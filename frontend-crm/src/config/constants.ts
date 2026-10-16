@@ -9,4 +9,8 @@ export const ROUTES = {
     HOME: '/',
     LOGIN: '/login',
     DASHBOARD: '/dashboard',
-} as const;
+    ORGANIZATIONS: '/organizations',
+    ORGANIZATION_NEW: '/organizations/new',
+    ORGANIZATION_DETAIL: (id: string | number) => `/organizations/${id}`,
+    ORGANIZATION_EDIT: (id: string | number) => `/organizations/${id}/edit`,
+};

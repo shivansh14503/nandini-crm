@@ -45,3 +45,11 @@ export function logout(_req: Request, res: Response): Response {
         message: 'Logged out successfully',
     });
 }
+
+export async function getMe(req: AuthenticatedRequest, res: Response): Promise<Response> {
+    return res.status(StatusCodes.OK).json({
+        status: 'ok',
+        user: req.user,
+    });
+}
+
