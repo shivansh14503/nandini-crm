@@ -45,6 +45,7 @@ const NAV_ITEMS = [
         label: 'Sales',
         items: [
             { label: 'Organizations', href: '/organizations' },
+            { label: 'Contacts', href: '/contacts' },
             { label: 'Opportunities', href: '/opportunities' },
             { label: 'Leads', href: '/leads' },
             { label: 'Customers', href: '/customers' },
@@ -71,7 +72,7 @@ const NAV_ITEMS = [
     {
         label: 'Inventory',
         items: [
-            { label: 'Products', href: '/dashboard' },
+            { label: 'Product Catalog', href: '/products' },
             { label: 'Categories', href: '/dashboard' },
             { label: 'Stock Movements', href: '/dashboard' },
         ],
@@ -638,7 +639,7 @@ export function Navbar() {
                             alt={APP_CONFIG.logoAlt}
                             width={32}
                             height={32}
-                            style={{ objectFit: 'contain', borderRadius: '6px' }}
+                            style={{ width: '32px', height: '32px', objectFit: 'contain', borderRadius: '6px' }}
                         />
                         <Box>
                             <Typography

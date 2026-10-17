@@ -8,6 +8,9 @@ export type NatureOfBusiness =
     | 'IT / Software'
     | 'Healthcare'
     | 'Education'
+    | 'Construction'
+    | 'Transportation'
+    | 'Consulting'
     | 'Government / PSU'
     | 'Other';
 
@@ -31,6 +34,7 @@ export type CustomerType =
     | 'System Integrator'
     | 'End User'
     | 'Distributor'
+    | 'Partner'
     | 'Internal';
 
 export type AnnualTurnover =
@@ -57,6 +61,7 @@ export type SourceOfLead =
     | 'Exhibition / Trade Show'
     | 'LinkedIn / Social Media'
     | 'Partner Referral'
+    | 'Direct Customer'
     | 'Other';
 
 export interface CorporateEmail {
@@ -84,6 +89,40 @@ export interface OrganizationFormData {
     accountVerified: boolean;
     provideSupport: 'Yes' | 'No';
     corporateEmails: CorporateEmail[];
+
+    // Billing Address
+    billingStreet?: string;
+    billingCity?: string;
+    billingState?: string;
+    billingPostalCode?: string;
+    billingCountry?: string;
+    billingLatitude?: string;
+
+    // Shipping Address
+    shippingStreet?: string;
+    shippingCity?: string;
+    shippingState?: string;
+    shippingPostalCode?: string;
+    shippingCountry?: string;
+    shippingLongitude?: string;
+    copyAddressFromBilling?: boolean;
+
+    // Tax & Bank Details
+    registrationType?: string;
+    panNumber?: string;
+    msmeRegnNumber?: string;
+    accountName?: string;
+    bankName?: string;
+    bankIfscCode?: string;
+    gstNumber?: string;
+    cinNo?: string;
+    tanNumber?: string;
+    accountNumber?: string;
+    typeOfAccount?: string;
+    bankAddress?: string;
+
+    // Partner Company
+    partnerCompanies?: string[];
 }
 
 export interface Organization extends OrganizationFormData {

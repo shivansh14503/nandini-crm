@@ -6,6 +6,7 @@ import { Box, Container } from '@mui/material';
 import { useAuth } from '@/src/context/AuthContext';
 import { ROUTES } from '@/src/config/constants';
 import { Navbar } from '@/src/components/layout/Navbar';
+import { AppBreadcrumbs } from '@/src/components/common/AppBreadcrumbs';
 import { AccountDetailsCard } from '@/src/components/dashboard/AccountDetailsCard';
 import { LoadingScreen } from '@/src/components/common/LoadingScreen';
 
@@ -30,7 +31,10 @@ export default function DashboardPage() {
     return (
         <Box sx={{ minHeight: '100vh', backgroundColor: 'background.default' }}>
             <Navbar />
-            <Container maxWidth="lg" sx={{ mt: 5 }}>
+            <Container maxWidth="lg" sx={{ mt: 3, pb: 4 }}>
+                <Box sx={{ mb: 2.5 }}>
+                    <AppBreadcrumbs />
+                </Box>
                 <AccountDetailsCard user={user} />
             </Container>
         </Box>
