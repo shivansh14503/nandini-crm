@@ -2,28 +2,16 @@
 
 import { useState, useCallback, useMemo, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import {
-    Box,
-    Paper,
-    Typography,
-    Button,
-    Alert,
-    CircularProgress,
-    Snackbar,
-} from '@mui/material';
-
 // Icons
 import ArticleOutlinedIcon from '@mui/icons-material/ArticleOutlined';
 import PlaceOutlinedIcon from '@mui/icons-material/PlaceOutlined';
 import AccountBalanceOutlinedIcon from '@mui/icons-material/AccountBalanceOutlined';
 import WorkspacePremiumOutlinedIcon from '@mui/icons-material/WorkspacePremiumOutlined';
-import CloseIcon from '@mui/icons-material/Close';
-import BookmarkBorderIcon from '@mui/icons-material/BookmarkBorder';
-import SyncIcon from '@mui/icons-material/Sync';
 
-import { AppBreadcrumbs, type BreadcrumbItem } from '../common/AppBreadcrumbs';
+import { type BreadcrumbItem } from '../common/AppBreadcrumbs';
 import { AppToast } from '../common/AppToast';
-import { FormHeader, FormStickyFooter } from '../forms';
+import { CommonFormLayout } from '../common/CommonFormLayout';
+import { type FormTabDefinition } from '../common/Drawer';
 import { organizationService } from '../../services/organization.service';
 import { ROUTES } from '../../config/constants';
 import { validateWithToast, organizationFormSchema } from '../../validations';
@@ -46,6 +34,31 @@ import {
     TaxBankTab,
     PartnerLicensingTab,
 } from './tabs';
+
+// ─── Single Source of Truth for Organization Form Tabs ──────────────────────────
+export const ORGANIZATION_FORM_TABS: (FormTabDefinition & { id: TabKey })[] = [
+    {
+        id: 'overview',
+        label: 'Overview',
+        icon: <ArticleOutlinedIcon sx={{ fontSize: 18 }} />,
+    },
+    {
+        id: 'address',
+        label: 'Address Information',
+        icon: <PlaceOutlinedIcon sx={{ fontSize: 18 }} />,
+    },
+    {
+        id: 'tax_bank',
+        label: 'Tax & Bank Details',
+        icon: <AccountBalanceOutlinedIcon sx={{ fontSize: 18 }} />,
+        hasDot: true,
+    },
+    {
+        id: 'partner_licensing',
+        label: 'Partner Company',
+        icon: <WorkspacePremiumOutlinedIcon sx={{ fontSize: 18 }} />,
+    },
+];
 
 // ─── Default Form State ───────────────────────────────────────────────────────
 const DEFAULT_FORM: OrganizationFormData = {
@@ -289,150 +302,41 @@ export default function OrganizationForm({
         router.push(ROUTES.ORGANIZATIONS);
     };
 
-    // ─── Tabs Configuration ───────────────────────────────────────────────────
-    const tabs = [
+    // ─── Tabs Configuration (derived from ORGANIZATION_FORM_TABS) ───────────────
+    const tabs = useMemo(() => [
         {
-            id: 'overview' as const,
-            label: 'Overview',
-            icon: <ArticleOutlinedIcon sx={{ fontSize: 18 }} />,
+            ...ORGANIZATION_FORM_TABS[0],
             badge: `${progressCount}/10 done`,
         },
         {
-            id: 'address' as const,
-            label: 'Address Information',
-            icon: <PlaceOutlinedIcon sx={{ fontSize: 18 }} />,
+            ...ORGANIZATION_FORM_TABS[1],
             sublabel: form.billingCity || form.shippingCity ? '(Configured)' : '(3 Locs)',
         },
-        {
-            id: 'tax_bank' as const,
-            label: 'Tax & Bank Details',
-            icon: <AccountBalanceOutlinedIcon sx={{ fontSize: 18 }} />,
-            hasDot: true,
-        },
-        {
-            id: 'partner_licensing' as const,
-            label: 'Partner Company',
-            icon: <WorkspacePremiumOutlinedIcon sx={{ fontSize: 18 }} />,
-        },
-    ];
+        ORGANIZATION_FORM_TABS[2],
+        ORGANIZATION_FORM_TABS[3],
+    ], [progressCount, form.billingCity, form.shippingCity]);
 
     return (
-        <Box sx={{ pb: 7 }}>
-            {/* ── Top Header & Actions with Permanent Breadcrumbs ─────────────── */}
-            <FormHeader
-                breadcrumbItems={breadcrumbItems || defaultBreadcrumbs}
-                onDiscard={handleDiscard}
-                submitting={submitting}
-                discardLabel="Discard"
-            />
-
-            {/* ── Main Form Card with Tabs ──────────────────────────────────── */}
-            <Paper
-                elevation={0}
-                sx={{
-                    border: '1px solid #e2e8f0',
-                    borderRadius: '12px',
-                    overflow: 'hidden',
-                    backgroundColor: '#fff',
-                }}
-            >
-                {/* ── Tabs Bar ──────────────────────────────────────────────── */}
-                <Box
-                    sx={{
-                        backgroundColor: '#f8fafc',
-                        borderBottom: '1px solid #e2e8f0',
-                        px: 2,
-                        py: 1,
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: 1,
-                        overflowX: 'auto',
-                    }}
-                >
-                    {tabs.map((tab) => {
-                        const isActive = activeTab === tab.id;
-                        return (
-                            <Box
-                                key={tab.id}
-                                onClick={() => setActiveTab(tab.id)}
-                                sx={{
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    gap: 1,
-                                    px: 2,
-                                    py: 1,
-                                    borderRadius: '8px',
-                                    cursor: 'pointer',
-                                    userSelect: 'none',
-                                    whiteSpace: 'nowrap',
-                                    transition: 'all 0.15s ease-in-out',
-                                    backgroundColor: isActive ? '#ffffff' : 'transparent',
-                                    border: isActive ? '1px solid #d1d5db' : '1px solid transparent',
-                                    boxShadow: isActive ? '0 1px 3px rgba(0,0,0,0.06)' : 'none',
-                                    color: isActive ? '#1e3a8a' : '#64748b',
-                                    fontWeight: isActive ? 600 : 500,
-                                    fontSize: '0.84rem',
-                                    '&:hover': {
-                                        backgroundColor: isActive ? '#ffffff' : '#f1f5f9',
-                                        color: isActive ? '#1e3a8a' : '#1e293b',
-                                    },
-                                }}
-                            >
-                                <Box
-                                    sx={{
-                                        display: 'flex',
-                                        alignItems: 'center',
-                                        color: isActive ? '#2563eb' : '#64748b',
-                                    }}
-                                >
-                                    {tab.icon}
-                                </Box>
-                                <Typography sx={{ fontSize: '0.84rem', fontWeight: 'inherit', color: 'inherit' }}>
-                                    {tab.label}
-                                </Typography>
-
-                                {tab.badge && (
-                                    <Box
-                                        sx={{
-                                            px: 1,
-                                            py: 0.2,
-                                            borderRadius: '9999px',
-                                            border: '1px solid #93c5fd',
-                                            backgroundColor: '#eff6ff',
-                                            color: '#2563eb',
-                                            fontSize: '0.72rem',
-                                            fontWeight: 600,
-                                            lineHeight: 1.2,
-                                        }}
-                                    >
-                                        {tab.badge}
-                                    </Box>
-                                )}
-
-                                {tab.sublabel && (
-                                    <Typography
-                                        component="span"
-                                        sx={{ fontSize: '0.76rem', color: '#94a3b8', fontWeight: 400 }}
-                                    >
-                                        {tab.sublabel}
-                                    </Typography>
-                                )}
-
-                                {tab.hasDot && (
-                                    <Box
-                                        sx={{
-                                            width: 7,
-                                            height: 7,
-                                            borderRadius: '50%',
-                                            backgroundColor: '#f97316',
-                                            ml: 0.5,
-                                        }}
-                                    />
-                                )}
-                            </Box>
-                        );
-                    })}
-                </Box>
+        <CommonFormLayout
+            breadcrumbItems={breadcrumbItems || defaultBreadcrumbs}
+            tabs={tabs}
+            activeTab={activeTab}
+            onTabChange={(tabId) => setActiveTab(tabId as TabKey)}
+            onCancel={handleDiscard}
+            onSave={() => handleSubmit(true)}
+            submitting={submitting}
+            saveLabel={mode === 'edit' ? 'Update Organization' : 'Save Organization'}
+            cancelLabel="Cancel"
+            disableContentPadding
+            toast={
+                <AppToast
+                    open={toast.open}
+                    message={toast.message}
+                    severity={toast.severity}
+                    onClose={() => setToast((t) => ({ ...t, open: false }))}
+                />
+            }
+        >
 
                 {/* ── Tab Content Panels ────────────────────────────────────── */}
                 {activeTab === 'overview' && (
@@ -466,24 +370,6 @@ export default function OrganizationForm({
                         set={set}
                     />
                 )}
-            </Paper>
-
-            {/* ── Bottom Sticky Action Bar ──────────────────────────────────── */}
-            <FormStickyFooter
-                onCancel={handleDiscard}
-                onSave={() => handleSubmit(true)}
-                submitting={submitting}
-                saveLabel="Save Organization"
-                cancelLabel="Cancel"
-            />
-
-            {/* ── Consistent Top-Right Toast ──────────────────────────────────── */}
-            <AppToast
-                open={toast.open}
-                message={toast.message}
-                severity={toast.severity}
-                onClose={() => setToast((t) => ({ ...t, open: false }))}
-            />
-        </Box>
+        </CommonFormLayout>
     );
 }

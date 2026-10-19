@@ -5,12 +5,8 @@ import { useRouter } from 'next/navigation';
 import {
     Box,
     Typography,
-    IconButton,
-    Tooltip,
 } from '@mui/material';
 import ApartmentIcon from '@mui/icons-material/Apartment';
-import EditOutlinedIcon from '@mui/icons-material/EditOutlined';
-import VisibilityOutlinedIcon from '@mui/icons-material/VisibilityOutlined';
 
 import { ROUTES } from '../../../config/constants';
 import type { ExtendedOrganization } from '../../../data/mockOrganizations';
@@ -27,6 +23,8 @@ export interface OrganizationsTableProps {
     sortField: SortField;
     sortOrder: 'asc' | 'desc';
     onSort: (field: SortField) => void;
+    onRowClick?: (org: ExtendedOrganization) => void;
+    activeOrgId?: string | null;
 }
 
 export function OrganizationsTable({
@@ -39,6 +37,8 @@ export function OrganizationsTable({
     sortField,
     sortOrder,
     onSort,
+    onRowClick,
+    activeOrgId,
 }: OrganizationsTableProps) {
     const router = useRouter();
 
@@ -90,7 +90,11 @@ export function OrganizationsTable({
                             <Typography
                                 onClick={(e) => {
                                     e.stopPropagation();
-                                    router.push(ROUTES.ORGANIZATION_EDIT(org.id));
+                                    if (onRowClick) {
+                                        onRowClick(org);
+                                    } else {
+                                        router.push(ROUTES.ORGANIZATION_DETAIL(org.id));
+                                    }
                                 }}
                                 sx={{
                                     fontSize: '0.82rem',
@@ -272,7 +276,7 @@ export function OrganizationsTable({
                 ),
             },
         ],
-        [router]
+        [router, onRowClick]
     );
 
     return (
@@ -291,10 +295,12 @@ export function OrganizationsTable({
             onSort={(field) => onSort(field as SortField)}
             onViewRow={(org) => router.push(ROUTES.ORGANIZATION_DETAIL(org.id))}
             onEditRow={(org) => router.push(ROUTES.ORGANIZATION_EDIT(org.id))}
+            onRowClick={onRowClick}
+            activeRowId={activeOrgId}
             viewTooltip="View Details"
             editTooltip="Edit Organization"
             actionsPosition="left"
-            actionsWidth={80}
+            actionsWidth={70}
             actionsHeaderLabel="ACTIONS"
             emptyTitle="No organizations found"
             emptyDescription="No organizations match your current search and filter criteria."

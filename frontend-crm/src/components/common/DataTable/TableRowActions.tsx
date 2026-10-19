@@ -2,7 +2,6 @@
 
 import React from 'react';
 import { Box, IconButton, Tooltip } from '@mui/material';
-import VisibilityOutlinedIcon from '@mui/icons-material/VisibilityOutlined';
 import EditOutlinedIcon from '@mui/icons-material/EditOutlined';
 import DeleteOutlinedIcon from '@mui/icons-material/DeleteOutlined';
 
@@ -21,35 +20,16 @@ export interface TableRowActionsProps {
  * Ensures 100% visual and behavioral consistency across all table views in the CRM.
  */
 export function TableRowActions({
-    onView,
+    onView: _onView,
     onEdit,
     onDelete,
-    viewTooltip = 'View Details',
+    viewTooltip: _viewTooltip = 'View Details',
     editTooltip = 'Edit',
     deleteTooltip = 'Delete',
     children,
 }: TableRowActionsProps) {
     return (
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-            {onView && (
-                <Tooltip title={viewTooltip}>
-                    <IconButton
-                        size="small"
-                        onClick={(e) => {
-                            e.stopPropagation();
-                            onView();
-                        }}
-                        sx={{
-                            color: '#64748b',
-                            p: 0.5,
-                            borderRadius: '6px',
-                            '&:hover': { color: '#2563eb', backgroundColor: '#eff6ff' },
-                        }}
-                    >
-                        <VisibilityOutlinedIcon sx={{ fontSize: 16 }} />
-                    </IconButton>
-                </Tooltip>
-            )}
 
             {onEdit && (
                 <Tooltip title={editTooltip}>

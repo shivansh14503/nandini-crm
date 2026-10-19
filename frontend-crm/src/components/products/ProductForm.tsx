@@ -4,7 +4,6 @@ import React, { useState, useCallback, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import {
     Box,
-    Paper,
     Grid,
     TextField,
     Divider,
@@ -15,14 +14,14 @@ import DescriptionOutlinedIcon from '@mui/icons-material/DescriptionOutlined';
 
 import { type BreadcrumbItem } from '../common/AppBreadcrumbs';
 import { AppToast } from '../common/AppToast';
+import { CommonFormLayout } from '../common/CommonFormLayout';
+import { type FormTabDefinition } from '../common/Drawer';
 import { ROUTES } from '../../config/constants';
 import type { ProductFormData, Product } from '../../types/product.types';
 import { getStoredProducts, saveStoredProducts } from '../../data/mockProducts';
 
 // Reusable Form Primitives
 import {
-    FormHeader,
-    FormStickyFooter,
     SectionLabel,
     FormField,
     StyledSelect,
@@ -73,6 +72,15 @@ const DEFAULT_FORM: ProductFormData = {
     description: '',
     termsAndConditions: '',
 };
+
+// ─── Single Source of Truth for Product Form Tabs ─────────────────────────────
+export const PRODUCT_FORM_TABS: FormTabDefinition[] = [
+    {
+        id: 'overview',
+        label: 'Overview',
+        icon: <InventoryOutlinedIcon sx={{ fontSize: 18, color: '#2563eb' }} />,
+    },
+];
 
 // ─── Props ─────────────────────────────────────────────────────────────────────
 export interface ProductFormProps {
@@ -193,62 +201,25 @@ export default function ProductForm({
     };
 
     return (
-        <Box sx={{ pb: 8 }}>
-            {/* ── Top Header ── */}
-            <FormHeader
-                breadcrumbItems={breadcrumbItems || defaultBreadcrumbs}
-                onDiscard={handleDiscard}
-                submitting={submitting}
-                discardLabel="Discard"
-            />
-
-            {/* ── Main Form Card ── */}
-            <Paper
-                elevation={0}
-                sx={{
-                    border: '1px solid #e2e8f0',
-                    borderRadius: '12px',
-                    overflow: 'hidden',
-                    backgroundColor: '#fff',
-                }}
-            >
-                {/* ── Tab Header Bar ── */}
-                <Box
-                    sx={{
-                        backgroundColor: '#f8fafc',
-                        borderBottom: '1px solid #e2e8f0',
-                        px: 2,
-                        py: 1,
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: 1,
-                    }}
-                >
-                    <Box
-                        sx={{
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: 1,
-                            px: 2,
-                            py: 1,
-                            borderRadius: '8px',
-                            backgroundColor: '#ffffff',
-                            border: '1px solid #d1d5db',
-                            boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
-                            color: '#1e3a8a',
-                            fontWeight: 700,
-                            fontSize: '0.84rem',
-                        }}
-                    >
-                        <InventoryOutlinedIcon sx={{ fontSize: 18, color: '#2563eb' }} />
-                        OVERVIEW
-                    </Box>
-                </Box>
-
-                {/* ── Form Content ── */}
-                <Box sx={{ p: { xs: 2.5, md: 3.5 } }}>
-
-                    {/* ════════════════════════════════════════════════
+        <CommonFormLayout
+            breadcrumbItems={breadcrumbItems || defaultBreadcrumbs}
+            tabs={PRODUCT_FORM_TABS}
+            activeTab="overview"
+            onCancel={handleDiscard}
+            onSave={() => handleSubmit(true)}
+            submitting={submitting}
+            saveLabel={mode === 'edit' ? 'Update Product' : 'Save Product'}
+            cancelLabel="Cancel"
+            toast={
+                <AppToast
+                    open={toast.open}
+                    message={toast.message}
+                    severity={toast.severity}
+                    onClose={() => setToast((t) => ({ ...t, open: false }))}
+                />
+            }
+        >
+            {/* ════════════════════════════════════════════════
                         Section 1: Basic Product Info
                         ════════════════════════════════════════════════ */}
                     <SectionLabel
@@ -464,25 +435,6 @@ export default function ProductForm({
                             </FormField>
                         </Grid>
                     </Grid>
-                </Box>
-            </Paper>
-
-            {/* ── Sticky Footer ── */}
-            <FormStickyFooter
-                onCancel={handleDiscard}
-                onSave={() => handleSubmit(true)}
-                submitting={submitting}
-                saveLabel="Save Product"
-                cancelLabel="Cancel"
-            />
-
-            {/* ── Toast ── */}
-            <AppToast
-                open={toast.open}
-                message={toast.message}
-                severity={toast.severity}
-                onClose={() => setToast((t) => ({ ...t, open: false }))}
-            />
-        </Box>
+        </CommonFormLayout>
     );
 }

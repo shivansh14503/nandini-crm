@@ -2,9 +2,7 @@
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
-import { Box, Paper } from '@mui/material';
-import { AppBreadcrumbs } from '../../common/AppBreadcrumbs';
-import { EnterpriseFooter } from '../../common/EnterpriseFooter';
+import { CommonMasterView } from '../../common/CommonMasterView';
 import { AppToast } from '../../common/AppToast';
 import { ROUTES } from '../../../config/constants';
 import type { Product } from '../../../types/product.types';
@@ -13,6 +11,7 @@ import { ProductsFilterPills, type ProductFilterTab } from './ProductsFilterPill
 import { ProductsTableToolbar } from './ProductsTableToolbar';
 import { ProductsTable } from './ProductsTable';
 import { ProductsPagination } from './ProductsPagination';
+import { ProductDetailDrawer } from '../ProductDetailDrawer';
 
 const RECENTLY_ADDED_DAYS = 7;
 
@@ -27,6 +26,7 @@ export function ProductsMasterView() {
     const [rowsPerPage, setRowsPerPage] = useState(10);
     const [sortField, setSortField] = useState<string>('productName');
     const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
+    const [selectedDrawerProduct, setSelectedDrawerProduct] = useState<Product | null>(null);
     const [toast, setToast] = useState<{ open: boolean; message: string; severity: 'success' | 'info' | 'error' }>({
         open: false,
         message: '',
@@ -132,92 +132,77 @@ export function ProductsMasterView() {
     }, [products]);
 
     return (
-        <Box sx={{ width: '100%', minHeight: 'calc(100vh - 64px)', display: 'flex', flexDirection: 'column', flex: 1 }}>
-            <Box sx={{ p: { xs: 2, md: 3 }, flex: 1, display: 'flex', flexDirection: 'column', backgroundColor: '#f8fafc' }}>
-                {/* ── Breadcrumbs ── */}
-                <Box sx={{ mb: 2 }}>
-                    <AppBreadcrumbs />
-                </Box>
-
-                {/* ── Filter Pills + New Product ── */}
-                <Box
-                    sx={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'space-between',
-                        flexWrap: 'wrap',
-                        gap: 2,
-                        mb: 2.5,
+        <CommonMasterView
+            filters={
+                <ProductsFilterPills
+                    activeTab={activeTab}
+                    onTabChange={(tab) => {
+                        setActiveTab(tab);
+                        setPage(0);
                     }}
-                >
-                    <ProductsFilterPills
-                        activeTab={activeTab}
-                        onTabChange={(tab) => {
-                            setActiveTab(tab);
-                            setPage(0);
-                        }}
-                        counts={counts}
-                    />
-                </Box>
-
-                {/* ── Main Table Card ── */}
-                <Paper
-                    elevation={0}
-                    sx={{
-                        border: '1px solid #e2e8f0',
-                        borderRadius: '12px',
-                        overflow: 'hidden',
-                        flex: 1,
-                        display: 'flex',
-                        flexDirection: 'column',
+                    counts={counts}
+                />
+            }
+            toolbar={
+                <ProductsTableToolbar
+                    searchQuery={searchQuery}
+                    onSearchChange={(v) => {
+                        setSearchQuery(v);
+                        setPage(0);
                     }}
-                >
-                    <ProductsTableToolbar
-                        searchQuery={searchQuery}
-                        onSearchChange={(v) => {
-                            setSearchQuery(v);
-                            setPage(0);
-                        }}
-                        onNewProduct={() => router.push(ROUTES.PRODUCT_NEW)}
-                        onRefresh={loadProducts}
-                        selectedCount={selectedIds.length}
-                        onBulkDelete={handleBulkDelete}
-                    />
-
-                    <ProductsTable
-                        products={paginatedProducts}
-                        selectedIds={selectedIds}
-                        onSelectAll={handleSelectAll}
-                        onSelectOne={handleSelectOne}
-                        onViewProduct={(id) => router.push(ROUTES.PRODUCT_EDIT(id))}
-                        onEditProduct={(id) => router.push(ROUTES.PRODUCT_EDIT(id))}
-                        onNewProduct={() => router.push(ROUTES.PRODUCT_NEW)}
-                        sortField={sortField}
-                        sortOrder={sortOrder}
-                        onSort={handleSort}
-                    />
-
-                    <ProductsPagination
-                        page={page}
-                        rowsPerPage={rowsPerPage}
-                        totalCount={sortedProducts.length}
-                        onPageChange={setPage}
-                        onRowsPerPageChange={(n) => {
-                            setRowsPerPage(n);
-                            setPage(0);
-                        }}
-                    />
-                </Paper>
-            </Box>
-
-            <EnterpriseFooter />
-
-            <AppToast
-                open={toast.open}
-                message={toast.message}
-                severity={toast.severity}
-                onClose={() => setToast((t) => ({ ...t, open: false }))}
-            />
-        </Box>
+                    onNewProduct={() => router.push(ROUTES.PRODUCT_NEW)}
+                    onRefresh={() => {
+                        loadProducts();
+                        setToast({ open: true, message: 'Products refreshed.', severity: 'info' });
+                    }}
+                    selectedCount={selectedIds.length}
+                    onBulkDelete={handleBulkDelete}
+                />
+            }
+            table={
+                <ProductsTable
+                    products={paginatedProducts}
+                    selectedIds={selectedIds}
+                    onSelectAll={handleSelectAll}
+                    onSelectOne={handleSelectOne}
+                    onViewProduct={(id) => router.push(ROUTES.PRODUCT_DETAIL(id))}
+                    onEditProduct={(id) => router.push(ROUTES.PRODUCT_EDIT(id))}
+                    onNewProduct={() => router.push(ROUTES.PRODUCT_NEW)}
+                    sortField={sortField}
+                    sortOrder={sortOrder}
+                    onSort={handleSort}
+                    onRowClick={(product) => setSelectedDrawerProduct(product)}
+                    activeProductId={selectedDrawerProduct?.id}
+                />
+            }
+            pagination={
+                <ProductsPagination
+                    page={page}
+                    rowsPerPage={rowsPerPage}
+                    totalCount={sortedProducts.length}
+                    onPageChange={setPage}
+                    onRowsPerPageChange={(n) => {
+                        setRowsPerPage(n);
+                        setPage(0);
+                    }}
+                />
+            }
+            drawer={
+                <ProductDetailDrawer
+                    product={selectedDrawerProduct}
+                    open={Boolean(selectedDrawerProduct)}
+                    onClose={() => setSelectedDrawerProduct(null)}
+                />
+            }
+            isDrawerOpen={Boolean(selectedDrawerProduct)}
+            toast={
+                <AppToast
+                    open={toast.open}
+                    message={toast.message}
+                    severity={toast.severity}
+                    onClose={() => setToast((t) => ({ ...t, open: false }))}
+                />
+            }
+        />
     );
 }

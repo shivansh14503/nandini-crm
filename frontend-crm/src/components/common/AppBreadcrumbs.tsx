@@ -85,6 +85,7 @@ function formatSegmentLabel(segment: string): string {
     if (lower === 'edit') return 'Edit View';
     if (lower === 'organizations' || lower === 'organisation') return 'Organizations';
     if (lower === 'contacts' || lower === 'contact') return 'Contacts';
+    if (lower === 'leads' || lower === 'lead') return 'Leads';
     if (lower === 'opportunities' || lower === 'deals') return 'Opportunities';
     if (lower === 'dashboard') return 'Dashboard';
     
@@ -141,13 +142,15 @@ export function useAutoBreadcrumbs(customItems?: BreadcrumbItem[]): BreadcrumbIt
     }, [pathname, customItems]);
 }
 
-export function AppBreadcrumbs({
+function BreadcrumbsView({
     items,
     separator = <NavigateNextIcon fontSize="small" sx={{ color: '#9ca3af', fontSize: 16 }} />,
     sx,
-}: AppBreadcrumbsProps) {
-    const breadcrumbItems = useAutoBreadcrumbs(items);
-
+}: {
+    items: BreadcrumbItem[];
+    separator?: React.ReactNode;
+    sx?: SxProps<Theme>;
+}) {
     return (
         <MuiBreadcrumbs
             separator={separator}
@@ -160,8 +163,8 @@ export function AppBreadcrumbs({
                 ...sx,
             }}
         >
-            {breadcrumbItems.map((item, index) => {
-                const isLast = index === breadcrumbItems.length - 1;
+            {items.map((item, index) => {
+                const isLast = index === items.length - 1;
 
                 if (isLast) {
                     return (
@@ -210,5 +213,39 @@ export function AppBreadcrumbs({
                 );
             })}
         </MuiBreadcrumbs>
+    );
+}
+
+function DynamicBreadcrumbs({
+    separator,
+    sx,
+}: Omit<AppBreadcrumbsProps, 'items'>) {
+    const breadcrumbItems = useAutoBreadcrumbs();
+    return <BreadcrumbsView items={breadcrumbItems} separator={separator} sx={sx} />;
+}
+
+export function AppBreadcrumbs({
+    items,
+    separator = <NavigateNextIcon fontSize="small" sx={{ color: '#9ca3af', fontSize: 16 }} />,
+    sx,
+}: AppBreadcrumbsProps) {
+    // If static custom items are provided, render directly without triggering usePathname
+    if (items && items.length > 0) {
+        return <BreadcrumbsView items={items} separator={separator} sx={sx} />;
+    }
+
+    // Wrap dynamic pathname breadcrumb in Suspense to satisfy Next.js prerendering requirements
+    return (
+        <React.Suspense
+            fallback={
+                <BreadcrumbsView
+                    items={[{ label: 'Home' }]}
+                    separator={separator}
+                    sx={sx}
+                />
+            }
+        >
+            <DynamicBreadcrumbs separator={separator} sx={sx} />
+        </React.Suspense>
     );
 }

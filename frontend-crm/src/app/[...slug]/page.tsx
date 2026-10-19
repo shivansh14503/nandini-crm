@@ -1,6 +1,6 @@
 'use client';
 
-import React from 'react';
+import React, { Suspense } from 'react';
 import { useRouter } from 'next/navigation';
 import {
     Box,
@@ -18,6 +18,7 @@ import DashboardOutlinedIcon from '@mui/icons-material/DashboardOutlined';
 import { Navbar } from '@/src/components/layout/Navbar';
 import { AppBreadcrumbs } from '@/src/components/common/AppBreadcrumbs';
 import { EnterpriseFooter } from '@/src/components/common/EnterpriseFooter';
+import { LoadingScreen } from '@/src/components/common/LoadingScreen';
 import { ROUTES } from '@/src/config/constants';
 
 /**
@@ -25,7 +26,7 @@ import { ROUTES } from '@/src/config/constants';
  * Guarantees that permanent breadcrumbs, Navbar, and layout persist
  * across any future arbitrary route created in the CRM.
  */
-export default function DynamicCrmPage() {
+function DynamicCrmPageContent() {
     const router = useRouter();
 
     return (
@@ -36,7 +37,9 @@ export default function DynamicCrmPage() {
             <Container maxWidth="xl" sx={{ pt: 2.5, pb: 4, flex: 1, display: 'flex', flexDirection: 'column' }}>
                 {/* ── Permanent Automatic Route-Aware Breadcrumbs ── */}
                 <Box sx={{ mb: 3 }}>
-                    <AppBreadcrumbs />
+                    <React.Suspense fallback={null}>
+                        <AppBreadcrumbs />
+                    </React.Suspense>
                 </Box>
 
                 {/* ── Enterprise Module Scaffold Card ── */}
@@ -143,5 +146,13 @@ export default function DynamicCrmPage() {
             {/* Global Enterprise Footer */}
             <EnterpriseFooter />
         </Box>
+    );
+}
+
+export default function DynamicCrmPage() {
+    return (
+        <Suspense fallback={<LoadingScreen message="Loading page..." />}>
+            <DynamicCrmPageContent />
+        </Suspense>
     );
 }

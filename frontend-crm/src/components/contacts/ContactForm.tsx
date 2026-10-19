@@ -3,8 +3,6 @@
 import React, { useState, useCallback, useMemo, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import {
-    Box,
-    Paper,
     Divider,
 } from '@mui/material';
 
@@ -16,16 +14,17 @@ import TuneOutlinedIcon from '@mui/icons-material/TuneOutlined';
 
 import { type BreadcrumbItem } from '../common/AppBreadcrumbs';
 import { AppToast } from '../common/AppToast';
+import { type FormTabDefinition } from '../common/Drawer';
 import { ROUTES } from '../../config/constants';
 import type { CorporateEmail } from '../../types/organization.types';
 import type { ContactFormData } from '../../types/contact.types';
 import { getStoredOrganizations } from '../../data/mockOrganizations';
 import { validateWithToast, contactFormSchema } from '../../validations';
 
+import { CommonFormLayout } from '../common/CommonFormLayout';
+
 // Reusable Production-grade Form Primitives
 import {
-    FormHeader,
-    FormStickyFooter,
     SectionLabel,
 } from '../forms';
 
@@ -36,6 +35,15 @@ import {
     ContactAssignmentSection,
     ContactPreferencesSection,
 } from './sections';
+
+// ─── Single Source of Truth for Contact Form Tabs ──────────────────────────────
+export const CONTACT_FORM_TABS: FormTabDefinition[] = [
+    {
+        id: 'overview',
+        label: 'Overview',
+        icon: <PersonOutlinedIcon sx={{ fontSize: 18, color: '#2563eb' }} />,
+    },
+];
 
 export interface ContactFormProps {
     mode?: 'create' | 'edit';
@@ -251,153 +259,98 @@ export default function ContactForm({
     };
 
     return (
-        <Box sx={{ pb: 8 }}>
-            {/* ── Top Header & Actions with Permanent Breadcrumbs ─────────────── */}
-            <FormHeader
-                breadcrumbItems={breadcrumbItems || defaultBreadcrumbs}
-                onDiscard={handleDiscard}
-                submitting={submitting}
-                discardLabel="Discard"
+        <CommonFormLayout
+            breadcrumbItems={breadcrumbItems || defaultBreadcrumbs}
+            tabs={CONTACT_FORM_TABS}
+            activeTab="overview"
+            onCancel={handleDiscard}
+            onSave={() => handleSubmit(true)}
+            submitting={submitting}
+            saveLabel={mode === 'edit' ? 'Update Contact' : 'Save Contact'}
+            cancelLabel="Cancel"
+            toast={
+                <AppToast
+                    open={toast.open}
+                    message={toast.message}
+                    severity={toast.severity}
+                    onClose={() => setToast((t) => ({ ...t, open: false }))}
+                />
+            }
+        >
+            {/* Section 1: Basic Identity & Account */}
+            <SectionLabel
+                icon={<ContactPhoneOutlinedIcon sx={{ fontSize: 18 }} />}
+                label="Contact Details & Association"
+            />
+            <ContactBasicInfoSection
+                name={form.name}
+                organizationName={form.organizationName}
+                mobile={form.mobile}
+                officePhone={form.officePhone}
+                organizationNames={organizationNames}
+                onNameChange={(v) => set('name', v)}
+                onOrganizationChange={(v) => set('organizationName', v)}
+                onMobileChange={(v) => set('mobile', v)}
+                onOfficePhoneChange={(v) => set('officePhone', v)}
             />
 
-            {/* ── Main Form Card with Tabs ──────────────────────────────────── */}
-            <Paper
-                elevation={0}
-                sx={{
-                    border: '1px solid #e2e8f0',
-                    borderRadius: '12px',
-                    overflow: 'hidden',
-                    backgroundColor: '#fff',
-                }}
-            >
-                {/* ── Tab Header Bar ─────────────────────────────────────────── */}
-                <Box
-                    sx={{
-                        backgroundColor: '#f8fafc',
-                        borderBottom: '1px solid #e2e8f0',
-                        px: 2,
-                        py: 1,
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: 1,
-                    }}
-                >
-                    <Box
-                        sx={{
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: 1,
-                            px: 2,
-                            py: 1,
-                            borderRadius: '8px',
-                            backgroundColor: '#ffffff',
-                            border: '1px solid #d1d5db',
-                            boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
-                            color: '#1e3a8a',
-                            fontWeight: 700,
-                            fontSize: '0.84rem',
-                        }}
-                    >
-                        <PersonOutlinedIcon sx={{ fontSize: 18, color: '#2563eb' }} />
-                        OVERVIEW
-                    </Box>
-                </Box>
+            <Divider sx={{ my: 3.5, borderColor: '#f1f5f9' }} />
 
-                {/* ── Form Content ───────────────────────────────────────────── */}
-                <Box sx={{ p: { xs: 2.5, md: 3.5 } }}>
-                    {/* Section 1: Basic Identity & Account */}
-                    <SectionLabel
-                        icon={<ContactPhoneOutlinedIcon sx={{ fontSize: 18 }} />}
-                        label="Contact Details & Association"
-                    />
-                    <ContactBasicInfoSection
-                        name={form.name}
-                        organizationName={form.organizationName}
-                        mobile={form.mobile}
-                        officePhone={form.officePhone}
-                        organizationNames={organizationNames}
-                        onNameChange={(v) => set('name', v)}
-                        onOrganizationChange={(v) => set('organizationName', v)}
-                        onMobileChange={(v) => set('mobile', v)}
-                        onOfficePhoneChange={(v) => set('officePhone', v)}
-                    />
-
-                    <Divider sx={{ my: 3.5, borderColor: '#f1f5f9' }} />
-
-                    {/* Section 2: Extended Contact Numbers & Verified Emails */}
-                    <SectionLabel
-                        icon={<ContactPhoneOutlinedIcon sx={{ fontSize: 18 }} />}
-                        label="Alternate Communication Channels"
-                    />
-                    <ContactPhonesEmailsSection
-                        phone3={form.phone3}
-                        phone4={form.phone4}
-                        phone5={form.phone5}
-                        emailAddresses={form.emailAddresses}
-                        onPhone3Change={(v) => set('phone3', v)}
-                        onPhone4Change={(v) => set('phone4', v)}
-                        onPhone5Change={(v) => set('phone5', v)}
-                        onAddEmail={addEmail}
-                        onUpdateEmail={updateEmail}
-                        onRemoveEmail={removeEmail}
-                    />
-
-                    <Divider sx={{ my: 3.5, borderColor: '#f1f5f9' }} />
-
-                    {/* Section 3: Internal Assignment & Role */}
-                    <SectionLabel
-                        icon={<BusinessOutlinedIcon sx={{ fontSize: 18 }} />}
-                        label="Internal Assignment & Department Role"
-                    />
-                    <ContactAssignmentSection
-                        assignedTo={form.assignedTo}
-                        isPrimaryContact={form.isPrimaryContact}
-                        designation={form.designation}
-                        department={form.department}
-                        location={form.location}
-                        leftJob={form.leftJob}
-                        onAssignedToChange={(v) => set('assignedTo', v)}
-                        onPrimaryContactChange={(c) => set('isPrimaryContact', c)}
-                        onDesignationChange={(v) => set('designation', v)}
-                        onDepartmentChange={(v) => set('department', v)}
-                        onLocationChange={(v) => set('location', v)}
-                        onLeftJobChange={(v) => set('leftJob', v)}
-                    />
-
-                    <Divider sx={{ my: 3.5, borderColor: '#f1f5f9' }} />
-
-                    {/* Section 4: Preferences, Compliance (DND) & Notes */}
-                    <SectionLabel
-                        icon={<TuneOutlinedIcon sx={{ fontSize: 18 }} />}
-                        label="Communication Preferences & Notes"
-                    />
-                    <ContactPreferencesSection
-                        communicationType={form.communicationType}
-                        doNotCall={form.doNotCall}
-                        description={form.description}
-                        onToggleCommunicationType={toggleCommunicationType}
-                        onDoNotCallChange={(c) => set('doNotCall', c)}
-                        onDescriptionChange={(v) => set('description', v)}
-                    />
-                </Box>
-            </Paper>
-
-            {/* ── Bottom Sticky Action Bar ──────────────────────────────────── */}
-            <FormStickyFooter
-                onCancel={handleDiscard}
-                onSave={() => handleSubmit(true)}
-                submitting={submitting}
-                saveLabel="Save Contact"
-                cancelLabel="Cancel"
+            {/* Section 2: Extended Contact Numbers & Verified Emails */}
+            <SectionLabel
+                icon={<ContactPhoneOutlinedIcon sx={{ fontSize: 18 }} />}
+                label="Alternate Communication Channels"
+            />
+            <ContactPhonesEmailsSection
+                phone3={form.phone3}
+                phone4={form.phone4}
+                phone5={form.phone5}
+                emailAddresses={form.emailAddresses}
+                onPhone3Change={(v) => set('phone3', v)}
+                onPhone4Change={(v) => set('phone4', v)}
+                onPhone5Change={(v) => set('phone5', v)}
+                onAddEmail={addEmail}
+                onUpdateEmail={updateEmail}
+                onRemoveEmail={removeEmail}
             />
 
-            {/* ── Consistent Top-Right Toast Notification ─────────────────────── */}
-            <AppToast
-                open={toast.open}
-                message={toast.message}
-                severity={toast.severity}
-                onClose={() => setToast((t) => ({ ...t, open: false }))}
+            <Divider sx={{ my: 3.5, borderColor: '#f1f5f9' }} />
+
+            {/* Section 3: Internal Assignment & Role */}
+            <SectionLabel
+                icon={<BusinessOutlinedIcon sx={{ fontSize: 18 }} />}
+                label="Internal Assignment & Department Role"
             />
-        </Box>
+            <ContactAssignmentSection
+                assignedTo={form.assignedTo}
+                isPrimaryContact={form.isPrimaryContact}
+                designation={form.designation}
+                department={form.department}
+                location={form.location}
+                leftJob={form.leftJob}
+                onAssignedToChange={(v) => set('assignedTo', v)}
+                onPrimaryContactChange={(c) => set('isPrimaryContact', c)}
+                onDesignationChange={(v) => set('designation', v)}
+                onDepartmentChange={(v) => set('department', v)}
+                onLocationChange={(v) => set('location', v)}
+                onLeftJobChange={(v) => set('leftJob', v)}
+            />
+
+            <Divider sx={{ my: 3.5, borderColor: '#f1f5f9' }} />
+
+            {/* Section 4: Preferences, Compliance (DND) & Notes */}
+            <SectionLabel
+                icon={<TuneOutlinedIcon sx={{ fontSize: 18 }} />}
+                label="Communication Preferences & Notes"
+            />
+            <ContactPreferencesSection
+                communicationType={form.communicationType}
+                doNotCall={form.doNotCall}
+                description={form.description}
+                onToggleCommunicationType={toggleCommunicationType}
+                onDoNotCallChange={(c) => set('doNotCall', c)}
+                onDescriptionChange={(v) => set('description', v)}
+            />
+        </CommonFormLayout>
     );
 }

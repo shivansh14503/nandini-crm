@@ -18,6 +18,8 @@ export interface ProductsTableProps {
     sortField?: string;
     sortOrder?: 'asc' | 'desc';
     onSort?: (field: string) => void;
+    onRowClick?: (product: Product) => void;
+    activeProductId?: string | null;
 }
 
 const TAX_RATE_COLORS: Record<string, { bg: string; color: string; border: string }> = {
@@ -39,6 +41,8 @@ export function ProductsTable({
     sortField,
     sortOrder,
     onSort,
+    onRowClick,
+    activeProductId,
 }: ProductsTableProps) {
     const columns: DataTableColumn<Product>[] = useMemo(
         () => [
@@ -54,7 +58,13 @@ export function ProductsTable({
                             <Typography
                                 onClick={(e) => {
                                     e.stopPropagation();
-                                    onEditProduct(p.id);
+                                    if (onRowClick) {
+                                        onRowClick(p);
+                                    } else if (onViewProduct) {
+                                        onViewProduct(p.id);
+                                    } else {
+                                        onEditProduct(p.id);
+                                    }
                                 }}
                                 sx={{
                                     fontWeight: 700,
@@ -155,7 +165,7 @@ export function ProductsTable({
                 ),
             },
         ],
-        [onEditProduct]
+        [onEditProduct, onViewProduct, onRowClick]
     );
 
     return (
@@ -175,10 +185,12 @@ export function ProductsTable({
             onSort={onSort}
             onViewRow={(p) => (onViewProduct ? onViewProduct(p.id) : onEditProduct(p.id))}
             onEditRow={(p) => onEditProduct(p.id)}
+            onRowClick={onRowClick}
+            activeRowId={activeProductId}
             viewTooltip="View Product"
             editTooltip="Edit Product"
             actionsPosition="left"
-            actionsWidth={80}
+            actionsWidth={70}
             actionsHeaderLabel="ACTIONS"
             emptyTitle="No products in catalog yet"
             emptyDescription="Add your first product to start building the catalog. You can define pricing, HSN codes, and tax rates."

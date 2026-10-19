@@ -46,6 +46,7 @@ export interface DataTableProps<T> {
 
     // Row interaction
     onRowClick?: (row: T) => void;
+    activeRowId?: string | null;
 
     // Empty state customization
     emptyState?: React.ReactNode;

@@ -475,15 +475,18 @@ function NotificationBell() {
 
 /* ─── Create button with dropdown ──────────────────────── */
 const CREATE_ITEMS = [
-    { label: 'Lead' },
-    { label: 'Opportunity' },
-    { label: 'Customer' },
-    { label: 'Quotation' },
-    { label: 'Ticket' },
-    { label: 'Activity' },
+    { label: 'Lead', href: '/leads/new' },
+    { label: 'Organization', href: '/organizations/new' },
+    { label: 'Contact', href: '/contacts/new' },
+    { label: 'Opportunity', href: '/opportunities/new' },
+    { label: 'Customer', href: '/customers' },
+    { label: 'Quotation', href: '/quotations' },
+    { label: 'Ticket', href: '/dashboard' },
+    { label: 'Activity', href: '/dashboard' },
 ];
 
 function CreateButton() {
+    const router = useRouter();
     const [open, setOpen] = useState(false);
     const anchorRef = useRef<HTMLButtonElement>(null);
     const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -568,7 +571,12 @@ function CreateButton() {
                                         {CREATE_ITEMS.map((item, i) => (
                                             <MenuItem
                                                 key={i}
-                                                onClick={() => setOpen(false)}
+                                                onClick={() => {
+                                                    setOpen(false);
+                                                    if (item.href) {
+                                                        router.push(item.href);
+                                                    }
+                                                }}
                                                 sx={{
                                                     fontSize: '0.82rem',
                                                     color: '#374151',

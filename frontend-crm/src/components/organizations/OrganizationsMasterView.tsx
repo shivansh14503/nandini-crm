@@ -17,7 +17,6 @@ import AddIcon from '@mui/icons-material/Add';
 import FilterListIcon from '@mui/icons-material/FilterList';
 import ViewColumnIcon from '@mui/icons-material/ViewColumn';
 import FileDownloadOutlinedIcon from '@mui/icons-material/FileDownloadOutlined';
-import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown';
 
 import { ROUTES } from '../../config/constants';
 import { AppBreadcrumbs } from '../common/AppBreadcrumbs';
@@ -28,7 +27,7 @@ import {
     saveStoredOrganizations,
     type ExtendedOrganization,
 } from '../../data/mockOrganizations';
-import { QuickCreateDrawer } from './QuickCreateDrawer';
+import { OrganizationDetailDrawer } from './OrganizationDetailDrawer';
 import {
     OrganizationsFilterPills,
     OrganizationsTableToolbar,
@@ -51,9 +50,8 @@ export function OrganizationsMasterView() {
     const [sortField, setSortField] = useState<SortField>('organizationName');
     const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
 
-    // Drawer & Menus
-    const [quickCreateOpen, setQuickCreateOpen] = useState(false);
-    const [newOrgMenuAnchor, setNewOrgMenuAnchor] = useState<null | HTMLElement>(null);
+    // Detail View Side Drawer
+    const [selectedDrawerOrg, setSelectedDrawerOrg] = useState<ExtendedOrganization | null>(null);
     const [toast, setToast] = useState<{ open: boolean; message: string; severity: 'success' | 'info' | 'error' }>({
         open: false,
         message: '',
@@ -197,20 +195,7 @@ export function OrganizationsMasterView() {
         setToast({ open: true, message: `Exported ${recordsToExport.length} organizations to CSV.`, severity: 'success' });
     };
 
-    const handleQuickCreateSave = (newOrg: ExtendedOrganization, addAnother = false) => {
-        const next = [newOrg, ...organizations];
-        setOrganizations(next);
-        saveStoredOrganizations(next);
-        setSelectedIds(new Set([newOrg.id]));
-        setToast({
-            open: true,
-            message: `Organization "${newOrg.organizationName}" created successfully!`,
-            severity: 'success',
-        });
-        if (!addAnother) {
-            setQuickCreateOpen(false);
-        }
-    };
+
 
     return (
         <Box sx={{ width: '100%', minHeight: 'calc(100vh - 64px)', display: 'flex', flexDirection: 'column', flex: 1 }}>
@@ -306,71 +291,31 @@ export function OrganizationsMasterView() {
                             Export
                         </Button>
 
-                        {/* Split Button: New Organization */}
-                        <Box sx={{ display: 'inline-flex', borderRadius: '8px', overflow: 'hidden' }}>
-                            <Button
-                                variant="contained"
-                                size="small"
-                                startIcon={<AddIcon sx={{ fontSize: 16 }} />}
-                                onClick={() => setQuickCreateOpen(true)}
-                                sx={{
-                                    background: 'linear-gradient(135deg, #1d4ed8 0%, #2563eb 100%)',
-                                    color: '#fff',
-                                    textTransform: 'none',
-                                    fontWeight: 700,
-                                    fontSize: '0.82rem',
-                                    borderRadius: '8px 0 0 8px',
-                                    height: 36,
-                                    px: 2,
-                                    boxShadow: 'none',
-                                    '&:hover': { background: 'linear-gradient(135deg, #1e40af 0%, #1d4ed8 100%)' },
-                                }}
-                            >
-                                New Organization
-                            </Button>
-                            <Button
-                                variant="contained"
-                                size="small"
-                                onClick={(e) => setNewOrgMenuAnchor(e.currentTarget)}
-                                sx={{
-                                    background: 'linear-gradient(135deg, #1d4ed8 0%, #2563eb 100%)',
-                                    color: '#fff',
-                                    minWidth: 28,
-                                    px: 0.8,
-                                    borderRadius: '0 8px 8px 0',
-                                    borderLeft: '1px solid rgba(255,255,255,0.25)',
-                                    height: 36,
-                                    boxShadow: 'none',
-                                    '&:hover': { background: 'linear-gradient(135deg, #1e40af 0%, #1d4ed8 100%)' },
-                                }}
-                            >
-                                <KeyboardArrowDownIcon sx={{ fontSize: 16 }} />
-                            </Button>
-                        </Box>
-
-                        <Menu
-                            anchorEl={newOrgMenuAnchor}
-                            open={Boolean(newOrgMenuAnchor)}
-                            onClose={() => setNewOrgMenuAnchor(null)}
-                            slotProps={{ paper: { sx: { borderRadius: '8px', minWidth: 200, mt: 0.5 } } }}
+                        {/* Single Primary Action: New Organization */}
+                        <Button
+                            variant="contained"
+                            size="small"
+                            startIcon={<AddIcon sx={{ fontSize: 16 }} />}
+                            onClick={() => router.push(ROUTES.ORGANIZATION_NEW)}
+                            sx={{
+                                background: 'linear-gradient(135deg, #1d4ed8 0%, #2563eb 100%)',
+                                color: '#fff',
+                                textTransform: 'none',
+                                fontWeight: 700,
+                                fontSize: '0.82rem',
+                                borderRadius: '8px',
+                                height: 36,
+                                px: 2,
+                                boxShadow: 'none',
+                                '&:hover': { background: 'linear-gradient(135deg, #1e40af 0%, #1d4ed8 100%)' },
+                            }}
                         >
-                            <MenuItem
-                                onClick={() => { setNewOrgMenuAnchor(null); setQuickCreateOpen(true); }}
-                                sx={{ fontSize: '0.82rem', fontWeight: 600, py: 1 }}
-                            >
-                                Quick Create (Side Drawer)
-                            </MenuItem>
-                            <MenuItem
-                                onClick={() => { setNewOrgMenuAnchor(null); router.push(ROUTES.ORGANIZATION_NEW); }}
-                                sx={{ fontSize: '0.82rem', fontWeight: 600, py: 1 }}
-                            >
-                                Full Organization Master Form
-                            </MenuItem>
-                        </Menu>
+                            New Organization
+                        </Button>
                     </Box>
                 </Box>
 
-                {/* ── Modular Table Card ──────────────────────────────────────── */}
+                {/* ── Modular Table Card (with slight blur when side drawer is open) ─ */}
                 <Paper
                     elevation={0}
                     sx={{
@@ -382,6 +327,8 @@ export function OrganizationsMasterView() {
                         display: 'flex',
                         flexDirection: 'column',
                         flex: 1,
+                        filter: selectedDrawerOrg ? 'blur(1.5px)' : 'none',
+                        transition: 'filter 0.25s ease',
                     }}
                 >
                     {/* Modular Table Toolbar */}
@@ -422,6 +369,8 @@ export function OrganizationsMasterView() {
                         sortField={sortField}
                         sortOrder={sortOrder}
                         onSort={handleSort}
+                        onRowClick={(org) => setSelectedDrawerOrg(org)}
+                        activeOrgId={selectedDrawerOrg?.id}
                     />
 
                     {/* Modular Pagination Footer */}
@@ -442,11 +391,12 @@ export function OrganizationsMasterView() {
             {/* ── Modular Enterprise Footer ─────────────────────────────────── */}
             <EnterpriseFooter />
 
-            {/* ── Quick Create Side Drawer ──────────────────────────────────── */}
-            <QuickCreateDrawer
-                open={quickCreateOpen}
-                onClose={() => setQuickCreateOpen(false)}
-                onSave={handleQuickCreateSave}
+            {/* ── Organization View Side Drawer ─────────────────────────────── */}
+            <OrganizationDetailDrawer
+                organization={selectedDrawerOrg}
+                open={Boolean(selectedDrawerOrg)}
+                onClose={() => setSelectedDrawerOrg(null)}
+                onEdit={(id) => router.push(ROUTES.ORGANIZATION_EDIT(id))}
             />
 
             {/* ── Standardized AppToast Notification ────────────────────────── */}

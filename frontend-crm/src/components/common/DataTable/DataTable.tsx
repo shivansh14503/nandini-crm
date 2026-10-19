@@ -43,9 +43,10 @@ export function DataTable<T>({
     editTooltip,
     deleteTooltip,
     actionsPosition = 'left',
-    actionsWidth = 80,
+    actionsWidth = 70,
     actionsHeaderLabel = 'ACTIONS',
     onRowClick,
+    activeRowId,
     emptyState,
     emptyIcon,
     emptyTitle,
@@ -96,8 +97,11 @@ export function DataTable<T>({
         );
     }
 
-    // Action presence check
-    const hasActions = Boolean(renderActions || onViewRow || onEditRow || onDeleteRow);
+    // Action presence check (view is now triggered by clicking the row)
+    const hasActions = Boolean(renderActions || onEditRow || onDeleteRow);
+
+    // Row click handler: row click opens the view
+    const handleRowClick = onRowClick || onViewRow;
 
     const renderActionButtons = (row: T, index: number) => {
         if (renderActions) {
@@ -255,17 +259,22 @@ export function DataTable<T>({
                     {data.map((row: T, index: number) => {
                         const rowId = keyExtractor(row, index);
                         const isSelected = isRowSelected(rowId);
+                        const isActive = Boolean(activeRowId && activeRowId === rowId);
 
                         return (
                             <TableRow
                                 key={rowId}
                                 hover
-                                selected={isSelected}
-                                onClick={onRowClick ? () => onRowClick(row) : undefined}
+                                selected={isSelected || isActive}
+                                onClick={handleRowClick ? () => handleRowClick(row) : undefined}
                                 sx={{
-                                    cursor: onRowClick ? 'pointer' : 'default',
+                                    cursor: handleRowClick ? 'pointer' : 'default',
                                     transition: 'background-color 0.12s ease',
                                     '&:hover': { backgroundColor: '#f8fafc' },
+                                    ...(isActive && {
+                                        backgroundColor: '#eff6ff !important',
+                                        boxShadow: 'inset 3px 0 0 #2563eb',
+                                    }),
                                     '&.Mui-selected': {
                                         backgroundColor: '#eff6ff !important',
                                     },
@@ -276,7 +285,11 @@ export function DataTable<T>({
                             >
                                 {/* Checkbox Cell */}
                                 {selectable && (
-                                    <TableCell padding="checkbox" sx={{ pl: 1.5, py: 1 }}>
+                                    <TableCell
+                                        padding="checkbox"
+                                        sx={{ pl: 1.5, py: 1 }}
+                                        onClick={(e) => e.stopPropagation()}
+                                    >
                                         <Checkbox
                                             size="small"
                                             checked={isSelected}

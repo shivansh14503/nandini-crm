@@ -1,15 +1,16 @@
 import React from 'react';
-import { Box, Typography } from '@mui/material';
+import { Box, Typography, type SxProps, type Theme } from '@mui/material';
 
 export interface SectionLabelProps {
-    icon: React.ReactNode;
+    icon?: React.ReactNode;
     label: string;
+    sx?: SxProps<Theme>;
 }
 
-export function SectionLabel({ icon, label }: SectionLabelProps) {
+export function SectionLabel({ icon, label, sx }: SectionLabelProps) {
     return (
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
-            <Box sx={{ color: '#2563EB', display: 'flex' }}>{icon}</Box>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1, ...sx }}>
+            {icon && <Box sx={{ color: '#2563EB', display: 'flex' }}>{icon}</Box>}
             <Typography
                 variant="subtitle2"
                 sx={{

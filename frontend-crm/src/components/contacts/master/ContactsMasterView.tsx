@@ -2,9 +2,8 @@
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
-import { Box, Paper } from '@mui/material';
-import { AppBreadcrumbs } from '../../common/AppBreadcrumbs';
-import { EnterpriseFooter } from '../../common/EnterpriseFooter';
+import { CommonMasterView } from '../../common/CommonMasterView';
+import { AppToast } from '../../common/AppToast';
 import { ROUTES } from '../../../config/constants';
 import type { Contact } from '../../../types/contact.types';
 import { ContactsFilterPills } from './ContactsFilterPills';
@@ -12,6 +11,7 @@ import { ContactsTableToolbar } from './ContactsTableToolbar';
 import { ContactsTable } from './ContactsTable';
 import { ContactsPagination } from './ContactsPagination';
 import type { ContactFilterTab } from './types';
+import { ContactDetailDrawer } from '../ContactDetailDrawer';
 
 const CONTACTS_STORAGE_KEY = 'nandini_crm_contacts_data_v1';
 
@@ -26,6 +26,16 @@ export function ContactsMasterView() {
     const [rowsPerPage, setRowsPerPage] = useState(10);
     const [sortField, setSortField] = useState<string>('name');
     const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
+    const [selectedDrawerContact, setSelectedDrawerContact] = useState<Contact | null>(null);
+    const [toast, setToast] = useState<{
+        open: boolean;
+        message: string;
+        severity: 'success' | 'error' | 'info' | 'warning';
+    }>({
+        open: false,
+        message: '',
+        severity: 'success',
+    });
 
     // ── Load Contacts from localStorage / Seed default if empty ─────────────
     const loadContacts = useCallback(() => {
@@ -253,39 +263,21 @@ export function ContactsMasterView() {
 
     const handleBulkDelete = () => {
         if (!window.confirm(`Delete ${selectedIds.length} selected contact(s)?`)) return;
+        const count = selectedIds.length;
         const next = contacts.filter((c) => !selectedIds.includes(c.id));
         localStorage.setItem(CONTACTS_STORAGE_KEY, JSON.stringify(next));
         setContacts(next);
         setSelectedIds([]);
+        setToast({
+            open: true,
+            message: `${count} contact(s) deleted successfully.`,
+            severity: 'success',
+        });
     };
 
     return (
-        <Box
-            sx={{
-                flex: 1,
-                display: 'flex',
-                flexDirection: 'column',
-                backgroundColor: '#f8fafc',
-                overflow: 'hidden',
-            }}
-        >
-            {/* ── Top Header with Permanent Breadcrumbs ────────────────────── */}
-            <Box
-                sx={{
-                    px: { xs: 2, md: 3 },
-                    pt: 2,
-                    pb: 1.5,
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    flexWrap: 'wrap',
-                    gap: 1.5,
-                }}
-            >
-                {/* Permanent Route-Aware Breadcrumbs */}
-                <AppBreadcrumbs />
-
-                {/* Filter Pills */}
+        <CommonMasterView
+            filters={
                 <ContactsFilterPills
                     activeTab={activeTab}
                     onTabChange={(tab) => {
@@ -294,77 +286,69 @@ export function ContactsMasterView() {
                     }}
                     counts={counts}
                 />
-            </Box>
-
-            {/* ── Main Table Card filling remaining space ─────────────────── */}
-            <Box
-                sx={{
-                    px: { xs: 2, md: 3 },
-                    pb: 1.5,
-                    flex: 1,
-                    display: 'flex',
-                    flexDirection: 'column',
-                    minHeight: 0,
-                }}
-            >
-                <Paper
-                    elevation={0}
-                    sx={{
-                        border: '1px solid #e2e8f0',
-                        borderRadius: '10px',
-                        backgroundColor: '#ffffff',
-                        display: 'flex',
-                        flexDirection: 'column',
-                        flex: 1,
-                        overflow: 'hidden',
-                        boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
+            }
+            toolbar={
+                <ContactsTableToolbar
+                    searchQuery={searchQuery}
+                    onSearchChange={(v) => {
+                        setSearchQuery(v);
+                        setPage(0);
                     }}
-                >
-                    {/* Toolbar */}
-                    <ContactsTableToolbar
-                        searchQuery={searchQuery}
-                        onSearchChange={(v) => {
-                            setSearchQuery(v);
+                    onNewContact={() => router.push(ROUTES.CONTACT_NEW)}
+                    onRefresh={() => {
+                        loadContacts();
+                        setToast({ open: true, message: 'Contacts refreshed.', severity: 'info' });
+                    }}
+                    selectedCount={selectedIds.length}
+                    onBulkDelete={handleBulkDelete}
+                />
+            }
+            table={
+                <ContactsTable
+                    contacts={paginatedContacts}
+                    selectedIds={selectedIds}
+                    onSelectAll={handleSelectAll}
+                    onSelectOne={handleSelectOne}
+                    onViewContact={(id) => router.push(ROUTES.CONTACT_DETAIL(id))}
+                    onEditContact={(id) => router.push(ROUTES.CONTACT_EDIT(id))}
+                    onNewContact={() => router.push(ROUTES.CONTACT_NEW)}
+                    sortField={sortField}
+                    sortOrder={sortOrder}
+                    onSort={handleSort}
+                    onRowClick={(contact) => setSelectedDrawerContact(contact)}
+                    activeContactId={selectedDrawerContact?.id}
+                />
+            }
+            pagination={
+                filteredContacts.length > 0 ? (
+                    <ContactsPagination
+                        page={page}
+                        rowsPerPage={rowsPerPage}
+                        totalCount={filteredContacts.length}
+                        onPageChange={setPage}
+                        onRowsPerPageChange={(size) => {
+                            setRowsPerPage(size);
                             setPage(0);
                         }}
-                        onNewContact={() => router.push(ROUTES.CONTACT_NEW)}
-                        onRefresh={loadContacts}
-                        selectedCount={selectedIds.length}
-                        onBulkDelete={handleBulkDelete}
                     />
-
-                    {/* Table View */}
-                    <ContactsTable
-                        contacts={paginatedContacts}
-                        selectedIds={selectedIds}
-                        onSelectAll={handleSelectAll}
-                        onSelectOne={handleSelectOne}
-                        onViewContact={(id) => router.push(ROUTES.CONTACT_DETAIL(id))}
-                        onEditContact={(id) => router.push(ROUTES.CONTACT_EDIT(id))}
-                        onNewContact={() => router.push(ROUTES.CONTACT_NEW)}
-                        sortField={sortField}
-                        sortOrder={sortOrder}
-                        onSort={handleSort}
-                    />
-
-                    {/* Pagination */}
-                    {filteredContacts.length > 0 && (
-                        <ContactsPagination
-                            page={page}
-                            rowsPerPage={rowsPerPage}
-                            totalCount={filteredContacts.length}
-                            onPageChange={setPage}
-                            onRowsPerPageChange={(size) => {
-                                setRowsPerPage(size);
-                                setPage(0);
-                            }}
-                        />
-                    )}
-                </Paper>
-            </Box>
-
-            {/* ── Enterprise Footer ────────────────────────────────────────── */}
-            <EnterpriseFooter />
-        </Box>
+                ) : null
+            }
+            drawer={
+                <ContactDetailDrawer
+                    contact={selectedDrawerContact}
+                    open={Boolean(selectedDrawerContact)}
+                    onClose={() => setSelectedDrawerContact(null)}
+                />
+            }
+            isDrawerOpen={Boolean(selectedDrawerContact)}
+            toast={
+                <AppToast
+                    open={toast.open}
+                    message={toast.message}
+                    severity={toast.severity}
+                    onClose={() => setToast((prev) => ({ ...prev, open: false }))}
+                />
+            }
+        />
     );
 }

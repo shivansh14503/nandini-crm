@@ -27,6 +27,8 @@ export interface ContactsTableProps {
     sortField?: string;
     sortOrder?: 'asc' | 'desc';
     onSort?: (field: string) => void;
+    onRowClick?: (contact: Contact) => void;
+    activeContactId?: string | null;
 }
 
 export function ContactsTable({
@@ -40,6 +42,8 @@ export function ContactsTable({
     sortField,
     sortOrder,
     onSort,
+    onRowClick,
+    activeContactId,
 }: ContactsTableProps) {
     // Declarative Column Definitions for Contacts
     const columns: DataTableColumn<Contact>[] = useMemo(
@@ -55,7 +59,13 @@ export function ContactsTable({
                         <Typography
                             onClick={(e) => {
                                 e.stopPropagation();
-                                onEditContact(c.id);
+                                if (onRowClick) {
+                                    onRowClick(c);
+                                } else if (onViewContact) {
+                                    onViewContact(c.id);
+                                } else {
+                                    onEditContact(c.id);
+                                }
                             }}
                             sx={{
                                 fontWeight: 700,
@@ -149,7 +159,7 @@ export function ContactsTable({
                 ),
             },
         ],
-        [onEditContact]
+        [onEditContact, onViewContact, onRowClick]
     );
 
     return (
@@ -169,10 +179,12 @@ export function ContactsTable({
             onSort={onSort}
             onViewRow={(c) => (onViewContact ? onViewContact(c.id) : onEditContact(c.id))}
             onEditRow={(c) => onEditContact(c.id)}
+            onRowClick={onRowClick}
+            activeRowId={activeContactId}
             viewTooltip="View Contact"
             editTooltip="Edit Contact"
             actionsPosition="left"
-            actionsWidth={80}
+            actionsWidth={70}
             actionsHeaderLabel="ACTIONS"
             emptyTitle="No contacts recorded yet"
             emptyDescription="Create your first contact person and link them to an active organization account."
