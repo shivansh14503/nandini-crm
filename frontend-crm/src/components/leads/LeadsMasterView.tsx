@@ -2,23 +2,25 @@
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
+import { Box, Chip, Typography } from '@mui/material';
+import GroupOutlinedIcon from '@mui/icons-material/GroupOutlined';
+import LocalFireDepartmentOutlinedIcon from '@mui/icons-material/LocalFireDepartmentOutlined';
+import LocalFireDepartmentIcon from '@mui/icons-material/LocalFireDepartment';
+import FiberNewOutlinedIcon from '@mui/icons-material/FiberNewOutlined';
+import TodayOutlinedIcon from '@mui/icons-material/TodayOutlined';
+import AccountCircleOutlinedIcon from '@mui/icons-material/AccountCircleOutlined';
+import PersonOutlinedIcon from '@mui/icons-material/PersonOutlined';
+import PhoneOutlinedIcon from '@mui/icons-material/PhoneOutlined';
+import EmailOutlinedIcon from '@mui/icons-material/EmailOutlined';
+import ApartmentIcon from '@mui/icons-material/Apartment';
+import CalendarMonthOutlinedIcon from '@mui/icons-material/CalendarMonthOutlined';
 import { CommonMasterView } from '../common/CommonMasterView';
 import { AppToast } from '../common/AppToast';
+import type { DataTableColumn, DataTableFilterItem } from '../common/DataTable';
 import { ROUTES } from '../../config/constants';
 import type { Lead } from '../../types/lead.types';
-import {
-    getStoredLeads,
-    deleteStoredLead,
-    deleteMultipleStoredLeads,
-} from '../../data/mockLeads';
-import {
-    LeadsFilterPills,
-    LeadsTableToolbar,
-    LeadsTable,
-    LeadsPagination,
-    type LeadFilterTab,
-    type LeadSortField,
-} from './master';
+import { leadService } from '@/services';
+import type { LeadFilterTab } from './master';
 import { LeadDetailDrawer } from './LeadDetailDrawer';
 
 export function LeadsMasterView() {
@@ -45,36 +47,71 @@ export function LeadsMasterView() {
 
     const todayStr = useMemo(() => new Date().toISOString().split('T')[0], []);
 
-    // ── Load Leads from localStorage ──────────────────────────────────────────
     const loadLeads = useCallback(() => {
-        setLeads(getStoredLeads());
+        setLeads(leadService.getAllSync());
     }, []);
 
     useEffect(() => {
-        loadLeads();
-    }, [loadLeads]);
-
-    // ── Compute Tab Counts ────────────────────────────────────────────────────
-    const counts = useMemo(() => {
-        return {
-            all: leads.length,
-            hot: leads.filter((l) => l.leadType === 'Hot').length,
-            newLeads: leads.filter((l) => l.status === 'New').length,
-            followupToday: leads.filter((l) => l.nextFollowupDate === todayStr).length,
-            myLeads: leads.filter((l) => (l.assignedTo || '').includes('mittal.sharma')).length,
+        let active = true;
+        leadService
+            .getAll()
+            .then((data) => {
+                if (active) setLeads(data);
+            })
+            .catch(() => {});
+        return () => {
+            active = false;
         };
+    }, []);
+
+    // ── Filter Tabs Configuration ─────────────────────────────────────────────
+    const filterItems: DataTableFilterItem<LeadFilterTab>[] = useMemo(() => {
+        return [
+            {
+                id: 'all',
+                label: 'All Leads',
+                icon: <GroupOutlinedIcon sx={{ fontSize: 16 }} />,
+                count: leads.length,
+            },
+            {
+                id: 'hot',
+                label: 'Hot Leads',
+                icon: <LocalFireDepartmentOutlinedIcon sx={{ fontSize: 16 }} />,
+                count: leads.filter((l) => l.leadType === 'Hot').length,
+                activeColor: '#dc2626',
+                activeBgColor: '#fef2f2',
+                activeBadgeBgColor: '#fee2e2',
+            },
+            {
+                id: 'new',
+                label: 'New Enquiries',
+                icon: <FiberNewOutlinedIcon sx={{ fontSize: 16 }} />,
+                count: leads.filter((l) => l.status === 'New').length,
+            },
+            {
+                id: 'followup_today',
+                label: 'Followup Today',
+                icon: <TodayOutlinedIcon sx={{ fontSize: 16 }} />,
+                count: leads.filter((l) => l.nextFollowupDate === todayStr).length,
+                activeColor: '#d97706',
+            },
+            {
+                id: 'my_leads',
+                label: 'My Leads',
+                icon: <AccountCircleOutlinedIcon sx={{ fontSize: 16 }} />,
+                count: leads.filter((l) => (l.assignedTo || '').includes('mittal.sharma')).length,
+            },
+        ];
     }, [leads, todayStr]);
 
     // ── Filter Logic ──────────────────────────────────────────────────────────
     const filteredLeads = useMemo(() => {
         return leads.filter((lead) => {
-            // Filter Tab condition
             if (activeTab === 'hot' && lead.leadType !== 'Hot') return false;
             if (activeTab === 'new' && lead.status !== 'New') return false;
             if (activeTab === 'followup_today' && lead.nextFollowupDate !== todayStr) return false;
             if (activeTab === 'my_leads' && !(lead.assignedTo || '').includes('mittal.sharma')) return false;
 
-            // Search query condition
             if (searchQuery.trim()) {
                 const q = searchQuery.toLowerCase().trim();
                 const inName = lead.name.toLowerCase().includes(q);
@@ -107,22 +144,20 @@ export function LeadsMasterView() {
     // ── Sort Logic ────────────────────────────────────────────────────────────
     const sortedLeads = useMemo(() => {
         return [...filteredLeads].sort((a, b) => {
-            const valA = ((a as Record<string, any>)[sortField] || '').toString().toLowerCase();
-            const valB = ((b as Record<string, any>)[sortField] || '').toString().toLowerCase();
+            const valA = ((a as unknown as Record<string, unknown>)[sortField] || '').toString().toLowerCase();
+            const valB = ((b as unknown as Record<string, unknown>)[sortField] || '').toString().toLowerCase();
             if (valA < valB) return sortOrder === 'asc' ? -1 : 1;
             if (valA > valB) return sortOrder === 'asc' ? 1 : -1;
             return 0;
         });
     }, [filteredLeads, sortField, sortOrder]);
 
-    // ── Paginated Leads ───────────────────────────────────────────────────────
     const paginatedLeads = useMemo(() => {
         const start = page * rowsPerPage;
         return sortedLeads.slice(start, start + rowsPerPage);
     }, [sortedLeads, page, rowsPerPage]);
 
-    // ── Selection Handlers ────────────────────────────────────────────────────
-    const handleSelectAll = (checked: boolean) => {
+    const handleToggleSelectAll = (checked?: boolean) => {
         if (checked) {
             setSelectedIds(paginatedLeads.map((l) => l.id));
         } else {
@@ -130,11 +165,10 @@ export function LeadsMasterView() {
         }
     };
 
-    const handleSelectOne = (id: string, checked: boolean) => {
-        setSelectedIds((prev) => (checked ? [...prev, id] : prev.filter((i) => i !== id)));
+    const handleToggleSelectRow = (id: string) => {
+        setSelectedIds((prev) => (prev.includes(id) ? prev.filter((i) => i !== id) : [...prev, id]));
     };
 
-    // ── Sort Handler ──────────────────────────────────────────────────────────
     const handleSort = (field: string) => {
         if (sortField === field) {
             setSortOrder((prev) => (prev === 'asc' ? 'desc' : 'asc'));
@@ -144,12 +178,11 @@ export function LeadsMasterView() {
         }
     };
 
-    // ── Bulk Delete Handler ───────────────────────────────────────────────────
-    const handleBulkDelete = () => {
+    const handleBulkDelete = async () => {
         if (selectedIds.length === 0) return;
         if (!confirm(`Are you sure you want to delete ${selectedIds.length} selected lead(s)?`)) return;
 
-        deleteMultipleStoredLeads(selectedIds);
+        await leadService.deleteBulk(selectedIds);
         setSelectedIds([]);
         loadLeads();
         setToast({
@@ -159,75 +192,354 @@ export function LeadsMasterView() {
         });
     };
 
+    // ── Declarative Column Definitions ────────────────────────────────────────
+    const columns: DataTableColumn<Lead>[] = useMemo(
+        () => [
+            {
+                id: 'name',
+                label: 'LEAD NAME',
+                sortable: true,
+                minWidth: 200,
+                render: (l) => (
+                    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.3 }}>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                            <PersonOutlinedIcon sx={{ fontSize: 16, color: '#2563eb', flexShrink: 0 }} />
+                            <Typography
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    setSelectedDrawerLead(l);
+                                }}
+                                sx={{
+                                    fontWeight: 700,
+                                    color: '#1d4ed8',
+                                    fontSize: '0.82rem',
+                                    cursor: 'pointer',
+                                    '&:hover': { textDecoration: 'underline' },
+                                }}
+                            >
+                                {l.name}
+                            </Typography>
+                        </Box>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.8, pl: 3 }}>
+                            <Chip
+                                label={l.leadCode}
+                                size="small"
+                                sx={{
+                                    height: 18,
+                                    fontSize: '0.62rem',
+                                    fontWeight: 700,
+                                    backgroundColor: '#f1f5f9',
+                                    color: '#475569',
+                                    fontFamily: 'monospace',
+                                }}
+                            />
+                            {l.designation && (
+                                <Typography sx={{ fontSize: '0.7rem', color: '#64748b' }} noWrap>
+                                    {l.designation}
+                                </Typography>
+                            )}
+                        </Box>
+                    </Box>
+                ),
+            },
+            {
+                id: 'organizationName',
+                label: 'ORGANIZATION',
+                sortable: true,
+                minWidth: 180,
+                render: (l) => (
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.8 }}>
+                        <ApartmentIcon sx={{ fontSize: 15, color: '#64748b', flexShrink: 0 }} />
+                        <Box>
+                            <Typography sx={{ fontSize: '0.8rem', color: '#1e293b', fontWeight: 600 }}>
+                                {l.organizationName || 'Individual Prospect'}
+                            </Typography>
+                            {l.primaryCity && (
+                                <Typography sx={{ fontSize: '0.7rem', color: '#64748b' }}>
+                                    {l.primaryCity}{l.primaryState ? `, ${l.primaryState}` : ''}
+                                </Typography>
+                            )}
+                        </Box>
+                    </Box>
+                ),
+            },
+            {
+                id: 'mobile',
+                label: 'CONTACT INFO',
+                sortable: true,
+                minWidth: 160,
+                render: (l) => (
+                    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.4 }}>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.6 }}>
+                            <PhoneOutlinedIcon sx={{ fontSize: 14, color: '#64748b' }} />
+                            <Typography sx={{ fontSize: '0.78rem', color: '#334155', fontWeight: 600 }}>
+                                {l.mobile || l.otherPhone || '-'}
+                            </Typography>
+                        </Box>
+                        {l.emailAddresses?.[0]?.email && (
+                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.6 }}>
+                                <EmailOutlinedIcon sx={{ fontSize: 13, color: '#94a3b8' }} />
+                                <Typography sx={{ fontSize: '0.74rem', color: '#64748b' }} noWrap>
+                                    {l.emailAddresses[0].email}
+                                </Typography>
+                            </Box>
+                        )}
+                    </Box>
+                ),
+            },
+            {
+                id: 'productCategory',
+                label: 'PRODUCT / SOLUTION',
+                sortable: false,
+                minWidth: 170,
+                render: (l) => (
+                    <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
+                        {l.productCategory && l.productCategory.length > 0 ? (
+                            l.productCategory.map((prod, idx) => (
+                                <Chip
+                                    key={idx}
+                                    label={prod}
+                                    size="small"
+                                    sx={{
+                                        height: 20,
+                                        fontSize: '0.68rem',
+                                        fontWeight: 600,
+                                        backgroundColor: '#f0fdf4',
+                                        color: '#166534',
+                                        border: '1px solid #bbf7d0',
+                                    }}
+                                />
+                            ))
+                        ) : (
+                            <Typography sx={{ fontSize: '0.78rem', color: '#94a3b8' }}>-</Typography>
+                        )}
+                    </Box>
+                ),
+            },
+            {
+                id: 'leadType',
+                label: 'LEAD TYPE',
+                sortable: true,
+                minWidth: 110,
+                render: (l) => {
+                    const isHot = l.leadType === 'Hot';
+                    const isWarm = l.leadType === 'Warm';
+
+                    return (
+                        <Chip
+                            icon={isHot ? <LocalFireDepartmentIcon sx={{ fontSize: '13px !important', color: '#dc2626 !important' }} /> : undefined}
+                            label={l.leadType || 'Normal'}
+                            size="small"
+                            sx={{
+                                height: 22,
+                                fontSize: '0.72rem',
+                                fontWeight: 700,
+                                backgroundColor: isHot ? '#fee2e2' : isWarm ? '#fef3c7' : '#f1f5f9',
+                                color: isHot ? '#991b1b' : isWarm ? '#92400e' : '#475569',
+                                border: isHot ? '1px solid #fecaca' : isWarm ? '1px solid #fde68a' : '1px solid #e2e8f0',
+                            }}
+                        />
+                    );
+                },
+            },
+            {
+                id: 'status',
+                label: 'STATUS',
+                sortable: true,
+                minWidth: 120,
+                render: (l) => {
+                    let bg = '#eff6ff';
+                    let color = '#1d4ed8';
+                    let border = '#bfdbfe';
+
+                    if (l.status === 'New') {
+                        bg = '#eff6ff';
+                        color = '#1e40af';
+                        border = '#bfdbfe';
+                    } else if (l.status === 'Contacted' || l.status === 'In Discussion') {
+                        bg = '#f5f3ff';
+                        color = '#6d28d9';
+                        border = '#ddd6fe';
+                    } else if (l.status === 'Demo Scheduled') {
+                        bg = '#fdf4ff';
+                        color = '#a21caf';
+                        border = '#f5d0fe';
+                    } else if (l.status === 'Proposal Sent' || l.status === 'Negotiation') {
+                        bg = '#fffbeb';
+                        color = '#b45309';
+                        border = '#fde68a';
+                    } else if (l.status === 'Converted') {
+                        bg = '#ecfdf5';
+                        color = '#047857';
+                        border = '#a7f3d0';
+                    } else if (l.status.includes('Lost') || l.status.includes('Unqualified')) {
+                        bg = '#fef2f2';
+                        color = '#b91c1c';
+                        border = '#fecaca';
+                    }
+
+                    return (
+                        <Chip
+                            label={l.status || 'New'}
+                            size="small"
+                            sx={{
+                                height: 22,
+                                fontSize: '0.72rem',
+                                fontWeight: 600,
+                                backgroundColor: bg,
+                                color: color,
+                                border: `1px solid ${border}`,
+                            }}
+                        />
+                    );
+                },
+            },
+            {
+                id: 'nextFollowupDate',
+                label: 'NEXT FOLLOWUP',
+                sortable: true,
+                minWidth: 150,
+                render: (l) => {
+                    const isToday = l.nextFollowupDate === todayStr;
+
+                    return (
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.8 }}>
+                            <CalendarMonthOutlinedIcon
+                                sx={{
+                                    fontSize: 16,
+                                    color: isToday ? '#d97706' : '#64748b',
+                                }}
+                            />
+                            <Box>
+                                <Typography
+                                    sx={{
+                                        fontSize: '0.78rem',
+                                        fontWeight: isToday ? 700 : 500,
+                                        color: isToday ? '#b45309' : '#334155',
+                                    }}
+                                >
+                                    {l.nextFollowupDate || '-'}
+                                    {isToday && (
+                                        <Box
+                                            component="span"
+                                            sx={{
+                                                ml: 0.6,
+                                                px: 0.6,
+                                                py: 0.1,
+                                                borderRadius: '4px',
+                                                fontSize: '0.62rem',
+                                                fontWeight: 800,
+                                                backgroundColor: '#fef3c7',
+                                                color: '#b45309',
+                                                border: '1px solid #fde68a',
+                                            }}
+                                        >
+                                            TODAY
+                                        </Box>
+                                    )}
+                                </Typography>
+                                {(l.nextFollowupTime || l.followupType) && (
+                                    <Typography sx={{ fontSize: '0.7rem', color: '#64748b' }}>
+                                        {l.followupType ? `${l.followupType} • ` : ''}
+                                        {l.nextFollowupTime || ''}
+                                    </Typography>
+                                )}
+                            </Box>
+                        </Box>
+                    );
+                },
+            },
+            {
+                id: 'assignedTo',
+                label: 'ASSIGNED TO',
+                sortable: true,
+                minWidth: 130,
+                render: (l) => (
+                    <Typography sx={{ fontSize: '0.78rem', color: '#475569', fontWeight: 500 }}>
+                        {l.assignedTo || 'mittal.sharma'}
+                    </Typography>
+                ),
+            },
+        ],
+        [todayStr]
+    );
+
     return (
-        <CommonMasterView
+        <CommonMasterView<Lead, LeadFilterTab>
             breadcrumbItems={[
                 { label: 'Sales' },
                 { label: 'Leads' },
             ]}
-            filters={
-                <LeadsFilterPills
-                    activeTab={activeTab}
-                    onTabChange={(tab) => {
-                        setActiveTab(tab);
-                        setPage(0);
-                    }}
-                    counts={counts}
-                />
-            }
-            toolbar={
-                <LeadsTableToolbar
-                    searchQuery={searchQuery}
-                    onSearchChange={(q) => {
-                        setSearchQuery(q);
-                        setPage(0);
-                    }}
-                    onNewLead={() => router.push(ROUTES.LEAD_NEW)}
-                    onRefresh={() => {
-                        loadLeads();
-                        setToast({ open: true, message: 'Leads refreshed.', severity: 'info' });
-                    }}
-                    selectedCount={selectedIds.length}
-                    onBulkDelete={handleBulkDelete}
-                />
-            }
-            table={
-                <LeadsTable
-                    leads={paginatedLeads}
-                    selectedIds={selectedIds}
-                    onSelectAll={handleSelectAll}
-                    onSelectOne={handleSelectOne}
-                    onViewLead={(id) => {
-                        const found = leads.find((l) => l.id === id);
-                        if (found) setSelectedDrawerLead(found);
-                    }}
-                    onEditLead={(id) => router.push(ROUTES.LEAD_EDIT(id))}
-                    onNewLead={() => router.push(ROUTES.LEAD_NEW)}
-                    sortField={sortField}
-                    sortOrder={sortOrder}
-                    onSort={handleSort}
-                    onRowClick={(lead) => setSelectedDrawerLead(lead)}
-                    activeLeadId={selectedDrawerLead?.id}
-                />
-            }
-            pagination={
-                <LeadsPagination
-                    page={page}
-                    rowsPerPage={rowsPerPage}
-                    totalCount={sortedLeads.length}
-                    onPageChange={(newPage) => setPage(newPage)}
-                    onRowsPerPageChange={(newRows) => {
-                        setRowsPerPage(newRows);
-                        setPage(0);
-                    }}
-                />
-            }
+            filterConfig={{
+                filters: filterItems,
+                activeFilter: activeTab,
+                onFilterChange: (tab) => {
+                    setActiveTab(tab);
+                    setPage(0);
+                },
+            }}
+            searchConfig={{
+                searchQuery,
+                onSearchChange: (q) => {
+                    setSearchQuery(q);
+                    setPage(0);
+                },
+                searchPlaceholder: 'Search by name, company, phone, product, status...',
+                searchWidth: { xs: '100%', sm: 340 },
+                onNewClick: () => router.push(ROUTES.LEAD_NEW),
+                newButtonLabel: 'New Lead',
+                onRefresh: () => {
+                    loadLeads();
+                    setToast({ open: true, message: 'Leads refreshed.', severity: 'info' });
+                },
+                refreshTooltip: 'Refresh Leads',
+                selectedCount: selectedIds.length,
+                onBulkDelete: handleBulkDelete,
+            }}
+            columns={columns}
+            data={paginatedLeads}
+            keyExtractor={(l) => l.id}
+            selectedIds={selectedIds}
+            onToggleSelectRow={handleToggleSelectRow}
+            onToggleSelectAll={handleToggleSelectAll}
+            sortField={sortField}
+            sortOrder={sortOrder}
+            onSort={handleSort}
+            onView={(l) => setSelectedDrawerLead(l)}
+            onEdit={(l) => router.push(ROUTES.LEAD_EDIT(l.id))}
+            onRowClick={(lead) => setSelectedDrawerLead(lead)}
+            activeRowId={selectedDrawerLead?.id}
+            viewTooltip="View Lead Details"
+            editTooltip="Edit Lead"
+            emptyTitle="No leads in pipeline"
+            emptyDescription="Record new prospective clients, followups, and product interests to begin converting sales."
+            emptyActionLabel="Create Lead"
+            onEmptyAction={() => router.push(ROUTES.LEAD_NEW)}
+            emptyIcon={<PersonOutlinedIcon sx={{ fontSize: 48, color: '#cbd5e1' }} />}
+            minHeight={300}
+            pagination={{
+                page,
+                rowsPerPage,
+                totalCount: sortedLeads.length,
+                onPageChange: (newPage) => setPage(newPage),
+                onRowsPerPageChange: (newRows) => {
+                    setRowsPerPage(newRows);
+                    setPage(0);
+                },
+            }}
             drawer={
                 <LeadDetailDrawer
                     lead={selectedDrawerLead}
                     open={Boolean(selectedDrawerLead)}
                     onClose={() => setSelectedDrawerLead(null)}
                     onEdit={(id) => router.push(ROUTES.LEAD_EDIT(id))}
+                    onLeadUpdated={(updatedLead) => {
+                        setSelectedDrawerLead(updatedLead);
+                        loadLeads();
+                    }}
+                    onShowToast={(message, severity = 'success') => {
+                        setToast({ open: true, message, severity });
+                    }}
                 />
             }
             isDrawerOpen={Boolean(selectedDrawerLead)}

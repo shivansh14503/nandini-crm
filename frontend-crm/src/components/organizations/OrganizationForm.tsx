@@ -12,20 +12,13 @@ import { type BreadcrumbItem } from '../common/AppBreadcrumbs';
 import { AppToast } from '../common/AppToast';
 import { CommonFormLayout } from '../common/CommonFormLayout';
 import { type FormTabDefinition } from '../common/Drawer';
-import { organizationService } from '../../services/organization.service';
+import { organizationService } from '@/services';
 import { ROUTES } from '../../config/constants';
 import { validateWithToast, organizationFormSchema } from '../../validations';
 import type {
     OrganizationFormData,
     CorporateEmail,
 } from '../../types/organization.types';
-import {
-    getStoredOrganizationById,
-    updateStoredOrganization,
-    getStoredOrganizations,
-    saveStoredOrganizations,
-    type ExtendedOrganization,
-} from '../../data/mockOrganizations';
 
 // Tab components
 import {
@@ -150,21 +143,20 @@ export default function OrganizationForm({
 
     // Populate data when editing
     useEffect(() => {
-        if (initialData && Object.keys(initialData).length > 0) {
-            setForm((prev) => ({ ...prev, ...initialData }));
-        } else if (organizationId) {
-            const stored = getStoredOrganizationById(organizationId);
-            if (stored) {
-                setForm((prev) => ({ ...prev, ...stored }));
-            } else {
-                organizationService.getById(organizationId)
-                    .then((res) => {
-                        if (res.data) setForm((prev) => ({ ...prev, ...res.data }));
-                    })
-                    .catch(() => {});
-            }
-        }
-    }, [initialData, organizationId]);
+        if (!organizationId) return;
+        let active = true;
+        organizationService
+            .getById(organizationId)
+            .then((found) => {
+                if (active && found) {
+                    setForm((prev) => ({ ...prev, ...found }));
+                }
+            })
+            .catch(() => {});
+        return () => {
+            active = false;
+        };
+    }, [organizationId]);
 
     // ── Field updaters ────────────────────────────────────────────────────────
     const set = useCallback(
@@ -254,24 +246,7 @@ export default function OrganizationForm({
         setSubmitting(true);
         try {
             if (mode === 'create') {
-                let createdOrg: ExtendedOrganization;
-                try {
-                    const res = await organizationService.create(form);
-                    createdOrg = res.data;
-                } catch {
-                    createdOrg = {
-                        ...form,
-                        id: `org-${Date.now()}`,
-                        accountCode: `ORG-${Math.floor(10000 + Math.random() * 90000)}`,
-                        createdAt: new Date().toISOString(),
-                        updatedAt: new Date().toISOString(),
-                        createdBy: 'mittal.sharma',
-                        isRecentlyViewed: true,
-                        isMyAccount: true,
-                    };
-                }
-                const existing = getStoredOrganizations();
-                saveStoredOrganizations([createdOrg, ...existing]);
+                await organizationService.create(form);
                 setToast({ open: true, message: 'Organization created successfully!', severity: 'success' });
                 if (redirectAfter) {
                     setTimeout(() => router.push(ROUTES.ORGANIZATIONS), 800);
@@ -280,12 +255,7 @@ export default function OrganizationForm({
                     setIsDirty(false);
                 }
             } else if (mode === 'edit' && organizationId) {
-                updateStoredOrganization(organizationId, form);
-                try {
-                    await organizationService.update(organizationId, form);
-                } catch {
-                    // Local persistence succeeded
-                }
+                await organizationService.update(organizationId, form);
                 setToast({ open: true, message: 'Organization updated successfully!', severity: 'success' });
                 setTimeout(() => router.push(ROUTES.ORGANIZATIONS), 800);
             }

@@ -1,4 +1,5 @@
 import React from 'react';
+import type { SxProps, Theme } from '@mui/material';
 
 export interface DrawerTabItem {
     id: string;
@@ -27,41 +28,6 @@ export interface DrawerBadgeItem {
     isMonospace?: boolean;
 }
 
-export interface EntityDetailDrawerProps {
-    open: boolean;
-    onClose: () => void;
-    title: string;
-    subtitle?: string;
-    avatarText?: string;
-    avatarIcon?: React.ReactNode;
-    avatarBg?: string;
-    verified?: boolean;
-    badges?: DrawerBadgeItem[];
-    headerActions?: {
-        onEdit?: () => void;
-        onSync?: () => void;
-        onPhone?: () => void;
-        custom?: React.ReactNode;
-    };
-    tabs: DrawerTabItem[];
-    auditRevisions?: AuditRevisionItem[];
-    includeChangesTab?: boolean; // Default true: automatically attaches the standardized 'Changes' tab
-    changesTabLabel?: string; // Default 'Changes'
-    defaultTabIndex?: number;
-    statusText?: string;
-    primaryAction?: {
-        label: string;
-        onClick: () => void;
-        icon?: React.ReactNode;
-    };
-    secondaryAction?: {
-        label: string;
-        onClick: () => void;
-        icon?: React.ReactNode;
-    };
-    width?: number | string | { xs?: string | number; sm?: string | number; md?: string | number };
-}
-
 /**
  * Standard form tab definition exported by creation forms.
  * Represents the single source of truth for tab identification, label, and icon.
@@ -73,6 +39,49 @@ export interface FormTabDefinition {
     sublabel?: string;
     badge?: React.ReactNode | number | string;
     hasDot?: boolean;
+}
+
+
+export interface DrawerActionButtonProps {
+    label: string;
+    onClick: () => void;
+    icon?: React.ReactNode;
+    variant?: 'text' | 'outlined' | 'contained';
+    disabled?: boolean;
+    tooltip?: string;
+    sx?: SxProps<Theme>;
+}
+
+export interface EntityDetailDrawerProps {
+    open: boolean;
+    onClose: () => void;
+    title: string;
+    subtitle?: string;
+    avatarText?: string;
+    avatarIcon?: React.ReactNode;
+    avatarBg?: string;
+    verified?: boolean;
+    loading?: boolean;
+    badges?: DrawerBadgeItem[];
+    headerActions?: {
+        onEdit?: () => void;
+        onSync?: () => void;
+        onPhone?: () => void;
+        custom?: React.ReactNode;
+    };
+    tabs?: DrawerTabItem[];
+    formTabs?: readonly FormTabDefinition[] | FormTabDefinition[];
+    tabContents?: Record<string, React.ReactNode>;
+    children?: React.ReactNode;
+    auditRevisions?: AuditRevisionItem[];
+    includeChangesTab?: boolean; // Default true: automatically attaches the standardized 'Changes' tab
+    changesTabLabel?: string; // Default 'Changes'
+    defaultTabIndex?: number;
+    statusText?: string;
+    primaryAction?: DrawerActionButtonProps;
+    secondaryAction?: DrawerActionButtonProps;
+    footerActions?: React.ReactNode;
+    width?: number | string | { xs?: string | number; sm?: string | number; md?: string | number };
 }
 
 /**
@@ -91,4 +100,3 @@ export function buildDrawerTabs<T extends string = string>(
         content: contentMap[tab.id as T] || null,
     }));
 }
-

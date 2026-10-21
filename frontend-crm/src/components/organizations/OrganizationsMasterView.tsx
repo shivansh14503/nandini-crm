@@ -4,38 +4,44 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import {
     Box,
-    Paper,
     Button,
-    Menu,
-    MenuItem,
-    Snackbar,
-    Alert,
+    Typography,
 } from '@mui/material';
-
-// Icons
 import AddIcon from '@mui/icons-material/Add';
 import FilterListIcon from '@mui/icons-material/FilterList';
 import ViewColumnIcon from '@mui/icons-material/ViewColumn';
 import FileDownloadOutlinedIcon from '@mui/icons-material/FileDownloadOutlined';
+import HistoryIcon from '@mui/icons-material/History';
+import PersonOutlinedIcon from '@mui/icons-material/PersonOutlined';
+import ApartmentIcon from '@mui/icons-material/Apartment';
 
 import { ROUTES } from '../../config/constants';
-import { AppBreadcrumbs } from '../common/AppBreadcrumbs';
+import { CommonMasterView } from '../common/CommonMasterView';
 import { AppToast } from '../common/AppToast';
-import { EnterpriseFooter } from '../common/EnterpriseFooter';
-import {
-    getStoredOrganizations,
-    saveStoredOrganizations,
-    type ExtendedOrganization,
-} from '../../data/mockOrganizations';
+import type { DataTableColumn, DataTableFilterItem } from '../common/DataTable';
+import { organizationService } from '@/services';
+import type { ExtendedOrganization } from '@/types/organization.types';
 import { OrganizationDetailDrawer } from './OrganizationDetailDrawer';
-import {
-    OrganizationsFilterPills,
-    OrganizationsTableToolbar,
-    OrganizationsTable,
-    OrganizationsPagination,
-    type FilterTab,
-    type SortField,
-} from './master';
+import type { FilterTab, SortField } from './master';
+
+const getNatureBadgeStyle = (nature: string = '') => {
+    const n = nature.toLowerCase();
+    if (n.includes('education')) return { backgroundColor: '#f3e8ff', color: '#7e22ce', border: '1px solid #d8b4fe' };
+    if (n.includes('construction')) return { backgroundColor: '#fff7ed', color: '#c2410c', border: '1px solid #fed7aa' };
+    if (n.includes('distributor') || n.includes('trading') || n.includes('wholesale')) return { backgroundColor: '#eff6ff', color: '#1d4ed8', border: '1px solid #bfdbfe' };
+    if (n.includes('transportation') || n.includes('logistics')) return { backgroundColor: '#ecfeff', color: '#0e7490', border: '1px solid #a5f3fc' };
+    if (n.includes('consulting')) return { backgroundColor: '#eef2ff', color: '#4338ca', border: '1px solid #c7d2fe' };
+    if (n.includes('it') || n.includes('software')) return { backgroundColor: '#f0f9ff', color: '#0284c7', border: '1px solid #bae6fd' };
+    if (n.includes('manufacturing')) return { backgroundColor: '#ecfdf5', color: '#047857', border: '1px solid #a7f3d0' };
+    if (n.includes('healthcare')) return { backgroundColor: '#fff1f2', color: '#be123c', border: '1px solid #fecdd3' };
+    if (n.includes('retail')) return { backgroundColor: '#fefce8', color: '#a16207', border: '1px solid #fef08a' };
+    return { backgroundColor: '#f8fafc', color: '#475569', border: '1px solid #cbd5e1' };
+};
+
+const formatNatureLabel = (nature: string = '') => {
+    if (nature.includes('Distributor / Wholesale Trading')) return 'Distributor/Trading';
+    return nature;
+};
 
 export function OrganizationsMasterView() {
     const router = useRouter();
@@ -59,7 +65,16 @@ export function OrganizationsMasterView() {
     });
 
     useEffect(() => {
-        setOrganizations(getStoredOrganizations());
+        let active = true;
+        organizationService
+            .getAll()
+            .then((data) => {
+                if (active) setOrganizations(data);
+            })
+            .catch(() => {});
+        return () => {
+            active = false;
+        };
     }, []);
 
     // ── Filter & Search Logic ─────────────────────────────────────────────────
@@ -89,8 +104,8 @@ export function OrganizationsMasterView() {
     // ── Sort Logic ────────────────────────────────────────────────────────────
     const sortedOrganizations = useMemo(() => {
         return [...filteredOrganizations].sort((a, b) => {
-            const valA = ((a as Record<string, any>)[sortField] || '').toString().toLowerCase();
-            const valB = ((b as Record<string, any>)[sortField] || '').toString().toLowerCase();
+            const valA = ((a as unknown as Record<string, unknown>)[sortField] || '').toString().toLowerCase();
+            const valB = ((b as unknown as Record<string, unknown>)[sortField] || '').toString().toLowerCase();
             if (valA < valB) return sortOrder === 'asc' ? -1 : 1;
             if (valA > valB) return sortOrder === 'asc' ? 1 : -1;
             return 0;
@@ -135,30 +150,6 @@ export function OrganizationsMasterView() {
         setSelectedIds(next);
     };
 
-    // ── Bulk Actions ──────────────────────────────────────────────────────────
-    const handleBulkAction = (action: 'active' | 'inactive' | 'delete' | 'export') => {
-        if (selectedIds.size === 0) {
-            setToast({ open: true, message: 'Please select records to perform bulk action.', severity: 'info' });
-            return;
-        }
-
-        if (action === 'delete') {
-            const nextOrgs = organizations.filter((o) => !selectedIds.has(o.id));
-            setOrganizations(nextOrgs);
-            saveStoredOrganizations(nextOrgs);
-            setSelectedIds(new Set());
-            setToast({ open: true, message: `${selectedIds.size} organizations deleted.`, severity: 'success' });
-        } else if (action === 'active' || action === 'inactive') {
-            const status = action === 'active' ? 'Active' : 'Inactive';
-            const nextOrgs = organizations.map((o) => (selectedIds.has(o.id) ? { ...o, accountStatus: status as any } : o));
-            setOrganizations(nextOrgs);
-            saveStoredOrganizations(nextOrgs);
-            setToast({ open: true, message: `${selectedIds.size} organizations updated to ${status}.`, severity: 'success' });
-        } else if (action === 'export') {
-            handleExport(true);
-        }
-    };
-
     // ── Export CSV ────────────────────────────────────────────────────────────
     const handleExport = (onlySelected = false) => {
         const recordsToExport = onlySelected
@@ -195,217 +186,461 @@ export function OrganizationsMasterView() {
         setToast({ open: true, message: `Exported ${recordsToExport.length} organizations to CSV.`, severity: 'success' });
     };
 
+    // ── Bulk Actions ──────────────────────────────────────────────────────────
+    const handleBulkAction = async (action: 'active' | 'inactive' | 'delete' | 'export') => {
+        if (selectedIds.size === 0) {
+            setToast({ open: true, message: 'Please select records to perform bulk action.', severity: 'info' });
+            return;
+        }
 
+        if (action === 'delete') {
+            const count = selectedIds.size;
+            await organizationService.deleteBulk(Array.from(selectedIds));
+            setOrganizations(organizationService.getAllSync());
+            setSelectedIds(new Set());
+            setToast({ open: true, message: `${count} organizations deleted.`, severity: 'success' });
+        } else if (action === 'active' || action === 'inactive') {
+            const status = action === 'active' ? 'Active' : 'Inactive';
+            const nextOrgs = organizationService.updateStatusBulk(selectedIds, status);
+            setOrganizations(nextOrgs);
+            setToast({ open: true, message: `${selectedIds.size} organizations updated to ${status}.`, severity: 'success' });
+        } else if (action === 'export') {
+            handleExport(true);
+        }
+    };
+
+    // ── Filter Pills Configuration ────────────────────────────────────────────
+    const filterItems: DataTableFilterItem<FilterTab>[] = useMemo(
+        () => [
+            {
+                id: 'all',
+                label: 'All Organizations',
+                count: 11417,
+            },
+            {
+                id: 'recent',
+                label: 'Recently Viewed',
+                icon: <HistoryIcon sx={{ fontSize: 15, color: '#94a3b8' }} />,
+                count: 24,
+            },
+            {
+                id: 'my',
+                label: 'My Accounts',
+                icon: <PersonOutlinedIcon sx={{ fontSize: 16, color: '#94a3b8' }} />,
+            },
+            {
+                id: 'distributor',
+                label: 'Distributor/Trading',
+                dotColor: '#2563eb',
+            },
+            {
+                id: 'enduser',
+                label: 'End User',
+                dotColor: '#10b981',
+            },
+        ],
+        []
+    );
+
+    // ── Declarative Column Definitions ────────────────────────────────────────
+    const columns: DataTableColumn<ExtendedOrganization>[] = useMemo(
+        () => [
+            {
+                id: 'organizationName',
+                label: 'ORGANIZATION NAME',
+                sortable: true,
+                minWidth: 240,
+                render: (org) => (
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.2 }}>
+                        <Box
+                            sx={{
+                                width: 28,
+                                height: 28,
+                                borderRadius: '6px',
+                                backgroundColor: '#eff6ff',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                color: '#2563eb',
+                                flexShrink: 0,
+                            }}
+                        >
+                            <ApartmentIcon sx={{ fontSize: 16 }} />
+                        </Box>
+                        <Box>
+                            <Typography
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    setSelectedDrawerOrg(org);
+                                }}
+                                sx={{
+                                    fontSize: '0.82rem',
+                                    fontWeight: 700,
+                                    color: '#1d4ed8',
+                                    cursor: 'pointer',
+                                    lineHeight: 1.3,
+                                    '&:hover': { textDecoration: 'underline' },
+                                }}
+                            >
+                                {org.organizationName}
+                            </Typography>
+                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 0.2 }}>
+                                <Typography sx={{ fontSize: '0.7rem', color: '#94a3b8', fontFamily: 'monospace' }}>
+                                    {org.accountCode}
+                                </Typography>
+                                {org.accountVerified && (
+                                    <Box
+                                        component="span"
+                                        sx={{
+                                            fontSize: '0.62rem',
+                                            fontWeight: 700,
+                                            color: '#059669',
+                                            backgroundColor: '#ecfdf5',
+                                            px: 0.6,
+                                            py: 0.1,
+                                            borderRadius: '4px',
+                                            border: '1px solid #a7f3d0',
+                                        }}
+                                    >
+                                        Verified
+                                    </Box>
+                                )}
+                            </Box>
+                        </Box>
+                    </Box>
+                ),
+            },
+            {
+                id: 'natureOfBusiness',
+                label: 'NATURE OF BUSINESS',
+                sortable: true,
+                minWidth: 160,
+                render: (org) => {
+                    const badge = getNatureBadgeStyle(org.natureOfBusiness);
+                    return (
+                        <Box
+                            component="span"
+                            sx={{
+                                display: 'inline-block',
+                                px: 1,
+                                py: 0.3,
+                                borderRadius: '6px',
+                                fontSize: '0.72rem',
+                                fontWeight: 600,
+                                ...badge,
+                            }}
+                        >
+                            {formatNatureLabel(org.natureOfBusiness)}
+                        </Box>
+                    );
+                },
+            },
+            {
+                id: 'customerType',
+                label: 'CUSTOMER TYPE',
+                sortable: true,
+                minWidth: 130,
+                render: (org) => (
+                    <Box
+                        component="span"
+                        sx={{
+                            display: 'inline-block',
+                            px: 1,
+                            py: 0.25,
+                            borderRadius: '6px',
+                            fontSize: '0.72rem',
+                            fontWeight: 600,
+                            backgroundColor: '#f1f5f9',
+                            color: '#334155',
+                            border: '1px solid #e2e8f0',
+                        }}
+                    >
+                        {org.customerType}
+                    </Box>
+                ),
+            },
+            {
+                id: 'accountStatus',
+                label: 'STATUS',
+                sortable: true,
+                minWidth: 110,
+                render: (org) => {
+                    const isActive = org.accountStatus === 'Active';
+                    return (
+                        <Box
+                            component="span"
+                            sx={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: 0.6,
+                                px: 0.9,
+                                py: 0.25,
+                                borderRadius: '12px',
+                                fontSize: '0.72rem',
+                                fontWeight: 700,
+                                backgroundColor: isActive ? '#ecfdf5' : '#fef3c7',
+                                color: isActive ? '#059669' : '#d97706',
+                                border: isActive ? '1px solid #a7f3d0' : '1px solid #fde68a',
+                            }}
+                        >
+                            <Box
+                                component="span"
+                                sx={{
+                                    width: 6,
+                                    height: 6,
+                                    borderRadius: '50%',
+                                    backgroundColor: isActive ? '#10b981' : '#f59e0b',
+                                }}
+                            />
+                            {org.accountStatus}
+                        </Box>
+                    );
+                },
+            },
+            {
+                id: 'billingStreet',
+                label: 'BILLING STREET',
+                sortable: true,
+                minWidth: 160,
+                render: (org) => (
+                    <Typography noWrap sx={{ fontSize: '0.78rem', color: '#475569', maxWidth: 200 }}>
+                        {org.billingStreet || '-'}
+                    </Typography>
+                ),
+            },
+            {
+                id: 'billingCity',
+                label: 'BILLING CITY',
+                sortable: true,
+                minWidth: 120,
+                render: (org) => (
+                    <Typography sx={{ fontSize: '0.78rem', color: '#475569' }}>
+                        {org.billingCity || '-'}
+                    </Typography>
+                ),
+            },
+            {
+                id: 'billingState',
+                label: 'BILLING STATE',
+                sortable: true,
+                minWidth: 120,
+                render: (org) => (
+                    <Typography sx={{ fontSize: '0.78rem', color: '#475569' }}>
+                        {org.billingState || '-'}
+                    </Typography>
+                ),
+            },
+            {
+                id: 'annualTurnover',
+                label: 'ANNUAL TURNOVER',
+                sortable: true,
+                minWidth: 130,
+                render: (org) => (
+                    <Typography sx={{ fontSize: '0.78rem', fontWeight: 600, color: '#334155' }}>
+                        {org.annualTurnover || '-'}
+                    </Typography>
+                ),
+            },
+            {
+                id: 'assignedUser',
+                label: 'ASSIGNED USER',
+                sortable: true,
+                minWidth: 140,
+                render: (org) => (
+                    <Typography sx={{ fontSize: '0.78rem', color: '#64748b' }}>
+                        {org.assignedUser || 'mittal.sharma'}
+                    </Typography>
+                ),
+            },
+        ],
+        []
+    );
+
+    const headerActions = (
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.2 }}>
+            <Button
+                variant="outlined"
+                size="small"
+                startIcon={<FilterListIcon sx={{ fontSize: 16 }} />}
+                onClick={() => setToast({ open: true, message: 'Custom filters active.', severity: 'info' })}
+                sx={{
+                    borderColor: '#e2e8f0',
+                    color: '#334155',
+                    backgroundColor: '#fff',
+                    textTransform: 'none',
+                    fontWeight: 600,
+                    fontSize: '0.8rem',
+                    borderRadius: '8px',
+                    height: 36,
+                    px: 1.8,
+                    '&:hover': { borderColor: '#cbd5e1', backgroundColor: '#f8fafc' },
+                }}
+            >
+                Filter / Views
+            </Button>
+
+            <Button
+                variant="outlined"
+                size="small"
+                startIcon={<ViewColumnIcon sx={{ fontSize: 16 }} />}
+                onClick={() => setToast({ open: true, message: 'Column Manager: All 7 standard columns visible.', severity: 'info' })}
+                sx={{
+                    borderColor: '#e2e8f0',
+                    color: '#334155',
+                    backgroundColor: '#fff',
+                    textTransform: 'none',
+                    fontWeight: 600,
+                    fontSize: '0.8rem',
+                    borderRadius: '8px',
+                    height: 36,
+                    px: 1.8,
+                    '&:hover': { borderColor: '#cbd5e1', backgroundColor: '#f8fafc' },
+                }}
+            >
+                Column Manager
+            </Button>
+
+            <Button
+                variant="outlined"
+                size="small"
+                startIcon={<FileDownloadOutlinedIcon sx={{ fontSize: 16 }} />}
+                onClick={() => handleExport(false)}
+                sx={{
+                    borderColor: '#e2e8f0',
+                    color: '#334155',
+                    backgroundColor: '#fff',
+                    textTransform: 'none',
+                    fontWeight: 600,
+                    fontSize: '0.8rem',
+                    borderRadius: '8px',
+                    height: 36,
+                    px: 1.8,
+                    '&:hover': { borderColor: '#cbd5e1', backgroundColor: '#f8fafc' },
+                }}
+            >
+                Export
+            </Button>
+
+            <Button
+                variant="contained"
+                size="small"
+                startIcon={<AddIcon sx={{ fontSize: 16 }} />}
+                onClick={() => router.push(ROUTES.ORGANIZATION_NEW)}
+                sx={{
+                    background: 'linear-gradient(135deg, #1d4ed8 0%, #2563eb 100%)',
+                    color: '#fff',
+                    textTransform: 'none',
+                    fontWeight: 700,
+                    fontSize: '0.82rem',
+                    borderRadius: '8px',
+                    height: 36,
+                    px: 2,
+                    boxShadow: 'none',
+                    '&:hover': { background: 'linear-gradient(135deg, #1e40af 0%, #1d4ed8 100%)' },
+                }}
+            >
+                New Organization
+            </Button>
+        </Box>
+    );
 
     return (
-        <Box sx={{ width: '100%', minHeight: 'calc(100vh - 64px)', display: 'flex', flexDirection: 'column', flex: 1 }}>
-            {/* ── Page Content Container ───────────────────────────────────── */}
-            <Box sx={{ p: { xs: 2, md: 3 }, flex: 1, display: 'flex', flexDirection: 'column', backgroundColor: '#f8fafc' }}>
-                {/* ── Permanent Automatic Breadcrumbs ────────────────────────── */}
-                <Box sx={{ mb: 2 }}>
-                    <AppBreadcrumbs />
-                </Box>
-
-                {/* ── Filter View Pills & Right Actions ───────────────────────── */}
-                <Box
-                    sx={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'space-between',
-                        flexWrap: 'wrap',
-                        gap: 2,
-                        mb: 2.5,
-                    }}
-                >
-                    {/* Modular Filter Pills */}
-                    <OrganizationsFilterPills
-                        activeTab={activeTab}
-                        onTabChange={(tab: FilterTab) => {
-                            setActiveTab(tab);
-                            setCurrentPage(1);
-                        }}
-                    />
-
-                    {/* Right: Action Buttons */}
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.2 }}>
-                        <Button
-                            variant="outlined"
-                            size="small"
-                            startIcon={<FilterListIcon sx={{ fontSize: 16 }} />}
-                            onClick={() => setToast({ open: true, message: 'Custom filters active.', severity: 'info' })}
-                            sx={{
-                                borderColor: '#e2e8f0',
-                                color: '#334155',
-                                backgroundColor: '#fff',
-                                textTransform: 'none',
-                                fontWeight: 600,
-                                fontSize: '0.8rem',
-                                borderRadius: '8px',
-                                height: 36,
-                                px: 1.8,
-                                '&:hover': { borderColor: '#cbd5e1', backgroundColor: '#f8fafc' },
-                            }}
-                        >
-                            Filter / Views
-                        </Button>
-
-                        <Button
-                            variant="outlined"
-                            size="small"
-                            startIcon={<ViewColumnIcon sx={{ fontSize: 16 }} />}
-                            onClick={() => setToast({ open: true, message: 'Column Manager: All 7 standard columns visible.', severity: 'info' })}
-                            sx={{
-                                borderColor: '#e2e8f0',
-                                color: '#334155',
-                                backgroundColor: '#fff',
-                                textTransform: 'none',
-                                fontWeight: 600,
-                                fontSize: '0.8rem',
-                                borderRadius: '8px',
-                                height: 36,
-                                px: 1.8,
-                                '&:hover': { borderColor: '#cbd5e1', backgroundColor: '#f8fafc' },
-                            }}
-                        >
-                            Column Manager
-                        </Button>
-
-                        <Button
-                            variant="outlined"
-                            size="small"
-                            startIcon={<FileDownloadOutlinedIcon sx={{ fontSize: 16 }} />}
-                            onClick={() => handleExport(false)}
-                            sx={{
-                                borderColor: '#e2e8f0',
-                                color: '#334155',
-                                backgroundColor: '#fff',
-                                textTransform: 'none',
-                                fontWeight: 600,
-                                fontSize: '0.8rem',
-                                borderRadius: '8px',
-                                height: 36,
-                                px: 1.8,
-                                '&:hover': { borderColor: '#cbd5e1', backgroundColor: '#f8fafc' },
-                            }}
-                        >
-                            Export
-                        </Button>
-
-                        {/* Single Primary Action: New Organization */}
-                        <Button
-                            variant="contained"
-                            size="small"
-                            startIcon={<AddIcon sx={{ fontSize: 16 }} />}
-                            onClick={() => router.push(ROUTES.ORGANIZATION_NEW)}
-                            sx={{
-                                background: 'linear-gradient(135deg, #1d4ed8 0%, #2563eb 100%)',
-                                color: '#fff',
-                                textTransform: 'none',
-                                fontWeight: 700,
-                                fontSize: '0.82rem',
-                                borderRadius: '8px',
-                                height: 36,
-                                px: 2,
-                                boxShadow: 'none',
-                                '&:hover': { background: 'linear-gradient(135deg, #1e40af 0%, #1d4ed8 100%)' },
-                            }}
-                        >
-                            New Organization
-                        </Button>
-                    </Box>
-                </Box>
-
-                {/* ── Modular Table Card (with slight blur when side drawer is open) ─ */}
-                <Paper
-                    elevation={0}
-                    sx={{
-                        border: '1px solid #e2e8f0',
-                        borderRadius: '10px',
-                        backgroundColor: '#fff',
-                        overflow: 'hidden',
-                        boxShadow: '0 1px 3px rgba(0,0,0,0.02)',
-                        display: 'flex',
-                        flexDirection: 'column',
-                        flex: 1,
-                        filter: selectedDrawerOrg ? 'blur(1.5px)' : 'none',
-                        transition: 'filter 0.25s ease',
-                    }}
-                >
-                    {/* Modular Table Toolbar */}
-                    <OrganizationsTableToolbar
-                        searchQuery={searchQuery}
-                        onSearchChange={(q: string) => {
-                            setSearchQuery(q);
-                            setCurrentPage(1);
-                        }}
-                        isAllPageSelected={isAllPageSelected}
-                        isSomePageSelected={isSomePageSelected}
-                        onToggleSelectAll={toggleSelectAll}
-                        onSelectAllMatching={() => setSelectedIds(new Set(organizations.map((o) => o.id)))}
-                        onSelectVisible={() => {
-                            const next = new Set(selectedIds);
-                            paginatedOrganizations.forEach((o) => next.add(o.id));
-                            setSelectedIds(next);
-                        }}
-                        onDeselectAll={() => setSelectedIds(new Set())}
-                        totalRecords={totalRecords}
-                        currentPage={currentPage}
-                        rowsPerPage={rowsPerPage}
-                        totalPages={totalPages}
-                        onPageChange={setCurrentPage}
-                        onBulkAction={handleBulkAction}
-                        onFilterClick={() => setToast({ open: true, message: 'Filter panel toggled.', severity: 'info' })}
-                        onColumnClick={() => setToast({ open: true, message: 'Layout columns toggled.', severity: 'info' })}
-                    />
-
-                    {/* Modular Data Table */}
-                    <OrganizationsTable
-                        organizations={paginatedOrganizations}
-                        selectedIds={selectedIds}
-                        onToggleSelectRow={toggleSelectRow}
-                        isAllPageSelected={isAllPageSelected}
-                        isSomePageSelected={isSomePageSelected}
-                        onToggleSelectAll={toggleSelectAll}
-                        sortField={sortField}
-                        sortOrder={sortOrder}
-                        onSort={handleSort}
-                        onRowClick={(org) => setSelectedDrawerOrg(org)}
-                        activeOrgId={selectedDrawerOrg?.id}
-                    />
-
-                    {/* Modular Pagination Footer */}
-                    <OrganizationsPagination
-                        totalRecords={totalRecords}
-                        currentPage={currentPage}
-                        rowsPerPage={rowsPerPage}
-                        totalPages={totalPages}
-                        onPageChange={setCurrentPage}
-                        onRowsPerPageChange={(rows: number) => {
-                            setRowsPerPage(rows);
-                            setCurrentPage(1);
-                        }}
-                    />
-                </Paper>
-            </Box>
-
-            {/* ── Modular Enterprise Footer ─────────────────────────────────── */}
-            <EnterpriseFooter />
-
-            {/* ── Organization View Side Drawer ─────────────────────────────── */}
-            <OrganizationDetailDrawer
-                organization={selectedDrawerOrg}
-                open={Boolean(selectedDrawerOrg)}
-                onClose={() => setSelectedDrawerOrg(null)}
-                onEdit={(id) => router.push(ROUTES.ORGANIZATION_EDIT(id))}
-            />
-
-            {/* ── Standardized AppToast Notification ────────────────────────── */}
-            <AppToast
-                open={toast.open}
-                message={toast.message}
-                severity={toast.severity}
-                onClose={() => setToast((t) => ({ ...t, open: false }))}
-            />
-        </Box>
+        <CommonMasterView<ExtendedOrganization, FilterTab>
+            filterConfig={{
+                filters: filterItems,
+                activeFilter: activeTab,
+                onFilterChange: (tab) => {
+                    setActiveTab(tab);
+                    setCurrentPage(1);
+                },
+                variant: 'pill',
+            }}
+            headerActions={headerActions}
+            searchConfig={{
+                variant: 'extended',
+                searchQuery,
+                onSearchChange: (q) => {
+                    setSearchQuery(q);
+                    setCurrentPage(1);
+                },
+                searchPlaceholder: 'Search within table...',
+                isAllPageSelected,
+                isSomePageSelected,
+                onToggleSelectAll: toggleSelectAll,
+                onSelectAllMatching: () => setSelectedIds(new Set(organizations.map((o) => o.id))),
+                onSelectVisible: () => {
+                    const next = new Set(selectedIds);
+                    paginatedOrganizations.forEach((o) => next.add(o.id));
+                    setSelectedIds(next);
+                },
+                onDeselectAll: () => setSelectedIds(new Set()),
+                totalRecords,
+                displayTotalRecords: '11,417',
+                currentPage,
+                rowsPerPage,
+                totalPages,
+                onPageChange: setCurrentPage,
+                bulkActionItems: [
+                    { id: 'active', label: 'Mark as Active', onClick: () => handleBulkAction('active') },
+                    { id: 'inactive', label: 'Mark as Inactive', onClick: () => handleBulkAction('inactive') },
+                    { id: 'export', label: 'Export Selected to CSV', onClick: () => handleBulkAction('export') },
+                    { id: 'delete', label: 'Delete Selected', color: 'error', onClick: () => handleBulkAction('delete') },
+                ],
+                onFilterClick: () => setToast({ open: true, message: 'Filter panel toggled.', severity: 'info' }),
+                onColumnClick: () => setToast({ open: true, message: 'Layout columns toggled.', severity: 'info' }),
+            }}
+            columns={columns}
+            data={paginatedOrganizations}
+            keyExtractor={(org) => org.id}
+            selectedIds={selectedIds}
+            onToggleSelectRow={toggleSelectRow}
+            onToggleSelectAll={toggleSelectAll}
+            isAllSelected={isAllPageSelected}
+            isIndeterminate={isSomePageSelected}
+            sortField={sortField}
+            sortOrder={sortOrder}
+            onSort={(field) => handleSort(field as SortField)}
+            onView={(org) => router.push(ROUTES.ORGANIZATION_DETAIL(org.id))}
+            onEdit={(org) => router.push(ROUTES.ORGANIZATION_EDIT(org.id))}
+            onRowClick={(org) => setSelectedDrawerOrg(org)}
+            activeRowId={selectedDrawerOrg?.id}
+            viewTooltip="View Details"
+            editTooltip="Edit Organization"
+            emptyTitle="No organizations found"
+            emptyDescription="No organizations match your current search and filter criteria."
+            emptyActionLabel="Create Organization"
+            onEmptyAction={() => router.push(ROUTES.ORGANIZATION_NEW)}
+            pagination={{
+                variant: 'full',
+                page: currentPage - 1,
+                rowsPerPage,
+                totalCount: totalRecords,
+                displayTotalCount: '11,417',
+                entityLabel: 'Organizations',
+                pageSizeOptions: [10, 25, 50, 100],
+                onPageChange: (pageZeroBased) => setCurrentPage(pageZeroBased + 1),
+                onRowsPerPageChange: (rows) => {
+                    setRowsPerPage(rows);
+                    setCurrentPage(1);
+                },
+            }}
+            drawer={
+                <OrganizationDetailDrawer
+                    organization={selectedDrawerOrg}
+                    open={Boolean(selectedDrawerOrg)}
+                    onClose={() => setSelectedDrawerOrg(null)}
+                    onEdit={(id) => router.push(ROUTES.ORGANIZATION_EDIT(id))}
+                />
+            }
+            isDrawerOpen={Boolean(selectedDrawerOrg)}
+            toast={
+                <AppToast
+                    open={toast.open}
+                    message={toast.message}
+                    severity={toast.severity}
+                    onClose={() => setToast((t) => ({ ...t, open: false }))}
+                />
+            }
+        />
     );
 }

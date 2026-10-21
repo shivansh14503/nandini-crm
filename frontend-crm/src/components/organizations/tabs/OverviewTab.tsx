@@ -27,9 +27,13 @@ import LinkOffIcon from '@mui/icons-material/LinkOff';
 import PersonOutlinedIcon from '@mui/icons-material/PersonOutlined';
 import ContactPageOutlinedIcon from '@mui/icons-material/ContactPageOutlined';
 
-import { SectionLabel } from '../shared/SectionLabel';
-import { StyledSelect } from '../shared/StyledSelect';
-import { EmailRow } from '../shared/EmailRow';
+import {
+    FormField,
+    SectionLabel,
+    StyledSelect,
+    EmailRow,
+    fieldSx,
+} from '@/components/forms';
 import {
     NATURE_OF_BUSINESS,
     ACCOUNT_STATUSES,
@@ -38,8 +42,7 @@ import {
     ANNUAL_TURNOVERS,
     EMPLOYEE_COUNTS,
     LEAD_SOURCES,
-    fieldSx,
-} from '../shared/constants';
+} from '../constants';
 
 import type {
     OrganizationFormData,
@@ -51,7 +54,7 @@ import type {
     AnnualTurnover,
     NumberOfEmployees,
     SourceOfLead,
-} from '../../../types/organization.types';
+} from '@/types/organization.types';
 
 export interface OverviewTabProps {
     form: OrganizationFormData;
@@ -81,18 +84,12 @@ export function OverviewTab({
                 {/* ── LEFT COLUMN ──────────────────────────────────── */}
                 <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5 }}>
                     {/* Organization Name */}
-                    <Box>
-                        <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.6 }}>
-                            <Typography
-                                variant="body2"
-                                sx={{ fontWeight: 600, color: '#374151', fontSize: '0.82rem' }}
-                            >
-                                Organization Name <span style={{ color: '#ef4444' }}>*</span>
-                            </Typography>
-                            <Typography variant="caption" sx={{ color: '#9ca3af', fontSize: '0.72rem' }}>
-                                As per official registration
-                            </Typography>
-                        </Box>
+                    <FormField
+                        label="Organization Name"
+                        required
+                        hint="As per official registration"
+                        sx={{ mb: 0 }}
+                    >
                         <TextField
                             fullWidth
                             size="small"
@@ -111,16 +108,10 @@ export function OverviewTab({
                                 htmlInput: { maxLength: 200 },
                             }}
                         />
-                    </Box>
+                    </FormField>
 
                     {/* Nature of Business */}
-                    <Box>
-                        <Typography
-                            variant="body2"
-                            sx={{ fontWeight: 600, color: '#374151', fontSize: '0.82rem', mb: 0.6 }}
-                        >
-                            Nature of Business <span style={{ color: '#ef4444' }}>*</span>
-                        </Typography>
+                    <FormField label="Nature of Business" required sx={{ mb: 0 }}>
                         <StyledSelect
                             label="Nature of Business"
                             placeholder="Select Nature of Business"
@@ -129,25 +120,13 @@ export function OverviewTab({
                             options={NATURE_OF_BUSINESS}
                             required
                         />
-                    </Box>
+                    </FormField>
 
                     {/* Account Status */}
-                    <Box>
-                        <Box
-                            sx={{
-                                display: 'flex',
-                                justifyContent: 'space-between',
-                                mb: 0.6,
-                                alignItems: 'center',
-                            }}
-                        >
-                            <Typography
-                                variant="body2"
-                                sx={{ fontWeight: 600, color: '#374151', fontSize: '0.82rem' }}
-                            >
-                                Account Status
-                            </Typography>
-                            {form.accountStatus === 'Active' && (
+                    <FormField
+                        label="Account Status"
+                        hint={
+                            form.accountStatus === 'Active' ? (
                                 <Chip
                                     label="● Active Commercial"
                                     size="small"
@@ -159,8 +138,10 @@ export function OverviewTab({
                                         fontWeight: 700,
                                     }}
                                 />
-                            )}
-                        </Box>
+                            ) : undefined
+                        }
+                        sx={{ mb: 0 }}
+                    >
                         <StyledSelect
                             label="Account Status"
                             placeholder="Select Account Status"
@@ -168,21 +149,14 @@ export function OverviewTab({
                             onChange={(v) => set('accountStatus', v as AccountStatus)}
                             options={ACCOUNT_STATUSES}
                         />
-                    </Box>
+                    </FormField>
 
                     {/* SAP Code / Tally ID */}
-                    <Box>
-                        <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.6 }}>
-                            <Typography
-                                variant="body2"
-                                sx={{ fontWeight: 600, color: '#374151', fontSize: '0.82rem' }}
-                            >
-                                SAP Code / Tally ID
-                            </Typography>
-                            <Typography variant="caption" sx={{ color: '#9ca3af', fontSize: '0.72rem' }}>
-                                ERP Master Ledger Code
-                            </Typography>
-                        </Box>
+                    <FormField
+                        label="SAP Code / Tally ID"
+                        hint="ERP Master Ledger Code"
+                        sx={{ mb: 0 }}
+                    >
                         <TextField
                             fullWidth
                             size="small"
@@ -200,16 +174,10 @@ export function OverviewTab({
                                 },
                             }}
                         />
-                    </Box>
+                    </FormField>
 
                     {/* Source of Lead */}
-                    <Box>
-                        <Typography
-                            variant="body2"
-                            sx={{ fontWeight: 600, color: '#374151', fontSize: '0.82rem', mb: 0.6 }}
-                        >
-                            Source of Lead
-                        </Typography>
+                    <FormField label="Source of Lead" sx={{ mb: 0 }}>
                         <StyledSelect
                             label="Source of Lead"
                             placeholder="Select Source of Lead"
@@ -217,7 +185,7 @@ export function OverviewTab({
                             onChange={(v) => set('sourceOfLead', v as SourceOfLead)}
                             options={LEAD_SOURCES}
                         />
-                    </Box>
+                    </FormField>
 
                     {/* Corporate Emails */}
                     <Box>
@@ -280,13 +248,7 @@ export function OverviewTab({
                     </Box>
 
                     {/* Annual Turnover */}
-                    <Box>
-                        <Typography
-                            variant="body2"
-                            sx={{ fontWeight: 600, color: '#374151', fontSize: '0.82rem', mb: 0.6 }}
-                        >
-                            Annual Turnover
-                        </Typography>
+                    <FormField label="Annual Turnover" sx={{ mb: 0 }}>
                         <StyledSelect
                             label="Annual Turnover"
                             placeholder="Select Annual Turnover"
@@ -294,21 +256,14 @@ export function OverviewTab({
                             onChange={(v) => set('annualTurnover', v as AnnualTurnover)}
                             options={ANNUAL_TURNOVERS}
                         />
-                    </Box>
+                    </FormField>
 
                     {/* Description */}
-                    <Box>
-                        <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.6 }}>
-                            <Typography
-                                variant="body2"
-                                sx={{ fontWeight: 600, color: '#374151', fontSize: '0.82rem' }}
-                            >
-                                Add Description &amp; Scope
-                            </Typography>
-                            <Typography variant="caption" sx={{ color: '#9ca3af', fontSize: '0.72rem' }}>
-                                {form.description.length} / 1000
-                            </Typography>
-                        </Box>
+                    <FormField
+                        label="Add Description & Scope"
+                        hint={`${form.description.length} / 1000`}
+                        sx={{ mb: 0 }}
+                    >
                         <TextField
                             fullWidth
                             multiline
@@ -320,7 +275,7 @@ export function OverviewTab({
                             onChange={(e) => set('description', e.target.value.slice(0, 1000))}
                             sx={fieldSx}
                         />
-                    </Box>
+                    </FormField>
                 </Box>
 
                 {/* ── RIGHT COLUMN ─────────────────────────────────── */}
@@ -452,18 +407,7 @@ export function OverviewTab({
                     </Box>
 
                     {/* Mailing Name */}
-                    <Box>
-                        <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.6 }}>
-                            <Typography
-                                variant="body2"
-                                sx={{ fontWeight: 600, color: '#374151', fontSize: '0.82rem' }}
-                            >
-                                Mailing Name
-                            </Typography>
-                            <Typography variant="caption" sx={{ color: '#9ca3af', fontSize: '0.72rem' }}>
-                                Printed on tax invoices
-                            </Typography>
-                        </Box>
+                    <FormField label="Mailing Name" hint="Printed on tax invoices" sx={{ mb: 0 }}>
                         <TextField
                             fullWidth
                             size="small"
@@ -472,16 +416,10 @@ export function OverviewTab({
                             onChange={(e) => set('mailingName', e.target.value)}
                             sx={fieldSx}
                         />
-                    </Box>
+                    </FormField>
 
                     {/* Type of Entity */}
-                    <Box>
-                        <Typography
-                            variant="body2"
-                            sx={{ fontWeight: 600, color: '#374151', fontSize: '0.82rem', mb: 0.6 }}
-                        >
-                            Type of Entity <span style={{ color: '#ef4444' }}>*</span>
-                        </Typography>
+                    <FormField label="Type of Entity" required sx={{ mb: 0 }}>
                         <StyledSelect
                             label="Type of Entity"
                             placeholder="Select Type of Entity"
@@ -490,16 +428,10 @@ export function OverviewTab({
                             options={ENTITY_TYPES}
                             required
                         />
-                    </Box>
+                    </FormField>
 
                     {/* Customer Type */}
-                    <Box>
-                        <Typography
-                            variant="body2"
-                            sx={{ fontWeight: 600, color: '#374151', fontSize: '0.82rem', mb: 0.6 }}
-                        >
-                            Customer Type <span style={{ color: '#ef4444' }}>*</span>
-                        </Typography>
+                    <FormField label="Customer Type" required sx={{ mb: 0 }}>
                         <StyledSelect
                             label="Customer Type"
                             placeholder="Select Customer Type"
@@ -508,21 +440,14 @@ export function OverviewTab({
                             options={CUSTOMER_TYPES}
                             required
                         />
-                    </Box>
+                    </FormField>
 
                     {/* Showroom / Branch Code */}
-                    <Box>
-                        <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.6 }}>
-                            <Typography
-                                variant="body2"
-                                sx={{ fontWeight: 600, color: '#374151', fontSize: '0.82rem' }}
-                            >
-                                Showroom / Branch Code
-                            </Typography>
-                            <Typography variant="caption" sx={{ color: '#9ca3af', fontSize: '0.72rem' }}>
-                                Store Location ID
-                            </Typography>
-                        </Box>
+                    <FormField
+                        label="Showroom / Branch Code"
+                        hint="Store Location ID"
+                        sx={{ mb: 0 }}
+                    >
                         <TextField
                             fullWidth
                             size="small"
@@ -531,16 +456,10 @@ export function OverviewTab({
                             onChange={(e) => set('showroomBranchCode', e.target.value)}
                             sx={fieldSx}
                         />
-                    </Box>
+                    </FormField>
 
                     {/* Member of (Parent Corporation) */}
-                    <Box>
-                        <Typography
-                            variant="body2"
-                            sx={{ fontWeight: 600, color: '#374151', fontSize: '0.82rem', mb: 0.6 }}
-                        >
-                            Member of (Parent Corporation)
-                        </Typography>
+                    <FormField label="Member of (Parent Corporation)" sx={{ mb: 0 }}>
                         <TextField
                             fullWidth
                             size="small"
@@ -566,16 +485,10 @@ export function OverviewTab({
                                 },
                             }}
                         />
-                    </Box>
+                    </FormField>
 
                     {/* Number of Employees */}
-                    <Box>
-                        <Typography
-                            variant="body2"
-                            sx={{ fontWeight: 600, color: '#374151', fontSize: '0.82rem', mb: 0.6 }}
-                        >
-                            Number of Employees
-                        </Typography>
+                    <FormField label="Number of Employees" sx={{ mb: 0 }}>
                         <StyledSelect
                             label="Number of Employees"
                             placeholder="Select Number of Employees"
@@ -583,16 +496,10 @@ export function OverviewTab({
                             onChange={(v) => set('numberOfEmployees', v as NumberOfEmployees)}
                             options={EMPLOYEE_COUNTS}
                         />
-                    </Box>
+                    </FormField>
 
                     {/* Assigned to (Account Executive) */}
-                    <Box>
-                        <Typography
-                            variant="body2"
-                            sx={{ fontWeight: 600, color: '#374151', fontSize: '0.82rem', mb: 0.6 }}
-                        >
-                            Assigned to (Account Executive) <span style={{ color: '#ef4444' }}>*</span>
-                        </Typography>
+                    <FormField label="Assigned to (Account Executive)" required sx={{ mb: 0 }}>
                         <Box
                             sx={{
                                 display: 'flex',
@@ -653,7 +560,7 @@ export function OverviewTab({
                                 </IconButton>
                             </Box>
                         </Box>
-                    </Box>
+                    </FormField>
                 </Box>
             </Box>
         </Box>

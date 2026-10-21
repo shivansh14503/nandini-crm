@@ -10,7 +10,7 @@ export interface AuditTrailTimelineProps {
     entityTitle?: string;
 }
 
-export function AuditTrailTimeline({ revisions, entityTitle }: AuditTrailTimelineProps) {
+export function AuditTrailTimeline({ revisions }: AuditTrailTimelineProps) {
     const items = revisions && revisions.length > 0 ? revisions : [
         {
             title: 'Record Updated',

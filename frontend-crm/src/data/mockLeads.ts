@@ -408,6 +408,56 @@ export const INITIAL_MOCK_LEADS: Lead[] = [
         updatedAt: new Date(Date.now() - 3600000 * 1).toISOString(),
         createdBy: 'mittal.sharma',
     },
+    {
+        id: 'lea-1009',
+        leadCode: 'LEA-1009',
+        name: 'Rohit Verma',
+        organizationName: '',
+        mailingName: '',
+        mobile: '+91 98765 43210',
+        otherPhone: '',
+        emailAddresses: [
+            {
+                id: 'eml-901',
+                email: 'rohit.verma@freemail.com',
+                isPrimary: true,
+                isOptedOut: false,
+                isInvalidBounce: false,
+            },
+        ],
+        designation: 'Independent Consultant',
+        department: 'Operations',
+        leadSource: 'Website Enquiry',
+        leadType: 'Warm',
+        productCategory: ['Biz Analyst'],
+        status: 'New',
+        followupType: 'Call',
+        nextFollowupDate: new Date().toISOString().split('T')[0],
+        nextFollowupTime: '02:30 PM',
+        addDescription: 'Inquired about individual license for Biz Analyst without organization affiliation.',
+        description: 'Independent business consultant looking for single-user mobile dashboard.',
+        registrationType: 'Unregistered',
+        turnover: 'Below ₹25 Lakhs',
+        noOfEmployee: '1 – 10 Staff Members',
+        assignedTo: 'mittal.sharma',
+        referredBy: '',
+        primaryAddress: 'Flat 402, Sunshine Apartments, Mayur Vihar Phase 1',
+        primaryCity: 'Delhi',
+        primaryState: 'Delhi',
+        primaryPostalCode: '110091',
+        primaryCountry: 'India',
+        primaryLatitude: '28.60800000',
+        otherAddress: '',
+        otherCity: '',
+        otherState: '',
+        otherPostalCode: '',
+        otherCountry: 'India',
+        copyAddressFromLeft: false,
+        otherLongitude: '0.00000000',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        createdBy: 'mittal.sharma',
+    },
 ];
 
 const LEADS_STORAGE_KEY = 'nandini_crm_leads_data_v1';
@@ -422,6 +472,15 @@ export function getStoredLeads(): Lead[] {
         }
         const parsed = JSON.parse(item);
         if (Array.isArray(parsed) && parsed.length > 0) {
+            const hasLea1009 = parsed.some((l: Lead) => l.id === 'lea-1009');
+            if (!hasLea1009) {
+                const leadWithoutOrg = INITIAL_MOCK_LEADS.find((l) => l.id === 'lea-1009');
+                if (leadWithoutOrg) {
+                    const updated = [...parsed, leadWithoutOrg];
+                    localStorage.setItem(LEADS_STORAGE_KEY, JSON.stringify(updated));
+                    return updated;
+                }
+            }
             return parsed;
         }
     } catch {

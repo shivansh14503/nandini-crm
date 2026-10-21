@@ -17,14 +17,10 @@ import AddIcon from '@mui/icons-material/Add';
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 import CheckCircleOutlinedIcon from '@mui/icons-material/CheckCircleOutlined';
 
-import { StyledSelect } from './shared/StyledSelect';
-import {
-    NATURE_OF_BUSINESS,
-    CUSTOMER_TYPES,
-    INDIAN_STATES,
-    fieldSx,
-} from './shared/constants';
-import type { ExtendedOrganization } from '../../data/mockOrganizations';
+import { StyledSelect, fieldSx } from '@/components/forms';
+import { INDIAN_STATES } from '@/config/constants';
+import { NATURE_OF_BUSINESS, CUSTOMER_TYPES } from './constants';
+import type { ExtendedOrganization } from '@/types/organization.types';
 
 export interface QuickCreateDrawerProps {
     open: boolean;
@@ -81,9 +77,9 @@ export function QuickCreateDrawer({ open, onClose, onSave }: QuickCreateDrawerPr
             accountCode: `ORG-${Math.floor(10000 + Math.random() * 90000)}`,
             organizationName: formData.organizationName.trim(),
             mailingName: formData.organizationName.trim(),
-            natureOfBusiness: formData.natureOfBusiness as any,
-            customerType: formData.customerType as any,
-            accountStatus: formData.accountStatus as any,
+            natureOfBusiness: formData.natureOfBusiness as ExtendedOrganization['natureOfBusiness'],
+            customerType: formData.customerType as ExtendedOrganization['customerType'],
+            accountStatus: formData.accountStatus as ExtendedOrganization['accountStatus'],
             typeOfEntity: 'Private Limited Company (Pvt. Ltd.)',
             sapCodeTallyId: `TALLY-${formData.organizationName.slice(0, 3).toUpperCase()}-${Math.floor(10 + Math.random() * 90)}`,
             showroomBranchCode: 'DEL-HQ',

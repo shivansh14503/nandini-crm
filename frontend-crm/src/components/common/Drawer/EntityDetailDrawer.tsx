@@ -7,12 +7,12 @@ import {
     Typography,
     IconButton,
     Button,
-    Chip,
     Tooltip,
     Tabs,
     Tab,
     Snackbar,
     Alert,
+    CircularProgress,
 } from '@mui/material';
 
 // Icons
@@ -23,7 +23,7 @@ import PhoneOutlinedIcon from '@mui/icons-material/PhoneOutlined';
 import VerifiedIcon from '@mui/icons-material/Verified';
 import HistoryOutlinedIcon from '@mui/icons-material/HistoryOutlined';
 
-import type { EntityDetailDrawerProps, DrawerTabItem } from './types';
+import { type EntityDetailDrawerProps, type DrawerTabItem, buildDrawerTabs } from './types';
 import { AuditTrailTimeline } from './AuditTrailTimeline';
 
 export function EntityDetailDrawer({
@@ -35,9 +35,13 @@ export function EntityDetailDrawer({
     avatarIcon,
     avatarBg = 'linear-gradient(135deg, #0284c7 0%, #0369a1 100%)',
     verified = true,
+    loading = false,
     badges = [],
     headerActions,
     tabs = [],
+    formTabs,
+    tabContents,
+    children,
     auditRevisions,
     includeChangesTab = true,
     changesTabLabel = 'Changes',
@@ -45,6 +49,7 @@ export function EntityDetailDrawer({
     statusText = 'Ready for Order Processing',
     primaryAction,
     secondaryAction,
+    footerActions,
     width = { xs: '100%', sm: 540, md: 580 },
 }: EntityDetailDrawerProps) {
     const [currentTab, setCurrentTab] = useState<number>(defaultTabIndex);
@@ -62,8 +67,11 @@ export function EntityDetailDrawer({
 
     const displayAvatar = avatarText || getInitials(title);
 
-    // Compile active tabs: caller tabs + standard Changes tab
-    const allTabs: DrawerTabItem[] = [...tabs];
+    // Compile active tabs: caller tabs (or formTabs + tabContents) + standard Changes tab
+    const resolvedBaseTabs: DrawerTabItem[] =
+        formTabs && tabContents ? buildDrawerTabs(formTabs, tabContents) : tabs;
+
+    const allTabs: DrawerTabItem[] = [...resolvedBaseTabs];
     if (includeChangesTab) {
         allTabs.push({
             id: 'changes-tab',
@@ -273,7 +281,7 @@ export function EntityDetailDrawer({
                     {allTabs.map((tab, idx) => (
                         <Tab
                             key={tab.id || idx}
-                            icon={tab.icon as any}
+                            icon={tab.icon as React.ReactElement | string | undefined}
                             iconPosition="start"
                             label={
                                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.6 }}>
@@ -316,7 +324,13 @@ export function EntityDetailDrawer({
 
             {/* ── Scrollable Tab Content ───────────────────────────────────────── */}
             <Box sx={{ flex: 1, overflowY: 'auto', p: 2.5, backgroundColor: '#ffffff' }}>
-                {allTabs[activeTabIndex]?.content}
+                {loading ? (
+                    <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', py: 8 }}>
+                        <CircularProgress size={28} sx={{ color: '#2563eb' }} />
+                    </Box>
+                ) : (
+                    allTabs[activeTabIndex]?.content ?? children
+                )}
             </Box>
 
             {/* ── Sticky Drawer Footer ────────────────────────────────────────── */}
@@ -349,48 +363,110 @@ export function EntityDetailDrawer({
 
                 {/* Right Action Buttons */}
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    {footerActions}
+
                     {secondaryAction && (
-                        <Button
-                            variant="outlined"
-                            size="small"
-                            startIcon={secondaryAction.icon}
-                            onClick={secondaryAction.onClick}
-                            sx={{
-                                fontSize: '0.78rem',
-                                textTransform: 'none',
-                                fontWeight: 600,
-                                color: '#334155',
-                                borderColor: '#cbd5e1',
-                                height: 36,
-                                px: 1.5,
-                                borderRadius: '6px',
-                                '&:hover': { borderColor: '#94a3b8', backgroundColor: '#f8fafc' },
-                            }}
-                        >
-                            {secondaryAction.label}
-                        </Button>
+                        secondaryAction.tooltip ? (
+                            <Tooltip title={secondaryAction.tooltip}>
+                                <span>
+                                    <Button
+                                        variant={secondaryAction.variant || 'outlined'}
+                                        size="small"
+                                        startIcon={secondaryAction.icon}
+                                        onClick={secondaryAction.onClick}
+                                        disabled={secondaryAction.disabled}
+                                        sx={{
+                                            fontSize: '0.78rem',
+                                            textTransform: 'none',
+                                            fontWeight: 600,
+                                            color: '#334155',
+                                            borderColor: '#cbd5e1',
+                                            height: 36,
+                                            px: 1.5,
+                                            borderRadius: '6px',
+                                            '&:hover': { borderColor: '#94a3b8', backgroundColor: '#f8fafc' },
+                                            ...secondaryAction.sx,
+                                        }}
+                                    >
+                                        {secondaryAction.label}
+                                    </Button>
+                                </span>
+                            </Tooltip>
+                        ) : (
+                            <Button
+                                variant={secondaryAction.variant || 'outlined'}
+                                size="small"
+                                startIcon={secondaryAction.icon}
+                                onClick={secondaryAction.onClick}
+                                disabled={secondaryAction.disabled}
+                                sx={{
+                                    fontSize: '0.78rem',
+                                    textTransform: 'none',
+                                    fontWeight: 600,
+                                    color: '#334155',
+                                    borderColor: '#cbd5e1',
+                                    height: 36,
+                                    px: 1.5,
+                                    borderRadius: '6px',
+                                    '&:hover': { borderColor: '#94a3b8', backgroundColor: '#f8fafc' },
+                                    ...secondaryAction.sx,
+                                }}
+                            >
+                                {secondaryAction.label}
+                            </Button>
+                        )
                     )}
 
                     {(primaryAction || headerActions?.onEdit) && (
-                        <Button
-                            variant="contained"
-                            size="small"
-                            startIcon={primaryAction?.icon || <EditOutlinedIcon sx={{ fontSize: 16 }} />}
-                            onClick={primaryAction?.onClick || headerActions?.onEdit}
-                            sx={{
-                                fontSize: '0.78rem',
-                                textTransform: 'none',
-                                fontWeight: 700,
-                                backgroundColor: '#1d4ed8',
-                                height: 36,
-                                px: 2,
-                                borderRadius: '6px',
-                                boxShadow: 'none',
-                                '&:hover': { backgroundColor: '#1e40af' },
-                            }}
-                        >
-                            {primaryAction?.label || 'Edit Details'}
-                        </Button>
+                        primaryAction?.tooltip ? (
+                            <Tooltip title={primaryAction.tooltip}>
+                                <span>
+                                    <Button
+                                        variant={primaryAction?.variant || 'contained'}
+                                        size="small"
+                                        startIcon={primaryAction?.icon || <EditOutlinedIcon sx={{ fontSize: 16 }} />}
+                                        onClick={primaryAction?.onClick || headerActions?.onEdit}
+                                        disabled={primaryAction?.disabled}
+                                        sx={{
+                                            fontSize: '0.78rem',
+                                            textTransform: 'none',
+                                            fontWeight: 700,
+                                            backgroundColor: '#1d4ed8',
+                                            height: 36,
+                                            px: 2,
+                                            borderRadius: '6px',
+                                            boxShadow: 'none',
+                                            '&:hover': { backgroundColor: '#1e40af' },
+                                            ...primaryAction?.sx,
+                                        }}
+                                    >
+                                        {primaryAction?.label || 'Edit Details'}
+                                    </Button>
+                                </span>
+                            </Tooltip>
+                        ) : (
+                            <Button
+                                variant={primaryAction?.variant || 'contained'}
+                                size="small"
+                                startIcon={primaryAction?.icon || <EditOutlinedIcon sx={{ fontSize: 16 }} />}
+                                onClick={primaryAction?.onClick || headerActions?.onEdit}
+                                disabled={primaryAction?.disabled}
+                                sx={{
+                                    fontSize: '0.78rem',
+                                    textTransform: 'none',
+                                    fontWeight: 700,
+                                    backgroundColor: '#1d4ed8',
+                                    height: 36,
+                                    px: 2,
+                                    borderRadius: '6px',
+                                    boxShadow: 'none',
+                                    '&:hover': { backgroundColor: '#1e40af' },
+                                    ...primaryAction?.sx,
+                                }}
+                            >
+                                {primaryAction?.label || 'Edit Details'}
+                            </Button>
+                        )
                     )}
                 </Box>
             </Box>

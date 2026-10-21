@@ -25,9 +25,8 @@ import BusinessIcon from '@mui/icons-material/Business';
 import ClearIcon from '@mui/icons-material/Clear';
 import HandshakeOutlinedIcon from '@mui/icons-material/HandshakeOutlined';
 
-import { SectionLabel } from '../shared/SectionLabel';
-import { fieldSx } from '../shared/constants';
-import type { OrganizationFormData } from '../../../types/organization.types';
+import { FormField, SectionLabel, fieldSx } from '@/components/forms';
+import type { OrganizationFormData } from '@/types/organization.types';
 
 export interface PartnerLicensingTabProps {
     form: OrganizationFormData;
@@ -66,13 +65,7 @@ export function PartnerLicensingTab({ form, set }: PartnerLicensingTabProps) {
             />
 
             {/* ── Partner Company Input with Search and Clear ─────────────── */}
-            <Box sx={{ maxWidth: 720, mb: 3 }}>
-                <Typography
-                    variant="body2"
-                    sx={{ fontWeight: 600, color: '#374151', fontSize: '0.82rem', mb: 0.6 }}
-                >
-                    Partner Company
-                </Typography>
+            <FormField label="Partner Company" sx={{ maxWidth: 720, mb: 3 }}>
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
                     <TextField
                         fullWidth
@@ -124,7 +117,7 @@ export function PartnerLicensingTab({ form, set }: PartnerLicensingTabProps) {
                         Add Company
                     </Button>
                 </Box>
-            </Box>
+            </FormField>
 
             {/* ── Partner Company Table Matching Screenshot ───────────────── */}
             <TableContainer

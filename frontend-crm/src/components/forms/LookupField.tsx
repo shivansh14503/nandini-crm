@@ -10,8 +10,7 @@ import {
 } from '@mui/material';
 import ArrowForwardIosIcon from '@mui/icons-material/ArrowForwardIos';
 import ClearIcon from '@mui/icons-material/Clear';
-import SearchIcon from '@mui/icons-material/Search';
-import { fieldSx } from '../organizations/shared/constants';
+import { fieldSx } from './FormField';
 
 export interface LookupFieldProps {
     value: string;

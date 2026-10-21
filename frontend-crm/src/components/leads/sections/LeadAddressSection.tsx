@@ -1,45 +1,50 @@
 'use client';
 
 import React from 'react';
-import {
-    Box,
-    TextField,
-    Typography,
-    FormControlLabel,
-    Checkbox,
-} from '@mui/material';
+import { Box } from '@mui/material';
 import PlaceOutlinedIcon from '@mui/icons-material/PlaceOutlined';
 import BusinessOutlinedIcon from '@mui/icons-material/BusinessOutlined';
+import { useFormContext, useWatch } from 'react-hook-form';
 
 import {
-    FormField,
-    StyledSelect,
     SectionLabel,
-    fieldSx,
-} from '../../forms';
-import { INDIAN_STATES, COUNTRIES } from '../../organizations/shared/constants';
-import type { LeadFormData } from '../../../types/lead.types';
+    RhfTextField,
+    RhfSelect,
+    RhfCheckbox,
+} from '@/components/forms';
+import { INDIAN_STATES, COUNTRIES } from '@/config/constants';
+import type { LeadFormData } from '@/types/lead.types';
 
-export interface LeadAddressSectionProps {
-    form: LeadFormData;
-    setField: <K extends keyof LeadFormData>(key: K, value: LeadFormData[K]) => void;
-}
+const columnSx = { display: 'flex', flexDirection: 'column', gap: 2 } as const;
 
-export function LeadAddressSection({ form, setField }: LeadAddressSectionProps) {
-    const handleCopyToggle = (checked: boolean) => {
-        setField('copyAddressFromLeft', checked);
-        if (checked) {
-            setField('otherAddress', form.primaryAddress || '');
-            setField('otherCity', form.primaryCity || '');
-            setField('otherState', form.primaryState || '');
-            setField('otherPostalCode', form.primaryPostalCode || '');
-            setField('otherCountry', form.primaryCountry || 'India');
-        }
-    };
+const PRIMARY_TO_OTHER = [
+    ['primaryAddress', 'otherAddress'],
+    ['primaryCity', 'otherCity'],
+    ['primaryState', 'otherState'],
+    ['primaryPostalCode', 'otherPostalCode'],
+    ['primaryCountry', 'otherCountry'],
+] as const;
+
+/** Address tab of the Lead form. Must be rendered inside a `FormProvider<LeadFormData>`. */
+export function LeadAddressSection() {
+    const { control, getValues, setValue } = useFormContext<LeadFormData>();
+    const copy = Boolean(useWatch({ control, name: 'copyAddressFromLeft' }));
+    const primaryValues = useWatch({
+        control,
+        name: PRIMARY_TO_OTHER.map(([primary]) => primary),
+    });
+
+    // Keep "other address" mirrored while the copy toggle is on.
+    React.useEffect(() => {
+        if (!copy) return;
+        PRIMARY_TO_OTHER.forEach(([primary, other], i) => {
+            const next = (primaryValues[i] as string) || (primary === 'primaryCountry' ? 'India' : '');
+            if (getValues(other) !== next) setValue(other, next, { shouldDirty: true });
+        });
+    }, [copy, primaryValues, getValues, setValue]);
 
     return (
         <Box sx={{ p: { xs: 2.5, md: 3.5 } }}>
-            {/* Two-column layout for Primary Address & Other Address */}
             <Box
                 sx={{
                     display: 'grid',
@@ -47,231 +52,27 @@ export function LeadAddressSection({ form, setField }: LeadAddressSectionProps) 
                     gap: { xs: 3, md: 4 },
                 }}
             >
-                {/* ════════════ LEFT COLUMN: PRIMARY ADDRESS ════════════ */}
-                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                    <SectionLabel
-                        icon={<PlaceOutlinedIcon sx={{ fontSize: 18, color: '#2563eb' }} />}
-                        label="PRIMARY ADDRESS"
-                        sx={{ mb: 1 }}
-                    />
-
-                    {/* Address (textarea) */}
-                    <FormField label="Address" hint="Registered or primary premises">
-                        <TextField
-                            fullWidth
-                            multiline
-                            minRows={3}
-                            maxRows={4}
-                            size="small"
-                            placeholder="Enter a location"
-                            value={form.primaryAddress || ''}
-                            onChange={(e) => {
-                                const val = e.target.value;
-                                setField('primaryAddress', val);
-                                if (form.copyAddressFromLeft) {
-                                    setField('otherAddress', val);
-                                }
-                            }}
-                            sx={fieldSx}
-                        />
-                    </FormField>
-
-                    {/* City */}
-                    <FormField label="City">
-                        <TextField
-                            fullWidth
-                            size="small"
-                            placeholder="e.g. Gurugram / New Delhi"
-                            value={form.primaryCity || ''}
-                            onChange={(e) => {
-                                const val = e.target.value;
-                                setField('primaryCity', val);
-                                if (form.copyAddressFromLeft) {
-                                    setField('otherCity', val);
-                                }
-                            }}
-                            sx={fieldSx}
-                        />
-                    </FormField>
-
-                    {/* State/Region */}
-                    <FormField label="State/Region">
-                        <StyledSelect
-                            value={form.primaryState || ''}
-                            onChange={(v) => {
-                                setField('primaryState', v);
-                                if (form.copyAddressFromLeft) {
-                                    setField('otherState', v);
-                                }
-                            }}
-                            options={INDIAN_STATES}
-                            placeholder="Select State / Region"
-                        />
-                    </FormField>
-
-                    {/* Postal Code */}
-                    <FormField label="Postal Code">
-                        <TextField
-                            fullWidth
-                            size="small"
-                            placeholder="e.g. 110001"
-                            value={form.primaryPostalCode || ''}
-                            onChange={(e) => {
-                                const val = e.target.value;
-                                setField('primaryPostalCode', val);
-                                if (form.copyAddressFromLeft) {
-                                    setField('otherPostalCode', val);
-                                }
-                            }}
-                            sx={fieldSx}
-                        />
-                    </FormField>
-
-                    {/* Country */}
-                    <FormField label="Country">
-                        <StyledSelect
-                            value={form.primaryCountry || 'India'}
-                            onChange={(v) => {
-                                setField('primaryCountry', v);
-                                if (form.copyAddressFromLeft) {
-                                    setField('otherCountry', v);
-                                }
-                            }}
-                            options={COUNTRIES}
-                            placeholder="Select Country"
-                        />
-                    </FormField>
-
-                    {/* Latitude */}
-                    <FormField label="Latitude" hint="GPS coordinate">
-                        <TextField
-                            fullWidth
-                            size="small"
-                            placeholder="0.00000000"
-                            value={form.primaryLatitude ?? '0.00000000'}
-                            onChange={(e) => setField('primaryLatitude', e.target.value)}
-                            sx={fieldSx}
-                        />
-                    </FormField>
+                <Box sx={columnSx}>
+                    <SectionLabel icon={<PlaceOutlinedIcon sx={{ fontSize: 18, color: '#2563eb' }} />} label="PRIMARY ADDRESS" sx={{ mb: 1 }} />
+                    <RhfTextField<LeadFormData> name="primaryAddress" label="Address" hint="Registered or primary premises" multiline minRows={3} maxRows={4} placeholder="Enter a location" />
+                    <RhfTextField<LeadFormData> name="primaryCity" label="City" placeholder="e.g. Gurugram / New Delhi" />
+                    <RhfSelect<LeadFormData> name="primaryState" label="State/Region" options={INDIAN_STATES} placeholder="Select State / Region" />
+                    <RhfTextField<LeadFormData> name="primaryPostalCode" label="Postal Code" placeholder="e.g. 110001" />
+                    <RhfSelect<LeadFormData> name="primaryCountry" label="Country" options={COUNTRIES} placeholder="Select Country" />
+                    <RhfTextField<LeadFormData> name="primaryLatitude" label="Latitude" hint="GPS coordinate" placeholder="0.00000000" />
                 </Box>
 
-                {/* ════════════ RIGHT COLUMN: OTHER ADDRESS ════════════ */}
-                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                    <Box
-                        sx={{
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'space-between',
-                            flexWrap: 'wrap',
-                            gap: 1,
-                            mb: 1,
-                        }}
-                    >
-                        <SectionLabel
-                            icon={<BusinessOutlinedIcon sx={{ fontSize: 18, color: '#64748b' }} />}
-                            label="OTHER ADDRESS"
-                        />
-                        <FormControlLabel
-                            control={
-                                <Checkbox
-                                    size="small"
-                                    checked={Boolean(form.copyAddressFromLeft)}
-                                    onChange={(e) => handleCopyToggle(e.target.checked)}
-                                    sx={{
-                                        color: '#2563EB',
-                                        '&.Mui-checked': { color: '#2563EB' },
-                                        p: 0.5,
-                                    }}
-                                />
-                            }
-                            label={
-                                <Typography
-                                    sx={{
-                                        fontSize: '0.78rem',
-                                        color: '#374151',
-                                        fontWeight: 600,
-                                    }}
-                                >
-                                    Copy address from left
-                                </Typography>
-                            }
-                            sx={{ m: 0 }}
-                        />
+                <Box sx={columnSx}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 1, mb: 1 }}>
+                        <SectionLabel icon={<BusinessOutlinedIcon sx={{ fontSize: 18, color: '#64748b' }} />} label="OTHER ADDRESS" />
+                        <RhfCheckbox<LeadFormData> name="copyAddressFromLeft" label="Copy address from left" />
                     </Box>
-
-                    {/* Other Address */}
-                    <FormField label="Other Address" hint="Branch, factory, or dispatch location">
-                        <TextField
-                            fullWidth
-                            multiline
-                            minRows={3}
-                            maxRows={4}
-                            size="small"
-                            placeholder="Enter branch or factory location"
-                            value={form.otherAddress || ''}
-                            onChange={(e) => setField('otherAddress', e.target.value)}
-                            disabled={form.copyAddressFromLeft}
-                            sx={fieldSx}
-                        />
-                    </FormField>
-
-                    {/* City */}
-                    <FormField label="City">
-                        <TextField
-                            fullWidth
-                            size="small"
-                            placeholder="Enter city"
-                            value={form.otherCity || ''}
-                            onChange={(e) => setField('otherCity', e.target.value)}
-                            disabled={form.copyAddressFromLeft}
-                            sx={fieldSx}
-                        />
-                    </FormField>
-
-                    {/* State/Region */}
-                    <FormField label="State/Region">
-                        <StyledSelect
-                            value={form.otherState || ''}
-                            onChange={(v) => setField('otherState', v)}
-                            options={INDIAN_STATES}
-                            placeholder="Select State / Region"
-                        />
-                    </FormField>
-
-                    {/* Postal Code */}
-                    <FormField label="Postal Code">
-                        <TextField
-                            fullWidth
-                            size="small"
-                            placeholder="Enter PIN code"
-                            value={form.otherPostalCode || ''}
-                            onChange={(e) => setField('otherPostalCode', e.target.value)}
-                            disabled={form.copyAddressFromLeft}
-                            sx={fieldSx}
-                        />
-                    </FormField>
-
-                    {/* Country */}
-                    <FormField label="Country">
-                        <StyledSelect
-                            value={form.otherCountry || 'India'}
-                            onChange={(v) => setField('otherCountry', v)}
-                            options={COUNTRIES}
-                            placeholder="Select Country"
-                        />
-                    </FormField>
-
-                    {/* Longitude */}
-                    <FormField label="Longitude" hint="GPS coordinate">
-                        <TextField
-                            fullWidth
-                            size="small"
-                            placeholder="0.00000000"
-                            value={form.otherLongitude ?? '0.00000000'}
-                            onChange={(e) => setField('otherLongitude', e.target.value)}
-                            sx={fieldSx}
-                        />
-                    </FormField>
+                    <RhfTextField<LeadFormData> name="otherAddress" label="Other Address" hint="Branch, factory, or dispatch location" multiline minRows={3} maxRows={4} placeholder="Enter branch or factory location" disabled={copy} />
+                    <RhfTextField<LeadFormData> name="otherCity" label="City" placeholder="Enter city" disabled={copy} />
+                    <RhfSelect<LeadFormData> name="otherState" label="State/Region" options={INDIAN_STATES} placeholder="Select State / Region" />
+                    <RhfTextField<LeadFormData> name="otherPostalCode" label="Postal Code" placeholder="Enter PIN code" disabled={copy} />
+                    <RhfSelect<LeadFormData> name="otherCountry" label="Country" options={COUNTRIES} placeholder="Select Country" />
+                    <RhfTextField<LeadFormData> name="otherLongitude" label="Longitude" hint="GPS coordinate" placeholder="0.00000000" />
                 </Box>
             </Box>
         </Box>

@@ -28,7 +28,7 @@ export function AppToast({
             autoHideDuration={autoHideDuration}
             onClose={onClose}
             anchorOrigin={{ vertical: 'top', horizontal: 'right' }}
-            sx={{ zIndex: 1500 }}
+            sx={{ zIndex: 2000 }}
         >
             <Alert
                 severity={severity}

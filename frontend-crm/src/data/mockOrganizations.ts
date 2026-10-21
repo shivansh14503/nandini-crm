@@ -1,10 +1,6 @@
-import type { Organization } from '../types/organization.types';
+import type { OrganizationFormData, ExtendedOrganization } from '../types/organization.types';
 
-export interface ExtendedOrganization extends Organization {
-    assignedUser?: string;
-    isRecentlyViewed?: boolean;
-    isMyAccount?: boolean;
-}
+export type { ExtendedOrganization };
 
 export const INITIAL_MOCK_ORGANIZATIONS: ExtendedOrganization[] = [
     {
@@ -1063,6 +1059,40 @@ export function getStoredOrganizationById(id: string): ExtendedOrganization | un
     return list.find((o) => o.id === id);
 }
 
+export function addStoredOrganization(data: OrganizationFormData | Partial<ExtendedOrganization>): ExtendedOrganization {
+    const list = getStoredOrganizations();
+    const now = new Date().toISOString();
+    const newOrg: ExtendedOrganization = {
+        organizationName: '',
+        mailingName: '',
+        natureOfBusiness: '',
+        accountStatus: 'Active',
+        typeOfEntity: '',
+        customerType: '',
+        sapCodeTallyId: '',
+        showroomBranchCode: '',
+        sourceOfLead: '',
+        memberOfParentCorp: '',
+        numberOfEmployees: '',
+        annualTurnover: '',
+        description: '',
+        accountVerified: false,
+        provideSupport: 'Yes',
+        corporateEmails: [],
+        ...data,
+        id: (data as ExtendedOrganization).id || `org-${Date.now()}`,
+        accountCode: (data as ExtendedOrganization).accountCode || `ORG-${Math.floor(10000 + Math.random() * 90000)}`,
+        createdAt: (data as ExtendedOrganization).createdAt || now,
+        updatedAt: now,
+        createdBy: (data as ExtendedOrganization).createdBy || 'mittal.sharma',
+        isRecentlyViewed: (data as ExtendedOrganization).isRecentlyViewed ?? true,
+        isMyAccount: (data as ExtendedOrganization).isMyAccount ?? true,
+    };
+    const updatedList = [newOrg, ...list];
+    saveStoredOrganizations(updatedList);
+    return newOrg;
+}
+
 export function updateStoredOrganization(id: string, updates: Partial<ExtendedOrganization>): ExtendedOrganization | null {
     const list = getStoredOrganizations();
     const idx = list.findIndex((o) => o.id === id);
@@ -1075,4 +1105,22 @@ export function updateStoredOrganization(id: string, updates: Partial<ExtendedOr
     list[idx] = updated;
     saveStoredOrganizations(list);
     return updated;
+}
+
+export function deleteStoredOrganization(id: string): boolean {
+    const list = getStoredOrganizations();
+    const filtered = list.filter((o) => o.id !== id);
+    if (filtered.length !== list.length) {
+        saveStoredOrganizations(filtered);
+        return true;
+    }
+    return false;
+}
+
+export function deleteMultipleStoredOrganizations(ids: string[]): boolean {
+    const idSet = new Set(ids);
+    const list = getStoredOrganizations();
+    const filtered = list.filter((o) => !idSet.has(o.id));
+    saveStoredOrganizations(filtered);
+    return true;
 }

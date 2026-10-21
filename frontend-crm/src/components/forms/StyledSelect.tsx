@@ -1,6 +1,6 @@
 import React from 'react';
 import { FormControl, Select, MenuItem, Typography } from '@mui/material';
-import { fieldSx } from './constants';
+import { fieldSx } from './FormField';
 
 export interface StyledSelectProps {
     label?: string;

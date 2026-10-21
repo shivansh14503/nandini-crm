@@ -20,10 +20,8 @@ export interface TableRowActionsProps {
  * Ensures 100% visual and behavioral consistency across all table views in the CRM.
  */
 export function TableRowActions({
-    onView: _onView,
     onEdit,
     onDelete,
-    viewTooltip: _viewTooltip = 'View Details',
     editTooltip = 'Edit',
     deleteTooltip = 'Delete',
     children,

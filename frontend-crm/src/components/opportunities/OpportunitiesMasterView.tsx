@@ -2,20 +2,31 @@
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
+import { Box, Chip, Typography } from '@mui/material';
+import TrendingUpOutlinedIcon from '@mui/icons-material/TrendingUpOutlined';
+import MonetizationOnOutlinedIcon from '@mui/icons-material/MonetizationOnOutlined';
+import CheckCircleOutlinedIcon from '@mui/icons-material/CheckCircleOutlined';
+import ScheduleIcon from '@mui/icons-material/Schedule';
+import AccountCircleOutlinedIcon from '@mui/icons-material/AccountCircleOutlined';
+import WorkspacePremiumOutlinedIcon from '@mui/icons-material/WorkspacePremiumOutlined';
+import ApartmentIcon from '@mui/icons-material/Apartment';
+import CalendarMonthOutlinedIcon from '@mui/icons-material/CalendarMonthOutlined';
+import PersonOutlinedIcon from '@mui/icons-material/PersonOutlined';
 import { CommonMasterView } from '../common/CommonMasterView';
 import { AppToast } from '../common/AppToast';
+import type { DataTableColumn, DataTableFilterItem } from '../common/DataTable';
 import { ROUTES } from '../../config/constants';
 import type { Opportunity } from '../../types/opportunity.types';
 import { opportunityService } from '../../services/opportunity.service';
-import {
-    OpportunitiesFilterPills,
-    OpportunitiesTableToolbar,
-    OpportunitiesTable,
-    OpportunitiesPagination,
-    type OpportunityFilterTab,
-    type OpportunitySortField,
-} from './master';
+import type { OpportunityFilterTab, OpportunitySortField } from './master';
 import { OpportunityDetailDrawer } from './OpportunityDetailDrawer';
+
+const formatCurrency = (val: number) =>
+    new Intl.NumberFormat('en-IN', {
+        style: 'currency',
+        currency: 'INR',
+        maximumFractionDigits: 0,
+    }).format(val);
 
 export function OpportunitiesMasterView() {
     const router = useRouter();
@@ -39,38 +50,81 @@ export function OpportunitiesMasterView() {
         severity: 'success',
     });
 
-    // ── Load Opportunities from service ───────────────────────────────────────
+    const todayStr = useMemo(() => new Date().toISOString().split('T')[0], []);
+
     const loadOpportunities = useCallback(() => {
         const data = opportunityService.getAllOpportunities();
         setOpportunities(data);
     }, []);
 
     useEffect(() => {
-        loadOpportunities();
-    }, [loadOpportunities]);
-
-    // ── Compute Tab Counts ────────────────────────────────────────────────────
-    const counts = useMemo(() => {
-        return {
-            all: opportunities.length,
-            open: opportunities.filter(
-                (o) => !['Closed Won', 'Closed Lost'].includes(o.salesStage)
-            ).length,
-            closingSoon: opportunities.filter((o) =>
-                ['Proposal/Price Quote', 'Negotiation/Review'].includes(o.salesStage)
-            ).length,
-            won: opportunities.filter((o) => o.salesStage === 'Closed Won').length,
-            highValue: opportunities.filter((o) => (o.grandTotal || 0) >= 100000).length,
-            myDeals: opportunities.filter((o) =>
-                (o.assignedTo || '').includes('mittal.sharma')
-            ).length,
+        let active = true;
+        opportunityService
+            .getAll()
+            .then((data) => {
+                if (active) setOpportunities(data);
+            })
+            .catch(() => {});
+        return () => {
+            active = false;
         };
+    }, []);
+
+    // ── Filter Tabs Configuration ─────────────────────────────────────────────
+    const filterItems: DataTableFilterItem<OpportunityFilterTab>[] = useMemo(() => {
+        return [
+            {
+                id: 'all',
+                label: 'All Opportunities',
+                icon: <TrendingUpOutlinedIcon sx={{ fontSize: 16 }} />,
+                count: opportunities.length,
+            },
+            {
+                id: 'open',
+                label: 'Active Pipeline',
+                icon: <MonetizationOnOutlinedIcon sx={{ fontSize: 16 }} />,
+                count: opportunities.filter(
+                    (o) => !['Closed Won', 'Closed Lost'].includes(o.salesStage)
+                ).length,
+                activeColor: '#2563eb',
+            },
+            {
+                id: 'closing_soon',
+                label: 'Followup Today',
+                icon: <ScheduleIcon sx={{ fontSize: 16 }} />,
+                count: opportunities.filter((o) =>
+                    ['Proposal/Price Quote', 'Negotiation/Review'].includes(o.salesStage)
+                ).length,
+                activeColor: '#d97706',
+            },
+            {
+                id: 'won',
+                label: 'Closed Won',
+                icon: <CheckCircleOutlinedIcon sx={{ fontSize: 16 }} />,
+                count: opportunities.filter((o) => o.salesStage === 'Closed Won').length,
+                activeColor: '#16a34a',
+            },
+            {
+                id: 'high_value',
+                label: 'High Value (₹1L+)',
+                icon: <WorkspacePremiumOutlinedIcon sx={{ fontSize: 16 }} />,
+                count: opportunities.filter((o) => (o.grandTotal || 0) >= 100000).length,
+                activeColor: '#7c3aed',
+            },
+            {
+                id: 'my_deals',
+                label: 'My Deals',
+                icon: <AccountCircleOutlinedIcon sx={{ fontSize: 16 }} />,
+                count: opportunities.filter((o) =>
+                    (o.assignedTo || '').includes('mittal.sharma')
+                ).length,
+            },
+        ];
     }, [opportunities]);
 
     // ── Filter Logic ──────────────────────────────────────────────────────────
     const filteredOpportunities = useMemo(() => {
         return opportunities.filter((opp) => {
-            // Filter Tab condition
             if (activeTab === 'open' && ['Closed Won', 'Closed Lost'].includes(opp.salesStage)) {
                 return false;
             }
@@ -90,7 +144,6 @@ export function OpportunitiesMasterView() {
                 return false;
             }
 
-            // Search query condition
             if (searchQuery.trim()) {
                 const q = searchQuery.toLowerCase().trim();
                 const inOrg = opp.organizationName.toLowerCase().includes(q);
@@ -133,21 +186,19 @@ export function OpportunitiesMasterView() {
                 return sortOrder === 'asc' ? valA - valB : valB - valA;
             }
 
-            const valA = ((a as Record<string, any>)[sortField] || '').toString().toLowerCase();
-            const valB = ((b as Record<string, any>)[sortField] || '').toString().toLowerCase();
+            const valA = ((a as unknown as Record<string, unknown>)[sortField] || '').toString().toLowerCase();
+            const valB = ((b as unknown as Record<string, unknown>)[sortField] || '').toString().toLowerCase();
             if (valA < valB) return sortOrder === 'asc' ? -1 : 1;
             if (valA > valB) return sortOrder === 'asc' ? 1 : -1;
             return 0;
         });
     }, [filteredOpportunities, sortField, sortOrder]);
 
-    // ── Paginated Opportunities ───────────────────────────────────────────────
     const paginatedOpportunities = useMemo(() => {
         const start = page * rowsPerPage;
         return sortedOpportunities.slice(start, start + rowsPerPage);
     }, [sortedOpportunities, page, rowsPerPage]);
 
-    // ── Handlers ──────────────────────────────────────────────────────────────
     const handleSort = (field: OpportunitySortField) => {
         if (sortField === field) {
             setSortOrder((prev) => (prev === 'asc' ? 'desc' : 'asc'));
@@ -163,7 +214,7 @@ export function OpportunitiesMasterView() {
         );
     };
 
-    const handleSelectAll = (checked: boolean) => {
+    const handleSelectAll = (checked?: boolean) => {
         if (checked) {
             setSelectedIds(paginatedOpportunities.map((o) => o.id));
         } else {
@@ -171,36 +222,12 @@ export function OpportunitiesMasterView() {
         }
     };
 
-    const handleView = (opp: Opportunity) => {
-        setSelectedDrawerOpp(opp);
-    };
-
-    const handleEdit = (id: string) => {
-        router.push(ROUTES.OPPORTUNITY_EDIT(id));
-    };
-
-    const handleDelete = async (id: string) => {
-        if (confirm('Are you sure you want to delete this opportunity?')) {
-            try {
-                await opportunityService.deleteOpportunity(id);
-                loadOpportunities();
-                if (selectedDrawerOpp?.id === id) {
-                    setSelectedDrawerOpp(null);
-                }
-                setToast({
-                    open: true,
-                    message: 'Opportunity deleted successfully.',
-                    severity: 'success',
-                });
-            } catch (err) {
-                setToast({
-                    open: true,
-                    message: 'Failed to delete opportunity.',
-                    severity: 'error',
-                });
-            }
-        }
-    };
+    const handleEdit = useCallback(
+        (id: string) => {
+            router.push(ROUTES.OPPORTUNITY_EDIT(id));
+        },
+        [router]
+    );
 
     const handleBulkDelete = async () => {
         if (
@@ -217,7 +244,7 @@ export function OpportunitiesMasterView() {
                     message: `${selectedIds.length} opportunities deleted successfully.`,
                     severity: 'success',
                 });
-            } catch (err) {
+            } catch {
                 setToast({
                     open: true,
                     message: 'Failed to bulk delete opportunities.',
@@ -227,67 +254,309 @@ export function OpportunitiesMasterView() {
         }
     };
 
+    // ── Declarative Column Definitions ────────────────────────────────────────
+    const columns: DataTableColumn<Opportunity>[] = useMemo(
+        () => [
+            {
+                id: 'opportunityCode',
+                label: 'DEAL / CODE',
+                sortable: true,
+                minWidth: 190,
+                render: (o) => (
+                    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.3 }}>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                            <TrendingUpOutlinedIcon sx={{ fontSize: 16, color: '#2563eb', flexShrink: 0 }} />
+                            <Typography
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    setSelectedDrawerOpp(o);
+                                }}
+                                sx={{
+                                    fontWeight: 700,
+                                    color: '#1d4ed8',
+                                    fontSize: '0.82rem',
+                                    cursor: 'pointer',
+                                    '&:hover': { textDecoration: 'underline' },
+                                }}
+                            >
+                                {o.opportunityCode}
+                            </Typography>
+                        </Box>
+                        <Box sx={{ pl: 3 }}>
+                            <Typography sx={{ fontSize: '0.72rem', color: '#64748b' }} noWrap>
+                                {o.groupName || 'Primary Solution'}
+                            </Typography>
+                        </Box>
+                    </Box>
+                ),
+            },
+            {
+                id: 'organizationName',
+                label: 'ORGANIZATION & CONTACT',
+                sortable: true,
+                minWidth: 200,
+                render: (o) => (
+                    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.3 }}>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.8 }}>
+                            <ApartmentIcon sx={{ fontSize: 15, color: '#64748b', flexShrink: 0 }} />
+                            <Typography sx={{ fontSize: '0.8rem', color: '#1e293b', fontWeight: 600 }}>
+                                {o.organizationName}
+                            </Typography>
+                        </Box>
+                        {o.contactName && (
+                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.6, pl: 2.8 }}>
+                                <PersonOutlinedIcon sx={{ fontSize: 13, color: '#94a3b8' }} />
+                                <Typography sx={{ fontSize: '0.72rem', color: '#64748b' }} noWrap>
+                                    {o.contactName} ({o.contactNumber})
+                                </Typography>
+                            </Box>
+                        )}
+                    </Box>
+                ),
+            },
+            {
+                id: 'salesStage',
+                label: 'SALES STAGE',
+                sortable: true,
+                minWidth: 150,
+                render: (o) => {
+                    let bg = '#eff6ff';
+                    let color = '#1d4ed8';
+                    let border = '#bfdbfe';
+
+                    if (o.salesStage === 'Closed Won') {
+                        bg = '#ecfdf5';
+                        color = '#047857';
+                        border = '#a7f3d0';
+                    } else if (o.salesStage === 'Closed Lost') {
+                        bg = '#fef2f2';
+                        color = '#b91c1c';
+                        border = '#fecaca';
+                    } else if (o.salesStage.includes('Proposal') || o.salesStage.includes('Negotiation')) {
+                        bg = '#fffbeb';
+                        color = '#b45309';
+                        border = '#fde68a';
+                    } else if (o.salesStage.includes('Value') || o.salesStage.includes('Needs')) {
+                        bg = '#f5f3ff';
+                        color = '#6d28d9';
+                        border = '#ddd6fe';
+                    }
+
+                    return (
+                        <Chip
+                            label={o.salesStage}
+                            size="small"
+                            icon={
+                                o.salesStage === 'Closed Won' ? (
+                                    <CheckCircleOutlinedIcon
+                                        sx={{ fontSize: '13px !important', color: '#047857 !important' }}
+                                    />
+                                ) : undefined
+                            }
+                            sx={{
+                                height: 22,
+                                fontSize: '0.72rem',
+                                fontWeight: 600,
+                                backgroundColor: bg,
+                                color: color,
+                                border: `1px solid ${border}`,
+                            }}
+                        />
+                    );
+                },
+            },
+            {
+                id: 'grandTotal',
+                label: 'DEAL VALUE',
+                sortable: true,
+                minWidth: 130,
+                render: (o) => (
+                    <Box sx={{ display: 'flex', flexDirection: 'column' }}>
+                        <Typography sx={{ fontSize: '0.84rem', fontWeight: 700, color: '#0f172a' }}>
+                            {formatCurrency(o.grandTotal || 0)}
+                        </Typography>
+                        {o.lineItems && o.lineItems.length > 0 && (
+                            <Typography sx={{ fontSize: '0.68rem', color: '#64748b' }}>
+                                {o.lineItems.length} line item(s)
+                            </Typography>
+                        )}
+                    </Box>
+                ),
+            },
+            {
+                id: 'productCategory',
+                label: 'PRODUCT CATEGORY',
+                sortable: false,
+                minWidth: 170,
+                render: (o) => (
+                    <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
+                        {o.productCategory && o.productCategory.length > 0 ? (
+                            o.productCategory.map((cat, idx) => (
+                                <Chip
+                                    key={idx}
+                                    label={cat}
+                                    size="small"
+                                    sx={{
+                                        height: 20,
+                                        fontSize: '0.66rem',
+                                        fontWeight: 600,
+                                        backgroundColor: '#eff6ff',
+                                        color: '#1d4ed8',
+                                        border: '1px solid #bfdbfe',
+                                    }}
+                                />
+                            ))
+                        ) : (
+                            <Typography sx={{ fontSize: '0.78rem', color: '#94a3b8' }}>-</Typography>
+                        )}
+                    </Box>
+                ),
+            },
+            {
+                id: 'type',
+                label: 'TYPE & SOURCE',
+                sortable: true,
+                minWidth: 150,
+                render: (o) => (
+                    <Box sx={{ display: 'flex', flexDirection: 'column' }}>
+                        <Typography sx={{ fontSize: '0.78rem', color: '#334155', fontWeight: 600 }}>
+                            {o.type || 'New Business'}
+                        </Typography>
+                        <Typography sx={{ fontSize: '0.7rem', color: '#64748b' }}>
+                            via {o.leadSource}
+                        </Typography>
+                    </Box>
+                ),
+            },
+            {
+                id: 'nextFollowupDate',
+                label: 'NEXT FOLLOWUP',
+                sortable: true,
+                minWidth: 140,
+                render: (o) => {
+                    const isToday = o.nextFollowupDate === todayStr;
+
+                    return (
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.8 }}>
+                            <CalendarMonthOutlinedIcon
+                                sx={{
+                                    fontSize: 16,
+                                    color: isToday ? '#d97706' : '#64748b',
+                                }}
+                            />
+                            <Box>
+                                <Typography
+                                    sx={{
+                                        fontSize: '0.78rem',
+                                        fontWeight: isToday ? 700 : 500,
+                                        color: isToday ? '#b45309' : '#334155',
+                                    }}
+                                >
+                                    {o.nextFollowupDate || '-'}
+                                    {isToday && (
+                                        <Box
+                                            component="span"
+                                            sx={{
+                                                ml: 0.6,
+                                                px: 0.6,
+                                                py: 0.1,
+                                                borderRadius: '4px',
+                                                fontSize: '0.62rem',
+                                                fontWeight: 800,
+                                                backgroundColor: '#fef3c7',
+                                                color: '#b45309',
+                                                border: '1px solid #fde68a',
+                                            }}
+                                        >
+                                            TODAY
+                                        </Box>
+                                    )}
+                                </Typography>
+                                {o.followupType && (
+                                    <Typography sx={{ fontSize: '0.7rem', color: '#64748b' }}>
+                                        {o.followupType} {o.nextFollowupTime ? `• ${o.nextFollowupTime}` : ''}
+                                    </Typography>
+                                )}
+                            </Box>
+                        </Box>
+                    );
+                },
+            },
+            {
+                id: 'assignedTo',
+                label: 'ASSIGNED TO',
+                sortable: true,
+                minWidth: 130,
+                render: (o) => (
+                    <Typography sx={{ fontSize: '0.78rem', color: '#475569', fontWeight: 500 }}>
+                        {o.assignedTo || 'mittal.sharma'}
+                    </Typography>
+                ),
+            },
+        ],
+        [todayStr]
+    );
+
     return (
-        <CommonMasterView
-            filters={
-                <OpportunitiesFilterPills
-                    activeTab={activeTab}
-                    onTabChange={(tab) => {
-                        setActiveTab(tab);
-                        setPage(0);
-                    }}
-                    counts={counts}
-                />
-            }
-            toolbar={
-                <OpportunitiesTableToolbar
-                    searchQuery={searchQuery}
-                    onSearchChange={(q) => {
-                        setSearchQuery(q);
-                        setPage(0);
-                    }}
-                    onNewOpportunity={() => router.push(ROUTES.OPPORTUNITY_NEW)}
-                    selectedCount={selectedIds.length}
-                    onBulkDelete={handleBulkDelete}
-                    onRefresh={() => {
-                        loadOpportunities();
-                        setToast({ open: true, message: 'Opportunities refreshed.', severity: 'info' });
-                    }}
-                />
-            }
-            table={
-                <OpportunitiesTable
-                    opportunities={paginatedOpportunities}
-                    selectedIds={selectedIds}
-                    sortField={sortField}
-                    sortOrder={sortOrder}
-                    onSort={(f) => handleSort(f as OpportunitySortField)}
-                    onSelectOne={(id) => handleSelectRow(id)}
-                    onSelectAll={handleSelectAll}
-                    onViewOpportunity={(id) => {
-                        const found = opportunities.find((o) => o.id === id);
-                        if (found) setSelectedDrawerOpp(found);
-                    }}
-                    onEditOpportunity={handleEdit}
-                    onNewOpportunity={() => router.push(ROUTES.OPPORTUNITY_NEW)}
-                    onRowClick={(opp) => setSelectedDrawerOpp(opp)}
-                    activeOpportunityId={selectedDrawerOpp?.id}
-                />
-            }
-            pagination={
-                sortedOpportunities.length > 0 ? (
-                    <OpportunitiesPagination
-                        page={page}
-                        rowsPerPage={rowsPerPage}
-                        totalCount={sortedOpportunities.length}
-                        onPageChange={setPage}
-                        onRowsPerPageChange={(r) => {
-                            setRowsPerPage(r);
-                            setPage(0);
-                        }}
-                    />
-                ) : null
-            }
+        <CommonMasterView<Opportunity, OpportunityFilterTab>
+            filterConfig={{
+                filters: filterItems,
+                activeFilter: activeTab,
+                onFilterChange: (tab) => {
+                    setActiveTab(tab);
+                    setPage(0);
+                },
+            }}
+            searchConfig={{
+                searchQuery,
+                onSearchChange: (q) => {
+                    setSearchQuery(q);
+                    setPage(0);
+                },
+                searchPlaceholder: 'Search by deal, company, contact, stage, amount...',
+                searchWidth: { xs: '100%', sm: 340 },
+                onNewClick: () => router.push(ROUTES.OPPORTUNITY_NEW),
+                newButtonLabel: 'New Opportunity',
+                selectedCount: selectedIds.length,
+                onBulkDelete: handleBulkDelete,
+                onRefresh: () => {
+                    loadOpportunities();
+                    setToast({ open: true, message: 'Opportunities refreshed.', severity: 'info' });
+                },
+                refreshTooltip: 'Refresh Opportunities',
+            }}
+            columns={columns}
+            data={paginatedOpportunities}
+            keyExtractor={(o) => o.id}
+            selectedIds={selectedIds}
+            onToggleSelectRow={handleSelectRow}
+            onToggleSelectAll={handleSelectAll}
+            sortField={sortField}
+            sortOrder={sortOrder}
+            onSort={(f) => handleSort(f as OpportunitySortField)}
+            onView={(o) => setSelectedDrawerOpp(o)}
+            onEdit={(o) => handleEdit(o.id)}
+            onRowClick={(opp) => setSelectedDrawerOpp(opp)}
+            activeRowId={selectedDrawerOpp?.id}
+            viewTooltip="View Deal Details"
+            editTooltip="Edit Opportunity"
+            emptyTitle="No opportunities in pipeline"
+            emptyDescription="Create your first deal opportunity and track it from qualification to closed won."
+            emptyActionLabel="Create Opportunity"
+            onEmptyAction={() => router.push(ROUTES.OPPORTUNITY_NEW)}
+            emptyIcon={<TrendingUpOutlinedIcon sx={{ fontSize: 48, color: '#cbd5e1' }} />}
+            minHeight={300}
+            pagination={{
+                page,
+                rowsPerPage,
+                totalCount: sortedOpportunities.length,
+                onPageChange: setPage,
+                onRowsPerPageChange: (r) => {
+                    setRowsPerPage(r);
+                    setPage(0);
+                },
+                hideWhenEmpty: true,
+            }}
             drawer={
                 <OpportunityDetailDrawer
                     opportunity={selectedDrawerOpp}

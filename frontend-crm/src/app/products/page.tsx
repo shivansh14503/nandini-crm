@@ -7,11 +7,12 @@ import { useAuth } from '@/src/context/AuthContext';
 import { ROUTES } from '@/src/config/constants';
 import { Navbar } from '@/src/components/layout/Navbar';
 import { LoadingScreen } from '@/src/components/common/LoadingScreen';
+import { ErrorAlert } from '@/src/components/common/ErrorAlert';
 import { ProductsMasterView } from '@/src/components/products';
 
 export default function ProductsPage() {
     const router = useRouter();
-    const { user, loading, isAuthenticated } = useAuth();
+    const { user, loading, error, clearError, isAuthenticated } = useAuth();
 
     useEffect(() => {
         if (!loading && !isAuthenticated) {
@@ -25,6 +26,7 @@ export default function ProductsPage() {
     return (
         <Box sx={{ minHeight: '100vh', backgroundColor: '#f8fafc', display: 'flex', flexDirection: 'column' }}>
             <Navbar />
+            <ErrorAlert error={error} onClose={clearError} />
             <ProductsMasterView />
         </Box>
     );

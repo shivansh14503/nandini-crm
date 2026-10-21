@@ -1,6 +1,6 @@
 'use client';
 
-import React, { Suspense } from 'react';
+import React, { Suspense, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import {
     Box,
@@ -15,10 +15,12 @@ import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import ApartmentIcon from '@mui/icons-material/Apartment';
 import PersonOutlinedIcon from '@mui/icons-material/PersonOutlined';
 import DashboardOutlinedIcon from '@mui/icons-material/DashboardOutlined';
+import { useAuth } from '@/src/context/AuthContext';
 import { Navbar } from '@/src/components/layout/Navbar';
 import { AppBreadcrumbs } from '@/src/components/common/AppBreadcrumbs';
 import { EnterpriseFooter } from '@/src/components/common/EnterpriseFooter';
 import { LoadingScreen } from '@/src/components/common/LoadingScreen';
+import { ErrorAlert } from '@/src/components/common/ErrorAlert';
 import { ROUTES } from '@/src/config/constants';
 
 /**
@@ -28,6 +30,16 @@ import { ROUTES } from '@/src/config/constants';
  */
 function DynamicCrmPageContent() {
     const router = useRouter();
+    const { user, loading, error, clearError, isAuthenticated } = useAuth();
+
+    useEffect(() => {
+        if (!loading && !isAuthenticated) {
+            router.push(ROUTES.LOGIN);
+        }
+    }, [isAuthenticated, loading, router]);
+
+    if (loading) return <LoadingScreen message="Loading page..." />;
+    if (!user) return null;
 
     return (
         <Box sx={{ minHeight: '100vh', backgroundColor: '#f8fafc', display: 'flex', flexDirection: 'column' }}>
@@ -35,6 +47,8 @@ function DynamicCrmPageContent() {
             <Navbar />
 
             <Container maxWidth="xl" sx={{ pt: 2.5, pb: 4, flex: 1, display: 'flex', flexDirection: 'column' }}>
+                <ErrorAlert error={error} onClose={clearError} />
+
                 {/* ── Permanent Automatic Route-Aware Breadcrumbs ── */}
                 <Box sx={{ mb: 3 }}>
                     <React.Suspense fallback={null}>

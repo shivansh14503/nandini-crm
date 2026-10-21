@@ -11,6 +11,22 @@ export function getZodErrorMessage(error: z.ZodError): string {
     return 'Invalid form data. Please check required fields.';
 }
 
+/**
+ * Walks a React Hook Form `FieldErrors` tree (including nested objects/arrays) and returns
+ * the first human-readable message, for display in toast notifications.
+ */
+export function getFirstErrorMessage(errors: unknown): string | undefined {
+    if (!errors || typeof errors !== 'object') return undefined;
+    const node = errors as Record<string, unknown>;
+    if (typeof node.message === 'string' && node.message) return node.message;
+    for (const key of Object.keys(node)) {
+        if (key === 'ref' || key === 'type') continue;
+        const found = getFirstErrorMessage(node[key]);
+        if (found) return found;
+    }
+    return undefined;
+}
+
 export type ValidationResult<T> =
     | { success: true; data: T }
     | { success: false; error: string };

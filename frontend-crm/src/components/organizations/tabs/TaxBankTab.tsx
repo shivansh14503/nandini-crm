@@ -3,7 +3,6 @@
 import React from 'react';
 import {
     Box,
-    Typography,
     TextField,
 } from '@mui/material';
 
@@ -11,10 +10,14 @@ import {
 import AccountBalanceOutlinedIcon from '@mui/icons-material/AccountBalanceOutlined';
 import ReceiptLongOutlinedIcon from '@mui/icons-material/ReceiptLongOutlined';
 
-import { SectionLabel } from '../shared/SectionLabel';
-import { StyledSelect } from '../shared/StyledSelect';
-import { REGISTRATION_TYPES, ACCOUNT_TYPES, fieldSx } from '../shared/constants';
-import type { OrganizationFormData } from '../../../types/organization.types';
+import {
+    FormField,
+    SectionLabel,
+    StyledSelect,
+    fieldSx,
+} from '@/components/forms';
+import { REGISTRATION_TYPES, ACCOUNT_TYPES } from '@/config/constants';
+import type { OrganizationFormData } from '@/types/organization.types';
 
 export interface TaxBankTabProps {
     form: OrganizationFormData;
@@ -40,13 +43,7 @@ export function TaxBankTab({ form, set }: TaxBankTabProps) {
                     />
 
                     {/* Registration Type */}
-                    <Box>
-                        <Typography
-                            variant="body2"
-                            sx={{ fontWeight: 600, color: '#374151', fontSize: '0.82rem', mb: 0.6 }}
-                        >
-                            Registration Type <span style={{ color: '#ef4444' }}>*</span>
-                        </Typography>
+                    <FormField label="Registration Type" required sx={{ mb: 0 }}>
                         <StyledSelect
                             label="Registration Type"
                             placeholder="Select Registration Type"
@@ -55,21 +52,14 @@ export function TaxBankTab({ form, set }: TaxBankTabProps) {
                             options={REGISTRATION_TYPES}
                             required
                         />
-                    </Box>
+                    </FormField>
 
                     {/* PAN Number */}
-                    <Box>
-                        <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.6 }}>
-                            <Typography
-                                variant="body2"
-                                sx={{ fontWeight: 600, color: '#374151', fontSize: '0.82rem' }}
-                            >
-                                PAN Number
-                            </Typography>
-                            <Typography variant="caption" sx={{ color: '#9ca3af', fontSize: '0.72rem' }}>
-                                10-digit Permanent Account Number
-                            </Typography>
-                        </Box>
+                    <FormField
+                        label="PAN Number"
+                        hint="10-digit Permanent Account Number"
+                        sx={{ mb: 0 }}
+                    >
                         <TextField
                             fullWidth
                             size="small"
@@ -79,21 +69,14 @@ export function TaxBankTab({ form, set }: TaxBankTabProps) {
                             slotProps={{ htmlInput: { maxLength: 10 } }}
                             sx={fieldSx}
                         />
-                    </Box>
+                    </FormField>
 
                     {/* MSME Regn. Number */}
-                    <Box>
-                        <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.6 }}>
-                            <Typography
-                                variant="body2"
-                                sx={{ fontWeight: 600, color: '#374151', fontSize: '0.82rem' }}
-                            >
-                                MSME Regn.Number
-                            </Typography>
-                            <Typography variant="caption" sx={{ color: '#9ca3af', fontSize: '0.72rem' }}>
-                                Udyam Registration
-                            </Typography>
-                        </Box>
+                    <FormField
+                        label="MSME Regn.Number"
+                        hint="Udyam Registration"
+                        sx={{ mb: 0 }}
+                    >
                         <TextField
                             fullWidth
                             size="small"
@@ -102,16 +85,10 @@ export function TaxBankTab({ form, set }: TaxBankTabProps) {
                             onChange={(e) => set('msmeRegnNumber', e.target.value.toUpperCase())}
                             sx={fieldSx}
                         />
-                    </Box>
+                    </FormField>
 
                     {/* Account Name */}
-                    <Box>
-                        <Typography
-                            variant="body2"
-                            sx={{ fontWeight: 600, color: '#374151', fontSize: '0.82rem', mb: 0.6 }}
-                        >
-                            Account Name
-                        </Typography>
+                    <FormField label="Account Name" sx={{ mb: 0 }}>
                         <TextField
                             fullWidth
                             size="small"
@@ -120,16 +97,10 @@ export function TaxBankTab({ form, set }: TaxBankTabProps) {
                             onChange={(e) => set('accountName', e.target.value)}
                             sx={fieldSx}
                         />
-                    </Box>
+                    </FormField>
 
                     {/* Bank Name */}
-                    <Box>
-                        <Typography
-                            variant="body2"
-                            sx={{ fontWeight: 600, color: '#374151', fontSize: '0.82rem', mb: 0.6 }}
-                        >
-                            Bank Name
-                        </Typography>
+                    <FormField label="Bank Name" sx={{ mb: 0 }}>
                         <TextField
                             fullWidth
                             size="small"
@@ -138,21 +109,10 @@ export function TaxBankTab({ form, set }: TaxBankTabProps) {
                             onChange={(e) => set('bankName', e.target.value)}
                             sx={fieldSx}
                         />
-                    </Box>
+                    </FormField>
 
                     {/* Bank IFSC Code */}
-                    <Box>
-                        <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.6 }}>
-                            <Typography
-                                variant="body2"
-                                sx={{ fontWeight: 600, color: '#374151', fontSize: '0.82rem' }}
-                            >
-                                Bank IFSC Code
-                            </Typography>
-                            <Typography variant="caption" sx={{ color: '#9ca3af', fontSize: '0.72rem' }}>
-                                11-character code
-                            </Typography>
-                        </Box>
+                    <FormField label="Bank IFSC Code" hint="11-character code" sx={{ mb: 0 }}>
                         <TextField
                             fullWidth
                             size="small"
@@ -162,7 +122,7 @@ export function TaxBankTab({ form, set }: TaxBankTabProps) {
                             slotProps={{ htmlInput: { maxLength: 11 } }}
                             sx={fieldSx}
                         />
-                    </Box>
+                    </FormField>
                 </Box>
 
                 {/* ── RIGHT COLUMN: Tax & Bank Right ────────────────── */}
@@ -173,18 +133,12 @@ export function TaxBankTab({ form, set }: TaxBankTabProps) {
                     />
 
                     {/* GST Number */}
-                    <Box>
-                        <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.6 }}>
-                            <Typography
-                                variant="body2"
-                                sx={{ fontWeight: 600, color: '#374151', fontSize: '0.82rem' }}
-                            >
-                                GST Number <span style={{ color: '#ef4444' }}>*</span>
-                            </Typography>
-                            <Typography variant="caption" sx={{ color: '#9ca3af', fontSize: '0.72rem' }}>
-                                15-character GSTIN
-                            </Typography>
-                        </Box>
+                    <FormField
+                        label="GST Number"
+                        required
+                        hint="15-character GSTIN"
+                        sx={{ mb: 0 }}
+                    >
                         <TextField
                             fullWidth
                             size="small"
@@ -194,21 +148,14 @@ export function TaxBankTab({ form, set }: TaxBankTabProps) {
                             slotProps={{ htmlInput: { maxLength: 15 } }}
                             sx={fieldSx}
                         />
-                    </Box>
+                    </FormField>
 
                     {/* CIN No */}
-                    <Box>
-                        <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.6 }}>
-                            <Typography
-                                variant="body2"
-                                sx={{ fontWeight: 600, color: '#374151', fontSize: '0.82rem' }}
-                            >
-                                CIN No
-                            </Typography>
-                            <Typography variant="caption" sx={{ color: '#9ca3af', fontSize: '0.72rem' }}>
-                                Corporate Identification Number
-                            </Typography>
-                        </Box>
+                    <FormField
+                        label="CIN No"
+                        hint="Corporate Identification Number"
+                        sx={{ mb: 0 }}
+                    >
                         <TextField
                             fullWidth
                             size="small"
@@ -218,21 +165,14 @@ export function TaxBankTab({ form, set }: TaxBankTabProps) {
                             slotProps={{ htmlInput: { maxLength: 21 } }}
                             sx={fieldSx}
                         />
-                    </Box>
+                    </FormField>
 
                     {/* TAN Number */}
-                    <Box>
-                        <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.6 }}>
-                            <Typography
-                                variant="body2"
-                                sx={{ fontWeight: 600, color: '#374151', fontSize: '0.82rem' }}
-                            >
-                                TAN Number
-                            </Typography>
-                            <Typography variant="caption" sx={{ color: '#9ca3af', fontSize: '0.72rem' }}>
-                                Tax Deduction &amp; Collection Account
-                            </Typography>
-                        </Box>
+                    <FormField
+                        label="TAN Number"
+                        hint="Tax Deduction & Collection Account"
+                        sx={{ mb: 0 }}
+                    >
                         <TextField
                             fullWidth
                             size="small"
@@ -242,16 +182,10 @@ export function TaxBankTab({ form, set }: TaxBankTabProps) {
                             slotProps={{ htmlInput: { maxLength: 10 } }}
                             sx={fieldSx}
                         />
-                    </Box>
+                    </FormField>
 
                     {/* Account Number */}
-                    <Box>
-                        <Typography
-                            variant="body2"
-                            sx={{ fontWeight: 600, color: '#374151', fontSize: '0.82rem', mb: 0.6 }}
-                        >
-                            Account Number
-                        </Typography>
+                    <FormField label="Account Number" sx={{ mb: 0 }}>
                         <TextField
                             fullWidth
                             size="small"
@@ -260,16 +194,10 @@ export function TaxBankTab({ form, set }: TaxBankTabProps) {
                             onChange={(e) => set('accountNumber', e.target.value)}
                             sx={fieldSx}
                         />
-                    </Box>
+                    </FormField>
 
                     {/* Type Of Account */}
-                    <Box>
-                        <Typography
-                            variant="body2"
-                            sx={{ fontWeight: 600, color: '#374151', fontSize: '0.82rem', mb: 0.6 }}
-                        >
-                            Type Of Account
-                        </Typography>
+                    <FormField label="Type Of Account" sx={{ mb: 0 }}>
                         <StyledSelect
                             label="Type Of Account"
                             placeholder="Select Type Of Account"
@@ -277,16 +205,10 @@ export function TaxBankTab({ form, set }: TaxBankTabProps) {
                             onChange={(v) => set('typeOfAccount', v)}
                             options={ACCOUNT_TYPES}
                         />
-                    </Box>
+                    </FormField>
 
                     {/* Bank Address */}
-                    <Box>
-                        <Typography
-                            variant="body2"
-                            sx={{ fontWeight: 600, color: '#374151', fontSize: '0.82rem', mb: 0.6 }}
-                        >
-                            Bank Address
-                        </Typography>
+                    <FormField label="Bank Address" sx={{ mb: 0 }}>
                         <TextField
                             fullWidth
                             size="small"
@@ -295,9 +217,10 @@ export function TaxBankTab({ form, set }: TaxBankTabProps) {
                             onChange={(e) => set('bankAddress', e.target.value)}
                             sx={fieldSx}
                         />
-                    </Box>
+                    </FormField>
                 </Box>
             </Box>
         </Box>
     );
 }
+

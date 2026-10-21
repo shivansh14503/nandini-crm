@@ -2,7 +2,8 @@
 
 import React from 'react';
 import { Box, Paper, Typography, type SxProps, type Theme } from '@mui/material';
-import { AppBreadcrumbs, type BreadcrumbItem } from './AppBreadcrumbs';
+import { type BreadcrumbItem } from './AppBreadcrumbs';
+import { FormHeader } from '../forms/FormHeader';
 import { FormStickyFooter } from '../forms/FormStickyFooter';
 
 export interface FormTabItem {
@@ -120,19 +121,11 @@ export function CommonFormLayout({
     return (
         <Box sx={{ width: '100%', pb: 10, ...sx }}>
             {/* ── Line 1: Route-Aware Breadcrumbs ── */}
-            <Box
-                sx={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    mb: 2.5,
-                    flexWrap: 'wrap',
-                    gap: 2,
-                }}
-            >
-                {breadcrumbs || <AppBreadcrumbs items={breadcrumbItems} />}
-                {headerExtra}
-            </Box>
+            <FormHeader
+                breadcrumbs={breadcrumbs}
+                breadcrumbItems={breadcrumbItems}
+                extraActions={headerExtra}
+            />
 
             {/* ── Main Form Card ── */}
             <Paper

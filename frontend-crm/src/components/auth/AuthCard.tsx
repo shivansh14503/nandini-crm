@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from 'react';
+import React from 'react';
 import { Box, Card, CardContent, Typography } from '@mui/material';
 import Image from 'next/image';
 import NIPLLogo from '@/public/images/NIPL-Updated-Logo-Large.png';
@@ -11,11 +11,7 @@ interface AuthCardProps {
 }
 
 export function AuthCard({ children }: AuthCardProps) {
-    const [year, setYear] = useState<number | null>(null);
-
-    useEffect(() => {
-        setYear(new Date().getFullYear());
-    }, []);
+    const year = new Date().getFullYear();
 
     return (
         <Box

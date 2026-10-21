@@ -1,33 +1,33 @@
 'use client';
 
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import {
-    Box,
-    Typography,
-    IconButton,
-    Chip,
-    Tooltip,
-    Divider,
-} from '@mui/material';
+import { Box, Typography, Chip, Divider } from '@mui/material';
 
 // Icons
 import PersonOutlinedIcon from '@mui/icons-material/PersonOutlined';
 import PhoneOutlinedIcon from '@mui/icons-material/PhoneOutlined';
 import EmailOutlinedIcon from '@mui/icons-material/EmailOutlined';
 import ApartmentIcon from '@mui/icons-material/Apartment';
-import ContentCopyOutlinedIcon from '@mui/icons-material/ContentCopyOutlined';
 import LocalFireDepartmentIcon from '@mui/icons-material/LocalFireDepartment';
 import CalendarMonthOutlinedIcon from '@mui/icons-material/CalendarMonthOutlined';
 import PlaceOutlinedIcon from '@mui/icons-material/PlaceOutlined';
 import BusinessOutlinedIcon from '@mui/icons-material/BusinessOutlined';
 import CheckCircleOutlinedIcon from '@mui/icons-material/CheckCircleOutlined';
-import AssignmentTurnedInOutlinedIcon from '@mui/icons-material/AssignmentTurnedInOutlined';
 import AccessTimeOutlinedIcon from '@mui/icons-material/AccessTimeOutlined';
+import EditOutlinedIcon from '@mui/icons-material/EditOutlined';
+import PublishedWithChangesIcon from '@mui/icons-material/PublishedWithChanges';
 
-import { ROUTES } from '../../config/constants';
-import type { Lead } from '../../types/lead.types';
-import { EntityDetailDrawer, type DrawerTabItem, type AuditRevisionItem, buildDrawerTabs } from '../common/Drawer';
+import { ROUTES } from '@/config/constants';
+import type { Lead } from '@/types/lead.types';
+import {
+    EntityDetailDrawer,
+    DrawerSectionCard,
+    DrawerMetricGrid,
+    DrawerChannelRow,
+    type AuditRevisionItem,
+} from '@/components/common/Drawer';
+import { AppToast } from '@/components/common/AppToast';
 import { LEAD_FORM_TABS } from './LeadForm';
 
 export interface LeadDetailDrawerProps {
@@ -35,6 +35,8 @@ export interface LeadDetailDrawerProps {
     open: boolean;
     onClose: () => void;
     onEdit?: (id: string) => void;
+    onLeadUpdated?: (updatedLead: Lead) => void;
+    onShowToast?: (message: string, severity?: 'success' | 'error' | 'info' | 'warning') => void;
 }
 
 export function LeadDetailDrawer({
@@ -42,12 +44,49 @@ export function LeadDetailDrawer({
     open,
     onClose,
     onEdit,
+    onLeadUpdated,
+    onShowToast,
 }: LeadDetailDrawerProps) {
     const router = useRouter();
 
-    if (!lead) return null;
+    const [currentLead, setCurrentLead] = useState<Lead | null>(lead);
+    const [toast, setToast] = useState<{
+        open: boolean;
+        message: string;
+        severity: 'success' | 'error' | 'info' | 'warning';
+    }>({
+        open: false,
+        message: '',
+        severity: 'error',
+    });
 
-    const l = lead;
+    useEffect(() => {
+        setCurrentLead(lead);
+    }, [lead]);
+
+    if (!lead && !currentLead) return null;
+
+    const l = currentLead || lead!;
+
+    const triggerToast = (message: string, severity: 'success' | 'error' | 'info' | 'warning' = 'error') => {
+        setToast({ open: true, message, severity });
+        onShowToast?.(message, severity);
+    };
+
+    const handleConvertLead = () => {
+        const orgName = (l.organizationName || '').trim();
+        if (!orgName) {
+            triggerToast('Organisation Name is required.', 'error');
+            return;
+        }
+
+        if (l.status === 'Converted') {
+            triggerToast('This lead has already been converted.', 'info');
+            return;
+        }
+
+        router.push(ROUTES.LEAD_CONVERT(l.id));
+    };
 
     const handleEdit = () => {
         if (onEdit) {
@@ -57,366 +96,25 @@ export function LeadDetailDrawer({
         }
     };
 
-    const copyToClipboard = (text: string) => {
-        navigator.clipboard.writeText(text);
-    };
-
-    // ── Derive Drawer Tabs dynamically from Creation Form Single Source of Truth ──
-    const tabs: DrawerTabItem[] = buildDrawerTabs(LEAD_FORM_TABS, {
-        overview: (
-            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                {/* Linked Organization Card */}
-                <Box
-                    sx={{
-                        p: 2,
-                        borderRadius: '8px',
-                        backgroundColor: '#f8fafc',
-                        border: '1px solid #e2e8f0',
-                    }}
-                >
-                    <Typography sx={{ fontSize: '0.68rem', fontWeight: 700, color: '#64748b', letterSpacing: '0.04em' }}>
-                        PROSPECTIVE ORGANIZATION
-                    </Typography>
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 0.5 }}>
-                        <ApartmentIcon sx={{ fontSize: 18, color: '#2563eb' }} />
-                        <Typography sx={{ fontSize: '0.98rem', fontWeight: 800, color: '#1d4ed8' }}>
-                            {l.organizationName || 'Individual Prospect / Non-Entity'}
-                        </Typography>
-                    </Box>
-                    {l.mailingName && l.mailingName !== l.organizationName && (
-                        <Typography sx={{ fontSize: '0.75rem', color: '#64748b', mt: 0.3 }}>
-                            Mailing Name: {l.mailingName}
-                        </Typography>
-                    )}
-                </Box>
-
-                {/* Next Followup Highlight Card */}
-                <Box
-                    sx={{
-                        p: 2,
-                        borderRadius: '8px',
-                        backgroundColor: '#fffbeb',
-                        border: '1px solid #fde68a',
-                    }}
-                >
-                    <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
-                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.8 }}>
-                            <CalendarMonthOutlinedIcon sx={{ fontSize: 18, color: '#d97706' }} />
-                            <Typography sx={{ fontSize: '0.8rem', fontWeight: 800, color: '#92400e' }}>
-                                NEXT SCHEDULED FOLLOWUP
-                            </Typography>
-                        </Box>
-                        {l.followupType && (
-                            <Chip
-                                label={l.followupType}
-                                size="small"
-                                sx={{
-                                    height: 20,
-                                    fontSize: '0.68rem',
-                                    fontWeight: 700,
-                                    backgroundColor: '#fef3c7',
-                                    color: '#b45309',
-                                    border: '1px solid #fcd34d',
-                                }}
-                            />
-                        )}
-                    </Box>
-
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, my: 0.5 }}>
-                        <Typography sx={{ fontSize: '0.94rem', fontWeight: 700, color: '#78350f' }}>
-                            {l.nextFollowupDate}
-                        </Typography>
-                        {l.nextFollowupTime && (
-                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.4 }}>
-                                <AccessTimeOutlinedIcon sx={{ fontSize: 14, color: '#b45309' }} />
-                                <Typography sx={{ fontSize: '0.82rem', fontWeight: 600, color: '#92400e' }}>
-                                    {l.nextFollowupTime}
-                                </Typography>
-                            </Box>
-                        )}
-                    </Box>
-
-                    {l.addDescription && (
-                        <Box
-                            sx={{
-                                mt: 1,
-                                p: 1.2,
-                                borderRadius: '6px',
-                                backgroundColor: '#ffffff',
-                                border: '1px solid #fed7aa',
-                            }}
-                        >
-                            <Typography sx={{ fontSize: '0.74rem', color: '#9a3412', fontWeight: 500, lineHeight: 1.4 }}>
-                                &quot;{l.addDescription}&quot;
-                            </Typography>
-                        </Box>
-                    )}
-                </Box>
-
-                {/* Product Categories Interested In */}
-                <Box sx={{ p: 2, borderRadius: '8px', backgroundColor: '#ffffff', border: '1px solid #e2e8f0' }}>
-                    <Typography sx={{ fontSize: '0.68rem', fontWeight: 700, color: '#64748b', mb: 1 }}>
-                        PRODUCTS &amp; SOLUTIONS OF INTEREST
-                    </Typography>
-                    <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.8 }}>
-                        {l.productCategory && l.productCategory.length > 0 ? (
-                            l.productCategory.map((prod, idx) => (
-                                <Chip
-                                    key={idx}
-                                    label={prod}
-                                    size="small"
-                                    icon={<CheckCircleOutlinedIcon sx={{ fontSize: '13px !important', color: '#15803d !important' }} />}
-                                    sx={{
-                                        height: 24,
-                                        fontSize: '0.74rem',
-                                        fontWeight: 700,
-                                        backgroundColor: '#dcfce7',
-                                        color: '#166534',
-                                        border: '1px solid #86efac',
-                                    }}
-                                />
-                            ))
-                        ) : (
-                            <Typography sx={{ fontSize: '0.8rem', color: '#94a3b8' }}>None specified</Typography>
-                        )}
-                    </Box>
-                </Box>
-
-                {/* Contact Phone & Channels */}
-                <Box sx={{ p: 2, borderRadius: '8px', border: '1px solid #e2e8f0', backgroundColor: '#ffffff' }}>
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.8, mb: 1.2 }}>
-                        <PhoneOutlinedIcon sx={{ fontSize: 16, color: '#2563eb' }} />
-                        <Typography sx={{ fontSize: '0.78rem', fontWeight: 700, color: '#0f172a' }}>
-                            Direct Phone &amp; Email
-                        </Typography>
-                    </Box>
-
-                    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.2 }}>
-                        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                                <PhoneOutlinedIcon sx={{ fontSize: 16, color: '#16a34a' }} />
-                                <Box>
-                                    <Typography sx={{ fontSize: '0.84rem', fontWeight: 700, color: '#0f172a' }}>
-                                        {l.mobile}
-                                    </Typography>
-                                    <Typography sx={{ fontSize: '0.68rem', color: '#64748b' }}>
-                                        Primary Mobile / WhatsApp
-                                    </Typography>
-                                </Box>
-                            </Box>
-                            <Tooltip title="Copy Phone">
-                                <IconButton size="small" onClick={() => copyToClipboard(l.mobile)}>
-                                    <ContentCopyOutlinedIcon sx={{ fontSize: 14 }} />
-                                </IconButton>
-                            </Tooltip>
-                        </Box>
-
-                        {l.otherPhone && (
-                            <>
-                                <Divider sx={{ borderColor: '#f1f5f9' }} />
-                                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                                        <PhoneOutlinedIcon sx={{ fontSize: 16, color: '#64748b' }} />
-                                        <Box>
-                                            <Typography sx={{ fontSize: '0.84rem', fontWeight: 600, color: '#334155' }}>
-                                                {l.otherPhone}
-                                            </Typography>
-                                            <Typography sx={{ fontSize: '0.68rem', color: '#64748b' }}>
-                                                Other / Landline Phone
-                                            </Typography>
-                                        </Box>
-                                    </Box>
-                                    <Tooltip title="Copy Phone">
-                                        <IconButton size="small" onClick={() => copyToClipboard(l.otherPhone || '')}>
-                                            <ContentCopyOutlinedIcon sx={{ fontSize: 14 }} />
-                                        </IconButton>
-                                    </Tooltip>
-                                </Box>
-                            </>
-                        )}
-
-                        {l.emailAddresses && l.emailAddresses.length > 0 && (
-                            <>
-                                <Divider sx={{ borderColor: '#f1f5f9' }} />
-                                {l.emailAddresses.map((em, idx) => (
-                                    <Box key={idx} sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                                            <EmailOutlinedIcon sx={{ fontSize: 16, color: '#2563eb' }} />
-                                            <Box>
-                                                <Typography sx={{ fontSize: '0.82rem', fontWeight: 600, color: '#0f172a' }}>
-                                                    {em.email}
-                                                </Typography>
-                                                <Typography sx={{ fontSize: '0.68rem', color: '#64748b' }}>
-                                                    {em.isPrimary ? 'Primary Official Email' : 'Alternate Email'}
-                                                </Typography>
-                                            </Box>
-                                        </Box>
-                                        {em.isPrimary && (
-                                            <Chip label="PRIMARY" size="small" sx={{ height: 18, fontSize: '0.62rem', fontWeight: 700, backgroundColor: '#eff6ff', color: '#1d4ed8' }} />
-                                        )}
-                                    </Box>
-                                ))}
-                            </>
-                        )}
-                    </Box>
-                </Box>
-
-                {/* Profile & Business Metrics Grid */}
-                <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 1.5 }}>
-                    <Box sx={{ p: 1.5, borderRadius: '8px', backgroundColor: '#ffffff', border: '1px solid #e2e8f0' }}>
-                        <Typography sx={{ fontSize: '0.68rem', fontWeight: 700, color: '#64748b' }}>DESIGNATION</Typography>
-                        <Typography sx={{ fontSize: '0.86rem', fontWeight: 700, color: '#0f172a', mt: 0.3 }}>
-                            {l.designation || 'Key Decision Maker'}
-                        </Typography>
-                    </Box>
-                    <Box sx={{ p: 1.5, borderRadius: '8px', backgroundColor: '#ffffff', border: '1px solid #e2e8f0' }}>
-                        <Typography sx={{ fontSize: '0.68rem', fontWeight: 700, color: '#64748b' }}>DEPARTMENT</Typography>
-                        <Typography sx={{ fontSize: '0.86rem', fontWeight: 700, color: '#0f172a', mt: 0.3 }}>
-                            {l.department || 'Management'}
-                        </Typography>
-                    </Box>
-                    <Box sx={{ p: 1.5, borderRadius: '8px', backgroundColor: '#ffffff', border: '1px solid #e2e8f0' }}>
-                        <Typography sx={{ fontSize: '0.68rem', fontWeight: 700, color: '#64748b' }}>ANNUAL TURNOVER</Typography>
-                        <Typography sx={{ fontSize: '0.82rem', fontWeight: 600, color: '#334155', mt: 0.3 }}>
-                            {l.turnover || 'Not Disclosed'}
-                        </Typography>
-                    </Box>
-                    <Box sx={{ p: 1.5, borderRadius: '8px', backgroundColor: '#ffffff', border: '1px solid #e2e8f0' }}>
-                        <Typography sx={{ fontSize: '0.68rem', fontWeight: 700, color: '#64748b' }}>NO OF EMPLOYEES</Typography>
-                        <Typography sx={{ fontSize: '0.82rem', fontWeight: 600, color: '#334155', mt: 0.3 }}>
-                            {l.noOfEmployee || '11 – 50 Staff'}
-                        </Typography>
-                    </Box>
-                </Box>
-
-                {/* Source & Representative Details */}
-                <Box sx={{ p: 2, borderRadius: '8px', border: '1px solid #e2e8f0', backgroundColor: '#f8fafc' }}>
-                    <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 1.5 }}>
-                        <Box>
-                            <Typography sx={{ fontSize: '0.68rem', fontWeight: 700, color: '#64748b' }}>LEAD SOURCE</Typography>
-                            <Typography sx={{ fontSize: '0.82rem', fontWeight: 600, color: '#1e3a8a', mt: 0.3 }}>
-                                {l.leadSource}
-                            </Typography>
-                        </Box>
-                        <Box>
-                            <Typography sx={{ fontSize: '0.68rem', fontWeight: 700, color: '#64748b' }}>ASSIGNED TO</Typography>
-                            <Typography sx={{ fontSize: '0.82rem', fontWeight: 600, color: '#0f172a', mt: 0.3 }}>
-                                {l.assignedTo}
-                            </Typography>
-                        </Box>
-                    </Box>
-                    {l.referredBy && (
-                        <Box sx={{ mt: 1.2, pt: 1, borderTop: '1px dashed #cbd5e1' }}>
-                            <Typography sx={{ fontSize: '0.68rem', fontWeight: 700, color: '#64748b' }}>REFERRED BY</Typography>
-                            <Typography sx={{ fontSize: '0.8rem', color: '#334155', mt: 0.2 }}>
-                                {l.referredBy}
-                            </Typography>
-                        </Box>
-                    )}
-                </Box>
-
-                {/* Long Description */}
-                {l.description && (
-                    <Box sx={{ p: 2, borderRadius: '8px', backgroundColor: '#ffffff', border: '1px solid #e2e8f0' }}>
-                        <Typography sx={{ fontSize: '0.68rem', fontWeight: 700, color: '#64748b', mb: 0.5 }}>
-                            BACKGROUND CONTEXT &amp; NOTES
-                        </Typography>
-                        <Typography sx={{ fontSize: '0.82rem', color: '#334155', lineHeight: 1.5 }}>
-                            {l.description}
-                        </Typography>
-                    </Box>
-                )}
-            </Box>
-        ),
-
-        address: (
-            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                {/* Primary Address Card */}
-                <Box sx={{ p: 2, borderRadius: '8px', backgroundColor: '#ffffff', border: '1px solid #e2e8f0' }}>
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
-                        <PlaceOutlinedIcon sx={{ fontSize: 18, color: '#2563eb' }} />
-                        <Typography sx={{ fontSize: '0.82rem', fontWeight: 700, color: '#0f172a' }}>
-                            PRIMARY REGISTERED ADDRESS
-                        </Typography>
-                    </Box>
-                    <Typography sx={{ fontSize: '0.84rem', color: '#1e293b', fontWeight: 500, lineHeight: 1.4 }}>
-                        {l.primaryAddress || 'No primary address specified'}
-                    </Typography>
-                    <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2, mt: 1.2, pt: 1, borderTop: '1px solid #f1f5f9' }}>
-                        <Box>
-                            <Typography sx={{ fontSize: '0.68rem', color: '#64748b', fontWeight: 700 }}>CITY / STATE</Typography>
-                            <Typography sx={{ fontSize: '0.8rem', color: '#334155' }}>
-                                {l.primaryCity || '-'}, {l.primaryState || '-'}
-                            </Typography>
-                        </Box>
-                        <Box>
-                            <Typography sx={{ fontSize: '0.68rem', color: '#64748b', fontWeight: 700 }}>POSTAL PIN</Typography>
-                            <Typography sx={{ fontSize: '0.8rem', color: '#334155' }}>
-                                {l.primaryPostalCode || '-'}
-                            </Typography>
-                        </Box>
-                        <Box>
-                            <Typography sx={{ fontSize: '0.68rem', color: '#64748b', fontWeight: 700 }}>COUNTRY</Typography>
-                            <Typography sx={{ fontSize: '0.8rem', color: '#334155' }}>
-                                {l.primaryCountry || 'India'}
-                            </Typography>
-                        </Box>
-                    </Box>
-                    {l.primaryLatitude && l.primaryLatitude !== '0.00000000' && (
-                        <Box sx={{ mt: 1 }}>
-                            <Chip label={`Lat: ${l.primaryLatitude}`} size="small" sx={{ height: 20, fontSize: '0.66rem', fontFamily: 'monospace' }} />
-                        </Box>
-                    )}
-                </Box>
-
-                {/* Other Address Card */}
-                <Box sx={{ p: 2, borderRadius: '8px', backgroundColor: '#ffffff', border: '1px solid #e2e8f0' }}>
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
-                        <BusinessOutlinedIcon sx={{ fontSize: 18, color: '#64748b' }} />
-                        <Typography sx={{ fontSize: '0.82rem', fontWeight: 700, color: '#0f172a' }}>
-                            OTHER / DISPATCH ADDRESS
-                        </Typography>
-                    </Box>
-                    <Typography sx={{ fontSize: '0.84rem', color: '#1e293b', fontWeight: 500, lineHeight: 1.4 }}>
-                        {l.otherAddress || 'Same as primary address or not provided'}
-                    </Typography>
-                    <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2, mt: 1.2, pt: 1, borderTop: '1px solid #f1f5f9' }}>
-                        <Box>
-                            <Typography sx={{ fontSize: '0.68rem', color: '#64748b', fontWeight: 700 }}>CITY / STATE</Typography>
-                            <Typography sx={{ fontSize: '0.8rem', color: '#334155' }}>
-                                {l.otherCity || '-'}, {l.otherState || '-'}
-                            </Typography>
-                        </Box>
-                        <Box>
-                            <Typography sx={{ fontSize: '0.68rem', color: '#64748b', fontWeight: 700 }}>POSTAL PIN</Typography>
-                            <Typography sx={{ fontSize: '0.8rem', color: '#334155' }}>
-                                {l.otherPostalCode || '-'}
-                            </Typography>
-                        </Box>
-                        <Box>
-                            <Typography sx={{ fontSize: '0.68rem', color: '#64748b', fontWeight: 700 }}>COUNTRY</Typography>
-                            <Typography sx={{ fontSize: '0.8rem', color: '#334155' }}>
-                                {l.otherCountry || 'India'}
-                            </Typography>
-                        </Box>
-                    </Box>
-                    {l.otherLongitude && l.otherLongitude !== '0.00000000' && (
-                        <Box sx={{ mt: 1 }}>
-                            <Chip label={`Long: ${l.otherLongitude}`} size="small" sx={{ height: 20, fontSize: '0.66rem', fontFamily: 'monospace' }} />
-                        </Box>
-                    )}
-                </Box>
-            </Box>
-        ),
-    });
-
     const isHot = l.leadType === 'Hot';
     const isWarm = l.leadType === 'Warm';
+    const hasOrg = Boolean(l.organizationName && l.organizationName.trim().length > 0);
+    const isConverted = l.status === 'Converted';
 
-    // Standard Audit trail revisions
     const auditRevisions: AuditRevisionItem[] = [
+        ...(isConverted
+            ? [
+                  {
+                      title: 'Lead converted to Account & Contact',
+                      author: l.assignedTo || 'mittal.sharma',
+                      time: 'Just now',
+                      note: `Converted with organization: ${l.organizationName || 'Entity'}`,
+                      tag: 'Converted',
+                  },
+              ]
+            : []),
         {
-            title: `Lead record updated`,
+            title: 'Lead record updated',
             author: l.assignedTo || 'mittal.sharma',
             time: '2 hours ago',
             note: `Status synchronized: ${l.status}`,
@@ -437,7 +135,8 @@ export function LeadDetailDrawer({
     ];
 
     return (
-        <EntityDetailDrawer
+        <>
+            <EntityDetailDrawer
             open={open}
             onClose={onClose}
             title={l.name}
@@ -474,20 +173,329 @@ export function LeadDetailDrawer({
                 onEdit: handleEdit,
                 onPhone: () => window.open(`tel:${l.mobile}`),
             }}
-            tabs={tabs}
+            formTabs={LEAD_FORM_TABS}
+            tabContents={{
+                overview: (
+                    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                        {/* Linked Organization Card */}
+                        <DrawerSectionCard title="PROSPECTIVE ORGANIZATION" bg="#f8fafc">
+                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 0.5 }}>
+                                <ApartmentIcon sx={{ fontSize: 18, color: '#2563eb' }} />
+                                <Typography sx={{ fontSize: '0.98rem', fontWeight: 800, color: '#1d4ed8' }}>
+                                    {l.organizationName || 'Individual Prospect / Non-Entity'}
+                                </Typography>
+                            </Box>
+                            {l.mailingName && l.mailingName !== l.organizationName && (
+                                <Typography sx={{ fontSize: '0.75rem', color: '#64748b', mt: 0.3 }}>
+                                    Mailing Name: {l.mailingName}
+                                </Typography>
+                            )}
+                        </DrawerSectionCard>
+
+                        {/* Next Followup Highlight Card */}
+                        <DrawerSectionCard
+                            title="NEXT SCHEDULED FOLLOWUP"
+                            icon={<CalendarMonthOutlinedIcon sx={{ fontSize: 18, color: '#d97706' }} />}
+                            titleSx={{ fontSize: '0.8rem', fontWeight: 800, color: '#92400e' }}
+                            bg="#fffbeb"
+                            borderColor="#fde68a"
+                            action={
+                                l.followupType ? (
+                                    <Chip
+                                        label={l.followupType}
+                                        size="small"
+                                        sx={{
+                                            height: 20,
+                                            fontSize: '0.68rem',
+                                            fontWeight: 700,
+                                            backgroundColor: '#fef3c7',
+                                            color: '#b45309',
+                                            border: '1px solid #fcd34d',
+                                        }}
+                                    />
+                                ) : undefined
+                            }
+                        >
+                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, my: 0.5 }}>
+                                <Typography sx={{ fontSize: '0.94rem', fontWeight: 700, color: '#78350f' }}>
+                                    {l.nextFollowupDate}
+                                </Typography>
+                                {l.nextFollowupTime && (
+                                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.4 }}>
+                                        <AccessTimeOutlinedIcon sx={{ fontSize: 14, color: '#b45309' }} />
+                                        <Typography sx={{ fontSize: '0.82rem', fontWeight: 600, color: '#92400e' }}>
+                                            {l.nextFollowupTime}
+                                        </Typography>
+                                    </Box>
+                                )}
+                            </Box>
+
+                            {l.addDescription && (
+                                <Box
+                                    sx={{
+                                        mt: 1,
+                                        p: 1.2,
+                                        borderRadius: '6px',
+                                        backgroundColor: '#ffffff',
+                                        border: '1px solid #fed7aa',
+                                    }}
+                                >
+                                    <Typography sx={{ fontSize: '0.74rem', color: '#9a3412', fontWeight: 500, lineHeight: 1.4 }}>
+                                        &quot;{l.addDescription}&quot;
+                                    </Typography>
+                                </Box>
+                            )}
+                        </DrawerSectionCard>
+
+                        {/* Product Categories Interested In */}
+                        <DrawerSectionCard title="PRODUCTS & SOLUTIONS OF INTEREST">
+                            <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.8, mt: 0.5 }}>
+                                {l.productCategory && l.productCategory.length > 0 ? (
+                                    l.productCategory.map((prod, idx) => (
+                                        <Chip
+                                            key={idx}
+                                            label={prod}
+                                            size="small"
+                                            icon={<CheckCircleOutlinedIcon sx={{ fontSize: '13px !important', color: '#15803d !important' }} />}
+                                            sx={{
+                                                height: 24,
+                                                fontSize: '0.74rem',
+                                                fontWeight: 700,
+                                                backgroundColor: '#dcfce7',
+                                                color: '#166534',
+                                                border: '1px solid #86efac',
+                                            }}
+                                        />
+                                    ))
+                                ) : (
+                                    <Typography sx={{ fontSize: '0.8rem', color: '#94a3b8' }}>None specified</Typography>
+                                )}
+                            </Box>
+                        </DrawerSectionCard>
+
+                        {/* Contact Phone & Channels */}
+                        <DrawerSectionCard
+                            title="Direct Phone & Email"
+                            icon={<PhoneOutlinedIcon sx={{ fontSize: 16, color: '#2563eb' }} />}
+                        >
+                            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.2 }}>
+                                <DrawerChannelRow
+                                    icon={<PhoneOutlinedIcon sx={{ fontSize: 16, color: '#16a34a' }} />}
+                                    value={l.mobile}
+                                    valueWeight={700}
+                                    caption="Primary Mobile / WhatsApp"
+                                    copyValue={l.mobile}
+                                    copyTitle="Copy Phone"
+                                />
+
+                                {l.otherPhone && (
+                                    <>
+                                        <Divider sx={{ borderColor: '#f1f5f9' }} />
+                                        <DrawerChannelRow
+                                            icon={<PhoneOutlinedIcon sx={{ fontSize: 16, color: '#64748b' }} />}
+                                            value={l.otherPhone}
+                                            valueColor="#334155"
+                                            caption="Other / Landline Phone"
+                                            copyValue={l.otherPhone}
+                                            copyTitle="Copy Phone"
+                                        />
+                                    </>
+                                )}
+
+                                {l.emailAddresses && l.emailAddresses.length > 0 && (
+                                    <>
+                                        <Divider sx={{ borderColor: '#f1f5f9' }} />
+                                        {l.emailAddresses.map((em, idx) => (
+                                            <DrawerChannelRow
+                                                key={idx}
+                                                icon={<EmailOutlinedIcon sx={{ fontSize: 16, color: '#2563eb' }} />}
+                                                value={em.email}
+                                                caption={em.isPrimary ? 'Primary Official Email' : 'Alternate Email'}
+                                                badgeLabel={em.isPrimary ? 'PRIMARY' : undefined}
+                                            />
+                                        ))}
+                                    </>
+                                )}
+                            </Box>
+                        </DrawerSectionCard>
+
+                        {/* Profile & Business Metrics Grid */}
+                        <DrawerMetricGrid
+                            items={[
+                                { label: 'DESIGNATION', value: l.designation || 'Key Decision Maker', valueSize: '0.86rem' },
+                                { label: 'DEPARTMENT', value: l.department || 'Management', valueSize: '0.86rem' },
+                                {
+                                    label: 'ANNUAL TURNOVER',
+                                    value: l.turnover || 'Not Disclosed',
+                                    valueSize: '0.82rem',
+                                    valueWeight: 600,
+                                    valueColor: '#334155',
+                                },
+                                {
+                                    label: 'NO OF EMPLOYEES',
+                                    value: l.noOfEmployee || '11 – 50 Staff',
+                                    valueSize: '0.82rem',
+                                    valueWeight: 600,
+                                    valueColor: '#334155',
+                                },
+                            ]}
+                        />
+
+                        {/* Source & Representative Details */}
+                        <DrawerSectionCard bg="#f8fafc">
+                            <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 1.5 }}>
+                                <Box>
+                                    <Typography sx={{ fontSize: '0.68rem', fontWeight: 700, color: '#64748b' }}>LEAD SOURCE</Typography>
+                                    <Typography sx={{ fontSize: '0.82rem', fontWeight: 600, color: '#1e3a8a', mt: 0.3 }}>
+                                        {l.leadSource}
+                                    </Typography>
+                                </Box>
+                                <Box>
+                                    <Typography sx={{ fontSize: '0.68rem', fontWeight: 700, color: '#64748b' }}>ASSIGNED TO</Typography>
+                                    <Typography sx={{ fontSize: '0.82rem', fontWeight: 600, color: '#0f172a', mt: 0.3 }}>
+                                        {l.assignedTo}
+                                    </Typography>
+                                </Box>
+                            </Box>
+                            {l.referredBy && (
+                                <Box sx={{ mt: 1.2, pt: 1, borderTop: '1px dashed #cbd5e1' }}>
+                                    <Typography sx={{ fontSize: '0.68rem', fontWeight: 700, color: '#64748b' }}>REFERRED BY</Typography>
+                                    <Typography sx={{ fontSize: '0.8rem', color: '#334155', mt: 0.2 }}>
+                                        {l.referredBy}
+                                    </Typography>
+                                </Box>
+                            )}
+                        </DrawerSectionCard>
+
+                        {/* Long Description */}
+                        {l.description && (
+                            <DrawerSectionCard title="BACKGROUND CONTEXT & NOTES">
+                                <Typography sx={{ fontSize: '0.82rem', color: '#334155', lineHeight: 1.5 }}>
+                                    {l.description}
+                                </Typography>
+                            </DrawerSectionCard>
+                        )}
+                    </Box>
+                ),
+                address: (
+                    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                        {/* Primary Address Card */}
+                        <DrawerSectionCard
+                            title="PRIMARY REGISTERED ADDRESS"
+                            icon={<PlaceOutlinedIcon sx={{ fontSize: 18, color: '#2563eb' }} />}
+                        >
+                            <Typography sx={{ fontSize: '0.84rem', color: '#1e293b', fontWeight: 500, lineHeight: 1.4 }}>
+                                {l.primaryAddress || 'No primary address specified'}
+                            </Typography>
+                            <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2, mt: 1.2, pt: 1, borderTop: '1px solid #f1f5f9' }}>
+                                <Box>
+                                    <Typography sx={{ fontSize: '0.68rem', color: '#64748b', fontWeight: 700 }}>CITY / STATE</Typography>
+                                    <Typography sx={{ fontSize: '0.8rem', color: '#334155' }}>
+                                        {l.primaryCity || '-'}, {l.primaryState || '-'}
+                                    </Typography>
+                                </Box>
+                                <Box>
+                                    <Typography sx={{ fontSize: '0.68rem', color: '#64748b', fontWeight: 700 }}>POSTAL PIN</Typography>
+                                    <Typography sx={{ fontSize: '0.8rem', color: '#334155' }}>
+                                        {l.primaryPostalCode || '-'}
+                                    </Typography>
+                                </Box>
+                                <Box>
+                                    <Typography sx={{ fontSize: '0.68rem', color: '#64748b', fontWeight: 700 }}>COUNTRY</Typography>
+                                    <Typography sx={{ fontSize: '0.8rem', color: '#334155' }}>
+                                        {l.primaryCountry || 'India'}
+                                    </Typography>
+                                </Box>
+                            </Box>
+                            {l.primaryLatitude && l.primaryLatitude !== '0.00000000' && (
+                                <Box sx={{ mt: 1 }}>
+                                    <Chip label={`Lat: ${l.primaryLatitude}`} size="small" sx={{ height: 20, fontSize: '0.66rem', fontFamily: 'monospace' }} />
+                                </Box>
+                            )}
+                        </DrawerSectionCard>
+
+                        {/* Other Address Card */}
+                        <DrawerSectionCard
+                            title="OTHER / DISPATCH ADDRESS"
+                            icon={<BusinessOutlinedIcon sx={{ fontSize: 18, color: '#64748b' }} />}
+                        >
+                            <Typography sx={{ fontSize: '0.84rem', color: '#1e293b', fontWeight: 500, lineHeight: 1.4 }}>
+                                {l.otherAddress || 'Same as primary address or not provided'}
+                            </Typography>
+                            <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2, mt: 1.2, pt: 1, borderTop: '1px solid #f1f5f9' }}>
+                                <Box>
+                                    <Typography sx={{ fontSize: '0.68rem', color: '#64748b', fontWeight: 700 }}>CITY / STATE</Typography>
+                                    <Typography sx={{ fontSize: '0.8rem', color: '#334155' }}>
+                                        {l.otherCity || '-'}, {l.otherState || '-'}
+                                    </Typography>
+                                </Box>
+                                <Box>
+                                    <Typography sx={{ fontSize: '0.68rem', color: '#64748b', fontWeight: 700 }}>POSTAL PIN</Typography>
+                                    <Typography sx={{ fontSize: '0.8rem', color: '#334155' }}>
+                                        {l.otherPostalCode || '-'}
+                                    </Typography>
+                                </Box>
+                                <Box>
+                                    <Typography sx={{ fontSize: '0.68rem', color: '#64748b', fontWeight: 700 }}>COUNTRY</Typography>
+                                    <Typography sx={{ fontSize: '0.8rem', color: '#334155' }}>
+                                        {l.otherCountry || 'India'}
+                                    </Typography>
+                                </Box>
+                            </Box>
+                            {l.otherLongitude && l.otherLongitude !== '0.00000000' && (
+                                <Box sx={{ mt: 1 }}>
+                                    <Chip label={`Long: ${l.otherLongitude}`} size="small" sx={{ height: 20, fontSize: '0.66rem', fontFamily: 'monospace' }} />
+                                </Box>
+                            )}
+                        </DrawerSectionCard>
+                    </Box>
+                ),
+            }}
             auditRevisions={auditRevisions}
             includeChangesTab={true}
-            statusText={`Next Followup: ${l.nextFollowupDate}`}
+            statusText={isConverted ? 'Lead Converted' : `Next Followup: ${l.nextFollowupDate}`}
             primaryAction={{
                 label: 'Edit Lead',
                 onClick: handleEdit,
+                icon: <EditOutlinedIcon sx={{ fontSize: 16 }} />,
             }}
             secondaryAction={{
-                label: 'Schedule Demo',
-                onClick: () => {
-                    alert(`Demo invitation email triggered for ${l.name}`);
+                label: isConverted ? 'Lead Converted' : 'Convert Lead',
+                icon: isConverted ? (
+                    <CheckCircleOutlinedIcon sx={{ fontSize: 16, color: '#059669' }} />
+                ) : (
+                    <PublishedWithChangesIcon sx={{ fontSize: 16 }} />
+                ),
+                onClick: handleConvertLead,
+                variant: 'outlined',
+                tooltip: !hasOrg
+                    ? 'Organisation Name is required to convert lead'
+                    : isConverted
+                    ? 'Lead has already been converted'
+                    : 'Convert Lead to Organization & Contact',
+                sx: {
+                    fontSize: '0.78rem',
+                    textTransform: 'none',
+                    fontWeight: 700,
+                    height: 36,
+                    px: 1.8,
+                    borderRadius: '6px',
+                    color: isConverted ? '#047857' : hasOrg ? '#047857' : '#dc2626',
+                    borderColor: isConverted ? '#a7f3d0' : hasOrg ? '#a7f3d0' : '#fca5a5',
+                    backgroundColor: isConverted ? '#ecfdf5' : hasOrg ? '#ecfdf5' : '#fef2f2',
+                    '&:hover': {
+                        borderColor: isConverted ? '#047857' : hasOrg ? '#059669' : '#ef4444',
+                        backgroundColor: isConverted ? '#d1fae5' : hasOrg ? '#d1fae5' : '#fee2e2',
+                    },
                 },
             }}
         />
+        <AppToast
+            open={toast.open}
+            message={toast.message}
+            severity={toast.severity}
+            onClose={() => setToast((prev) => ({ ...prev, open: false }))}
+        />
+    </>
     );
 }

@@ -11,8 +11,8 @@ import {
     Typography,
 } from '@mui/material';
 import DeleteIcon from '@mui/icons-material/Delete';
-import { fieldSx } from './constants';
-import type { CorporateEmail } from '../../../types/organization.types';
+import { fieldSx } from './FormField';
+import type { CorporateEmail } from '@/types/organization.types';
 
 export interface EmailRowProps {
     email: CorporateEmail;

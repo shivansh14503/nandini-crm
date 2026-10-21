@@ -25,7 +25,8 @@ import { TableRowActions } from './TableRowActions';
 export function DataTable<T>({
     data,
     columns,
-    keyExtractor = (row: any, idx) => row.id || `row-${idx}`,
+    keyExtractor = (row: T, idx: number) =>
+        String((row as Record<string, unknown>)?.id || `row-${idx}`),
     selectable = true,
     selectedIds,
     onToggleSelectRow,
@@ -327,9 +328,11 @@ export function DataTable<T>({
                                     } else if (typeof col.accessor === 'function') {
                                         cellContent = col.accessor(row);
                                     } else if (col.accessor) {
-                                        cellContent = (row as any)[col.accessor];
+                                        cellContent = (row as Record<string, React.ReactNode>)[
+                                            String(col.accessor)
+                                        ];
                                     } else {
-                                        cellContent = (row as any)[col.id];
+                                        cellContent = (row as Record<string, React.ReactNode>)[col.id];
                                     }
 
                                     return (

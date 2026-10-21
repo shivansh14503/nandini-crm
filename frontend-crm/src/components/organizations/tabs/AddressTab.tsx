@@ -13,10 +13,14 @@ import {
 import PlaceOutlinedIcon from '@mui/icons-material/PlaceOutlined';
 import LocalShippingOutlinedIcon from '@mui/icons-material/LocalShippingOutlined';
 
-import { SectionLabel } from '../shared/SectionLabel';
-import { StyledSelect } from '../shared/StyledSelect';
-import { INDIAN_STATES, COUNTRIES, fieldSx } from '../shared/constants';
-import type { OrganizationFormData } from '../../../types/organization.types';
+import {
+    FormField,
+    SectionLabel,
+    StyledSelect,
+    fieldSx,
+} from '@/components/forms';
+import { INDIAN_STATES, COUNTRIES } from '@/config/constants';
+import type { OrganizationFormData } from '@/types/organization.types';
 
 export interface AddressTabProps {
     form: OrganizationFormData;
@@ -47,18 +51,12 @@ export function AddressTab({
                     />
 
                     {/* Street */}
-                    <Box>
-                        <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.6 }}>
-                            <Typography
-                                variant="body2"
-                                sx={{ fontWeight: 600, color: '#374151', fontSize: '0.82rem' }}
-                            >
-                                Street <span style={{ color: '#ef4444' }}>*</span>
-                            </Typography>
-                            <Typography variant="caption" sx={{ color: '#9ca3af', fontSize: '0.72rem' }}>
-                                Registered office location
-                            </Typography>
-                        </Box>
+                    <FormField
+                        label="Street"
+                        required
+                        hint="Registered office location"
+                        sx={{ mb: 0 }}
+                    >
                         <TextField
                             fullWidth
                             multiline
@@ -70,16 +68,10 @@ export function AddressTab({
                             onChange={(e) => set('billingStreet', e.target.value)}
                             sx={fieldSx}
                         />
-                    </Box>
+                    </FormField>
 
                     {/* City */}
-                    <Box>
-                        <Typography
-                            variant="body2"
-                            sx={{ fontWeight: 600, color: '#374151', fontSize: '0.82rem', mb: 0.6 }}
-                        >
-                            City <span style={{ color: '#ef4444' }}>*</span>
-                        </Typography>
+                    <FormField label="City" required sx={{ mb: 0 }}>
                         <TextField
                             fullWidth
                             size="small"
@@ -88,16 +80,10 @@ export function AddressTab({
                             onChange={(e) => set('billingCity', e.target.value)}
                             sx={fieldSx}
                         />
-                    </Box>
+                    </FormField>
 
                     {/* State/Region */}
-                    <Box>
-                        <Typography
-                            variant="body2"
-                            sx={{ fontWeight: 600, color: '#374151', fontSize: '0.82rem', mb: 0.6 }}
-                        >
-                            State/Region <span style={{ color: '#ef4444' }}>*</span>
-                        </Typography>
+                    <FormField label="State/Region" required sx={{ mb: 0 }}>
                         <StyledSelect
                             label="State/Region"
                             placeholder="Select State/Region"
@@ -106,16 +92,10 @@ export function AddressTab({
                             options={INDIAN_STATES}
                             required
                         />
-                    </Box>
+                    </FormField>
 
                     {/* Postal Code */}
-                    <Box>
-                        <Typography
-                            variant="body2"
-                            sx={{ fontWeight: 600, color: '#374151', fontSize: '0.82rem', mb: 0.6 }}
-                        >
-                            Postal Code <span style={{ color: '#ef4444' }}>*</span>
-                        </Typography>
+                    <FormField label="Postal Code" required sx={{ mb: 0 }}>
                         <TextField
                             fullWidth
                             size="small"
@@ -124,16 +104,10 @@ export function AddressTab({
                             onChange={(e) => set('billingPostalCode', e.target.value)}
                             sx={fieldSx}
                         />
-                    </Box>
+                    </FormField>
 
                     {/* Country */}
-                    <Box>
-                        <Typography
-                            variant="body2"
-                            sx={{ fontWeight: 600, color: '#374151', fontSize: '0.82rem', mb: 0.6 }}
-                        >
-                            Country
-                        </Typography>
+                    <FormField label="Country" sx={{ mb: 0 }}>
                         <StyledSelect
                             label="Country"
                             placeholder="Select Country"
@@ -141,21 +115,10 @@ export function AddressTab({
                             onChange={(v) => set('billingCountry', v)}
                             options={COUNTRIES}
                         />
-                    </Box>
+                    </FormField>
 
                     {/* Latitude */}
-                    <Box>
-                        <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.6 }}>
-                            <Typography
-                                variant="body2"
-                                sx={{ fontWeight: 600, color: '#374151', fontSize: '0.82rem' }}
-                            >
-                                Latitude
-                            </Typography>
-                            <Typography variant="caption" sx={{ color: '#9ca3af', fontSize: '0.72rem' }}>
-                                Geo coordinate
-                            </Typography>
-                        </Box>
+                    <FormField label="Latitude" hint="Geo coordinate" sx={{ mb: 0 }}>
                         <TextField
                             fullWidth
                             size="small"
@@ -164,7 +127,7 @@ export function AddressTab({
                             onChange={(e) => set('billingLatitude', e.target.value)}
                             sx={fieldSx}
                         />
-                    </Box>
+                    </FormField>
                 </Box>
 
                 {/* ── RIGHT COLUMN: Shipping Address ────────────────── */}
@@ -211,18 +174,11 @@ export function AddressTab({
                     </Box>
 
                     {/* Street */}
-                    <Box>
-                        <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.6 }}>
-                            <Typography
-                                variant="body2"
-                                sx={{ fontWeight: 600, color: '#374151', fontSize: '0.82rem' }}
-                            >
-                                Street
-                            </Typography>
-                            <Typography variant="caption" sx={{ color: '#9ca3af', fontSize: '0.72rem' }}>
-                                Dispatch &amp; delivery location
-                            </Typography>
-                        </Box>
+                    <FormField
+                        label="Street"
+                        hint="Dispatch & delivery location"
+                        sx={{ mb: 0 }}
+                    >
                         <TextField
                             fullWidth
                             multiline
@@ -235,16 +191,10 @@ export function AddressTab({
                             disabled={form.copyAddressFromBilling}
                             sx={fieldSx}
                         />
-                    </Box>
+                    </FormField>
 
                     {/* City */}
-                    <Box>
-                        <Typography
-                            variant="body2"
-                            sx={{ fontWeight: 600, color: '#374151', fontSize: '0.82rem', mb: 0.6 }}
-                        >
-                            City
-                        </Typography>
+                    <FormField label="City" sx={{ mb: 0 }}>
                         <TextField
                             fullWidth
                             size="small"
@@ -254,16 +204,10 @@ export function AddressTab({
                             disabled={form.copyAddressFromBilling}
                             sx={fieldSx}
                         />
-                    </Box>
+                    </FormField>
 
                     {/* State/Region */}
-                    <Box>
-                        <Typography
-                            variant="body2"
-                            sx={{ fontWeight: 600, color: '#374151', fontSize: '0.82rem', mb: 0.6 }}
-                        >
-                            State/Region
-                        </Typography>
+                    <FormField label="State/Region" sx={{ mb: 0 }}>
                         <StyledSelect
                             label="State/Region"
                             placeholder="Select State/Region"
@@ -271,16 +215,10 @@ export function AddressTab({
                             onChange={(v) => set('shippingState', v)}
                             options={INDIAN_STATES}
                         />
-                    </Box>
+                    </FormField>
 
                     {/* Postal Code */}
-                    <Box>
-                        <Typography
-                            variant="body2"
-                            sx={{ fontWeight: 600, color: '#374151', fontSize: '0.82rem', mb: 0.6 }}
-                        >
-                            Postal Code
-                        </Typography>
+                    <FormField label="Postal Code" sx={{ mb: 0 }}>
                         <TextField
                             fullWidth
                             size="small"
@@ -290,16 +228,10 @@ export function AddressTab({
                             disabled={form.copyAddressFromBilling}
                             sx={fieldSx}
                         />
-                    </Box>
+                    </FormField>
 
                     {/* Country */}
-                    <Box>
-                        <Typography
-                            variant="body2"
-                            sx={{ fontWeight: 600, color: '#374151', fontSize: '0.82rem', mb: 0.6 }}
-                        >
-                            Country
-                        </Typography>
+                    <FormField label="Country" sx={{ mb: 0 }}>
                         <StyledSelect
                             label="Country"
                             placeholder="Select Country"
@@ -307,21 +239,10 @@ export function AddressTab({
                             onChange={(v) => set('shippingCountry', v)}
                             options={COUNTRIES}
                         />
-                    </Box>
+                    </FormField>
 
                     {/* Longitude */}
-                    <Box>
-                        <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.6 }}>
-                            <Typography
-                                variant="body2"
-                                sx={{ fontWeight: 600, color: '#374151', fontSize: '0.82rem' }}
-                            >
-                                Longitude
-                            </Typography>
-                            <Typography variant="caption" sx={{ color: '#9ca3af', fontSize: '0.72rem' }}>
-                                Geo coordinate
-                            </Typography>
-                        </Box>
+                    <FormField label="Longitude" hint="Geo coordinate" sx={{ mb: 0 }}>
                         <TextField
                             fullWidth
                             size="small"
@@ -330,9 +251,10 @@ export function AddressTab({
                             onChange={(e) => set('shippingLongitude', e.target.value)}
                             sx={fieldSx}
                         />
-                    </Box>
+                    </FormField>
                 </Box>
             </Box>
         </Box>
     );
 }
+

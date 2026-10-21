@@ -16,9 +16,8 @@ import {
 } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
 import ClearIcon from '@mui/icons-material/Clear';
-import SearchIcon from '@mui/icons-material/Search';
 
-import { FormField, fieldSx } from '../../forms';
+import { FormField, fieldSx } from '@/components/forms';
 import type { OpportunityFormData, OpportunityLineItem } from '../../../types/opportunity.types';
 import {
     OPPORTUNITY_CURRENCIES,

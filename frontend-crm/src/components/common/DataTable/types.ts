@@ -11,14 +11,84 @@ export interface DataTableColumn<T> {
     sortable?: boolean;
     sortKey?: string;
     render?: (row: T, index: number) => React.ReactNode;
-    accessor?: keyof T | ((row: T) => any);
+    accessor?: keyof T | ((row: T) => React.ReactNode);
+}
+
+export interface DataTableFilterItem<TFilter extends string = string> {
+    id: TFilter;
+    label: string;
+    count?: number;
+    icon?: React.ReactElement;
+    activeColor?: string;
+    activeBgColor?: string;
+    activeBadgeBgColor?: string;
+    dotColor?: string;
+}
+
+export interface DataTableFilterPillsProps<TFilter extends string = string> {
+    filters: DataTableFilterItem<TFilter>[];
+    activeFilter: TFilter;
+    onFilterChange: (filterId: TFilter) => void;
+    variant?: 'chip' | 'pill';
+}
+
+export interface DataTableBulkActionItem {
+    id: string;
+    label: string;
+    color?: 'inherit' | 'error';
+    onClick: () => void;
+}
+
+export interface DataTableToolbarProps {
+    searchQuery: string;
+    onSearchChange: (value: string) => void;
+    searchPlaceholder?: string;
+    searchWidth?: number | string | Record<string, number | string>;
+    onNewClick?: () => void;
+    newButtonLabel?: string;
+    onRefresh?: () => void;
+    refreshTooltip?: string;
+    selectedCount?: number;
+    onBulkDelete?: () => void;
+    bulkDeleteLabel?: string;
+    extraActions?: React.ReactNode;
+    // Extended toolbar options (used by Organizations table toolbar)
+    variant?: 'standard' | 'extended';
+    isAllPageSelected?: boolean;
+    isSomePageSelected?: boolean;
+    onToggleSelectAll?: () => void;
+    onSelectAllMatching?: () => void;
+    onSelectVisible?: () => void;
+    onDeselectAll?: () => void;
+    totalRecords?: number;
+    displayTotalRecords?: string | number;
+    currentPage?: number;
+    rowsPerPage?: number;
+    totalPages?: number;
+    onPageChange?: (page: number) => void;
+    bulkActionItems?: DataTableBulkActionItem[];
+    onFilterClick?: () => void;
+    onColumnClick?: () => void;
+}
+
+export interface DataTablePaginationProps {
+    page: number;
+    rowsPerPage: number;
+    totalCount: number;
+    onPageChange: (newPage: number) => void;
+    onRowsPerPageChange: (newRowsPerPage: number) => void;
+    pageSizeOptions?: number[];
+    variant?: 'compact' | 'full';
+    entityLabel?: string;
+    displayTotalCount?: string | number;
+    hideWhenEmpty?: boolean;
 }
 
 export interface DataTableProps<T> {
     data: T[];
     columns: DataTableColumn<T>[];
     keyExtractor?: (row: T, index: number) => string;
-    
+
     // Selection
     selectable?: boolean;
     selectedIds?: Set<string> | string[];

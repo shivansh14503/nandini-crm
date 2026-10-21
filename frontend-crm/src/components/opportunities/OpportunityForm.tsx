@@ -144,15 +144,20 @@ export default function OpportunityForm({
 
     // Populate data when editing
     useEffect(() => {
-        if (initialData && Object.keys(initialData).length > 0) {
-            setForm((prev) => ({ ...prev, ...initialData }));
-        } else if (opportunityId) {
-            const found = opportunityService.getOpportunityById(opportunityId);
-            if (found) {
-                setForm(found);
-            }
-        }
-    }, [initialData, opportunityId]);
+        if (!opportunityId) return;
+        let active = true;
+        opportunityService
+            .getById(opportunityId)
+            .then((found) => {
+                if (active && found) {
+                    setForm(found);
+                }
+            })
+            .catch(() => {});
+        return () => {
+            active = false;
+        };
+    }, [opportunityId]);
 
     const setField = useCallback(
         <K extends keyof OpportunityFormData>(key: K, value: OpportunityFormData[K]) => {

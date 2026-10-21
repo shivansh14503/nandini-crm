@@ -133,6 +133,12 @@ export interface Organization extends OrganizationFormData {
     createdBy: string;
 }
 
+export interface ExtendedOrganization extends Organization {
+    assignedUser?: string;
+    isRecentlyViewed?: boolean;
+    isMyAccount?: boolean;
+}
+
 export interface CreateOrganizationResponse {
     success: boolean;
     data: Organization;

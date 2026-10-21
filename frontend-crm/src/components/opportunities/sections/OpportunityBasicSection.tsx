@@ -5,7 +5,6 @@ import {
     Box,
     TextField,
     Chip,
-    Typography,
     MenuItem,
     Select,
     FormControl,
@@ -18,7 +17,6 @@ import AccessTimeOutlinedIcon from '@mui/icons-material/AccessTimeOutlined';
 import CheckIcon from '@mui/icons-material/Check';
 import ReceiptLongOutlinedIcon from '@mui/icons-material/ReceiptLongOutlined';
 import MonetizationOnOutlinedIcon from '@mui/icons-material/MonetizationOnOutlined';
-import DescriptionOutlinedIcon from '@mui/icons-material/DescriptionOutlined';
 
 import {
     FormField,
@@ -26,7 +24,7 @@ import {
     StyledSelect,
     SectionLabel,
     fieldSx,
-} from '../../forms';
+} from '@/components/forms';
 import type { OpportunityFormData } from '../../../types/opportunity.types';
 import {
     OPPORTUNITY_SALES_STAGES,

@@ -3,7 +3,6 @@ import {
     requiredString,
     optionalString,
     phoneSchema,
-    emailSchema,
 } from './common';
 
 export const corporateEmailSchema = z.object({

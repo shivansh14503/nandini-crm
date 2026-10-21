@@ -91,7 +91,7 @@ const NAV_ITEMS = [
 function NavPill({ item }: { item: { label: string; icon?: React.ReactNode; items: readonly { label: string; href: string }[] } }) {
     const router = useRouter();
     const [open, setOpen] = useState(false);
-    const anchorRef = useRef<HTMLButtonElement>(null);
+    const [anchorEl, setAnchorEl] = useState<HTMLButtonElement | null>(null);
     const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
     const handleMouseEnter = () => {
@@ -105,7 +105,7 @@ function NavPill({ item }: { item: { label: string; icon?: React.ReactNode; item
     return (
         <Box onMouseEnter={handleMouseEnter} onMouseLeave={handleMouseLeave} sx={{ position: 'relative' }}>
             <Button
-                ref={anchorRef}
+                ref={setAnchorEl}
                 size="small"
                 startIcon={item.icon}
                 endIcon={
@@ -142,7 +142,7 @@ function NavPill({ item }: { item: { label: string; icon?: React.ReactNode; item
 
             <Popper
                 open={open}
-                anchorEl={anchorRef.current}
+                anchorEl={anchorEl}
                 placement="bottom-start"
                 transition
                 style={{ zIndex: 1400 }}
@@ -192,7 +192,7 @@ function NavPill({ item }: { item: { label: string; icon?: React.ReactNode; item
 /* ─── User avatar dropdown ──────────────────────────────── */
 function UserMenu({ user, onLogout }: { user: { username: string; role: string }; onLogout: () => void }) {
     const [open, setOpen] = useState(false);
-    const anchorRef = useRef<HTMLDivElement>(null);
+    const [anchorEl, setAnchorEl] = useState<HTMLDivElement | null>(null);
     const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
     const initials = user.username.slice(0, 2).toUpperCase();
@@ -206,7 +206,7 @@ function UserMenu({ user, onLogout }: { user: { username: string; role: string }
     };
 
     return (
-        <Box ref={anchorRef} onMouseEnter={handleMouseEnter} onMouseLeave={handleMouseLeave} sx={{ position: 'relative', cursor: 'pointer' }}>
+        <Box ref={setAnchorEl} onMouseEnter={handleMouseEnter} onMouseLeave={handleMouseLeave} sx={{ position: 'relative', cursor: 'pointer' }}>
             <Box
                 sx={{
                     display: 'flex',
@@ -252,7 +252,7 @@ function UserMenu({ user, onLogout }: { user: { username: string; role: string }
 
             <Popper
                 open={open}
-                anchorEl={anchorRef.current}
+                anchorEl={anchorEl}
                 placement="bottom-end"
                 transition
                 style={{ zIndex: 1400 }}
@@ -333,7 +333,7 @@ const SAMPLE_NOTIFICATIONS = [
 
 function NotificationBell() {
     const [open, setOpen] = useState(false);
-    const anchorRef = useRef<HTMLButtonElement>(null);
+    const [anchorEl, setAnchorEl] = useState<HTMLButtonElement | null>(null);
     const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
     const unreadCount = SAMPLE_NOTIFICATIONS.filter((n) => n.unread).length;
 
@@ -349,7 +349,7 @@ function NotificationBell() {
         <Box onMouseEnter={handleMouseEnter} onMouseLeave={handleMouseLeave} sx={{ position: 'relative' }}>
             <Box
                 component="button"
-                ref={anchorRef}
+                ref={setAnchorEl}
                 id="notification-btn"
                 aria-label="Notifications"
                 sx={{
@@ -385,7 +385,7 @@ function NotificationBell() {
 
             <Popper
                 open={open}
-                anchorEl={anchorRef.current}
+                anchorEl={anchorEl}
                 placement="bottom-end"
                 transition
                 style={{ zIndex: 1400 }}
@@ -488,7 +488,7 @@ const CREATE_ITEMS = [
 function CreateButton() {
     const router = useRouter();
     const [open, setOpen] = useState(false);
-    const anchorRef = useRef<HTMLButtonElement>(null);
+    const [anchorEl, setAnchorEl] = useState<HTMLButtonElement | null>(null);
     const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
     const handleMouseEnter = () => {
@@ -502,7 +502,7 @@ function CreateButton() {
     return (
         <Box onMouseEnter={handleMouseEnter} onMouseLeave={handleMouseLeave} sx={{ position: 'relative' }}>
             <Button
-                ref={anchorRef}
+                ref={setAnchorEl}
                 id="create-btn"
                 size="small"
                 startIcon={<AddIcon sx={{ fontSize: '16px !important' }} />}
@@ -540,7 +540,7 @@ function CreateButton() {
 
             <Popper
                 open={open}
-                anchorEl={anchorRef.current}
+                anchorEl={anchorEl}
                 placement="bottom-start"
                 transition
                 style={{ zIndex: 1400 }}

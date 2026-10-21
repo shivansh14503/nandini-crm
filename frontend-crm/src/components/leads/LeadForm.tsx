@@ -1,7 +1,8 @@
 'use client';
 
-import React, { useState, useCallback, useMemo, useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { FormProvider } from 'react-hook-form';
 import ArticleOutlinedIcon from '@mui/icons-material/ArticleOutlined';
 import PlaceOutlinedIcon from '@mui/icons-material/PlaceOutlined';
 
@@ -9,14 +10,11 @@ import { type BreadcrumbItem } from '../common/AppBreadcrumbs';
 import { AppToast } from '../common/AppToast';
 import { CommonFormLayout } from '../common/CommonFormLayout';
 import { type FormTabDefinition } from '../common/Drawer';
+import { useRhfForm } from '../forms/rhf';
 import { ROUTES } from '../../config/constants';
-import { validateWithToast, leadFormSchema } from '../../validations';
-import type { LeadFormData, Lead } from '../../types/lead.types';
-import {
-    getStoredLeadById,
-    addStoredLead,
-    updateStoredLead,
-} from '../../data/mockLeads';
+import { leadFormSchema } from '../../validations';
+import type { LeadFormData } from '../../types/lead.types';
+import { leadService } from '@/services';
 
 // Modular Lead Form Sections
 import {
@@ -103,89 +101,52 @@ export default function LeadForm({
     breadcrumbItems,
 }: LeadFormProps) {
     const router = useRouter();
-
-    const [form, setForm] = useState<LeadFormData>({ ...DEFAULT_FORM, ...initialData });
     const [activeTab, setActiveTab] = useState<LeadTabKey>('overview');
-    const [submitting, setSubmitting] = useState(false);
-    const [isDirty, setIsDirty] = useState(false);
-    const [toast, setToast] = useState<{
-        open: boolean;
-        message: string;
-        severity: 'success' | 'error' | 'info' | 'warning';
-    }>({
-        open: false,
-        message: '',
-        severity: 'success',
+
+    const { methods, toast, showToast, closeToast, createSubmitHandler } = useRhfForm<LeadFormData>({
+        schema: leadFormSchema,
+        defaultValues: { ...DEFAULT_FORM, ...initialData },
     });
+    const { reset, watch, formState } = methods;
+    const { isDirty, isSubmitting } = formState;
+    const leadName = watch('name');
 
     const defaultBreadcrumbs: BreadcrumbItem[] = [
         { label: 'Sales' },
         { label: 'Leads', href: ROUTES.LEADS },
-        { label: mode === 'edit' ? (form.name ? `Edit: ${form.name}` : 'Edit Lead') : 'Create Lead' },
+        { label: mode === 'edit' ? (leadName ? `Edit: ${leadName}` : 'Edit Lead') : 'Create Lead' },
     ];
 
     // Populate data when editing
     useEffect(() => {
-        if (initialData && Object.keys(initialData).length > 0) {
-            setForm((prev) => ({ ...prev, ...initialData }));
-        } else if (leadId) {
-            const found = getStoredLeadById(leadId);
-            if (found) {
-                setForm(found);
-            }
-        }
-    }, [initialData, leadId]);
+        if (!leadId) return;
+        let active = true;
+        leadService
+            .getById(leadId)
+            .then((found) => {
+                if (active && found) reset(found);
+            })
+            .catch(() => {});
+        return () => {
+            active = false;
+        };
+    }, [leadId, reset]);
 
-    const setField = useCallback(<K extends keyof LeadFormData>(key: K, value: LeadFormData[K]) => {
-        setForm((prev) => ({ ...prev, [key]: value }));
-        setIsDirty(true);
-    }, []);
-
-    // ── Submit Logic with Validation ──────────────────────────────────────────
-    const handleSubmit = async () => {
-        // Run Zod schema validation
-        const validation = validateWithToast(leadFormSchema, form);
-        if (!validation.success) {
-            setToast({
-                open: true,
-                message: validation.error,
-                severity: 'error',
-            });
-            return;
-        }
-
-        setSubmitting(true);
+    const handleSave = createSubmitHandler(async (values) => {
         try {
-            if (mode === 'create') {
-                addStoredLead(form);
-                setToast({
-                    open: true,
-                    message: 'Lead created successfully! Added to your sales pipeline.',
-                    severity: 'success',
-                });
-            } else if (mode === 'edit' && leadId) {
-                updateStoredLead(leadId, form);
-                setToast({
-                    open: true,
-                    message: 'Lead details updated successfully!',
-                    severity: 'success',
-                });
+            if (mode === 'edit' && leadId) {
+                await leadService.update(leadId, values);
+                showToast('Lead details updated successfully!', 'success');
+            } else {
+                await leadService.create(values);
+                showToast('Lead created successfully! Added to your sales pipeline.', 'success');
             }
-
-            setTimeout(() => {
-                router.push(ROUTES.LEADS);
-            }, 800);
+            reset(values);
+            setTimeout(() => router.push(ROUTES.LEADS), 800);
         } catch (err: unknown) {
-            const message = err instanceof Error ? err.message : 'An error occurred while saving the lead.';
-            setToast({
-                open: true,
-                message,
-                severity: 'error',
-            });
-        } finally {
-            setSubmitting(false);
+            showToast(err instanceof Error ? err.message : 'An error occurred while saving the lead.', 'error');
         }
-    };
+    });
 
     const handleDiscard = () => {
         if (isDirty && !confirm('You have unsaved changes. Are you sure you want to discard them?')) {
@@ -195,33 +156,28 @@ export default function LeadForm({
     };
 
     return (
-        <CommonFormLayout
-            breadcrumbItems={breadcrumbItems || defaultBreadcrumbs}
-            tabs={LEAD_FORM_TABS}
-            activeTab={activeTab}
-            onTabChange={(tabId) => setActiveTab(tabId as LeadTabKey)}
-            onCancel={handleDiscard}
-            onSave={handleSubmit}
-            submitting={submitting}
-            saveLabel={mode === 'edit' ? 'Update Lead' : 'Save Lead'}
-            cancelLabel="Cancel"
-            disableContentPadding
-            toast={
-                <AppToast
-                    open={toast.open}
-                    message={toast.message}
-                    severity={toast.severity}
-                    onClose={() => setToast((prev) => ({ ...prev, open: false }))}
-                />
-            }
-        >
-            {activeTab === 'overview' && (
-                <LeadOverviewSection form={form} setField={setField} />
-            )}
-
-            {activeTab === 'address' && (
-                <LeadAddressSection form={form} setField={setField} />
-            )}
-        </CommonFormLayout>
+        <FormProvider {...methods}>
+            <CommonFormLayout
+                breadcrumbItems={breadcrumbItems || defaultBreadcrumbs}
+                tabs={LEAD_FORM_TABS}
+                activeTab={activeTab}
+                onTabChange={(tabId) => setActiveTab(tabId as LeadTabKey)}
+                onCancel={handleDiscard}
+                onSave={handleSave}
+                submitting={isSubmitting}
+                saveLabel={mode === 'edit' ? 'Update Lead' : 'Save Lead'}
+                cancelLabel="Cancel"
+                disableContentPadding
+                toast={<AppToast open={toast.open} message={toast.message} severity={toast.severity} onClose={closeToast} />}
+            >
+                {/* Keep both panels mounted so validation state of hidden tab is preserved */}
+                <div hidden={activeTab !== 'overview'}>
+                    <LeadOverviewSection />
+                </div>
+                <div hidden={activeTab !== 'address'}>
+                    <LeadAddressSection />
+                </div>
+            </CommonFormLayout>
+        </FormProvider>
     );
 }

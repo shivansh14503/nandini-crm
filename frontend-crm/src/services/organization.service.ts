@@ -1,36 +1,43 @@
-import { apiClient } from './apiClient';
 import type {
     OrganizationFormData,
-    Organization,
-    CreateOrganizationResponse,
-    OrganizationListResponse,
+    ExtendedOrganization,
 } from '../types/organization.types';
+import {
+    getStoredOrganizations,
+    saveStoredOrganizations,
+    getStoredOrganizationById,
+    addStoredOrganization,
+    updateStoredOrganization,
+    deleteStoredOrganization,
+    deleteMultipleStoredOrganizations,
+} from '../data/mockOrganizations';
+import { createCrudService } from './base.service';
 
-const BASE = '/api/organizations';
+const baseOrganizationService = createCrudService<
+    ExtendedOrganization,
+    OrganizationFormData | Partial<ExtendedOrganization>,
+    Partial<ExtendedOrganization>
+>('/api/organizations', {
+    getAll: getStoredOrganizations,
+    getById: getStoredOrganizationById,
+    create: addStoredOrganization,
+    update: updateStoredOrganization,
+    delete: deleteStoredOrganization,
+    deleteBulk: deleteMultipleStoredOrganizations,
+    saveAll: saveStoredOrganizations,
+});
 
 export const organizationService = {
-    /** Fetch paginated list of organizations */
-    list: (params?: { page?: number; limit?: number; search?: string }) => {
-        const qs = new URLSearchParams();
-        if (params?.page) qs.set('page', String(params.page));
-        if (params?.limit) qs.set('limit', String(params.limit));
-        if (params?.search) qs.set('search', params.search);
-        return apiClient.get<OrganizationListResponse>(`${BASE}?${qs.toString()}`);
+    ...baseOrganizationService,
+    updateStatusBulk: (
+        ids: Iterable<string>,
+        status: ExtendedOrganization['accountStatus']
+    ): ExtendedOrganization[] => {
+        const idSet = new Set(ids);
+        const nextOrgs = baseOrganizationService.getAllSync().map((org) =>
+            idSet.has(org.id) ? { ...org, accountStatus: status } : org
+        );
+        baseOrganizationService.saveAllSync(nextOrgs);
+        return nextOrgs;
     },
-
-    /** Fetch a single organization by ID */
-    getById: (id: string) =>
-        apiClient.get<{ success: boolean; data: Organization }>(`${BASE}/${id}`),
-
-    /** Create a new organization */
-    create: (data: OrganizationFormData) =>
-        apiClient.post<CreateOrganizationResponse>(BASE, data),
-
-    /** Update an existing organization */
-    update: (id: string, data: Partial<OrganizationFormData>) =>
-        apiClient.put<{ success: boolean; data: Organization; message: string }>(`${BASE}/${id}`, data),
-
-    /** Delete an organization */
-    delete: (id: string) =>
-        apiClient.delete<{ success: boolean; message: string }>(`${BASE}/${id}`),
 };

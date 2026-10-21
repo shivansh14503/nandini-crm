@@ -1,4 +1,4 @@
-import type { Product } from '../types/product.types';
+import type { Product, ProductFormData } from '../types/product.types';
 
 const PRODUCTS_STORAGE_KEY = 'nandini_crm_products_data_v1';
 
@@ -128,4 +128,57 @@ export function saveStoredProducts(products: Product[]): void {
     try {
         localStorage.setItem(PRODUCTS_STORAGE_KEY, JSON.stringify(products));
     } catch {}
+}
+
+export function getStoredProductById(id: string): Product | undefined {
+    const list = getStoredProducts();
+    return list.find((p) => p.id === id);
+}
+
+export function addStoredProduct(data: ProductFormData): Product {
+    const list = getStoredProducts();
+    const now = new Date().toISOString();
+    const newProduct: Product = {
+        ...data,
+        id: `prod-${Date.now()}`,
+        productCode: `PRD-${Math.floor(1000 + Math.random() * 9000)}`,
+        createdAt: now,
+        updatedAt: now,
+        createdBy: 'mittal.sharma',
+    };
+    const updatedList = [newProduct, ...list];
+    saveStoredProducts(updatedList);
+    return newProduct;
+}
+
+export function updateStoredProduct(id: string, updates: Partial<ProductFormData>): Product | null {
+    const list = getStoredProducts();
+    const idx = list.findIndex((p) => p.id === id);
+    if (idx === -1) return null;
+    const updated: Product = {
+        ...list[idx],
+        ...updates,
+        updatedAt: new Date().toISOString(),
+    };
+    list[idx] = updated;
+    saveStoredProducts(list);
+    return updated;
+}
+
+export function deleteStoredProduct(id: string): boolean {
+    const list = getStoredProducts();
+    const filtered = list.filter((p) => p.id !== id);
+    if (filtered.length !== list.length) {
+        saveStoredProducts(filtered);
+        return true;
+    }
+    return false;
+}
+
+export function deleteMultipleStoredProducts(ids: string[]): boolean {
+    const idSet = new Set(ids);
+    const list = getStoredProducts();
+    const filtered = list.filter((p) => !idSet.has(p.id));
+    saveStoredProducts(filtered);
+    return true;
 }

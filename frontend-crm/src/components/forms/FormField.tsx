@@ -1,10 +1,24 @@
 import React from 'react';
 import { Box, Typography, type SxProps, type Theme } from '@mui/material';
 
+export const fieldSx = {
+    '& .MuiOutlinedInput-root': {
+        borderRadius: '8px',
+        backgroundColor: '#fff',
+        fontSize: '0.85rem',
+        '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: '#2563EB' },
+        '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
+            borderColor: '#2563EB',
+            borderWidth: '1.5px',
+        },
+    },
+    '& .MuiInputLabel-root.Mui-focused': { color: '#2563EB' },
+};
+
 export interface FormFieldProps {
     label: string;
     required?: boolean;
-    hint?: string;
+    hint?: React.ReactNode;
     children: React.ReactNode;
     sx?: SxProps<Theme>;
 }
@@ -29,12 +43,17 @@ export function FormField({ label, required, hint, children, sx }: FormFieldProp
                     )}
                 </Typography>
                 {hint && (
-                    <Typography variant="caption" sx={{ color: '#9ca3af', fontSize: '0.72rem' }}>
-                        {hint}
-                    </Typography>
+                    typeof hint === 'string' ? (
+                        <Typography variant="caption" sx={{ color: '#9ca3af', fontSize: '0.72rem' }}>
+                            {hint}
+                        </Typography>
+                    ) : (
+                        hint
+                    )
                 )}
             </Box>
             {children}
         </Box>
     );
 }
+
