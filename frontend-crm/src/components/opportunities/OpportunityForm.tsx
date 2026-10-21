@@ -2,7 +2,7 @@
 
 import React, { useState, useCallback, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-
+import { FormProvider } from 'react-hook-form';
 
 // Icons
 import ArticleOutlinedIcon from '@mui/icons-material/ArticleOutlined';
@@ -12,8 +12,9 @@ import { type BreadcrumbItem } from '../common/AppBreadcrumbs';
 import { AppToast } from '../common/AppToast';
 import { CommonFormLayout } from '../common/CommonFormLayout';
 import { type FormTabDefinition } from '../common/Drawer';
+import { useRhfForm } from '../forms/rhf';
 import { ROUTES } from '../../config/constants';
-import { validateWithToast, opportunityFormSchema } from '../../validations';
+import { opportunityFormSchema } from '../../validations';
 import type { OpportunityFormData } from '../../types/opportunity.types';
 import { opportunityService } from '../../services/opportunity.service';
 
@@ -110,24 +111,17 @@ export default function OpportunityForm({
     breadcrumbItems,
 }: OpportunityFormProps) {
     const router = useRouter();
-
-    const [form, setForm] = useState<OpportunityFormData>({
-        ...DEFAULT_OPPORTUNITY_FORM,
-        ...initialData,
-    });
     const [activeTab, setActiveTab] = useState<OpportunityTabKey>('basic');
-    const [submitting, setSubmitting] = useState(false);
-    const [isDirty, setIsDirty] = useState(false);
 
-    const [toast, setToast] = useState<{
-        open: boolean;
-        message: string;
-        severity: 'success' | 'error' | 'info' | 'warning';
-    }>({
-        open: false,
-        message: '',
-        severity: 'success',
-    });
+    const { methods, toast, showToast, closeToast, createSubmitHandler } =
+        useRhfForm<OpportunityFormData>({
+            schema: opportunityFormSchema,
+            defaultValues: { ...DEFAULT_OPPORTUNITY_FORM, ...initialData },
+        });
+
+    const { reset, watch, setValue, formState } = methods;
+    const { isDirty, isSubmitting } = formState;
+    const orgName = watch('organizationName');
 
     const defaultBreadcrumbs: BreadcrumbItem[] = [
         { label: 'Sales' },
@@ -135,8 +129,8 @@ export default function OpportunityForm({
         {
             label:
                 mode === 'edit'
-                    ? form.organizationName
-                        ? `Edit: ${form.organizationName}`
+                    ? orgName
+                        ? `Edit: ${orgName}`
                         : 'Edit Opportunity'
                     : 'Create Opportunity',
         },
@@ -150,75 +144,47 @@ export default function OpportunityForm({
             .getById(opportunityId)
             .then((found) => {
                 if (active && found) {
-                    setForm(found);
+                    reset(found);
                 }
             })
             .catch(() => {});
         return () => {
             active = false;
         };
-    }, [opportunityId]);
+    }, [opportunityId, reset]);
 
     const setField = useCallback(
         <K extends keyof OpportunityFormData>(key: K, value: OpportunityFormData[K]) => {
-            setForm((prev) => ({ ...prev, [key]: value }));
-            setIsDirty(true);
+            setValue(key, value as never, {
+                shouldDirty: true,
+                shouldValidate: true,
+            });
         },
-        []
+        [setValue]
     );
 
     // ── Submit Logic with Validation ──────────────────────────────────────────
-    const handleSubmit = async () => {
-        // Run Zod schema validation
-        const validation = validateWithToast(opportunityFormSchema, form);
-        if (!validation.success) {
-            setToast({
-                open: true,
-                message: validation.error,
-                severity: 'error',
-            });
-            // If the validation error is in basic fields and we're on line items, switch to basic
-            if (activeTab !== 'basic') {
-                setActiveTab('basic');
-            }
-            return;
-        }
-
-        setSubmitting(true);
+    const handleSave = createSubmitHandler(async (values) => {
         try {
             if (mode === 'create') {
-                await opportunityService.createOpportunity(form);
-                setToast({
-                    open: true,
-                    message: 'Opportunity created successfully! Added to your sales pipeline.',
-                    severity: 'success',
-                });
+                await opportunityService.createOpportunity(values);
+                showToast('Opportunity created successfully! Added to your sales pipeline.', 'success');
             } else if (mode === 'edit' && opportunityId) {
-                await opportunityService.updateOpportunity(opportunityId, form);
-                setToast({
-                    open: true,
-                    message: 'Opportunity details updated successfully!',
-                    severity: 'success',
-                });
+                await opportunityService.updateOpportunity(opportunityId, values);
+                showToast('Opportunity details updated successfully!', 'success');
             }
 
+            reset(values);
             setTimeout(() => {
                 router.push(ROUTES.OPPORTUNITIES);
             }, 800);
         } catch (err: unknown) {
-            const message =
-                err instanceof Error
-                    ? err.message
-                    : 'An error occurred while saving the opportunity.';
-            setToast({
-                open: true,
-                message,
-                severity: 'error',
-            });
-        } finally {
-            setSubmitting(false);
+            showToast(
+                err instanceof Error ? err.message : 'An error occurred while saving the opportunity.',
+                'error'
+            );
         }
-    };
+    });
 
     const handleDiscard = () => {
         if (
@@ -230,34 +196,38 @@ export default function OpportunityForm({
         router.push(ROUTES.OPPORTUNITIES);
     };
 
-    return (
-        <CommonFormLayout
-            breadcrumbItems={breadcrumbItems || defaultBreadcrumbs}
-            tabs={OPPORTUNITY_FORM_TABS}
-            activeTab={activeTab}
-            onTabChange={(tabId) => setActiveTab(tabId as OpportunityTabKey)}
-            onCancel={handleDiscard}
-            onSave={handleSubmit}
-            submitting={submitting}
-            saveLabel={mode === 'edit' ? 'Update Opportunity' : 'Save Opportunity'}
-            cancelLabel="Cancel"
-            disableContentPadding
-            toast={
-                <AppToast
-                    open={toast.open}
-                    message={toast.message}
-                    severity={toast.severity}
-                    onClose={() => setToast((prev) => ({ ...prev, open: false }))}
-                />
-            }
-        >
-            {activeTab === 'basic' && (
-                <OpportunityBasicSection form={form} setField={setField} />
-            )}
+    const formValues = watch();
 
-            {activeTab === 'line_items' && (
-                <OpportunityLineItemsSection form={form} setField={setField} />
-            )}
-        </CommonFormLayout>
+    return (
+        <FormProvider {...methods}>
+            <CommonFormLayout
+                breadcrumbItems={breadcrumbItems || defaultBreadcrumbs}
+                tabs={OPPORTUNITY_FORM_TABS}
+                activeTab={activeTab}
+                onTabChange={(tabId) => setActiveTab(tabId as OpportunityTabKey)}
+                onCancel={handleDiscard}
+                onSave={handleSave}
+                submitting={isSubmitting}
+                saveLabel={mode === 'edit' ? 'Update Opportunity' : 'Save Opportunity'}
+                cancelLabel="Cancel"
+                disableContentPadding
+                toast={
+                    <AppToast
+                        open={toast.open}
+                        message={toast.message}
+                        severity={toast.severity}
+                        onClose={closeToast}
+                    />
+                }
+            >
+                <div hidden={activeTab !== 'basic'}>
+                    <OpportunityBasicSection form={formValues} setField={setField} />
+                </div>
+
+                <div hidden={activeTab !== 'line_items'}>
+                    <OpportunityLineItemsSection />
+                </div>
+            </CommonFormLayout>
+        </FormProvider>
     );
 }

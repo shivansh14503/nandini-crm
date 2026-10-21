@@ -9,6 +9,7 @@ export interface StyledSelectProps {
     onChange: (v: string) => void;
     options: string[];
     required?: boolean;
+    disabled?: boolean;
 }
 
 export function StyledSelect({
@@ -18,14 +19,16 @@ export function StyledSelect({
     onChange,
     options,
     required,
+    disabled,
 }: StyledSelectProps) {
     const placeholderText =
         placeholder || (label ? `Select ${label.replace(/\s*\*$/, '')}` : 'Select an option');
 
     return (
-        <FormControl fullWidth size="small" sx={fieldSx} required={required}>
+        <FormControl fullWidth size="small" sx={fieldSx} required={required} disabled={disabled}>
             <Select
                 displayEmpty
+                disabled={disabled}
                 value={value}
                 onChange={(e) => onChange(e.target.value)}
                 renderValue={(selected) => {

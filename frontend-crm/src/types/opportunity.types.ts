@@ -15,6 +15,7 @@ export interface OpportunityLineItem {
 }
 
 export interface OpportunityFormData {
+    opportunityName?: string;
     // Basic Details - Row 1
     productCategory: string[];
 

@@ -13,6 +13,7 @@ export interface RhfSelectProps<T extends FieldValues> {
     required?: boolean;
     hint?: React.ReactNode;
     placeholder?: string;
+    disabled?: boolean;
 }
 
 /** React Hook Form bound dropdown built on the shared {@link StyledSelect}. */
@@ -23,6 +24,7 @@ export function RhfSelect<T extends FieldValues>({
     required,
     hint,
     placeholder,
+    disabled,
 }: RhfSelectProps<T>) {
     const { field, fieldState } = useController<T>({ name });
 
@@ -33,6 +35,7 @@ export function RhfSelect<T extends FieldValues>({
                 onChange={field.onChange}
                 options={options}
                 placeholder={placeholder}
+                disabled={disabled}
             />
             {fieldState.error && (
                 <FormHelperText error sx={{ mx: 1.75 }}>

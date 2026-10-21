@@ -87,6 +87,8 @@ function formatSegmentLabel(segment: string): string {
     if (lower === 'contacts' || lower === 'contact') return 'Contacts';
     if (lower === 'leads' || lower === 'lead') return 'Leads';
     if (lower === 'opportunities' || lower === 'deals') return 'Opportunities';
+    if (lower === 'quotations' || lower === 'quotes') return 'Quotations';
+    if (lower === 'quote') return 'Create Quote';
     if (lower === 'dashboard') return 'Dashboard';
     
     // Check if it's an ID (digits or uuid format)

@@ -9,5 +9,6 @@ export * from './opportunity.service';
 export * from './organization.service';
 export * from './product.service';
 export * from './leadConversion.service';
+export * from './quotation.service';
 
 export const authApi = authService;

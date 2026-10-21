@@ -102,7 +102,6 @@ export function ConvertLeadForm({ leadId, breadcrumbItems }: ConvertLeadFormProp
 
     useEffect(() => {
         let active = true;
-        setLoading(true);
         leadService
             .getById(leadId)
             .then((found) => {

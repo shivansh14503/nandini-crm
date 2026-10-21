@@ -11,7 +11,7 @@ interface AuthCardProps {
 }
 
 export function AuthCard({ children }: AuthCardProps) {
-    const year = new Date().getFullYear();
+    const currentYear = 2026;
 
     return (
         <Box
@@ -70,7 +70,7 @@ export function AuthCard({ children }: AuthCardProps) {
                             mt: 3,
                         }}
                     >
-                        &copy; {year ?? ''} {APP_CONFIG.companyName}. All rights reserved.
+                        &copy; {currentYear} {APP_CONFIG.companyName}. All rights reserved.
                     </Typography>
                 </CardContent>
             </Card>

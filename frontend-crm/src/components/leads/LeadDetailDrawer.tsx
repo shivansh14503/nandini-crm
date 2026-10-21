@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Box, Typography, Chip, Divider } from '@mui/material';
 
@@ -44,12 +44,10 @@ export function LeadDetailDrawer({
     open,
     onClose,
     onEdit,
-    onLeadUpdated,
     onShowToast,
 }: LeadDetailDrawerProps) {
     const router = useRouter();
 
-    const [currentLead, setCurrentLead] = useState<Lead | null>(lead);
     const [toast, setToast] = useState<{
         open: boolean;
         message: string;
@@ -60,13 +58,9 @@ export function LeadDetailDrawer({
         severity: 'error',
     });
 
-    useEffect(() => {
-        setCurrentLead(lead);
-    }, [lead]);
+    if (!lead) return null;
 
-    if (!lead && !currentLead) return null;
-
-    const l = currentLead || lead!;
+    const l = lead;
 
     const triggerToast = (message: string, severity: 'success' | 'error' | 'info' | 'warning' = 'error') => {
         setToast({ open: true, message, severity });

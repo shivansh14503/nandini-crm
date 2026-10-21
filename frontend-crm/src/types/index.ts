@@ -5,3 +5,4 @@ export * from './lead.types';
 export * from './opportunity.types';
 export * from './organization.types';
 export * from './product.types';
+export * from './quotation.types';

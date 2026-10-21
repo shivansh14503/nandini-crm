@@ -1,6 +1,6 @@
 'use client';
 
-import React from 'react';
+import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Box, Typography, Chip, Divider } from '@mui/material';
 
@@ -11,6 +11,8 @@ import PhoneOutlinedIcon from '@mui/icons-material/PhoneOutlined';
 import EmailOutlinedIcon from '@mui/icons-material/EmailOutlined';
 import CalendarMonthOutlinedIcon from '@mui/icons-material/CalendarMonthOutlined';
 import EditOutlinedIcon from '@mui/icons-material/EditOutlined';
+import RequestQuoteOutlinedIcon from '@mui/icons-material/RequestQuoteOutlined';
+import CheckCircleOutlinedIcon from '@mui/icons-material/CheckCircleOutlined';
 
 import { ROUTES } from '@/config/constants';
 import type { Opportunity } from '@/types/opportunity.types';
@@ -20,6 +22,8 @@ import {
     DrawerCopyButton,
     type AuditRevisionItem,
 } from '@/components/common/Drawer';
+import { AppToast } from '@/components/common/AppToast';
+import { organizationService, quotationService } from '@/services';
 import { OPPORTUNITY_FORM_TABS } from './OpportunityForm';
 
 export interface OpportunityDetailDrawerProps {
@@ -27,6 +31,7 @@ export interface OpportunityDetailDrawerProps {
     open: boolean;
     onClose: () => void;
     onEdit?: (id: string) => void;
+    onShowToast?: (message: string, severity?: 'success' | 'error' | 'info' | 'warning') => void;
 }
 
 export function OpportunityDetailDrawer({
@@ -34,12 +39,68 @@ export function OpportunityDetailDrawer({
     open,
     onClose,
     onEdit,
+    onShowToast,
 }: OpportunityDetailDrawerProps) {
     const router = useRouter();
+
+    const [toast, setToast] = useState<{
+        open: boolean;
+        message: string;
+        severity: 'success' | 'error' | 'info' | 'warning';
+    }>({
+        open: false,
+        message: '',
+        severity: 'error',
+    });
 
     if (!opportunity) return null;
 
     const opp = opportunity;
+
+    const triggerToast = (
+        message: string,
+        severity: 'success' | 'error' | 'info' | 'warning' = 'error'
+    ) => {
+        setToast({ open: true, message, severity });
+        onShowToast?.(message, severity);
+    };
+
+    // Check whether the linked Organization has a complete address
+    const linkedOrg = opp.organizationId
+        ? organizationService.getByIdSync(opp.organizationId)
+        : organizationService
+              .getAllSync()
+              .find(
+                  (o) =>
+                      o.organizationName.trim().toLowerCase() ===
+                      opp.organizationName.trim().toLowerCase()
+              );
+
+    const billingStreet = (linkedOrg?.billingStreet || '').trim();
+    const billingCity = (linkedOrg?.billingCity || '').trim();
+    const billingState = (linkedOrg?.billingState || '').trim();
+    const billingPostalCode = (linkedOrg?.billingPostalCode || '').trim();
+
+    const hasAddress = Boolean(
+        billingStreet && billingCity && billingState && billingPostalCode
+    );
+
+    const existingQuote = quotationService
+        .getAllSync()
+        .find((q) => q.opportunityId === opp.id);
+    const isQuoteCreated = Boolean(existingQuote);
+
+    const handleCreateQuote = () => {
+        if (!hasAddress) {
+            triggerToast(
+                'Address is required before creating a quotation. Please update the address details first.',
+                'error'
+            );
+            return;
+        }
+
+        router.push(ROUTES.OPPORTUNITY_CREATE_QUOTE(opp.id));
+    };
 
     const handleEdit = () => {
         if (onEdit) {
@@ -83,7 +144,8 @@ export function OpportunityDetailDrawer({
     ];
 
     return (
-        <EntityDetailDrawer
+        <>
+            <EntityDetailDrawer
             open={open}
             onClose={onClose}
             title={opp.organizationName}
@@ -370,7 +432,44 @@ export function OpportunityDetailDrawer({
                 onClick: handleEdit,
                 icon: <EditOutlinedIcon sx={{ fontSize: 16 }} />,
             }}
+            secondaryAction={{
+                label: isQuoteCreated ? 'Quote Created' : 'Create Quote',
+                icon: isQuoteCreated ? (
+                    <CheckCircleOutlinedIcon sx={{ fontSize: 16, color: '#059669' }} />
+                ) : (
+                    <RequestQuoteOutlinedIcon sx={{ fontSize: 16 }} />
+                ),
+                onClick: handleCreateQuote,
+                variant: 'outlined',
+                tooltip: !hasAddress
+                    ? 'Complete Address is required to create a quotation'
+                    : isQuoteCreated
+                    ? 'Quotation already created for this opportunity'
+                    : 'Create Quotation from Opportunity details',
+                sx: {
+                    fontSize: '0.78rem',
+                    textTransform: 'none',
+                    fontWeight: 700,
+                    height: 36,
+                    px: 1.8,
+                    borderRadius: '6px',
+                    color: isQuoteCreated ? '#047857' : hasAddress ? '#047857' : '#dc2626',
+                    borderColor: isQuoteCreated ? '#a7f3d0' : hasAddress ? '#a7f3d0' : '#fca5a5',
+                    backgroundColor: isQuoteCreated ? '#ecfdf5' : hasAddress ? '#ecfdf5' : '#fef2f2',
+                    '&:hover': {
+                        borderColor: isQuoteCreated ? '#047857' : hasAddress ? '#059669' : '#ef4444',
+                        backgroundColor: isQuoteCreated ? '#d1fae5' : hasAddress ? '#d1fae5' : '#fee2e2',
+                    },
+                },
+            }}
             width={{ xs: '100vw', sm: 600, md: 660 }}
         />
+        <AppToast
+            open={toast.open}
+            message={toast.message}
+            severity={toast.severity}
+            onClose={() => setToast((prev) => ({ ...prev, open: false }))}
+        />
+    </>
     );
 }

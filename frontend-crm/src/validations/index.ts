@@ -5,3 +5,4 @@ export * from './lead.schema';
 export * from './opportunity.schema';
 export * from './product.schema';
 export * from './convertLead.schema';
+export * from './quotation.schema';

@@ -271,6 +271,7 @@ export function CommonMasterView<T = unknown, TFilter extends string = string>({
                 minHeight: 'calc(100vh - 64px)',
                 backgroundColor: '#f8fafc',
                 width: '100%',
+                minWidth: 0,
                 ...sx,
             }}
         >
@@ -284,11 +285,13 @@ export function CommonMasterView<T = unknown, TFilter extends string = string>({
                     display: 'flex',
                     flexDirection: 'column',
                     minHeight: 0,
+                    minWidth: 0,
+                    width: '100%',
                     ...contentSx,
                 }}
             >
                 {/* ── Line 1: Route-Aware Breadcrumbs ── */}
-                <Box sx={{ mb: 1.5 }}>
+                <Box sx={{ mb: 1.5, minWidth: 0 }}>
                     {breadcrumbs || <AppBreadcrumbs items={breadcrumbItems} />}
                 </Box>
 
@@ -302,6 +305,7 @@ export function CommonMasterView<T = unknown, TFilter extends string = string>({
                             flexWrap: 'wrap',
                             gap: 1.5,
                             mb: 2,
+                            minWidth: 0,
                         }}
                     >
                         <Box sx={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 1, minWidth: 0 }}>
@@ -326,6 +330,8 @@ export function CommonMasterView<T = unknown, TFilter extends string = string>({
                         flexDirection: 'column',
                         flex: 1,
                         overflow: 'hidden',
+                        minWidth: 0,
+                        width: '100%',
                         boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
                         filter: isDrawerOpen ? 'blur(1.5px)' : 'none',
                         transition: 'filter 0.2s ease-in-out',

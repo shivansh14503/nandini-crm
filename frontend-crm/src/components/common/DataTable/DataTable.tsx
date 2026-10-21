@@ -144,12 +144,37 @@ export function DataTable<T>({
             sx={{
                 flex: 1,
                 minHeight,
-                overflow: 'auto',
-                display: 'flex',
-                flexDirection: 'column',
+                width: '100%',
+                maxWidth: '100%',
+                overflowX: 'auto',
+                overflowY: 'auto',
+                WebkitOverflowScrolling: 'touch',
+                '&::-webkit-scrollbar': {
+                    width: '8px',
+                    height: '8px',
+                },
+                '&::-webkit-scrollbar-track': {
+                    backgroundColor: '#f8fafc',
+                    borderRadius: '4px',
+                },
+                '&::-webkit-scrollbar-thumb': {
+                    backgroundColor: '#cbd5e1',
+                    borderRadius: '4px',
+                    '&:hover': {
+                        backgroundColor: '#94a3b8',
+                    },
+                },
             }}
         >
-            <Table stickyHeader={stickyHeader} size="small">
+            <Table
+                stickyHeader={stickyHeader}
+                size="small"
+                sx={{
+                    minWidth: 'max-content',
+                    width: '100%',
+                    tableLayout: 'auto',
+                }}
+            >
                 {/* ── Table Header ───────────────────────────────────────────── */}
                 <TableHead>
                     <TableRow sx={{ backgroundColor: '#f8fafc' }}>

@@ -48,7 +48,6 @@ const NAV_ITEMS = [
             { label: 'Contacts', href: '/contacts' },
             { label: 'Opportunities', href: '/opportunities' },
             { label: 'Leads', href: '/leads' },
-            { label: 'Customers', href: '/customers' },
             { label: 'Quotations', href: '/quotations' },
         ],
     },
@@ -479,8 +478,6 @@ const CREATE_ITEMS = [
     { label: 'Organization', href: '/organizations/new' },
     { label: 'Contact', href: '/contacts/new' },
     { label: 'Opportunity', href: '/opportunities/new' },
-    { label: 'Customer', href: '/customers' },
-    { label: 'Quotation', href: '/quotations' },
     { label: 'Ticket', href: '/dashboard' },
     { label: 'Activity', href: '/dashboard' },
 ];
