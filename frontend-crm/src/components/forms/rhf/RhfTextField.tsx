@@ -16,14 +16,18 @@ export interface RhfTextFieldProps<T extends FieldValues>
     hint?: React.ReactNode;
     numericOnly?: boolean;
     uppercase?: boolean;
+    lowercase?: boolean;
     maxLength?: number;
+    min?: number | string;
+    max?: number | string;
+    step?: number | string;
     onChange?: (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => void;
 }
 
 /**
  * React Hook Form bound text input rendered inside the shared {@link FormField} shell.
  * Must be rendered inside a `FormProvider`.
- * Enforces production-grade enterprise input constraints (numeric-only, uppercase, max length).
+ * Enforces production-grade enterprise input constraints (numeric-only, uppercase, lowercase, max/min limits).
  */
 export function RhfTextField<T extends FieldValues>({
     name,
@@ -32,7 +36,11 @@ export function RhfTextField<T extends FieldValues>({
     hint,
     numericOnly,
     uppercase,
+    lowercase,
     maxLength,
+    min,
+    max,
+    step,
     sx,
     slotProps,
     ...inputProps
@@ -48,6 +56,12 @@ export function RhfTextField<T extends FieldValues>({
     const isUppercase =
         uppercase ??
         (/(gst|pan|ifsc)/i.test(name) || /(gst|pan|ifsc)/i.test(label));
+
+    const isEmail =
+        lowercase ??
+        (inputProps.type === 'email' ||
+            /(email)/i.test(name) ||
+            /(email)/i.test(label));
 
     const existingHtmlInput =
         (slotProps?.htmlInput as Record<string, unknown> | undefined) || {};
@@ -78,6 +92,20 @@ export function RhfTextField<T extends FieldValues>({
                 val = val.slice(0, resolvedMaxLength);
             }
             e.target.value = val;
+        } else if (isEmail) {
+            val = val.toLowerCase().trim();
+            e.target.value = val;
+        } else if (inputProps.type === 'number') {
+            const num = parseFloat(val);
+            if (!isNaN(num)) {
+                if (max !== undefined && num > Number(max)) {
+                    val = String(max);
+                    e.target.value = val;
+                } else if (min !== undefined && num < Number(min)) {
+                    val = String(min);
+                    e.target.value = val;
+                }
+            }
         }
         field.onChange(val);
         inputProps.onChange?.(e);
@@ -87,6 +115,9 @@ export function RhfTextField<T extends FieldValues>({
         ...slotProps,
         htmlInput: {
             ...existingHtmlInput,
+            ...(min !== undefined ? { min } : {}),
+            ...(max !== undefined ? { max } : {}),
+            ...(step !== undefined ? { step } : {}),
             ...(isNumeric
                 ? {
                       inputMode: 'numeric',
@@ -108,6 +139,18 @@ export function RhfTextField<T extends FieldValues>({
                         val = val.slice(0, resolvedMaxLength);
                     }
                     target.value = val;
+                } else if (isEmail && target.value) {
+                    let val = target.value.toLowerCase().trim();
+                    target.value = val;
+                } else if (inputProps.type === 'number' && target.value) {
+                    const num = parseFloat(target.value);
+                    if (!isNaN(num)) {
+                        if (max !== undefined && num > Number(max)) {
+                            target.value = String(max);
+                        } else if (min !== undefined && num < Number(min)) {
+                            target.value = String(min);
+                        }
+                    }
                 }
             },
         },

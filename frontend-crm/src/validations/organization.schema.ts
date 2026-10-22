@@ -2,12 +2,13 @@ import { z } from 'zod';
 import {
     requiredString,
     optionalString,
-    gstSchema,
-    panSchema,
-    pinCodeSchema,
-    requiredPinCodeSchema,
-    phoneSchema,
-    emailSchema,
+    zodPinCode,
+    zodPinCodeOptional,
+    zodPanOptional,
+    zodGstOptional,
+    zodIfscOptional,
+    zodPhoneOptional,
+    zodEmailOptional,
     GST_REGEX,
 } from './common';
 import { corporateEmailSchema } from './contact.schema';
@@ -17,8 +18,8 @@ export const partnerCompanySchema = z.object({
     partnerCompanyName: requiredString('Partner Company Name'),
     relationshipType: optionalString,
     contactPerson: optionalString,
-    contactEmail: emailSchema.optional().or(z.literal('')),
-    contactPhone: phoneSchema('Partner Contact Phone').optional().or(z.literal('')),
+    contactEmail: zodEmailOptional,
+    contactPhone: zodPhoneOptional,
     status: z.enum(['Active', 'Inactive']).default('Active'),
 });
 
@@ -48,7 +49,7 @@ export const organizationFormSchema = z
         billingStreet: optionalString,
         billingCity: requiredString('Billing City'),
         billingState: requiredString('Billing State'),
-        billingPostalCode: requiredPinCodeSchema('Billing Postal / PIN code'),
+        billingPostalCode: zodPinCode,
         billingCountry: optionalString.default('India'),
         billingLatitude: optionalString,
 
@@ -57,19 +58,19 @@ export const organizationFormSchema = z
         shippingStreet: optionalString,
         shippingCity: optionalString,
         shippingState: optionalString,
-        shippingPostalCode: pinCodeSchema.optional().or(z.literal('')),
+        shippingPostalCode: zodPinCodeOptional,
         shippingCountry: optionalString.default('India'),
         shippingLongitude: optionalString,
         copyAddressFromBilling: z.boolean().default(false),
 
         // Tax & Bank Details
         registrationType: z.enum(['Registered', 'Unregistered']).default('Registered'),
-        panNumber: panSchema.optional().or(z.literal('')),
+        panNumber: zodPanOptional,
         msmeRegnNumber: optionalString,
         accountName: optionalString,
         bankName: optionalString,
-        bankIfscCode: optionalString,
-        gstNo: gstSchema.optional().or(z.literal('')),
+        bankIfscCode: zodIfscOptional,
+        gstNo: zodGstOptional,
         gstNumber: optionalString,
         cinNo: optionalString,
         tanNumber: optionalString,

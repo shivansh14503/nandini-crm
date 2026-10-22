@@ -24,6 +24,8 @@ import {
     StyledSelect,
     SectionLabel,
     fieldSx,
+    RhfPhoneField,
+    RhfEmailField,
 } from '@/components/forms';
 import type { OpportunityFormData } from '../../../types/opportunity.types';
 import {
@@ -150,17 +152,14 @@ export function OpportunityBasicSection({ form, setField }: OpportunityBasicSect
                     </FormField>
 
                     {/* Contact Number:* */}
-                    <FormField label="Contact Number" required hint="Mobile / direct work phone">
-                        <TextField
-                            fullWidth
-                            size="small"
-                            type="tel"
-                            placeholder="+91 98000 00000"
-                            value={form.contactNumber}
-                            onChange={(e) => setField('contactNumber', e.target.value)}
-                            sx={fieldSx}
-                        />
-                    </FormField>
+                    <RhfPhoneField<OpportunityFormData>
+                        name="contactNumber"
+                        label="Contact Number"
+                        required
+                        hint="Mobile / direct work phone"
+                        placeholder="e.g. 9800000000"
+                        onChange={(e) => setField('contactNumber', e.target.value)}
+                    />
 
                     {/* Referred By */}
                     <FormField label="Referred By" hint="Referring partner, agent, or client">
@@ -294,17 +293,13 @@ export function OpportunityBasicSection({ form, setField }: OpportunityBasicSect
                     </FormField>
 
                     {/* Email Address */}
-                    <FormField label="Email Address" hint="Official contact email">
-                        <TextField
-                            fullWidth
-                            size="small"
-                            type="email"
-                            placeholder="corporate.contact@company.com"
-                            value={form.emailAddress || ''}
-                            onChange={(e) => setField('emailAddress', e.target.value)}
-                            sx={fieldSx}
-                        />
-                    </FormField>
+                    <RhfEmailField<OpportunityFormData>
+                        name="emailAddress"
+                        label="Email Address"
+                        hint="Official contact email"
+                        placeholder="corporate.contact@company.com"
+                        onChange={(e) => setField('emailAddress', e.target.value)}
+                    />
 
                     {/* Sales Stage:* (Default Qualification) */}
                     <FormField label="Sales Stage" required hint="Current pipeline phase">

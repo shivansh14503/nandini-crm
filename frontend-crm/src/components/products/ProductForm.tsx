@@ -22,6 +22,8 @@ import {
     SectionLabel,
     RhfTextField,
     RhfSelect,
+    RhfPercentageField,
+    RhfAmountField,
     useRhfForm,
 } from '@/components/forms';
 
@@ -258,39 +260,35 @@ export default function ProductForm({
                     </Grid>
 
                     <Grid size={{ xs: 12, md: 6 }}>
-                        <RhfTextField<ProductFormData>
+                        <RhfPercentageField<ProductFormData>
                             name="discount"
                             label="Discount (%)"
                             hint="e.g. 10 for 10%"
-                            type="number"
                             placeholder="0"
                         />
                     </Grid>
                     <Grid size={{ xs: 12, md: 6 }}>
-                        <RhfTextField<ProductFormData>
+                        <RhfAmountField<ProductFormData>
                             name="cost"
                             label="Cost (₹)"
                             hint="Purchase / landed cost"
-                            type="number"
                             placeholder="0.00"
                         />
                     </Grid>
 
                     <Grid size={{ xs: 12, md: 6 }}>
-                        <RhfTextField<ProductFormData>
+                        <RhfAmountField<ProductFormData>
                             name="mrp"
                             label="MRP (₹)"
                             hint="Maximum Retail Price"
-                            type="number"
                             placeholder="0.00"
                         />
                     </Grid>
                     <Grid size={{ xs: 12, md: 6 }}>
-                        <RhfTextField<ProductFormData>
+                        <RhfAmountField<ProductFormData>
                             name="msp"
                             label="MSP (₹)"
                             hint="Minimum Selling Price"
-                            type="number"
                             placeholder="0.00"
                         />
                     </Grid>

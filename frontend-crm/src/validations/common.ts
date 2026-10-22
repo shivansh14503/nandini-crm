@@ -58,6 +58,7 @@ export const PHONE_REGEX = /^\d{10}$/;
 export const PIN_CODE_REGEX = /^\d{6}$/;
 export const PAN_REGEX = /^[A-Z]{5}[0-9]{4}[A-Z]{1}$/;
 export const GST_REGEX = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/;
+export const IFSC_REGEX = /^[A-Z]{4}0[A-Z0-9]{6}$/;
 
 // ── Reusable String Primitives ────────────────────────────────────────────────
 
@@ -75,11 +76,124 @@ export const optionalString = z
     .optional()
     .or(z.literal(''));
 
-// ── Phone Number Primitives ───────────────────────────────────────────────────
+// ── Central DRY Zod Validation Dictionary ─────────────────────────────────────
 
-/**
- * Optional phone number: allows empty string, or exactly 10 numeric digits.
- */
+/** Exactly 10 digits numeric phone */
+export const zodPhone = z
+    .string()
+    .trim()
+    .regex(PHONE_REGEX, { message: 'Must be exactly 10 digits.' });
+
+export const zodPhoneOptional = z
+    .string()
+    .trim()
+    .refine((val) => !val || PHONE_REGEX.test(val), {
+        message: 'Must be exactly 10 digits.',
+    })
+    .optional()
+    .or(z.literal(''));
+
+/** Exactly 6 digits Indian postal PIN code */
+export const zodPinCode = z
+    .string()
+    .trim()
+    .regex(PIN_CODE_REGEX, { message: 'Must be exactly 6 digits.' });
+
+export const zodPinCodeOptional = z
+    .string()
+    .trim()
+    .refine((val) => !val || PIN_CODE_REGEX.test(val), {
+        message: 'Must be exactly 6 digits.',
+    })
+    .optional()
+    .or(z.literal(''));
+
+/** 10-character Indian PAN format with auto toUpperCase */
+export const zodPan = z
+    .string()
+    .trim()
+    .transform((val) => val.toUpperCase())
+    .refine((val) => PAN_REGEX.test(val), {
+        message: 'Must be a valid 10-character Indian PAN (e.g. ABCDE1234F).',
+    });
+
+export const zodPanOptional = z
+    .string()
+    .trim()
+    .transform((val) => (val ? val.toUpperCase() : ''))
+    .refine((val) => !val || PAN_REGEX.test(val), {
+        message: 'Must be a valid 10-character Indian PAN (e.g. ABCDE1234F).',
+    })
+    .optional()
+    .or(z.literal(''));
+
+/** 15-character GST format with auto toUpperCase */
+export const zodGst = z
+    .string()
+    .trim()
+    .transform((val) => val.toUpperCase())
+    .refine((val) => GST_REGEX.test(val), {
+        message: 'Must be a valid 15-character GSTIN (e.g. 07AAAAA0000A1Z5).',
+    });
+
+export const zodGstOptional = z
+    .string()
+    .trim()
+    .transform((val) => (val ? val.toUpperCase() : ''))
+    .refine((val) => !val || GST_REGEX.test(val), {
+        message: 'Must be a valid 15-character GSTIN (e.g. 07AAAAA0000A1Z5).',
+    })
+    .optional()
+    .or(z.literal(''));
+
+/** 11-character Indian IFSC code with auto toUpperCase */
+export const zodIfsc = z
+    .string()
+    .trim()
+    .transform((val) => val.toUpperCase())
+    .refine((val) => IFSC_REGEX.test(val), {
+        message: 'Must be a valid 11-character IFSC code (e.g. SBIN0001234).',
+    });
+
+export const zodIfscOptional = z
+    .string()
+    .trim()
+    .transform((val) => (val ? val.toUpperCase() : ''))
+    .refine((val) => !val || IFSC_REGEX.test(val), {
+        message: 'Must be a valid 11-character IFSC code (e.g. SBIN0001234).',
+    })
+    .optional()
+    .or(z.literal(''));
+
+/** Standard email validation, trimmed, lowercased */
+export const zodEmail = z
+    .string()
+    .trim()
+    .email({ message: 'Invalid email format.' })
+    .toLowerCase();
+
+export const zodEmailOptional = z
+    .string()
+    .trim()
+    .toLowerCase()
+    .refine((val) => !val || z.string().email().safeParse(val).success, {
+        message: 'Invalid email format.',
+    })
+    .default('');
+
+/** Non-negative number coercion */
+export const zodAmount = z.coerce
+    .number()
+    .min(0, { message: 'Amount cannot be negative.' });
+
+/** Number coercion between 0 and 100 */
+export const zodPercentage = z.coerce
+    .number()
+    .min(0, { message: 'Percentage cannot be less than 0.' })
+    .max(100, { message: 'Percentage cannot exceed 100.' });
+
+// ── Aliases & Parameterized Helpers ───────────────────────────────────────────
+
 export const phoneSchema = (fieldName: string = 'Phone Number') =>
     z
         .string()
@@ -89,9 +203,6 @@ export const phoneSchema = (fieldName: string = 'Phone Number') =>
             { message: `${fieldName} must be exactly 10 digits.` }
         );
 
-/**
- * Required phone number: exactly 10 numeric digits.
- */
 export const requiredPhoneSchema = (fieldName: string = 'Phone Number') =>
     z
         .string()
@@ -99,21 +210,7 @@ export const requiredPhoneSchema = (fieldName: string = 'Phone Number') =>
         .min(1, { message: `${fieldName} is required.` })
         .regex(PHONE_REGEX, { message: `${fieldName} must be exactly 10 digits.` });
 
-// ── Postal Code / PIN Primitives ──────────────────────────────────────────────
-
-/**
- * Optional postal/PIN code: allows empty string, or exactly 6 numeric digits.
- */
-export const pinCodeSchema = z
-    .string()
-    .trim()
-    .refine((val) => !val || PIN_CODE_REGEX.test(val), {
-        message: 'Postal PIN code must be exactly 6 digits.',
-    });
-
-/**
- * Required postal/PIN code: exactly 6 numeric digits.
- */
+export const pinCodeSchema = zodPinCodeOptional;
 export const requiredPinCodeSchema = (fieldName: string = 'Postal / PIN code') =>
     z
         .string()
@@ -121,20 +218,8 @@ export const requiredPinCodeSchema = (fieldName: string = 'Postal / PIN code') =
         .min(1, { message: `${fieldName} is required.` })
         .regex(PIN_CODE_REGEX, { message: `${fieldName} must be exactly 6 digits.` });
 
-// ── Email Address Primitives ──────────────────────────────────────────────────
-
-/**
- * Standard email validation primitive (required, trimmed, lowercased).
- */
-export const emailPrimitive = z
-    .string()
-    .trim()
-    .toLowerCase()
-    .email({ message: 'Invalid email format.' });
-
-/**
- * Required email address schema.
- */
+export const emailPrimitive = zodEmail;
+export const emailSchema = zodEmailOptional;
 export const requiredEmailSchema = (fieldName: string = 'Email Address') =>
     z
         .string()
@@ -143,34 +228,7 @@ export const requiredEmailSchema = (fieldName: string = 'Email Address') =>
         .email({ message: 'Invalid email format.' })
         .toLowerCase();
 
-/**
- * Optional email address schema: allows empty string, or valid email format.
- */
-export const emailSchema = z
-    .string()
-    .trim()
-    .toLowerCase()
-    .refine((val) => !val || z.string().email().safeParse(val).success, {
-        message: 'Invalid email format.',
-    });
-
-// ── PAN Number Primitives ─────────────────────────────────────────────────────
-
-/**
- * Standard 10-character Indian PAN format with auto toUpperCase transformation.
- * Optional when empty.
- */
-export const panSchema = z
-    .string()
-    .trim()
-    .transform((val) => (val ? val.toUpperCase() : ''))
-    .refine((val) => !val || PAN_REGEX.test(val), {
-        message: 'Please enter a valid 10-character Indian PAN (e.g. ABCDE1234F).',
-    });
-
-/**
- * Required 10-character Indian PAN.
- */
+export const panSchema = zodPanOptional;
 export const requiredPanSchema = (fieldName: string = 'PAN Number') =>
     z
         .string()
@@ -181,23 +239,7 @@ export const requiredPanSchema = (fieldName: string = 'PAN Number') =>
             message: `${fieldName} must be a valid 10-character Indian PAN (e.g. ABCDE1234F).`,
         });
 
-// ── GST Number Primitives ─────────────────────────────────────────────────────
-
-/**
- * Standard 15-character GST format with auto toUpperCase transformation.
- * Optional when empty.
- */
-export const gstSchema = z
-    .string()
-    .trim()
-    .transform((val) => (val ? val.toUpperCase() : ''))
-    .refine((val) => !val || GST_REGEX.test(val), {
-        message: 'Please enter a valid 15-character GSTIN (e.g. 07AAAAA0000A1Z5).',
-    });
-
-/**
- * Required 15-character GST number.
- */
+export const gstSchema = zodGstOptional;
 export const requiredGstSchema = (fieldName: string = 'GST Number') =>
     z
         .string()
@@ -208,11 +250,6 @@ export const requiredGstSchema = (fieldName: string = 'GST Number') =>
             message: `${fieldName} must be a valid 15-character GSTIN (e.g. 07AAAAA0000A1Z5).`,
         });
 
-// ── Website / URL Primitives ──────────────────────────────────────────────────
-
-/**
- * Optional URL schema: allows empty string, or valid URL format.
- */
 export const urlSchema = z
     .string()
     .trim()
@@ -220,9 +257,6 @@ export const urlSchema = z
         message: 'Please enter a valid URL (e.g. https://example.com).',
     });
 
-/**
- * Required URL schema.
- */
 export const requiredUrlSchema = (fieldName: string = 'Website URL') =>
     z
         .string()
@@ -230,17 +264,12 @@ export const requiredUrlSchema = (fieldName: string = 'Website URL') =>
         .min(1, { message: `${fieldName} is required.` })
         .url({ message: 'Please enter a valid URL (e.g. https://example.com).' });
 
-// ── Currency / Amount / Quantity Primitives ───────────────────────────────────
-
-/**
- * Non-negative coerced number validator (handles strings and numbers).
- */
 export const nonNegativeNumber = (fieldName: string = 'Amount') =>
     z.coerce.number().min(0, {
         message: `${fieldName} cannot be negative.`,
     });
 
-export const amountSchema = nonNegativeNumber('Amount');
+export const amountSchema = zodAmount;
 
 export const quantitySchema = z.coerce
     .number()

@@ -402,6 +402,7 @@ export function CrmLineItemsEditor({ value, onChange, error }: CrmLineItemsEdito
                                                     amount: Math.max(0, parseFloat(e.target.value) || 0),
                                                 })
                                             }
+                                            slotProps={{ htmlInput: { min: 0 } }}
                                             sx={fieldSx}
                                         />
 
@@ -411,21 +412,25 @@ export function CrmLineItemsEditor({ value, onChange, error }: CrmLineItemsEdito
                                                 size="small"
                                                 type="number"
                                                 value={item.discount}
-                                                onChange={(e) =>
-                                                    handleUpdateLineItem(idx, {
-                                                        discount: Math.max(0, parseFloat(e.target.value) || 0),
-                                                    })
-                                                }
+                                                onChange={(e) => {
+                                                    const raw = Math.max(0, parseFloat(e.target.value) || 0);
+                                                    const val = item.discountType === 'percentage' ? Math.min(100, raw) : raw;
+                                                    handleUpdateLineItem(idx, { discount: val });
+                                                }}
+                                                slotProps={{ htmlInput: { min: 0, max: item.discountType === 'percentage' ? 100 : undefined } }}
                                                 sx={{ flex: 1, ...fieldSx }}
                                             />
                                             <FormControl size="small" sx={{ width: 75, ...fieldSx }}>
                                                 <Select
                                                     value={item.discountType}
-                                                    onChange={(e) =>
+                                                    onChange={(e) => {
+                                                        const newType = e.target.value as 'percentage' | 'direct';
+                                                        const adjustedDiscount = newType === 'percentage' && item.discount > 100 ? 100 : item.discount;
                                                         handleUpdateLineItem(idx, {
-                                                            discountType: e.target.value as 'percentage' | 'direct',
-                                                        })
-                                                    }
+                                                            discountType: newType,
+                                                            discount: adjustedDiscount,
+                                                        });
+                                                    }}
                                                 >
                                                     <MenuItem value="percentage">Pct</MenuItem>
                                                     <MenuItem value="direct">Price</MenuItem>

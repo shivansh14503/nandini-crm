@@ -8,6 +8,7 @@ import { useFormContext, useWatch, type FieldValues, type Path } from 'react-hoo
 
 import { SectionLabel } from '../SectionLabel';
 import { RhfTextField } from './RhfTextField';
+import { RhfPinCodeField } from './RhfPinCodeField';
 import { RhfSelect } from './RhfSelect';
 import { RhfCheckbox } from './RhfCheckbox';
 import { INDIAN_STATES, COUNTRIES } from '@/config/constants';
@@ -141,7 +142,7 @@ export function RhfAddressSection<T extends FieldValues>({
                     placeholder="Select State / Region"
                     disabled={disabled}
                 />
-                <RhfTextField<T>
+                <RhfPinCodeField<T>
                     name={billingFields.postalCode}
                     label="Postal Code (PIN)"
                     required={required}
@@ -200,7 +201,7 @@ export function RhfAddressSection<T extends FieldValues>({
                     placeholder="Select State / Region"
                     disabled={copy ? true : disabled}
                 />
-                <RhfTextField<T>
+                <RhfPinCodeField<T>
                     name={shippingFields.postalCode}
                     label="Postal Code (PIN)"
                     placeholder="Enter delivery PIN code"

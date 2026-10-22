@@ -13,6 +13,7 @@ import {
     RhfLookup,
     RhfSelect,
     RhfTextField,
+    RhfPhoneField,
 } from '@/components/forms';
 import { contactService, findExistingContact } from '@/services';
 import {
@@ -83,8 +84,8 @@ export function ConvertContactSection() {
 
                 <Grid size={{ xs: 12, md: 6 }}>
                     <RhfTextField<F> name="contactName" label="Name" required placeholder="Contact person name" />
-                    <RhfTextField<F> name="contactMobile" label="Mobile" required type="tel" placeholder="e.g. 9811245890" />
-                    <RhfTextField<F> name="contactPhone3" label="Phone 3" type="tel" placeholder="Alternate phone number" />
+                    <RhfPhoneField<F> name="contactMobile" label="Mobile" required />
+                    <RhfPhoneField<F> name="contactPhone3" label="Phone 3" placeholder="Alternate phone number" />
                     <RhfSelect<F> name="designation" label="Designation" options={CONTACT_DESIGNATIONS} placeholder="Select Designation" />
                     <RhfTextField<F> name="location" label="Location" placeholder="e.g. New Delhi / Branch Office" />
                     <RhfChipGroup<F> name="communicationType" label="Communication Type" options={COMMUNICATION_TYPES} />

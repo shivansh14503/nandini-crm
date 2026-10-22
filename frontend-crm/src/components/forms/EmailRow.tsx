@@ -35,9 +35,10 @@ export function EmailRow({ email, onChange, onRemove }: EmailRowProps) {
                 <TextField
                     fullWidth
                     size="small"
+                    type="email"
                     value={email.email}
                     placeholder="e.g. contact@domain.com"
-                    onChange={(e) => onChange({ ...email, email: e.target.value })}
+                    onChange={(e) => onChange({ ...email, email: e.target.value.toLowerCase().trim() })}
                     sx={fieldSx}
                 />
                 <Tooltip title="Remove email">

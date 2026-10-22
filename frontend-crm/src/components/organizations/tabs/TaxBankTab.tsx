@@ -19,6 +19,7 @@ import {
     fieldSx,
     RhfSelect,
     RhfTextField,
+    RhfUppercaseField,
 } from '@/components/forms';
 import { REGISTRATION_TYPES, ACCOUNT_TYPES } from '@/config/constants';
 import type { OrganizationFormData } from '@/types/organization.types';
@@ -82,37 +83,23 @@ function TaxBankTabInner({ form, set }: TaxBankTabProps) {
                     />
 
                     {/* PAN Number */}
-                    <FormField
+                    <RhfUppercaseField<OrganizationFormData>
+                        name="panNumber"
                         label="PAN Number"
                         hint="10-digit Permanent Account Number"
-                        sx={{ mb: 0 }}
-                    >
-                        <TextField
-                            fullWidth
-                            size="small"
-                            placeholder="e.g. ABCDE1234F"
-                            value={form.panNumber || ''}
-                            onChange={(e) => set('panNumber', e.target.value.toUpperCase())}
-                            slotProps={{ htmlInput: { maxLength: 10 } }}
-                            sx={fieldSx}
-                        />
-                    </FormField>
+                        placeholder="e.g. ABCDE1234F"
+                        maxLength={10}
+                        onChange={(e) => set('panNumber', e.target.value)}
+                    />
 
                     {/* MSME Regn. Number */}
-                    <FormField
+                    <RhfUppercaseField<OrganizationFormData>
+                        name="msmeRegnNumber"
                         label="MSME Regn.Number"
                         hint="Udyam Registration"
-                        sx={{ mb: 0 }}
-                    >
-                        <TextField
-                            fullWidth
-                            size="small"
-                            placeholder="e.g. UDYAM-DL-01-0012345"
-                            value={form.msmeRegnNumber || ''}
-                            onChange={(e) => set('msmeRegnNumber', e.target.value.toUpperCase())}
-                            sx={fieldSx}
-                        />
-                    </FormField>
+                        placeholder="e.g. UDYAM-DL-01-0012345"
+                        onChange={(e) => set('msmeRegnNumber', e.target.value)}
+                    />
 
                     {/* Account Name */}
                     <FormField label="Account Name" sx={{ mb: 0 }}>
@@ -139,17 +126,14 @@ function TaxBankTabInner({ form, set }: TaxBankTabProps) {
                     </FormField>
 
                     {/* Bank IFSC Code */}
-                    <FormField label="Bank IFSC Code" hint="11-character code" sx={{ mb: 0 }}>
-                        <TextField
-                            fullWidth
-                            size="small"
-                            placeholder="e.g. HDFC0001234"
-                            value={form.bankIfscCode || ''}
-                            onChange={(e) => set('bankIfscCode', e.target.value.toUpperCase())}
-                            slotProps={{ htmlInput: { maxLength: 11 } }}
-                            sx={fieldSx}
-                        />
-                    </FormField>
+                    <RhfUppercaseField<OrganizationFormData>
+                        name="bankIfscCode"
+                        label="Bank IFSC Code"
+                        hint="11-character code"
+                        placeholder="e.g. HDFC0001234"
+                        maxLength={11}
+                        onChange={(e) => set('bankIfscCode', e.target.value)}
+                    />
                 </Box>
 
                 {/* ── RIGHT COLUMN: Tax & Bank Right ────────────────── */}
@@ -161,49 +145,35 @@ function TaxBankTabInner({ form, set }: TaxBankTabProps) {
 
                     {/* GST Number */}
                     {registrationType === 'Registered' && (
-                        <RhfTextField<OrganizationFormData>
+                        <RhfUppercaseField<OrganizationFormData>
                             name="gstNo"
                             label="GST Number"
                             required={registrationType === 'Registered'}
                             hint="15-character GSTIN"
                             placeholder="e.g. 06AFZFS3757G1Z9"
-                            slotProps={{ htmlInput: { maxLength: 15 } }}
+                            maxLength={15}
                         />
                     )}
 
                     {/* CIN No */}
-                    <FormField
+                    <RhfUppercaseField<OrganizationFormData>
+                        name="cinNo"
                         label="CIN No"
                         hint="Corporate Identification Number"
-                        sx={{ mb: 0 }}
-                    >
-                        <TextField
-                            fullWidth
-                            size="small"
-                            placeholder="e.g. U74999DL2020PTC123456"
-                            value={form.cinNo || ''}
-                            onChange={(e) => set('cinNo', e.target.value.toUpperCase())}
-                            slotProps={{ htmlInput: { maxLength: 21 } }}
-                            sx={fieldSx}
-                        />
-                    </FormField>
+                        placeholder="e.g. U74999DL2020PTC123456"
+                        maxLength={21}
+                        onChange={(e) => set('cinNo', e.target.value)}
+                    />
 
                     {/* TAN Number */}
-                    <FormField
+                    <RhfUppercaseField<OrganizationFormData>
+                        name="tanNumber"
                         label="TAN Number"
                         hint="Tax Deduction & Collection Account"
-                        sx={{ mb: 0 }}
-                    >
-                        <TextField
-                            fullWidth
-                            size="small"
-                            placeholder="e.g. DELM12345E"
-                            value={form.tanNumber || ''}
-                            onChange={(e) => set('tanNumber', e.target.value.toUpperCase())}
-                            slotProps={{ htmlInput: { maxLength: 10 } }}
-                            sx={fieldSx}
-                        />
-                    </FormField>
+                        placeholder="e.g. DELM12345E"
+                        maxLength={10}
+                        onChange={(e) => set('tanNumber', e.target.value)}
+                    />
 
                     {/* Account Number */}
                     <FormField label="Account Number" sx={{ mb: 0 }}>

@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { requiredString, optionalString, phoneSchema, requiredPhoneSchema } from './common';
+import { requiredString, optionalString, zodPhone, zodPhoneOptional } from './common';
 import { corporateEmailSchema } from './contact.schema';
 
 /**
@@ -24,11 +24,11 @@ export const convertLeadFormSchema = z.object({
     contactName: requiredString('Contact Name').max(100, {
         message: 'Contact Name cannot exceed 100 characters.',
     }),
-    contactMobile: requiredPhoneSchema('Mobile Number'),
-    contactPhone3: phoneSchema('Phone 3 Number').optional().or(z.literal('')),
+    contactMobile: zodPhone,
+    contactPhone3: zodPhoneOptional,
     contactEmails: z
         .array(corporateEmailSchema)
-        .refine((emails) => emails.some((e) => e.email.trim().length > 0), {
+        .refine((emails) => emails.some((e) => (e.email || '').trim().length > 0), {
             message: 'Email Address is required.',
         }),
     isPrimaryContact: z.boolean(),

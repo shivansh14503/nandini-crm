@@ -2,7 +2,7 @@
 
 import React, { useMemo } from 'react';
 import { Grid } from '@mui/material';
-import { RhfTextField, RhfLookup } from '@/components/forms';
+import { RhfTextField, RhfPhoneField, RhfLookup } from '@/components/forms';
 import { organizationService } from '@/services';
 import type { ContactFormData } from '../../../types/contact.types';
 
@@ -20,7 +20,7 @@ export function ContactBasicInfoSection() {
         <Grid container spacing={3.5}>
             <Grid size={{ xs: 12, md: 6 }}>
                 <RhfTextField<ContactFormData> name="name" label="Name" required placeholder="e.g. Rajesh Kumar" />
-                <RhfTextField<ContactFormData> name="mobile" label="Mobile" required type="tel" hint="Primary 10-digit mobile number" placeholder="e.g. 9876543210" />
+                <RhfPhoneField<ContactFormData> name="mobile" label="Mobile" required hint="Primary 10-digit mobile number" placeholder="e.g. 9876543210" />
             </Grid>
             <Grid size={{ xs: 12, md: 6 }}>
                 <RhfLookup<ContactFormData>
@@ -31,7 +31,7 @@ export function ContactBasicInfoSection() {
                     options={organizationNames}
                     placeholder="Search or select organization..."
                 />
-                <RhfTextField<ContactFormData> name="officePhone" label="Office Phone" type="tel" placeholder="e.g. 0112345678" />
+                <RhfPhoneField<ContactFormData> name="officePhone" label="Office Phone" placeholder="e.g. 0112345678" />
             </Grid>
         </Grid>
     );

@@ -9,6 +9,9 @@ import {
     RhfTextField,
     RhfLookup,
     RhfAddressSection,
+    RhfPhoneField,
+    RhfUppercaseField,
+    RhfEmailField,
 } from '@/components/forms';
 import type { QuotationFormData } from '@/types/quotation.types';
 import { organizationService, contactService } from '@/services';
@@ -133,11 +136,10 @@ export function QuotationAddressSection() {
                         hint="Primary signatory or quote recipient"
                     />
 
-                    <RhfTextField<QuotationFormData>
+                    <RhfPhoneField<QuotationFormData>
                         name="contactMobile"
                         label="Contact Mobile No"
-                        type="tel"
-                        placeholder="+91 98000 00000"
+                        placeholder="e.g. 9800000000"
                         hint="Recipient direct phone / WhatsApp"
                     />
                 </Box>
@@ -151,17 +153,17 @@ export function QuotationAddressSection() {
                         hint="As displayed on billing documents"
                     />
 
-                    <RhfTextField<QuotationFormData>
+                    <RhfUppercaseField<QuotationFormData>
                         name="gstNo"
                         label="GST NO"
                         placeholder="e.g. 07AAAAA0000A1Z5"
+                        maxLength={15}
                         hint="Client GST Identification Number"
                     />
 
-                    <RhfTextField<QuotationFormData>
+                    <RhfEmailField<QuotationFormData>
                         name="contactEmail"
                         label="Contact Email Address"
-                        type="email"
                         placeholder="contact@company.com"
                         hint="Dispatch address for quotation PDF"
                     />

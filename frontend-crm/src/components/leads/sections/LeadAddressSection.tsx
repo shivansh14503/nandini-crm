@@ -9,6 +9,7 @@ import { useFormContext, useWatch } from 'react-hook-form';
 import {
     SectionLabel,
     RhfTextField,
+    RhfPinCodeField,
     RhfSelect,
     RhfCheckbox,
 } from '@/components/forms';
@@ -57,7 +58,7 @@ export function LeadAddressSection() {
                     <RhfTextField<LeadFormData> name="primaryAddress" label="Address" hint="Registered or primary premises" multiline minRows={3} maxRows={4} placeholder="Enter a location" />
                     <RhfTextField<LeadFormData> name="primaryCity" label="City" placeholder="e.g. Gurugram / New Delhi" />
                     <RhfSelect<LeadFormData> name="primaryState" label="State/Region" options={INDIAN_STATES} placeholder="Select State / Region" />
-                    <RhfTextField<LeadFormData> name="primaryPostalCode" label="Postal Code" placeholder="e.g. 110001" />
+                    <RhfPinCodeField<LeadFormData> name="primaryPostalCode" label="Postal Code" placeholder="e.g. 110001" />
                     <RhfSelect<LeadFormData> name="primaryCountry" label="Country" options={COUNTRIES} placeholder="Select Country" />
                     <RhfTextField<LeadFormData> name="primaryLatitude" label="Latitude" hint="GPS coordinate" placeholder="0.00000000" />
                 </Box>
@@ -70,7 +71,7 @@ export function LeadAddressSection() {
                     <RhfTextField<LeadFormData> name="otherAddress" label="Other Address" hint="Branch, factory, or dispatch location" multiline minRows={3} maxRows={4} placeholder="Enter branch or factory location" disabled={copy} />
                     <RhfTextField<LeadFormData> name="otherCity" label="City" placeholder="Enter city" disabled={copy} />
                     <RhfSelect<LeadFormData> name="otherState" label="State/Region" options={INDIAN_STATES} placeholder="Select State / Region" />
-                    <RhfTextField<LeadFormData> name="otherPostalCode" label="Postal Code" placeholder="Enter PIN code" disabled={copy} />
+                    <RhfPinCodeField<LeadFormData> name="otherPostalCode" label="Postal Code" placeholder="Enter PIN code" disabled={copy} />
                     <RhfSelect<LeadFormData> name="otherCountry" label="Country" options={COUNTRIES} placeholder="Select Country" />
                     <RhfTextField<LeadFormData> name="otherLongitude" label="Longitude" hint="GPS coordinate" placeholder="0.00000000" />
                 </Box>

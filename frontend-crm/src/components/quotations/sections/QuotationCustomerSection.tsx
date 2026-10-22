@@ -2,7 +2,13 @@
 
 import React from 'react';
 import { Grid } from '@mui/material';
-import { RhfTextField, RhfSelect, RhfLookup } from '@/components/forms';
+import {
+    RhfTextField,
+    RhfSelect,
+    RhfLookup,
+    RhfPhoneField,
+    RhfEmailField,
+} from '@/components/forms';
 import { LEAD_ASSIGNED_USERS } from '@/types/lead.types';
 import {
     QUOTATION_STATUSES,
@@ -33,16 +39,14 @@ export function QuotationCustomerSection() {
                     required
                     placeholder="e.g. Rajesh Kumar"
                 />
-                <RhfTextField<QuotationFormData>
+                <RhfPhoneField<QuotationFormData>
                     name="contactNumber"
                     label="Contact Phone"
-                    type="tel"
-                    placeholder="+91 98765 43210"
+                    placeholder="e.g. 9876543210"
                 />
-                <RhfTextField<QuotationFormData>
+                <RhfEmailField<QuotationFormData>
                     name="emailAddress"
                     label="Contact Email"
-                    type="email"
                     placeholder="rajesh@example.com"
                 />
             </Grid>
