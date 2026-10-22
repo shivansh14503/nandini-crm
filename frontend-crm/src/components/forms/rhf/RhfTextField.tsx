@@ -14,21 +14,104 @@ export interface RhfTextFieldProps<T extends FieldValues>
     label: string;
     required?: boolean;
     hint?: React.ReactNode;
+    numericOnly?: boolean;
+    uppercase?: boolean;
+    maxLength?: number;
+    onChange?: (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => void;
 }
 
 /**
  * React Hook Form bound text input rendered inside the shared {@link FormField} shell.
  * Must be rendered inside a `FormProvider`.
+ * Enforces production-grade enterprise input constraints (numeric-only, uppercase, max length).
  */
 export function RhfTextField<T extends FieldValues>({
     name,
     label,
     required,
     hint,
+    numericOnly,
+    uppercase,
+    maxLength,
     sx,
+    slotProps,
     ...inputProps
 }: RhfTextFieldProps<T>) {
     const { field, fieldState } = useController<T>({ name });
+
+    const isNumeric =
+        numericOnly ??
+        (inputProps.type === 'tel' ||
+            /(mobile|phone|postalcode|pincode|pin_code)/i.test(name) ||
+            /(mobile|phone|postal code|pin code|pincode)/i.test(label));
+
+    const isUppercase =
+        uppercase ??
+        (/(gst|pan|ifsc)/i.test(name) || /(gst|pan|ifsc)/i.test(label));
+
+    const existingHtmlInput =
+        (slotProps?.htmlInput as Record<string, unknown> | undefined) || {};
+
+    const resolvedMaxLength =
+        maxLength ??
+        (existingHtmlInput.maxLength as number | undefined) ??
+        (/(postalcode|pincode|pin code|postal code)/i.test(name) ||
+        /(postal code|pin code|pincode)/i.test(label)
+            ? 6
+            : /(mobile|phone)/i.test(name) || /(mobile|phone)/i.test(label)
+            ? 10
+            : undefined);
+
+    const handleChange = (
+        e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
+    ) => {
+        let val = e.target.value;
+        if (isNumeric) {
+            val = val.replace(/\D/g, '');
+            if (resolvedMaxLength) {
+                val = val.slice(0, resolvedMaxLength);
+            }
+            e.target.value = val;
+        } else if (isUppercase) {
+            val = val.toUpperCase();
+            if (resolvedMaxLength) {
+                val = val.slice(0, resolvedMaxLength);
+            }
+            e.target.value = val;
+        }
+        field.onChange(val);
+        inputProps.onChange?.(e);
+    };
+
+    const mergedSlotProps = {
+        ...slotProps,
+        htmlInput: {
+            ...existingHtmlInput,
+            ...(isNumeric
+                ? {
+                      inputMode: 'numeric',
+                      pattern: '[0-9]*',
+                  }
+                : {}),
+            ...(resolvedMaxLength ? { maxLength: resolvedMaxLength } : {}),
+            onInput: (e: React.FormEvent<HTMLInputElement>) => {
+                const target = e.currentTarget;
+                if (isNumeric && target.value) {
+                    let val = target.value.replace(/\D/g, '');
+                    if (resolvedMaxLength) {
+                        val = val.slice(0, resolvedMaxLength);
+                    }
+                    target.value = val;
+                } else if (isUppercase && target.value) {
+                    let val = target.value.toUpperCase();
+                    if (resolvedMaxLength) {
+                        val = val.slice(0, resolvedMaxLength);
+                    }
+                    target.value = val;
+                }
+            },
+        },
+    };
 
     return (
         <FormField label={label} required={required} hint={hint}>
@@ -36,8 +119,10 @@ export function RhfTextField<T extends FieldValues>({
                 {...inputProps}
                 {...field}
                 value={field.value ?? ''}
+                onChange={handleChange}
                 fullWidth
                 size="small"
+                slotProps={mergedSlotProps}
                 error={Boolean(fieldState.error)}
                 helperText={fieldState.error?.message}
                 sx={{ ...fieldSx, ...sx }}

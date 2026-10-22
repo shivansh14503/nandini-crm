@@ -27,12 +27,15 @@ import LinkOffIcon from '@mui/icons-material/LinkOff';
 import PersonOutlinedIcon from '@mui/icons-material/PersonOutlined';
 import ContactPageOutlinedIcon from '@mui/icons-material/ContactPageOutlined';
 
+import { useFormContext, useWatch, FormProvider, useForm } from 'react-hook-form';
+
 import {
     FormField,
     SectionLabel,
     StyledSelect,
     EmailRow,
     fieldSx,
+    RhfSelect,
 } from '@/components/forms';
 import {
     NATURE_OF_BUSINESS,
@@ -59,18 +62,75 @@ import type {
 export interface OverviewTabProps {
     form: OrganizationFormData;
     set: <K extends keyof OrganizationFormData>(key: K, value: OrganizationFormData[K]) => void;
-    addEmail: () => void;
-    updateEmail: (id: string, updated: CorporateEmail) => void;
-    removeEmail: (id: string) => void;
+    addEmail?: () => void;
+    updateEmail?: (id: string, updated: CorporateEmail) => void;
+    removeEmail?: (id: string) => void;
 }
 
-export function OverviewTab({
+function OverviewTabInner({
     form,
     set,
     addEmail,
     updateEmail,
     removeEmail,
 }: OverviewTabProps) {
+    const { control, setValue, getValues, formState } = useFormContext<OrganizationFormData>();
+
+    const organizationName = useWatch({ control, name: 'organizationName' }) ?? form?.organizationName ?? '';
+    const mailingName = useWatch({ control, name: 'mailingName' }) ?? form?.mailingName ?? '';
+    const currentAccountStatus = (useWatch({ control, name: 'accountStatus' }) ?? form?.accountStatus ?? 'Active') as AccountStatus;
+    const watchedNatureOfBusiness = useWatch({ control, name: 'natureOfBusiness' });
+    const watchedTypeOfEntity = useWatch({ control, name: 'typeOfEntity' });
+    const watchedCustomerType = useWatch({ control, name: 'customerType' });
+
+    // Sync RHF values with external set callback if provided
+    React.useEffect(() => {
+        if (set && watchedNatureOfBusiness !== undefined && watchedNatureOfBusiness !== form?.natureOfBusiness) {
+            set('natureOfBusiness', watchedNatureOfBusiness as NatureOfBusiness);
+        }
+    }, [watchedNatureOfBusiness, set, form?.natureOfBusiness]);
+
+    React.useEffect(() => {
+        if (set && watchedTypeOfEntity !== undefined && watchedTypeOfEntity !== form?.typeOfEntity) {
+            set('typeOfEntity', watchedTypeOfEntity as TypeOfEntity);
+        }
+    }, [watchedTypeOfEntity, set, form?.typeOfEntity]);
+
+    React.useEffect(() => {
+        if (set && watchedCustomerType !== undefined && watchedCustomerType !== form?.customerType) {
+            set('customerType', watchedCustomerType as CustomerType);
+        }
+    }, [watchedCustomerType, set, form?.customerType]);
+
+    // Auto-copy Mailing Name when organizationName changes and mailingName is untouched or empty
+    const prevOrgNameRef = React.useRef(organizationName);
+
+    React.useEffect(() => {
+        if (organizationName === prevOrgNameRef.current) return;
+        prevOrgNameRef.current = organizationName;
+
+        const currentMailing = getValues('mailingName');
+        const isTouched = formState.touchedFields?.mailingName;
+
+        if (!isTouched || !currentMailing || currentMailing.trim() === '') {
+            setValue('mailingName', organizationName || '', { shouldValidate: true });
+            if (set) {
+                set('mailingName', organizationName || '');
+            }
+        }
+    }, [organizationName, getValues, setValue, formState.touchedFields?.mailingName, set]);
+
+    const handleOrgNameChange = (val: string) => {
+        setValue('organizationName', val, { shouldValidate: true, shouldDirty: true });
+        if (set) set('organizationName', val);
+
+        const currentMailing = getValues('mailingName');
+        const isTouched = formState.touchedFields?.mailingName;
+        if (!isTouched || !currentMailing || currentMailing.trim() === '') {
+            setValue('mailingName', val, { shouldValidate: true });
+            if (set) set('mailingName', val);
+        }
+    };
     return (
         <Box sx={{ p: { xs: 2.5, md: 3.5 } }}>
             {/* ── Two-column grid ───────────────────────────────── */}
@@ -94,12 +154,12 @@ export function OverviewTab({
                             fullWidth
                             size="small"
                             placeholder="e.g. Mohit Traders Pvt Ltd"
-                            value={form.organizationName}
-                            onChange={(e) => set('organizationName', e.target.value)}
+                            value={organizationName}
+                            onChange={(e) => handleOrgNameChange(e.target.value)}
                             sx={fieldSx}
                             slotProps={{
                                 input: {
-                                    endAdornment: form.organizationName ? (
+                                    endAdornment: organizationName ? (
                                         <InputAdornment position="end">
                                             <VerifiedIcon sx={{ fontSize: 18, color: '#16a34a' }} />
                                         </InputAdornment>
@@ -111,22 +171,19 @@ export function OverviewTab({
                     </FormField>
 
                     {/* Nature of Business */}
-                    <FormField label="Nature of Business" required sx={{ mb: 0 }}>
-                        <StyledSelect
-                            label="Nature of Business"
-                            placeholder="Select Nature of Business"
-                            value={form.natureOfBusiness}
-                            onChange={(v) => set('natureOfBusiness', v as NatureOfBusiness)}
-                            options={NATURE_OF_BUSINESS}
-                            required
-                        />
-                    </FormField>
+                    <RhfSelect<OrganizationFormData>
+                        name="natureOfBusiness"
+                        label="Nature of Business"
+                        placeholder="Select Nature of Business"
+                        options={NATURE_OF_BUSINESS}
+                        required
+                    />
 
                     {/* Account Status */}
                     <FormField
                         label="Account Status"
                         hint={
-                            form.accountStatus === 'Active' ? (
+                            (currentAccountStatus || 'Active') === 'Active' ? (
                                 <Chip
                                     label="● Active Commercial"
                                     size="small"
@@ -145,8 +202,12 @@ export function OverviewTab({
                         <StyledSelect
                             label="Account Status"
                             placeholder="Select Account Status"
-                            value={form.accountStatus}
-                            onChange={(v) => set('accountStatus', v as AccountStatus)}
+                            value={currentAccountStatus || 'Active'}
+                            onChange={(v) => {
+                                const val = v as AccountStatus;
+                                setValue('accountStatus', val, { shouldValidate: true, shouldDirty: true });
+                                if (set) set('accountStatus', val);
+                            }}
                             options={ACCOUNT_STATUSES}
                         />
                     </FormField>
@@ -201,29 +262,31 @@ export function OverviewTab({
                                 icon={<EmailIcon sx={{ fontSize: 18 }} />}
                                 label="Corporate Email Addresses"
                             />
-                            <Button
-                                size="small"
-                                startIcon={<AddIcon fontSize="small" />}
-                                onClick={addEmail}
-                                sx={{
-                                    fontSize: '0.78rem',
-                                    textTransform: 'none',
-                                    fontWeight: 600,
-                                    color: '#2563EB',
-                                    border: '1px dashed #93c5fd',
-                                    borderRadius: '6px',
-                                    px: 1.5,
-                                    py: 0.4,
-                                    '&:hover': {
-                                        backgroundColor: '#eff6ff',
-                                        border: '1px dashed #2563EB',
-                                    },
-                                }}
-                            >
-                                Add Email
-                            </Button>
+                            {addEmail && (
+                                <Button
+                                    size="small"
+                                    startIcon={<AddIcon fontSize="small" />}
+                                    onClick={addEmail}
+                                    sx={{
+                                        fontSize: '0.78rem',
+                                        textTransform: 'none',
+                                        fontWeight: 600,
+                                        color: '#2563EB',
+                                        border: '1px dashed #93c5fd',
+                                        borderRadius: '6px',
+                                        px: 1.5,
+                                        py: 0.4,
+                                        '&:hover': {
+                                            backgroundColor: '#eff6ff',
+                                            border: '1px dashed #2563EB',
+                                        },
+                                    }}
+                                >
+                                    Add Email
+                                </Button>
+                            )}
                         </Box>
-                        {form.corporateEmails.length === 0 && (
+                        {(!form?.corporateEmails || form.corporateEmails.length === 0) && (
                             <Box
                                 sx={{
                                     textAlign: 'center',
@@ -237,12 +300,12 @@ export function OverviewTab({
                                 No email addresses added yet
                             </Box>
                         )}
-                        {form.corporateEmails.map((email) => (
+                        {form?.corporateEmails?.map((email) => (
                             <EmailRow
                                 key={email.id}
                                 email={email}
-                                onChange={(updated) => updateEmail(email.id, updated)}
-                                onRemove={() => removeEmail(email.id)}
+                                onChange={(updated) => updateEmail?.(email.id, updated)}
+                                onRemove={() => removeEmail?.(email.id)}
                             />
                         ))}
                     </Box>
@@ -412,35 +475,36 @@ export function OverviewTab({
                             fullWidth
                             size="small"
                             placeholder="e.g. Mohit Traders Private Limited, Delhi"
-                            value={form.mailingName}
-                            onChange={(e) => set('mailingName', e.target.value)}
+                            value={mailingName}
+                            onChange={(e) => {
+                                const val = e.target.value;
+                                setValue('mailingName', val, { shouldValidate: true, shouldDirty: true });
+                                if (set) set('mailingName', val);
+                            }}
+                            onBlur={() => {
+                                setValue('mailingName', getValues('mailingName') || '', { shouldTouch: true });
+                            }}
                             sx={fieldSx}
                         />
                     </FormField>
 
                     {/* Type of Entity */}
-                    <FormField label="Type of Entity" required sx={{ mb: 0 }}>
-                        <StyledSelect
-                            label="Type of Entity"
-                            placeholder="Select Type of Entity"
-                            value={form.typeOfEntity}
-                            onChange={(v) => set('typeOfEntity', v as TypeOfEntity)}
-                            options={ENTITY_TYPES}
-                            required
-                        />
-                    </FormField>
+                    <RhfSelect<OrganizationFormData>
+                        name="typeOfEntity"
+                        label="Type of Entity"
+                        placeholder="Select Type of Entity"
+                        options={ENTITY_TYPES}
+                        required
+                    />
 
                     {/* Customer Type */}
-                    <FormField label="Customer Type" required sx={{ mb: 0 }}>
-                        <StyledSelect
-                            label="Customer Type"
-                            placeholder="Select Customer Type"
-                            value={form.customerType}
-                            onChange={(v) => set('customerType', v as CustomerType)}
-                            options={CUSTOMER_TYPES}
-                            required
-                        />
-                    </FormField>
+                    <RhfSelect<OrganizationFormData>
+                        name="customerType"
+                        label="Customer Type"
+                        placeholder="Select Customer Type"
+                        options={CUSTOMER_TYPES}
+                        required
+                    />
 
                     {/* Showroom / Branch Code */}
                     <FormField
@@ -564,5 +628,50 @@ export function OverviewTab({
                 </Box>
             </Box>
         </Box>
+    );
+}
+
+function FallbackOverviewProvider({
+    children,
+    defaultValues,
+}: {
+    children: React.ReactNode;
+    defaultValues?: OrganizationFormData;
+}) {
+    const methods = useForm<OrganizationFormData>({
+        defaultValues: {
+            organizationName: defaultValues?.organizationName || '',
+            mailingName: defaultValues?.mailingName || '',
+            natureOfBusiness: defaultValues?.natureOfBusiness || '',
+            accountStatus: defaultValues?.accountStatus || 'Active',
+            typeOfEntity: defaultValues?.typeOfEntity || '',
+            customerType: defaultValues?.customerType || '',
+            sapCodeTallyId: defaultValues?.sapCodeTallyId || '',
+            showroomBranchCode: defaultValues?.showroomBranchCode || '',
+            sourceOfLead: defaultValues?.sourceOfLead || '',
+            memberOfParentCorp: defaultValues?.memberOfParentCorp || '',
+            numberOfEmployees: defaultValues?.numberOfEmployees || '',
+            annualTurnover: defaultValues?.annualTurnover || '',
+            description: defaultValues?.description || '',
+            accountVerified: defaultValues?.accountVerified || false,
+            provideSupport: defaultValues?.provideSupport || 'Yes',
+            corporateEmails: defaultValues?.corporateEmails || [],
+            registrationType: (defaultValues?.registrationType as 'Registered' | 'Unregistered') || 'Registered',
+            gstNo: defaultValues?.gstNo || defaultValues?.gstNumber || '',
+            ...defaultValues,
+        },
+    });
+    return <FormProvider {...methods}>{children}</FormProvider>;
+}
+
+export function OverviewTab(props: OverviewTabProps) {
+    const existing = useFormContext<OrganizationFormData>();
+    if (existing) {
+        return <OverviewTabInner {...props} />;
+    }
+    return (
+        <FallbackOverviewProvider defaultValues={props.form}>
+            <OverviewTabInner {...props} />
+        </FallbackOverviewProvider>
     );
 }

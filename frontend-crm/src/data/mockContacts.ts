@@ -8,8 +8,8 @@ export const INITIAL_MOCK_CONTACTS: Contact[] = [
         contactCode: 'CON-1001',
         name: 'Rajesh Sharma',
         organizationName: 'Tata Consultancy Services',
-        mobile: '+91 98112 34567',
-        officePhone: '011-45678901',
+        mobile: '9811234567',
+        officePhone: '0114567890',
         phone3: '',
         phone4: '',
         phone5: '',
@@ -40,8 +40,8 @@ export const INITIAL_MOCK_CONTACTS: Contact[] = [
         contactCode: 'CON-1002',
         name: 'Ananya Deshmukh',
         organizationName: 'Infosys Limited',
-        mobile: '+91 97234 56789',
-        officePhone: '080-28520261',
+        mobile: '9723456789',
+        officePhone: '0802852026',
         phone3: '',
         phone4: '',
         phone5: '',
@@ -72,8 +72,8 @@ export const INITIAL_MOCK_CONTACTS: Contact[] = [
         contactCode: 'CON-1003',
         name: 'Vikram Mehta',
         organizationName: 'Reliance Industries Ltd',
-        mobile: '+91 99887 76655',
-        officePhone: '022-35555000',
+        mobile: '9988776655',
+        officePhone: '0223555500',
         phone3: '',
         phone4: '',
         phone5: '',
@@ -108,7 +108,14 @@ export function getStoredContacts(): Contact[] {
         if (raw) {
             const parsed = JSON.parse(raw);
             if (Array.isArray(parsed) && parsed.length > 0) {
-                return parsed;
+                return parsed.map((contact: Contact) => ({
+                    ...contact,
+                    mobile: contact.mobile ? contact.mobile.replace(/\D/g, '').slice(-10) : contact.mobile,
+                    officePhone: contact.officePhone ? contact.officePhone.replace(/\D/g, '').slice(-10) : contact.officePhone,
+                    phone3: contact.phone3 ? contact.phone3.replace(/\D/g, '').slice(-10) : contact.phone3,
+                    phone4: contact.phone4 ? contact.phone4.replace(/\D/g, '').slice(-10) : contact.phone4,
+                    phone5: contact.phone5 ? contact.phone5.replace(/\D/g, '').slice(-10) : contact.phone5,
+                }));
             }
         }
         localStorage.setItem(CONTACTS_STORAGE_KEY, JSON.stringify(INITIAL_MOCK_CONTACTS));

@@ -44,7 +44,7 @@ export function LeadOverviewSection() {
             >
                 <Box sx={columnSx}>
                     <RhfTextField<LeadFormData> name="name" label="Name" required hint="Contact person name" placeholder="Enter contact person name" />
-                    <RhfTextField<LeadFormData> name="mobile" label="Mobile" required hint="Primary 10-digit number" type="tel" placeholder="+91 98000 00000" />
+                    <RhfTextField<LeadFormData> name="mobile" label="Mobile" required hint="Primary 10-digit number" type="tel" placeholder="e.g. 9811245890" />
                     <RhfEmailList />
                     <RhfTextField<LeadFormData> name="mailingName" label="Mailing Name" hint="As shown on official invoices / letters" placeholder="Official mailing name" />
                     <RhfSelect<LeadFormData> name="designation" label="Designation" options={LEAD_DESIGNATIONS} placeholder="Select Designation" />
@@ -58,7 +58,7 @@ export function LeadOverviewSection() {
                 </Box>
 
                 <Box sx={columnSx}>
-                    <RhfTextField<LeadFormData> name="otherPhone" label="Other Phone" hint="Landline or alternate phone" type="tel" placeholder="e.g. 011-45678900" />
+                    <RhfTextField<LeadFormData> name="otherPhone" label="Other Phone" hint="Landline or alternate phone" type="tel" placeholder="e.g. 0114567890" />
                     <RhfTextField<LeadFormData> name="organizationName" label="Organization Name" hint="Company or business firm name" placeholder="e.g. Acme Industrial Solutions Pvt Ltd" />
                     <RhfSelect<LeadFormData> name="department" label="Department" options={LEAD_DEPARTMENTS} placeholder="Select Department" />
                     <RhfSelect<LeadFormData> name="leadType" label="Lead Type" required hint="Hot / Warm / Cold urgency" options={LEAD_TYPES} placeholder="Select Lead Urgency" />

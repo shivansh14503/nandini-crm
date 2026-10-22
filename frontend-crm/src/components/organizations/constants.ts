@@ -23,7 +23,7 @@ export const NATURE_OF_BUSINESS: NatureOfBusiness[] = [
     'Other',
 ];
 
-export const ACCOUNT_STATUSES: AccountStatus[] = ['Active', 'Inactive', 'Prospect', 'Blacklisted'];
+export const ACCOUNT_STATUSES: AccountStatus[] = ['Active', 'Inactive'];
 
 export const ENTITY_TYPES: TypeOfEntity[] = [
     'Private Limited Company (Pvt. Ltd.)',

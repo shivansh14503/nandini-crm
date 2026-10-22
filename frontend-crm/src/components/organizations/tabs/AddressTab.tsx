@@ -214,6 +214,7 @@ export function AddressTab({
                             value={form.shippingState || ''}
                             onChange={(v) => set('shippingState', v)}
                             options={INDIAN_STATES}
+                            disabled={Boolean(form.copyAddressFromBilling)}
                         />
                     </FormField>
 
@@ -238,6 +239,7 @@ export function AddressTab({
                             value={form.shippingCountry || 'India'}
                             onChange={(v) => set('shippingCountry', v)}
                             options={COUNTRIES}
+                            disabled={Boolean(form.copyAddressFromBilling)}
                         />
                     </FormField>
 

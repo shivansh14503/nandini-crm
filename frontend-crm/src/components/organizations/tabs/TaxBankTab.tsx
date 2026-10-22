@@ -10,11 +10,15 @@ import {
 import AccountBalanceOutlinedIcon from '@mui/icons-material/AccountBalanceOutlined';
 import ReceiptLongOutlinedIcon from '@mui/icons-material/ReceiptLongOutlined';
 
+import { useFormContext, useWatch, FormProvider, useForm } from 'react-hook-form';
+
 import {
     FormField,
     SectionLabel,
     StyledSelect,
     fieldSx,
+    RhfSelect,
+    RhfTextField,
 } from '@/components/forms';
 import { REGISTRATION_TYPES, ACCOUNT_TYPES } from '@/config/constants';
 import type { OrganizationFormData } from '@/types/organization.types';
@@ -24,7 +28,33 @@ export interface TaxBankTabProps {
     set: <K extends keyof OrganizationFormData>(key: K, value: OrganizationFormData[K]) => void;
 }
 
-export function TaxBankTab({ form, set }: TaxBankTabProps) {
+function TaxBankTabInner({ form, set }: TaxBankTabProps) {
+    const { control, setValue } = useFormContext<OrganizationFormData>();
+    const registrationType = (useWatch({ control, name: 'registrationType' }) ?? form?.registrationType ?? 'Registered') as 'Registered' | 'Unregistered';
+    const gstNo = useWatch({ control, name: 'gstNo' }) ?? form?.gstNo ?? form?.gstNumber ?? '';
+
+    // Synchronize registrationType changes
+    React.useEffect(() => {
+        if (set && registrationType) {
+            set('registrationType', registrationType);
+        }
+        if (registrationType === 'Unregistered') {
+            setValue('gstNo', '', { shouldValidate: true });
+            if (set) {
+                set('gstNo', '');
+                set('gstNumber', '');
+            }
+        }
+    }, [registrationType, setValue, set]);
+
+    // Synchronize gstNo changes with external set callback if provided
+    React.useEffect(() => {
+        if (set && gstNo !== undefined) {
+            set('gstNo', gstNo);
+            set('gstNumber', gstNo);
+        }
+    }, [gstNo, set]);
+
     return (
         <Box sx={{ p: { xs: 2.5, md: 3.5 } }}>
             {/* ── Two-column grid ───────────────────────────────── */}
@@ -43,16 +73,13 @@ export function TaxBankTab({ form, set }: TaxBankTabProps) {
                     />
 
                     {/* Registration Type */}
-                    <FormField label="Registration Type" required sx={{ mb: 0 }}>
-                        <StyledSelect
-                            label="Registration Type"
-                            placeholder="Select Registration Type"
-                            value={form.registrationType || 'Registered'}
-                            onChange={(v) => set('registrationType', v)}
-                            options={REGISTRATION_TYPES}
-                            required
-                        />
-                    </FormField>
+                    <RhfSelect<OrganizationFormData>
+                        name="registrationType"
+                        label="Registration Type"
+                        options={['Registered', 'Unregistered']}
+                        required
+                        placeholder="Select Registration Type"
+                    />
 
                     {/* PAN Number */}
                     <FormField
@@ -133,22 +160,16 @@ export function TaxBankTab({ form, set }: TaxBankTabProps) {
                     />
 
                     {/* GST Number */}
-                    <FormField
-                        label="GST Number"
-                        required
-                        hint="15-character GSTIN"
-                        sx={{ mb: 0 }}
-                    >
-                        <TextField
-                            fullWidth
-                            size="small"
+                    {registrationType === 'Registered' && (
+                        <RhfTextField<OrganizationFormData>
+                            name="gstNo"
+                            label="GST Number"
+                            required={registrationType === 'Registered'}
+                            hint="15-character GSTIN"
                             placeholder="e.g. 06AFZFS3757G1Z9"
-                            value={form.gstNumber || ''}
-                            onChange={(e) => set('gstNumber', e.target.value.toUpperCase())}
                             slotProps={{ htmlInput: { maxLength: 15 } }}
-                            sx={fieldSx}
                         />
-                    </FormField>
+                    )}
 
                     {/* CIN No */}
                     <FormField
@@ -221,6 +242,35 @@ export function TaxBankTab({ form, set }: TaxBankTabProps) {
                 </Box>
             </Box>
         </Box>
+    );
+}
+
+function FallbackTaxBankProvider({
+    children,
+    defaultValues,
+}: {
+    children: React.ReactNode;
+    defaultValues?: OrganizationFormData;
+}) {
+    const methods = useForm<OrganizationFormData>({
+        defaultValues: {
+            registrationType: (defaultValues?.registrationType as 'Registered' | 'Unregistered') || 'Registered',
+            gstNo: defaultValues?.gstNo || defaultValues?.gstNumber || '',
+            ...defaultValues,
+        },
+    });
+    return <FormProvider {...methods}>{children}</FormProvider>;
+}
+
+export function TaxBankTab(props: TaxBankTabProps) {
+    const existing = useFormContext<OrganizationFormData>();
+    if (existing) {
+        return <TaxBankTabInner {...props} />;
+    }
+    return (
+        <FallbackTaxBankProvider defaultValues={props.form}>
+            <TaxBankTabInner {...props} />
+        </FallbackTaxBankProvider>
     );
 }
 

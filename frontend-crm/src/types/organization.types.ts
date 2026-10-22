@@ -14,7 +14,7 @@ export type NatureOfBusiness =
     | 'Government / PSU'
     | 'Other';
 
-export type AccountStatus = 'Active' | 'Inactive' | 'Prospect' | 'Blacklisted';
+export type AccountStatus = 'Active' | 'Inactive';
 
 export type TypeOfEntity =
     | 'Private Limited Company (Pvt. Ltd.)'
@@ -91,6 +91,7 @@ export interface OrganizationFormData {
     corporateEmails: CorporateEmail[];
 
     // Billing Address
+    billingAddress?: string;
     billingStreet?: string;
     billingCity?: string;
     billingState?: string;
@@ -99,6 +100,7 @@ export interface OrganizationFormData {
     billingLatitude?: string;
 
     // Shipping Address
+    shippingAddress?: string;
     shippingStreet?: string;
     shippingCity?: string;
     shippingState?: string;
@@ -108,12 +110,13 @@ export interface OrganizationFormData {
     copyAddressFromBilling?: boolean;
 
     // Tax & Bank Details
-    registrationType?: string;
+    registrationType?: 'Registered' | 'Unregistered' | string;
     panNumber?: string;
     msmeRegnNumber?: string;
     accountName?: string;
     bankName?: string;
     bankIfscCode?: string;
+    gstNo?: string;
     gstNumber?: string;
     cinNo?: string;
     tanNumber?: string;

@@ -7,8 +7,8 @@ export const INITIAL_MOCK_LEADS: Lead[] = [
         name: 'Vikram Malhotra',
         organizationName: 'Apex Industrial Solutions Pvt Ltd',
         mailingName: 'Apex Industrial Solutions Pvt Ltd',
-        mobile: '+91 98112 45890',
-        otherPhone: '011-45601290',
+        mobile: '9811245890',
+        otherPhone: '0114560129',
         emailAddresses: [
             {
                 id: 'eml-101',
@@ -64,8 +64,8 @@ export const INITIAL_MOCK_LEADS: Lead[] = [
         name: 'Pooja Agarwal',
         organizationName: 'Sterling Logistics & Cold Chain',
         mailingName: 'Sterling Logistics & Cold Chain LLP',
-        mobile: '+91 98205 12344',
-        otherPhone: '022-27894500',
+        mobile: '9820512344',
+        otherPhone: '0222789450',
         emailAddresses: [
             {
                 id: 'eml-201',
@@ -114,8 +114,8 @@ export const INITIAL_MOCK_LEADS: Lead[] = [
         name: 'Harish Chandra',
         organizationName: 'Chandra Automotives & Spares',
         mailingName: 'M/s Chandra Automotives & Spares',
-        mobile: '+91 94140 88219',
-        otherPhone: '0141-2365411',
+        mobile: '9414088219',
+        otherPhone: '0141236541',
         emailAddresses: [
             {
                 id: 'eml-301',
@@ -164,8 +164,8 @@ export const INITIAL_MOCK_LEADS: Lead[] = [
         name: 'Kavita Sundaram',
         organizationName: 'Velocis Health Tech',
         mailingName: 'Velocis Health Tech Solutions Private Limited',
-        mobile: '+91 97411 90812',
-        otherPhone: '080-41228899',
+        mobile: '9741190812',
+        otherPhone: '0804122889',
         emailAddresses: [
             {
                 id: 'eml-401',
@@ -214,8 +214,8 @@ export const INITIAL_MOCK_LEADS: Lead[] = [
         name: 'Rameshwar Dayal',
         organizationName: 'Dayal Agro Commodity Traders',
         mailingName: 'Dayal Agro Commodity Traders',
-        mobile: '+91 98390 55432',
-        otherPhone: '0522-2618900',
+        mobile: '9839055432',
+        otherPhone: '0522261890',
         emailAddresses: [
             {
                 id: 'eml-501',
@@ -264,8 +264,8 @@ export const INITIAL_MOCK_LEADS: Lead[] = [
         name: 'Deepak Singhania',
         organizationName: 'Singhania Electronics & Appliances',
         mailingName: 'Singhania Electronics Pvt Ltd',
-        mobile: '+91 99100 66782',
-        otherPhone: '011-23861234',
+        mobile: '9910066782',
+        otherPhone: '0112386123',
         emailAddresses: [
             {
                 id: 'eml-601',
@@ -314,8 +314,8 @@ export const INITIAL_MOCK_LEADS: Lead[] = [
         name: 'Sunita Menon',
         organizationName: 'Zenith Biotech Labs',
         mailingName: 'Zenith Biotech Labs LLP',
-        mobile: '+91 94471 22390',
-        otherPhone: '0484-2556789',
+        mobile: '9447122390',
+        otherPhone: '0484255678',
         emailAddresses: [
             {
                 id: 'eml-701',
@@ -364,8 +364,8 @@ export const INITIAL_MOCK_LEADS: Lead[] = [
         name: 'Alok Nath Tiwari',
         organizationName: 'Tiwari Construction & Infra',
         mailingName: 'Tiwari Construction & Infra Pvt Ltd',
-        mobile: '+91 97110 33419',
-        otherPhone: '0120-4991122',
+        mobile: '9711033419',
+        otherPhone: '0120499112',
         emailAddresses: [
             {
                 id: 'eml-801',
@@ -414,7 +414,7 @@ export const INITIAL_MOCK_LEADS: Lead[] = [
         name: 'Rohit Verma',
         organizationName: '',
         mailingName: '',
-        mobile: '+91 98765 43210',
+        mobile: '9876543210',
         otherPhone: '',
         emailAddresses: [
             {
@@ -472,16 +472,21 @@ export function getStoredLeads(): Lead[] {
         }
         const parsed = JSON.parse(item);
         if (Array.isArray(parsed) && parsed.length > 0) {
-            const hasLea1009 = parsed.some((l: Lead) => l.id === 'lea-1009');
+            const sanitized = parsed.map((lead: Lead) => ({
+                ...lead,
+                mobile: lead.mobile ? lead.mobile.replace(/\D/g, '').slice(-10) : lead.mobile,
+                otherPhone: lead.otherPhone ? lead.otherPhone.replace(/\D/g, '').slice(-10) : lead.otherPhone,
+            }));
+            const hasLea1009 = sanitized.some((l: Lead) => l.id === 'lea-1009');
             if (!hasLea1009) {
                 const leadWithoutOrg = INITIAL_MOCK_LEADS.find((l) => l.id === 'lea-1009');
                 if (leadWithoutOrg) {
-                    const updated = [...parsed, leadWithoutOrg];
+                    const updated = [...sanitized, leadWithoutOrg];
                     localStorage.setItem(LEADS_STORAGE_KEY, JSON.stringify(updated));
                     return updated;
                 }
             }
-            return parsed;
+            return sanitized;
         }
     } catch {
         // Fallback to initial seeds

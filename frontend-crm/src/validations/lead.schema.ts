@@ -3,6 +3,8 @@ import {
     requiredString,
     optionalString,
     phoneSchema,
+    requiredPhoneSchema,
+    pinCodeSchema,
 } from './common';
 import { corporateEmailSchema } from './contact.schema';
 
@@ -10,14 +12,7 @@ export const leadFormSchema = z.object({
     // Overview - Left Column
     name: requiredString('Lead Name')
         .max(100, { message: 'Lead Name cannot exceed 100 characters.' }),
-    mobile: z
-        .string()
-        .trim()
-        .min(1, { message: 'Mobile Number is required.' })
-        .refine(
-            (val) => /^[+]?[\d\s\-().]{7,20}$/.test(val),
-            { message: 'Please enter a valid mobile number.' }
-        ),
+    mobile: requiredPhoneSchema('Mobile Number'),
     emailAddresses: z.array(corporateEmailSchema).optional().default([]),
     mailingName: optionalString,
     designation: optionalString,
@@ -33,7 +28,7 @@ export const leadFormSchema = z.object({
     assignedTo: requiredString('Assigned Representative'),
 
     // Overview - Right Column
-    otherPhone: phoneSchema('Other Phone Number'),
+    otherPhone: phoneSchema('Other Phone Number').optional().or(z.literal('')),
     organizationName: optionalString,
     department: optionalString,
     leadType: requiredString('Lead Type'),
@@ -48,7 +43,7 @@ export const leadFormSchema = z.object({
     primaryAddress: optionalString,
     primaryCity: optionalString,
     primaryState: optionalString,
-    primaryPostalCode: optionalString,
+    primaryPostalCode: pinCodeSchema.optional().or(z.literal('')),
     primaryCountry: optionalString.default('India'),
     primaryLatitude: optionalString.default('0.00000000'),
 
@@ -56,7 +51,7 @@ export const leadFormSchema = z.object({
     otherAddress: optionalString,
     otherCity: optionalString,
     otherState: optionalString,
-    otherPostalCode: optionalString,
+    otherPostalCode: pinCodeSchema.optional().or(z.literal('')),
     otherCountry: optionalString.default('India'),
     copyAddressFromLeft: z.boolean().default(false),
     otherLongitude: optionalString.default('0.00000000'),

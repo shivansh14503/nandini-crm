@@ -2,6 +2,7 @@
 
 import { useState, useCallback, useMemo, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import { FormProvider, useForm, type Path } from 'react-hook-form';
 // Icons
 import ArticleOutlinedIcon from '@mui/icons-material/ArticleOutlined';
 import PlaceOutlinedIcon from '@mui/icons-material/PlaceOutlined';
@@ -58,7 +59,7 @@ const DEFAULT_FORM: OrganizationFormData = {
     organizationName: '',
     mailingName: '',
     natureOfBusiness: '',
-    accountStatus: '',
+    accountStatus: 'Active',
     typeOfEntity: '',
     customerType: '',
     sapCodeTallyId: '',
@@ -73,6 +74,7 @@ const DEFAULT_FORM: OrganizationFormData = {
     corporateEmails: [],
 
     // Billing Address
+    billingAddress: '',
     billingStreet: '',
     billingCity: '',
     billingState: '',
@@ -81,6 +83,7 @@ const DEFAULT_FORM: OrganizationFormData = {
     billingLatitude: '0.00000000',
 
     // Shipping Address
+    shippingAddress: '',
     shippingStreet: '',
     shippingCity: '',
     shippingState: '',
@@ -96,6 +99,7 @@ const DEFAULT_FORM: OrganizationFormData = {
     accountName: '',
     bankName: '',
     bankIfscCode: '',
+    gstNo: '',
     gstNumber: '',
     cinNo: '',
     tanNumber: '',
@@ -135,6 +139,11 @@ export default function OrganizationForm({
         severity: 'success',
     });
 
+    const methods = useForm<OrganizationFormData>({
+        defaultValues: { ...DEFAULT_FORM, ...initialData },
+        mode: 'onTouched',
+    });
+
     const defaultBreadcrumbs: BreadcrumbItem[] = [
         { label: 'Sales' },
         { label: 'Organizations', href: ROUTES.ORGANIZATIONS },
@@ -149,14 +158,22 @@ export default function OrganizationForm({
             .getById(organizationId)
             .then((found) => {
                 if (active && found) {
-                    setForm((prev) => ({ ...prev, ...found }));
+                    const normalized: OrganizationFormData = {
+                        ...found,
+                        accountStatus: found.accountStatus === 'Inactive' ? 'Inactive' : 'Active',
+                        billingAddress: found.billingAddress || found.billingStreet || '',
+                        shippingAddress: found.shippingAddress || found.shippingStreet || '',
+                        gstNo: found.gstNo || found.gstNumber || '',
+                    };
+                    setForm((prev) => ({ ...prev, ...normalized }));
+                    methods.reset(normalized);
                 }
             })
             .catch(() => {});
         return () => {
             active = false;
         };
-    }, [organizationId]);
+    }, [organizationId, methods]);
 
     // ── Field updaters ────────────────────────────────────────────────────────
     const set = useCallback(
@@ -164,7 +181,10 @@ export default function OrganizationForm({
             setForm((prev) => {
                 const next = { ...prev, [key]: value };
                 if (next.copyAddressFromBilling) {
-                    if (key === 'billingStreet') next.shippingStreet = value as string;
+                    if (key === 'billingStreet' || key === 'billingAddress') {
+                        next.shippingStreet = value as string;
+                        next.shippingAddress = value as string;
+                    }
                     if (key === 'billingCity') next.shippingCity = value as string;
                     if (key === 'billingState') next.shippingState = value as string;
                     if (key === 'billingPostalCode') next.shippingPostalCode = value as string;
@@ -172,18 +192,24 @@ export default function OrganizationForm({
                 }
                 return next;
             });
+            methods.setValue(key as Path<OrganizationFormData>, value as never, {
+                shouldDirty: true,
+                shouldValidate: true,
+            });
             setIsDirty(true);
         },
-        []
+        [methods]
     );
 
     const handleCopyAddressToggle = (checked: boolean) => {
+        const billingAddr = form.billingAddress || form.billingStreet || '';
         setForm((prev) => ({
             ...prev,
             copyAddressFromBilling: checked,
             ...(checked
                 ? {
-                      shippingStreet: prev.billingStreet || '',
+                      shippingStreet: billingAddr,
+                      shippingAddress: billingAddr,
                       shippingCity: prev.billingCity || '',
                       shippingState: prev.billingState || '',
                       shippingPostalCode: prev.billingPostalCode || '',
@@ -191,6 +217,15 @@ export default function OrganizationForm({
                   }
                 : {}),
         }));
+        methods.setValue('copyAddressFromBilling', checked, { shouldDirty: true });
+        if (checked) {
+            methods.setValue('shippingAddress', billingAddr, { shouldDirty: true });
+            methods.setValue('shippingStreet', billingAddr, { shouldDirty: true });
+            methods.setValue('shippingCity', form.billingCity || '', { shouldDirty: true });
+            methods.setValue('shippingState', form.billingState || '', { shouldDirty: true });
+            methods.setValue('shippingPostalCode', form.billingPostalCode || '', { shouldDirty: true });
+            methods.setValue('shippingCountry', form.billingCountry || 'India', { shouldDirty: true });
+        }
         setIsDirty(true);
     };
 
@@ -203,21 +238,18 @@ export default function OrganizationForm({
             isOptedOut: false,
             isInvalidBounce: false,
         };
-        set('corporateEmails', [...form.corporateEmails, newEmail]);
+        const updated = [...form.corporateEmails, newEmail];
+        set('corporateEmails', updated);
     };
 
     const updateEmail = (id: string, updated: CorporateEmail) => {
-        set(
-            'corporateEmails',
-            form.corporateEmails.map((e) => (e.id === id ? updated : e))
-        );
+        const next = form.corporateEmails.map((e) => (e.id === id ? updated : e));
+        set('corporateEmails', next);
     };
 
     const removeEmail = (id: string) => {
-        set(
-            'corporateEmails',
-            form.corporateEmails.filter((e) => e.id !== id)
-        );
+        const next = form.corporateEmails.filter((e) => e.id !== id);
+        set('corporateEmails', next);
     };
 
     // ── Calculation of completion progress ────────────────────────────────────
@@ -238,7 +270,27 @@ export default function OrganizationForm({
 
     // ── Submit logic with Zod Validation ──────────────────────────────────────
     const handleSubmit = async (redirectAfter: boolean) => {
-        const validation = validateWithToast(organizationFormSchema, form);
+        const currentData = { ...form, ...methods.getValues() };
+        if (!currentData.billingAddress && currentData.billingStreet) {
+            currentData.billingAddress = currentData.billingStreet;
+        }
+        if (!currentData.billingStreet && currentData.billingAddress) {
+            currentData.billingStreet = currentData.billingAddress;
+        }
+        if (!currentData.shippingAddress && currentData.shippingStreet) {
+            currentData.shippingAddress = currentData.shippingStreet;
+        }
+        if (!currentData.shippingStreet && currentData.shippingAddress) {
+            currentData.shippingStreet = currentData.shippingAddress;
+        }
+        if (!currentData.gstNo && currentData.gstNumber) {
+            currentData.gstNo = currentData.gstNumber;
+        }
+        if (!currentData.gstNumber && currentData.gstNo) {
+            currentData.gstNumber = currentData.gstNo;
+        }
+
+        const validation = validateWithToast(organizationFormSchema, currentData);
         if (!validation.success) {
             setToast({ open: true, message: validation.error, severity: 'error' });
             return;
@@ -246,16 +298,17 @@ export default function OrganizationForm({
         setSubmitting(true);
         try {
             if (mode === 'create') {
-                await organizationService.create(form);
+                await organizationService.create(currentData as OrganizationFormData);
                 setToast({ open: true, message: 'Organization created successfully!', severity: 'success' });
                 if (redirectAfter) {
                     setTimeout(() => router.push(ROUTES.ORGANIZATIONS), 800);
                 } else {
                     setForm(DEFAULT_FORM);
+                    methods.reset(DEFAULT_FORM);
                     setIsDirty(false);
                 }
             } else if (mode === 'edit' && organizationId) {
-                await organizationService.update(organizationId, form);
+                await organizationService.update(organizationId, currentData as OrganizationFormData);
                 setToast({ open: true, message: 'Organization updated successfully!', severity: 'success' });
                 setTimeout(() => router.push(ROUTES.ORGANIZATIONS), 800);
             }
@@ -287,27 +340,27 @@ export default function OrganizationForm({
     ], [progressCount, form.billingCity, form.shippingCity]);
 
     return (
-        <CommonFormLayout
-            breadcrumbItems={breadcrumbItems || defaultBreadcrumbs}
-            tabs={tabs}
-            activeTab={activeTab}
-            onTabChange={(tabId) => setActiveTab(tabId as TabKey)}
-            onCancel={handleDiscard}
-            onSave={() => handleSubmit(true)}
-            submitting={submitting}
-            saveLabel={mode === 'edit' ? 'Update Organization' : 'Save Organization'}
-            cancelLabel="Cancel"
-            disableContentPadding
-            toast={
-                <AppToast
-                    open={toast.open}
-                    message={toast.message}
-                    severity={toast.severity}
-                    onClose={() => setToast((t) => ({ ...t, open: false }))}
-                />
-            }
-        >
-
+        <FormProvider {...methods}>
+            <CommonFormLayout
+                breadcrumbItems={breadcrumbItems || defaultBreadcrumbs}
+                tabs={tabs}
+                activeTab={activeTab}
+                onTabChange={(tabId) => setActiveTab(tabId as TabKey)}
+                onCancel={handleDiscard}
+                onSave={() => handleSubmit(true)}
+                submitting={submitting}
+                saveLabel={mode === 'edit' ? 'Update Organization' : 'Save Organization'}
+                cancelLabel="Cancel"
+                disableContentPadding
+                toast={
+                    <AppToast
+                        open={toast.open}
+                        message={toast.message}
+                        severity={toast.severity}
+                        onClose={() => setToast((t) => ({ ...t, open: false }))}
+                    />
+                }
+            >
                 {/* ── Tab Content Panels ────────────────────────────────────── */}
                 {activeTab === 'overview' && (
                     <OverviewTab
@@ -340,6 +393,7 @@ export default function OrganizationForm({
                         set={set}
                     />
                 )}
-        </CommonFormLayout>
+            </CommonFormLayout>
+        </FormProvider>
     );
 }

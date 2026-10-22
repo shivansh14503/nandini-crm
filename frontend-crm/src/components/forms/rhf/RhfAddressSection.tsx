@@ -55,7 +55,7 @@ export function RhfAddressSection<T extends FieldValues>({
         country: 'shippingCountry' as Path<T>,
     },
     copyFieldName = 'copyAddressFromBilling' as Path<T>,
-    copyLabel = 'Copy billing address to shipping',
+    copyLabel = 'Copy address from left',
     required = true,
     disabled = false,
 }: RhfAddressSectionProps<T>) {
@@ -185,33 +185,33 @@ export function RhfAddressSection<T extends FieldValues>({
                     minRows={3}
                     maxRows={4}
                     placeholder="Enter shipping address..."
-                    disabled={copy || disabled}
+                    disabled={copy ? true : disabled}
                 />
                 <RhfTextField<T>
                     name={shippingFields.city}
                     label="City"
                     placeholder="Enter delivery city"
-                    disabled={copy || disabled}
+                    disabled={copy ? true : disabled}
                 />
                 <RhfSelect<T>
                     name={shippingFields.state}
                     label="State / Region"
                     options={INDIAN_STATES}
                     placeholder="Select State / Region"
-                    disabled={copy || disabled}
+                    disabled={copy ? true : disabled}
                 />
                 <RhfTextField<T>
                     name={shippingFields.postalCode}
                     label="Postal Code (PIN)"
                     placeholder="Enter delivery PIN code"
-                    disabled={copy || disabled}
+                    disabled={copy ? true : disabled}
                 />
                 <RhfSelect<T>
                     name={shippingFields.country}
                     label="Country"
                     options={COUNTRIES}
                     placeholder="Select Country"
-                    disabled={copy || disabled}
+                    disabled={copy ? true : disabled}
                 />
             </Box>
         </Box>
