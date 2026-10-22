@@ -19,7 +19,7 @@ import { AppToast } from '../common/AppToast';
 import type { DataTableColumn, DataTableFilterItem } from '../common/DataTable';
 import { ROUTES } from '../../config/constants';
 import type { Lead } from '../../types/lead.types';
-import { leadService } from '@/services';
+import { leadService, subscribeCrmSync } from '@/services';
 import type { LeadFilterTab } from './master';
 import { LeadDetailDrawer } from './LeadDetailDrawer';
 
@@ -48,7 +48,12 @@ export function LeadsMasterView() {
     const todayStr = useMemo(() => new Date().toISOString().split('T')[0], []);
 
     const loadLeads = useCallback(() => {
-        setLeads(leadService.getAllSync());
+        const data = leadService.getAllSync();
+        setLeads(data);
+        setSelectedDrawerLead((prev) => {
+            if (!prev) return null;
+            return data.find((l) => l.id === prev.id) || null;
+        });
     }, []);
 
     useEffect(() => {
@@ -56,13 +61,40 @@ export function LeadsMasterView() {
         leadService
             .getAll()
             .then((data) => {
-                if (active) setLeads(data);
+                if (active) {
+                    setLeads(data);
+                    setSelectedDrawerLead((prev) => {
+                        if (!prev) return null;
+                        return data.find((l) => l.id === prev.id) || null;
+                    });
+                }
             })
             .catch(() => {});
         return () => {
             active = false;
         };
     }, []);
+
+    useEffect(() => {
+        const handleFocus = () => {
+            loadLeads();
+        };
+        const handleVisibility = () => {
+            if (document.visibilityState === 'visible') {
+                loadLeads();
+            }
+        };
+
+        window.addEventListener('focus', handleFocus);
+        document.addEventListener('visibilitychange', handleVisibility);
+        const unsubscribe = subscribeCrmSync(loadLeads);
+
+        return () => {
+            window.removeEventListener('focus', handleFocus);
+            document.removeEventListener('visibilitychange', handleVisibility);
+            unsubscribe();
+        };
+    }, [loadLeads]);
 
     // ── Filter Tabs Configuration ─────────────────────────────────────────────
     const filterItems: DataTableFilterItem<LeadFilterTab>[] = useMemo(() => {

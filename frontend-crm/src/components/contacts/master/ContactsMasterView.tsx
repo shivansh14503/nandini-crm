@@ -14,7 +14,7 @@ import { CommonMasterView } from '../../common/CommonMasterView';
 import { AppToast } from '../../common/AppToast';
 import type { DataTableColumn, DataTableFilterItem } from '../../common/DataTable';
 import { ROUTES } from '../../../config/constants';
-import { contactService } from '@/services';
+import { contactService, subscribeCrmSync } from '@/services';
 import type { Contact } from '../../../types/contact.types';
 import type { ContactFilterTab } from './types';
 import { ContactDetailDrawer } from '../ContactDetailDrawer';
@@ -43,7 +43,12 @@ export function ContactsMasterView() {
 
     // ── Load Contacts via Service Layer ─────────────────────────────────────
     const loadContacts = useCallback(() => {
-        setContacts(contactService.getAllSync());
+        const data = contactService.getAllSync();
+        setContacts(data);
+        setSelectedDrawerContact((prev) => {
+            if (!prev) return null;
+            return data.find((c) => c.id === prev.id) || null;
+        });
     }, []);
 
     useEffect(() => {
@@ -51,13 +56,40 @@ export function ContactsMasterView() {
         contactService
             .getAll()
             .then((data) => {
-                if (active) setContacts(data);
+                if (active) {
+                    setContacts(data);
+                    setSelectedDrawerContact((prev) => {
+                        if (!prev) return null;
+                        return data.find((c) => c.id === prev.id) || null;
+                    });
+                }
             })
             .catch(() => {});
         return () => {
             active = false;
         };
     }, []);
+
+    useEffect(() => {
+        const handleFocus = () => {
+            loadContacts();
+        };
+        const handleVisibility = () => {
+            if (document.visibilityState === 'visible') {
+                loadContacts();
+            }
+        };
+
+        window.addEventListener('focus', handleFocus);
+        document.addEventListener('visibilitychange', handleVisibility);
+        const unsubscribe = subscribeCrmSync(loadContacts);
+
+        return () => {
+            window.removeEventListener('focus', handleFocus);
+            document.removeEventListener('visibilitychange', handleVisibility);
+            unsubscribe();
+        };
+    }, [loadContacts]);
 
     // ── Filter Tabs Configuration ────────────────────────────────────────────
     const filterItems: DataTableFilterItem<ContactFilterTab>[] = useMemo(() => {

@@ -16,7 +16,7 @@ import { AppToast } from '../common/AppToast';
 import type { DataTableColumn, DataTableFilterItem } from '../common/DataTable';
 import { ROUTES } from '@/config/constants';
 import type { Quotation } from '@/types/quotation.types';
-import { quotationService } from '@/services/quotation.service';
+import { quotationService, subscribeCrmSync } from '@/services';
 import { QuotationDetailDrawer } from './QuotationDetailDrawer';
 
 export type QuotationFilterTab = 'all' | 'draft' | 'sent' | 'accepted' | 'rejected';
@@ -54,6 +54,10 @@ export function QuotationsMasterView() {
     const loadQuotations = useCallback(() => {
         const data = quotationService.getAllSync();
         setQuotations(data);
+        setSelectedDrawerQuotation((prev) => {
+            if (!prev) return null;
+            return data.find((q) => q.id === prev.id) || null;
+        });
     }, []);
 
     const handleDelete = async (id: string) => {
@@ -95,13 +99,40 @@ export function QuotationsMasterView() {
         quotationService
             .getAll()
             .then((data) => {
-                if (active) setQuotations(data);
+                if (active) {
+                    setQuotations(data);
+                    setSelectedDrawerQuotation((prev) => {
+                        if (!prev) return null;
+                        return data.find((q) => q.id === prev.id) || null;
+                    });
+                }
             })
             .catch(() => {
                 loadQuotations();
             });
         return () => {
             active = false;
+        };
+    }, [loadQuotations]);
+
+    useEffect(() => {
+        const handleFocus = () => {
+            loadQuotations();
+        };
+        const handleVisibility = () => {
+            if (document.visibilityState === 'visible') {
+                loadQuotations();
+            }
+        };
+
+        window.addEventListener('focus', handleFocus);
+        document.addEventListener('visibilitychange', handleVisibility);
+        const unsubscribe = subscribeCrmSync(loadQuotations);
+
+        return () => {
+            window.removeEventListener('focus', handleFocus);
+            document.removeEventListener('visibilitychange', handleVisibility);
+            unsubscribe();
         };
     }, [loadQuotations]);
 

@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Box, Typography, Chip, Divider } from '@mui/material';
 
@@ -20,6 +20,7 @@ import PublishedWithChangesIcon from '@mui/icons-material/PublishedWithChanges';
 
 import { ROUTES } from '@/config/constants';
 import type { Lead } from '@/types/lead.types';
+import { leadService, subscribeCrmSync } from '@/services';
 import {
     EntityDetailDrawer,
     DrawerSectionCard,
@@ -44,9 +45,33 @@ export function LeadDetailDrawer({
     open,
     onClose,
     onEdit,
+    onLeadUpdated,
     onShowToast,
 }: LeadDetailDrawerProps) {
     const router = useRouter();
+
+    const [currentLead, setCurrentLead] = useState<Lead | null>(lead);
+    const [, setSyncVersion] = useState(0);
+
+    useEffect(() => {
+        setCurrentLead(lead);
+    }, [lead]);
+
+    useEffect(() => {
+        if (!open || !lead?.id) return;
+
+        const refreshLead = () => {
+            const fresh = leadService.getByIdSync(lead.id);
+            if (fresh) {
+                setCurrentLead(fresh);
+                onLeadUpdated?.(fresh);
+            }
+            setSyncVersion((v) => v + 1);
+        };
+
+        const unsubscribe = subscribeCrmSync(refreshLead);
+        return unsubscribe;
+    }, [open, lead?.id, onLeadUpdated]);
 
     const [toast, setToast] = useState<{
         open: boolean;
@@ -58,9 +83,9 @@ export function LeadDetailDrawer({
         severity: 'error',
     });
 
-    if (!lead) return null;
+    if (!lead && !currentLead) return null;
 
-    const l = lead;
+    const l = currentLead || lead!;
 
     const triggerToast = (message: string, severity: 'success' | 'error' | 'info' | 'warning' = 'error') => {
         setToast({ open: true, message, severity });

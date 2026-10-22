@@ -14,6 +14,7 @@ import { leadService } from './lead.service';
 import { organizationService } from './organization.service';
 import { contactService } from './contact.service';
 import { opportunityService } from './opportunity.service';
+import { notifyCrmUpdate } from './crmSync';
 
 export interface LeadConversionResult {
     organization: ExtendedOrganization;
@@ -210,6 +211,7 @@ export async function convertLead(
 
     const opportunity = await opportunityService.create(toOpportunityPayload(values, organization, contact));
     await leadService.update(leadId, { status: 'Converted' });
+    notifyCrmUpdate('leadConversion', leadId);
 
     return { organization, contact, opportunity, organizationCreated, contactCreated };
 }

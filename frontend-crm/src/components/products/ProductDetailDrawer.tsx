@@ -1,6 +1,6 @@
 'use client';
 
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Box, Typography, Chip, Divider } from '@mui/material';
 
@@ -15,6 +15,7 @@ import GavelOutlinedIcon from '@mui/icons-material/GavelOutlined';
 
 import { ROUTES } from '@/config/constants';
 import type { Product } from '@/types/product.types';
+import { productService, subscribeCrmSync } from '@/services';
 import {
     EntityDetailDrawer,
     DrawerSectionCard,
@@ -40,9 +41,31 @@ export function ProductDetailDrawer({
 }: ProductDetailDrawerProps) {
     const router = useRouter();
 
-    if (!product) return null;
+    const [currentProduct, setCurrentProduct] = useState<Product | null>(product);
+    const [, setSyncVersion] = useState(0);
 
-    const p = product;
+    useEffect(() => {
+        setCurrentProduct(product);
+    }, [product]);
+
+    useEffect(() => {
+        if (!open || !product?.id) return;
+
+        const refreshProduct = () => {
+            const fresh = productService.getByIdSync(product.id);
+            if (fresh) {
+                setCurrentProduct(fresh);
+            }
+            setSyncVersion((v) => v + 1);
+        };
+
+        const unsubscribe = subscribeCrmSync(refreshProduct);
+        return unsubscribe;
+    }, [open, product?.id]);
+
+    if (!product && !currentProduct) return null;
+
+    const p = currentProduct || product!;
 
     const handleEdit = () => {
         if (onEdit) {

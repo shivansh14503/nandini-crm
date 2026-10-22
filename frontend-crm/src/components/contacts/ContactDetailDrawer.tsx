@@ -1,6 +1,6 @@
 'use client';
 
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Box, Typography, Chip, Divider } from '@mui/material';
 
@@ -14,6 +14,7 @@ import TuneOutlinedIcon from '@mui/icons-material/TuneOutlined';
 
 import { ROUTES } from '@/config/constants';
 import type { Contact } from '@/types/contact.types';
+import { contactService, subscribeCrmSync } from '@/services';
 import {
     EntityDetailDrawer,
     DrawerSectionCard,
@@ -39,9 +40,31 @@ export function ContactDetailDrawer({
 }: ContactDetailDrawerProps) {
     const router = useRouter();
 
-    if (!contact) return null;
+    const [currentContact, setCurrentContact] = useState<Contact | null>(contact);
+    const [, setSyncVersion] = useState(0);
 
-    const c = contact;
+    useEffect(() => {
+        setCurrentContact(contact);
+    }, [contact]);
+
+    useEffect(() => {
+        if (!open || !contact?.id) return;
+
+        const refreshContact = () => {
+            const fresh = contactService.getByIdSync(contact.id);
+            if (fresh) {
+                setCurrentContact(fresh);
+            }
+            setSyncVersion((v) => v + 1);
+        };
+
+        const unsubscribe = subscribeCrmSync(refreshContact);
+        return unsubscribe;
+    }, [open, contact?.id]);
+
+    if (!contact && !currentContact) return null;
+
+    const c = currentContact || contact!;
 
     const handleEdit = () => {
         if (onEdit) {

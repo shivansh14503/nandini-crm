@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Box, Typography, IconButton, Button, Chip, Divider } from '@mui/material';
 
@@ -19,6 +19,7 @@ import VerifiedUserOutlinedIcon from '@mui/icons-material/VerifiedUserOutlined';
 
 import { ROUTES } from '@/config/constants';
 import type { ExtendedOrganization } from '@/types/organization.types';
+import { organizationService, subscribeCrmSync } from '@/services';
 import {
     EntityDetailDrawer,
     DrawerSectionCard,
@@ -45,10 +46,31 @@ export function OrganizationDetailDrawer({
 }: OrganizationDetailDrawerProps) {
     const router = useRouter();
     const [showBankAccount, setShowBankAccount] = useState(false);
+    const [currentOrg, setCurrentOrg] = useState<ExtendedOrganization | null>(organization);
+    const [, setSyncVersion] = useState(0);
 
-    if (!organization) return null;
+    useEffect(() => {
+        setCurrentOrg(organization);
+    }, [organization]);
 
-    const org = organization;
+    useEffect(() => {
+        if (!open || !organization?.id) return;
+
+        const refreshOrg = () => {
+            const fresh = organizationService.getByIdSync(organization.id);
+            if (fresh) {
+                setCurrentOrg(fresh);
+            }
+            setSyncVersion((v) => v + 1);
+        };
+
+        const unsubscribe = subscribeCrmSync(refreshOrg);
+        return unsubscribe;
+    }, [open, organization?.id]);
+
+    if (!organization && !currentOrg) return null;
+
+    const org = currentOrg || organization!;
 
     const handleEdit = () => {
         if (onEdit) {

@@ -10,5 +10,6 @@ export * from './organization.service';
 export * from './product.service';
 export * from './leadConversion.service';
 export * from './quotation.service';
+export * from './crmSync';
 
 export const authApi = authService;

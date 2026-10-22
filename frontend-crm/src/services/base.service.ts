@@ -1,6 +1,7 @@
 import { ENV } from '../config/env';
 import type { ApiResponse, PaginatedResponse, PaginationParams } from '../types/api.types';
 import { apiClient } from './apiClient';
+import { notifyCrmUpdate } from './crmSync';
 
 export interface CrudMockAdapter<T, CreateDto, UpdateDto> {
     getAll: () => T[];
@@ -105,7 +106,9 @@ export function createCrudService<T, CreateDto = Partial<T>, UpdateDto = Partial
 
         create: async (data: CreateDto): Promise<T> => {
             if (ENV.USE_MOCK && mockAdapter) {
-                return mockAdapter.create(data);
+                const res = mockAdapter.create(data);
+                notifyCrmUpdate(cleanEndpoint);
+                return res;
             }
 
             try {
@@ -118,16 +121,23 @@ export function createCrudService<T, CreateDto = Partial<T>, UpdateDto = Partial
                     const existing = mockAdapter.getAll();
                     mockAdapter.saveAll([created, ...existing]);
                 }
+                notifyCrmUpdate(cleanEndpoint);
                 return created;
             } catch (err) {
-                if (mockAdapter) return mockAdapter.create(data);
+                if (mockAdapter) {
+                    const res = mockAdapter.create(data);
+                    notifyCrmUpdate(cleanEndpoint);
+                    return res;
+                }
                 throw err;
             }
         },
 
         update: async (id: string, data: UpdateDto): Promise<T | null> => {
             if (ENV.USE_MOCK && mockAdapter) {
-                return mockAdapter.update(id, data);
+                const res = mockAdapter.update(id, data);
+                notifyCrmUpdate(cleanEndpoint, id);
+                return res;
             }
 
             try {
@@ -139,16 +149,23 @@ export function createCrudService<T, CreateDto = Partial<T>, UpdateDto = Partial
                 if (mockAdapter) {
                     mockAdapter.update(id, data);
                 }
+                notifyCrmUpdate(cleanEndpoint, id);
                 return updated;
             } catch (err) {
-                if (mockAdapter) return mockAdapter.update(id, data);
+                if (mockAdapter) {
+                    const res = mockAdapter.update(id, data);
+                    notifyCrmUpdate(cleanEndpoint, id);
+                    return res;
+                }
                 throw err;
             }
         },
 
         delete: async (id: string): Promise<boolean> => {
             if (ENV.USE_MOCK && mockAdapter) {
-                return mockAdapter.delete(id);
+                const res = mockAdapter.delete(id);
+                notifyCrmUpdate(cleanEndpoint, id);
+                return res;
             }
 
             try {
@@ -156,16 +173,23 @@ export function createCrudService<T, CreateDto = Partial<T>, UpdateDto = Partial
                 if (mockAdapter) {
                     mockAdapter.delete(id);
                 }
+                notifyCrmUpdate(cleanEndpoint, id);
                 return true;
             } catch (err) {
-                if (mockAdapter) return mockAdapter.delete(id);
+                if (mockAdapter) {
+                    const res = mockAdapter.delete(id);
+                    notifyCrmUpdate(cleanEndpoint, id);
+                    return res;
+                }
                 throw err;
             }
         },
 
         deleteBulk: async (ids: string[]): Promise<boolean> => {
             if (ENV.USE_MOCK && mockAdapter) {
-                return mockAdapter.deleteBulk(ids);
+                const res = mockAdapter.deleteBulk(ids);
+                notifyCrmUpdate(cleanEndpoint);
+                return res;
             }
 
             try {
@@ -173,9 +197,14 @@ export function createCrudService<T, CreateDto = Partial<T>, UpdateDto = Partial
                 if (mockAdapter) {
                     mockAdapter.deleteBulk(ids);
                 }
+                notifyCrmUpdate(cleanEndpoint);
                 return true;
             } catch (err) {
-                if (mockAdapter) return mockAdapter.deleteBulk(ids);
+                if (mockAdapter) {
+                    const res = mockAdapter.deleteBulk(ids);
+                    notifyCrmUpdate(cleanEndpoint);
+                    return res;
+                }
                 throw err;
             }
         },
@@ -190,6 +219,7 @@ export function createCrudService<T, CreateDto = Partial<T>, UpdateDto = Partial
 
         saveAllSync: (items: T[]): void => {
             mockAdapter?.saveAll?.(items);
+            notifyCrmUpdate(cleanEndpoint);
         },
     };
 }

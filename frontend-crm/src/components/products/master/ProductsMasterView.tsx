@@ -12,7 +12,7 @@ import { AppToast } from '../../common/AppToast';
 import type { DataTableColumn, DataTableFilterItem } from '../../common/DataTable';
 import { ROUTES } from '../../../config/constants';
 import type { Product } from '../../../types/product.types';
-import { productService } from '@/services';
+import { productService, subscribeCrmSync } from '@/services';
 import type { ProductFilterTab } from './types';
 import { ProductDetailDrawer } from '../ProductDetailDrawer';
 
@@ -45,7 +45,12 @@ export function ProductsMasterView() {
     });
 
     const loadProducts = useCallback(() => {
-        setProducts(productService.getAllSync());
+        const data = productService.getAllSync();
+        setProducts(data);
+        setSelectedDrawerProduct((prev) => {
+            if (!prev) return null;
+            return data.find((p) => p.id === prev.id) || null;
+        });
     }, []);
 
     useEffect(() => {
@@ -53,13 +58,40 @@ export function ProductsMasterView() {
         productService
             .getAll()
             .then((data) => {
-                if (active) setProducts(data);
+                if (active) {
+                    setProducts(data);
+                    setSelectedDrawerProduct((prev) => {
+                        if (!prev) return null;
+                        return data.find((p) => p.id === prev.id) || null;
+                    });
+                }
             })
             .catch(() => {});
         return () => {
             active = false;
         };
     }, []);
+
+    useEffect(() => {
+        const handleFocus = () => {
+            loadProducts();
+        };
+        const handleVisibility = () => {
+            if (document.visibilityState === 'visible') {
+                loadProducts();
+            }
+        };
+
+        window.addEventListener('focus', handleFocus);
+        document.addEventListener('visibilitychange', handleVisibility);
+        const unsubscribe = subscribeCrmSync(loadProducts);
+
+        return () => {
+            window.removeEventListener('focus', handleFocus);
+            document.removeEventListener('visibilitychange', handleVisibility);
+            unsubscribe();
+        };
+    }, [loadProducts]);
 
     // ── Filter Logic ──────────────────────────────────────────────────────────
     const filteredProducts = useMemo(() => {

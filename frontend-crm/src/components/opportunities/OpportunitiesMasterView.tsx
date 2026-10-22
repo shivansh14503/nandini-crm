@@ -18,6 +18,7 @@ import type { DataTableColumn, DataTableFilterItem } from '../common/DataTable';
 import { ROUTES } from '../../config/constants';
 import type { Opportunity } from '../../types/opportunity.types';
 import { opportunityService } from '../../services/opportunity.service';
+import { subscribeCrmSync } from '@/services';
 import type { OpportunityFilterTab, OpportunitySortField } from './master';
 import { OpportunityDetailDrawer } from './OpportunityDetailDrawer';
 
@@ -55,6 +56,10 @@ export function OpportunitiesMasterView() {
     const loadOpportunities = useCallback(() => {
         const data = opportunityService.getAllOpportunities();
         setOpportunities(data);
+        setSelectedDrawerOpp((prev) => {
+            if (!prev) return null;
+            return data.find((o) => o.id === prev.id) || null;
+        });
     }, []);
 
     useEffect(() => {
@@ -62,13 +67,40 @@ export function OpportunitiesMasterView() {
         opportunityService
             .getAll()
             .then((data) => {
-                if (active) setOpportunities(data);
+                if (active) {
+                    setOpportunities(data);
+                    setSelectedDrawerOpp((prev) => {
+                        if (!prev) return null;
+                        return data.find((o) => o.id === prev.id) || null;
+                    });
+                }
             })
             .catch(() => {});
         return () => {
             active = false;
         };
     }, []);
+
+    useEffect(() => {
+        const handleFocus = () => {
+            loadOpportunities();
+        };
+        const handleVisibility = () => {
+            if (document.visibilityState === 'visible') {
+                loadOpportunities();
+            }
+        };
+
+        window.addEventListener('focus', handleFocus);
+        document.addEventListener('visibilitychange', handleVisibility);
+        const unsubscribe = subscribeCrmSync(loadOpportunities);
+
+        return () => {
+            window.removeEventListener('focus', handleFocus);
+            document.removeEventListener('visibilitychange', handleVisibility);
+            unsubscribe();
+        };
+    }, [loadOpportunities]);
 
     // ── Filter Tabs Configuration ─────────────────────────────────────────────
     const filterItems: DataTableFilterItem<OpportunityFilterTab>[] = useMemo(() => {

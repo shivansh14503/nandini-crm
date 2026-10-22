@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Box, Typography, Chip, Divider } from '@mui/material';
 
@@ -23,7 +23,7 @@ import {
     type AuditRevisionItem,
 } from '@/components/common/Drawer';
 import { AppToast } from '@/components/common/AppToast';
-import { organizationService, quotationService } from '@/services';
+import { organizationService, quotationService, opportunityService, subscribeCrmSync } from '@/services';
 import { OPPORTUNITY_FORM_TABS } from './OpportunityForm';
 
 export interface OpportunityDetailDrawerProps {
@@ -43,6 +43,28 @@ export function OpportunityDetailDrawer({
 }: OpportunityDetailDrawerProps) {
     const router = useRouter();
 
+    const [currentOpp, setCurrentOpp] = useState<Opportunity | null>(opportunity);
+    const [, setSyncVersion] = useState(0);
+
+    useEffect(() => {
+        setCurrentOpp(opportunity);
+    }, [opportunity]);
+
+    useEffect(() => {
+        if (!open || !opportunity?.id) return;
+
+        const refreshLinkedData = () => {
+            const freshOpp = opportunityService.getOpportunityById(opportunity.id);
+            if (freshOpp) {
+                setCurrentOpp(freshOpp);
+            }
+            setSyncVersion((v) => v + 1);
+        };
+
+        const unsubscribe = subscribeCrmSync(refreshLinkedData);
+        return unsubscribe;
+    }, [open, opportunity?.id]);
+
     const [toast, setToast] = useState<{
         open: boolean;
         message: string;
@@ -53,9 +75,9 @@ export function OpportunityDetailDrawer({
         severity: 'error',
     });
 
-    if (!opportunity) return null;
+    if (!opportunity && !currentOpp) return null;
 
-    const opp = opportunity;
+    const opp = currentOpp || opportunity!;
 
     const triggerToast = (
         message: string,

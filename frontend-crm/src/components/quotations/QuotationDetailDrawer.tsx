@@ -1,6 +1,6 @@
 'use client';
 
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import {
     Box,
@@ -25,6 +25,7 @@ import EditOutlinedIcon from '@mui/icons-material/EditOutlined';
 
 import { ROUTES } from '@/config/constants';
 import type { Quotation } from '@/types/quotation.types';
+import { quotationService, subscribeCrmSync } from '@/services';
 import {
     EntityDetailDrawer,
     DrawerSectionCard,
@@ -49,14 +50,39 @@ const formatCurrency = (val: number = 0) =>
     }).format(val);
 
 export function QuotationDetailDrawer({
-    quotation,
+    quotation: initialQuotation,
     open,
     onClose,
     onEdit,
+    onShowToast,
 }: QuotationDetailDrawerProps) {
     const router = useRouter();
 
-    if (!quotation) return null;
+    const [currentQuotation, setCurrentQuotation] = useState<Quotation | null>(initialQuotation);
+    const [, setSyncVersion] = useState(0);
+
+    useEffect(() => {
+        setCurrentQuotation(initialQuotation);
+    }, [initialQuotation]);
+
+    useEffect(() => {
+        if (!open || !initialQuotation?.id) return;
+
+        const refreshQuote = () => {
+            const fresh = quotationService.getByIdSync(initialQuotation.id);
+            if (fresh) {
+                setCurrentQuotation(fresh);
+            }
+            setSyncVersion((v) => v + 1);
+        };
+
+        const unsubscribe = subscribeCrmSync(refreshQuote);
+        return unsubscribe;
+    }, [open, initialQuotation?.id]);
+
+    if (!initialQuotation && !currentQuotation) return null;
+
+    const quotation = currentQuotation || initialQuotation!;
 
     const handleEdit = () => {
         if (onEdit) {

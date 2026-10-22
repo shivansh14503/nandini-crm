@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import {
     Box,
@@ -19,7 +19,7 @@ import { ROUTES } from '../../config/constants';
 import { CommonMasterView } from '../common/CommonMasterView';
 import { AppToast } from '../common/AppToast';
 import type { DataTableColumn, DataTableFilterItem } from '../common/DataTable';
-import { organizationService } from '@/services';
+import { organizationService, subscribeCrmSync } from '@/services';
 import type { ExtendedOrganization } from '@/types/organization.types';
 import { OrganizationDetailDrawer } from './OrganizationDetailDrawer';
 import type { FilterTab, SortField } from './master';
@@ -64,18 +64,54 @@ export function OrganizationsMasterView() {
         severity: 'success',
     });
 
+    const loadOrganizations = useCallback(() => {
+        const data = organizationService.getAllSync();
+        setOrganizations(data);
+        setSelectedDrawerOrg((prev) => {
+            if (!prev) return null;
+            return data.find((o) => o.id === prev.id) || null;
+        });
+    }, []);
+
     useEffect(() => {
         let active = true;
         organizationService
             .getAll()
             .then((data) => {
-                if (active) setOrganizations(data);
+                if (active) {
+                    setOrganizations(data);
+                    setSelectedDrawerOrg((prev) => {
+                        if (!prev) return null;
+                        return data.find((o) => o.id === prev.id) || null;
+                    });
+                }
             })
             .catch(() => {});
         return () => {
             active = false;
         };
     }, []);
+
+    useEffect(() => {
+        const handleFocus = () => {
+            loadOrganizations();
+        };
+        const handleVisibility = () => {
+            if (document.visibilityState === 'visible') {
+                loadOrganizations();
+            }
+        };
+
+        window.addEventListener('focus', handleFocus);
+        document.addEventListener('visibilitychange', handleVisibility);
+        const unsubscribe = subscribeCrmSync(loadOrganizations);
+
+        return () => {
+            window.removeEventListener('focus', handleFocus);
+            document.removeEventListener('visibilitychange', handleVisibility);
+            unsubscribe();
+        };
+    }, [loadOrganizations]);
 
     // ── Filter & Search Logic ─────────────────────────────────────────────────
     const filteredOrganizations = useMemo(() => {
