@@ -481,7 +481,7 @@ export function RelatedRecordsTableView({
         }
     };
 
-    const effectiveRightOffset = isRightDrawerCollapsed ? 24 : rightOffset;
+    const effectiveRightOffset = isRightDrawerCollapsed ? 28 : rightOffset;
 
     return (
         <Box
@@ -492,16 +492,13 @@ export function RelatedRecordsTableView({
                 bottom: 0,
                 left: leftOffset,
                 right: effectiveRightOffset,
-                zIndex: 1300,
+                zIndex: 1290, // Tucks nicely underneath both side panels
                 backgroundColor: '#ffffff',
-                borderRight: '1px solid #e2e8f0',
-                filter: 'none !important',
-                backdropFilter: 'none !important',
-                WebkitBackdropFilter: 'none !important',
+                borderRight: '1px solid #cbd5e1', // Adds a clean edge
                 display: 'flex',
                 flexDirection: 'column',
                 transition: 'left 0.25s cubic-bezier(0.4, 0, 0.2, 1), right 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
-                boxShadow: '0 4px 20px rgba(0,0,0,0.08)',
+                boxShadow: 'none', // Remove heavy shadow, let the right drawer cast its shadow over this
                 overflow: 'hidden',
             }}
         >

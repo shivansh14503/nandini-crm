@@ -415,9 +415,9 @@ export function CommonMasterView<T = unknown, TFilter extends string = string>({
             {/* ── Layered LIFO Drawer Stack Z-Index Hierarchy ─────────────── */}
             <GlobalStyles
                 styles={{
-                    // Primary Right Drawer (z-index: 1290) & Main Backdrop (z-index: 1200)
+                    // Primary Right Drawer (z-index: 1310) - Elevates above Middle Panel (1290)
                     '.MuiModal-root.MuiDrawer-root': {
-                        zIndex: '1290 !important',
+                        zIndex: '1310 !important',
                         ...(relatedRecordsTable
                             ? {
                                   pointerEvents: 'none',
@@ -426,6 +426,7 @@ export function CommonMasterView<T = unknown, TFilter extends string = string>({
                     },
                     '.MuiModal-root.MuiDrawer-root .MuiDrawer-paper': {
                         pointerEvents: 'auto',
+                        boxShadow: '-8px 0 32px rgba(15, 23, 42, 0.12)', // Cast a clean drawer shadow over middle panel
                     },
                     '.MuiModal-root.MuiDrawer-root > .MuiBackdrop-root': {
                         zIndex: -1,
@@ -460,7 +461,7 @@ export function CommonMasterView<T = unknown, TFilter extends string = string>({
             {/* 1. Left Related Modules Sidebar (z-index: 1300) */}
             {relatedSidebar}
 
-            {/* 2. Middle Related Records Table (z-index: 1300, outside Paper blur) */}
+            {/* 2. Middle Related Records Table (z-index: 1290, outside Paper blur) */}
             {React.isValidElement<{
                 rightOffset?: number;
                 isRightDrawerCollapsed?: boolean;
@@ -469,7 +470,7 @@ export function CommonMasterView<T = unknown, TFilter extends string = string>({
                       isRightDrawerCollapsed,
                       rightOffset: isRightDrawerCollapsed
                           ? 28
-                          : (relatedRecordsTable.props.rightOffset ?? 560),
+                          : (relatedRecordsTable.props.rightOffset ?? 580),
                   })
                 : relatedRecordsTable}
 

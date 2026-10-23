@@ -484,7 +484,6 @@ export function OpportunityDetailDrawer({
                     },
                 },
             }}
-            width={{ xs: '100vw', sm: 600, md: 660 }}
         />
         <AppToast
             open={toast.open}
