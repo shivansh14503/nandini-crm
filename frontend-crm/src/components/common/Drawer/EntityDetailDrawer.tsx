@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
     Drawer,
     Box,
@@ -22,9 +22,12 @@ import SyncOutlinedIcon from '@mui/icons-material/SyncOutlined';
 import PhoneOutlinedIcon from '@mui/icons-material/PhoneOutlined';
 import VerifiedIcon from '@mui/icons-material/Verified';
 import HistoryOutlinedIcon from '@mui/icons-material/HistoryOutlined';
+import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
+import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 
 import { type EntityDetailDrawerProps, type DrawerTabItem, buildDrawerTabs } from './types';
 import { AuditTrailTimeline } from './AuditTrailTimeline';
+import { useDrawerStack } from './DrawerStackContext';
 
 export function EntityDetailDrawer({
     open,
@@ -51,9 +54,45 @@ export function EntityDetailDrawer({
     secondaryAction,
     footerActions,
     width = { xs: '100%', sm: 540, md: 580 },
+    hideBackdrop = false,
+    onCollapseChange,
+    isCollapsed: isCollapsedProp,
+    onToggleCollapse: onToggleCollapseProp,
+    showBookmark: showBookmarkProp,
 }: EntityDetailDrawerProps) {
     const [currentTab, setCurrentTab] = useState<number>(defaultTabIndex);
     const [toastMessage, setToastMessage] = useState<string | null>(null);
+    const [internalCollapsed, setInternalCollapsed] = useState<boolean>(false);
+    const stack = useDrawerStack();
+
+    // Precedence: explicit props > shared stack context > internal standalone state
+    const isCollapsed = isCollapsedProp ?? stack?.isCollapsed ?? internalCollapsed;
+    const showBookmark = showBookmarkProp ?? stack?.showBookmark ?? true;
+    const onCollapseReset = stack?.onCollapseReset;
+
+    useEffect(() => {
+        if (open) {
+            setInternalCollapsed(false);
+            onCollapseReset?.();
+            onCollapseChange?.(false);
+        }
+    }, [open, title, onCollapseChange, onCollapseReset]);
+
+    const handleToggleCollapse = () => {
+        if (onToggleCollapseProp) {
+            onToggleCollapseProp();
+            return;
+        }
+        if (stack) {
+            stack.onToggleCollapse();
+            return;
+        }
+        setInternalCollapsed((prev) => {
+            const next = !prev;
+            onCollapseChange?.(next);
+            return next;
+        });
+    };
 
     // Compute initials fallback if avatarText not given
     const getInitials = (str: string) => {
@@ -84,32 +123,77 @@ export function EntityDetailDrawer({
     // Ensure valid currentTab index
     const activeTabIndex = Math.min(currentTab, Math.max(0, allTabs.length - 1));
 
+    const effectiveHideBackdrop = hideBackdrop || isCollapsed;
+
     return (
-        <Drawer
-            anchor="right"
-            open={open}
-            onClose={onClose}
-            slotProps={{
-                backdrop: {
-                    sx: {
-                        backgroundColor: 'rgba(15, 23, 42, 0.25)',
-                        backdropFilter: 'blur(3px)',
-                        WebkitBackdropFilter: 'blur(3px)',
+        <>
+            {open && showBookmark && (
+                <Tooltip title={isCollapsed ? 'Expand Details' : 'Collapse Details'} placement="left" arrow>
+                    <Box
+                        onClick={handleToggleCollapse}
+                        role="button"
+                        aria-label={isCollapsed ? 'Expand Details' : 'Collapse Details'}
+                        sx={{
+                            position: 'fixed',
+                            top: '45%',
+                            right: isCollapsed ? 0 : width,
+                            transform: 'translateY(-50%)',
+                            zIndex: 1410,
+                            width: 24,
+                            height: 56,
+                            backgroundColor: '#2563eb',
+                            color: '#ffffff',
+                            borderRadius: '8px 0 0 8px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            cursor: 'pointer',
+                            boxShadow: '-3px 0 10px rgba(0,0,0,0.15)',
+                            transition: 'right 0.25s cubic-bezier(0.4, 0, 0.2, 1), background-color 0.15s ease',
+                            pointerEvents: 'auto',
+                            '&:hover': {
+                                backgroundColor: '#1e293b',
+                            },
+                        }}
+                    >
+                        {isCollapsed ? (
+                            <ChevronLeftIcon sx={{ fontSize: 18 }} />
+                        ) : (
+                            <ChevronRightIcon sx={{ fontSize: 18 }} />
+                        )}
+                    </Box>
+                </Tooltip>
+            )}
+            <Drawer
+                anchor="right"
+                open={open}
+                onClose={onClose}
+                hideBackdrop={effectiveHideBackdrop}
+                slotProps={{
+                    backdrop: {
+                        sx: {
+                            backgroundColor: effectiveHideBackdrop ? 'transparent' : 'rgba(15, 23, 42, 0.25)',
+                            backdropFilter: effectiveHideBackdrop ? 'none' : 'blur(3px)',
+                            WebkitBackdropFilter: effectiveHideBackdrop ? 'none' : 'blur(3px)',
+                            ...(effectiveHideBackdrop && { pointerEvents: 'none' }),
+                        },
                     },
-                },
-                paper: {
-                    sx: {
-                        width,
-                        backgroundColor: '#ffffff',
-                        borderLeft: '1px solid #e2e8f0',
-                        boxShadow: '-8px 0 32px rgba(15, 23, 42, 0.12)',
-                        display: 'flex',
-                        flexDirection: 'column',
-                        overflow: 'hidden',
+                    paper: {
+                        sx: {
+                            width,
+                            backgroundColor: '#ffffff',
+                            borderLeft: '1px solid #e2e8f0',
+                            boxShadow: isCollapsed ? 'none' : '-8px 0 32px rgba(15, 23, 42, 0.12)',
+                            display: 'flex',
+                            flexDirection: 'column',
+                            overflow: 'hidden',
+                            transform: isCollapsed ? 'translateX(100%) !important' : 'translateX(0) !important',
+                            transition: 'transform 0.25s cubic-bezier(0.4, 0, 0.2, 1) !important',
+                            visibility: 'visible !important',
+                        },
                     },
-                },
-            }}
-        >
+                }}
+            >
             {/* ── Top Header Section ────────────────────────────────────────────── */}
             <Box sx={{ p: 2.5, pb: 2, borderBottom: '1px solid #f1f5f9', backgroundColor: '#ffffff' }}>
                 <Box sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 1.5 }}>
@@ -483,5 +567,6 @@ export function EntityDetailDrawer({
                 </Alert>
             </Snackbar>
         </Drawer>
+        </>
     );
 }

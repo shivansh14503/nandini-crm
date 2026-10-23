@@ -36,6 +36,7 @@ export interface OrganizationDetailDrawerProps {
     open: boolean;
     onClose: () => void;
     onEdit?: (id: string) => void;
+    hideBackdrop?: boolean;
 }
 
 export function OrganizationDetailDrawer({
@@ -43,6 +44,7 @@ export function OrganizationDetailDrawer({
     open,
     onClose,
     onEdit,
+    hideBackdrop,
 }: OrganizationDetailDrawerProps) {
     const router = useRouter();
     const [showBankAccount, setShowBankAccount] = useState(false);
@@ -127,6 +129,7 @@ export function OrganizationDetailDrawer({
         <EntityDetailDrawer
             open={open}
             onClose={onClose}
+            hideBackdrop={hideBackdrop}
             title={org.organizationName}
             subtitle={`${org.mailingName || org.organizationName}${org.billingCity ? `, ${org.billingCity} NCR` : ', Delhi NCR'}`}
             avatarBg="linear-gradient(135deg, #0284c7 0%, #0369a1 100%)"

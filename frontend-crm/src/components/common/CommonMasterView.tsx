@@ -1,9 +1,10 @@
 'use client';
 
 import React from 'react';
-import { Box, Paper, SxProps, Theme } from '@mui/material';
+import { Box, GlobalStyles, Paper, SxProps, Theme } from '@mui/material';
 import { AppBreadcrumbs, type BreadcrumbItem } from './AppBreadcrumbs';
 import { EnterpriseFooter } from './EnterpriseFooter';
+import { DrawerStackContext, type DrawerStackContextValue } from './Drawer/DrawerStackContext';
 import {
     DataTable,
     DataTableFilterPills,
@@ -105,9 +106,21 @@ export interface CommonMasterViewProps<T = unknown, TFilter extends string = str
      */
     pagination?: DataTablePaginationProps | React.ReactNode;
     /**
-     * Side detail drawer component (rendered outside the paper card).
+     * Left-side related modules sidebar component (rendered alongside the detail drawer).
+     */
+    relatedSidebar?: React.ReactNode;
+    /**
+     * Middle panel table displaying records for the selected related module.
+     */
+    relatedRecordsTable?: React.ReactNode;
+    /**
+     * Primary side detail drawer component (rendered outside the paper card).
      */
     drawer?: React.ReactNode;
+    /**
+     * Top stacked secondary detail drawer component (LIFO stack above primary drawer).
+     */
+    secondaryDrawer?: React.ReactNode;
     /**
      * Whether a side detail drawer is currently open, used to apply subtle blur to the background table.
      */
@@ -203,7 +216,10 @@ export function CommonMasterView<T = unknown, TFilter extends string = string>({
     minHeight = 280,
     table,
     pagination,
+    relatedSidebar,
+    relatedRecordsTable,
     drawer,
+    secondaryDrawer,
     isDrawerOpen = false,
     toast,
     footer,
@@ -213,6 +229,50 @@ export function CommonMasterView<T = unknown, TFilter extends string = string>({
     contentSx,
     paperSx,
 }: CommonMasterViewProps<T, TFilter>) {
+    const [isRightDrawerCollapsed, setIsRightDrawerCollapsed] = React.useState(false);
+    const hasSecondaryDrawer = Boolean(secondaryDrawer);
+
+    // Collapse the whole stack together; expand again whenever the stack changes.
+    React.useEffect(() => {
+        if (!isDrawerOpen) {
+            setIsRightDrawerCollapsed(false);
+        }
+    }, [isDrawerOpen]);
+
+    React.useEffect(() => {
+        if (hasSecondaryDrawer) {
+            setIsRightDrawerCollapsed(false);
+        }
+    }, [hasSecondaryDrawer]);
+
+    const toggleRightDrawerCollapsed = React.useCallback(() => {
+        setIsRightDrawerCollapsed((prev) => !prev);
+    }, []);
+
+    const resetRightDrawerCollapsed = React.useCallback(() => {
+        setIsRightDrawerCollapsed(false);
+    }, []);
+
+    const baseDrawerStackValue = React.useMemo<DrawerStackContextValue>(
+        () => ({
+            isCollapsed: isRightDrawerCollapsed,
+            onToggleCollapse: toggleRightDrawerCollapsed,
+            onCollapseReset: resetRightDrawerCollapsed,
+            showBookmark: !hasSecondaryDrawer,
+        }),
+        [isRightDrawerCollapsed, toggleRightDrawerCollapsed, resetRightDrawerCollapsed, hasSecondaryDrawer]
+    );
+
+    const topDrawerStackValue = React.useMemo<DrawerStackContextValue>(
+        () => ({
+            isCollapsed: isRightDrawerCollapsed,
+            onToggleCollapse: toggleRightDrawerCollapsed,
+            onCollapseReset: resetRightDrawerCollapsed,
+            showBookmark: true,
+        }),
+        [isRightDrawerCollapsed, toggleRightDrawerCollapsed, resetRightDrawerCollapsed]
+    );
+
     const resolvedFilters =
         filters ?? (filterConfig ? <DataTableFilterPills<TFilter> {...filterConfig} /> : null);
 
@@ -319,10 +379,12 @@ export function CommonMasterView<T = unknown, TFilter extends string = string>({
                     </Box>
                 )}
 
-                {/* ── Line 3: Main Table Card ── */}
+                    {/* ── Line 3: Main Table Card (Base z-index: 1) ── */}
                 <Paper
                     elevation={0}
                     sx={{
+                        position: 'relative',
+                        zIndex: 1,
                         border: '1px solid #e2e8f0',
                         borderRadius: '10px',
                         backgroundColor: '#ffffff',
@@ -333,7 +395,7 @@ export function CommonMasterView<T = unknown, TFilter extends string = string>({
                         minWidth: 0,
                         width: '100%',
                         boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
-                        filter: isDrawerOpen ? 'blur(1.5px)' : 'none',
+                        filter: isDrawerOpen && !isRightDrawerCollapsed ? 'blur(1.5px)' : 'none',
                         transition: 'filter 0.2s ease-in-out',
                         ...paperSx,
                     }}
@@ -350,8 +412,80 @@ export function CommonMasterView<T = unknown, TFilter extends string = string>({
                 </Paper>
             </Box>
 
-            {/* ── Modular Detail Drawer ────────────────────────────────────── */}
-            {drawer}
+            {/* ── Layered LIFO Drawer Stack Z-Index Hierarchy ─────────────── */}
+            <GlobalStyles
+                styles={{
+                    // Primary Right Drawer (z-index: 1290) & Main Backdrop (z-index: 1200)
+                    '.MuiModal-root.MuiDrawer-root': {
+                        zIndex: '1290 !important',
+                        ...(relatedRecordsTable
+                            ? {
+                                  pointerEvents: 'none',
+                              }
+                            : {}),
+                    },
+                    '.MuiModal-root.MuiDrawer-root .MuiDrawer-paper': {
+                        pointerEvents: 'auto',
+                    },
+                    '.MuiModal-root.MuiDrawer-root > .MuiBackdrop-root': {
+                        zIndex: -1,
+                        ...(relatedRecordsTable
+                            ? {
+                                  backgroundColor: 'transparent !important',
+                                  backdropFilter: 'none !important',
+                                  WebkitBackdropFilter: 'none !important',
+                                  pointerEvents: 'none !important',
+                              }
+                            : {}),
+                    },
+                    // Stacked Secondary Right Drawer (z-index: 1400)
+                    '.MuiModal-root.MuiDrawer-root ~ .MuiModal-root.MuiDrawer-root': {
+                        zIndex: '1400 !important',
+                        pointerEvents: 'none',
+                    },
+                    '.MuiModal-root.MuiDrawer-root ~ .MuiModal-root.MuiDrawer-root > .MuiBackdrop-root': {
+                        backgroundColor: 'transparent !important',
+                        backdropFilter: 'none !important',
+                        WebkitBackdropFilter: 'none !important',
+                        pointerEvents: 'none !important',
+                    },
+                    '.MuiModal-root.MuiDrawer-root ~ .MuiModal-root.MuiDrawer-root .MuiDrawer-paper': {
+                        pointerEvents: 'auto',
+                        borderLeft: '1px solid #cbd5e1',
+                        boxShadow: '-12px 0 40px rgba(15, 23, 42, 0.22)',
+                    },
+                }}
+            />
+
+            {/* 1. Left Related Modules Sidebar (z-index: 1300) */}
+            {relatedSidebar}
+
+            {/* 2. Middle Related Records Table (z-index: 1300, outside Paper blur) */}
+            {React.isValidElement<{
+                rightOffset?: number;
+                isRightDrawerCollapsed?: boolean;
+            }>(relatedRecordsTable)
+                ? React.cloneElement(relatedRecordsTable, {
+                      isRightDrawerCollapsed,
+                      rightOffset: isRightDrawerCollapsed
+                          ? 28
+                          : (relatedRecordsTable.props.rightOffset ?? 560),
+                  })
+                : relatedRecordsTable}
+
+            {/* 3. Primary Right Detail Drawer (z-index: 1290). Bookmark hidden while a top drawer is stacked. */}
+            <DrawerStackContext.Provider value={baseDrawerStackValue}>
+                {relatedRecordsTable && React.isValidElement<{ hideBackdrop?: boolean }>(drawer)
+                    ? React.cloneElement(drawer, { hideBackdrop: true })
+                    : drawer}
+            </DrawerStackContext.Provider>
+
+            {/* 4. Top Stacked Secondary Right Detail Drawer (z-index: 1400). Owns the single shared bookmark. */}
+            <DrawerStackContext.Provider value={topDrawerStackValue}>
+                {React.isValidElement<{ hideBackdrop?: boolean }>(secondaryDrawer)
+                    ? React.cloneElement(secondaryDrawer, { hideBackdrop: true })
+                    : secondaryDrawer}
+            </DrawerStackContext.Provider>
 
             {/* ── Enterprise CRM Global Footer ─────────────────────────────── */}
             {!hideFooter && (footer || <EnterpriseFooter />)}

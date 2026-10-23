@@ -14,8 +14,11 @@ import CalendarMonthOutlinedIcon from '@mui/icons-material/CalendarMonthOutlined
 import PersonOutlinedIcon from '@mui/icons-material/PersonOutlined';
 import { CommonMasterView } from '../common/CommonMasterView';
 import { AppToast } from '../common/AppToast';
+import { RelatedModulesSidebar, RelatedRecordsTableView } from '../common/Drawer';
+import { RelatedSecondaryDrawer, type SecondaryDrawerEntity } from '../common/RelatedSecondaryDrawer';
 import type { DataTableColumn, DataTableFilterItem } from '../common/DataTable';
 import { ROUTES } from '../../config/constants';
+import { getRelatedModulesForEntity } from '@/config/relatedModules.config';
 import type { Opportunity } from '../../types/opportunity.types';
 import { opportunityService } from '../../services/opportunity.service';
 import { subscribeCrmSync } from '@/services';
@@ -41,6 +44,9 @@ export function OpportunitiesMasterView() {
     const [sortField, setSortField] = useState<OpportunitySortField>('createdAt');
     const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
     const [selectedDrawerOpp, setSelectedDrawerOpp] = useState<Opportunity | null>(null);
+    const [activeRelatedModule, setActiveRelatedModule] = useState<string | null>(null);
+    const [secondaryDrawerEntity, setSecondaryDrawerEntity] = useState<SecondaryDrawerEntity | null>(null);
+    const [isLeftSidebarCollapsed, setIsLeftSidebarCollapsed] = useState<boolean>(false);
     const [toast, setToast] = useState<{
         open: boolean;
         message: string;
@@ -269,6 +275,9 @@ export function OpportunitiesMasterView() {
         ) {
             try {
                 await opportunityService.bulkDeleteOpportunities(selectedIds);
+                if (selectedDrawerOpp && selectedIds.includes(selectedDrawerOpp.id)) {
+                    closeThreePanelView();
+                }
                 setSelectedIds([]);
                 loadOpportunities();
                 setToast({
@@ -529,6 +538,23 @@ export function OpportunitiesMasterView() {
         [todayStr]
     );
 
+    const relatedModules = useMemo(() => {
+        void opportunities;
+        if (!selectedDrawerOpp) return [];
+        return getRelatedModulesForEntity('opportunity', selectedDrawerOpp, setActiveRelatedModule);
+    }, [selectedDrawerOpp, opportunities]);
+
+    // Falls back to the first module until the user explicitly picks one.
+    const effectiveRelatedModule = activeRelatedModule ?? relatedModules[0]?.id ?? null;
+    const activeModuleMeta = relatedModules.find((m) => m.id === effectiveRelatedModule);
+
+    // Dismisses the three-panel view and returns to the clean master table.
+    const closeThreePanelView = useCallback(() => {
+        setSecondaryDrawerEntity(null);
+        setSelectedDrawerOpp(null);
+        setActiveRelatedModule(null);
+    }, []);
+
     return (
         <CommonMasterView<Opportunity, OpportunityFilterTab>
             filterConfig={{
@@ -589,12 +615,45 @@ export function OpportunitiesMasterView() {
                 },
                 hideWhenEmpty: true,
             }}
+            relatedSidebar={
+                <RelatedModulesSidebar
+                    open={Boolean(selectedDrawerOpp)}
+                    modules={relatedModules}
+                    activeModuleId={effectiveRelatedModule ?? undefined}
+                    onModuleSelect={(moduleId) => setActiveRelatedModule(moduleId)}
+                    collapsed={isLeftSidebarCollapsed}
+                    onToggleCollapse={setIsLeftSidebarCollapsed}
+                />
+            }
+            relatedRecordsTable={
+                <RelatedRecordsTableView
+                    open={Boolean(selectedDrawerOpp && effectiveRelatedModule)}
+                    moduleId={effectiveRelatedModule || ''}
+                    moduleTitle={activeModuleMeta?.label || 'Related Records'}
+                    parentRecordId={selectedDrawerOpp?.id}
+                    parentEntityTitle={selectedDrawerOpp?.opportunityCode || selectedDrawerOpp?.organizationName || ''}
+                    entityData={selectedDrawerOpp}
+                    entityType="opportunity"
+                    leftOffset={isLeftSidebarCollapsed ? 72 : 260}
+                    rightOffset={580}
+                    onClose={closeThreePanelView}
+                    onRowClick={(row, modId) => setSecondaryDrawerEntity({ type: modId, data: row })}
+                />
+            }
             drawer={
                 <OpportunityDetailDrawer
                     opportunity={selectedDrawerOpp}
                     open={Boolean(selectedDrawerOpp)}
-                    onClose={() => setSelectedDrawerOpp(null)}
+                    onClose={closeThreePanelView}
                     onEdit={handleEdit}
+                />
+            }
+            secondaryDrawer={
+                <RelatedSecondaryDrawer
+                    entity={secondaryDrawerEntity}
+                    moduleLabel={activeModuleMeta?.label}
+                    parentTitle={selectedDrawerOpp?.opportunityCode || selectedDrawerOpp?.organizationName}
+                    onClose={() => setSecondaryDrawerEntity(null)}
                 />
             }
             isDrawerOpen={Boolean(selectedDrawerOpp)}

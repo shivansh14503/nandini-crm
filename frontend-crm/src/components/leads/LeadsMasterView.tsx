@@ -16,8 +16,11 @@ import ApartmentIcon from '@mui/icons-material/Apartment';
 import CalendarMonthOutlinedIcon from '@mui/icons-material/CalendarMonthOutlined';
 import { CommonMasterView } from '../common/CommonMasterView';
 import { AppToast } from '../common/AppToast';
+import { RelatedModulesSidebar, RelatedRecordsTableView } from '../common/Drawer';
+import { RelatedSecondaryDrawer, type SecondaryDrawerEntity } from '../common/RelatedSecondaryDrawer';
 import type { DataTableColumn, DataTableFilterItem } from '../common/DataTable';
 import { ROUTES } from '../../config/constants';
+import { getRelatedModulesForEntity } from '@/config/relatedModules.config';
 import type { Lead } from '../../types/lead.types';
 import { leadService, subscribeCrmSync } from '@/services';
 import type { LeadFilterTab } from './master';
@@ -35,6 +38,9 @@ export function LeadsMasterView() {
     const [sortField, setSortField] = useState<string>('name');
     const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
     const [selectedDrawerLead, setSelectedDrawerLead] = useState<Lead | null>(null);
+    const [activeRelatedModule, setActiveRelatedModule] = useState<string | null>(null);
+    const [secondaryDrawerEntity, setSecondaryDrawerEntity] = useState<SecondaryDrawerEntity | null>(null);
+    const [isLeftSidebarCollapsed, setIsLeftSidebarCollapsed] = useState<boolean>(false);
     const [toast, setToast] = useState<{
         open: boolean;
         message: string;
@@ -496,6 +502,23 @@ export function LeadsMasterView() {
         [todayStr]
     );
 
+    const relatedModules = useMemo(() => {
+        void leads;
+        if (!selectedDrawerLead) return [];
+        return getRelatedModulesForEntity('lead', selectedDrawerLead, setActiveRelatedModule);
+    }, [selectedDrawerLead, leads]);
+
+    // Falls back to the first module until the user explicitly picks one.
+    const effectiveRelatedModule = activeRelatedModule ?? relatedModules[0]?.id ?? null;
+    const activeModuleMeta = relatedModules.find((m) => m.id === effectiveRelatedModule);
+
+    // Dismisses the three-panel view and returns to the clean master table.
+    const closeThreePanelView = useCallback(() => {
+        setSecondaryDrawerEntity(null);
+        setSelectedDrawerLead(null);
+        setActiveRelatedModule(null);
+    }, []);
+
     return (
         <CommonMasterView<Lead, LeadFilterTab>
             breadcrumbItems={[
@@ -559,11 +582,36 @@ export function LeadsMasterView() {
                     setPage(0);
                 },
             }}
+            relatedSidebar={
+                <RelatedModulesSidebar
+                    open={Boolean(selectedDrawerLead)}
+                    modules={relatedModules}
+                    activeModuleId={effectiveRelatedModule ?? undefined}
+                    onModuleSelect={(moduleId) => setActiveRelatedModule(moduleId)}
+                    collapsed={isLeftSidebarCollapsed}
+                    onToggleCollapse={setIsLeftSidebarCollapsed}
+                />
+            }
+            relatedRecordsTable={
+                <RelatedRecordsTableView
+                    open={Boolean(selectedDrawerLead && effectiveRelatedModule)}
+                    moduleId={effectiveRelatedModule || ''}
+                    moduleTitle={activeModuleMeta?.label || 'Related Records'}
+                    parentRecordId={selectedDrawerLead?.id}
+                    parentEntityTitle={selectedDrawerLead?.name || ''}
+                    entityData={selectedDrawerLead}
+                    entityType="lead"
+                    leftOffset={isLeftSidebarCollapsed ? 72 : 260}
+                    rightOffset={580}
+                    onClose={closeThreePanelView}
+                    onRowClick={(row, modId) => setSecondaryDrawerEntity({ type: modId, data: row })}
+                />
+            }
             drawer={
                 <LeadDetailDrawer
                     lead={selectedDrawerLead}
                     open={Boolean(selectedDrawerLead)}
-                    onClose={() => setSelectedDrawerLead(null)}
+                    onClose={closeThreePanelView}
                     onEdit={(id) => router.push(ROUTES.LEAD_EDIT(id))}
                     onLeadUpdated={(updatedLead) => {
                         setSelectedDrawerLead(updatedLead);
@@ -572,6 +620,14 @@ export function LeadsMasterView() {
                     onShowToast={(message, severity = 'success') => {
                         setToast({ open: true, message, severity });
                     }}
+                />
+            }
+            secondaryDrawer={
+                <RelatedSecondaryDrawer
+                    entity={secondaryDrawerEntity}
+                    moduleLabel={activeModuleMeta?.label}
+                    parentTitle={selectedDrawerLead?.name}
+                    onClose={() => setSecondaryDrawerEntity(null)}
                 />
             }
             isDrawerOpen={Boolean(selectedDrawerLead)}

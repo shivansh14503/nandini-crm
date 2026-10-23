@@ -9,8 +9,11 @@ import NewReleasesOutlinedIcon from '@mui/icons-material/NewReleasesOutlined';
 import StarBorderIcon from '@mui/icons-material/StarBorder';
 import { CommonMasterView } from '../../common/CommonMasterView';
 import { AppToast } from '../../common/AppToast';
+import { RelatedModulesSidebar, RelatedRecordsTableView } from '../../common/Drawer';
+import { RelatedSecondaryDrawer, type SecondaryDrawerEntity } from '../../common/RelatedSecondaryDrawer';
 import type { DataTableColumn, DataTableFilterItem } from '../../common/DataTable';
 import { ROUTES } from '../../../config/constants';
+import { getRelatedModulesForEntity } from '@/config/relatedModules.config';
 import type { Product } from '../../../types/product.types';
 import { productService, subscribeCrmSync } from '@/services';
 import type { ProductFilterTab } from './types';
@@ -38,6 +41,9 @@ export function ProductsMasterView() {
     const [sortField, setSortField] = useState<string>('productName');
     const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
     const [selectedDrawerProduct, setSelectedDrawerProduct] = useState<Product | null>(null);
+    const [activeRelatedModule, setActiveRelatedModule] = useState<string | null>(null);
+    const [secondaryDrawerEntity, setSecondaryDrawerEntity] = useState<SecondaryDrawerEntity | null>(null);
+    const [isLeftSidebarCollapsed, setIsLeftSidebarCollapsed] = useState<boolean>(false);
     const [toast, setToast] = useState<{ open: boolean; message: string; severity: 'success' | 'info' | 'error' }>({
         open: false,
         message: '',
@@ -159,9 +165,18 @@ export function ProductsMasterView() {
         );
     };
 
+    const closeThreePanelView = useCallback(() => {
+        setSecondaryDrawerEntity(null);
+        setSelectedDrawerProduct(null);
+        setActiveRelatedModule(null);
+    }, []);
+
     const handleBulkDelete = async () => {
         const count = selectedIds.length;
         await productService.deleteBulk(selectedIds);
+        if (selectedDrawerProduct && selectedIds.includes(selectedDrawerProduct.id)) {
+            closeThreePanelView();
+        }
         loadProducts();
         setSelectedIds([]);
         setToast({ open: true, message: `${count} product(s) deleted.`, severity: 'success' });
@@ -323,6 +338,16 @@ export function ProductsMasterView() {
         []
     );
 
+    const relatedModules = useMemo(() => {
+        void products;
+        if (!selectedDrawerProduct) return [];
+        return getRelatedModulesForEntity('product', selectedDrawerProduct, setActiveRelatedModule);
+    }, [selectedDrawerProduct, products]);
+
+    // Falls back to the first module until the user explicitly picks one.
+    const effectiveRelatedModule = activeRelatedModule ?? relatedModules[0]?.id ?? null;
+    const activeModuleMeta = relatedModules.find((m) => m.id === effectiveRelatedModule);
+
     return (
         <CommonMasterView<Product, ProductFilterTab>
             filterConfig={{
@@ -381,11 +406,44 @@ export function ProductsMasterView() {
                     setPage(0);
                 },
             }}
+            relatedSidebar={
+                <RelatedModulesSidebar
+                    open={Boolean(selectedDrawerProduct)}
+                    modules={relatedModules}
+                    activeModuleId={effectiveRelatedModule ?? undefined}
+                    onModuleSelect={(moduleId) => setActiveRelatedModule(moduleId)}
+                    collapsed={isLeftSidebarCollapsed}
+                    onToggleCollapse={setIsLeftSidebarCollapsed}
+                />
+            }
+            relatedRecordsTable={
+                <RelatedRecordsTableView
+                    open={Boolean(selectedDrawerProduct && effectiveRelatedModule)}
+                    moduleId={effectiveRelatedModule || ''}
+                    moduleTitle={activeModuleMeta?.label || 'Related Records'}
+                    parentRecordId={selectedDrawerProduct?.id}
+                    parentEntityTitle={selectedDrawerProduct?.productName || ''}
+                    entityData={selectedDrawerProduct}
+                    entityType="product"
+                    leftOffset={isLeftSidebarCollapsed ? 72 : 260}
+                    rightOffset={580}
+                    onClose={closeThreePanelView}
+                    onRowClick={(row, modId) => setSecondaryDrawerEntity({ type: modId, data: row })}
+                />
+            }
             drawer={
                 <ProductDetailDrawer
                     product={selectedDrawerProduct}
                     open={Boolean(selectedDrawerProduct)}
-                    onClose={() => setSelectedDrawerProduct(null)}
+                    onClose={closeThreePanelView}
+                />
+            }
+            secondaryDrawer={
+                <RelatedSecondaryDrawer
+                    entity={secondaryDrawerEntity}
+                    moduleLabel={activeModuleMeta?.label}
+                    parentTitle={selectedDrawerProduct?.productName}
+                    onClose={() => setSecondaryDrawerEntity(null)}
                 />
             }
             isDrawerOpen={Boolean(selectedDrawerProduct)}

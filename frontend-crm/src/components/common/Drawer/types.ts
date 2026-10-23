@@ -82,6 +82,14 @@ export interface EntityDetailDrawerProps {
     secondaryAction?: DrawerActionButtonProps;
     footerActions?: React.ReactNode;
     width?: number | string | { xs?: string | number; sm?: string | number; md?: string | number };
+    hideBackdrop?: boolean;
+    onCollapseChange?: (collapsed: boolean) => void;
+    /** Controlled collapse state. Overrides the shared stack context when provided. */
+    isCollapsed?: boolean;
+    /** Controlled toggle handler. Overrides the shared stack context when provided. */
+    onToggleCollapse?: () => void;
+    /** Whether this drawer renders the floating bookmark tab (default true). */
+    showBookmark?: boolean;
 }
 
 /**
