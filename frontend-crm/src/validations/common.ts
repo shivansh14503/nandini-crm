@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { DEFAULT_COUNTRY_CODE, resolveCountryIso2 } from '../data/addressMaster';
 
 /**
  * Extracts the first human-readable validation error message from a ZodError
@@ -57,7 +58,12 @@ export function validateWithToast<T>(
 // ── Reusable Regex Constants ──────────────────────────────────────────────────
 
 export const PHONE_REGEX = /^\d{10}$/;
+/** Indian PIN code: exactly 6 digits. */
 export const PIN_CODE_REGEX = /^\d{6}$/;
+/** Non-Indian postal / ZIP codes: 2–12 letters, digits, spaces or hyphens (e.g. SW1A 1AA, K1A 0B1, 94105-1234). */
+export const INTL_POSTAL_CODE_REGEX = /^[A-Za-z0-9\s-]{2,12}$/;
+/** Characters a postal code may contain in any country (base shape before the country-specific check). */
+const POSTAL_CODE_CHARS_REGEX = /^[A-Za-z0-9\s-]*$/;
 export const PAN_REGEX = /^[A-Z]{5}[0-9]{4}[A-Z]{1}$/;
 export const GST_REGEX = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/;
 export const IFSC_REGEX = /^[A-Z]{4}0[A-Z0-9]{6}$/;
@@ -107,6 +113,67 @@ export const zodPinCodeOptional = z
     .refine((val) => !val || PIN_CODE_REGEX.test(val), {
         message: 'Must be exactly 6 digits.',
     })
+    .optional()
+    .or(z.literal(''));
+
+// ── Country-aware postal codes ────────────────────────────────────────────────
+// Address_Field_Design: postal codes are text (letters / leading zeros allowed) and their format depends on country.
+
+const POSTAL_CODE_REQUIRED_MESSAGE = 'Postal / PIN Code is required.';
+const INDIAN_PIN_MESSAGE = 'Must be a valid 6-digit Indian PIN code (e.g. 110001).';
+const INTL_POSTAL_MESSAGE = 'Must be a valid postal / ZIP code (2–12 alphanumeric characters).';
+
+/**
+ * Validates a postal code against its country (ISO2 code or name).
+ * An empty country means India; a non-empty country that isn't in the master (e.g. legacy 'Other')
+ * gets the international rule rather than being forced into the Indian PIN format.
+ */
+export function validatePostalCodeByCountry(
+    postalCode: string | undefined,
+    country: string | undefined,
+    isRequired: boolean
+): { valid: boolean; message?: string } {
+    const value = postalCode?.trim() ?? '';
+    if (!value) {
+        return { valid: !isRequired, message: isRequired ? POSTAL_CODE_REQUIRED_MESSAGE : undefined };
+    }
+    const iso2 = country?.trim() ? resolveCountryIso2(country) : DEFAULT_COUNTRY_CODE;
+    if (iso2 === DEFAULT_COUNTRY_CODE) {
+        return PIN_CODE_REGEX.test(value) ? { valid: true } : { valid: false, message: INDIAN_PIN_MESSAGE };
+    }
+    return INTL_POSTAL_CODE_REGEX.test(value) ? { valid: true } : { valid: false, message: INTL_POSTAL_MESSAGE };
+}
+
+/**
+ * Adds a field issue to a schema's superRefine when the postal code doesn't fit its country.
+ * Use with zodPostalCode / zodPostalCodeOptional, which only check the generic shape.
+ */
+export function refinePostalCodeForCountry(
+    ctx: z.RefinementCtx,
+    field: string,
+    postalCode: string | undefined,
+    country: string | undefined,
+    isRequired = false
+): void {
+    const result = validatePostalCodeByCountry(postalCode, country, isRequired);
+    if (!result.valid) {
+        ctx.addIssue({ code: 'custom', message: result.message ?? INTL_POSTAL_MESSAGE, path: [field] });
+    }
+}
+
+/** Required postal code: text, up to 12 letters/digits/spaces/hyphens. Country format is checked by refinePostalCodeForCountry. */
+export const zodPostalCode = z
+    .string()
+    .trim()
+    .min(1, { message: POSTAL_CODE_REQUIRED_MESSAGE })
+    .max(12, { message: INTL_POSTAL_MESSAGE })
+    .regex(POSTAL_CODE_CHARS_REGEX, { message: INTL_POSTAL_MESSAGE });
+
+export const zodPostalCodeOptional = z
+    .string()
+    .trim()
+    .max(12, { message: INTL_POSTAL_MESSAGE })
+    .regex(POSTAL_CODE_CHARS_REGEX, { message: INTL_POSTAL_MESSAGE })
     .optional()
     .or(z.literal(''));
 

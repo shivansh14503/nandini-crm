@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import { getCountryNameByCode } from '@/data/addressMaster';
 import { useRouter } from 'next/navigation';
 import {
     Box,
@@ -525,7 +526,7 @@ export function QuotationDetailDrawer({
                     {quotation.billingCity ? `${quotation.billingCity}, ` : ''}
                     {quotation.billingState || ''}
                     {quotation.billingPostalCode ? ` - ${quotation.billingPostalCode}` : ''}<br />
-                    {quotation.billingCountry || 'India'}
+                    {getCountryNameByCode(quotation.billingCountry || 'IN')}
                 </Typography>
             </DrawerSectionCard>
 
@@ -555,7 +556,7 @@ export function QuotationDetailDrawer({
                     {(quotation.shippingCity || quotation.billingCity) ? `${quotation.shippingCity || quotation.billingCity}, ` : ''}
                     {quotation.shippingState || quotation.billingState || ''}
                     {(quotation.shippingPostalCode || quotation.billingPostalCode) ? ` - ${quotation.shippingPostalCode || quotation.billingPostalCode}` : ''}<br />
-                    {quotation.shippingCountry || quotation.billingCountry || 'India'}
+                    {getCountryNameByCode(quotation.shippingCountry || quotation.billingCountry || 'IN')}
                 </Typography>
             </DrawerSectionCard>
         </Box>

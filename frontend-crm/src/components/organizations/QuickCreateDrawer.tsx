@@ -17,8 +17,8 @@ import AddIcon from '@mui/icons-material/Add';
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 import CheckCircleOutlinedIcon from '@mui/icons-material/CheckCircleOutlined';
 
-import { StyledSelect, fieldSx } from '@/components/forms';
-import { INDIAN_STATES } from '@/config/constants';
+import { StyledSelect, StateRegionField, fieldSx } from '@/components/forms';
+import { DEFAULT_COUNTRY_CODE } from '@/data/addressMaster';
 import { NATURE_OF_BUSINESS, CUSTOMER_TYPES } from './constants';
 import type { ExtendedOrganization } from '@/types/organization.types';
 
@@ -95,7 +95,7 @@ export function QuickCreateDrawer({ open, onClose, onSave }: QuickCreateDrawerPr
             billingCity: formData.billingCity,
             billingState: formData.billingState,
             billingPostalCode: '110001',
-            billingCountry: 'India',
+            billingCountry: DEFAULT_COUNTRY_CODE,
             registrationType: 'Registered',
             gstNumber: formData.gstNumber.toUpperCase(),
             panNumber: formData.gstNumber ? formData.gstNumber.substring(2, 12).toUpperCase() : '',
@@ -324,18 +324,13 @@ export function QuickCreateDrawer({ open, onClose, onSave }: QuickCreateDrawerPr
                         />
                     </Grid>
                     <Grid size={{ xs: 12, sm: 6 }}>
-                        <Typography
-                            variant="body2"
-                            sx={{ fontWeight: 600, color: '#374151', fontSize: '0.82rem', mb: 0.6 }}
-                        >
-                            State
-                        </Typography>
-                        <StyledSelect
+                        {/* Quick create is India-only; the full address form offers every country. */}
+                        <StateRegionField
+                            name="billingState"
                             label="State"
-                            placeholder="Select State"
                             value={formData.billingState}
                             onChange={(v) => handleChange('billingState', v)}
-                            options={INDIAN_STATES}
+                            countryValue={DEFAULT_COUNTRY_CODE}
                         />
                     </Grid>
                 </Grid>

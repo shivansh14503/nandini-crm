@@ -1,13 +1,7 @@
 'use client';
 
 import React from 'react';
-import {
-    Box,
-    Typography,
-    TextField,
-    FormControlLabel,
-    Checkbox,
-} from '@mui/material';
+import { Box, Typography, TextField, FormControlLabel, Checkbox } from '@mui/material';
 
 // Icons
 import PlaceOutlinedIcon from '@mui/icons-material/PlaceOutlined';
@@ -15,11 +9,18 @@ import LocalShippingOutlinedIcon from '@mui/icons-material/LocalShippingOutlined
 
 import {
     FormField,
+    ReadOnlyField,
     SectionLabel,
-    StyledSelect,
     fieldSx,
+    CountrySelectField,
+    StateRegionField,
+    CityAutocompleteField,
+    PostalCodeField,
+    shouldResetStateForCountry,
+    countryIso2OrDefault,
 } from '@/components/forms';
-import { INDIAN_STATES, COUNTRIES } from '@/config/constants';
+import { getSubdivisionsByCountry } from '@/data/addressMaster';
+import { formatAddressLine } from '@/utils/address';
 import type { OrganizationFormData } from '@/types/organization.types';
 import { useFormMode } from '@/context/FormModeContext';
 
@@ -29,15 +30,144 @@ export interface AddressTabProps {
     handleCopyAddressToggle: (checked: boolean) => void;
 }
 
-export function AddressTab({
-    form,
-    set,
-    handleCopyAddressToggle,
-}: AddressTabProps) {
+type Side = 'billing' | 'shipping';
+
+/** Field keys per column; street is stored in both `*Street` and `*Address`, which the form keeps in sync. */
+const KEYS = {
+    billing: {
+        street: 'billingStreet',
+        address: 'billingAddress',
+        country: 'billingCountry',
+        state: 'billingState',
+        city: 'billingCity',
+        postalCode: 'billingPostalCode',
+    },
+    shipping: {
+        street: 'shippingStreet',
+        address: 'shippingAddress',
+        country: 'shippingCountry',
+        state: 'shippingState',
+        city: 'shippingCity',
+        postalCode: 'shippingPostalCode',
+    },
+} as const satisfies Record<Side, Record<string, keyof OrganizationFormData>>;
+
+export function AddressTab({ form, set, handleCopyAddressToggle }: AddressTabProps) {
     const isView = useFormMode().mode === 'view';
+    const copying = Boolean(form.copyAddressFromBilling);
+
+    const setStreet = (side: Side, value: string) => {
+        set(KEYS[side].street, value);
+        set(KEYS[side].address, value);
+    };
+
+    // Changing country clears a state that doesn't belong to the new country.
+    const setCountry = (side: Side, iso2: string) => {
+        set(KEYS[side].country, iso2);
+        if (shouldResetStateForCountry(form[KEYS[side].state], iso2)) set(KEYS[side].state, '');
+    };
+
+    const renderColumn = (side: Side) => {
+        const k = KEYS[side];
+        const isBilling = side === 'billing';
+        const locked = !isBilling && copying;
+        const country = form[k.country] || '';
+        const hasStates = getSubdivisionsByCountry(countryIso2OrDefault(country)).length > 0;
+
+        return (
+            <>
+                <CountrySelectField
+                    name={k.country}
+                    value={country}
+                    onChange={(iso2) => setCountry(side, iso2)}
+                    required={isBilling}
+                    disabled={locked}
+                />
+
+                <StateRegionField
+                    name={k.state}
+                    value={form[k.state] || ''}
+                    onChange={(v) => set(k.state, v)}
+                    countryValue={country}
+                    required={isBilling && hasStates}
+                    disabled={locked}
+                />
+
+                <CityAutocompleteField
+                    name={k.city}
+                    value={form[k.city] || ''}
+                    onChange={(v) => set(k.city, v)}
+                    countryValue={country}
+                    required={isBilling}
+                    disabled={locked}
+                />
+
+                <FormField
+                    name={k.address}
+                    label="Street"
+                    required={isBilling}
+                    hint={isBilling ? 'Registered office location' : 'Dispatch & delivery location'}
+                    sx={{ mb: 0 }}
+                >
+                    <TextField
+                        fullWidth
+                        multiline
+                        minRows={3}
+                        maxRows={5}
+                        size="small"
+                        placeholder={isBilling ? 'Enter a location' : 'Enter delivery location'}
+                        value={form[k.street] || form[k.address] || ''}
+                        onChange={(e) => setStreet(side, e.target.value)}
+                        disabled={locked}
+                        sx={fieldSx}
+                    />
+                </FormField>
+
+                <PostalCodeField
+                    name={k.postalCode}
+                    value={form[k.postalCode] || ''}
+                    onChange={(v) => set(k.postalCode, v)}
+                    countryValue={country}
+                    required={isBilling}
+                    disabled={locked}
+                />
+            </>
+        );
+    };
+
+    if (isView) {
+        const line = (side: Side) => {
+            const k = KEYS[side];
+            return formatAddressLine({
+                street: form[k.street] || form[k.address],
+                city: form[k.city],
+                state: form[k.state],
+                postalCode: form[k.postalCode],
+                country: form[k.country],
+            });
+        };
+        const billing = line('billing');
+        const shipping = line('shipping');
+        return (
+            <Box sx={{ p: { xs: 2.5, md: 3.5 }, display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' }, gap: 3.5 }}>
+                {billing && (
+                    <Box>
+                        <SectionLabel icon={<PlaceOutlinedIcon sx={{ fontSize: 18 }} />} label="Billing Address" />
+                        <ReadOnlyField label="Address" value={billing} copyable />
+                    </Box>
+                )}
+                {shipping && (
+                    <Box>
+                        <SectionLabel icon={<LocalShippingOutlinedIcon sx={{ fontSize: 18 }} />} label="Shipping Address" />
+                        <ReadOnlyField label="Address" value={shipping} copyable />
+                    </Box>
+                )}
+            </Box>
+        );
+    }
+
     return (
         <Box sx={{ p: { xs: 2.5, md: 3.5 } }}>
-            {/* ── Two-column grid ───────────────────────────────── */}
             <Box
                 sx={{
                     display: 'grid',
@@ -47,80 +177,8 @@ export function AddressTab({
             >
                 {/* ── LEFT COLUMN: Billing Address ─────────────────── */}
                 <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5 }}>
-                    <SectionLabel
-                        icon={<PlaceOutlinedIcon sx={{ fontSize: 18 }} />}
-                        label="Billing Address"
-                    />
-
-                    {/* Street */}
-                    <FormField
-                        name="billingAddress"
-                        label="Street"
-                        required
-                        hint="Registered office location"
-                        sx={{ mb: 0 }}
-                    >
-                        <TextField
-                            fullWidth
-                            multiline
-                            minRows={3}
-                            maxRows={5}
-                            size="small"
-                            placeholder="Enter a location"
-                            value={form.billingStreet || ''}
-                            onChange={(e) => set('billingStreet', e.target.value)}
-                            sx={fieldSx}
-                        />
-                    </FormField>
-
-                    {/* City */}
-                    <FormField name="billingCity" label="City" required sx={{ mb: 0 }}>
-                        <TextField
-                            fullWidth
-                            size="small"
-                            placeholder="Enter city"
-                            value={form.billingCity || ''}
-                            onChange={(e) => set('billingCity', e.target.value)}
-                            sx={fieldSx}
-                        />
-                    </FormField>
-
-                    {/* State/Region */}
-                    <FormField name="billingState" label="State/Region" required sx={{ mb: 0 }}>
-                        <StyledSelect
-                            label="State/Region"
-                            placeholder="Select State/Region"
-                            value={form.billingState || ''}
-                            onChange={(v) => set('billingState', v)}
-                            options={INDIAN_STATES}
-                            required
-                        />
-                    </FormField>
-
-                    {/* Postal Code */}
-                    <FormField name="billingPostalCode" label="Postal Code" required sx={{ mb: 0 }}>
-                        <TextField
-                            fullWidth
-                            size="small"
-                            placeholder="Enter postal code"
-                            value={form.billingPostalCode || ''}
-                            onChange={(e) => set('billingPostalCode', e.target.value)}
-                            sx={fieldSx}
-                        />
-                    </FormField>
-
-                    {/* Country */}
-                    <FormField name="billingCountry" label="Country" sx={{ mb: 0 }}>
-                        <StyledSelect
-                            label="Country"
-                            placeholder="Select Country"
-                            value={form.billingCountry || 'India'}
-                            onChange={(v) => set('billingCountry', v)}
-                            options={COUNTRIES}
-                        />
-                    </FormField>
-
-                    {/* Latitude */}
+                    <SectionLabel icon={<PlaceOutlinedIcon sx={{ fontSize: 18 }} />} label="Billing Address" />
+                    {renderColumn('billing')}
                     <FormField name="billingLatitude" label="Latitude" hint="Geo coordinate" sx={{ mb: 0 }}>
                         <TextField
                             fullWidth
@@ -144,112 +202,27 @@ export function AddressTab({
                             gap: 1,
                         }}
                     >
-                        <SectionLabel
-                            icon={<LocalShippingOutlinedIcon sx={{ fontSize: 18 }} />}
-                            label="Shipping Address"
-                        />
+                        <SectionLabel icon={<LocalShippingOutlinedIcon sx={{ fontSize: 18 }} />} label="Shipping Address" />
                         {!isView && (
-                        <FormControlLabel
-                            control={
-                                <Checkbox
-                                    size="small"
-                                    checked={Boolean(form.copyAddressFromBilling)}
-                                    onChange={(e) => handleCopyAddressToggle(e.target.checked)}
-                                    sx={{
-                                        color: '#2563EB',
-                                        '&.Mui-checked': { color: '#2563EB' },
-                                        p: 0.5,
-                                    }}
-                                />
-                            }
-                            label={
-                                <Typography
-                                    sx={{
-                                        fontSize: '0.78rem',
-                                        color: '#374151',
-                                        fontWeight: 600,
-                                    }}
-                                >
-                                    Copy address from left
-                                </Typography>
-                            }
-                            sx={{ m: 0 }}
-                        />
+                            <FormControlLabel
+                                control={
+                                    <Checkbox
+                                        size="small"
+                                        checked={copying}
+                                        onChange={(e) => handleCopyAddressToggle(e.target.checked)}
+                                        sx={{ color: '#2563EB', '&.Mui-checked': { color: '#2563EB' }, p: 0.5 }}
+                                    />
+                                }
+                                label={
+                                    <Typography sx={{ fontSize: '0.78rem', color: '#374151', fontWeight: 600 }}>
+                                        Copy address from left
+                                    </Typography>
+                                }
+                                sx={{ m: 0 }}
+                            />
                         )}
                     </Box>
-
-                    {/* Street */}
-                    <FormField
-                        name="shippingAddress"
-                        label="Street"
-                        hint="Dispatch & delivery location"
-                        sx={{ mb: 0 }}
-                    >
-                        <TextField
-                            fullWidth
-                            multiline
-                            minRows={3}
-                            maxRows={5}
-                            size="small"
-                            placeholder="Enter delivery location"
-                            value={form.shippingStreet || ''}
-                            onChange={(e) => set('shippingStreet', e.target.value)}
-                            disabled={form.copyAddressFromBilling}
-                            sx={fieldSx}
-                        />
-                    </FormField>
-
-                    {/* City */}
-                    <FormField name="shippingCity" label="City" sx={{ mb: 0 }}>
-                        <TextField
-                            fullWidth
-                            size="small"
-                            placeholder="Enter city"
-                            value={form.shippingCity || ''}
-                            onChange={(e) => set('shippingCity', e.target.value)}
-                            disabled={form.copyAddressFromBilling}
-                            sx={fieldSx}
-                        />
-                    </FormField>
-
-                    {/* State/Region */}
-                    <FormField name="shippingState" label="State/Region" sx={{ mb: 0 }}>
-                        <StyledSelect
-                            label="State/Region"
-                            placeholder="Select State/Region"
-                            value={form.shippingState || ''}
-                            onChange={(v) => set('shippingState', v)}
-                            options={INDIAN_STATES}
-                            disabled={Boolean(form.copyAddressFromBilling)}
-                        />
-                    </FormField>
-
-                    {/* Postal Code */}
-                    <FormField name="shippingPostalCode" label="Postal Code" sx={{ mb: 0 }}>
-                        <TextField
-                            fullWidth
-                            size="small"
-                            placeholder="Enter postal code"
-                            value={form.shippingPostalCode || ''}
-                            onChange={(e) => set('shippingPostalCode', e.target.value)}
-                            disabled={form.copyAddressFromBilling}
-                            sx={fieldSx}
-                        />
-                    </FormField>
-
-                    {/* Country */}
-                    <FormField name="shippingCountry" label="Country" sx={{ mb: 0 }}>
-                        <StyledSelect
-                            label="Country"
-                            placeholder="Select Country"
-                            value={form.shippingCountry || 'India'}
-                            onChange={(v) => set('shippingCountry', v)}
-                            options={COUNTRIES}
-                            disabled={Boolean(form.copyAddressFromBilling)}
-                        />
-                    </FormField>
-
-                    {/* Longitude */}
+                    {renderColumn('shipping')}
                     <FormField name="shippingLongitude" label="Longitude" hint="Geo coordinate" sx={{ mb: 0 }}>
                         <TextField
                             fullWidth
@@ -265,4 +238,3 @@ export function AddressTab({
         </Box>
     );
 }
-

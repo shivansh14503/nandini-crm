@@ -7,11 +7,15 @@ import LocalShippingOutlinedIcon from '@mui/icons-material/LocalShippingOutlined
 import { useFormContext, useWatch, type FieldValues, type Path } from 'react-hook-form';
 
 import { SectionLabel } from '../SectionLabel';
+import { ReadOnlyField } from '../ReadOnlyField';
+import { formatAddressLine } from '@/utils/address';
+import { countryIso2OrDefault } from '../AddressPrimitives';
 import { RhfTextField } from './RhfTextField';
 import { RhfPinCodeField } from './RhfPinCodeField';
-import { RhfSelect } from './RhfSelect';
 import { RhfCheckbox } from './RhfCheckbox';
-import { INDIAN_STATES, COUNTRIES } from '@/config/constants';
+import { RhfCityField, RhfCountrySelect, RhfStateRegionField } from './RhfAddressFields';
+import { DEFAULT_COUNTRY_CODE, getSubdivisionsByCountry } from '@/data/addressMaster';
+import { useFormMode } from '@/context/FormModeContext';
 
 export interface AddressFieldNames<T extends FieldValues> {
     address: Path<T>;
@@ -19,6 +23,8 @@ export interface AddressFieldNames<T extends FieldValues> {
     state: Path<T>;
     postalCode: Path<T>;
     country: Path<T>;
+    latitude?: Path<T>;
+    longitude?: Path<T>;
 }
 
 export interface RhfAddressSectionProps<T extends FieldValues> {
@@ -30,17 +36,26 @@ export interface RhfAddressSectionProps<T extends FieldValues> {
     shippingFields?: AddressFieldNames<T>;
     copyFieldName?: Path<T>;
     copyLabel?: string;
+    /** Makes the left (billing / primary) column's fields required. */
     required?: boolean;
     disabled?: boolean;
 }
 
 const columnSx = { display: 'flex', flexDirection: 'column', gap: 2 } as const;
 
+/** Copy-able field keys; latitude/longitude are per-column and never mirrored. */
+const MIRRORED_KEYS = ['address', 'country', 'state', 'city', 'postalCode'] as const;
+
+/**
+ * Universal two-column address section (billing/primary on the left, shipping/other on the right) built on the
+ * ISO 3166 address master: country dropdown storing ISO2, country-filtered state/region, free-text city and a
+ * country-aware postal code. The optional copy checkbox mirrors the left column into the right one.
+ */
 export function RhfAddressSection<T extends FieldValues>({
     billingTitle = 'BILLING ADDRESS',
     shippingTitle = 'SHIPPING ADDRESS',
-    streetLabel = 'Address',
-    shippingStreetLabel = 'Shipping Address',
+    streetLabel = 'Street',
+    shippingStreetLabel = 'Street',
     billingFields = {
         address: 'billingAddress' as Path<T>,
         city: 'billingCity' as Path<T>,
@@ -61,6 +76,7 @@ export function RhfAddressSection<T extends FieldValues>({
     disabled = false,
 }: RhfAddressSectionProps<T>) {
     const { control, getValues, setValue } = useFormContext<T>();
+    const { mode } = useFormMode();
     const copy = Boolean(useWatch({ control, name: copyFieldName }));
 
     const billingAddressVal = useWatch({ control, name: billingFields.address });
@@ -69,28 +85,25 @@ export function RhfAddressSection<T extends FieldValues>({
     const billingPostalCodeVal = useWatch({ control, name: billingFields.postalCode });
     const billingCountryVal = useWatch({ control, name: billingFields.country });
 
-    // Sync shipping fields with billing when copy toggle is enabled
+    // Mirror the left column into the right one while "copy" is checked (exact values; country defaults to India).
     useEffect(() => {
-        if (!copy) return;
+        if (!copy || mode === 'view') return;
         const opts = { shouldDirty: true, shouldValidate: true } as const;
-
-        if (getValues(shippingFields.address) !== billingAddressVal) {
-            setValue(shippingFields.address, (billingAddressVal || '') as never, opts);
-        }
-        if (getValues(shippingFields.city) !== billingCityVal) {
-            setValue(shippingFields.city, (billingCityVal || '') as never, opts);
-        }
-        if (getValues(shippingFields.state) !== billingStateVal) {
-            setValue(shippingFields.state, (billingStateVal || 'Delhi') as never, opts);
-        }
-        if (getValues(shippingFields.postalCode) !== billingPostalCodeVal) {
-            setValue(shippingFields.postalCode, (billingPostalCodeVal || '') as never, opts);
-        }
-        if (getValues(shippingFields.country) !== billingCountryVal) {
-            setValue(shippingFields.country, (billingCountryVal || 'India') as never, opts);
+        const source: Record<(typeof MIRRORED_KEYS)[number], unknown> = {
+            address: billingAddressVal ?? '',
+            country: billingCountryVal || DEFAULT_COUNTRY_CODE,
+            state: billingStateVal ?? '',
+            city: billingCityVal ?? '',
+            postalCode: billingPostalCodeVal ?? '',
+        };
+        for (const key of MIRRORED_KEYS) {
+            if (getValues(shippingFields[key]) !== source[key]) {
+                setValue(shippingFields[key], source[key] as never, opts);
+            }
         }
     }, [
         copy,
+        mode,
         billingAddressVal,
         billingCityVal,
         billingStateVal,
@@ -101,6 +114,47 @@ export function RhfAddressSection<T extends FieldValues>({
         shippingFields,
     ]);
 
+    const [sStreet, sCity, sState, sPostal, sCountry] = useWatch({
+        control,
+        name: [shippingFields.address, shippingFields.city, shippingFields.state, shippingFields.postalCode, shippingFields.country],
+    });
+
+    const billingHasStates = getSubdivisionsByCountry(countryIso2OrDefault(billingCountryVal as string)).length > 0;
+    const shippingLocked = copy || disabled;
+
+    if (mode === 'view') {
+        const billingLine = formatAddressLine({
+            street: billingAddressVal as string,
+            city: billingCityVal as string,
+            state: billingStateVal as string,
+            postalCode: billingPostalCodeVal as string,
+            country: billingCountryVal as string,
+        });
+        const shippingLine = formatAddressLine({
+            street: sStreet as string,
+            city: sCity as string,
+            state: sState as string,
+            postalCode: sPostal as string,
+            country: sCountry as string,
+        });
+        return (
+            <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' }, gap: { xs: 3, md: 4 } }}>
+                {billingLine && (
+                    <Box sx={columnSx}>
+                        <SectionLabel icon={<PlaceOutlinedIcon sx={{ fontSize: 18, color: '#2563eb' }} />} label={billingTitle} sx={{ mb: 1 }} />
+                        <ReadOnlyField label="Address" value={billingLine} copyable />
+                    </Box>
+                )}
+                {shippingLine && (
+                    <Box sx={columnSx}>
+                        <SectionLabel icon={<LocalShippingOutlinedIcon sx={{ fontSize: 18, color: '#64748b' }} />} label={shippingTitle} sx={{ mb: 1 }} />
+                        <ReadOnlyField label="Address" value={shippingLine} copyable />
+                    </Box>
+                )}
+            </Box>
+        );
+    }
+
     return (
         <Box
             sx={{
@@ -109,12 +163,25 @@ export function RhfAddressSection<T extends FieldValues>({
                 gap: { xs: 3, md: 4 },
             }}
         >
-            {/* ── Left Column: Primary / Billing Address ── */}
+            {/* ── Left Column: Billing / Primary Address ── */}
             <Box sx={columnSx}>
                 <SectionLabel
                     icon={<PlaceOutlinedIcon sx={{ fontSize: 18, color: '#2563eb' }} />}
                     label={billingTitle}
                     sx={{ mb: 1 }}
+                />
+                <RhfCountrySelect<T> name={billingFields.country} required={required} disabled={disabled} />
+                <RhfStateRegionField<T>
+                    name={billingFields.state}
+                    countryFieldName={billingFields.country}
+                    required={required && billingHasStates}
+                    disabled={disabled}
+                />
+                <RhfCityField<T>
+                    name={billingFields.city}
+                    countryFieldName={billingFields.country}
+                    required={required}
+                    disabled={disabled}
                 />
                 <RhfTextField<T>
                     name={billingFields.address}
@@ -127,36 +194,21 @@ export function RhfAddressSection<T extends FieldValues>({
                     placeholder="Enter street and building address..."
                     disabled={disabled}
                 />
-                <RhfTextField<T>
-                    name={billingFields.city}
-                    label="City"
-                    required={required}
-                    placeholder="e.g. New Delhi / Gurugram"
-                    disabled={disabled}
-                />
-                <RhfSelect<T>
-                    name={billingFields.state}
-                    label="State / Region"
-                    required={required}
-                    options={INDIAN_STATES}
-                    placeholder="Select State / Region"
-                    disabled={disabled}
-                />
                 <RhfPinCodeField<T>
                     name={billingFields.postalCode}
-                    label="Postal Code (PIN)"
+                    countryFieldName={billingFields.country}
                     required={required}
-                    placeholder="e.g. 110020"
                     disabled={disabled}
                 />
-                <RhfSelect<T>
-                    name={billingFields.country}
-                    label="Country"
-                    required={required}
-                    options={COUNTRIES}
-                    placeholder="Select Country"
-                    disabled={disabled}
-                />
+                {billingFields.latitude && (
+                    <RhfTextField<T>
+                        name={billingFields.latitude}
+                        label="Latitude"
+                        hint="Geo coordinate"
+                        placeholder="0.00000000"
+                        disabled={disabled}
+                    />
+                )}
             </Box>
 
             {/* ── Right Column: Shipping / Other Address ── */}
@@ -178,6 +230,17 @@ export function RhfAddressSection<T extends FieldValues>({
                     <RhfCheckbox<T> name={copyFieldName} label={copyLabel} />
                 </Box>
 
+                <RhfCountrySelect<T> name={shippingFields.country} disabled={shippingLocked} />
+                <RhfStateRegionField<T>
+                    name={shippingFields.state}
+                    countryFieldName={shippingFields.country}
+                    disabled={shippingLocked}
+                />
+                <RhfCityField<T>
+                    name={shippingFields.city}
+                    countryFieldName={shippingFields.country}
+                    disabled={shippingLocked}
+                />
                 <RhfTextField<T>
                     name={shippingFields.address}
                     label={shippingStreetLabel}
@@ -185,35 +248,23 @@ export function RhfAddressSection<T extends FieldValues>({
                     multiline
                     minRows={3}
                     maxRows={4}
-                    placeholder="Enter shipping address..."
-                    disabled={copy ? true : disabled}
-                />
-                <RhfTextField<T>
-                    name={shippingFields.city}
-                    label="City"
-                    placeholder="Enter delivery city"
-                    disabled={copy ? true : disabled}
-                />
-                <RhfSelect<T>
-                    name={shippingFields.state}
-                    label="State / Region"
-                    options={INDIAN_STATES}
-                    placeholder="Select State / Region"
-                    disabled={copy ? true : disabled}
+                    placeholder="Enter street and building address..."
+                    disabled={shippingLocked}
                 />
                 <RhfPinCodeField<T>
                     name={shippingFields.postalCode}
-                    label="Postal Code (PIN)"
-                    placeholder="Enter delivery PIN code"
-                    disabled={copy ? true : disabled}
+                    countryFieldName={shippingFields.country}
+                    disabled={shippingLocked}
                 />
-                <RhfSelect<T>
-                    name={shippingFields.country}
-                    label="Country"
-                    options={COUNTRIES}
-                    placeholder="Select Country"
-                    disabled={copy ? true : disabled}
-                />
+                {shippingFields.longitude && (
+                    <RhfTextField<T>
+                        name={shippingFields.longitude}
+                        label="Longitude"
+                        hint="Geo coordinate"
+                        placeholder="0.00000000"
+                        disabled={disabled}
+                    />
+                )}
             </Box>
         </Box>
     );

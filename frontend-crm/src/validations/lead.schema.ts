@@ -4,7 +4,8 @@ import {
     optionalString,
     zodPhone,
     zodPhoneOptional,
-    zodPinCodeOptional,
+    zodPostalCodeOptional,
+    refinePostalCodeForCountry,
 } from './common';
 import { corporateEmailSchema } from './contact.schema';
 
@@ -43,7 +44,7 @@ export const leadFormSchema = z.object({
     primaryAddress: optionalString,
     primaryCity: optionalString,
     primaryState: optionalString,
-    primaryPostalCode: zodPinCodeOptional,
+    primaryPostalCode: zodPostalCodeOptional,
     primaryCountry: optionalString.default('India'),
     primaryLatitude: optionalString.default('0.00000000'),
 
@@ -51,10 +52,13 @@ export const leadFormSchema = z.object({
     otherAddress: optionalString,
     otherCity: optionalString,
     otherState: optionalString,
-    otherPostalCode: zodPinCodeOptional,
+    otherPostalCode: zodPostalCodeOptional,
     otherCountry: optionalString.default('India'),
     copyAddressFromLeft: z.boolean().default(false),
     otherLongitude: optionalString.default('0.00000000'),
+}).superRefine((data, ctx) => {
+    refinePostalCodeForCountry(ctx, 'primaryPostalCode', data.primaryPostalCode, data.primaryCountry);
+    refinePostalCodeForCountry(ctx, 'otherPostalCode', data.otherPostalCode, data.otherCountry);
 });
 
 export type LeadFormSchemaType = z.infer<typeof leadFormSchema>;

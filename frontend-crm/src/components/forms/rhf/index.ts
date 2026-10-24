@@ -12,5 +12,6 @@ export * from './RhfChipGroup';
 export * from './RhfDateTimeField';
 export * from './RhfEmailList';
 export * from './useRhfForm';
+export * from './RhfAddressFields';
 export * from './RhfAddressSection';
 export * from './CrmLineItemsSection';

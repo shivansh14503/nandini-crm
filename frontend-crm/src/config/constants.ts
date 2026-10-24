@@ -1,3 +1,10 @@
+import {
+    COUNTRY_OPTIONS,
+    DEFAULT_COUNTRY_CODE,
+    getSubdivisionsByCountry,
+    toPlainName,
+} from '../data/addressMaster';
+
 export const APP_CONFIG = {
     appName: 'Nandini Infosys CRM',
     companyName: 'Nandini Infosys',
@@ -36,56 +43,23 @@ export const ROUTES = {
     PRODUCT_EDIT: (id: string | number) => `/products/${id}/edit`,
 };
 
-export const INDIAN_STATES: string[] = [
-    'Andhra Pradesh',
-    'Arunachal Pradesh',
-    'Assam',
-    'Bihar',
-    'Chhattisgarh',
-    'Goa',
-    'Gujarat',
-    'Haryana',
-    'Himachal Pradesh',
-    'Jharkhand',
-    'Karnataka',
-    'Kerala',
-    'Madhya Pradesh',
-    'Maharashtra',
-    'Manipur',
-    'Meghalaya',
-    'Mizoram',
-    'Nagaland',
-    'Odisha',
-    'Punjab',
-    'Rajasthan',
-    'Sikkim',
-    'Tamil Nadu',
-    'Telangana',
-    'Tripura',
-    'Uttar Pradesh',
-    'Uttarakhand',
-    'West Bengal',
-    'Andaman and Nicobar Islands',
-    'Chandigarh',
-    'Dadra and Nagar Haveli and Daman and Diu',
-    'Delhi',
-    'Jammu and Kashmir',
-    'Ladakh',
-    'Lakshadweep',
-    'Puducherry',
-];
+// ── Address lists (derived from the ISO 3166 address master) ──────────────────
+// Kept for backward compatibility while forms move to the country-aware helpers in src/data/addressMaster.ts.
+// Values stay plain ASCII ('Haryana', not 'Haryāna') so they keep matching existing saved records.
 
-export const COUNTRIES: string[] = [
-    'India',
-    'United States',
-    'United Kingdom',
-    'United Arab Emirates',
-    'Singapore',
-    'Germany',
-    'Australia',
-    'Canada',
-    'Other',
-];
+/**
+ * Indian states and union territories, alphabetical, without diacritics.
+ * @deprecated Use getStateOptionLabelsForCountry(country) from '@/data/addressMaster'.
+ */
+export const INDIAN_STATES: string[] = getSubdivisionsByCountry(DEFAULT_COUNTRY_CODE).map((s) =>
+    toPlainName(s.subdivisionName)
+);
+
+/**
+ * Country display names (India first), plus the legacy 'Other' option that older records may hold.
+ * @deprecated Use COUNTRY_OPTIONS from '@/data/addressMaster' and store iso2Code.
+ */
+export const COUNTRIES: string[] = [...COUNTRY_OPTIONS.map((c) => c.countryName), 'Other'];
 
 export const REGISTRATION_TYPES: string[] = [
     'Registered',

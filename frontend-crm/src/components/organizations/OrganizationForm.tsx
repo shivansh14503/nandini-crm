@@ -19,6 +19,7 @@ import { organizationService } from '@/services';
 import { useAuth } from '@/context/AuthContext';
 import { ROUTES } from '../../config/constants';
 import { focusFormField } from '@/utils/formFocus';
+import { normalizeAddressFields } from '@/utils/address';
 import { useFormDraftGuard } from '@/hooks/useFormDraftGuard';
 import { UnsavedChangesModal } from '../common/UnsavedChangesModal';
 import { validateWithToast, organizationFormSchema } from '../../validations';
@@ -60,6 +61,12 @@ export const ORGANIZATION_FORM_TABS: (FormTabDefinition & { id: TabKey })[] = [
     },
 ];
 
+/** Country/state pairs normalised to the ISO address master when a saved organization is loaded. */
+const ORGANIZATION_ADDRESS_PAIRS = [
+    ['billingCountry', 'billingState'],
+    ['shippingCountry', 'shippingState'],
+] as const;
+
 // ─── Default Form State ───────────────────────────────────────────────────────
 const DEFAULT_FORM: OrganizationFormData = {
     organizationName: '',
@@ -86,7 +93,7 @@ const DEFAULT_FORM: OrganizationFormData = {
     billingCity: '',
     billingState: '',
     billingPostalCode: '',
-    billingCountry: 'India',
+    billingCountry: 'IN',
     billingLatitude: '0.00000000',
 
     // Shipping Address
@@ -95,7 +102,7 @@ const DEFAULT_FORM: OrganizationFormData = {
     shippingCity: '',
     shippingState: '',
     shippingPostalCode: '',
-    shippingCountry: 'India',
+    shippingCountry: 'IN',
     shippingLongitude: '0.00000000',
     copyAddressFromBilling: false,
 
@@ -262,13 +269,13 @@ export default function OrganizationForm({
             .getById(organizationId)
             .then((found) => {
                 if (active && found) {
-                    const normalized: OrganizationFormData = {
+                    const normalized: OrganizationFormData = normalizeAddressFields<OrganizationFormData>({
                         ...found,
                         accountStatus: found.accountStatus === 'Inactive' ? 'Inactive' : 'Active',
                         billingAddress: found.billingAddress || found.billingStreet || '',
                         shippingAddress: found.shippingAddress || found.shippingStreet || '',
                         gstNo: found.gstNo || found.gstNumber || '',
-                    };
+                    }, ORGANIZATION_ADDRESS_PAIRS);
                     setAudit({
                         code: found.accountCode,
                         createdAt: found.createdAt,
@@ -328,7 +335,7 @@ export default function OrganizationForm({
                       shippingCity: prev.billingCity || '',
                       shippingState: prev.billingState || '',
                       shippingPostalCode: prev.billingPostalCode || '',
-                      shippingCountry: prev.billingCountry || 'India',
+                      shippingCountry: prev.billingCountry || 'IN',
                   }
                 : {}),
         }));
@@ -339,7 +346,7 @@ export default function OrganizationForm({
             methods.setValue('shippingCity', form.billingCity || '', { shouldDirty: true });
             methods.setValue('shippingState', form.billingState || '', { shouldDirty: true });
             methods.setValue('shippingPostalCode', form.billingPostalCode || '', { shouldDirty: true });
-            methods.setValue('shippingCountry', form.billingCountry || 'India', { shouldDirty: true });
+            methods.setValue('shippingCountry', form.billingCountry || 'IN', { shouldDirty: true });
         }
         setIsDirty(true);
     };

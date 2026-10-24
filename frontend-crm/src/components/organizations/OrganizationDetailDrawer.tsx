@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import { getCountryNameByCode } from '@/data/addressMaster';
 import { useRouter } from 'next/navigation';
 import { Box, Typography, IconButton, Button, Chip, Divider } from '@mui/material';
 
@@ -334,7 +335,7 @@ export function OrganizationDetailDrawer({
                                 {org.billingCity || 'New Delhi'}, {org.billingState || 'Delhi'} – {org.billingPostalCode || '110052'}
                             </Typography>
                             <Typography sx={{ fontSize: '0.74rem', color: '#64748b', mt: 0.3 }}>
-                                Country: {org.billingCountry || 'India'}
+                                Country: {getCountryNameByCode(org.billingCountry || 'IN')}
                             </Typography>
                             <Box sx={{ mt: 1.2, pt: 1, borderTop: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', gap: 2 }}>
                                 <Typography sx={{ fontSize: '0.72rem', color: '#64748b' }}>
@@ -359,7 +360,7 @@ export function OrganizationDetailDrawer({
                                 {org.shippingCity || 'North Delhi'}, {org.shippingState || 'Delhi'} – {org.shippingPostalCode || '110036'}
                             </Typography>
                             <Typography sx={{ fontSize: '0.74rem', color: '#64748b', mt: 0.3 }}>
-                                Country: {org.shippingCountry || 'India'}
+                                Country: {getCountryNameByCode(org.shippingCountry || 'IN')}
                             </Typography>
                         </DrawerSectionCard>
 

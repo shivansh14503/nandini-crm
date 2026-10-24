@@ -15,6 +15,7 @@ import { ROUTES } from '../../config/constants';
 import { leadFormSchema } from '../../validations';
 import type { LeadFormData } from '../../types/lead.types';
 import { leadService } from '@/services';
+import { normalizeAddressFields } from '@/utils/address';
 
 // Modular Lead Form Sections
 import {
@@ -82,17 +83,23 @@ const DEFAULT_FORM: LeadFormData = {
     primaryCity: '',
     primaryState: 'Delhi',
     primaryPostalCode: '',
-    primaryCountry: 'India',
+    primaryCountry: 'IN',
     primaryLatitude: '0.00000000',
 
     otherAddress: '',
     otherCity: '',
     otherState: 'Delhi',
     otherPostalCode: '',
-    otherCountry: 'India',
+    otherCountry: 'IN',
     copyAddressFromLeft: false,
     otherLongitude: '0.00000000',
 };
+
+/** Country/state pairs normalised to the ISO address master when a saved lead is loaded. */
+const LEAD_ADDRESS_PAIRS = [
+    ['primaryCountry', 'primaryState'],
+    ['otherCountry', 'otherState'],
+] as const;
 
 export default function LeadForm({
     mode = 'create',
@@ -124,7 +131,7 @@ export default function LeadForm({
         leadService
             .getById(leadId)
             .then((found) => {
-                if (active && found) reset(found);
+                if (active && found) reset(normalizeAddressFields(found, LEAD_ADDRESS_PAIRS));
             })
             .catch(() => {});
         return () => {

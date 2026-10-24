@@ -2,8 +2,9 @@ import { z } from 'zod';
 import {
     requiredString,
     optionalString,
-    zodPinCode,
-    zodPinCodeOptional,
+    zodPostalCode,
+    zodPostalCodeOptional,
+    refinePostalCodeForCountry,
     zodPanOptional,
     zodGstOptional,
     zodIfscOptional,
@@ -50,7 +51,7 @@ export const organizationFormSchema = z
         billingStreet: optionalString,
         billingCity: requiredString('Billing City'),
         billingState: requiredString('Billing State'),
-        billingPostalCode: zodPinCode,
+        billingPostalCode: zodPostalCode,
         billingCountry: optionalString.default('India'),
         billingLatitude: optionalString,
 
@@ -59,7 +60,7 @@ export const organizationFormSchema = z
         shippingStreet: optionalString,
         shippingCity: optionalString,
         shippingState: optionalString,
-        shippingPostalCode: zodPinCodeOptional,
+        shippingPostalCode: zodPostalCodeOptional,
         shippingCountry: optionalString.default('India'),
         shippingLongitude: optionalString,
         copyAddressFromBilling: z.boolean().default(false),
@@ -83,6 +84,9 @@ export const organizationFormSchema = z
         partnerCompanies: z.array(z.union([z.string(), partnerCompanySchema])).default([]),
     })
     .superRefine((data, ctx) => {
+        refinePostalCodeForCountry(ctx, 'billingPostalCode', data.billingPostalCode, data.billingCountry, true);
+        refinePostalCodeForCountry(ctx, 'shippingPostalCode', data.shippingPostalCode, data.shippingCountry);
+
         if (data.registrationType === 'Registered') {
             const gst = (data.gstNo || data.gstNumber)?.trim();
             if (!gst || gst.length < 1) {

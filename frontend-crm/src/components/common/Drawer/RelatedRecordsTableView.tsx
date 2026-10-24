@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useEffect, useMemo, useState } from 'react';
+import { getCountryNameByCode } from '@/data/addressMaster';
 import {
     Box,
     Typography,
@@ -331,7 +332,13 @@ function getColumnsForModule(moduleKey: string): DataTableColumn<RelatedRow>[] {
             return [
                 { id: 'name', label: 'Name', minWidth: 200, sortable: true, render: (r) => renderPrimaryCell(r.name) },
                 { id: 'city', label: 'City', minWidth: 140, sortable: true, accessor: 'city' },
-                { id: 'billingCountry', label: 'Billing Country', minWidth: 150, sortable: true, accessor: 'billingCountry' },
+                {
+                    id: 'billingCountry',
+                    label: 'Billing Country',
+                    minWidth: 150,
+                    sortable: true,
+                    accessor: (r) => getCountryNameByCode(typeof r.billingCountry === 'string' ? r.billingCountry : ''),
+                },
                 { id: 'phone', label: 'Phone', minWidth: 150, sortable: true, accessor: 'phone' },
             ];
 

@@ -3,8 +3,9 @@ import {
     requiredString,
     optionalString,
     zodPhoneOptional,
-    zodPinCode,
-    zodPinCodeOptional,
+    zodPostalCode,
+    zodPostalCodeOptional,
+    refinePostalCodeForCountry,
     zodEmailOptional,
     zodGstOptional,
     zodAmount,
@@ -73,13 +74,13 @@ export const quotationFormSchema = z.object({
     billingAddress: requiredString('Street / Billing Address'),
     billingCity: requiredString('City'),
     billingState: requiredString('State / Region'),
-    billingPostalCode: zodPinCode,
+    billingPostalCode: zodPostalCode,
     billingCountry: requiredString('Country').default('India'),
 
     shippingAddress: optionalString,
     shippingCity: optionalString,
     shippingState: optionalString,
-    shippingPostalCode: zodPinCodeOptional,
+    shippingPostalCode: zodPostalCodeOptional,
     shippingCountry: optionalString,
     copyAddressFromBilling: z.boolean().default(true),
 
@@ -93,6 +94,10 @@ export const quotationFormSchema = z.object({
     emailAddress: zodEmailOptional,
     notes: optionalString,
     termsAndConditions: optionalString,
+}).superRefine((data, ctx) => {
+    refinePostalCodeForCountry(ctx, 'billingPostalCode', data.billingPostalCode, data.billingCountry, true);
+    // An empty shipping country falls back to the billing country.
+    refinePostalCodeForCountry(ctx, 'shippingPostalCode', data.shippingPostalCode, data.shippingCountry || data.billingCountry);
 });
 
 export type QuotationFormSchemaType = z.infer<typeof quotationFormSchema>;

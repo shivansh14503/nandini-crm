@@ -30,6 +30,7 @@ import {
     QuotationLineItemsSection,
     QuotationAddressSection,
 } from './sections';
+import { normalizeAddressFields } from '@/utils/address';
 
 export interface CreateQuoteFormProps {
     mode?: 'create' | 'edit' | 'view';
@@ -111,6 +112,12 @@ const ADDRESS_FIELD_KEYS = [
     'copyAddressFromBilling',
 ];
 
+/** Country/state pairs normalised to the ISO address master when address data is loaded. */
+const QUOTATION_ADDRESS_PAIRS = [
+    ['billingCountry', 'billingState'],
+    ['shippingCountry', 'shippingState'],
+] as const;
+
 const EMPTY_DEFAULTS: QuotationFormData = {
     // Tab 1: Overview
     quotationTitle: '',
@@ -155,13 +162,13 @@ const EMPTY_DEFAULTS: QuotationFormData = {
     billingCity: '',
     billingState: 'Delhi',
     billingPostalCode: '',
-    billingCountry: 'India',
+    billingCountry: 'IN',
 
     shippingAddress: '',
     shippingCity: '',
     shippingState: 'Delhi',
     shippingPostalCode: '',
-    shippingCountry: 'India',
+    shippingCountry: 'IN',
     copyAddressFromBilling: true,
 
     // Context & Aliases
@@ -218,11 +225,12 @@ export function CreateQuoteForm({
                         return;
                     }
                     setQuotation(found);
-                    reset({
-                        ...EMPTY_DEFAULTS,
-                        ...found,
-                        ...initialData,
-                    });
+                    reset(
+                        normalizeAddressFields<QuotationFormData>(
+                            { ...EMPTY_DEFAULTS, ...found, ...initialData },
+                            QUOTATION_ADDRESS_PAIRS
+                        )
+                    );
                 })
                 .catch((err) => {
                     if (active) {

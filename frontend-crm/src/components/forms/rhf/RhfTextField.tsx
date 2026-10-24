@@ -50,8 +50,8 @@ export function RhfTextField<T extends FieldValues>({
     const isNumeric =
         numericOnly ??
         (inputProps.type === 'tel' ||
-            /(mobile|phone|postalcode|pincode|pin_code)/i.test(name) ||
-            /(mobile|phone|postal code|pin code|pincode)/i.test(label));
+            /(mobile|phone)/i.test(name) ||
+            /(mobile|phone)/i.test(label));
 
     const isUppercase =
         uppercase ??
@@ -69,9 +69,10 @@ export function RhfTextField<T extends FieldValues>({
     const resolvedMaxLength =
         maxLength ??
         (existingHtmlInput.maxLength as number | undefined) ??
+        // Postal codes are free text (international formats); country-specific masking lives in the postal field primitive.
         (/(postalcode|pincode|pin code|postal code)/i.test(name) ||
         /(postal code|pin code|pincode)/i.test(label)
-            ? 6
+            ? 12
             : /(mobile|phone)/i.test(name) || /(mobile|phone)/i.test(label)
             ? 10
             : undefined);

@@ -14,6 +14,8 @@ import {
     RhfEmailField,
 } from '@/components/forms';
 import type { QuotationFormData } from '@/types/quotation.types';
+import { normalizeLegacyStateName } from '@/data/addressMaster';
+import { normalizeCountryValue } from '@/utils/address';
 import { organizationService, contactService } from '@/services';
 
 const columnSx = { display: 'flex', flexDirection: 'column', gap: 2.2 } as const;
@@ -63,17 +65,21 @@ export function QuotationAddressSection() {
                 if (org.mailingName) setValue('mailingName', org.mailingName, opts);
                 if (org.gstNumber) setValue('gstNo', org.gstNumber, opts);
 
+                // Country is set before state so the state field validates against the right country.
+                const billingCountry = normalizeCountryValue(org.billingCountry);
+                const shippingCountry = normalizeCountryValue(org.shippingCountry || org.billingCountry);
+
                 if (org.billingStreet) setValue('billingAddress', org.billingStreet, opts);
+                setValue('billingCountry', billingCountry, opts);
+                if (org.billingState) setValue('billingState', normalizeLegacyStateName(org.billingState, billingCountry), opts);
                 if (org.billingCity) setValue('billingCity', org.billingCity, opts);
-                if (org.billingState) setValue('billingState', org.billingState, opts);
                 if (org.billingPostalCode) setValue('billingPostalCode', org.billingPostalCode, opts);
-                if (org.billingCountry) setValue('billingCountry', org.billingCountry, opts);
 
                 if (org.shippingStreet) setValue('shippingAddress', org.shippingStreet, opts);
+                setValue('shippingCountry', shippingCountry, opts);
+                if (org.shippingState) setValue('shippingState', normalizeLegacyStateName(org.shippingState, shippingCountry), opts);
                 if (org.shippingCity) setValue('shippingCity', org.shippingCity, opts);
-                if (org.shippingState) setValue('shippingState', org.shippingState, opts);
                 if (org.shippingPostalCode) setValue('shippingPostalCode', org.shippingPostalCode, opts);
-                if (org.shippingCountry) setValue('shippingCountry', org.shippingCountry, opts);
             }
         } catch {
             // Ignore lookups if service throws

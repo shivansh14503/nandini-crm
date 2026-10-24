@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import { getCountryNameByCode } from '@/data/addressMaster';
 import { useRouter } from 'next/navigation';
 import { Box, Typography, Chip, Divider } from '@mui/material';
 
@@ -422,7 +423,7 @@ export function LeadDetailDrawer({
                                 <Box>
                                     <Typography sx={{ fontSize: '0.68rem', color: '#64748b', fontWeight: 700 }}>COUNTRY</Typography>
                                     <Typography sx={{ fontSize: '0.8rem', color: '#334155' }}>
-                                        {l.primaryCountry || 'India'}
+                                        {getCountryNameByCode(l.primaryCountry || 'IN')}
                                     </Typography>
                                 </Box>
                             </Box>
@@ -457,7 +458,7 @@ export function LeadDetailDrawer({
                                 <Box>
                                     <Typography sx={{ fontSize: '0.68rem', color: '#64748b', fontWeight: 700 }}>COUNTRY</Typography>
                                     <Typography sx={{ fontSize: '0.8rem', color: '#334155' }}>
-                                        {l.otherCountry || 'India'}
+                                        {getCountryNameByCode(l.otherCountry || 'IN')}
                                     </Typography>
                                 </Box>
                             </Box>

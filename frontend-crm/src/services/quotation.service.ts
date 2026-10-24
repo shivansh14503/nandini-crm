@@ -13,6 +13,8 @@ import {
     deleteMultipleStoredQuotations,
 } from '../data/mockQuotations';
 import { createCrudService } from './base.service';
+import { DEFAULT_COUNTRY_CODE, normalizeLegacyStateName } from '../data/addressMaster';
+import { normalizeCountryValue } from '../utils/address';
 import { opportunityService } from './opportunity.service';
 import { organizationService } from './organization.service';
 
@@ -63,15 +65,15 @@ export function resolveOpportunityAddress(
 
     const billingStreet = (org?.billingStreet || '').trim();
     const billingCity = (org?.billingCity || '').trim();
-    const billingState = (org?.billingState || '').trim();
+    const billingCountry = normalizeCountryValue(org?.billingCountry);
+    const billingState = normalizeLegacyStateName(org?.billingState, billingCountry);
     const billingPostalCode = (org?.billingPostalCode || '').trim();
-    const billingCountry = (org?.billingCountry || 'India').trim();
 
     const shippingStreet = (org?.shippingStreet || billingStreet).trim();
     const shippingCity = (org?.shippingCity || billingCity).trim();
-    const shippingState = (org?.shippingState || billingState).trim();
+    const shippingCountry = normalizeCountryValue(org?.shippingCountry || billingCountry);
+    const shippingState = normalizeLegacyStateName(org?.shippingState || billingState, shippingCountry);
     const shippingPostalCode = (org?.shippingPostalCode || billingPostalCode).trim();
-    const shippingCountry = (org?.shippingCountry || billingCountry || 'India').trim();
 
     const hasCompleteAddress = Boolean(
         billingStreet && billingCity && billingState && billingPostalCode
@@ -185,13 +187,13 @@ export function buildQuotationDefaultsFromOpportunity(
         billingCity: addr.billingCity,
         billingState: addr.billingState || 'Delhi',
         billingPostalCode: addr.billingPostalCode,
-        billingCountry: addr.billingCountry || 'India',
+        billingCountry: addr.billingCountry || DEFAULT_COUNTRY_CODE,
 
         shippingAddress: addr.shippingStreet,
         shippingCity: addr.shippingCity,
         shippingState: addr.shippingState || 'Delhi',
         shippingPostalCode: addr.shippingPostalCode,
-        shippingCountry: addr.shippingCountry || 'India',
+        shippingCountry: addr.shippingCountry || DEFAULT_COUNTRY_CODE,
         copyAddressFromBilling: true,
 
         // Aliases / Context

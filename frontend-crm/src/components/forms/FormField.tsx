@@ -2,6 +2,7 @@ import React from 'react';
 import { Box, Typography, type SxProps, type Theme } from '@mui/material';
 import { useFormMode } from '@/context/FormModeContext';
 import { ReadOnlyField } from './ReadOnlyField';
+import { getCountryNameByCode } from '@/data/addressMaster';
 
 export const fieldSx = {
     '& .MuiOutlinedInput-root': {
@@ -89,7 +90,10 @@ export function FormField({ name, viewValue, label, required, hint, children, sx
         if (viewValue !== undefined) {
             return <ReadOnlyField label={label} value={viewValue} hideWhenEmpty sx={{ mb: 2, ...sx }} />;
         }
-        const { found, value } = extractViewValue(children);
+        const extracted = extractViewValue(children);
+        const found = extracted.found;
+        // Country fields store ISO2 codes; show the country name.
+        const value = name && /country$/i.test(name) && extracted.value ? getCountryNameByCode(extracted.value) : extracted.value;
         if (found) {
             return <ReadOnlyField label={label} value={value} hideWhenEmpty {...viewPresentation(name, value)} sx={{ mb: 2, ...sx }} />;
         }
