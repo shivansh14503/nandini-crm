@@ -270,10 +270,16 @@ export function CommonRecordDetailView({
                 )}
 
                 <FormModeProvider mode="view">
-                    {/* Safety net: any control not yet migrated to view mode can't be interacted with. */}
-                    <fieldset inert style={{ border: 'none', padding: 0, margin: 0, minWidth: 0 }}>
+                    {/* `inert` would also block the copy buttons, so only form controls are made non-interactive. */}
+                    <Box
+                        sx={{
+                            '& input, & textarea, & select, & .MuiSelect-select, & .MuiSwitch-root, & .MuiCheckbox-root, & .MuiRadio-root, & .MuiAutocomplete-root': {
+                                pointerEvents: 'none',
+                            },
+                        }}
+                    >
                         {children}
-                    </fieldset>
+                    </Box>
                 </FormModeProvider>
             </Paper>
 
