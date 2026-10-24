@@ -90,7 +90,6 @@ export function QuickCreateDrawer({ open, onClose, onSave }: QuickCreateDrawerPr
             description: 'Quick created enterprise account.',
             accountVerified: true,
             provideSupport: 'Yes',
-            corporateEmails: [],
             billingStreet: formData.billingStreet,
             billingCity: formData.billingCity,
             billingState: formData.billingState,

@@ -112,7 +112,10 @@ export interface CorporateEmail {
 
 export interface OrganizationFormData {
     organizationName: string;
+    /** Always equal to organizationName (read-only in the form). */
     mailingName: string;
+    /** Defaults to organizationName until the user edits it. */
+    tradeName?: string;
     natureOfBusiness: NatureOfBusiness | '';
     accountStatus: AccountStatus | '';
     /** Why the organization was set to Inactive (collected via CommonActionModal). */
@@ -127,8 +130,17 @@ export interface OrganizationFormData {
     annualTurnover: AnnualTurnover | '';
     description: string;
     accountVerified: boolean;
+    /** ISO timestamp of when accountVerified was switched on. */
+    verifiedAt?: string;
+    /** Username of whoever switched accountVerified on. */
+    verifiedBy?: string;
+    /** Active AMC entitlement. */
+    activeAmc?: boolean;
+    /** Active cloud hosting. */
+    activeCloud?: boolean;
     provideSupport: 'Yes' | 'No';
-    corporateEmails: CorporateEmail[];
+    /** @deprecated Emails are managed on Contacts; kept optional so older records still load. */
+    corporateEmails?: CorporateEmail[];
 
     // Billing Address
     billingAddress?: string;

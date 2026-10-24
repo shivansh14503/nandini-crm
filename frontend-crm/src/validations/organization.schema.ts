@@ -30,6 +30,7 @@ export const organizationFormSchema = z
         organizationName: requiredString('Organization Name')
             .max(150, { message: 'Organization Name cannot exceed 150 characters.' }),
         mailingName: optionalString,
+        tradeName: optionalString,
         natureOfBusiness: requiredString('Nature of Business'),
         accountStatus: z.enum(['Active', 'Inactive']).default('Active'),
         inactivityReason: optionalString,
@@ -43,8 +44,13 @@ export const organizationFormSchema = z
         annualTurnover: optionalString,
         description: optionalString,
         accountVerified: z.boolean().default(false),
+        verifiedAt: optionalString,
+        verifiedBy: optionalString,
+        activeAmc: z.boolean().default(false),
+        activeCloud: z.boolean().default(false),
         provideSupport: z.enum(['Yes', 'No']).default('Yes'),
-        corporateEmails: z.array(corporateEmailSchema).default([]),
+        // Emails live on Contacts now; accepted but not required for older records.
+        corporateEmails: z.array(corporateEmailSchema).optional(),
 
         // Billing Address
         billingAddress: requiredString('Billing Address'),

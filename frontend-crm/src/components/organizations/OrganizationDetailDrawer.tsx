@@ -1,22 +1,16 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { getCountryNameByCode } from '@/data/addressMaster';
 import { useRouter } from 'next/navigation';
-import { Box, Typography, IconButton, Button, Chip, Divider } from '@mui/material';
+import { Box, Typography, IconButton, Tooltip } from '@mui/material';
 
 // Icons
-import TrendingUpIcon from '@mui/icons-material/TrendingUp';
-import EmailOutlinedIcon from '@mui/icons-material/EmailOutlined';
-import AlternateEmailIcon from '@mui/icons-material/AlternateEmail';
-import PhoneOutlinedIcon from '@mui/icons-material/PhoneOutlined';
-import AccessTimeOutlinedIcon from '@mui/icons-material/AccessTimeOutlined';
-import BusinessIcon from '@mui/icons-material/Business';
-import ReceiptLongOutlinedIcon from '@mui/icons-material/ReceiptLongOutlined';
 import VisibilityOutlinedIcon from '@mui/icons-material/VisibilityOutlined';
 import VisibilityOffOutlinedIcon from '@mui/icons-material/VisibilityOffOutlined';
 import CheckCircleOutlinedIcon from '@mui/icons-material/CheckCircleOutlined';
+import HighlightOffOutlinedIcon from '@mui/icons-material/HighlightOffOutlined';
 import VerifiedUserOutlinedIcon from '@mui/icons-material/VerifiedUserOutlined';
+import CloudDoneOutlinedIcon from '@mui/icons-material/CloudDoneOutlined';
 
 import { ROUTES } from '@/config/constants';
 import type { ExtendedOrganization } from '@/types/organization.types';
@@ -24,12 +18,14 @@ import { organizationService, subscribeCrmSync } from '@/services';
 import {
     EntityDetailDrawer,
     DrawerSectionCard,
-    DrawerMetricGrid,
-    DrawerChannelRow,
     DrawerCopyButton,
-    copyToClipboard,
     type AuditRevisionItem,
+    type DrawerBadgeItem,
 } from '@/components/common/Drawer';
+import { ReadOnlyField } from '@/components/forms/ReadOnlyField';
+import { getCountryNameByCode } from '@/data/addressMaster';
+import { formatAddressLine } from '@/utils/address';
+import { formatDateTime } from '@/utils/date';
 import { ORGANIZATION_FORM_TABS } from './OrganizationForm';
 
 export interface OrganizationDetailDrawerProps {
@@ -38,6 +34,49 @@ export interface OrganizationDetailDrawerProps {
     onClose: () => void;
     onEdit?: (id: string) => void;
     hideBackdrop?: boolean;
+}
+
+const fieldGridSx = { display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 1.75 } as const;
+
+const SectionTitle = ({ children }: { children: React.ReactNode }) => (
+    <Typography sx={{ fontSize: '0.82rem', fontWeight: 700, color: '#0f172a' }}>{children}</Typography>
+);
+
+/** Masks all but the last 4 digits of an account number. */
+const maskAccountNumber = (value: string) => (value.length > 4 ? `•••• ${value.slice(-4)}` : value);
+
+interface AddressCardProps {
+    title: string;
+    street?: string;
+    city?: string;
+    state?: string;
+    postalCode?: string;
+    country?: string;
+}
+
+/** Multi-line address with a copy button (copies the one-line form). Renders nothing when empty. */
+function AddressCard({ title, street, city, state, postalCode, country }: AddressCardProps) {
+    const oneLine = formatAddressLine({ street, city, state, postalCode, country });
+    if (!oneLine) return null;
+    const locality = [city, [state, postalCode].filter(Boolean).join(' – ')].filter(Boolean).join(', ');
+
+    return (
+        <DrawerSectionCard
+            bg="#f8fafc"
+            title={<SectionTitle>{title}</SectionTitle>}
+            action={<DrawerCopyButton text={oneLine} title={`Copy ${title.toLowerCase()}`} iconColor="#64748b" />}
+        >
+            {street && (
+                <Typography sx={{ fontSize: '0.84rem', fontWeight: 700, color: '#0f172a', whiteSpace: 'pre-line' }}>
+                    {street}
+                </Typography>
+            )}
+            {locality && <Typography sx={{ fontSize: '0.78rem', color: '#475569', mt: 0.3 }}>{locality}</Typography>}
+            {country && (
+                <Typography sx={{ fontSize: '0.74rem', color: '#64748b', mt: 0.3 }}>{getCountryNameByCode(country)}</Typography>
+            )}
+        </DrawerSectionCard>
+    );
 }
 
 export function OrganizationDetailDrawer({
@@ -83,6 +122,55 @@ export function OrganizationDetailDrawer({
         }
     };
 
+    const isActive = org.accountStatus !== 'Inactive';
+    const location = [org.billingCity, org.billingState].filter(Boolean).join(', ') || 'Location Unspecified';
+    const gstin = org.gstNo || org.gstNumber || '';
+
+    const badges: DrawerBadgeItem[] = [
+        isActive
+            ? { label: 'Active', backgroundColor: '#ecfdf5', color: '#059669', borderColor: '#a7f3d0' }
+            : { label: 'Inactive', backgroundColor: '#fef3c7', color: '#b45309', borderColor: '#fde68a' },
+        org.accountVerified
+            ? {
+                  label: org.verifiedAt
+                      ? `Verified: ${formatDateTime(org.verifiedAt)} by ${org.verifiedBy || 'Admin'}`
+                      : 'Verified',
+                  icon: <CheckCircleOutlinedIcon sx={{ fontSize: 13 }} />,
+                  backgroundColor: '#ecfdf5',
+                  color: '#059669',
+                  borderColor: '#a7f3d0',
+              }
+            : {
+                  label: 'Not Verified',
+                  icon: <HighlightOffOutlinedIcon sx={{ fontSize: 13 }} />,
+                  backgroundColor: '#f1f5f9',
+                  color: '#64748b',
+                  borderColor: '#e2e8f0',
+              },
+        ...(org.activeAmc
+            ? [
+                  {
+                      label: 'Active AMC',
+                      icon: <VerifiedUserOutlinedIcon sx={{ fontSize: 13 }} />,
+                      backgroundColor: '#eff6ff',
+                      color: '#1d4ed8',
+                      borderColor: '#bfdbfe',
+                  },
+              ]
+            : []),
+        ...(org.activeCloud
+            ? [
+                  {
+                      label: 'Active Cloud',
+                      icon: <CloudDoneOutlinedIcon sx={{ fontSize: 13 }} />,
+                      backgroundColor: '#f0fdf4',
+                      color: '#15803d',
+                      borderColor: '#bbf7d0',
+                  },
+              ]
+            : []),
+    ];
+
     const auditRevisions: AuditRevisionItem[] = [
         {
             title: 'Annual Turnover Updated',
@@ -101,22 +189,6 @@ export function OrganizationDetailDrawer({
             note: 'Live GSTIN check against Govt portal returned 0 non-compliance flags.',
         },
         {
-            title: 'Primary Shipping Warehouse Added',
-            author: 'vikas.nair',
-            time: '15-Oct-2026, 02:30 PM',
-            from: 'None (Direct Dispatch)',
-            to: 'Warehouse 12-B Alipur',
-            note: 'Configured new transit depot for north zone fulfillment.',
-        },
-        {
-            title: 'Registered Corporate Email Channel Added',
-            author: 'mittal.sharma',
-            time: '12-Oct-2026, 11:15 AM',
-            from: 'contact@mohittraders.in',
-            to: 'billing@mohittraders.in (Default)',
-            note: 'Routing e-Way bills to dedicated accounts desk.',
-        },
-        {
             title: 'Master Account Created & ERP Synced',
             author: 'mittal.sharma',
             time: '01-Oct-2026, 09:30 AM',
@@ -132,373 +204,96 @@ export function OrganizationDetailDrawer({
             onClose={onClose}
             hideBackdrop={hideBackdrop}
             title={org.organizationName}
-            subtitle={`${org.mailingName || org.organizationName}${org.billingCity ? `, ${org.billingCity} NCR` : ', Delhi NCR'}`}
+            subtitle={`${org.tradeName || org.organizationName} • ${location}`}
             avatarBg="linear-gradient(135deg, #0284c7 0%, #0369a1 100%)"
-            verified={true}
-            badges={[
-                {
-                    label: 'Account Verified (KYC & MSME)',
-                    icon: <CheckCircleOutlinedIcon sx={{ fontSize: 13 }} />,
-                    backgroundColor: '#ecfdf5',
-                    color: '#059669',
-                    borderColor: '#a7f3d0',
-                },
-                {
-                    label: 'Active AMC Entitlement',
-                    icon: <VerifiedUserOutlinedIcon sx={{ fontSize: 13 }} />,
-                    backgroundColor: '#eff6ff',
-                    color: '#1d4ed8',
-                    borderColor: '#bfdbfe',
-                },
-                {
-                    label: `ID: ${org.accountCode || org.id.toUpperCase()}`,
-                    isMonospace: true,
-                    backgroundColor: '#f1f5f9',
-                    color: '#64748b',
-                    borderColor: '#e2e8f0',
-                },
-            ]}
+            verified={Boolean(org.accountVerified)}
+            badges={badges}
             headerActions={{
                 onEdit: handleEdit,
                 onView: () => router.push(ROUTES.ORGANIZATION_DETAIL(org.id)),
             }}
-            formTabs={ORGANIZATION_FORM_TABS}
+            formTabs={ORGANIZATION_FORM_TABS.filter((t) => t.id !== 'partner_licensing')}
             tabContents={{
                 overview: (
-                    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.2 }}>
-                        {/* 2x2 Key Metrics Grid */}
-                        <DrawerMetricGrid
-                            items={[
-                                {
-                                    label: 'ANNUAL TURNOVER',
-                                    value: org.annualTurnover && org.annualTurnover.includes('₹') ? org.annualTurnover : '₹25,00,00,000',
-                                    valueSize: '1.05rem',
-                                    valueWeight: 800,
-                                    bg: '#f8fafc',
-                                    sublabel: (
-                                        <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.4, mt: 0.5, color: '#16a34a', fontSize: '0.7rem', fontWeight: 700 }}>
-                                            <TrendingUpIcon sx={{ fontSize: 13 }} />
-                                            +14.2% YoY Growth
-                                        </Box>
-                                    ),
-                                },
-                                {
-                                    label: 'CUSTOMER TYPE',
-                                    value: org.customerType || 'Prime Enterprise',
-                                    valueSize: '1.05rem',
-                                    valueWeight: 800,
-                                    bg: '#f8fafc',
-                                    sublabel: 'Tally Tier-1 Distributor',
-                                },
-                                {
-                                    label: 'SAP / TALLY CODE',
-                                    value: org.sapCodeTallyId || 'SAP-ND-4891',
-                                    valueSize: '0.98rem',
-                                    valueWeight: 800,
-                                    labelColor: '#1d4ed8',
-                                    valueColor: '#1d4ed8',
-                                    monospace: true,
-                                    bg: '#eff6ff',
-                                    borderColor: '#bfdbfe',
-                                    sublabel: (
-                                        <Typography sx={{ fontSize: '0.72rem', color: '#60a5fa', mt: 0.5 }}>
-                                            Ledger: North Sales 01
-                                        </Typography>
-                                    ),
-                                },
-                                {
-                                    label: 'SHOWROOM / BRANCH CODE',
-                                    value: org.showroomBranchCode || 'DEL-NORTH-04',
-                                    valueSize: '0.98rem',
-                                    valueWeight: 800,
-                                    monospace: true,
-                                    bg: '#f8fafc',
-                                    sublabel: 'Netaji Subhash Place',
-                                },
-                            ]}
-                        />
-
-                        {/* Registered Corporate Channels */}
-                        <DrawerSectionCard
-                            p={1.8}
-                            title={
-                                <Typography sx={{ fontSize: '0.8rem', fontWeight: 700, color: '#0f172a' }}>
-                                    Registered Corporate Channels
-                                </Typography>
-                            }
-                            action={
-                                <Button
-                                    size="small"
-                                    onClick={handleEdit}
-                                    sx={{ fontSize: '0.72rem', textTransform: 'none', fontWeight: 700, color: '#2563eb', p: 0 }}
-                                >
-                                    + Add Email
-                                </Button>
-                            }
-                        >
-                            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.2 }}>
-                                <DrawerChannelRow
-                                    icon={<EmailOutlinedIcon sx={{ fontSize: 16, color: '#2563eb' }} />}
-                                    value={org.corporateEmails?.[0]?.email || 'billing@mohittraders.in'}
-                                    caption="Primary Billing & e-Invoicing"
-                                    badgeLabel="DEFAULT"
-                                    badgeBorder="#bfdbfe"
-                                />
-
-                                <Divider sx={{ borderColor: '#f1f5f9' }} />
-
-                                <DrawerChannelRow
-                                    icon={<AlternateEmailIcon sx={{ fontSize: 16, color: '#64748b' }} />}
-                                    value={org.corporateEmails?.[1]?.email || 'contact@mohittraders.in'}
-                                    valueColor="#334155"
-                                    caption="Executive Desk"
-                                    badgeLabel="SECONDARY"
-                                    badgeBg="#f8fafc"
-                                    badgeColor="#64748b"
-                                    badgeBorder="#e2e8f0"
-                                />
-
-                                <Divider sx={{ borderColor: '#f1f5f9' }} />
-
-                                <DrawerChannelRow
-                                    icon={<PhoneOutlinedIcon sx={{ fontSize: 16, color: '#16a34a' }} />}
-                                    value="+91 98101 23456 / +91 11 4589 1200"
-                                    caption="Board Line • Mon-Sat 9AM-7PM"
-                                    copyValue="+919810123456"
-                                    copyTitle="Copy Phone"
-                                />
-                            </Box>
-                        </DrawerSectionCard>
-
-                        {/* Business Nature & Description */}
-                        <DrawerSectionCard p={1.8} title="BUSINESS NATURE & DESCRIPTION">
-                            <Typography sx={{ fontSize: '0.78rem', color: '#334155', lineHeight: 1.5 }}>
-                                {org.description ||
-                                    'Authorized regional distributor for Tier-1 enterprise hardware, peripheral networking kits, and certified Tally multi-node cloud hosting solutions across the National Capital Region.'}
-                            </Typography>
-                            <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.8, mt: 1.4 }}>
-                                <Chip label={org.natureOfBusiness || 'Hardware Trading'} size="small" sx={{ height: 22, fontSize: '0.68rem', fontWeight: 600, backgroundColor: '#f1f5f9', color: '#334155' }} />
-                                <Chip label={org.typeOfEntity || 'Pvt Ltd Entity'} size="small" sx={{ height: 22, fontSize: '0.68rem', fontWeight: 600, backgroundColor: '#f1f5f9', color: '#334155' }} />
-                                <Chip label="Class-A Commercial" size="small" sx={{ height: 22, fontSize: '0.68rem', fontWeight: 600, backgroundColor: '#f1f5f9', color: '#334155' }} />
-                            </Box>
-                        </DrawerSectionCard>
-
-                        {/* Assigned Primary Representative */}
-                        <DrawerSectionCard p={1.5} sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.2 }}>
-                                <Box sx={{ width: 36, height: 36, borderRadius: '50%', backgroundColor: '#1e3a8a', color: '#ffffff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: '0.78rem' }}>
-                                    MS
-                                </Box>
-                                <Box>
-                                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.8 }}>
-                                        <Typography sx={{ fontSize: '0.82rem', fontWeight: 700, color: '#0f172a' }}>
-                                            {org.assignedUser || 'mittal.sharma'}
-                                        </Typography>
-                                        <Chip label="Primary Rep" size="small" sx={{ height: 18, fontSize: '0.62rem', fontWeight: 700, backgroundColor: '#eff6ff', color: '#1d4ed8' }} />
-                                    </Box>
-                                    <Typography sx={{ fontSize: '0.7rem', color: '#64748b' }}>
-                                        Senior Sales Specialist • North Region
-                                    </Typography>
-                                </Box>
-                            </Box>
-                            <Button size="small" variant="outlined" sx={{ fontSize: '0.72rem', textTransform: 'none', fontWeight: 600, borderColor: '#cbd5e1', color: '#475569', height: 28, borderRadius: '6px' }}>
-                                Reassign
-                            </Button>
-                        </DrawerSectionCard>
-
-                        {/* Last Modified Banner */}
-                        <DrawerSectionCard p={1.5} bg="#f0f9ff" borderColor="#bae6fd" sx={{ display: 'flex', alignItems: 'flex-start', gap: 1.2 }}>
-                            <AccessTimeOutlinedIcon sx={{ fontSize: 18, color: '#0284c7', mt: 0.2 }} />
-                            <Box>
-                                <Typography sx={{ fontSize: '0.75rem', fontWeight: 700, color: '#0369a1' }}>
-                                    Last modified 19-Oct-2026, 10:48 AM by mittal.sharma
-                                </Typography>
-                                <Typography sx={{ fontSize: '0.72rem', color: '#0284c7', mt: 0.3, lineHeight: 1.4 }}>
-                                    Updated turnover figures to ₹25 Cr and attached FY26-Q2 GST returns. 14 field revisions tracked in the Changes tab.
-                                </Typography>
-                            </Box>
-                        </DrawerSectionCard>
-                    </Box>
+                    <DrawerSectionCard p={1.8} title={<SectionTitle>Overview</SectionTitle>}>
+                        <Box sx={{ ...fieldGridSx, mt: 1 }}>
+                            <ReadOnlyField label="Nature of Business" value={org.natureOfBusiness} />
+                            <ReadOnlyField label="Type of Entity" value={org.typeOfEntity} />
+                            <ReadOnlyField label="SAP Code / Tally ID" value={org.sapCodeTallyId} copyable />
+                            <ReadOnlyField label="Showroom Code" value={org.showroomBranchCode} copyable />
+                            <ReadOnlyField label="Member Of" value={org.memberOfParentCorp} />
+                            <ReadOnlyField label="Turnover" value={org.annualTurnover} />
+                            <ReadOnlyField label="Employee Count" value={org.numberOfEmployees} />
+                            <ReadOnlyField label="Assigned User" value={org.assignedUser} />
+                        </Box>
+                    </DrawerSectionCard>
                 ),
                 address: (
                     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                        <DrawerSectionCard
-                            bg="#f8fafc"
-                            borderColor="#bfdbfe"
-                            title={<Chip label="PRIMARY BILLING LOCATION" size="small" sx={{ height: 20, fontSize: '0.64rem', fontWeight: 700, backgroundColor: '#eff6ff', color: '#1d4ed8' }} />}
-                            action={<DrawerCopyButton text={`${org.billingStreet || 'Plot 42'}, ${org.billingCity || 'Delhi'}`} iconColor="#64748b" />}
-                        >
-                            <Typography sx={{ fontSize: '0.84rem', fontWeight: 700, color: '#0f172a' }}>
-                                {org.billingStreet || 'Plot 42, Wazirpur Industrial Area, Ring Road'}
-                            </Typography>
-                            <Typography sx={{ fontSize: '0.78rem', color: '#475569', mt: 0.3 }}>
-                                {org.billingCity || 'New Delhi'}, {org.billingState || 'Delhi'} – {org.billingPostalCode || '110052'}
-                            </Typography>
-                            <Typography sx={{ fontSize: '0.74rem', color: '#64748b', mt: 0.3 }}>
-                                Country: {getCountryNameByCode(org.billingCountry || 'IN')}
-                            </Typography>
-                            <Box sx={{ mt: 1.2, pt: 1, borderTop: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', gap: 2 }}>
-                                <Typography sx={{ fontSize: '0.72rem', color: '#64748b' }}>
-                                    GST State Code: <strong style={{ color: '#0f172a' }}>07 (Delhi)</strong>
-                                </Typography>
-                                <Typography sx={{ fontSize: '0.72rem', color: '#64748b' }}>
-                                    Territory: <strong style={{ color: '#0f172a' }}>DEL-NORTH-04</strong>
-                                </Typography>
-                            </Box>
-                        </DrawerSectionCard>
-
-                        <DrawerSectionCard
-                            bg="#f8fafc"
-                            borderColor="#bbf7d0"
-                            title={<Chip label="PRIMARY SHIPPING / WAREHOUSE LOCATION" size="small" sx={{ height: 20, fontSize: '0.64rem', fontWeight: 700, backgroundColor: '#f0fdf4', color: '#15803d' }} />}
-                            action={<DrawerCopyButton text="Warehouse 12-B, Khasra 89/2, Alipur Freight Terminal" iconColor="#64748b" />}
-                        >
-                            <Typography sx={{ fontSize: '0.84rem', fontWeight: 700, color: '#0f172a' }}>
-                                {org.shippingStreet || 'Warehouse 12-B, Khasra 89/2, Alipur Freight Terminal'}
-                            </Typography>
-                            <Typography sx={{ fontSize: '0.78rem', color: '#475569', mt: 0.3 }}>
-                                {org.shippingCity || 'North Delhi'}, {org.shippingState || 'Delhi'} – {org.shippingPostalCode || '110036'}
-                            </Typography>
-                            <Typography sx={{ fontSize: '0.74rem', color: '#64748b', mt: 0.3 }}>
-                                Country: {getCountryNameByCode(org.shippingCountry || 'IN')}
-                            </Typography>
-                        </DrawerSectionCard>
-
-                        <DrawerSectionCard>
-                            <Chip label="SHOWROOM / BRANCH LOCATION" size="small" sx={{ height: 20, fontSize: '0.64rem', fontWeight: 700, backgroundColor: '#f1f5f9', color: '#475569', mb: 1 }} />
-                            <Typography sx={{ fontSize: '0.84rem', fontWeight: 700, color: '#0f172a' }}>
-                                Netaji Subhash Place Showroom & Training Center
-                            </Typography>
-                            <Typography sx={{ fontSize: '0.78rem', color: '#475569', mt: 0.3 }}>
-                                Unit 304, Aggarwal Cyber Plaza-1, Pitampura, Delhi 110034
-                            </Typography>
-                            <Typography sx={{ fontSize: '0.72rem', color: '#64748b', mt: 0.8 }}>
-                                Point of Contact: Ramesh Verma (+91 98112 34567)
-                            </Typography>
-                        </DrawerSectionCard>
+                        <AddressCard
+                            title="Billing Address"
+                            street={org.billingStreet || org.billingAddress}
+                            city={org.billingCity}
+                            state={org.billingState}
+                            postalCode={org.billingPostalCode}
+                            country={org.billingCountry}
+                        />
+                        <AddressCard
+                            title="Shipping Address"
+                            street={org.shippingStreet || org.shippingAddress}
+                            city={org.shippingCity}
+                            state={org.shippingState}
+                            postalCode={org.shippingPostalCode}
+                            country={org.shippingCountry}
+                        />
                     </Box>
                 ),
                 tax_bank: (
                     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                        <DrawerSectionCard
-                            bg="#f8fafc"
-                            title={
-                                <Typography sx={{ fontSize: '0.82rem', fontWeight: 700, color: '#0f172a' }}>
-                                    Operating Bank Account
-                                </Typography>
-                            }
-                            action={<Chip label="PRIMARY LEDGER" size="small" sx={{ height: 18, fontSize: '0.62rem', fontWeight: 700, backgroundColor: '#ecfdf5', color: '#059669' }} />}
-                        >
-                            <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 1.5 }}>
-                                <Box>
-                                    <Typography sx={{ fontSize: '0.68rem', color: '#64748b' }}>BANK NAME</Typography>
-                                    <Typography sx={{ fontSize: '0.84rem', fontWeight: 700, color: '#0f172a' }}>
-                                        {org.bankName || 'HDFC Bank Ltd'}
-                                    </Typography>
-                                </Box>
-                                <Box>
-                                    <Typography sx={{ fontSize: '0.68rem', color: '#64748b' }}>ACCOUNT TYPE</Typography>
-                                    <Typography sx={{ fontSize: '0.84rem', fontWeight: 700, color: '#0f172a' }}>
-                                        {org.typeOfAccount || 'Current Account'}
-                                    </Typography>
-                                </Box>
-                                <Box>
-                                    <Typography sx={{ fontSize: '0.68rem', color: '#64748b' }}>ACCOUNT NUMBER</Typography>
-                                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.6 }}>
-                                        <Typography sx={{ fontSize: '0.84rem', fontWeight: 800, fontFamily: 'monospace', color: '#0f172a' }}>
-                                            {showBankAccount ? org.accountNumber || '50200038920144' : '•••• •••• •••• 0144'}
-                                        </Typography>
-                                        <IconButton size="small" onClick={() => setShowBankAccount(!showBankAccount)} sx={{ p: 0.2 }}>
-                                            {showBankAccount ? <VisibilityOffOutlinedIcon sx={{ fontSize: 14 }} /> : <VisibilityOutlinedIcon sx={{ fontSize: 14 }} />}
-                                        </IconButton>
-                                    </Box>
-                                </Box>
-                                <Box>
-                                    <Typography sx={{ fontSize: '0.68rem', color: '#64748b' }}>IFSC CODE</Typography>
-                                    <Typography sx={{ fontSize: '0.84rem', fontWeight: 800, fontFamily: 'monospace', color: '#1d4ed8' }}>
-                                        {org.bankIfscCode || 'HDFC0000284'}
-                                    </Typography>
-                                </Box>
+                        <DrawerSectionCard p={1.8} title={<SectionTitle>Statutory Tax & Compliance</SectionTitle>}>
+                            <Box sx={{ ...fieldGridSx, mt: 1 }}>
+                                <ReadOnlyField label="GSTIN" value={gstin} copyable />
+                                <ReadOnlyField label="PAN" value={org.panNumber} copyable />
+                                <ReadOnlyField label="MSME Registration No." value={org.msmeRegnNumber} copyable />
+                                <ReadOnlyField label="CIN" value={org.cinNo} copyable />
+                                <ReadOnlyField label="TAN" value={org.tanNumber} copyable />
                             </Box>
                         </DrawerSectionCard>
 
-                        <DrawerSectionCard>
-                            <Typography sx={{ fontSize: '0.82rem', fontWeight: 700, color: '#0f172a', mb: 1.5 }}>
-                                Statutory Tax & Compliance
-                            </Typography>
-                            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.2 }}>
-                                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                                    <Box>
-                                        <Typography sx={{ fontSize: '0.68rem', color: '#64748b' }}>GSTIN</Typography>
-                                        <Typography sx={{ fontSize: '0.84rem', fontWeight: 800, fontFamily: 'monospace', color: '#0f172a' }}>
-                                            {org.gstNumber || '07AABCM8912P1ZA'}
-                                        </Typography>
-                                    </Box>
-                                    <Chip label="Active & Verified" size="small" sx={{ height: 20, fontSize: '0.66rem', fontWeight: 700, backgroundColor: '#ecfdf5', color: '#059669' }} />
-                                </Box>
-                                <Divider sx={{ borderColor: '#f1f5f9' }} />
-                                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                                    <Box>
-                                        <Typography sx={{ fontSize: '0.68rem', color: '#64748b' }}>PAN NUMBER</Typography>
-                                        <Typography sx={{ fontSize: '0.84rem', fontWeight: 800, fontFamily: 'monospace', color: '#0f172a' }}>
-                                            {org.panNumber || 'AABCM8912P'}
-                                        </Typography>
-                                    </Box>
-                                    <Chip label="Verified" size="small" sx={{ height: 20, fontSize: '0.66rem', fontWeight: 700, backgroundColor: '#eff6ff', color: '#1d4ed8' }} />
-                                </Box>
-                            </Box>
-                        </DrawerSectionCard>
-                    </Box>
-                ),
-                partner_licensing: (
-                    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                        <DrawerSectionCard
-                            bg="#eff6ff"
-                            borderColor="#bfdbfe"
-                            title={
-                                <Typography sx={{ fontSize: '0.82rem', fontWeight: 800, color: '#1d4ed8' }}>
-                                    Tally Prime Licensing & AMC
-                                </Typography>
-                            }
-                            action={<Chip label="GOLD PARTNER" size="small" sx={{ height: 18, fontSize: '0.62rem', fontWeight: 800, backgroundColor: '#fef3c7', color: '#b45309' }} />}
-                        >
-                            <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 1.2, mt: 1 }}>
-                                <Box>
-                                    <Typography sx={{ fontSize: '0.68rem', color: '#1e40af' }}>SERIAL NUMBER</Typography>
-                                    <Typography sx={{ fontSize: '0.84rem', fontWeight: 800, fontFamily: 'monospace', color: '#0f172a' }}>
-                                        789234501
-                                    </Typography>
-                                </Box>
-                                <Box>
-                                    <Typography sx={{ fontSize: '0.68rem', color: '#1e40af' }}>LICENSE TIER</Typography>
-                                    <Typography sx={{ fontSize: '0.84rem', fontWeight: 700, color: '#0f172a' }}>
-                                        Multi-User Enterprise
-                                    </Typography>
-                                </Box>
-                            </Box>
-                        </DrawerSectionCard>
-
-                        <DrawerSectionCard p={1.8}>
-                            <Typography sx={{ fontSize: '0.82rem', fontWeight: 700, color: '#0f172a', mb: 1.5 }}>
-                                Linked Partner Companies
-                            </Typography>
-                            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.2 }}>
-                                {[
-                                    { name: 'Alsorg Interiors India Pvt Ltd', type: 'System Integrator', status: 'Active' },
-                                    { name: 'Apex Holdings Conglomerate Ltd', type: 'Hardware Vendor', status: 'Certified' },
-                                    { name: 'Shree Balaji Logistics & Freight', type: '3PL Logistics Partner', status: 'Active' },
-                                ].map((p, idx) => (
-                                    <Box key={idx} sx={{ p: 1.2, borderRadius: '6px', backgroundColor: '#f8fafc', border: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                                            <BusinessIcon sx={{ fontSize: 18, color: '#64748b' }} />
-                                            <Box>
-                                                <Typography sx={{ fontSize: '0.8rem', fontWeight: 700, color: '#0f172a' }}>{p.name}</Typography>
-                                                <Typography sx={{ fontSize: '0.68rem', color: '#64748b' }}>{p.type}</Typography>
+                        <DrawerSectionCard p={1.8} bg="#f8fafc" title={<SectionTitle>Operating Bank Account</SectionTitle>}>
+                            <Box sx={{ ...fieldGridSx, mt: 1 }}>
+                                <ReadOnlyField label="Bank Name" value={org.bankName} />
+                                <ReadOnlyField label="Account Name" value={org.accountName} />
+                                <ReadOnlyField
+                                    label="Account Number"
+                                    value={
+                                        org.accountNumber ? (
+                                            <Box component="span" sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5 }}>
+                                                <Box component="span" sx={{ fontFamily: 'monospace' }}>
+                                                    {showBankAccount ? org.accountNumber : maskAccountNumber(org.accountNumber)}
+                                                </Box>
+                                                <Tooltip title={showBankAccount ? 'Hide account number' : 'Show account number'}>
+                                                    <IconButton
+                                                        size="small"
+                                                        onClick={() => setShowBankAccount((v) => !v)}
+                                                        aria-label={showBankAccount ? 'Hide account number' : 'Show account number'}
+                                                        sx={{ p: 0.2 }}
+                                                    >
+                                                        {showBankAccount ? (
+                                                            <VisibilityOffOutlinedIcon sx={{ fontSize: 14 }} />
+                                                        ) : (
+                                                            <VisibilityOutlinedIcon sx={{ fontSize: 14 }} />
+                                                        )}
+                                                    </IconButton>
+                                                </Tooltip>
                                             </Box>
-                                        </Box>
-                                        <Chip label={p.status} size="small" sx={{ height: 18, fontSize: '0.62rem', fontWeight: 700, backgroundColor: '#ecfdf5', color: '#059669' }} />
-                                    </Box>
-                                ))}
+                                        ) : undefined
+                                    }
+                                    copyable
+                                    copyText={org.accountNumber}
+                                />
+                                <ReadOnlyField label="IFSC Code" value={org.bankIfscCode} copyable />
+                                <ReadOnlyField label="Branch Address" value={org.bankAddress} sx={{ gridColumn: '1 / -1' }} />
                             </Box>
                         </DrawerSectionCard>
                     </Box>
@@ -506,15 +301,10 @@ export function OrganizationDetailDrawer({
             }}
             auditRevisions={auditRevisions}
             includeChangesTab={true}
-            statusText="Ready for Order Processing"
+            statusText={isActive ? 'Ready for Order Processing' : 'Inactive account'}
             primaryAction={{
                 label: 'Edit Details',
                 onClick: handleEdit,
-            }}
-            secondaryAction={{
-                label: 'Generate Quote',
-                icon: <ReceiptLongOutlinedIcon sx={{ fontSize: 16 }} />,
-                onClick: () => {},
             }}
         />
     );

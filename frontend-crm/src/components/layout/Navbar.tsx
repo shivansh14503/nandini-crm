@@ -18,17 +18,16 @@ import {
     Divider,
     Typography,
     Avatar,
-    InputBase,
 } from '@mui/material';
 import HomeIcon from '@mui/icons-material/Home';
 import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown';
 import LogoutIcon from '@mui/icons-material/Logout';
 import PersonIcon from '@mui/icons-material/Person';
-import SearchIcon from '@mui/icons-material/Search';
 import AddIcon from '@mui/icons-material/Add';
 import NotificationsIcon from '@mui/icons-material/Notifications';
 import Badge from '@mui/material/Badge';
 import { useAuth } from '../../context/AuthContext';
+import { GlobalSearch } from './GlobalSearch';
 import { APP_CONFIG, ROUTES } from '../../config/constants';
 
 /* ─── Nav pill definitions ─────────────────────────────── */
@@ -685,53 +684,8 @@ export function Navbar() {
                 {/* ── RIGHT: Search + Create + User menu ── */}
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
 
-                    {/* Search bar */}
-                    <Box
-                        sx={{
-                            display: { xs: 'none', md: 'flex' },
-                            alignItems: 'center',
-                            gap: 1,
-                            backgroundColor: '#F3F4F6',
-                            border: '1px solid #E5E7EB',
-                            borderRadius: '8px',
-                            px: 1.5,
-                            py: 0.5,
-                            width: 200,
-                            transition: 'all 0.2s ease',
-                            '&:focus-within': {
-                                backgroundColor: '#FFFFFF',
-                                borderColor: '#93C5FD',
-                                boxShadow: '0 0 0 3px rgba(147,197,253,0.3)',
-                                width: 240,
-                            },
-                        }}
-                    >
-                        <SearchIcon sx={{ fontSize: 16, color: '#9CA3AF', flexShrink: 0 }} />
-                        <InputBase
-                            placeholder="Search CRM..."
-                            inputProps={{ 'aria-label': 'search crm' }}
-                            sx={{
-                                fontSize: '0.8rem',
-                                color: '#374151',
-                                width: '100%',
-                                '& input::placeholder': { color: '#9CA3AF', opacity: 1 },
-                            }}
-                        />
-                        <Typography
-                            sx={{
-                                fontSize: '0.65rem',
-                                color: '#9CA3AF',
-                                backgroundColor: '#E5E7EB',
-                                borderRadius: '4px',
-                                px: 0.6,
-                                py: 0.2,
-                                fontFamily: 'monospace',
-                                flexShrink: 0,
-                            }}
-                        >
-                            ⌘K
-                        </Typography>
-                    </Box>
+                    {/* Global search (Organizations, Contacts, Leads, Opportunities) */}
+                    <GlobalSearch />
 
                     {/* Create button */}
                     <CreateButton />

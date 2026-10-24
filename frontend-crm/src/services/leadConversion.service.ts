@@ -110,7 +110,6 @@ function toOrganizationPayload(v: ConvertLeadFormValues, lead: Lead): Organizati
         description: v.organizationDescription ?? '',
         accountVerified: false,
         provideSupport: 'No',
-        corporateEmails: [],
         billingStreet: lead.primaryAddress,
         billingCity: lead.primaryCity,
         billingState: lead.primaryState,

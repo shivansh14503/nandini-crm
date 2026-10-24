@@ -5,7 +5,6 @@ import {
     Box,
     Typography,
     TextField,
-    Button,
     Chip,
     Switch,
     FormControl,
@@ -18,8 +17,6 @@ import {
 import { CommonActionModal } from '@/components/common/CommonActionModal';
 
 // Icons
-import AddIcon from '@mui/icons-material/Add';
-import EmailIcon from '@mui/icons-material/Email';
 import VerifiedIcon from '@mui/icons-material/Verified';
 import SwapHorizIcon from '@mui/icons-material/SwapHoriz';
 import MenuBookIcon from '@mui/icons-material/MenuBook';
@@ -27,15 +24,16 @@ import SearchIcon from '@mui/icons-material/Search';
 import LinkOffIcon from '@mui/icons-material/LinkOff';
 import PersonOutlinedIcon from '@mui/icons-material/PersonOutlined';
 import ContactPageOutlinedIcon from '@mui/icons-material/ContactPageOutlined';
+import LockOutlinedIcon from '@mui/icons-material/LockOutlined';
 
 import { useFormContext, useWatch, FormProvider, useForm } from 'react-hook-form';
 import { useFormMode } from '@/context/FormModeContext';
+import { useAuth } from '@/context/AuthContext';
+import { formatDateTime } from '@/utils/date';
 
 import {
     FormField,
-    SectionLabel,
     StyledSelect,
-    EmailRow,
     fieldSx,
     RhfSelect,
 } from '@/components/forms';
@@ -51,7 +49,6 @@ import {
 
 import type {
     OrganizationFormData,
-    CorporateEmail,
     NatureOfBusiness,
     AccountStatus,
     TypeOfEntity,
@@ -70,25 +67,56 @@ const INACTIVITY_REASONS = [
     'Other',
 ];
 
+interface EntitlementToggleProps {
+    label: string;
+    caption: string;
+    checked: boolean;
+    onChange: (checked: boolean) => void;
+    isView: boolean;
+}
+
+/** Labelled on/off switch; renders as a pill in view mode. */
+function EntitlementToggle({ label, caption, checked, onChange, isView }: EntitlementToggleProps) {
+    return (
+        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1 }}>
+            <Box>
+                <Typography sx={{ fontWeight: 700, color: '#1e293b', fontSize: '0.82rem', lineHeight: 1.3 }}>{label}</Typography>
+                <Typography sx={{ color: '#94a3b8', fontSize: '0.72rem' }}>{caption}</Typography>
+            </Box>
+            {isView ? (
+                <Chip
+                    label={checked ? 'Yes' : 'No'}
+                    size="small"
+                    sx={{
+                        height: 24,
+                        fontSize: '0.76rem',
+                        fontWeight: 700,
+                        cursor: 'default',
+                        color: checked ? '#16a34a' : '#64748b',
+                        backgroundColor: checked ? '#16a34a1a' : '#64748b1a',
+                    }}
+                />
+            ) : (
+                <Switch checked={checked} onChange={(e) => onChange(e.target.checked)} slotProps={{ input: { 'aria-label': label } }} />
+            )}
+        </Box>
+    );
+}
+
 export interface OverviewTabProps {
     form: OrganizationFormData;
     set: <K extends keyof OrganizationFormData>(key: K, value: OrganizationFormData[K]) => void;
-    addEmail?: () => void;
-    updateEmail?: (id: string, updated: CorporateEmail) => void;
-    removeEmail?: (id: string) => void;
 }
 
 function OverviewTabInner({
     form,
     set,
-    addEmail,
-    updateEmail,
-    removeEmail,
 }: OverviewTabProps) {
-    const { control, setValue, getValues, formState } = useFormContext<OrganizationFormData>();
+    const { control, setValue } = useFormContext<OrganizationFormData>();
 
     const organizationName = useWatch({ control, name: 'organizationName' }) ?? form?.organizationName ?? '';
-    const mailingName = useWatch({ control, name: 'mailingName' }) ?? form?.mailingName ?? '';
+    const tradeName = useWatch({ control, name: 'tradeName' }) ?? form?.tradeName ?? '';
+    const { user } = useAuth();
     const currentAccountStatus = (useWatch({ control, name: 'accountStatus' }) ?? form?.accountStatus ?? 'Active') as AccountStatus;
     const isView = useFormMode().mode === 'view';
     const [pendingInactive, setPendingInactive] = React.useState(false);
@@ -115,35 +143,39 @@ function OverviewTabInner({
         }
     }, [watchedCustomerType, set, form?.customerType]);
 
-    // Auto-copy Mailing Name when organizationName changes and mailingName is untouched or empty
-    const prevOrgNameRef = React.useRef(organizationName);
-
-    React.useEffect(() => {
-        if (organizationName === prevOrgNameRef.current) return;
-        prevOrgNameRef.current = organizationName;
-
-        const currentMailing = getValues('mailingName');
-        const isTouched = formState.touchedFields?.mailingName;
-
-        if (!isTouched || !currentMailing || currentMailing.trim() === '') {
-            setValue('mailingName', organizationName || '', { shouldValidate: true });
-            if (set) {
-                set('mailingName', organizationName || '');
-            }
-        }
-    }, [organizationName, getValues, setValue, formState.touchedFields?.mailingName, set]);
-
     const handleOrgNameChange = (val: string) => {
-        setValue('organizationName', val, { shouldValidate: true, shouldDirty: true });
-        if (set) set('organizationName', val);
-
-        const currentMailing = getValues('mailingName');
-        const isTouched = formState.touchedFields?.mailingName;
-        if (!isTouched || !currentMailing || currentMailing.trim() === '') {
-            setValue('mailingName', val, { shouldValidate: true });
-            if (set) set('mailingName', val);
+        // Trade name keeps following the organization name until the user gives it a value of its own.
+        const tradeNameFollows = !tradeName || tradeName === organizationName;
+        const opts = { shouldValidate: true, shouldDirty: true } as const;
+        setValue('organizationName', val, opts);
+        setValue('mailingName', val, opts);
+        if (set) {
+            set('organizationName', val);
+            set('mailingName', val);
+        }
+        if (tradeNameFollows) {
+            setValue('tradeName', val, opts);
+            if (set) set('tradeName', val);
         }
     };
+
+    const handleTradeNameChange = (val: string) => {
+        setValue('tradeName', val, { shouldValidate: true, shouldDirty: true });
+        if (set) set('tradeName', val);
+    };
+
+    // Verification is audited: switching on records when and by whom; switching off clears both.
+    const handleVerifiedToggle = (checked: boolean) => {
+        set('accountVerified', checked);
+        set('verifiedAt', checked ? new Date().toISOString() : undefined);
+        set('verifiedBy', checked ? user?.username || 'Current User' : undefined);
+    };
+    const verifiedCaption = form.accountVerified
+        ? form.verifiedAt
+            ? `${formatDateTime(form.verifiedAt)} by ${form.verifiedBy || 'Admin'}`
+            : 'Verified'
+        : 'Not verified';
+
     return (
         <Box sx={{ p: { xs: 2.5, md: 3.5 } }}>
             {/* ── Two-column grid ───────────────────────────────── */}
@@ -181,6 +213,19 @@ function OverviewTabInner({
                                 },
                                 htmlInput: { maxLength: 200 },
                             }}
+                        />
+                    </FormField>
+
+                    {/* Trade Name */}
+                    <FormField name="tradeName" label="Trade Name" hint="Defaults to the organization name" sx={{ mb: 0 }}>
+                        <TextField
+                            fullWidth
+                            size="small"
+                            placeholder="e.g. Mohit Traders"
+                            value={tradeName}
+                            onChange={(e) => handleTradeNameChange(e.target.value)}
+                            sx={fieldSx}
+                            slotProps={{ htmlInput: { maxLength: 200 } }}
                         />
                     </FormField>
 
@@ -293,68 +338,6 @@ function OverviewTabInner({
                         />
                     </FormField>
 
-                    {/* Corporate Emails */}
-                    <Box>
-                        <Box
-                            sx={{
-                                display: 'flex',
-                                justifyContent: 'space-between',
-                                alignItems: 'center',
-                                mb: 1.5,
-                            }}
-                        >
-                            <SectionLabel
-                                icon={<EmailIcon sx={{ fontSize: 18 }} />}
-                                label="Corporate Email Addresses"
-                            />
-                            {addEmail && !isView && (
-                                <Button
-                                    size="small"
-                                    startIcon={<AddIcon fontSize="small" />}
-                                    onClick={addEmail}
-                                    sx={{
-                                        fontSize: '0.78rem',
-                                        textTransform: 'none',
-                                        fontWeight: 600,
-                                        color: '#2563EB',
-                                        border: '1px dashed #93c5fd',
-                                        borderRadius: '6px',
-                                        px: 1.5,
-                                        py: 0.4,
-                                        '&:hover': {
-                                            backgroundColor: '#eff6ff',
-                                            border: '1px dashed #2563EB',
-                                        },
-                                    }}
-                                >
-                                    Add Email
-                                </Button>
-                            )}
-                        </Box>
-                        {(!form?.corporateEmails || form.corporateEmails.length === 0) && (
-                            <Box
-                                sx={{
-                                    textAlign: 'center',
-                                    py: 2.5,
-                                    color: '#9ca3af',
-                                    fontSize: '0.8rem',
-                                    border: '1px dashed #e5e7eb',
-                                    borderRadius: '8px',
-                                }}
-                            >
-                                No email addresses added yet
-                            </Box>
-                        )}
-                        {form?.corporateEmails?.map((email) => (
-                            <EmailRow
-                                key={email.id}
-                                email={email}
-                                onChange={(updated) => updateEmail?.(email.id, updated)}
-                                onRemove={() => removeEmail?.(email.id)}
-                            />
-                        ))}
-                    </Box>
-
                     {/* Annual Turnover */}
                     <FormField name="annualTurnover" label="Annual Turnover" sx={{ mb: 0 }}>
                         <StyledSelect
@@ -424,7 +407,7 @@ function OverviewTabInner({
                                     Account Verified
                                 </Typography>
                                 <Typography sx={{ color: '#94a3b8', fontSize: '0.72rem' }}>
-                                    KYC &amp; MSME validated
+                                    {verifiedCaption}
                                 </Typography>
                             </Box>
                             {isView ? (
@@ -443,7 +426,7 @@ function OverviewTabInner({
                             ) : (
                             <Switch
                                 checked={form.accountVerified}
-                                onChange={(e) => set('accountVerified', e.target.checked)}
+                                onChange={(e) => handleVerifiedToggle(e.target.checked)}
                                 sx={{
                                     width: 44,
                                     height: 24,
@@ -545,22 +528,51 @@ function OverviewTabInner({
                         </Box>
                     </Box>
 
-                    {/* Mailing Name */}
-                    <FormField name="mailingName" label="Mailing Name" hint="Printed on tax invoices" sx={{ mb: 0 }}>
+                    {/* Active AMC & Cloud entitlements */}
+                    <Box
+                        sx={{
+                            display: 'grid',
+                            gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' },
+                            gap: 2,
+                            p: 1.75,
+                            border: '1px solid #e2e8f0',
+                            borderRadius: '10px',
+                            backgroundColor: '#f8fafc',
+                        }}
+                    >
+                        <EntitlementToggle
+                            label="Active AMC"
+                            caption="Annual maintenance contract"
+                            checked={Boolean(form.activeAmc)}
+                            onChange={(v) => set('activeAmc', v)}
+                            isView={isView}
+                        />
+                        <EntitlementToggle
+                            label="Active Cloud"
+                            caption="Cloud hosting subscription"
+                            checked={Boolean(form.activeCloud)}
+                            onChange={(v) => set('activeCloud', v)}
+                            isView={isView}
+                        />
+                    </Box>
+
+                    {/* Mailing Name (always equals Organization Name) */}
+                    <FormField name="mailingName" label="Mailing Name" hint="Printed on tax invoices • follows Organization Name" sx={{ mb: 0 }}>
                         <TextField
                             fullWidth
                             size="small"
-                            placeholder="e.g. Mohit Traders Private Limited, Delhi"
-                            value={mailingName}
-                            onChange={(e) => {
-                                const val = e.target.value;
-                                setValue('mailingName', val, { shouldValidate: true, shouldDirty: true });
-                                if (set) set('mailingName', val);
+                            value={organizationName}
+                            sx={{ ...fieldSx, '& .MuiOutlinedInput-root': { backgroundColor: '#f8fafc', color: '#475569' } }}
+                            slotProps={{
+                                htmlInput: { readOnly: true, tabIndex: -1, 'aria-readonly': true },
+                                input: {
+                                    endAdornment: (
+                                        <InputAdornment position="end">
+                                            <LockOutlinedIcon sx={{ fontSize: 16, color: '#94a3b8' }} />
+                                        </InputAdornment>
+                                    ),
+                                },
                             }}
-                            onBlur={() => {
-                                setValue('mailingName', getValues('mailingName') || '', { shouldTouch: true });
-                            }}
-                            sx={fieldSx}
                         />
                     </FormField>
 
@@ -736,7 +748,6 @@ function FallbackOverviewProvider({
             description: defaultValues?.description || '',
             accountVerified: defaultValues?.accountVerified || false,
             provideSupport: defaultValues?.provideSupport || 'Yes',
-            corporateEmails: defaultValues?.corporateEmails || [],
             registrationType: (defaultValues?.registrationType as 'Registered' | 'Unregistered') || 'Registered',
             gstNo: defaultValues?.gstNo || defaultValues?.gstNumber || '',
             ...defaultValues,

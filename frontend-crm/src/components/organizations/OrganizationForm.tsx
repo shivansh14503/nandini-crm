@@ -23,10 +23,7 @@ import { normalizeAddressFields } from '@/utils/address';
 import { useFormDraftGuard } from '@/hooks/useFormDraftGuard';
 import { UnsavedChangesModal } from '../common/UnsavedChangesModal';
 import { validateWithToast, organizationFormSchema } from '../../validations';
-import type {
-    OrganizationFormData,
-    CorporateEmail,
-} from '../../types/organization.types';
+import type { OrganizationFormData } from '../../types/organization.types';
 
 // Tab components
 import {
@@ -74,6 +71,7 @@ const DEFAULT_FORM: OrganizationFormData = {
     natureOfBusiness: '',
     accountStatus: 'Active',
     inactivityReason: '',
+    tradeName: '',
     typeOfEntity: '',
     customerType: '',
     sapCodeTallyId: '',
@@ -85,7 +83,10 @@ const DEFAULT_FORM: OrganizationFormData = {
     description: '',
     accountVerified: false,
     provideSupport: 'Yes',
-    corporateEmails: [],
+    verifiedAt: '',
+    verifiedBy: '',
+    activeAmc: false,
+    activeCloud: false,
 
     // Billing Address
     billingAddress: '',
@@ -143,7 +144,7 @@ const FIELD_TAB_MAP: Record<string, TabKey> = {
     numberOfEmployees: 'overview',
     annualTurnover: 'overview',
     description: 'overview',
-    corporateEmails: 'overview',
+    tradeName: 'overview',
     billingAddress: 'address',
     billingStreet: 'address',
     billingCity: 'address',
@@ -193,7 +194,7 @@ export default function OrganizationForm({
     // Lock is based on the status as last saved, so deactivating mid-edit doesn't lock the user out of their own unsaved change.
     const [persistedStatus, setPersistedStatus] = useState(initialData?.accountStatus ?? 'Active');
     const [activeTab, setActiveTab] = useState<TabKey>('overview');
-    const [audit, setAudit] = useState<{ code?: string; createdAt?: string; createdBy?: string; updatedAt?: string }>({});
+    const [audit, setAudit] = useState<{ createdAt?: string; createdBy?: string; updatedAt?: string }>({});
     const pendingFocusField = useRef<string | null>(null);
     // Values "Discard" resets to: blank for create, the last loaded record for edit.
     const baselineRef = useRef<OrganizationFormData>({ ...DEFAULT_FORM, ...initialData });
@@ -275,9 +276,11 @@ export default function OrganizationForm({
                         billingAddress: found.billingAddress || found.billingStreet || '',
                         shippingAddress: found.shippingAddress || found.shippingStreet || '',
                         gstNo: found.gstNo || found.gstNumber || '',
+                        // Mailing name always mirrors the organization name; older records may lack a trade name.
+                        mailingName: found.organizationName,
+                        tradeName: found.tradeName || found.organizationName,
                     }, ORGANIZATION_ADDRESS_PAIRS);
                     setAudit({
-                        code: found.accountCode,
                         createdAt: found.createdAt,
                         createdBy: found.createdBy,
                         updatedAt: found.updatedAt,
@@ -351,29 +354,6 @@ export default function OrganizationForm({
         setIsDirty(true);
     };
 
-    // ── Email management ──────────────────────────────────────────────────────
-    const addEmail = () => {
-        const newEmail: CorporateEmail = {
-            id: crypto.randomUUID(),
-            email: '',
-            isPrimary: form.corporateEmails.length === 0,
-            isOptedOut: false,
-            isInvalidBounce: false,
-        };
-        const updated = [...form.corporateEmails, newEmail];
-        set('corporateEmails', updated);
-    };
-
-    const updateEmail = (id: string, updated: CorporateEmail) => {
-        const next = form.corporateEmails.map((e) => (e.id === id ? updated : e));
-        set('corporateEmails', next);
-    };
-
-    const removeEmail = (id: string) => {
-        const next = form.corporateEmails.filter((e) => e.id !== id);
-        set('corporateEmails', next);
-    };
-
     // ── Calculation of completion progress ────────────────────────────────────
     const progressCount = useMemo(() => {
         let count = 0;
@@ -384,7 +364,7 @@ export default function OrganizationForm({
         if (form.customerType) count++;
         if (form.sapCodeTallyId.trim()) count++;
         if (form.sourceOfLead) count++;
-        if (form.corporateEmails.length > 0) count++;
+        if (form.tradeName?.trim()) count++;
         if (form.annualTurnover) count++;
         if (form.description.trim()) count++;
         return Math.min(count, 10);
@@ -394,6 +374,8 @@ export default function OrganizationForm({
     const handleSubmit = async (redirectAfter: boolean) => {
         if (isLocked) return;
         const currentData = { ...form, ...methods.getValues() };
+        // Mailing name is not editable: it is always the organization name.
+        currentData.mailingName = currentData.organizationName;
         if (!currentData.billingAddress && currentData.billingStreet) {
             currentData.billingAddress = currentData.billingStreet;
         }
@@ -486,7 +468,9 @@ export default function OrganizationForm({
                 onSave={effectiveMode === 'view' ? () => router.push(ROUTES.ORGANIZATION_EDIT(organizationId!)) : () => handleSubmit(true)}
                 recordView={{
                     title: form.organizationName,
-                    subtitle: audit.code,
+                    subtitle: [form.tradeName, [form.billingCity, form.billingState].filter(Boolean).join(', ')]
+                        .filter(Boolean)
+                        .join(' • '),
                     avatarIcon: <ApartmentIcon sx={{ fontSize: 28 }} />,
                     verified: form.accountVerified,
                     statusLabel: form.accountStatus || undefined,
@@ -543,9 +527,6 @@ export default function OrganizationForm({
                     <OverviewTab
                         form={form}
                         set={set}
-                        addEmail={addEmail}
-                        updateEmail={updateEmail}
-                        removeEmail={removeEmail}
                     />
                 )}
 
@@ -570,6 +551,7 @@ export default function OrganizationForm({
                         set={set}
                     />
                 )}
+
             </CommonFormLayout>
         </FormProvider>
     );

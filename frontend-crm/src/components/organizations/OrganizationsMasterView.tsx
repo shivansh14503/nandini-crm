@@ -460,9 +460,9 @@ export function OrganizationsMasterView() {
                                 {org.organizationName}
                             </RecordLink>
                             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 0.2 }}>
-                                <Typography sx={{ fontSize: '0.7rem', color: '#94a3b8', fontFamily: 'monospace' }}>
-                                    {org.accountCode}
-                                </Typography>
+                                {org.tradeName && org.tradeName !== org.organizationName && (
+                                    <Typography sx={{ fontSize: '0.7rem', color: '#94a3b8' }}>{org.tradeName}</Typography>
+                                )}
                                 {org.accountVerified && (
                                     <Box
                                         component="span"
