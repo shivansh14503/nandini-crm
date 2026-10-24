@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { Box, Button, Typography, CircularProgress } from '@mui/material';
+import { Box, Button, Typography, CircularProgress, Tooltip } from '@mui/material';
 import VisibilityOutlinedIcon from '@mui/icons-material/VisibilityOutlined';
 import EditOutlinedIcon from '@mui/icons-material/EditOutlined';
 
@@ -14,6 +14,9 @@ export interface FormStickyFooterProps {
     cancelLabel?: string;
     showSaveAndNew?: boolean; // Deprecated: removed per requirements
     mode?: 'create' | 'edit' | 'view';
+    /** Disables the primary action; `saveDisabledTooltip` explains why. */
+    saveDisabled?: boolean;
+    saveDisabledTooltip?: string;
 }
 
 /**
@@ -27,6 +30,8 @@ export function FormStickyFooter({
     saveLabel = 'Save Record',
     cancelLabel = 'Cancel',
     mode = 'create',
+    saveDisabled = false,
+    saveDisabledTooltip,
 }: FormStickyFooterProps) {
     const isView = mode === 'view';
     return (
@@ -90,11 +95,13 @@ export function FormStickyFooter({
                     {cancelLabel}
                 </Button>
 
+                <Tooltip title={saveDisabled ? saveDisabledTooltip ?? '' : ''}>
+                    <span>
                 <Button
                     variant="contained"
                     size="small"
                     onClick={onSave}
-                    disabled={submitting}
+                    disabled={submitting || saveDisabled}
                     startIcon={
                         isView ? (
                             <EditOutlinedIcon sx={{ fontSize: 16 }} />
@@ -116,6 +123,8 @@ export function FormStickyFooter({
                 >
                     {saveLabel}
                 </Button>
+                    </span>
+                </Tooltip>
             </Box>
         </Box>
     );

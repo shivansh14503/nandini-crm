@@ -20,6 +20,10 @@ export interface CommonFormLayoutProps {
      * Form mode. `view` renders every field read-only and turns the footer into a read-only bar.
      */
     mode?: 'create' | 'edit' | 'view';
+    /** Optional notice rendered between the header and the form card. */
+    banner?: React.ReactNode;
+    saveDisabled?: boolean;
+    saveDisabledTooltip?: string;
     /**
      * Optional custom breadcrumb elements. If omitted, AppBreadcrumbs is rendered with optional `breadcrumbItems`.
      */
@@ -122,6 +126,9 @@ export function CommonFormLayout({
     paperSx,
     contentSx,
     mode = 'create',
+    banner,
+    saveDisabled,
+    saveDisabledTooltip,
 }: CommonFormLayoutProps) {
     return (
         <Box sx={{ width: '100%', pb: 10, ...sx }}>
@@ -131,6 +138,8 @@ export function CommonFormLayout({
                 breadcrumbItems={breadcrumbItems}
                 extraActions={headerExtra}
             />
+
+            {banner}
 
             {/* ── Main Form Card ── */}
             <Paper
@@ -281,6 +290,8 @@ export function CommonFormLayout({
                     saveLabel={saveLabel}
                     cancelLabel={cancelLabel}
                     mode={mode}
+                    saveDisabled={saveDisabled}
+                    saveDisabledTooltip={saveDisabledTooltip}
                 />
             )}
 

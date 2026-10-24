@@ -11,7 +11,10 @@ import CancelOutlinedIcon from '@mui/icons-material/CancelOutlined';
 import ApartmentIcon from '@mui/icons-material/Apartment';
 import PersonOutlinedIcon from '@mui/icons-material/PersonOutlined';
 
+import { RecordLink } from '../common/RecordLink';
 import { CommonMasterView } from '../common/CommonMasterView';
+import { MasterHeaderActions } from '../common/MasterHeaderActions';
+import { buildExtendedSearchConfig } from '../common/buildExtendedSearchConfig';
 import { AppToast } from '../common/AppToast';
 import { RelatedModulesSidebar, RelatedRecordsTableView } from '../common/Drawer';
 import { RelatedSecondaryDrawer, type SecondaryDrawerEntity } from '../common/RelatedSecondaryDrawer';
@@ -275,7 +278,9 @@ export function QuotationsMasterView() {
                 sortable: true,
                 minWidth: 150,
                 render: (row) => (
-                    <Typography
+                    <RecordLink
+                        href={ROUTES.QUOTATION_DETAIL(row.id)}
+                        onOpen={() => setSelectedDrawerQuotation(row)}
                         sx={{
                             fontSize: '0.82rem',
                             fontWeight: 700,
@@ -286,7 +291,7 @@ export function QuotationsMasterView() {
                         }}
                     >
                         {row.quotationCode}
-                    </Typography>
+                    </RecordLink>
                 ),
             },
             {
@@ -463,22 +468,32 @@ export function QuotationsMasterView() {
                 },
                 variant: 'pill',
             }}
-            searchConfig={{
+            tableId="quotations"
+            headerActions={() => (
+                <MasterHeaderActions
+                    onRefresh={() => {
+                        loadQuotations();
+                        setToast({ open: true, message: 'Quotations refreshed.', severity: 'info' });
+                    }}
+                />
+            )}
+            searchConfig={buildExtendedSearchConfig({
                 searchQuery,
                 onSearchChange: (q) => {
                     setSearchQuery(q);
                     setPage(0);
                 },
                 searchPlaceholder: 'Search by quote code, customer, subject...',
-                // Strictly omit onNewClick so no standalone "New Quotation" button appears
-                onRefresh: () => {
-                    loadQuotations();
-                    setToast({ open: true, message: 'Quotations refreshed.', severity: 'info' });
-                },
-                refreshTooltip: 'Refresh Quotations',
-                selectedCount: selectedIds.length,
+                pageIds: paginatedQuotations.map((r) => r.id),
+                allIds: filteredQuotations.map((r) => r.id),
+                selectedIds,
+                onSelectedIdsChange: setSelectedIds,
+                page,
+                rowsPerPage,
+                totalRecords: filteredQuotations.length,
+                onPageChange: setPage,
                 onBulkDelete: handleBulkDelete,
-            }}
+            })}
             columns={columns}
             data={paginatedQuotations}
             keyExtractor={(item) => item.id}
@@ -499,7 +514,7 @@ export function QuotationsMasterView() {
             sortOrder={sortOrder}
             onSort={handleSort}
             onView={(quote) => setSelectedDrawerQuotation(quote)}
-            onEdit={(quote) => router.push(ROUTES.QUOTATION_EDIT(quote.id))}
+            getEditHref={(quote) => ROUTES.QUOTATION_EDIT(quote.id)}
             onDelete={(quote) => handleDelete(quote.id)}
             onRowClick={(quote) => setSelectedDrawerQuotation(quote)}
             activeRowId={selectedDrawerQuotation?.id}

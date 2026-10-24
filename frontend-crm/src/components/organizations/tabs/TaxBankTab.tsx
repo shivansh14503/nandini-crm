@@ -102,7 +102,7 @@ function TaxBankTabInner({ form, set }: TaxBankTabProps) {
                     />
 
                     {/* Account Name */}
-                    <FormField label="Account Name" sx={{ mb: 0 }}>
+                    <FormField name="accountName" label="Account Name" sx={{ mb: 0 }}>
                         <TextField
                             fullWidth
                             size="small"
@@ -114,7 +114,7 @@ function TaxBankTabInner({ form, set }: TaxBankTabProps) {
                     </FormField>
 
                     {/* Bank Name */}
-                    <FormField label="Bank Name" sx={{ mb: 0 }}>
+                    <FormField name="bankName" label="Bank Name" sx={{ mb: 0 }}>
                         <TextField
                             fullWidth
                             size="small"
@@ -176,7 +176,7 @@ function TaxBankTabInner({ form, set }: TaxBankTabProps) {
                     />
 
                     {/* Account Number */}
-                    <FormField label="Account Number" sx={{ mb: 0 }}>
+                    <FormField name="accountNumber" label="Account Number" sx={{ mb: 0 }}>
                         <TextField
                             fullWidth
                             size="small"
@@ -188,7 +188,7 @@ function TaxBankTabInner({ form, set }: TaxBankTabProps) {
                     </FormField>
 
                     {/* Type Of Account */}
-                    <FormField label="Type Of Account" sx={{ mb: 0 }}>
+                    <FormField name="typeOfAccount" label="Type Of Account" sx={{ mb: 0 }}>
                         <StyledSelect
                             label="Type Of Account"
                             placeholder="Select Type Of Account"
@@ -199,7 +199,7 @@ function TaxBankTabInner({ form, set }: TaxBankTabProps) {
                     </FormField>
 
                     {/* Bank Address */}
-                    <FormField label="Bank Address" sx={{ mb: 0 }}>
+                    <FormField name="bankAddress" label="Bank Address" sx={{ mb: 0 }}>
                         <TextField
                             fullWidth
                             size="small"

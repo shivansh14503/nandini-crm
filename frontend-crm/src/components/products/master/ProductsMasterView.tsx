@@ -7,7 +7,10 @@ import InventoryOutlinedIcon from '@mui/icons-material/InventoryOutlined';
 import CategoryOutlinedIcon from '@mui/icons-material/CategoryOutlined';
 import NewReleasesOutlinedIcon from '@mui/icons-material/NewReleasesOutlined';
 import StarBorderIcon from '@mui/icons-material/StarBorder';
+import { RecordLink } from '../../common/RecordLink';
 import { CommonMasterView } from '../../common/CommonMasterView';
+import { MasterHeaderActions } from '../../common/MasterHeaderActions';
+import { buildExtendedSearchConfig } from '../../common/buildExtendedSearchConfig';
 import { AppToast } from '../../common/AppToast';
 import { RelatedModulesSidebar, RelatedRecordsTableView } from '../../common/Drawer';
 import { RelatedSecondaryDrawer, type SecondaryDrawerEntity } from '../../common/RelatedSecondaryDrawer';
@@ -231,11 +234,9 @@ export function ProductsMasterView() {
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                         <InventoryOutlinedIcon sx={{ fontSize: 16, color: '#2563eb' }} />
                         <Box>
-                            <Typography
-                                onClick={(e) => {
-                                    e.stopPropagation();
-                                    setSelectedDrawerProduct(p);
-                                }}
+                            <RecordLink
+                                href={ROUTES.PRODUCT_DETAIL(p.id)}
+                                onOpen={() => setSelectedDrawerProduct(p)}
                                 sx={{
                                     fontWeight: 700,
                                     color: '#1d4ed8',
@@ -246,7 +247,7 @@ export function ProductsMasterView() {
                                 }}
                             >
                                 {p.productName}
-                            </Typography>
+                            </RecordLink>
                             <Typography sx={{ fontSize: '0.72rem', color: '#94a3b8' }}>
                                 {p.productCode}
                             </Typography>
@@ -358,24 +359,34 @@ export function ProductsMasterView() {
                     setPage(0);
                 },
             }}
-            searchConfig={{
+            tableId="products"
+            headerActions={() => (
+                <MasterHeaderActions
+                    onRefresh={() => {
+                        loadProducts();
+                        setToast({ open: true, message: 'Products refreshed.', severity: 'info' });
+                    }}
+                    onNewClick={() => router.push(ROUTES.PRODUCT_NEW)}
+                    newButtonLabel="New Product"
+                />
+            )}
+            searchConfig={buildExtendedSearchConfig({
                 searchQuery,
-                onSearchChange: (v) => {
-                    setSearchQuery(v);
+                onSearchChange: (q) => {
+                    setSearchQuery(q);
                     setPage(0);
                 },
                 searchPlaceholder: 'Search by name, category, HSN, manufacturer...',
-                searchWidth: { xs: '100%', sm: 320 },
-                onNewClick: () => router.push(ROUTES.PRODUCT_NEW),
-                newButtonLabel: 'New Product',
-                onRefresh: () => {
-                    loadProducts();
-                    setToast({ open: true, message: 'Products refreshed.', severity: 'info' });
-                },
-                refreshTooltip: 'Refresh Products',
-                selectedCount: selectedIds.length,
+                pageIds: paginatedProducts.map((r) => r.id),
+                allIds: sortedProducts.map((r) => r.id),
+                selectedIds,
+                onSelectedIdsChange: setSelectedIds,
+                page,
+                rowsPerPage,
+                totalRecords: sortedProducts.length,
+                onPageChange: setPage,
                 onBulkDelete: handleBulkDelete,
-            }}
+            })}
             columns={columns}
             data={paginatedProducts}
             keyExtractor={(p) => p.id}
@@ -386,7 +397,7 @@ export function ProductsMasterView() {
             sortOrder={sortOrder}
             onSort={handleSort}
             onView={(p) => router.push(ROUTES.PRODUCT_DETAIL(p.id))}
-            onEdit={(p) => router.push(ROUTES.PRODUCT_EDIT(p.id))}
+            getEditHref={(p) => ROUTES.PRODUCT_EDIT(p.id)}
             onRowClick={(product) => setSelectedDrawerProduct(product)}
             activeRowId={selectedDrawerProduct?.id}
             viewTooltip="View Product"

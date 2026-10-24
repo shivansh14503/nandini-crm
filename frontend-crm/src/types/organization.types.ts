@@ -1,57 +1,95 @@
 // ─── Organization Types ───────────────────────────────────────────────────────
 
 export type NatureOfBusiness =
-    | 'Distributor / Wholesale Trading'
+    | 'Agriculture & Food Processing'
+    | 'Apparel & Textiles'
+    | 'Association / Society / NGO / Trust'
+    | 'Automobile & Auto Components'
+    | 'Biotechnology & Pharmaceuticals'
+    | 'CA Firm / Accounting & Taxation'
+    | 'Chemicals'
+    | 'Communications & Telecommunications'
+    | 'Construction & Real Estate'
+    | 'Consulting & Professional Services'
+    | 'Distributor / Trading / Wholesale'
+    | 'E-commerce / Online Business'
+    | 'Education & Training'
+    | 'Electronics & Electricals'
+    | 'Energy & Utilities'
+    | 'Engineering'
+    | 'Entertainment & Recreation'
+    | 'Environmental Services'
+    | 'Finance & Banking'
+    | 'Government / Public Sector'
+    | 'Healthcare & Medical'
+    | 'Hospitality / Hotel / Restaurant'
+    | 'Import / Export'
+    | 'Insurance'
+    | 'Jewellery & Gems'
+    | 'Logistics & Warehousing'
+    | 'Machinery & Industrial Equipment'
     | 'Manufacturing'
+    | 'Media / Advertising / Marketing'
+    | 'Printing / Packaging / Publishing'
     | 'Retail'
-    | 'Services'
-    | 'IT / Software'
-    | 'Healthcare'
-    | 'Education'
-    | 'Construction'
-    | 'Transportation'
-    | 'Consulting'
-    | 'Government / PSU'
-    | 'Other';
+    | 'Technology / IT & Software'
+    | 'Transportation & Logistics'
+    // Open fallback keeps legacy stored/mock values compiling.
+    | (string & Record<never, never>);
 
 export type AccountStatus = 'Active' | 'Inactive';
 
 export type TypeOfEntity =
-    | 'Private Limited Company (Pvt. Ltd.)'
-    | 'Public Limited Company (Ltd.)'
-    | 'Limited Liability Partnership (LLP)'
-    | 'Partnership Firm'
-    | 'Sole Proprietorship'
-    | 'Trust / NGO'
-    | 'Government Body'
-    | 'Foreign Entity'
-    | 'Other';
+    | 'Association'
+    | 'Government'
+    | 'HUF'
+    | 'LLP'
+    | 'NGO'
+    | 'Partnership'
+    | 'Private Limited'
+    | 'Proprietorship'
+    | 'PSU'
+    | 'Public Limited'
+    | 'RWA'
+    | 'Section 8 Company'
+    | 'Society'
+    | 'Trust'
+    // Open fallback keeps legacy stored/mock values compiling.
+    | (string & Record<never, never>);
 
 export type CustomerType =
-    | 'Authorized Reseller'
-    | 'Direct Customer'
-    | 'OEM Partner'
-    | 'System Integrator'
+    | 'BMW'
+    | 'CEAT'
     | 'End User'
-    | 'Distributor'
+    | 'GAIA'
+    | 'IFFCO'
+    | 'Luxottica'
     | 'Partner'
-    | 'Internal';
+    | 'Samsung'
+    | 'Usha'
+    | 'Valvoline'
+    | 'ValvolineSFDC'
+    // Open fallback keeps legacy stored/mock values compiling.
+    | (string & Record<never, never>);
 
 export type AnnualTurnover =
-    | 'Below ₹25 Lakhs'
-    | '₹25 Lakhs – ₹1 Cr'
-    | '₹1 Cr – ₹1.5 Cr'
-    | '₹1.5 Cr – ₹5 Cr'
-    | '₹5 Cr – ₹25 Cr'
-    | '₹25 Cr – ₹100 Cr'
-    | 'Above ₹100 Cr';
+    | 'Less than 1.5 crore'
+    | '1.5 crore to 5 crore'
+    | '5 crore to 10 crore'
+    | 'Greater than 10 crore'
+    // Open fallback keeps legacy stored/mock values compiling.
+    | (string & Record<never, never>);
 
 export type NumberOfEmployees =
-    | '1 – 10 Staff Members'
-    | '11 – 50 Staff Members'
-    | '51 – 200 Staff Members'
-    | '201 – 500 Staff Members'
-    | '500+ Staff Members';
+    | 'Less than 20'
+    | '21 To 50'
+    | '51 To 100'
+    | '101 To 250'
+    | '251 To 500'
+    | '501 To 1000'
+    | '1001 & Above'
+    // Open fallback keeps legacy stored/mock values compiling.
+    | (string & Record<never, never>);
 
 export type SourceOfLead =
     | 'Client Referral'
@@ -77,6 +115,8 @@ export interface OrganizationFormData {
     mailingName: string;
     natureOfBusiness: NatureOfBusiness | '';
     accountStatus: AccountStatus | '';
+    /** Why the organization was set to Inactive (collected via CommonActionModal). */
+    inactivityReason?: string;
     typeOfEntity: TypeOfEntity | '';
     customerType: CustomerType | '';
     sapCodeTallyId: string;

@@ -1,8 +1,9 @@
 'use client';
 
-import { useState, useCallback, useMemo, useEffect } from 'react';
+import { useState, useCallback, useMemo, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { FormProvider, useForm, type Path } from 'react-hook-form';
+import { Alert, Typography } from '@mui/material';
 // Icons
 import ArticleOutlinedIcon from '@mui/icons-material/ArticleOutlined';
 import PlaceOutlinedIcon from '@mui/icons-material/PlaceOutlined';
@@ -14,7 +15,11 @@ import { AppToast } from '../common/AppToast';
 import { CommonFormLayout } from '../common/CommonFormLayout';
 import { type FormTabDefinition } from '../common/Drawer';
 import { organizationService } from '@/services';
+import { useAuth } from '@/context/AuthContext';
 import { ROUTES } from '../../config/constants';
+import { focusFormField } from '@/utils/formFocus';
+import { useFormDraftGuard } from '@/hooks/useFormDraftGuard';
+import { UnsavedChangesModal } from '../common/UnsavedChangesModal';
 import { validateWithToast, organizationFormSchema } from '../../validations';
 import type {
     OrganizationFormData,
@@ -60,6 +65,7 @@ const DEFAULT_FORM: OrganizationFormData = {
     mailingName: '',
     natureOfBusiness: '',
     accountStatus: 'Active',
+    inactivityReason: '',
     typeOfEntity: '',
     customerType: '',
     sapCodeTallyId: '',
@@ -113,6 +119,50 @@ const DEFAULT_FORM: OrganizationFormData = {
 
 type TabKey = 'overview' | 'address' | 'tax_bank' | 'partner_licensing';
 
+// Maps a validation field key to the tab that renders it (unmapped keys stay on the current tab).
+const FIELD_TAB_MAP: Record<string, TabKey> = {
+    organizationName: 'overview',
+    mailingName: 'overview',
+    natureOfBusiness: 'overview',
+    accountStatus: 'overview',
+    inactivityReason: 'overview',
+    typeOfEntity: 'overview',
+    customerType: 'overview',
+    sapCodeTallyId: 'overview',
+    showroomBranchCode: 'overview',
+    sourceOfLead: 'overview',
+    memberOfParentCorp: 'overview',
+    numberOfEmployees: 'overview',
+    annualTurnover: 'overview',
+    description: 'overview',
+    corporateEmails: 'overview',
+    billingAddress: 'address',
+    billingStreet: 'address',
+    billingCity: 'address',
+    billingState: 'address',
+    billingPostalCode: 'address',
+    billingCountry: 'address',
+    shippingAddress: 'address',
+    shippingStreet: 'address',
+    shippingCity: 'address',
+    shippingState: 'address',
+    shippingPostalCode: 'address',
+    registrationType: 'tax_bank',
+    panNumber: 'tax_bank',
+    msmeRegnNumber: 'tax_bank',
+    accountName: 'tax_bank',
+    bankName: 'tax_bank',
+    bankIfscCode: 'tax_bank',
+    gstNo: 'tax_bank',
+    gstNumber: 'tax_bank',
+    cinNo: 'tax_bank',
+    tanNumber: 'tax_bank',
+    accountNumber: 'tax_bank',
+    typeOfAccount: 'tax_bank',
+    bankAddress: 'tax_bank',
+    partnerCompanies: 'partner_licensing',
+};
+
 // ─── Component Props ──────────────────────────────────────────────────────────
 export interface OrganizationFormProps {
     mode?: 'create' | 'edit' | 'view';
@@ -128,12 +178,21 @@ export default function OrganizationForm({
     breadcrumbItems,
 }: OrganizationFormProps) {
     const router = useRouter();
+    const { user } = useAuth();
+    const isAdmin = user?.role?.toLowerCase() === 'admin';
 
     const [form, setForm] = useState<OrganizationFormData>({ ...DEFAULT_FORM, ...initialData });
+    // Lock is based on the status as last saved, so deactivating mid-edit doesn't lock the user out of their own unsaved change.
+    const [persistedStatus, setPersistedStatus] = useState(initialData?.accountStatus ?? 'Active');
     const [activeTab, setActiveTab] = useState<TabKey>('overview');
+    const pendingFocusField = useRef<string | null>(null);
+    // Values "Discard" resets to: blank for create, the last loaded record for edit.
+    const baselineRef = useRef<OrganizationFormData>({ ...DEFAULT_FORM, ...initialData });
+    // In edit mode drafts are restored only after the saved record has loaded, so they aren't overwritten by it.
+    const [recordLoaded, setRecordLoaded] = useState(!organizationId);
     const [submitting, setSubmitting] = useState(false);
     const [isDirty, setIsDirty] = useState(false);
-    const [toast, setToast] = useState<{ open: boolean; message: string; severity: 'success' | 'error' }>({
+    const [toast, setToast] = useState<{ open: boolean; message: string; severity: 'success' | 'error' | 'info' }>({
         open: false,
         message: '',
         severity: 'success',
@@ -144,11 +203,54 @@ export default function OrganizationForm({
         mode: 'onTouched',
     });
 
+    const isInactive = mode !== 'create' && persistedStatus === 'Inactive';
+    const isLocked = isInactive && !isAdmin;
+    const effectiveMode = isLocked ? 'view' : mode;
+
+    const draftKey = mode === 'create' ? 'crm_draft_organization_new' : `crm_draft_organization_${organizationId}`;
+    const draftValues = useMemo<OrganizationFormData>(
+        () => ({ ...form, ...methods.getValues() }),
+        // eslint-disable-next-line react-hooks/exhaustive-deps -- RHF values change together with `form` (see set())
+        [form]
+    );
+    const { clearDraft, confirmDiscard, discardModalOpen, handleKeepEditing, handleDiscardAndLeave } =
+        useFormDraftGuard<OrganizationFormData>({
+            draftKey,
+            isDirty,
+            currentValues: draftValues,
+            defaultValues: DEFAULT_FORM,
+            onRestoreDraft: (draft) => {
+                const restored = { ...DEFAULT_FORM, ...draft };
+                setForm(restored);
+                methods.reset(restored);
+                setIsDirty(true);
+                setToast({ open: true, message: 'Unsaved draft restored from your previous session.', severity: 'info' });
+            },
+            enabled: effectiveMode !== 'view' && recordLoaded,
+            navigate: (href) => router.push(href),
+            onDiscard: () => {
+                const baseline = baselineRef.current;
+                setForm(baseline);
+                methods.reset(baseline);
+                setIsDirty(false);
+                setActiveTab('overview');
+            },
+        });
+
     const defaultBreadcrumbs: BreadcrumbItem[] = [
         { label: 'Sales' },
         { label: 'Organizations', href: ROUTES.ORGANIZATIONS },
         { label: mode !== 'create' ? (form.organizationName ? `${mode === 'view' ? 'View' : 'Edit'}: ${form.organizationName}` : `${mode === 'view' ? 'View' : 'Edit'} Organization`) : 'Create & Edit View' },
     ];
+
+    // After a validation-driven tab switch, focus the field once the new tab has rendered.
+    useEffect(() => {
+        const field = pendingFocusField.current;
+        if (!field) return;
+        pendingFocusField.current = null;
+        const frame = requestAnimationFrame(() => focusFormField(field));
+        return () => cancelAnimationFrame(frame);
+    }, [activeTab]);
 
     // Populate data when editing
     useEffect(() => {
@@ -165,11 +267,16 @@ export default function OrganizationForm({
                         shippingAddress: found.shippingAddress || found.shippingStreet || '',
                         gstNo: found.gstNo || found.gstNumber || '',
                     };
+                    baselineRef.current = { ...DEFAULT_FORM, ...normalized };
+                    setPersistedStatus(normalized.accountStatus);
                     setForm((prev) => ({ ...prev, ...normalized }));
                     methods.reset(normalized);
                 }
             })
-            .catch(() => {});
+            .catch(() => {})
+            .finally(() => {
+                if (active) setRecordLoaded(true);
+            });
         return () => {
             active = false;
         };
@@ -270,6 +377,7 @@ export default function OrganizationForm({
 
     // ── Submit logic with Zod Validation ──────────────────────────────────────
     const handleSubmit = async (redirectAfter: boolean) => {
+        if (isLocked) return;
         const currentData = { ...form, ...methods.getValues() };
         if (!currentData.billingAddress && currentData.billingStreet) {
             currentData.billingAddress = currentData.billingStreet;
@@ -293,12 +401,24 @@ export default function OrganizationForm({
         const validation = validateWithToast(organizationFormSchema, currentData);
         if (!validation.success) {
             setToast({ open: true, message: validation.error, severity: 'error' });
+            const { fieldName } = validation;
+            if (fieldName) {
+                const targetTab = FIELD_TAB_MAP[fieldName];
+                if (targetTab && targetTab !== activeTab) {
+                    pendingFocusField.current = fieldName;
+                    setActiveTab(targetTab);
+                } else {
+                    focusFormField(fieldName);
+                }
+            }
             return;
         }
         setSubmitting(true);
         try {
             if (mode === 'create') {
                 await organizationService.create(currentData as OrganizationFormData);
+                clearDraft();
+                setIsDirty(false);
                 setToast({ open: true, message: 'Organization created successfully!', severity: 'success' });
                 if (redirectAfter) {
                     setTimeout(() => router.push(ROUTES.ORGANIZATIONS), 800);
@@ -309,6 +429,8 @@ export default function OrganizationForm({
                 }
             } else if (mode === 'edit' && organizationId) {
                 await organizationService.update(organizationId, currentData as OrganizationFormData);
+                clearDraft();
+                setIsDirty(false);
                 setToast({ open: true, message: 'Organization updated successfully!', severity: 'success' });
                 setTimeout(() => router.push(ROUTES.ORGANIZATIONS), 800);
             }
@@ -321,12 +443,7 @@ export default function OrganizationForm({
     };
 
     const handleDiscard = () => {
-        if (mode === 'view') {
-            router.push(ROUTES.ORGANIZATIONS);
-            return;
-        }
-        if (isDirty && !confirm('You have unsaved changes. Are you sure you want to discard them?')) return;
-        router.push(ROUTES.ORGANIZATIONS);
+        confirmDiscard(() => router.push(ROUTES.ORGANIZATIONS));
     };
 
     // ─── Tabs Configuration (derived from ORGANIZATION_FORM_TABS) ───────────────
@@ -351,11 +468,30 @@ export default function OrganizationForm({
                 activeTab={activeTab}
                 onTabChange={(tabId) => setActiveTab(tabId as TabKey)}
                 onCancel={handleDiscard}
-                onSave={mode === 'view' ? () => router.push(ROUTES.ORGANIZATION_EDIT(organizationId!)) : () => handleSubmit(true)}
+                onSave={effectiveMode === 'view' ? () => router.push(ROUTES.ORGANIZATION_EDIT(organizationId!)) : () => handleSubmit(true)}
+                saveDisabled={isLocked}
+                saveDisabledTooltip="Only Admins can edit inactive organizations"
+                banner={
+                    isLocked ? (
+                        <Alert severity="warning" sx={{ mb: 2.5, borderRadius: '8px' }}>
+                            <Typography sx={{ fontWeight: 700, fontSize: '0.85rem' }}>This organization is Inactive</Typography>
+                            <Typography sx={{ fontSize: '0.8rem', mt: 0.5 }}>
+                                <strong>Reason:</strong> {form.inactivityReason || 'No reason specified'}
+                            </Typography>
+                            <Typography sx={{ fontSize: '0.75rem', color: '#64748b', mt: 0.5 }}>
+                                This record is locked. Only users with the <strong>Admin</strong> role can edit or reactivate this account.
+                            </Typography>
+                        </Alert>
+                    ) : isInactive ? (
+                        <Alert severity="info" sx={{ mb: 2.5, borderRadius: '8px' }}>
+                            <strong>Inactive Organization (Admin Override):</strong> Reason: {form.inactivityReason || 'N/A'}. You have administrative privileges to edit or reactivate this organization.
+                        </Alert>
+                    ) : undefined
+                }
                 submitting={submitting}
-                saveLabel={mode === 'view' ? 'Edit Organization' : mode === 'edit' ? 'Update Organization' : 'Save Organization'}
-                cancelLabel={mode === 'view' ? 'Back' : 'Cancel'}
-                mode={mode}
+                saveLabel={effectiveMode === 'view' ? 'Edit Organization' : mode === 'edit' ? 'Update Organization' : 'Save Organization'}
+                cancelLabel={effectiveMode === 'view' ? 'Back' : 'Cancel'}
+                mode={effectiveMode}
                 disableContentPadding
                 toast={
                     <AppToast
@@ -366,6 +502,13 @@ export default function OrganizationForm({
                     />
                 }
             >
+                <UnsavedChangesModal
+                    open={discardModalOpen}
+                    onKeepEditing={handleKeepEditing}
+                    onDiscardAndLeave={handleDiscardAndLeave}
+                    description="You have unsaved changes. If you leave now, they will be discarded."
+                />
+
                 {/* ── Tab Content Panels ────────────────────────────────────── */}
                 {activeTab === 'overview' && (
                     <OverviewTab

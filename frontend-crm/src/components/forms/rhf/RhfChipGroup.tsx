@@ -31,7 +31,7 @@ export function RhfChipGroup<T extends FieldValues>({
         );
 
     return (
-        <FormField label={label} required={required} hint={hint}>
+        <FormField name={name} label={label} required={required} hint={hint}>
             <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.8 }}>
                 {options.map((option) => {
                     const active = selected.includes(option);

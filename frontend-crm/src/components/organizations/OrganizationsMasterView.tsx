@@ -8,8 +8,6 @@ import {
     Typography,
 } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
-import FilterListIcon from '@mui/icons-material/FilterList';
-import ViewColumnIcon from '@mui/icons-material/ViewColumn';
 import FileDownloadOutlinedIcon from '@mui/icons-material/FileDownloadOutlined';
 import HistoryIcon from '@mui/icons-material/History';
 import PersonOutlinedIcon from '@mui/icons-material/PersonOutlined';
@@ -17,6 +15,8 @@ import ApartmentIcon from '@mui/icons-material/Apartment';
 
 import { ROUTES } from '../../config/constants';
 import { getRelatedModulesForEntity } from '@/config/relatedModules.config';
+import { RecordLink } from '../common/RecordLink';
+import { useAuth } from '@/context/AuthContext';
 import { CommonMasterView } from '../common/CommonMasterView';
 import { AppToast } from '../common/AppToast';
 import {
@@ -57,12 +57,14 @@ const getNatureBadgeStyle = (nature: string = '') => {
 };
 
 const formatNatureLabel = (nature: string = '') => {
-    if (nature.includes('Distributor / Wholesale Trading')) return 'Distributor/Trading';
+    if (nature.includes('Distributor / Trading / Wholesale')) return 'Distributor/Trading';
     return nature;
 };
 
 export function OrganizationsMasterView() {
     const router = useRouter();
+    const { user } = useAuth();
+    const isAdmin = user?.role?.toLowerCase() === 'admin';
 
     // ── State ─────────────────────────────────────────────────────────────────
     const [organizations, setOrganizations] = useState<ExtendedOrganization[]>([]);
@@ -420,6 +422,8 @@ export function OrganizationsMasterView() {
         () => [
             {
                 id: 'organizationName',
+                category: 'basic',
+                locked: true,
                 label: 'ORGANIZATION NAME',
                 sortable: true,
                 minWidth: 240,
@@ -441,11 +445,9 @@ export function OrganizationsMasterView() {
                             <ApartmentIcon sx={{ fontSize: 16 }} />
                         </Box>
                         <Box>
-                            <Typography
-                                onClick={(e) => {
-                                    e.stopPropagation();
-                                    setSelectedDrawerOrg(org);
-                                }}
+                            <RecordLink
+                                href={ROUTES.ORGANIZATION_DETAIL(org.id)}
+                                onOpen={() => setSelectedDrawerOrg(org)}
                                 sx={{
                                     fontSize: '0.82rem',
                                     fontWeight: 700,
@@ -456,7 +458,7 @@ export function OrganizationsMasterView() {
                                 }}
                             >
                                 {org.organizationName}
-                            </Typography>
+                            </RecordLink>
                             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 0.2 }}>
                                 <Typography sx={{ fontSize: '0.7rem', color: '#94a3b8', fontFamily: 'monospace' }}>
                                     {org.accountCode}
@@ -485,6 +487,7 @@ export function OrganizationsMasterView() {
             },
             {
                 id: 'natureOfBusiness',
+                category: 'basic',
                 label: 'NATURE OF BUSINESS',
                 sortable: true,
                 minWidth: 160,
@@ -510,6 +513,7 @@ export function OrganizationsMasterView() {
             },
             {
                 id: 'customerType',
+                category: 'basic',
                 label: 'CUSTOMER TYPE',
                 sortable: true,
                 minWidth: 130,
@@ -534,6 +538,7 @@ export function OrganizationsMasterView() {
             },
             {
                 id: 'accountStatus',
+                category: 'basic',
                 label: 'STATUS',
                 sortable: true,
                 minWidth: 110,
@@ -572,6 +577,7 @@ export function OrganizationsMasterView() {
             },
             {
                 id: 'billingStreet',
+                category: 'more',
                 label: 'BILLING STREET',
                 sortable: true,
                 minWidth: 160,
@@ -583,6 +589,7 @@ export function OrganizationsMasterView() {
             },
             {
                 id: 'billingCity',
+                category: 'more',
                 label: 'BILLING CITY',
                 sortable: true,
                 minWidth: 120,
@@ -594,6 +601,7 @@ export function OrganizationsMasterView() {
             },
             {
                 id: 'billingState',
+                category: 'more',
                 label: 'BILLING STATE',
                 sortable: true,
                 minWidth: 120,
@@ -605,6 +613,7 @@ export function OrganizationsMasterView() {
             },
             {
                 id: 'annualTurnover',
+                category: 'more',
                 label: 'ANNUAL TURNOVER',
                 sortable: true,
                 minWidth: 130,
@@ -616,6 +625,7 @@ export function OrganizationsMasterView() {
             },
             {
                 id: 'assignedUser',
+                category: 'more',
                 label: 'ASSIGNED USER',
                 sortable: true,
                 minWidth: 140,
@@ -631,48 +641,6 @@ export function OrganizationsMasterView() {
 
     const headerActions = (
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.2 }}>
-            <Button
-                variant="outlined"
-                size="small"
-                startIcon={<FilterListIcon sx={{ fontSize: 16 }} />}
-                onClick={() => setToast({ open: true, message: 'Custom filters active.', severity: 'info' })}
-                sx={{
-                    borderColor: '#e2e8f0',
-                    color: '#334155',
-                    backgroundColor: '#fff',
-                    textTransform: 'none',
-                    fontWeight: 600,
-                    fontSize: '0.8rem',
-                    borderRadius: '8px',
-                    height: 36,
-                    px: 1.8,
-                    '&:hover': { borderColor: '#cbd5e1', backgroundColor: '#f8fafc' },
-                }}
-            >
-                Filter / Views
-            </Button>
-
-            <Button
-                variant="outlined"
-                size="small"
-                startIcon={<ViewColumnIcon sx={{ fontSize: 16 }} />}
-                onClick={() => setToast({ open: true, message: 'Column Manager: All 7 standard columns visible.', severity: 'info' })}
-                sx={{
-                    borderColor: '#e2e8f0',
-                    color: '#334155',
-                    backgroundColor: '#fff',
-                    textTransform: 'none',
-                    fontWeight: 600,
-                    fontSize: '0.8rem',
-                    borderRadius: '8px',
-                    height: 36,
-                    px: 1.8,
-                    '&:hover': { borderColor: '#cbd5e1', backgroundColor: '#f8fafc' },
-                }}
-            >
-                Column Manager
-            </Button>
-
             <Button
                 variant="outlined"
                 size="small"
@@ -728,6 +696,7 @@ export function OrganizationsMasterView() {
                 },
                 variant: 'pill',
             }}
+            tableId="organizations"
             headerActions={headerActions}
             searchConfig={{
                 variant: 'extended',
@@ -759,8 +728,6 @@ export function OrganizationsMasterView() {
                     { id: 'export', label: 'Export Selected to CSV', onClick: () => handleBulkAction('export') },
                     { id: 'delete', label: 'Delete Selected', color: 'error', onClick: () => handleBulkAction('delete') },
                 ],
-                onFilterClick: () => setToast({ open: true, message: 'Filter panel toggled.', severity: 'info' }),
-                onColumnClick: () => setToast({ open: true, message: 'Layout columns toggled.', severity: 'info' }),
             }}
             columns={columns}
             data={paginatedOrganizations}
@@ -774,7 +741,16 @@ export function OrganizationsMasterView() {
             sortOrder={sortOrder}
             onSort={(field) => handleSort(field as SortField)}
             onView={(org) => router.push(ROUTES.ORGANIZATION_DETAIL(org.id))}
-            onEdit={(org) => router.push(ROUTES.ORGANIZATION_EDIT(org.id))}
+            getEditHref={(org) =>
+                org.accountStatus === 'Inactive' && !isAdmin
+                    ? ROUTES.ORGANIZATION_DETAIL(org.id)
+                    : ROUTES.ORGANIZATION_EDIT(org.id)
+            }
+            onEdit={(org) => {
+                if (org.accountStatus === 'Inactive' && !isAdmin) {
+                    setToast({ open: true, message: 'This organization is inactive. Only an Admin can edit it.', severity: 'info' });
+                }
+            }}
             onRowClick={(org) => setSelectedDrawerOrg(org)}
             activeRowId={selectedDrawerOrg?.id}
             viewTooltip="View Details"

@@ -15,6 +15,7 @@ import {
     IconButton,
     Avatar,
 } from '@mui/material';
+import { CommonActionModal } from '@/components/common/CommonActionModal';
 
 // Icons
 import AddIcon from '@mui/icons-material/Add';
@@ -59,6 +60,15 @@ import type {
     SourceOfLead,
 } from '@/types/organization.types';
 
+const INACTIVITY_REASONS = [
+    'Client Closed Operations',
+    'Non-Payment / Dispute',
+    'Shifted to Competitor',
+    'Duplicate Account',
+    'Temporary Pause',
+    'Other',
+];
+
 export interface OverviewTabProps {
     form: OrganizationFormData;
     set: <K extends keyof OrganizationFormData>(key: K, value: OrganizationFormData[K]) => void;
@@ -79,6 +89,7 @@ function OverviewTabInner({
     const organizationName = useWatch({ control, name: 'organizationName' }) ?? form?.organizationName ?? '';
     const mailingName = useWatch({ control, name: 'mailingName' }) ?? form?.mailingName ?? '';
     const currentAccountStatus = (useWatch({ control, name: 'accountStatus' }) ?? form?.accountStatus ?? 'Active') as AccountStatus;
+    const [pendingInactive, setPendingInactive] = React.useState(false);
     const watchedNatureOfBusiness = useWatch({ control, name: 'natureOfBusiness' });
     const watchedTypeOfEntity = useWatch({ control, name: 'typeOfEntity' });
     const watchedCustomerType = useWatch({ control, name: 'customerType' });
@@ -145,6 +156,7 @@ function OverviewTabInner({
                 <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5 }}>
                     {/* Organization Name */}
                     <FormField
+                        name="organizationName"
                         label="Organization Name"
                         required
                         hint="As per official registration"
@@ -181,6 +193,7 @@ function OverviewTabInner({
 
                     {/* Account Status */}
                     <FormField
+                        name="accountStatus"
                         label="Account Status"
                         hint={
                             (currentAccountStatus || 'Active') === 'Active' ? (
@@ -205,15 +218,45 @@ function OverviewTabInner({
                             value={currentAccountStatus || 'Active'}
                             onChange={(v) => {
                                 const val = v as AccountStatus;
+                                if (val === 'Inactive' && currentAccountStatus !== 'Inactive') {
+                                    // Defer the change until a reason is collected.
+                                    setPendingInactive(true);
+                                    return;
+                                }
                                 setValue('accountStatus', val, { shouldValidate: true, shouldDirty: true });
                                 if (set) set('accountStatus', val);
+                                if (val === 'Active') {
+                                    setValue('inactivityReason', '', { shouldDirty: true });
+                                    if (set) set('inactivityReason', '');
+                                }
                             }}
                             options={ACCOUNT_STATUSES}
+                        />
+                        <CommonActionModal
+                            open={pendingInactive}
+                            title="Reason for Inactivity"
+                            description="Setting this organization to Inactive will lock the record for non-admin users."
+                            reasonLabel="Reason"
+                            reasonPlaceholder="Why is this organization being deactivated?"
+                            presetReasons={INACTIVITY_REASONS}
+                            confirmLabel="Deactivate Organization"
+                            confirmColor="warning"
+                            onConfirm={(reason) => {
+                                setValue('accountStatus', 'Inactive', { shouldValidate: true, shouldDirty: true });
+                                setValue('inactivityReason', reason, { shouldDirty: true });
+                                if (set) {
+                                    set('accountStatus', 'Inactive');
+                                    set('inactivityReason', reason);
+                                }
+                                setPendingInactive(false);
+                            }}
+                            onClose={() => setPendingInactive(false)}
                         />
                     </FormField>
 
                     {/* SAP Code / Tally ID */}
                     <FormField
+                        name="sapCodeTallyId"
                         label="SAP Code / Tally ID"
                         hint="ERP Master Ledger Code"
                         sx={{ mb: 0 }}
@@ -238,7 +281,7 @@ function OverviewTabInner({
                     </FormField>
 
                     {/* Source of Lead */}
-                    <FormField label="Source of Lead" sx={{ mb: 0 }}>
+                    <FormField name="sourceOfLead" label="Source of Lead" sx={{ mb: 0 }}>
                         <StyledSelect
                             label="Source of Lead"
                             placeholder="Select Source of Lead"
@@ -311,7 +354,7 @@ function OverviewTabInner({
                     </Box>
 
                     {/* Annual Turnover */}
-                    <FormField label="Annual Turnover" sx={{ mb: 0 }}>
+                    <FormField name="annualTurnover" label="Annual Turnover" sx={{ mb: 0 }}>
                         <StyledSelect
                             label="Annual Turnover"
                             placeholder="Select Annual Turnover"
@@ -323,6 +366,7 @@ function OverviewTabInner({
 
                     {/* Description */}
                     <FormField
+                        name="description"
                         label="Add Description & Scope"
                         hint={`${form.description.length} / 1000`}
                         sx={{ mb: 0 }}
@@ -470,7 +514,7 @@ function OverviewTabInner({
                     </Box>
 
                     {/* Mailing Name */}
-                    <FormField label="Mailing Name" hint="Printed on tax invoices" sx={{ mb: 0 }}>
+                    <FormField name="mailingName" label="Mailing Name" hint="Printed on tax invoices" sx={{ mb: 0 }}>
                         <TextField
                             fullWidth
                             size="small"
@@ -508,6 +552,7 @@ function OverviewTabInner({
 
                     {/* Showroom / Branch Code */}
                     <FormField
+                        name="showroomBranchCode"
                         label="Showroom / Branch Code"
                         hint="Store Location ID"
                         sx={{ mb: 0 }}
@@ -523,7 +568,7 @@ function OverviewTabInner({
                     </FormField>
 
                     {/* Member of (Parent Corporation) */}
-                    <FormField label="Member of (Parent Corporation)" sx={{ mb: 0 }}>
+                    <FormField name="memberOfParentCorp" label="Member of (Parent Corporation)" sx={{ mb: 0 }}>
                         <TextField
                             fullWidth
                             size="small"
@@ -552,7 +597,7 @@ function OverviewTabInner({
                     </FormField>
 
                     {/* Number of Employees */}
-                    <FormField label="Number of Employees" sx={{ mb: 0 }}>
+                    <FormField name="numberOfEmployees" label="Number of Employees" sx={{ mb: 0 }}>
                         <StyledSelect
                             label="Number of Employees"
                             placeholder="Select Number of Employees"

@@ -1,16 +1,25 @@
 // ─── Product Catalog Types ─────────────────────────────────────────────────────
 
 export type ProductCategory =
-    | 'Hardware'
-    | 'Software'
-    | 'Networking'
-    | 'Storage'
-    | 'Security'
-    | 'Cloud Services'
-    | 'Peripherals'
-    | 'Consumables'
-    | 'AMC / Service'
-    | 'Other';
+    | 'Acronis'
+    | 'Biz Analyst'
+    | 'Connect 21'
+    | 'CredFlow'
+    | 'CRM'
+    | 'Data Warehouse'
+    | 'Tally AMC'
+    | 'Tally Customization'
+    | 'Tally On Cloud'
+    | 'Tally Service'
+    | 'Tally Software Service (TSS)'
+    | 'Tally Training'
+    | 'Tally Upgrade'
+    | 'TallyPrime'
+    | 'TallyPrime Server'
+    | 'Teramind'
+    | 'TVU'
+    // Open fallback keeps legacy stored/mock values compiling.
+    | (string & Record<never, never>);
 
 export type ProductType =
     | 'Product'

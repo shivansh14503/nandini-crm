@@ -14,7 +14,10 @@ import PhoneOutlinedIcon from '@mui/icons-material/PhoneOutlined';
 import EmailOutlinedIcon from '@mui/icons-material/EmailOutlined';
 import ApartmentIcon from '@mui/icons-material/Apartment';
 import CalendarMonthOutlinedIcon from '@mui/icons-material/CalendarMonthOutlined';
+import { RecordLink } from '../common/RecordLink';
 import { CommonMasterView } from '../common/CommonMasterView';
+import { MasterHeaderActions } from '../common/MasterHeaderActions';
+import { buildExtendedSearchConfig } from '../common/buildExtendedSearchConfig';
 import { AppToast } from '../common/AppToast';
 import { RelatedModulesSidebar, RelatedRecordsTableView } from '../common/Drawer';
 import { RelatedSecondaryDrawer, type SecondaryDrawerEntity } from '../common/RelatedSecondaryDrawer';
@@ -242,11 +245,9 @@ export function LeadsMasterView() {
                     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.3 }}>
                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                             <PersonOutlinedIcon sx={{ fontSize: 16, color: '#2563eb', flexShrink: 0 }} />
-                            <Typography
-                                onClick={(e) => {
-                                    e.stopPropagation();
-                                    setSelectedDrawerLead(l);
-                                }}
+                            <RecordLink
+                                href={ROUTES.LEAD_DETAIL(l.id)}
+                                onOpen={() => setSelectedDrawerLead(l)}
                                 sx={{
                                     fontWeight: 700,
                                     color: '#1d4ed8',
@@ -256,7 +257,7 @@ export function LeadsMasterView() {
                                 }}
                             >
                                 {l.name}
-                            </Typography>
+                            </RecordLink>
                         </Box>
                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.8, pl: 3 }}>
                             <Chip
@@ -533,24 +534,34 @@ export function LeadsMasterView() {
                     setPage(0);
                 },
             }}
-            searchConfig={{
+            tableId="leads"
+            headerActions={() => (
+                <MasterHeaderActions
+                    onRefresh={() => {
+                        loadLeads();
+                        setToast({ open: true, message: 'Leads refreshed.', severity: 'info' });
+                    }}
+                    onNewClick={() => router.push(ROUTES.LEAD_NEW)}
+                    newButtonLabel="New Lead"
+                />
+            )}
+            searchConfig={buildExtendedSearchConfig({
                 searchQuery,
                 onSearchChange: (q) => {
                     setSearchQuery(q);
                     setPage(0);
                 },
                 searchPlaceholder: 'Search by name, company, phone, product, status...',
-                searchWidth: { xs: '100%', sm: 340 },
-                onNewClick: () => router.push(ROUTES.LEAD_NEW),
-                newButtonLabel: 'New Lead',
-                onRefresh: () => {
-                    loadLeads();
-                    setToast({ open: true, message: 'Leads refreshed.', severity: 'info' });
-                },
-                refreshTooltip: 'Refresh Leads',
-                selectedCount: selectedIds.length,
+                pageIds: paginatedLeads.map((r) => r.id),
+                allIds: sortedLeads.map((r) => r.id),
+                selectedIds,
+                onSelectedIdsChange: setSelectedIds,
+                page,
+                rowsPerPage,
+                totalRecords: sortedLeads.length,
+                onPageChange: setPage,
                 onBulkDelete: handleBulkDelete,
-            }}
+            })}
             columns={columns}
             data={paginatedLeads}
             keyExtractor={(l) => l.id}
@@ -561,7 +572,7 @@ export function LeadsMasterView() {
             sortOrder={sortOrder}
             onSort={handleSort}
             onView={(l) => setSelectedDrawerLead(l)}
-            onEdit={(l) => router.push(ROUTES.LEAD_EDIT(l.id))}
+            getEditHref={(l) => ROUTES.LEAD_EDIT(l.id)}
             onRowClick={(lead) => setSelectedDrawerLead(lead)}
             activeRowId={selectedDrawerLead?.id}
             viewTooltip="View Lead Details"

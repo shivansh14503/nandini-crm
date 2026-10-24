@@ -249,24 +249,6 @@ export function EntityDetailDrawer({
 
                     {/* Top Right Header Actions */}
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, flexShrink: 0 }}>
-                        {headerActions?.onEdit && (
-                            <Tooltip title="Edit Record">
-                                <IconButton
-                                    size="small"
-                                    onClick={headerActions.onEdit}
-                                    sx={{
-                                        color: '#475569',
-                                        border: '1px solid #e2e8f0',
-                                        borderRadius: '6px',
-                                        p: 0.6,
-                                        '&:hover': { color: '#1d4ed8', backgroundColor: '#eff6ff', borderColor: '#bfdbfe' },
-                                    }}
-                                >
-                                    <EditOutlinedIcon sx={{ fontSize: 16 }} />
-                                </IconButton>
-                            </Tooltip>
-                        )}
-
                         {headerActions?.onSync && (
                             <Tooltip title="Synchronize Data">
                                 <IconButton

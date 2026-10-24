@@ -52,6 +52,7 @@ export function AddressTab({
 
                     {/* Street */}
                     <FormField
+                        name="billingAddress"
                         label="Street"
                         required
                         hint="Registered office location"
@@ -71,7 +72,7 @@ export function AddressTab({
                     </FormField>
 
                     {/* City */}
-                    <FormField label="City" required sx={{ mb: 0 }}>
+                    <FormField name="billingCity" label="City" required sx={{ mb: 0 }}>
                         <TextField
                             fullWidth
                             size="small"
@@ -83,7 +84,7 @@ export function AddressTab({
                     </FormField>
 
                     {/* State/Region */}
-                    <FormField label="State/Region" required sx={{ mb: 0 }}>
+                    <FormField name="billingState" label="State/Region" required sx={{ mb: 0 }}>
                         <StyledSelect
                             label="State/Region"
                             placeholder="Select State/Region"
@@ -95,7 +96,7 @@ export function AddressTab({
                     </FormField>
 
                     {/* Postal Code */}
-                    <FormField label="Postal Code" required sx={{ mb: 0 }}>
+                    <FormField name="billingPostalCode" label="Postal Code" required sx={{ mb: 0 }}>
                         <TextField
                             fullWidth
                             size="small"
@@ -107,7 +108,7 @@ export function AddressTab({
                     </FormField>
 
                     {/* Country */}
-                    <FormField label="Country" sx={{ mb: 0 }}>
+                    <FormField name="billingCountry" label="Country" sx={{ mb: 0 }}>
                         <StyledSelect
                             label="Country"
                             placeholder="Select Country"
@@ -118,7 +119,7 @@ export function AddressTab({
                     </FormField>
 
                     {/* Latitude */}
-                    <FormField label="Latitude" hint="Geo coordinate" sx={{ mb: 0 }}>
+                    <FormField name="billingLatitude" label="Latitude" hint="Geo coordinate" sx={{ mb: 0 }}>
                         <TextField
                             fullWidth
                             size="small"
@@ -175,6 +176,7 @@ export function AddressTab({
 
                     {/* Street */}
                     <FormField
+                        name="shippingAddress"
                         label="Street"
                         hint="Dispatch & delivery location"
                         sx={{ mb: 0 }}
@@ -194,7 +196,7 @@ export function AddressTab({
                     </FormField>
 
                     {/* City */}
-                    <FormField label="City" sx={{ mb: 0 }}>
+                    <FormField name="shippingCity" label="City" sx={{ mb: 0 }}>
                         <TextField
                             fullWidth
                             size="small"
@@ -207,7 +209,7 @@ export function AddressTab({
                     </FormField>
 
                     {/* State/Region */}
-                    <FormField label="State/Region" sx={{ mb: 0 }}>
+                    <FormField name="shippingState" label="State/Region" sx={{ mb: 0 }}>
                         <StyledSelect
                             label="State/Region"
                             placeholder="Select State/Region"
@@ -219,7 +221,7 @@ export function AddressTab({
                     </FormField>
 
                     {/* Postal Code */}
-                    <FormField label="Postal Code" sx={{ mb: 0 }}>
+                    <FormField name="shippingPostalCode" label="Postal Code" sx={{ mb: 0 }}>
                         <TextField
                             fullWidth
                             size="small"
@@ -232,7 +234,7 @@ export function AddressTab({
                     </FormField>
 
                     {/* Country */}
-                    <FormField label="Country" sx={{ mb: 0 }}>
+                    <FormField name="shippingCountry" label="Country" sx={{ mb: 0 }}>
                         <StyledSelect
                             label="Country"
                             placeholder="Select Country"
@@ -244,7 +246,7 @@ export function AddressTab({
                     </FormField>
 
                     {/* Longitude */}
-                    <FormField label="Longitude" hint="Geo coordinate" sx={{ mb: 0 }}>
+                    <FormField name="shippingLongitude" label="Longitude" hint="Geo coordinate" sx={{ mb: 0 }}>
                         <TextField
                             fullWidth
                             size="small"

@@ -3,6 +3,7 @@
 import { useState, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
+import Link from 'next/link';
 import {
     AppBar,
     Toolbar,
@@ -88,7 +89,6 @@ const NAV_ITEMS = [
 
 /* ─── Hover-dropdown pill ───────────────────────────────── */
 function NavPill({ item }: { item: { label: string; icon?: React.ReactNode; items: readonly { label: string; href: string }[] } }) {
-    const router = useRouter();
     const [open, setOpen] = useState(false);
     const [anchorEl, setAnchorEl] = useState<HTMLButtonElement | null>(null);
     const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -166,8 +166,11 @@ function NavPill({ item }: { item: { label: string; icon?: React.ReactNode; item
                                     {item.items.map((sub, i) => (
                                         <MenuItem
                                             key={i}
-                                            onClick={() => { router.push(sub.href); setOpen(false); }}
+                                            component={Link}
+                                            href={sub.href}
+                                            onClick={() => setOpen(false)}
                                             sx={{
+                                                textDecoration: 'none',
                                                 fontSize: '0.82rem',
                                                 color: '#374151',
                                                 px: 2,
@@ -483,7 +486,6 @@ const CREATE_ITEMS = [
 ];
 
 function CreateButton() {
-    const router = useRouter();
     const [open, setOpen] = useState(false);
     const [anchorEl, setAnchorEl] = useState<HTMLButtonElement | null>(null);
     const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -568,13 +570,11 @@ function CreateButton() {
                                         {CREATE_ITEMS.map((item, i) => (
                                             <MenuItem
                                                 key={i}
-                                                onClick={() => {
-                                                    setOpen(false);
-                                                    if (item.href) {
-                                                        router.push(item.href);
-                                                    }
-                                                }}
+                                                component={Link}
+                                                href={item.href}
+                                                onClick={() => setOpen(false)}
                                                 sx={{
+                                                    textDecoration: 'none',
                                                     fontSize: '0.82rem',
                                                     color: '#374151',
                                                     px: 2,
@@ -627,8 +627,10 @@ export function Navbar() {
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: { xs: 1, md: 2 } }}>
                     {/* Logo — clicks → dashboard */}
                     <Box
-                        onClick={() => router.push(ROUTES.DASHBOARD)}
+                        component={Link}
+                        href={ROUTES.DASHBOARD}
                         sx={{
+                            textDecoration: 'none',
                             display: 'flex',
                             alignItems: 'center',
                             gap: 1.2,

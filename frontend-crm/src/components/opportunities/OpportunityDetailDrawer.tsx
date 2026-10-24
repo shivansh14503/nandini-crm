@@ -138,7 +138,7 @@ export function OpportunityDetailDrawer({
                 return { bg: '#dcfce7', text: '#15803d', border: '#86efac' };
             case 'Closed Lost':
                 return { bg: '#fee2e2', text: '#b91c1c', border: '#fca5a5' };
-            case 'Negotiation/Review':
+            case 'Negotiation':
             case 'Proposal/Price Quote':
                 return { bg: '#fef3c7', text: '#b45309', border: '#fde68a' };
             default:

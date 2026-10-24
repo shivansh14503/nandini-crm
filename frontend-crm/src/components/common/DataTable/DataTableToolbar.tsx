@@ -194,7 +194,7 @@ export function DataTableToolbar({
                     {onColumnClick && (
                         <IconButton
                             size="small"
-                            onClick={onColumnClick}
+                            onClick={(e) => onColumnClick(e.currentTarget)}
                             sx={{ border: '1px solid #e2e8f0', borderRadius: '6px', width: 32, height: 32, color: '#64748b' }}
                         >
                             <ViewColumnIcon sx={{ fontSize: 16 }} />
@@ -376,6 +376,24 @@ export function DataTableToolbar({
                 ) : null}
 
                 {extraActions}
+
+                {onColumnClick && (
+                    <Tooltip title="Manage Columns">
+                        <IconButton
+                            size="small"
+                            onClick={(e) => onColumnClick(e.currentTarget)}
+                            sx={{
+                                color: '#64748b',
+                                border: '1px solid #e2e8f0',
+                                borderRadius: '8px',
+                                p: 0.8,
+                                '&:hover': { backgroundColor: '#f1f5f9', color: '#1d4ed8' },
+                            }}
+                        >
+                            <ViewColumnIcon sx={{ fontSize: 18 }} />
+                        </IconButton>
+                    </Tooltip>
+                )}
 
                 {onRefresh && (
                     <Tooltip title={refreshTooltip}>

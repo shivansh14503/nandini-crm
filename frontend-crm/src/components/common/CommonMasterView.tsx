@@ -6,6 +6,7 @@ import { AppBreadcrumbs, type BreadcrumbItem } from './AppBreadcrumbs';
 import { EnterpriseFooter } from './EnterpriseFooter';
 import { DrawerStackContext, type DrawerStackContextValue } from './Drawer/DrawerStackContext';
 import {
+    ColumnVisibilityPopover,
     DataTable,
     DataTableFilterPills,
     DataTablePagination,
@@ -15,7 +16,13 @@ import {
     type DataTablePaginationProps,
     type DataTableToolbarProps,
     type SortOrder,
+    useColumnVisibility,
 } from './DataTable';
+
+export interface MasterViewHeaderActionsContext {
+    /** Opens the shared column visibility popover anchored to the given element. */
+    openColumnManager: (anchorEl: HTMLElement) => void;
+}
 
 export interface CommonMasterViewProps<T = unknown, TFilter extends string = string> {
     /**
@@ -37,7 +44,11 @@ export interface CommonMasterViewProps<T = unknown, TFilter extends string = str
     /**
      * Optional action controls rendered on the right side of the filter row (e.g. Export, Filter/Views).
      */
-    headerActions?: React.ReactNode;
+    headerActions?: React.ReactNode | ((ctx: MasterViewHeaderActionsContext) => React.ReactNode);
+    /**
+     * Identifies this table. When set, column visibility is persisted to localStorage.
+     */
+    tableId?: string;
     /**
      * Declarative search & toolbar configuration.
      */
@@ -78,6 +89,8 @@ export interface CommonMasterViewProps<T = unknown, TFilter extends string = str
      */
     onView?: (row: T) => void;
     onEdit?: (row: T) => void;
+    getViewHref?: (row: T) => string;
+    getEditHref?: (row: T) => string;
     onDelete?: (row: T) => void;
     onRowClick?: (row: T) => void;
     activeRowId?: string | null;
@@ -182,6 +195,7 @@ export function CommonMasterView<T = unknown, TFilter extends string = string>({
     filterConfig,
     filters,
     headerActions,
+    tableId,
     searchConfig,
     toolbar,
     columns,
@@ -198,6 +212,8 @@ export function CommonMasterView<T = unknown, TFilter extends string = string>({
     onSort,
     onView,
     onEdit,
+    getViewHref,
+    getEditHref,
     onDelete,
     onRowClick,
     activeRowId,
@@ -278,18 +294,33 @@ export function CommonMasterView<T = unknown, TFilter extends string = string>({
         [isRightDrawerCollapsed, toggleRightDrawerCollapsed, resetRightDrawerCollapsed]
     );
 
+    const { visibleColumnIds, activeColumns, toggleColumn, resetDefaults } =
+        useColumnVisibility<T>(columns, tableId);
+    const [columnAnchorEl, setColumnAnchorEl] = React.useState<HTMLElement | null>(null);
+    const openColumnManager = React.useCallback((el: HTMLElement) => setColumnAnchorEl(el), []);
+    const closeColumnManager = React.useCallback(() => setColumnAnchorEl(null), []);
+
+    const resolvedHeaderActions =
+        typeof headerActions === 'function' ? headerActions({ openColumnManager }) : headerActions;
+
     const resolvedFilters =
         filters ?? (filterConfig ? <DataTableFilterPills<TFilter> {...filterConfig} /> : null);
 
     const resolvedToolbar =
-        toolbar ?? (searchConfig ? <DataTableToolbar {...searchConfig} /> : null);
+        toolbar ??
+        (searchConfig ? (
+            <DataTableToolbar
+                {...searchConfig}
+                onColumnClick={searchConfig.onColumnClick ?? (columns ? openColumnManager : undefined)}
+            />
+        ) : null);
 
     const resolvedTable =
         table ??
         (columns && data ? (
             <DataTable<T>
                 data={data}
-                columns={columns}
+                columns={activeColumns}
                 keyExtractor={keyExtractor}
                 selectable={selectable}
                 selectedIds={selectedIds}
@@ -302,6 +333,8 @@ export function CommonMasterView<T = unknown, TFilter extends string = string>({
                 onSort={onSort}
                 onViewRow={onView}
                 onEditRow={onEdit}
+                getViewHref={getViewHref}
+                getEditHref={getEditHref}
                 onDeleteRow={onDelete}
                 onRowClick={onRowClick}
                 activeRowId={activeRowId}
@@ -361,7 +394,7 @@ export function CommonMasterView<T = unknown, TFilter extends string = string>({
                 </Box>
 
                 {/* ── Line 2: All Filters & Optional Header Actions ── */}
-                {(resolvedFilters || headerActions) && (
+                {(resolvedFilters || resolvedHeaderActions) && (
                     <Box
                         sx={{
                             display: 'flex',
@@ -376,9 +409,9 @@ export function CommonMasterView<T = unknown, TFilter extends string = string>({
                         <Box sx={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 1, minWidth: 0 }}>
                             {resolvedFilters}
                         </Box>
-                        {headerActions && (
+                        {resolvedHeaderActions && (
                             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
-                                {headerActions}
+                                {resolvedHeaderActions}
                             </Box>
                         )}
                     </Box>
@@ -405,6 +438,18 @@ export function CommonMasterView<T = unknown, TFilter extends string = string>({
                         ...paperSx,
                     }}
                 >
+                    {columns && (
+                        <ColumnVisibilityPopover<T>
+                            columns={columns}
+                            visibleColumnIds={visibleColumnIds}
+                            onToggleColumn={toggleColumn}
+                            onResetDefaults={resetDefaults}
+                            anchorEl={columnAnchorEl}
+                            onClose={closeColumnManager}
+                            tableId={tableId}
+                        />
+                    )}
+
                     {/* Search & Action Toolbar */}
                     {resolvedToolbar}
 

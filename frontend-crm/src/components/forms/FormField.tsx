@@ -16,6 +16,8 @@ export const fieldSx = {
 };
 
 export interface FormFieldProps {
+    /** Form field key; exposed as `data-field` so validation can scroll to and focus the control. */
+    name?: string;
     label: string;
     required?: boolean;
     hint?: React.ReactNode;
@@ -23,9 +25,9 @@ export interface FormFieldProps {
     sx?: SxProps<Theme>;
 }
 
-export function FormField({ label, required, hint, children, sx }: FormFieldProps) {
+export function FormField({ name, label, required, hint, children, sx }: FormFieldProps) {
     return (
-        <Box sx={{ mb: 2, ...sx }}>
+        <Box data-field={name} sx={{ mb: 2, ...sx }}>
             <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 0.6 }}>
                 <Typography
                     variant="body2"

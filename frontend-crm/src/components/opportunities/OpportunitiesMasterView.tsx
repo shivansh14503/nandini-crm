@@ -12,7 +12,10 @@ import WorkspacePremiumOutlinedIcon from '@mui/icons-material/WorkspacePremiumOu
 import ApartmentIcon from '@mui/icons-material/Apartment';
 import CalendarMonthOutlinedIcon from '@mui/icons-material/CalendarMonthOutlined';
 import PersonOutlinedIcon from '@mui/icons-material/PersonOutlined';
+import { RecordLink } from '../common/RecordLink';
 import { CommonMasterView } from '../common/CommonMasterView';
+import { MasterHeaderActions } from '../common/MasterHeaderActions';
+import { buildExtendedSearchConfig } from '../common/buildExtendedSearchConfig';
 import { AppToast } from '../common/AppToast';
 import { RelatedModulesSidebar, RelatedRecordsTableView } from '../common/Drawer';
 import { RelatedSecondaryDrawer, type SecondaryDrawerEntity } from '../common/RelatedSecondaryDrawer';
@@ -131,7 +134,7 @@ export function OpportunitiesMasterView() {
                 label: 'Followup Today',
                 icon: <ScheduleIcon sx={{ fontSize: 16 }} />,
                 count: opportunities.filter((o) =>
-                    ['Proposal/Price Quote', 'Negotiation/Review'].includes(o.salesStage)
+                    ['Proposal/Price Quote', 'Negotiation'].includes(o.salesStage)
                 ).length,
                 activeColor: '#d97706',
             },
@@ -168,7 +171,7 @@ export function OpportunitiesMasterView() {
             }
             if (
                 activeTab === 'closing_soon' &&
-                !['Proposal/Price Quote', 'Negotiation/Review'].includes(opp.salesStage)
+                !['Proposal/Price Quote', 'Negotiation'].includes(opp.salesStage)
             ) {
                 return false;
             }
@@ -307,11 +310,9 @@ export function OpportunitiesMasterView() {
                     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.3 }}>
                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                             <TrendingUpOutlinedIcon sx={{ fontSize: 16, color: '#2563eb', flexShrink: 0 }} />
-                            <Typography
-                                onClick={(e) => {
-                                    e.stopPropagation();
-                                    setSelectedDrawerOpp(o);
-                                }}
+                            <RecordLink
+                                href={ROUTES.OPPORTUNITY_DETAIL(o.id)}
+                                onOpen={() => setSelectedDrawerOpp(o)}
                                 sx={{
                                     fontWeight: 700,
                                     color: '#1d4ed8',
@@ -321,7 +322,7 @@ export function OpportunitiesMasterView() {
                                 }}
                             >
                                 {o.opportunityCode}
-                            </Typography>
+                            </RecordLink>
                         </Box>
                         <Box sx={{ pl: 3 }}>
                             <Typography sx={{ fontSize: '0.72rem', color: '#64748b' }} noWrap>
@@ -565,24 +566,34 @@ export function OpportunitiesMasterView() {
                     setPage(0);
                 },
             }}
-            searchConfig={{
+            tableId="opportunities"
+            headerActions={() => (
+                <MasterHeaderActions
+                    onRefresh={() => {
+                        loadOpportunities();
+                        setToast({ open: true, message: 'Opportunities refreshed.', severity: 'info' });
+                    }}
+                    onNewClick={() => router.push(ROUTES.OPPORTUNITY_NEW)}
+                    newButtonLabel="New Opportunity"
+                />
+            )}
+            searchConfig={buildExtendedSearchConfig({
                 searchQuery,
                 onSearchChange: (q) => {
                     setSearchQuery(q);
                     setPage(0);
                 },
                 searchPlaceholder: 'Search by deal, company, contact, stage, amount...',
-                searchWidth: { xs: '100%', sm: 340 },
-                onNewClick: () => router.push(ROUTES.OPPORTUNITY_NEW),
-                newButtonLabel: 'New Opportunity',
-                selectedCount: selectedIds.length,
+                pageIds: paginatedOpportunities.map((r) => r.id),
+                allIds: sortedOpportunities.map((r) => r.id),
+                selectedIds,
+                onSelectedIdsChange: setSelectedIds,
+                page,
+                rowsPerPage,
+                totalRecords: sortedOpportunities.length,
+                onPageChange: setPage,
                 onBulkDelete: handleBulkDelete,
-                onRefresh: () => {
-                    loadOpportunities();
-                    setToast({ open: true, message: 'Opportunities refreshed.', severity: 'info' });
-                },
-                refreshTooltip: 'Refresh Opportunities',
-            }}
+            })}
             columns={columns}
             data={paginatedOpportunities}
             keyExtractor={(o) => o.id}
@@ -593,7 +604,7 @@ export function OpportunitiesMasterView() {
             sortOrder={sortOrder}
             onSort={(f) => handleSort(f as OpportunitySortField)}
             onView={(o) => setSelectedDrawerOpp(o)}
-            onEdit={(o) => handleEdit(o.id)}
+            getEditHref={(o) => ROUTES.OPPORTUNITY_EDIT(o.id)}
             onRowClick={(opp) => setSelectedDrawerOpp(opp)}
             activeRowId={selectedDrawerOpp?.id}
             viewTooltip="View Deal Details"

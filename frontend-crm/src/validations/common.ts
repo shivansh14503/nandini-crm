@@ -29,7 +29,7 @@ export function getFirstErrorMessage(errors: unknown): string | undefined {
 
 export type ValidationResult<T> =
     | { success: true; data: T }
-    | { success: false; error: string };
+    | { success: false; error: string; /** Top-level key of the first invalid field. */ fieldName?: string };
 
 /**
  * Safely validates form data using a Zod schema and extracts a single friendly
@@ -41,9 +41,11 @@ export function validateWithToast<T>(
 ): ValidationResult<T> {
     const result = schema.safeParse(data);
     if (!result.success) {
+        const firstKey = result.error.issues[0]?.path[0];
         return {
             success: false,
             error: getZodErrorMessage(result.error),
+            fieldName: firstKey !== undefined ? String(firstKey) : undefined,
         };
     }
     return {

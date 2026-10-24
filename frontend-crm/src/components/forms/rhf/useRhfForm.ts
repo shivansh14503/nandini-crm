@@ -6,12 +6,14 @@ import {
     type DefaultValues,
     type FieldErrors,
     type FieldValues,
+    type Path,
     type Resolver,
     type UseFormReturn,
 } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import type { ZodType } from 'zod';
 import { getFirstErrorMessage } from '@/validations';
+import { focusFormField } from '@/utils/formFocus';
 
 export type FormToastState = {
     open: boolean;
@@ -60,9 +62,14 @@ export function useRhfForm<T extends FieldValues>({
 
     const createSubmitHandler = useCallback<UseRhfFormReturn<T>['createSubmitHandler']>(
         (onValid) =>
-            methods.handleSubmit(onValid, (errors: FieldErrors<T>) =>
-                showToast(getFirstErrorMessage(errors) ?? 'Please correct the highlighted fields.', 'error')
-            ),
+            methods.handleSubmit(onValid, (errors: FieldErrors<T>) => {
+                showToast(getFirstErrorMessage(errors) ?? 'Please correct the highlighted fields.', 'error');
+                const firstField = Object.keys(errors)[0];
+                if (firstField && !focusFormField(firstField)) {
+                    // Not found in the DOM by name: fall back to RHF's registered ref.
+                    methods.setFocus(firstField as Path<T>);
+                }
+            }),
         [methods, showToast]
     );
 

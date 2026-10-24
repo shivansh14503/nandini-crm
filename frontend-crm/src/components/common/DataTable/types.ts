@@ -12,6 +12,12 @@ export interface DataTableColumn<T> {
     sortKey?: string;
     render?: (row: T, index: number) => React.ReactNode;
     accessor?: keyof T | ((row: T) => React.ReactNode);
+    /** Hidden on first load and after Reset in the column manager. */
+    defaultHidden?: boolean;
+    /** Column manager section. Defaults to 'basic'. */
+    category?: 'basic' | 'more';
+    /** Cannot be hidden from the column manager (e.g. the primary Name/Code column). */
+    locked?: boolean;
 }
 
 export interface DataTableFilterItem<TFilter extends string = string> {
@@ -68,7 +74,8 @@ export interface DataTableToolbarProps {
     onPageChange?: (page: number) => void;
     bulkActionItems?: DataTableBulkActionItem[];
     onFilterClick?: () => void;
-    onColumnClick?: () => void;
+    /** Receives the clicked button so the column manager popover can anchor to it. */
+    onColumnClick?: (anchorEl: HTMLElement) => void;
 }
 
 export interface DataTablePaginationProps {
@@ -106,6 +113,9 @@ export interface DataTableProps<T> {
     renderActions?: (row: T, index: number) => React.ReactNode;
     onViewRow?: (row: T) => void;
     onEditRow?: (row: T) => void;
+    /** Real-link URLs for the action icons (enables open-in-new-tab). */
+    getViewHref?: (row: T) => string;
+    getEditHref?: (row: T) => string;
     onDeleteRow?: (row: T) => void;
     viewTooltip?: string;
     editTooltip?: string;

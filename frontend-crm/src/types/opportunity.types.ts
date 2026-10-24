@@ -86,14 +86,14 @@ export interface Opportunity extends OpportunityFormData {
 // Option Lists based on reference screenshots and Nandini Infosys products
 export const OPPORTUNITY_SALES_STAGES: string[] = [
     'Qualification',
-    'Needs Analysis',
-    'Value Proposition',
-    'Id. Decision Makers',
-    'Perception Analysis',
+    'Demo',
     'Proposal/Price Quote',
-    'Negotiation/Review',
+    'Negotiation',
+    'On Hold',
     'Closed Won',
     'Closed Lost',
+    'PO',
+    'Advance Received',
 ];
 
 export const OPPORTUNITY_TYPES: string[] = [

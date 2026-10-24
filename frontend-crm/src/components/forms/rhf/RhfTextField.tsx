@@ -157,7 +157,7 @@ export function RhfTextField<T extends FieldValues>({
     };
 
     return (
-        <FormField label={label} required={required} hint={hint}>
+        <FormField name={name} label={label} required={required} hint={hint}>
             <TextField
                 {...inputProps}
                 {...field}

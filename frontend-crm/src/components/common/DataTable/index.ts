@@ -5,3 +5,5 @@ export * from './DataTableFilterPills';
 export * from './DataTableToolbar';
 export * from './DataTablePagination';
 export * from './TableRowActions';
+export * from './ColumnVisibilityPopover';
+export * from './useColumnVisibility';

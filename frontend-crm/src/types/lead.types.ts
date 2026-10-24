@@ -70,15 +70,22 @@ export const LEAD_SOURCES: string[] = [
 
 export const PRODUCT_CATEGORIES: string[] = [
     'Acronis',
-    'B-Softwares',
     'Biz Analyst',
-    'Connect 2T',
+    'Connect 21',
     'CredFlow',
+    'CRM',
+    'Data Warehouse',
+    'Tally AMC',
+    'Tally Customization',
+    'Tally On Cloud',
+    'Tally Service',
+    'Tally Software Service (TSS)',
+    'Tally Training',
+    'Tally Upgrade',
     'TallyPrime',
-    'Tally Server 9',
-    'Tally Software Services (TSS)',
-    'Cloud Backup Solutions',
-    'Cyber Security & Antivirus',
+    'TallyPrime Server',
+    'Teramind',
+    'TVU',
 ];
 
 export const FOLLOWUP_TYPES: string[] = [

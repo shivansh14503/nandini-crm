@@ -31,6 +31,7 @@ export const organizationFormSchema = z
         mailingName: optionalString,
         natureOfBusiness: requiredString('Nature of Business'),
         accountStatus: z.enum(['Active', 'Inactive']).default('Active'),
+        inactivityReason: optionalString,
         typeOfEntity: requiredString('Type of Entity'),
         customerType: requiredString('Customer Type'),
         sapCodeTallyId: optionalString,

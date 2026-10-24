@@ -33,7 +33,7 @@ export function RhfDateTimeField<T extends FieldValues>({
     const error = date.fieldState.error?.message ?? (timeName ? time.fieldState.error?.message : undefined);
 
     return (
-        <FormField label={label} required={required} hint={hint}>
+        <FormField name={dateName} label={label} required={required} hint={hint}>
             <Box sx={{ display: 'grid', gridTemplateColumns: timeName ? '1.4fr 1fr' : '1fr', gap: 1.5 }}>
                 <TextField
                     {...date.field}

@@ -39,6 +39,8 @@ export function DataTable<T>({
     renderActions,
     onViewRow,
     onEditRow,
+    getViewHref,
+    getEditHref,
     onDeleteRow,
     viewTooltip,
     editTooltip,
@@ -99,7 +101,7 @@ export function DataTable<T>({
     }
 
     // Action presence check (view is now triggered by clicking the row)
-    const hasActions = Boolean(renderActions || onEditRow || onDeleteRow);
+    const hasActions = Boolean(renderActions || onEditRow || getEditHref || onDeleteRow);
 
     // Row click handler: row click opens the view
     const handleRowClick = onRowClick || onViewRow;
@@ -112,6 +114,8 @@ export function DataTable<T>({
             <TableRowActions
                 onView={onViewRow ? () => onViewRow(row) : undefined}
                 onEdit={onEditRow ? () => onEditRow(row) : undefined}
+                viewHref={getViewHref?.(row)}
+                editHref={getEditHref?.(row)}
                 onDelete={onDeleteRow ? () => onDeleteRow(row) : undefined}
                 viewTooltip={viewTooltip}
                 editTooltip={editTooltip}

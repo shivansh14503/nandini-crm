@@ -29,7 +29,7 @@ export function RhfSelect<T extends FieldValues>({
     const { field, fieldState } = useController<T>({ name });
 
     return (
-        <FormField label={label} required={required} hint={hint}>
+        <FormField name={name} label={label} required={required} hint={hint}>
             <StyledSelect
                 value={(field.value as string) ?? ''}
                 onChange={field.onChange}

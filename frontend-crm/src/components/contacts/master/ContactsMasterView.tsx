@@ -10,7 +10,10 @@ import AccountCircleOutlinedIcon from '@mui/icons-material/AccountCircleOutlined
 import PhoneOutlinedIcon from '@mui/icons-material/PhoneOutlined';
 import EmailOutlinedIcon from '@mui/icons-material/EmailOutlined';
 import ApartmentIcon from '@mui/icons-material/Apartment';
+import { RecordLink } from '../../common/RecordLink';
 import { CommonMasterView } from '../../common/CommonMasterView';
+import { MasterHeaderActions } from '../../common/MasterHeaderActions';
+import { buildExtendedSearchConfig } from '../../common/buildExtendedSearchConfig';
 import { AppToast } from '../../common/AppToast';
 import { RelatedModulesSidebar, RelatedRecordsTableView } from '../../common/Drawer';
 import { RelatedSecondaryDrawer, type SecondaryDrawerEntity } from '../../common/RelatedSecondaryDrawer';
@@ -234,11 +237,9 @@ export function ContactsMasterView() {
                 render: (c) => (
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                         <PersonOutlinedIcon sx={{ fontSize: 16, color: '#2563eb' }} />
-                        <Typography
-                            onClick={(e) => {
-                                e.stopPropagation();
-                                setSelectedDrawerContact(c);
-                            }}
+                        <RecordLink
+                            href={ROUTES.CONTACT_DETAIL(c.id)}
+                            onOpen={() => setSelectedDrawerContact(c)}
                             sx={{
                                 fontWeight: 700,
                                 color: '#1d4ed8',
@@ -248,7 +249,7 @@ export function ContactsMasterView() {
                             }}
                         >
                             {c.name}
-                        </Typography>
+                        </RecordLink>
                         {c.isPrimaryContact && (
                             <Chip
                                 label="Primary"
@@ -361,24 +362,34 @@ export function ContactsMasterView() {
                     setPage(0);
                 },
             }}
-            searchConfig={{
+            tableId="contacts"
+            headerActions={() => (
+                <MasterHeaderActions
+                    onRefresh={() => {
+                        loadContacts();
+                        setToast({ open: true, message: 'Contacts refreshed.', severity: 'info' });
+                    }}
+                    onNewClick={() => router.push(ROUTES.CONTACT_NEW)}
+                    newButtonLabel="New Contact"
+                />
+            )}
+            searchConfig={buildExtendedSearchConfig({
                 searchQuery,
-                onSearchChange: (v) => {
-                    setSearchQuery(v);
+                onSearchChange: (q) => {
+                    setSearchQuery(q);
                     setPage(0);
                 },
                 searchPlaceholder: 'Search by name, organization, phone, email...',
-                searchWidth: { xs: '100%', sm: 300 },
-                onNewClick: () => router.push(ROUTES.CONTACT_NEW),
-                newButtonLabel: 'New Contact',
-                onRefresh: () => {
-                    loadContacts();
-                    setToast({ open: true, message: 'Contacts refreshed.', severity: 'info' });
-                },
-                refreshTooltip: 'Refresh Contacts',
-                selectedCount: selectedIds.length,
+                pageIds: paginatedContacts.map((r) => r.id),
+                allIds: filteredContacts.map((r) => r.id),
+                selectedIds,
+                onSelectedIdsChange: setSelectedIds,
+                page,
+                rowsPerPage,
+                totalRecords: filteredContacts.length,
+                onPageChange: setPage,
                 onBulkDelete: handleBulkDelete,
-            }}
+            })}
             columns={columns}
             data={paginatedContacts}
             keyExtractor={(c) => c.id}
@@ -389,7 +400,7 @@ export function ContactsMasterView() {
             sortOrder={sortOrder}
             onSort={handleSort}
             onView={(c) => router.push(ROUTES.CONTACT_DETAIL(c.id))}
-            onEdit={(c) => router.push(ROUTES.CONTACT_EDIT(c.id))}
+            getEditHref={(c) => ROUTES.CONTACT_EDIT(c.id)}
             onRowClick={(c) => setSelectedDrawerContact(c)}
             activeRowId={selectedDrawerContact?.id}
             viewTooltip="View Contact"
