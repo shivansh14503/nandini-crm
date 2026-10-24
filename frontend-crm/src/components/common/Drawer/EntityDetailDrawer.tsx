@@ -19,7 +19,7 @@ import {
 import CloseIcon from '@mui/icons-material/Close';
 import EditOutlinedIcon from '@mui/icons-material/EditOutlined';
 import SyncOutlinedIcon from '@mui/icons-material/SyncOutlined';
-import PhoneOutlinedIcon from '@mui/icons-material/PhoneOutlined';
+import VisibilityOutlinedIcon from '@mui/icons-material/VisibilityOutlined';
 import VerifiedIcon from '@mui/icons-material/Verified';
 import HistoryOutlinedIcon from '@mui/icons-material/HistoryOutlined';
 import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
@@ -125,6 +125,12 @@ export function EntityDetailDrawer({
 
     const effectiveHideBackdrop = hideBackdrop || isCollapsed;
 
+    // Resolve responsive width objects to a concrete value for the bookmark's `right` offset
+    const resolvedDrawerWidth =
+        typeof width === 'number' || typeof width === 'string'
+            ? width
+            : (width?.md ?? width?.sm ?? 580);
+
     return (
         <>
             {open && showBookmark && (
@@ -136,7 +142,7 @@ export function EntityDetailDrawer({
                         sx={{
                             position: 'fixed',
                             top: '45%',
-                            right: isCollapsed ? 0 : width,
+                            right: isCollapsed ? 0 : resolvedDrawerWidth,
                             transform: 'translateY(-50%)',
                             zIndex: 1410,
                             width: 24,
@@ -279,20 +285,20 @@ export function EntityDetailDrawer({
                             </Tooltip>
                         )}
 
-                        {headerActions?.onPhone && (
-                            <Tooltip title="Direct Call">
+                        {headerActions?.onView && (
+                            <Tooltip title="View Full Record">
                                 <IconButton
                                     size="small"
-                                    onClick={headerActions.onPhone}
+                                    onClick={headerActions.onView}
                                     sx={{
                                         color: '#475569',
                                         border: '1px solid #e2e8f0',
                                         borderRadius: '6px',
                                         p: 0.6,
-                                        '&:hover': { color: '#15803d', backgroundColor: '#f0fdf4', borderColor: '#bbf7d0' },
+                                        '&:hover': { color: '#047857', backgroundColor: '#ecfdf5', borderColor: '#d1fae5' },
                                     }}
                                 >
-                                    <PhoneOutlinedIcon sx={{ fontSize: 16 }} />
+                                    <VisibilityOutlinedIcon sx={{ fontSize: 16 }} />
                                 </IconButton>
                             </Tooltip>
                         )}

@@ -196,6 +196,7 @@ export function OpportunityDetailDrawer({
             ]}
             headerActions={{
                 onEdit: handleEdit,
+                onView: () => router.push(ROUTES.OPPORTUNITY_DETAIL(opp.id)),
             }}
             formTabs={OPPORTUNITY_FORM_TABS}
             tabContents={{

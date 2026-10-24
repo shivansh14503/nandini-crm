@@ -127,7 +127,7 @@ export function ContactDetailDrawer({
             ]}
             headerActions={{
                 onEdit: handleEdit,
-                onPhone: () => copyToClipboard(c.mobile || '+919810123456'),
+                onView: () => router.push(ROUTES.CONTACT_DETAIL(c.id)),
             }}
             formTabs={CONTACT_FORM_TABS}
             tabContents={{

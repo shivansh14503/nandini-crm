@@ -29,7 +29,7 @@ function OpportunityDetailContent() {
             <Navbar />
 
             <Container maxWidth="xl" sx={{ pt: 2.5, pb: 1 }}>
-                <OpportunityForm mode="edit" opportunityId={id} />
+                <OpportunityForm mode="view" opportunityId={id} />
             </Container>
         </Box>
     );

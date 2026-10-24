@@ -159,7 +159,7 @@ export function OrganizationDetailDrawer({
             ]}
             headerActions={{
                 onEdit: handleEdit,
-                onPhone: () => copyToClipboard('+919810123456'),
+                onView: () => router.push(ROUTES.ORGANIZATION_DETAIL(org.id)),
             }}
             formTabs={ORGANIZATION_FORM_TABS}
             tabContents={{

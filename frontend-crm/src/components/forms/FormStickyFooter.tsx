@@ -2,6 +2,8 @@
 
 import React from 'react';
 import { Box, Button, Typography, CircularProgress } from '@mui/material';
+import VisibilityOutlinedIcon from '@mui/icons-material/VisibilityOutlined';
+import EditOutlinedIcon from '@mui/icons-material/EditOutlined';
 
 export interface FormStickyFooterProps {
     onCancel: () => void;
@@ -11,6 +13,7 @@ export interface FormStickyFooterProps {
     saveLabel?: string;
     cancelLabel?: string;
     showSaveAndNew?: boolean; // Deprecated: removed per requirements
+    mode?: 'create' | 'edit' | 'view';
 }
 
 /**
@@ -23,7 +26,9 @@ export function FormStickyFooter({
     submitting = false,
     saveLabel = 'Save Record',
     cancelLabel = 'Cancel',
+    mode = 'create',
 }: FormStickyFooterProps) {
+    const isView = mode === 'view';
     return (
         <Box
             sx={{
@@ -43,12 +48,21 @@ export function FormStickyFooter({
             }}
         >
             {/* Left: CRM Staged status indicator */}
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                <Box sx={{ width: 8, height: 8, borderRadius: '50%', backgroundColor: '#22c55e' }} />
-                <Typography sx={{ fontSize: '0.78rem', color: '#64748b', fontWeight: 500 }}>
-                    All changes staged locally in CRM memory buffer
-                </Typography>
-            </Box>
+            {isView ? (
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <VisibilityOutlinedIcon sx={{ fontSize: 18, color: '#64748b' }} />
+                    <Typography sx={{ fontSize: '0.78rem', color: '#64748b', fontWeight: 500 }}>
+                        Read-only view
+                    </Typography>
+                </Box>
+            ) : (
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <Box sx={{ width: 8, height: 8, borderRadius: '50%', backgroundColor: '#22c55e' }} />
+                    <Typography sx={{ fontSize: '0.78rem', color: '#64748b', fontWeight: 500 }}>
+                        All changes staged locally in CRM memory buffer
+                    </Typography>
+                </Box>
+            )}
 
             {/* Right: Actions (Cancel & Save) */}
             <Box sx={{ display: 'flex', gap: 1.5, alignItems: 'center' }}>
@@ -82,7 +96,9 @@ export function FormStickyFooter({
                     onClick={onSave}
                     disabled={submitting}
                     startIcon={
-                        submitting ? (
+                        isView ? (
+                            <EditOutlinedIcon sx={{ fontSize: 16 }} />
+                        ) : submitting ? (
                             <CircularProgress size={14} color="inherit" />
                         ) : undefined
                     }

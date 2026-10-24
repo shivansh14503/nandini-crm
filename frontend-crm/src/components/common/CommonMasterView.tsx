@@ -230,7 +230,12 @@ export function CommonMasterView<T = unknown, TFilter extends string = string>({
     paperSx,
 }: CommonMasterViewProps<T, TFilter>) {
     const [isRightDrawerCollapsed, setIsRightDrawerCollapsed] = React.useState(false);
-    const hasSecondaryDrawer = Boolean(secondaryDrawer);
+    // A secondary drawer is only active when it is mounted with a populated entity
+    const hasSecondaryDrawer = Boolean(
+        secondaryDrawer &&
+            (!React.isValidElement<{ entity?: unknown }>(secondaryDrawer) ||
+                Boolean(secondaryDrawer.props.entity))
+    );
 
     // Collapse the whole stack together; expand again whenever the stack changes.
     React.useEffect(() => {

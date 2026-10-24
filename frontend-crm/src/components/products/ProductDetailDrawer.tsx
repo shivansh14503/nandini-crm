@@ -143,6 +143,7 @@ export function ProductDetailDrawer({
             ]}
             headerActions={{
                 onEdit: handleEdit,
+                onView: () => router.push(ROUTES.PRODUCT_DETAIL(p.id)),
             }}
             formTabs={PRODUCT_FORM_TABS}
             tabContents={{

@@ -83,7 +83,7 @@ export const PRODUCT_FORM_TABS: FormTabDefinition[] = [
 
 // ─── Props ─────────────────────────────────────────────────────────────────────
 export interface ProductFormProps {
-    mode?: 'create' | 'edit';
+    mode?: 'create' | 'edit' | 'view';
     initialData?: Partial<ProductFormData>;
     productId?: string;
     breadcrumbItems?: BreadcrumbItem[];
@@ -112,10 +112,10 @@ export default function ProductForm({
         { label: 'Products', href: ROUTES.PRODUCTS },
         {
             label:
-                mode === 'edit'
+                mode !== 'create'
                     ? productName
-                        ? `Edit: ${productName}`
-                        : 'Edit Product'
+                        ? `${mode === 'view' ? 'View' : 'Edit'}: ${productName}`
+                        : `${mode === 'view' ? 'View' : 'Edit'} Product`
                     : 'Create Product',
         },
     ];
@@ -156,6 +156,10 @@ export default function ProductForm({
     });
 
     const handleDiscard = () => {
+        if (mode === 'view') {
+            router.push(ROUTES.PRODUCTS);
+            return;
+        }
         if (isDirty && !window.confirm('Discard unsaved product changes?')) return;
         router.push(ROUTES.PRODUCTS);
     };
@@ -167,10 +171,11 @@ export default function ProductForm({
                 tabs={PRODUCT_FORM_TABS}
                 activeTab="overview"
                 onCancel={handleDiscard}
-                onSave={handleSave}
+                onSave={mode === 'view' ? () => router.push(ROUTES.PRODUCT_EDIT(productId!)) : handleSave}
                 submitting={isSubmitting}
-                saveLabel={mode === 'edit' ? 'Update Product' : 'Save Product'}
-                cancelLabel="Cancel"
+                saveLabel={mode === 'view' ? 'Edit Product' : mode === 'edit' ? 'Update Product' : 'Save Product'}
+                cancelLabel={mode === 'view' ? 'Back' : 'Cancel'}
+                mode={mode}
                 toast={
                     <AppToast
                         open={toast.open}

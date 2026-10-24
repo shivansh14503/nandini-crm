@@ -558,12 +558,14 @@ export function QuotationsMasterView() {
                 />
             }
             secondaryDrawer={
-                <RelatedSecondaryDrawer
-                    entity={secondaryDrawerEntity}
-                    moduleLabel={activeModuleMeta?.label}
-                    parentTitle={selectedDrawerQuotation?.quotationCode || selectedDrawerQuotation?.quotationSubject}
-                    onClose={() => setSecondaryDrawerEntity(null)}
-                />
+                secondaryDrawerEntity ? (
+                    <RelatedSecondaryDrawer
+                        entity={secondaryDrawerEntity}
+                        moduleLabel={activeModuleMeta?.label}
+                        parentTitle={selectedDrawerQuotation?.quotationCode || selectedDrawerQuotation?.quotationSubject}
+                        onClose={() => setSecondaryDrawerEntity(null)}
+                    />
+                ) : null
             }
             isDrawerOpen={Boolean(selectedDrawerQuotation)}
             toast={

@@ -649,12 +649,14 @@ export function OpportunitiesMasterView() {
                 />
             }
             secondaryDrawer={
-                <RelatedSecondaryDrawer
-                    entity={secondaryDrawerEntity}
-                    moduleLabel={activeModuleMeta?.label}
-                    parentTitle={selectedDrawerOpp?.opportunityCode || selectedDrawerOpp?.organizationName}
-                    onClose={() => setSecondaryDrawerEntity(null)}
-                />
+                secondaryDrawerEntity ? (
+                    <RelatedSecondaryDrawer
+                        entity={secondaryDrawerEntity}
+                        moduleLabel={activeModuleMeta?.label}
+                        parentTitle={selectedDrawerOpp?.opportunityCode || selectedDrawerOpp?.organizationName}
+                        onClose={() => setSecondaryDrawerEntity(null)}
+                    />
+                ) : null
             }
             isDrawerOpen={Boolean(selectedDrawerOpp)}
             toast={

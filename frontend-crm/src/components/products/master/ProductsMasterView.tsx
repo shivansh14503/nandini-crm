@@ -439,12 +439,14 @@ export function ProductsMasterView() {
                 />
             }
             secondaryDrawer={
-                <RelatedSecondaryDrawer
-                    entity={secondaryDrawerEntity}
-                    moduleLabel={activeModuleMeta?.label}
-                    parentTitle={selectedDrawerProduct?.productName}
-                    onClose={() => setSecondaryDrawerEntity(null)}
-                />
+                secondaryDrawerEntity ? (
+                    <RelatedSecondaryDrawer
+                        entity={secondaryDrawerEntity}
+                        moduleLabel={activeModuleMeta?.label}
+                        parentTitle={selectedDrawerProduct?.productName}
+                        onClose={() => setSecondaryDrawerEntity(null)}
+                    />
+                ) : null
             }
             isDrawerOpen={Boolean(selectedDrawerProduct)}
             toast={

@@ -443,12 +443,14 @@ export function ContactsMasterView() {
                 />
             }
             secondaryDrawer={
-                <RelatedSecondaryDrawer
-                    entity={secondaryDrawerEntity}
-                    moduleLabel={activeModuleMeta?.label}
-                    parentTitle={selectedDrawerContact?.name}
-                    onClose={() => setSecondaryDrawerEntity(null)}
-                />
+                secondaryDrawerEntity ? (
+                    <RelatedSecondaryDrawer
+                        entity={secondaryDrawerEntity}
+                        moduleLabel={activeModuleMeta?.label}
+                        parentTitle={selectedDrawerContact?.name}
+                        onClose={() => setSecondaryDrawerEntity(null)}
+                    />
+                ) : null
             }
             isDrawerOpen={Boolean(selectedDrawerContact)}
             toast={

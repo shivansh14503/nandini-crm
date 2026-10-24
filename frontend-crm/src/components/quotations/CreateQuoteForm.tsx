@@ -32,7 +32,7 @@ import {
 } from './sections';
 
 export interface CreateQuoteFormProps {
-    mode?: 'create' | 'edit';
+    mode?: 'create' | 'edit' | 'view';
     quotationId?: string;
     opportunityId?: string;
     initialData?: Partial<QuotationFormData>;
@@ -184,11 +184,11 @@ export function CreateQuoteForm({
     breadcrumbItems,
 }: CreateQuoteFormProps) {
     const router = useRouter();
-    const isEdit = mode === 'edit';
+    const isEdit = mode !== 'create';
     const [quotation, setQuotation] = useState<Quotation | null>(null);
     const [opportunity, setOpportunity] = useState<Opportunity | null>(null);
     const [loading, setLoading] = useState<boolean>(() =>
-        mode === 'edit' ? Boolean(quotationId) : Boolean(opportunityId)
+        mode !== 'create' ? Boolean(quotationId) : Boolean(opportunityId)
     );
     const [activeTab, setActiveTab] = useState<QuotationTabKey>('overview');
     const [addressPrepopulated, setAddressPrepopulated] = useState(true);
@@ -313,8 +313,8 @@ export function CreateQuoteForm({
               { label: 'Quotations', href: ROUTES.QUOTATIONS },
               {
                   label: quotation?.quotationCode
-                      ? `Edit: ${quotation.quotationCode}`
-                      : 'Edit Quotation',
+                      ? `${mode === 'view' ? 'View' : 'Edit'}: ${quotation.quotationCode}`
+                      : `${mode === 'view' ? 'View' : 'Edit'} Quotation`,
               },
           ]
         : [
@@ -412,6 +412,10 @@ export function CreateQuoteForm({
     const handleSave = handleSubmit(onValidSubmit, onInvalidSubmit);
 
     const handleDiscard = () => {
+        if (mode === 'view') {
+            router.push(ROUTES.QUOTATIONS);
+            return;
+        }
         if (isDirty && !window.confirm('Discard unsaved quotation data?')) return;
         router.push(isEdit ? ROUTES.QUOTATIONS : ROUTES.OPPORTUNITIES);
     };
@@ -435,10 +439,11 @@ export function CreateQuoteForm({
                 activeTab={activeTab}
                 onTabChange={(tabId) => setActiveTab(tabId as QuotationTabKey)}
                 onCancel={handleDiscard}
-                onSave={handleSave}
+                onSave={mode === 'view' ? () => router.push(ROUTES.QUOTATION_EDIT(quotationId!)) : handleSave}
                 submitting={isSubmitting}
-                saveLabel={isEdit ? 'Update Quotation' : 'Save Quotation'}
-                cancelLabel="Cancel"
+                saveLabel={mode === 'view' ? 'Edit Quotation' : isEdit ? 'Update Quotation' : 'Save Quotation'}
+                cancelLabel={mode === 'view' ? 'Back' : 'Cancel'}
+                mode={mode}
                 disableContentPadding
                 toast={
                     <AppToast

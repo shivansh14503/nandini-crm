@@ -39,7 +39,7 @@ export const LEAD_FORM_TABS: (FormTabDefinition & { id: LeadTabKey })[] = [
 ];
 
 export interface LeadFormProps {
-    mode?: 'create' | 'edit';
+    mode?: 'create' | 'edit' | 'view';
     initialData?: Partial<LeadFormData>;
     leadId?: string;
     breadcrumbItems?: BreadcrumbItem[];
@@ -114,7 +114,7 @@ export default function LeadForm({
     const defaultBreadcrumbs: BreadcrumbItem[] = [
         { label: 'Sales' },
         { label: 'Leads', href: ROUTES.LEADS },
-        { label: mode === 'edit' ? (leadName ? `Edit: ${leadName}` : 'Edit Lead') : 'Create Lead' },
+        { label: mode !== 'create' ? (leadName ? `${mode === 'view' ? 'View' : 'Edit'}: ${leadName}` : `${mode === 'view' ? 'View' : 'Edit'} Lead`) : 'Create Lead' },
     ];
 
     // Populate data when editing
@@ -149,6 +149,10 @@ export default function LeadForm({
     });
 
     const handleDiscard = () => {
+        if (mode === 'view') {
+            router.push(ROUTES.LEADS);
+            return;
+        }
         if (isDirty && !confirm('You have unsaved changes. Are you sure you want to discard them?')) {
             return;
         }
@@ -163,10 +167,11 @@ export default function LeadForm({
                 activeTab={activeTab}
                 onTabChange={(tabId) => setActiveTab(tabId as LeadTabKey)}
                 onCancel={handleDiscard}
-                onSave={handleSave}
+                onSave={mode === 'view' ? () => router.push(ROUTES.LEAD_EDIT(leadId!)) : handleSave}
                 submitting={isSubmitting}
-                saveLabel={mode === 'edit' ? 'Update Lead' : 'Save Lead'}
-                cancelLabel="Cancel"
+                saveLabel={mode === 'view' ? 'Edit Lead' : mode === 'edit' ? 'Update Lead' : 'Save Lead'}
+                cancelLabel={mode === 'view' ? 'Back' : 'Cancel'}
+                mode={mode}
                 disableContentPadding
                 toast={<AppToast open={toast.open} message={toast.message} severity={toast.severity} onClose={closeToast} />}
             >

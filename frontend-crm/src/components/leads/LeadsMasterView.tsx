@@ -623,12 +623,14 @@ export function LeadsMasterView() {
                 />
             }
             secondaryDrawer={
-                <RelatedSecondaryDrawer
-                    entity={secondaryDrawerEntity}
-                    moduleLabel={activeModuleMeta?.label}
-                    parentTitle={selectedDrawerLead?.name}
-                    onClose={() => setSecondaryDrawerEntity(null)}
-                />
+                secondaryDrawerEntity ? (
+                    <RelatedSecondaryDrawer
+                        entity={secondaryDrawerEntity}
+                        moduleLabel={activeModuleMeta?.label}
+                        parentTitle={selectedDrawerLead?.name}
+                        onClose={() => setSecondaryDrawerEntity(null)}
+                    />
+                ) : null
             }
             isDrawerOpen={Boolean(selectedDrawerLead)}
             toast={

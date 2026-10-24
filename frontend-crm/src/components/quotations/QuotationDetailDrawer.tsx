@@ -593,10 +593,7 @@ export function QuotationDetailDrawer({
             ]}
             headerActions={{
                 onEdit: handleEdit,
-                onPhone:
-                    quotation.contactMobile || quotation.contactNumber
-                        ? () => window.open(`tel:${quotation.contactMobile || quotation.contactNumber}`)
-                        : undefined,
+                onView: () => router.push(ROUTES.QUOTATION_DETAIL(quotation.id)),
             }}
             primaryAction={{
                 label: 'Edit Quotation',

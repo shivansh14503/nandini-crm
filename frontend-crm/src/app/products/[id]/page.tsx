@@ -28,7 +28,7 @@ function ProductDetailContent() {
         <Box sx={{ minHeight: '100vh', backgroundColor: '#f8fafc' }}>
             <Navbar />
             <Container maxWidth="xl" sx={{ pt: 2.5, pb: 1 }}>
-                <ProductForm mode="edit" productId={id} />
+                <ProductForm mode="view" productId={id} />
             </Container>
         </Box>
     );

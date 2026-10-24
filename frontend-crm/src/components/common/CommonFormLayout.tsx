@@ -17,6 +17,10 @@ export interface FormTabItem {
 
 export interface CommonFormLayoutProps {
     /**
+     * Form mode. `view` renders every field read-only and turns the footer into a read-only bar.
+     */
+    mode?: 'create' | 'edit' | 'view';
+    /**
      * Optional custom breadcrumb elements. If omitted, AppBreadcrumbs is rendered with optional `breadcrumbItems`.
      */
     breadcrumbs?: React.ReactNode;
@@ -117,6 +121,7 @@ export function CommonFormLayout({
     sx,
     paperSx,
     contentSx,
+    mode = 'create',
 }: CommonFormLayoutProps) {
     return (
         <Box sx={{ width: '100%', pb: 10, ...sx }}>
@@ -255,7 +260,15 @@ export function CommonFormLayout({
                         ...contentSx,
                     }}
                 >
-                    {children}
+                    {/* View mode: the disabled fieldset covers native controls; `inert` also blocks custom
+                        (MUI Select/Autocomplete/date pickers, chips, buttons) from mouse, keyboard and focus. */}
+                    <fieldset
+                        disabled={mode === 'view'}
+                        inert={mode === 'view'}
+                        style={{ border: 'none', padding: 0, margin: 0, minWidth: 0 }}
+                    >
+                        {children}
+                    </fieldset>
                 </Box>
             </Paper>
 
@@ -267,6 +280,7 @@ export function CommonFormLayout({
                     submitting={submitting}
                     saveLabel={saveLabel}
                     cancelLabel={cancelLabel}
+                    mode={mode}
                 />
             )}
 

@@ -594,7 +594,8 @@ export function RelatedRecordsTableView({
                         />
                     </Box>
 
-                    {onClose && (
+                    {/* Show Close [X] button ONLY when the right drawer is collapsed */}
+                    {isRightDrawerCollapsed && onClose && (
                         <Tooltip title="Close Related View & Return to Table">
                             <IconButton
                                 size="small"

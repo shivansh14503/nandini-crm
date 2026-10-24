@@ -190,7 +190,7 @@ export function LeadDetailDrawer({
             ]}
             headerActions={{
                 onEdit: handleEdit,
-                onPhone: () => window.open(`tel:${l.mobile}`),
+                onView: () => router.push(ROUTES.LEAD_DETAIL(l.id)),
             }}
             formTabs={LEAD_FORM_TABS}
             tabContents={{

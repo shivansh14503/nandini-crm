@@ -115,7 +115,7 @@ type TabKey = 'overview' | 'address' | 'tax_bank' | 'partner_licensing';
 
 // ─── Component Props ──────────────────────────────────────────────────────────
 export interface OrganizationFormProps {
-    mode?: 'create' | 'edit';
+    mode?: 'create' | 'edit' | 'view';
     initialData?: Partial<OrganizationFormData>;
     organizationId?: string;
     breadcrumbItems?: BreadcrumbItem[];
@@ -147,7 +147,7 @@ export default function OrganizationForm({
     const defaultBreadcrumbs: BreadcrumbItem[] = [
         { label: 'Sales' },
         { label: 'Organizations', href: ROUTES.ORGANIZATIONS },
-        { label: mode === 'edit' ? (form.organizationName ? `Edit: ${form.organizationName}` : 'Edit Organization') : 'Create & Edit View' },
+        { label: mode !== 'create' ? (form.organizationName ? `${mode === 'view' ? 'View' : 'Edit'}: ${form.organizationName}` : `${mode === 'view' ? 'View' : 'Edit'} Organization`) : 'Create & Edit View' },
     ];
 
     // Populate data when editing
@@ -321,6 +321,10 @@ export default function OrganizationForm({
     };
 
     const handleDiscard = () => {
+        if (mode === 'view') {
+            router.push(ROUTES.ORGANIZATIONS);
+            return;
+        }
         if (isDirty && !confirm('You have unsaved changes. Are you sure you want to discard them?')) return;
         router.push(ROUTES.ORGANIZATIONS);
     };
@@ -347,10 +351,11 @@ export default function OrganizationForm({
                 activeTab={activeTab}
                 onTabChange={(tabId) => setActiveTab(tabId as TabKey)}
                 onCancel={handleDiscard}
-                onSave={() => handleSubmit(true)}
+                onSave={mode === 'view' ? () => router.push(ROUTES.ORGANIZATION_EDIT(organizationId!)) : () => handleSubmit(true)}
                 submitting={submitting}
-                saveLabel={mode === 'edit' ? 'Update Organization' : 'Save Organization'}
-                cancelLabel="Cancel"
+                saveLabel={mode === 'view' ? 'Edit Organization' : mode === 'edit' ? 'Update Organization' : 'Save Organization'}
+                cancelLabel={mode === 'view' ? 'Back' : 'Cancel'}
+                mode={mode}
                 disableContentPadding
                 toast={
                     <AppToast

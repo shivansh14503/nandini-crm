@@ -41,7 +41,7 @@ export const OPPORTUNITY_FORM_TABS: (FormTabDefinition & { id: OpportunityTabKey
 ];
 
 export interface OpportunityFormProps {
-    mode?: 'create' | 'edit';
+    mode?: 'create' | 'edit' | 'view';
     initialData?: Partial<OpportunityFormData>;
     opportunityId?: string;
     breadcrumbItems?: BreadcrumbItem[];
@@ -128,10 +128,10 @@ export default function OpportunityForm({
         { label: 'Opportunities', href: ROUTES.OPPORTUNITIES },
         {
             label:
-                mode === 'edit'
+                mode !== 'create'
                     ? orgName
-                        ? `Edit: ${orgName}`
-                        : 'Edit Opportunity'
+                        ? `${mode === 'view' ? 'View' : 'Edit'}: ${orgName}`
+                        : `${mode === 'view' ? 'View' : 'Edit'} Opportunity`
                     : 'Create Opportunity',
         },
     ];
@@ -187,6 +187,10 @@ export default function OpportunityForm({
     });
 
     const handleDiscard = () => {
+        if (mode === 'view') {
+            router.push(ROUTES.OPPORTUNITIES);
+            return;
+        }
         if (
             isDirty &&
             !confirm('You have unsaved changes. Are you sure you want to discard them?')
@@ -206,10 +210,11 @@ export default function OpportunityForm({
                 activeTab={activeTab}
                 onTabChange={(tabId) => setActiveTab(tabId as OpportunityTabKey)}
                 onCancel={handleDiscard}
-                onSave={handleSave}
+                onSave={mode === 'view' ? () => router.push(ROUTES.OPPORTUNITY_EDIT(opportunityId!)) : handleSave}
                 submitting={isSubmitting}
-                saveLabel={mode === 'edit' ? 'Update Opportunity' : 'Save Opportunity'}
-                cancelLabel="Cancel"
+                saveLabel={mode === 'view' ? 'Edit Opportunity' : mode === 'edit' ? 'Update Opportunity' : 'Save Opportunity'}
+                cancelLabel={mode === 'view' ? 'Back' : 'Cancel'}
+                mode={mode}
                 disableContentPadding
                 toast={
                     <AppToast

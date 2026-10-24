@@ -66,7 +66,7 @@ export interface EntityDetailDrawerProps {
     headerActions?: {
         onEdit?: () => void;
         onSync?: () => void;
-        onPhone?: () => void;
+        onView?: () => void;
         custom?: React.ReactNode;
     };
     tabs?: DrawerTabItem[];

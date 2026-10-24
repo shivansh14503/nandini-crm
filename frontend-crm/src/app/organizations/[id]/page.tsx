@@ -29,7 +29,7 @@ function OrganizationDetailContent() {
             <Navbar />
 
             <Container maxWidth="xl" sx={{ pt: 2.5, pb: 1 }}>
-                <OrganizationForm mode="edit" organizationId={id} />
+                <OrganizationForm mode="view" organizationId={id} />
             </Container>
         </Box>
     );

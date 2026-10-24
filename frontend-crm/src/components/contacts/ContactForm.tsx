@@ -42,7 +42,7 @@ export const CONTACT_FORM_TABS: FormTabDefinition[] = [
 ];
 
 export interface ContactFormProps {
-    mode?: 'create' | 'edit';
+    mode?: 'create' | 'edit' | 'view';
     initialData?: Partial<ContactFormData>;
     contactId?: string;
     breadcrumbItems?: BreadcrumbItem[];
@@ -97,7 +97,7 @@ export default function ContactForm({
     const defaultBreadcrumbs: BreadcrumbItem[] = [
         { label: 'Sales' },
         { label: 'Contacts', href: ROUTES.CONTACTS },
-        { label: mode === 'edit' ? (contactName ? `Edit: ${contactName}` : 'Edit Contact') : 'Create Contact' },
+        { label: mode !== 'create' ? (contactName ? `${mode === 'view' ? 'View' : 'Edit'}: ${contactName}` : `${mode === 'view' ? 'View' : 'Edit'} Contact`) : 'Create Contact' },
     ];
 
     // Populate data when editing
@@ -131,6 +131,10 @@ export default function ContactForm({
     });
 
     const handleDiscard = () => {
+        if (mode === 'view') {
+            router.push(ROUTES.CONTACTS);
+            return;
+        }
         if (isDirty && !window.confirm('Discard unsaved contact changes?')) return;
         router.push(ROUTES.CONTACTS);
     };
@@ -142,10 +146,11 @@ export default function ContactForm({
                 tabs={CONTACT_FORM_TABS}
                 activeTab="overview"
                 onCancel={handleDiscard}
-                onSave={handleSave}
+                onSave={mode === 'view' ? () => router.push(ROUTES.CONTACT_EDIT(contactId!)) : handleSave}
                 submitting={isSubmitting}
-                saveLabel={mode === 'edit' ? 'Update Contact' : 'Save Contact'}
-                cancelLabel="Cancel"
+                saveLabel={mode === 'view' ? 'Edit Contact' : mode === 'edit' ? 'Update Contact' : 'Save Contact'}
+                cancelLabel={mode === 'view' ? 'Back' : 'Cancel'}
+                mode={mode}
                 toast={<AppToast open={toast.open} message={toast.message} severity={toast.severity} onClose={closeToast} />}
             >
                 <SectionLabel icon={<ContactPhoneOutlinedIcon sx={{ fontSize: 18 }} />} label="Contact Details & Association" />

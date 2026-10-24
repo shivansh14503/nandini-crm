@@ -29,7 +29,7 @@ function LeadDetailContent() {
             <Navbar />
 
             <Container maxWidth="xl" sx={{ pt: 2.5, pb: 1 }}>
-                <LeadForm mode="edit" leadId={id} />
+                <LeadForm mode="view" leadId={id} />
             </Container>
         </Box>
     );
