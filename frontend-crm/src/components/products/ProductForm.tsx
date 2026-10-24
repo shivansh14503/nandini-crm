@@ -182,6 +182,12 @@ export default function ProductForm({
                 submitting={isSubmitting}
                 saveLabel={mode === 'view' ? 'Edit Product' : mode === 'edit' ? 'Update Product' : 'Save Product'}
                 cancelLabel={mode === 'view' ? 'Back' : 'Cancel'}
+                recordView={{
+                    title: productName || '',
+                    editHref: productId ? ROUTES.PRODUCT_EDIT(productId) : undefined,
+                    editLabel: 'Edit Product',
+                    backHref: ROUTES.PRODUCTS,
+                }}
                 mode={mode}
                 toast={
                     <AppToast

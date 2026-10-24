@@ -84,6 +84,20 @@ export function OpportunityBasicSection({ form, setField }: OpportunityBasicSect
                     <FormField
                         label="Product Category"
                         required
+                        viewValue={
+                            (form.productCategory || []).length > 0 ? (
+                                <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.75 }}>
+                                    {(form.productCategory || []).map((prod) => (
+                                        <Chip
+                                            key={prod}
+                                            label={prod}
+                                            size="small"
+                                            sx={{ fontSize: '0.76rem', fontWeight: 600, cursor: 'default', color: '#1d4ed8', backgroundColor: '#eff6ff' }}
+                                        />
+                                    ))}
+                                </Box>
+                            ) : null
+                        }
                         hint={`${(form.productCategory || []).length} category selected`}
                     >
                         <Box

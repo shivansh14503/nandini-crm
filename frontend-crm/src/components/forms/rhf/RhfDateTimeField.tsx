@@ -6,6 +6,8 @@ import CalendarTodayOutlinedIcon from '@mui/icons-material/CalendarTodayOutlined
 import AccessTimeOutlinedIcon from '@mui/icons-material/AccessTimeOutlined';
 import { useController, type FieldPath, type FieldValues } from 'react-hook-form';
 import { FormField, fieldSx } from '../FormField';
+import { useFormMode } from '@/context/FormModeContext';
+import { ReadOnlyField } from '../ReadOnlyField';
 
 export interface RhfDateTimeFieldProps<T extends FieldValues> {
     dateName: FieldPath<T>;
@@ -31,6 +33,17 @@ export function RhfDateTimeField<T extends FieldValues>({
     // useController requires a name; fall back to the date name when no time field is configured.
     const time = useController<T>({ name: (timeName ?? dateName) as FieldPath<T> });
     const error = date.fieldState.error?.message ?? (timeName ? time.fieldState.error?.message : undefined);
+
+    const { mode } = useFormMode();
+    if (mode === 'view') {
+        const rawDate = typeof date.field.value === 'string' ? date.field.value : '';
+        const parsed = /^\d{4}-\d{2}-\d{2}$/.test(rawDate) ? new Date(`${rawDate}T00:00:00`) : null;
+        const dateText = parsed
+            ? parsed.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
+            : rawDate;
+        const timeText = timeName && typeof time.field.value === 'string' ? time.field.value : '';
+        return <ReadOnlyField label={label} value={[dateText, timeText].filter(Boolean).join(' • ')} hideWhenEmpty sx={{ mb: 2 }} />;
+    }
 
     return (
         <FormField name={dateName} label={label} required={required} hint={hint}>

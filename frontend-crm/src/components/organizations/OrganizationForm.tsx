@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { FormProvider, useForm, type Path } from 'react-hook-form';
 import { Alert, Typography } from '@mui/material';
 // Icons
+import ApartmentIcon from '@mui/icons-material/Apartment';
 import ArticleOutlinedIcon from '@mui/icons-material/ArticleOutlined';
 import PlaceOutlinedIcon from '@mui/icons-material/PlaceOutlined';
 import AccountBalanceOutlinedIcon from '@mui/icons-material/AccountBalanceOutlined';
@@ -185,6 +186,7 @@ export default function OrganizationForm({
     // Lock is based on the status as last saved, so deactivating mid-edit doesn't lock the user out of their own unsaved change.
     const [persistedStatus, setPersistedStatus] = useState(initialData?.accountStatus ?? 'Active');
     const [activeTab, setActiveTab] = useState<TabKey>('overview');
+    const [audit, setAudit] = useState<{ code?: string; createdAt?: string; createdBy?: string; updatedAt?: string }>({});
     const pendingFocusField = useRef<string | null>(null);
     // Values "Discard" resets to: blank for create, the last loaded record for edit.
     const baselineRef = useRef<OrganizationFormData>({ ...DEFAULT_FORM, ...initialData });
@@ -267,6 +269,12 @@ export default function OrganizationForm({
                         shippingAddress: found.shippingAddress || found.shippingStreet || '',
                         gstNo: found.gstNo || found.gstNumber || '',
                     };
+                    setAudit({
+                        code: found.accountCode,
+                        createdAt: found.createdAt,
+                        createdBy: found.createdBy,
+                        updatedAt: found.updatedAt,
+                    });
                     baselineRef.current = { ...DEFAULT_FORM, ...normalized };
                     setPersistedStatus(normalized.accountStatus);
                     setForm((prev) => ({ ...prev, ...normalized }));
@@ -469,6 +477,20 @@ export default function OrganizationForm({
                 onTabChange={(tabId) => setActiveTab(tabId as TabKey)}
                 onCancel={handleDiscard}
                 onSave={effectiveMode === 'view' ? () => router.push(ROUTES.ORGANIZATION_EDIT(organizationId!)) : () => handleSubmit(true)}
+                recordView={{
+                    title: form.organizationName,
+                    subtitle: audit.code,
+                    avatarIcon: <ApartmentIcon sx={{ fontSize: 28 }} />,
+                    verified: form.accountVerified,
+                    statusLabel: form.accountStatus || undefined,
+                    statusColor: form.accountStatus === 'Inactive' ? '#64748b' : '#16a34a',
+                    editHref: organizationId ? ROUTES.ORGANIZATION_EDIT(organizationId) : undefined,
+                    editLabel: 'Edit Organization',
+                    editDisabled: isLocked,
+                    editDisabledTooltip: 'Only Admins can edit inactive organizations',
+                    backHref: ROUTES.ORGANIZATIONS,
+                    audit,
+                }}
                 saveDisabled={isLocked}
                 saveDisabledTooltip="Only Admins can edit inactive organizations"
                 banner={

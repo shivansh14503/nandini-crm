@@ -1,6 +1,8 @@
 import React from 'react';
 import { FormControl, Select, MenuItem, Typography } from '@mui/material';
 import { fieldSx } from './FormField';
+import { useFormMode } from '@/context/FormModeContext';
+import { ReadOnlyField } from './ReadOnlyField';
 
 export interface StyledSelectProps {
     label?: string;
@@ -21,6 +23,11 @@ export function StyledSelect({
     required,
     disabled,
 }: StyledSelectProps) {
+    const { mode } = useFormMode();
+    if (mode === 'view') {
+        return <ReadOnlyField label={label ?? ''} value={value} hideWhenEmpty />;
+    }
+
     const placeholderText =
         placeholder || (label ? `Select ${label.replace(/\s*\*$/, '')}` : 'Select an option');
 

@@ -21,6 +21,7 @@ import {
 } from '@/components/forms';
 import { INDIAN_STATES, COUNTRIES } from '@/config/constants';
 import type { OrganizationFormData } from '@/types/organization.types';
+import { useFormMode } from '@/context/FormModeContext';
 
 export interface AddressTabProps {
     form: OrganizationFormData;
@@ -33,6 +34,7 @@ export function AddressTab({
     set,
     handleCopyAddressToggle,
 }: AddressTabProps) {
+    const isView = useFormMode().mode === 'view';
     return (
         <Box sx={{ p: { xs: 2.5, md: 3.5 } }}>
             {/* ── Two-column grid ───────────────────────────────── */}
@@ -146,6 +148,7 @@ export function AddressTab({
                             icon={<LocalShippingOutlinedIcon sx={{ fontSize: 18 }} />}
                             label="Shipping Address"
                         />
+                        {!isView && (
                         <FormControlLabel
                             control={
                                 <Checkbox
@@ -172,6 +175,7 @@ export function AddressTab({
                             }
                             sx={{ m: 0 }}
                         />
+                        )}
                     </Box>
 
                     {/* Street */}

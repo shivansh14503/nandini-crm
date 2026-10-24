@@ -150,6 +150,12 @@ export default function ContactForm({
                 submitting={isSubmitting}
                 saveLabel={mode === 'view' ? 'Edit Contact' : mode === 'edit' ? 'Update Contact' : 'Save Contact'}
                 cancelLabel={mode === 'view' ? 'Back' : 'Cancel'}
+                recordView={{
+                    title: contactName || '',
+                    editHref: contactId ? ROUTES.CONTACT_EDIT(contactId) : undefined,
+                    editLabel: 'Edit Contact',
+                    backHref: ROUTES.CONTACTS,
+                }}
                 mode={mode}
                 toast={<AppToast open={toast.open} message={toast.message} severity={toast.severity} onClose={closeToast} />}
             >

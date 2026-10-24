@@ -10,3 +10,4 @@ export * from './CommonMasterView';
 export * from './CommonFormLayout';
 export * from './CommonActionModal';
 export * from './UnsavedChangesModal';
+export * from './CommonRecordDetailView';

@@ -1,6 +1,7 @@
 import React from 'react';
 import {
     Box,
+    Chip,
     TextField,
     Tooltip,
     IconButton,
@@ -12,6 +13,8 @@ import {
 } from '@mui/material';
 import DeleteIcon from '@mui/icons-material/Delete';
 import { fieldSx } from './FormField';
+import { useFormMode } from '@/context/FormModeContext';
+import { DrawerCopyButton } from '../common/Drawer/DrawerPrimitives';
 import type { CorporateEmail } from '@/types/organization.types';
 
 export interface EmailRowProps {
@@ -21,6 +24,18 @@ export interface EmailRowProps {
 }
 
 export function EmailRow({ email, onChange, onRemove }: EmailRowProps) {
+    const { mode } = useFormMode();
+    if (mode === 'view') {
+        return (
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap', py: 0.75 }}>
+                <Typography sx={{ fontSize: '0.88rem', fontWeight: 600, color: '#0f172a' }}>{email.email || '—'}</Typography>
+                {email.email && <DrawerCopyButton text={email.email} title="Copy email" />}
+                {email.isPrimary && <Chip label="Primary" size="small" sx={{ height: 20, fontSize: '0.68rem', fontWeight: 700, color: '#1d4ed8', backgroundColor: '#eff6ff' }} />}
+                {email.isOptedOut && <Chip label="Opted Out (DND)" size="small" sx={{ height: 20, fontSize: '0.68rem', fontWeight: 700, color: '#b45309', backgroundColor: '#fef3c7' }} />}
+                {email.isInvalidBounce && <Chip label="Invalid Bounce" size="small" sx={{ height: 20, fontSize: '0.68rem', fontWeight: 700, color: '#b91c1c', backgroundColor: '#fee2e2' }} />}
+            </Box>
+        );
+    }
     return (
         <Box
             sx={{

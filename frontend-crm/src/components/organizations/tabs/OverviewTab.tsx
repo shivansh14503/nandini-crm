@@ -29,6 +29,7 @@ import PersonOutlinedIcon from '@mui/icons-material/PersonOutlined';
 import ContactPageOutlinedIcon from '@mui/icons-material/ContactPageOutlined';
 
 import { useFormContext, useWatch, FormProvider, useForm } from 'react-hook-form';
+import { useFormMode } from '@/context/FormModeContext';
 
 import {
     FormField,
@@ -89,6 +90,7 @@ function OverviewTabInner({
     const organizationName = useWatch({ control, name: 'organizationName' }) ?? form?.organizationName ?? '';
     const mailingName = useWatch({ control, name: 'mailingName' }) ?? form?.mailingName ?? '';
     const currentAccountStatus = (useWatch({ control, name: 'accountStatus' }) ?? form?.accountStatus ?? 'Active') as AccountStatus;
+    const isView = useFormMode().mode === 'view';
     const [pendingInactive, setPendingInactive] = React.useState(false);
     const watchedNatureOfBusiness = useWatch({ control, name: 'natureOfBusiness' });
     const watchedTypeOfEntity = useWatch({ control, name: 'typeOfEntity' });
@@ -305,7 +307,7 @@ function OverviewTabInner({
                                 icon={<EmailIcon sx={{ fontSize: 18 }} />}
                                 label="Corporate Email Addresses"
                             />
-                            {addEmail && (
+                            {addEmail && !isView && (
                                 <Button
                                     size="small"
                                     startIcon={<AddIcon fontSize="small" />}
@@ -425,6 +427,20 @@ function OverviewTabInner({
                                     KYC &amp; MSME validated
                                 </Typography>
                             </Box>
+                            {isView ? (
+                                <Chip
+                                    label={form.accountVerified ? 'Verified' : 'Not verified'}
+                                    size="small"
+                                    sx={{
+                                        height: 24,
+                                        fontSize: '0.76rem',
+                                        fontWeight: 700,
+                                        cursor: 'default',
+                                        color: form.accountVerified ? '#16a34a' : '#64748b',
+                                        backgroundColor: form.accountVerified ? '#16a34a1a' : '#64748b1a',
+                                    }}
+                                />
+                            ) : (
                             <Switch
                                 checked={form.accountVerified}
                                 onChange={(e) => set('accountVerified', e.target.checked)}
@@ -456,6 +472,7 @@ function OverviewTabInner({
                                     },
                                 }}
                             />
+                            )}
                         </Box>
 
                         {/* Right: Provide Support */}
@@ -483,6 +500,20 @@ function OverviewTabInner({
                                     Active AMC entitlement
                                 </Typography>
                             </Box>
+                            {isView ? (
+                                <Chip
+                                    label={form.provideSupport}
+                                    size="small"
+                                    sx={{
+                                        height: 24,
+                                        fontSize: '0.76rem',
+                                        fontWeight: 700,
+                                        cursor: 'default',
+                                        color: form.provideSupport === 'Yes' ? '#16a34a' : '#64748b',
+                                        backgroundColor: form.provideSupport === 'Yes' ? '#16a34a1a' : '#64748b1a',
+                                    }}
+                                />
+                            ) : (
                             <FormControl size="small" sx={{ minWidth: 84 }}>
                                 <Select
                                     value={form.provideSupport}
@@ -510,6 +541,7 @@ function OverviewTabInner({
                                     </MenuItem>
                                 </Select>
                             </FormControl>
+                            )}
                         </Box>
                     </Box>
 
@@ -661,12 +693,16 @@ function OverviewTabInner({
                                         backgroundColor: '#f8fafc',
                                     }}
                                 />
+                                {!isView && (
+                                    <>
                                 <IconButton size="small" sx={{ color: '#94a3b8' }}>
                                     <PersonOutlinedIcon sx={{ fontSize: 18 }} />
                                 </IconButton>
                                 <IconButton size="small" sx={{ color: '#94a3b8' }}>
                                     <ContactPageOutlinedIcon sx={{ fontSize: 18 }} />
                                 </IconButton>
+                                    </>
+                                )}
                             </Box>
                         </Box>
                     </FormField>

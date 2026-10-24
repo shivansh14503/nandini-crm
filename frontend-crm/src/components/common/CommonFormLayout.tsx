@@ -4,6 +4,8 @@ import React from 'react';
 import { Box, Paper, Typography, type SxProps, type Theme } from '@mui/material';
 import { type BreadcrumbItem } from './AppBreadcrumbs';
 import { FormHeader } from '../forms/FormHeader';
+import { CommonRecordDetailView, type CommonRecordDetailViewProps } from './CommonRecordDetailView';
+import { FormModeProvider } from '@/context/FormModeContext';
 import { FormStickyFooter } from '../forms/FormStickyFooter';
 
 export interface FormTabItem {
@@ -22,6 +24,11 @@ export interface CommonFormLayoutProps {
     mode?: 'create' | 'edit' | 'view';
     /** Optional notice rendered between the header and the form card. */
     banner?: React.ReactNode;
+    /**
+     * When set and `mode` is 'view', the page renders as a read-only CommonRecordDetailView
+     * (identity hero, tabs, audit footer) instead of a disabled form.
+     */
+    recordView?: Omit<CommonRecordDetailViewProps, 'tabs' | 'activeTab' | 'onTabChange' | 'children' | 'banner' | 'toast' | 'breadcrumbItems'>;
     saveDisabled?: boolean;
     saveDisabledTooltip?: string;
     /**
@@ -127,9 +134,26 @@ export function CommonFormLayout({
     contentSx,
     mode = 'create',
     banner,
+    recordView,
     saveDisabled,
     saveDisabledTooltip,
 }: CommonFormLayoutProps) {
+    if (mode === 'view' && recordView) {
+        return (
+            <CommonRecordDetailView
+                {...recordView}
+                breadcrumbItems={breadcrumbItems}
+                tabs={tabs}
+                activeTab={activeTab}
+                onTabChange={onTabChange}
+                banner={banner}
+                toast={toast}
+            >
+                {children}
+            </CommonRecordDetailView>
+        );
+    }
+
     return (
         <Box sx={{ width: '100%', pb: 10, ...sx }}>
             {/* ── Line 1: Route-Aware Breadcrumbs ── */}
@@ -271,6 +295,7 @@ export function CommonFormLayout({
                 >
                     {/* View mode: the disabled fieldset covers native controls; `inert` also blocks custom
                         (MUI Select/Autocomplete/date pickers, chips, buttons) from mouse, keyboard and focus. */}
+                    <FormModeProvider mode={mode}>
                     <fieldset
                         disabled={mode === 'view'}
                         inert={mode === 'view'}
@@ -278,6 +303,7 @@ export function CommonFormLayout({
                     >
                         {children}
                     </fieldset>
+                    </FormModeProvider>
                 </Box>
             </Paper>
 

@@ -3,6 +3,8 @@
 import React from 'react';
 import { Checkbox, FormControlLabel, FormHelperText, Typography } from '@mui/material';
 import { useController, type FieldPath, type FieldValues } from 'react-hook-form';
+import { useFormMode } from '@/context/FormModeContext';
+import { ReadOnlyField } from '../ReadOnlyField';
 
 export interface RhfCheckboxProps<T extends FieldValues> {
     name: FieldPath<T>;
@@ -12,6 +14,10 @@ export interface RhfCheckboxProps<T extends FieldValues> {
 /** React Hook Form bound boolean checkbox. */
 export function RhfCheckbox<T extends FieldValues>({ name, label }: RhfCheckboxProps<T>) {
     const { field, fieldState } = useController<T>({ name });
+    const { mode } = useFormMode();
+    if (mode === 'view') {
+        return <ReadOnlyField label={label} value={field.value ? 'Yes' : undefined} hideWhenEmpty sx={{ mb: 1 }} />;
+    }
 
     return (
         <>

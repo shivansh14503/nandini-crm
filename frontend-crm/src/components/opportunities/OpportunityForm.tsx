@@ -214,6 +214,12 @@ export default function OpportunityForm({
                 submitting={isSubmitting}
                 saveLabel={mode === 'view' ? 'Edit Opportunity' : mode === 'edit' ? 'Update Opportunity' : 'Save Opportunity'}
                 cancelLabel={mode === 'view' ? 'Back' : 'Cancel'}
+                recordView={{
+                    title: orgName || '',
+                    editHref: opportunityId ? ROUTES.OPPORTUNITY_EDIT(opportunityId) : undefined,
+                    editLabel: 'Edit Opportunity',
+                    backHref: ROUTES.OPPORTUNITIES,
+                }}
                 mode={mode}
                 disableContentPadding
                 toast={

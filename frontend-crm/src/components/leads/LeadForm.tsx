@@ -171,6 +171,12 @@ export default function LeadForm({
                 submitting={isSubmitting}
                 saveLabel={mode === 'view' ? 'Edit Lead' : mode === 'edit' ? 'Update Lead' : 'Save Lead'}
                 cancelLabel={mode === 'view' ? 'Back' : 'Cancel'}
+                recordView={{
+                    title: leadName || '',
+                    editHref: leadId ? ROUTES.LEAD_EDIT(leadId) : undefined,
+                    editLabel: 'Edit Lead',
+                    backHref: ROUTES.LEADS,
+                }}
                 mode={mode}
                 disableContentPadding
                 toast={<AppToast open={toast.open} message={toast.message} severity={toast.severity} onClose={closeToast} />}

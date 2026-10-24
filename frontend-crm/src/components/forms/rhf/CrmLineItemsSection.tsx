@@ -20,6 +20,8 @@ import ClearIcon from '@mui/icons-material/Clear';
 import { useFormContext, useWatch, type Path, type PathValue } from 'react-hook-form';
 
 import { FormField, fieldSx } from '../FormField';
+import { useFormMode } from '@/context/FormModeContext';
+import { CrmLineItemsReadOnly } from './CrmLineItemsReadOnly';
 import {
     OPPORTUNITY_CURRENCIES,
     OPPORTUNITY_TAX_RATES,
@@ -93,6 +95,7 @@ export const DEFAULT_LINE_ITEMS_VALUES: CrmLineItemsValues = {
 // COMPONENT A: CrmLineItemsEditor (Pure Controlled UI — Zero RHF Hooks)
 // ══════════════════════════════════════════════════════════════════════
 export function CrmLineItemsEditor({ value, onChange, error }: CrmLineItemsEditorProps) {
+    const isView = useFormMode().mode === 'view';
     const currency = value.currency || 'Indian Rupee: ₹';
     const groupName = value.groupName || '';
     const lineItems = Array.isArray(value.lineItems) ? value.lineItems : [];
@@ -219,6 +222,8 @@ export function CrmLineItemsEditor({ value, onChange, error }: CrmLineItemsEdito
         onChange('lumpSumDiscount', val);
         recalculateTotals(lineItems, val);
     };
+
+    if (isView) return <CrmLineItemsReadOnly value={value} />;
 
     return (
         <Box sx={{ p: { xs: 2, md: 3 } }}>

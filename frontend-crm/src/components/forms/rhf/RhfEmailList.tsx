@@ -5,6 +5,7 @@ import { Box, Button, FormHelperText, Typography } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
 import { useController, type FieldValues } from 'react-hook-form';
 import { EmailRow } from '../EmailRow';
+import { useFormMode } from '@/context/FormModeContext';
 import type { CorporateEmail } from '@/types/organization.types';
 
 export interface RhfEmailListProps {
@@ -29,6 +30,8 @@ export function RhfEmailList({
     const errorMessage =
         (fieldState.error as { root?: { message?: string } } | undefined)?.root?.message ??
         fieldState.error?.message;
+
+    const isView = useFormMode().mode === 'view';
 
     const commit = (next: CorporateEmail[]) => field.onChange(next);
 
@@ -60,6 +63,8 @@ export function RhfEmailList({
         commit(next);
     };
 
+    if (isView && rows.length === 0) return null;
+
     return (
         <Box sx={{ mb: 1 }}>
             <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
@@ -71,6 +76,7 @@ export function RhfEmailList({
                         </Box>
                     )}
                 </Typography>
+                {!isView && (
                 <Button
                     size="small"
                     startIcon={<AddIcon sx={{ fontSize: 16 }} />}
@@ -90,6 +96,7 @@ export function RhfEmailList({
                 >
                     Add Email
                 </Button>
+                )}
             </Box>
 
             {rows.map((row, index) => (

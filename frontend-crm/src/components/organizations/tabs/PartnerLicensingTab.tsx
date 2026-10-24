@@ -27,6 +27,7 @@ import HandshakeOutlinedIcon from '@mui/icons-material/HandshakeOutlined';
 
 import { FormField, SectionLabel, fieldSx } from '@/components/forms';
 import type { OrganizationFormData } from '@/types/organization.types';
+import { useFormMode } from '@/context/FormModeContext';
 
 export interface PartnerLicensingTabProps {
     form: OrganizationFormData;
@@ -34,6 +35,7 @@ export interface PartnerLicensingTabProps {
 }
 
 export function PartnerLicensingTab({ form, set }: PartnerLicensingTabProps) {
+    const isView = useFormMode().mode === 'view';
     const [inputValue, setInputValue] = useState('');
 
     const partnerCompanies = form.partnerCompanies || [];
@@ -65,6 +67,7 @@ export function PartnerLicensingTab({ form, set }: PartnerLicensingTabProps) {
             />
 
             {/* ── Partner Company Input with Search and Clear ─────────────── */}
+            {!isView && (
             <FormField label="Partner Company" sx={{ maxWidth: 720, mb: 3 }}>
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
                     <TextField
@@ -118,6 +121,7 @@ export function PartnerLicensingTab({ form, set }: PartnerLicensingTabProps) {
                     </Button>
                 </Box>
             </FormField>
+            )}
 
             {/* ── Partner Company Table Matching Screenshot ───────────────── */}
             <TableContainer
@@ -244,6 +248,7 @@ export function PartnerLicensingTab({ form, set }: PartnerLicensingTabProps) {
                                         </Box>
                                     </TableCell>
                                     <TableCell align="right" sx={{ py: 1.2 }}>
+                                        {!isView && (
                                         <IconButton
                                             size="small"
                                             onClick={() => handleRemovePartner(index)}
@@ -254,6 +259,7 @@ export function PartnerLicensingTab({ form, set }: PartnerLicensingTabProps) {
                                         >
                                             <DeleteIcon fontSize="small" />
                                         </IconButton>
+                                        )}
                                     </TableCell>
                                 </TableRow>
                             ))
