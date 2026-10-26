@@ -173,7 +173,7 @@ export default function ContactForm({
 
                 <Divider sx={sectionDividerSx} />
 
-                <SectionLabel icon={<TuneOutlinedIcon sx={{ fontSize: 18 }} />} label="Communication Preferences & Notes" />
+                <SectionLabel icon={<TuneOutlinedIcon sx={{ fontSize: 18 }} />} label="Notes" />
                 <ContactPreferencesSection />
             </CommonFormLayout>
         </FormProvider>

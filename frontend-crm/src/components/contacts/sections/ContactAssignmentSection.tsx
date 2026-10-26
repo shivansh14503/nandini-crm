@@ -2,10 +2,11 @@
 
 import React from 'react';
 import { Grid } from '@mui/material';
-import { RhfLookup, RhfSelect } from '@/components/forms';
+import { RhfCheckbox, RhfChipGroup, RhfLookup, RhfSelect } from '@/components/forms';
 import {
     CONTACT_DESIGNATIONS,
     CONTACT_DEPARTMENTS,
+    COMMUNICATION_TYPES,
     type ContactFormData,
 } from '../../../types/contact.types';
 
@@ -20,7 +21,7 @@ const DEFAULT_ASSIGNEES = [
 ];
 
 /**
- * Internal ownership and organizational role (designation & department side by side).
+ * Internal ownership, organizational role and communication preferences.
  * Must be rendered inside a `FormProvider<ContactFormData>`.
  */
 export function ContactAssignmentSection({ assigneeOptions = DEFAULT_ASSIGNEES }: { assigneeOptions?: string[] }) {
@@ -34,6 +35,10 @@ export function ContactAssignmentSection({ assigneeOptions = DEFAULT_ASSIGNEES }
             </Grid>
             <Grid size={{ xs: 12, md: 6 }}>
                 <RhfLookup<ContactFormData> name="assignedTo" label="Assigned to" required options={assigneeOptions} placeholder="Select assigned sales rep" />
+            </Grid>
+            <Grid size={{ xs: 12, md: 6 }}>
+                <RhfChipGroup<ContactFormData> name="communicationType" label="Communication Type" hint="Select preferred channels" options={COMMUNICATION_TYPES} />
+                <RhfCheckbox<ContactFormData> name="doNotCall" label="Do Not Call (DND)" />
             </Grid>
         </Grid>
     );
