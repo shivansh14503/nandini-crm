@@ -148,6 +148,7 @@ export function CommonFormLayout({
                 onTabChange={onTabChange}
                 banner={banner}
                 toast={toast}
+                padContent={!disableContentPadding}
             >
                 {children}
             </CommonRecordDetailView>

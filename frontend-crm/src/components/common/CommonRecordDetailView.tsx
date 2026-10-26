@@ -49,6 +49,8 @@ export interface CommonRecordDetailViewProps {
     banner?: React.ReactNode;
     audit?: RecordAuditInfo;
     toast?: React.ReactNode;
+    /** Pads the content area; off for entities whose tab panels already pad themselves. */
+    padContent?: boolean;
 }
 
 const formatDate = (iso?: string) => {
@@ -92,6 +94,7 @@ export function CommonRecordDetailView({
     banner,
     audit,
     toast,
+    padContent = false,
 }: CommonRecordDetailViewProps) {
     const created = formatDate(audit?.createdAt);
     const modified = formatDate(audit?.updatedAt);
@@ -273,6 +276,7 @@ export function CommonRecordDetailView({
                     {/* `inert` would also block the copy buttons, so only form controls are made non-interactive. */}
                     <Box
                         sx={{
+                            p: padContent ? { xs: 2.5, md: 3.5 } : 0,
                             '& input, & textarea, & select, & .MuiSelect-select, & .MuiSwitch-root, & .MuiCheckbox-root, & .MuiRadio-root, & .MuiAutocomplete-root': {
                                 pointerEvents: 'none',
                             },
