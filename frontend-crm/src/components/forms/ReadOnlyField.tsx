@@ -43,8 +43,8 @@ export function ReadOnlyField({
         <Box sx={sx}>
             <Typography
                 sx={{
-                    fontSize: '0.72rem',
-                    fontWeight: 700,
+                    fontSize: '0.68rem',
+                    fontWeight: 600,
                     color: '#64748b',
                     textTransform: 'uppercase',
                     letterSpacing: '0.04em',
@@ -55,7 +55,7 @@ export function ReadOnlyField({
             </Typography>
 
             {empty ? (
-                <Typography sx={{ color: '#94a3b8', fontSize: '0.88rem' }} aria-label="Not provided">
+                <Typography sx={{ color: '#94a3b8', fontSize: '0.86rem' }} aria-label="Not provided">
                     —
                 </Typography>
             ) : (
@@ -77,10 +77,10 @@ export function ReadOnlyField({
                         <Typography
                             component="div"
                             sx={{
-                                fontSize: '0.88rem',
+                                fontSize: '0.86rem',
                                 fontWeight: 600,
                                 color: '#0f172a',
-                                lineHeight: 1.4,
+                                lineHeight: 1.35,
                                 wordBreak: 'break-word',
                                 whiteSpace: 'pre-wrap',
                             }}

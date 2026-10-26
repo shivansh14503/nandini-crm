@@ -11,6 +11,10 @@ import CheckCircleOutlinedIcon from '@mui/icons-material/CheckCircleOutlined';
 import HighlightOffOutlinedIcon from '@mui/icons-material/HighlightOffOutlined';
 import VerifiedUserOutlinedIcon from '@mui/icons-material/VerifiedUserOutlined';
 import CloudDoneOutlinedIcon from '@mui/icons-material/CloudDoneOutlined';
+import BusinessCenterOutlinedIcon from '@mui/icons-material/BusinessCenterOutlined';
+import TagOutlinedIcon from '@mui/icons-material/TagOutlined';
+import PersonOutlineIcon from '@mui/icons-material/PersonOutlined';
+import NotesOutlinedIcon from '@mui/icons-material/NotesOutlined';
 
 import { ROUTES } from '@/config/constants';
 import type { ExtendedOrganization } from '@/types/organization.types';
@@ -19,6 +23,8 @@ import {
     EntityDetailDrawer,
     DrawerSectionCard,
     DrawerCopyButton,
+    DrawerFieldGrid,
+    DrawerMetricGrid,
     type AuditRevisionItem,
     type DrawerBadgeItem,
 } from '@/components/common/Drawer';
@@ -36,11 +42,65 @@ export interface OrganizationDetailDrawerProps {
     hideBackdrop?: boolean;
 }
 
-const fieldGridSx = { display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 1.75 } as const;
 
-const SectionTitle = ({ children }: { children: React.ReactNode }) => (
-    <Typography sx={{ fontSize: '0.82rem', fontWeight: 700, color: '#0f172a' }}>{children}</Typography>
+const sectionIcon = (icon: React.ReactElement) => (
+    <Box
+        sx={{
+            width: 24,
+            height: 24,
+            borderRadius: '7px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            color: '#2563eb',
+            backgroundColor: '#eff6ff',
+        }}
+    >
+        {icon}
+    </Box>
 );
+
+const getInitials = (name: string) => {
+    const parts = name.trim().split(/\s+/);
+    return ((parts[0]?.[0] ?? '') + (parts.length > 1 ? parts[parts.length - 1][0] : '')).toUpperCase();
+};
+
+/** A code (SAP / showroom) shown as a monospace pill with an inline copy button. */
+function IdentifierRow({ label, value }: { label: string; value?: string }) {
+    return (
+        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1.5, py: 0.9 }}>
+            <Typography sx={{ fontSize: '0.68rem', fontWeight: 600, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                {label}
+            </Typography>
+            {value ? (
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.25, minWidth: 0 }}>
+                    <Box
+                        component="span"
+                        sx={{
+                            fontFamily: 'monospace',
+                            fontSize: '0.82rem',
+                            fontWeight: 700,
+                            color: '#0f172a',
+                            backgroundColor: '#f1f5f9',
+                            border: '1px solid #e2e8f0',
+                            borderRadius: '6px',
+                            px: 1,
+                            py: 0.2,
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                            whiteSpace: 'nowrap',
+                        }}
+                    >
+                        {value}
+                    </Box>
+                    <DrawerCopyButton text={value} title={`Copy ${label}`} iconColor="#64748b" />
+                </Box>
+            ) : (
+                <Typography sx={{ color: '#94a3b8', fontSize: '0.86rem' }}>—</Typography>
+            )}
+        </Box>
+    );
+}
 
 /** Masks all but the last 4 digits of an account number. */
 const maskAccountNumber = (value: string) => (value.length > 4 ? `•••• ${value.slice(-4)}` : value);
@@ -63,7 +123,7 @@ function AddressCard({ title, street, city, state, postalCode, country }: Addres
     return (
         <DrawerSectionCard
             bg="#f8fafc"
-            title={<SectionTitle>{title}</SectionTitle>}
+            title={title}
             action={<DrawerCopyButton text={oneLine} title={`Copy ${title.toLowerCase()}`} iconColor="#64748b" />}
         >
             {street && (
@@ -124,6 +184,7 @@ export function OrganizationDetailDrawer({
 
     const isActive = org.accountStatus !== 'Inactive';
     const location = [org.billingCity, org.billingState].filter(Boolean).join(', ') || 'Location Unspecified';
+    const partnerCompany = org.partnerCompanies?.join(', ');
     const gstin = org.gstNo || org.gstNumber || '';
 
     const badges: DrawerBadgeItem[] = [
@@ -215,18 +276,89 @@ export function OrganizationDetailDrawer({
             formTabs={ORGANIZATION_FORM_TABS.filter((t) => t.id !== 'partner_licensing')}
             tabContents={{
                 overview: (
-                    <DrawerSectionCard p={1.8} title={<SectionTitle>Overview</SectionTitle>}>
-                        <Box sx={{ ...fieldGridSx, mt: 1 }}>
-                            <ReadOnlyField label="Nature of Business" value={org.natureOfBusiness} />
-                            <ReadOnlyField label="Type of Entity" value={org.typeOfEntity} />
-                            <ReadOnlyField label="SAP Code / Tally ID" value={org.sapCodeTallyId} copyable />
-                            <ReadOnlyField label="Showroom Code" value={org.showroomBranchCode} copyable />
-                            <ReadOnlyField label="Member Of" value={org.memberOfParentCorp} />
-                            <ReadOnlyField label="Turnover" value={org.annualTurnover} />
-                            <ReadOnlyField label="Employee Count" value={org.numberOfEmployees} />
-                            <ReadOnlyField label="Assigned User" value={org.assignedUser} />
-                        </Box>
-                    </DrawerSectionCard>
+                    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                        <DrawerMetricGrid
+                            items={[
+                                {
+                                    label: 'ANNUAL TURNOVER',
+                                    value: org.annualTurnover || '—',
+                                    bg: '#eff6ff',
+                                    borderColor: '#dbeafe',
+                                    labelColor: '#1d4ed8',
+                                    valueSize: '1rem',
+                                    valueWeight: 800,
+                                    p: 1.75,
+                                },
+                                {
+                                    label: 'EMPLOYEES',
+                                    value: org.numberOfEmployees || '—',
+                                    bg: '#f0fdf4',
+                                    borderColor: '#dcfce7',
+                                    labelColor: '#15803d',
+                                    valueSize: '1rem',
+                                    valueWeight: 800,
+                                    p: 1.75,
+                                },
+                            ]}
+                        />
+
+                        <DrawerSectionCard p={1.8} icon={sectionIcon(<BusinessCenterOutlinedIcon sx={{ fontSize: 15 }} />)} title="Business Profile">
+                            <DrawerFieldGrid sx={{ mt: 0 }}>
+                                <ReadOnlyField label="Nature of Business" value={org.natureOfBusiness} />
+                                <ReadOnlyField label="Type of Entity" value={org.typeOfEntity} />
+                                <ReadOnlyField label="Customer Type" value={org.customerType} />
+                                <ReadOnlyField label="Member Of" value={org.memberOfParentCorp} />
+                                <ReadOnlyField label="Partner Company" value={partnerCompany} sx={{ gridColumn: '1 / -1' }} />
+                            </DrawerFieldGrid>
+                        </DrawerSectionCard>
+
+                        <DrawerSectionCard p={1.8} bg="#f8fafc" icon={sectionIcon(<TagOutlinedIcon sx={{ fontSize: 15 }} />)} title="Account Identifiers">
+                            <Box sx={{ '& > * + *': { borderTop: '1px dashed #e2e8f0' } }}>
+                                <IdentifierRow label="SAP Code / Tally ID" value={org.sapCodeTallyId} />
+                                <IdentifierRow label="Showroom Code" value={org.showroomBranchCode} />
+                            </Box>
+                        </DrawerSectionCard>
+
+                        <DrawerSectionCard p={1.8} icon={sectionIcon(<PersonOutlineIcon sx={{ fontSize: 15 }} />)} title="Account Owner">
+                            {org.assignedUser ? (
+                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.25 }}>
+                                    <Box
+                                        sx={{
+                                            width: 34,
+                                            height: 34,
+                                            borderRadius: '50%',
+                                            background: 'linear-gradient(135deg, #6366f1 0%, #4f46e5 100%)',
+                                            color: '#ffffff',
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            justifyContent: 'center',
+                                            fontSize: '0.78rem',
+                                            fontWeight: 700,
+                                            boxShadow: '0 2px 8px rgba(79, 70, 229, 0.25)',
+                                        }}
+                                    >
+                                        {getInitials(org.assignedUser)}
+                                    </Box>
+                                    <Box>
+                                        <Typography sx={{ fontSize: '0.88rem', fontWeight: 700, color: '#0f172a', lineHeight: 1.3 }}>
+                                            {org.assignedUser}
+                                        </Typography>
+                                        <Typography sx={{ fontSize: '0.72rem', color: '#64748b' }}>Assigned user</Typography>
+                                    </Box>
+                                </Box>
+                            ) : (
+                                <Typography sx={{ color: '#94a3b8', fontSize: '0.86rem' }}>Unassigned</Typography>
+                            )}
+                        </DrawerSectionCard>
+
+                        {org.description && (
+                            <DrawerSectionCard p={1.8} icon={sectionIcon(<NotesOutlinedIcon sx={{ fontSize: 15 }} />)} title="About">
+                                <Typography sx={{ fontSize: '0.84rem', color: '#334155', lineHeight: 1.55, whiteSpace: 'pre-wrap' }}>
+                                    {org.description}
+                                </Typography>
+                            </DrawerSectionCard>
+                        )}
+                    </Box>
                 ),
                 address: (
                     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
@@ -250,18 +382,18 @@ export function OrganizationDetailDrawer({
                 ),
                 tax_bank: (
                     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                        <DrawerSectionCard p={1.8} title={<SectionTitle>Statutory Tax & Compliance</SectionTitle>}>
-                            <Box sx={{ ...fieldGridSx, mt: 1 }}>
+                        <DrawerSectionCard p={1.8} title="Statutory Tax & Compliance">
+                            <DrawerFieldGrid>
                                 <ReadOnlyField label="GSTIN" value={gstin} copyable />
                                 <ReadOnlyField label="PAN" value={org.panNumber} copyable />
                                 <ReadOnlyField label="MSME Registration No." value={org.msmeRegnNumber} copyable />
                                 <ReadOnlyField label="CIN" value={org.cinNo} copyable />
                                 <ReadOnlyField label="TAN" value={org.tanNumber} copyable />
-                            </Box>
+                            </DrawerFieldGrid>
                         </DrawerSectionCard>
 
-                        <DrawerSectionCard p={1.8} bg="#f8fafc" title={<SectionTitle>Operating Bank Account</SectionTitle>}>
-                            <Box sx={{ ...fieldGridSx, mt: 1 }}>
+                        <DrawerSectionCard p={1.8} bg="#f8fafc" title="Operating Bank Account">
+                            <DrawerFieldGrid>
                                 <ReadOnlyField label="Bank Name" value={org.bankName} />
                                 <ReadOnlyField label="Account Name" value={org.accountName} />
                                 <ReadOnlyField
@@ -294,7 +426,7 @@ export function OrganizationDetailDrawer({
                                 />
                                 <ReadOnlyField label="IFSC Code" value={org.bankIfscCode} copyable />
                                 <ReadOnlyField label="Branch Address" value={org.bankAddress} sx={{ gridColumn: '1 / -1' }} />
-                            </Box>
+                            </DrawerFieldGrid>
                         </DrawerSectionCard>
                     </Box>
                 ),

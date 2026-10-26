@@ -51,7 +51,7 @@ export function DrawerSectionCard({
     icon,
     action,
     bg = '#ffffff',
-    borderColor = '#e2e8f0',
+    borderColor = '#eef2f6',
     p = 2,
     titleSx,
     sx,
@@ -61,9 +61,10 @@ export function DrawerSectionCard({
         <Box
             sx={{
                 p,
-                borderRadius: '8px',
+                borderRadius: '10px',
                 backgroundColor: bg,
                 border: `1px solid ${borderColor}`,
+                boxShadow: '0 1px 3px rgba(0,0,0,0.03)',
                 ...sx,
             }}
         >
@@ -81,10 +82,13 @@ export function DrawerSectionCard({
                         {typeof title === 'string' ? (
                             <Typography
                                 sx={{
-                                    fontSize: icon ? '0.78rem' : '0.68rem',
+                                    fontSize: '0.72rem',
                                     fontWeight: 700,
-                                    color: icon ? '#0f172a' : '#64748b',
-                                    letterSpacing: icon ? undefined : '0.04em',
+                                    color: '#475569',
+                                    textTransform: 'uppercase',
+                                    letterSpacing: '0.05em',
+                                    // Subtle left accent when there is no icon
+                                    ...(!icon && { borderLeft: '3px solid #2563eb', pl: 1, lineHeight: 1.2 }),
                                     ...titleSx,
                                 }}
                             >
@@ -97,6 +101,23 @@ export function DrawerSectionCard({
                     {action}
                 </Box>
             )}
+            {children}
+        </Box>
+    );
+}
+
+/** Balanced 2-column key/value grid shared by every entity drawer. */
+export function DrawerFieldGrid({ children, columns = 2, sx }: { children: React.ReactNode; columns?: number; sx?: SxProps<Theme> }) {
+    return (
+        <Box
+            sx={{
+                display: 'grid',
+                gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))`,
+                gap: 2,
+                mt: 1,
+                ...sx,
+            }}
+        >
             {children}
         </Box>
     );
@@ -130,7 +151,7 @@ export function DrawerMetricGrid({ items, columns = 2, gap = 1.5 }: DrawerMetric
                     key={idx}
                     sx={{
                         p: item.p ?? 1.5,
-                        borderRadius: '8px',
+                        borderRadius: '10px',
                         backgroundColor: item.bg || '#ffffff',
                         border: `1px solid ${item.borderColor || '#e2e8f0'}`,
                     }}

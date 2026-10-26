@@ -94,6 +94,47 @@ export function EntityDetailDrawer({
         });
     };
 
+    const headerIconButtonSx = {
+        width: 30,
+        height: 30,
+        color: '#475569',
+        border: '1px solid #e2e8f0',
+        borderRadius: '8px',
+        p: 0,
+        transition: 'all 0.15s ease',
+    } as const;
+
+    const secondaryButtonSx = {
+        fontSize: '0.82rem',
+        textTransform: 'none',
+        fontWeight: 600,
+        color: '#334155',
+        borderColor: '#cbd5e1',
+        height: 36,
+        px: 1.8,
+        borderRadius: '8px',
+        transition: 'all 0.15s ease',
+        '&:hover': { borderColor: '#94a3b8', backgroundColor: '#f8fafc' },
+        ...secondaryAction?.sx,
+    } as const;
+
+    const primaryButtonSx = {
+        fontSize: '0.82rem',
+        textTransform: 'none',
+        fontWeight: 700,
+        background: 'linear-gradient(135deg, #1d4ed8 0%, #2563eb 100%)',
+        height: 36,
+        px: 2.2,
+        borderRadius: '8px',
+        boxShadow: 'none',
+        transition: 'all 0.15s ease',
+        '&:hover': {
+            background: 'linear-gradient(135deg, #1e40af 0%, #1d4ed8 100%)',
+            boxShadow: '0 4px 14px rgba(37, 99, 235, 0.35)',
+        },
+        ...primaryAction?.sx,
+    } as const;
+
     // Compute initials fallback if avatarText not given
     const getInitials = (str: string) => {
         if (!str) return 'REC';
@@ -179,8 +220,8 @@ export function EntityDetailDrawer({
                     backdrop: {
                         sx: {
                             backgroundColor: effectiveHideBackdrop ? 'transparent' : 'rgba(15, 23, 42, 0.25)',
-                            backdropFilter: effectiveHideBackdrop ? 'none' : 'blur(3px)',
-                            WebkitBackdropFilter: effectiveHideBackdrop ? 'none' : 'blur(3px)',
+                            backdropFilter: effectiveHideBackdrop ? 'none' : 'blur(4px)',
+                            WebkitBackdropFilter: effectiveHideBackdrop ? 'none' : 'blur(4px)',
                             ...(effectiveHideBackdrop && { pointerEvents: 'none' }),
                         },
                     },
@@ -189,7 +230,7 @@ export function EntityDetailDrawer({
                             width,
                             backgroundColor: '#ffffff',
                             borderLeft: '1px solid #e2e8f0',
-                            boxShadow: isCollapsed ? 'none' : '-8px 0 32px rgba(15, 23, 42, 0.12)',
+                            boxShadow: isCollapsed ? 'none' : '-12px 0 40px rgba(15, 23, 42, 0.08)',
                             display: 'flex',
                             flexDirection: 'column',
                             overflow: 'hidden',
@@ -207,9 +248,9 @@ export function EntityDetailDrawer({
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, minWidth: 0 }}>
                         <Box
                             sx={{
-                                width: 44,
-                                height: 44,
-                                borderRadius: '8px',
+                                width: 48,
+                                height: 48,
+                                borderRadius: '10px',
                                 background: avatarBg,
                                 color: '#ffffff',
                                 display: 'flex',
@@ -219,7 +260,7 @@ export function EntityDetailDrawer({
                                 fontSize: '1.05rem',
                                 letterSpacing: '0.02em',
                                 flexShrink: 0,
-                                boxShadow: '0 2px 8px rgba(2, 132, 199, 0.28)',
+                                boxShadow: '0 4px 14px rgba(2, 132, 199, 0.25)',
                             }}
                         >
                             {avatarIcon || displayAvatar}
@@ -229,9 +270,10 @@ export function EntityDetailDrawer({
                                 <Typography
                                     noWrap
                                     sx={{
-                                        fontSize: '1.08rem',
+                                        fontSize: '1.15rem',
                                         fontWeight: 800,
                                         color: '#0f172a',
+                                        letterSpacing: '-0.01em',
                                         lineHeight: 1.25,
                                     }}
                                 >
@@ -240,7 +282,7 @@ export function EntityDetailDrawer({
                                 {verified && <VerifiedIcon sx={{ fontSize: 18, color: '#2563eb', flexShrink: 0 }} />}
                             </Box>
                             {subtitle && (
-                                <Typography noWrap sx={{ fontSize: '0.78rem', color: '#64748b', mt: 0.3 }}>
+                                <Typography noWrap sx={{ fontSize: '0.8rem', color: '#64748b', fontWeight: 500, mt: 0.3 }}>
                                     {subtitle}
                                 </Typography>
                             )}
@@ -254,13 +296,7 @@ export function EntityDetailDrawer({
                                 <IconButton
                                     size="small"
                                     onClick={headerActions.onSync}
-                                    sx={{
-                                        color: '#475569',
-                                        border: '1px solid #e2e8f0',
-                                        borderRadius: '6px',
-                                        p: 0.6,
-                                        '&:hover': { color: '#0284c7', backgroundColor: '#f0f9ff', borderColor: '#bae6fd' },
-                                    }}
+                                    sx={{ ...headerIconButtonSx, '&:hover': { color: '#0284c7', backgroundColor: '#f0f9ff', borderColor: '#bae6fd' } }}
                                 >
                                     <SyncOutlinedIcon sx={{ fontSize: 16 }} />
                                 </IconButton>
@@ -272,13 +308,7 @@ export function EntityDetailDrawer({
                                 <IconButton
                                     size="small"
                                     onClick={headerActions.onView}
-                                    sx={{
-                                        color: '#475569',
-                                        border: '1px solid #e2e8f0',
-                                        borderRadius: '6px',
-                                        p: 0.6,
-                                        '&:hover': { color: '#047857', backgroundColor: '#ecfdf5', borderColor: '#d1fae5' },
-                                    }}
+                                    sx={{ ...headerIconButtonSx, '&:hover': { color: '#059669', backgroundColor: '#ecfdf5', borderColor: '#a7f3d0' } }}
                                 >
                                     <VisibilityOutlinedIcon sx={{ fontSize: 16 }} />
                                 </IconButton>
@@ -291,15 +321,9 @@ export function EntityDetailDrawer({
                             <IconButton
                                 size="small"
                                 onClick={onClose}
-                                sx={{
-                                    color: '#64748b',
-                                    borderRadius: '6px',
-                                    p: 0.6,
-                                    ml: 0.5,
-                                    '&:hover': { color: '#0f172a', backgroundColor: '#f1f5f9' },
-                                }}
+                                sx={{ ...headerIconButtonSx, ml: 0.5, '&:hover': { color: '#dc2626', backgroundColor: '#fef2f2', borderColor: '#fecaca' } }}
                             >
-                                <CloseIcon sx={{ fontSize: 18 }} />
+                                <CloseIcon sx={{ fontSize: 16 }} />
                             </IconButton>
                         </Tooltip>
                     </Box>
@@ -318,9 +342,9 @@ export function EntityDetailDrawer({
                                     backgroundColor: b.backgroundColor || '#f1f5f9',
                                     color: b.color || '#475569',
                                     border: `1px solid ${b.borderColor || '#e2e8f0'}`,
-                                    px: 0.9,
-                                    py: 0.25,
-                                    borderRadius: '6px',
+                                    px: 1.2,
+                                    py: 0.35,
+                                    borderRadius: '9999px',
                                     fontSize: '0.7rem',
                                     fontWeight: 700,
                                     fontFamily: b.isMonospace ? 'monospace' : 'inherit',
@@ -335,7 +359,7 @@ export function EntityDetailDrawer({
             </Box>
 
             {/* ── Tabs Navigation Bar ───────────────────────────────────────── */}
-            <Box sx={{ borderBottom: '1px solid #e2e8f0', backgroundColor: '#fafafa', px: 0.5 }}>
+            <Box sx={{ borderBottom: '1px solid #e2e8f0', backgroundColor: '#f8fafc', px: 0.5 }}>
                 <Tabs
                     value={activeTabIndex}
                     onChange={(_, val) => setCurrentTab(val)}
@@ -344,9 +368,9 @@ export function EntityDetailDrawer({
                     sx={{
                         minHeight: 44,
                         '& .MuiTabs-indicator': {
-                            backgroundColor: '#1d4ed8',
-                            height: 2.5,
-                            borderRadius: '2px',
+                            backgroundColor: '#2563eb',
+                            height: 3,
+                            borderRadius: '3px 3px 0 0',
                         },
                     }}
                 >
@@ -382,9 +406,10 @@ export function EntityDetailDrawer({
                             }
                             sx={{
                                 minHeight: 44,
-                                fontSize: '0.78rem',
-                                fontWeight: activeTabIndex === idx ? 700 : 500,
-                                color: activeTabIndex === idx ? '#1d4ed8 !important' : '#64748b',
+                                fontSize: '0.8rem',
+                                fontWeight: 600, // constant weight so switching tabs never shifts the layout
+                                color: activeTabIndex === idx ? '#2563eb !important' : '#64748b',
+                                transition: 'color 0.15s ease',
                                 textTransform: 'none',
                                 px: 1.5,
                                 gap: 0.6,
@@ -410,7 +435,7 @@ export function EntityDetailDrawer({
                 sx={{
                     p: 2,
                     px: 2.5,
-                    borderTop: '1px solid #e2e8f0',
+                    borderTop: '1px solid #f1f5f9',
                     backgroundColor: '#ffffff',
                     display: 'flex',
                     alignItems: 'center',
@@ -418,7 +443,7 @@ export function EntityDetailDrawer({
                 }}
             >
                 {/* Status Indicator */}
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.8 }}>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                     <Box
                         sx={{
                             width: 8,
@@ -428,7 +453,7 @@ export function EntityDetailDrawer({
                             boxShadow: '0 0 0 3px rgba(16, 185, 129, 0.2)',
                         }}
                     />
-                    <Typography sx={{ fontSize: '0.75rem', fontWeight: 600, color: '#334155' }}>
+                    <Typography sx={{ fontSize: '0.78rem', fontWeight: 600, color: '#334155' }}>
                         {statusText}
                     </Typography>
                 </Box>
@@ -447,18 +472,7 @@ export function EntityDetailDrawer({
                                         startIcon={secondaryAction.icon}
                                         onClick={secondaryAction.onClick}
                                         disabled={secondaryAction.disabled}
-                                        sx={{
-                                            fontSize: '0.78rem',
-                                            textTransform: 'none',
-                                            fontWeight: 600,
-                                            color: '#334155',
-                                            borderColor: '#cbd5e1',
-                                            height: 36,
-                                            px: 1.5,
-                                            borderRadius: '6px',
-                                            '&:hover': { borderColor: '#94a3b8', backgroundColor: '#f8fafc' },
-                                            ...secondaryAction.sx,
-                                        }}
+                                        sx={secondaryButtonSx}
                                     >
                                         {secondaryAction.label}
                                     </Button>
@@ -471,18 +485,7 @@ export function EntityDetailDrawer({
                                 startIcon={secondaryAction.icon}
                                 onClick={secondaryAction.onClick}
                                 disabled={secondaryAction.disabled}
-                                sx={{
-                                    fontSize: '0.78rem',
-                                    textTransform: 'none',
-                                    fontWeight: 600,
-                                    color: '#334155',
-                                    borderColor: '#cbd5e1',
-                                    height: 36,
-                                    px: 1.5,
-                                    borderRadius: '6px',
-                                    '&:hover': { borderColor: '#94a3b8', backgroundColor: '#f8fafc' },
-                                    ...secondaryAction.sx,
-                                }}
+                                sx={secondaryButtonSx}
                             >
                                 {secondaryAction.label}
                             </Button>
@@ -499,18 +502,7 @@ export function EntityDetailDrawer({
                                         startIcon={primaryAction?.icon || <EditOutlinedIcon sx={{ fontSize: 16 }} />}
                                         onClick={primaryAction?.onClick || headerActions?.onEdit}
                                         disabled={primaryAction?.disabled}
-                                        sx={{
-                                            fontSize: '0.78rem',
-                                            textTransform: 'none',
-                                            fontWeight: 700,
-                                            backgroundColor: '#1d4ed8',
-                                            height: 36,
-                                            px: 2,
-                                            borderRadius: '6px',
-                                            boxShadow: 'none',
-                                            '&:hover': { backgroundColor: '#1e40af' },
-                                            ...primaryAction?.sx,
-                                        }}
+                                        sx={primaryButtonSx}
                                     >
                                         {primaryAction?.label || 'Edit Details'}
                                     </Button>
@@ -523,18 +515,7 @@ export function EntityDetailDrawer({
                                 startIcon={primaryAction?.icon || <EditOutlinedIcon sx={{ fontSize: 16 }} />}
                                 onClick={primaryAction?.onClick || headerActions?.onEdit}
                                 disabled={primaryAction?.disabled}
-                                sx={{
-                                    fontSize: '0.78rem',
-                                    textTransform: 'none',
-                                    fontWeight: 700,
-                                    backgroundColor: '#1d4ed8',
-                                    height: 36,
-                                    px: 2,
-                                    borderRadius: '6px',
-                                    boxShadow: 'none',
-                                    '&:hover': { backgroundColor: '#1e40af' },
-                                    ...primaryAction?.sx,
-                                }}
+                                sx={primaryButtonSx}
                             >
                                 {primaryAction?.label || 'Edit Details'}
                             </Button>
