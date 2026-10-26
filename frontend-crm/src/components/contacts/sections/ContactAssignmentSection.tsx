@@ -2,7 +2,7 @@
 
 import React from 'react';
 import { Grid } from '@mui/material';
-import { RhfCheckbox, RhfLookup, RhfSelect, RhfTextField } from '@/components/forms';
+import { RhfLookup, RhfSelect } from '@/components/forms';
 import {
     CONTACT_DESIGNATIONS,
     CONTACT_DEPARTMENTS,
@@ -20,21 +20,20 @@ const DEFAULT_ASSIGNEES = [
 ];
 
 /**
- * Internal ownership, primary contact status and organizational role.
+ * Internal ownership and organizational role (designation & department side by side).
  * Must be rendered inside a `FormProvider<ContactFormData>`.
  */
 export function ContactAssignmentSection({ assigneeOptions = DEFAULT_ASSIGNEES }: { assigneeOptions?: string[] }) {
     return (
         <Grid container spacing={3.5}>
             <Grid size={{ xs: 12, md: 6 }}>
-                <RhfLookup<ContactFormData> name="assignedTo" label="Assigned to" required options={assigneeOptions} placeholder="Select assigned sales rep" />
-                <RhfCheckbox<ContactFormData> name="isPrimaryContact" label="Is Primary Contact" />
                 <RhfSelect<ContactFormData> name="designation" label="Designation" options={CONTACT_DESIGNATIONS} placeholder="Select Designation" />
-                <RhfTextField<ContactFormData> name="location" label="Location" placeholder="e.g. New Delhi / Branch Office" />
             </Grid>
             <Grid size={{ xs: 12, md: 6 }}>
                 <RhfSelect<ContactFormData> name="department" label="Department" options={CONTACT_DEPARTMENTS} placeholder="Select Department" />
-                <RhfSelect<ContactFormData> name="leftJob" label="Left Job" options={['No', 'Yes']} placeholder="Select option" />
+            </Grid>
+            <Grid size={{ xs: 12, md: 6 }}>
+                <RhfLookup<ContactFormData> name="assignedTo" label="Assigned to" required options={assigneeOptions} placeholder="Select assigned sales rep" />
             </Grid>
         </Grid>
     );

@@ -55,7 +55,6 @@ export function ConvertContactSection() {
         setValue('contactEmails', contact.emailAddresses, opts);
         setValue('designation', contact.designation ?? '', opts);
         setValue('department', contact.department ?? '', opts);
-        setValue('location', contact.location ?? '', opts);
         setValue('communicationType', contact.communicationType ?? [], opts);
         setValue('isPrimaryContact', contact.isPrimaryContact, opts);
         setValue('doNotCall', contact.doNotCall, opts);
@@ -87,7 +86,6 @@ export function ConvertContactSection() {
                     <RhfPhoneField<F> name="contactMobile" label="Mobile" required />
                     <RhfPhoneField<F> name="contactPhone3" label="Phone 3" placeholder="Alternate phone number" />
                     <RhfSelect<F> name="designation" label="Designation" options={CONTACT_DESIGNATIONS} placeholder="Select Designation" />
-                    <RhfTextField<F> name="location" label="Location" placeholder="e.g. New Delhi / Branch Office" />
                     <RhfChipGroup<F> name="communicationType" label="Communication Type" options={COMMUNICATION_TYPES} />
                     <RhfTextField<F> name="contactDescription" label="Description" multiline minRows={3} placeholder="Notes about this contact..." />
                     <RhfLookup<F> name="contactAssignedTo" label="Assigned to" required options={LEAD_ASSIGNED_USERS} placeholder="Select assigned representative" />

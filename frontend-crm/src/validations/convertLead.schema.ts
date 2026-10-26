@@ -34,7 +34,6 @@ export const convertLeadFormSchema = z.object({
     isPrimaryContact: z.boolean(),
     designation: optionalString,
     department: optionalString,
-    location: optionalString,
     communicationType: z.array(z.string()),
     doNotCall: z.boolean(),
     contactDescription: optionalString,

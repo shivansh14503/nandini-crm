@@ -14,7 +14,6 @@ export interface ContactFormData {
     isPrimaryContact: boolean;
     designation: string;
     department: string;
-    location: string;
     leftJob: 'No' | 'Yes';
     communicationType: string[]; // ['Call', 'Email', 'Meeting', 'WhatsApp']
     doNotCall: boolean;

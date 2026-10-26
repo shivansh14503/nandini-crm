@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { FormHelperText } from '@mui/material';
+import { FormHelperText, type SxProps, type Theme } from '@mui/material';
 import { useController, type FieldPath, type FieldValues } from 'react-hook-form';
 import { FormField } from '../FormField';
 import { StyledSelect } from '../StyledSelect';
@@ -14,6 +14,7 @@ export interface RhfSelectProps<T extends FieldValues> {
     hint?: React.ReactNode;
     placeholder?: string;
     disabled?: boolean;
+    sx?: SxProps<Theme>;
 }
 
 /** React Hook Form bound dropdown built on the shared {@link StyledSelect}. */
@@ -25,11 +26,12 @@ export function RhfSelect<T extends FieldValues>({
     hint,
     placeholder,
     disabled,
+    sx,
 }: RhfSelectProps<T>) {
     const { field, fieldState } = useController<T>({ name });
 
     return (
-        <FormField name={name} label={label} required={required} hint={hint}>
+        <FormField name={name} label={label} required={required} hint={hint} sx={sx}>
             <StyledSelect
                 value={(field.value as string) ?? ''}
                 onChange={field.onChange}

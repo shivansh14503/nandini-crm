@@ -40,7 +40,6 @@ export const contactFormSchema = z.object({
     isPrimaryContact: z.boolean().default(false),
     designation: optionalString,
     department: optionalString,
-    location: optionalString,
     leftJob: z.enum(['No', 'Yes']).default('No'),
     communicationType: z.array(z.string()).default(['Call', 'Email']),
     doNotCall: z.boolean().default(false),

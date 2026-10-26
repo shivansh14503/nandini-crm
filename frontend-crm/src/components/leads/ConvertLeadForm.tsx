@@ -67,7 +67,6 @@ const EMPTY_DEFAULTS: ConvertLeadFormValues = {
     isPrimaryContact: true,
     designation: '',
     department: '',
-    location: '',
     communicationType: ['Call', 'Email'],
     doNotCall: false,
     contactDescription: '',

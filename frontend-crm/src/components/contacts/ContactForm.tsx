@@ -69,7 +69,6 @@ const DEFAULT_FORM: ContactFormData = {
     isPrimaryContact: false,
     designation: '',
     department: '',
-    location: '',
     leftJob: 'No',
     communicationType: ['Call', 'Email'],
     doNotCall: false,
