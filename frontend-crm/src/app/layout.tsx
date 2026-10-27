@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { ThemeRegistry } from "@/src/theme/ThemeRegistry";
+import { QueryProvider } from "@/src/context/QueryProvider";
 import { AuthProvider } from "@/src/context/AuthContext";
 import { APP_CONFIG } from "@/src/config/constants";
 
@@ -28,7 +29,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     >
       <body className="min-h-full m-0">
         <ThemeRegistry>
-          <AuthProvider>{children}</AuthProvider>
+          <QueryProvider>
+            <AuthProvider>{children}</AuthProvider>
+          </QueryProvider>
         </ThemeRegistry>
       </body>
     </html>

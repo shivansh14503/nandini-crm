@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { Box, Chip, Typography } from '@mui/material';
 import InventoryOutlinedIcon from '@mui/icons-material/InventoryOutlined';
@@ -19,7 +19,8 @@ import type { DataTableColumn, DataTableFilterItem } from '../../common/DataTabl
 import { ROUTES } from '../../../config/constants';
 import { getRelatedModulesForEntity } from '@/config/relatedModules.config';
 import type { Product } from '../../../types/product.types';
-import { productService, subscribeCrmSync } from '@/services';
+import { useCrmDataVersion } from '@/services';
+import { useProducts, useBulkDeleteProducts } from '@/hooks/queries';
 import type { ProductFilterTab } from './types';
 import { ProductDetailDrawer } from '../ProductDetailDrawer';
 
@@ -36,7 +37,9 @@ const TAX_RATE_COLORS: Record<string, { bg: string; color: string; border: strin
 export function ProductsMasterView() {
     const router = useRouter();
 
-    const [products, setProducts] = useState<Product[]>([]);
+    const { data: products, refetch } = useProducts();
+    const bulkDeleteMutation = useBulkDeleteProducts();
+    const crmDataVersion = useCrmDataVersion();
     const [activeTab, setActiveTab] = useState<ProductFilterTab>('all');
     const [searchQuery, setSearchQuery] = useState('');
     const [selectedIds, setSelectedIds] = useState<string[]>([]);
@@ -44,7 +47,12 @@ export function ProductsMasterView() {
     const [rowsPerPage, setRowsPerPage] = useState(10);
     const [sortField, setSortField] = useState<string>('productName');
     const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
-    const [selectedDrawerProduct, setSelectedDrawerProduct] = useState<Product | null>(null);
+    // Tracked by id so the drawer always shows the cached copy and closes if the product is deleted.
+    const [drawerProductId, setDrawerProductId] = useState<string | null>(null);
+    const selectedDrawerProduct = useMemo(
+        () => (drawerProductId ? products.find((p) => p.id === drawerProductId) ?? null : null),
+        [products, drawerProductId]
+    );
     const [activeRelatedModule, setActiveRelatedModule] = useState<string | null>(null);
     const [secondaryDrawerEntity, setSecondaryDrawerEntity] = useState<SecondaryDrawerEntity | null>(null);
     const [isLeftSidebarCollapsed, setIsLeftSidebarCollapsed] = useState<boolean>(false);
@@ -55,55 +63,6 @@ export function ProductsMasterView() {
     });
 
     const [importOpen, setImportOpen] = useState(false);
-
-    const loadProducts = useCallback(() => {
-        const data = productService.getAllSync();
-        setProducts(data);
-        setSelectedDrawerProduct((prev) => {
-            if (!prev) return null;
-            return data.find((p) => p.id === prev.id) || null;
-        });
-    }, []);
-
-    useEffect(() => {
-        let active = true;
-        productService
-            .getAll()
-            .then((data) => {
-                if (active) {
-                    setProducts(data);
-                    setSelectedDrawerProduct((prev) => {
-                        if (!prev) return null;
-                        return data.find((p) => p.id === prev.id) || null;
-                    });
-                }
-            })
-            .catch(() => {});
-        return () => {
-            active = false;
-        };
-    }, []);
-
-    useEffect(() => {
-        const handleFocus = () => {
-            loadProducts();
-        };
-        const handleVisibility = () => {
-            if (document.visibilityState === 'visible') {
-                loadProducts();
-            }
-        };
-
-        window.addEventListener('focus', handleFocus);
-        document.addEventListener('visibilitychange', handleVisibility);
-        const unsubscribe = subscribeCrmSync(loadProducts);
-
-        return () => {
-            window.removeEventListener('focus', handleFocus);
-            document.removeEventListener('visibilitychange', handleVisibility);
-            unsubscribe();
-        };
-    }, [loadProducts]);
 
     // ── Filter Logic ──────────────────────────────────────────────────────────
     const filteredProducts = useMemo(() => {
@@ -173,19 +132,24 @@ export function ProductsMasterView() {
 
     const closeThreePanelView = useCallback(() => {
         setSecondaryDrawerEntity(null);
-        setSelectedDrawerProduct(null);
+        setDrawerProductId(null);
         setActiveRelatedModule(null);
     }, []);
 
     const handleBulkDelete = async () => {
         const count = selectedIds.length;
-        await productService.deleteBulk(selectedIds);
-        if (selectedDrawerProduct && selectedIds.includes(selectedDrawerProduct.id)) {
-            closeThreePanelView();
+        if (count === 0) return;
+        if (!window.confirm(`Delete ${count} selected product(s)?`)) return;
+        try {
+            await bulkDeleteMutation.mutateAsync(selectedIds);
+            if (drawerProductId && selectedIds.includes(drawerProductId)) {
+                closeThreePanelView();
+            }
+            setSelectedIds([]);
+            setToast({ open: true, message: `${count} product(s) deleted.`, severity: 'success' });
+        } catch {
+            setToast({ open: true, message: 'Failed to delete products.', severity: 'error' });
         }
-        loadProducts();
-        setSelectedIds([]);
-        setToast({ open: true, message: `${count} product(s) deleted.`, severity: 'success' });
     };
 
     // ── Filter Tabs Configuration ─────────────────────────────────────────────
@@ -239,7 +203,7 @@ export function ProductsMasterView() {
                         <Box>
                             <RecordLink
                                 href={ROUTES.PRODUCT_DETAIL(p.id)}
-                                onOpen={() => setSelectedDrawerProduct(p)}
+                                onOpen={() => setDrawerProductId(p.id)}
                                 sx={{
                                     fontWeight: 700,
                                     color: '#1d4ed8',
@@ -343,10 +307,11 @@ export function ProductsMasterView() {
     );
 
     const relatedModules = useMemo(() => {
-        void products;
+        // Related counts come from other entities' stores; recompute whenever any of them changes.
+        void crmDataVersion;
         if (!selectedDrawerProduct) return [];
         return getRelatedModulesForEntity('product', selectedDrawerProduct, setActiveRelatedModule);
-    }, [selectedDrawerProduct, products]);
+    }, [selectedDrawerProduct, crmDataVersion]);
 
     // Falls back to the first module until the user explicitly picks one.
     const effectiveRelatedModule = activeRelatedModule ?? relatedModules[0]?.id ?? null;
@@ -365,9 +330,13 @@ export function ProductsMasterView() {
             tableId="products"
             headerActions={() => (
                 <MasterHeaderActions
-                    onRefresh={() => {
-                        loadProducts();
-                        setToast({ open: true, message: 'Products refreshed.', severity: 'info' });
+                    onRefresh={async () => {
+                        const { isError } = await refetch();
+                        setToast(
+                            isError
+                                ? { open: true, message: 'Failed to refresh products.', severity: 'error' }
+                                : { open: true, message: 'Products refreshed.', severity: 'info' }
+                        );
                     }}
                     onNewClick={() => router.push(ROUTES.PRODUCT_NEW)}
                     newButtonLabel="New Product"
@@ -402,7 +371,7 @@ export function ProductsMasterView() {
             onSort={handleSort}
             onView={(p) => router.push(ROUTES.PRODUCT_DETAIL(p.id))}
             getEditHref={(p) => ROUTES.PRODUCT_EDIT(p.id)}
-            onRowClick={(product) => setSelectedDrawerProduct(product)}
+            onRowClick={(product) => setDrawerProductId(product.id)}
             activeRowId={selectedDrawerProduct?.id}
             viewTooltip="View Product"
             editTooltip="Edit Product"
@@ -478,7 +447,6 @@ export function ProductsMasterView() {
                 entity="products"
                 onClose={() => setImportOpen(false)}
                 onImported={(count) => {
-                    loadProducts();
                     setToast({ open: true, message: `Successfully imported ${count} product${count === 1 ? '' : 's'}!`, severity: 'success' });
                 }}
             />

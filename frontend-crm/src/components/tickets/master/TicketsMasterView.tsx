@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { Box, Typography } from '@mui/material';
 import ConfirmationNumberOutlinedIcon from '@mui/icons-material/ConfirmationNumberOutlined';
@@ -24,7 +24,7 @@ import {
     isTicketOverdue,
     type Ticket,
 } from '@/types/ticket.types';
-import { ticketService, subscribeCrmSync } from '@/services';
+import { useTickets, useBulkDeleteTickets } from '@/hooks/queries';
 import type { TicketFilterTab, TicketSortField } from './types';
 import { TicketDetailDrawer } from '../TicketDetailDrawer';
 import { TicketPriorityPill, TicketStatusPill, formatTicketDue } from '../TicketBadges';
@@ -59,9 +59,8 @@ export function TicketsMasterView() {
     const { user } = useAuth();
     const currentUsername = user?.username || 'mittal.sharma';
 
-    const [tickets, setTickets] = useState<Ticket[]>([]);
-    // Reference time for "recent" / "overdue"; refreshed whenever the data reloads.
-    const [now, setNow] = useState(() => Date.now());
+    const { data: tickets, dataUpdatedAt: now, refetch } = useTickets();
+    const bulkDeleteMutation = useBulkDeleteTickets();
     const [activeTab, setActiveTab] = useState<TicketFilterTab>('all');
     const [searchQuery, setSearchQuery] = useState('');
     const [selectedIds, setSelectedIds] = useState<string[]>([]);
@@ -69,34 +68,17 @@ export function TicketsMasterView() {
     const [rowsPerPage, setRowsPerPage] = useState(25);
     const [sortField, setSortField] = useState<TicketSortField>('ticketNumber');
     const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
-    const [selectedDrawerTicket, setSelectedDrawerTicket] = useState<Ticket | null>(null);
+    // Tracked by id so the drawer always shows the cached copy and closes if the ticket is deleted.
+    const [drawerTicketId, setDrawerTicketId] = useState<string | null>(null);
+    const selectedDrawerTicket = useMemo(
+        () => (drawerTicketId ? tickets.find((t) => t.id === drawerTicketId) ?? null : null),
+        [tickets, drawerTicketId]
+    );
     const [toast, setToast] = useState<{ open: boolean; message: string; severity: 'success' | 'info' | 'error' }>({
         open: false,
         message: '',
         severity: 'success',
     });
-
-    const loadTickets = useCallback(() => {
-        const data = ticketService.getAllSync();
-        setTickets(data);
-        setNow(Date.now());
-        setSelectedDrawerTicket((prev) => (prev ? data.find((t) => t.id === prev.id) || null : null));
-    }, []);
-
-    useEffect(() => {
-        let active = true;
-        ticketService
-            .getAll()
-            .then((data) => {
-                if (active) setTickets(data);
-            })
-            .catch(() => {});
-        return () => {
-            active = false;
-        };
-    }, []);
-
-    useEffect(() => subscribeCrmSync(loadTickets), [loadTickets]);
 
     const matchesTab = useCallback(
         (t: Ticket, tab: TicketFilterTab) => {
@@ -174,13 +156,15 @@ export function TicketsMasterView() {
 
     const handleBulkDelete = async () => {
         const count = selectedIds.length;
-        await ticketService.deleteBulk(selectedIds);
-        if (selectedDrawerTicket && selectedIds.includes(selectedDrawerTicket.id)) {
-            setSelectedDrawerTicket(null);
+        if (count === 0) return;
+        if (!window.confirm(`Delete ${count} ticket(s)?`)) return;
+        try {
+            await bulkDeleteMutation.mutateAsync(selectedIds);
+            setSelectedIds([]);
+            setToast({ open: true, message: `${count} ticket(s) deleted.`, severity: 'success' });
+        } catch {
+            setToast({ open: true, message: 'Failed to delete tickets.', severity: 'error' });
         }
-        loadTickets();
-        setSelectedIds([]);
-        setToast({ open: true, message: `${count} ticket(s) deleted.`, severity: 'success' });
     };
 
     // ── Filter Tabs Configuration ─────────────────────────────────────────────
@@ -210,7 +194,7 @@ export function TicketsMasterView() {
                         <Box sx={{ minWidth: 0 }}>
                             <RecordLink
                                 href={ROUTES.TICKET_DETAIL(t.id)}
-                                onOpen={() => setSelectedDrawerTicket(t)}
+                                onOpen={() => setDrawerTicketId(t.id)}
                                 sx={{
                                     fontWeight: 700,
                                     color: '#1d4ed8',
@@ -315,9 +299,13 @@ export function TicketsMasterView() {
             tableId="tickets"
             headerActions={() => (
                 <MasterHeaderActions
-                    onRefresh={() => {
-                        loadTickets();
-                        setToast({ open: true, message: 'Tickets refreshed.', severity: 'info' });
+                    onRefresh={async () => {
+                        const { isError } = await refetch();
+                        setToast(
+                            isError
+                                ? { open: true, message: 'Failed to refresh tickets.', severity: 'error' }
+                                : { open: true, message: 'Tickets refreshed.', severity: 'info' }
+                        );
                     }}
                     onNewClick={() => router.push(ROUTES.TICKET_NEW)}
                     newButtonLabel="New Ticket"
@@ -351,7 +339,7 @@ export function TicketsMasterView() {
             onSort={handleSort}
             onView={(t) => router.push(ROUTES.TICKET_DETAIL(t.id))}
             getEditHref={(t) => ROUTES.TICKET_EDIT(t.id)}
-            onRowClick={(t) => setSelectedDrawerTicket(t)}
+            onRowClick={(t) => setDrawerTicketId(t.id)}
             activeRowId={selectedDrawerTicket?.id}
             viewTooltip="View Ticket"
             editTooltip="Edit Ticket"
@@ -374,7 +362,7 @@ export function TicketsMasterView() {
                 <TicketDetailDrawer
                     ticket={selectedDrawerTicket}
                     open={Boolean(selectedDrawerTicket)}
-                    onClose={() => setSelectedDrawerTicket(null)}
+                    onClose={() => setDrawerTicketId(null)}
                 />
             }
             isDrawerOpen={Boolean(selectedDrawerTicket)}

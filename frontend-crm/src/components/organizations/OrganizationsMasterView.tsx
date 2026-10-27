@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useMemo, useEffect, useCallback } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import {
     Box,
@@ -28,7 +28,8 @@ import {
     DrawerMetricGrid,
 } from '../common/Drawer';
 import type { DataTableColumn, DataTableFilterItem } from '../common/DataTable';
-import { organizationService, subscribeCrmSync } from '@/services';
+import { organizationService, useCrmDataVersion } from '@/services';
+import { useOrganizations, useBulkDeleteOrganizations } from '@/hooks/queries';
 import type { ExtendedOrganization } from '@/types/organization.types';
 import type { Contact } from '@/types/contact.types';
 import type { Lead } from '@/types/lead.types';
@@ -70,7 +71,9 @@ export function OrganizationsMasterView() {
     const isAdmin = user?.role?.toLowerCase() === 'admin';
 
     // ── State ─────────────────────────────────────────────────────────────────
-    const [organizations, setOrganizations] = useState<ExtendedOrganization[]>([]);
+    const { data: organizations, refetch } = useOrganizations();
+    const bulkDeleteMutation = useBulkDeleteOrganizations();
+    const crmDataVersion = useCrmDataVersion();
     const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set(['org-004']));
     const [activeTab, setActiveTab] = useState<FilterTab>('all');
     const [searchQuery, setSearchQuery] = useState('');
@@ -80,7 +83,12 @@ export function OrganizationsMasterView() {
     const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
 
     // Detail View Side Drawer & Three-Panel LIFO Stack State
-    const [selectedDrawerOrg, setSelectedDrawerOrg] = useState<ExtendedOrganization | null>(null);
+    // Tracked by id so the drawer always shows the cached copy and closes if the organization is deleted.
+    const [drawerOrgId, setDrawerOrgId] = useState<string | null>(null);
+    const selectedDrawerOrg = useMemo(
+        () => (drawerOrgId ? organizations.find((o) => o.id === drawerOrgId) ?? null : null),
+        [organizations, drawerOrgId]
+    );
     const [activeRelatedModule, setActiveRelatedModule] = useState<string>('contacts');
     const [secondaryDrawerEntity, setSecondaryDrawerEntity] = useState<{
         type: string;
@@ -97,15 +105,16 @@ export function OrganizationsMasterView() {
         // Dismiss the three-panel view and return to the normal master table.
         // CommonMasterView resets its shared drawer-collapse state when isDrawerOpen becomes false.
         setSecondaryDrawerEntity(null);
-        setSelectedDrawerOrg(null);
+        setDrawerOrgId(null);
         setActiveRelatedModule('contacts');
     }, []);
 
     const relatedModules = useMemo(() => {
-        void organizations;
+        // Related counts come from other entities' stores; recompute whenever any of them changes.
+        void crmDataVersion;
         if (!selectedDrawerOrg) return [];
         return getRelatedModulesForEntity('organization', selectedDrawerOrg, setActiveRelatedModule);
-    }, [selectedDrawerOrg, organizations]);
+    }, [selectedDrawerOrg, crmDataVersion]);
 
     const activeModuleMeta = useMemo(
         () => relatedModules.find((m) => m.id === activeRelatedModule) || relatedModules[0],
@@ -216,55 +225,6 @@ export function OrganizationsMasterView() {
     };
 
     const [importOpen, setImportOpen] = useState(false);
-
-    const loadOrganizations = useCallback(() => {
-        const data = organizationService.getAllSync();
-        setOrganizations(data);
-        setSelectedDrawerOrg((prev) => {
-            if (!prev) return null;
-            return data.find((o) => o.id === prev.id) || null;
-        });
-    }, []);
-
-    useEffect(() => {
-        let active = true;
-        organizationService
-            .getAll()
-            .then((data) => {
-                if (active) {
-                    setOrganizations(data);
-                    setSelectedDrawerOrg((prev) => {
-                        if (!prev) return null;
-                        return data.find((o) => o.id === prev.id) || null;
-                    });
-                }
-            })
-            .catch(() => {});
-        return () => {
-            active = false;
-        };
-    }, []);
-
-    useEffect(() => {
-        const handleFocus = () => {
-            loadOrganizations();
-        };
-        const handleVisibility = () => {
-            if (document.visibilityState === 'visible') {
-                loadOrganizations();
-            }
-        };
-
-        window.addEventListener('focus', handleFocus);
-        document.addEventListener('visibilitychange', handleVisibility);
-        const unsubscribe = subscribeCrmSync(loadOrganizations);
-
-        return () => {
-            window.removeEventListener('focus', handleFocus);
-            document.removeEventListener('visibilitychange', handleVisibility);
-            unsubscribe();
-        };
-    }, [loadOrganizations]);
 
     // ── Filter & Search Logic ─────────────────────────────────────────────────
     const filteredOrganizations = useMemo(() => {
@@ -384,14 +344,21 @@ export function OrganizationsMasterView() {
 
         if (action === 'delete') {
             const count = selectedIds.size;
-            await organizationService.deleteBulk(Array.from(selectedIds));
-            setOrganizations(organizationService.getAllSync());
-            setSelectedIds(new Set());
-            setToast({ open: true, message: `${count} organizations deleted.`, severity: 'success' });
+            if (!window.confirm(`Delete ${count} selected organization(s)?`)) return;
+            try {
+                await bulkDeleteMutation.mutateAsync(Array.from(selectedIds));
+                if (drawerOrgId && selectedIds.has(drawerOrgId)) {
+                    closeThreePanelView();
+                }
+                setSelectedIds(new Set());
+                setToast({ open: true, message: `${count} organizations deleted.`, severity: 'success' });
+            } catch {
+                setToast({ open: true, message: 'Failed to delete organizations.', severity: 'error' });
+            }
         } else if (action === 'active' || action === 'inactive') {
             const status = action === 'active' ? 'Active' : 'Inactive';
-            const nextOrgs = organizationService.updateStatusBulk(selectedIds, status);
-            setOrganizations(nextOrgs);
+            // Saves through the service, whose sync notification refreshes the organizations cache.
+            organizationService.updateStatusBulk(selectedIds, status);
             setToast({ open: true, message: `${selectedIds.size} organizations updated to ${status}.`, severity: 'success' });
         } else if (action === 'export') {
             handleExport(true);
@@ -461,7 +428,7 @@ export function OrganizationsMasterView() {
                         <Box>
                             <RecordLink
                                 href={ROUTES.ORGANIZATION_DETAIL(org.id)}
-                                onOpen={() => setSelectedDrawerOrg(org)}
+                                onOpen={() => setDrawerOrgId(org.id)}
                                 sx={{
                                     fontSize: '0.82rem',
                                     fontWeight: 700,
@@ -655,6 +622,14 @@ export function OrganizationsMasterView() {
 
     const headerActions = (
         <MasterHeaderActions
+            onRefresh={async () => {
+                const { isError } = await refetch();
+                setToast(
+                    isError
+                        ? { open: true, message: 'Failed to refresh organizations.', severity: 'error' }
+                        : { open: true, message: 'Organizations refreshed.', severity: 'info' }
+                );
+            }}
             onNewClick={() => router.push(ROUTES.ORGANIZATION_NEW)}
             newButtonLabel="New Organization"
             onImportClick={() => setImportOpen(true)}
@@ -737,7 +712,7 @@ export function OrganizationsMasterView() {
                     setToast({ open: true, message: 'This organization is inactive. Only an Admin can edit it.', severity: 'info' });
                 }
             }}
-            onRowClick={(org) => setSelectedDrawerOrg(org)}
+            onRowClick={(org) => setDrawerOrgId(org.id)}
             activeRowId={selectedDrawerOrg?.id}
             viewTooltip="View Details"
             editTooltip="Edit Organization"
@@ -812,7 +787,6 @@ export function OrganizationsMasterView() {
                 entity="organizations"
                 onClose={() => setImportOpen(false)}
                 onImported={(count) => {
-                    loadOrganizations();
                     setToast({ open: true, message: `Successfully imported ${count} organization${count === 1 ? '' : 's'}!`, severity: 'success' });
                 }}
             />

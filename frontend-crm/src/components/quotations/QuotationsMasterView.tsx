@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { Box, Chip, Typography } from '@mui/material';
 import RequestQuoteOutlinedIcon from '@mui/icons-material/RequestQuoteOutlined';
@@ -22,7 +22,8 @@ import type { DataTableColumn, DataTableFilterItem } from '../common/DataTable';
 import { ROUTES } from '@/config/constants';
 import { getRelatedModulesForEntity } from '@/config/relatedModules.config';
 import type { Quotation } from '@/types/quotation.types';
-import { quotationService, subscribeCrmSync } from '@/services';
+import { useCrmDataVersion } from '@/services';
+import { useQuotations, useDeleteQuotation, useBulkDeleteQuotations } from '@/hooks/queries';
 import { QuotationDetailDrawer } from './QuotationDetailDrawer';
 
 export type QuotationFilterTab = 'all' | 'draft' | 'sent' | 'accepted' | 'rejected';
@@ -38,7 +39,10 @@ const formatCurrency = (val: number = 0) =>
 export function QuotationsMasterView() {
     const router = useRouter();
 
-    const [quotations, setQuotations] = useState<Quotation[]>([]);
+    const { data: quotations, refetch } = useQuotations();
+    const deleteMutation = useDeleteQuotation();
+    const bulkDeleteMutation = useBulkDeleteQuotations();
+    const crmDataVersion = useCrmDataVersion();
     const [activeTab, setActiveTab] = useState<QuotationFilterTab>('all');
     const [searchQuery, setSearchQuery] = useState('');
     const [selectedIds, setSelectedIds] = useState<string[]>([]);
@@ -46,7 +50,12 @@ export function QuotationsMasterView() {
     const [rowsPerPage, setRowsPerPage] = useState(10);
     const [sortField, setSortField] = useState<QuotationSortField>('quotationCode');
     const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
-    const [selectedDrawerQuotation, setSelectedDrawerQuotation] = useState<Quotation | null>(null);
+    // Tracked by id so the drawer always shows the cached copy and closes if the quotation is deleted.
+    const [drawerQuotationId, setDrawerQuotationId] = useState<string | null>(null);
+    const selectedDrawerQuotation = useMemo(
+        () => (drawerQuotationId ? quotations.find((q) => q.id === drawerQuotationId) ?? null : null),
+        [quotations, drawerQuotationId]
+    );
     const [activeRelatedModule, setActiveRelatedModule] = useState<string | null>(null);
     const [secondaryDrawerEntity, setSecondaryDrawerEntity] = useState<SecondaryDrawerEntity | null>(null);
     const [isLeftSidebarCollapsed, setIsLeftSidebarCollapsed] = useState<boolean>(false);
@@ -60,18 +69,9 @@ export function QuotationsMasterView() {
         severity: 'success',
     });
 
-    const loadQuotations = useCallback(() => {
-        const data = quotationService.getAllSync();
-        setQuotations(data);
-        setSelectedDrawerQuotation((prev) => {
-            if (!prev) return null;
-            return data.find((q) => q.id === prev.id) || null;
-        });
-    }, []);
-
     const closeThreePanelView = useCallback(() => {
         setSecondaryDrawerEntity(null);
-        setSelectedDrawerQuotation(null);
+        setDrawerQuotationId(null);
         setActiveRelatedModule(null);
     }, []);
 
@@ -80,76 +80,41 @@ export function QuotationsMasterView() {
         const label = quote?.quotationCode ? `"${quote.quotationCode}"` : 'this quotation';
         if (!window.confirm(`Are you sure you want to delete ${label}?`)) return;
 
-        await quotationService.delete(id);
-        loadQuotations();
-        if (selectedDrawerQuotation?.id === id) {
-            closeThreePanelView();
+        try {
+            await deleteMutation.mutateAsync(id);
+            if (drawerQuotationId === id) {
+                closeThreePanelView();
+            }
+            setToast({
+                open: true,
+                message: 'Quotation deleted successfully.',
+                severity: 'success',
+            });
+        } catch {
+            setToast({ open: true, message: 'Failed to delete quotation.', severity: 'error' });
         }
-        setToast({
-            open: true,
-            message: 'Quotation deleted successfully.',
-            severity: 'success',
-        });
     };
 
     const handleBulkDelete = async () => {
-        if (selectedIds.length === 0) return;
-        if (!window.confirm(`Are you sure you want to delete ${selectedIds.length} selected quotation(s)?`)) return;
+        const count = selectedIds.length;
+        if (count === 0) return;
+        if (!window.confirm(`Are you sure you want to delete ${count} selected quotation(s)?`)) return;
 
-        await quotationService.deleteBulk(selectedIds);
-        setSelectedIds([]);
-        loadQuotations();
-        if (selectedDrawerQuotation && selectedIds.includes(selectedDrawerQuotation.id)) {
-            closeThreePanelView();
-        }
-        setToast({
-            open: true,
-            message: `${selectedIds.length} quotation(s) deleted successfully.`,
-            severity: 'success',
-        });
-    };
-
-    useEffect(() => {
-        let active = true;
-        quotationService
-            .getAll()
-            .then((data) => {
-                if (active) {
-                    setQuotations(data);
-                    setSelectedDrawerQuotation((prev) => {
-                        if (!prev) return null;
-                        return data.find((q) => q.id === prev.id) || null;
-                    });
-                }
-            })
-            .catch(() => {
-                loadQuotations();
-            });
-        return () => {
-            active = false;
-        };
-    }, [loadQuotations]);
-
-    useEffect(() => {
-        const handleFocus = () => {
-            loadQuotations();
-        };
-        const handleVisibility = () => {
-            if (document.visibilityState === 'visible') {
-                loadQuotations();
+        try {
+            await bulkDeleteMutation.mutateAsync(selectedIds);
+            if (drawerQuotationId && selectedIds.includes(drawerQuotationId)) {
+                closeThreePanelView();
             }
-        };
-
-        window.addEventListener('focus', handleFocus);
-        document.addEventListener('visibilitychange', handleVisibility);
-        const unsubscribe = subscribeCrmSync(loadQuotations);
-
-        return () => {
-            window.removeEventListener('focus', handleFocus);
-            document.removeEventListener('visibilitychange', handleVisibility);
-            unsubscribe();
-        };
-    }, [loadQuotations]);
+            setSelectedIds([]);
+            setToast({
+                open: true,
+                message: `${count} quotation(s) deleted successfully.`,
+                severity: 'success',
+            });
+        } catch {
+            setToast({ open: true, message: 'Failed to delete quotations.', severity: 'error' });
+        }
+    };
 
     // ── Filter Tabs Configuration ─────────────────────────────────────────────
     const filterItems: DataTableFilterItem<QuotationFilterTab>[] = useMemo(() => {
@@ -280,7 +245,7 @@ export function QuotationsMasterView() {
                 render: (row) => (
                     <RecordLink
                         href={ROUTES.QUOTATION_DETAIL(row.id)}
-                        onOpen={() => setSelectedDrawerQuotation(row)}
+                        onOpen={() => setDrawerQuotationId(row.id)}
                         sx={{
                             fontSize: '0.82rem',
                             fontWeight: 700,
@@ -444,10 +409,11 @@ export function QuotationsMasterView() {
     };
 
     const relatedModules = useMemo(() => {
-        void quotations;
+        // Related counts come from other entities' stores; recompute whenever any of them changes.
+        void crmDataVersion;
         if (!selectedDrawerQuotation) return [];
         return getRelatedModulesForEntity('quotation', selectedDrawerQuotation, setActiveRelatedModule);
-    }, [selectedDrawerQuotation, quotations]);
+    }, [selectedDrawerQuotation, crmDataVersion]);
 
     // Falls back to the first module until the user explicitly picks one.
     const effectiveRelatedModule = activeRelatedModule ?? relatedModules[0]?.id ?? null;
@@ -471,9 +437,13 @@ export function QuotationsMasterView() {
             tableId="quotations"
             headerActions={() => (
                 <MasterHeaderActions
-                    onRefresh={() => {
-                        loadQuotations();
-                        setToast({ open: true, message: 'Quotations refreshed.', severity: 'info' });
+                    onRefresh={async () => {
+                        const { isError } = await refetch();
+                        setToast(
+                            isError
+                                ? { open: true, message: 'Failed to refresh quotations.', severity: 'error' }
+                                : { open: true, message: 'Quotations refreshed.', severity: 'info' }
+                        );
                     }}
                 />
             )}
@@ -513,10 +483,10 @@ export function QuotationsMasterView() {
             sortField={sortField}
             sortOrder={sortOrder}
             onSort={handleSort}
-            onView={(quote) => setSelectedDrawerQuotation(quote)}
+            onView={(quote) => setDrawerQuotationId(quote.id)}
             getEditHref={(quote) => ROUTES.QUOTATION_EDIT(quote.id)}
             onDelete={(quote) => handleDelete(quote.id)}
-            onRowClick={(quote) => setSelectedDrawerQuotation(quote)}
+            onRowClick={(quote) => setDrawerQuotationId(quote.id)}
             activeRowId={selectedDrawerQuotation?.id}
             viewTooltip="View Quotation Details"
             editTooltip="Edit Quotation"

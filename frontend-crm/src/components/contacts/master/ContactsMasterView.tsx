@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { Box, Chip, Typography } from '@mui/material';
 import PersonOutlinedIcon from '@mui/icons-material/PersonOutlined';
@@ -21,7 +21,8 @@ import { RelatedSecondaryDrawer, type SecondaryDrawerEntity } from '../../common
 import type { DataTableColumn, DataTableFilterItem } from '../../common/DataTable';
 import { ROUTES } from '../../../config/constants';
 import { getRelatedModulesForEntity } from '@/config/relatedModules.config';
-import { contactService, subscribeCrmSync } from '@/services';
+import { useCrmDataVersion } from '@/services';
+import { useContacts, useBulkDeleteContacts } from '@/hooks/queries';
 import type { Contact } from '../../../types/contact.types';
 import type { ContactFilterTab } from './types';
 import { ContactDetailDrawer } from '../ContactDetailDrawer';
@@ -29,7 +30,9 @@ import { ContactDetailDrawer } from '../ContactDetailDrawer';
 export function ContactsMasterView() {
     const router = useRouter();
 
-    const [contacts, setContacts] = useState<Contact[]>([]);
+    const { data: contacts, refetch } = useContacts();
+    const bulkDeleteMutation = useBulkDeleteContacts();
+    const crmDataVersion = useCrmDataVersion();
     const [activeTab, setActiveTab] = useState<ContactFilterTab>('all');
     const [searchQuery, setSearchQuery] = useState('');
     const [selectedIds, setSelectedIds] = useState<string[]>([]);
@@ -37,7 +40,12 @@ export function ContactsMasterView() {
     const [rowsPerPage, setRowsPerPage] = useState(10);
     const [sortField, setSortField] = useState<string>('name');
     const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
-    const [selectedDrawerContact, setSelectedDrawerContact] = useState<Contact | null>(null);
+    // Tracked by id so the drawer always shows the cached copy and closes if the contact is deleted.
+    const [drawerContactId, setDrawerContactId] = useState<string | null>(null);
+    const selectedDrawerContact = useMemo(
+        () => (drawerContactId ? contacts.find((c) => c.id === drawerContactId) ?? null : null),
+        [contacts, drawerContactId]
+    );
     const [activeRelatedModule, setActiveRelatedModule] = useState<string | null>(null);
     const [secondaryDrawerEntity, setSecondaryDrawerEntity] = useState<SecondaryDrawerEntity | null>(null);
     const [isLeftSidebarCollapsed, setIsLeftSidebarCollapsed] = useState<boolean>(false);
@@ -51,57 +59,7 @@ export function ContactsMasterView() {
         severity: 'success',
     });
 
-    // ── Load Contacts via Service Layer ─────────────────────────────────────
     const [importOpen, setImportOpen] = useState(false);
-
-    const loadContacts = useCallback(() => {
-        const data = contactService.getAllSync();
-        setContacts(data);
-        setSelectedDrawerContact((prev) => {
-            if (!prev) return null;
-            return data.find((c) => c.id === prev.id) || null;
-        });
-    }, []);
-
-    useEffect(() => {
-        let active = true;
-        contactService
-            .getAll()
-            .then((data) => {
-                if (active) {
-                    setContacts(data);
-                    setSelectedDrawerContact((prev) => {
-                        if (!prev) return null;
-                        return data.find((c) => c.id === prev.id) || null;
-                    });
-                }
-            })
-            .catch(() => {});
-        return () => {
-            active = false;
-        };
-    }, []);
-
-    useEffect(() => {
-        const handleFocus = () => {
-            loadContacts();
-        };
-        const handleVisibility = () => {
-            if (document.visibilityState === 'visible') {
-                loadContacts();
-            }
-        };
-
-        window.addEventListener('focus', handleFocus);
-        document.addEventListener('visibilitychange', handleVisibility);
-        const unsubscribe = subscribeCrmSync(loadContacts);
-
-        return () => {
-            window.removeEventListener('focus', handleFocus);
-            document.removeEventListener('visibilitychange', handleVisibility);
-            unsubscribe();
-        };
-    }, [loadContacts]);
 
     // ── Filter Tabs Configuration ────────────────────────────────────────────
     const filterItems: DataTableFilterItem<ContactFilterTab>[] = useMemo(() => {
@@ -219,14 +177,17 @@ export function ContactsMasterView() {
     const handleBulkDelete = async () => {
         if (!window.confirm(`Delete ${selectedIds.length} selected contact(s)?`)) return;
         const count = selectedIds.length;
-        await contactService.deleteBulk(selectedIds);
-        loadContacts();
-        setSelectedIds([]);
-        setToast({
-            open: true,
-            message: `${count} contact(s) deleted successfully.`,
-            severity: 'success',
-        });
+        try {
+            await bulkDeleteMutation.mutateAsync(selectedIds);
+            setSelectedIds([]);
+            setToast({
+                open: true,
+                message: `${count} contact(s) deleted successfully.`,
+                severity: 'success',
+            });
+        } catch {
+            setToast({ open: true, message: 'Failed to delete contacts.', severity: 'error' });
+        }
     };
 
     // ── Declarative Column Definitions ──────────────────────────────────────
@@ -242,7 +203,7 @@ export function ContactsMasterView() {
                         <PersonOutlinedIcon sx={{ fontSize: 16, color: '#2563eb' }} />
                         <RecordLink
                             href={ROUTES.CONTACT_DETAIL(c.id)}
-                            onOpen={() => setSelectedDrawerContact(c)}
+                            onOpen={() => setDrawerContactId(c.id)}
                             sx={{
                                 fontWeight: 700,
                                 color: '#1d4ed8',
@@ -339,10 +300,11 @@ export function ContactsMasterView() {
     );
 
     const relatedModules = useMemo(() => {
-        void contacts;
+        // Related counts come from other entities' stores; recompute whenever any of them changes.
+        void crmDataVersion;
         if (!selectedDrawerContact) return [];
         return getRelatedModulesForEntity('contact', selectedDrawerContact, setActiveRelatedModule);
-    }, [selectedDrawerContact, contacts]);
+    }, [selectedDrawerContact, crmDataVersion]);
 
     // Falls back to the first module until the user explicitly picks one.
     const effectiveRelatedModule = activeRelatedModule ?? relatedModules[0]?.id ?? null;
@@ -351,7 +313,7 @@ export function ContactsMasterView() {
     // Dismisses the three-panel view and returns to the clean master table.
     const closeThreePanelView = useCallback(() => {
         setSecondaryDrawerEntity(null);
-        setSelectedDrawerContact(null);
+        setDrawerContactId(null);
         setActiveRelatedModule(null);
     }, []);
 
@@ -368,9 +330,13 @@ export function ContactsMasterView() {
             tableId="contacts"
             headerActions={() => (
                 <MasterHeaderActions
-                    onRefresh={() => {
-                        loadContacts();
-                        setToast({ open: true, message: 'Contacts refreshed.', severity: 'info' });
+                    onRefresh={async () => {
+                        const { isError } = await refetch();
+                        setToast(
+                            isError
+                                ? { open: true, message: 'Failed to refresh contacts.', severity: 'error' }
+                                : { open: true, message: 'Contacts refreshed.', severity: 'info' }
+                        );
                     }}
                     onNewClick={() => router.push(ROUTES.CONTACT_NEW)}
                     newButtonLabel="New Contact"
@@ -405,7 +371,7 @@ export function ContactsMasterView() {
             onSort={handleSort}
             onView={(c) => router.push(ROUTES.CONTACT_DETAIL(c.id))}
             getEditHref={(c) => ROUTES.CONTACT_EDIT(c.id)}
-            onRowClick={(c) => setSelectedDrawerContact(c)}
+            onRowClick={(c) => setDrawerContactId(c.id)}
             activeRowId={selectedDrawerContact?.id}
             viewTooltip="View Contact"
             editTooltip="Edit Contact"
@@ -482,7 +448,6 @@ export function ContactsMasterView() {
                 entity="contacts"
                 onClose={() => setImportOpen(false)}
                 onImported={(count) => {
-                    loadContacts();
                     setToast({ open: true, message: `Successfully imported ${count} contact${count === 1 ? '' : 's'}!`, severity: 'success' });
                 }}
             />

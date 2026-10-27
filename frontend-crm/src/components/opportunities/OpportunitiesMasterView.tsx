@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { Box, Chip, Typography } from '@mui/material';
 import TrendingUpOutlinedIcon from '@mui/icons-material/TrendingUpOutlined';
@@ -23,8 +23,8 @@ import type { DataTableColumn, DataTableFilterItem } from '../common/DataTable';
 import { ROUTES } from '../../config/constants';
 import { getRelatedModulesForEntity } from '@/config/relatedModules.config';
 import type { Opportunity } from '../../types/opportunity.types';
-import { opportunityService } from '../../services/opportunity.service';
-import { subscribeCrmSync } from '@/services';
+import { useCrmDataVersion } from '@/services';
+import { useOpportunities, useBulkDeleteOpportunities } from '@/hooks/queries';
 import type { OpportunityFilterTab, OpportunitySortField } from './master';
 import { OpportunityDetailDrawer } from './OpportunityDetailDrawer';
 
@@ -38,7 +38,9 @@ const formatCurrency = (val: number) =>
 export function OpportunitiesMasterView() {
     const router = useRouter();
 
-    const [opportunities, setOpportunities] = useState<Opportunity[]>([]);
+    const { data: opportunities, refetch } = useOpportunities();
+    const bulkDeleteMutation = useBulkDeleteOpportunities();
+    const crmDataVersion = useCrmDataVersion();
     const [activeTab, setActiveTab] = useState<OpportunityFilterTab>('all');
     const [searchQuery, setSearchQuery] = useState('');
     const [selectedIds, setSelectedIds] = useState<string[]>([]);
@@ -46,7 +48,12 @@ export function OpportunitiesMasterView() {
     const [rowsPerPage, setRowsPerPage] = useState(10);
     const [sortField, setSortField] = useState<OpportunitySortField>('createdAt');
     const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
-    const [selectedDrawerOpp, setSelectedDrawerOpp] = useState<Opportunity | null>(null);
+    // Tracked by id so the drawer always shows the cached copy and closes if the deal is deleted.
+    const [drawerOppId, setDrawerOppId] = useState<string | null>(null);
+    const selectedDrawerOpp = useMemo(
+        () => (drawerOppId ? opportunities.find((o) => o.id === drawerOppId) ?? null : null),
+        [opportunities, drawerOppId]
+    );
     const [activeRelatedModule, setActiveRelatedModule] = useState<string | null>(null);
     const [secondaryDrawerEntity, setSecondaryDrawerEntity] = useState<SecondaryDrawerEntity | null>(null);
     const [isLeftSidebarCollapsed, setIsLeftSidebarCollapsed] = useState<boolean>(false);
@@ -61,55 +68,6 @@ export function OpportunitiesMasterView() {
     });
 
     const todayStr = useMemo(() => new Date().toISOString().split('T')[0], []);
-
-    const loadOpportunities = useCallback(() => {
-        const data = opportunityService.getAllOpportunities();
-        setOpportunities(data);
-        setSelectedDrawerOpp((prev) => {
-            if (!prev) return null;
-            return data.find((o) => o.id === prev.id) || null;
-        });
-    }, []);
-
-    useEffect(() => {
-        let active = true;
-        opportunityService
-            .getAll()
-            .then((data) => {
-                if (active) {
-                    setOpportunities(data);
-                    setSelectedDrawerOpp((prev) => {
-                        if (!prev) return null;
-                        return data.find((o) => o.id === prev.id) || null;
-                    });
-                }
-            })
-            .catch(() => {});
-        return () => {
-            active = false;
-        };
-    }, []);
-
-    useEffect(() => {
-        const handleFocus = () => {
-            loadOpportunities();
-        };
-        const handleVisibility = () => {
-            if (document.visibilityState === 'visible') {
-                loadOpportunities();
-            }
-        };
-
-        window.addEventListener('focus', handleFocus);
-        document.addEventListener('visibilitychange', handleVisibility);
-        const unsubscribe = subscribeCrmSync(loadOpportunities);
-
-        return () => {
-            window.removeEventListener('focus', handleFocus);
-            document.removeEventListener('visibilitychange', handleVisibility);
-            unsubscribe();
-        };
-    }, [loadOpportunities]);
 
     // ── Filter Tabs Configuration ─────────────────────────────────────────────
     const filterItems: DataTableFilterItem<OpportunityFilterTab>[] = useMemo(() => {
@@ -271,21 +229,22 @@ export function OpportunitiesMasterView() {
     );
 
     const handleBulkDelete = async () => {
+        const count = selectedIds.length;
+        if (count === 0) return;
         if (
             confirm(
-                `Are you sure you want to delete ${selectedIds.length} selected opportunities?`
+                `Are you sure you want to delete ${count} selected opportunities?`
             )
         ) {
             try {
-                await opportunityService.bulkDeleteOpportunities(selectedIds);
-                if (selectedDrawerOpp && selectedIds.includes(selectedDrawerOpp.id)) {
+                await bulkDeleteMutation.mutateAsync(selectedIds);
+                if (drawerOppId && selectedIds.includes(drawerOppId)) {
                     closeThreePanelView();
                 }
                 setSelectedIds([]);
-                loadOpportunities();
                 setToast({
                     open: true,
-                    message: `${selectedIds.length} opportunities deleted successfully.`,
+                    message: `${count} opportunities deleted successfully.`,
                     severity: 'success',
                 });
             } catch {
@@ -312,7 +271,7 @@ export function OpportunitiesMasterView() {
                             <TrendingUpOutlinedIcon sx={{ fontSize: 16, color: '#2563eb', flexShrink: 0 }} />
                             <RecordLink
                                 href={ROUTES.OPPORTUNITY_DETAIL(o.id)}
-                                onOpen={() => setSelectedDrawerOpp(o)}
+                                onOpen={() => setDrawerOppId(o.id)}
                                 sx={{
                                     fontWeight: 700,
                                     color: '#1d4ed8',
@@ -540,10 +499,11 @@ export function OpportunitiesMasterView() {
     );
 
     const relatedModules = useMemo(() => {
-        void opportunities;
+        // Related counts come from other entities' stores; recompute whenever any of them changes.
+        void crmDataVersion;
         if (!selectedDrawerOpp) return [];
         return getRelatedModulesForEntity('opportunity', selectedDrawerOpp, setActiveRelatedModule);
-    }, [selectedDrawerOpp, opportunities]);
+    }, [selectedDrawerOpp, crmDataVersion]);
 
     // Falls back to the first module until the user explicitly picks one.
     const effectiveRelatedModule = activeRelatedModule ?? relatedModules[0]?.id ?? null;
@@ -552,7 +512,7 @@ export function OpportunitiesMasterView() {
     // Dismisses the three-panel view and returns to the clean master table.
     const closeThreePanelView = useCallback(() => {
         setSecondaryDrawerEntity(null);
-        setSelectedDrawerOpp(null);
+        setDrawerOppId(null);
         setActiveRelatedModule(null);
     }, []);
 
@@ -569,9 +529,13 @@ export function OpportunitiesMasterView() {
             tableId="opportunities"
             headerActions={() => (
                 <MasterHeaderActions
-                    onRefresh={() => {
-                        loadOpportunities();
-                        setToast({ open: true, message: 'Opportunities refreshed.', severity: 'info' });
+                    onRefresh={async () => {
+                        const { isError } = await refetch();
+                        setToast(
+                            isError
+                                ? { open: true, message: 'Failed to refresh opportunities.', severity: 'error' }
+                                : { open: true, message: 'Opportunities refreshed.', severity: 'info' }
+                        );
                     }}
                     onNewClick={() => router.push(ROUTES.OPPORTUNITY_NEW)}
                     newButtonLabel="New Opportunity"
@@ -603,9 +567,9 @@ export function OpportunitiesMasterView() {
             sortField={sortField}
             sortOrder={sortOrder}
             onSort={(f) => handleSort(f as OpportunitySortField)}
-            onView={(o) => setSelectedDrawerOpp(o)}
+            onView={(o) => setDrawerOppId(o.id)}
             getEditHref={(o) => ROUTES.OPPORTUNITY_EDIT(o.id)}
-            onRowClick={(opp) => setSelectedDrawerOpp(opp)}
+            onRowClick={(opp) => setDrawerOppId(opp.id)}
             activeRowId={selectedDrawerOpp?.id}
             viewTooltip="View Deal Details"
             editTooltip="Edit Opportunity"

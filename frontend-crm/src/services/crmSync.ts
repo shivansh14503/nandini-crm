@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useSyncExternalStore } from 'react';
 
 /**
  * Global CRM Synchronization Service & Hooks
@@ -126,12 +126,56 @@ export function subscribeCrmSync(onSync: () => void, debounceMs = 50): () => voi
 }
 
 /**
+ * Subscribes to CRM update notifications with their detail: local `notifyCrmUpdate` calls in this tab
+ * and BroadcastChannel messages from other tabs (a channel never receives its own posts, so each
+ * update arrives exactly once).
+ */
+export function subscribeCrmUpdates(onUpdate: (detail: CrmSyncEventDetail) => void): () => void {
+    if (typeof window === 'undefined') {
+        return () => {};
+    }
+
+    const handleLocal = (event: Event) => {
+        onUpdate((event as CustomEvent<CrmSyncEventDetail>).detail ?? { timestamp: Date.now() });
+    };
+    const handleRemote = (event: MessageEvent<CrmSyncEventDetail>) => {
+        onUpdate(event.data ?? { timestamp: Date.now() });
+    };
+
+    window.addEventListener(CRM_SYNC_EVENT, handleLocal);
+    syncChannel?.addEventListener('message', handleRemote);
+
+    return () => {
+        window.removeEventListener(CRM_SYNC_EVENT, handleLocal);
+        syncChannel?.removeEventListener('message', handleRemote);
+    };
+}
+
+let crmDataVersion = 0;
+
+const subscribeCrmDataVersion = (onChange: () => void) =>
+    subscribeCrmUpdates(() => {
+        crmDataVersion += 1;
+        onChange();
+    });
+
+/**
+ * Counter that changes whenever any CRM entity is updated (this tab or another). Use it as a memo
+ * dependency for values derived from several entities at once, such as related-module counts.
+ */
+export function useCrmDataVersion(): number {
+    return useSyncExternalStore(subscribeCrmDataVersion, () => crmDataVersion, () => 0);
+}
+
+/**
  * React hook that triggers a re-fetch or re-evaluation whenever the browser
  * gains focus, the tab becomes visible, or any CRM entity is updated.
  */
 export function useCrmSync(callback: () => void, deps: React.DependencyList = []): void {
     const callbackRef = useRef(callback);
-    callbackRef.current = callback;
+    useEffect(() => {
+        callbackRef.current = callback;
+    });
 
     useEffect(() => {
         const unsubscribe = subscribeCrmSync(() => {

@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { Box, Chip, Typography } from '@mui/material';
 import GroupOutlinedIcon from '@mui/icons-material/GroupOutlined';
@@ -26,14 +26,17 @@ import type { DataTableColumn, DataTableFilterItem } from '../common/DataTable';
 import { ROUTES } from '../../config/constants';
 import { getRelatedModulesForEntity } from '@/config/relatedModules.config';
 import type { Lead } from '../../types/lead.types';
-import { leadService, subscribeCrmSync } from '@/services';
+import { useCrmDataVersion } from '@/services';
+import { useLeads, useBulkDeleteLeads } from '@/hooks/queries';
 import type { LeadFilterTab } from './master';
 import { LeadDetailDrawer } from './LeadDetailDrawer';
 
 export function LeadsMasterView() {
     const router = useRouter();
 
-    const [leads, setLeads] = useState<Lead[]>([]);
+    const { data: leads, refetch } = useLeads();
+    const bulkDeleteMutation = useBulkDeleteLeads();
+    const crmDataVersion = useCrmDataVersion();
     const [activeTab, setActiveTab] = useState<LeadFilterTab>('all');
     const [searchQuery, setSearchQuery] = useState('');
     const [selectedIds, setSelectedIds] = useState<string[]>([]);
@@ -41,7 +44,12 @@ export function LeadsMasterView() {
     const [rowsPerPage, setRowsPerPage] = useState(10);
     const [sortField, setSortField] = useState<string>('name');
     const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
-    const [selectedDrawerLead, setSelectedDrawerLead] = useState<Lead | null>(null);
+    // Tracked by id so the drawer always shows the cached copy and closes if the lead is deleted.
+    const [drawerLeadId, setDrawerLeadId] = useState<string | null>(null);
+    const selectedDrawerLead = useMemo(
+        () => (drawerLeadId ? leads.find((l) => l.id === drawerLeadId) ?? null : null),
+        [leads, drawerLeadId]
+    );
     const [activeRelatedModule, setActiveRelatedModule] = useState<string | null>(null);
     const [secondaryDrawerEntity, setSecondaryDrawerEntity] = useState<SecondaryDrawerEntity | null>(null);
     const [isLeftSidebarCollapsed, setIsLeftSidebarCollapsed] = useState<boolean>(false);
@@ -58,55 +66,6 @@ export function LeadsMasterView() {
     const todayStr = useMemo(() => new Date().toISOString().split('T')[0], []);
 
     const [importOpen, setImportOpen] = useState(false);
-
-    const loadLeads = useCallback(() => {
-        const data = leadService.getAllSync();
-        setLeads(data);
-        setSelectedDrawerLead((prev) => {
-            if (!prev) return null;
-            return data.find((l) => l.id === prev.id) || null;
-        });
-    }, []);
-
-    useEffect(() => {
-        let active = true;
-        leadService
-            .getAll()
-            .then((data) => {
-                if (active) {
-                    setLeads(data);
-                    setSelectedDrawerLead((prev) => {
-                        if (!prev) return null;
-                        return data.find((l) => l.id === prev.id) || null;
-                    });
-                }
-            })
-            .catch(() => {});
-        return () => {
-            active = false;
-        };
-    }, []);
-
-    useEffect(() => {
-        const handleFocus = () => {
-            loadLeads();
-        };
-        const handleVisibility = () => {
-            if (document.visibilityState === 'visible') {
-                loadLeads();
-            }
-        };
-
-        window.addEventListener('focus', handleFocus);
-        document.addEventListener('visibilitychange', handleVisibility);
-        const unsubscribe = subscribeCrmSync(loadLeads);
-
-        return () => {
-            window.removeEventListener('focus', handleFocus);
-            document.removeEventListener('visibilitychange', handleVisibility);
-            unsubscribe();
-        };
-    }, [loadLeads]);
 
     // ── Filter Tabs Configuration ─────────────────────────────────────────────
     const filterItems: DataTableFilterItem<LeadFilterTab>[] = useMemo(() => {
@@ -223,17 +182,21 @@ export function LeadsMasterView() {
     };
 
     const handleBulkDelete = async () => {
-        if (selectedIds.length === 0) return;
-        if (!confirm(`Are you sure you want to delete ${selectedIds.length} selected lead(s)?`)) return;
+        const count = selectedIds.length;
+        if (count === 0) return;
+        if (!confirm(`Are you sure you want to delete ${count} selected lead(s)?`)) return;
 
-        await leadService.deleteBulk(selectedIds);
-        setSelectedIds([]);
-        loadLeads();
-        setToast({
-            open: true,
-            message: `${selectedIds.length} lead(s) deleted successfully.`,
-            severity: 'success',
-        });
+        try {
+            await bulkDeleteMutation.mutateAsync(selectedIds);
+            setSelectedIds([]);
+            setToast({
+                open: true,
+                message: `${count} lead(s) deleted successfully.`,
+                severity: 'success',
+            });
+        } catch {
+            setToast({ open: true, message: 'Failed to delete leads.', severity: 'error' });
+        }
     };
 
     // ── Declarative Column Definitions ────────────────────────────────────────
@@ -250,7 +213,7 @@ export function LeadsMasterView() {
                             <PersonOutlinedIcon sx={{ fontSize: 16, color: '#2563eb', flexShrink: 0 }} />
                             <RecordLink
                                 href={ROUTES.LEAD_DETAIL(l.id)}
-                                onOpen={() => setSelectedDrawerLead(l)}
+                                onOpen={() => setDrawerLeadId(l.id)}
                                 sx={{
                                     fontWeight: 700,
                                     color: '#1d4ed8',
@@ -507,10 +470,11 @@ export function LeadsMasterView() {
     );
 
     const relatedModules = useMemo(() => {
-        void leads;
+        // Related counts come from other entities' stores; recompute whenever any of them changes.
+        void crmDataVersion;
         if (!selectedDrawerLead) return [];
         return getRelatedModulesForEntity('lead', selectedDrawerLead, setActiveRelatedModule);
-    }, [selectedDrawerLead, leads]);
+    }, [selectedDrawerLead, crmDataVersion]);
 
     // Falls back to the first module until the user explicitly picks one.
     const effectiveRelatedModule = activeRelatedModule ?? relatedModules[0]?.id ?? null;
@@ -519,7 +483,7 @@ export function LeadsMasterView() {
     // Dismisses the three-panel view and returns to the clean master table.
     const closeThreePanelView = useCallback(() => {
         setSecondaryDrawerEntity(null);
-        setSelectedDrawerLead(null);
+        setDrawerLeadId(null);
         setActiveRelatedModule(null);
     }, []);
 
@@ -540,9 +504,13 @@ export function LeadsMasterView() {
             tableId="leads"
             headerActions={() => (
                 <MasterHeaderActions
-                    onRefresh={() => {
-                        loadLeads();
-                        setToast({ open: true, message: 'Leads refreshed.', severity: 'info' });
+                    onRefresh={async () => {
+                        const { isError } = await refetch();
+                        setToast(
+                            isError
+                                ? { open: true, message: 'Failed to refresh leads.', severity: 'error' }
+                                : { open: true, message: 'Leads refreshed.', severity: 'info' }
+                        );
                     }}
                     onNewClick={() => router.push(ROUTES.LEAD_NEW)}
                     newButtonLabel="New Lead"
@@ -575,9 +543,9 @@ export function LeadsMasterView() {
             sortField={sortField}
             sortOrder={sortOrder}
             onSort={handleSort}
-            onView={(l) => setSelectedDrawerLead(l)}
+            onView={(l) => setDrawerLeadId(l.id)}
             getEditHref={(l) => ROUTES.LEAD_EDIT(l.id)}
-            onRowClick={(lead) => setSelectedDrawerLead(lead)}
+            onRowClick={(lead) => setDrawerLeadId(lead.id)}
             activeRowId={selectedDrawerLead?.id}
             viewTooltip="View Lead Details"
             editTooltip="Edit Lead"
@@ -628,10 +596,6 @@ export function LeadsMasterView() {
                     open={Boolean(selectedDrawerLead)}
                     onClose={closeThreePanelView}
                     onEdit={(id) => router.push(ROUTES.LEAD_EDIT(id))}
-                    onLeadUpdated={(updatedLead) => {
-                        setSelectedDrawerLead(updatedLead);
-                        loadLeads();
-                    }}
                     onShowToast={(message, severity = 'success') => {
                         setToast({ open: true, message, severity });
                     }}
@@ -662,7 +626,6 @@ export function LeadsMasterView() {
                 entity="leads"
                 onClose={() => setImportOpen(false)}
                 onImported={(count) => {
-                    loadLeads();
                     setToast({ open: true, message: `Successfully imported ${count} lead${count === 1 ? '' : 's'}!`, severity: 'success' });
                 }}
             />
