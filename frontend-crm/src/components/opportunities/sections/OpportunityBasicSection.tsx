@@ -1,6 +1,6 @@
 'use client';
 
-import React from 'react';
+import React, { useState } from 'react';
 import {
     Box,
     TextField,
@@ -27,6 +27,7 @@ import {
     RhfPhoneField,
     RhfEmailField,
 } from '@/components/forms';
+import { UserLookupModal } from '@/components/common/lookup';
 import type { OpportunityFormData } from '../../../types/opportunity.types';
 import {
     OPPORTUNITY_SALES_STAGES,
@@ -46,6 +47,8 @@ export interface OpportunityBasicSectionProps {
 }
 
 export function OpportunityBasicSection({ form, setField }: OpportunityBasicSectionProps) {
+    const [userLookupOpen, setUserLookupOpen] = useState(false);
+
     // ── Product Category Toggle Handler ─────────────────────────────────────────
     const handleToggleProduct = (product: string) => {
         const current = form.productCategory || [];
@@ -287,7 +290,14 @@ export function OpportunityBasicSection({ form, setField }: OpportunityBasicSect
                                 'deepak.joshi',
                                 'amit.tandon',
                             ]}
+                            onLookupClick={() => setUserLookupOpen(true)}
                             required
+                        />
+                        <UserLookupModal
+                            open={userLookupOpen}
+                            onClose={() => setUserLookupOpen(false)}
+                            onSelect={(user) => setField('assignedTo', user.username)}
+                            selectedValue={form.assignedTo}
                         />
                     </FormField>
                 </Box>

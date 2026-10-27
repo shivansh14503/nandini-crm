@@ -6,3 +6,5 @@ export * from './opportunity.types';
 export * from './organization.types';
 export * from './product.types';
 export * from './quotation.types';
+export * from './user.types';
+export * from './lookup.types';

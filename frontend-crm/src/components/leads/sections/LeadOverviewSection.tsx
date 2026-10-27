@@ -55,7 +55,7 @@ export function LeadOverviewSection() {
                     <RhfTextField<LeadFormData> name="addDescription" label="Add Description" required hint="Action item notes / requirement brief" multiline minRows={3} maxRows={5} placeholder="Enter specific followup requirement, client demand, or notes..." />
                     <RhfSelect<LeadFormData> name="registrationType" label="Registration Type" options={LEAD_REGISTRATION_TYPES} placeholder="Select Registration Type" />
                     <RhfSelect<LeadFormData> name="turnover" label="Turnover" hint="Annual turnover bracket" options={LEAD_TURNOVER_RANGES} placeholder="Select Annual Turnover" />
-                    <RhfLookup<LeadFormData> name="assignedTo" label="Assigned to" required hint="Default: mittal.sharma" options={LEAD_ASSIGNED_USERS} placeholder="Select Assigned Representative" />
+                    <RhfLookup<LeadFormData> name="assignedTo" label="Assigned to" lookupType="user" required hint="Default: mittal.sharma" options={LEAD_ASSIGNED_USERS} placeholder="Select Assigned Representative" />
                 </Box>
 
                 <Box sx={columnSx}>

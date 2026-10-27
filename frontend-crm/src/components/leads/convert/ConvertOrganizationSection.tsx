@@ -61,6 +61,7 @@ export function ConvertOrganizationSection() {
                         hint="Type a new name or pick an existing organization"
                         options={organizationNames}
                         placeholder="Search or enter organization..."
+                        lookupType="organization"
                     />
                     <RhfTextField<F> name="mailingName" label="Mailing Name" placeholder="Official mailing name" />
                     <RhfSelect<F> name="natureOfBusiness" label="Nature of Business" required options={NATURE_OF_BUSINESS} placeholder="Select Nature of Business" />
@@ -71,7 +72,7 @@ export function ConvertOrganizationSection() {
                     <RhfSelect<F> name="sourceOfLead" label="Source of Lead" options={ORG_LEAD_SOURCES} placeholder="Select Source of Lead" />
                     <RhfTextField<F> name="memberOf" label="Member of" placeholder="Parent corporation" />
                     <RhfTextField<F> name="organizationDescription" label="Description" multiline minRows={3} placeholder="Notes about this organization..." />
-                    <RhfLookup<F> name="organizationAssignedTo" label="Assigned to" required options={LEAD_ASSIGNED_USERS} placeholder="Select assigned representative" />
+                    <RhfLookup<F> name="organizationAssignedTo" label="Assigned to" lookupType="user" required options={LEAD_ASSIGNED_USERS} placeholder="Select assigned representative" />
                 </Grid>
             </Grid>
         </>

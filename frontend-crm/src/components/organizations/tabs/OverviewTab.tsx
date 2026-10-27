@@ -13,6 +13,7 @@ import {
     InputAdornment,
     IconButton,
     Avatar,
+    Tooltip,
 } from '@mui/material';
 import { CommonActionModal } from '@/components/common/CommonActionModal';
 
@@ -23,7 +24,6 @@ import MenuBookIcon from '@mui/icons-material/MenuBook';
 import SearchIcon from '@mui/icons-material/Search';
 import LinkOffIcon from '@mui/icons-material/LinkOff';
 import PersonOutlinedIcon from '@mui/icons-material/PersonOutlined';
-import ContactPageOutlinedIcon from '@mui/icons-material/ContactPageOutlined';
 import LockOutlinedIcon from '@mui/icons-material/LockOutlined';
 
 import { useFormContext, useWatch, FormProvider, useForm } from 'react-hook-form';
@@ -57,6 +57,19 @@ import type {
     NumberOfEmployees,
     SourceOfLead,
 } from '@/types/organization.types';
+import { OrganizationLookupModal, UserLookupModal } from '@/components/common/lookup';
+import { findCrmUser } from '@/data/mockUsers';
+
+const DEFAULT_ASSIGNED_USER = 'mittal.sharma';
+
+const initials = (name: string) =>
+    name
+        .replace(/\s*\(You\)\s*$/i, '')
+        .split(/[\s._]+/)
+        .filter(Boolean)
+        .slice(0, 2)
+        .map((p) => p[0].toUpperCase())
+        .join('');
 
 const INACTIVITY_REASONS = [
     'Client Closed Operations',
@@ -120,6 +133,11 @@ function OverviewTabInner({
     const currentAccountStatus = (useWatch({ control, name: 'accountStatus' }) ?? form?.accountStatus ?? 'Active') as AccountStatus;
     const isView = useFormMode().mode === 'view';
     const [pendingInactive, setPendingInactive] = React.useState(false);
+    const [userLookupOpen, setUserLookupOpen] = React.useState(false);
+    const [orgLookupOpen, setOrgLookupOpen] = React.useState(false);
+    // Matches the master view, which shows mittal.sharma for organizations without an owner.
+    const assignedUsername = form.assignedUser || DEFAULT_ASSIGNED_USER;
+    const assignedUser = findCrmUser(assignedUsername);
     const watchedNatureOfBusiness = useWatch({ control, name: 'natureOfBusiness' });
     const watchedTypeOfEntity = useWatch({ control, name: 'typeOfEntity' });
     const watchedCustomerType = useWatch({ control, name: 'customerType' });
@@ -627,16 +645,39 @@ function OverviewTabInner({
                                             <IconButton size="small" sx={{ color: '#94a3b8' }}>
                                                 <MenuBookIcon sx={{ fontSize: 18 }} />
                                             </IconButton>
-                                            <IconButton size="small" sx={{ color: '#94a3b8' }}>
-                                                <SearchIcon sx={{ fontSize: 18 }} />
-                                            </IconButton>
-                                            <IconButton size="small" sx={{ color: '#94a3b8' }}>
-                                                <LinkOffIcon sx={{ fontSize: 18 }} />
-                                            </IconButton>
+                                            <Tooltip title="Search organizations">
+                                                <IconButton
+                                                    size="small"
+                                                    aria-label="Search organizations"
+                                                    onClick={() => setOrgLookupOpen(true)}
+                                                    sx={{ color: '#94a3b8', '&:hover': { color: '#1d4ed8' } }}
+                                                >
+                                                    <SearchIcon sx={{ fontSize: 18 }} />
+                                                </IconButton>
+                                            </Tooltip>
+                                            <Tooltip title="Unlink parent">
+                                                <span>
+                                                    <IconButton
+                                                        size="small"
+                                                        aria-label="Unlink parent"
+                                                        disabled={!form.memberOfParentCorp}
+                                                        onClick={() => set('memberOfParentCorp', '')}
+                                                        sx={{ color: '#94a3b8', '&:hover': { color: '#dc2626' } }}
+                                                    >
+                                                        <LinkOffIcon sx={{ fontSize: 18 }} />
+                                                    </IconButton>
+                                                </span>
+                                            </Tooltip>
                                         </InputAdornment>
                                     ),
                                 },
                             }}
+                        />
+                        <OrganizationLookupModal
+                            open={orgLookupOpen}
+                            onClose={() => setOrgLookupOpen(false)}
+                            onSelect={(org) => set('memberOfParentCorp', org.organizationName)}
+                            selectedValue={form.memberOfParentCorp}
                         />
                     </FormField>
 
@@ -674,7 +715,7 @@ function OverviewTabInner({
                                         backgroundColor: '#1d4ed8',
                                     }}
                                 >
-                                    MS
+                                    {initials(assignedUser?.name || assignedUsername)}
                                 </Avatar>
                                 <Box>
                                     <Typography
@@ -685,10 +726,10 @@ function OverviewTabInner({
                                             lineHeight: 1.2,
                                         }}
                                     >
-                                        mittal.sharma
+                                        {assignedUser?.name || assignedUsername}
                                     </Typography>
                                     <Typography sx={{ fontSize: '0.72rem', color: '#64748b' }}>
-                                        Senior Sales Specialist • North Region
+                                        {assignedUser ? `${assignedUser.role} • ${assignedUser.department}` : 'Not in user directory'}
                                     </Typography>
                                 </Box>
                             </Box>
@@ -703,20 +744,34 @@ function OverviewTabInner({
                                         borderColor: '#cbd5e1',
                                         color: '#475569',
                                         backgroundColor: '#f8fafc',
+                                        fontWeight: 500,
                                     }}
                                 />
                                 {!isView && (
-                                    <>
-                                <IconButton size="small" sx={{ color: '#94a3b8' }}>
-                                    <PersonOutlinedIcon sx={{ fontSize: 18 }} />
-                                </IconButton>
-                                <IconButton size="small" sx={{ color: '#94a3b8' }}>
-                                    <ContactPageOutlinedIcon sx={{ fontSize: 18 }} />
-                                </IconButton>
-                                    </>
+                                    <Tooltip title="Change assigned user">
+                                        <IconButton
+                                            size="small"
+                                            aria-label="Change assigned user"
+                                            onClick={() => setUserLookupOpen(true)}
+                                            sx={{
+                                                color: '#64748b',
+                                                width: 28,
+                                                height: 28,
+                                                '&:hover': { color: '#1d4ed8', backgroundColor: '#eff6ff' },
+                                            }}
+                                        >
+                                            <PersonOutlinedIcon sx={{ fontSize: 18 }} />
+                                        </IconButton>
+                                    </Tooltip>
                                 )}
                             </Box>
                         </Box>
+                        <UserLookupModal
+                            open={userLookupOpen}
+                            onClose={() => setUserLookupOpen(false)}
+                            onSelect={(u) => set('assignedUser', u.username)}
+                            selectedValue={assignedUsername}
+                        />
                     </FormField>
                 </Box>
             </Box>

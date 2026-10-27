@@ -34,7 +34,7 @@ export function ContactAssignmentSection({ assigneeOptions = DEFAULT_ASSIGNEES }
                 <RhfSelect<ContactFormData> name="department" label="Department" options={CONTACT_DEPARTMENTS} placeholder="Select Department" />
             </Grid>
             <Grid size={{ xs: 12, md: 6 }}>
-                <RhfLookup<ContactFormData> name="assignedTo" label="Assigned to" required options={assigneeOptions} placeholder="Select assigned sales rep" />
+                <RhfLookup<ContactFormData> name="assignedTo" label="Assigned to" lookupType="user" required options={assigneeOptions} placeholder="Select assigned sales rep" />
             </Grid>
             <Grid size={{ xs: 12, md: 6 }}>
                 <RhfChipGroup<ContactFormData> name="communicationType" label="Communication Type" hint="Select preferred channels" options={COMMUNICATION_TYPES} />

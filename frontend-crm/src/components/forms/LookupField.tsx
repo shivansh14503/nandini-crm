@@ -1,12 +1,13 @@
 'use client';
 
-import React, { useState } from 'react';
+import React from 'react';
 import {
     Box,
     TextField,
     IconButton,
     Autocomplete,
     Tooltip,
+    CircularProgress,
 } from '@mui/material';
 import ArrowForwardIosIcon from '@mui/icons-material/ArrowForwardIos';
 import ClearIcon from '@mui/icons-material/Clear';
@@ -17,23 +18,48 @@ export interface LookupFieldProps {
     onChange: (value: string) => void;
     placeholder?: string;
     options?: string[];
+    /** Opens the record picker (the `[ > ]` directory button). */
+    onLookupClick?: () => void;
+    /** @deprecated Use `onLookupClick`. */
     onSelectClick?: () => void;
+    /** Called after the clear button resets the value. */
+    onClear?: () => void;
+    /** Shows a spinner in the directory button and disables it. */
+    loading?: boolean;
+    disabled?: boolean;
     required?: boolean;
+    lookupTooltip?: string;
 }
+
+const actionButtonSx = {
+    width: 34,
+    height: 34,
+    borderRadius: '6px',
+    backgroundColor: '#1e3a8a',
+    color: '#fff',
+    flexShrink: 0,
+    '&:hover': { backgroundColor: '#1d4ed8' },
+    '&.Mui-disabled': { backgroundColor: '#e2e8f0', color: '#94a3b8' },
+} as const;
 
 export function LookupField({
     value,
     onChange,
     placeholder = 'Type or select...',
     options = [],
+    onLookupClick,
     onSelectClick,
+    onClear,
+    loading = false,
+    disabled = false,
     required = false,
+    lookupTooltip = 'Select from Directory',
 }: LookupFieldProps) {
-    const [inputValue, setInputValue] = useState(value);
+    const handleLookup = onLookupClick ?? onSelectClick;
 
     const handleClear = () => {
         onChange('');
-        setInputValue('');
+        onClear?.();
     };
 
     return (
@@ -41,16 +67,13 @@ export function LookupField({
             {options.length > 0 ? (
                 <Autocomplete
                     freeSolo
+                    disabled={disabled}
                     options={options}
                     value={value || ''}
-                    inputValue={inputValue}
-                    onInputChange={(_, newInputValue) => {
-                        setInputValue(newInputValue);
-                        onChange(newInputValue);
-                    }}
-                    onChange={(_, newValue) => {
-                        onChange(newValue || '');
-                    }}
+                    // Controlled by `value` so selections made from the lookup modal show up immediately.
+                    inputValue={value || ''}
+                    onInputChange={(_, newInputValue) => onChange(newInputValue)}
+                    onChange={(_, newValue) => onChange(newValue || '')}
                     sx={{ flex: 1, ...fieldSx }}
                     renderInput={(params) => (
                         <TextField
@@ -66,6 +89,7 @@ export function LookupField({
                     fullWidth
                     size="small"
                     value={value}
+                    disabled={disabled}
                     onChange={(e) => onChange(e.target.value)}
                     placeholder={placeholder}
                     required={required}
@@ -74,43 +98,37 @@ export function LookupField({
             )}
 
             {/* Select / Search Action Button */}
-            <Tooltip title="Select from Directory">
-                <IconButton
-                    size="small"
-                    onClick={onSelectClick}
-                    sx={{
-                        width: 34,
-                        height: 34,
-                        borderRadius: '6px',
-                        backgroundColor: '#1e3a8a',
-                        color: '#fff',
-                        flexShrink: 0,
-                        '&:hover': { backgroundColor: '#1d4ed8' },
-                    }}
-                >
-                    <ArrowForwardIosIcon sx={{ fontSize: 13 }} />
-                </IconButton>
+            <Tooltip title={lookupTooltip}>
+                <span>
+                    <IconButton
+                        size="small"
+                        aria-label={lookupTooltip}
+                        onClick={handleLookup}
+                        disabled={disabled || loading}
+                        sx={actionButtonSx}
+                    >
+                        {loading ? (
+                            <CircularProgress size={14} sx={{ color: '#94a3b8' }} />
+                        ) : (
+                            <ArrowForwardIosIcon sx={{ fontSize: 13 }} />
+                        )}
+                    </IconButton>
+                </span>
             </Tooltip>
 
             {/* Clear Action Button */}
             <Tooltip title="Clear selection">
-                <IconButton
-                    size="small"
-                    onClick={handleClear}
-                    disabled={!value}
-                    sx={{
-                        width: 34,
-                        height: 34,
-                        borderRadius: '6px',
-                        backgroundColor: '#1e3a8a',
-                        color: '#fff',
-                        flexShrink: 0,
-                        '&:hover': { backgroundColor: '#1d4ed8' },
-                        '&.Mui-disabled': { backgroundColor: '#e2e8f0', color: '#94a3b8' },
-                    }}
-                >
-                    <ClearIcon sx={{ fontSize: 14 }} />
-                </IconButton>
+                <span>
+                    <IconButton
+                        size="small"
+                        aria-label="Clear selection"
+                        onClick={handleClear}
+                        disabled={disabled || !value}
+                        sx={actionButtonSx}
+                    >
+                        <ClearIcon sx={{ fontSize: 14 }} />
+                    </IconButton>
+                </span>
             </Tooltip>
         </Box>
     );

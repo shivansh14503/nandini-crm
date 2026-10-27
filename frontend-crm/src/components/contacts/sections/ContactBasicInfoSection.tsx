@@ -2,6 +2,7 @@
 
 import React, { useMemo } from 'react';
 import { Grid } from '@mui/material';
+import { useFormContext } from 'react-hook-form';
 import { RhfTextField, RhfPhoneField, RhfLookup, RhfCheckbox, RhfSelect } from '@/components/forms';
 import { organizationService } from '@/services';
 import type { ContactFormData } from '../../../types/contact.types';
@@ -11,6 +12,7 @@ import type { ContactFormData } from '../../../types/contact.types';
  * Must be rendered inside a `FormProvider<ContactFormData>`.
  */
 export function ContactBasicInfoSection() {
+    const { setValue } = useFormContext<ContactFormData>();
     const organizationNames = useMemo(
         () => organizationService.getAllSync().map((o) => o.organizationName),
         []
@@ -31,6 +33,8 @@ export function ContactBasicInfoSection() {
                     hint="Parent company / account"
                     options={organizationNames}
                     placeholder="Search or select organization..."
+                    lookupType="organization"
+                    onSelectRecord={(org) => setValue('organizationId', org.id, { shouldDirty: true })}
                 />
                 <RhfPhoneField<ContactFormData> name="officePhone" label="Office Phone" placeholder="e.g. 0112345678" />
                 <RhfSelect<ContactFormData> name="leftJob" label="Left Job" options={['No', 'Yes']} placeholder="Select option" />

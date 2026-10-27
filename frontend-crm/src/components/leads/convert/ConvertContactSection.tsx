@@ -88,7 +88,7 @@ export function ConvertContactSection() {
                     <RhfSelect<F> name="designation" label="Designation" options={CONTACT_DESIGNATIONS} placeholder="Select Designation" />
                     <RhfChipGroup<F> name="communicationType" label="Communication Type" options={COMMUNICATION_TYPES} />
                     <RhfTextField<F> name="contactDescription" label="Description" multiline minRows={3} placeholder="Notes about this contact..." />
-                    <RhfLookup<F> name="contactAssignedTo" label="Assigned to" required options={LEAD_ASSIGNED_USERS} placeholder="Select assigned representative" />
+                    <RhfLookup<F> name="contactAssignedTo" label="Assigned to" lookupType="user" required options={LEAD_ASSIGNED_USERS} placeholder="Select assigned representative" />
                 </Grid>
 
                 <Grid size={{ xs: 12, md: 6 }}>

@@ -41,7 +41,7 @@ export function ConvertOpportunitySection() {
                 <RhfTextField<F> name="principalCompany" label="Principal Company" placeholder="Principal / OEM company" />
                 <RhfLookup<F> name="referredBy" label="Referred By" placeholder="Referring partner or employee" />
                 <RhfSelect<F> name="opportunityLeadSource" label="Lead Source" required options={LEAD_SOURCES} placeholder="Select Lead Source" />
-                <RhfLookup<F> name="opportunityAssignedTo" label="Assigned to" required options={LEAD_ASSIGNED_USERS} placeholder="Select assigned representative" />
+                <RhfLookup<F> name="opportunityAssignedTo" label="Assigned to" lookupType="user" required options={LEAD_ASSIGNED_USERS} placeholder="Select assigned representative" />
                 <RhfChipGroup<F> name="copyActivitiesTo" label="Copy Activities to" options={COPY_ACTIVITY_TARGETS} />
             </Grid>
         </Grid>

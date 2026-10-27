@@ -139,6 +139,8 @@ export interface OrganizationFormData {
     /** Active cloud hosting. */
     activeCloud?: boolean;
     provideSupport: 'Yes' | 'No';
+    /** Username of the account executive who owns this organization. */
+    assignedUser?: string;
     /** @deprecated Emails are managed on Contacts; kept optional so older records still load. */
     corporateEmails?: CorporateEmail[];
 
