@@ -35,7 +35,8 @@ export const theme = createTheme({
         // and its compensating padding-right would only add a horizontal jump when overlays open.
         MuiModal: { defaultProps: { disableScrollLock: true } },
         MuiDialog: { defaultProps: { disableScrollLock: true } },
-        MuiDrawer: { defaultProps: { disableScrollLock: true } },
+        // Via ModalProps: persistent/permanent drawers render a plain div and would leak a root-level prop to the DOM.
+        MuiDrawer: { defaultProps: { ModalProps: { disableScrollLock: true } } },
         MuiMenu: { defaultProps: { disableScrollLock: true } },
         MuiPopover: { defaultProps: { disableScrollLock: true } },
         MuiButton: {
