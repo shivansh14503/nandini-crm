@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { requiredString, optionalString, zodPhoneOptional, zodEmailOptional } from './common';
+import { getNatureOfCalls } from '../data/mockNatureOfCalls';
 import {
-    NATURES_OF_CALL,
     SUPPORT_MODES,
     SUPPORT_TYPES,
     TICKET_PRIORITIES,
@@ -32,7 +32,10 @@ export const ticketFormSchema = z.object({
 
     // Overview — right column
     cloudFlag: z.boolean().default(false),
-    natureOfCall: requiredEnum(asTuple(NATURES_OF_CALL), 'Nature Of Call'),
+    natureOfCall: requiredString('Nature Of Call').refine(
+        (v) => getNatureOfCalls().some((n) => n.name.toLowerCase() === v.toLowerCase()),
+        { message: 'Select a Nature Of Call from the list.' }
+    ),
     accountAddress: optionalString,
     contactEmail: zodEmailOptional,
     leftJob: z.enum(['No', 'Yes']).default('No'),

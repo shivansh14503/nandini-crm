@@ -21,16 +21,21 @@ export type SupportMode =
     | 'Remote Support (AnyDesk/TeamViewer)'
     | 'Phone Consultation';
 
-export type NatureOfCall =
-    | 'Installation'
-    | 'Training'
-    | 'Data Corruption'
-    | 'Customization Issue'
-    | 'Tally Configuration'
-    | 'Error Resolution'
-    | 'License Reactivation'
-    | 'Sync Failure'
-    | 'General Query';
+export type NatureOfCallPriority = 'High' | 'Medium' | 'Low';
+
+/** One entry of the Nature of Call master (see `data/mockNatureOfCalls.ts`). */
+export interface NatureOfCallItem {
+    id: string;
+    name: string;
+    priority: NatureOfCallPriority;
+}
+
+/** Ticket priority suggested by a nature of call's own priority (the master has no "Urgent"/"Normal"). */
+export const NATURE_PRIORITY_TO_TICKET_PRIORITY: Record<NatureOfCallPriority, TicketPriority> = {
+    High: 'High',
+    Medium: 'Normal',
+    Low: 'Low',
+};
 
 export interface TicketFormData {
     // Overview — left column
@@ -49,7 +54,8 @@ export interface TicketFormData {
 
     // Overview — right column
     cloudFlag: boolean;
-    natureOfCall: NatureOfCall | '';
+    /** Name from the Nature of Call master. */
+    natureOfCall: string;
     accountAddress: string;
     contactEmail: string;
     leftJob: 'No' | 'Yes';
@@ -99,18 +105,6 @@ export const SUPPORT_MODES: SupportMode[] = [
     'Onsite Support',
     'Remote Support (AnyDesk/TeamViewer)',
     'Phone Consultation',
-];
-
-export const NATURES_OF_CALL: NatureOfCall[] = [
-    'Installation',
-    'Training',
-    'Data Corruption',
-    'Customization Issue',
-    'Tally Configuration',
-    'Error Resolution',
-    'License Reactivation',
-    'Sync Failure',
-    'General Query',
 ];
 
 export const isTicketOpen = (t: Pick<Ticket, 'ticketStatus'>) => !TICKET_CLOSED_STATUSES.includes(t.ticketStatus);

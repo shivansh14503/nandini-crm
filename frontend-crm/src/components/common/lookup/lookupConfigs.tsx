@@ -7,6 +7,11 @@ import type { CrmUser } from '@/types/user.types';
 import { CRM_USER_DEPARTMENTS } from '@/types/user.types';
 import type { ExtendedOrganization } from '@/types/organization.types';
 import type { Contact } from '@/types/contact.types';
+import type { NatureOfCallItem } from '@/types/ticket.types';
+import type { PartnerCompany, PartnerCompanyContact } from '@/types/partner.types';
+import { CUSTOMER_TYPES } from '@/components/organizations/constants';
+import { findCrmUser } from '@/data/mockUsers';
+import { getPartnerCompanies } from '@/data/mockPartners';
 import type { LookupColumn, LookupFilterField, LookupSearchPredicate } from '@/types/lookup.types';
 
 export interface LookupPreset<T> {
@@ -59,6 +64,19 @@ const PrimaryText = ({ children }: { children: React.ReactNode }) => (
 const includesQuery = (query: string, ...values: (string | undefined)[]) =>
     !query || values.some((v) => (v || '').toLowerCase().includes(query));
 
+/** Case-insensitive "contains" for a free-text filter; an empty filter matches everything. */
+const containsText = (value: string | undefined, filter: string | undefined) =>
+    !filter || (value || '').toLowerCase().includes(filter.toLowerCase());
+
+/** Full name from the user directory, falling back to the stored username. */
+const userName = (username: string | undefined) => findCrmUser(username)?.name || username || '';
+
+const yesNoOptions = [
+    { value: '', label: 'All' },
+    { value: 'No', label: 'No' },
+    { value: 'Yes', label: 'Yes' },
+];
+
 const statusOptions = [
     { value: 'Active', label: 'Active' },
     { value: 'Inactive', label: 'Inactive' },
@@ -105,11 +123,7 @@ export const USER_LOOKUP_PRESET: LookupPreset<CrmUser> = {
             label: 'Group User',
             type: 'select',
             defaultValue: 'No',
-            options: [
-                { value: '', label: 'All' },
-                { value: 'No', label: 'No' },
-                { value: 'Yes', label: 'Yes' },
-            ],
+            options: yesNoOptions,
         },
         { key: 'status', label: 'Status', type: 'select', defaultValue: 'Active', options: statusOptions },
         {
@@ -135,20 +149,26 @@ export const ORGANIZATION_LOOKUP_PRESET: LookupPreset<ExtendedOrganization> = {
     subtitle: 'Select an organization. Click a row to choose it.',
     searchPlaceholder: 'Name, code, city or GST',
     columns: [
-        { id: 'organizationName', label: 'Organization Name', minWidth: 220, render: (o) => <PrimaryText>{o.organizationName}</PrimaryText> },
-        { id: 'accountCode', label: 'Account Code', minWidth: 110 },
-        { id: 'customerType', label: 'Customer Type', minWidth: 120 },
-        { id: 'billingCity', label: 'City', minWidth: 110 },
-        { id: 'billingState', label: 'State', minWidth: 110 },
-        { id: 'accountStatus', label: 'Status', render: (o) => <StatusChip status={o.accountStatus} /> },
+        { id: 'organizationName', label: 'Name', minWidth: 240, render: (o) => <PrimaryText>{o.organizationName}</PrimaryText> },
+        { id: 'customerType', label: 'Customer Type', minWidth: 130 },
+        { id: 'natureOfBusiness', label: 'Nature of Business', minWidth: 200 },
+        { id: 'assignedUser', label: 'User', minWidth: 140, getValue: (o) => userName(o.assignedUser) },
     ],
     filterFields: [
-        { key: 'accountStatus', label: 'Status', type: 'select', defaultValue: '', options: statusOptions },
+        {
+            key: 'customerType',
+            label: 'Customer Type',
+            type: 'select',
+            defaultValue: '',
+            options: [{ value: '', label: 'All' }, ...CUSTOMER_TYPES.map((t) => ({ value: t, label: t }))],
+        },
         { key: 'billingCity', label: 'City', type: 'text', placeholder: 'e.g. Delhi' },
+        { key: 'accountStatus', label: 'Status', type: 'select', defaultValue: '', options: statusOptions },
     ],
     searchPredicate: (o, f, q) => {
+        if (f.customerType && o.customerType !== f.customerType) return false;
         if (f.accountStatus && o.accountStatus !== f.accountStatus) return false;
-        if (f.billingCity && !(o.billingCity || '').toLowerCase().includes(f.billingCity.toLowerCase())) return false;
+        if (!containsText(o.billingCity, f.billingCity)) return false;
         return includesQuery(q, o.organizationName, o.tradeName, o.accountCode, o.billingCity, o.gstNumber, o.gstNo);
     },
 };
@@ -163,14 +183,127 @@ export const CONTACT_LOOKUP_PRESET: LookupPreset<Contact> = {
     searchPlaceholder: 'Name, mobile or email',
     columns: [
         { id: 'name', label: 'Name', minWidth: 160, render: (c) => <PrimaryText>{c.name}</PrimaryText> },
-        { id: 'organizationName', label: 'Organization', minWidth: 200 },
+        { id: 'organizationName', label: 'Organization Name', minWidth: 200 },
         { id: 'designation', label: 'Designation', minWidth: 150 },
         { id: 'mobile', label: 'Mobile', minWidth: 110 },
-        { id: 'email', label: 'Email', minWidth: 200, getValue: primaryEmail },
+        { id: 'officePhone', label: 'Office Phone', minWidth: 110 },
+        { id: 'leftJob', label: 'Left Job', minWidth: 80 },
+        { id: 'assignedTo', label: 'Assigned to', minWidth: 140, getValue: (c) => userName(c.assignedTo) },
     ],
-    filterFields: [{ key: 'organizationName', label: 'Organization', type: 'text', width: 3 }],
+    filterFields: [
+        { key: 'organizationName', label: 'Organization', type: 'text', width: 3 },
+        { key: 'leftJob', label: 'Left Job', type: 'select', defaultValue: '', options: yesNoOptions },
+    ],
     searchPredicate: (c, f, q) => {
-        if (f.organizationName && !c.organizationName.toLowerCase().includes(f.organizationName.toLowerCase())) return false;
-        return includesQuery(q, c.name, c.mobile, primaryEmail(c), c.contactCode);
+        if (!containsText(c.organizationName, f.organizationName)) return false;
+        if (f.leftJob && c.leftJob !== f.leftJob) return false;
+        return includesQuery(q, c.name, c.mobile, c.officePhone, primaryEmail(c), c.contactCode);
+    },
+};
+
+// ─── Nature of Call ───────────────────────────────────────────────────────────
+
+const CALL_PRIORITY_COLORS: Record<NatureOfCallItem['priority'], { color: string; bg: string; border: string }> = {
+    High: { color: '#dc2626', bg: '#fef2f2', border: '#fecaca' },
+    Medium: { color: '#d97706', bg: '#fffbeb', border: '#fde68a' },
+    Low: { color: '#2563eb', bg: '#eff6ff', border: '#bfdbfe' },
+};
+
+export const NATURE_OF_CALL_LOOKUP_PRESET: LookupPreset<NatureOfCallItem> = {
+    title: 'Search Nature of Calls',
+    subtitle: 'Select the nature of call. Click a row to choose it.',
+    searchPlaceholder: 'Search call name...',
+    columns: [
+        { id: 'name', label: 'Name', minWidth: 260, render: (n) => <PrimaryText>{n.name}</PrimaryText> },
+        {
+            id: 'priority',
+            label: 'Priority of Call',
+            minWidth: 140,
+            render: (n) => {
+                const c = CALL_PRIORITY_COLORS[n.priority];
+                return (
+                    <Box
+                        component="span"
+                        sx={{ px: 1, py: 0.3, borderRadius: '6px', fontSize: '0.74rem', fontWeight: 700, color: c.color, backgroundColor: c.bg, border: `1px solid ${c.border}` }}
+                    >
+                        {n.priority}
+                    </Box>
+                );
+            },
+        },
+    ],
+    filterFields: [
+        {
+            key: 'priority',
+            label: 'Priority',
+            type: 'select',
+            defaultValue: '',
+            options: [
+                { value: '', label: 'All' },
+                { value: 'High', label: 'High' },
+                { value: 'Medium', label: 'Medium' },
+                { value: 'Low', label: 'Low' },
+            ],
+        },
+    ],
+    searchPredicate: (n, f, q) => {
+        if (f.priority && n.priority !== f.priority) return false;
+        return includesQuery(q, n.name);
+    },
+};
+
+// ─── Partner Companies ────────────────────────────────────────────────────────
+
+export const PARTNER_COMPANY_LOOKUP_PRESET: LookupPreset<PartnerCompany> = {
+    title: 'Partner Company Search',
+    subtitle: 'Select a partner company. Click a row to choose it.',
+    searchPlaceholder: 'Company, phone or email',
+    columns: [
+        { id: 'companyName', label: 'Company Name', minWidth: 180, render: (p) => <PrimaryText>{p.companyName}</PrimaryText> },
+        { id: 'natureOfPartner', label: 'Nature of Partner', minWidth: 180 },
+        { id: 'phone', label: 'Phone', minWidth: 110 },
+        { id: 'email', label: 'Email Address', minWidth: 210 },
+        { id: 'city', label: 'City', minWidth: 100 },
+        { id: 'billingCountry', label: 'Billing Country', minWidth: 110 },
+        { id: 'assignedTo', label: 'Assigned to', minWidth: 130, getValue: (p) => userName(p.assignedTo) },
+    ],
+    filterFields: [
+        { key: 'city', label: 'City', type: 'text', placeholder: 'e.g. Delhi' },
+        {
+            key: 'natureOfPartner',
+            label: 'Nature of Partner',
+            type: 'select',
+            defaultValue: '',
+            width: 3,
+            options: [
+                { value: '', label: 'All' },
+                ...[...new Set(getPartnerCompanies().map((p) => p.natureOfPartner))].sort().map((n) => ({ value: n, label: n })),
+            ],
+        },
+    ],
+    searchPredicate: (p, f, q) => {
+        if (!containsText(p.city, f.city)) return false;
+        if (f.natureOfPartner && p.natureOfPartner !== f.natureOfPartner) return false;
+        return includesQuery(q, p.companyName, p.phone, p.email);
+    },
+};
+
+export const PARTNER_COMPANY_CONTACT_LOOKUP_PRESET: LookupPreset<PartnerCompanyContact> = {
+    title: 'Partner Company Contact Search',
+    subtitle: 'Select a partner contact. Click a row to choose it.',
+    searchPlaceholder: 'Name, mobile or email',
+    columns: [
+        { id: 'name', label: 'Name', minWidth: 160, render: (c) => <PrimaryText>{c.name}</PrimaryText> },
+        { id: 'designation', label: 'Designation', minWidth: 140 },
+        { id: 'partnerCompany', label: 'Partner Company', minWidth: 160 },
+        { id: 'mobile', label: 'Mobile', minWidth: 110 },
+        { id: 'officePhone', label: 'Office Phone', minWidth: 110 },
+        { id: 'email', label: 'Email Address', minWidth: 210 },
+        { id: 'location', label: 'Location', minWidth: 100 },
+    ],
+    filterFields: [{ key: 'partnerCompany', label: 'Partner Company', type: 'text', width: 3 }],
+    searchPredicate: (c, f, q) => {
+        if (!containsText(c.partnerCompany, f.partnerCompany)) return false;
+        return includesQuery(q, c.name, c.mobile, c.officePhone, c.email);
     },
 };

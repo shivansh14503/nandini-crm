@@ -2,6 +2,8 @@ import type React from 'react';
 import type { CrmUser } from './user.types';
 import type { ExtendedOrganization } from './organization.types';
 import type { Contact } from './contact.types';
+import type { NatureOfCallItem } from './ticket.types';
+import type { PartnerCompany, PartnerCompanyContact } from './partner.types';
 
 // ─── Generic Lookup / Record Picker Types ─────────────────────────────────────
 
@@ -41,6 +43,9 @@ export interface LookupRecordMap {
     user: CrmUser;
     organization: ExtendedOrganization;
     contact: Contact;
+    natureOfCall: NatureOfCallItem;
+    partnerCompany: PartnerCompany;
+    partnerCompanyContact: PartnerCompanyContact;
 }
 
 export type LookupKind = keyof LookupRecordMap;

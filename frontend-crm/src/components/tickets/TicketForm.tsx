@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { FormProvider, useWatch } from 'react-hook-form';
 import { Box } from '@mui/material';
@@ -12,16 +12,21 @@ import { type FormTabDefinition } from '../common/Drawer';
 import { ROUTES } from '../../config/constants';
 import { ticketFormSchema } from '@/validations';
 import {
-    NATURES_OF_CALL,
+    NATURE_PRIORITY_TO_TICKET_PRIORITY,
     SUPPORT_MODES,
     SUPPORT_TYPES,
     TICKET_PRIORITIES,
     TICKET_SOURCES,
     TICKET_STATUSES,
+    type NatureOfCallItem,
     type TicketFormData,
+    type TicketPriority,
 } from '@/types/ticket.types';
 import type { ExtendedOrganization } from '@/types/organization.types';
 import type { Contact } from '@/types/contact.types';
+import type { PartnerCompany, PartnerCompanyContact } from '@/types/partner.types';
+import { getNatureOfCalls } from '@/data/mockNatureOfCalls';
+import { getPartnerCompanies, getPartnerContacts } from '@/data/mockPartners';
 import { contactService, organizationService, ticketService } from '@/services';
 import { formatAddressLine } from '@/utils/address';
 
@@ -131,6 +136,18 @@ export default function TicketForm({ mode = 'create', initialData, ticketId, bre
         return (inOrg.length > 0 ? inOrg : contacts).map((c) => c.name);
     }, [contacts, organizationName]);
 
+    const natureOfCallNames = useMemo(() => getNatureOfCalls().map((n) => n.name), []);
+    const partnerCompanyNames = useMemo(() => getPartnerCompanies().map((p) => p.companyName), []);
+    const partnerContacts = useMemo(() => getPartnerContacts(), []);
+    const partnerCompany = useWatch({ control, name: 'partnerCompany' });
+
+    // Same narrowing for partner contacts: only the chosen partner's people, when it has any.
+    const partnerContactNames = useMemo(() => {
+        const company = partnerCompany?.trim().toLowerCase();
+        const inCompany = company ? partnerContacts.filter((c) => c.partnerCompany.toLowerCase() === company) : [];
+        return (inCompany.length > 0 ? inCompany : partnerContacts).map((c) => c.name);
+    }, [partnerContacts, partnerCompany]);
+
     const recordLabel = ticketNumber || ticketSubject || 'Ticket';
     const defaultBreadcrumbs: BreadcrumbItem[] = [
         { label: 'Support' },
@@ -203,6 +220,32 @@ export default function TicketForm({ mode = 'create', initialData, ticketId, bre
     const handleContactCleared = () => {
         setValue('contactNumber', '', touch);
         setValue('contactEmail', '', touch);
+    };
+
+    // ── Nature of call → suggested priority ──────────────────────────────────
+    // Priority set by the last nature-of-call pick. If the current priority differs from it (or from the
+    // default before any pick), the user chose it explicitly and it is left alone.
+    const autoPriorityRef = useRef<TicketPriority | null>(null);
+    const handleNatureOfCallPicked = (item: NatureOfCallItem) => {
+        const current = getValues('ticketPriority');
+        const untouched = current === (autoPriorityRef.current ?? DEFAULT_TICKET_FORM.ticketPriority);
+        if (!untouched) return;
+        const suggested = NATURE_PRIORITY_TO_TICKET_PRIORITY[item.priority];
+        autoPriorityRef.current = suggested;
+        setValue('ticketPriority', suggested, touch);
+    };
+
+    // ── Partner company & contact ────────────────────────────────────────────
+    const handlePartnerCompanyPicked = (partner: PartnerCompany) => {
+        const contactName = getValues('partnerCompanyContact')?.trim();
+        const contact = contactName ? partnerContacts.find((c) => sameName(c.name, contactName)) : undefined;
+        if (contact && !sameName(contact.partnerCompany, partner.companyName)) {
+            setValue('partnerCompanyContact', '', { shouldDirty: true });
+        }
+    };
+
+    const handlePartnerContactPicked = (contact: PartnerCompanyContact) => {
+        setValue('partnerCompany', contact.partnerCompany, touch);
     };
 
     const submit = createSubmitHandler(async (values) => {
@@ -309,19 +352,22 @@ export default function TicketForm({ mode = 'create', initialData, ticketId, bre
                                     { name: 'cloudFlag', label: 'Active Cloud', caption: 'Cloud hosting subscription' },
                                 ]}
                             />
-                            <RhfSelect<TicketFormData>
+                            <RhfLookup<TicketFormData, 'natureOfCall'>
                                 name="natureOfCall"
                                 label="Nature Of Call"
                                 required
-                                options={NATURES_OF_CALL}
-                                placeholder="Select Nature Of Call"
+                                options={natureOfCallNames}
+                                lookupType="natureOfCall"
+                                onSelectRecord={handleNatureOfCallPicked}
+                                hint="Sets a suggested priority"
+                                placeholder="Search or select nature of call..."
                             />
                             <RhfTextField<TicketFormData>
                                 name="accountAddress"
                                 label="Account Address"
                                 multiline
                                 minRows={2}
-                                hint="Filled from the organization when left empty"
+                                hint="Filled from the selected organization"
                                 placeholder="Customer site address"
                             />
                             <RhfEmailField<TicketFormData> name="contactEmail" label="Contact Email" placeholder="e.g. name@company.com" />
@@ -339,13 +385,24 @@ export default function TicketForm({ mode = 'create', initialData, ticketId, bre
                 <div hidden={activeTab !== 'partner_company'}>
                     <Box sx={gridSx}>
                         <Box sx={columnSx}>
-                            <RhfTextField<TicketFormData> name="partnerCompany" label="Partner Company" placeholder="e.g. Tally Solutions Pvt Ltd" />
+                            <RhfLookup<TicketFormData, 'partnerCompany'>
+                                name="partnerCompany"
+                                label="Partner Company"
+                                options={partnerCompanyNames}
+                                lookupType="partnerCompany"
+                                onSelectRecord={handlePartnerCompanyPicked}
+                                onClearRecord={() => setValue('partnerCompanyContact', '', { shouldDirty: true })}
+                                placeholder="Search or select partner company..."
+                            />
                         </Box>
                         <Box sx={columnSx}>
-                            <RhfTextField<TicketFormData>
+                            <RhfLookup<TicketFormData, 'partnerCompanyContact'>
                                 name="partnerCompanyContact"
                                 label="Partner Company Contact"
-                                placeholder="Contact person / desk at the partner"
+                                options={partnerContactNames}
+                                lookupType="partnerCompanyContact"
+                                onSelectRecord={handlePartnerContactPicked}
+                                placeholder="Search or select partner contact..."
                             />
                         </Box>
                     </Box>
