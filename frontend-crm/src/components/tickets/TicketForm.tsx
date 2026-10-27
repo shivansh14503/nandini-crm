@@ -160,22 +160,49 @@ export default function TicketForm({ mode = 'create', initialData, ticketId, bre
         };
     }, [ticketId, reset]);
 
-    const fillIfEmpty = (key: 'accountAddress' | 'contactNumber' | 'contactEmail' | 'organizationName', value: string) => {
-        if (value && !getValues(key)?.trim()) {
-            setValue(key, value, { shouldDirty: true, shouldValidate: true });
+    const touch = { shouldDirty: true, shouldValidate: true } as const;
+    const sameName = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLowerCase();
+
+    const clearContactFields = () => {
+        setValue('contactPersonName', '', { shouldDirty: true });
+        setValue('contactNumber', '', touch);
+        setValue('contactEmail', '', touch);
+    };
+
+    // ── Organization selection & clear ───────────────────────────────────────
+    const handleOrganizationPicked = (org: ExtendedOrganization) => {
+        // Always overwrite: switching organizations must replace the previous one's address.
+        setValue('accountAddress', organizationAddress(org), touch);
+        // A contact who belongs to a different organization no longer applies.
+        const currentContact = getValues('contactPersonName')?.trim();
+        if (currentContact) {
+            const match = contacts.find((c) => sameName(c.name, currentContact));
+            if (match && match.organizationName && !sameName(match.organizationName, org.organizationName)) {
+                clearContactFields();
+            }
         }
     };
 
-    const handleOrganizationPicked = (org: ExtendedOrganization) => {
-        fillIfEmpty('accountAddress', organizationAddress(org));
+    const handleOrganizationCleared = () => {
+        setValue('accountAddress', '', touch);
+        clearContactFields();
     };
 
+    // ── Contact selection & clear ────────────────────────────────────────────
     const handleContactPicked = (contact: Contact) => {
-        fillIfEmpty('contactNumber', contact.mobile);
-        fillIfEmpty('contactEmail', primaryEmail(contact));
-        fillIfEmpty('organizationName', contact.organizationName);
-        const org = organizations.find((o) => o.organizationName === contact.organizationName);
-        if (org) fillIfEmpty('accountAddress', organizationAddress(org));
+        setValue('contactNumber', contact.mobile || '', touch);
+        setValue('contactEmail', primaryEmail(contact), touch);
+        if (contact.organizationName) {
+            setValue('organizationName', contact.organizationName, touch);
+            const org = organizations.find((o) => sameName(o.organizationName, contact.organizationName));
+            // No directory record for the contact's organization: don't leave a previous one's address behind.
+            setValue('accountAddress', org ? organizationAddress(org) : '', touch);
+        }
+    };
+
+    const handleContactCleared = () => {
+        setValue('contactNumber', '', touch);
+        setValue('contactEmail', '', touch);
     };
 
     const submit = createSubmitHandler(async (values) => {
@@ -238,6 +265,7 @@ export default function TicketForm({ mode = 'create', initialData, ticketId, bre
                                 options={organizationNames}
                                 lookupType="organization"
                                 onSelectRecord={handleOrganizationPicked}
+                                onClearRecord={handleOrganizationCleared}
                                 placeholder="Search or select organization..."
                             />
                             <RhfLookup<TicketFormData, 'contact'>
@@ -247,6 +275,7 @@ export default function TicketForm({ mode = 'create', initialData, ticketId, bre
                                 options={contactNames}
                                 lookupType="contact"
                                 onSelectRecord={handleContactPicked}
+                                onClearRecord={handleContactCleared}
                                 placeholder="Search or select contact..."
                             />
                             <RhfPhoneField<TicketFormData> name="contactNumber" label="Contact Number" placeholder="e.g. 9876543210" />

@@ -84,7 +84,6 @@ const DEFAULT_FORM: LeadFormData = {
     primaryState: 'Delhi',
     primaryPostalCode: '',
     primaryCountry: 'IN',
-    primaryLatitude: '0.00000000',
 
     otherAddress: '',
     otherCity: '',
@@ -92,7 +91,6 @@ const DEFAULT_FORM: LeadFormData = {
     otherPostalCode: '',
     otherCountry: 'IN',
     copyAddressFromLeft: false,
-    otherLongitude: '0.00000000',
 };
 
 /** Country/state pairs normalised to the ISO address master when a saved lead is loaded. */

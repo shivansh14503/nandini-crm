@@ -31,6 +31,13 @@ export const theme = createTheme({
         borderRadius: 10,
     },
     components: {
+        // The page keeps a permanent scrollbar gutter (see globals.css), so MUI's body scroll lock
+        // and its compensating padding-right would only add a horizontal jump when overlays open.
+        MuiModal: { defaultProps: { disableScrollLock: true } },
+        MuiDialog: { defaultProps: { disableScrollLock: true } },
+        MuiDrawer: { defaultProps: { disableScrollLock: true } },
+        MuiMenu: { defaultProps: { disableScrollLock: true } },
+        MuiPopover: { defaultProps: { disableScrollLock: true } },
         MuiButton: {
             styleOverrides: {
                 root: {

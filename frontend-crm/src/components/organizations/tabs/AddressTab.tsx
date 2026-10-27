@@ -179,16 +179,6 @@ export function AddressTab({ form, set, handleCopyAddressToggle }: AddressTabPro
                 <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5 }}>
                     <SectionLabel icon={<PlaceOutlinedIcon sx={{ fontSize: 18 }} />} label="Billing Address" />
                     {renderColumn('billing')}
-                    <FormField name="billingLatitude" label="Latitude" hint="Geo coordinate" sx={{ mb: 0 }}>
-                        <TextField
-                            fullWidth
-                            size="small"
-                            placeholder="0.00000000"
-                            value={form.billingLatitude ?? '0.00000000'}
-                            onChange={(e) => set('billingLatitude', e.target.value)}
-                            sx={fieldSx}
-                        />
-                    </FormField>
                 </Box>
 
                 {/* ── RIGHT COLUMN: Shipping Address ────────────────── */}
@@ -223,16 +213,6 @@ export function AddressTab({ form, set, handleCopyAddressToggle }: AddressTabPro
                         )}
                     </Box>
                     {renderColumn('shipping')}
-                    <FormField name="shippingLongitude" label="Longitude" hint="Geo coordinate" sx={{ mb: 0 }}>
-                        <TextField
-                            fullWidth
-                            size="small"
-                            placeholder="0.00000000"
-                            value={form.shippingLongitude ?? '0.00000000'}
-                            onChange={(e) => set('shippingLongitude', e.target.value)}
-                            sx={fieldSx}
-                        />
-                    </FormField>
                 </Box>
             </Box>
         </Box>

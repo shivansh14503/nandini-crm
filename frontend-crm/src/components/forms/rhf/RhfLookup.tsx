@@ -31,6 +31,8 @@ export interface RhfLookupProps<T extends FieldValues, K extends LookupKind = Lo
      * autocompleted value exactly matches a record — e.g. to auto-populate sibling fields.
      */
     onSelectRecord?: (record: LookupRecordMap[K]) => void;
+    /** Fired once when a non-empty value is cleared, via the [X] button or by deleting the text. */
+    onClearRecord?: () => void;
 }
 
 /** React Hook Form bound lookup/autocomplete built on the shared {@link LookupField}. */
@@ -46,6 +48,7 @@ export function RhfLookup<T extends FieldValues, K extends LookupKind = LookupKi
     onLookupClick,
     userValueField = 'username',
     onSelectRecord,
+    onClearRecord,
 }: RhfLookupProps<T, K>) {
     const { field, fieldState } = useController<T>({ name });
     const [modalOpen, setModalOpen] = useState(false);
@@ -67,8 +70,14 @@ export function RhfLookup<T extends FieldValues, K extends LookupKind = LookupKi
         onSelectRecord?.(record);
     };
 
+    // Covers the [X] button (LookupField calls onChange('') first) and backspacing the text away.
+    // Only fires when there was something to clear, so empty-to-empty updates stay silent.
     const handleChange = (next: string) => {
         field.onChange(next);
+        if (!next.trim()) {
+            if (value.trim()) onClearRecord?.();
+            return;
+        }
         if (!kind || !onSelectRecord || next === value) return;
         const match = LOOKUP_FIND_RECORD[kind](next);
         if (match) onSelectRecord(match);

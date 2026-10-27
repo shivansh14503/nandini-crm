@@ -23,8 +23,6 @@ export interface AddressFieldNames<T extends FieldValues> {
     state: Path<T>;
     postalCode: Path<T>;
     country: Path<T>;
-    latitude?: Path<T>;
-    longitude?: Path<T>;
 }
 
 export interface RhfAddressSectionProps<T extends FieldValues> {
@@ -43,7 +41,7 @@ export interface RhfAddressSectionProps<T extends FieldValues> {
 
 const columnSx = { display: 'flex', flexDirection: 'column', gap: 2 } as const;
 
-/** Copy-able field keys; latitude/longitude are per-column and never mirrored. */
+/** Copy-able field keys mirrored from billing to shipping. */
 const MIRRORED_KEYS = ['address', 'country', 'state', 'city', 'postalCode'] as const;
 
 /**
@@ -200,15 +198,6 @@ export function RhfAddressSection<T extends FieldValues>({
                     required={required}
                     disabled={disabled}
                 />
-                {billingFields.latitude && (
-                    <RhfTextField<T>
-                        name={billingFields.latitude}
-                        label="Latitude"
-                        hint="Geo coordinate"
-                        placeholder="0.00000000"
-                        disabled={disabled}
-                    />
-                )}
             </Box>
 
             {/* ── Right Column: Shipping / Other Address ── */}
@@ -256,15 +245,6 @@ export function RhfAddressSection<T extends FieldValues>({
                     countryFieldName={shippingFields.country}
                     disabled={shippingLocked}
                 />
-                {shippingFields.longitude && (
-                    <RhfTextField<T>
-                        name={shippingFields.longitude}
-                        label="Longitude"
-                        hint="Geo coordinate"
-                        placeholder="0.00000000"
-                        disabled={disabled}
-                    />
-                )}
             </Box>
         </Box>
     );

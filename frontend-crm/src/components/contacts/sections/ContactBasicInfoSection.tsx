@@ -35,6 +35,7 @@ export function ContactBasicInfoSection() {
                     placeholder="Search or select organization..."
                     lookupType="organization"
                     onSelectRecord={(org) => setValue('organizationId', org.id, { shouldDirty: true })}
+                    onClearRecord={() => setValue('organizationId', '', { shouldDirty: true })}
                 />
                 <RhfPhoneField<ContactFormData> name="officePhone" label="Office Phone" placeholder="e.g. 0112345678" />
                 <RhfSelect<ContactFormData> name="leftJob" label="Left Job" options={['No', 'Yes']} placeholder="Select option" />

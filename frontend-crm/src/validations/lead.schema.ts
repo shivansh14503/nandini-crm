@@ -46,7 +46,7 @@ export const leadFormSchema = z.object({
     primaryState: optionalString,
     primaryPostalCode: zodPostalCodeOptional,
     primaryCountry: optionalString.default('India'),
-    primaryLatitude: optionalString.default('0.00000000'),
+    primaryLatitude: optionalString,
 
     // Other Address
     otherAddress: optionalString,
@@ -55,7 +55,7 @@ export const leadFormSchema = z.object({
     otherPostalCode: zodPostalCodeOptional,
     otherCountry: optionalString.default('India'),
     copyAddressFromLeft: z.boolean().default(false),
-    otherLongitude: optionalString.default('0.00000000'),
+    otherLongitude: optionalString,
 }).superRefine((data, ctx) => {
     refinePostalCodeForCountry(ctx, 'primaryPostalCode', data.primaryPostalCode, data.primaryCountry);
     refinePostalCodeForCountry(ctx, 'otherPostalCode', data.otherPostalCode, data.otherCountry);

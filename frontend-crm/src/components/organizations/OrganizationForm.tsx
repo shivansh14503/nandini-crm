@@ -96,7 +96,6 @@ const DEFAULT_FORM: OrganizationFormData = {
     billingState: '',
     billingPostalCode: '',
     billingCountry: 'IN',
-    billingLatitude: '0.00000000',
 
     // Shipping Address
     shippingAddress: '',
@@ -105,7 +104,6 @@ const DEFAULT_FORM: OrganizationFormData = {
     shippingState: '',
     shippingPostalCode: '',
     shippingCountry: 'IN',
-    shippingLongitude: '0.00000000',
     copyAddressFromBilling: false,
 
     // Tax & Bank Details

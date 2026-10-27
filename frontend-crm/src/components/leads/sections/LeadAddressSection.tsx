@@ -23,7 +23,6 @@ export function LeadAddressSection() {
                     state: 'primaryState',
                     postalCode: 'primaryPostalCode',
                     country: 'primaryCountry',
-                    latitude: 'primaryLatitude',
                 }}
                 shippingFields={{
                     address: 'otherAddress',
@@ -31,7 +30,6 @@ export function LeadAddressSection() {
                     state: 'otherState',
                     postalCode: 'otherPostalCode',
                     country: 'otherCountry',
-                    longitude: 'otherLongitude',
                 }}
             />
         </Box>

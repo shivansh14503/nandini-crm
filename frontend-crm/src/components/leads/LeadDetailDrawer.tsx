@@ -427,11 +427,6 @@ export function LeadDetailDrawer({
                                     </Typography>
                                 </Box>
                             </Box>
-                            {l.primaryLatitude && l.primaryLatitude !== '0.00000000' && (
-                                <Box sx={{ mt: 1 }}>
-                                    <Chip label={`Lat: ${l.primaryLatitude}`} size="small" sx={{ height: 20, fontSize: '0.66rem', fontFamily: 'monospace' }} />
-                                </Box>
-                            )}
                         </DrawerSectionCard>
 
                         {/* Other Address Card */}
@@ -462,11 +457,6 @@ export function LeadDetailDrawer({
                                     </Typography>
                                 </Box>
                             </Box>
-                            {l.otherLongitude && l.otherLongitude !== '0.00000000' && (
-                                <Box sx={{ mt: 1 }}>
-                                    <Chip label={`Long: ${l.otherLongitude}`} size="small" sx={{ height: 20, fontSize: '0.66rem', fontFamily: 'monospace' }} />
-                                </Box>
-                            )}
                         </DrawerSectionCard>
                     </Box>
                 ),
