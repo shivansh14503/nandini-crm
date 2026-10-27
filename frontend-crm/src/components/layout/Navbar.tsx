@@ -54,7 +54,7 @@ const NAV_ITEMS = [
     {
         label: 'Support',
         items: [
-            { label: 'Tickets', href: '/dashboard' },
+            { label: 'Tickets', href: ROUTES.TICKETS },
             { label: 'SLA Policies', href: '/dashboard' },
             { label: 'Helpdesk Teams', href: '/dashboard' },
         ],
@@ -480,7 +480,7 @@ const CREATE_ITEMS = [
     { label: 'Organization', href: '/organizations/new' },
     { label: 'Contact', href: '/contacts/new' },
     { label: 'Opportunity', href: '/opportunities/new' },
-    { label: 'Ticket', href: '/dashboard' },
+    { label: 'Ticket', href: ROUTES.TICKET_NEW },
     { label: 'Activity', href: '/dashboard' },
 ];
 

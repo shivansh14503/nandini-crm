@@ -24,6 +24,7 @@ import {
     organizationService,
     productService,
     quotationService,
+    ticketService,
 } from '@/services';
 
 export type CrmEntityType =
@@ -401,7 +402,25 @@ export function resolveRelatedRecordsForModule(
             ];
         }
 
-        case 'tickets':
+        case 'tickets': {
+            const sameText = (a: string | undefined, b: string) => Boolean(b) && (a || '').trim().toLowerCase() === b;
+            return ticketService
+                .getAllSync()
+                .filter((t) =>
+                    ctx.entityType === 'contact'
+                        ? sameText(t.contactPersonName, ctx.contactName)
+                        : sameText(t.organizationName, ctx.orgName)
+                )
+                .map((t) => ({
+                    ...t,
+                    subject: t.ticketSubject || t.problemReported,
+                    status: t.ticketStatus,
+                    priority: t.ticketPriority,
+                    dateCreated: new Date(t.createdAt).toLocaleDateString('en-IN'),
+                    assignedUser: t.assignedTo,
+                }));
+        }
+
         case 'contracts':
         case 'partner_contacts':
         case 'member_organizations':

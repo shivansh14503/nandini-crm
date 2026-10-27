@@ -17,6 +17,8 @@ import { OpportunityDetailDrawer } from '@/components/opportunities/OpportunityD
 import { QuotationDetailDrawer } from '@/components/quotations/QuotationDetailDrawer';
 import { ProductDetailDrawer } from '@/components/products/ProductDetailDrawer';
 import { OrganizationDetailDrawer } from '@/components/organizations/OrganizationDetailDrawer';
+import { TicketDetailDrawer } from '@/components/tickets/TicketDetailDrawer';
+import type { Ticket } from '@/types/ticket.types';
 import {
     EntityDetailDrawer,
     DrawerSectionCard,
@@ -56,6 +58,9 @@ export function RelatedSecondaryDrawer({
     switch (type) {
         case 'contacts':
             return <ContactDetailDrawer contact={data as unknown as Contact} open onClose={onClose} />;
+
+        case 'tickets':
+            return <TicketDetailDrawer ticket={data as unknown as Ticket} open onClose={onClose} />;
 
         case 'leads':
             return (

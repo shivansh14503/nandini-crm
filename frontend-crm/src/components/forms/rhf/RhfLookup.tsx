@@ -5,7 +5,7 @@ import { FormHelperText } from '@mui/material';
 import { useController, type FieldPath, type FieldValues } from 'react-hook-form';
 import { FormField } from '../FormField';
 import { LookupField } from '../LookupField';
-import { RecordLookupModal, LOOKUP_DISPLAY_VALUE } from '@/components/common/lookup';
+import { RecordLookupModal, LOOKUP_DISPLAY_VALUE, LOOKUP_FIND_RECORD } from '@/components/common/lookup';
 import { getAssignableUsernames } from '@/data/mockUsers';
 import type { LookupKind, LookupRecordMap } from '@/types/lookup.types';
 
@@ -26,7 +26,10 @@ export interface RhfLookupProps<T extends FieldValues, K extends LookupKind = Lo
     onLookupClick?: () => void;
     /** Which user property is written into the field for `lookupType="user"` (default `username`). */
     userValueField?: 'username' | 'name';
-    /** Fired with the full picked record, e.g. to auto-populate sibling fields. */
+    /**
+     * Fired with the full record when one is picked from the modal, or when the typed /
+     * autocompleted value exactly matches a record — e.g. to auto-populate sibling fields.
+     */
     onSelectRecord?: (record: LookupRecordMap[K]) => void;
 }
 
@@ -64,11 +67,18 @@ export function RhfLookup<T extends FieldValues, K extends LookupKind = LookupKi
         onSelectRecord?.(record);
     };
 
+    const handleChange = (next: string) => {
+        field.onChange(next);
+        if (!kind || !onSelectRecord || next === value) return;
+        const match = LOOKUP_FIND_RECORD[kind](next);
+        if (match) onSelectRecord(match);
+    };
+
     return (
         <FormField name={name} label={label} required={required} hint={hint}>
             <LookupField
                 value={value}
-                onChange={field.onChange}
+                onChange={handleChange}
                 options={suggestions}
                 placeholder={placeholder}
                 required={required}

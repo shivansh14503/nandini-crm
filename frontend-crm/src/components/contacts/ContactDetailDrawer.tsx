@@ -35,7 +35,8 @@ import {
     type DrawerBadgeItem,
 } from '@/components/common/Drawer';
 import { ReadOnlyField } from '@/components/forms/ReadOnlyField';
-import { mailtoHref, smsHref, telHref, whatsappHref } from '@/utils/contactLinks';
+import { findCrmUser } from '@/data/mockUsers';
+import { mailtoHref,smsHref, telHref, whatsappHref } from '@/utils/contactLinks';
 import { CONTACT_FORM_TABS } from './ContactForm';
 
 export interface ContactDetailDrawerProps {
@@ -197,6 +198,8 @@ export function ContactDetailDrawer({
     if (!contact && !currentContact) return null;
 
     const c = currentContact || contact!;
+    const assignedUser = findCrmUser(c.assignedTo);
+    const assignedDisplayName = assignedUser?.name || c.assignedTo;
 
     const handleEdit = () => {
         if (onEdit) {
@@ -475,13 +478,15 @@ export function ContactDetailDrawer({
                                             boxShadow: '0 2px 8px rgba(79, 70, 229, 0.25)',
                                         }}
                                     >
-                                        {getInitials(c.assignedTo)}
+                                        {getInitials(assignedDisplayName)}
                                     </Box>
                                     <Box>
                                         <Typography sx={{ fontSize: '0.88rem', fontWeight: 700, color: '#0f172a', lineHeight: 1.3 }}>
-                                            {c.assignedTo}
+                                            {assignedDisplayName}
                                         </Typography>
-                                        <Typography sx={{ fontSize: '0.72rem', color: '#64748b' }}>Account Manager</Typography>
+                                        <Typography sx={{ fontSize: '0.72rem', color: '#64748b' }}>
+                                            {assignedUser ? `${assignedUser.role} • ${assignedUser.department}` : 'Account Manager'}
+                                        </Typography>
                                     </Box>
                                 </Box>
                             ) : (

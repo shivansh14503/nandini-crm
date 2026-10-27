@@ -41,6 +41,8 @@ import { LeadDetailDrawer } from '../leads/LeadDetailDrawer';
 import { OpportunityDetailDrawer } from '../opportunities/OpportunityDetailDrawer';
 import { QuotationDetailDrawer } from '../quotations/QuotationDetailDrawer';
 import { ProductDetailDrawer } from '../products/ProductDetailDrawer';
+import { TicketDetailDrawer } from '../tickets/TicketDetailDrawer';
+import type { Ticket } from '@/types/ticket.types';
 import type { FilterTab, SortField } from './master';
 
 const getNatureBadgeStyle = (nature: string = '') => {
@@ -151,6 +153,15 @@ export function OrganizationsMasterView() {
                     open
                     onClose={closeSecondary}
                     onEdit={(id) => router.push(ROUTES.QUOTATION_EDIT(id))}
+                />
+            );
+        }
+        if (type === 'tickets') {
+            return (
+                <TicketDetailDrawer
+                    ticket={data as unknown as Ticket}
+                    open
+                    onClose={closeSecondary}
                 />
             );
         }

@@ -1,6 +1,8 @@
 'use client';
 
 import React from 'react';
+import { contactService, organizationService } from '@/services';
+import { findCrmUser } from '@/data/mockUsers';
 import type { EntityLookupModalProps, LookupKind, LookupRecordMap } from '@/types/lookup.types';
 import { UserLookupModal } from './UserLookupModal';
 import { OrganizationLookupModal } from './OrganizationLookupModal';
@@ -17,6 +19,15 @@ export const LOOKUP_DISPLAY_VALUE: { [K in LookupKind]: (record: LookupRecordMap
     user: (u) => u.username,
     organization: (o) => o.organizationName,
     contact: (c) => c.name,
+};
+
+const sameText = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLowerCase();
+
+/** Resolves a typed / autocompleted field value back to its record (exact, case-insensitive match). */
+export const LOOKUP_FIND_RECORD: { [K in LookupKind]: (value: string) => LookupRecordMap[K] | undefined } = {
+    user: (v) => findCrmUser(v),
+    organization: (v) => (v.trim() ? organizationService.getAllSync().find((o) => sameText(o.organizationName, v)) : undefined),
+    contact: (v) => (v.trim() ? contactService.getAllSync().find((c) => sameText(c.name, v)) : undefined),
 };
 
 export interface RecordLookupModalProps<K extends LookupKind> extends EntityLookupModalProps<LookupRecordMap[K]> {

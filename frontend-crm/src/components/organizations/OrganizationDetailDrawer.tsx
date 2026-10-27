@@ -30,6 +30,7 @@ import {
 } from '@/components/common/Drawer';
 import { ReadOnlyField } from '@/components/forms/ReadOnlyField';
 import { getCountryNameByCode } from '@/data/addressMaster';
+import { findCrmUser } from '@/data/mockUsers';
 import { formatAddressLine } from '@/utils/address';
 import { formatDateTime } from '@/utils/date';
 import { ORGANIZATION_FORM_TABS } from './OrganizationForm';
@@ -61,7 +62,7 @@ const sectionIcon = (icon: React.ReactElement) => (
 );
 
 const getInitials = (name: string) => {
-    const parts = name.trim().split(/\s+/);
+    const parts = name.replace(/[._-]+/g, ' ').trim().split(/\s+/);
     return ((parts[0]?.[0] ?? '') + (parts.length > 1 ? parts[parts.length - 1][0] : '')).toUpperCase();
 };
 
@@ -173,6 +174,8 @@ export function OrganizationDetailDrawer({
     if (!organization && !currentOrg) return null;
 
     const org = currentOrg || organization!;
+    const assignedUser = findCrmUser(org.assignedUser);
+    const assignedDisplayName = assignedUser?.name || org.assignedUser || '';
 
     const handleEdit = () => {
         if (onEdit) {
@@ -337,13 +340,15 @@ export function OrganizationDetailDrawer({
                                             boxShadow: '0 2px 8px rgba(79, 70, 229, 0.25)',
                                         }}
                                     >
-                                        {getInitials(org.assignedUser)}
+                                        {getInitials(assignedDisplayName)}
                                     </Box>
                                     <Box>
                                         <Typography sx={{ fontSize: '0.88rem', fontWeight: 700, color: '#0f172a', lineHeight: 1.3 }}>
-                                            {org.assignedUser}
+                                            {assignedDisplayName}
                                         </Typography>
-                                        <Typography sx={{ fontSize: '0.72rem', color: '#64748b' }}>Assigned user</Typography>
+                                        <Typography sx={{ fontSize: '0.72rem', color: '#64748b' }}>
+                                            {assignedUser ? `${assignedUser.role} • ${assignedUser.department}` : 'Assigned user'}
+                                        </Typography>
                                     </Box>
                                 </Box>
                             ) : (
