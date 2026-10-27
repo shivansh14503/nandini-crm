@@ -140,7 +140,7 @@ export function addStoredProduct(data: ProductFormData): Product {
     const now = new Date().toISOString();
     const newProduct: Product = {
         ...data,
-        id: `prod-${Date.now()}`,
+        id: `prod-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
         productCode: `PRD-${Math.floor(1000 + Math.random() * 9000)}`,
         createdAt: now,
         updatedAt: now,

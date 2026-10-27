@@ -141,7 +141,7 @@ export function addStoredContact(data: ContactFormData): Contact {
     const now = new Date().toISOString();
     const newContact: Contact = {
         ...data,
-        id: `contact-${Date.now()}`,
+        id: `contact-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
         contactCode: `CON-${Math.floor(1000 + Math.random() * 9000)}`,
         createdAt: now,
         updatedAt: now,

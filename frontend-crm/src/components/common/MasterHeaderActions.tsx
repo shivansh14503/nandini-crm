@@ -4,14 +4,19 @@ import React from 'react';
 import { Box, Button } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
 import RefreshIcon from '@mui/icons-material/Refresh';
+import { CreateSplitButton } from './CreateSplitButton';
 
 export interface MasterHeaderActionsProps {
     onRefresh?: () => void;
     onNewClick?: () => void;
     newButtonLabel?: string;
+    /** When provided, the New button becomes a split button with import options. */
+    onImportClick?: () => void;
+    /** Extra buttons rendered between Refresh and the New button (e.g. Export). */
+    children?: React.ReactNode;
 }
 
-const outlinedSx = {
+export const outlinedHeaderButtonSx = {
     borderColor: '#e2e8f0',
     color: '#334155',
     backgroundColor: '#fff',
@@ -29,6 +34,8 @@ export function MasterHeaderActions({
     onRefresh,
     onNewClick,
     newButtonLabel = 'New Record',
+    onImportClick,
+    children,
 }: MasterHeaderActionsProps) {
     return (
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.2, flexWrap: 'wrap' }}>
@@ -38,13 +45,23 @@ export function MasterHeaderActions({
                     size="small"
                     startIcon={<RefreshIcon sx={{ fontSize: 16 }} />}
                     onClick={onRefresh}
-                    sx={outlinedSx}
+                    sx={outlinedHeaderButtonSx}
                 >
                     Refresh
                 </Button>
             )}
 
-            {onNewClick && (
+            {children}
+
+            {onNewClick && onImportClick && (
+                <CreateSplitButton
+                    newButtonLabel={newButtonLabel}
+                    onNewClick={onNewClick}
+                    onImportClick={onImportClick}
+                />
+            )}
+
+            {onNewClick && !onImportClick && (
                 <Button
                     variant="contained"
                     size="small"

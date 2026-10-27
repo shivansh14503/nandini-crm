@@ -11,3 +11,4 @@ export * from './CommonFormLayout';
 export * from './CommonActionModal';
 export * from './UnsavedChangesModal';
 export * from './CommonRecordDetailView';
+export * from './CreateSplitButton';

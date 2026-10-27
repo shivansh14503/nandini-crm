@@ -19,6 +19,7 @@ import { CommonMasterView } from '../common/CommonMasterView';
 import { MasterHeaderActions } from '../common/MasterHeaderActions';
 import { buildExtendedSearchConfig } from '../common/buildExtendedSearchConfig';
 import { AppToast } from '../common/AppToast';
+import { DataImportModal } from '../common/import';
 import { RelatedModulesSidebar, RelatedRecordsTableView } from '../common/Drawer';
 import { RelatedSecondaryDrawer, type SecondaryDrawerEntity } from '../common/RelatedSecondaryDrawer';
 import type { DataTableColumn, DataTableFilterItem } from '../common/DataTable';
@@ -55,6 +56,8 @@ export function LeadsMasterView() {
     });
 
     const todayStr = useMemo(() => new Date().toISOString().split('T')[0], []);
+
+    const [importOpen, setImportOpen] = useState(false);
 
     const loadLeads = useCallback(() => {
         const data = leadService.getAllSync();
@@ -543,6 +546,7 @@ export function LeadsMasterView() {
                     }}
                     onNewClick={() => router.push(ROUTES.LEAD_NEW)}
                     newButtonLabel="New Lead"
+                    onImportClick={() => setImportOpen(true)}
                 />
             )}
             searchConfig={buildExtendedSearchConfig({
@@ -652,6 +656,16 @@ export function LeadsMasterView() {
                     onClose={() => setToast((prev) => ({ ...prev, open: false }))}
                 />
             }
-        />
+        >
+            <DataImportModal
+                open={importOpen}
+                entity="leads"
+                onClose={() => setImportOpen(false)}
+                onImported={(count) => {
+                    loadLeads();
+                    setToast({ open: true, message: `Successfully imported ${count} lead${count === 1 ? '' : 's'}!`, severity: 'success' });
+                }}
+            />
+        </CommonMasterView>
     );
 }

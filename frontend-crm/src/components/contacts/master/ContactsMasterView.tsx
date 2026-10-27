@@ -15,6 +15,7 @@ import { CommonMasterView } from '../../common/CommonMasterView';
 import { MasterHeaderActions } from '../../common/MasterHeaderActions';
 import { buildExtendedSearchConfig } from '../../common/buildExtendedSearchConfig';
 import { AppToast } from '../../common/AppToast';
+import { DataImportModal } from '../../common/import';
 import { RelatedModulesSidebar, RelatedRecordsTableView } from '../../common/Drawer';
 import { RelatedSecondaryDrawer, type SecondaryDrawerEntity } from '../../common/RelatedSecondaryDrawer';
 import type { DataTableColumn, DataTableFilterItem } from '../../common/DataTable';
@@ -51,6 +52,8 @@ export function ContactsMasterView() {
     });
 
     // ── Load Contacts via Service Layer ─────────────────────────────────────
+    const [importOpen, setImportOpen] = useState(false);
+
     const loadContacts = useCallback(() => {
         const data = contactService.getAllSync();
         setContacts(data);
@@ -371,6 +374,7 @@ export function ContactsMasterView() {
                     }}
                     onNewClick={() => router.push(ROUTES.CONTACT_NEW)}
                     newButtonLabel="New Contact"
+                    onImportClick={() => setImportOpen(true)}
                 />
             )}
             searchConfig={buildExtendedSearchConfig({
@@ -472,6 +476,16 @@ export function ContactsMasterView() {
                     onClose={() => setToast((prev) => ({ ...prev, open: false }))}
                 />
             }
-        />
+        >
+            <DataImportModal
+                open={importOpen}
+                entity="contacts"
+                onClose={() => setImportOpen(false)}
+                onImported={(count) => {
+                    loadContacts();
+                    setToast({ open: true, message: `Successfully imported ${count} contact${count === 1 ? '' : 's'}!`, severity: 'success' });
+                }}
+            />
+        </CommonMasterView>
     );
 }

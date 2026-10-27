@@ -12,6 +12,7 @@ import { CommonMasterView } from '../../common/CommonMasterView';
 import { MasterHeaderActions } from '../../common/MasterHeaderActions';
 import { buildExtendedSearchConfig } from '../../common/buildExtendedSearchConfig';
 import { AppToast } from '../../common/AppToast';
+import { DataImportModal } from '../../common/import';
 import { RelatedModulesSidebar, RelatedRecordsTableView } from '../../common/Drawer';
 import { RelatedSecondaryDrawer, type SecondaryDrawerEntity } from '../../common/RelatedSecondaryDrawer';
 import type { DataTableColumn, DataTableFilterItem } from '../../common/DataTable';
@@ -52,6 +53,8 @@ export function ProductsMasterView() {
         message: '',
         severity: 'success',
     });
+
+    const [importOpen, setImportOpen] = useState(false);
 
     const loadProducts = useCallback(() => {
         const data = productService.getAllSync();
@@ -368,6 +371,7 @@ export function ProductsMasterView() {
                     }}
                     onNewClick={() => router.push(ROUTES.PRODUCT_NEW)}
                     newButtonLabel="New Product"
+                    onImportClick={() => setImportOpen(true)}
                 />
             )}
             searchConfig={buildExtendedSearchConfig({
@@ -468,6 +472,16 @@ export function ProductsMasterView() {
                     onClose={() => setToast((t) => ({ ...t, open: false }))}
                 />
             }
-        />
+        >
+            <DataImportModal
+                open={importOpen}
+                entity="products"
+                onClose={() => setImportOpen(false)}
+                onImported={(count) => {
+                    loadProducts();
+                    setToast({ open: true, message: `Successfully imported ${count} product${count === 1 ? '' : 's'}!`, severity: 'success' });
+                }}
+            />
+        </CommonMasterView>
     );
 }

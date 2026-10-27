@@ -7,7 +7,6 @@ import {
     Button,
     Typography,
 } from '@mui/material';
-import AddIcon from '@mui/icons-material/Add';
 import FileDownloadOutlinedIcon from '@mui/icons-material/FileDownloadOutlined';
 import HistoryIcon from '@mui/icons-material/History';
 import PersonOutlinedIcon from '@mui/icons-material/PersonOutlined';
@@ -19,6 +18,8 @@ import { RecordLink } from '../common/RecordLink';
 import { useAuth } from '@/context/AuthContext';
 import { CommonMasterView } from '../common/CommonMasterView';
 import { AppToast } from '../common/AppToast';
+import { MasterHeaderActions, outlinedHeaderButtonSx } from '../common/MasterHeaderActions';
+import { DataImportModal } from '../common/import';
 import {
     RelatedModulesSidebar,
     RelatedRecordsTableView,
@@ -202,6 +203,8 @@ export function OrganizationsMasterView() {
             />
         );
     };
+
+    const [importOpen, setImportOpen] = useState(false);
 
     const loadOrganizations = useCallback(() => {
         const data = organizationService.getAllSync();
@@ -640,49 +643,21 @@ export function OrganizationsMasterView() {
     );
 
     const headerActions = (
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.2 }}>
+        <MasterHeaderActions
+            onNewClick={() => router.push(ROUTES.ORGANIZATION_NEW)}
+            newButtonLabel="New Organization"
+            onImportClick={() => setImportOpen(true)}
+        >
             <Button
                 variant="outlined"
                 size="small"
                 startIcon={<FileDownloadOutlinedIcon sx={{ fontSize: 16 }} />}
                 onClick={() => handleExport(false)}
-                sx={{
-                    borderColor: '#e2e8f0',
-                    color: '#334155',
-                    backgroundColor: '#fff',
-                    textTransform: 'none',
-                    fontWeight: 600,
-                    fontSize: '0.8rem',
-                    borderRadius: '8px',
-                    height: 36,
-                    px: 1.8,
-                    '&:hover': { borderColor: '#cbd5e1', backgroundColor: '#f8fafc' },
-                }}
+                sx={outlinedHeaderButtonSx}
             >
                 Export
             </Button>
-
-            <Button
-                variant="contained"
-                size="small"
-                startIcon={<AddIcon sx={{ fontSize: 16 }} />}
-                onClick={() => router.push(ROUTES.ORGANIZATION_NEW)}
-                sx={{
-                    background: 'linear-gradient(135deg, #1d4ed8 0%, #2563eb 100%)',
-                    color: '#fff',
-                    textTransform: 'none',
-                    fontWeight: 700,
-                    fontSize: '0.82rem',
-                    borderRadius: '8px',
-                    height: 36,
-                    px: 2,
-                    boxShadow: 'none',
-                    '&:hover': { background: 'linear-gradient(135deg, #1e40af 0%, #1d4ed8 100%)' },
-                }}
-            >
-                New Organization
-            </Button>
-        </Box>
+        </MasterHeaderActions>
     );
 
     return (
@@ -820,6 +795,16 @@ export function OrganizationsMasterView() {
                     onClose={() => setToast((t) => ({ ...t, open: false }))}
                 />
             }
-        />
+        >
+            <DataImportModal
+                open={importOpen}
+                entity="organizations"
+                onClose={() => setImportOpen(false)}
+                onImported={(count) => {
+                    loadOrganizations();
+                    setToast({ open: true, message: `Successfully imported ${count} organization${count === 1 ? '' : 's'}!`, severity: 'success' });
+                }}
+            />
+        </CommonMasterView>
     );
 }

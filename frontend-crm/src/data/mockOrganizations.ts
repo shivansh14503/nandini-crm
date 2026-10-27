@@ -1080,7 +1080,7 @@ export function addStoredOrganization(data: OrganizationFormData | Partial<Exten
         provideSupport: 'Yes',
         corporateEmails: [],
         ...data,
-        id: (data as ExtendedOrganization).id || `org-${Date.now()}`,
+        id: (data as ExtendedOrganization).id || `org-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
         accountCode: (data as ExtendedOrganization).accountCode || `ORG-${Math.floor(10000 + Math.random() * 90000)}`,
         createdAt: (data as ExtendedOrganization).createdAt || now,
         updatedAt: now,
