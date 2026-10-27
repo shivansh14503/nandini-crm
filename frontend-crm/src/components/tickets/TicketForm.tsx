@@ -31,7 +31,9 @@ import {
     RhfTextField,
     RhfSelect,
     RhfLookup,
-    RhfCheckbox,
+    RhfAssignedUserCard,
+    RhfToggleGroupCard,
+    RhfDateTimeField,
     RhfPhoneField,
     RhfEmailField,
     useRhfForm,
@@ -228,7 +230,6 @@ export default function TicketForm({ mode = 'create', initialData, ticketId, bre
                     <Box sx={gridSx}>
                         {/* Left column */}
                         <Box sx={columnSx}>
-                            <RhfCheckbox<TicketFormData> name="amcFlag" label="AMC Flag" />
                             <RhfTextField<TicketFormData> name="ticketSubject" label="Ticket Subject" placeholder="Short summary of the issue" />
                             <RhfLookup<TicketFormData, 'organization'>
                                 name="organizationName"
@@ -268,18 +269,17 @@ export default function TicketForm({ mode = 'create', initialData, ticketId, bre
                                 minRows={3}
                                 placeholder="Why this call was escalated..."
                             />
-                            <RhfLookup<TicketFormData, 'user'>
-                                name="assignedTo"
-                                label="Assigned to"
-                                required
-                                lookupType="user"
-                                placeholder="Select support representative"
-                            />
+                            <RhfAssignedUserCard<TicketFormData> name="assignedTo" label="Assigned to" required roleBadge="Primary Rep" />
                         </Box>
 
                         {/* Right column */}
                         <Box sx={columnSx}>
-                            <RhfCheckbox<TicketFormData> name="cloudFlag" label="Cloud Flag" />
+                            <RhfToggleGroupCard<TicketFormData>
+                                items={[
+                                    { name: 'amcFlag', label: 'Active AMC', caption: 'Annual maintenance contract' },
+                                    { name: 'cloudFlag', label: 'Active Cloud', caption: 'Cloud hosting subscription' },
+                                ]}
+                            />
                             <RhfSelect<TicketFormData>
                                 name="natureOfCall"
                                 label="Nature Of Call"
@@ -298,7 +298,7 @@ export default function TicketForm({ mode = 'create', initialData, ticketId, bre
                             <RhfEmailField<TicketFormData> name="contactEmail" label="Contact Email" placeholder="e.g. name@company.com" />
                             <RhfSelect<TicketFormData> name="leftJob" label="Left Job" options={['No', 'Yes']} />
                             <RhfSelect<TicketFormData> name="ticketStatus" label="Ticket Status" options={TICKET_STATUSES} />
-                            <RhfTextField<TicketFormData> name="dueDate" label="Due Date" required type="datetime-local" />
+                            <RhfDateTimeField<TicketFormData> dateName="dueDate" label="Due Date" required combined />
                             <RhfSelect<TicketFormData> name="supportMode" label="Support Mode" required options={SUPPORT_MODES} />
                             <RhfTextField<TicketFormData> name="problemObserved" label="Problem Observed" multiline minRows={3} placeholder="What the engineer found..." />
                             <RhfTextField<TicketFormData> name="rca" label="RCA (Root Cause Analysis)" multiline minRows={3} placeholder="Underlying cause..." />

@@ -12,7 +12,6 @@ import {
     MenuItem,
     InputAdornment,
     IconButton,
-    Avatar,
     Tooltip,
 } from '@mui/material';
 import { CommonActionModal } from '@/components/common/CommonActionModal';
@@ -23,7 +22,6 @@ import SwapHorizIcon from '@mui/icons-material/SwapHoriz';
 import MenuBookIcon from '@mui/icons-material/MenuBook';
 import SearchIcon from '@mui/icons-material/Search';
 import LinkOffIcon from '@mui/icons-material/LinkOff';
-import PersonOutlinedIcon from '@mui/icons-material/PersonOutlined';
 import LockOutlinedIcon from '@mui/icons-material/LockOutlined';
 
 import { useFormContext, useWatch, FormProvider, useForm } from 'react-hook-form';
@@ -36,6 +34,8 @@ import {
     StyledSelect,
     fieldSx,
     RhfSelect,
+    RhfAssignedUserCard,
+    RhfToggleGroupCard,
 } from '@/components/forms';
 import {
     NATURE_OF_BUSINESS,
@@ -57,19 +57,7 @@ import type {
     NumberOfEmployees,
     SourceOfLead,
 } from '@/types/organization.types';
-import { OrganizationLookupModal, UserLookupModal } from '@/components/common/lookup';
-import { findCrmUser } from '@/data/mockUsers';
-
-const DEFAULT_ASSIGNED_USER = 'mittal.sharma';
-
-const initials = (name: string) =>
-    name
-        .replace(/\s*\(You\)\s*$/i, '')
-        .split(/[\s._]+/)
-        .filter(Boolean)
-        .slice(0, 2)
-        .map((p) => p[0].toUpperCase())
-        .join('');
+import { OrganizationLookupModal } from '@/components/common/lookup';
 
 const INACTIVITY_REASONS = [
     'Client Closed Operations',
@@ -79,42 +67,6 @@ const INACTIVITY_REASONS = [
     'Temporary Pause',
     'Other',
 ];
-
-interface EntitlementToggleProps {
-    label: string;
-    caption: string;
-    checked: boolean;
-    onChange: (checked: boolean) => void;
-    isView: boolean;
-}
-
-/** Labelled on/off switch; renders as a pill in view mode. */
-function EntitlementToggle({ label, caption, checked, onChange, isView }: EntitlementToggleProps) {
-    return (
-        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1 }}>
-            <Box>
-                <Typography sx={{ fontWeight: 700, color: '#1e293b', fontSize: '0.82rem', lineHeight: 1.3 }}>{label}</Typography>
-                <Typography sx={{ color: '#94a3b8', fontSize: '0.72rem' }}>{caption}</Typography>
-            </Box>
-            {isView ? (
-                <Chip
-                    label={checked ? 'Yes' : 'No'}
-                    size="small"
-                    sx={{
-                        height: 24,
-                        fontSize: '0.76rem',
-                        fontWeight: 700,
-                        cursor: 'default',
-                        color: checked ? '#16a34a' : '#64748b',
-                        backgroundColor: checked ? '#16a34a1a' : '#64748b1a',
-                    }}
-                />
-            ) : (
-                <Switch checked={checked} onChange={(e) => onChange(e.target.checked)} slotProps={{ input: { 'aria-label': label } }} />
-            )}
-        </Box>
-    );
-}
 
 export interface OverviewTabProps {
     form: OrganizationFormData;
@@ -133,11 +85,7 @@ function OverviewTabInner({
     const currentAccountStatus = (useWatch({ control, name: 'accountStatus' }) ?? form?.accountStatus ?? 'Active') as AccountStatus;
     const isView = useFormMode().mode === 'view';
     const [pendingInactive, setPendingInactive] = React.useState(false);
-    const [userLookupOpen, setUserLookupOpen] = React.useState(false);
     const [orgLookupOpen, setOrgLookupOpen] = React.useState(false);
-    // Matches the master view, which shows mittal.sharma for organizations without an owner.
-    const assignedUsername = form.assignedUser || DEFAULT_ASSIGNED_USER;
-    const assignedUser = findCrmUser(assignedUsername);
     const watchedNatureOfBusiness = useWatch({ control, name: 'natureOfBusiness' });
     const watchedTypeOfEntity = useWatch({ control, name: 'typeOfEntity' });
     const watchedCustomerType = useWatch({ control, name: 'customerType' });
@@ -547,32 +495,13 @@ function OverviewTabInner({
                     </Box>
 
                     {/* Active AMC & Cloud entitlements */}
-                    <Box
-                        sx={{
-                            display: 'grid',
-                            gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' },
-                            gap: 2,
-                            p: 1.75,
-                            border: '1px solid #e2e8f0',
-                            borderRadius: '10px',
-                            backgroundColor: '#f8fafc',
-                        }}
-                    >
-                        <EntitlementToggle
-                            label="Active AMC"
-                            caption="Annual maintenance contract"
-                            checked={Boolean(form.activeAmc)}
-                            onChange={(v) => set('activeAmc', v)}
-                            isView={isView}
-                        />
-                        <EntitlementToggle
-                            label="Active Cloud"
-                            caption="Cloud hosting subscription"
-                            checked={Boolean(form.activeCloud)}
-                            onChange={(v) => set('activeCloud', v)}
-                            isView={isView}
-                        />
-                    </Box>
+                    <RhfToggleGroupCard<OrganizationFormData>
+                        items={[
+                            { name: 'activeAmc', label: 'Active AMC', caption: 'Annual maintenance contract' },
+                            { name: 'activeCloud', label: 'Active Cloud', caption: 'Cloud hosting subscription' },
+                        ]}
+                        onValueChange={(name, checked) => set(name as 'activeAmc' | 'activeCloud', checked)}
+                    />
 
                     {/* Mailing Name (always equals Organization Name) */}
                     <FormField name="mailingName" label="Mailing Name" hint="Printed on tax invoices • follows Organization Name" sx={{ mb: 0 }}>
@@ -693,86 +622,13 @@ function OverviewTabInner({
                     </FormField>
 
                     {/* Assigned to (Account Executive) */}
-                    <FormField label="Assigned to (Account Executive)" required sx={{ mb: 0 }}>
-                        <Box
-                            sx={{
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'space-between',
-                                p: 1.5,
-                                border: '1px solid #e2e8f0',
-                                borderRadius: '8px',
-                                backgroundColor: '#fff',
-                            }}
-                        >
-                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-                                <Avatar
-                                    sx={{
-                                        width: 32,
-                                        height: 32,
-                                        fontSize: '0.78rem',
-                                        fontWeight: 700,
-                                        backgroundColor: '#1d4ed8',
-                                    }}
-                                >
-                                    {initials(assignedUser?.name || assignedUsername)}
-                                </Avatar>
-                                <Box>
-                                    <Typography
-                                        sx={{
-                                            fontSize: '0.84rem',
-                                            fontWeight: 600,
-                                            color: '#1e293b',
-                                            lineHeight: 1.2,
-                                        }}
-                                    >
-                                        {assignedUser?.name || assignedUsername}
-                                    </Typography>
-                                    <Typography sx={{ fontSize: '0.72rem', color: '#64748b' }}>
-                                        {assignedUser ? `${assignedUser.role} • ${assignedUser.department}` : 'Not in user directory'}
-                                    </Typography>
-                                </Box>
-                            </Box>
-                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                                <Chip
-                                    label="Primary Rep"
-                                    size="small"
-                                    variant="outlined"
-                                    sx={{
-                                        fontSize: '0.7rem',
-                                        height: 22,
-                                        borderColor: '#cbd5e1',
-                                        color: '#475569',
-                                        backgroundColor: '#f8fafc',
-                                        fontWeight: 500,
-                                    }}
-                                />
-                                {!isView && (
-                                    <Tooltip title="Change assigned user">
-                                        <IconButton
-                                            size="small"
-                                            aria-label="Change assigned user"
-                                            onClick={() => setUserLookupOpen(true)}
-                                            sx={{
-                                                color: '#64748b',
-                                                width: 28,
-                                                height: 28,
-                                                '&:hover': { color: '#1d4ed8', backgroundColor: '#eff6ff' },
-                                            }}
-                                        >
-                                            <PersonOutlinedIcon sx={{ fontSize: 18 }} />
-                                        </IconButton>
-                                    </Tooltip>
-                                )}
-                            </Box>
-                        </Box>
-                        <UserLookupModal
-                            open={userLookupOpen}
-                            onClose={() => setUserLookupOpen(false)}
-                            onSelect={(u) => set('assignedUser', u.username)}
-                            selectedValue={assignedUsername}
-                        />
-                    </FormField>
+                    <RhfAssignedUserCard<OrganizationFormData>
+                        name="assignedUser"
+                        label="Assigned to (Account Executive)"
+                        required
+                        roleBadge="Primary Rep"
+                        onValueChange={(username) => set('assignedUser', username)}
+                    />
                 </Box>
             </Box>
         </Box>

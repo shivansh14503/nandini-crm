@@ -87,6 +87,7 @@ const DEFAULT_FORM: OrganizationFormData = {
     verifiedBy: '',
     activeAmc: false,
     activeCloud: false,
+    assignedUser: 'mittal.sharma',
 
     // Billing Address
     billingAddress: '',
