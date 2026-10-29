@@ -1,7 +1,10 @@
 import { z } from 'zod';
+import { FIELD_MAX_LENGTH as L } from '../config/fieldLimits';
 import {
     requiredString,
     optionalString,
+    requiredText,
+    optionalText,
     zodPhone,
     zodEmailOptional,
     zodAmount,
@@ -20,8 +23,8 @@ export const opportunityLineItemSchema = z.object({
     taxRate: z.string().default('18%'),
     taxAmount: zodAmount.default(0),
     total: zodAmount.default(0),
-    description: optionalString,
-    note: optionalString,
+    description: optionalText('Line item description', L.longText),
+    note: optionalText('Line item note', L.longText),
 });
 
 export const opportunityFormSchema = z.object({
@@ -29,9 +32,9 @@ export const opportunityFormSchema = z.object({
     productCategory: z
         .array(z.string())
         .min(1, { message: 'Please select at least one Product Category.' }),
-    contactName: requiredString('Contact Person'),
+    contactName: requiredText('Contact Person', L.personName),
     contactId: optionalString,
-    organizationName: requiredString('Organization Name'),
+    organizationName: requiredText('Organization Name', L.organizationName),
     organizationId: optionalString,
     contactNumber: zodPhone,
     emailAddress: zodEmailOptional,
@@ -43,14 +46,14 @@ export const opportunityFormSchema = z.object({
     nextFollowupDate: requiredString('Next Followup Date'),
     nextFollowupTime: optionalString,
     followupType: optionalString.default('Call'),
-    addDescription: requiredString('Add Description')
+    addDescription: requiredText('Add Description', L.longText)
         .min(3, { message: 'Add Description must be at least 3 characters.' }),
-    description: optionalString,
+    description: optionalText('Description', L.longText),
     assignedTo: requiredString('Assigned Representative'),
 
     // Billing Details
-    tallySerialNo: optionalString,
-    invoiceNo: optionalString,
+    tallySerialNo: optionalText('Tally Serial No', L.shortCode),
+    invoiceNo: optionalText('Invoice No', L.shortCode),
     invoiceDate: optionalString,
 
     // Commission Details
@@ -61,7 +64,7 @@ export const opportunityFormSchema = z.object({
 
     // Line Items
     currency: optionalString.default('Indian Rupee: ₹'),
-    groupName: optionalString.default('Products & Services'),
+    groupName: optionalText('Group Name', L.shortText).default('Products & Services'),
     lineItems: z.array(opportunityLineItemSchema).default([]),
     lumpSumDiscount: zodAmount.default(0),
     totalAmount: zodAmount.default(0),

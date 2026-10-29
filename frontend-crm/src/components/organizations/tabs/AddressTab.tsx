@@ -8,7 +8,10 @@ import PlaceOutlinedIcon from '@mui/icons-material/PlaceOutlined';
 import LocalShippingOutlinedIcon from '@mui/icons-material/LocalShippingOutlined';
 
 import {
+    FIELD_MAX_LENGTH,
     FormField,
+    FormGrid,
+    FormGridItem,
     ReadOnlyField,
     SectionLabel,
     fieldSx,
@@ -31,6 +34,9 @@ export interface AddressTabProps {
 }
 
 type Side = 'billing' | 'shipping';
+
+/** Country + State, City + PIN side by side within each address column; one column on phones. */
+const ADDRESS_GRID_COLUMNS = { sm: 2 };
 
 /** Field keys per column; street is stored in both `*Street` and `*Address`, which the form keeps in sync. */
 const KEYS = {
@@ -75,7 +81,7 @@ export function AddressTab({ form, set, handleCopyAddressToggle }: AddressTabPro
         const hasStates = getSubdivisionsByCountry(countryIso2OrDefault(country)).length > 0;
 
         return (
-            <>
+            <FormGrid columns={ADDRESS_GRID_COLUMNS}>
                 <CountrySelectField
                     name={k.country}
                     value={country}
@@ -102,27 +108,6 @@ export function AddressTab({ form, set, handleCopyAddressToggle }: AddressTabPro
                     disabled={locked}
                 />
 
-                <FormField
-                    name={k.address}
-                    label="Street"
-                    required={isBilling}
-                    hint={isBilling ? 'Registered office location' : 'Dispatch & delivery location'}
-                    sx={{ mb: 0 }}
-                >
-                    <TextField
-                        fullWidth
-                        multiline
-                        minRows={3}
-                        maxRows={5}
-                        size="small"
-                        placeholder={isBilling ? 'Enter a location' : 'Enter delivery location'}
-                        value={form[k.street] || form[k.address] || ''}
-                        onChange={(e) => setStreet(side, e.target.value)}
-                        disabled={locked}
-                        sx={fieldSx}
-                    />
-                </FormField>
-
                 <PostalCodeField
                     name={k.postalCode}
                     value={form[k.postalCode] || ''}
@@ -131,7 +116,31 @@ export function AddressTab({ form, set, handleCopyAddressToggle }: AddressTabPro
                     required={isBilling}
                     disabled={locked}
                 />
-            </>
+
+                <FormGridItem span="full">
+                    <FormField
+                        name={k.address}
+                        label="Street"
+                        size="lg"
+                        required={isBilling}
+                        hint={isBilling ? 'Registered office location' : 'Dispatch & delivery location'}
+                    >
+                        <TextField
+                            fullWidth
+                            multiline
+                            minRows={3}
+                            maxRows={5}
+                            size="small"
+                            placeholder={isBilling ? 'Enter a location' : 'Enter delivery location'}
+                            value={form[k.street] || form[k.address] || ''}
+                            onChange={(e) => setStreet(side, e.target.value)}
+                            disabled={locked}
+                            sx={fieldSx}
+                            slotProps={{ htmlInput: { maxLength: FIELD_MAX_LENGTH.address } }}
+                        />
+                    </FormField>
+                </FormGridItem>
+            </FormGrid>
         );
     };
 

@@ -1,11 +1,13 @@
 'use client';
 
 import React, { useMemo, useState } from 'react';
-import { Alert, Grid } from '@mui/material';
+import { Alert, Box } from '@mui/material';
 import { useFormContext, useWatch } from 'react-hook-form';
 
 import {
     FormField,
+    FormGrid,
+    FormGridItem,
     LookupField,
     RhfCheckbox,
     RhfChipGroup,
@@ -69,36 +71,40 @@ export function ConvertContactSection() {
 
     return (
         <>
-            <Grid container spacing={3.5}>
-                <Grid size={{ xs: 12 }}>
-                    <FormField label="Select Existing Contact" hint="Optional — leave blank to create a new contact">
-                        <LookupField
-                            value={selected}
-                            onChange={handleSelect}
-                            options={[...contactsByLabel.keys()]}
-                            placeholder="Search existing contacts by name or mobile..."
-                        />
-                    </FormField>
-                </Grid>
+            <FormField label="Select Existing Contact" size="lg" hint="Optional — leave blank to create new">
+                <LookupField
+                    value={selected}
+                    onChange={handleSelect}
+                    options={[...contactsByLabel.keys()]}
+                    placeholder="Search existing contacts by name or mobile..."
+                />
+            </FormField>
 
-                <Grid size={{ xs: 12, md: 6 }}>
-                    <RhfTextField<F> name="contactName" label="Name" required placeholder="Contact person name" />
-                    <RhfPhoneField<F> name="contactMobile" label="Mobile" required />
-                    <RhfPhoneField<F> name="contactPhone3" label="Phone 3" placeholder="Alternate phone number" />
-                    <RhfSelect<F> name="designation" label="Designation" options={CONTACT_DESIGNATIONS} placeholder="Select Designation" />
-                    <RhfChipGroup<F> name="communicationType" label="Communication Type" options={COMMUNICATION_TYPES} />
-                    <RhfTextField<F> name="contactDescription" label="Description" multiline minRows={3} placeholder="Notes about this contact..." />
-                    <RhfLookup<F> name="contactAssignedTo" label="Assigned to" lookupType="user" required options={LEAD_ASSIGNED_USERS} placeholder="Select assigned representative" />
-                </Grid>
+            <FormGrid columns={3}>
+                <RhfTextField<F> name="contactName" label="Name" required placeholder="Contact person name" />
+                <RhfPhoneField<F> name="contactMobile" label="Mobile" required />
+                <RhfPhoneField<F> name="contactPhone3" label="Phone 3" placeholder="Alternate phone number" />
 
-                <Grid size={{ xs: 12, md: 6 }}>
+                <RhfSelect<F> name="designation" label="Designation" options={CONTACT_DESIGNATIONS} placeholder="Select Designation" />
+                <RhfSelect<F> name="department" label="Department" options={CONTACT_DEPARTMENTS} placeholder="Select Department" />
+                <RhfLookup<F> name="contactAssignedTo" label="Assigned to" lookupType="user" required options={LEAD_ASSIGNED_USERS} placeholder="Select representative" />
+
+                <FormGridItem span={2}>
                     <RhfTextField<F> name="organizationName" label="Organization Name" required disabled hint="Taken from the organization section below" />
+                </FormGridItem>
+
+                <FormGridItem span="full">
                     <RhfEmailList name="contactEmails" required />
-                    <RhfCheckbox<F> name="isPrimaryContact" label="Is Primary Contact" />
-                    <RhfSelect<F> name="department" label="Department" options={CONTACT_DEPARTMENTS} placeholder="Select Department" />
-                    <RhfCheckbox<F> name="doNotCall" label="Do Not Call (DND)" />
-                </Grid>
-            </Grid>
+                </FormGridItem>
+                <RhfChipGroup<F> name="communicationType" label="Communication Type" options={COMMUNICATION_TYPES} />
+                <FormGridItem span="full">
+                    <Box sx={{ display: 'flex', flexWrap: 'wrap', columnGap: 3 }}>
+                        <RhfCheckbox<F> name="isPrimaryContact" label="Is Primary Contact" />
+                        <RhfCheckbox<F> name="doNotCall" label="Do Not Call (DND)" />
+                    </Box>
+                </FormGridItem>
+                <RhfTextField<F> name="contactDescription" label="Description" multiline minRows={3} placeholder="Notes about this contact..." />
+            </FormGrid>
 
             {duplicate && (
                 <Alert severity="warning" sx={{ mt: 2 }}>

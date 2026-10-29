@@ -33,6 +33,9 @@ import { formatAddressLine } from '@/utils/address';
 import {
     CommonFormLayout,
     AppToast,
+    FormGrid,
+    FormGridItem,
+    fieldSizeSx,
     RhfTextField,
     RhfSelect,
     RhfLookup,
@@ -88,8 +91,6 @@ export const DEFAULT_TICKET_FORM: TicketFormData = {
     partnerCompanyContact: '',
 };
 
-const columnSx = { display: 'flex', flexDirection: 'column', minWidth: 0 } as const;
-const gridSx = { display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' }, gap: 3.5 } as const;
 
 const organizationAddress = (o: ExtendedOrganization) =>
     o.billingAddress ||
@@ -297,34 +298,84 @@ export default function TicketForm({ mode = 'create', initialData, ticketId, bre
                 toast={<AppToast open={toast.open} message={toast.message} severity={toast.severity} onClose={closeToast} />}
             >
                 <div hidden={activeTab !== 'overview'}>
-                    <Box sx={gridSx}>
-                        {/* Left column */}
-                        <Box sx={columnSx}>
-                            <RhfTextField<TicketFormData> name="ticketSubject" label="Ticket Subject" placeholder="Short summary of the issue" />
-                            <RhfLookup<TicketFormData, 'organization'>
-                                name="organizationName"
-                                label="Organization Name"
-                                required
-                                options={organizationNames}
-                                lookupType="organization"
-                                onSelectRecord={handleOrganizationPicked}
-                                onClearRecord={handleOrganizationCleared}
-                                placeholder="Search or select organization..."
+                    {/* Entitlements */}
+                    <Box sx={fieldSizeSx('lg')}>
+                        <RhfToggleGroupCard<TicketFormData>
+                            items={[
+                                { name: 'amcFlag', label: 'Active AMC', caption: 'Annual maintenance contract' },
+                                { name: 'cloudFlag', label: 'Active Cloud', caption: 'Cloud hosting subscription' },
+                            ]}
+                        />
+                    </Box>
+
+                    <FormGrid columns={3} sx={{ mt: 1 }}>
+                        {/* ── Customer ── */}
+                        <RhfTextField<TicketFormData> name="ticketSubject" label="Ticket Subject" placeholder="Short summary of the issue" />
+                        <RhfLookup<TicketFormData, 'organization'>
+                            name="organizationName"
+                            label="Organization Name"
+                            required
+                            options={organizationNames}
+                            lookupType="organization"
+                            onSelectRecord={handleOrganizationPicked}
+                            onClearRecord={handleOrganizationCleared}
+                            placeholder="Search or select organization..."
+                        />
+                        <RhfLookup<TicketFormData, 'contact'>
+                            name="contactPersonName"
+                            label="Contact Person Name"
+                            required
+                            options={contactNames}
+                            lookupType="contact"
+                            onSelectRecord={handleContactPicked}
+                            onClearRecord={handleContactCleared}
+                            placeholder="Search or select contact..."
+                            fieldSize="md"
+                        />
+
+                        {/* ── Contact channels ── */}
+                        <RhfPhoneField<TicketFormData> name="contactNumber" label="Contact Number" placeholder="e.g. 9876543210" />
+                        <RhfEmailField<TicketFormData> name="contactEmail" label="Contact Email" placeholder="e.g. name@company.com" />
+                        <RhfSelect<TicketFormData> name="leftJob" label="Left Job" options={['No', 'Yes']} />
+
+                        {/* ── Classification ── */}
+                        <RhfLookup<TicketFormData, 'natureOfCall'>
+                            name="natureOfCall"
+                            label="Nature Of Call"
+                            required
+                            options={natureOfCallNames}
+                            lookupType="natureOfCall"
+                            onSelectRecord={handleNatureOfCallPicked}
+                            hint="Sets a suggested priority"
+                            placeholder="Search or select nature of call..."
+                        />
+                        <RhfSelect<TicketFormData> name="ticketPriority" label="Ticket Priority" required options={TICKET_PRIORITIES} />
+                        <RhfSelect<TicketFormData> name="ticketStatus" label="Ticket Status" options={TICKET_STATUSES} />
+
+                        {/* ── Channel ── */}
+                        <RhfSelect<TicketFormData> name="source" label="Source" options={TICKET_SOURCES} />
+                        <RhfSelect<TicketFormData> name="supportType" label="Support Type" options={SUPPORT_TYPES} />
+                        <RhfSelect<TicketFormData> name="supportMode" label="Support Mode" required options={SUPPORT_MODES} />
+
+                        {/* ── Scheduling & ownership ── */}
+                        <RhfDateTimeField<TicketFormData> dateName="dueDate" label="Due Date" required combined />
+                        <RhfAssignedUserCard<TicketFormData> name="assignedTo" label="Assigned to" required roleBadge="Primary Rep" />
+                        <FormGridItem>
+                            <RhfTextField<TicketFormData>
+                                name="accountAddress"
+                                label="Account Address"
+                                multiline
+                                minRows={2}
+                                hint="From the selected organization"
+                                placeholder="Customer site address"
+                                fieldSize="lg"
                             />
-                            <RhfLookup<TicketFormData, 'contact'>
-                                name="contactPersonName"
-                                label="Contact Person Name"
-                                required
-                                options={contactNames}
-                                lookupType="contact"
-                                onSelectRecord={handleContactPicked}
-                                onClearRecord={handleContactCleared}
-                                placeholder="Search or select contact..."
-                            />
-                            <RhfPhoneField<TicketFormData> name="contactNumber" label="Contact Number" placeholder="e.g. 9876543210" />
-                            <RhfSelect<TicketFormData> name="ticketPriority" label="Ticket Priority" required options={TICKET_PRIORITIES} />
-                            <RhfSelect<TicketFormData> name="source" label="Source" options={TICKET_SOURCES} />
-                            <RhfSelect<TicketFormData> name="supportType" label="Support Type" options={SUPPORT_TYPES} />
+                        </FormGridItem>
+                    </FormGrid>
+
+                    {/* ── Case notes: textareas three to a row ── */}
+                    <FormGrid columns={3} sx={{ mt: 3 }}>
+                        <FormGridItem>
                             <RhfTextField<TicketFormData>
                                 name="problemReported"
                                 label="Problem Reported"
@@ -333,7 +384,17 @@ export default function TicketForm({ mode = 'create', initialData, ticketId, bre
                                 minRows={3}
                                 placeholder="What the customer reported..."
                             />
+                        </FormGridItem>
+                        <FormGridItem>
+                            <RhfTextField<TicketFormData> name="problemObserved" label="Problem Observed" multiline minRows={3} placeholder="What the engineer found..." />
+                        </FormGridItem>
+                        <FormGridItem>
+                            <RhfTextField<TicketFormData> name="rca" label="RCA (Root Cause Analysis)" multiline minRows={3} placeholder="Underlying cause..." />
+                        </FormGridItem>
+                        <FormGridItem>
                             <RhfTextField<TicketFormData> name="resolution" label="Resolution" multiline minRows={3} placeholder="Steps taken to resolve..." />
+                        </FormGridItem>
+                        <FormGridItem>
                             <RhfTextField<TicketFormData>
                                 name="reasonForEscalatedCalls"
                                 label="Reason For Escalated Calls"
@@ -341,71 +402,33 @@ export default function TicketForm({ mode = 'create', initialData, ticketId, bre
                                 minRows={3}
                                 placeholder="Why this call was escalated..."
                             />
-                            <RhfAssignedUserCard<TicketFormData> name="assignedTo" label="Assigned to" required roleBadge="Primary Rep" />
-                        </Box>
-
-                        {/* Right column */}
-                        <Box sx={columnSx}>
-                            <RhfToggleGroupCard<TicketFormData>
-                                items={[
-                                    { name: 'amcFlag', label: 'Active AMC', caption: 'Annual maintenance contract' },
-                                    { name: 'cloudFlag', label: 'Active Cloud', caption: 'Cloud hosting subscription' },
-                                ]}
-                            />
-                            <RhfLookup<TicketFormData, 'natureOfCall'>
-                                name="natureOfCall"
-                                label="Nature Of Call"
-                                required
-                                options={natureOfCallNames}
-                                lookupType="natureOfCall"
-                                onSelectRecord={handleNatureOfCallPicked}
-                                hint="Sets a suggested priority"
-                                placeholder="Search or select nature of call..."
-                            />
-                            <RhfTextField<TicketFormData>
-                                name="accountAddress"
-                                label="Account Address"
-                                multiline
-                                minRows={2}
-                                hint="Filled from the selected organization"
-                                placeholder="Customer site address"
-                            />
-                            <RhfEmailField<TicketFormData> name="contactEmail" label="Contact Email" placeholder="e.g. name@company.com" />
-                            <RhfSelect<TicketFormData> name="leftJob" label="Left Job" options={['No', 'Yes']} />
-                            <RhfSelect<TicketFormData> name="ticketStatus" label="Ticket Status" options={TICKET_STATUSES} />
-                            <RhfDateTimeField<TicketFormData> dateName="dueDate" label="Due Date" required combined />
-                            <RhfSelect<TicketFormData> name="supportMode" label="Support Mode" required options={SUPPORT_MODES} />
-                            <RhfTextField<TicketFormData> name="problemObserved" label="Problem Observed" multiline minRows={3} placeholder="What the engineer found..." />
-                            <RhfTextField<TicketFormData> name="rca" label="RCA (Root Cause Analysis)" multiline minRows={3} placeholder="Underlying cause..." />
+                        </FormGridItem>
+                        <FormGridItem>
                             <RhfTextField<TicketFormData> name="addDescription" label="Add Description" multiline minRows={3} placeholder="Additional notes..." />
-                        </Box>
-                    </Box>
+                        </FormGridItem>
+                    </FormGrid>
                 </div>
 
                 <div hidden={activeTab !== 'partner_company'}>
-                    <Box sx={gridSx}>
-                        <Box sx={columnSx}>
-                            <RhfLookup<TicketFormData, 'partnerCompany'>
-                                name="partnerCompany"
-                                label="Partner Company"
-                                options={partnerCompanyNames}
-                                lookupType="partnerCompany"
-                                onSelectRecord={handlePartnerCompanyPicked}
-                                onClearRecord={() => setValue('partnerCompanyContact', '', { shouldDirty: true })}
-                                placeholder="Search or select partner company..."
-                            />
-                        </Box>
-                        <Box sx={columnSx}>
-                            <RhfLookup<TicketFormData, 'partnerCompanyContact'>
-                                name="partnerCompanyContact"
-                                label="Partner Company Contact"
-                                options={partnerContactNames}
-                                lookupType="partnerCompanyContact"
-                                onSelectRecord={handlePartnerContactPicked}
-                                placeholder="Search or select partner contact..."
-                            />
-                        </Box>
-                    </Box>
+                    <FormGrid columns={2}>
+                        <RhfLookup<TicketFormData, 'partnerCompany'>
+                            name="partnerCompany"
+                            label="Partner Company"
+                            options={partnerCompanyNames}
+                            lookupType="partnerCompany"
+                            onSelectRecord={handlePartnerCompanyPicked}
+                            onClearRecord={() => setValue('partnerCompanyContact', '', { shouldDirty: true })}
+                            placeholder="Search or select partner company..."
+                        />
+                        <RhfLookup<TicketFormData, 'partnerCompanyContact'>
+                            name="partnerCompanyContact"
+                            label="Partner Company Contact"
+                            options={partnerContactNames}
+                            lookupType="partnerCompanyContact"
+                            onSelectRecord={handlePartnerContactPicked}
+                            placeholder="Search or select partner contact..."
+                        />
+                    </FormGrid>
                 </div>
             </CommonFormLayout>
         </FormProvider>

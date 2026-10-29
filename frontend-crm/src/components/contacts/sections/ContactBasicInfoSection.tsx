@@ -1,9 +1,8 @@
 'use client';
 
 import React, { useMemo } from 'react';
-import { Grid } from '@mui/material';
 import { useFormContext } from 'react-hook-form';
-import { RhfTextField, RhfPhoneField, RhfLookup, RhfCheckbox, RhfSelect } from '@/components/forms';
+import { FormGrid, FormGridItem, RhfTextField, RhfPhoneField, RhfLookup, RhfCheckbox, RhfSelect } from '@/components/forms';
 import { organizationService } from '@/services';
 import type { ContactFormData } from '../../../types/contact.types';
 
@@ -19,13 +18,12 @@ export function ContactBasicInfoSection() {
     );
 
     return (
-        <Grid container spacing={3.5}>
-            <Grid size={{ xs: 12, md: 6 }}>
-                <RhfTextField<ContactFormData> name="name" label="Name" required placeholder="e.g. Rajesh Kumar" />
-                <RhfPhoneField<ContactFormData> name="mobile" label="Mobile" required hint="Primary 10-digit mobile number" placeholder="e.g. 9876543210" />
-                <RhfCheckbox<ContactFormData> name="isPrimaryContact" label="Is Primary Contact" />
-            </Grid>
-            <Grid size={{ xs: 12, md: 6 }}>
+        <FormGrid columns={3}>
+            <RhfTextField<ContactFormData> name="name" label="Name" required placeholder="e.g. Rajesh Kumar" />
+            <RhfPhoneField<ContactFormData> name="mobile" label="Mobile" required hint="Primary 10-digit mobile" placeholder="e.g. 9876543210" />
+            <RhfPhoneField<ContactFormData> name="officePhone" label="Office Phone" placeholder="e.g. 0112345678" />
+
+            <FormGridItem span={2}>
                 <RhfLookup<ContactFormData>
                     name="organizationName"
                     label="Organization Name"
@@ -37,9 +35,12 @@ export function ContactBasicInfoSection() {
                     onSelectRecord={(org) => setValue('organizationId', org.id, { shouldDirty: true })}
                     onClearRecord={() => setValue('organizationId', '', { shouldDirty: true })}
                 />
-                <RhfPhoneField<ContactFormData> name="officePhone" label="Office Phone" placeholder="e.g. 0112345678" />
-                <RhfSelect<ContactFormData> name="leftJob" label="Left Job" options={['No', 'Yes']} placeholder="Select option" />
-            </Grid>
-        </Grid>
+            </FormGridItem>
+            <RhfSelect<ContactFormData> name="leftJob" label="Left Job" options={['No', 'Yes']} placeholder="Select" />
+
+            <FormGridItem span="full">
+                <RhfCheckbox<ContactFormData> name="isPrimaryContact" label="Is Primary Contact" />
+            </FormGridItem>
+        </FormGrid>
     );
 }

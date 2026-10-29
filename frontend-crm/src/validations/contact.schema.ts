@@ -1,7 +1,10 @@
 import { z } from 'zod';
+import { FIELD_MAX_LENGTH as L } from '../config/fieldLimits';
 import {
     requiredString,
     optionalString,
+    requiredText,
+    optionalText,
     zodPhone,
     zodPhoneOptional,
     zodEmailOptional,
@@ -16,9 +19,8 @@ export const corporateEmailSchema = z.object({
 });
 
 export const contactFormSchema = z.object({
-    name: requiredString('Contact Name')
-        .max(100, { message: 'Contact Name cannot exceed 100 characters.' }),
-    organizationName: requiredString('Organization Name'),
+    name: requiredText('Contact Name', L.personName),
+    organizationName: requiredText('Organization Name', L.organizationName),
     mobile: zodPhone,
     officePhone: zodPhoneOptional,
     phone3: zodPhoneOptional,
@@ -43,7 +45,7 @@ export const contactFormSchema = z.object({
     leftJob: z.enum(['No', 'Yes']).default('No'),
     communicationType: z.array(z.string()).default(['Call', 'Email']),
     doNotCall: z.boolean().default(false),
-    description: optionalString,
+    description: optionalText('Description', L.longText),
 });
 
 export type ContactFormSchemaType = z.infer<typeof contactFormSchema>;

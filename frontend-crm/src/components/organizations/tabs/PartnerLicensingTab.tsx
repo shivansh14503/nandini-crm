@@ -25,7 +25,7 @@ import BusinessIcon from '@mui/icons-material/Business';
 import ClearIcon from '@mui/icons-material/Clear';
 import HandshakeOutlinedIcon from '@mui/icons-material/HandshakeOutlined';
 
-import { FormField, SectionLabel, fieldSx } from '@/components/forms';
+import { FIELD_MAX_LENGTH, FormField, SectionLabel, fieldSizeMaxWidth, fieldSx } from '@/components/forms';
 import type { OrganizationFormData } from '@/types/organization.types';
 import { useFormMode } from '@/context/FormModeContext';
 
@@ -68,7 +68,7 @@ export function PartnerLicensingTab({ form, set }: PartnerLicensingTabProps) {
 
             {/* ── Partner Company Input with Search and Clear ─────────────── */}
             {!isView && (
-            <FormField label="Partner Company" sx={{ maxWidth: 720, mb: 3 }}>
+            <FormField label="Partner Company" size="lg" sx={{ mb: 3 }}>
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
                     <TextField
                         fullWidth
@@ -84,6 +84,7 @@ export function PartnerLicensingTab({ form, set }: PartnerLicensingTabProps) {
                         }}
                         sx={fieldSx}
                         slotProps={{
+                            htmlInput: { maxLength: FIELD_MAX_LENGTH.organizationName },
                             input: {
                                 endAdornment: inputValue ? (
                                     <InputAdornment position="end">
@@ -128,7 +129,7 @@ export function PartnerLicensingTab({ form, set }: PartnerLicensingTabProps) {
                 component={Paper}
                 elevation={0}
                 sx={{
-                    maxWidth: 720,
+                    maxWidth: fieldSizeMaxWidth('lg'),
                     border: '1px solid #e2e8f0',
                     borderRadius: '10px',
                     overflow: 'hidden',

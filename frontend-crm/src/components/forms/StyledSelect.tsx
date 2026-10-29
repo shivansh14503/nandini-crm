@@ -3,6 +3,7 @@ import { FormControl, Select, MenuItem, Typography } from '@mui/material';
 import { fieldSx } from './FormField';
 import { useFormMode } from '@/context/FormModeContext';
 import { ReadOnlyField } from './ReadOnlyField';
+import { fieldSizeSx, type FieldSize } from './fieldSizing';
 
 export interface StyledSelectProps {
     label?: string;
@@ -12,6 +13,8 @@ export interface StyledSelectProps {
     options: string[];
     required?: boolean;
     disabled?: boolean;
+    /** Width cap for standalone use; omit inside a {@link FormField}, which sizes its children. */
+    fieldSize?: FieldSize;
 }
 
 export function StyledSelect({
@@ -22,6 +25,7 @@ export function StyledSelect({
     options,
     required,
     disabled,
+    fieldSize,
 }: StyledSelectProps) {
     const { mode } = useFormMode();
     if (mode === 'view') {
@@ -32,7 +36,13 @@ export function StyledSelect({
         placeholder || (label ? `Select ${label.replace(/\s*\*$/, '')}` : 'Select an option');
 
     return (
-        <FormControl fullWidth size="small" sx={fieldSx} required={required} disabled={disabled}>
+        <FormControl
+            fullWidth
+            size="small"
+            sx={fieldSize ? { ...fieldSx, ...fieldSizeSx(fieldSize) } : fieldSx}
+            required={required}
+            disabled={disabled}
+        >
             <Select
                 displayEmpty
                 disabled={disabled}

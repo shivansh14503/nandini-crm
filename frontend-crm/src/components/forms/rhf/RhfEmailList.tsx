@@ -5,6 +5,7 @@ import { Box, Button, FormHelperText, Typography } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
 import { useController, type FieldValues } from 'react-hook-form';
 import { EmailRow } from '../EmailRow';
+import { fieldSizeSx } from '../fieldSizing';
 import { useFormMode } from '@/context/FormModeContext';
 import type { CorporateEmail } from '@/types/organization.types';
 
@@ -66,7 +67,8 @@ export function RhfEmailList({
     if (isView && rows.length === 0) return null;
 
     return (
-        <Box sx={{ mb: 1 }}>
+        // Capped so the email cards (address + flags) don't stretch across wide layouts.
+        <Box sx={{ mb: 1, ...fieldSizeSx('lg') }}>
             <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
                 <Typography sx={{ fontWeight: 600, color: '#374151', fontSize: '0.82rem' }}>
                     {label}

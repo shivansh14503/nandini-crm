@@ -1,8 +1,16 @@
 'use client';
 
 import React from 'react';
-import { Autocomplete, Box, FormHelperText, TextField, Typography } from '@mui/material';
+import {
+    Autocomplete,
+    Box,
+    FormHelperText,
+    TextField,
+    Typography,
+    type AutocompleteRenderInputParams,
+} from '@mui/material';
 import { FormField, fieldSx } from './FormField';
+import { FIELD_MAX_LENGTH, type FieldSize } from './fieldSizing';
 import { ReadOnlyField } from './ReadOnlyField';
 import { useFormMode } from '@/context/FormModeContext';
 import {
@@ -75,7 +83,15 @@ interface BaseFieldProps {
     placeholder?: string;
     hint?: React.ReactNode;
     error?: string;
+    /** Width token; each field has a compact default (postal code `xs`, the rest `md`). */
+    size?: FieldSize;
 }
+
+/** Adds the shared place-name limit to an Autocomplete's input while keeping its own props (ref, handlers, aria). */
+const withMaxLength = (slotProps: AutocompleteRenderInputParams['slotProps']) => ({
+    ...slotProps,
+    htmlInput: { ...slotProps.htmlInput, maxLength: FIELD_MAX_LENGTH.shortText },
+});
 
 const ErrorText = ({ error }: { error?: string }) =>
     error ? (
@@ -114,6 +130,7 @@ export function CountrySelectField({
     placeholder = 'Select Country',
     hint,
     error,
+    size = 'md',
 }: CountrySelectFieldProps) {
     const { mode } = useFormMode();
     if (mode === 'view') {
@@ -123,7 +140,7 @@ export function CountrySelectField({
     const selected = getCountryByCode(value) ?? null;
 
     return (
-        <FormField name={name} label={label} required={required} hint={hint}>
+        <FormField name={name} label={label} required={required} hint={hint} size={size}>
             <Autocomplete<CountryMasterItem, false, false, false>
                 options={COUNTRY_OPTIONS as CountryMasterItem[]}
                 value={selected}
@@ -146,7 +163,13 @@ export function CountrySelectField({
                     );
                 }}
                 renderInput={(params) => (
-                    <TextField {...params} placeholder={placeholder} error={Boolean(error)} sx={fieldSx} />
+                    <TextField
+                        {...params}
+                        placeholder={placeholder}
+                        error={Boolean(error)}
+                        sx={fieldSx}
+                        slotProps={withMaxLength(params.slotProps)}
+                    />
                 )}
             />
             <ErrorText error={error} />
@@ -178,6 +201,7 @@ export function StateRegionField({
     placeholder,
     hint,
     error,
+    size = 'md',
 }: StateRegionFieldProps) {
     const { mode } = useFormMode();
     const [manualEntry, setManualEntry] = React.useState(false);
@@ -192,7 +216,7 @@ export function StateRegionField({
         (manualEntry || !hasSubdivisions ? 'Type state / province / region' : 'Search or select state / region');
 
     return (
-        <FormField name={name} label={label} required={required} hint={hint}>
+        <FormField name={name} label={label} required={required} hint={hint} size={size}>
             <Autocomplete<string, false, false, true>
                 freeSolo
                 options={options}
@@ -218,7 +242,13 @@ export function StateRegionField({
                 disabled={disabled}
                 size="small"
                 renderInput={(params) => (
-                    <TextField {...params} placeholder={resolvedPlaceholder} error={Boolean(error)} sx={fieldSx} />
+                    <TextField
+                        {...params}
+                        placeholder={resolvedPlaceholder}
+                        error={Boolean(error)}
+                        sx={fieldSx}
+                        slotProps={withMaxLength(params.slotProps)}
+                    />
                 )}
             />
             <ErrorText error={error} />
@@ -258,6 +288,7 @@ export function CityAutocompleteField({
     placeholder = 'Enter city',
     hint,
     error,
+    size = 'md',
 }: CityAutocompleteFieldProps) {
     const { mode } = useFormMode();
     if (mode === 'view') {
@@ -267,7 +298,7 @@ export function CityAutocompleteField({
     const suggestions = CITY_SUGGESTIONS[countryIso2OrDefault(countryValue)] ?? [];
 
     return (
-        <FormField name={name} label={label} required={required} hint={hint}>
+        <FormField name={name} label={label} required={required} hint={hint} size={size}>
             <Autocomplete<string, false, false, true>
                 freeSolo
                 options={suggestions}
@@ -283,7 +314,13 @@ export function CityAutocompleteField({
                 disabled={disabled}
                 size="small"
                 renderInput={(params) => (
-                    <TextField {...params} placeholder={placeholder} error={Boolean(error)} sx={fieldSx} />
+                    <TextField
+                        {...params}
+                        placeholder={placeholder}
+                        error={Boolean(error)}
+                        sx={fieldSx}
+                        slotProps={withMaxLength(params.slotProps)}
+                    />
                 )}
             />
             <ErrorText error={error} />
@@ -311,10 +348,11 @@ export function PostalCodeField({
     placeholder,
     hint,
     error,
+    size = 'xs',
 }: PostalCodeFieldProps) {
     const config = getPostalCodeConfig(countryValue);
     return (
-        <FormField name={name} label={label ?? config.label} required={required} hint={hint}>
+        <FormField name={name} label={label ?? config.label} required={required} hint={hint} size={size}>
             <TextField
                 fullWidth
                 size="small"

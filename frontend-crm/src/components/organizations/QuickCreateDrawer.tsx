@@ -8,7 +8,6 @@ import {
     IconButton,
     TextField,
     Button,
-    Grid,
     CircularProgress,
     Alert,
 } from '@mui/material';
@@ -17,7 +16,16 @@ import AddIcon from '@mui/icons-material/Add';
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 import CheckCircleOutlinedIcon from '@mui/icons-material/CheckCircleOutlined';
 
-import { StyledSelect, StateRegionField, fieldSx } from '@/components/forms';
+import {
+    FIELD_MAX_LENGTH,
+    FormField,
+    FormGrid,
+    FormGridItem,
+    StyledSelect,
+    StateRegionField,
+    fieldSx,
+} from '@/components/forms';
+import { FormModeProvider } from '@/context/FormModeContext';
 import { DEFAULT_COUNTRY_CODE } from '@/data/addressMaster';
 import { NATURE_OF_BUSINESS, CUSTOMER_TYPES } from './constants';
 import type { ExtendedOrganization } from '@/types/organization.types';
@@ -185,144 +193,115 @@ export function QuickCreateDrawer({ open, onClose, onSave }: QuickCreateDrawerPr
                     </Alert>
                 )}
 
-                {/* Organization Name * */}
-                <Box sx={{ mb: 2.5 }}>
-                    <Typography
-                        variant="body2"
-                        sx={{ fontWeight: 600, color: '#374151', fontSize: '0.82rem', mb: 0.6 }}
-                    >
-                        Organization Name <span style={{ color: '#ef4444' }}>*</span>
-                    </Typography>
-                    <TextField
-                        fullWidth
-                        size="small"
-                        placeholder="e.g. Acme Technologies Pvt Ltd"
-                        value={formData.organizationName}
-                        onChange={(e) => handleChange('organizationName', e.target.value)}
-                        sx={fieldSx}
-                        autoFocus
-                    />
-                </Box>
+                {/* Quick create is always a fresh record, even if opened from a page rendered in view mode. */}
+                <FormModeProvider mode="create">
+                    <FormGrid columns={{ sm: 2 }} sx={{ mb: 3 }}>
+                        <FormGridItem span="full">
+                            <FormField name="organizationName" label="Organization Name" required size="lg">
+                                <TextField
+                                    fullWidth
+                                    size="small"
+                                    placeholder="e.g. Acme Technologies Pvt Ltd"
+                                    value={formData.organizationName}
+                                    onChange={(e) => handleChange('organizationName', e.target.value)}
+                                    sx={fieldSx}
+                                    slotProps={{ htmlInput: { maxLength: FIELD_MAX_LENGTH.organizationName } }}
+                                    autoFocus
+                                />
+                            </FormField>
+                        </FormGridItem>
 
-                {/* Nature of Business & Customer Type (2 columns) */}
-                <Grid container spacing={2} sx={{ mb: 2.5 }}>
-                    <Grid size={{ xs: 12, sm: 6 }}>
-                        <Typography
-                            variant="body2"
-                            sx={{ fontWeight: 600, color: '#374151', fontSize: '0.82rem', mb: 0.6 }}
-                        >
-                            Nature of Business
-                        </Typography>
-                        <StyledSelect
-                            label="Nature of Business"
-                            placeholder="Select Nature"
-                            value={formData.natureOfBusiness}
-                            onChange={(v) => handleChange('natureOfBusiness', v)}
-                            options={NATURE_OF_BUSINESS}
-                        />
-                    </Grid>
-                    <Grid size={{ xs: 12, sm: 6 }}>
-                        <Typography
-                            variant="body2"
-                            sx={{ fontWeight: 600, color: '#374151', fontSize: '0.82rem', mb: 0.6 }}
-                        >
-                            Customer Type
-                        </Typography>
-                        <StyledSelect
-                            label="Customer Type"
-                            placeholder="Select Customer Type"
-                            value={formData.customerType}
-                            onChange={(v) => handleChange('customerType', v)}
-                            options={CUSTOMER_TYPES}
-                        />
-                    </Grid>
-                </Grid>
+                        <FormField name="natureOfBusiness" label="Nature of Business" size="md">
+                            <StyledSelect
+                                label="Nature of Business"
+                                placeholder="Select Nature"
+                                value={formData.natureOfBusiness}
+                                onChange={(v) => handleChange('natureOfBusiness', v)}
+                                options={NATURE_OF_BUSINESS}
+                            />
+                        </FormField>
 
-                {/* GST Number with Verify GST link/button */}
-                <Box sx={{ mb: 2.5 }}>
-                    <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 0.6 }}>
-                        <Typography
-                            variant="body2"
-                            sx={{ fontWeight: 600, color: '#374151', fontSize: '0.82rem' }}
-                        >
-                            GST Number
-                        </Typography>
-                        {gstVerified ? (
-                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                                <CheckCircleOutlinedIcon sx={{ fontSize: 14, color: '#16a34a' }} />
-                                <Typography sx={{ fontSize: '0.74rem', color: '#16a34a', fontWeight: 600 }}>
-                                    GSTIN Verified
-                                </Typography>
-                            </Box>
-                        ) : (
-                            <Button
-                                size="small"
-                                onClick={handleVerifyGst}
-                                disabled={verifyingGst}
-                                sx={{
-                                    fontSize: '0.74rem',
-                                    fontWeight: 700,
-                                    textTransform: 'none',
-                                    color: '#2563eb',
-                                    p: 0,
-                                    minWidth: 0,
-                                    '&:hover': { textDecoration: 'underline', backgroundColor: 'transparent' },
-                                }}
+                        <FormField name="customerType" label="Customer Type" size="sm">
+                            <StyledSelect
+                                label="Customer Type"
+                                placeholder="Select Type"
+                                value={formData.customerType}
+                                onChange={(v) => handleChange('customerType', v)}
+                                options={CUSTOMER_TYPES}
+                            />
+                        </FormField>
+
+                        <FormGridItem span="full">
+                            <FormField
+                                name="gstNumber"
+                                label="GST Number"
+                                size="sm"
+                                hint={
+                                    gstVerified ? (
+                                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                                            <CheckCircleOutlinedIcon sx={{ fontSize: 14, color: '#16a34a' }} />
+                                            <Typography sx={{ fontSize: '0.74rem', color: '#16a34a', fontWeight: 600 }}>
+                                                GSTIN Verified
+                                            </Typography>
+                                        </Box>
+                                    ) : (
+                                        <Button
+                                            size="small"
+                                            onClick={handleVerifyGst}
+                                            disabled={verifyingGst}
+                                            sx={{
+                                                fontSize: '0.74rem',
+                                                fontWeight: 700,
+                                                textTransform: 'none',
+                                                color: '#2563eb',
+                                                p: 0,
+                                                minWidth: 0,
+                                                '&:hover': { textDecoration: 'underline', backgroundColor: 'transparent' },
+                                            }}
+                                        >
+                                            {verifyingGst ? <CircularProgress size={12} sx={{ mr: 0.5 }} /> : null}
+                                            Verify GST
+                                        </Button>
+                                    )
+                                }
                             >
-                                {verifyingGst ? <CircularProgress size={12} sx={{ mr: 0.5 }} /> : null}
-                                Verify GST
-                            </Button>
-                        )}
-                    </Box>
-                    <TextField
-                        fullWidth
-                        size="small"
-                        placeholder="E.G. 07AAAAA0000A1Z5"
-                        value={formData.gstNumber}
-                        onChange={(e) => handleChange('gstNumber', e.target.value.toUpperCase())}
-                        slotProps={{ htmlInput: { maxLength: 15 } }}
-                        sx={fieldSx}
-                    />
-                </Box>
+                                <TextField
+                                    fullWidth
+                                    size="small"
+                                    placeholder="E.G. 07AAAAA0000A1Z5"
+                                    value={formData.gstNumber}
+                                    onChange={(e) => handleChange('gstNumber', e.target.value.toUpperCase())}
+                                    slotProps={{ htmlInput: { maxLength: FIELD_MAX_LENGTH.gstin } }}
+                                    sx={fieldSx}
+                                />
+                            </FormField>
+                        </FormGridItem>
 
-                {/* Billing Street Address */}
-                <Box sx={{ mb: 2.5 }}>
-                    <Typography
-                        variant="body2"
-                        sx={{ fontWeight: 600, color: '#374151', fontSize: '0.82rem', mb: 0.6 }}
-                    >
-                        Billing Street Address
-                    </Typography>
-                    <TextField
-                        fullWidth
-                        multiline
-                        rows={3}
-                        placeholder="Street, Sector, Building, Floor..."
-                        value={formData.billingStreet}
-                        onChange={(e) => handleChange('billingStreet', e.target.value)}
-                        sx={fieldSx}
-                    />
-                </Box>
+                        <FormField name="billingStreet" label="Billing Street Address" size="full">
+                            <TextField
+                                fullWidth
+                                multiline
+                                rows={3}
+                                placeholder="Street, Sector, Building, Floor..."
+                                value={formData.billingStreet}
+                                onChange={(e) => handleChange('billingStreet', e.target.value)}
+                                slotProps={{ htmlInput: { maxLength: FIELD_MAX_LENGTH.address } }}
+                                sx={fieldSx}
+                            />
+                        </FormField>
 
-                {/* City & State (2 columns) */}
-                <Grid container spacing={2} sx={{ mb: 2.5 }}>
-                    <Grid size={{ xs: 12, sm: 6 }}>
-                        <Typography
-                            variant="body2"
-                            sx={{ fontWeight: 600, color: '#374151', fontSize: '0.82rem', mb: 0.6 }}
-                        >
-                            City
-                        </Typography>
-                        <TextField
-                            fullWidth
-                            size="small"
-                            placeholder="City"
-                            value={formData.billingCity}
-                            onChange={(e) => handleChange('billingCity', e.target.value)}
-                            sx={fieldSx}
-                        />
-                    </Grid>
-                    <Grid size={{ xs: 12, sm: 6 }}>
+                        <FormField name="billingCity" label="City" size="md">
+                            <TextField
+                                fullWidth
+                                size="small"
+                                placeholder="City"
+                                value={formData.billingCity}
+                                onChange={(e) => handleChange('billingCity', e.target.value)}
+                                slotProps={{ htmlInput: { maxLength: FIELD_MAX_LENGTH.shortText } }}
+                                sx={fieldSx}
+                            />
+                        </FormField>
+
                         {/* Quick create is India-only; the full address form offers every country. */}
                         <StateRegionField
                             name="billingState"
@@ -331,52 +310,38 @@ export function QuickCreateDrawer({ open, onClose, onSave }: QuickCreateDrawerPr
                             onChange={(v) => handleChange('billingState', v)}
                             countryValue={DEFAULT_COUNTRY_CODE}
                         />
-                    </Grid>
-                </Grid>
 
-                {/* Assigned User & Account Status (2 columns) */}
-                <Grid container spacing={2} sx={{ mb: 3 }}>
-                    <Grid size={{ xs: 12, sm: 6 }}>
-                        <Typography
-                            variant="body2"
-                            sx={{ fontWeight: 600, color: '#374151', fontSize: '0.82rem', mb: 0.6 }}
-                        >
-                            Assigned User
-                        </Typography>
-                        <StyledSelect
-                            label="Assigned User"
-                            placeholder="Select User"
-                            value={formData.assignedUser}
-                            onChange={(v) => handleChange('assignedUser', v)}
-                            options={['mittal.sharma (You)', 'rahul.verma', 'priya.singh', 'amit.patel', 'vikram.seth']}
-                        />
-                    </Grid>
-                    <Grid size={{ xs: 12, sm: 6 }}>
-                        <Typography
-                            variant="body2"
-                            sx={{ fontWeight: 600, color: '#374151', fontSize: '0.82rem', mb: 0.6 }}
-                        >
-                            Account Status
-                        </Typography>
-                        <Box
-                            sx={{
-                                display: 'flex',
-                                alignItems: 'center',
-                                gap: 1,
-                                height: 38,
-                                px: 1.5,
-                                border: '1px solid #d1d5db',
-                                borderRadius: '8px',
-                                backgroundColor: '#fff',
-                            }}
-                        >
-                            <Box sx={{ width: 8, height: 8, borderRadius: '50%', backgroundColor: '#22c55e' }} />
-                            <Typography sx={{ fontSize: '0.82rem', fontWeight: 600, color: '#15803d' }}>
-                                Active Account
-                            </Typography>
-                        </Box>
-                    </Grid>
-                </Grid>
+                        <FormField name="assignedUser" label="Assigned User" size="md">
+                            <StyledSelect
+                                label="Assigned User"
+                                placeholder="Select User"
+                                value={formData.assignedUser}
+                                onChange={(v) => handleChange('assignedUser', v)}
+                                options={['mittal.sharma (You)', 'rahul.verma', 'priya.singh', 'amit.patel', 'vikram.seth']}
+                            />
+                        </FormField>
+
+                        <FormField name="accountStatus" label="Account Status" size="sm">
+                            <Box
+                                sx={{
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: 1,
+                                    height: 38,
+                                    px: 1.5,
+                                    border: '1px solid #d1d5db',
+                                    borderRadius: '8px',
+                                    backgroundColor: '#fff',
+                                }}
+                            >
+                                <Box sx={{ width: 8, height: 8, borderRadius: '50%', backgroundColor: '#22c55e' }} />
+                                <Typography sx={{ fontSize: '0.82rem', fontWeight: 600, color: '#15803d' }}>
+                                    Active Account
+                                </Typography>
+                            </Box>
+                        </FormField>
+                    </FormGrid>
+                </FormModeProvider>
 
                 {/* Informational Callout matching screenshot */}
                 <Box

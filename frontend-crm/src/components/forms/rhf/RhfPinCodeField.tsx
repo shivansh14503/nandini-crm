@@ -12,6 +12,7 @@ import {
 } from 'react-hook-form';
 import { FormField, fieldSx } from '../FormField';
 import { getPostalCodeConfig } from '../AddressPrimitives';
+import type { FieldSize } from '../fieldSizing';
 
 export interface RhfPinCodeFieldProps<T extends FieldValues> {
     name: FieldPath<T>;
@@ -25,6 +26,8 @@ export interface RhfPinCodeFieldProps<T extends FieldValues> {
     countryFieldName?: Path<T>;
     /** Fixed country when there is no country field. Defaults to India. */
     countryCode?: string;
+    /** Width token (default `xs`). */
+    fieldSize?: FieldSize;
 }
 
 /**
@@ -40,6 +43,7 @@ export function RhfPinCodeField<T extends FieldValues>({
     disabled,
     countryFieldName,
     countryCode,
+    fieldSize = 'xs',
 }: RhfPinCodeFieldProps<T>) {
     const { control } = useFormContext<T>();
     const { field, fieldState } = useController<T>({ name });
@@ -49,7 +53,7 @@ export function RhfPinCodeField<T extends FieldValues>({
     const config = getPostalCodeConfig(country);
 
     return (
-        <FormField name={name} label={label ?? config.label} required={required} hint={hint}>
+        <FormField name={name} label={label ?? config.label} required={required} hint={hint} size={fieldSize}>
             <TextField
                 {...field}
                 value={field.value ?? ''}

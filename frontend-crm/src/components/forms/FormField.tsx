@@ -3,6 +3,7 @@ import { Box, Typography, type SxProps, type Theme } from '@mui/material';
 import { useFormMode } from '@/context/FormModeContext';
 import { ReadOnlyField } from './ReadOnlyField';
 import { getCountryNameByCode } from '@/data/addressMaster';
+import { fieldSizeSx, resolveFieldSize, type FieldSize } from './fieldSizing';
 
 export const fieldSx = {
     '& .MuiOutlinedInput-root': {
@@ -26,6 +27,11 @@ export interface FormFieldProps {
     label: string;
     required?: boolean;
     hint?: React.ReactNode;
+    /**
+     * Width token for the whole field (label, control, error). Inferred from `name` when omitted;
+     * unrecognised names stay full width. Exposed as `data-field-size` for {@link FormRow} / {@link FormGrid}.
+     */
+    size?: FieldSize;
     children: React.ReactNode;
     sx?: SxProps<Theme>;
 }
@@ -84,7 +90,7 @@ function viewPresentation(name: string | undefined, value: string | undefined) {
     return { copyable, badge: false, badgeColor: undefined };
 }
 
-export function FormField({ name, viewValue, label, required, hint, children, sx }: FormFieldProps) {
+export function FormField({ name, viewValue, label, required, hint, size, children, sx }: FormFieldProps) {
     const { mode } = useFormMode();
     if (mode === 'view') {
         if (viewValue !== undefined) {
@@ -98,9 +104,24 @@ export function FormField({ name, viewValue, label, required, hint, children, sx
             return <ReadOnlyField label={label} value={value} hideWhenEmpty {...viewPresentation(name, value)} sx={{ mb: 2, ...sx }} />;
         }
     }
+    const resolvedSize = resolveFieldSize(name, undefined, size);
     return (
-        <Box data-field={name} sx={{ mb: 2, ...sx }}>
-            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 0.6 }}>
+        <Box
+            data-field={name}
+            data-field-size={resolvedSize}
+            sx={[{ mb: 2, ...fieldSizeSx(resolvedSize) }, ...(Array.isArray(sx) ? sx : [sx])]}
+        >
+            {/* Wraps so a hint (e.g. a status chip) drops below the label on compact fields instead of squeezing it. */}
+            <Box
+                sx={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    flexWrap: 'wrap',
+                    columnGap: 1,
+                    mb: 0.6,
+                }}
+            >
                 <Typography
                     variant="body2"
                     sx={{

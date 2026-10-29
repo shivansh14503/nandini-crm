@@ -13,6 +13,7 @@ import {
 } from '@mui/material';
 import DeleteIcon from '@mui/icons-material/Delete';
 import { fieldSx } from './FormField';
+import { FIELD_MAX_LENGTH } from './fieldSizing';
 import { useFormMode } from '@/context/FormModeContext';
 import { DrawerCopyButton } from '../common/Drawer/DrawerPrimitives';
 import type { CorporateEmail } from '@/types/organization.types';
@@ -54,6 +55,7 @@ export function EmailRow({ email, onChange, onRemove }: EmailRowProps) {
                     value={email.email}
                     placeholder="e.g. contact@domain.com"
                     onChange={(e) => onChange({ ...email, email: e.target.value.toLowerCase().trim() })}
+                    slotProps={{ htmlInput: { maxLength: FIELD_MAX_LENGTH.email } }}
                     sx={fieldSx}
                 />
                 <Tooltip title="Remove email">

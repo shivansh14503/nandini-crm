@@ -106,6 +106,12 @@ export interface CommonFormLayoutProps {
 }
 
 /**
+ * Caps the field area (not the card) so form grids stay proportional on ultrawide monitors: past this width
+ * the 3-column grids' cells would grow far wider than any field-size token, scattering fields across the row.
+ */
+const FORM_CONTENT_MAX_WIDTH = 1440;
+
+/**
  * CommonFormLayout provides a standard, consistent page layout for all Create/Edit forms across the CRM:
  * 1. Line 1: Route-aware Breadcrumbs (no redundant discard button).
  * 2. Form Card: Clean Paper container with unified horizontal tabs bar.
@@ -291,6 +297,7 @@ export function CommonFormLayout({
                 <Box
                     sx={{
                         p: disableContentPadding ? 0 : { xs: 2.5, md: 3.5 },
+                        maxWidth: FORM_CONTENT_MAX_WIDTH,
                         ...contentSx,
                     }}
                 >

@@ -5,6 +5,8 @@ import { Box, Divider } from '@mui/material';
 import { useFormContext, useWatch } from 'react-hook-form';
 
 import {
+    FIELD_MAX_LENGTH,
+    FormGrid,
     SectionLabel,
     RhfTextField,
     RhfLookup,
@@ -17,8 +19,6 @@ import type { QuotationFormData } from '@/types/quotation.types';
 import { normalizeLegacyStateName } from '@/data/addressMaster';
 import { normalizeCountryValue } from '@/utils/address';
 import { organizationService, contactService } from '@/services';
-
-const columnSx = { display: 'flex', flexDirection: 'column', gap: 2.2 } as const;
 
 export function QuotationAddressSection() {
     const { control, setValue } = useFormContext<QuotationFormData>();
@@ -115,66 +115,52 @@ export function QuotationAddressSection() {
             {/* ── Top Section: Organization & Contact Header Grid ── */}
             <SectionLabel label="ACCOUNT & CONTACT CONTEXT" sx={{ mb: 3 }} />
 
-            <Box
-                sx={{
-                    display: 'grid',
-                    gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' },
-                    gap: { xs: 2.5, md: 4 },
-                    mb: 4,
-                }}
-            >
-                {/* Left Column */}
-                <Box sx={columnSx}>
-                    <RhfLookup<QuotationFormData>
-                        name="organizationName"
-                        label="Organization"
-                        options={orgOptions}
-                        placeholder="Search or enter Organization..."
-                        hint="Linked client organization"
-                    />
+            <FormGrid columns={3} sx={{ mb: 4 }}>
+                {/* ── Account ── */}
+                <RhfLookup<QuotationFormData>
+                    name="organizationName"
+                    label="Organization"
+                    options={orgOptions}
+                    placeholder="Search or enter Organization..."
+                    hint="Linked client organization"
+                />
+                <RhfTextField<QuotationFormData>
+                    name="mailingName"
+                    label="Mailing Name"
+                    placeholder="Official organization legal name"
+                    hint="As on billing documents"
+                />
+                <RhfUppercaseField<QuotationFormData>
+                    name="gstNo"
+                    label="GST NO"
+                    placeholder="e.g. 07AAAAA0000A1Z5"
+                    maxLength={FIELD_MAX_LENGTH.gstin}
+                    hint="Client GSTIN"
+                />
 
-                    <RhfLookup<QuotationFormData>
-                        name="contactName"
-                        label="Contact"
-                        required
-                        options={contactOptions}
-                        placeholder="Search or enter Contact person..."
-                        hint="Primary signatory or quote recipient"
-                    />
-
-                    <RhfPhoneField<QuotationFormData>
-                        name="contactMobile"
-                        label="Contact Mobile No"
-                        placeholder="e.g. 9800000000"
-                        hint="Recipient direct phone / WhatsApp"
-                    />
-                </Box>
-
-                {/* Right Column */}
-                <Box sx={columnSx}>
-                    <RhfTextField<QuotationFormData>
-                        name="mailingName"
-                        label="Mailing Name"
-                        placeholder="Official organization legal name"
-                        hint="As displayed on billing documents"
-                    />
-
-                    <RhfUppercaseField<QuotationFormData>
-                        name="gstNo"
-                        label="GST NO"
-                        placeholder="e.g. 07AAAAA0000A1Z5"
-                        maxLength={15}
-                        hint="Client GST Identification Number"
-                    />
-
-                    <RhfEmailField<QuotationFormData>
-                        name="contactEmail"
-                        label="Contact Email Address"
-                        placeholder="contact@company.com"
-                        hint="Dispatch address for quotation PDF"
-                    />
-                </Box>
-            </Box>
+                {/* ── Recipient ── */}
+                <RhfLookup<QuotationFormData>
+                    name="contactName"
+                    label="Contact"
+                    required
+                    options={contactOptions}
+                    placeholder="Search or enter Contact..."
+                    hint="Signatory / quote recipient"
+                    fieldSize="md"
+                />
+                <RhfPhoneField<QuotationFormData>
+                    name="contactMobile"
+                    label="Contact Mobile No"
+                    placeholder="e.g. 9800000000"
+                    hint="Direct phone / WhatsApp"
+                />
+                <RhfEmailField<QuotationFormData>
+                    name="contactEmail"
+                    label="Contact Email Address"
+                    placeholder="contact@company.com"
+                    hint="Receives the quotation PDF"
+                />
+            </FormGrid>
 
             <Divider sx={{ my: 3.5, borderColor: '#f1f5f9' }} />
 

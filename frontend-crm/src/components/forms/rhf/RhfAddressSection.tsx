@@ -8,6 +8,7 @@ import { useFormContext, useWatch, type FieldValues, type Path } from 'react-hoo
 
 import { SectionLabel } from '../SectionLabel';
 import { ReadOnlyField } from '../ReadOnlyField';
+import { FormGrid, FormGridItem } from '../FormGrid';
 import { formatAddressLine } from '@/utils/address';
 import { countryIso2OrDefault } from '../AddressPrimitives';
 import { RhfTextField } from './RhfTextField';
@@ -40,6 +41,9 @@ export interface RhfAddressSectionProps<T extends FieldValues> {
 }
 
 const columnSx = { display: 'flex', flexDirection: 'column', gap: 2 } as const;
+
+/** Country + State, City + PIN side by side within each address column; one column on phones. */
+const ADDRESS_GRID_COLUMNS = { sm: 2 };
 
 /** Copy-able field keys mirrored from billing to shipping. */
 const MIRRORED_KEYS = ['address', 'country', 'state', 'city', 'postalCode'] as const;
@@ -168,36 +172,41 @@ export function RhfAddressSection<T extends FieldValues>({
                     label={billingTitle}
                     sx={{ mb: 1 }}
                 />
-                <RhfCountrySelect<T> name={billingFields.country} required={required} disabled={disabled} />
-                <RhfStateRegionField<T>
-                    name={billingFields.state}
-                    countryFieldName={billingFields.country}
-                    required={required && billingHasStates}
-                    disabled={disabled}
-                />
-                <RhfCityField<T>
-                    name={billingFields.city}
-                    countryFieldName={billingFields.country}
-                    required={required}
-                    disabled={disabled}
-                />
-                <RhfTextField<T>
-                    name={billingFields.address}
-                    label={streetLabel}
-                    required={required}
-                    hint="Street address, building, premises"
-                    multiline
-                    minRows={3}
-                    maxRows={4}
-                    placeholder="Enter street and building address..."
-                    disabled={disabled}
-                />
-                <RhfPinCodeField<T>
-                    name={billingFields.postalCode}
-                    countryFieldName={billingFields.country}
-                    required={required}
-                    disabled={disabled}
-                />
+                <FormGrid columns={ADDRESS_GRID_COLUMNS}>
+                    <RhfCountrySelect<T> name={billingFields.country} required={required} disabled={disabled} />
+                    <RhfStateRegionField<T>
+                        name={billingFields.state}
+                        countryFieldName={billingFields.country}
+                        required={required && billingHasStates}
+                        disabled={disabled}
+                    />
+                    <RhfCityField<T>
+                        name={billingFields.city}
+                        countryFieldName={billingFields.country}
+                        required={required}
+                        disabled={disabled}
+                    />
+                    <RhfPinCodeField<T>
+                        name={billingFields.postalCode}
+                        countryFieldName={billingFields.country}
+                        required={required}
+                        disabled={disabled}
+                    />
+                    <FormGridItem span="full">
+                        <RhfTextField<T>
+                            name={billingFields.address}
+                            label={streetLabel}
+                            required={required}
+                            hint="Street address, building, premises"
+                            multiline
+                            minRows={3}
+                            maxRows={4}
+                            placeholder="Enter street and building address..."
+                            disabled={disabled}
+                            fieldSize="lg"
+                        />
+                    </FormGridItem>
+                </FormGrid>
             </Box>
 
             {/* ── Right Column: Shipping / Other Address ── */}
@@ -219,32 +228,37 @@ export function RhfAddressSection<T extends FieldValues>({
                     <RhfCheckbox<T> name={copyFieldName} label={copyLabel} />
                 </Box>
 
-                <RhfCountrySelect<T> name={shippingFields.country} disabled={shippingLocked} />
-                <RhfStateRegionField<T>
-                    name={shippingFields.state}
-                    countryFieldName={shippingFields.country}
-                    disabled={shippingLocked}
-                />
-                <RhfCityField<T>
-                    name={shippingFields.city}
-                    countryFieldName={shippingFields.country}
-                    disabled={shippingLocked}
-                />
-                <RhfTextField<T>
-                    name={shippingFields.address}
-                    label={shippingStreetLabel}
-                    hint="Delivery warehouse, facility, or office"
-                    multiline
-                    minRows={3}
-                    maxRows={4}
-                    placeholder="Enter street and building address..."
-                    disabled={shippingLocked}
-                />
-                <RhfPinCodeField<T>
-                    name={shippingFields.postalCode}
-                    countryFieldName={shippingFields.country}
-                    disabled={shippingLocked}
-                />
+                <FormGrid columns={ADDRESS_GRID_COLUMNS}>
+                    <RhfCountrySelect<T> name={shippingFields.country} disabled={shippingLocked} />
+                    <RhfStateRegionField<T>
+                        name={shippingFields.state}
+                        countryFieldName={shippingFields.country}
+                        disabled={shippingLocked}
+                    />
+                    <RhfCityField<T>
+                        name={shippingFields.city}
+                        countryFieldName={shippingFields.country}
+                        disabled={shippingLocked}
+                    />
+                    <RhfPinCodeField<T>
+                        name={shippingFields.postalCode}
+                        countryFieldName={shippingFields.country}
+                        disabled={shippingLocked}
+                    />
+                    <FormGridItem span="full">
+                        <RhfTextField<T>
+                            name={shippingFields.address}
+                            label={shippingStreetLabel}
+                            hint="Delivery warehouse, facility, or office"
+                            multiline
+                            minRows={3}
+                            maxRows={4}
+                            placeholder="Enter street and building address..."
+                            disabled={shippingLocked}
+                            fieldSize="lg"
+                        />
+                    </FormGridItem>
+                </FormGrid>
             </Box>
         </Box>
     );

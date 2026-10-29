@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { DEFAULT_COUNTRY_CODE, resolveCountryIso2 } from '../data/addressMaster';
+import { FIELD_MAX_LENGTH } from '../config/fieldLimits';
 
 /**
  * Extracts the first human-readable validation error message from a ZodError
@@ -83,6 +84,25 @@ export const optionalString = z
     .trim()
     .optional()
     .or(z.literal(''));
+
+// ── Length-capped text (limits mirror each input's `maxLength`, see config/fieldLimits) ──
+
+const maxLengthMessage = (fieldName: string, max: number) => ({
+    message: `${fieldName} cannot exceed ${max} characters.`,
+});
+
+/** Required trimmed text capped at `max` characters. */
+export const requiredText = (fieldName: string, max: number) =>
+    requiredString(fieldName).max(max, maxLengthMessage(fieldName, max));
+
+/** Optional trimmed text capped at `max` characters. */
+export const optionalText = (fieldName: string, max: number) =>
+    z
+        .string()
+        .trim()
+        .max(max, maxLengthMessage(fieldName, max))
+        .optional()
+        .or(z.literal(''));
 
 // ── Central DRY Zod Validation Dictionary ─────────────────────────────────────
 
@@ -238,6 +258,7 @@ export const zodIfscOptional = z
 export const zodEmail = z
     .string()
     .trim()
+    .max(FIELD_MAX_LENGTH.email, maxLengthMessage('Email', FIELD_MAX_LENGTH.email))
     .email({ message: 'Invalid email format.' })
     .toLowerCase();
 
@@ -245,6 +266,7 @@ export const zodEmailOptional = z
     .string()
     .trim()
     .toLowerCase()
+    .max(FIELD_MAX_LENGTH.email, maxLengthMessage('Email', FIELD_MAX_LENGTH.email))
     .refine((val) => !val || z.string().email().safeParse(val).success, {
         message: 'Invalid email format.',
     })
@@ -294,6 +316,7 @@ export const requiredEmailSchema = (fieldName: string = 'Email Address') =>
         .string()
         .trim()
         .min(1, { message: `${fieldName} is required.` })
+        .max(FIELD_MAX_LENGTH.email, maxLengthMessage(fieldName, FIELD_MAX_LENGTH.email))
         .email({ message: 'Invalid email format.' })
         .toLowerCase();
 

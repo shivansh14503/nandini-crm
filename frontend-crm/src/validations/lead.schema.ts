@@ -1,7 +1,10 @@
 import { z } from 'zod';
+import { FIELD_MAX_LENGTH as L } from '../config/fieldLimits';
 import {
     requiredString,
     optionalString,
+    requiredText,
+    optionalText,
     zodPhone,
     zodPhoneOptional,
     zodPostalCodeOptional,
@@ -11,18 +14,17 @@ import { corporateEmailSchema } from './contact.schema';
 
 export const leadFormSchema = z.object({
     // Overview - Left Column
-    name: requiredString('Lead Name')
-        .max(100, { message: 'Lead Name cannot exceed 100 characters.' }),
+    name: requiredText('Lead Name', L.personName),
     mobile: zodPhone,
     emailAddresses: z.array(corporateEmailSchema).optional().default([]),
-    mailingName: optionalString,
+    mailingName: optionalText('Mailing Name', L.organizationName),
     designation: optionalString,
     leadSource: requiredString('Lead Source'),
     productCategory: z
         .array(z.string())
         .min(1, { message: 'Please select at least one Product Category.' }),
     followupType: optionalString.default('Call'),
-    addDescription: requiredString('Add Description')
+    addDescription: requiredText('Add Description', L.longText)
         .min(3, { message: 'Add Description must be at least 3 characters.' }),
     registrationType: optionalString,
     turnover: optionalString,
@@ -30,28 +32,28 @@ export const leadFormSchema = z.object({
 
     // Overview - Right Column
     otherPhone: zodPhoneOptional,
-    organizationName: optionalString,
+    organizationName: optionalText('Organization Name', L.organizationName),
     department: optionalString,
     leadType: requiredString('Lead Type'),
     status: optionalString.default('New'),
     nextFollowupDate: requiredString('Next Followup Date'),
     nextFollowupTime: optionalString,
-    description: optionalString,
+    description: optionalText('Description', L.longText),
     noOfEmployee: optionalString,
     referredBy: optionalString,
 
     // Primary Address
-    primaryAddress: optionalString,
-    primaryCity: optionalString,
-    primaryState: optionalString,
+    primaryAddress: optionalText('Primary Street', L.address),
+    primaryCity: optionalText('Primary City', L.shortText),
+    primaryState: optionalText('Primary State', L.shortText),
     primaryPostalCode: zodPostalCodeOptional,
     primaryCountry: optionalString.default('India'),
     primaryLatitude: optionalString,
 
     // Other Address
-    otherAddress: optionalString,
-    otherCity: optionalString,
-    otherState: optionalString,
+    otherAddress: optionalText('Other Street', L.address),
+    otherCity: optionalText('Other City', L.shortText),
+    otherState: optionalText('Other State', L.shortText),
     otherPostalCode: zodPostalCodeOptional,
     otherCountry: optionalString.default('India'),
     copyAddressFromLeft: z.boolean().default(false),

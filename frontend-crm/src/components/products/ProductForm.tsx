@@ -3,7 +3,7 @@
 import React, { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { FormProvider } from 'react-hook-form';
-import { Grid, Divider } from '@mui/material';
+import { Divider } from '@mui/material';
 import InventoryOutlinedIcon from '@mui/icons-material/InventoryOutlined';
 import LocalOfferOutlinedIcon from '@mui/icons-material/LocalOfferOutlined';
 import DescriptionOutlinedIcon from '@mui/icons-material/DescriptionOutlined';
@@ -19,6 +19,9 @@ import { productService } from '@/services';
 import {
     CommonFormLayout,
     AppToast,
+    FIELD_MAX_LENGTH,
+    FormGrid,
+    FormGridItem,
     SectionLabel,
     RhfTextField,
     RhfSelect,
@@ -206,48 +209,38 @@ export default function ProductForm({
                     label="Sale Information"
                 />
 
-                <Grid container spacing={3.5}>
-                    <Grid size={{ xs: 12, md: 6 }}>
-                        <RhfTextField<ProductFormData>
-                            name="productName"
-                            label="Product Name"
-                            required
-                            placeholder="Enter product name"
-                        />
-                    </Grid>
-                    <Grid size={{ xs: 12, md: 6 }}>
-                        <RhfTextField<ProductFormData>
-                            name="hsnCode"
-                            label="HSN Code"
-                            placeholder="e.g. 84715000"
-                        />
-                    </Grid>
-
-                    <Grid size={{ xs: 12, md: 6 }}>
-                        <RhfSelect<ProductFormData>
-                            name="category"
-                            label="Category"
-                            placeholder="Select Category"
-                            options={PRODUCT_CATEGORIES}
-                        />
-                    </Grid>
-                    <Grid size={{ xs: 12, md: 6 }}>
-                        <RhfSelect<ProductFormData>
-                            name="type"
-                            label="Type"
-                            placeholder="Select Type"
-                            options={PRODUCT_TYPES}
-                        />
-                    </Grid>
-
-                    <Grid size={{ xs: 12, md: 6 }}>
-                        <RhfTextField<ProductFormData>
-                            name="manufacturer"
-                            label="Manufacturer"
-                            placeholder="e.g. Dell Technologies"
-                        />
-                    </Grid>
-                </Grid>
+                <FormGrid columns={3} sx={{ mt: 1 }}>
+                    <RhfTextField<ProductFormData>
+                        name="productName"
+                        label="Product Name"
+                        required
+                        placeholder="Enter product name"
+                    />
+                    <RhfSelect<ProductFormData>
+                        name="category"
+                        label="Category"
+                        placeholder="Select Category"
+                        options={PRODUCT_CATEGORIES}
+                    />
+                    <RhfSelect<ProductFormData>
+                        name="type"
+                        label="Type"
+                        placeholder="Select Type"
+                        options={PRODUCT_TYPES}
+                    />
+                    <RhfTextField<ProductFormData>
+                        name="manufacturer"
+                        label="Manufacturer"
+                        placeholder="e.g. Dell Technologies"
+                        fieldSize="md"
+                        maxLength={FIELD_MAX_LENGTH.personName}
+                    />
+                    <RhfTextField<ProductFormData>
+                        name="hsnCode"
+                        label="HSN Code"
+                        placeholder="e.g. 84715000"
+                    />
+                </FormGrid>
 
                 <Divider sx={{ my: 3.5, borderColor: '#f1f5f9' }} />
 
@@ -259,66 +252,56 @@ export default function ProductForm({
                     label="Pricing & Tax"
                 />
 
-                <Grid container spacing={3.5}>
-                    <Grid size={{ xs: 12, md: 6 }}>
-                        <RhfSelect<ProductFormData>
-                            name="taxType"
-                            label="Tax Type"
-                            placeholder="Select Tax Type"
-                            options={TAX_TYPES}
-                        />
-                    </Grid>
-                    <Grid size={{ xs: 12, md: 6 }}>
-                        <RhfSelect<ProductFormData>
-                            name="taxRate"
-                            label="Tax Rate"
-                            placeholder="Select Tax Rate"
-                            options={TAX_RATES}
-                        />
-                    </Grid>
+                <FormGrid columns={3} sx={{ mt: 1 }}>
+                    {/* ── Prices ── */}
+                    <RhfAmountField<ProductFormData>
+                        name="cost"
+                        label="Cost (₹)"
+                        hint="Purchase / landed cost"
+                        placeholder="0.00"
+                        fieldSize="sm"
+                    />
+                    <RhfAmountField<ProductFormData>
+                        name="mrp"
+                        label="MRP (₹)"
+                        hint="Maximum Retail Price"
+                        placeholder="0.00"
+                        fieldSize="sm"
+                    />
+                    <RhfAmountField<ProductFormData>
+                        name="msp"
+                        label="MSP (₹)"
+                        hint="Minimum Selling Price"
+                        placeholder="0.00"
+                        fieldSize="sm"
+                    />
 
-                    <Grid size={{ xs: 12, md: 6 }}>
-                        <RhfPercentageField<ProductFormData>
-                            name="discount"
-                            label="Discount (%)"
-                            hint="e.g. 10 for 10%"
-                            placeholder="0"
-                        />
-                    </Grid>
-                    <Grid size={{ xs: 12, md: 6 }}>
-                        <RhfAmountField<ProductFormData>
-                            name="cost"
-                            label="Cost (₹)"
-                            hint="Purchase / landed cost"
-                            placeholder="0.00"
-                        />
-                    </Grid>
+                    {/* ── Tax ── */}
+                    <RhfSelect<ProductFormData>
+                        name="taxType"
+                        label="Tax Type"
+                        placeholder="Select Tax Type"
+                        options={TAX_TYPES}
+                    />
+                    <RhfSelect<ProductFormData>
+                        name="taxRate"
+                        label="Tax Rate"
+                        placeholder="Select Tax Rate"
+                        options={TAX_RATES}
+                    />
+                    <RhfPercentageField<ProductFormData>
+                        name="discount"
+                        label="Discount (%)"
+                        hint="e.g. 10 for 10%"
+                        placeholder="0"
+                    />
 
-                    <Grid size={{ xs: 12, md: 6 }}>
-                        <RhfAmountField<ProductFormData>
-                            name="mrp"
-                            label="MRP (₹)"
-                            hint="Maximum Retail Price"
-                            placeholder="0.00"
-                        />
-                    </Grid>
-                    <Grid size={{ xs: 12, md: 6 }}>
-                        <RhfAmountField<ProductFormData>
-                            name="msp"
-                            label="MSP (₹)"
-                            hint="Minimum Selling Price"
-                            placeholder="0.00"
-                        />
-                    </Grid>
-
-                    <Grid size={{ xs: 12, md: 6 }}>
-                        <RhfSelect<ProductFormData>
-                            name="contractCreate"
-                            label="Contract Create"
-                            options={CONTRACT_CREATE_OPTIONS}
-                        />
-                    </Grid>
-                </Grid>
+                    <RhfSelect<ProductFormData>
+                        name="contractCreate"
+                        label="Contract Create"
+                        options={CONTRACT_CREATE_OPTIONS}
+                    />
+                </FormGrid>
 
                 <Divider sx={{ my: 3.5, borderColor: '#f1f5f9' }} />
 
@@ -330,8 +313,8 @@ export default function ProductForm({
                     label="Description & Terms"
                 />
 
-                <Grid container spacing={3.5}>
-                    <Grid size={{ xs: 12, md: 6 }}>
+                <FormGrid columns={2} sx={{ mt: 1 }}>
+                    <FormGridItem>
                         <RhfTextField<ProductFormData>
                             name="description"
                             label="Description"
@@ -339,8 +322,8 @@ export default function ProductForm({
                             minRows={4}
                             placeholder="Enter product description..."
                         />
-                    </Grid>
-                    <Grid size={{ xs: 12, md: 6 }}>
+                    </FormGridItem>
+                    <FormGridItem>
                         <RhfTextField<ProductFormData>
                             name="termsAndConditions"
                             label="Terms and Conditions"
@@ -348,8 +331,8 @@ export default function ProductForm({
                             minRows={4}
                             placeholder="Enter terms and conditions..."
                         />
-                    </Grid>
-                </Grid>
+                    </FormGridItem>
+                </FormGrid>
             </CommonFormLayout>
         </FormProvider>
     );

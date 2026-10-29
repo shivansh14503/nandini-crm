@@ -1,8 +1,7 @@
 'use client';
 
 import React from 'react';
-import { Grid } from '@mui/material';
-import { RhfCheckbox, RhfChipGroup, RhfLookup, RhfSelect } from '@/components/forms';
+import { FormGrid, FormGridItem, RhfCheckbox, RhfChipGroup, RhfLookup, RhfSelect } from '@/components/forms';
 import {
     CONTACT_DESIGNATIONS,
     CONTACT_DEPARTMENTS,
@@ -26,20 +25,15 @@ const DEFAULT_ASSIGNEES = [
  */
 export function ContactAssignmentSection({ assigneeOptions = DEFAULT_ASSIGNEES }: { assigneeOptions?: string[] }) {
     return (
-        <Grid container spacing={3.5}>
-            <Grid size={{ xs: 12, md: 6 }}>
-                <RhfSelect<ContactFormData> name="designation" label="Designation" options={CONTACT_DESIGNATIONS} placeholder="Select Designation" />
-            </Grid>
-            <Grid size={{ xs: 12, md: 6 }}>
-                <RhfSelect<ContactFormData> name="department" label="Department" options={CONTACT_DEPARTMENTS} placeholder="Select Department" />
-            </Grid>
-            <Grid size={{ xs: 12, md: 6 }}>
-                <RhfLookup<ContactFormData> name="assignedTo" label="Assigned to" lookupType="user" required options={assigneeOptions} placeholder="Select assigned sales rep" />
-            </Grid>
-            <Grid size={{ xs: 12, md: 6 }}>
-                <RhfChipGroup<ContactFormData> name="communicationType" label="Communication Type" hint="Select preferred channels" options={COMMUNICATION_TYPES} />
+        <FormGrid columns={3}>
+            <RhfSelect<ContactFormData> name="designation" label="Designation" options={CONTACT_DESIGNATIONS} placeholder="Select Designation" />
+            <RhfSelect<ContactFormData> name="department" label="Department" options={CONTACT_DEPARTMENTS} placeholder="Select Department" />
+            <RhfLookup<ContactFormData> name="assignedTo" label="Assigned to" lookupType="user" required options={assigneeOptions} placeholder="Select assigned sales rep" />
+
+            <RhfChipGroup<ContactFormData> name="communicationType" label="Communication Type" hint="Select preferred channels" options={COMMUNICATION_TYPES} />
+            <FormGridItem span="full">
                 <RhfCheckbox<ContactFormData> name="doNotCall" label="Do Not Call (DND)" />
-            </Grid>
-        </Grid>
+            </FormGridItem>
+        </FormGrid>
     );
 }

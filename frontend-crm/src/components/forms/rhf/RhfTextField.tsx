@@ -4,6 +4,14 @@ import React from 'react';
 import { TextField, type TextFieldProps } from '@mui/material';
 import { useController, type FieldPath, type FieldValues } from 'react-hook-form';
 import { FormField, fieldSx } from '../FormField';
+import {
+    fieldTypeFromInput,
+    isTaxIdentifierField,
+    resolveFieldMaxLength,
+    resolveFieldSize,
+    type FieldSize,
+    type FieldType,
+} from '../fieldSizing';
 
 export interface RhfTextFieldProps<T extends FieldValues>
     extends Pick<
@@ -21,6 +29,10 @@ export interface RhfTextFieldProps<T extends FieldValues>
     min?: number | string;
     max?: number | string;
     step?: number | string;
+    /** Width token; inferred from `name` / `fieldType` when omitted. */
+    fieldSize?: FieldSize;
+    /** Data shape used for size inference; derived from `type` / `multiline` when omitted. */
+    fieldType?: FieldType;
     onChange?: (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => void;
 }
 
@@ -41,21 +53,25 @@ export function RhfTextField<T extends FieldValues>({
     min,
     max,
     step,
+    fieldSize,
+    fieldType,
     sx,
     slotProps,
     ...inputProps
 }: RhfTextFieldProps<T>) {
     const { field, fieldState } = useController<T>({ name });
 
+    const resolvedType = fieldType ?? fieldTypeFromInput(inputProps.type, inputProps.multiline);
+    const resolvedSize = resolveFieldSize(name, resolvedType, fieldSize);
+
     const isNumeric =
         numericOnly ??
-        (inputProps.type === 'tel' ||
+        (resolvedType === 'phone' ||
             /(mobile|phone)/i.test(name) ||
             /(mobile|phone)/i.test(label));
 
-    const isUppercase =
-        uppercase ??
-        (/(gst|pan|ifsc)/i.test(name) || /(gst|pan|ifsc)/i.test(label));
+    // Exact-name match: a substring test would uppercase fields like "Principal Company" (com-pan-y).
+    const isUppercase = uppercase ?? (isTaxIdentifierField(name) || isTaxIdentifierField(label));
 
     const isEmail =
         lowercase ??
@@ -66,16 +82,10 @@ export function RhfTextField<T extends FieldValues>({
     const existingHtmlInput =
         (slotProps?.htmlInput as Record<string, unknown> | undefined) || {};
 
+    // Postal codes resolve to the international 12-char cap; country-specific masking lives in RhfPinCodeField.
     const resolvedMaxLength =
-        maxLength ??
-        (existingHtmlInput.maxLength as number | undefined) ??
-        // Postal codes are free text (international formats); country-specific masking lives in the postal field primitive.
-        (/(postalcode|pincode|pin code|postal code)/i.test(name) ||
-        /(postal code|pin code|pincode)/i.test(label)
-            ? 12
-            : /(mobile|phone)/i.test(name) || /(mobile|phone)/i.test(label)
-            ? 10
-            : undefined);
+        resolveFieldMaxLength(name, maxLength ?? (existingHtmlInput.maxLength as number | undefined)) ??
+        resolveFieldMaxLength(label);
 
     const handleChange = (
         e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
@@ -141,8 +151,7 @@ export function RhfTextField<T extends FieldValues>({
                     }
                     target.value = val;
                 } else if (isEmail && target.value) {
-                    let val = target.value.toLowerCase().trim();
-                    target.value = val;
+                    target.value = target.value.toLowerCase().trim();
                 } else if (inputProps.type === 'number' && target.value) {
                     const num = parseFloat(target.value);
                     if (!isNaN(num)) {
@@ -158,7 +167,7 @@ export function RhfTextField<T extends FieldValues>({
     };
 
     return (
-        <FormField name={name} label={label} required={required} hint={hint}>
+        <FormField name={name} label={label} required={required} hint={hint} size={resolvedSize}>
             <TextField
                 {...inputProps}
                 {...field}

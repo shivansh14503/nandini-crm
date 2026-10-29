@@ -1,5 +1,13 @@
 import { z } from 'zod';
-import { requiredString, optionalString, zodPhoneOptional, zodEmailOptional } from './common';
+import { FIELD_MAX_LENGTH as L } from '../config/fieldLimits';
+import {
+    requiredString,
+    optionalString,
+    requiredText,
+    optionalText,
+    zodPhoneOptional,
+    zodEmailOptional,
+} from './common';
 import { getNatureOfCalls } from '../data/mockNatureOfCalls';
 import {
     SUPPORT_MODES,
@@ -18,16 +26,16 @@ const asTuple = <T extends string>(values: T[]) => values as [T, ...T[]];
 export const ticketFormSchema = z.object({
     // Overview — left column
     amcFlag: z.boolean().default(false),
-    ticketSubject: optionalString,
-    organizationName: requiredString('Organization Name'),
-    contactPersonName: requiredString('Contact Person Name'),
+    ticketSubject: optionalText('Ticket Subject', L.title),
+    organizationName: requiredText('Organization Name', L.organizationName),
+    contactPersonName: requiredText('Contact Person Name', L.personName),
     contactNumber: zodPhoneOptional,
     ticketPriority: requiredEnum(asTuple(TICKET_PRIORITIES), 'Ticket Priority'),
     source: z.enum(asTuple(TICKET_SOURCES)).default('Call'),
     supportType: z.enum(asTuple(SUPPORT_TYPES)).default('Free'),
-    problemReported: requiredString('Problem Reported'),
-    resolution: optionalString,
-    reasonForEscalatedCalls: optionalString,
+    problemReported: requiredText('Problem Reported', L.longText),
+    resolution: optionalText('Resolution', L.longText),
+    reasonForEscalatedCalls: optionalText('Reason For Escalated Calls', L.longText),
     assignedTo: requiredString('Assigned to'),
 
     // Overview — right column
@@ -36,7 +44,7 @@ export const ticketFormSchema = z.object({
         (v) => getNatureOfCalls().some((n) => n.name.toLowerCase() === v.toLowerCase()),
         { message: 'Select a Nature Of Call from the list.' }
     ),
-    accountAddress: optionalString,
+    accountAddress: optionalText('Account Address', L.address),
     contactEmail: zodEmailOptional,
     leftJob: z.enum(['No', 'Yes']).default('No'),
     ticketStatus: z.enum(asTuple(TICKET_STATUSES)).default('New'),
@@ -44,9 +52,9 @@ export const ticketFormSchema = z.object({
         message: 'Due Date must be a valid date and time.',
     }),
     supportMode: requiredEnum(asTuple(SUPPORT_MODES), 'Support Mode'),
-    problemObserved: optionalString,
-    rca: optionalString,
-    addDescription: optionalString,
+    problemObserved: optionalText('Problem Observed', L.longText),
+    rca: optionalText('RCA', L.longText),
+    addDescription: optionalText('Add Description', L.longText),
 
     // Partner Company tab
     partnerCompany: optionalString,

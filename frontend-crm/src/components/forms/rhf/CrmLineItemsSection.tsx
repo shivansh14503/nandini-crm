@@ -20,6 +20,7 @@ import ClearIcon from '@mui/icons-material/Clear';
 import { useFormContext, useWatch, type Path, type PathValue } from 'react-hook-form';
 
 import { FormField, fieldSx } from '../FormField';
+import { FIELD_MAX_LENGTH, FIELD_SIZE_WIDTH } from '../fieldSizing';
 import { useFormMode } from '@/context/FormModeContext';
 import { CrmLineItemsReadOnly } from './CrmLineItemsReadOnly';
 import {
@@ -234,22 +235,20 @@ export function CrmLineItemsEditor({ value, onChange, error }: CrmLineItemsEdito
             )}
 
             {/* ════════════ TOP SETTINGS (Currency) ════════════ */}
-            <Box sx={{ maxWidth: { xs: '100%', sm: 400 }, mb: 3 }}>
-                <FormField label="Currency" hint="Base billing currency">
-                    <FormControl size="small" fullWidth sx={fieldSx}>
-                        <Select
-                            value={currency}
-                            onChange={(e) => onChange('currency', e.target.value)}
-                        >
-                            {OPPORTUNITY_CURRENCIES.map((cur) => (
-                                <MenuItem key={cur} value={cur}>
-                                    {cur}
-                                </MenuItem>
-                            ))}
-                        </Select>
-                    </FormControl>
-                </FormField>
-            </Box>
+            <FormField name="currency" label="Currency" size="sm" hint="Base billing currency" sx={{ mb: 3 }}>
+                <FormControl size="small" fullWidth sx={fieldSx}>
+                    <Select
+                        value={currency}
+                        onChange={(e) => onChange('currency', e.target.value)}
+                    >
+                        {OPPORTUNITY_CURRENCIES.map((cur) => (
+                            <MenuItem key={cur} value={cur}>
+                                {cur}
+                            </MenuItem>
+                        ))}
+                    </Select>
+                </FormControl>
+            </FormField>
 
             {/* ════════════ LINE ITEMS SECTION ════════════ */}
             <Paper
@@ -267,18 +266,23 @@ export function CrmLineItemsEditor({ value, onChange, error }: CrmLineItemsEdito
                 </Typography>
 
                 {/* Group Name input */}
-                <Box sx={{ maxWidth: 500, mb: 3 }}>
-                    <FormField label="Group Name" hint="Logical bundle name (e.g. Products / Software / AMC)">
-                        <TextField
-                            fullWidth
-                            size="small"
-                            value={groupName}
-                            onChange={(e) => onChange('groupName', e.target.value)}
-                            placeholder="e.g. Software Licenses & Add-ons"
-                            sx={fieldSx}
-                        />
-                    </FormField>
-                </Box>
+                <FormField
+                    name="groupName"
+                    label="Group Name"
+                    size="lg"
+                    hint="Logical bundle name (e.g. Products / Software / AMC)"
+                    sx={{ mb: 3 }}
+                >
+                    <TextField
+                        fullWidth
+                        size="small"
+                        value={groupName}
+                        onChange={(e) => onChange('groupName', e.target.value)}
+                        placeholder="e.g. Software Licenses & Add-ons"
+                        sx={fieldSx}
+                        slotProps={{ htmlInput: { maxLength: FIELD_MAX_LENGTH.shortText } }}
+                    />
+                </FormField>
 
                 {/* Dynamic Line items table container */}
                 <Box sx={{ overflowX: 'auto', mb: 2 }}>
@@ -549,6 +553,7 @@ export function CrmLineItemsEditor({ value, onChange, error }: CrmLineItemsEdito
                                                 onChange={(e) =>
                                                     handleUpdateLineItem(idx, { description: e.target.value })
                                                 }
+                                                slotProps={{ htmlInput: { maxLength: FIELD_MAX_LENGTH.longText } }}
                                                 sx={fieldSx}
                                             />
                                         </Box>
@@ -566,6 +571,7 @@ export function CrmLineItemsEditor({ value, onChange, error }: CrmLineItemsEdito
                                                 onChange={(e) =>
                                                     handleUpdateLineItem(idx, { note: e.target.value })
                                                 }
+                                                slotProps={{ htmlInput: { maxLength: FIELD_MAX_LENGTH.longText } }}
                                                 sx={fieldSx}
                                             />
                                         </Box>
@@ -640,7 +646,7 @@ export function CrmLineItemsEditor({ value, onChange, error }: CrmLineItemsEdito
                                 type="number"
                                 value={lumpSumDiscount}
                                 onChange={(e) => handleLumpSumChange(parseFloat(e.target.value) || 0)}
-                                sx={{ width: 140, ...fieldSx }}
+                                sx={{ width: FIELD_SIZE_WIDTH.xs, ...fieldSx }}
                                 slotProps={{ htmlInput: { min: 0 } }}
                             />
                         </Box>

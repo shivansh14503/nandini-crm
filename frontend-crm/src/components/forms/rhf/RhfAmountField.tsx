@@ -10,18 +10,20 @@ export type RhfAmountFieldProps<T extends FieldValues> = Omit<
 >;
 
 /**
- * Specialized Amount input component that enforces non-negative numerical inputs (min=0).
+ * Specialized Amount input component that enforces non-negative numerical inputs (min=0). Sized `md` by default.
  */
 export function RhfAmountField<T extends FieldValues>({
     min = 0,
     step = 'any',
     placeholder = '0.00',
+    fieldType = 'amount',
     ...props
 }: RhfAmountFieldProps<T>) {
     return (
         <RhfTextField<T>
             {...props}
             type="number"
+            fieldType={fieldType}
             min={min}
             step={step}
             placeholder={placeholder}

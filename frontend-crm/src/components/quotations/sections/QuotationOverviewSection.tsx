@@ -5,6 +5,9 @@ import { Box } from '@mui/material';
 import { useFormContext, useWatch } from 'react-hook-form';
 
 import {
+    FIELD_MAX_LENGTH,
+    FormGrid,
+    FormGridItem,
     SectionLabel,
     RhfTextField,
     RhfSelect,
@@ -23,7 +26,8 @@ import {
 } from '@/types/quotation.types';
 import { LEAD_ASSIGNED_USERS } from '@/types/lead.types';
 
-const columnSx = { display: 'flex', flexDirection: 'column', gap: 2.2 } as const;
+/** Select + its description stacked in one grid cell. */
+const termsColumnSx = { display: 'flex', flexDirection: 'column', gap: 2.5 } as const;
 
 export function QuotationOverviewSection() {
     const { control, setValue, getValues } = useFormContext<QuotationFormData>();
@@ -100,67 +104,102 @@ export function QuotationOverviewSection() {
         <Box sx={{ p: { xs: 2.5, md: 3.5 } }}>
             <SectionLabel label="OVERVIEW" sx={{ mb: 3 }} />
 
-            <Box
-                sx={{
-                    display: 'grid',
-                    gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' },
-                    gap: { xs: 2.5, md: 4 },
-                }}
-            >
-                {/* ── Left Column ── */}
-                <Box sx={columnSx}>
-                    <RhfTextField<QuotationFormData>
-                        name="quotationTitle"
-                        label="Quotation Title"
-                        required
-                        placeholder="e.g. B-Softwares Enterprise Deal"
-                        hint="Primary quote identifier"
-                    />
+            <FormGrid columns={3}>
+                {/* ── Identity ── */}
+                <RhfTextField<QuotationFormData>
+                    name="quotationTitle"
+                    label="Quotation Title"
+                    required
+                    placeholder="e.g. B-Softwares Enterprise Deal"
+                    hint="Primary quote identifier"
+                />
+                <RhfTextField<QuotationFormData>
+                    name="opportunityName"
+                    label="Opportunity"
+                    required
+                    disabled
+                    hint="Parent Opportunity"
+                />
+                <RhfSelect<QuotationFormData>
+                    name="company"
+                    label="Company"
+                    required
+                    options={QUOTE_COMPANIES}
+                    placeholder="Select Issuing Company"
+                    hint="Default: Nandini Infosystems"
+                />
 
-                    <RhfSelect<QuotationFormData>
-                        name="quoteStage"
-                        label="Quote Stage"
-                        required
-                        options={QUOTE_STAGES}
-                        placeholder="Select Quote Stage"
-                        hint="Default: Draft"
-                    />
+                {/* ── Validity: date + period → valid until ── */}
+                <RhfTextField<QuotationFormData>
+                    name="quotationDate"
+                    label="Quotation Date"
+                    type="date"
+                    required
+                    slotProps={{ inputLabel: { shrink: true } }}
+                />
+                <RhfSelect<QuotationFormData>
+                    name="validationPeriod"
+                    label="Validation Period"
+                    required
+                    options={QUOTE_VALIDATION_PERIODS}
+                    placeholder="Select Period"
+                    hint="Default: 30 Days"
+                />
+                <RhfTextField<QuotationFormData>
+                    name="validUntil"
+                    label="Valid Until"
+                    type="date"
+                    required
+                    slotProps={{ inputLabel: { shrink: true } }}
+                    hint="Date + validation period"
+                />
 
-                    <RhfTextField<QuotationFormData>
-                        name="quotationDate"
-                        label="Quotation Date"
-                        type="date"
-                        required
-                        slotProps={{ inputLabel: { shrink: true } }}
-                    />
+                {/* ── Workflow ── */}
+                <RhfSelect<QuotationFormData>
+                    name="quoteStage"
+                    label="Quote Stage"
+                    required
+                    options={QUOTE_STAGES}
+                    placeholder="Select Quote Stage"
+                    hint="Default: Draft"
+                />
+                <RhfSelect<QuotationFormData>
+                    name="preparedFor"
+                    label="Prepared For"
+                    required
+                    options={preparedForOptions}
+                    placeholder="Select Target Entity"
+                    hint="Recipient role or linked entity"
+                />
+                <RhfLookup<QuotationFormData>
+                    name="assignedTo"
+                    label="Assigned to"
+                    required
+                    options={LEAD_ASSIGNED_USERS}
+                    placeholder="Select Representative"
+                    hint="Managing representative"
+                    fieldSize="md"
+                />
+                <RhfTextField<QuotationFormData>
+                    name="otherRef"
+                    label="Other Ref."
+                    placeholder="External PO, tender, or inquiry ref..."
+                    fieldSize="md"
+                    maxLength={FIELD_MAX_LENGTH.shortText}
+                />
+            </FormGrid>
 
-                    <RhfTextField<QuotationFormData>
-                        name="validUntil"
-                        label="Valid Until"
-                        type="date"
-                        required
-                        slotProps={{ inputLabel: { shrink: true } }}
-                        hint="Automatically computed from Quotation Date + Validation Period"
-                    />
-
-                    <RhfTextField<QuotationFormData>
-                        name="remarks"
-                        label="Remarks"
-                        multiline
-                        minRows={3}
-                        maxRows={5}
-                        placeholder="Internal or customer-facing quotation remarks..."
-                    />
-
+            {/* ── Terms: each template picker sits directly above the description it fills ── */}
+            <FormGrid columns={2} sx={{ mt: 3 }}>
+                <FormGridItem sx={termsColumnSx}>
                     <RhfSelect<QuotationFormData>
                         name="termsAndCondition"
                         label="Terms & Condition"
                         required
                         options={QUOTE_TERMS_TEMPLATES}
                         placeholder="Select Terms Template"
-                        hint="Auto-populates description template"
+                        hint="Fills the description below"
                     />
-
                     <RhfTextField<QuotationFormData>
                         name="termsAndConditionDescription"
                         label="Terms & Condition Description"
@@ -169,63 +208,16 @@ export function QuotationOverviewSection() {
                         maxRows={6}
                         placeholder="Detailed terms, commercial conditions, and delivery clauses..."
                     />
-
-                    <RhfLookup<QuotationFormData>
-                        name="assignedTo"
-                        label="Assigned to"
-                        required
-                        options={LEAD_ASSIGNED_USERS}
-                        placeholder="Select Assigned Representative"
-                        hint="Representative managing this quotation"
-                    />
-                </Box>
-
-                {/* ── Right Column ── */}
-                <Box sx={columnSx}>
-                    <RhfTextField<QuotationFormData>
-                        name="opportunityName"
-                        label="Opportunity"
-                        required
-                        disabled
-                        hint="Parent Opportunity context"
-                    />
-
-                    <RhfSelect<QuotationFormData>
-                        name="company"
-                        label="Company"
-                        required
-                        options={QUOTE_COMPANIES}
-                        placeholder="Select Issuing Company"
-                        hint="Default: Nandini Infosystems"
-                    />
-
-                    <RhfSelect<QuotationFormData>
-                        name="validationPeriod"
-                        label="Validation Period"
-                        required
-                        options={QUOTE_VALIDATION_PERIODS}
-                        placeholder="Select Period"
-                        hint="Default: 30 Days"
-                    />
-
-                    <RhfTextField<QuotationFormData>
-                        name="otherRef"
-                        label="Other Ref."
-                        placeholder="External PO, tender, or inquiry reference..."
-                    />
-
-                    {/* Spacer box to visually align Payment Terms with Terms & Condition in Left Column */}
-                    <Box sx={{ minHeight: { xs: 0, md: 80 } }} />
-
+                </FormGridItem>
+                <FormGridItem sx={termsColumnSx}>
                     <RhfSelect<QuotationFormData>
                         name="paymentTerms"
                         label="Payment Terms"
                         required
                         options={QUOTE_PAYMENT_TERMS}
                         placeholder="Select Payment Terms"
-                        hint="Auto-populates payment description"
+                        hint="Fills the description below"
                     />
-
                     <RhfTextField<QuotationFormData>
                         name="paymentTermsDescription"
                         label="Payment Terms Description"
@@ -234,17 +226,16 @@ export function QuotationOverviewSection() {
                         maxRows={6}
                         placeholder="Milestone schedule, advance % and delivery breakdown..."
                     />
-
-                    <RhfSelect<QuotationFormData>
-                        name="preparedFor"
-                        label="Prepared For"
-                        required
-                        options={preparedForOptions}
-                        placeholder="Select Target Entity"
-                        hint="Recipient role or linked contact/organization"
-                    />
-                </Box>
-            </Box>
+                </FormGridItem>
+                <RhfTextField<QuotationFormData>
+                    name="remarks"
+                    label="Remarks"
+                    multiline
+                    minRows={3}
+                    maxRows={5}
+                    placeholder="Internal or customer-facing quotation remarks..."
+                />
+            </FormGrid>
         </Box>
     );
 }

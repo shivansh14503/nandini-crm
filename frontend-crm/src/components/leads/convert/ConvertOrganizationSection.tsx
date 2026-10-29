@@ -1,10 +1,10 @@
 'use client';
 
 import React, { useEffect, useMemo } from 'react';
-import { Alert, Grid } from '@mui/material';
+import { Alert } from '@mui/material';
 import { useFormContext, useWatch } from 'react-hook-form';
 
-import { RhfLookup, RhfSelect, RhfTextField } from '@/components/forms';
+import { FormGrid, RhfLookup, RhfSelect, RhfTextField } from '@/components/forms';
 import {
     NATURE_OF_BUSINESS,
     ENTITY_TYPES,
@@ -52,29 +52,28 @@ export function ConvertOrganizationSection() {
                     Organization “{existing.organizationName}” already exists and will be linked — no duplicate will be created.
                 </Alert>
             )}
-            <Grid container spacing={3.5}>
-                <Grid size={{ xs: 12, md: 6 }}>
-                    <RhfLookup<F>
-                        name="organizationName"
-                        label="Organization Name"
-                        required
-                        hint="Type a new name or pick an existing organization"
-                        options={organizationNames}
-                        placeholder="Search or enter organization..."
-                        lookupType="organization"
-                    />
-                    <RhfTextField<F> name="mailingName" label="Mailing Name" placeholder="Official mailing name" />
-                    <RhfSelect<F> name="natureOfBusiness" label="Nature of Business" required options={NATURE_OF_BUSINESS} placeholder="Select Nature of Business" />
-                    <RhfSelect<F> name="typeOfEntity" label="Type of Entity" required options={ENTITY_TYPES} placeholder="Select Type of Entity" />
-                    <RhfSelect<F> name="customerType" label="Customer Type" required options={CUSTOMER_TYPES} placeholder="Select Customer Type" />
-                </Grid>
-                <Grid size={{ xs: 12, md: 6 }}>
-                    <RhfSelect<F> name="sourceOfLead" label="Source of Lead" options={ORG_LEAD_SOURCES} placeholder="Select Source of Lead" />
-                    <RhfTextField<F> name="memberOf" label="Member of" placeholder="Parent corporation" />
-                    <RhfTextField<F> name="organizationDescription" label="Description" multiline minRows={3} placeholder="Notes about this organization..." />
-                    <RhfLookup<F> name="organizationAssignedTo" label="Assigned to" lookupType="user" required options={LEAD_ASSIGNED_USERS} placeholder="Select assigned representative" />
-                </Grid>
-            </Grid>
+            <FormGrid columns={3}>
+                <RhfLookup<F>
+                    name="organizationName"
+                    label="Organization Name"
+                    required
+                    hint="New name or pick existing"
+                    options={organizationNames}
+                    placeholder="Search or enter organization..."
+                    lookupType="organization"
+                />
+                <RhfTextField<F> name="mailingName" label="Mailing Name" placeholder="Official mailing name" />
+                <RhfTextField<F> name="memberOf" label="Member of" placeholder="Parent corporation" />
+
+                <RhfSelect<F> name="natureOfBusiness" label="Nature of Business" required options={NATURE_OF_BUSINESS} placeholder="Select Nature of Business" />
+                <RhfSelect<F> name="typeOfEntity" label="Type of Entity" required options={ENTITY_TYPES} placeholder="Select Type of Entity" />
+                <RhfSelect<F> name="customerType" label="Customer Type" required options={CUSTOMER_TYPES} placeholder="Select Customer Type" />
+
+                <RhfSelect<F> name="sourceOfLead" label="Source of Lead" options={ORG_LEAD_SOURCES} placeholder="Select Source of Lead" />
+                <RhfLookup<F> name="organizationAssignedTo" label="Assigned to" lookupType="user" required options={LEAD_ASSIGNED_USERS} placeholder="Select representative" />
+
+                <RhfTextField<F> name="organizationDescription" label="Description" multiline minRows={3} placeholder="Notes about this organization..." />
+            </FormGrid>
         </>
     );
 }

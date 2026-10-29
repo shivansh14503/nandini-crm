@@ -11,6 +11,7 @@ import {
 } from '../AddressPrimitives';
 import { useFormMode } from '@/context/FormModeContext';
 import { resolveCountryIso2 } from '@/data/addressMaster';
+import type { FieldSize } from '../fieldSizing';
 
 interface RhfAddressFieldBaseProps<T extends FieldValues> {
     name: FieldPath<T>;
@@ -19,6 +20,8 @@ interface RhfAddressFieldBaseProps<T extends FieldValues> {
     disabled?: boolean;
     placeholder?: string;
     hint?: React.ReactNode;
+    /** Width token (default `md`). */
+    fieldSize?: FieldSize;
 }
 
 /** Watches an optional country field; returns undefined when no field name is given. */
@@ -34,7 +37,7 @@ function useWatchedCountry<T extends FieldValues>(countryFieldName?: Path<T>, fa
 export type RhfCountrySelectProps<T extends FieldValues> = RhfAddressFieldBaseProps<T>;
 
 /** RHF country dropdown storing ISO2 codes; legacy names already in the form ('India') are converted to 'IN'. */
-export function RhfCountrySelect<T extends FieldValues>({ name, ...props }: RhfCountrySelectProps<T>) {
+export function RhfCountrySelect<T extends FieldValues>({ name, fieldSize, ...props }: RhfCountrySelectProps<T>) {
     const { field, fieldState } = useController<T>({ name });
     const { setValue } = useFormContext<T>();
     const raw = typeof field.value === 'string' ? field.value : '';
@@ -48,6 +51,7 @@ export function RhfCountrySelect<T extends FieldValues>({ name, ...props }: RhfC
         <CountrySelectField
             {...props}
             name={name}
+            size={fieldSize}
             value={raw}
             onChange={(iso2) => field.onChange(iso2)}
             error={fieldState.error?.message}
@@ -69,6 +73,7 @@ export function RhfStateRegionField<T extends FieldValues>({
     name,
     countryFieldName,
     countryCode,
+    fieldSize,
     ...props
 }: RhfStateRegionFieldProps<T>) {
     const { field, fieldState } = useController<T>({ name });
@@ -94,6 +99,7 @@ export function RhfStateRegionField<T extends FieldValues>({
         <StateRegionField
             {...props}
             name={name}
+            size={fieldSize}
             value={typeof field.value === 'string' ? field.value : ''}
             onChange={(v) => field.onChange(v)}
             countryValue={country}
@@ -109,7 +115,7 @@ export interface RhfCityFieldProps<T extends FieldValues> extends RhfAddressFiel
     countryFieldName?: Path<T>;
 }
 
-export function RhfCityField<T extends FieldValues>({ name, countryFieldName, ...props }: RhfCityFieldProps<T>) {
+export function RhfCityField<T extends FieldValues>({ name, countryFieldName, fieldSize, ...props }: RhfCityFieldProps<T>) {
     const { field, fieldState } = useController<T>({ name });
     const country = useWatchedCountry<T>(countryFieldName, name);
 
@@ -117,6 +123,7 @@ export function RhfCityField<T extends FieldValues>({ name, countryFieldName, ..
         <CityAutocompleteField
             {...props}
             name={name}
+            size={fieldSize}
             value={typeof field.value === 'string' ? field.value : ''}
             onChange={(v) => field.onChange(v)}
             countryValue={country}

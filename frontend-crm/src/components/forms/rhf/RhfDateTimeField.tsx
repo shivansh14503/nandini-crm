@@ -8,6 +8,7 @@ import { useController, type FieldPath, type FieldValues } from 'react-hook-form
 import { FormField, fieldSx } from '../FormField';
 import { useFormMode } from '@/context/FormModeContext';
 import { ReadOnlyField } from '../ReadOnlyField';
+import type { FieldSize } from '../fieldSizing';
 
 export interface RhfDateTimeFieldProps<T extends FieldValues> {
     dateName: FieldPath<T>;
@@ -20,6 +21,8 @@ export interface RhfDateTimeFieldProps<T extends FieldValues> {
      * separate date + free-text time pair. `timeName` is ignored.
      */
     combined?: boolean;
+    /** Width token; defaults to `sm` for a date alone and `md` for date + time. */
+    fieldSize?: FieldSize;
 }
 
 const adornment = (icon: React.ReactNode) => ({
@@ -34,7 +37,9 @@ export function RhfDateTimeField<T extends FieldValues>({
     required,
     hint,
     combined = false,
+    fieldSize,
 }: RhfDateTimeFieldProps<T>) {
+    const size = fieldSize ?? (combined || timeName ? 'md' : 'sm');
     const date = useController<T>({ name: dateName });
     // useController requires a name; fall back to the date name when no time field is configured.
     const time = useController<T>({ name: (timeName ?? dateName) as FieldPath<T> });
@@ -52,7 +57,7 @@ export function RhfDateTimeField<T extends FieldValues>({
             return <ReadOnlyField label={label} value={text} hideWhenEmpty sx={{ mb: 2 }} />;
         }
         return (
-            <FormField name={dateName} label={label} required={required} hint={hint}>
+            <FormField name={dateName} label={label} required={required} hint={hint} size={size}>
                 <TextField
                     {...date.field}
                     value={raw}
@@ -79,7 +84,7 @@ export function RhfDateTimeField<T extends FieldValues>({
     }
 
     return (
-        <FormField name={dateName} label={label} required={required} hint={hint}>
+        <FormField name={dateName} label={label} required={required} hint={hint} size={size}>
             <Box sx={{ display: 'grid', gridTemplateColumns: timeName ? '1.4fr 1fr' : '1fr', gap: 1.5 }}>
                 <TextField
                     {...date.field}

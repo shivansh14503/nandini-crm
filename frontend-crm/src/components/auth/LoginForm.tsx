@@ -20,6 +20,9 @@ import {
 import { useAuth } from '../../context/AuthContext';
 import { ROUTES } from '../../config/constants';
 import { ErrorAlert } from '../common/ErrorAlert';
+import { FIELD_MAX_LENGTH } from '../forms/fieldSizing';
+
+const PASSWORD_MAX_LENGTH = 128;
 
 export function LoginForm() {
     const router = useRouter();
@@ -87,6 +90,7 @@ export function LoginForm() {
                     autoComplete="username"
                     disabled={loading}
                     slotProps={{
+                        htmlInput: { maxLength: FIELD_MAX_LENGTH.email },
                         input: {
                             startAdornment: (
                                 <InputAdornment position="start">
@@ -160,6 +164,7 @@ export function LoginForm() {
                     autoComplete="current-password"
                     disabled={loading}
                     slotProps={{
+                        htmlInput: { maxLength: PASSWORD_MAX_LENGTH },
                         input: {
                             startAdornment: (
                                 <InputAdornment position="start">

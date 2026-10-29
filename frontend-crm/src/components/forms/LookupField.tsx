@@ -12,6 +12,7 @@ import {
 import ArrowForwardIosIcon from '@mui/icons-material/ArrowForwardIos';
 import ClearIcon from '@mui/icons-material/Clear';
 import { fieldSx } from './FormField';
+import { fieldSizeSx, type FieldSize } from './fieldSizing';
 
 export interface LookupFieldProps {
     value: string;
@@ -29,6 +30,8 @@ export interface LookupFieldProps {
     disabled?: boolean;
     required?: boolean;
     lookupTooltip?: string;
+    /** Width cap (input + action buttons) for standalone use; omit inside a FormField, which sizes its children. */
+    fieldSize?: FieldSize;
 }
 
 const actionButtonSx = {
@@ -54,6 +57,7 @@ export function LookupField({
     disabled = false,
     required = false,
     lookupTooltip = 'Select from Directory',
+    fieldSize,
 }: LookupFieldProps) {
     const handleLookup = onLookupClick ?? onSelectClick;
 
@@ -63,7 +67,7 @@ export function LookupField({
     };
 
     return (
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, ...(fieldSize ? fieldSizeSx(fieldSize) : {}) }}>
             {options.length > 0 ? (
                 <Autocomplete
                     freeSolo

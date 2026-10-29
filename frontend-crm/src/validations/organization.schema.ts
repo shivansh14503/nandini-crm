@@ -1,7 +1,10 @@
 import { z } from 'zod';
+import { FIELD_MAX_LENGTH as L } from '../config/fieldLimits';
 import {
     requiredString,
     optionalString,
+    requiredText,
+    optionalText,
     zodPostalCode,
     zodPostalCodeOptional,
     refinePostalCodeForCountry,
@@ -27,22 +30,21 @@ export const partnerCompanySchema = z.object({
 export const organizationFormSchema = z
     .object({
         // Basic Details
-        organizationName: requiredString('Organization Name')
-            .max(150, { message: 'Organization Name cannot exceed 150 characters.' }),
-        mailingName: optionalString,
-        tradeName: optionalString,
+        organizationName: requiredText('Organization Name', L.organizationName),
+        mailingName: optionalText('Mailing Name', L.organizationName),
+        tradeName: optionalText('Trade Name', L.organizationName),
         natureOfBusiness: requiredString('Nature of Business'),
         accountStatus: z.enum(['Active', 'Inactive']).default('Active'),
         inactivityReason: optionalString,
         typeOfEntity: requiredString('Type of Entity'),
         customerType: requiredString('Customer Type'),
-        sapCodeTallyId: optionalString,
-        showroomBranchCode: optionalString,
+        sapCodeTallyId: optionalText('SAP Code / Tally ID', L.shortCode),
+        showroomBranchCode: optionalText('Showroom / Branch Code', L.shortCode),
         sourceOfLead: optionalString,
-        memberOfParentCorp: optionalString,
+        memberOfParentCorp: optionalText('Parent Corporation', L.organizationName),
         numberOfEmployees: optionalString,
         annualTurnover: optionalString,
-        description: optionalString,
+        description: optionalText('Description', L.organizationDescription),
         accountVerified: z.boolean().default(false),
         verifiedAt: optionalString,
         verifiedBy: optionalString,
@@ -53,19 +55,19 @@ export const organizationFormSchema = z
         corporateEmails: z.array(corporateEmailSchema).optional(),
 
         // Billing Address
-        billingAddress: requiredString('Billing Address'),
-        billingStreet: optionalString,
-        billingCity: requiredString('Billing City'),
-        billingState: requiredString('Billing State'),
+        billingAddress: requiredText('Billing Address', L.address),
+        billingStreet: optionalText('Billing Street', L.address),
+        billingCity: requiredText('Billing City', L.shortText),
+        billingState: requiredText('Billing State', L.shortText),
         billingPostalCode: zodPostalCode,
         billingCountry: optionalString.default('India'),
         billingLatitude: optionalString,
 
         // Shipping Address
-        shippingAddress: optionalString,
-        shippingStreet: optionalString,
-        shippingCity: optionalString,
-        shippingState: optionalString,
+        shippingAddress: optionalText('Shipping Address', L.address),
+        shippingStreet: optionalText('Shipping Street', L.address),
+        shippingCity: optionalText('Shipping City', L.shortText),
+        shippingState: optionalText('Shipping State', L.shortText),
         shippingPostalCode: zodPostalCodeOptional,
         shippingCountry: optionalString.default('India'),
         shippingLongitude: optionalString,
@@ -74,17 +76,17 @@ export const organizationFormSchema = z
         // Tax & Bank Details
         registrationType: z.enum(['Registered', 'Unregistered']).default('Registered'),
         panNumber: zodPanOptional,
-        msmeRegnNumber: optionalString,
-        accountName: optionalString,
-        bankName: optionalString,
+        msmeRegnNumber: optionalText('MSME Regn. Number', L.msme),
+        accountName: optionalText('Account Name', L.organizationName),
+        bankName: optionalText('Bank Name', L.personName),
         bankIfscCode: zodIfscOptional,
         gstNo: zodGstOptional,
         gstNumber: optionalString,
-        cinNo: optionalString,
-        tanNumber: optionalString,
-        accountNumber: optionalString,
+        cinNo: optionalText('CIN No', L.cin),
+        tanNumber: optionalText('TAN Number', L.tan),
+        accountNumber: optionalText('Account Number', L.bankAccount),
         typeOfAccount: optionalString,
-        bankAddress: optionalString,
+        bankAddress: optionalText('Bank Address', L.address),
 
         // Partner Company
         partnerCompanies: z.array(z.union([z.string(), partnerCompanySchema])).default([]),

@@ -1,5 +1,6 @@
 import { z } from 'zod';
-import { requiredString, optionalString, zodPhone, zodPhoneOptional } from './common';
+import { FIELD_MAX_LENGTH as L } from '../config/fieldLimits';
+import { requiredString, optionalString, requiredText, optionalText, zodPhone, zodPhoneOptional } from './common';
 import { corporateEmailSchema } from './contact.schema';
 
 /**
@@ -9,21 +10,19 @@ import { corporateEmailSchema } from './contact.schema';
 export const convertLeadFormSchema = z.object({
     // ── Organization ───────────────────────────────────────────────────────────
     existingOrganizationId: optionalString,
-    organizationName: requiredString('Organization Name'),
-    mailingName: optionalString,
+    organizationName: requiredText('Organization Name', L.organizationName),
+    mailingName: optionalText('Mailing Name', L.organizationName),
     natureOfBusiness: requiredString('Nature of Business'),
     typeOfEntity: requiredString('Type of Entity'),
     customerType: requiredString('Customer Type'),
     sourceOfLead: optionalString,
-    memberOf: optionalString,
-    organizationDescription: optionalString,
+    memberOf: optionalText('Member of', L.organizationName),
+    organizationDescription: optionalText('Organization Description', L.longText),
     organizationAssignedTo: requiredString('Organization Assigned to'),
 
     // ── Contact ────────────────────────────────────────────────────────────────
     existingContactId: optionalString,
-    contactName: requiredString('Contact Name').max(100, {
-        message: 'Contact Name cannot exceed 100 characters.',
-    }),
+    contactName: requiredText('Contact Name', L.personName),
     contactMobile: zodPhone,
     contactPhone3: zodPhoneOptional,
     contactEmails: z
@@ -36,18 +35,18 @@ export const convertLeadFormSchema = z.object({
     department: optionalString,
     communicationType: z.array(z.string()),
     doNotCall: z.boolean(),
-    contactDescription: optionalString,
+    contactDescription: optionalText('Contact Description', L.longText),
     contactAssignedTo: requiredString('Contact Assigned to'),
 
     // ── Opportunity ────────────────────────────────────────────────────────────
     productCategory: z.array(z.string()).min(1, { message: 'Select at least one Product Category.' }),
-    principalCompany: optionalString,
+    principalCompany: optionalText('Principal Company', L.organizationName),
     referredBy: optionalString,
     opportunityType: requiredString('Opportunity Type'),
     nextFollowupDate: requiredString('Next Followup Date'),
     nextFollowupTime: optionalString,
     followupType: optionalString,
-    opportunityDescription: optionalString,
+    opportunityDescription: optionalText('Opportunity Description', L.longText),
     opportunityLeadSource: requiredString('Lead Source'),
     opportunityAssignedTo: requiredString('Opportunity Assigned to'),
     copyActivitiesTo: z.array(z.string()),

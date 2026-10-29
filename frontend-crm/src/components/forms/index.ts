@@ -1,4 +1,6 @@
 export * from './FormField';
+export * from './fieldSizing';
+export * from './FormGrid';
 export * from './LookupField';
 export * from './FormHeader';
 export * from './FormStickyFooter';

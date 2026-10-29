@@ -5,6 +5,7 @@ import { FormHelperText, type SxProps, type Theme } from '@mui/material';
 import { useController, type FieldPath, type FieldValues } from 'react-hook-form';
 import { FormField } from '../FormField';
 import { StyledSelect } from '../StyledSelect';
+import { resolveFieldSize, resolveOptionsFieldSize, type FieldSize } from '../fieldSizing';
 
 export interface RhfSelectProps<T extends FieldValues> {
     name: FieldPath<T>;
@@ -14,6 +15,8 @@ export interface RhfSelectProps<T extends FieldValues> {
     hint?: React.ReactNode;
     placeholder?: string;
     disabled?: boolean;
+    /** Width token; defaults to the width of the longest option (`xs` for Yes/No … capped at `md`). */
+    fieldSize?: FieldSize;
     sx?: SxProps<Theme>;
 }
 
@@ -26,17 +29,20 @@ export function RhfSelect<T extends FieldValues>({
     hint,
     placeholder,
     disabled,
+    fieldSize,
     sx,
 }: RhfSelectProps<T>) {
     const { field, fieldState } = useController<T>({ name });
+    const size = resolveFieldSize(name, 'select', fieldSize ?? resolveOptionsFieldSize(options));
 
     return (
-        <FormField name={name} label={label} required={required} hint={hint} sx={sx}>
+        <FormField name={name} label={label} required={required} hint={hint} size={size} sx={sx}>
             <StyledSelect
                 value={(field.value as string) ?? ''}
                 onChange={field.onChange}
                 options={options}
-                placeholder={placeholder}
+                // "Select <label>" doesn't fit an xs control; a bare "Select" keeps the prompt readable.
+                placeholder={placeholder ?? (size === 'xs' ? 'Select' : undefined)}
                 disabled={disabled}
             />
             {fieldState.error && (
