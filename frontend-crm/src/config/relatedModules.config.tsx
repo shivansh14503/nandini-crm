@@ -33,7 +33,8 @@ export type CrmEntityType =
     | 'lead'
     | 'opportunity'
     | 'product'
-    | 'quotation';
+    | 'quotation'
+    | 'ticket';
 
 export type RelatedRecordRow = Record<string, unknown>;
 
@@ -95,7 +96,7 @@ function extractEntityContext(
 
     const contactId = String(obj.contactId || (isContact ? recordId : '')).trim();
     const contactName = String(
-        obj.contactName || (isContact ? obj.name || rawTitle : '')
+        obj.contactName || obj.contactPersonName || (isContact ? obj.name || rawTitle : '')
     )
         .trim()
         .toLowerCase();
@@ -149,7 +150,11 @@ export function resolveRelatedRecordsForModule(
             const contacts = contactService.getAllSync();
             return contacts
                 .filter((c) => {
-                    if (ctx.entityType === 'opportunity' || ctx.entityType === 'quotation') {
+                    if (
+                        ctx.entityType === 'opportunity' ||
+                        ctx.entityType === 'quotation' ||
+                        ctx.entityType === 'ticket'
+                    ) {
                         if (ctx.contactId && c.id === ctx.contactId) return true;
                         if (ctx.contactName && c.name.trim().toLowerCase() === ctx.contactName) return true;
                     }
@@ -582,6 +587,14 @@ export function getRelatedModulesForEntity(
             return withClick([
                 { id: 'line-items', label: 'Line Items', icon: <Inventory2OutlinedIcon /> },
                 { id: 'opportunities', label: 'Opportunities', icon: <TrendingUpOutlinedIcon /> },
+                { id: 'organizations', label: 'Organizations', icon: <ApartmentOutlinedIcon /> },
+                { id: 'contacts', label: 'Contacts', icon: <PeopleOutlinedIcon /> },
+                { id: 'history', label: 'History', icon: <HistoryOutlinedIcon /> },
+            ]);
+
+        case 'ticket':
+            return withClick([
+                { id: 'activities', label: 'Activities', icon: <AssignmentOutlinedIcon /> },
                 { id: 'organizations', label: 'Organizations', icon: <ApartmentOutlinedIcon /> },
                 { id: 'contacts', label: 'Contacts', icon: <PeopleOutlinedIcon /> },
                 { id: 'history', label: 'History', icon: <HistoryOutlinedIcon /> },

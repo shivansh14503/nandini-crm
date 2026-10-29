@@ -26,6 +26,10 @@ import {
 } from '@/types/ticket.types';
 import { useTickets, useBulkDeleteTickets } from '@/hooks/queries';
 import type { TicketFilterTab, TicketSortField } from './types';
+import { RelatedModulesSidebar, RelatedRecordsTableView } from '../../common/Drawer';
+import { RelatedSecondaryDrawer, type SecondaryDrawerEntity } from '../../common/RelatedSecondaryDrawer';
+import { getRelatedModulesForEntity } from '@/config/relatedModules.config';
+import { useCrmDataVersion } from '@/services';
 import { TicketDetailDrawer } from '../TicketDetailDrawer';
 import { TicketPriorityPill, TicketStatusPill, formatTicketDue } from '../TicketBadges';
 
@@ -74,6 +78,10 @@ export function TicketsMasterView() {
         () => (drawerTicketId ? tickets.find((t) => t.id === drawerTicketId) ?? null : null),
         [tickets, drawerTicketId]
     );
+    const crmDataVersion = useCrmDataVersion();
+    const [activeRelatedModule, setActiveRelatedModule] = useState<string | null>(null);
+    const [secondaryDrawerEntity, setSecondaryDrawerEntity] = useState<SecondaryDrawerEntity | null>(null);
+    const [isLeftSidebarCollapsed, setIsLeftSidebarCollapsed] = useState<boolean>(false);
     const [toast, setToast] = useState<{ open: boolean; message: string; severity: 'success' | 'info' | 'error' }>({
         open: false,
         message: '',
@@ -286,6 +294,24 @@ export function TicketsMasterView() {
         [now]
     );
 
+    const relatedModules = useMemo(() => {
+        // Related counts come from other entities' stores; recompute whenever any of them changes.
+        void crmDataVersion;
+        if (!selectedDrawerTicket) return [];
+        return getRelatedModulesForEntity('ticket', selectedDrawerTicket, setActiveRelatedModule);
+    }, [selectedDrawerTicket, crmDataVersion]);
+
+    // Falls back to the first module until the user explicitly picks one.
+    const effectiveRelatedModule = activeRelatedModule ?? relatedModules[0]?.id ?? null;
+    const activeModuleMeta = relatedModules.find((m) => m.id === effectiveRelatedModule);
+
+    // Dismisses the three-panel view and returns to the clean master table.
+    const closeThreePanelView = useCallback(() => {
+        setSecondaryDrawerEntity(null);
+        setDrawerTicketId(null);
+        setActiveRelatedModule(null);
+    }, []);
+
     return (
         <CommonMasterView<Ticket, TicketFilterTab>
             filterConfig={{
@@ -358,12 +384,47 @@ export function TicketsMasterView() {
                     setPage(0);
                 },
             }}
+            relatedSidebar={
+                <RelatedModulesSidebar
+                    open={Boolean(selectedDrawerTicket)}
+                    modules={relatedModules}
+                    activeModuleId={effectiveRelatedModule ?? undefined}
+                    onModuleSelect={(moduleId) => setActiveRelatedModule(moduleId)}
+                    collapsed={isLeftSidebarCollapsed}
+                    onToggleCollapse={setIsLeftSidebarCollapsed}
+                />
+            }
+            relatedRecordsTable={
+                <RelatedRecordsTableView
+                    open={Boolean(selectedDrawerTicket && effectiveRelatedModule)}
+                    moduleId={effectiveRelatedModule || ''}
+                    moduleTitle={activeModuleMeta?.label || 'Related Records'}
+                    parentRecordId={selectedDrawerTicket?.id}
+                    parentEntityTitle={selectedDrawerTicket?.ticketSubject || ''}
+                    entityData={selectedDrawerTicket}
+                    entityType="ticket"
+                    leftOffset={isLeftSidebarCollapsed ? 72 : 260}
+                    rightOffset={580}
+                    onClose={closeThreePanelView}
+                    onRowClick={(row, modId) => setSecondaryDrawerEntity({ type: modId, data: row })}
+                />
+            }
             drawer={
                 <TicketDetailDrawer
                     ticket={selectedDrawerTicket}
                     open={Boolean(selectedDrawerTicket)}
-                    onClose={() => setDrawerTicketId(null)}
+                    onClose={closeThreePanelView}
                 />
+            }
+            secondaryDrawer={
+                secondaryDrawerEntity ? (
+                    <RelatedSecondaryDrawer
+                        entity={secondaryDrawerEntity}
+                        moduleLabel={activeModuleMeta?.label}
+                        parentTitle={selectedDrawerTicket?.ticketSubject}
+                        onClose={() => setSecondaryDrawerEntity(null)}
+                    />
+                ) : null
             }
             isDrawerOpen={Boolean(selectedDrawerTicket)}
             toast={
