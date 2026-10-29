@@ -1,20 +1,14 @@
-"use client";
-
-import { useEffect } from 'react';
-import { useRouter } from 'next/navigation';
-import { useAuth } from '@/src/context/AuthContext';
+import { cookies } from 'next/headers';
+import { redirect } from 'next/navigation';
 import { ROUTES } from '@/src/config/constants';
-import { LoadingScreen } from '@/src/components/common/LoadingScreen';
 
-export default function HomePage() {
-    const router = useRouter();
-    const { isAuthenticated, loading } = useAuth();
+export default async function HomePage() {
+    const cookieStore = await cookies();
+    const token = cookieStore.get('token')?.value;
 
-    useEffect(() => {
-        if (!loading) {
-            router.replace(isAuthenticated ? ROUTES.DASHBOARD : ROUTES.LOGIN);
-        }
-    }, [isAuthenticated, loading, router]);
+    if (token) {
+        redirect(ROUTES.DASHBOARD);
+    }
 
-    return <LoadingScreen message="Redirecting to CRM portal..." />;
+    redirect(ROUTES.LOGIN);
 }

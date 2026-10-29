@@ -93,6 +93,13 @@ async function request<T>(endpoint: string, options: RequestOptions = {}): Promi
             currentOptions = next.options;
         }
 
+        if (!currentOptions.signal && typeof AbortSignal !== 'undefined' && typeof AbortSignal.timeout === 'function') {
+            currentOptions = {
+                ...currentOptions,
+                signal: AbortSignal.timeout(10000),
+            };
+        }
+
         let response = await fetch(currentUrl, currentOptions);
 
         for (const interceptor of responseInterceptors) {

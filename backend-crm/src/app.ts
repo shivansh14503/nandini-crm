@@ -11,7 +11,17 @@ const app: Express = express();
 // ── Global Middleware ──────────────────────────────────────────────────────────
 app.use(
     cors({
-        origin: ENV.CLIENT_ORIGIN,
+        origin: (origin, callback) => {
+            if (!origin) return callback(null, true);
+            if (
+                !ENV.IS_PRODUCTION ||
+                origin === ENV.CLIENT_ORIGIN ||
+                /^http:\/\/(localhost|127\.0\.0\.1|192\.168\.\d+\.\d+|10\.\d+\.\d+\.\d+)(:\d+)?$/.test(origin)
+            ) {
+                return callback(null, true);
+            }
+            return callback(new Error(`CORS blocked for origin: ${origin}`));
+        },
         credentials: true,
     }),
 );
