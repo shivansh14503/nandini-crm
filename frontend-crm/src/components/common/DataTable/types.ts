@@ -122,6 +122,8 @@ export interface DataTableProps<T> {
     deleteTooltip?: string;
     actionsPosition?: 'left' | 'right';
     actionsWidth?: number | string;
+    /** Horizontal alignment of the actions header and cells. Defaults to 'center'. */
+    actionsAlign?: 'left' | 'center' | 'right';
     actionsHeaderLabel?: string;
 
     // Row interaction

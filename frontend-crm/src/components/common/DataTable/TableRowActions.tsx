@@ -19,7 +19,11 @@ export interface TableRowActionsProps {
     editTooltip?: string;
     deleteTooltip?: string;
     children?: React.ReactNode;
+    /** Horizontal alignment of the icons within the cell. Defaults to 'center'. */
+    align?: 'left' | 'center' | 'right';
 }
+
+const JUSTIFY = { left: 'flex-start', center: 'center', right: 'flex-end' } as const;
 
 /**
  * Standardized Enterprise Table Row Actions Component.
@@ -34,9 +38,18 @@ export function TableRowActions({
     editTooltip = 'Edit',
     deleteTooltip = 'Delete',
     children,
+    align = 'center',
 }: TableRowActionsProps) {
     return (
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+        <Box
+            sx={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: JUSTIFY[align],
+                gap: 0.5,
+                width: '100%',
+            }}
+        >
 
             {viewHref && (
                 <Tooltip title={viewTooltip}>

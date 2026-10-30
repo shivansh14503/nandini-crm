@@ -46,7 +46,8 @@ export function DataTable<T>({
     editTooltip,
     deleteTooltip,
     actionsPosition = 'left',
-    actionsWidth = 70,
+    actionsWidth = 80,
+    actionsAlign = 'center',
     actionsHeaderLabel = 'ACTIONS',
     onRowClick,
     activeRowId,
@@ -108,7 +109,24 @@ export function DataTable<T>({
 
     const renderActionButtons = (row: T, index: number) => {
         if (renderActions) {
-            return renderActions(row, index);
+            // Wrap custom actions so they follow the same alignment as the built-in ones
+            return (
+                <Box
+                    sx={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent:
+                            actionsAlign === 'left'
+                                ? 'flex-start'
+                                : actionsAlign === 'right'
+                                ? 'flex-end'
+                                : 'center',
+                        width: '100%',
+                    }}
+                >
+                    {renderActions(row, index)}
+                </Box>
+            );
         }
         return (
             <TableRowActions
@@ -120,6 +138,7 @@ export function DataTable<T>({
                 viewTooltip={viewTooltip}
                 editTooltip={editTooltip}
                 deleteTooltip={deleteTooltip}
+                align={actionsAlign}
             />
         );
     };
@@ -127,6 +146,7 @@ export function DataTable<T>({
     // Actions cell renderer
     const renderActionsHeader = () => (
         <TableCell
+            align={actionsAlign}
             sx={{
                 backgroundColor: '#f8fafc',
                 borderBottom: '1px solid #e2e8f0',
@@ -135,8 +155,11 @@ export function DataTable<T>({
                 fontSize: '0.74rem',
                 letterSpacing: '0.04em',
                 py: 1.2,
+                px: 1,
                 width: actionsWidth,
-                textAlign: actionsPosition === 'right' ? 'right' : 'left',
+                minWidth: actionsWidth,
+                whiteSpace: 'nowrap',
+                textAlign: actionsAlign,
             }}
         >
             {actionsHeaderLabel}
@@ -337,10 +360,13 @@ export function DataTable<T>({
                                 {/* Actions Cell Left */}
                                 {hasActions && actionsPosition === 'left' && (
                                     <TableCell
+                                        align={actionsAlign}
                                         sx={{
                                             py: 1,
+                                            px: 1,
                                             borderBottom: '1px solid #f1f5f9',
                                             width: actionsWidth,
+                                            minWidth: actionsWidth,
                                         }}
                                         onClick={(e) => e.stopPropagation()}
                                     >
@@ -384,11 +410,13 @@ export function DataTable<T>({
                                 {/* Actions Cell Right */}
                                 {hasActions && actionsPosition === 'right' && (
                                     <TableCell
-                                        align="right"
+                                        align={actionsAlign}
                                         sx={{
                                             py: 1,
+                                            px: 1,
                                             borderBottom: '1px solid #f1f5f9',
                                             width: actionsWidth,
+                                            minWidth: actionsWidth,
                                         }}
                                         onClick={(e) => e.stopPropagation()}
                                     >
