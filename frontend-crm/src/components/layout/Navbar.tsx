@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect, useCallback, useId } from 'react';
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
 import Link from 'next/link';
@@ -86,24 +86,84 @@ const NAV_ITEMS = [
     },
 ] as const;
 
-/* ─── Hover-dropdown pill ───────────────────────────────── */
-function NavPill({ item }: { item: { label: string; icon?: React.ReactNode; items: readonly { label: string; href: string }[] } }) {
+/* ─── Shared hover + click/tap dropdown behaviour ───────── */
+const CLOSE_DELAY_MS = 150;
+
+function useDropdown() {
+    const menuId = useId();
     const [open, setOpen] = useState(false);
-    const [anchorEl, setAnchorEl] = useState<HTMLButtonElement | null>(null);
+    const [anchorEl, setAnchorEl] = useState<HTMLElement | null>(null);
     const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-    const handleMouseEnter = () => {
-        if (closeTimer.current) clearTimeout(closeTimer.current);
-        setOpen(true);
-    };
-    const handleMouseLeave = () => {
-        closeTimer.current = setTimeout(() => setOpen(false), 120);
+    const clearCloseTimer = useCallback(() => {
+        if (closeTimer.current) {
+            clearTimeout(closeTimer.current);
+            closeTimer.current = null;
+        }
+    }, []);
+
+    // Clear any pending close timeout on unmount
+    useEffect(() => clearCloseTimer, [clearCloseTimer]);
+
+    const close = useCallback(() => {
+        clearCloseTimer();
+        setOpen(false);
+    }, [clearCloseTimer]);
+
+    // Close on Escape while open
+    useEffect(() => {
+        if (!open) return;
+        const onKeyDown = (e: KeyboardEvent) => {
+            if (e.key === 'Escape') close();
+        };
+        document.addEventListener('keydown', onKeyDown);
+        return () => document.removeEventListener('keydown', onKeyDown);
+    }, [open, close]);
+
+    // Hover is mouse-only: touch/pen taps also emit pointerenter, which would
+    // open the menu and then have the click handler toggle it straight shut.
+    const hoverProps = {
+        onPointerEnter: (e: React.PointerEvent) => {
+            if (e.pointerType !== 'mouse') return;
+            clearCloseTimer();
+            setOpen(true);
+        },
+        onPointerLeave: (e: React.PointerEvent) => {
+            if (e.pointerType !== 'mouse') return;
+            clearCloseTimer();
+            closeTimer.current = setTimeout(() => setOpen(false), CLOSE_DELAY_MS);
+        },
     };
 
+    const triggerProps = {
+        'aria-haspopup': 'true' as const,
+        'aria-expanded': open,
+        'aria-controls': open ? menuId : undefined,
+        onClick: () => {
+            clearCloseTimer();
+            setOpen((prev) => !prev);
+        },
+    };
+
+    // The popper is portaled outside the trigger, so a click on the trigger
+    // reaches ClickAwayListener too; ignore it and let onClick toggle.
+    const handleClickAway = (event: MouseEvent | TouchEvent) => {
+        if (anchorEl && anchorEl.contains(event.target as Node)) return;
+        close();
+    };
+
+    return { open, close, menuId, setAnchorEl, anchorEl, hoverProps, triggerProps, handleClickAway };
+}
+
+/* ─── Hover/click-dropdown pill ─────────────────────────── */
+function NavPill({ item }: { item: { label: string; icon?: React.ReactNode; items: readonly { label: string; href: string }[] } }) {
+    const { open, close, menuId, setAnchorEl, anchorEl, hoverProps, triggerProps, handleClickAway } = useDropdown();
+
     return (
-        <Box onMouseEnter={handleMouseEnter} onMouseLeave={handleMouseLeave} sx={{ position: 'relative' }}>
+        <Box {...hoverProps} sx={{ position: 'relative' }}>
             <Button
                 ref={setAnchorEl}
+                {...triggerProps}
                 size="small"
                 startIcon={item.icon}
                 endIcon={
@@ -149,9 +209,9 @@ function NavPill({ item }: { item: { label: string; icon?: React.ReactNode; item
                 {({ TransitionProps }) => (
                     <Grow {...TransitionProps} timeout={150}>
                         <Paper
+                            id={menuId}
                             elevation={8}
-                            onMouseEnter={handleMouseEnter}
-                            onMouseLeave={handleMouseLeave}
+                            {...hoverProps}
                             sx={{
                                 minWidth: 180,
                                 borderRadius: '10px',
@@ -160,14 +220,14 @@ function NavPill({ item }: { item: { label: string; icon?: React.ReactNode; item
                                 boxShadow: '0 8px 30px rgba(0,0,0,0.10)',
                             }}
                         >
-                            <ClickAwayListener onClickAway={() => setOpen(false)}>
+                            <ClickAwayListener onClickAway={handleClickAway}>
                                 <MenuList dense sx={{ py: 0.5 }}>
                                     {item.items.map((sub, i) => (
                                         <MenuItem
                                             key={i}
                                             component={Link}
                                             href={sub.href}
-                                            onClick={() => setOpen(false)}
+                                            onClick={close}
                                             sx={{
                                                 textDecoration: 'none',
                                                 fontSize: '0.82rem',
@@ -192,29 +252,27 @@ function NavPill({ item }: { item: { label: string; icon?: React.ReactNode; item
 
 /* ─── User avatar dropdown ──────────────────────────────── */
 function UserMenu({ user, onLogout }: { user: { username: string; role: string }; onLogout: () => void }) {
-    const [open, setOpen] = useState(false);
-    const [anchorEl, setAnchorEl] = useState<HTMLDivElement | null>(null);
-    const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const { open, close, menuId, setAnchorEl, anchorEl, hoverProps, triggerProps, handleClickAway } = useDropdown();
 
     const initials = user.username.slice(0, 2).toUpperCase();
 
-    const handleMouseEnter = () => {
-        if (closeTimer.current) clearTimeout(closeTimer.current);
-        setOpen(true);
-    };
-    const handleMouseLeave = () => {
-        closeTimer.current = setTimeout(() => setOpen(false), 150);
-    };
-
     return (
-        <Box ref={setAnchorEl} onMouseEnter={handleMouseEnter} onMouseLeave={handleMouseLeave} sx={{ position: 'relative', cursor: 'pointer' }}>
+        <Box {...hoverProps} sx={{ position: 'relative', cursor: 'pointer' }}>
             <Box
+                component="button"
+                type="button"
+                ref={setAnchorEl}
+                id="user-menu-btn"
+                {...triggerProps}
                 sx={{
                     display: 'flex',
                     alignItems: 'center',
                     gap: 1,
                     px: 1.2,
                     py: 0.5,
+                    font: 'inherit',
+                    textAlign: 'left',
+                    cursor: 'pointer',
                     borderRadius: '8px',
                     border: open ? '1px solid #BFDBFE' : '1px solid transparent',
                     backgroundColor: open ? '#EFF6FF' : 'transparent',
@@ -262,9 +320,9 @@ function UserMenu({ user, onLogout }: { user: { username: string; role: string }
                 {({ TransitionProps }) => (
                     <Grow {...TransitionProps} timeout={150}>
                         <Paper
+                            id={menuId}
                             elevation={8}
-                            onMouseEnter={handleMouseEnter}
-                            onMouseLeave={handleMouseLeave}
+                            {...hoverProps}
                             sx={{
                                 minWidth: 200,
                                 borderRadius: '10px',
@@ -273,7 +331,7 @@ function UserMenu({ user, onLogout }: { user: { username: string; role: string }
                                 boxShadow: '0 8px 30px rgba(0,0,0,0.10)',
                             }}
                         >
-                            <ClickAwayListener onClickAway={() => setOpen(false)}>
+                            <ClickAwayListener onClickAway={handleClickAway}>
                                 <Box>
                                     <Box sx={{ px: 2, py: 1.5, backgroundColor: '#F9FAFB' }}>
                                         <Typography sx={{ fontSize: '0.85rem', fontWeight: 700, color: '#111827' }}>
@@ -286,6 +344,7 @@ function UserMenu({ user, onLogout }: { user: { username: string; role: string }
                                     <Divider />
                                     <MenuList dense sx={{ py: 0.5 }}>
                                         <MenuItem
+                                            onClick={close}
                                             sx={{
                                                 fontSize: '0.82rem',
                                                 color: '#374151',
@@ -301,7 +360,10 @@ function UserMenu({ user, onLogout }: { user: { username: string; role: string }
                                         <Divider sx={{ my: 0.5 }} />
                                         <MenuItem
                                             id="signout-btn"
-                                            onClick={onLogout}
+                                            onClick={() => {
+                                                close();
+                                                onLogout();
+                                            }}
                                             sx={{
                                                 fontSize: '0.82rem',
                                                 color: '#EF4444',
@@ -333,26 +395,18 @@ const SAMPLE_NOTIFICATIONS = [
 ];
 
 function NotificationBell() {
-    const [open, setOpen] = useState(false);
-    const [anchorEl, setAnchorEl] = useState<HTMLButtonElement | null>(null);
-    const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const { open, menuId, setAnchorEl, anchorEl, hoverProps, triggerProps, handleClickAway } = useDropdown();
     const unreadCount = SAMPLE_NOTIFICATIONS.filter((n) => n.unread).length;
 
-    const handleMouseEnter = () => {
-        if (closeTimer.current) clearTimeout(closeTimer.current);
-        setOpen(true);
-    };
-    const handleMouseLeave = () => {
-        closeTimer.current = setTimeout(() => setOpen(false), 150);
-    };
-
     return (
-        <Box onMouseEnter={handleMouseEnter} onMouseLeave={handleMouseLeave} sx={{ position: 'relative' }}>
+        <Box {...hoverProps} sx={{ position: 'relative' }}>
             <Box
                 component="button"
+                type="button"
                 ref={setAnchorEl}
                 id="notification-btn"
                 aria-label="Notifications"
+                {...triggerProps}
                 sx={{
                     display: 'flex',
                     alignItems: 'center',
@@ -395,9 +449,9 @@ function NotificationBell() {
                 {({ TransitionProps }) => (
                     <Grow {...TransitionProps} timeout={150}>
                         <Paper
+                            id={menuId}
                             elevation={8}
-                            onMouseEnter={handleMouseEnter}
-                            onMouseLeave={handleMouseLeave}
+                            {...hoverProps}
                             sx={{
                                 width: 320,
                                 borderRadius: '12px',
@@ -406,7 +460,7 @@ function NotificationBell() {
                                 boxShadow: '0 8px 30px rgba(0,0,0,0.12)',
                             }}
                         >
-                            <ClickAwayListener onClickAway={() => setOpen(false)}>
+                            <ClickAwayListener onClickAway={handleClickAway}>
                                 <Box>
                                     {/* Header */}
                                     <Box sx={{ px: 2, py: 1.5, display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid #E5E7EB', backgroundColor: '#F9FAFB' }}>
@@ -485,23 +539,14 @@ const CREATE_ITEMS = [
 ];
 
 function CreateButton() {
-    const [open, setOpen] = useState(false);
-    const [anchorEl, setAnchorEl] = useState<HTMLButtonElement | null>(null);
-    const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-    const handleMouseEnter = () => {
-        if (closeTimer.current) clearTimeout(closeTimer.current);
-        setOpen(true);
-    };
-    const handleMouseLeave = () => {
-        closeTimer.current = setTimeout(() => setOpen(false), 120);
-    };
+    const { open, close, menuId, setAnchorEl, anchorEl, hoverProps, triggerProps, handleClickAway } = useDropdown();
 
     return (
-        <Box onMouseEnter={handleMouseEnter} onMouseLeave={handleMouseLeave} sx={{ position: 'relative' }}>
+        <Box {...hoverProps} sx={{ position: 'relative' }}>
             <Button
                 ref={setAnchorEl}
                 id="create-btn"
+                {...triggerProps}
                 size="small"
                 startIcon={<AddIcon sx={{ fontSize: '16px !important' }} />}
                 endIcon={
@@ -547,9 +592,9 @@ function CreateButton() {
                 {({ TransitionProps }) => (
                     <Grow {...TransitionProps} timeout={150}>
                         <Paper
+                            id={menuId}
                             elevation={8}
-                            onMouseEnter={handleMouseEnter}
-                            onMouseLeave={handleMouseLeave}
+                            {...hoverProps}
                             sx={{
                                 minWidth: 180,
                                 borderRadius: '10px',
@@ -558,7 +603,7 @@ function CreateButton() {
                                 boxShadow: '0 8px 30px rgba(0,0,0,0.10)',
                             }}
                         >
-                            <ClickAwayListener onClickAway={() => setOpen(false)}>
+                            <ClickAwayListener onClickAway={handleClickAway}>
                                 <Box>
                                     <Box sx={{ px: 2, py: 1, backgroundColor: '#F9FAFB', borderBottom: '1px solid #E5E7EB' }}>
                                         <Typography sx={{ fontSize: '0.7rem', fontWeight: 700, color: '#6B7280', letterSpacing: '0.05em', textTransform: 'uppercase' }}>
@@ -571,7 +616,7 @@ function CreateButton() {
                                                 key={i}
                                                 component={Link}
                                                 href={item.href}
-                                                onClick={() => setOpen(false)}
+                                                onClick={close}
                                                 sx={{
                                                     textDecoration: 'none',
                                                     fontSize: '0.82rem',
