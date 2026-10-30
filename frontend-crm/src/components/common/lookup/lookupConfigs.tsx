@@ -10,8 +10,8 @@ import type { Contact } from '@/types/contact.types';
 import type { NatureOfCallItem } from '@/types/ticket.types';
 import type { PartnerCompany, PartnerCompanyContact } from '@/types/partner.types';
 import { CUSTOMER_TYPES } from '@/components/organizations/constants';
-import { findCrmUser } from '@/data/mockUsers';
-import { getPartnerCompanies } from '@/data/mockPartners';
+import { findCrmUser } from '@/services/masterData.store';
+import { getPartnerCompanies } from '@/services/masterData.store';
 import type { LookupColumn, LookupFilterField, LookupSearchPredicate } from '@/types/lookup.types';
 
 export interface LookupPreset<T> {

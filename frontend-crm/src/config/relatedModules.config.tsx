@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import AssignmentOutlinedIcon from '@mui/icons-material/AssignmentOutlined';
 import ConfirmationNumberOutlinedIcon from '@mui/icons-material/ConfirmationNumberOutlined';
 import PeopleOutlinedIcon from '@mui/icons-material/PeopleOutlined';
@@ -17,15 +17,25 @@ import ApartmentOutlinedIcon from '@mui/icons-material/ApartmentOutlined';
 import StickyNote2OutlinedIcon from '@mui/icons-material/StickyNote2Outlined';
 import SwapHorizOutlinedIcon from '@mui/icons-material/SwapHorizOutlined';
 import type { RelatedModuleItem } from '@/components/common/Drawer/RelatedModulesSidebar';
+import type { AuditRevisionItem } from '@/components/common/Drawer/types';
 import {
-    contactService,
-    leadService,
-    opportunityService,
-    organizationService,
-    productService,
-    quotationService,
-    ticketService,
-} from '@/services';
+    useContacts,
+    useEntityAuditLogs,
+    useLeads,
+    useOpportunities,
+    useOrganizations,
+    useProducts,
+    useQuotations,
+    useTickets,
+    type AuditEntityType,
+} from '@/hooks/queries';
+import type { Contact } from '@/types/contact.types';
+import type { Lead } from '@/types/lead.types';
+import type { Opportunity } from '@/types/opportunity.types';
+import type { ExtendedOrganization } from '@/types/organization.types';
+import type { Product } from '@/types/product.types';
+import type { Quotation } from '@/types/quotation.types';
+import type { Ticket } from '@/types/ticket.types';
 
 export type CrmEntityType =
     | 'organization'
@@ -38,12 +48,33 @@ export type CrmEntityType =
 
 export type RelatedRecordRow = Record<string, unknown>;
 
+export interface RelatedRecordDatasets {
+    contacts?: Contact[];
+    opportunities?: Opportunity[];
+    quotations?: Quotation[];
+    leads?: Lead[];
+    organizations?: ExtendedOrganization[];
+    products?: Product[];
+    tickets?: Ticket[];
+    auditRevisions?: AuditRevisionItem[];
+}
+
 export function normalizeRelatedModuleKey(moduleId: string): string {
     const normalized = moduleId.trim().toLowerCase().replace(/-/g, '_');
     if (normalized === 'quotes') return 'quotations';
     if (normalized === 'line_items') return 'products';
     return normalized;
 }
+
+const AUDIT_ENTITY_MAP: Record<CrmEntityType, AuditEntityType> = {
+    organization: 'organizations',
+    contact: 'contacts',
+    lead: 'leads',
+    opportunity: 'opportunities',
+    product: 'products',
+    quotation: 'quotations',
+    ticket: 'tickets',
+};
 
 interface ExtractedEntityContext {
     entityType?: CrmEntityType;
@@ -88,9 +119,7 @@ function extractEntityContext(
     const isProduct = entityType === 'product' || ('productCode' in obj && 'mrp' in obj);
 
     const orgId = String(obj.organizationId || (isOrg ? recordId : '')).trim();
-    const orgName = String(
-        obj.organizationName || (isOrg ? rawTitle : '')
-    )
+    const orgName = String(obj.organizationName || (isOrg ? rawTitle : ''))
         .trim()
         .toLowerCase();
 
@@ -132,22 +161,23 @@ function extractEntityContext(
 }
 
 /**
- * Single source of truth for resolving linked records for both `RelatedModulesSidebar` badge counts
- * and `RelatedRecordsTableView` table rows. Guarantees 100% parity between badge numbers and table rows.
+ * Resolves linked records for both `RelatedModulesSidebar` badge counts and `RelatedRecordsTableView`
+ * table rows from live React Query datasets (no sync cache or fabricated mock entries).
  */
 export function resolveRelatedRecordsForModule(
     moduleId: string,
     parentEntityTitle: string,
     parentRecordId?: string,
     entityData?: unknown,
-    entityType?: CrmEntityType
+    entityType?: CrmEntityType,
+    datasets: RelatedRecordDatasets = {}
 ): RelatedRecordRow[] {
     const moduleKey = normalizeRelatedModuleKey(moduleId);
     const ctx = extractEntityContext(entityType, entityData, parentEntityTitle, parentRecordId);
 
     switch (moduleKey) {
         case 'contacts': {
-            const contacts = contactService.getAllSync();
+            const contacts = datasets.contacts ?? [];
             return contacts
                 .filter((c) => {
                     if (
@@ -172,7 +202,7 @@ export function resolveRelatedRecordsForModule(
         }
 
         case 'opportunities': {
-            const opps = opportunityService.getAllSync();
+            const opps = datasets.opportunities ?? [];
             return opps
                 .filter((o) => {
                     if (ctx.entityType === 'quotation' && ctx.oppId && o.id === ctx.oppId) return true;
@@ -193,7 +223,7 @@ export function resolveRelatedRecordsForModule(
                             return true;
                         }
                     }
-                    if (ctx.entityType === 'product' && ctx.productName) {
+                    if (ctx.entityType === 'product' && (ctx.productId || ctx.productName)) {
                         return Boolean(
                             o.lineItems?.some(
                                 (li) =>
@@ -216,7 +246,7 @@ export function resolveRelatedRecordsForModule(
         }
 
         case 'quotations': {
-            const quotes = quotationService.getAllSync();
+            const quotes = datasets.quotations ?? [];
             return quotes
                 .filter((q) => {
                     if (ctx.entityType === 'opportunity') {
@@ -240,7 +270,7 @@ export function resolveRelatedRecordsForModule(
                             return true;
                         }
                     }
-                    if (ctx.entityType === 'product' && ctx.productName) {
+                    if (ctx.entityType === 'product' && (ctx.productId || ctx.productName)) {
                         return Boolean(
                             q.lineItems?.some(
                                 (li) =>
@@ -263,7 +293,7 @@ export function resolveRelatedRecordsForModule(
         }
 
         case 'leads': {
-            const leads = leadService.getAllSync();
+            const leads = datasets.leads ?? [];
             return leads
                 .filter(
                     (l) =>
@@ -275,10 +305,11 @@ export function resolveRelatedRecordsForModule(
         }
 
         case 'organizations': {
-            const orgs = organizationService.getAllSync();
-            if (ctx.entityType === 'product' && ctx.productName) {
-                const quotes = quotationService.getAllSync();
-                const opps = opportunityService.getAllSync();
+            const orgs = datasets.organizations ?? [];
+            if (ctx.entityType === 'product' && (ctx.productId || ctx.productName)) {
+                const quotes = datasets.quotations ?? [];
+                const opps = datasets.opportunities ?? [];
+                const matchedOrgIds = new Set<string>();
                 const matchedOrgNames = new Set<string>();
                 quotes.forEach((q) => {
                     if (
@@ -286,10 +317,10 @@ export function resolveRelatedRecordsForModule(
                             (li) =>
                                 (ctx.productId && li.productId === ctx.productId) ||
                                 li.productName.trim().toLowerCase() === ctx.productName
-                        ) &&
-                        q.organizationName
+                        )
                     ) {
-                        matchedOrgNames.add(q.organizationName.trim().toLowerCase());
+                        if (q.organizationId) matchedOrgIds.add(q.organizationId);
+                        if (q.organizationName) matchedOrgNames.add(q.organizationName.trim().toLowerCase());
                     }
                 });
                 opps.forEach((o) => {
@@ -298,14 +329,18 @@ export function resolveRelatedRecordsForModule(
                             (li) =>
                                 (ctx.productId && li.productId === ctx.productId) ||
                                 li.productName.trim().toLowerCase() === ctx.productName
-                        ) &&
-                        o.organizationName
+                        )
                     ) {
-                        matchedOrgNames.add(o.organizationName.trim().toLowerCase());
+                        if (o.organizationId) matchedOrgIds.add(o.organizationId);
+                        if (o.organizationName) matchedOrgNames.add(o.organizationName.trim().toLowerCase());
                     }
                 });
                 return orgs
-                    .filter((org) => matchedOrgNames.has(org.organizationName.trim().toLowerCase()))
+                    .filter(
+                        (org) =>
+                            matchedOrgIds.has(org.id) ||
+                            matchedOrgNames.has(org.organizationName.trim().toLowerCase())
+                    )
                     .map((org) => ({ ...org }));
             }
 
@@ -319,7 +354,7 @@ export function resolveRelatedRecordsForModule(
         }
 
         case 'products': {
-            const catalog = productService.getAllSync();
+            const catalog = datasets.products ?? [];
             if (ctx.lineItems.length > 0) {
                 return ctx.lineItems.map((li, idx) => {
                     const matchedProduct = catalog.find(
@@ -335,20 +370,14 @@ export function resolveRelatedRecordsForModule(
                         ...li,
                         id: String(li.id || matchedProduct?.id || `li-${idx}`),
                         productName: String(li.productName || matchedProduct?.productName || '-'),
-                        serialNumber: String(
-                            matchedProduct?.productCode || `SN-NIPL-2026-0${idx + 1}`
-                        ),
-                        status: 'Active',
-                        warrantyPeriod: '12 Months',
-                        warrantyEndDate: '2027-03-31',
-                        location: ctx.title || 'Primary Site',
+                        serialNumber: String(matchedProduct?.productCode || '-'),
+                        status: matchedProduct?.isActive === false ? 'Inactive' : 'Active',
                     };
                 });
             }
 
-            // For organizations, check products present in linked quotations/opportunities
             if (ctx.orgId || ctx.orgName) {
-                const linkedQuotes = quotationService.getAllSync().filter(
+                const linkedQuotes = (datasets.quotations ?? []).filter(
                     (q) =>
                         (ctx.orgId && q.organizationId === ctx.orgId) ||
                         (ctx.orgName &&
@@ -373,13 +402,8 @@ export function resolveRelatedRecordsForModule(
                                 ...li,
                                 id: String(matchedProduct?.id || li.id || key),
                                 productName: String(li.productName || matchedProduct?.productName || '-'),
-                                serialNumber: String(
-                                    matchedProduct?.productCode || `SN-NIPL-2026-0${idx + 1}`
-                                ),
-                                status: 'Active',
-                                warrantyPeriod: '12 Months',
-                                warrantyEndDate: '2027-03-31',
-                                location: ctx.title || 'Primary Site',
+                                serialNumber: String(matchedProduct?.productCode || '-'),
+                                status: matchedProduct?.isActive === false ? 'Inactive' : 'Active',
                             });
                         }
                     });
@@ -390,32 +414,22 @@ export function resolveRelatedRecordsForModule(
             return [];
         }
 
-        case 'activities': {
-            if (ctx.entityType === 'organization') {
-                return [];
-            }
-            if (!ctx.title) return [];
-            return [
-                {
-                    id: `act-${ctx.recordId || '1'}-1`,
-                    subject: `Follow-up Call — ${ctx.title}`,
-                    status: 'Scheduled',
-                    contact: ctx.contactName || ctx.title,
-                    startDate: '2026-10-25 11:00 AM',
-                    assignedUser: 'mittal.sharma',
-                },
-            ];
-        }
-
         case 'tickets': {
-            const sameText = (a: string | undefined, b: string) => Boolean(b) && (a || '').trim().toLowerCase() === b;
-            return ticketService
-                .getAllSync()
-                .filter((t) =>
-                    ctx.entityType === 'contact'
-                        ? sameText(t.contactPersonName, ctx.contactName)
-                        : sameText(t.organizationName, ctx.orgName)
-                )
+            const sameText = (a: string | undefined, b: string) =>
+                Boolean(b) && (a || '').trim().toLowerCase() === b;
+            return (datasets.tickets ?? [])
+                .filter((t) => {
+                    if (ctx.entityType === 'contact') {
+                        return (
+                            (ctx.contactId && t.contactId === ctx.contactId) ||
+                            sameText(t.contactPersonName, ctx.contactName)
+                        );
+                    }
+                    return (
+                        (ctx.orgId && t.organizationId === ctx.orgId) ||
+                        sameText(t.organizationName, ctx.orgName)
+                    );
+                })
                 .map((t) => ({
                     ...t,
                     subject: t.ticketSubject || t.problemReported,
@@ -426,93 +440,116 @@ export function resolveRelatedRecordsForModule(
                 }));
         }
 
+        case 'history':
+        case 'conversion_audit': {
+            const revisions = datasets.auditRevisions ?? [];
+            return revisions.map((rev, idx) => ({
+                id: `rev-${ctx.recordId || 'rec'}-${idx}`,
+                subject: rev.note ? `${rev.title} — ${rev.note}` : rev.title,
+                status: rev.to || 'Recorded',
+                contact: ctx.contactName || ctx.title || '-',
+                dateModified: rev.time,
+                dateCreated: rev.time,
+                dueDate: '-',
+                assignedUser: rev.author,
+            }));
+        }
+
+        case 'activities':
         case 'contracts':
         case 'partner_contacts':
         case 'member_organizations':
         case 'documents':
         case 'partner_company':
-            return [];
-
         case 'security_groups':
-            return ctx.title || ctx.recordId
-                ? [
-                      {
-                          id: 'sg-001',
-                          name: 'Enterprise Sales — North & West Region',
-                          description:
-                              'Full access to enterprise accounts, commercial quotations, and SLA escalations.',
-                      },
-                  ]
-                : [];
-
         case 'notes':
-            return ctx.title
-                ? [
-                      {
-                          id: `note-${ctx.recordId || '1'}`,
-                          subject: `Discovery & Requirement Note — ${ctx.title}`,
-                          status: 'Active',
-                          assignedUser: 'mittal.sharma',
-                      },
-                  ]
-                : [];
-
-        case 'conversion_audit':
-            return ctx.title
-                ? [
-                      {
-                          id: `conv-${ctx.recordId || '1'}`,
-                          subject: `Lead Qualification Check — ${ctx.title}`,
-                          status: 'Verified',
-                          assignedUser: 'mittal.sharma',
-                      },
-                  ]
-                : [];
-
-        case 'history':
-            if (!ctx.title && !ctx.recordId) return [];
-            return [
-                {
-                    id: 'his-001',
-                    subject: `Commercial Proposal & BoQ Shared — ${ctx.title || 'Record'}`,
-                    status: 'Completed',
-                    contact: ctx.contactName || 'Primary Contact',
-                    dateModified: '2026-10-21 04:15 PM',
-                    dateCreated: '2026-10-21 02:00 PM',
-                    dueDate: '2026-10-21',
-                    assignedUser: 'mittal.sharma',
-                },
-                {
-                    id: 'his-002',
-                    subject: 'GST & Billing Verification Completed',
-                    status: 'Completed',
-                    contact: 'Accounts Desk',
-                    dateModified: '2026-10-15 11:20 AM',
-                    dateCreated: '2026-10-14 05:10 PM',
-                    dueDate: '2026-10-15',
-                    assignedUser: 'mittal.sharma',
-                },
-                {
-                    id: 'his-003',
-                    subject: 'Initial Technical Requirement Gathering',
-                    status: 'Completed',
-                    contact: 'IT Infrastructure Lead',
-                    dateModified: '2026-10-08 01:45 PM',
-                    dateCreated: '2026-10-08 10:30 AM',
-                    dueDate: '2026-10-08',
-                    assignedUser: 'rohit.verma',
-                },
-            ];
-
         default:
             return [];
     }
 }
 
+/**
+ * Fetches the live datasets needed to compute related records and badge counts for an active drawer entity.
+ * Queries are disabled when `enabled` is false or `entityData` is null.
+ */
+export function useRelatedDatasets(
+    entityType: CrmEntityType,
+    entityData?: unknown,
+    enabled = true
+): RelatedRecordDatasets {
+    const active = Boolean(enabled && entityData);
+    const ctx = useMemo(() => extractEntityContext(entityType, entityData), [entityType, entityData]);
+
+    const contactFilter = useMemo(
+        () => (ctx.orgId ? { organizationId: ctx.orgId } : undefined),
+        [ctx.orgId]
+    );
+    const oppFilter = useMemo(() => {
+        if (entityType === 'contact' && ctx.contactId) return { contactId: ctx.contactId };
+        if (entityType === 'product' && ctx.productId) return { productId: ctx.productId };
+        if (ctx.orgId) return { organizationId: ctx.orgId };
+        return undefined;
+    }, [entityType, ctx.contactId, ctx.productId, ctx.orgId]);
+
+    const quoteFilter = useMemo(() => {
+        if (entityType === 'opportunity' && ctx.recordId) return { opportunityId: ctx.recordId };
+        if (entityType === 'contact' && ctx.contactId) return { contactId: ctx.contactId };
+        if (entityType === 'product' && ctx.productId) return { productId: ctx.productId };
+        if (ctx.orgId) return { organizationId: ctx.orgId };
+        return undefined;
+    }, [entityType, ctx.recordId, ctx.contactId, ctx.productId, ctx.orgId]);
+
+    const ticketFilter = useMemo(() => {
+        if (entityType === 'contact' && ctx.contactId) return { contactId: ctx.contactId };
+        if (ctx.orgId) return { organizationId: ctx.orgId };
+        return undefined;
+    }, [entityType, ctx.contactId, ctx.orgId]);
+
+    const leadFilter = useMemo(
+        () => (ctx.title && entityType === 'organization' ? { organizationName: ctx.title } : undefined),
+        [entityType, ctx.title]
+    );
+
+    const needsContacts = active && ['organization', 'opportunity', 'quotation', 'ticket'].includes(entityType);
+    const needsOpps = active && ['organization', 'contact', 'quotation', 'product'].includes(entityType);
+    const needsQuotes = active && ['organization', 'contact', 'opportunity', 'product'].includes(entityType);
+    const needsLeads = active && entityType === 'organization';
+    const needsOrgs = active && ['contact', 'opportunity', 'quotation', 'ticket', 'product'].includes(entityType);
+    const needsProducts = active && ['organization', 'opportunity', 'quotation'].includes(entityType);
+    const needsTickets = active && ['organization', 'contact'].includes(entityType);
+
+    const { data: contacts } = useContacts(contactFilter, { enabled: needsContacts });
+    const { data: opportunities } = useOpportunities(oppFilter, { enabled: needsOpps });
+    const { data: quotations } = useQuotations(quoteFilter, { enabled: needsQuotes });
+    const { data: leads } = useLeads(leadFilter, { enabled: needsLeads });
+    const { data: organizations } = useOrganizations(undefined, { enabled: needsOrgs });
+    const { data: products } = useProducts(undefined, { enabled: needsProducts });
+    const { data: tickets } = useTickets(ticketFilter, { enabled: needsTickets });
+    const { data: auditRevisions } = useEntityAuditLogs(
+        AUDIT_ENTITY_MAP[entityType],
+        active && ctx.recordId ? ctx.recordId : undefined
+    );
+
+    return useMemo(
+        () => ({
+            contacts,
+            opportunities,
+            quotations,
+            leads,
+            organizations,
+            products,
+            tickets,
+            auditRevisions,
+        }),
+        [contacts, opportunities, quotations, leads, organizations, products, tickets, auditRevisions]
+    );
+}
+
 export function getRelatedModulesForEntity(
     entityType: CrmEntityType,
     entityData?: unknown,
-    onSelectModule?: (moduleId: string) => void
+    onSelectModule?: (moduleId: string) => void,
+    datasets: RelatedRecordDatasets = {}
 ): RelatedModuleItem[] {
     const ctx = extractEntityContext(entityType, entityData);
 
@@ -523,7 +560,8 @@ export function getRelatedModulesForEntity(
             ctx.title,
             ctx.recordId,
             entityData,
-            entityType
+            entityType,
+            datasets
         ).length;
     };
 
@@ -609,4 +647,20 @@ export function getRelatedModulesForEntity(
                 { id: 'history', label: 'History', icon: <HistoryOutlinedIcon /> },
             ]);
     }
+}
+
+/**
+ * React hook wrapper around `getRelatedModulesForEntity` that automatically subscribes to live React Query
+ * datasets when `entityData` is non-null.
+ */
+export function useRelatedModulesForEntity(
+    entityType: CrmEntityType,
+    entityData?: unknown,
+    onSelectModule?: (moduleId: string) => void
+): RelatedModuleItem[] {
+    const datasets = useRelatedDatasets(entityType, entityData, Boolean(entityData));
+    return useMemo(
+        () => (entityData ? getRelatedModulesForEntity(entityType, entityData, onSelectModule, datasets) : []),
+        [entityType, entityData, onSelectModule, datasets]
+    );
 }

@@ -3,11 +3,11 @@
 import { Suspense, useEffect } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { Box, Container } from '@mui/material';
-import { useAuth } from '@/src/context/AuthContext';
-import { ROUTES } from '@/src/config/constants';
-import { Navbar } from '@/src/components/layout/Navbar';
-import { LoadingScreen } from '@/src/components/common/LoadingScreen';
-import ContactForm from '@/src/components/contacts/ContactForm';
+import { useAuth } from '@/context/AuthContext';
+import { ROUTES } from '@/config/constants';
+import { Navbar } from '@/components/layout/Navbar';
+import { LoadingScreen } from '@/components/common/LoadingScreen';
+import ContactForm from '@/components/contacts/ContactForm';
 
 function EditContactContent() {
     const router = useRouter();

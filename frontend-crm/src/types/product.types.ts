@@ -58,6 +58,7 @@ export interface ProductFormData {
 export interface Product extends ProductFormData {
     id: string;
     productCode: string;
+    isActive?: boolean;
     createdAt: string;
     updatedAt: string;
     createdBy: string;

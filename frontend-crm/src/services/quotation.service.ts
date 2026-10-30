@@ -3,42 +3,15 @@ import type { ExtendedOrganization } from '../types/organization.types';
 import type { Contact } from '../types/contact.types';
 import type { Quotation, QuotationFormData, QuotationLineItem } from '../types/quotation.types';
 import { TERMS_TEMPLATE_DESCRIPTIONS, PAYMENT_TERMS_DESCRIPTIONS } from '../types/quotation.types';
-import {
-    getStoredQuotations,
-    saveStoredQuotations,
-    getStoredQuotationById,
-    addStoredQuotation,
-    updateStoredQuotation,
-    deleteStoredQuotation,
-    deleteMultipleStoredQuotations,
-} from '../data/mockQuotations';
 import { createCrudService } from './base.service';
 import { DEFAULT_COUNTRY_CODE, normalizeLegacyStateName } from '../data/addressMaster';
 import { normalizeCountryValue } from '../utils/address';
-import { opportunityService } from './opportunity.service';
-import { organizationService } from './organization.service';
+import { notifyCrmUpdate } from './crmSync';
 
-const baseQuotationService = createCrudService<
-    Quotation,
-    QuotationFormData,
-    Partial<QuotationFormData>
->('/api/quotations', {
-    getAll: getStoredQuotations,
-    getById: (id: string) => getStoredQuotationById(id) || undefined,
-    create: addStoredQuotation,
-    update: updateStoredQuotation,
-    delete: deleteStoredQuotation,
-    deleteBulk: (ids: string[]) => deleteMultipleStoredQuotations(ids) > 0,
-    saveAll: saveStoredQuotations,
-});
+const baseQuotationService = createCrudService<Quotation, QuotationFormData, Partial<QuotationFormData>>('/api/quotations');
 
-/**
- * Resolves an address for an opportunity either directly or via its linked organization.
- */
-export function resolveOpportunityAddress(
-    opportunity: Opportunity,
-    organization?: ExtendedOrganization
-): {
+/** Billing / shipping address for a quote, taken from the opportunity's organization (loaded by the caller). */
+export function resolveQuoteAddress(org?: ExtendedOrganization): {
     hasCompleteAddress: boolean;
     billingStreet: string;
     billingCity: string;
@@ -51,18 +24,6 @@ export function resolveOpportunityAddress(
     shippingPostalCode: string;
     shippingCountry: string;
 } {
-    const org =
-        organization ||
-        (opportunity.organizationId
-            ? organizationService.getByIdSync(opportunity.organizationId)
-            : organizationService
-                  .getAllSync()
-                  .find(
-                      (o) =>
-                          o.organizationName.trim().toLowerCase() ===
-                          opportunity.organizationName.trim().toLowerCase()
-                  ));
-
     const billingStreet = (org?.billingStreet || '').trim();
     const billingCity = (org?.billingCity || '').trim();
     const billingCountry = normalizeCountryValue(org?.billingCountry);
@@ -102,7 +63,7 @@ export function buildQuotationDefaultsFromOpportunity(
     organization?: ExtendedOrganization,
     contact?: Contact
 ): QuotationFormData {
-    const addr = resolveOpportunityAddress(opportunity, organization);
+    const addr = resolveQuoteAddress(organization);
     const today = new Date().toISOString().split('T')[0];
     const validityDate = new Date(Date.now() + 30 * 86400000).toISOString().split('T')[0];
 
@@ -152,7 +113,7 @@ export function buildQuotationDefaultsFromOpportunity(
         remarks: opportunity.addDescription || '',
         termsAndCondition: 'Standard Terms & Conditions',
         termsAndConditionDescription: TERMS_TEMPLATE_DESCRIPTIONS['Standard Terms & Conditions'],
-        assignedTo: opportunity.assignedTo || 'mittal.sharma',
+        assignedTo: opportunity.assignedTo || '',
 
         opportunityName: quoteTitle,
         company: 'Nandini Infosystems',
@@ -210,43 +171,18 @@ export function buildQuotationDefaultsFromOpportunity(
 }
 
 /**
- * Creates a quotation record from an opportunity and progresses the opportunity's sales stage.
+ * Creates a quotation for an opportunity. The API advances the opportunity to "Proposal/Price Quote" in the same
+ * transaction (unless it is already closed), so the opportunity's cache is refreshed too.
  */
-export async function createQuotationFromOpportunity(
-    opportunityId: string,
-    values: QuotationFormData
-): Promise<Quotation> {
-    const newQuote = await baseQuotationService.create(values);
-
-    // Update opportunity stage to "Proposal/Price Quote" if not already closed
-    try {
-        const opp = await opportunityService.getById(opportunityId);
-        if (
-            opp &&
-            opp.salesStage !== 'Closed Won' &&
-            opp.salesStage !== 'Closed Lost' &&
-            opp.salesStage !== 'Proposal/Price Quote'
-        ) {
-            await opportunityService.update(opportunityId, {
-                salesStage: 'Proposal/Price Quote',
-            });
-        }
-    } catch {
-        // Non-blocking stage update
-    }
-
-    return newQuote;
+export async function createQuotationFromOpportunity(opportunityId: string, values: QuotationFormData): Promise<Quotation> {
+    const quotation = await baseQuotationService.create({ ...values, opportunityId });
+    notifyCrmUpdate('/api/opportunities', opportunityId);
+    return quotation;
 }
 
 export const quotationService = {
     ...baseQuotationService,
-    getAllQuotations: baseQuotationService.getAllSync,
-    getQuotationById: baseQuotationService.getByIdSync,
-    createQuotation: baseQuotationService.create,
-    updateQuotation: baseQuotationService.update,
-    deleteQuotation: baseQuotationService.delete,
-    bulkDeleteQuotations: baseQuotationService.deleteBulk,
     buildQuotationDefaultsFromOpportunity,
     createQuotationFromOpportunity,
-    resolveOpportunityAddress,
+    resolveQuoteAddress,
 };

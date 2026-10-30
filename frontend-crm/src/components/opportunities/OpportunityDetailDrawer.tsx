@@ -20,10 +20,9 @@ import {
     EntityDetailDrawer,
     DrawerSectionCard,
     DrawerCopyButton,
-    type AuditRevisionItem,
 } from '@/components/common/Drawer';
 import { AppToast } from '@/components/common/AppToast';
-import { organizationService, quotationService, opportunityService, subscribeCrmSync } from '@/services';
+import { useOpportunity, useOrganization, useOrganizations, useQuotations } from '@/hooks/queries';
 import { OPPORTUNITY_FORM_TABS } from './OpportunityForm';
 
 export interface OpportunityDetailDrawerProps {
@@ -43,27 +42,19 @@ export function OpportunityDetailDrawer({
 }: OpportunityDetailDrawerProps) {
     const router = useRouter();
 
-    const [currentOpp, setCurrentOpp] = useState<Opportunity | null>(opportunity);
-    const [, setSyncVersion] = useState(0);
+    const { data: freshOpp } = useOpportunity(open && opportunity?.id ? opportunity.id : undefined);
+    const opp = freshOpp ?? opportunity;
 
-    useEffect(() => {
-        setCurrentOpp(opportunity);
-    }, [opportunity]);
-
-    useEffect(() => {
-        if (!open || !opportunity?.id) return;
-
-        const refreshLinkedData = () => {
-            const freshOpp = opportunityService.getOpportunityById(opportunity.id);
-            if (freshOpp) {
-                setCurrentOpp(freshOpp);
-            }
-            setSyncVersion((v) => v + 1);
-        };
-
-        const unsubscribe = subscribeCrmSync(refreshLinkedData);
-        return unsubscribe;
-    }, [open, opportunity?.id]);
+    const { data: linkedOrgById } = useOrganization(
+        open && opp?.organizationId ? opp.organizationId : undefined
+    );
+    const { data: organizations } = useOrganizations(undefined, {
+        enabled: Boolean(open && opp && !opp.organizationId && opp.organizationName),
+    });
+    const { data: linkedQuotes } = useQuotations(
+        opp?.id ? { opportunityId: opp.id } : undefined,
+        { enabled: Boolean(open && opp?.id) }
+    );
 
     const [toast, setToast] = useState<{
         open: boolean;
@@ -75,9 +66,7 @@ export function OpportunityDetailDrawer({
         severity: 'error',
     });
 
-    if (!opportunity && !currentOpp) return null;
-
-    const opp = currentOpp || opportunity!;
+    if (!opp) return null;
 
     const triggerToast = (
         message: string,
@@ -88,17 +77,15 @@ export function OpportunityDetailDrawer({
     };
 
     // Check whether the linked Organization has a complete address
-    const linkedOrg = opp.organizationId
-        ? organizationService.getByIdSync(opp.organizationId)
-        : organizationService
-              .getAllSync()
-              .find(
-                  (o) =>
-                      o.organizationName.trim().toLowerCase() ===
-                      opp.organizationName.trim().toLowerCase()
-              );
+    const linkedOrg =
+        linkedOrgById ??
+        organizations?.find(
+            (o) =>
+                o.organizationName.trim().toLowerCase() ===
+                opp.organizationName.trim().toLowerCase()
+        );
 
-    const billingStreet = (linkedOrg?.billingStreet || '').trim();
+    const billingStreet = (linkedOrg?.billingStreet || linkedOrg?.billingAddress || '').trim();
     const billingCity = (linkedOrg?.billingCity || '').trim();
     const billingState = (linkedOrg?.billingState || '').trim();
     const billingPostalCode = (linkedOrg?.billingPostalCode || '').trim();
@@ -107,9 +94,7 @@ export function OpportunityDetailDrawer({
         billingStreet && billingCity && billingState && billingPostalCode
     );
 
-    const existingQuote = quotationService
-        .getAllSync()
-        .find((q) => q.opportunityId === opp.id);
+    const existingQuote = linkedQuotes?.[0];
     const isQuoteCreated = Boolean(existingQuote);
 
     const handleCreateQuote = () => {
@@ -147,23 +132,6 @@ export function OpportunityDetailDrawer({
     };
 
     const stageColors = getStageColor(opp.salesStage);
-
-    const auditRevisions: AuditRevisionItem[] = [
-        {
-            title: `Stage set to "${opp.salesStage}"`,
-            author: opp.assignedTo || 'mittal.sharma',
-            time: 'Yesterday at 3:15 PM',
-            tag: opp.salesStage,
-            note: 'Updated proposal specifications & client sign-off timeline.',
-        },
-        {
-            title: 'Opportunity Created',
-            author: opp.createdBy || 'mittal.sharma',
-            time: opp.createdAt || '3 days ago',
-            tag: 'Created',
-            note: `Initial deal value ₹${opp.grandTotal.toLocaleString('en-IN')} generated from lead.`,
-        },
-    ];
 
     return (
         <>
@@ -448,7 +416,7 @@ export function OpportunityDetailDrawer({
                     </Box>
                 ),
             }}
-            auditRevisions={auditRevisions}
+            auditEntity={{ type: 'opportunities', id: opp.id }}
             includeChangesTab={true}
             primaryAction={{
                 label: 'Edit Opportunity',

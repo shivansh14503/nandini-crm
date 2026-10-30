@@ -16,10 +16,9 @@ import { DataImportModal } from '../../common/import';
 import { RelatedModulesSidebar, RelatedRecordsTableView } from '../../common/Drawer';
 import { RelatedSecondaryDrawer, type SecondaryDrawerEntity } from '../../common/RelatedSecondaryDrawer';
 import type { DataTableColumn, DataTableFilterItem } from '../../common/DataTable';
-import { ROUTES } from '../../../config/constants';
-import { getRelatedModulesForEntity } from '@/config/relatedModules.config';
-import type { Product } from '../../../types/product.types';
-import { useCrmDataVersion } from '@/services';
+import { ROUTES } from '@/config/constants';
+import { useRelatedModulesForEntity } from '@/config/relatedModules.config';
+import type { Product } from '@/types/product.types';
 import { useProducts, useBulkDeleteProducts } from '@/hooks/queries';
 import type { ProductFilterTab } from './types';
 import { ProductDetailDrawer } from '../ProductDetailDrawer';
@@ -34,12 +33,14 @@ const TAX_RATE_COLORS: Record<string, { bg: string; color: string; border: strin
     '28%': { bg: '#fef2f2', color: '#b91c1c', border: '#fecaca' },
 };
 
+
+/** Stable empty list while the first page loads (keeps memoized filters from recomputing). */
+const NO_RECORDS: Product[] = [];
 export function ProductsMasterView() {
     const router = useRouter();
 
-    const { data: products, refetch } = useProducts();
+    const { data: products = NO_RECORDS, refetch } = useProducts();
     const bulkDeleteMutation = useBulkDeleteProducts();
-    const crmDataVersion = useCrmDataVersion();
     const [activeTab, setActiveTab] = useState<ProductFilterTab>('all');
     const [searchQuery, setSearchQuery] = useState('');
     const [selectedIds, setSelectedIds] = useState<string[]>([]);
@@ -306,12 +307,7 @@ export function ProductsMasterView() {
         []
     );
 
-    const relatedModules = useMemo(() => {
-        // Related counts come from other entities' stores; recompute whenever any of them changes.
-        void crmDataVersion;
-        if (!selectedDrawerProduct) return [];
-        return getRelatedModulesForEntity('product', selectedDrawerProduct, setActiveRelatedModule);
-    }, [selectedDrawerProduct, crmDataVersion]);
+    const relatedModules = useRelatedModulesForEntity('product', selectedDrawerProduct, setActiveRelatedModule);
 
     // Falls back to the first module until the user explicitly picks one.
     const effectiveRelatedModule = activeRelatedModule ?? relatedModules[0]?.id ?? null;

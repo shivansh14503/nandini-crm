@@ -28,9 +28,9 @@ import HandshakeOutlinedIcon from '@mui/icons-material/HandshakeOutlined';
 import AdminPanelSettingsOutlinedIcon from '@mui/icons-material/AdminPanelSettingsOutlined';
 
 import { DataTable, type DataTableColumn, type SortOrder } from '../DataTable';
-import { subscribeCrmSync } from '@/services';
 import {
     resolveRelatedRecordsForModule,
+    useRelatedDatasets,
     type CrmEntityType,
 } from '@/config/relatedModules.config';
 
@@ -228,7 +228,7 @@ function getColumnsForModule(moduleKey: string): DataTableColumn<RelatedRow>[] {
                     label: 'Assigned User',
                     minWidth: 140,
                     sortable: true,
-                    render: (r) => String(r.assignedTo || r.assignedUser || 'mittal.sharma'),
+                    render: (r) => String(r.assignedTo || r.assignedUser || '-'),
                 },
             ];
 
@@ -282,7 +282,7 @@ function getColumnsForModule(moduleKey: string): DataTableColumn<RelatedRow>[] {
                     },
                 },
                 { id: 'mobile', label: 'Mobile', minWidth: 140, sortable: true, accessor: 'mobile' },
-                { id: 'assignedTo', label: 'Assigned User', minWidth: 140, sortable: true, render: (r) => String(r.assignedTo || r.assignedUser || 'mittal.sharma') },
+                { id: 'assignedTo', label: 'Assigned User', minWidth: 140, sortable: true, render: (r) => String(r.assignedTo || r.assignedUser || '-') },
                 { id: 'createdAt', label: 'Date Created', minWidth: 130, sortable: true, render: (r) => String(r.createdAt || r.dateCreated || '-') },
             ];
 
@@ -324,7 +324,7 @@ function getColumnsForModule(moduleKey: string): DataTableColumn<RelatedRow>[] {
                     sortable: true,
                     render: (r) => formatCurrency(r.subTotal ?? r.grandTotal ?? 0),
                 },
-                { id: 'assignedTo', label: 'Assigned User', minWidth: 140, sortable: true, render: (r) => String(r.assignedTo || r.assignedUser || 'mittal.sharma') },
+                { id: 'assignedTo', label: 'Assigned User', minWidth: 140, sortable: true, render: (r) => String(r.assignedTo || r.assignedUser || '-') },
                 { id: 'createdAt', label: 'Date Created', minWidth: 130, sortable: true, render: (r) => String(r.createdAt || r.dateCreated || '-') },
             ];
 
@@ -355,11 +355,11 @@ function getColumnsForModule(moduleKey: string): DataTableColumn<RelatedRow>[] {
         case 'products':
             return [
                 { id: 'productName', label: 'Product Name', minWidth: 210, sortable: true, render: (r) => renderPrimaryCell(r.productName) },
-                { id: 'serialNumber', label: 'Serial Number', minWidth: 150, sortable: true, render: (r) => String(r.serialNumber || r.productCode || '-') },
+                { id: 'serialNumber', label: 'Product Code', minWidth: 150, sortable: true, render: (r) => String(r.serialNumber || r.productCode || '-') },
                 { id: 'status', label: 'Status', minWidth: 120, sortable: true, render: (r) => renderStatusPill(r.status || 'Active') },
-                { id: 'warrantyPeriod', label: 'Warranty Period', minWidth: 140, sortable: true, render: (r) => String(r.warrantyPeriod || '12 Months') },
-                { id: 'warrantyEndDate', label: 'Warranty End Date', minWidth: 150, sortable: true, render: (r) => String(r.warrantyEndDate || '2027-03-31') },
-                { id: 'location', label: 'Location', minWidth: 140, sortable: true, render: (r) => String(r.location || 'Primary Site') },
+                { id: 'category', label: 'Category', minWidth: 140, sortable: true, render: (r) => String(r.category || '-') },
+                { id: 'quantity', label: 'Quantity', minWidth: 100, sortable: true, render: (r) => String(r.quantity ?? '-') },
+                { id: 'total', label: 'Amount', minWidth: 130, sortable: true, render: (r) => (r.total !== undefined ? formatCurrency(r.total) : formatCurrency(r.mrp)) },
                 { id: 'updatedAt', label: 'Date Modified', minWidth: 130, sortable: true, render: (r) => String(r.updatedAt || r.dateModified || '-') },
                 { id: 'createdAt', label: 'Date Created', minWidth: 130, sortable: true, render: (r) => String(r.createdAt || r.dateCreated || '-') },
             ];
@@ -380,7 +380,7 @@ function getColumnsForModule(moduleKey: string): DataTableColumn<RelatedRow>[] {
                 { id: 'grandTotal', label: 'Grand Total', minWidth: 140, sortable: true, render: (r) => formatCurrency(r.grandTotal) },
                 { id: 'validUntil', label: 'Valid Until', minWidth: 130, sortable: true, accessor: 'validUntil' },
                 { id: 'quoteDate', label: 'Date Created', minWidth: 130, sortable: true, render: (r) => String(r.quoteDate || r.createdAt || '-') },
-                { id: 'assignedTo', label: 'User', minWidth: 140, sortable: true, render: (r) => String(r.assignedTo || 'mittal.sharma') },
+                { id: 'assignedTo', label: 'User', minWidth: 140, sortable: true, render: (r) => String(r.assignedTo || '-') },
             ];
 
         case 'partner_company':
@@ -424,29 +424,25 @@ export function RelatedRecordsTableView({
     const [sortField, setSortField] = useState<string>('');
     const [sortOrder, setSortOrder] = useState<SortOrder>('asc');
     const [activeRowId, setActiveRowId] = useState<string | null>(null);
-    const [syncVersion, setSyncVersion] = useState(0);
-
-    useEffect(() => {
-        const unsubscribe = subscribeCrmSync(() => {
-            setSyncVersion((v) => v + 1);
-        });
-        return () => unsubscribe();
-    }, []);
 
     const moduleKey = useMemo(() => normalizeModuleKey(moduleId), [moduleId]);
 
     const columns = useMemo(() => getColumnsForModule(moduleKey), [moduleKey]);
 
-    const rawRecords = useMemo(() => {
-        void syncVersion;
-        return resolveRelatedRecordsForModule(
-            moduleKey,
-            parentEntityTitle,
-            parentRecordId,
-            entityData,
-            entityType
-        );
-    }, [moduleKey, parentEntityTitle, parentRecordId, entityData, entityType, syncVersion]);
+    const datasets = useRelatedDatasets(entityType, entityData, open);
+
+    const rawRecords = useMemo(
+        () =>
+            resolveRelatedRecordsForModule(
+                moduleKey,
+                parentEntityTitle,
+                parentRecordId,
+                entityData,
+                entityType,
+                datasets
+            ),
+        [moduleKey, parentEntityTitle, parentRecordId, entityData, entityType, datasets]
+    );
 
     const filteredAndSortedRecords = useMemo(() => {
         const q = searchQuery.trim().toLowerCase();

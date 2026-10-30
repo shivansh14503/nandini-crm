@@ -18,7 +18,7 @@ import {
     VisibilityOff as VisibilityOffIcon,
 } from '@mui/icons-material';
 import { useAuth } from '../../context/AuthContext';
-import { ROUTES } from '../../config/constants';
+import { ROUTES } from '@/config/constants';
 import { ErrorAlert } from '../common/ErrorAlert';
 import { FIELD_MAX_LENGTH } from '../forms/fieldSizing';
 

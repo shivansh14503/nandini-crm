@@ -254,7 +254,7 @@ export function CreateQuoteForm({
 
         opportunityService
             .getById(opportunityId)
-            .then((found) => {
+            .then(async (found) => {
                 if (!active) return;
                 if (!found) {
                     showToast('Opportunity record not found.', 'error');
@@ -262,26 +262,22 @@ export function CreateQuoteForm({
                 }
                 setOpportunity(found);
 
-                // Look up linked organization & contact to prefill address
-                const org = found.organizationId
-                    ? organizationService.getByIdSync(found.organizationId)
-                    : organizationService
-                          .getAllSync()
-                          .find(
-                              (o) =>
-                                  o.organizationName.trim().toLowerCase() ===
-                                  found.organizationName.trim().toLowerCase()
-                          );
-
-                const contact = found.contactId
-                    ? contactService.getByIdSync(found.contactId)
-                    : contactService
-                          .getAllSync()
-                          .find(
-                              (c) =>
-                                  c.name.trim().toLowerCase() ===
-                                  found.contactName.trim().toLowerCase()
-                          );
+                // Look up linked organization & contact to prefill address: by id when linked, otherwise
+                // a name search (server-side in API mode) narrowed to an exact, case-insensitive match.
+                const sameText = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLowerCase();
+                const [org, contact] = await Promise.all([
+                    found.organizationId
+                        ? organizationService.getById(found.organizationId)
+                        : organizationService
+                              .getAll({ search: found.organizationName })
+                              .then((orgs) => orgs.find((o) => sameText(o.organizationName, found.organizationName))),
+                    found.contactId
+                        ? contactService.getById(found.contactId)
+                        : contactService
+                              .getAll({ search: found.contactName })
+                              .then((contacts) => contacts.find((c) => sameText(c.name, found.contactName))),
+                ]);
+                if (!active) return;
 
                 const defaults = quotationService.buildQuotationDefaultsFromOpportunity(
                     found,
@@ -375,7 +371,7 @@ export function CreateQuoteForm({
     const onValidSubmit = async (values: QuotationFormData) => {
         try {
             if (isEdit && quotationId) {
-                const updated = await quotationService.updateQuotation(quotationId, values);
+                const updated = await quotationService.update(quotationId, values);
                 showToast(
                     `Quotation "${updated?.quotationCode || quotation?.quotationCode || quotationId}" updated successfully!`,
                     'success'
@@ -398,7 +394,7 @@ export function CreateQuoteForm({
                     router.push(ROUTES.QUOTATIONS);
                 }, 900);
             } else {
-                const created = await quotationService.createQuotation(values);
+                const created = await quotationService.create(values);
                 showToast(`Quotation "${created.quotationCode}" created successfully!`, 'success');
                 reset(values);
                 setTimeout(() => {

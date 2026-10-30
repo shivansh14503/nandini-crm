@@ -13,9 +13,9 @@ import { AppToast } from '../common/AppToast';
 import { CommonFormLayout } from '../common/CommonFormLayout';
 import { type FormTabDefinition } from '../common/Drawer';
 import { useRhfForm } from '../forms/rhf';
-import { ROUTES } from '../../config/constants';
+import { ROUTES } from '@/config/constants';
 import { opportunityFormSchema } from '../../validations';
-import type { OpportunityFormData } from '../../types/opportunity.types';
+import type { OpportunityFormData } from '@/types/opportunity.types';
 import { opportunityService } from '../../services/opportunity.service';
 
 // Modular Opportunity Form Sections
@@ -167,10 +167,10 @@ export default function OpportunityForm({
     const handleSave = createSubmitHandler(async (values) => {
         try {
             if (mode === 'create') {
-                await opportunityService.createOpportunity(values);
+                await opportunityService.create(values);
                 showToast('Opportunity created successfully! Added to your sales pipeline.', 'success');
             } else if (mode === 'edit' && opportunityId) {
-                await opportunityService.updateOpportunity(opportunityId, values);
+                await opportunityService.update(opportunityId, values);
                 showToast('Opportunity details updated successfully!', 'success');
             }
 

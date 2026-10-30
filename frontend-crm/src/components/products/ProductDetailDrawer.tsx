@@ -15,14 +15,13 @@ import GavelOutlinedIcon from '@mui/icons-material/GavelOutlined';
 
 import { ROUTES } from '@/config/constants';
 import type { Product } from '@/types/product.types';
-import { productService, subscribeCrmSync } from '@/services';
+import { useProduct } from '@/hooks/queries';
 import {
     EntityDetailDrawer,
     DrawerSectionCard,
     DrawerMetricGrid,
     DrawerCopyButton,
     copyToClipboard,
-    type AuditRevisionItem,
 } from '@/components/common/Drawer';
 import { PRODUCT_FORM_TABS } from './ProductForm';
 
@@ -41,31 +40,10 @@ export function ProductDetailDrawer({
 }: ProductDetailDrawerProps) {
     const router = useRouter();
 
-    const [currentProduct, setCurrentProduct] = useState<Product | null>(product);
-    const [, setSyncVersion] = useState(0);
+    const { data: freshProduct } = useProduct(open && product?.id ? product.id : undefined);
+    const p = freshProduct ?? product;
 
-    useEffect(() => {
-        setCurrentProduct(product);
-    }, [product]);
-
-    useEffect(() => {
-        if (!open || !product?.id) return;
-
-        const refreshProduct = () => {
-            const fresh = productService.getByIdSync(product.id);
-            if (fresh) {
-                setCurrentProduct(fresh);
-            }
-            setSyncVersion((v) => v + 1);
-        };
-
-        const unsubscribe = subscribeCrmSync(refreshProduct);
-        return unsubscribe;
-    }, [open, product?.id]);
-
-    if (!product && !currentProduct) return null;
-
-    const p = currentProduct || product!;
+    if (!p) return null;
 
     const handleEdit = () => {
         if (onEdit) {
@@ -87,36 +65,6 @@ export function ProductDetailDrawer({
     const mrpNum = parseFloat(p.mrp || '0');
     const mspNum = parseFloat(p.msp || '0');
     const profitMargin = costNum > 0 && mrpNum > 0 ? (((mrpNum - costNum) / costNum) * 100).toFixed(1) : null;
-
-    const auditRevisions: AuditRevisionItem[] = [
-        {
-            title: 'MSP Floor Price Revised',
-            author: 'mittal.sharma',
-            time: p.updatedAt ? new Date(p.updatedAt).toLocaleDateString('en-IN') : 'Today, 10:45 AM',
-            from: '₹' + ((mspNum || 10000) * 0.95).toFixed(2),
-            to: formatCurrency(p.msp),
-            note: 'Adjusted minimum floor price based on updated OEM quarterly price list.',
-            tag: 'Pricing Update',
-        },
-        {
-            title: 'Tax Rate & HSN Statutory Compliance',
-            author: 'mittal.sharma',
-            time: '12-Oct-2026, 04:15 PM',
-            from: '12% (Standard)',
-            to: `${p.taxRate || '18%'} (${p.taxType || 'GST'})`,
-            note: `HSN code ${p.hsnCode || '84715000'} mapped to revised statutory GST schedule.`,
-            tag: 'Tax Revision',
-        },
-        {
-            title: 'Product Record Initialized',
-            author: p.createdBy || 'mittal.sharma',
-            time: p.createdAt ? new Date(p.createdAt).toLocaleDateString('en-IN') : '05-Oct-2026, 09:30 AM',
-            from: 'Draft',
-            to: `Active [${p.productCode}]`,
-            note: 'Catalog specification approved by inventory department.',
-            tag: 'Creation',
-        },
-    ];
 
     return (
         <EntityDetailDrawer
@@ -366,7 +314,7 @@ export function ProductDetailDrawer({
                                 <Box>
                                     <Typography sx={{ fontSize: '0.68rem', color: '#94a3b8' }}>Created By</Typography>
                                     <Typography sx={{ fontSize: '0.8rem', fontWeight: 600, color: '#334155' }}>
-                                        {p.createdBy || 'mittal.sharma'}
+                                        {p.createdBy || '-'}
                                     </Typography>
                                 </Box>
                                 <Box>
@@ -380,7 +328,7 @@ export function ProductDetailDrawer({
                     </Box>
                 ),
             }}
-            auditRevisions={auditRevisions}
+            auditEntity={{ type: 'products', id: p.id }}
             includeChangesTab={true}
             statusText="In Catalog • Active"
             primaryAction={{

@@ -20,10 +20,10 @@ import { AppToast } from '../common/AppToast';
 import { RelatedModulesSidebar, RelatedRecordsTableView } from '../common/Drawer';
 import { RelatedSecondaryDrawer, type SecondaryDrawerEntity } from '../common/RelatedSecondaryDrawer';
 import type { DataTableColumn, DataTableFilterItem } from '../common/DataTable';
-import { ROUTES } from '../../config/constants';
-import { getRelatedModulesForEntity } from '@/config/relatedModules.config';
-import type { Opportunity } from '../../types/opportunity.types';
-import { useCrmDataVersion } from '@/services';
+import { ROUTES } from '@/config/constants';
+import { useAuth } from '@/context/AuthContext';
+import { useRelatedModulesForEntity } from '@/config/relatedModules.config';
+import type { Opportunity } from '@/types/opportunity.types';
 import { useOpportunities, useBulkDeleteOpportunities } from '@/hooks/queries';
 import type { OpportunityFilterTab, OpportunitySortField } from './master';
 import { OpportunityDetailDrawer } from './OpportunityDetailDrawer';
@@ -35,12 +35,16 @@ const formatCurrency = (val: number) =>
         maximumFractionDigits: 0,
     }).format(val);
 
+
+/** Stable empty list while the first page loads (keeps memoized filters from recomputing). */
+const NO_RECORDS: Opportunity[] = [];
 export function OpportunitiesMasterView() {
     const router = useRouter();
+    const { user } = useAuth();
+    const currentUsername = user?.username || '';
 
-    const { data: opportunities, refetch } = useOpportunities();
+    const { data: opportunities = NO_RECORDS, refetch } = useOpportunities();
     const bulkDeleteMutation = useBulkDeleteOpportunities();
-    const crmDataVersion = useCrmDataVersion();
     const [activeTab, setActiveTab] = useState<OpportunityFilterTab>('all');
     const [searchQuery, setSearchQuery] = useState('');
     const [selectedIds, setSelectedIds] = useState<string[]>([]);
@@ -114,12 +118,10 @@ export function OpportunitiesMasterView() {
                 id: 'my_deals',
                 label: 'My Deals',
                 icon: <AccountCircleOutlinedIcon sx={{ fontSize: 16 }} />,
-                count: opportunities.filter((o) =>
-                    (o.assignedTo || '').includes('mittal.sharma')
-                ).length,
+                count: currentUsername ? opportunities.filter((o) => (o.assignedTo || '').includes(currentUsername)).length : 0,
             },
         ];
-    }, [opportunities]);
+    }, [opportunities, currentUsername]);
 
     // ── Filter Logic ──────────────────────────────────────────────────────────
     const filteredOpportunities = useMemo(() => {
@@ -139,7 +141,7 @@ export function OpportunitiesMasterView() {
             if (activeTab === 'high_value' && (opp.grandTotal || 0) < 100000) {
                 return false;
             }
-            if (activeTab === 'my_deals' && !(opp.assignedTo || '').includes('mittal.sharma')) {
+            if (activeTab === 'my_deals' && (!currentUsername || !(opp.assignedTo || '').includes(currentUsername))) {
                 return false;
             }
 
@@ -174,7 +176,7 @@ export function OpportunitiesMasterView() {
 
             return true;
         });
-    }, [opportunities, activeTab, searchQuery]);
+    }, [opportunities, activeTab, searchQuery, currentUsername]);
 
     // ── Sort Logic ────────────────────────────────────────────────────────────
     const sortedOpportunities = useMemo(() => {
@@ -490,7 +492,7 @@ export function OpportunitiesMasterView() {
                 minWidth: 130,
                 render: (o) => (
                     <Typography sx={{ fontSize: '0.78rem', color: '#475569', fontWeight: 500 }}>
-                        {o.assignedTo || 'mittal.sharma'}
+                        {o.assignedTo || '-'}
                     </Typography>
                 ),
             },
@@ -498,12 +500,7 @@ export function OpportunitiesMasterView() {
         [todayStr]
     );
 
-    const relatedModules = useMemo(() => {
-        // Related counts come from other entities' stores; recompute whenever any of them changes.
-        void crmDataVersion;
-        if (!selectedDrawerOpp) return [];
-        return getRelatedModulesForEntity('opportunity', selectedDrawerOpp, setActiveRelatedModule);
-    }, [selectedDrawerOpp, crmDataVersion]);
+    const relatedModules = useRelatedModulesForEntity('opportunity', selectedDrawerOpp, setActiveRelatedModule);
 
     // Falls back to the first module until the user explicitly picks one.
     const effectiveRelatedModule = activeRelatedModule ?? relatedModules[0]?.id ?? null;

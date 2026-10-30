@@ -5,6 +5,7 @@ import { queryKeys } from './queryKeys';
 const productHooks = createEntityHooks(queryKeys.products, productService);
 
 export const useProducts = productHooks.useList;
+export const usePaginatedProducts = productHooks.usePaginatedList;
 export const useProduct = productHooks.useDetail;
 export const useCreateProduct = productHooks.useCreate;
 export const useUpdateProduct = productHooks.useUpdate;

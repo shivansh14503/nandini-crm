@@ -20,9 +20,8 @@ import { RelatedModulesSidebar, RelatedRecordsTableView } from '../common/Drawer
 import { RelatedSecondaryDrawer, type SecondaryDrawerEntity } from '../common/RelatedSecondaryDrawer';
 import type { DataTableColumn, DataTableFilterItem } from '../common/DataTable';
 import { ROUTES } from '@/config/constants';
-import { getRelatedModulesForEntity } from '@/config/relatedModules.config';
+import { useRelatedModulesForEntity } from '@/config/relatedModules.config';
 import type { Quotation } from '@/types/quotation.types';
-import { useCrmDataVersion } from '@/services';
 import { useQuotations, useDeleteQuotation, useBulkDeleteQuotations } from '@/hooks/queries';
 import { QuotationDetailDrawer } from './QuotationDetailDrawer';
 
@@ -36,13 +35,15 @@ const formatCurrency = (val: number = 0) =>
         maximumFractionDigits: 0,
     }).format(val);
 
+
+/** Stable empty list while the first page loads (keeps memoized filters from recomputing). */
+const NO_RECORDS: Quotation[] = [];
 export function QuotationsMasterView() {
     const router = useRouter();
 
-    const { data: quotations, refetch } = useQuotations();
+    const { data: quotations = NO_RECORDS, refetch } = useQuotations();
     const deleteMutation = useDeleteQuotation();
     const bulkDeleteMutation = useBulkDeleteQuotations();
-    const crmDataVersion = useCrmDataVersion();
     const [activeTab, setActiveTab] = useState<QuotationFilterTab>('all');
     const [searchQuery, setSearchQuery] = useState('');
     const [selectedIds, setSelectedIds] = useState<string[]>([]);
@@ -408,12 +409,7 @@ export function QuotationsMasterView() {
         setSortField(field as QuotationSortField);
     };
 
-    const relatedModules = useMemo(() => {
-        // Related counts come from other entities' stores; recompute whenever any of them changes.
-        void crmDataVersion;
-        if (!selectedDrawerQuotation) return [];
-        return getRelatedModulesForEntity('quotation', selectedDrawerQuotation, setActiveRelatedModule);
-    }, [selectedDrawerQuotation, crmDataVersion]);
+    const relatedModules = useRelatedModulesForEntity('quotation', selectedDrawerQuotation, setActiveRelatedModule);
 
     // Falls back to the first module until the user explicitly picks one.
     const effectiveRelatedModule = activeRelatedModule ?? relatedModules[0]?.id ?? null;

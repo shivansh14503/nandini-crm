@@ -5,6 +5,7 @@ import { queryKeys } from './queryKeys';
 const leadHooks = createEntityHooks(queryKeys.leads, leadService);
 
 export const useLeads = leadHooks.useList;
+export const usePaginatedLeads = leadHooks.usePaginatedList;
 export const useLead = leadHooks.useDetail;
 export const useCreateLead = leadHooks.useCreate;
 export const useUpdateLead = leadHooks.useUpdate;

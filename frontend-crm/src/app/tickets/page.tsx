@@ -3,12 +3,12 @@
 import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Box } from '@mui/material';
-import { useAuth } from '@/src/context/AuthContext';
-import { ROUTES } from '@/src/config/constants';
-import { Navbar } from '@/src/components/layout/Navbar';
-import { LoadingScreen } from '@/src/components/common/LoadingScreen';
-import { ErrorAlert } from '@/src/components/common/ErrorAlert';
-import { TicketsMasterView } from '@/src/components/tickets';
+import { useAuth } from '@/context/AuthContext';
+import { ROUTES } from '@/config/constants';
+import { Navbar } from '@/components/layout/Navbar';
+import { LoadingScreen } from '@/components/common/LoadingScreen';
+import { ErrorAlert } from '@/components/common/ErrorAlert';
+import { TicketsMasterView } from '@/components/tickets';
 
 export default function TicketsPage() {
     const router = useRouter();

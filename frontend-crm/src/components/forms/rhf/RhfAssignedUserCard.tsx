@@ -7,7 +7,8 @@ import { useFormContext, useWatch, type FieldPath, type FieldValues, type PathVa
 import { FormField } from '../FormField';
 import type { FieldSize } from '../fieldSizing';
 import { UserLookupModal } from '@/components/common/lookup';
-import { findCrmUser } from '@/data/mockUsers';
+import { findCrmUser } from '@/services/masterData.store';
+import { useMasterData } from '@/hooks/queries/useMasterData';
 import { useFormMode } from '@/context/FormModeContext';
 
 export interface RhfAssignedUserCardProps<T extends FieldValues> {
@@ -47,6 +48,8 @@ export function RhfAssignedUserCard<T extends FieldValues>({
     const assignedUsername = (useWatch({ control, name }) as string | undefined) || '';
     const [lookupOpen, setLookupOpen] = useState(false);
     const isView = useFormMode().mode === 'view';
+    // Re-renders once the user directory loads (API mode), so the card shows the person, not just the username.
+    useMasterData();
 
     const user = findCrmUser(assignedUsername);
     const displayName = user?.name || assignedUsername || 'Unassigned';

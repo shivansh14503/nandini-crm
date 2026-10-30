@@ -17,13 +17,13 @@ import { CommonFormLayout } from '../common/CommonFormLayout';
 import { type FormTabDefinition } from '../common/Drawer';
 import { organizationService } from '@/services';
 import { useAuth } from '@/context/AuthContext';
-import { ROUTES } from '../../config/constants';
+import { ROUTES } from '@/config/constants';
 import { focusFormField } from '@/utils/formFocus';
 import { normalizeAddressFields } from '@/utils/address';
 import { useFormDraftGuard } from '@/hooks/useFormDraftGuard';
 import { UnsavedChangesModal } from '../common/UnsavedChangesModal';
 import { validateWithToast, organizationFormSchema } from '../../validations';
-import type { OrganizationFormData } from '../../types/organization.types';
+import type { OrganizationFormData } from '@/types/organization.types';
 
 // Tab components
 import {

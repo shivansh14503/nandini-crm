@@ -10,9 +10,9 @@ import DescriptionOutlinedIcon from '@mui/icons-material/DescriptionOutlined';
 
 import { type BreadcrumbItem } from '../common/AppBreadcrumbs';
 import { type FormTabDefinition } from '../common/Drawer';
-import { ROUTES } from '../../config/constants';
+import { ROUTES } from '@/config/constants';
 import { productFormSchema } from '@/validations';
-import type { ProductFormData } from '../../types/product.types';
+import type { ProductFormData } from '@/types/product.types';
 import { productService } from '@/services';
 
 // Reusable Form Primitives

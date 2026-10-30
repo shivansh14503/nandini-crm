@@ -1,0 +1,28 @@
+BEGIN TRY
+
+BEGIN TRAN;
+
+-- CreateSchema
+IF NOT EXISTS (SELECT * FROM sys.schemas WHERE name = N'dbo') EXEC sp_executesql N'CREATE SCHEMA [dbo];';
+
+-- CreateTable
+CREATE TABLE [dbo].[Users] (
+    [Id] INT NOT NULL IDENTITY(1,1),
+    [Username] NVARCHAR(50) NOT NULL,
+    [Password] NVARCHAR(100) NOT NULL,
+    [Role] NVARCHAR(50) NOT NULL CONSTRAINT [DF__Users__Role__5CD6CB2B] DEFAULT 'Admin',
+    CONSTRAINT [PK__Users__3214EC07D4281F91] PRIMARY KEY CLUSTERED ([Id] ASC)
+);
+
+COMMIT TRAN;
+
+END TRY
+BEGIN CATCH
+
+IF @@TRANCOUNT > 0
+BEGIN
+    ROLLBACK TRAN;
+END;
+THROW
+
+END CATCH

@@ -14,5 +14,4 @@ export const ENV = {
     get API_URL() {
         return resolveApiUrl();
     },
-    USE_MOCK: process.env.NEXT_PUBLIC_USE_MOCK !== 'false',
 } as const;

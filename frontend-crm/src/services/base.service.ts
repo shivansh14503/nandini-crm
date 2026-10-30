@@ -1,224 +1,82 @@
-import { ENV } from '../config/env';
 import type { ApiResponse, PaginatedResponse, PaginationParams } from '../types/api.types';
-import { apiClient } from './apiClient';
+import { ApiClientError, apiClient } from './apiClient';
 import { notifyCrmUpdate } from './crmSync';
-
-export interface CrudMockAdapter<T, CreateDto, UpdateDto> {
-    getAll: () => T[];
-    getById: (id: string) => T | undefined;
-    create: (data: CreateDto) => T;
-    update: (id: string, data: UpdateDto) => T | null;
-    delete: (id: string) => boolean;
-    deleteBulk: (ids: string[]) => boolean;
-    saveAll?: (items: T[]) => void;
-}
 
 export interface CrudService<T, CreateDto = Partial<T>, UpdateDto = Partial<CreateDto>> {
     readonly endpoint: string;
+    /** One page: `GET endpoint?page&limit&search&sortBy&sortOrder&<filters>`. */
     list: (params?: PaginationParams) => Promise<PaginatedResponse<T>>;
+    /** Every record matching the filters (all pages). Prefer `list` for anything that can grow large. */
     getAll: (params?: PaginationParams) => Promise<T[]>;
+    /** `undefined` when the record doesn't exist (or was deleted). */
     getById: (id: string) => Promise<T | undefined>;
     create: (data: CreateDto) => Promise<T>;
-    update: (id: string, data: UpdateDto) => Promise<T | null>;
-    delete: (id: string) => Promise<boolean>;
-    deleteBulk: (ids: string[]) => Promise<boolean>;
-    getAllSync: () => T[];
-    getByIdSync: (id: string) => T | undefined;
-    saveAllSync: (items: T[]) => void;
+    update: (id: string, data: UpdateDto) => Promise<T>;
+    delete: (id: string) => Promise<void>;
+    deleteBulk: (ids: string[]) => Promise<void>;
 }
 
+/** The API caps a page at 100 records. */
+const PAGE_SIZE = 100;
+/** Safety cap for `getAll` (10,000 records). */
+const MAX_PAGES = 100;
+
+/**
+ * CRUD client for a backend entity endpoint. Writes broadcast `notifyCrmUpdate(endpoint)`, which invalidates the
+ * entity's React Query cache in this tab and in other open tabs.
+ */
 export function createCrudService<T, CreateDto = Partial<T>, UpdateDto = Partial<CreateDto>>(
-    endpoint: string,
-    mockAdapter?: CrudMockAdapter<T, CreateDto, UpdateDto>
+    endpoint: string
 ): CrudService<T, CreateDto, UpdateDto> {
     const cleanEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
 
+    const list = (params?: PaginationParams) => apiClient.get<PaginatedResponse<T>>(cleanEndpoint, { params });
+
     return {
         endpoint: cleanEndpoint,
-
-        list: async (params?: PaginationParams): Promise<PaginatedResponse<T>> => {
-            if (ENV.USE_MOCK && mockAdapter) {
-                const all = mockAdapter.getAll();
-                const page = Number(params?.page ?? 1);
-                const limit = Number(params?.limit ?? (all.length || 25));
-                const start = (page - 1) * limit;
-                const data = all.slice(start, start + limit);
-                return {
-                    success: true,
-                    data,
-                    total: all.length,
-                    page,
-                    limit,
-                };
-            }
-
-            try {
-                return await apiClient.get<PaginatedResponse<T>>(cleanEndpoint, { params });
-            } catch (err) {
-                if (mockAdapter) {
-                    const all = mockAdapter.getAll();
-                    return {
-                        success: true,
-                        data: all,
-                        total: all.length,
-                        page: Number(params?.page ?? 1),
-                        limit: Number(params?.limit ?? (all.length || 25)),
-                    };
-                }
-                throw err;
-            }
-        },
+        list,
 
         getAll: async (params?: PaginationParams): Promise<T[]> => {
-            if (ENV.USE_MOCK && mockAdapter) {
-                return mockAdapter.getAll();
+            const all: T[] = [];
+            for (let page = 1; page <= MAX_PAGES; page++) {
+                const res = await list({ ...params, page, limit: PAGE_SIZE });
+                all.push(...res.data);
+                if (res.data.length < PAGE_SIZE || all.length >= res.total) return all;
             }
-
-            try {
-                const res = await apiClient.get<PaginatedResponse<T> | ApiResponse<T[]> | T[]>(
-                    cleanEndpoint,
-                    { params }
-                );
-                if (Array.isArray(res)) return res;
-                return res.data;
-            } catch (err) {
-                if (mockAdapter) return mockAdapter.getAll();
-                throw err;
-            }
+            console.warn(`${cleanEndpoint}: stopped after ${MAX_PAGES * PAGE_SIZE} records; use list() with server-side pagination instead.`);
+            return all;
         },
 
         getById: async (id: string): Promise<T | undefined> => {
-            if (ENV.USE_MOCK && mockAdapter) {
-                return mockAdapter.getById(id);
-            }
-
             try {
-                const res = await apiClient.get<ApiResponse<T> | T>(`${cleanEndpoint}/${id}`);
-                if (res && typeof res === 'object' && 'data' in res) {
-                    return (res as ApiResponse<T>).data;
-                }
-                return res as T;
+                const res = await apiClient.get<ApiResponse<T>>(`${cleanEndpoint}/${encodeURIComponent(id)}`);
+                return res.data;
             } catch (err) {
-                if (mockAdapter) return mockAdapter.getById(id);
+                // A missing record is "not found", not an error (callers render their empty state).
+                if (err instanceof ApiClientError && err.status === 404) return undefined;
                 throw err;
             }
         },
 
         create: async (data: CreateDto): Promise<T> => {
-            if (ENV.USE_MOCK && mockAdapter) {
-                const res = mockAdapter.create(data);
-                notifyCrmUpdate(cleanEndpoint);
-                return res;
-            }
-
-            try {
-                const res = await apiClient.post<ApiResponse<T> | T>(cleanEndpoint, data);
-                const created =
-                    res && typeof res === 'object' && 'data' in res
-                        ? (res as ApiResponse<T>).data
-                        : (res as T);
-                if (mockAdapter?.saveAll) {
-                    const existing = mockAdapter.getAll();
-                    mockAdapter.saveAll([created, ...existing]);
-                }
-                notifyCrmUpdate(cleanEndpoint);
-                return created;
-            } catch (err) {
-                if (mockAdapter) {
-                    const res = mockAdapter.create(data);
-                    notifyCrmUpdate(cleanEndpoint);
-                    return res;
-                }
-                throw err;
-            }
+            const res = await apiClient.post<ApiResponse<T>>(cleanEndpoint, data);
+            notifyCrmUpdate(cleanEndpoint);
+            return res.data;
         },
 
-        update: async (id: string, data: UpdateDto): Promise<T | null> => {
-            if (ENV.USE_MOCK && mockAdapter) {
-                const res = mockAdapter.update(id, data);
-                notifyCrmUpdate(cleanEndpoint, id);
-                return res;
-            }
-
-            try {
-                const res = await apiClient.put<ApiResponse<T> | T>(`${cleanEndpoint}/${id}`, data);
-                const updated =
-                    res && typeof res === 'object' && 'data' in res
-                        ? (res as ApiResponse<T>).data
-                        : (res as T);
-                if (mockAdapter) {
-                    mockAdapter.update(id, data);
-                }
-                notifyCrmUpdate(cleanEndpoint, id);
-                return updated;
-            } catch (err) {
-                if (mockAdapter) {
-                    const res = mockAdapter.update(id, data);
-                    notifyCrmUpdate(cleanEndpoint, id);
-                    return res;
-                }
-                throw err;
-            }
+        update: async (id: string, data: UpdateDto): Promise<T> => {
+            const res = await apiClient.put<ApiResponse<T>>(`${cleanEndpoint}/${encodeURIComponent(id)}`, data);
+            notifyCrmUpdate(cleanEndpoint, id);
+            return res.data;
         },
 
-        delete: async (id: string): Promise<boolean> => {
-            if (ENV.USE_MOCK && mockAdapter) {
-                const res = mockAdapter.delete(id);
-                notifyCrmUpdate(cleanEndpoint, id);
-                return res;
-            }
-
-            try {
-                await apiClient.delete<ApiResponse<unknown>>(`${cleanEndpoint}/${id}`);
-                if (mockAdapter) {
-                    mockAdapter.delete(id);
-                }
-                notifyCrmUpdate(cleanEndpoint, id);
-                return true;
-            } catch (err) {
-                if (mockAdapter) {
-                    const res = mockAdapter.delete(id);
-                    notifyCrmUpdate(cleanEndpoint, id);
-                    return res;
-                }
-                throw err;
-            }
+        delete: async (id: string): Promise<void> => {
+            await apiClient.delete<ApiResponse<unknown>>(`${cleanEndpoint}/${encodeURIComponent(id)}`);
+            notifyCrmUpdate(cleanEndpoint, id);
         },
 
-        deleteBulk: async (ids: string[]): Promise<boolean> => {
-            if (ENV.USE_MOCK && mockAdapter) {
-                const res = mockAdapter.deleteBulk(ids);
-                notifyCrmUpdate(cleanEndpoint);
-                return res;
-            }
-
-            try {
-                await apiClient.post<ApiResponse<unknown>>(`${cleanEndpoint}/bulk-delete`, { ids });
-                if (mockAdapter) {
-                    mockAdapter.deleteBulk(ids);
-                }
-                notifyCrmUpdate(cleanEndpoint);
-                return true;
-            } catch (err) {
-                if (mockAdapter) {
-                    const res = mockAdapter.deleteBulk(ids);
-                    notifyCrmUpdate(cleanEndpoint);
-                    return res;
-                }
-                throw err;
-            }
-        },
-
-        getAllSync: (): T[] => {
-            return mockAdapter ? mockAdapter.getAll() : [];
-        },
-
-        getByIdSync: (id: string): T | undefined => {
-            return mockAdapter ? mockAdapter.getById(id) : undefined;
-        },
-
-        saveAllSync: (items: T[]): void => {
-            mockAdapter?.saveAll?.(items);
+        deleteBulk: async (ids: string[]): Promise<void> => {
+            await apiClient.post<ApiResponse<unknown>>(`${cleanEndpoint}/bulk-delete`, { ids });
             notifyCrmUpdate(cleanEndpoint);
         },
     };

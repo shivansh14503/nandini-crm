@@ -32,18 +32,18 @@ import {
     RhfEmailField,
 } from '@/components/forms';
 import { UserLookupModal } from '@/components/common/lookup';
-import type { OpportunityFormData } from '../../../types/opportunity.types';
+import type { OpportunityFormData } from '@/types/opportunity.types';
 import {
     OPPORTUNITY_SALES_STAGES,
     OPPORTUNITY_TYPES,
     OPPORTUNITY_COMMISSIONS,
     OPPORTUNITY_DOCUMENT_OPTIONS,
-} from '../../../types/opportunity.types';
+} from '@/types/opportunity.types';
 import {
     PRODUCT_CATEGORIES,
     LEAD_SOURCES,
     FOLLOWUP_TYPES,
-} from '../../../types/lead.types';
+} from '@/types/lead.types';
 
 export interface OpportunityBasicSectionProps {
     form: OpportunityFormData;

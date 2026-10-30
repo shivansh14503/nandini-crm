@@ -4,7 +4,7 @@
  * UI-free on purpose: imported by both `components/forms/fieldSizing` and `validations/`.
  */
 export const FIELD_MAX_LENGTH = {
-    phone: 10,
+    phone: 16,
     pinCode: 6,
     postalCode: 12,
     pan: 10,

@@ -26,12 +26,11 @@ import EditOutlinedIcon from '@mui/icons-material/EditOutlined';
 
 import { ROUTES } from '@/config/constants';
 import type { Quotation } from '@/types/quotation.types';
-import { quotationService, subscribeCrmSync } from '@/services';
+import { useQuotation } from '@/hooks/queries';
 import {
     EntityDetailDrawer,
     DrawerSectionCard,
     DrawerCopyButton,
-    type AuditRevisionItem,
 } from '@/components/common/Drawer';
 import { QUOTATION_FORM_TABS } from './CreateQuoteForm';
 
@@ -59,31 +58,12 @@ export function QuotationDetailDrawer({
 }: QuotationDetailDrawerProps) {
     const router = useRouter();
 
-    const [currentQuotation, setCurrentQuotation] = useState<Quotation | null>(initialQuotation);
-    const [, setSyncVersion] = useState(0);
+    const { data: freshQuotation } = useQuotation(
+        open && initialQuotation?.id ? initialQuotation.id : undefined
+    );
+    const quotation = freshQuotation ?? initialQuotation;
 
-    useEffect(() => {
-        setCurrentQuotation(initialQuotation);
-    }, [initialQuotation]);
-
-    useEffect(() => {
-        if (!open || !initialQuotation?.id) return;
-
-        const refreshQuote = () => {
-            const fresh = quotationService.getByIdSync(initialQuotation.id);
-            if (fresh) {
-                setCurrentQuotation(fresh);
-            }
-            setSyncVersion((v) => v + 1);
-        };
-
-        const unsubscribe = subscribeCrmSync(refreshQuote);
-        return unsubscribe;
-    }, [open, initialQuotation?.id]);
-
-    if (!initialQuotation && !currentQuotation) return null;
-
-    const quotation = currentQuotation || initialQuotation!;
+    if (!quotation) return null;
 
     const handleEdit = () => {
         if (onEdit) {
@@ -102,23 +82,6 @@ export function QuotationDetailDrawer({
 
     const currentStatus = String(quotation.quoteStage || quotation.status || 'Draft');
     const statusStyle = statusColorMap[currentStatus] || statusColorMap.Draft;
-
-    const auditRevisions: AuditRevisionItem[] = [
-        {
-            title: `Quotation stage set to "${currentStatus}"`,
-            author: quotation.assignedTo || 'mittal.sharma',
-            time: 'Today',
-            tag: currentStatus,
-            note: `Grand total ₹${(quotation.grandTotal || 0).toLocaleString('en-IN')} approved for customer review.`,
-        },
-        {
-            title: 'Quotation Generated',
-            author: quotation.createdBy || quotation.assignedTo || 'mittal.sharma',
-            time: quotation.createdAt || quotation.quotationDate || quotation.quoteDate || 'Recently',
-            tag: 'Created',
-            note: `Generated from opportunity "${quotation.opportunityName || quotation.opportunityCode || 'Deal'}".`,
-        },
-    ];
 
     // ══════════════════════════════════════════════════════════════════
     // TAB 1: OVERVIEW
@@ -215,7 +178,7 @@ export function QuotationDetailDrawer({
                     <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                         <Typography sx={{ fontSize: '0.78rem', color: '#64748b' }}>Assigned Representative:</Typography>
                         <Typography sx={{ fontSize: '0.84rem', fontWeight: 600, color: '#1e293b' }}>
-                            {quotation.assignedTo || 'mittal.sharma'}
+                            {quotation.assignedTo || '-'}
                         </Typography>
                     </Box>
                     {quotation.otherRef && (
@@ -586,7 +549,7 @@ export function QuotationDetailDrawer({
                     borderColor: '#bbf7d0',
                 },
                 {
-                    label: quotation.assignedTo || 'mittal.sharma',
+                    label: quotation.assignedTo || 'Unassigned',
                     backgroundColor: '#f1f5f9',
                     color: '#475569',
                     borderColor: '#cbd5e1',
@@ -607,7 +570,7 @@ export function QuotationDetailDrawer({
                 line_items: renderLineItems(),
                 address: renderAddress(),
             }}
-            auditRevisions={auditRevisions}
+            auditEntity={{ type: 'quotations', id: quotation.id }}
             includeChangesTab={true}
         />
     );

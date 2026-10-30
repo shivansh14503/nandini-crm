@@ -9,7 +9,7 @@ import HandshakeOutlinedIcon from '@mui/icons-material/HandshakeOutlined';
 
 import { type BreadcrumbItem } from '../common/AppBreadcrumbs';
 import { type FormTabDefinition } from '../common/Drawer';
-import { ROUTES } from '../../config/constants';
+import { ROUTES } from '@/config/constants';
 import { ticketFormSchema } from '@/validations';
 import {
     NATURE_PRIORITY_TO_TICKET_PRIORITY,
@@ -25,9 +25,8 @@ import {
 import type { ExtendedOrganization } from '@/types/organization.types';
 import type { Contact } from '@/types/contact.types';
 import type { PartnerCompany, PartnerCompanyContact } from '@/types/partner.types';
-import { getNatureOfCalls } from '@/data/mockNatureOfCalls';
-import { getPartnerCompanies, getPartnerContacts } from '@/data/mockPartners';
-import { contactService, organizationService, ticketService } from '@/services';
+import { ticketService } from '@/services';
+import { useContacts, useMasterData, useOrganizations } from '@/hooks/queries';
 import { formatAddressLine } from '@/utils/address';
 
 import {
@@ -111,6 +110,10 @@ export interface TicketFormProps {
     breadcrumbItems?: BreadcrumbItem[];
 }
 
+// Stable fallbacks while the lists load, so memoized suggestions don't recompute every render.
+const EMPTY_ORGANIZATIONS: ExtendedOrganization[] = [];
+const EMPTY_CONTACTS: Contact[] = [];
+
 export default function TicketForm({ mode = 'create', initialData, ticketId, breadcrumbItems }: TicketFormProps) {
     const router = useRouter();
     const [activeTab, setActiveTab] = useState<TicketTabKey>('overview');
@@ -126,8 +129,9 @@ export default function TicketForm({ mode = 'create', initialData, ticketId, bre
     const ticketSubject = useWatch({ control, name: 'ticketSubject' });
     const organizationName = useWatch({ control, name: 'organizationName' });
 
-    const organizations = useMemo(() => organizationService.getAllSync(), []);
-    const contacts = useMemo(() => contactService.getAllSync(), []);
+    const { data: organizations = EMPTY_ORGANIZATIONS } = useOrganizations();
+    const { data: contacts = EMPTY_CONTACTS } = useContacts();
+    const { natureOfCalls, partnerCompanies, partnerContacts } = useMasterData();
     const organizationNames = useMemo(() => organizations.map((o) => o.organizationName), [organizations]);
 
     // Narrow contact suggestions to the chosen organization when it has any contacts on file.
@@ -137,9 +141,8 @@ export default function TicketForm({ mode = 'create', initialData, ticketId, bre
         return (inOrg.length > 0 ? inOrg : contacts).map((c) => c.name);
     }, [contacts, organizationName]);
 
-    const natureOfCallNames = useMemo(() => getNatureOfCalls().map((n) => n.name), []);
-    const partnerCompanyNames = useMemo(() => getPartnerCompanies().map((p) => p.companyName), []);
-    const partnerContacts = useMemo(() => getPartnerContacts(), []);
+    const natureOfCallNames = useMemo(() => natureOfCalls.map((n) => n.name), [natureOfCalls]);
+    const partnerCompanyNames = useMemo(() => partnerCompanies.map((p) => p.companyName), [partnerCompanies]);
     const partnerCompany = useWatch({ control, name: 'partnerCompany' });
 
     // Same narrowing for partner contacts: only the chosen partner's people, when it has any.

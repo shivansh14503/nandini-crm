@@ -42,7 +42,9 @@ export interface TicketFormData {
     amcFlag: boolean;
     ticketSubject: string;
     organizationName: string;
+    organizationId?: string;
     contactPersonName: string;
+    contactId?: string;
     contactNumber: string;
     ticketPriority: TicketPriority;
     source: TicketSource;

@@ -2,7 +2,7 @@
 
 import React from 'react';
 import { RhfTextField } from '@/components/forms';
-import type { ContactFormData } from '../../../types/contact.types';
+import type { ContactFormData } from '@/types/contact.types';
 
 /**
  * Free-text description / notes (full width; capped at the long-text limit).

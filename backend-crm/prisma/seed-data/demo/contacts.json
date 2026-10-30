@@ -1,0 +1,104 @@
+[
+  {
+    "id": "con-1",
+    "contactCode": "CON-1001",
+    "name": "Rajesh Sharma",
+    "organizationName": "Tata Consultancy Services",
+    "mobile": "9811234567",
+    "officePhone": "0114567890",
+    "phone3": "",
+    "phone4": "",
+    "phone5": "",
+    "emailAddresses": [
+      {
+        "id": "em-1",
+        "email": "rajesh.sharma@tcs.com",
+        "isPrimary": true,
+        "isOptedOut": false,
+        "isInvalidBounce": false
+      }
+    ],
+    "assignedTo": "mittal.sharma",
+    "isPrimaryContact": true,
+    "designation": "Managing Director / MD",
+    "department": "Executive Management",
+    "leftJob": "No",
+    "communicationType": [
+      "Call",
+      "Email"
+    ],
+    "doNotCall": false,
+    "description": "Key decision maker for enterprise cloud migration contracts.",
+    "createdAt": "2026-10-28T05:42:59.754Z",
+    "updatedAt": "2026-10-30T05:42:59.754Z",
+    "createdBy": "mittal.sharma"
+  },
+  {
+    "id": "con-2",
+    "contactCode": "CON-1002",
+    "name": "Ananya Deshmukh",
+    "organizationName": "Infosys Limited",
+    "mobile": "9723456789",
+    "officePhone": "0802852026",
+    "phone3": "",
+    "phone4": "",
+    "phone5": "",
+    "emailAddresses": [
+      {
+        "id": "em-2",
+        "email": "ananya.d@infosys.com",
+        "isPrimary": true,
+        "isOptedOut": false,
+        "isInvalidBounce": false
+      }
+    ],
+    "assignedTo": "mittal.sharma",
+    "isPrimaryContact": false,
+    "designation": "Purchase Head / Manager",
+    "department": "Procurement & Purchase",
+    "leftJob": "No",
+    "communicationType": [
+      "Email",
+      "WhatsApp"
+    ],
+    "doNotCall": false,
+    "description": "Handles software licensing procurement.",
+    "createdAt": "2026-10-25T05:42:59.754Z",
+    "updatedAt": "2026-10-30T05:42:59.754Z",
+    "createdBy": "mittal.sharma"
+  },
+  {
+    "id": "con-3",
+    "contactCode": "CON-1003",
+    "name": "Vikram Mehta",
+    "organizationName": "Reliance Industries Ltd",
+    "mobile": "9988776655",
+    "officePhone": "0223555500",
+    "phone3": "",
+    "phone4": "",
+    "phone5": "",
+    "emailAddresses": [
+      {
+        "id": "em-3",
+        "email": "vikram.mehta@ril.com",
+        "isPrimary": true,
+        "isOptedOut": false,
+        "isInvalidBounce": false
+      }
+    ],
+    "assignedTo": "rahul.verma",
+    "isPrimaryContact": true,
+    "designation": "Chief Technology Officer (CTO)",
+    "department": "Information Technology (IT)",
+    "leftJob": "No",
+    "communicationType": [
+      "Call",
+      "Meeting"
+    ],
+    "doNotCall": false,
+    "description": "Digital transformation committee head.",
+    "createdAt": "2026-10-20T05:42:59.754Z",
+    "updatedAt": "2026-10-30T05:42:59.754Z",
+    "createdBy": "rahul.verma"
+  }
+]

@@ -8,3 +8,6 @@ export * from './useLeads';
 export * from './useOpportunities';
 export * from './useQuotations';
 export * from './useProducts';
+export * from './useMasterData';
+export * from './useGlobalSearch';
+export * from './useAuditLogs';

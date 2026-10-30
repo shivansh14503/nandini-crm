@@ -19,20 +19,24 @@ import { DataImportModal } from '../../common/import';
 import { RelatedModulesSidebar, RelatedRecordsTableView } from '../../common/Drawer';
 import { RelatedSecondaryDrawer, type SecondaryDrawerEntity } from '../../common/RelatedSecondaryDrawer';
 import type { DataTableColumn, DataTableFilterItem } from '../../common/DataTable';
-import { ROUTES } from '../../../config/constants';
-import { getRelatedModulesForEntity } from '@/config/relatedModules.config';
-import { useCrmDataVersion } from '@/services';
+import { ROUTES } from '@/config/constants';
+import { useAuth } from '@/context/AuthContext';
+import { useRelatedModulesForEntity } from '@/config/relatedModules.config';
 import { useContacts, useBulkDeleteContacts } from '@/hooks/queries';
-import type { Contact } from '../../../types/contact.types';
+import type { Contact } from '@/types/contact.types';
 import type { ContactFilterTab } from './types';
 import { ContactDetailDrawer } from '../ContactDetailDrawer';
 
+
+/** Stable empty list while the first page loads (keeps memoized filters from recomputing). */
+const NO_RECORDS: Contact[] = [];
 export function ContactsMasterView() {
     const router = useRouter();
+    const { user } = useAuth();
+    const currentUsername = user?.username || '';
 
-    const { data: contacts, refetch } = useContacts();
+    const { data: contacts = NO_RECORDS, refetch } = useContacts();
     const bulkDeleteMutation = useBulkDeleteContacts();
-    const crmDataVersion = useCrmDataVersion();
     const [activeTab, setActiveTab] = useState<ContactFilterTab>('all');
     const [searchQuery, setSearchQuery] = useState('');
     const [selectedIds, setSelectedIds] = useState<string[]>([]);
@@ -64,7 +68,7 @@ export function ContactsMasterView() {
     // ── Filter Tabs Configuration ────────────────────────────────────────────
     const filterItems: DataTableFilterItem<ContactFilterTab>[] = useMemo(() => {
         const primary = contacts.filter((c) => c.isPrimaryContact).length;
-        const myContacts = contacts.filter((c) => c.assignedTo === 'mittal.sharma').length;
+        const myContacts = currentUsername ? contacts.filter((c) => c.assignedTo === currentUsername).length : 0;
         const oneWeekAgo = new Date().getTime() - 7 * 86400000;
         const recentlyAdded = contacts.filter((c) => new Date(c.createdAt).getTime() >= oneWeekAgo).length;
 
@@ -94,7 +98,7 @@ export function ContactsMasterView() {
                 count: recentlyAdded,
             },
         ];
-    }, [contacts]);
+    }, [contacts, currentUsername]);
 
     // ── Filter & Search Logic ────────────────────────────────────────────────
     const filteredContacts = useMemo(() => {
@@ -103,7 +107,7 @@ export function ContactsMasterView() {
         if (activeTab === 'primary') {
             result = result.filter((c) => c.isPrimaryContact);
         } else if (activeTab === 'my_contacts') {
-            result = result.filter((c) => c.assignedTo === 'mittal.sharma');
+            result = currentUsername ? result.filter((c) => c.assignedTo === currentUsername) : [];
         } else if (activeTab === 'recently_added') {
             const oneWeekAgo = new Date().getTime() - 7 * 86400000;
             result = result.filter((c) => new Date(c.createdAt).getTime() >= oneWeekAgo);
@@ -144,7 +148,7 @@ export function ContactsMasterView() {
         }
 
         return result;
-    }, [contacts, activeTab, searchQuery, sortField, sortOrder]);
+    }, [contacts, activeTab, searchQuery, sortField, sortOrder, currentUsername]);
 
     const handleSort = (field: string) => {
         if (sortField === field) {
@@ -291,7 +295,7 @@ export function ContactsMasterView() {
                 minWidth: 140,
                 render: (c) => (
                     <Typography sx={{ fontSize: '0.78rem', color: '#64748b' }}>
-                        {c.assignedTo || 'mittal.sharma'}
+                        {c.assignedTo || '-'}
                     </Typography>
                 ),
             },
@@ -299,12 +303,7 @@ export function ContactsMasterView() {
         []
     );
 
-    const relatedModules = useMemo(() => {
-        // Related counts come from other entities' stores; recompute whenever any of them changes.
-        void crmDataVersion;
-        if (!selectedDrawerContact) return [];
-        return getRelatedModulesForEntity('contact', selectedDrawerContact, setActiveRelatedModule);
-    }, [selectedDrawerContact, crmDataVersion]);
+    const relatedModules = useRelatedModulesForEntity('contact', selectedDrawerContact, setActiveRelatedModule);
 
     // Falls back to the first module until the user explicitly picks one.
     const effectiveRelatedModule = activeRelatedModule ?? relatedModules[0]?.id ?? null;

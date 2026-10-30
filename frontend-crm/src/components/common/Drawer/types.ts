@@ -1,5 +1,6 @@
 import React from 'react';
 import type { SxProps, Theme } from '@mui/material';
+import type { AuditEntityType } from '@/hooks/queries/useAuditLogs';
 
 export interface DrawerTabItem {
     id: string;
@@ -73,8 +74,9 @@ export interface EntityDetailDrawerProps {
     formTabs?: readonly FormTabDefinition[] | FormTabDefinition[];
     tabContents?: Record<string, React.ReactNode>;
     children?: React.ReactNode;
-    auditRevisions?: AuditRevisionItem[];
-    includeChangesTab?: boolean; // Default true: automatically attaches the standardized 'Changes' tab
+    /** The record whose revision trail the 'Changes' tab loads; the tab is omitted without it. */
+    auditEntity?: { type: AuditEntityType; id: string };
+    includeChangesTab?: boolean; // Default true: attaches the standardized 'Changes' tab (needs auditEntity)
     changesTabLabel?: string; // Default 'Changes'
     defaultTabIndex?: number;
     statusText?: string;

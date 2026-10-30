@@ -1,8 +1,3 @@
-import { contactService, leadService, organizationService, productService } from '@/services';
-import type { ContactFormData } from '@/types/contact.types';
-import type { LeadFormData } from '@/types/lead.types';
-import type { ProductFormData } from '@/types/product.types';
-import type { OrganizationFormData } from '@/types/organization.types';
 import type { ColumnMapping, ImportEntityConfig, ImportEntityType, MappedRow, ParsedFile } from './types';
 
 export const IMPORT_CONFIGS: Record<ImportEntityType, ImportEntityConfig> = {
@@ -115,99 +110,6 @@ export function mapAndValidateRows(entity: ImportEntityType, parsed: ParsedFile,
         if (values.email && !EMAIL_RE.test(values.email)) errors.push('Invalid email');
         return { rowNumber: idx + 2, values, errors };
     });
-}
-
-const emailList = (email: string) =>
-    email
-        ? [{ id: `email-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`, email, isPrimary: true, isOptedOut: false, isInvalidBounce: false }]
-        : [];
-
-/** Creates the given valid rows via the entity service. Returns the number created. */
-export async function importRows(entity: ImportEntityType, rows: MappedRow[]): Promise<number> {
-    let created = 0;
-    for (const { values: v } of rows) {
-        switch (entity) {
-            case 'organizations': {
-                const data: Partial<OrganizationFormData> = {
-                    organizationName: v.organizationName,
-                    mailingName: v.organizationName,
-                    natureOfBusiness: v.natureOfBusiness as OrganizationFormData['natureOfBusiness'],
-                    customerType: v.customerType as OrganizationFormData['customerType'],
-                    accountStatus: (v.accountStatus || 'Active') as OrganizationFormData['accountStatus'],
-                    billingStreet: v.billingStreet,
-                    billingCity: v.billingCity,
-                    billingState: v.billingState,
-                    gstNumber: v.gstNumber,
-                };
-                await organizationService.create(data);
-                break;
-            }
-            case 'contacts': {
-                const data: ContactFormData = {
-                    name: v.name,
-                    organizationName: v.organizationName,
-                    mobile: v.mobile,
-                    officePhone: v.officePhone,
-                    phone3: '',
-                    phone4: '',
-                    phone5: '',
-                    emailAddresses: emailList(v.email),
-                    assignedTo: '',
-                    isPrimaryContact: false,
-                    designation: v.designation,
-                    department: v.department,
-                    leftJob: 'No',
-                    communicationType: [],
-                    doNotCall: false,
-                    description: v.description,
-                };
-                await contactService.create(data);
-                break;
-            }
-            case 'products': {
-                const data: ProductFormData = {
-                    productName: v.productName,
-                    hsnCode: v.hsnCode,
-                    category: v.category as ProductFormData['category'],
-                    type: v.type as ProductFormData['type'],
-                    manufacturer: v.manufacturer,
-                    taxType: v.taxRate ? 'GST' : '',
-                    taxRate: v.taxRate as ProductFormData['taxRate'],
-                    discount: '',
-                    cost: v.cost,
-                    mrp: v.mrp,
-                    msp: '',
-                    contractCreate: '',
-                    description: v.description,
-                    termsAndConditions: '',
-                };
-                await productService.create(data);
-                break;
-            }
-            case 'leads': {
-                const data: LeadFormData = {
-                    name: v.name,
-                    mobile: v.mobile,
-                    emailAddresses: emailList(v.email),
-                    leadSource: v.leadSource,
-                    productCategory: [],
-                    followupType: '',
-                    addDescription: v.addDescription,
-                    assignedTo: '',
-                    organizationName: v.organizationName,
-                    leadType: v.leadType,
-                    status: v.status || 'New',
-                    nextFollowupDate: '',
-                    primaryCity: v.primaryCity,
-                    primaryState: v.primaryState,
-                };
-                await leadService.create(data);
-                break;
-            }
-        }
-        created += 1;
-    }
-    return created;
 }
 
 const csvCell = (s: string) => (/[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s);

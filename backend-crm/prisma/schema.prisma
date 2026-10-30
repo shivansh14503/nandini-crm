@@ -1,0 +1,674 @@
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// Nandini CRM â€” SQL Server schema
+//
+// Contracts mirror frontend-crm/src/types/*.types.ts; service mappers translate rows to those shapes.
+//
+// SQL Server rules applied throughout:
+// â€¢ No scalar lists: string arrays (productCategory, communicationType, copyActivitiesTo, partnerCompanies)
+//   are JSON in NVarChar(Max); repeating objects (emails, line items) are child tables.
+// â€¢ No multiple cascade paths (error 1785): every cross-entity FK is NoAction/NoAction. Only owned
+//   children (emails, line items) cascade from their single parent.
+// â€¢ Core entities are soft-deleted (isDeleted / deletedAt), so FKs never block a "delete".
+// â€¢ Column widths â‰¥ the frontend's FIELD_MAX_LENGTH (frontend-crm/src/config/fieldLimits.ts).
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+
+generator client {
+  provider            = "prisma-client"
+  output              = "../src/generated/prisma"
+  moduleFormat        = "esm"
+  runtime             = "nodejs"
+  importFileExtension = "js"
+}
+
+// Connection URL lives in prisma.config.ts (Prisma 7); runtime connects through @prisma/adapter-mssql.
+datasource db {
+  provider = "sqlserver"
+}
+
+// â”€â”€ Identity â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+
+/// Mapped onto the pre-existing `Users` table (Id, Username, Password, Role) so current accounts keep working.
+/// Every column added beyond those four has a default, so existing rows migrate without manual backfill.
+model User {
+  // Int keeps the existing auth contract (frontend `User.id: number`).
+  id           Int       @id @default(autoincrement()) @map("Id")
+  username     String    @unique @map("Username") @db.NVarChar(50)
+  /// bcrypt hash. Legacy plain-text values are re-hashed on the user's next successful login.
+  passwordHash String    @map("Password") @db.NVarChar(255)
+  role         String    @default("Sales Executive") @map("Role") @db.NVarChar(50)
+  /// Not @unique: SQL Server unique constraints allow a single NULL. Uniqueness is enforced in the service.
+  email        String?   @db.NVarChar(120)
+  fullName     String    @default("") @db.NVarChar(100)
+  phone        String?   @db.NVarChar(20)
+  department   String?   @db.NVarChar(50)
+  isActive     Boolean   @default(true)
+  isGroupUser  Boolean   @default(false)
+  onLeave      Boolean   @default(false)
+  lastLoginAt  DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @default(now()) @updatedAt
+
+  @@index([email])
+  @@index([isActive])
+  @@map("Users")
+}
+
+/// Atomic per-prefix counters behind ORG-0001, CON-0001, â€¦ (see src/utils/codeGenerator.ts).
+model SequenceCounter {
+  prefix       String @id @db.NVarChar(10)
+  currentValue Int    @default(0)
+}
+
+// â”€â”€ Organizations â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+
+model Organization {
+  id          String @id @default(uuid()) @db.NVarChar(50)
+  accountCode String @unique @db.NVarChar(20)
+
+  // Overview
+  organizationName     String    @db.NVarChar(200)
+  mailingName          String?   @db.NVarChar(200)
+  tradeName            String?   @db.NVarChar(200)
+  natureOfBusiness     String?   @db.NVarChar(100)
+  accountStatus        String    @default("Active") @db.NVarChar(20)
+  inactivityReason     String?   @db.NVarChar(500)
+  typeOfEntity         String?   @db.NVarChar(50)
+  customerType         String?   @db.NVarChar(50)
+  sapCodeTallyId       String?   @db.NVarChar(30)
+  showroomBranchCode   String?   @db.NVarChar(30)
+  sourceOfLead         String?   @db.NVarChar(50)
+  /// Display name of the parent corporation (free text in the form); parentOrganizationId links it when known.
+  memberOfParentCorp   String?   @db.NVarChar(200)
+  parentOrganizationId String?   @db.NVarChar(50)
+  numberOfEmployees    String?   @db.NVarChar(30)
+  annualTurnover       String?   @db.NVarChar(30)
+  description          String?   @db.NVarChar(1000)
+  accountVerified      Boolean   @default(false)
+  verifiedAt           DateTime?
+  verifiedBy           String?   @db.NVarChar(50)
+  activeAmc            Boolean   @default(false)
+  activeCloud          Boolean   @default(false)
+  provideSupport       String    @default("Yes") @db.NVarChar(3)
+  assignedUser         String?   @db.NVarChar(50)
+
+  // Billing address (billingStreet mirrors billingAddress for older records)
+  billingAddress    String? @db.NVarChar(250)
+  billingStreet     String? @db.NVarChar(250)
+  billingCity       String? @db.NVarChar(80)
+  billingState      String? @db.NVarChar(80)
+  billingPostalCode String? @db.NVarChar(12)
+  billingCountry    String? @db.NVarChar(80)
+  billingLatitude   String? @db.NVarChar(30)
+
+  // Shipping address
+  shippingAddress        String? @db.NVarChar(250)
+  shippingStreet         String? @db.NVarChar(250)
+  shippingCity           String? @db.NVarChar(80)
+  shippingState          String? @db.NVarChar(80)
+  shippingPostalCode     String? @db.NVarChar(12)
+  shippingCountry        String? @db.NVarChar(80)
+  shippingLongitude      String? @db.NVarChar(30)
+  copyAddressFromBilling Boolean @default(false)
+
+  // Tax & bank
+  registrationType String? @db.NVarChar(30)
+  panNumber        String? @db.NVarChar(10)
+  msmeRegnNumber   String? @db.NVarChar(19)
+  accountName      String? @db.NVarChar(200)
+  bankName         String? @db.NVarChar(100)
+  bankIfscCode     String? @db.NVarChar(11)
+  /// Canonical GSTIN; the API also echoes it as the legacy `gstNumber` alias.
+  gstNo            String? @db.NVarChar(15)
+  cinNo            String? @db.NVarChar(21)
+  tanNumber        String? @db.NVarChar(10)
+  accountNumber    String? @db.NVarChar(18)
+  typeOfAccount    String? @db.NVarChar(30)
+  bankAddress      String? @db.NVarChar(250)
+
+  // Partner licensing: string[] as JSON
+  partnerCompaniesJson String? @db.NVarChar(Max)
+
+  // Audit & soft delete
+  createdBy String    @db.NVarChar(50)
+  updatedBy String?   @db.NVarChar(50)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  isDeleted Boolean   @default(false)
+  deletedAt DateTime?
+
+  parentOrganization Organization?  @relation("OrganizationHierarchy", fields: [parentOrganizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  childOrganizations Organization[] @relation("OrganizationHierarchy")
+  corporateEmails    EntityEmail[]
+  contacts           Contact[]
+  opportunities      Opportunity[]
+  quotations         Quotation[]
+  tickets            Ticket[]
+  convertedLeads     Lead[]         @relation("LeadConvertedOrganization")
+
+  @@index([organizationName])
+  @@index([accountStatus])
+  @@index([assignedUser])
+  @@index([gstNo])
+  @@index([isDeleted, createdAt])
+}
+
+/// Emails owned by exactly one Organization, Contact or Lead (one FK set per row).
+/// Returned by the API as `corporateEmails` (organizations) / `emailAddresses` (contacts, leads).
+model EntityEmail {
+  id              String  @id @default(uuid()) @db.NVarChar(50)
+  email           String  @db.NVarChar(120)
+  isPrimary       Boolean @default(false)
+  isOptedOut      Boolean @default(false)
+  isInvalidBounce Boolean @default(false)
+  sortOrder       Int     @default(0)
+
+  organizationId String? @db.NVarChar(50)
+  contactId      String? @db.NVarChar(50)
+  leadId         String? @db.NVarChar(50)
+
+  // Each parent is the sole cascade path to this table, so cascading is safe here.
+  organization Organization? @relation(fields: [organizationId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  contact      Contact?      @relation(fields: [contactId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  lead         Lead?         @relation(fields: [leadId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([organizationId])
+  @@index([contactId])
+  @@index([leadId])
+  @@index([email])
+}
+
+// â”€â”€ Contacts â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+
+model Contact {
+  id          String @id @default(uuid()) @db.NVarChar(50)
+  contactCode String @unique @db.NVarChar(20)
+
+  name             String  @db.NVarChar(100)
+  /// Denormalized display name; organizationId is the link.
+  organizationName String  @db.NVarChar(200)
+  organizationId   String? @db.NVarChar(50)
+  mobile           String  @db.NVarChar(20)
+  officePhone      String? @db.NVarChar(20)
+  phone3           String? @db.NVarChar(20)
+  phone4           String? @db.NVarChar(20)
+  phone5           String? @db.NVarChar(20)
+  assignedTo       String  @db.NVarChar(50)
+  isPrimaryContact Boolean @default(false)
+  designation      String? @db.NVarChar(100)
+  department       String? @db.NVarChar(100)
+  leftJob          String  @default("No") @db.NVarChar(3)
+  /// string[] as JSON (e.g. ["Call","Email"]).
+  communicationTypeJson String? @db.NVarChar(Max)
+  doNotCall        Boolean @default(false)
+  description      String? @db.NVarChar(2000)
+
+  createdBy String    @db.NVarChar(50)
+  updatedBy String?   @db.NVarChar(50)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  isDeleted Boolean   @default(false)
+  deletedAt DateTime?
+
+  organization   Organization? @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  emailAddresses EntityEmail[]
+  opportunities  Opportunity[]
+  quotations     Quotation[]
+  tickets        Ticket[]
+  convertedLeads Lead[]        @relation("LeadConvertedContact")
+
+  @@index([organizationId])
+  @@index([mobile])
+  @@index([name])
+  @@index([assignedTo])
+  @@index([isDeleted, createdAt])
+}
+
+// â”€â”€ Leads â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+
+model Lead {
+  id       String @id @default(uuid()) @db.NVarChar(50)
+  leadCode String @unique @db.NVarChar(20)
+
+  // Overview
+  name                String  @db.NVarChar(100)
+  mobile              String  @db.NVarChar(20)
+  mailingName         String? @db.NVarChar(200)
+  designation         String? @db.NVarChar(100)
+  leadSource          String  @db.NVarChar(50)
+  /// string[] as JSON.
+  productCategoryJson String  @db.NVarChar(Max)
+  followupType        String? @db.NVarChar(30)
+  addDescription      String  @db.NVarChar(2000)
+  registrationType    String? @db.NVarChar(30)
+  turnover            String? @db.NVarChar(30)
+  assignedTo          String  @db.NVarChar(50)
+  otherPhone          String? @db.NVarChar(20)
+  organizationName    String? @db.NVarChar(200)
+  department          String? @db.NVarChar(100)
+  leadType            String  @db.NVarChar(30)
+  status              String  @default("New") @db.NVarChar(30)
+  nextFollowupDate    DateTime @db.Date
+  nextFollowupTime    String? @db.NVarChar(20)
+  description         String? @db.NVarChar(2000)
+  noOfEmployee        String? @db.NVarChar(30)
+  referredBy          String? @db.NVarChar(200)
+
+  // Primary address
+  primaryAddress    String? @db.NVarChar(250)
+  primaryCity       String? @db.NVarChar(80)
+  primaryState      String? @db.NVarChar(80)
+  primaryPostalCode String? @db.NVarChar(12)
+  primaryCountry    String? @db.NVarChar(80)
+  primaryLatitude   String? @db.NVarChar(30)
+
+  // Other address
+  otherAddress        String? @db.NVarChar(250)
+  otherCity           String? @db.NVarChar(80)
+  otherState          String? @db.NVarChar(80)
+  otherPostalCode     String? @db.NVarChar(12)
+  otherCountry        String? @db.NVarChar(80)
+  otherLongitude      String? @db.NVarChar(30)
+  copyAddressFromLeft Boolean @default(false)
+
+  // Conversion (set atomically by POST /api/leads/:id/convert)
+  convertedAt             DateTime?
+  convertedBy             String?   @db.NVarChar(50)
+  convertedOrganizationId String?   @db.NVarChar(50)
+  convertedContactId      String?   @db.NVarChar(50)
+  convertedOpportunityId  String?   @db.NVarChar(50)
+
+  createdBy String    @db.NVarChar(50)
+  updatedBy String?   @db.NVarChar(50)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  isDeleted Boolean   @default(false)
+  deletedAt DateTime?
+
+  emailAddresses        EntityEmail[]
+  convertedOrganization Organization? @relation("LeadConvertedOrganization", fields: [convertedOrganizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  convertedContact      Contact?      @relation("LeadConvertedContact", fields: [convertedContactId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  convertedOpportunity  Opportunity?  @relation("LeadConvertedOpportunity", fields: [convertedOpportunityId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([status])
+  @@index([assignedTo])
+  @@index([mobile])
+  @@index([nextFollowupDate])
+  @@index([isDeleted, createdAt])
+}
+
+// â”€â”€ Products â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+
+model Product {
+  id          String @id @default(uuid()) @db.NVarChar(50)
+  productCode String @unique @db.NVarChar(20)
+
+  productName        String   @db.NVarChar(200)
+  hsnCode            String?  @db.NVarChar(8)
+  category           String?  @db.NVarChar(100)
+  type               String?  @db.NVarChar(30)
+  manufacturer       String?  @db.NVarChar(100)
+  taxType            String?  @default("GST") @db.NVarChar(10)
+  taxRate            String?  @db.NVarChar(10)
+  // The API returns these as strings (ProductFormData); stored as decimals for reporting.
+  discount           Decimal? @db.Decimal(5, 2)
+  cost               Decimal? @db.Decimal(18, 2)
+  mrp                Decimal? @db.Decimal(18, 2)
+  msp                Decimal? @db.Decimal(18, 2)
+  contractCreate     String   @default("No") @db.NVarChar(3)
+  description        String?  @db.NVarChar(2000)
+  termsAndConditions String?  @db.NVarChar(2000)
+  isActive           Boolean  @default(true)
+
+  createdBy String    @db.NVarChar(50)
+  updatedBy String?   @db.NVarChar(50)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  isDeleted Boolean   @default(false)
+  deletedAt DateTime?
+
+  opportunityLineItems OpportunityLineItem[]
+  quotationLineItems   QuotationLineItem[]
+
+  @@index([productName])
+  @@index([category])
+  @@index([isDeleted, createdAt])
+}
+
+// â”€â”€ Opportunities â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+
+model Opportunity {
+  id              String @id @default(uuid()) @db.NVarChar(50)
+  opportunityCode String @unique @db.NVarChar(20)
+
+  opportunityName     String?   @db.NVarChar(200)
+  /// string[] as JSON.
+  productCategoryJson String    @db.NVarChar(Max)
+  contactName         String    @db.NVarChar(100)
+  contactId           String?   @db.NVarChar(50)
+  organizationName    String    @db.NVarChar(200)
+  organizationId      String?   @db.NVarChar(50)
+  contactNumber       String    @db.NVarChar(20)
+  emailAddress        String?   @db.NVarChar(120)
+  referredBy          String?   @db.NVarChar(200)
+  type                String    @db.NVarChar(50)
+  salesStage          String    @db.NVarChar(50)
+  leadSource          String    @db.NVarChar(50)
+  leadGivenBy         String    @db.NVarChar(200)
+  nextFollowupDate    DateTime  @db.Date
+  nextFollowupTime    String?   @db.NVarChar(20)
+  followupType        String?   @db.NVarChar(30)
+  addDescription      String    @db.NVarChar(2000)
+  description         String?   @db.NVarChar(2000)
+  assignedTo          String    @db.NVarChar(50)
+
+  // Billing
+  tallySerialNo String?   @db.NVarChar(30)
+  invoiceNo     String?   @db.NVarChar(30)
+  invoiceDate   DateTime? @db.Date
+
+  commission  String  @db.NVarChar(50)
+  addDocument String? @default("No") @db.NVarChar(3)
+
+  // Line-item totals (verified server-side)
+  /// No DB default: Prisma writes SQL Server string defaults without the N prefix (â‚¹ â†’ ?). The API always sets it.
+  currency        String  @db.NVarChar(30)
+  groupName       String? @db.NVarChar(80)
+  lumpSumDiscount Decimal @default(0) @db.Decimal(18, 2)
+  totalAmount     Decimal @default(0) @db.Decimal(18, 2)
+  totalDiscount   Decimal @default(0) @db.Decimal(18, 2)
+  subtotal        Decimal @default(0) @db.Decimal(18, 2)
+  totalTax        Decimal @default(0) @db.Decimal(18, 2)
+  grandTotal      Decimal @default(0) @db.Decimal(18, 2)
+
+  createdBy String    @db.NVarChar(50)
+  updatedBy String?   @db.NVarChar(50)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  isDeleted Boolean   @default(false)
+  deletedAt DateTime?
+
+  organization   Organization?         @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  contact        Contact?              @relation(fields: [contactId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  lineItems      OpportunityLineItem[]
+  quotations     Quotation[]
+  convertedLeads Lead[]                @relation("LeadConvertedOpportunity")
+
+  @@index([organizationId])
+  @@index([contactId])
+  @@index([salesStage])
+  @@index([assignedTo])
+  @@index([nextFollowupDate])
+  @@index([isDeleted, createdAt])
+}
+
+model OpportunityLineItem {
+  id            String  @id @default(uuid()) @db.NVarChar(50)
+  opportunityId String  @db.NVarChar(50)
+  productId     String? @db.NVarChar(50)
+  productName   String  @db.NVarChar(200)
+  quantity      Decimal @db.Decimal(18, 2)
+  amount        Decimal @db.Decimal(18, 2)
+  discount      Decimal @default(0) @db.Decimal(18, 2)
+  discountType  String  @default("percentage") @db.NVarChar(10)
+  salePrice     Decimal @default(0) @db.Decimal(18, 2)
+  taxRate       String  @db.NVarChar(20)
+  taxAmount     Decimal @default(0) @db.Decimal(18, 2)
+  total         Decimal @default(0) @db.Decimal(18, 2)
+  description   String? @db.NVarChar(2000)
+  note          String? @db.NVarChar(2000)
+  sortOrder     Int     @default(0)
+
+  opportunity Opportunity @relation(fields: [opportunityId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  product     Product?    @relation(fields: [productId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([opportunityId])
+  @@index([productId])
+}
+
+// â”€â”€ Quotations â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+
+model Quotation {
+  id            String @id @default(uuid()) @db.NVarChar(50)
+  quotationCode String @unique @db.NVarChar(20)
+
+  // Overview
+  quotationTitle               String   @db.NVarChar(200)
+  quoteStage                   String   @default("Draft") @db.NVarChar(30)
+  quotationDate                DateTime @db.Date
+  validUntil                   DateTime @db.Date
+  remarks                      String?  @db.NVarChar(2000)
+  termsAndCondition            String   @db.NVarChar(100)
+  termsAndConditionDescription String?  @db.NVarChar(4000)
+  assignedTo                   String   @db.NVarChar(50)
+  opportunityName              String   @db.NVarChar(200)
+  company                      String   @db.NVarChar(100)
+  validationPeriod             String   @db.NVarChar(30)
+  otherRef                     String?  @db.NVarChar(80)
+  paymentTerms                 String   @db.NVarChar(100)
+  paymentTermsDescription      String?  @db.NVarChar(4000)
+  preparedFor                  String   @db.NVarChar(200)
+
+  // Line-item totals (verified server-side)
+  /// No DB default: Prisma writes SQL Server string defaults without the N prefix (â‚¹ â†’ ?). The API always sets it.
+  currency        String  @db.NVarChar(30)
+  groupName       String? @db.NVarChar(80)
+  lumpSumDiscount Decimal @default(0) @db.Decimal(18, 2)
+  totalAmount     Decimal @default(0) @db.Decimal(18, 2)
+  totalDiscount   Decimal @default(0) @db.Decimal(18, 2)
+  subtotal        Decimal @default(0) @db.Decimal(18, 2)
+  totalTax        Decimal @default(0) @db.Decimal(18, 2)
+  grandTotal      Decimal @default(0) @db.Decimal(18, 2)
+
+  // Customer & address
+  organizationName String?  @db.NVarChar(200)
+  organizationId   String?  @db.NVarChar(50)
+  contactName      String   @db.NVarChar(100)
+  contactId        String?  @db.NVarChar(50)
+  contactMobile    String?  @db.NVarChar(20)
+  mailingName      String?  @db.NVarChar(200)
+  gstNo            String?  @db.NVarChar(15)
+  contactEmail     String?  @db.NVarChar(120)
+
+  billingAddress    String  @db.NVarChar(250)
+  billingCity       String  @db.NVarChar(80)
+  billingState      String  @db.NVarChar(80)
+  billingPostalCode String  @db.NVarChar(12)
+  billingCountry    String  @db.NVarChar(80)
+
+  shippingAddress        String? @db.NVarChar(250)
+  shippingCity           String? @db.NVarChar(80)
+  shippingState          String? @db.NVarChar(80)
+  shippingPostalCode     String? @db.NVarChar(12)
+  shippingCountry        String? @db.NVarChar(80)
+  copyAddressFromBilling Boolean @default(true)
+
+  // Linked context & legacy aliases
+  opportunityId      String?   @db.NVarChar(50)
+  status             String?   @db.NVarChar(30)
+  quotationSubject   String?   @db.NVarChar(200)
+  notes              String?   @db.NVarChar(2000)
+  termsAndConditions String?   @db.NVarChar(4000)
+
+  createdBy String    @db.NVarChar(50)
+  updatedBy String?   @db.NVarChar(50)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  isDeleted Boolean   @default(false)
+  deletedAt DateTime?
+
+  opportunity  Opportunity?        @relation(fields: [opportunityId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  organization Organization?       @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  contact      Contact?            @relation(fields: [contactId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  lineItems    QuotationLineItem[]
+
+  @@index([opportunityId])
+  @@index([organizationId])
+  @@index([quoteStage])
+  @@index([assignedTo])
+  @@index([isDeleted, createdAt])
+}
+
+model QuotationLineItem {
+  id           String  @id @default(uuid()) @db.NVarChar(50)
+  quotationId  String  @db.NVarChar(50)
+  productId    String? @db.NVarChar(50)
+  productName  String  @db.NVarChar(200)
+  quantity     Decimal @db.Decimal(18, 2)
+  amount       Decimal @db.Decimal(18, 2)
+  discount     Decimal @default(0) @db.Decimal(18, 2)
+  discountType String  @default("percentage") @db.NVarChar(10)
+  salePrice    Decimal @default(0) @db.Decimal(18, 2)
+  taxRate      String  @db.NVarChar(20)
+  taxAmount    Decimal @default(0) @db.Decimal(18, 2)
+  total        Decimal @default(0) @db.Decimal(18, 2)
+  description  String? @db.NVarChar(2000)
+  note         String? @db.NVarChar(2000)
+  sortOrder    Int     @default(0)
+
+  quotation Quotation @relation(fields: [quotationId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  product   Product?  @relation(fields: [productId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([quotationId])
+  @@index([productId])
+}
+
+// â”€â”€ Tickets â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+
+model Ticket {
+  id           String @id @default(uuid()) @db.NVarChar(50)
+  ticketNumber String @unique @db.NVarChar(20)
+
+  amcFlag                 Boolean  @default(false)
+  cloudFlag               Boolean  @default(false)
+  ticketSubject           String?  @db.NVarChar(200)
+  organizationName        String   @db.NVarChar(200)
+  organizationId          String?  @db.NVarChar(50)
+  contactPersonName       String   @db.NVarChar(100)
+  contactId               String?  @db.NVarChar(50)
+  contactNumber           String?  @db.NVarChar(20)
+  contactEmail            String?  @db.NVarChar(120)
+  ticketPriority          String   @db.NVarChar(20)
+  source                  String   @default("Call") @db.NVarChar(20)
+  supportType             String   @default("Free") @db.NVarChar(20)
+  supportMode             String   @db.NVarChar(50)
+  natureOfCall            String   @db.NVarChar(100)
+  ticketStatus            String   @default("New") @db.NVarChar(30)
+  /// Local date-time from the form (`YYYY-MM-DDTHH:mm`), stored as datetime for overdue queries.
+  dueDate                 DateTime
+  problemReported         String   @db.NVarChar(2000)
+  problemObserved         String?  @db.NVarChar(2000)
+  resolution              String?  @db.NVarChar(2000)
+  reasonForEscalatedCalls String?  @db.NVarChar(2000)
+  rca                     String?  @db.NVarChar(2000)
+  addDescription          String?  @db.NVarChar(2000)
+  accountAddress          String?  @db.NVarChar(250)
+  leftJob                 String   @default("No") @db.NVarChar(3)
+  assignedTo              String   @db.NVarChar(50)
+  partnerCompany          String?  @db.NVarChar(200)
+  partnerCompanyContact   String?  @db.NVarChar(100)
+
+  createdBy String    @db.NVarChar(50)
+  updatedBy String?   @db.NVarChar(50)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  isDeleted Boolean   @default(false)
+  deletedAt DateTime?
+
+  organization Organization? @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  contact      Contact?      @relation(fields: [contactId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([ticketStatus])
+  @@index([ticketPriority])
+  @@index([assignedTo])
+  @@index([dueDate])
+  @@index([organizationId])
+  @@index([isDeleted, createdAt])
+}
+
+// â”€â”€ Masters (reference data, seeded) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+
+/// Nature of Call master: tickets must use one of these names; `priority` suggests the ticket priority.
+model NatureOfCall {
+  id        String   @id @default(uuid()) @db.NVarChar(50)
+  name      String   @unique @db.NVarChar(100)
+  /// High | Medium | Low
+  priority  String   @db.NVarChar(10)
+  isActive  Boolean  @default(true)
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+/// Channel / referral partner firms involved in support tickets.
+model PartnerCompany {
+  id              String   @id @default(uuid()) @db.NVarChar(50)
+  companyName     String   @unique @db.NVarChar(200)
+  natureOfPartner String?  @db.NVarChar(100)
+  phone           String?  @db.NVarChar(20)
+  email           String?  @db.NVarChar(120)
+  city            String?  @db.NVarChar(80)
+  billingCountry  String?  @db.NVarChar(80)
+  assignedTo      String?  @db.NVarChar(50)
+  isActive        Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  contacts PartnerCompanyContact[]
+}
+
+model PartnerCompanyContact {
+  id               String   @id @default(uuid()) @db.NVarChar(50)
+  partnerCompanyId String   @db.NVarChar(50)
+  name             String   @db.NVarChar(100)
+  designation      String?  @db.NVarChar(100)
+  mobile           String?  @db.NVarChar(20)
+  officePhone      String?  @db.NVarChar(20)
+  email            String?  @db.NVarChar(120)
+  location         String?  @db.NVarChar(80)
+  isActive         Boolean  @default(true)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  partnerCompany PartnerCompany @relation(fields: [partnerCompanyId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([partnerCompanyId])
+}
+
+/// ISO 3166-1 countries (seeded from CRM_Address_Master.xlsx â†’ Country_Master).
+model Country {
+  iso2Code    String @id @db.NVarChar(2)
+  iso3Code    String @db.NVarChar(3)
+  countryName String @db.NVarChar(100)
+  numericCode Int
+
+  subdivisions Subdivision[]
+}
+
+/// ISO 3166-2 states / provinces / regions (seeded from State_Region_Master).
+model Subdivision {
+  subdivisionCode String @id @db.NVarChar(10)
+  countryIso2     String @db.NVarChar(2)
+  subdivisionName String @db.NVarChar(150)
+  subdivisionType String @db.NVarChar(60)
+
+  country Country @relation(fields: [countryIso2], references: [iso2Code], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([countryIso2])
+}
+
+// â”€â”€ Audit trail â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+
+model AuditLog {
+  id          String   @id @default(uuid()) @db.NVarChar(50)
+  entityType  String   @db.NVarChar(30)
+  entityId    String   @db.NVarChar(50)
+  /// CREATE | UPDATE | DELETE | CONVERT | IMPORT | STATUS_CHANGE â€¦
+  action      String   @db.NVarChar(30)
+  changedBy   String   @db.NVarChar(50)
+  /// JSON diff `{ field: { from, to } }` or a snapshot, depending on the action.
+  changesJson String?  @db.NVarChar(Max)
+  createdAt   DateTime @default(now())
+
+  @@index([entityType, entityId, createdAt])
+  @@index([changedBy])
+}

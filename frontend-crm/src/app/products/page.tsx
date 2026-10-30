@@ -3,12 +3,12 @@
 import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Box } from '@mui/material';
-import { useAuth } from '@/src/context/AuthContext';
-import { ROUTES } from '@/src/config/constants';
-import { Navbar } from '@/src/components/layout/Navbar';
-import { LoadingScreen } from '@/src/components/common/LoadingScreen';
-import { ErrorAlert } from '@/src/components/common/ErrorAlert';
-import { ProductsMasterView } from '@/src/components/products';
+import { useAuth } from '@/context/AuthContext';
+import { ROUTES } from '@/config/constants';
+import { Navbar } from '@/components/layout/Navbar';
+import { LoadingScreen } from '@/components/common/LoadingScreen';
+import { ErrorAlert } from '@/components/common/ErrorAlert';
+import { ProductsMasterView } from '@/components/products';
 
 export default function ProductsPage() {
     const router = useRouter();

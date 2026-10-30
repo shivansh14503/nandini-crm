@@ -12,8 +12,8 @@ import HistoryIcon from '@mui/icons-material/History';
 import PersonOutlinedIcon from '@mui/icons-material/PersonOutlined';
 import ApartmentIcon from '@mui/icons-material/Apartment';
 
-import { ROUTES } from '../../config/constants';
-import { getRelatedModulesForEntity } from '@/config/relatedModules.config';
+import { ROUTES } from '@/config/constants';
+import { useRelatedModulesForEntity } from '@/config/relatedModules.config';
 import { RecordLink } from '../common/RecordLink';
 import { useAuth } from '@/context/AuthContext';
 import { CommonMasterView } from '../common/CommonMasterView';
@@ -28,7 +28,7 @@ import {
     DrawerMetricGrid,
 } from '../common/Drawer';
 import type { DataTableColumn, DataTableFilterItem } from '../common/DataTable';
-import { organizationService, useCrmDataVersion } from '@/services';
+import { organizationService } from '@/services';
 import { useOrganizations, useBulkDeleteOrganizations } from '@/hooks/queries';
 import type { ExtendedOrganization } from '@/types/organization.types';
 import type { Contact } from '@/types/contact.types';
@@ -65,16 +65,18 @@ const formatNatureLabel = (nature: string = '') => {
     return nature;
 };
 
+
+/** Stable empty list while the first page loads (keeps memoized filters from recomputing). */
+const NO_RECORDS: ExtendedOrganization[] = [];
 export function OrganizationsMasterView() {
     const router = useRouter();
     const { user } = useAuth();
     const isAdmin = user?.role?.toLowerCase() === 'admin';
 
     // ── State ─────────────────────────────────────────────────────────────────
-    const { data: organizations, refetch } = useOrganizations();
+    const { data: organizations = NO_RECORDS, refetch } = useOrganizations();
     const bulkDeleteMutation = useBulkDeleteOrganizations();
-    const crmDataVersion = useCrmDataVersion();
-    const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set(['org-004']));
+    const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
     const [activeTab, setActiveTab] = useState<FilterTab>('all');
     const [searchQuery, setSearchQuery] = useState('');
     const [rowsPerPage, setRowsPerPage] = useState<number>(25);
@@ -109,12 +111,7 @@ export function OrganizationsMasterView() {
         setActiveRelatedModule('contacts');
     }, []);
 
-    const relatedModules = useMemo(() => {
-        // Related counts come from other entities' stores; recompute whenever any of them changes.
-        void crmDataVersion;
-        if (!selectedDrawerOrg) return [];
-        return getRelatedModulesForEntity('organization', selectedDrawerOrg, setActiveRelatedModule);
-    }, [selectedDrawerOrg, crmDataVersion]);
+    const relatedModules = useRelatedModulesForEntity('organization', selectedDrawerOrg, setActiveRelatedModule);
 
     const activeModuleMeta = useMemo(
         () => relatedModules.find((m) => m.id === activeRelatedModule) || relatedModules[0],
@@ -357,9 +354,17 @@ export function OrganizationsMasterView() {
             }
         } else if (action === 'active' || action === 'inactive') {
             const status = action === 'active' ? 'Active' : 'Inactive';
-            // Saves through the service, whose sync notification refreshes the organizations cache.
-            organizationService.updateStatusBulk(selectedIds, status);
-            setToast({ open: true, message: `${selectedIds.size} organizations updated to ${status}.`, severity: 'success' });
+            try {
+                // Saves through the service, whose sync notification refreshes the organizations cache.
+                const updated = await organizationService.updateStatusBulk(selectedIds, status);
+                setToast({ open: true, message: `${updated.length} organizations updated to ${status}.`, severity: 'success' });
+            } catch (err) {
+                setToast({
+                    open: true,
+                    message: err instanceof Error ? err.message : 'Failed to update organization status.',
+                    severity: 'error',
+                });
+            }
         } else if (action === 'export') {
             handleExport(true);
         }
@@ -371,13 +376,13 @@ export function OrganizationsMasterView() {
             {
                 id: 'all',
                 label: 'All Organizations',
-                count: 11417,
+                count: organizations.length,
             },
             {
                 id: 'recent',
                 label: 'Recently Viewed',
                 icon: <HistoryIcon sx={{ fontSize: 15, color: '#94a3b8' }} />,
-                count: 24,
+                count: organizations.filter((o) => o.isRecentlyViewed).length,
             },
             {
                 id: 'my',
@@ -395,7 +400,7 @@ export function OrganizationsMasterView() {
                 dotColor: '#10b981',
             },
         ],
-        []
+        [organizations]
     );
 
     // ── Declarative Column Definitions ────────────────────────────────────────
@@ -612,7 +617,7 @@ export function OrganizationsMasterView() {
                 minWidth: 140,
                 render: (org) => (
                     <Typography sx={{ fontSize: '0.78rem', color: '#64748b' }}>
-                        {org.assignedUser || 'mittal.sharma'}
+                        {org.assignedUser || '-'}
                     </Typography>
                 ),
             },
@@ -678,7 +683,7 @@ export function OrganizationsMasterView() {
                 },
                 onDeselectAll: () => setSelectedIds(new Set()),
                 totalRecords,
-                displayTotalRecords: '11,417',
+                displayTotalRecords: totalRecords.toLocaleString('en-IN'),
                 currentPage,
                 rowsPerPage,
                 totalPages,
@@ -725,7 +730,7 @@ export function OrganizationsMasterView() {
                 page: currentPage - 1,
                 rowsPerPage,
                 totalCount: totalRecords,
-                displayTotalCount: '11,417',
+                displayTotalCount: totalRecords.toLocaleString('en-IN'),
                 entityLabel: 'Organizations',
                 pageSizeOptions: [10, 25, 50, 100],
                 onPageChange: (pageZeroBased) => setCurrentPage(pageZeroBased + 1),

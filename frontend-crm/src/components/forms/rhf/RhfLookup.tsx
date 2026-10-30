@@ -6,8 +6,10 @@ import { useController, type FieldPath, type FieldValues } from 'react-hook-form
 import { FormField } from '../FormField';
 import { LookupField } from '../LookupField';
 import { resolveFieldSize, type FieldSize } from '../fieldSizing';
-import { RecordLookupModal, LOOKUP_DISPLAY_VALUE, LOOKUP_FIND_RECORD } from '@/components/common/lookup';
-import { getAssignableUsernames } from '@/data/mockUsers';
+import { RecordLookupModal, LOOKUP_DISPLAY_VALUE, findLookupRecord } from '@/components/common/lookup';
+import { getAssignableUsernames } from '@/services/masterData.store';
+import { useContacts, useOrganizations } from '@/hooks/queries';
+import { useMasterData } from '@/hooks/queries/useMasterData';
 import type { LookupKind, LookupRecordMap } from '@/types/lookup.types';
 
 export interface RhfLookupProps<T extends FieldValues, K extends LookupKind = LookupKind> {
@@ -61,9 +63,19 @@ export function RhfLookup<T extends FieldValues, K extends LookupKind = LookupKi
     const kind: K | null = lookupType === 'custom' ? null : lookupType;
     // Usernames are short; record lookups (organizations, contacts…) keep the wider `lg` default.
     const size = resolveFieldSize(name, 'lookup', fieldSize ?? (kind === 'user' ? 'md' : undefined));
+    // Subscribes to the user directory so suggestions fill in once it loads (API mode).
+    const { users } = useMasterData();
+    const { data: organizations } = useOrganizations(undefined, {
+        enabled: kind === 'organization' && Boolean(onSelectRecord),
+    });
+    const { data: contacts } = useContacts(undefined, {
+        enabled: kind === 'contact' && Boolean(onSelectRecord),
+    });
     const suggestions = useMemo(
         () => options ?? (kind === 'user' ? getAssignableUsernames() : undefined),
-        [options, kind]
+        // `users` is the re-render trigger; getAssignableUsernames reads the same directory.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+        [options, kind, users]
     );
 
     const handleSelect = (record: LookupRecordMap[K]) => {
@@ -85,7 +97,7 @@ export function RhfLookup<T extends FieldValues, K extends LookupKind = LookupKi
             return;
         }
         if (!kind || !onSelectRecord || next === value) return;
-        const match = LOOKUP_FIND_RECORD[kind](next);
+        const match = findLookupRecord(kind, next, { organizations, contacts });
         if (match) onSelectRecord(match);
     };
 

@@ -28,7 +28,7 @@ import NotificationsIcon from '@mui/icons-material/Notifications';
 import Badge from '@mui/material/Badge';
 import { useAuth } from '../../context/AuthContext';
 import { GlobalSearch } from './GlobalSearch';
-import { APP_CONFIG, ROUTES } from '../../config/constants';
+import { APP_CONFIG, ROUTES } from '@/config/constants';
 
 /* ─── Nav pill definitions ─────────────────────────────── */
 const NAV_ITEMS = [

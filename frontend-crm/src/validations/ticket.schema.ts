@@ -8,7 +8,7 @@ import {
     zodPhoneOptional,
     zodEmailOptional,
 } from './common';
-import { getNatureOfCalls } from '../data/mockNatureOfCalls';
+import { getNatureOfCalls } from '../services/masterData.store';
 import {
     SUPPORT_MODES,
     SUPPORT_TYPES,

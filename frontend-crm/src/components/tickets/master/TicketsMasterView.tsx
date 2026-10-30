@@ -14,9 +14,9 @@ import { MasterHeaderActions } from '../../common/MasterHeaderActions';
 import { buildExtendedSearchConfig } from '../../common/buildExtendedSearchConfig';
 import { AppToast } from '../../common/AppToast';
 import type { DataTableColumn, DataTableFilterItem } from '../../common/DataTable';
-import { ROUTES } from '../../../config/constants';
+import { ROUTES } from '@/config/constants';
 import { useAuth } from '@/context/AuthContext';
-import { findCrmUser } from '@/data/mockUsers';
+import { findCrmUser } from '@/services/masterData.store';
 import {
     TICKET_PRIORITIES,
     TICKET_STATUSES,
@@ -28,8 +28,7 @@ import { useTickets, useBulkDeleteTickets } from '@/hooks/queries';
 import type { TicketFilterTab, TicketSortField } from './types';
 import { RelatedModulesSidebar, RelatedRecordsTableView } from '../../common/Drawer';
 import { RelatedSecondaryDrawer, type SecondaryDrawerEntity } from '../../common/RelatedSecondaryDrawer';
-import { getRelatedModulesForEntity } from '@/config/relatedModules.config';
-import { useCrmDataVersion } from '@/services';
+import { useRelatedModulesForEntity } from '@/config/relatedModules.config';
 import { TicketDetailDrawer } from '../TicketDetailDrawer';
 import { TicketPriorityPill, TicketStatusPill, formatTicketDue } from '../TicketBadges';
 
@@ -58,12 +57,15 @@ const sortValue = (t: Ticket, field: TicketSortField): string | number => {
     }
 };
 
+
+/** Stable empty list while the first page loads (keeps memoized filters from recomputing). */
+const NO_RECORDS: Ticket[] = [];
 export function TicketsMasterView() {
     const router = useRouter();
     const { user } = useAuth();
-    const currentUsername = user?.username || 'mittal.sharma';
+    const currentUsername = user?.username || '';
 
-    const { data: tickets, dataUpdatedAt: now, refetch } = useTickets();
+    const { data: tickets = NO_RECORDS, dataUpdatedAt: now, refetch } = useTickets();
     const bulkDeleteMutation = useBulkDeleteTickets();
     const [activeTab, setActiveTab] = useState<TicketFilterTab>('all');
     const [searchQuery, setSearchQuery] = useState('');
@@ -78,7 +80,6 @@ export function TicketsMasterView() {
         () => (drawerTicketId ? tickets.find((t) => t.id === drawerTicketId) ?? null : null),
         [tickets, drawerTicketId]
     );
-    const crmDataVersion = useCrmDataVersion();
     const [activeRelatedModule, setActiveRelatedModule] = useState<string | null>(null);
     const [secondaryDrawerEntity, setSecondaryDrawerEntity] = useState<SecondaryDrawerEntity | null>(null);
     const [isLeftSidebarCollapsed, setIsLeftSidebarCollapsed] = useState<boolean>(false);
@@ -294,12 +295,7 @@ export function TicketsMasterView() {
         [now]
     );
 
-    const relatedModules = useMemo(() => {
-        // Related counts come from other entities' stores; recompute whenever any of them changes.
-        void crmDataVersion;
-        if (!selectedDrawerTicket) return [];
-        return getRelatedModulesForEntity('ticket', selectedDrawerTicket, setActiveRelatedModule);
-    }, [selectedDrawerTicket, crmDataVersion]);
+    const relatedModules = useRelatedModulesForEntity('ticket', selectedDrawerTicket, setActiveRelatedModule);
 
     // Falls back to the first module until the user explicitly picks one.
     const effectiveRelatedModule = activeRelatedModule ?? relatedModules[0]?.id ?? null;

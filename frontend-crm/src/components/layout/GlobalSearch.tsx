@@ -11,10 +11,10 @@ import TrendingUpIcon from '@mui/icons-material/TrendingUp';
 import WorkspacePremiumOutlinedIcon from '@mui/icons-material/WorkspacePremiumOutlined';
 import {
     GLOBAL_SEARCH_CATEGORIES,
-    searchCrm,
     type GlobalSearchCategory,
     type GlobalSearchResult,
 } from '@/services/globalSearch.service';
+import { useGlobalSearch } from '@/hooks/queries/useGlobalSearch';
 
 const DEBOUNCE_MS = 150;
 
@@ -68,7 +68,7 @@ export function GlobalSearch() {
         return () => window.removeEventListener('keydown', onKeyDown);
     }, []);
 
-    const results = useMemo(() => searchCrm(debouncedQuery), [debouncedQuery]);
+    const { results } = useGlobalSearch(debouncedQuery);
     const flat = useMemo<GlobalSearchResult[]>(
         () => GLOBAL_SEARCH_CATEGORIES.flatMap((c) => results[c]),
         [results]

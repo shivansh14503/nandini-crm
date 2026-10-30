@@ -3,13 +3,13 @@
 import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Box, Container } from '@mui/material';
-import { useAuth } from '@/src/context/AuthContext';
-import { ROUTES } from '@/src/config/constants';
-import { Navbar } from '@/src/components/layout/Navbar';
-import { AppBreadcrumbs } from '@/src/components/common/AppBreadcrumbs';
-import { AccountDetailsCard } from '@/src/components/dashboard/AccountDetailsCard';
-import { LoadingScreen } from '@/src/components/common/LoadingScreen';
-import { ErrorAlert } from '@/src/components/common/ErrorAlert';
+import { useAuth } from '@/context/AuthContext';
+import { ROUTES } from '@/config/constants';
+import { Navbar } from '@/components/layout/Navbar';
+import { AppBreadcrumbs } from '@/components/common/AppBreadcrumbs';
+import { AccountDetailsCard } from '@/components/dashboard/AccountDetailsCard';
+import { LoadingScreen } from '@/components/common/LoadingScreen';
+import { ErrorAlert } from '@/components/common/ErrorAlert';
 
 export default function DashboardPage() {
     const router = useRouter();

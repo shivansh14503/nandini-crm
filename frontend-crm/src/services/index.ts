@@ -12,5 +12,6 @@ export * from './leadConversion.service';
 export * from './quotation.service';
 export * from './ticket.service';
 export * from './crmSync';
+export * from './import.service';
 
 export const authApi = authService;

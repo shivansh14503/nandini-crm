@@ -27,6 +27,8 @@ function resolveFocusTarget(el: HTMLElement): HTMLElement {
         if (combobox) return combobox;
     }
     if (el.matches(FOCUSABLE)) return el;
+    const phoneInput = el.querySelector<HTMLElement>('[data-phone-national]');
+    if (phoneInput) return phoneInput;
     return el.querySelector<HTMLElement>(FOCUSABLE) ?? el;
 }
 

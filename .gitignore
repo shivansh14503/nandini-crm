@@ -68,3 +68,6 @@ desktop.ini
 *.sublime-workspace
 *.swp
 *.swo
+
+# Prisma generated client (rebuilt by `npm install` / `prisma generate`)
+/backend-crm/src/generated/

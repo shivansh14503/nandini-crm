@@ -18,7 +18,12 @@ import {
 import type { QuotationFormData } from '@/types/quotation.types';
 import { normalizeLegacyStateName } from '@/data/addressMaster';
 import { normalizeCountryValue } from '@/utils/address';
-import { organizationService, contactService } from '@/services';
+import { useContacts, useOrganizations } from '@/hooks/queries';
+import type { ExtendedOrganization } from '@/types/organization.types';
+import type { Contact } from '@/types/contact.types';
+
+const NO_ORGANIZATIONS: ExtendedOrganization[] = [];
+const NO_CONTACTS: Contact[] = [];
 
 export function QuotationAddressSection() {
     const { control, setValue } = useFormContext<QuotationFormData>();
@@ -29,86 +34,65 @@ export function QuotationAddressSection() {
     const prevOrgRef = useRef(organizationName);
     const prevContactRef = useRef(contactName);
 
-    // Organization and Contact options from CRM services
-    const orgOptions = useMemo(() => {
-        try {
-            return organizationService.getAllSync().map((o) => o.organizationName);
-        } catch {
-            return [];
-        }
-    }, []);
-
-    const contactOptions = useMemo(() => {
-        try {
-            return contactService.getAllSync().map((c) => c.name);
-        } catch {
-            return [];
-        }
-    }, []);
+    // Organization and Contact options
+    const { data: organizations = NO_ORGANIZATIONS } = useOrganizations();
+    const { data: contacts = NO_CONTACTS } = useContacts();
+    const orgOptions = useMemo(() => organizations.map((o) => o.organizationName), [organizations]);
+    const contactOptions = useMemo(() => contacts.map((c) => c.name), [contacts]);
 
     // ── When Organization changes, auto-fill mailingName, gstNo & addresses ─────
     useEffect(() => {
         if (!organizationName || organizationName === prevOrgRef.current) return;
         prevOrgRef.current = organizationName;
 
-        try {
-            const org = organizationService
-                .getAllSync()
-                .find(
-                    (o) =>
-                        o.organizationName.trim().toLowerCase() ===
-                        organizationName.trim().toLowerCase()
-                );
+        const org = organizations.find(
+            (o) =>
+                o.organizationName.trim().toLowerCase() ===
+                organizationName.trim().toLowerCase()
+        );
 
-            if (org) {
-                const opts = { shouldDirty: true, shouldValidate: true } as const;
-                if (org.mailingName) setValue('mailingName', org.mailingName, opts);
-                if (org.gstNumber) setValue('gstNo', org.gstNumber, opts);
+        if (org) {
+            const opts = { shouldDirty: true, shouldValidate: true } as const;
+            if (org.mailingName) setValue('mailingName', org.mailingName, opts);
+            if (org.gstNumber || org.gstNo) setValue('gstNo', org.gstNumber || org.gstNo || '', opts);
 
-                // Country is set before state so the state field validates against the right country.
-                const billingCountry = normalizeCountryValue(org.billingCountry);
-                const shippingCountry = normalizeCountryValue(org.shippingCountry || org.billingCountry);
+            // Country is set before state so the state field validates against the right country.
+            const billingCountry = normalizeCountryValue(org.billingCountry);
+            const shippingCountry = normalizeCountryValue(org.shippingCountry || org.billingCountry);
 
-                if (org.billingStreet) setValue('billingAddress', org.billingStreet, opts);
-                setValue('billingCountry', billingCountry, opts);
-                if (org.billingState) setValue('billingState', normalizeLegacyStateName(org.billingState, billingCountry), opts);
-                if (org.billingCity) setValue('billingCity', org.billingCity, opts);
-                if (org.billingPostalCode) setValue('billingPostalCode', org.billingPostalCode, opts);
+            const billingStreet = org.billingStreet || org.billingAddress;
+            if (billingStreet) setValue('billingAddress', billingStreet, opts);
+            setValue('billingCountry', billingCountry, opts);
+            if (org.billingState) setValue('billingState', normalizeLegacyStateName(org.billingState, billingCountry), opts);
+            if (org.billingCity) setValue('billingCity', org.billingCity, opts);
+            if (org.billingPostalCode) setValue('billingPostalCode', org.billingPostalCode, opts);
 
-                if (org.shippingStreet) setValue('shippingAddress', org.shippingStreet, opts);
-                setValue('shippingCountry', shippingCountry, opts);
-                if (org.shippingState) setValue('shippingState', normalizeLegacyStateName(org.shippingState, shippingCountry), opts);
-                if (org.shippingCity) setValue('shippingCity', org.shippingCity, opts);
-                if (org.shippingPostalCode) setValue('shippingPostalCode', org.shippingPostalCode, opts);
-            }
-        } catch {
-            // Ignore lookups if service throws
+            const shippingStreet = org.shippingStreet || org.shippingAddress;
+            if (shippingStreet) setValue('shippingAddress', shippingStreet, opts);
+            setValue('shippingCountry', shippingCountry, opts);
+            if (org.shippingState) setValue('shippingState', normalizeLegacyStateName(org.shippingState, shippingCountry), opts);
+            if (org.shippingCity) setValue('shippingCity', org.shippingCity, opts);
+            if (org.shippingPostalCode) setValue('shippingPostalCode', org.shippingPostalCode, opts);
         }
-    }, [organizationName, setValue]);
+    }, [organizationName, organizations, setValue]);
 
     // ── When Contact changes, auto-fill mobile & email ──────────────────────────
     useEffect(() => {
         if (!contactName || contactName === prevContactRef.current) return;
         prevContactRef.current = contactName;
 
-        try {
-            const contact = contactService
-                .getAllSync()
-                .find(
-                    (c) =>
-                        c.name.trim().toLowerCase() === contactName.trim().toLowerCase()
-                );
+        const contact = contacts.find(
+            (c) =>
+                c.name.trim().toLowerCase() === contactName.trim().toLowerCase()
+        );
 
-            if (contact) {
-                const opts = { shouldDirty: true, shouldValidate: true } as const;
-                if (contact.mobile) setValue('contactMobile', contact.mobile, opts);
-                const email = contact.emailAddresses?.[0]?.email;
-                if (email) setValue('contactEmail', email, opts);
-            }
-        } catch {
-            // Ignore lookup errors
+        if (contact) {
+            const opts = { shouldDirty: true, shouldValidate: true } as const;
+            if (contact.mobile) setValue('contactMobile', contact.mobile, opts);
+            const email = contact.emailAddresses?.[0]?.email;
+            if (email) setValue('contactEmail', email, opts);
         }
-    }, [contactName, setValue]);
+    }, [contactName, contacts, setValue]);
 
     return (
         <Box sx={{ p: { xs: 2.5, md: 3.5 } }}>

@@ -18,19 +18,18 @@ import NotesOutlinedIcon from '@mui/icons-material/NotesOutlined';
 
 import { ROUTES } from '@/config/constants';
 import type { ExtendedOrganization } from '@/types/organization.types';
-import { organizationService, subscribeCrmSync } from '@/services';
+import { useOrganization } from '@/hooks/queries';
 import {
     EntityDetailDrawer,
     DrawerSectionCard,
     DrawerCopyButton,
     DrawerFieldGrid,
     DrawerMetricGrid,
-    type AuditRevisionItem,
     type DrawerBadgeItem,
 } from '@/components/common/Drawer';
 import { ReadOnlyField } from '@/components/forms/ReadOnlyField';
 import { getCountryNameByCode } from '@/data/addressMaster';
-import { findCrmUser } from '@/data/mockUsers';
+import { findCrmUser } from '@/services/masterData.store';
 import { formatAddressLine } from '@/utils/address';
 import { formatDateTime } from '@/utils/date';
 import { ORGANIZATION_FORM_TABS } from './OrganizationForm';
@@ -149,31 +148,11 @@ export function OrganizationDetailDrawer({
 }: OrganizationDetailDrawerProps) {
     const router = useRouter();
     const [showBankAccount, setShowBankAccount] = useState(false);
-    const [currentOrg, setCurrentOrg] = useState<ExtendedOrganization | null>(organization);
-    const [, setSyncVersion] = useState(0);
 
-    useEffect(() => {
-        setCurrentOrg(organization);
-    }, [organization]);
+    const { data: freshOrg } = useOrganization(open && organization?.id ? organization.id : undefined);
+    const org = freshOrg ?? organization;
 
-    useEffect(() => {
-        if (!open || !organization?.id) return;
-
-        const refreshOrg = () => {
-            const fresh = organizationService.getByIdSync(organization.id);
-            if (fresh) {
-                setCurrentOrg(fresh);
-            }
-            setSyncVersion((v) => v + 1);
-        };
-
-        const unsubscribe = subscribeCrmSync(refreshOrg);
-        return unsubscribe;
-    }, [open, organization?.id]);
-
-    if (!organization && !currentOrg) return null;
-
-    const org = currentOrg || organization!;
+    if (!org) return null;
     const assignedUser = findCrmUser(org.assignedUser);
     const assignedDisplayName = assignedUser?.name || org.assignedUser || '';
 
@@ -233,33 +212,6 @@ export function OrganizationDetailDrawer({
                   },
               ]
             : []),
-    ];
-
-    const auditRevisions: AuditRevisionItem[] = [
-        {
-            title: 'Annual Turnover Updated',
-            author: 'mittal.sharma',
-            time: 'Today, 10:48 AM',
-            from: '₹5 Cr – ₹25 Cr',
-            to: '₹25 Cr – ₹100 Cr',
-            note: 'Attached FY26-Q2 provisional audited balance sheet.',
-        },
-        {
-            title: 'Statutory KYC & GST Verification Completed',
-            author: 'system.automations',
-            time: 'Yesterday, 04:15 PM',
-            from: 'Pending KYC',
-            to: 'Verified Active',
-            note: 'Live GSTIN check against Govt portal returned 0 non-compliance flags.',
-        },
-        {
-            title: 'Master Account Created & ERP Synced',
-            author: 'mittal.sharma',
-            time: '01-Oct-2026, 09:30 AM',
-            from: 'New Lead Import',
-            to: 'Active Master Ledger',
-            note: 'Imported via Tally Prime Connector Gateway Port 9000.',
-        },
     ];
 
     return (
@@ -436,7 +388,7 @@ export function OrganizationDetailDrawer({
                     </Box>
                 ),
             }}
-            auditRevisions={auditRevisions}
+            auditEntity={{ type: 'organizations', id: org.id }}
             includeChangesTab={true}
             statusText={isActive ? 'Ready for Order Processing' : 'Inactive account'}
             primaryAction={{

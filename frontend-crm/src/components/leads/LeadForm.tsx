@@ -11,9 +11,9 @@ import { AppToast } from '../common/AppToast';
 import { CommonFormLayout } from '../common/CommonFormLayout';
 import { type FormTabDefinition } from '../common/Drawer';
 import { useRhfForm } from '../forms/rhf';
-import { ROUTES } from '../../config/constants';
+import { ROUTES } from '@/config/constants';
 import { leadFormSchema } from '../../validations';
-import type { LeadFormData } from '../../types/lead.types';
+import type { LeadFormData } from '@/types/lead.types';
 import { leadService } from '@/services';
 import { normalizeAddressFields } from '@/utils/address';
 

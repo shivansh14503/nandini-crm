@@ -1,21 +1,32 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { CrudService } from '@/services/base.service';
-import type { PaginationParams } from '@/types/api.types';
+import type { PaginatedResponse, PaginationParams } from '@/types/api.types';
 import type { EntityQueryKeys } from './queryKeys';
 
 /**
- * Builds list/detail queries and create/update/delete mutations for a CRUD service. Queries start from the
- * local store (`getAllSync`/`getByIdSync`) so views render instantly; mutations invalidate the entity's cache.
+ * Builds list/detail queries and create/update/delete mutations for a CRUD service. Mutations invalidate the
+ * entity's cache (services also broadcast `notifyCrmUpdate`, which reaches other tabs).
  */
 export function createEntityHooks<T, CreateDto, UpdateDto>(
     keys: EntityQueryKeys,
     service: CrudService<T, CreateDto, UpdateDto>
 ) {
-    function useList(params?: PaginationParams) {
+    /** Every record matching `params` (filters such as `organizationId`), e.g. for lookups and related lists. */
+    function useList(params?: PaginationParams, options: { enabled?: boolean } = {}) {
         return useQuery<T[]>({
             queryKey: keys.list(params),
             queryFn: () => service.getAll(params),
-            initialData: () => service.getAllSync(),
+            enabled: options.enabled ?? true,
+        });
+    }
+
+    /** Server-paginated page (`{ data, total, page, limit }`) with smooth page-to-page transitions. */
+    function usePaginatedList(params?: PaginationParams, options: { enabled?: boolean } = {}) {
+        return useQuery<PaginatedResponse<T>>({
+            queryKey: [...keys.list(params), 'paginated'] as const,
+            queryFn: () => service.list(params),
+            placeholderData: keepPreviousData,
+            enabled: options.enabled ?? true,
         });
     }
 
@@ -25,7 +36,6 @@ export function createEntityHooks<T, CreateDto, UpdateDto>(
             queryKey: keys.detail(id ?? ''),
             queryFn: async () => (await service.getById(id!)) ?? null,
             enabled: Boolean(id),
-            initialData: () => (id ? service.getByIdSync(id) : undefined),
         });
     }
 
@@ -62,5 +72,5 @@ export function createEntityHooks<T, CreateDto, UpdateDto>(
         });
     }
 
-    return { useList, useDetail, useCreate, useUpdate, useDelete, useBulkDelete };
+    return { useList, usePaginatedList, useDetail, useCreate, useUpdate, useDelete, useBulkDelete };
 }

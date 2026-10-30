@@ -14,8 +14,8 @@ import TuneOutlinedIcon from '@mui/icons-material/TuneOutlined';
 import { type BreadcrumbItem } from '../common/AppBreadcrumbs';
 import { AppToast } from '../common/AppToast';
 import { type FormTabDefinition } from '../common/Drawer';
-import { ROUTES } from '../../config/constants';
-import type { ContactFormData } from '../../types/contact.types';
+import { ROUTES } from '@/config/constants';
+import type { ContactFormData } from '@/types/contact.types';
 import { contactService } from '@/services';
 import { contactFormSchema } from '../../validations';
 
@@ -116,11 +116,10 @@ export default function ContactForm({
 
     const handleSave = createSubmitHandler(async (values) => {
         try {
-            if (contactId && contactService.getByIdSync(contactId)) {
-                await contactService.update(contactId, values);
-            } else {
-                await contactService.create(values);
-            }
+            // With an id this is an edit: update (API mode reports a missing record as an error instead of
+            // silently creating a duplicate). Only the mock store returns null for an unknown id.
+            const updated = contactId ? await contactService.update(contactId, values) : null;
+            if (!updated) await contactService.create(values);
             showToast(`Contact "${values.name}" saved successfully!`, 'success');
             reset(values);
             setTimeout(() => router.push(ROUTES.CONTACTS), 700);

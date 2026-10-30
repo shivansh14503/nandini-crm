@@ -3,11 +3,11 @@
 import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Box, Container } from '@mui/material';
-import { useAuth } from '@/src/context/AuthContext';
-import { ROUTES } from '@/src/config/constants';
-import { Navbar } from '@/src/components/layout/Navbar';
-import { LoadingScreen } from '@/src/components/common/LoadingScreen';
-import ProductForm from '@/src/components/products/ProductForm';
+import { useAuth } from '@/context/AuthContext';
+import { ROUTES } from '@/config/constants';
+import { Navbar } from '@/components/layout/Navbar';
+import { LoadingScreen } from '@/components/common/LoadingScreen';
+import ProductForm from '@/components/products/ProductForm';
 
 export default function NewProductPage() {
     const router = useRouter();

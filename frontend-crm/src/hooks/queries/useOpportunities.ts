@@ -5,6 +5,7 @@ import { queryKeys } from './queryKeys';
 const opportunityHooks = createEntityHooks(queryKeys.opportunities, opportunityService);
 
 export const useOpportunities = opportunityHooks.useList;
+export const usePaginatedOpportunities = opportunityHooks.usePaginatedList;
 export const useOpportunity = opportunityHooks.useDetail;
 export const useCreateOpportunity = opportunityHooks.useCreate;
 export const useUpdateOpportunity = opportunityHooks.useUpdate;

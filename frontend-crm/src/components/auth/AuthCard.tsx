@@ -4,7 +4,7 @@ import React from 'react';
 import { Box, Card, CardContent, Typography } from '@mui/material';
 import Image from 'next/image';
 import NIPLLogo from '@/public/images/NIPL-Updated-Logo-Large.png';
-import { APP_CONFIG } from '../../config/constants';
+import { APP_CONFIG } from '@/config/constants';
 
 interface AuthCardProps {
     children: React.ReactNode;

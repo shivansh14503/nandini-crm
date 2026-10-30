@@ -23,20 +23,24 @@ import { DataImportModal } from '../common/import';
 import { RelatedModulesSidebar, RelatedRecordsTableView } from '../common/Drawer';
 import { RelatedSecondaryDrawer, type SecondaryDrawerEntity } from '../common/RelatedSecondaryDrawer';
 import type { DataTableColumn, DataTableFilterItem } from '../common/DataTable';
-import { ROUTES } from '../../config/constants';
-import { getRelatedModulesForEntity } from '@/config/relatedModules.config';
-import type { Lead } from '../../types/lead.types';
-import { useCrmDataVersion } from '@/services';
+import { ROUTES } from '@/config/constants';
+import { useAuth } from '@/context/AuthContext';
+import { useRelatedModulesForEntity } from '@/config/relatedModules.config';
+import type { Lead } from '@/types/lead.types';
 import { useLeads, useBulkDeleteLeads } from '@/hooks/queries';
 import type { LeadFilterTab } from './master';
 import { LeadDetailDrawer } from './LeadDetailDrawer';
 
+
+/** Stable empty list while the first page loads (keeps memoized filters from recomputing). */
+const NO_RECORDS: Lead[] = [];
 export function LeadsMasterView() {
     const router = useRouter();
+    const { user } = useAuth();
+    const currentUsername = user?.username || '';
 
-    const { data: leads, refetch } = useLeads();
+    const { data: leads = NO_RECORDS, refetch } = useLeads();
     const bulkDeleteMutation = useBulkDeleteLeads();
-    const crmDataVersion = useCrmDataVersion();
     const [activeTab, setActiveTab] = useState<LeadFilterTab>('all');
     const [searchQuery, setSearchQuery] = useState('');
     const [selectedIds, setSelectedIds] = useState<string[]>([]);
@@ -102,10 +106,10 @@ export function LeadsMasterView() {
                 id: 'my_leads',
                 label: 'My Leads',
                 icon: <AccountCircleOutlinedIcon sx={{ fontSize: 16 }} />,
-                count: leads.filter((l) => (l.assignedTo || '').includes('mittal.sharma')).length,
+                count: currentUsername ? leads.filter((l) => (l.assignedTo || '').includes(currentUsername)).length : 0,
             },
         ];
-    }, [leads, todayStr]);
+    }, [leads, todayStr, currentUsername]);
 
     // ── Filter Logic ──────────────────────────────────────────────────────────
     const filteredLeads = useMemo(() => {
@@ -113,7 +117,7 @@ export function LeadsMasterView() {
             if (activeTab === 'hot' && lead.leadType !== 'Hot') return false;
             if (activeTab === 'new' && lead.status !== 'New') return false;
             if (activeTab === 'followup_today' && lead.nextFollowupDate !== todayStr) return false;
-            if (activeTab === 'my_leads' && !(lead.assignedTo || '').includes('mittal.sharma')) return false;
+            if (activeTab === 'my_leads' && (!currentUsername || !(lead.assignedTo || '').includes(currentUsername))) return false;
 
             if (searchQuery.trim()) {
                 const q = searchQuery.toLowerCase().trim();
@@ -142,7 +146,7 @@ export function LeadsMasterView() {
 
             return true;
         });
-    }, [leads, activeTab, searchQuery, todayStr]);
+    }, [leads, activeTab, searchQuery, todayStr, currentUsername]);
 
     // ── Sort Logic ────────────────────────────────────────────────────────────
     const sortedLeads = useMemo(() => {
@@ -461,7 +465,7 @@ export function LeadsMasterView() {
                 minWidth: 130,
                 render: (l) => (
                     <Typography sx={{ fontSize: '0.78rem', color: '#475569', fontWeight: 500 }}>
-                        {l.assignedTo || 'mittal.sharma'}
+                        {l.assignedTo || '-'}
                     </Typography>
                 ),
             },
@@ -469,12 +473,7 @@ export function LeadsMasterView() {
         [todayStr]
     );
 
-    const relatedModules = useMemo(() => {
-        // Related counts come from other entities' stores; recompute whenever any of them changes.
-        void crmDataVersion;
-        if (!selectedDrawerLead) return [];
-        return getRelatedModulesForEntity('lead', selectedDrawerLead, setActiveRelatedModule);
-    }, [selectedDrawerLead, crmDataVersion]);
+    const relatedModules = useRelatedModulesForEntity('lead', selectedDrawerLead, setActiveRelatedModule);
 
     // Falls back to the first module until the user explicitly picks one.
     const effectiveRelatedModule = activeRelatedModule ?? relatedModules[0]?.id ?? null;

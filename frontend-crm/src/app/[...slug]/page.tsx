@@ -15,13 +15,13 @@ import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import ApartmentIcon from '@mui/icons-material/Apartment';
 import PersonOutlinedIcon from '@mui/icons-material/PersonOutlined';
 import DashboardOutlinedIcon from '@mui/icons-material/DashboardOutlined';
-import { useAuth } from '@/src/context/AuthContext';
-import { Navbar } from '@/src/components/layout/Navbar';
-import { AppBreadcrumbs } from '@/src/components/common/AppBreadcrumbs';
-import { EnterpriseFooter } from '@/src/components/common/EnterpriseFooter';
-import { LoadingScreen } from '@/src/components/common/LoadingScreen';
-import { ErrorAlert } from '@/src/components/common/ErrorAlert';
-import { ROUTES } from '@/src/config/constants';
+import { useAuth } from '@/context/AuthContext';
+import { Navbar } from '@/components/layout/Navbar';
+import { AppBreadcrumbs } from '@/components/common/AppBreadcrumbs';
+import { EnterpriseFooter } from '@/components/common/EnterpriseFooter';
+import { LoadingScreen } from '@/components/common/LoadingScreen';
+import { ErrorAlert } from '@/components/common/ErrorAlert';
+import { ROUTES } from '@/config/constants';
 
 /**
  * Dynamic Catch-All Route for future localhost/{something} pages.

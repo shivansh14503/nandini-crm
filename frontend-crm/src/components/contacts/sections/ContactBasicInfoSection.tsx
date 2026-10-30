@@ -3,8 +3,11 @@
 import React, { useMemo } from 'react';
 import { useFormContext } from 'react-hook-form';
 import { FormGrid, FormGridItem, RhfTextField, RhfPhoneField, RhfLookup, RhfCheckbox, RhfSelect } from '@/components/forms';
-import { organizationService } from '@/services';
-import type { ContactFormData } from '../../../types/contact.types';
+import { useOrganizations } from '@/hooks/queries';
+import type { ContactFormData } from '@/types/contact.types';
+import type { ExtendedOrganization } from '@/types/organization.types';
+
+const NO_ORGANIZATIONS: ExtendedOrganization[] = [];
 
 /**
  * Basic contact identity & organization association, plus primary-contact and left-job status.
@@ -12,15 +15,13 @@ import type { ContactFormData } from '../../../types/contact.types';
  */
 export function ContactBasicInfoSection() {
     const { setValue } = useFormContext<ContactFormData>();
-    const organizationNames = useMemo(
-        () => organizationService.getAllSync().map((o) => o.organizationName),
-        []
-    );
+    const { data: organizations = NO_ORGANIZATIONS } = useOrganizations();
+    const organizationNames = useMemo(() => organizations.map((o) => o.organizationName), [organizations]);
 
     return (
         <FormGrid columns={3}>
             <RhfTextField<ContactFormData> name="name" label="Name" required placeholder="e.g. Rajesh Kumar" />
-            <RhfPhoneField<ContactFormData> name="mobile" label="Mobile" required hint="Primary 10-digit mobile" placeholder="e.g. 9876543210" />
+            <RhfPhoneField<ContactFormData> name="mobile" label="Mobile" required hint="Primary mobile" placeholder="e.g. 9876543210" />
             <RhfPhoneField<ContactFormData> name="officePhone" label="Office Phone" placeholder="e.g. 0112345678" />
 
             <FormGridItem span={2}>

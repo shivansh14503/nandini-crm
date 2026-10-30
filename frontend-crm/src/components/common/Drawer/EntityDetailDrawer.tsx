@@ -45,7 +45,7 @@ export function EntityDetailDrawer({
     formTabs,
     tabContents,
     children,
-    auditRevisions,
+    auditEntity,
     includeChangesTab = true,
     changesTabLabel = 'Changes',
     defaultTabIndex = 0,
@@ -70,9 +70,16 @@ export function EntityDetailDrawer({
     const showBookmark = showBookmarkProp ?? stack?.showBookmark ?? true;
     const onCollapseReset = stack?.onCollapseReset;
 
+    // Opening the drawer (or switching records) expands it: local state resets during render, shared state below.
+    const openKey = open ? title : null;
+    const [lastOpenKey, setLastOpenKey] = useState(openKey);
+    if (openKey !== lastOpenKey) {
+        setLastOpenKey(openKey);
+        if (open) setInternalCollapsed(false);
+    }
+
     useEffect(() => {
         if (open) {
-            setInternalCollapsed(false);
             onCollapseReset?.();
             onCollapseChange?.(false);
         }
@@ -152,12 +159,12 @@ export function EntityDetailDrawer({
         formTabs && tabContents ? buildDrawerTabs(formTabs, tabContents) : tabs;
 
     const allTabs: DrawerTabItem[] = [...resolvedBaseTabs];
-    if (includeChangesTab) {
+    if (includeChangesTab && auditEntity) {
         allTabs.push({
             id: 'changes-tab',
             label: changesTabLabel,
             icon: <HistoryOutlinedIcon sx={{ fontSize: 16 }} />,
-            content: <AuditTrailTimeline revisions={auditRevisions} entityTitle={title} />,
+            content: <AuditTrailTimeline entityType={auditEntity.type} entityId={auditEntity.id} />,
         });
     }
 

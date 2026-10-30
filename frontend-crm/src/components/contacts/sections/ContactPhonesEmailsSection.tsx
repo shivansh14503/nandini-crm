@@ -2,7 +2,7 @@
 
 import React from 'react';
 import { FormGrid, FormGridItem, RhfPhoneField, RhfEmailList } from '@/components/forms';
-import type { ContactFormData } from '../../../types/contact.types';
+import type { ContactFormData } from '@/types/contact.types';
 
 /**
  * Alternate phone numbers (one row) and email addresses (below).

@@ -11,9 +11,13 @@ import {
     CUSTOMER_TYPES,
     LEAD_SOURCES as ORG_LEAD_SOURCES,
 } from '@/components/organizations/constants';
-import { findExistingOrganization, organizationService } from '@/services';
+import { matchExistingOrganization } from '@/services';
+import { useOrganizations } from '@/hooks/queries';
 import { LEAD_ASSIGNED_USERS } from '@/types/lead.types';
+import type { ExtendedOrganization } from '@/types/organization.types';
 import type { ConvertLeadFormValues } from '@/validations';
+
+const NO_ORGANIZATIONS: ExtendedOrganization[] = [];
 
 type F = ConvertLeadFormValues;
 
@@ -22,11 +26,12 @@ export function ConvertOrganizationSection() {
     const { control, setValue } = useFormContext<F>();
     const organizationName = useWatch({ control, name: 'organizationName' });
 
-    const organizationNames = useMemo(
-        () => organizationService.getAllSync().map((o) => o.organizationName),
-        []
+    const { data: organizations = NO_ORGANIZATIONS } = useOrganizations();
+    const organizationNames = useMemo(() => organizations.map((o) => o.organizationName), [organizations]);
+    const existing = useMemo(
+        () => matchExistingOrganization(organizations, organizationName),
+        [organizationName, organizations]
     );
-    const existing = useMemo(() => findExistingOrganization(organizationName), [organizationName]);
 
     // Link to (and prefill from) an existing organization when the typed name matches one.
     useEffect(() => {

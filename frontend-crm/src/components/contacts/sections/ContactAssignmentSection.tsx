@@ -7,7 +7,7 @@ import {
     CONTACT_DEPARTMENTS,
     COMMUNICATION_TYPES,
     type ContactFormData,
-} from '../../../types/contact.types';
+} from '@/types/contact.types';
 
 const DEFAULT_ASSIGNEES = [
     'mittal.sharma',

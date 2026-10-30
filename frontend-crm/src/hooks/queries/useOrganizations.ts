@@ -5,6 +5,7 @@ import { queryKeys } from './queryKeys';
 const organizationHooks = createEntityHooks(queryKeys.organizations, organizationService);
 
 export const useOrganizations = organizationHooks.useList;
+export const usePaginatedOrganizations = organizationHooks.usePaginatedList;
 export const useOrganization = organizationHooks.useDetail;
 export const useCreateOrganization = organizationHooks.useCreate;
 export const useUpdateOrganization = organizationHooks.useUpdate;

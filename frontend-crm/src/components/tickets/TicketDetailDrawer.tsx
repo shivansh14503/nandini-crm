@@ -13,15 +13,14 @@ import ContentCopyOutlinedIcon from '@mui/icons-material/ContentCopyOutlined';
 
 import { ROUTES } from '@/config/constants';
 import { isTicketOverdue, type Ticket } from '@/types/ticket.types';
-import { ticketService, subscribeCrmSync } from '@/services';
-import { findCrmUser } from '@/data/mockUsers';
+import { useTicket } from '@/hooks/queries';
+import { findCrmUser } from '@/services/masterData.store';
 import { ReadOnlyField } from '@/components/forms/ReadOnlyField';
 import {
     EntityDetailDrawer,
     DrawerSectionCard,
     DrawerMetricGrid,
     copyToClipboard,
-    type AuditRevisionItem,
 } from '@/components/common/Drawer';
 import { TICKET_FORM_TABS } from './TicketForm';
 import { TicketPriorityPill, TicketStatusPill, formatTicketDue } from './TicketBadges';
@@ -67,18 +66,9 @@ const flagChip = (label: string) => (
 
 export function TicketDetailDrawer({ ticket, open, onClose, onEdit, hideBackdrop }: TicketDetailDrawerProps) {
     const router = useRouter();
-    const [syncVersion, setSyncVersion] = useState(0);
 
-    useEffect(() => {
-        if (!open || !ticket?.id) return;
-        return subscribeCrmSync(() => setSyncVersion((v) => v + 1));
-    }, [open, ticket?.id]);
-
-    // Re-read the stored record whenever CRM data changes so edits elsewhere show up live.
-    const t = useMemo(() => {
-        void syncVersion;
-        return ticket ? ticketService.getByIdSync(ticket.id) ?? ticket : null;
-    }, [ticket, syncVersion]);
+    const { data: freshTicket } = useTicket(open && ticket?.id ? ticket.id : undefined);
+    const t = freshTicket ?? ticket;
 
     if (!t) return null;
 
@@ -87,27 +77,6 @@ export function TicketDetailDrawer({ ticket, open, onClose, onEdit, hideBackdrop
     const assignedUser = findCrmUser(t.assignedTo);
     const assignedDisplayName = assignedUser?.name || t.assignedTo;
     const flags = [t.amcFlag && 'AMC', t.cloudFlag && 'Cloud'].filter((f): f is string => Boolean(f));
-
-    const auditRevisions: AuditRevisionItem[] = [
-        {
-            title: 'Ticket Last Updated',
-            author: t.assignedTo || 'mittal.sharma',
-            time: new Date(t.updatedAt).toLocaleString('en-IN'),
-            from: 'Previous',
-            to: t.ticketStatus,
-            note: t.resolution || 'Ticket details updated.',
-            tag: 'Status',
-        },
-        {
-            title: 'Ticket Logged',
-            author: t.createdBy || 'mittal.sharma',
-            time: new Date(t.createdAt).toLocaleString('en-IN'),
-            from: 'Draft',
-            to: `New [${t.ticketNumber}]`,
-            note: `Logged via ${t.source}.`,
-            tag: 'Creation',
-        },
-    ];
 
     return (
         <EntityDetailDrawer
@@ -256,7 +225,7 @@ export function TicketDetailDrawer({ ticket, open, onClose, onEdit, hideBackdrop
                     </DrawerSectionCard>
                 ),
             }}
-            auditRevisions={auditRevisions}
+            auditEntity={{ type: 'tickets', id: t.id }}
             includeChangesTab
             statusText={overdue ? `${t.ticketStatus} • Overdue` : t.ticketStatus}
             primaryAction={{ label: 'Edit Ticket', onClick: handleEdit }}

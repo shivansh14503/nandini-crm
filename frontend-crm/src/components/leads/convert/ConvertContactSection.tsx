@@ -17,7 +17,9 @@ import {
     RhfTextField,
     RhfPhoneField,
 } from '@/components/forms';
-import { contactService, findExistingContact } from '@/services';
+import { matchExistingContact } from '@/services';
+import { useContacts } from '@/hooks/queries';
+import type { Contact } from '@/types/contact.types';
 import {
     COMMUNICATION_TYPES,
     CONTACT_DEPARTMENTS,
@@ -28,6 +30,8 @@ import type { ConvertLeadFormValues } from '@/validations';
 
 type F = ConvertLeadFormValues;
 
+const NO_CONTACTS: Contact[] = [];
+
 /** "Create Contact OR Select Contact" section of the Convert Lead form. */
 export function ConvertContactSection() {
     const { setValue, control } = useFormContext<F>();
@@ -36,11 +40,12 @@ export function ConvertContactSection() {
     const [selected, setSelected] = useState('');
 
     // Label → contact lookup for the "select existing" picker.
+    const { data: contacts = NO_CONTACTS } = useContacts();
     const contactsByLabel = useMemo(() => {
-        const map = new Map<string, ReturnType<typeof contactService.getAllSync>[number]>();
-        contactService.getAllSync().forEach((c) => map.set(`${c.name} (${c.mobile})`, c));
+        const map = new Map<string, Contact>();
+        contacts.forEach((c) => map.set(`${c.name} (${c.mobile})`, c));
         return map;
-    }, []);
+    }, [contacts]);
 
     const handleSelect = (label: string) => {
         setSelected(label);
@@ -65,8 +70,8 @@ export function ConvertContactSection() {
     };
 
     const duplicate = useMemo(
-        () => (mobile ? findExistingContact(mobile, existingContactId || undefined) : undefined),
-        [mobile, existingContactId]
+        () => (mobile ? matchExistingContact(contacts, mobile, existingContactId || undefined) : undefined),
+        [contacts, mobile, existingContactId]
     );
 
     return (

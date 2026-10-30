@@ -1,51 +1,48 @@
 'use client';
 
 import React from 'react';
-import { Box, Typography, Chip } from '@mui/material';
+import { Box, Typography, Chip, Skeleton } from '@mui/material';
 import PersonOutlinedIcon from '@mui/icons-material/PersonOutlined';
+import HistoryOutlinedIcon from '@mui/icons-material/HistoryOutlined';
+import { useEntityAuditLogs, type AuditEntityType } from '@/hooks/queries/useAuditLogs';
 import type { AuditRevisionItem } from './types';
 
 export interface AuditTrailTimelineProps {
-    revisions?: AuditRevisionItem[];
-    entityTitle?: string;
+    /** The record whose revision trail is loaded from GET /api/audit-logs/:entityType/:entityId. */
+    entityType: AuditEntityType;
+    entityId: string;
 }
 
-export function AuditTrailTimeline({ revisions }: AuditTrailTimelineProps) {
-    const items = revisions && revisions.length > 0 ? revisions : [
-        {
-            title: 'Record Updated',
-            author: 'mittal.sharma',
-            time: 'Today, 10:48 AM',
-            from: 'Draft',
-            to: 'Active',
-            note: 'Updated record fields and synchronized with ERP ledger.',
-        },
-        {
-            title: 'Compliance & Verification Check',
-            author: 'system.automations',
-            time: 'Yesterday, 04:15 PM',
-            from: 'Pending Review',
-            to: 'Verified',
-            note: 'Live validation against central registry returned 0 discrepancies.',
-        },
-        {
-            title: 'Primary Contact Channel Registered',
-            author: 'mittal.sharma',
-            time: '12-Oct-2026, 11:15 AM',
-            from: 'None',
-            to: 'Active Channel',
-            note: 'Direct enterprise communication link established.',
-        },
-        {
-            title: 'Initial Master Record Created',
-            author: 'mittal.sharma',
-            time: '01-Oct-2026, 09:30 AM',
-            from: 'New Lead Import',
-            to: 'Master Catalog',
-            note: 'Imported via enterprise database sync.',
-        },
-    ];
+/** Revision trail of one record, newest first, with loading and empty states. */
+export function AuditTrailTimeline({ entityType, entityId }: AuditTrailTimelineProps) {
+    const { data: items = [], isLoading, isError } = useEntityAuditLogs(entityType, entityId);
 
+    if (isLoading) {
+        return (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+                {[0, 1, 2].map((i) => (
+                    <Skeleton key={i} variant="rounded" height={86} sx={{ borderRadius: '8px' }} />
+                ))}
+            </Box>
+        );
+    }
+    if (isError || items.length === 0) {
+        return (
+            <Box sx={{ py: 5, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1, color: '#94a3b8' }}>
+                <HistoryOutlinedIcon sx={{ fontSize: 32 }} />
+                <Typography sx={{ fontSize: '0.8rem', fontWeight: 600, color: '#64748b' }}>
+                    {isError ? 'The revision trail could not be loaded.' : 'No revisions yet'}
+                </Typography>
+                <Typography sx={{ fontSize: '0.72rem' }}>
+                    {isError ? 'Please try again in a moment.' : 'Changes to this record will appear here.'}
+                </Typography>
+            </Box>
+        );
+    }
+    return <RevisionList items={items} />;
+}
+
+function RevisionList({ items }: { items: AuditRevisionItem[] }) {
     return (
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
             <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 0.5 }}>
@@ -53,7 +50,7 @@ export function AuditTrailTimeline({ revisions }: AuditTrailTimelineProps) {
                     Revision Trail & Field Edits
                 </Typography>
                 <Chip
-                    label={`${items.length} Revisions Tracked`}
+                    label={`${items.length} ${items.length === 1 ? 'Revision' : 'Revisions'} Tracked`}
                     size="small"
                     sx={{ height: 20, fontSize: '0.66rem', fontWeight: 700, backgroundColor: '#f1f5f9', color: '#475569' }}
                 />

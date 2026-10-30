@@ -1,8 +1,9 @@
 'use client';
 
 import React from 'react';
-import { getNatureOfCalls } from '@/data/mockNatureOfCalls';
-import { getPartnerCompanies, getPartnerContacts } from '@/data/mockPartners';
+import { getNatureOfCalls } from '@/services/masterData.store';
+import { getPartnerCompanies, getPartnerContacts } from '@/services/masterData.store';
+import { useMasterData } from '@/hooks/queries/useMasterData';
 import type { NatureOfCallItem } from '@/types/ticket.types';
 import type { PartnerCompany, PartnerCompanyContact } from '@/types/partner.types';
 import type { EntityLookupModalProps } from '@/types/lookup.types';
@@ -25,6 +26,8 @@ function createPresetLookupModal<T extends { id: string }>(
     displayName: string
 ) {
     function PresetLookupModal({ open, onClose, onSelect, selectedValue }: EntityLookupModalProps<T>) {
+        // Subscribes to the masters so the list fills in once they load (API mode); getData reads the same store.
+        useMasterData();
         const data = getData();
         const selected = selectedValue?.trim().toLowerCase();
         const selectedId = selected ? data.find((r) => getLabel(r).toLowerCase() === selected)?.id : undefined;

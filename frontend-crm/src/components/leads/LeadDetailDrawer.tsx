@@ -21,13 +21,12 @@ import PublishedWithChangesIcon from '@mui/icons-material/PublishedWithChanges';
 
 import { ROUTES } from '@/config/constants';
 import type { Lead } from '@/types/lead.types';
-import { leadService, subscribeCrmSync } from '@/services';
+import { useLead } from '@/hooks/queries';
 import {
     EntityDetailDrawer,
     DrawerSectionCard,
     DrawerMetricGrid,
     DrawerChannelRow,
-    type AuditRevisionItem,
 } from '@/components/common/Drawer';
 import { AppToast } from '@/components/common/AppToast';
 import { LEAD_FORM_TABS } from './LeadForm';
@@ -51,28 +50,13 @@ export function LeadDetailDrawer({
 }: LeadDetailDrawerProps) {
     const router = useRouter();
 
-    const [currentLead, setCurrentLead] = useState<Lead | null>(lead);
-    const [, setSyncVersion] = useState(0);
+    const { data: freshLead } = useLead(open && lead?.id ? lead.id : undefined);
 
     useEffect(() => {
-        setCurrentLead(lead);
-    }, [lead]);
-
-    useEffect(() => {
-        if (!open || !lead?.id) return;
-
-        const refreshLead = () => {
-            const fresh = leadService.getByIdSync(lead.id);
-            if (fresh) {
-                setCurrentLead(fresh);
-                onLeadUpdated?.(fresh);
-            }
-            setSyncVersion((v) => v + 1);
-        };
-
-        const unsubscribe = subscribeCrmSync(refreshLead);
-        return unsubscribe;
-    }, [open, lead?.id, onLeadUpdated]);
+        if (freshLead) {
+            onLeadUpdated?.(freshLead);
+        }
+    }, [freshLead, onLeadUpdated]);
 
     const [toast, setToast] = useState<{
         open: boolean;
@@ -84,9 +68,8 @@ export function LeadDetailDrawer({
         severity: 'error',
     });
 
-    if (!lead && !currentLead) return null;
-
-    const l = currentLead || lead!;
+    const l = freshLead ?? lead;
+    if (!l) return null;
 
     const triggerToast = (message: string, severity: 'success' | 'error' | 'info' | 'warning' = 'error') => {
         setToast({ open: true, message, severity });
@@ -121,39 +104,6 @@ export function LeadDetailDrawer({
     const hasOrg = Boolean(l.organizationName && l.organizationName.trim().length > 0);
     const isConverted = l.status === 'Converted';
 
-    const auditRevisions: AuditRevisionItem[] = [
-        ...(isConverted
-            ? [
-                  {
-                      title: 'Lead converted to Account & Contact',
-                      author: l.assignedTo || 'mittal.sharma',
-                      time: 'Just now',
-                      note: `Converted with organization: ${l.organizationName || 'Entity'}`,
-                      tag: 'Converted',
-                  },
-              ]
-            : []),
-        {
-            title: 'Lead record updated',
-            author: l.assignedTo || 'mittal.sharma',
-            time: '2 hours ago',
-            note: `Status synchronized: ${l.status}`,
-            tag: l.status,
-        },
-        {
-            title: `Followup scheduled: ${l.followupType}`,
-            author: l.assignedTo || 'mittal.sharma',
-            time: '1 day ago',
-            note: l.addDescription,
-        },
-        {
-            title: `Lead captured via ${l.leadSource}`,
-            author: l.createdBy || 'mittal.sharma',
-            time: '3 days ago',
-            note: `Assigned to ${l.assignedTo}`,
-        },
-    ];
-
     return (
         <>
             <EntityDetailDrawer
@@ -183,7 +133,7 @@ export function LeadDetailDrawer({
                     borderColor: '#a7f3d0',
                 },
                 {
-                    label: l.assignedTo || 'mittal.sharma',
+                    label: l.assignedTo || 'Unassigned',
                     color: '#475569',
                     backgroundColor: '#f1f5f9',
                     borderColor: '#cbd5e1',
@@ -461,7 +411,7 @@ export function LeadDetailDrawer({
                     </Box>
                 ),
             }}
-            auditRevisions={auditRevisions}
+            auditEntity={{ type: 'leads', id: l.id }}
             includeChangesTab={true}
             statusText={isConverted ? 'Lead Converted' : `Next Followup: ${l.nextFollowupDate}`}
             primaryAction={{

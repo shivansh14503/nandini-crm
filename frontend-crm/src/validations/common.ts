@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { E164_REGEX, normalizeToE164, phoneIssue } from '../utils/phone';
 import { DEFAULT_COUNTRY_CODE, resolveCountryIso2 } from '../data/addressMaster';
 import { FIELD_MAX_LENGTH } from '../config/fieldLimits';
 
@@ -58,7 +59,8 @@ export function validateWithToast<T>(
 
 // ── Reusable Regex Constants ──────────────────────────────────────────────────
 
-export const PHONE_REGEX = /^\d{10}$/;
+/** ITU-T E.164 (+919811234567). Kept under the old name so existing imports keep working. */
+export const PHONE_REGEX = E164_REGEX;
 /** Indian PIN code: exactly 6 digits. */
 export const PIN_CODE_REGEX = /^\d{6}$/;
 /** Non-Indian postal / ZIP codes: 2–12 letters, digits, spaces or hyphens (e.g. SW1A 1AA, K1A 0B1, 94105-1234). */
@@ -106,21 +108,26 @@ export const optionalText = (fieldName: string, max: number) =>
 
 // ── Central DRY Zod Validation Dictionary ─────────────────────────────────────
 
-/** Exactly 10 digits numeric phone */
+/** International phone in E.164 (legacy 10-digit Indian numbers are upgraded to +91). */
 export const zodPhone = z
     .string()
     .trim()
-    .regex(PHONE_REGEX, { message: 'Must be exactly 10 digits.' });
+    .transform(normalizeToE164)
+    .superRefine((val, ctx) => {
+        const message = phoneIssue(val);
+        if (message) ctx.addIssue({ code: 'custom', message });
+    });
 
 export const zodPhoneOptional = z
     .string()
     .trim()
-    .refine((val) => !val || PHONE_REGEX.test(val), {
-        message: 'Must be exactly 10 digits.',
+    .transform(normalizeToE164)
+    .superRefine((val, ctx) => {
+        const message = val ? phoneIssue(val) : null;
+        if (message) ctx.addIssue({ code: 'custom', message });
     })
     .optional()
     .or(z.literal(''));
-
 /** Exactly 6 digits Indian postal PIN code */
 export const zodPinCode = z
     .string()
@@ -289,17 +296,22 @@ export const phoneSchema = (fieldName: string = 'Phone Number') =>
     z
         .string()
         .trim()
-        .refine(
-            (val) => !val || PHONE_REGEX.test(val),
-            { message: `${fieldName} must be exactly 10 digits.` }
-        );
+        .transform(normalizeToE164)
+        .superRefine((val, ctx) => {
+            const message = val ? phoneIssue(val) : null;
+            if (message) ctx.addIssue({ code: 'custom', message: message.replace('Phone number', fieldName) });
+        });
 
 export const requiredPhoneSchema = (fieldName: string = 'Phone Number') =>
     z
         .string()
         .trim()
         .min(1, { message: `${fieldName} is required.` })
-        .regex(PHONE_REGEX, { message: `${fieldName} must be exactly 10 digits.` });
+        .transform(normalizeToE164)
+        .superRefine((val, ctx) => {
+            const message = phoneIssue(val);
+            if (message) ctx.addIssue({ code: 'custom', message: message.replace('Phone number', fieldName) });
+        });
 
 export const pinCodeSchema = zodPinCodeOptional;
 export const requiredPinCodeSchema = (fieldName: string = 'Postal / PIN code') =>

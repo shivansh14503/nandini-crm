@@ -25,17 +25,16 @@ import LogoutOutlinedIcon from '@mui/icons-material/LogoutOutlined';
 
 import { ROUTES } from '@/config/constants';
 import type { Contact } from '@/types/contact.types';
-import { contactService, organizationService, subscribeCrmSync } from '@/services';
+import { useContact, useOrganizations } from '@/hooks/queries';
 import {
     EntityDetailDrawer,
     DrawerSectionCard,
     DrawerCopyButton,
     DrawerFieldGrid,
-    type AuditRevisionItem,
     type DrawerBadgeItem,
 } from '@/components/common/Drawer';
 import { ReadOnlyField } from '@/components/forms/ReadOnlyField';
-import { findCrmUser } from '@/data/mockUsers';
+import { findCrmUser } from '@/services/masterData.store';
 import { mailtoHref,smsHref, telHref, whatsappHref } from '@/utils/contactLinks';
 import { CONTACT_FORM_TABS } from './ContactForm';
 
@@ -170,34 +169,15 @@ export function ContactDetailDrawer({
 }: ContactDetailDrawerProps) {
     const router = useRouter();
 
-    const [currentContact, setCurrentContact] = useState<Contact | null>(contact);
-    const [, setSyncVersion] = useState(0);
-    const [prevContact, setPrevContact] = useState<Contact | null>(contact);
+    const { data: freshContact } = useContact(open && contact?.id ? contact.id : undefined);
+    const c = freshContact ?? contact;
 
-    // Reset to the new prop during render (React's recommended alternative to a syncing effect).
-    if (contact !== prevContact) {
-        setPrevContact(contact);
-        setCurrentContact(contact);
-    }
+    const { data: organizations } = useOrganizations(undefined, {
+        enabled: Boolean(open && c && !c.organizationId && c.organizationName),
+    });
 
-    useEffect(() => {
-        if (!open || !contact?.id) return;
+    if (!c) return null;
 
-        const refreshContact = () => {
-            const fresh = contactService.getByIdSync(contact.id);
-            if (fresh) {
-                setCurrentContact(fresh);
-            }
-            setSyncVersion((v) => v + 1);
-        };
-
-        const unsubscribe = subscribeCrmSync(refreshContact);
-        return unsubscribe;
-    }, [open, contact?.id]);
-
-    if (!contact && !currentContact) return null;
-
-    const c = currentContact || contact!;
     const assignedUser = findCrmUser(c.assignedTo);
     const assignedDisplayName = assignedUser?.name || c.assignedTo;
 
@@ -212,7 +192,7 @@ export function ContactDetailDrawer({
     const leftJob = c.leftJob === 'Yes';
     const organizationId =
         c.organizationId ||
-        organizationService.getAllSync().find((o) => o.organizationName === c.organizationName)?.id;
+        organizations?.find((o) => o.organizationName === c.organizationName)?.id;
 
     const badges: DrawerBadgeItem[] = [
         leftJob
@@ -256,33 +236,6 @@ export function ContactDetailDrawer({
     ).filter(([, value]) => Boolean(value?.trim()));
 
     const emails = (c.emailAddresses ?? []).filter((em) => em.email?.trim());
-
-    const auditRevisions: AuditRevisionItem[] = [
-        {
-            title: 'Contact Details Verified',
-            author: 'mittal.sharma',
-            time: 'Today, 11:20 AM',
-            from: 'Unverified',
-            to: 'Direct Link Verified',
-            note: 'Confirmed direct WhatsApp & corporate email channel with client.',
-        },
-        {
-            title: 'Role & Department Updated',
-            author: 'vikas.nair',
-            time: '14-Oct-2026, 03:40 PM',
-            from: 'Accounts Executive',
-            to: c.designation || 'Purchase Head',
-            note: 'Updated upon client organizational restructuring.',
-        },
-        {
-            title: 'Primary Contact Flag Assigned',
-            author: 'mittal.sharma',
-            time: '05-Oct-2026, 09:15 AM',
-            from: 'Secondary',
-            to: 'Primary Contact',
-            note: 'Set as primary escalation point for software and licensing orders.',
-        },
-    ];
 
     return (
         <EntityDetailDrawer
@@ -504,7 +457,7 @@ export function ContactDetailDrawer({
                     </Box>
                 ),
             }}
-            auditRevisions={auditRevisions}
+            auditEntity={{ type: 'contacts', id: c.id }}
             includeChangesTab={true}
             statusText={leftJob ? 'Former employee' : 'Direct Channel Active'}
             primaryAction={{

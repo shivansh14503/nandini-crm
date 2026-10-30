@@ -2,8 +2,8 @@
 
 import { useEffect } from 'react';
 import { Box, Button, Container, Typography } from '@mui/material';
-import { Navbar } from '@/src/components/layout/Navbar';
-import { ErrorAlert } from '@/src/components/common/ErrorAlert';
+import { Navbar } from '@/components/layout/Navbar';
+import { ErrorAlert } from '@/components/common/ErrorAlert';
 
 export default function GlobalRouteError({
     error,
