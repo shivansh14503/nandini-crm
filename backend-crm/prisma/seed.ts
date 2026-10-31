@@ -38,7 +38,14 @@ import { ticketInputSchema } from '../src/modules/tickets/ticket.validator.js';
 import { hashPassword } from '../src/modules/auth/auth.service.js';
 import { cacheService } from '../src/services/cache.service.js';
 import type { AuthUser } from '../src/types/user.types.js';
-import { NATURE_OF_CALLS, PARTNER_COMPANIES, PARTNER_CONTACTS } from './seed-data/masters.js';
+import { parseStringArray, stringifyStringArray } from '../src/utils/mappers.js';
+import {
+    NATURE_OF_CALLS,
+    ORGANIZATION_PRODUCT_COMPANIES,
+    PARTNER_COMPANIES,
+    PARTNER_CONTACTS,
+    PRODUCT_COMPANIES,
+} from './seed-data/masters.js';
 
 XLSX.set_fs(fs);
 
@@ -80,7 +87,7 @@ async function seedMasters(): Promise<void> {
             update: { priority: entry.priority, sortOrder: index },
         });
     }
-    for (const company of PARTNER_COMPANIES) {
+    for (const company of [...PARTNER_COMPANIES, ...PRODUCT_COMPANIES]) {
         await prisma.partnerCompany.upsert({ where: { companyName: company.companyName }, create: company, update: company });
     }
     for (const { partnerCompany, ...contact } of PARTNER_CONTACTS) {
@@ -90,7 +97,36 @@ async function seedMasters(): Promise<void> {
         if (existing) await prisma.partnerCompanyContact.update({ where: { id: existing.id }, data: contact });
         else await prisma.partnerCompanyContact.create({ data: { ...contact, partnerCompanyId: company.id } });
     }
-    log(`masters: ${NATURE_OF_CALLS.length} natures of call, ${PARTNER_COMPANIES.length} partner companies, ${PARTNER_CONTACTS.length} partner contacts`);
+    log(
+        `masters: ${NATURE_OF_CALLS.length} natures of call, ${PARTNER_COMPANIES.length} partner companies, ` +
+            `${PRODUCT_COMPANIES.length} product companies, ${PARTNER_CONTACTS.length} partner contacts`,
+    );
+}
+
+/**
+ * Links the product companies to organizations (Organization.partnerCompaniesJson, shown in the Partner Company
+ * field / Partner Licensing tab). Merges by name and never removes partners, so it is idempotent and also
+ * updates databases seeded before these companies existed. Runs after demo data so a fresh CRM is covered too.
+ */
+async function syncOrganizationProductCompanies(): Promise<void> {
+    let updated = 0;
+    for (const [organizationName, companies] of Object.entries(ORGANIZATION_PRODUCT_COMPANIES)) {
+        const orgs = await prisma.organization.findMany({
+            where: { organizationName, isDeleted: false },
+            select: { id: true, partnerCompaniesJson: true },
+        });
+        for (const org of orgs) {
+            const current = parseStringArray(org.partnerCompaniesJson);
+            const missing = companies.filter((name) => !current.includes(name));
+            if (missing.length === 0) continue;
+            await prisma.organization.update({
+                where: { id: org.id },
+                data: { partnerCompaniesJson: stringifyStringArray([...current, ...missing]), updatedBy: 'system' },
+            });
+            updated++;
+        }
+    }
+    log(`product companies: linked to ${updated} organization(s)`);
 }
 
 interface CountryRow { country_name: string; iso2_code: string; iso3_code: string; numeric_code: string | number }
@@ -339,6 +375,7 @@ async function main(): Promise<void> {
     await seedMasters();
     await seedAddressMaster();
     await seedDemoData(admin);
+    await syncOrganizationProductCompanies();
     await invalidateCaches();
     log('done');
 }

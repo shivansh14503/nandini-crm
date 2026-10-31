@@ -17,6 +17,10 @@ export interface PartnerCompanySeed {
     city: string;
     billingCountry: string;
     assignedTo: string;
+    website?: string;
+    description?: string;
+    billingCity?: string;
+    billingState?: string;
 }
 
 export interface PartnerContactSeed {
@@ -211,6 +215,102 @@ export const PARTNER_COMPANIES: PartnerCompanySeed[] = [
         assignedTo: 'govind.tandon'
     }
 ];
+
+/** Nature of Partner used for the OEM / product (principal) companies below. */
+export const PRODUCT_COMPANY_NATURE = 'PRODUCT COMPANY';
+
+/**
+ * Dummy OEM / product companies. They live in the PartnerCompany master (so they show up in the organization
+ * form's Partner Company lookup and Partner Licensing tab) and are linked to organizations via
+ * ORGANIZATION_PRODUCT_COMPANIES. Names, phones, emails and websites are fictitious.
+ */
+export const PRODUCT_COMPANIES: PartnerCompanySeed[] = [
+    {
+        companyName: 'Nexora Software Labs',
+        natureOfPartner: PRODUCT_COMPANY_NATURE,
+        phone: '+919810011001',
+        email: 'partners@nexora-software.example',
+        city: 'Bengaluru',
+        billingCity: 'Bengaluru',
+        billingState: 'Karnataka',
+        billingCountry: 'India',
+        assignedTo: 'mittal.sharma',
+        website: 'https://nexora-software.example',
+        description: 'Accounting & ERP software publisher (dummy record).'
+    },
+    {
+        companyName: 'Quantix Cloud Systems',
+        natureOfPartner: PRODUCT_COMPANY_NATURE,
+        phone: '+919810011002',
+        email: 'alliances@quantix-cloud.example',
+        city: 'Pune',
+        billingCity: 'Pune',
+        billingState: 'Maharashtra',
+        billingCountry: 'India',
+        assignedTo: 'govind.tandon',
+        website: 'https://quantix-cloud.example',
+        description: 'Cloud hosting & backup product vendor (dummy record).'
+    },
+    {
+        companyName: 'Veltrix Hardware Pvt Ltd',
+        natureOfPartner: PRODUCT_COMPANY_NATURE,
+        phone: '+919810011003',
+        email: 'channel@veltrix-hw.example',
+        city: 'Noida',
+        billingCity: 'Noida',
+        billingState: 'Uttar Pradesh',
+        billingCountry: 'India',
+        assignedTo: 'shashi.ranjan',
+        website: 'https://veltrix-hw.example',
+        description: 'Servers, desktops and peripherals OEM (dummy record).'
+    },
+    {
+        companyName: 'Orbis Networks India',
+        natureOfPartner: PRODUCT_COMPANY_NATURE,
+        phone: '+919810011004',
+        email: 'partners@orbis-networks.example',
+        city: 'Hyderabad',
+        billingCity: 'Hyderabad',
+        billingState: 'Telangana',
+        billingCountry: 'India',
+        assignedTo: 'gagan.gupta',
+        website: 'https://orbis-networks.example',
+        description: 'Switching, routing and Wi-Fi product company (dummy record).'
+    },
+    {
+        companyName: 'Sentrik Cybersecurity',
+        natureOfPartner: PRODUCT_COMPANY_NATURE,
+        phone: '+919810011005',
+        email: 'resellers@sentrik-security.example',
+        city: 'Gurugram',
+        billingCity: 'Gurugram',
+        billingState: 'Haryana',
+        billingCountry: 'India',
+        assignedTo: 'mittal.sharma',
+        website: 'https://sentrik-security.example',
+        description: 'Firewall and endpoint security vendor (dummy record).'
+    }
+];
+
+/**
+ * organizationName → product companies to link in Organization.partnerCompaniesJson. The seed merges these into
+ * whatever partners an organization already has (never removes any), so it is safe to re-run.
+ */
+export const ORGANIZATION_PRODUCT_COMPANIES: Record<string, string[]> = {
+    'IDTR Network': ['Nexora Software Labs', 'Quantix Cloud Systems'],
+    'GIRDHAR BUILDTECH LLP': ['Nexora Software Labs'],
+    'Nandini Infosys Pvt Ltd': ['Nexora Software Labs', 'Quantix Cloud Systems', 'Veltrix Hardware Pvt Ltd', 'Orbis Networks India', 'Sentrik Cybersecurity'],
+    'Apex Technosoft Solutions': ['Nexora Software Labs', 'Sentrik Cybersecurity'],
+    'Bharat Heavy Electricals & Engg': ['Veltrix Hardware Pvt Ltd', 'Orbis Networks India'],
+    'Apollo Diagnostics & Health Ltd': ['Quantix Cloud Systems', 'Sentrik Cybersecurity'],
+    'Zenith Cloud Infotech LLP': ['Quantix Cloud Systems', 'Orbis Networks India'],
+    'Vanguard Security & Surveillance': ['Sentrik Cybersecurity', 'Veltrix Hardware Pvt Ltd'],
+    'Dynamic System Integrators Pvt': ['Veltrix Hardware Pvt Ltd', 'Orbis Networks India', 'Sentrik Cybersecurity'],
+    'TechnoServe Electronics India': ['Veltrix Hardware Pvt Ltd'],
+    'Matrix Telecom & Hardware': ['Orbis Networks India', 'Veltrix Hardware Pvt Ltd'],
+    'Kalyan Jewellers & Retailers': ['Nexora Software Labs'],
+    'CareWell Pharma & Chemicals': ['Nexora Software Labs', 'Quantix Cloud Systems']
+};
 
 export const PARTNER_CONTACTS: PartnerContactSeed[] = [
     {
