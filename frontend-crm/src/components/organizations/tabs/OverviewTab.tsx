@@ -125,6 +125,19 @@ function OverviewTabInner({
         }
     }, [watchedParentCorp, set, form?.memberOfParentCorp]);
 
+    // The lookup edits one partner; `partnerCompanies` (the API shape) keeps it first, followed by any other saved partners.
+    const watchedPartnerCompany = useWatch({ control, name: 'partnerCompany' });
+    React.useEffect(() => {
+        if (!set || watchedPartnerCompany === undefined) return;
+        const current = form?.partnerCompanies ?? [];
+        if ((current[0] ?? '') === watchedPartnerCompany && (form?.partnerCompany ?? '') === watchedPartnerCompany) return;
+        set('partnerCompany', watchedPartnerCompany);
+        set(
+            'partnerCompanies',
+            watchedPartnerCompany ? [watchedPartnerCompany, ...current.slice(1).filter((p) => p !== watchedPartnerCompany)] : []
+        );
+    }, [watchedPartnerCompany, set, form?.partnerCompanies, form?.partnerCompany]);
+
     React.useEffect(() => {
         if (set && watchedAssignedUser !== undefined && watchedAssignedUser !== form?.assignedUser) {
             set('assignedUser', watchedAssignedUser);
@@ -619,6 +632,13 @@ function OverviewTabInner({
                     lookupType="organization"
                     excludeValues={organizationName ? [organizationName] : undefined}
                     placeholder="e.g. Apex Holdings Conglomerate Ltd."
+                />
+
+                <RhfLookup<OrganizationFormData>
+                    name="partnerCompany"
+                    label="Partner Company"
+                    lookupType="partnerCompany"
+                    placeholder="Search or select partner company..."
                 />
 
                 {/* Assigned to (Account Executive) */}

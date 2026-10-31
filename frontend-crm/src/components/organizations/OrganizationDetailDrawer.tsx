@@ -228,7 +228,7 @@ export function OrganizationDetailDrawer({
                 onEdit: handleEdit,
                 onView: () => router.push(ROUTES.ORGANIZATION_DETAIL(org.id)),
             }}
-            formTabs={ORGANIZATION_FORM_TABS.filter((t) => t.id !== 'partner_licensing')}
+            formTabs={ORGANIZATION_FORM_TABS}
             tabContents={{
                 overview: (
                     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>

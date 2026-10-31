@@ -90,6 +90,90 @@ function viewPresentation(name: string | undefined, value: string | undefined) {
     return { copyable, badge: false, badgeColor: undefined };
 }
 
+/** Smallest space kept between the label and a hint; with less room the hint is hidden. */
+const MIN_GAP_PX = 12;
+
+const useIsomorphicLayoutEffect = typeof window !== 'undefined' ? React.useLayoutEffect : React.useEffect;
+
+/**
+ * Label + hint on one line, always. The header never wraps (so inputs in a grid row stay aligned): a hint
+ * that doesn't fit beside the label, or any hint on a compact (`xs` / `sm`) field, is hidden instead.
+ * The hint stays mounted (invisible, out of flow) so its natural width can be re-measured on resize.
+ */
+function FormFieldHeader({ label, required, hint, compact }: { label: string; required?: boolean; hint?: React.ReactNode; compact: boolean }) {
+    const headerRef = React.useRef<HTMLDivElement>(null);
+    const labelRef = React.useRef<HTMLSpanElement>(null);
+    const hintRef = React.useRef<HTMLDivElement>(null);
+    const [fits, setFits] = React.useState(false);
+
+    useIsomorphicLayoutEffect(() => {
+        const header = headerRef.current;
+        if (!header || !hint || compact) {
+            setFits(false);
+            return;
+        }
+        const measure = () => {
+            const labelWidth = labelRef.current?.offsetWidth ?? 0;
+            const hintWidth = hintRef.current?.scrollWidth ?? 0;
+            setFits(labelWidth + hintWidth + MIN_GAP_PX <= header.clientWidth);
+        };
+        measure();
+        if (typeof ResizeObserver === 'undefined') return;
+        const observer = new ResizeObserver(measure);
+        observer.observe(header);
+        return () => observer.disconnect();
+    }, [hint, label, required, compact]);
+
+    return (
+        <Box
+            ref={headerRef}
+            sx={{
+                position: 'relative',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                flexWrap: 'nowrap',
+                minWidth: 0,
+                minHeight: 20,
+                overflow: 'hidden',
+                columnGap: 1,
+                mb: 0.6,
+            }}
+        >
+            <Typography
+                ref={labelRef}
+                component="span"
+                variant="body2"
+                sx={{ fontWeight: 600, color: '#374151', fontSize: '0.82rem', whiteSpace: 'nowrap', flexShrink: 0 }}
+            >
+                {label}
+                {required && (
+                    <Box component="span" sx={{ color: '#ef4444', ml: 0.4 }}>
+                        *
+                    </Box>
+                )}
+            </Typography>
+            {hint && (
+                <Box
+                    ref={hintRef}
+                    sx={[
+                        { whiteSpace: 'nowrap', flexShrink: 0, display: 'flex', alignItems: 'center' },
+                        !fits && { position: 'absolute', visibility: 'hidden', pointerEvents: 'none' },
+                    ]}
+                >
+                    {typeof hint === 'string' ? (
+                        <Typography variant="caption" sx={{ color: '#9ca3af', fontSize: '0.72rem' }}>
+                            {hint}
+                        </Typography>
+                    ) : (
+                        hint
+                    )}
+                </Box>
+            )}
+        </Box>
+    );
+}
+
 export function FormField({ name, viewValue, label, required, hint, size, children, sx }: FormFieldProps) {
     const { mode } = useFormMode();
     if (mode === 'view') {
@@ -111,42 +195,7 @@ export function FormField({ name, viewValue, label, required, hint, size, childr
             data-field-size={resolvedSize}
             sx={[{ mb: 2, ...fieldSizeSx(resolvedSize) }, ...(Array.isArray(sx) ? sx : [sx])]}
         >
-            {/* Wraps so a hint (e.g. a status chip) drops below the label on compact fields instead of squeezing it. */}
-            <Box
-                sx={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    flexWrap: 'wrap',
-                    columnGap: 1,
-                    mb: 0.6,
-                }}
-            >
-                <Typography
-                    variant="body2"
-                    sx={{
-                        fontWeight: 600,
-                        color: '#374151',
-                        fontSize: '0.82rem',
-                    }}
-                >
-                    {label}
-                    {required && (
-                        <Box component="span" sx={{ color: '#ef4444', ml: 0.4 }}>
-                            *
-                        </Box>
-                    )}
-                </Typography>
-                {hint && (
-                    typeof hint === 'string' ? (
-                        <Typography variant="caption" sx={{ color: '#9ca3af', fontSize: '0.72rem' }}>
-                            {hint}
-                        </Typography>
-                    ) : (
-                        hint
-                    )
-                )}
-            </Box>
+            <FormFieldHeader label={label} required={required} hint={hint} compact={resolvedSize === 'xs' || resolvedSize === 'sm'} />
             {children}
         </Box>
     );

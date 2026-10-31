@@ -90,6 +90,7 @@ export const organizationFormSchema = z
 
         // Partner Company
         partnerCompanies: z.array(z.union([z.string(), partnerCompanySchema])).default([]),
+        partnerCompany: optionalString,
     })
     .superRefine((data, ctx) => {
         refinePostalCodeForCountry(ctx, 'billingPostalCode', data.billingPostalCode, data.billingCountry, true);

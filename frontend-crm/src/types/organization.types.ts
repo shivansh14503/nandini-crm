@@ -180,6 +180,8 @@ export interface OrganizationFormData {
 
     // Partner Company
     partnerCompanies?: string[];
+    /** Form-only: the first entry of `partnerCompanies`, edited via the Overview tab's lookup. */
+    partnerCompany?: string;
 }
 
 export interface Organization extends OrganizationFormData {

@@ -11,6 +11,8 @@ export interface PartnerCompany {
     billingCountry: string;
     /** Username of the internal owner. */
     assignedTo: string;
+    /** ISO timestamp the partner was created. */
+    createdAt?: string;
 }
 
 /** A person at a partner company. */

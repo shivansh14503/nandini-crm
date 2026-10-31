@@ -10,7 +10,8 @@ import type { NatureOfCallItem } from '@/types/ticket.types';
 import type { PartnerCompany, PartnerCompanyContact } from '@/types/partner.types';
 import { CUSTOMER_TYPES, ENTITY_TYPES, NATURE_OF_BUSINESS } from '@/components/organizations/constants';
 import { findCrmUser } from '@/services/masterData.store';
-import { getPartnerCompanies } from '@/services/masterData.store';
+import { getCountryNameByCode } from '@/data/addressMaster';
+import { formatDateTime } from '@/utils/date';
 import { splitMulti } from '@/types/lookup.types';
 import type { LookupColumn, LookupFilterField, LookupSearchPredicate } from '@/types/lookup.types';
 
@@ -243,34 +244,42 @@ export const NATURE_OF_CALL_LOOKUP_PRESET: LookupPreset<NatureOfCallItem> = {
 export const PARTNER_COMPANY_LOOKUP_PRESET: LookupPreset<PartnerCompany> = {
     title: 'Partner Company Search',
     subtitle: 'Select a partner company. Click a row to choose it.',
-    searchPlaceholder: 'Company, phone or email',
+    searchPlaceholder: '',
+    showSearchBox: false,
+    rowsPerPage: 10,
     columns: [
-        { id: 'companyName', label: 'Company Name', minWidth: 180, render: (p) => <PrimaryText>{p.companyName}</PrimaryText> },
-        { id: 'natureOfPartner', label: 'Nature of Partner', minWidth: 180 },
-        { id: 'phone', label: 'Phone', minWidth: 110 },
-        { id: 'email', label: 'Email Address', minWidth: 210 },
-        { id: 'city', label: 'City', minWidth: 100 },
-        { id: 'billingCountry', label: 'Billing Country', minWidth: 110 },
-        { id: 'assignedTo', label: 'Assigned to', minWidth: 130, getValue: (p) => userName(p.assignedTo) },
+        { id: 'companyName', label: 'Company Name', minWidth: 180, sortable: true, render: (p) => <PrimaryText>{p.companyName}</PrimaryText> },
+        { id: 'natureOfPartner', label: 'Nature of Partner', minWidth: 170, sortable: true },
+        { id: 'phone', label: 'Phone', minWidth: 120, sortable: true },
+        { id: 'email', label: 'Email Address', minWidth: 200 },
+        { id: 'city', label: 'City', minWidth: 110, sortable: true },
+        {
+            id: 'billingCountry',
+            label: 'Billing Country',
+            minWidth: 120,
+            sortable: true,
+            getValue: (p) => getCountryNameByCode(p.billingCountry) || p.billingCountry || '',
+        },
+        { id: 'assignedTo', label: 'Assigned to', minWidth: 140, sortable: true, getValue: (p) => userName(p.assignedTo) },
+        { id: 'createdAt', label: 'Date Created', minWidth: 140, sortable: true, getValue: (p) => (p.createdAt ? formatDateTime(p.createdAt) : '-') },
     ],
     filterFields: [
-        { key: 'city', label: 'City', type: 'text', placeholder: 'e.g. Delhi' },
-        {
-            key: 'natureOfPartner',
-            label: 'Nature of Partner',
-            type: 'select',
-            defaultValue: '',
-            width: 3,
-            options: [
-                { value: '', label: 'All' },
-                ...[...new Set(getPartnerCompanies().map((p) => p.natureOfPartner))].sort().map((n) => ({ value: n, label: n })),
-            ],
-        },
+        { key: 'companyName', label: 'Partner Name', type: 'text', width: 4, placeholder: 'Search partner name...' },
+        { key: 'phone', label: 'Any Phone', type: 'text', width: 4, placeholder: 'Search phone...' },
+        { key: 'city', label: 'City', type: 'text', width: 4, placeholder: 'e.g. Delhi, Karnal...' },
+        // Options depend on master data that loads after import; PartnerCompanyLookupModal fills them in.
+        { key: 'natureOfPartner', label: 'Nature of Partner', type: 'multiselect', width: 6, options: [] },
+        { key: 'assignedTo', label: 'Assigned to', type: 'multiselect', width: 6, options: [] },
     ],
-    searchPredicate: (p, f, q) => {
-        if (!containsText(p.city, f.city)) return false;
-        if (f.natureOfPartner && p.natureOfPartner !== f.natureOfPartner) return false;
-        return includesQuery(q, p.companyName, p.phone, p.email);
+    searchPredicate: (p, f) => {
+        if (!containsText(p.companyName, f.companyName?.trim())) return false;
+        if (!containsText(p.phone, f.phone?.trim())) return false;
+        if (!containsText(p.city, f.city?.trim())) return false;
+        const natures = splitMulti(f.natureOfPartner);
+        if (natures.length && !natures.includes(p.natureOfPartner)) return false;
+        const owners = splitMulti(f.assignedTo);
+        if (owners.length && !owners.includes(p.assignedTo)) return false;
+        return true;
     },
 };
 

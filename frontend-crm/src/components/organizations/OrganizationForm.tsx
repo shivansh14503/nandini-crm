@@ -9,7 +9,6 @@ import ApartmentIcon from '@mui/icons-material/Apartment';
 import ArticleOutlinedIcon from '@mui/icons-material/ArticleOutlined';
 import PlaceOutlinedIcon from '@mui/icons-material/PlaceOutlined';
 import AccountBalanceOutlinedIcon from '@mui/icons-material/AccountBalanceOutlined';
-import WorkspacePremiumOutlinedIcon from '@mui/icons-material/WorkspacePremiumOutlined';
 
 import { type BreadcrumbItem } from '../common/AppBreadcrumbs';
 import { AppToast } from '../common/AppToast';
@@ -31,7 +30,6 @@ import {
     OverviewTab,
     AddressTab,
     TaxBankTab,
-    PartnerLicensingTab,
 } from './tabs';
 
 // ─── Single Source of Truth for Organization Form Tabs ──────────────────────────
@@ -51,11 +49,6 @@ export const ORGANIZATION_FORM_TABS: (FormTabDefinition & { id: TabKey })[] = [
         label: 'Tax & Bank Details',
         icon: <AccountBalanceOutlinedIcon sx={{ fontSize: 18 }} />,
         hasDot: true,
-    },
-    {
-        id: 'partner_licensing',
-        label: 'Partner Company',
-        icon: <WorkspacePremiumOutlinedIcon sx={{ fontSize: 18 }} />,
     },
 ];
 
@@ -124,9 +117,10 @@ const DEFAULT_FORM: OrganizationFormData = {
 
     // Partner Company
     partnerCompanies: [],
+    partnerCompany: '',
 };
 
-type TabKey = 'overview' | 'address' | 'tax_bank' | 'partner_licensing';
+type TabKey = 'overview' | 'address' | 'tax_bank';
 
 // Maps a validation field key to the tab that renders it (unmapped keys stay on the current tab).
 const FIELD_TAB_MAP: Record<string, TabKey> = {
@@ -169,7 +163,8 @@ const FIELD_TAB_MAP: Record<string, TabKey> = {
     accountNumber: 'tax_bank',
     typeOfAccount: 'tax_bank',
     bankAddress: 'tax_bank',
-    partnerCompanies: 'partner_licensing',
+    partnerCompanies: 'overview',
+    partnerCompany: 'overview',
 };
 
 // ─── Component Props ──────────────────────────────────────────────────────────
@@ -279,6 +274,7 @@ export default function OrganizationForm({
                         // Mailing name always mirrors the organization name; older records may lack a trade name.
                         mailingName: found.organizationName,
                         tradeName: found.tradeName || found.organizationName,
+                        partnerCompany: found.partnerCompanies?.[0] || '',
                     }, ORGANIZATION_ADDRESS_PAIRS);
                     setAudit({
                         createdAt: found.createdAt,
@@ -395,6 +391,11 @@ export default function OrganizationForm({
             currentData.gstNumber = currentData.gstNo;
         }
 
+        // The single Partner Company lookup owns the first entry; any further saved partners are kept behind it.
+        const partner = currentData.partnerCompany?.trim() ?? '';
+        const otherPartners = (currentData.partnerCompanies ?? []).slice(1).filter((p) => p !== partner);
+        currentData.partnerCompanies = partner ? [partner, ...otherPartners] : [];
+
         // Switches to the tab that renders the field (if needed) and focuses it.
         const revealField = (fieldName: string) => {
             const targetTab = FIELD_TAB_MAP[fieldName];
@@ -475,7 +476,6 @@ export default function OrganizationForm({
             sublabel: form.billingCity || form.shippingCity ? '(Configured)' : '(3 Locs)',
         },
         ORGANIZATION_FORM_TABS[2],
-        ORGANIZATION_FORM_TABS[3],
     ], [progressCount, form.billingCity, form.shippingCity]);
 
     return (
@@ -562,13 +562,6 @@ export default function OrganizationForm({
 
                 {activeTab === 'tax_bank' && (
                     <TaxBankTab
-                        form={form}
-                        set={set}
-                    />
-                )}
-
-                {activeTab === 'partner_licensing' && (
-                    <PartnerLicensingTab
                         form={form}
                         set={set}
                     />

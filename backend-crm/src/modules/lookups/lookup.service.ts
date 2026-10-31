@@ -225,6 +225,7 @@ export const lookupService = {
                 city: p.city ?? '',
                 billingCountry: p.billingCountry ?? '',
                 assignedTo: p.assignedTo ?? '',
+                createdAt: p.createdAt.toISOString(),
             }));
         });
     },

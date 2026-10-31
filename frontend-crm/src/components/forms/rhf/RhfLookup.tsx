@@ -7,7 +7,7 @@ import { FormField } from '../FormField';
 import { LookupField } from '../LookupField';
 import { resolveFieldSize, type FieldSize } from '../fieldSizing';
 import { RecordLookupModal, LOOKUP_DISPLAY_VALUE, findLookupRecord } from '@/components/common/lookup';
-import { findCrmUser, formatCrmUserDisplay, getAssignableUserNames } from '@/services/masterData.store';
+import { findCrmUser, formatCrmUserDisplay, getAssignableUserNames, getPartnerCompanies } from '@/services/masterData.store';
 import { useContacts, useOrganizations } from '@/hooks/queries';
 import { useMasterData } from '@/hooks/queries/useMasterData';
 import type { LookupKind, LookupRecordMap } from '@/types/lookup.types';
@@ -70,7 +70,7 @@ export function RhfLookup<T extends FieldValues, K extends LookupKind = LookupKi
     // Usernames are short; record lookups (organizations, contacts…) keep the wider `lg` default.
     const size = resolveFieldSize(name, 'lookup', fieldSize ?? (kind === 'user' ? 'md' : undefined));
     // Subscribes to the user directory so suggestions fill in once it loads (API mode).
-    const { users } = useMasterData();
+    const { users, partnerCompanies } = useMasterData();
     // Records feed both inline suggestions (when no explicit `options`) and exact-match auto-population.
     const { data: organizations } = useOrganizations(undefined, {
         enabled: kind === 'organization' && (!options || Boolean(onSelectRecord)),
@@ -83,6 +83,7 @@ export function RhfLookup<T extends FieldValues, K extends LookupKind = LookupKi
         // User fields always suggest active users by full name; caller-supplied username lists are ignored.
         if (kind === 'user') return getAssignableUserNames();
         if (options) return options;
+        if (kind === 'partnerCompany') return getPartnerCompanies().map((p) => p.companyName);
         const names =
             kind === 'organization'
                 ? (organizations ?? []).map((o) => o.organizationName)
@@ -100,7 +101,7 @@ export function RhfLookup<T extends FieldValues, K extends LookupKind = LookupKi
         });
         // `users` is the re-render trigger for user suggestions; getAssignableUsernames reads the same directory.
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [options, kind, users, organizations, contacts, excludeKey]);
+    }, [options, kind, users, partnerCompanies, organizations, contacts, excludeKey]);
 
     const handleSelect = (record: LookupRecordMap[K]) => {
         if (!kind) return;

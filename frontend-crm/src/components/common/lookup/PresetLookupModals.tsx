@@ -2,7 +2,7 @@
 
 import React from 'react';
 import { getNatureOfCalls } from '@/services/masterData.store';
-import { getPartnerCompanies, getPartnerContacts } from '@/services/masterData.store';
+import { getPartnerContacts } from '@/services/masterData.store';
 import { useMasterData } from '@/hooks/queries/useMasterData';
 import type { NatureOfCallItem } from '@/types/ticket.types';
 import type { PartnerCompany, PartnerCompanyContact } from '@/types/partner.types';
@@ -46,12 +46,41 @@ export const NatureOfCallLookupModal = createPresetLookupModal<NatureOfCallItem>
     'NatureOfCallLookupModal'
 );
 
-export const PartnerCompanyLookupModal = createPresetLookupModal<PartnerCompany>(
-    PARTNER_COMPANY_LOOKUP_PRESET,
-    getPartnerCompanies,
-    (p) => p.companyName,
-    'PartnerCompanyLookupModal'
-);
+const NO_PARTNER_COMPANIES: PartnerCompany[] = [];
+
+export function PartnerCompanyLookupModal({ open, onClose, onSelect, selectedValue }: EntityLookupModalProps<PartnerCompany>) {
+    // Master data arrives after module import, so filter options are built from it here, not in the preset.
+    const { partnerCompanies, users } = useMasterData();
+    const filterFields = React.useMemo(() => {
+        const natures = [...new Set(partnerCompanies.map((p) => p.natureOfPartner).filter(Boolean))].sort();
+        const owners = users
+            .filter((u) => u.status === 'Active')
+            .map((u) => ({ value: u.username, label: u.name || u.username }))
+            .sort((a, b) => a.label.localeCompare(b.label));
+        return PARTNER_COMPANY_LOOKUP_PRESET.filterFields.map((f) =>
+            f.key === 'natureOfPartner'
+                ? { ...f, options: natures.map((n) => ({ value: n, label: n })) }
+                : f.key === 'assignedTo'
+                  ? { ...f, options: owners }
+                  : f
+        );
+    }, [partnerCompanies, users]);
+
+    const selected = selectedValue?.trim().toLowerCase();
+    const selectedId = selected ? partnerCompanies.find((p) => p.companyName.toLowerCase() === selected)?.id : undefined;
+    return (
+        <GenericLookupModal<PartnerCompany>
+            open={open}
+            onClose={onClose}
+            onSelect={onSelect}
+            data={open ? partnerCompanies : NO_PARTNER_COMPANIES}
+            selectedId={selectedId}
+            {...PARTNER_COMPANY_LOOKUP_PRESET}
+            filterFields={filterFields}
+        />
+    );
+}
+PartnerCompanyLookupModal.displayName = 'PartnerCompanyLookupModal';
 
 export const PartnerCompanyContactLookupModal = createPresetLookupModal<PartnerCompanyContact>(
     PARTNER_COMPANY_CONTACT_LOOKUP_PRESET,

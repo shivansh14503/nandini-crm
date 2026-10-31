@@ -71,6 +71,8 @@ export function LookupField({
             {/* Always an Autocomplete (even with no options yet) so the input isn't remounted, and loses focus, when suggestions load mid-typing. */}
             <Autocomplete
                 freeSolo
+                // The separate [X] button already clears the field; hide the Autocomplete's built-in clear icon.
+                disableClearable
                 disabled={disabled}
                 options={options}
                 value={value || ''}
