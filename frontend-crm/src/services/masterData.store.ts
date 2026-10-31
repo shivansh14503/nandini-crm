@@ -41,6 +41,19 @@ export const getPartnerCompanies = (): PartnerCompany[] => masters.partnerCompan
 /** Partner contacts (`/api/lookups/partner-contacts`). */
 export const getPartnerContacts = (): PartnerCompanyContact[] => masters.partnerContacts;
 
+/** Active users only: the pool every "Assigned to" picker draws from. */
+export const getActiveUsers = (): CrmUser[] => masters.users.filter((x) => x.status === 'Active');
+
+/** Active, non-group user display names (full name, falling back to username) for assignee autocomplete. */
+export function getAssignableUserNames(): string[] {
+    return masters.users.filter((x) => x.status === 'Active' && !x.isGroupUser).map((x) => x.name || x.username);
+}
+
+/** Resolves a stored username (or name) to the user's full name; unknown values are shown as-is. */
+export function formatCrmUserDisplay(value: string | undefined): string {
+    return findCrmUser(value)?.name || value || '';
+}
+
 /** Active, non-group usernames: autocomplete suggestions for assignee fields. */
 export function getAssignableUsernames(): string[] {
     return masters.users.filter((x) => x.status === 'Active' && !x.isGroupUser).map((x) => x.username);

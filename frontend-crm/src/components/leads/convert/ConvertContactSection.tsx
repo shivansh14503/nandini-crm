@@ -25,7 +25,6 @@ import {
     CONTACT_DEPARTMENTS,
     CONTACT_DESIGNATIONS,
 } from '@/types/contact.types';
-import { LEAD_ASSIGNED_USERS } from '@/types/lead.types';
 import type { ConvertLeadFormValues } from '@/validations';
 
 type F = ConvertLeadFormValues;
@@ -92,7 +91,7 @@ export function ConvertContactSection() {
 
                 <RhfSelect<F> name="designation" label="Designation" options={CONTACT_DESIGNATIONS} placeholder="Select Designation" />
                 <RhfSelect<F> name="department" label="Department" options={CONTACT_DEPARTMENTS} placeholder="Select Department" />
-                <RhfLookup<F> name="contactAssignedTo" label="Assigned to" lookupType="user" required options={LEAD_ASSIGNED_USERS} placeholder="Select representative" />
+                <RhfLookup<F> name="contactAssignedTo" label="Assigned to" lookupType="user" required placeholder="Select representative" />
 
                 <FormGridItem span={2}>
                     <RhfTextField<F> name="organizationName" label="Organization Name" required disabled hint="Taken from the organization section below" />

@@ -13,7 +13,6 @@ import {
 import { OPPORTUNITY_TYPES } from '@/types/opportunity.types';
 import {
     FOLLOWUP_TYPES,
-    LEAD_ASSIGNED_USERS,
     LEAD_SOURCES,
     PRODUCT_CATEGORIES,
 } from '@/types/lead.types';
@@ -35,7 +34,7 @@ export function ConvertOpportunitySection() {
 
             <RhfSelect<F> name="opportunityType" label="Type" required options={OPPORTUNITY_TYPES} placeholder="Select Type" />
             <RhfSelect<F> name="opportunityLeadSource" label="Lead Source" required options={LEAD_SOURCES} placeholder="Select Lead Source" />
-            <RhfLookup<F> name="opportunityAssignedTo" label="Assigned to" lookupType="user" required options={LEAD_ASSIGNED_USERS} placeholder="Select representative" />
+            <RhfLookup<F> name="opportunityAssignedTo" label="Assigned to" lookupType="user" required placeholder="Select representative" />
 
             <RhfDateTimeField<F> dateName="nextFollowupDate" timeName="nextFollowupTime" label="Next Followup Date" required />
             <RhfSelect<F> name="followupType" label="Followup Type" options={FOLLOWUP_TYPES} placeholder="Select Type" />

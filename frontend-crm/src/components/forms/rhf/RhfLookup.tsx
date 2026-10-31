@@ -7,7 +7,7 @@ import { FormField } from '../FormField';
 import { LookupField } from '../LookupField';
 import { resolveFieldSize, type FieldSize } from '../fieldSizing';
 import { RecordLookupModal, LOOKUP_DISPLAY_VALUE, findLookupRecord } from '@/components/common/lookup';
-import { getAssignableUsernames } from '@/services/masterData.store';
+import { findCrmUser, formatCrmUserDisplay, getAssignableUserNames } from '@/services/masterData.store';
 import { useContacts, useOrganizations } from '@/hooks/queries';
 import { useMasterData } from '@/hooks/queries/useMasterData';
 import type { LookupKind, LookupRecordMap } from '@/types/lookup.types';
@@ -64,6 +64,9 @@ export function RhfLookup<T extends FieldValues, K extends LookupKind = LookupKi
     const value = (field.value as string) ?? '';
 
     const kind: K | null = lookupType === 'custom' ? null : lookupType;
+    // The form keeps the username (API contract); the input and read-only view show the full name.
+    const storesUsername = kind === 'user' && userValueField === 'username';
+    const displayValue = storesUsername ? formatCrmUserDisplay(value) : value;
     // Usernames are short; record lookups (organizations, contacts…) keep the wider `lg` default.
     const size = resolveFieldSize(name, 'lookup', fieldSize ?? (kind === 'user' ? 'md' : undefined));
     // Subscribes to the user directory so suggestions fill in once it loads (API mode).
@@ -77,8 +80,9 @@ export function RhfLookup<T extends FieldValues, K extends LookupKind = LookupKi
     });
     const excludeKey = excludeValues?.map((v) => v.trim().toLowerCase()).join('\u0000') ?? '';
     const suggestions = useMemo(() => {
+        // User fields always suggest active users by full name; caller-supplied username lists are ignored.
+        if (kind === 'user') return getAssignableUserNames();
         if (options) return options;
-        if (kind === 'user') return getAssignableUsernames();
         const names =
             kind === 'organization'
                 ? (organizations ?? []).map((o) => o.organizationName)
@@ -111,20 +115,22 @@ export function RhfLookup<T extends FieldValues, K extends LookupKind = LookupKi
     // Covers the [X] button (LookupField calls onChange('') first) and backspacing the text away.
     // Only fires when there was something to clear, so empty-to-empty updates stay silent.
     const handleChange = (next: string) => {
-        field.onChange(next);
+        // Users are shown by full name but stored by username; partial text is kept as typed until it matches.
+        const matchedUser = storesUsername ? findCrmUser(next) : undefined;
+        field.onChange(matchedUser?.status === 'Active' ? matchedUser.username : next);
         if (!next.trim()) {
             if (value.trim()) onClearRecord?.();
             return;
         }
-        if (!kind || !onSelectRecord || next === value) return;
+        if (!kind || !onSelectRecord || next === displayValue) return;
         const match = findLookupRecord(kind, next, { organizations, contacts });
         if (match) onSelectRecord(match);
     };
 
     return (
-        <FormField name={name} label={label} required={required} hint={hint} size={size}>
+        <FormField name={name} label={label} required={required} hint={hint} size={size} viewValue={storesUsername ? displayValue : undefined}>
             <LookupField
-                value={value}
+                value={displayValue}
                 onChange={handleChange}
                 options={suggestions}
                 placeholder={placeholder}

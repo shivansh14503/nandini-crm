@@ -8,15 +8,16 @@ import type { EntityLookupModalProps } from '@/types/lookup.types';
 import { GenericLookupModal } from './GenericLookupModal';
 import { USER_LOOKUP_PRESET } from './lookupConfigs';
 
-/** "User Search" picker matching the legacy CRM popup (Group User / Status / Department filters). */
+/** "User Search" picker (Group User / Department filters). Lists active users only. */
 export function UserLookupModal({ open, onClose, onSelect, selectedValue }: EntityLookupModalProps<CrmUser>) {
     const { users } = useMasterData();
+    const activeUsers = React.useMemo(() => users.filter((u) => u.status === 'Active'), [users]);
     return (
         <GenericLookupModal<CrmUser>
             open={open}
             onClose={onClose}
             onSelect={onSelect}
-            data={users}
+            data={activeUsers}
             selectedId={findCrmUser(selectedValue)?.id}
             {...USER_LOOKUP_PRESET}
         />

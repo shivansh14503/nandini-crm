@@ -13,7 +13,6 @@ import {
 } from '@/components/organizations/constants';
 import { matchExistingOrganization } from '@/services';
 import { useOrganizations } from '@/hooks/queries';
-import { LEAD_ASSIGNED_USERS } from '@/types/lead.types';
 import type { ExtendedOrganization } from '@/types/organization.types';
 import type { ConvertLeadFormValues } from '@/validations';
 
@@ -75,7 +74,7 @@ export function ConvertOrganizationSection() {
                 <RhfSelect<F> name="customerType" label="Customer Type" required options={CUSTOMER_TYPES} placeholder="Select Customer Type" />
 
                 <RhfSelect<F> name="sourceOfLead" label="Source of Lead" options={ORG_LEAD_SOURCES} placeholder="Select Source of Lead" />
-                <RhfLookup<F> name="organizationAssignedTo" label="Assigned to" lookupType="user" required options={LEAD_ASSIGNED_USERS} placeholder="Select representative" />
+                <RhfLookup<F> name="organizationAssignedTo" label="Assigned to" lookupType="user" required placeholder="Select representative" />
 
                 <RhfTextField<F> name="organizationDescription" label="Description" multiline minRows={3} placeholder="Notes about this organization..." />
             </FormGrid>

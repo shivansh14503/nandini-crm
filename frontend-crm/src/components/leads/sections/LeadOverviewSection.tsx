@@ -26,7 +26,6 @@ import {
     LEAD_REGISTRATION_TYPES,
     LEAD_TURNOVER_RANGES,
     LEAD_EMPLOYEE_RANGES,
-    LEAD_ASSIGNED_USERS,
     type LeadFormData,
 } from '@/types/lead.types';
 
@@ -73,7 +72,7 @@ export function LeadOverviewSection() {
                     <RhfLookup<LeadFormData> name="referredBy" label="Referred By" hint="Partner, channel or employee" placeholder="e.g. Sunil Mehta / Tally Partner" />
                     <RhfSelect<LeadFormData> name="followupType" label="Followup Type" hint="Default: Call" options={FOLLOWUP_TYPES} placeholder="Select Type" />
                     <RhfDateTimeField<LeadFormData> dateName="nextFollowupDate" timeName="nextFollowupTime" label="Next Followup Date" required hint="Date & time" />
-                    <RhfLookup<LeadFormData> name="assignedTo" label="Assigned to" lookupType="user" required hint="Default: mittal.sharma" options={LEAD_ASSIGNED_USERS} placeholder="Select Representative" />
+                    <RhfLookup<LeadFormData> name="assignedTo" label="Assigned to" lookupType="user" required hint="Default: mittal.sharma" placeholder="Select Representative" />
                     <RhfChipGroup<LeadFormData> name="productCategory" label="Product Category" required options={PRODUCT_CATEGORIES} />
                 </FormGrid>
             </Box>

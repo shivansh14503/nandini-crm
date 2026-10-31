@@ -9,7 +9,6 @@ import {
     RhfPhoneField,
     RhfEmailField,
 } from '@/components/forms';
-import { LEAD_ASSIGNED_USERS } from '@/types/lead.types';
 import {
     QUOTATION_STATUSES,
     QUOTATION_PAYMENT_TERMS,
@@ -81,7 +80,7 @@ export function QuotationCustomerSection() {
                 name="assignedTo"
                 label="Assigned Representative"
                 required
-                options={LEAD_ASSIGNED_USERS}
+                lookupType="user"
                 placeholder="Select sales rep"
                 fieldSize="md"
             />

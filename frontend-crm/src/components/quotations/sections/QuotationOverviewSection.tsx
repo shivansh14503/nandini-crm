@@ -24,7 +24,6 @@ import {
     PAYMENT_TERMS_DESCRIPTIONS,
     type QuotationFormData,
 } from '@/types/quotation.types';
-import { LEAD_ASSIGNED_USERS } from '@/types/lead.types';
 
 /** Select + its description stacked in one grid cell. */
 const termsColumnSx = { display: 'flex', flexDirection: 'column', gap: 2.5 } as const;
@@ -175,7 +174,7 @@ export function QuotationOverviewSection() {
                     name="assignedTo"
                     label="Assigned to"
                     required
-                    options={LEAD_ASSIGNED_USERS}
+                    lookupType="user"
                     placeholder="Select Representative"
                     hint="Managing representative"
                     fieldSize="md"

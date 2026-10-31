@@ -2,7 +2,6 @@
 
 import React from 'react';
 import { Box, Typography } from '@mui/material';
-import CheckIcon from '@mui/icons-material/Check';
 import type { CrmUser } from '@/types/user.types';
 import { CRM_USER_DEPARTMENTS } from '@/types/user.types';
 import type { ExtendedOrganization } from '@/types/organization.types';
@@ -81,12 +80,6 @@ const yesNoOptions = [
     { value: 'Yes', label: 'Yes' },
 ];
 
-const statusOptions = [
-    { value: 'Active', label: 'Active' },
-    { value: 'Inactive', label: 'Inactive' },
-    { value: '', label: 'All' },
-];
-
 // ─── Users ────────────────────────────────────────────────────────────────────
 
 export const USER_LOOKUP_PRESET: LookupPreset<CrmUser> = {
@@ -99,27 +92,6 @@ export const USER_LOOKUP_PRESET: LookupPreset<CrmUser> = {
         { id: 'department', label: 'Department', minWidth: 110 },
         { id: 'role', label: 'Role', minWidth: 170 },
         { id: 'email', label: 'Email', minWidth: 220 },
-        { id: 'status', label: 'Status', render: (u) => <StatusChip status={u.status} /> },
-        {
-            id: 'onLeave',
-            label: 'On Leave',
-            align: 'center',
-            width: 90,
-            getValue: (u) => (u.onLeave ? 'Yes' : 'No'),
-            render: (u) =>
-                u.onLeave ? (
-                    <Box component="span" sx={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>
-                        <CheckIcon
-                            aria-label="On leave"
-                            sx={{ fontSize: 18, color: '#dc2626', stroke: '#dc2626', strokeWidth: 1 }}
-                        />
-                    </Box>
-                ) : (
-                    <Typography component="span" aria-label="Not on leave" sx={{ color: '#cbd5e1', fontSize: '0.85rem' }}>
-                        -
-                    </Typography>
-                ),
-        },
     ],
     filterFields: [
         {
@@ -129,7 +101,6 @@ export const USER_LOOKUP_PRESET: LookupPreset<CrmUser> = {
             defaultValue: 'No',
             options: yesNoOptions,
         },
-        { key: 'status', label: 'Status', type: 'select', defaultValue: 'Active', options: statusOptions },
         {
             key: 'department',
             label: 'Department',
@@ -139,8 +110,9 @@ export const USER_LOOKUP_PRESET: LookupPreset<CrmUser> = {
         },
     ],
     searchPredicate: (u, f, q) => {
+        // Only active users can be assigned; there is deliberately no way to list inactive ones.
+        if (u.status !== 'Active') return false;
         if (f.isGroupUser && (u.isGroupUser ? 'Yes' : 'No') !== f.isGroupUser) return false;
-        if (f.status && u.status !== f.status) return false;
         if (f.department && u.department !== f.department) return false;
         return includesQuery(q, u.name, u.username, u.email);
     },
