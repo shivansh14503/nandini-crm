@@ -44,6 +44,8 @@ export interface GenericLookupModalProps<T extends { id: string }> {
     columns: LookupColumn<T>[];
     data: T[];
     filterFields?: LookupFilterField[];
+    /** Filter values the dialog opens with (e.g. the text already typed in the field); "Clear" still resets to blank. */
+    initialFilterValues?: LookupFilterValues;
     /** Receives the filter values and the main search text. Defaults to text match + exact filter match. */
     searchPredicate?: LookupSearchPredicate<T>;
     selectedId?: string;
@@ -106,6 +108,7 @@ function LookupDialog<T extends { id: string }>({
     columns,
     data,
     filterFields = [],
+    initialFilterValues,
     searchPredicate,
     selectedId,
     searchPlaceholder = 'Search…',
@@ -115,7 +118,10 @@ function LookupDialog<T extends { id: string }>({
     emptyMessage,
 }: GenericLookupModalProps<T>) {
     const [query, setQuery] = useState('');
-    const [filters, setFilters] = useState<LookupFilterValues>(() => initialFilters(filterFields));
+    const [filters, setFilters] = useState<LookupFilterValues>(() => ({
+        ...initialFilters(filterFields),
+        ...initialFilterValues,
+    }));
     const [page, setPage] = useState(0);
     const firstRowRef = useRef<HTMLTableRowElement>(null);
     const [sort, setSort] = useState<{ id: string; dir: 'asc' | 'desc' } | null>(null);

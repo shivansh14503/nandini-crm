@@ -38,6 +38,8 @@ export interface RhfLookupProps<T extends FieldValues, K extends LookupKind = Lo
     onClearRecord?: () => void;
     /** Width token for input + action buttons (default `md` for user lookups, `lg` otherwise). */
     fieldSize?: FieldSize;
+    /** Values (case-insensitive) left out of the auto-built suggestions, e.g. a record's own name. */
+    excludeValues?: string[];
 }
 
 /** React Hook Form bound lookup/autocomplete built on the shared {@link LookupField}. */
@@ -55,6 +57,7 @@ export function RhfLookup<T extends FieldValues, K extends LookupKind = LookupKi
     onSelectRecord,
     onClearRecord,
     fieldSize,
+    excludeValues,
 }: RhfLookupProps<T, K>) {
     const { field, fieldState } = useController<T>({ name });
     const [modalOpen, setModalOpen] = useState(false);
@@ -65,18 +68,35 @@ export function RhfLookup<T extends FieldValues, K extends LookupKind = LookupKi
     const size = resolveFieldSize(name, 'lookup', fieldSize ?? (kind === 'user' ? 'md' : undefined));
     // Subscribes to the user directory so suggestions fill in once it loads (API mode).
     const { users } = useMasterData();
+    // Records feed both inline suggestions (when no explicit `options`) and exact-match auto-population.
     const { data: organizations } = useOrganizations(undefined, {
-        enabled: kind === 'organization' && Boolean(onSelectRecord),
+        enabled: kind === 'organization' && (!options || Boolean(onSelectRecord)),
     });
     const { data: contacts } = useContacts(undefined, {
-        enabled: kind === 'contact' && Boolean(onSelectRecord),
+        enabled: kind === 'contact' && (!options || Boolean(onSelectRecord)),
     });
-    const suggestions = useMemo(
-        () => options ?? (kind === 'user' ? getAssignableUsernames() : undefined),
-        // `users` is the re-render trigger; getAssignableUsernames reads the same directory.
+    const excludeKey = excludeValues?.map((v) => v.trim().toLowerCase()).join('\u0000') ?? '';
+    const suggestions = useMemo(() => {
+        if (options) return options;
+        if (kind === 'user') return getAssignableUsernames();
+        const names =
+            kind === 'organization'
+                ? (organizations ?? []).map((o) => o.organizationName)
+                : kind === 'contact'
+                  ? (contacts ?? []).map((c) => c.name)
+                  : undefined;
+        if (!names) return undefined;
+        const excluded = new Set(excludeKey ? excludeKey.split('\u0000') : []);
+        const seen = new Set<string>();
+        return names.filter((n) => {
+            const key = n?.trim().toLowerCase();
+            if (!key || excluded.has(key) || seen.has(key)) return false;
+            seen.add(key);
+            return true;
+        });
+        // `users` is the re-render trigger for user suggestions; getAssignableUsernames reads the same directory.
         // eslint-disable-next-line react-hooks/exhaustive-deps
-        [options, kind, users]
-    );
+    }, [options, kind, users, organizations, contacts, excludeKey]);
 
     const handleSelect = (record: LookupRecordMap[K]) => {
         if (!kind) return;

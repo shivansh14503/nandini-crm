@@ -7,6 +7,10 @@ import { organizationService } from './organization.service.js';
 export const organizationController = {
     ...createCrudController(organizationService, { singular: 'Organization', plural: 'organizations' }),
 
+    async checkUnique(req: Request, res: Response): Promise<void> {
+        sendSuccess(res, await organizationService.checkUnique(req.query));
+    },
+
     async updateStatusBulk(req: Request, res: Response): Promise<void> {
         const updated = await organizationService.updateStatusBulk(req.body, requireUser(req));
         sendSuccess(res, updated, `${updated.length} organization${updated.length === 1 ? '' : 's'} updated`);

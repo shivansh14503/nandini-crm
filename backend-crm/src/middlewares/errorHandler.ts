@@ -47,6 +47,16 @@ function fromPrismaError(error: Prisma.PrismaClientKnownRequestError): [number, 
     switch (error.code) {
         case 'P2002': {
             const fields = constraintFields(error);
+            // The driver reports the index name (e.g. Organization_organizationName_live_key) or the column list.
+            if (fields && /organizationName/i.test(fields)) {
+                const message = 'An organization with this name already exists.';
+                return [StatusCodes.CONFLICT, {
+                    status: 'error',
+                    code: 'DUPLICATE_RECORD',
+                    message,
+                    errors: [{ message, path: ['organizationName'] }],
+                }];
+            }
             return [StatusCodes.CONFLICT, {
                 status: 'error',
                 code: 'DUPLICATE_RECORD',

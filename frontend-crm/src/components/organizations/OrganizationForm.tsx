@@ -16,6 +16,7 @@ import { AppToast } from '../common/AppToast';
 import { CommonFormLayout } from '../common/CommonFormLayout';
 import { type FormTabDefinition } from '../common/Drawer';
 import { organizationService } from '@/services';
+import { ApiClientError } from '@/services/apiClient';
 import { useAuth } from '@/context/AuthContext';
 import { ROUTES } from '@/config/constants';
 import { focusFormField } from '@/utils/formFocus';
@@ -394,19 +395,29 @@ export default function OrganizationForm({
             currentData.gstNumber = currentData.gstNo;
         }
 
+        // Switches to the tab that renders the field (if needed) and focuses it.
+        const revealField = (fieldName: string) => {
+            const targetTab = FIELD_TAB_MAP[fieldName];
+            if (targetTab && targetTab !== activeTab) {
+                pendingFocusField.current = fieldName;
+                setActiveTab(targetTab);
+            } else {
+                focusFormField(fieldName);
+            }
+        };
+
+        // The live check already found this name taken: don't round-trip just to be told again.
+        const nameError = methods.getFieldState('organizationName').error;
+        if (nameError?.type === 'duplicate') {
+            setToast({ open: true, message: nameError.message || 'An organization with this name already exists.', severity: 'error' });
+            revealField('organizationName');
+            return;
+        }
+
         const validation = validateWithToast(organizationFormSchema, currentData);
         if (!validation.success) {
             setToast({ open: true, message: validation.error, severity: 'error' });
-            const { fieldName } = validation;
-            if (fieldName) {
-                const targetTab = FIELD_TAB_MAP[fieldName];
-                if (targetTab && targetTab !== activeTab) {
-                    pendingFocusField.current = fieldName;
-                    setActiveTab(targetTab);
-                } else {
-                    focusFormField(fieldName);
-                }
-            }
+            if (validation.fieldName) revealField(validation.fieldName);
             return;
         }
         setSubmitting(true);
@@ -431,7 +442,18 @@ export default function OrganizationForm({
                 setTimeout(() => router.push(ROUTES.ORGANIZATIONS), 800);
             }
         } catch (err: unknown) {
-            const message = err instanceof Error ? err.message : 'Something went wrong. Please try again.';
+            let message = err instanceof Error ? err.message : 'Something went wrong. Please try again.';
+            if (err instanceof ApiClientError) {
+                // 409 / 400 responses name the offending fields: mark them inline and take the user to the first one.
+                const fieldErrors = (err.details?.errors ?? []).filter((e) => e.path?.[0]);
+                fieldErrors.forEach((fieldErr) => {
+                    methods.setError(fieldErr.path[0] as Path<OrganizationFormData>, { type: 'server', message: fieldErr.message });
+                });
+                if (fieldErrors.length > 0) {
+                    message = fieldErrors[0].message || message;
+                    revealField(fieldErrors[0].path[0]);
+                }
+            }
             setToast({ open: true, message, severity: 'error' });
         } finally {
             setSubmitting(false);
@@ -526,6 +548,7 @@ export default function OrganizationForm({
                     <OverviewTab
                         form={form}
                         set={set}
+                        organizationId={organizationId}
                     />
                 )}
 

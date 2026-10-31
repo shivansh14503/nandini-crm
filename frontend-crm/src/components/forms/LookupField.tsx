@@ -68,38 +68,35 @@ export function LookupField({
 
     return (
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, ...(fieldSize ? fieldSizeSx(fieldSize) : {}) }}>
-            {options.length > 0 ? (
-                <Autocomplete
-                    freeSolo
-                    disabled={disabled}
-                    options={options}
-                    value={value || ''}
-                    // Controlled by `value` so selections made from the lookup modal show up immediately.
-                    inputValue={value || ''}
-                    onInputChange={(_, newInputValue) => onChange(newInputValue)}
-                    onChange={(_, newValue) => onChange(newValue || '')}
-                    sx={{ flex: 1, ...fieldSx }}
-                    renderInput={(params) => (
-                        <TextField
-                            {...params}
-                            size="small"
-                            placeholder={placeholder}
-                            required={required}
-                        />
-                    )}
-                />
-            ) : (
-                <TextField
-                    fullWidth
-                    size="small"
-                    value={value}
-                    disabled={disabled}
-                    onChange={(e) => onChange(e.target.value)}
-                    placeholder={placeholder}
-                    required={required}
-                    sx={fieldSx}
-                />
-            )}
+            {/* Always an Autocomplete (even with no options yet) so the input isn't remounted, and loses focus, when suggestions load mid-typing. */}
+            <Autocomplete
+                freeSolo
+                disabled={disabled}
+                options={options}
+                value={value || ''}
+                // Controlled by `value` so selections made from the lookup modal show up immediately.
+                inputValue={value || ''}
+                // Case-insensitive substring match on what is typed; capped to keep long directories snappy.
+                filterOptions={(opts, { inputValue }) => {
+                    const q = inputValue.trim().toLowerCase();
+                    return (q ? opts.filter((o) => o.toLowerCase().includes(q)) : opts).slice(0, 50);
+                }}
+                // Only user edits propagate; 'reset' (MUI echoing `value` back) would otherwise fight a picked option.
+                onInputChange={(_, newInputValue, reason) => {
+                    if (reason === 'input' || reason === 'clear') onChange(newInputValue);
+                }}
+                onChange={(_, newValue) => onChange(newValue || '')}
+                sx={{ flex: 1, ...fieldSx }}
+                renderInput={(params) => (
+                    <TextField
+                        {...params}
+                        size="small"
+                        placeholder={placeholder}
+                        required={required}
+                    />
+                )}
+            />
+
 
             {/* Select / Search Action Button */}
             <Tooltip title={lookupTooltip}>

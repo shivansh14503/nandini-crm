@@ -40,7 +40,7 @@ export class HttpError extends Error {
         return new HttpError(message, StatusCodes.NOT_FOUND, { code: 'NOT_FOUND' });
     }
 
-    static conflict(message: string): HttpError {
-        return new HttpError(message, StatusCodes.CONFLICT, { code: 'CONFLICT' });
+    static conflict(message: string, errors?: ApiFieldError[]): HttpError {
+        return new HttpError(message, StatusCodes.CONFLICT, { code: 'CONFLICT', errors });
     }
 }

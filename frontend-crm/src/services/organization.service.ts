@@ -10,8 +10,27 @@ const baseOrganizationService = createCrudService<
     Partial<ExtendedOrganization>
 >('/api/organizations');
 
+export interface OrganizationUniqueCheck {
+    exists: boolean;
+    field?: 'organizationName' | 'gstNo';
+    accountCode?: string;
+    organizationName?: string;
+    message?: string;
+}
+
 export const organizationService = {
     ...baseOrganizationService,
+    /** Read-only duplicate check against live organizations; `excludeId` skips the record being edited. */
+    checkUnique: async (
+        params: { organizationName?: string; gstNo?: string; excludeId?: string },
+        signal?: AbortSignal
+    ): Promise<OrganizationUniqueCheck> => {
+        const res = await apiClient.get<ApiResponse<OrganizationUniqueCheck>>(`${baseOrganizationService.endpoint}/check-unique`, {
+            params,
+            signal,
+        });
+        return res.data;
+    },
     /** Sets the account status of several organizations in one audited transaction (PATCH /bulk-status). */
     updateStatusBulk: async (
         ids: Iterable<string>,

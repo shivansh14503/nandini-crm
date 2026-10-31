@@ -11,7 +11,10 @@ import {
     Select,
     MenuItem,
     InputAdornment,
+    CircularProgress,
 } from '@mui/material';
+import { organizationService, matchExistingOrganization } from '@/services';
+import { useOrganizations } from '@/hooks/queries/useOrganizations';
 import { CommonActionModal } from '@/components/common/CommonActionModal';
 
 // Icons
@@ -69,13 +72,20 @@ const DESCRIPTION_MAX_LENGTH = FIELD_MAX_LENGTH.organizationDescription;
 export interface OverviewTabProps {
     form: OrganizationFormData;
     set: <K extends keyof OrganizationFormData>(key: K, value: OrganizationFormData[K]) => void;
+    /** Id of the organization being edited, so its own name isn't flagged as a duplicate. */
+    organizationId?: string;
 }
+
+const NAME_CHECK_DEBOUNCE_MS = 350;
+const DUPLICATE_NAME_MESSAGE = 'An organization with this name already exists.';
 
 function OverviewTabInner({
     form,
     set,
+    organizationId,
 }: OverviewTabProps) {
-    const { control, setValue } = useFormContext<OrganizationFormData>();
+    const { control, setValue, setError, clearErrors, getFieldState, formState } = useFormContext<OrganizationFormData>();
+    const { errors } = formState;
 
     const organizationName = useWatch({ control, name: 'organizationName' }) ?? form?.organizationName ?? '';
     const tradeName = useWatch({ control, name: 'tradeName' }) ?? form?.tradeName ?? '';
@@ -121,10 +131,57 @@ function OverviewTabInner({
         }
     }, [watchedAssignedUser, set, form?.assignedUser]);
 
+    // ── Live uniqueness check (cached list for instant feedback, API as the authority) ──
+    const { data: knownOrganizations } = useOrganizations(undefined, { enabled: !isView });
+    const [checkingName, setCheckingName] = React.useState(false);
+    const [blurTick, setBlurTick] = React.useState(0);
+    const checkNowRef = React.useRef(false);
+    const trimmedName = organizationName.trim();
+
+    React.useEffect(() => {
+        if (isView || !trimmedName) {
+            setCheckingName(false);
+            return;
+        }
+        const duplicateError = (message: string) => setError('organizationName', { type: 'duplicate', message });
+
+        const cached = matchExistingOrganization((knownOrganizations ?? []).filter((o) => o.id !== organizationId), trimmedName);
+        if (cached) {
+            duplicateError(`An organization named "${trimmedName}" already exists (${cached.accountCode}).`);
+        }
+
+        const controller = new AbortController();
+        const delay = checkNowRef.current ? 0 : NAME_CHECK_DEBOUNCE_MS;
+        checkNowRef.current = false;
+        setCheckingName(true);
+        const timer = setTimeout(async () => {
+            try {
+                const result = await organizationService.checkUnique({ organizationName: trimmedName, excludeId: organizationId }, controller.signal);
+                if (controller.signal.aborted) return;
+                if (result.exists) {
+                    duplicateError(result.message || DUPLICATE_NAME_MESSAGE);
+                } else if (getFieldState('organizationName').error?.type === 'duplicate') {
+                    clearErrors('organizationName');
+                }
+            } catch {
+                // Offline / timeout: keep what the cache said; the server re-checks on save.
+            } finally {
+                if (!controller.signal.aborted) setCheckingName(false);
+            }
+        }, delay);
+
+        return () => {
+            controller.abort();
+            clearTimeout(timer);
+        };
+    }, [trimmedName, organizationId, isView, knownOrganizations, blurTick, setError, clearErrors, getFieldState]);
+
     const handleOrgNameChange = (val: string) => {
         // Trade name keeps following the organization name until the user gives it a value of its own.
         const tradeNameFollows = !tradeName || tradeName === organizationName;
         const opts = { shouldValidate: true, shouldDirty: true } as const;
+        // Any earlier (duplicate / server) error described the previous text; the check re-raises it if still valid.
+        clearErrors('organizationName');
         setValue('organizationName', val, opts);
         setValue('mailingName', val, opts);
         if (set) {
@@ -344,12 +401,25 @@ function OverviewTabInner({
                         placeholder="e.g. Mohit Traders Pvt Ltd"
                         value={organizationName}
                         onChange={(e) => handleOrgNameChange(e.target.value)}
+                        onBlur={() => {
+                            // Check right away instead of waiting out the debounce.
+                            if (trimmedName && checkingName) {
+                                checkNowRef.current = true;
+                                setBlurTick((n) => n + 1);
+                            }
+                        }}
+                        error={Boolean(errors.organizationName)}
+                        helperText={errors.organizationName?.message}
                         sx={fieldSx}
                         slotProps={{
                             input: {
-                                endAdornment: organizationName ? (
+                                endAdornment: trimmedName ? (
                                     <InputAdornment position="end">
-                                        <VerifiedIcon sx={{ fontSize: 18, color: '#16a34a' }} />
+                                        {checkingName ? (
+                                            <CircularProgress size={16} />
+                                        ) : !errors.organizationName ? (
+                                            <VerifiedIcon sx={{ fontSize: 18, color: '#16a34a' }} />
+                                        ) : null}
                                     </InputAdornment>
                                 ) : undefined,
                             },
@@ -547,6 +617,7 @@ function OverviewTabInner({
                     name="memberOfParentCorp"
                     label="Member of (Parent Corporation)"
                     lookupType="organization"
+                    excludeValues={organizationName ? [organizationName] : undefined}
                     placeholder="e.g. Apex Holdings Conglomerate Ltd."
                 />
 

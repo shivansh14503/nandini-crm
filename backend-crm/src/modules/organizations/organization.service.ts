@@ -15,6 +15,7 @@ import { toOrganizationDto, type OrganizationDto, type OrganizationRow } from '.
 import {
     ORGANIZATION_SORT_FIELDS,
     bulkStatusSchema,
+    checkOrganizationUniqueQuerySchema,
     organizationInputSchema,
     organizationListQuerySchema,
     type OrganizationWriteInput,
@@ -26,6 +27,14 @@ const MAX_HIERARCHY_DEPTH = 25;
 const include = { corporateEmails: emailsInclude } as const;
 
 const notFound = () => HttpError.notFound('Organization not found');
+
+export interface UniqueCheckResult {
+    exists: boolean;
+    field?: 'organizationName' | 'gstNo';
+    accountCode?: string;
+    organizationName?: string;
+    message?: string;
+}
 
 // ── Viewer flags ─────────────────────────────────────────────────────────────
 
@@ -41,14 +50,16 @@ async function viewerFlags(user: AuthUser) {
 
 /** Name / GSTIN locks make "check, then write" race-free (names compare case-insensitively in SQL Server). */
 async function assertUnique(tx: TransactionClient, input: OrganizationWriteInput, gstNo: string | null, excludeId?: string): Promise<void> {
-    await acquireLocks(tx, [`organization:name:${input.organizationName.trim().toLowerCase()}`, gstNo && `organization:gst:${gstNo}`]);
+    const normalizedName = input.organizationName.trim();
+    await acquireLocks(tx, [`organization:name:${normalizedName.toLowerCase()}`, gstNo && `organization:gst:${gstNo}`]);
     const notSelf = excludeId ? { NOT: { id: excludeId } } : {};
     const sameName = await tx.organization.findFirst({
-        where: { organizationName: input.organizationName, isDeleted: false, ...notSelf },
+        where: { organizationName: normalizedName, isDeleted: false, ...notSelf },
         select: { accountCode: true },
     });
     if (sameName) {
-        throw HttpError.conflict(`An organization named "${input.organizationName}" already exists (${sameName.accountCode}).`);
+        const message = `An organization named "${normalizedName}" already exists (${sameName.accountCode}).`;
+        throw HttpError.conflict(message, [{ message, path: ['organizationName'] }]);
     }
     if (gstNo) {
         const sameGst = await tx.organization.findFirst({
@@ -56,7 +67,8 @@ async function assertUnique(tx: TransactionClient, input: OrganizationWriteInput
             select: { accountCode: true, organizationName: true },
         });
         if (sameGst) {
-            throw HttpError.conflict(`GSTIN ${gstNo} is already registered to ${sameGst.organizationName} (${sameGst.accountCode}).`);
+            const message = `GSTIN ${gstNo} is already registered to ${sameGst.organizationName} (${sameGst.accountCode}).`;
+            throw HttpError.conflict(message, [{ message, path: ['gstNo'] }]);
         }
     }
 }
@@ -290,6 +302,44 @@ export const organizationService = {
         return toOrganizationDto(row, flagsFor(row));
     },
 
+    /** GET /api/organizations/check-unique — read-only pre-check for the form; the write path still enforces uniqueness. */
+    async checkUnique(query: unknown): Promise<UniqueCheckResult> {
+        const { organizationName, gstNo, excludeId } = checkOrganizationUniqueQuerySchema.parse(query);
+        const notSelf = excludeId ? { NOT: { id: excludeId } } : {};
+
+        if (organizationName) {
+            const sameName = await prisma.organization.findFirst({
+                where: { organizationName, isDeleted: false, ...notSelf },
+                select: { accountCode: true, organizationName: true },
+            });
+            if (sameName) {
+                return {
+                    exists: true,
+                    field: 'organizationName',
+                    accountCode: sameName.accountCode,
+                    organizationName: sameName.organizationName,
+                    message: `An organization named "${organizationName}" already exists (${sameName.accountCode}).`,
+                };
+            }
+        }
+        if (gstNo) {
+            const sameGst = await prisma.organization.findFirst({
+                where: { gstNo, isDeleted: false, ...notSelf },
+                select: { accountCode: true, organizationName: true },
+            });
+            if (sameGst) {
+                return {
+                    exists: true,
+                    field: 'gstNo',
+                    accountCode: sameGst.accountCode,
+                    organizationName: sameGst.organizationName,
+                    message: `GSTIN ${gstNo} is already registered to ${sameGst.organizationName} (${sameGst.accountCode}).`,
+                };
+            }
+        }
+        return { exists: false };
+    },
+
     async create(body: unknown, user: AuthUser): Promise<OrganizationDto> {
         const input = organizationInputSchema.parse(body);
 
@@ -309,6 +359,7 @@ export const organizationService = {
             const before = toOrganizationDto(existing, flagsFor(existing));
             const input = organizationInputSchema.parse(mergePatch(before, patch));
             const gstNo = gstFor(input);
+            // Strict comparison on purpose: a case-only rename counts as a change and is re-checked (excluding this record).
             if (input.organizationName !== existing.organizationName || gstNo !== existing.gstNo) {
                 await assertUnique(tx, input, gstNo, id);
             }

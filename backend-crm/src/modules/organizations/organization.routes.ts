@@ -9,6 +9,7 @@ import { bulkStatusSchema } from './organization.validator.js';
  * /api/organizations
  *   GET    /             ?page&limit&search&sortBy&sortOrder&accountStatus&customerType&natureOfBusiness
  *                         &assignedUser&parentOrganizationId&mine&recent&createdWithinDays
+ *   GET    /check-unique ?organizationName&gstNo&excludeId  → { exists, field?, accountCode?, message? }
  *   GET    /:id          (also records a "recently viewed" entry for the caller)
  *   POST   /
  *   PUT    /:id          (partial; PATCH is an alias)
@@ -19,7 +20,8 @@ import { bulkStatusSchema } from './organization.validator.js';
 const router = Router();
 router.use(authenticate);
 
-// Registered before the CRUD routes so `/bulk-status` isn't captured by `PATCH /:id`.
+// Registered before the CRUD routes so `/check-unique` isn't captured by `GET /:id` and `/bulk-status` by `PATCH /:id`.
+router.get('/check-unique', organizationController.checkUnique);
 router.patch('/bulk-status', validateRequest({ body: bulkStatusSchema }), organizationController.updateStatusBulk);
 registerCrudRoutes(router, organizationController);
 

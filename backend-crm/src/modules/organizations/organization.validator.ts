@@ -194,7 +194,15 @@ export const organizationListQuerySchema = z.object({
     createdWithinDays: createdWithinDaysQuery,
 });
 
-export const bulkStatusSchema = bulkIdsSchema.extend({
+/** Query for GET /check-unique. Blank values mean "not provided". */
+const blankToUndefined = (value: unknown) => (typeof value === 'string' && value.trim() === '' ? undefined : value);
+export const checkOrganizationUniqueQuerySchema = z.object({
+    organizationName: z.preprocess(blankToUndefined, z.string().trim().max(L.organizationName).optional()),
+    gstNo: z.preprocess(blankToUndefined, z.string().trim().toUpperCase().max(30).optional()),
+    excludeId: z.preprocess(blankToUndefined, z.string().trim().max(50).optional()),
+});
+
+export const bulkStatusSchema =bulkIdsSchema.extend({
     status: z.enum(ACCOUNT_STATUSES, { error: 'status must be Active or Inactive.' }),
     inactivityReason: optionalText('Inactivity Reason', 500),
 });
