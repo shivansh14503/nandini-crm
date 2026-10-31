@@ -79,6 +79,7 @@ const NAV_ITEMS = [
     {
         label: 'All',
         items: [
+            { label: 'Partner Company', href: ROUTES.PARTNER_COMPANIES },
             { label: 'Reports', href: '/dashboard' },
             { label: 'Settings', href: '/dashboard' },
             { label: 'Integrations', href: '/dashboard' },
@@ -535,6 +536,7 @@ const CREATE_ITEMS = [
     { label: 'Contact', href: '/contacts/new' },
     { label: 'Opportunity', href: '/opportunities/new' },
     { label: 'Ticket', href: ROUTES.TICKET_NEW },
+    { label: 'Partner Company', href: ROUTES.PARTNER_COMPANY_NEW },
     { label: 'Activity', href: '/dashboard' },
 ];
 

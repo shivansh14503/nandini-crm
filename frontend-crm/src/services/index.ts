@@ -11,6 +11,7 @@ export * from './product.service';
 export * from './leadConversion.service';
 export * from './quotation.service';
 export * from './ticket.service';
+export * from './partnerCompany.service';
 export * from './crmSync';
 export * from './import.service';
 

@@ -22,6 +22,7 @@ export const queryKeys = {
     opportunities: createEntityKeys('opportunities'),
     quotations: createEntityKeys('quotations'),
     products: createEntityKeys('products'),
+    partnerCompanies: createEntityKeys('partner-companies'),
     users: {
         all: ['users'] as const,
     },
@@ -34,6 +35,12 @@ export type QueryEntity = keyof typeof queryKeys;
  * namespace, or undefined when no queries are cached under it.
  */
 export function queryEntityFromSync(entity?: string): QueryEntity | undefined {
-    const name = entity?.split('/').filter(Boolean).pop()?.toLowerCase();
+    // Endpoints are kebab-case (`/api/partner-companies`); query namespaces are camelCase (`partnerCompanies`).
+    const name = entity
+        ?.split('/')
+        .filter(Boolean)
+        .pop()
+        ?.toLowerCase()
+        .replace(/-([a-z])/g, (_, c: string) => c.toUpperCase());
     return name && name in queryKeys ? (name as QueryEntity) : undefined;
 }

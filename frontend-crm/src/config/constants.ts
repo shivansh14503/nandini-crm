@@ -45,6 +45,10 @@ export const ROUTES = {
     TICKET_NEW: '/tickets/new',
     TICKET_DETAIL: (id: string | number) => `/tickets/${id}`,
     TICKET_EDIT: (id: string | number) => `/tickets/${id}/edit`,
+    PARTNER_COMPANIES: '/partner-companies',
+    PARTNER_COMPANY_NEW: '/partner-companies/new',
+    PARTNER_COMPANY_DETAIL: (id: string | number) => `/partner-companies/${id}`,
+    PARTNER_COMPANY_EDIT: (id: string | number) => `/partner-companies/${id}/edit`,
 };
 
 // ── Address lists (derived from the ISO 3166 address master) ──────────────────

@@ -4,7 +4,15 @@ import { apiClient } from '@/services/apiClient';
 import type { ApiResponse } from '@/types/api.types';
 
 /** `entityType` values accepted by GET /api/audit-logs/:entityType/:entityId. */
-export type AuditEntityType = 'organizations' | 'contacts' | 'leads' | 'opportunities' | 'quotations' | 'products' | 'tickets';
+export type AuditEntityType =
+    | 'organizations'
+    | 'contacts'
+    | 'leads'
+    | 'opportunities'
+    | 'quotations'
+    | 'products'
+    | 'tickets'
+    | 'partner-companies';
 
 interface EntityAuditLog {
     entityType: string;

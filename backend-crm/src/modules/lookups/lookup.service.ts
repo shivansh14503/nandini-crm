@@ -215,7 +215,7 @@ export const lookupService = {
     /** `PartnerCompany[]` (active). */
     async partnerCompanies() {
         return cacheService.getOrSet(CACHE_KEYS.lookups('partner-companies'), MASTER_TTL_SECONDS, async () => {
-            const rows = await prisma.partnerCompany.findMany({ where: { isActive: true }, orderBy: { companyName: 'asc' } });
+            const rows = await prisma.partnerCompany.findMany({ where: { isActive: true, isDeleted: false }, orderBy: { companyName: 'asc' } });
             return rows.map((p) => ({
                 id: p.id,
                 companyName: p.companyName,
@@ -235,7 +235,7 @@ export const lookupService = {
         const { partnerCompany } = partnerContactsQuerySchema.parse(query ?? {});
         const all = await cacheService.getOrSet(CACHE_KEYS.lookups('partner-contacts'), MASTER_TTL_SECONDS, async () => {
             const rows = await prisma.partnerCompanyContact.findMany({
-                where: { isActive: true, partnerCompany: { isActive: true } },
+                where: { isActive: true, partnerCompany: { isActive: true, isDeleted: false } },
                 include: { partnerCompany: { select: { companyName: true } } },
                 orderBy: { name: 'asc' },
             });

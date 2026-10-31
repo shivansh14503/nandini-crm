@@ -600,6 +600,8 @@ model NatureOfCall {
 }
 
 /// Channel / referral partner firms involved in support tickets.
+/// `companyName` stays globally unique (seeds upsert by it), so a soft-deleted partner keeps its name reserved.
+/// `email` (primary of `emailAddressesJson`) and `city` (= `billingCity`) are kept in sync for the lookup projection.
 model PartnerCompany {
   id              String   @id @default(uuid()) @db.NVarChar(50)
   companyName     String   @unique @db.NVarChar(200)
@@ -613,7 +615,52 @@ model PartnerCompany {
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
+  // Overview
+  website            String? @db.NVarChar(200)
+  addDescription     String? @db.NVarChar(2000)
+  description        String? @db.NVarChar(2000)
+  principalCompany   String? @db.NVarChar(200)
+  /// JSON `CorporateEmail[]` (without ids), primary first.
+  emailAddressesJson String? @db.NVarChar(Max)
+
+  // Bank details
+  bankName      String? @db.NVarChar(100)
+  bankBranch    String? @db.NVarChar(150)
+  accountNumber String? @db.NVarChar(18)
+  bankIfscCode  String? @db.NVarChar(11)
+
+  // Billing address (`city` / `billingCountry` above double as billing city / country)
+  billingAddress    String? @db.NVarChar(250)
+  billingStreet     String? @db.NVarChar(250)
+  billingCity       String? @db.NVarChar(80)
+  billingState      String? @db.NVarChar(80)
+  billingPostalCode String? @db.NVarChar(12)
+
+  // Shipping address
+  shippingAddress        String? @db.NVarChar(250)
+  shippingStreet         String? @db.NVarChar(250)
+  shippingCity           String? @db.NVarChar(80)
+  shippingState          String? @db.NVarChar(80)
+  shippingPostalCode     String? @db.NVarChar(12)
+  shippingCountry        String? @db.NVarChar(80)
+  copyAddressFromBilling Boolean @default(false)
+
+  // Statutory
+  gstNo          String? @db.NVarChar(15)
+  panNumber      String? @db.NVarChar(10)
+  cinNo          String? @db.NVarChar(21)
+  msmeRegnNumber String? @db.NVarChar(19)
+  tanNumber      String? @db.NVarChar(10)
+
+  // Audit & soft delete
+  createdBy String    @default("system") @db.NVarChar(50)
+  updatedBy String?   @db.NVarChar(50)
+  isDeleted Boolean   @default(false)
+  deletedAt DateTime?
+
   contacts PartnerCompanyContact[]
+
+  @@index([isDeleted, createdAt])
 }
 
 model PartnerCompanyContact {

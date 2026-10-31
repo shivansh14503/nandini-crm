@@ -2,7 +2,17 @@ import { prisma, type TransactionClient } from '../config/prisma.js';
 import { logger } from '../config/logger.js';
 import { auditQueue, tryEnqueue } from '../jobs/queues.js';
 
-export type AuditEntityType = 'Organization' | 'Contact' | 'Lead' | 'Opportunity' | 'Quotation' | 'Product' | 'Ticket' | 'User' | 'Import';
+export type AuditEntityType =
+    | 'Organization'
+    | 'Contact'
+    | 'Lead'
+    | 'Opportunity'
+    | 'Quotation'
+    | 'Product'
+    | 'Ticket'
+    | 'PartnerCompany'
+    | 'User'
+    | 'Import';
 
 export type AuditAction =
     | 'CREATE'

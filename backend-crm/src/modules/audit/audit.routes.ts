@@ -5,7 +5,7 @@ import { auditLogService } from './audit.service.js';
 
 /**
  * /api/audit-logs/:entityType/:entityId?limit=100
- *   entityType: organizations | contacts | leads | opportunities | quotations | products | tickets | users
+ *   entityType: organizations | contacts | leads | opportunities | quotations | products | tickets | partner-companies | users
  *   → { entityType, entityId, entries: [...], revisions: AuditRevisionItem[] } (newest first)
  */
 const router = Router();

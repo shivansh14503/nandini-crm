@@ -19,6 +19,10 @@ const ENTITY_TYPES: Record<string, AuditEntityType> = {
     products: 'Product',
     ticket: 'Ticket',
     tickets: 'Ticket',
+    'partner-company': 'PartnerCompany',
+    'partner-companies': 'PartnerCompany',
+    partnercompany: 'PartnerCompany',
+    partnercompanies: 'PartnerCompany',
     user: 'User',
     users: 'User',
 };

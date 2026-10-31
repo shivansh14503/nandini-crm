@@ -75,4 +75,13 @@ export const cacheService = {
     },
 };
 
-export type CachedEntity = 'organizations' | 'contacts' | 'leads' | 'opportunities' | 'quotations' | 'products' | 'tickets' | 'users';
+export type CachedEntity =
+    | 'organizations'
+    | 'contacts'
+    | 'leads'
+    | 'opportunities'
+    | 'quotations'
+    | 'products'
+    | 'tickets'
+    | 'users'
+    | 'partner-companies';
