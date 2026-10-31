@@ -16,6 +16,8 @@ export interface LookupColumn<T> {
     /** Custom cell renderer; falls back to `getValue` or `String(row[id])`. */
     render?: (row: T) => React.ReactNode;
     getValue?: (row: T) => string;
+    /** Adds a clickable sort header (sorts by `getValue` / the row field, case-insensitive). */
+    sortable?: boolean;
 }
 
 export interface LookupFilterOption {
@@ -26,7 +28,8 @@ export interface LookupFilterOption {
 export interface LookupFilterField {
     key: string;
     label: string;
-    type: 'text' | 'select';
+    /** `multiselect` stores its picks in one string; read it with `splitMulti`. */
+    type: 'text' | 'select' | 'multiselect';
     options?: LookupFilterOption[];
     placeholder?: string;
     defaultValue?: string;
@@ -35,6 +38,11 @@ export interface LookupFilterField {
 }
 
 export type LookupFilterValues = Record<string, string>;
+
+const MULTI_DELIMITER = '\u001f';
+/** Multi-select picks are kept in the string-valued filter map, joined by an unprintable delimiter. */
+export const joinMulti = (values: string[]): string => values.join(MULTI_DELIMITER);
+export const splitMulti = (value: string | undefined): string[] => (value ? value.split(MULTI_DELIMITER) : []);
 
 export type LookupSearchPredicate<T> = (item: T, filters: LookupFilterValues, query: string) => boolean;
 

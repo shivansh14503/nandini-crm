@@ -4,6 +4,7 @@ import React, { useDeferredValue, useMemo, useRef, useState } from 'react';
 import {
     Box,
     Button,
+    CircularProgress,
     Dialog,
     DialogContent,
     DialogTitle,
@@ -18,6 +19,7 @@ import {
     TableHead,
     TablePagination,
     TableRow,
+    TableSortLabel,
     TextField,
     Typography,
 } from '@mui/material';
@@ -25,6 +27,7 @@ import CloseIcon from '@mui/icons-material/Close';
 import SearchIcon from '@mui/icons-material/Search';
 import RestartAltIcon from '@mui/icons-material/RestartAlt';
 import SearchOffIcon from '@mui/icons-material/SearchOff';
+import { splitMulti, joinMulti } from '@/types/lookup.types';
 import type {
     LookupColumn,
     LookupFilterField,
@@ -46,6 +49,11 @@ export interface GenericLookupModalProps<T extends { id: string }> {
     selectedId?: string;
     searchPlaceholder?: string;
     rowsPerPage?: number;
+    /** Show the main free-text Search box (default true). Presets with a full field form can hide it. */
+    showSearchBox?: boolean;
+    /** Shows a spinner instead of the empty state while data is being fetched. */
+    loading?: boolean;
+    emptyMessage?: string;
 }
 
 const inputSx = {
@@ -102,22 +110,36 @@ function LookupDialog<T extends { id: string }>({
     selectedId,
     searchPlaceholder = 'Search…',
     rowsPerPage = 25,
+    showSearchBox = true,
+    loading = false,
+    emptyMessage,
 }: GenericLookupModalProps<T>) {
     const [query, setQuery] = useState('');
     const [filters, setFilters] = useState<LookupFilterValues>(() => initialFilters(filterFields));
     const [page, setPage] = useState(0);
     const firstRowRef = useRef<HTMLTableRowElement>(null);
+    const [sort, setSort] = useState<{ id: string; dir: 'asc' | 'desc' } | null>(null);
     const deferredQuery = useDeferredValue(query);
 
     const filtered = useMemo(() => {
         const q = deferredQuery.trim().toLowerCase();
-        return data.filter((item) => {
+        const rows = data.filter((item) => {
             if (searchPredicate) return searchPredicate(item, filters, q);
-            const filtersMatch = filterFields.every((f) => !filters[f.key] || fieldValue(item, f.key) === filters[f.key]);
+            const filtersMatch = filterFields.every((f) => {
+                if (!filters[f.key]) return true;
+                if (f.type === 'multiselect') return splitMulti(filters[f.key]).includes(fieldValue(item, f.key));
+                return fieldValue(item, f.key) === filters[f.key];
+            });
             if (!filtersMatch) return false;
             return !q || columns.some((c) => cellText(item, c).toLowerCase().includes(q));
         });
-    }, [data, deferredQuery, filters, filterFields, columns, searchPredicate]);
+        const sortCol = sort && columns.find((c) => c.id === sort.id);
+        if (!sort || !sortCol) return rows;
+        const dir = sort.dir === 'asc' ? 1 : -1;
+        return [...rows].sort(
+            (a, b) => dir * cellText(a, sortCol).localeCompare(cellText(b, sortCol), undefined, { sensitivity: 'base' })
+        );
+    }, [data, deferredQuery, filters, filterFields, columns, searchPredicate, sort]);
 
     const pageCount = Math.max(1, Math.ceil(filtered.length / rowsPerPage));
     const safePage = Math.min(page, pageCount - 1);
@@ -127,6 +149,11 @@ function LookupDialog<T extends { id: string }>({
 
     const updateFilter = (key: string, value: string) => {
         setFilters((prev) => ({ ...prev, [key]: value }));
+        setPage(0);
+    };
+
+    const toggleSort = (id: string) => {
+        setSort((prev) => (prev?.id === id ? { id, dir: prev.dir === 'asc' ? 'desc' : 'asc' } : { id, dir: 'asc' }));
         setPage(0);
     };
 
@@ -192,6 +219,7 @@ function LookupDialog<T extends { id: string }>({
                     sx={{ px: 3, py: 2, backgroundColor: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}
                 >
                     <Grid container spacing={1.5} sx={{ alignItems: 'center' }}>
+                        {showSearchBox && (
                         <Grid size={{ xs: 12, md: 3 }}>
                             <TextField
                                 autoFocus
@@ -216,9 +244,36 @@ function LookupDialog<T extends { id: string }>({
                                 }}
                             />
                         </Grid>
+                        )}
                         {filterFields.map((f) => (
                             <Grid key={f.key} size={{ xs: 6, md: f.width ?? 2 }}>
-                                {f.type === 'select' ? (
+                                {f.type === 'multiselect' ? (
+                                    <TextField
+                                        select
+                                        fullWidth
+                                        size="small"
+                                        label={f.label}
+                                        value={splitMulti(filters[f.key])}
+                                        onChange={(e) => {
+                                            const v = e.target.value as unknown as string | string[];
+                                            updateFilter(f.key, joinMulti(typeof v === 'string' ? splitMulti(v) : v));
+                                        }}
+                                        sx={inputSx}
+                                        slotProps={{
+                                            select: {
+                                                multiple: true,
+                                                renderValue: (v) => (v as string[]).join(', '),
+                                                MenuProps: { slotProps: { paper: { sx: { maxHeight: 280 } } } },
+                                            },
+                                        }}
+                                    >
+                                        {(f.options ?? []).map((o) => (
+                                            <MenuItem key={o.value} value={o.value} sx={{ fontSize: '0.82rem' }}>
+                                                {o.label}
+                                            </MenuItem>
+                                        ))}
+                                    </TextField>
+                                ) : f.type === 'select' ? (
                                     <TextField
                                         select
                                         fullWidth
@@ -295,7 +350,17 @@ function LookupDialog<T extends { id: string }>({
                             <TableRow>
                                 {columns.map((c) => (
                                     <TableCell key={c.id} align={c.align} sx={{ ...headCellSx, minWidth: c.minWidth, width: c.width }}>
-                                        {c.label.toUpperCase()}
+                                        {c.sortable ? (
+                                            <TableSortLabel
+                                                active={sort?.id === c.id}
+                                                direction={sort?.id === c.id ? sort.dir : 'asc'}
+                                                onClick={() => toggleSort(c.id)}
+                                            >
+                                                {c.label.toUpperCase()}
+                                            </TableSortLabel>
+                                        ) : (
+                                            c.label.toUpperCase()
+                                        )}
                                     </TableCell>
                                 ))}
                             </TableRow>
@@ -336,11 +401,17 @@ function LookupDialog<T extends { id: string }>({
                         </TableBody>
                     </Table>
 
-                    {filtered.length === 0 && (
+                    {loading && (
+                        <Box sx={{ py: 6, display: 'flex', justifyContent: 'center' }}>
+                            <CircularProgress size={28} />
+                        </Box>
+                    )}
+
+                    {!loading && filtered.length === 0 && (
                         <Box sx={{ py: 6, textAlign: 'center' }}>
                             <SearchOffIcon sx={{ fontSize: 36, color: '#cbd5e1' }} />
                             <Typography sx={{ fontWeight: 700, fontSize: '0.9rem', color: '#334155', mt: 1 }}>
-                                No matching records
+                                {emptyMessage ?? 'No matching records'}
                             </Typography>
                             <Typography sx={{ fontSize: '0.78rem', color: '#94a3b8', mt: 0.3 }}>
                                 Try a different search term or clear the filters.
@@ -369,6 +440,8 @@ function LookupDialog<T extends { id: string }>({
                         page={safePage}
                         rowsPerPage={rowsPerPage}
                         rowsPerPageOptions={[]}
+                        showFirstButton
+                        showLastButton
                         onPageChange={(_, p) => setPage(p)}
                         labelDisplayedRows={() => `Page ${safePage + 1} of ${pageCount}`}
                         sx={{ '& .MuiTablePagination-displayedRows': { fontSize: '0.78rem', color: '#64748b' } }}

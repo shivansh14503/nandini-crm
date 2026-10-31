@@ -9,9 +9,11 @@ import type { ExtendedOrganization } from '@/types/organization.types';
 import type { Contact } from '@/types/contact.types';
 import type { NatureOfCallItem } from '@/types/ticket.types';
 import type { PartnerCompany, PartnerCompanyContact } from '@/types/partner.types';
-import { CUSTOMER_TYPES } from '@/components/organizations/constants';
-import { findCrmUser } from '@/services/masterData.store';
+import { ENTITY_TYPES, NATURE_OF_BUSINESS } from '@/components/organizations/constants';
+import { INDIAN_STATES } from '@/config/constants';
+import { findCrmUser, getCrmUsers } from '@/services/masterData.store';
 import { getPartnerCompanies } from '@/services/masterData.store';
+import { splitMulti } from '@/types/lookup.types';
 import type { LookupColumn, LookupFilterField, LookupSearchPredicate } from '@/types/lookup.types';
 
 export interface LookupPreset<T> {
@@ -21,6 +23,9 @@ export interface LookupPreset<T> {
     columns: LookupColumn<T>[];
     filterFields: LookupFilterField[];
     searchPredicate: LookupSearchPredicate<T>;
+    showSearchBox?: boolean;
+    rowsPerPage?: number;
+    emptyMessage?: string;
 }
 
 // ─── Shared cell renderers ────────────────────────────────────────────────────
@@ -144,32 +149,60 @@ export const USER_LOOKUP_PRESET: LookupPreset<CrmUser> = {
 
 // ─── Organizations ────────────────────────────────────────────────────────────
 
+const toOptions = (values: readonly string[]) => values.map((v) => ({ value: v, label: v }));
+
+/** Every email the record carries: corporate emails plus any legacy single-email field. */
+const orgEmails = (o: ExtendedOrganization): string[] => {
+    const legacy = o as unknown as { email?: string; primaryEmail?: string };
+    return [...(o.corporateEmails ?? []).map((e) => e.email), legacy.email, legacy.primaryEmail].filter(
+        (e): e is string => !!e
+    );
+};
+
 export const ORGANIZATION_LOOKUP_PRESET: LookupPreset<ExtendedOrganization> = {
     title: 'Organization Search',
     subtitle: 'Select an organization. Click a row to choose it.',
-    searchPlaceholder: 'Name, code, city or GST',
+    searchPlaceholder: '',
+    showSearchBox: false,
+    rowsPerPage: 10,
+    emptyMessage: 'No organizations found matching search criteria',
     columns: [
-        { id: 'organizationName', label: 'Name', minWidth: 240, render: (o) => <PrimaryText>{o.organizationName}</PrimaryText> },
-        { id: 'customerType', label: 'Customer Type', minWidth: 130 },
-        { id: 'natureOfBusiness', label: 'Nature of Business', minWidth: 200 },
-        { id: 'assignedUser', label: 'User', minWidth: 140, getValue: (o) => userName(o.assignedUser) },
+        { id: 'organizationName', label: 'Name', minWidth: 240, sortable: true, render: (o) => <PrimaryText>{o.organizationName}</PrimaryText> },
+        { id: 'customerType', label: 'Customer Type', minWidth: 130, sortable: true },
+        { id: 'natureOfBusiness', label: 'Nature of Business', minWidth: 200, sortable: true },
+        { id: 'assignedUser', label: 'User', minWidth: 140, sortable: true, getValue: (o) => userName(o.assignedUser) },
     ],
     filterFields: [
+        { key: 'organizationName', label: 'Organization Name', type: 'text', width: 6 },
+        { key: 'anyEmail', label: 'Any Email', type: 'text', width: 6 },
+        { key: 'billingCity', label: 'Billing City', type: 'text', width: 6 },
+        { key: 'billingState', label: 'Billing State', type: 'multiselect', width: 6, options: toOptions(INDIAN_STATES) },
+        { key: 'natureOfBusiness', label: 'Nature of Business', type: 'multiselect', width: 6, options: toOptions(NATURE_OF_BUSINESS) },
+        { key: 'typeOfEntity', label: 'Type of Entity', type: 'multiselect', width: 6, options: toOptions(ENTITY_TYPES) },
         {
-            key: 'customerType',
-            label: 'Customer Type',
-            type: 'select',
-            defaultValue: '',
-            options: [{ value: '', label: 'All' }, ...CUSTOMER_TYPES.map((t) => ({ value: t, label: t }))],
+            key: 'assignedUser',
+            label: 'Assigned to',
+            type: 'multiselect',
+            width: 6,
+            options: getCrmUsers()
+                .map((u) => ({ value: u.username, label: u.name || u.username }))
+                .sort((a, b) => a.label.localeCompare(b.label)),
         },
-        { key: 'billingCity', label: 'City', type: 'text', placeholder: 'e.g. Delhi' },
-        { key: 'accountStatus', label: 'Status', type: 'select', defaultValue: '', options: statusOptions },
     ],
-    searchPredicate: (o, f, q) => {
-        if (f.customerType && o.customerType !== f.customerType) return false;
-        if (f.accountStatus && o.accountStatus !== f.accountStatus) return false;
-        if (!containsText(o.billingCity, f.billingCity)) return false;
-        return includesQuery(q, o.organizationName, o.tradeName, o.accountCode, o.billingCity, o.gstNumber, o.gstNo);
+    searchPredicate: (o, f) => {
+        if (!containsText(o.organizationName, f.organizationName?.trim())) return false;
+        const email = f.anyEmail?.trim();
+        if (email && !orgEmails(o).some((e) => containsText(e, email))) return false;
+        if (!containsText(o.billingCity, f.billingCity?.trim())) return false;
+        const states = splitMulti(f.billingState).map((s) => s.toLowerCase());
+        if (states.length && !states.includes((o.billingState || '').toLowerCase())) return false;
+        const natures = splitMulti(f.natureOfBusiness);
+        if (natures.length && !natures.includes(o.natureOfBusiness)) return false;
+        const entities = splitMulti(f.typeOfEntity);
+        if (entities.length && !entities.includes(o.typeOfEntity)) return false;
+        const users = splitMulti(f.assignedUser);
+        if (users.length && !users.includes(o.assignedUser ?? '')) return false;
+        return true;
     },
 };
 

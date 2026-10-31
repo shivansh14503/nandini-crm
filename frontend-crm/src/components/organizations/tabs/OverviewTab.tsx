@@ -11,17 +11,12 @@ import {
     Select,
     MenuItem,
     InputAdornment,
-    IconButton,
-    Tooltip,
 } from '@mui/material';
 import { CommonActionModal } from '@/components/common/CommonActionModal';
 
 // Icons
 import VerifiedIcon from '@mui/icons-material/Verified';
 import SwapHorizIcon from '@mui/icons-material/SwapHoriz';
-import MenuBookIcon from '@mui/icons-material/MenuBook';
-import SearchIcon from '@mui/icons-material/Search';
-import LinkOffIcon from '@mui/icons-material/LinkOff';
 import LockOutlinedIcon from '@mui/icons-material/LockOutlined';
 
 import { useFormContext, useWatch, FormProvider, useForm } from 'react-hook-form';
@@ -36,7 +31,7 @@ import {
     fieldSx,
     FIELD_MAX_LENGTH,
     RhfSelect,
-    RhfAssignedUserCard,
+    RhfLookup,
     RhfToggleGroupCard,
 } from '@/components/forms';
 import {
@@ -59,7 +54,6 @@ import type {
     NumberOfEmployees,
     SourceOfLead,
 } from '@/types/organization.types';
-import { OrganizationLookupModal } from '@/components/common/lookup';
 
 const INACTIVITY_REASONS = [
     'Client Closed Operations',
@@ -89,7 +83,8 @@ function OverviewTabInner({
     const currentAccountStatus = (useWatch({ control, name: 'accountStatus' }) ?? form?.accountStatus ?? 'Active') as AccountStatus;
     const isView = useFormMode().mode === 'view';
     const [pendingInactive, setPendingInactive] = React.useState(false);
-    const [orgLookupOpen, setOrgLookupOpen] = React.useState(false);
+    const watchedParentCorp = useWatch({ control, name: 'memberOfParentCorp' });
+    const watchedAssignedUser = useWatch({ control, name: 'assignedUser' });
     const watchedNatureOfBusiness = useWatch({ control, name: 'natureOfBusiness' });
     const watchedTypeOfEntity = useWatch({ control, name: 'typeOfEntity' });
     const watchedCustomerType = useWatch({ control, name: 'customerType' });
@@ -112,6 +107,19 @@ function OverviewTabInner({
             set('customerType', watchedCustomerType as CustomerType);
         }
     }, [watchedCustomerType, set, form?.customerType]);
+
+    // Mirror the lookup fields into the parent form state.
+    React.useEffect(() => {
+        if (set && watchedParentCorp !== undefined && watchedParentCorp !== form?.memberOfParentCorp) {
+            set('memberOfParentCorp', watchedParentCorp);
+        }
+    }, [watchedParentCorp, set, form?.memberOfParentCorp]);
+
+    React.useEffect(() => {
+        if (set && watchedAssignedUser !== undefined && watchedAssignedUser !== form?.assignedUser) {
+            set('assignedUser', watchedAssignedUser);
+        }
+    }, [watchedAssignedUser, set, form?.assignedUser]);
 
     const handleOrgNameChange = (val: string) => {
         // Trade name keeps following the organization name until the user gives it a value of its own.
@@ -535,65 +543,20 @@ function OverviewTabInner({
                 </FormField>
 
                 {/* ── Hierarchy & ownership ── */}
-                <FormField name="memberOfParentCorp" label="Member of (Parent Corporation)" size="lg">
-                    <TextField
-                        fullWidth
-                        size="small"
-                        placeholder="e.g. Apex Holdings Conglomerate Ltd."
-                        value={form.memberOfParentCorp}
-                        onChange={(e) => set('memberOfParentCorp', e.target.value)}
-                        sx={fieldSx}
-                        slotProps={{
-                            input: {
-                                endAdornment: (
-                                    <InputAdornment position="end" sx={{ gap: 0.5 }}>
-                                        <IconButton size="small" sx={{ color: '#94a3b8' }}>
-                                            <MenuBookIcon sx={{ fontSize: 18 }} />
-                                        </IconButton>
-                                        <Tooltip title="Search organizations">
-                                            <IconButton
-                                                size="small"
-                                                aria-label="Search organizations"
-                                                onClick={() => setOrgLookupOpen(true)}
-                                                sx={{ color: '#94a3b8', '&:hover': { color: '#1d4ed8' } }}
-                                            >
-                                                <SearchIcon sx={{ fontSize: 18 }} />
-                                            </IconButton>
-                                        </Tooltip>
-                                        <Tooltip title="Unlink parent">
-                                            <span>
-                                                <IconButton
-                                                    size="small"
-                                                    aria-label="Unlink parent"
-                                                    disabled={!form.memberOfParentCorp}
-                                                    onClick={() => set('memberOfParentCorp', '')}
-                                                    sx={{ color: '#94a3b8', '&:hover': { color: '#dc2626' } }}
-                                                >
-                                                    <LinkOffIcon sx={{ fontSize: 18 }} />
-                                                </IconButton>
-                                            </span>
-                                        </Tooltip>
-                                    </InputAdornment>
-                                ),
-                            },
-                            htmlInput: { maxLength: FIELD_MAX_LENGTH.organizationName },
-                        }}
-                    />
-                    <OrganizationLookupModal
-                        open={orgLookupOpen}
-                        onClose={() => setOrgLookupOpen(false)}
-                        onSelect={(org) => set('memberOfParentCorp', org.organizationName)}
-                        selectedValue={form.memberOfParentCorp}
-                    />
-                </FormField>
+                <RhfLookup<OrganizationFormData>
+                    name="memberOfParentCorp"
+                    label="Member of (Parent Corporation)"
+                    lookupType="organization"
+                    placeholder="e.g. Apex Holdings Conglomerate Ltd."
+                />
 
                 {/* Assigned to (Account Executive) */}
-                <RhfAssignedUserCard<OrganizationFormData>
+                <RhfLookup<OrganizationFormData>
                     name="assignedUser"
                     label="Assigned to (Account Executive)"
+                    lookupType="user"
                     required
-                    roleBadge="Primary Rep"
-                    onValueChange={(username) => set('assignedUser', username)}
+                    placeholder="Select assigned sales rep"
                 />
 
                 {/* Description (full row) */}
