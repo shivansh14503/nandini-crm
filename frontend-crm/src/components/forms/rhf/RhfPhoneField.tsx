@@ -192,7 +192,7 @@ export function RhfPhoneField<T extends FieldValues>({
                                             ? options
                                             : options.filter((c) => matchesPhoneCountry(c, state.inputValue))
                                     }
-                                    sx={{ width: 82, flexShrink: 0 }}
+                                    sx={{ width: 90, flexShrink: 0 }}
                                     slotProps={{
                                         popper: {
                                             anchorEl,
