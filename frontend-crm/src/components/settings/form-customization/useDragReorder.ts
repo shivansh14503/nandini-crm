@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
 
 /** Elements inside a row that keep their own pointer behaviour (typing, selecting, clicking) instead of starting a drag. */
 const INTERACTIVE_SELECTOR = [
@@ -19,9 +19,12 @@ const INTERACTIVE_SELECTOR = [
 
 /** Vertical movement before a press becomes a drag (so plain clicks never move anything). */
 const DRAG_THRESHOLD_PX = 4;
+/** A sibling's slot flips only once the dragged edge is this far past its middle (no jitter on the boundary). */
+const HYSTERESIS_PX = 6;
 const SETTLE_MS = 180;
 const SHIFT_MS = 220;
 const EASE = 'cubic-bezier(0.2, 0, 0, 1)';
+const LIFT_SCALE = 1.012;
 const LIFT_SHADOW = '0 14px 30px -6px rgba(15, 23, 42, 0.18), 0 4px 12px -2px rgba(37, 99, 235, 0.14), 0 0 0 1.5px #60a5fa';
 /** Same three layers, transparent: lets the shadow fade out while the row settles. */
 const SETTLED_SHADOW = '0 0 0 0 rgba(15, 23, 42, 0), 0 0 0 0 rgba(37, 99, 235, 0), 0 0 0 0 rgba(96, 165, 250, 0)';
@@ -29,6 +32,20 @@ const SETTLED_SHADOW = '0 0 0 0 rgba(15, 23, 42, 0), 0 0 0 0 rgba(37, 99, 235, 0
 /** Auto-scroll: distance from the scroll area's edge where scrolling kicks in, and the top speed (px / frame). */
 const AUTO_SCROLL_ZONE_PX = 80;
 const AUTO_SCROLL_MAX_SPEED = 20;
+
+/** Every inline style the drag sets, so a reset leaves the rows exactly as React / Emotion styled them. */
+const DRAG_STYLE_PROPS = [
+    'transform',
+    'transition',
+    'zIndex',
+    'position',
+    'boxShadow',
+    'willChange',
+    'pointerEvents',
+    'backgroundColor',
+    'borderRadius',
+    'cursor',
+] as const;
 
 /** Nearest ancestor that actually scrolls vertically, else the page. */
 function findScroller(el: HTMLElement): HTMLElement {
@@ -70,6 +87,10 @@ function unlockBody(previous: { userSelect: string; cursor: string }): void {
     document.body.style.cursor = previous.cursor;
 }
 
+function clearDragStyles(el: HTMLElement): void {
+    for (const prop of DRAG_STYLE_PROPS) el.style[prop] = '';
+}
+
 const isInteractive = (target: EventTarget | null, row: Element) => {
     const el = target instanceof Element ? target.closest(INTERACTIVE_SELECTOR) : null;
     return Boolean(el && el !== row && row.contains(el));
@@ -94,6 +115,8 @@ interface Session {
     engaged: boolean;
     ids: string[];
     rects: RowRect[];
+    /** Row elements, aligned with `ids` (captured once at drag start). */
+    els: HTMLElement[];
     fromIndex: number;
     targetIndex: number;
     deltaY: number;
@@ -103,34 +126,28 @@ interface Session {
     bodyCursor: string;
 }
 
-/** What rendering needs from the session. */
-interface DragView {
-    id: string;
-    ids: string[];
-    fromIndex: number;
-    targetIndex: number;
-    deltaY: number;
-    stride: number;
-    phase: 'dragging' | 'settling';
-}
-
 export interface RowDragProps {
     ref: (el: HTMLElement | null) => void;
     onPointerDown: (e: ReactPointerEvent<HTMLElement>) => void;
 }
 
+const NO_SX: Record<string, unknown> = {};
+
 /**
- * Zero-dependency, pointer-driven drag-to-reorder with a physical feel.
+ * Zero-dependency, pointer-driven drag-to-reorder with a physical feel — and no React work while dragging.
  *
  * - The pressed row lifts and follows the pointer; siblings slide out of its way as it passes their middle.
- * - On release the row glides into its slot, then `onReorder` fires — in the same tick as the drag state is
- *   cleared, so the list re-renders straight into the new order without a jump. Escape / pointer-cancel glide
- *   it back instead.
+ *   All of it is inline `transform`s written straight to the row elements (compositor-only), so moving the
+ *   pointer causes no React render and no Emotion style injection. Siblings are only touched when the target
+ *   slot changes, and a small hysteresis keeps that slot from flickering on a boundary.
+ * - On release the row glides into its slot, then `onReorder` fires; the inline styles are cleared in a layout
+ *   effect of the very render that puts the rows in their new order, so no frame shows old order + no offsets
+ *   (or new order + old offsets). Escape / pointer-cancel glide it back instead.
  * - `orderedItems` holds the new order until `items` changes, so the rows never snap back while the parent
  *   catches up (render `orderedItems`, not `items`).
  *
- * Spread `getRowDragProps(item)` on each row and `getRowDragSx(item)` last into its `sx`. Presses on inputs,
- * buttons, selects and switches inside a row never start a drag.
+ * Spread `getRowDragProps(item)` on each row (and `getRowDragSx(item)` into its `sx`; it is static now). Presses
+ * on inputs, buttons, selects and switches inside a row never start a drag.
  */
 export function useDragReorder<T extends { id: string }>({
     items,
@@ -141,7 +158,6 @@ export function useDragReorder<T extends { id: string }>({
     canDrag: boolean;
     onReorder: (orderedIds: string[]) => void;
 }) {
-    const [view, setView] = useState<DragView | null>(null);
     /** Order committed by the last drop, applied while `items` is still what it was at that moment. */
     const [pending, setPending] = useState<{ order: string[]; basis: string } | null>(null);
 
@@ -157,8 +173,9 @@ export function useDragReorder<T extends { id: string }>({
     const session = useRef<Session | null>(null);
     const detachRef = useRef<(() => void) | null>(null);
     const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-    const rafRef = useRef<number | null>(null);
     const autoScrollRef = useRef<number | null>(null);
+    /** Elements whose drag styles must be cleared once the reordered rows are committed to the DOM. */
+    const clearOnCommit = useRef<HTMLElement[] | null>(null);
     const orderedRef = useRef(orderedItems);
     const itemsKeyRef = useRef(itemsKey);
     const onReorderRef = useRef(onReorder);
@@ -168,16 +185,28 @@ export function useDragReorder<T extends { id: string }>({
         onReorderRef.current = onReorder;
     }, [orderedItems, itemsKey, onReorder]);
 
+    // Runs after the DOM is updated and before the browser paints: the rows are in their new order, so the
+    // offsets that faked that order can go in the same frame.
+    useLayoutEffect(() => {
+        const els = clearOnCommit.current;
+        if (!els) return;
+        clearOnCommit.current = null;
+        els.forEach(clearDragStyles);
+    }, [orderedItems]);
+
     const restoreBody = (s: Session) => unlockBody({ userSelect: s.bodyUserSelect, cursor: s.bodyCursor });
 
-    // Unmounting mid-drag: drop listeners, timers and the body styles.
+    // Unmounting mid-drag: drop listeners, timers, inline styles and the body styles.
     useEffect(
         () => () => {
             detachRef.current?.();
             if (timerRef.current) clearTimeout(timerRef.current);
-            if (rafRef.current != null) cancelAnimationFrame(rafRef.current);
             if (autoScrollRef.current != null) cancelAnimationFrame(autoScrollRef.current);
-            if (session.current?.engaged) restoreBody(session.current);
+            const s = session.current;
+            if (s?.engaged) {
+                s.els.forEach(clearDragStyles);
+                restoreBody(s);
+            }
         },
         [],
     );
@@ -185,6 +214,75 @@ export function useDragReorder<T extends { id: string }>({
     const stopAutoScroll = () => {
         if (autoScrollRef.current != null) cancelAnimationFrame(autoScrollRef.current);
         autoScrollRef.current = null;
+    };
+
+    // ── Imperative styling (no React state) ──
+
+    const dragTransform = (deltaY: number, scale: number) => `translate3d(0, ${deltaY}px, 0) scale(${scale})`;
+
+    /** Sibling offsets for the current target slot. Called only when the target changes. */
+    const layoutSiblings = (s: Session) => {
+        const from = s.fromIndex;
+        const to = s.targetIndex;
+        s.els.forEach((el, index) => {
+            if (index === from) return;
+            let offset = 0;
+            if (to > from && index > from && index <= to) offset = -s.stride;
+            else if (to < from && index >= to && index < from) offset = s.stride;
+            el.style.transform = `translate3d(0, ${offset}px, 0)`;
+        });
+    };
+
+    const liftRows = (s: Session) => {
+        s.els.forEach((el, index) => {
+            const { style } = el;
+            style.position = 'relative';
+            style.willChange = 'transform';
+            if (index === s.fromIndex) {
+                style.zIndex = '30';
+                style.backgroundColor = '#ffffff';
+                style.borderRadius = '8px';
+                style.cursor = 'grabbing';
+                style.boxShadow = LIFT_SHADOW;
+                // No transform transition while dragging: the row tracks the pointer with zero lag.
+                style.transition = 'box-shadow 150ms ease';
+                style.transform = dragTransform(s.deltaY, LIFT_SCALE);
+            } else {
+                style.zIndex = '1';
+                style.pointerEvents = 'none';
+                style.transition = `transform ${SHIFT_MS}ms ${EASE}`;
+                style.transform = 'translate3d(0, 0px, 0)';
+            }
+        });
+    };
+
+    /**
+     * Follows the pointer: moves the lifted row, and re-lays the siblings only if the target slot changed.
+     * A sibling counts as passed once the leading edge is HYSTERESIS_PX beyond its middle, and as un-passed only
+     * once it is HYSTERESIS_PX back on the other side, so hovering on a boundary never makes rows flicker.
+     */
+    const track = (s: Session, clientY: number) => {
+        s.lastClientY = clientY;
+        // Scrolling moves the rows too (by hand or auto-scroll): keep the lifted row under the pointer.
+        // Rects were measured before any scroll, so everything here is in "content at drag start" coordinates.
+        const scrolled = s.scroller ? s.scroller.scrollTop - s.startScrollTop : 0;
+        s.deltaY = clientY - s.startY + scrolled;
+        s.els[s.fromIndex].style.transform = dragTransform(s.deltaY, LIFT_SCALE);
+
+        const { fromIndex: from, targetIndex: current, rects } = s;
+        const self = rects[from];
+        const passed = (i: number) => (i > from && i <= current) || (i < from && i >= current);
+        let target = from;
+        const bottom = self.bottom + s.deltaY;
+        for (let i = from + 1; i < rects.length && bottom > rects[i].midY + (passed(i) ? -HYSTERESIS_PX : HYSTERESIS_PX); i++) target = i;
+        if (target === from) {
+            const top = self.top + s.deltaY;
+            for (let i = from - 1; i >= 0 && top < rects[i].midY + (passed(i) ? HYSTERESIS_PX : -HYSTERESIS_PX); i--) target = i;
+        }
+        if (target !== current) {
+            s.targetIndex = target;
+            layoutSiblings(s);
+        }
     };
 
     /**
@@ -201,40 +299,42 @@ export function useDragReorder<T extends { id: string }>({
         if (speed !== 0) {
             const before = s.scroller.scrollTop;
             s.scroller.scrollTop = before + speed;
-            if (s.scroller.scrollTop !== before) {
-                track(s, s.lastClientY);
-                schedule();
-            }
+            if (s.scroller.scrollTop !== before) track(s, s.lastClientY);
         }
         autoScrollRef.current = requestAnimationFrame(autoScrollLoop);
     };
 
-    const publish = () => {
-        rafRef.current = null;
-        const s = session.current;
-        if (!s?.engaged) return;
-        setView({ id: s.id, ids: s.ids, fromIndex: s.fromIndex, targetIndex: s.targetIndex, deltaY: s.deltaY, stride: s.stride, phase: 'dragging' });
-    };
-    /** One render per animation frame, however many pointer events arrive. */
-    const schedule = () => {
-        if (rafRef.current == null) rafRef.current = requestAnimationFrame(publish);
-    };
-
-    /** Measures the rows once, at the start of the drag. */
+    /** Measures the rows once and lifts the pressed one. */
     const engage = (s: Session): boolean => {
         const ids = orderedRef.current.map((i) => i.id);
         const fromIndex = ids.indexOf(s.id);
-        const measured = ids.map((id) => rowEls.current.get(id)?.getBoundingClientRect());
-        if (fromIndex < 0 || measured.some((r) => !r)) return false;
-        const rects = (measured as DOMRect[]).map((r) => ({ top: r.top, bottom: r.bottom, height: r.height, midY: r.top + r.height / 2 }));
+        const els = ids.map((id) => rowEls.current.get(id));
+        if (fromIndex < 0 || els.some((el) => !el)) return false;
+        const rowElements = els as HTMLElement[];
+        const rects = rowElements.map((el) => {
+            const r = el.getBoundingClientRect();
+            return { top: r.top, bottom: r.bottom, height: r.height, midY: r.top + r.height / 2 };
+        });
         const self = rects[fromIndex];
         const next = rects[fromIndex + 1];
         const prev = rects[fromIndex - 1];
         const gap = Math.max(0, next ? next.top - self.bottom : prev ? self.top - prev.bottom : 0);
 
-        const scroller = findScroller(rowEls.current.get(s.id) as HTMLElement);
-        Object.assign(s, { engaged: true, ids, rects, fromIndex, targetIndex: fromIndex, deltaY: 0, stride: self.height + gap, scroller, startScrollTop: scroller.scrollTop });
-        // The pointer may have moved past the threshold already: measure from where the drag really starts.
+        const scroller = findScroller(rowElements[fromIndex]);
+        Object.assign(s, {
+            engaged: true,
+            ids,
+            rects,
+            els: rowElements,
+            fromIndex,
+            targetIndex: fromIndex,
+            deltaY: 0,
+            stride: self.height + gap,
+            scroller,
+            startScrollTop: scroller.scrollTop,
+        });
+        liftRows(s);
+        // The pointer may have moved past the threshold already: place the row where the pointer really is.
         track(s, s.lastClientY);
         autoScrollRef.current = requestAnimationFrame(autoScrollLoop);
         const previous = lockBody();
@@ -243,32 +343,11 @@ export function useDragReorder<T extends { id: string }>({
         return true;
     };
 
-    /** Follows the pointer and works out which slot the row's leading edge has reached. */
-    const track = (s: Session, clientY: number) => {
-        s.lastClientY = clientY;
-        // Scrolling moves the rows too (by hand or auto-scroll): keep the lifted row under the pointer.
-        // Rects were measured before any scroll, so everything here is in "content at drag start" coordinates.
-        const scrolled = s.scroller ? s.scroller.scrollTop - s.startScrollTop : 0;
-        s.deltaY = clientY - s.startY + scrolled;
-        const self = s.rects[s.fromIndex];
-        let target = s.fromIndex;
-        if (s.deltaY > 0) {
-            const bottom = self.bottom + s.deltaY;
-            for (let i = s.fromIndex + 1; i < s.rects.length && s.rects[i].midY < bottom; i++) target = i;
-        } else if (s.deltaY < 0) {
-            const top = self.top + s.deltaY;
-            for (let i = s.fromIndex - 1; i >= 0 && s.rects[i].midY > top; i--) target = i;
-        }
-        s.targetIndex = target;
-    };
-
     /** Glides the row into its slot (or back home when cancelled), then commits. */
     const finish = (commit: boolean) => {
         const s = session.current;
         detachRef.current?.();
         stopAutoScroll();
-        if (rafRef.current != null) cancelAnimationFrame(rafRef.current);
-        rafRef.current = null;
         if (!s?.engaged) {
             session.current = null;
             return;
@@ -276,10 +355,17 @@ export function useDragReorder<T extends { id: string }>({
 
         const from = s.fromIndex;
         const to = commit ? s.targetIndex : from;
+        if (s.targetIndex !== to) {
+            s.targetIndex = to;
+            layoutSiblings(s); // cancelled: siblings slide back home
+        }
         const r = s.rects;
         // Where the row's box lands once the list is in its new order (exact, whatever the row heights).
         const settleY = to > from ? r[to].bottom - r[from].bottom : to < from ? r[to].top - r[from].top : 0;
-        setView({ id: s.id, ids: s.ids, fromIndex: from, targetIndex: to, deltaY: settleY, stride: s.stride, phase: 'settling' });
+        const { style } = s.els[from];
+        style.transition = `transform ${SETTLE_MS}ms ${EASE}, box-shadow ${SETTLE_MS}ms ease`;
+        style.transform = dragTransform(settleY, 1);
+        style.boxShadow = SETTLED_SHADOW;
 
         // The release must not also "click" whatever is under the pointer.
         const swallow = (e: MouseEvent) => {
@@ -289,22 +375,26 @@ export function useDragReorder<T extends { id: string }>({
         window.addEventListener('click', swallow, { capture: true, once: true });
         setTimeout(() => window.removeEventListener('click', swallow, { capture: true }), 0);
 
-        timerRef.current = setTimeout(() => {
-            timerRef.current = null;
-            restoreBody(s);
-            session.current = null;
-            if (to === from) {
-                setView(null);
-                return;
-            }
-            const next = [...s.ids];
-            const [moved] = next.splice(from, 1);
-            next.splice(to, 0, moved);
-            // Same tick: the transforms go away exactly as the rows take their new order.
-            setPending({ order: next, basis: itemsKeyRef.current });
-            setView(null);
-            onReorderRef.current(next);
-        }, SETTLE_MS);
+        timerRef.current = setTimeout(
+            () => {
+                timerRef.current = null;
+                restoreBody(s);
+                session.current = null;
+                if (to === from) {
+                    // Order unchanged: every row is visually home already, so the styles can go right away.
+                    s.els.forEach(clearDragStyles);
+                    return;
+                }
+                const next = [...s.ids];
+                const [moved] = next.splice(from, 1);
+                next.splice(to, 0, moved);
+                // The layout effect of the render that applies `next` clears the offsets before that frame paints.
+                clearOnCommit.current = s.els;
+                setPending({ order: next, basis: itemsKeyRef.current });
+                onReorderRef.current(next);
+            },
+            to === from ? Math.max(SETTLE_MS, SHIFT_MS) : SETTLE_MS,
+        );
     };
 
     const start = (item: T, e: ReactPointerEvent<HTMLElement>) => {
@@ -318,6 +408,7 @@ export function useDragReorder<T extends { id: string }>({
             engaged: false,
             ids: [],
             rects: [],
+            els: [],
             fromIndex: -1,
             targetIndex: -1,
             deltaY: 0,
@@ -335,12 +426,12 @@ export function useDragReorder<T extends { id: string }>({
                 if (!engage(s)) {
                     detachRef.current?.();
                     session.current = null;
-                    return;
                 }
+                ev.preventDefault();
+                return;
             }
             ev.preventDefault();
             track(s, ev.clientY);
-            schedule();
         };
         const onUp = (ev: PointerEvent) => ev.pointerId === s.pointerId && finish(true);
         const onCancel = (ev: PointerEvent) => ev.pointerId === s.pointerId && finish(false);
@@ -350,9 +441,7 @@ export function useDragReorder<T extends { id: string }>({
             finish(false);
         };
         const onScroll = () => {
-            if (!s.engaged) return;
-            track(s, s.lastClientY);
-            schedule();
+            if (s.engaged) track(s, s.lastClientY);
         };
 
         window.addEventListener('pointermove', onMove, { passive: false });
@@ -378,49 +467,15 @@ export function useDragReorder<T extends { id: string }>({
         },
         onPointerDown: (e) => {
             if (!canDrag || !isDraggable || e.button !== 0 || !e.isPrimary) return;
-            if (session.current || view) return; // a drag is running or settling
+            if (session.current) return; // a drag is running or settling
             if (isInteractive(e.target, e.currentTarget)) return;
             start(item, e);
         },
     });
 
-    /** Lifted style for the dragged row, sliding offsets for its siblings; `{}` when nothing is dragged. */
-    const getRowDragSx = (item: T): Record<string, unknown> => {
-        if (!view) return {};
-        const index = view.ids.indexOf(item.id);
-        if (index < 0) return {};
+    /** Kept for API compatibility: all drag styling is applied to the row elements directly, so this is static. */
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const getRowDragSx = (_item: T): Record<string, unknown> => NO_SX;
 
-        if (item.id === view.id) {
-            const settling = view.phase === 'settling';
-            return {
-                position: 'relative',
-                zIndex: 30,
-                backgroundColor: '#ffffff',
-                borderRadius: '8px',
-                cursor: 'grabbing',
-                willChange: 'transform',
-                transform: `translate3d(0, ${view.deltaY}px, 0) scale(${settling ? 1 : 1.014})`,
-                boxShadow: settling ? SETTLED_SHADOW : LIFT_SHADOW,
-                // While tracking, the transform follows the pointer with no easing (zero lag).
-                transition: settling
-                    ? `transform ${SETTLE_MS}ms ${EASE}, box-shadow ${SETTLE_MS}ms ease`
-                    : 'box-shadow 180ms ease, background-color 180ms ease',
-                '&:hover': { backgroundColor: '#ffffff' },
-            };
-        }
-
-        const { fromIndex: from, targetIndex: to, stride } = view;
-        let offset = 0;
-        if (to > from && index > from && index <= to) offset = -stride;
-        else if (to < from && index >= to && index < from) offset = stride;
-        return {
-            position: 'relative',
-            zIndex: 1,
-            pointerEvents: 'none',
-            transform: `translate3d(0, ${offset}px, 0)`,
-            transition: `transform ${SHIFT_MS}ms ${EASE}`,
-        };
-    };
-
-    return { draggedId: view?.id ?? null, isDragging: Boolean(view), orderedItems, getRowDragProps, getRowDragSx };
+    return { orderedItems, getRowDragProps, getRowDragSx };
 }
