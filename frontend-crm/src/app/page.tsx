@@ -2,6 +2,8 @@ import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { ROUTES } from '@/config/constants';
 
+export const instant = false;
+
 export default async function HomePage() {
     const cookieStore = await cookies();
     const token = cookieStore.get('token')?.value;
@@ -12,3 +14,4 @@ export default async function HomePage() {
 
     redirect(ROUTES.LOGIN);
 }
+
