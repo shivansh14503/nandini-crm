@@ -1,0 +1,235 @@
+// ─── Admin Form & Dropdown Customization ──────────────────────────────────────
+// Mirrors backend-crm/src/modules/form-configs (GET /api/form-configs).
+
+export const CRM_MODULE_KEYS = [
+    'organizations',
+    'contacts',
+    'leads',
+    'opportunities',
+    'quotations',
+    'products',
+    'tickets',
+    'partner-companies',
+] as const;
+
+export type CrmModuleKey = (typeof CRM_MODULE_KEYS)[number];
+
+export const CRM_MODULE_LABELS: Record<CrmModuleKey, string> = {
+    organizations: 'Organizations',
+    contacts: 'Contacts',
+    leads: 'Leads',
+    opportunities: 'Opportunities',
+    quotations: 'Quotations',
+    products: 'Products',
+    tickets: 'Tickets',
+    'partner-companies': 'Partner Companies',
+};
+
+/** Control types an admin can pick for a custom field. */
+export const CUSTOM_FIELD_TYPES = [
+    'text',
+    'textarea',
+    'number',
+    'amount',
+    'percentage',
+    'phone',
+    'email',
+    'date',
+    'select',
+    'multiselect',
+    'checkbox',
+    'uppercase',
+    'pincode',
+] as const;
+
+export type CustomFieldType = (typeof CUSTOM_FIELD_TYPES)[number];
+
+/** Built-in fields can also be lookups or date + time pickers. */
+export type FieldType = CustomFieldType | 'lookup' | 'datetime';
+
+export const FIELD_TYPE_LABELS: Record<FieldType, string> = {
+    text: 'Text',
+    textarea: 'Text Area',
+    number: 'Number',
+    amount: 'Amount',
+    percentage: 'Percentage',
+    phone: 'Phone',
+    email: 'Email',
+    date: 'Date',
+    select: 'Select',
+    multiselect: 'Multi-Select',
+    checkbox: 'Checkbox',
+    uppercase: 'Uppercase Code',
+    pincode: 'PIN Code',
+    lookup: 'Lookup',
+    datetime: 'Date & Time',
+};
+
+export type ConfigFieldSize = 'xs' | 'sm' | 'md' | 'lg' | 'full';
+
+export interface DropdownOptionDto {
+    id: string;
+    categoryId: string;
+    value: string;
+    label: string;
+    /** Extra data, e.g. `{ description }` for quotation terms templates. */
+    meta: Record<string, unknown> | null;
+    sortOrder: number;
+    isActive: boolean;
+    /** Drives backend logic: can't be archived or renamed (label edits are fine). */
+    isSystem: boolean;
+}
+
+export interface DropdownCategoryDto {
+    id: string;
+    key: string;
+    label: string;
+    /** Owning module, or `shared`. */
+    module: CrmModuleKey | 'shared';
+    description: string;
+    isSystem: boolean;
+    /** CRM screens read it directly by key (lead conversion, quick create, quotations). */
+    appRequired: boolean;
+    /** Why it can't be deleted, or null when an admin may delete it (built-in or not). */
+    lockReason: string | null;
+    options: DropdownOptionDto[];
+    /** Fields whose options come from this category. */
+    usedBy: { module: string; fieldKey: string; label: string }[];
+}
+
+export interface FormFieldDefinitionDto {
+    id: string;
+    module: CrmModuleKey;
+    /** RHF name for built-in fields; `cf_…` key inside `customFields` for custom fields. */
+    fieldKey: string;
+    label: string;
+    fieldType: FieldType;
+    tabKey: string;
+    sectionKey: string;
+    sectionLabel: string;
+    sortOrder: number;
+    fieldSize: ConfigFieldSize | null;
+    /** null → the form's built-in text. */
+    placeholder: string | null;
+    /** null → the form's built-in text. */
+    hint: string | null;
+    defaultValue: string | null;
+    isRequired: boolean;
+    /** Can't be hidden or made optional. */
+    isCoreLocked: boolean;
+    /** Built-in field (fixed tab / section / type). */
+    isSystem: boolean;
+    isActive: boolean;
+    isVisibleInForm: boolean;
+    isVisibleInDrawer: boolean;
+    dropdownCategoryId: string | null;
+    dropdownCategoryKey: string | null;
+    validationRules: Record<string, unknown> | null;
+}
+
+export interface ModuleTabDefinition {
+    key: string;
+    label: string;
+}
+
+export interface FormConfigsPayload {
+    categories: DropdownCategoryDto[];
+    fieldsByModule: Record<CrmModuleKey, FormFieldDefinitionDto[]>;
+    moduleTabs: Record<CrmModuleKey, ModuleTabDefinition[]>;
+}
+
+/** A built-in field's default settings (GET /api/form-configs/modules/:module/defaults): what a reset restores. */
+export interface ModuleFieldDefault {
+    fieldKey: string;
+    label: string;
+    tabKey: string;
+    sectionKey: string;
+    sectionLabel: string;
+    sortOrder: number;
+    isRequired: boolean;
+    isCoreLocked: boolean;
+    dropdownCategoryKey: string | null;
+}
+
+/** A section of a module form, as configured. */
+export interface ConfiguredSection {
+    sectionKey: string;
+    sectionLabel: string;
+    tabKey: string;
+    fields: FormFieldDefinitionDto[];
+}
+
+// ── Admin request bodies ─────────────────────────────────────────────────────
+
+export interface CreateCategoryPayload {
+    key?: string;
+    label: string;
+    module: CrmModuleKey | 'shared';
+    description?: string;
+    options?: string[];
+}
+
+export interface UpdateCategoryPayload {
+    label?: string;
+    description?: string | null;
+    /** Owning module, or `shared`. */
+    module?: CrmModuleKey | 'shared';
+}
+
+export interface CreateOptionPayload {
+    value: string;
+    label?: string;
+    meta?: Record<string, unknown> | null;
+}
+
+export interface UpdateOptionPayload {
+    value?: string;
+    label?: string;
+    meta?: Record<string, unknown> | null;
+    isActive?: boolean;
+}
+
+export interface CreateFieldPayload {
+    module: CrmModuleKey;
+    label: string;
+    fieldType: CustomFieldType;
+    tabKey: string;
+    sectionKey?: string;
+    sectionLabel: string;
+    fieldSize?: ConfigFieldSize | null;
+    placeholder?: string;
+    hint?: string;
+    defaultValue?: string;
+    isRequired?: boolean;
+    isVisibleInForm?: boolean;
+    isVisibleInDrawer?: boolean;
+    dropdownCategoryKey?: string;
+    newOptions?: string[];
+}
+
+export interface UpdateFieldPayload {
+    label?: string;
+    /** Custom select / multi-select fields only: switches between the two. */
+    fieldType?: 'select' | 'multiselect';
+    tabKey?: string;
+    sectionKey?: string;
+    sectionLabel?: string;
+    fieldSize?: ConfigFieldSize | null;
+    placeholder?: string | null;
+    hint?: string | null;
+    defaultValue?: string | null;
+    isRequired?: boolean;
+    isVisibleInForm?: boolean;
+    isVisibleInDrawer?: boolean;
+    isActive?: boolean;
+    dropdownCategoryKey?: string | null;
+}
+
+/** `PIPELINE & FOLLOW-UP` → `pipeline_follow_up` (same rule as the backend). */
+export function sectionKeyFromLabel(label: string): string {
+    return label
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '_')
+        .replace(/^_+|_+$/g, '')
+        .slice(0, 80);
+}

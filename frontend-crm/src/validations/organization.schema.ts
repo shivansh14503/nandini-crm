@@ -14,6 +14,8 @@ import {
     zodPhoneOptional,
     zodEmailOptional,
     GST_REGEX,
+    configurableOption,
+    customFieldsSchema,
 } from './common';
 import { corporateEmailSchema } from './contact.schema';
 
@@ -34,7 +36,8 @@ export const organizationFormSchema = z
         mailingName: optionalText('Mailing Name', L.organizationName),
         tradeName: optionalText('Trade Name', L.organizationName),
         natureOfBusiness: requiredString('Nature of Business'),
-        accountStatus: z.enum(['Active', 'Inactive']).default('Active'),
+        // Admin-customizable (org_account_status / org_registration_type).
+        accountStatus: configurableOption('Account Status', 'Active'),
         inactivityReason: optionalString,
         typeOfEntity: requiredString('Type of Entity'),
         customerType: requiredString('Customer Type'),
@@ -74,7 +77,7 @@ export const organizationFormSchema = z
         copyAddressFromBilling: z.boolean().default(false),
 
         // Tax & Bank Details
-        registrationType: z.enum(['Registered', 'Unregistered']).default('Registered'),
+        registrationType: configurableOption('Registration Type', 'Registered'),
         panNumber: zodPanOptional,
         msmeRegnNumber: optionalText('MSME Regn. Number', L.msme),
         accountName: optionalText('Account Name', L.organizationName),
@@ -91,6 +94,9 @@ export const organizationFormSchema = z
         // Partner Company
         partnerCompanies: z.array(z.union([z.string(), partnerCompanySchema])).default([]),
         partnerCompany: optionalString,
+
+        /** Admin-defined custom field values (validated against the form configuration by useRhfForm). */
+        customFields: customFieldsSchema,
     })
     .superRefine((data, ctx) => {
         refinePostalCodeForCountry(ctx, 'billingPostalCode', data.billingPostalCode, data.billingCountry, true);

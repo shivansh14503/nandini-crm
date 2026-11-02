@@ -31,6 +31,8 @@ import {
     ContactAssignmentSection,
     ContactPreferencesSection,
 } from './sections';
+import { FormConfigProvider } from '@/context/FormConfigContext';
+import { DynamicModuleCustomFields } from '@/components/forms/DynamicModuleCustomFields';
 
 // ─── Single Source of Truth for Contact Form Tabs ──────────────────────────────
 export const CONTACT_FORM_TABS: FormTabDefinition[] = [
@@ -87,6 +89,7 @@ export default function ContactForm({
 
     const { methods, toast, showToast, closeToast, createSubmitHandler } = useRhfForm<ContactFormData>({
         schema: contactFormSchema,
+        module: 'contacts',
         defaultValues: { ...DEFAULT_FORM, ...initialData },
     });
     const { reset, watch, formState } = methods;
@@ -139,42 +142,45 @@ export default function ContactForm({
 
     return (
         <FormProvider {...methods}>
-            <CommonFormLayout
-                breadcrumbItems={breadcrumbItems || defaultBreadcrumbs}
-                tabs={CONTACT_FORM_TABS}
-                activeTab="overview"
-                onCancel={handleDiscard}
-                onSave={mode === 'view' ? () => router.push(ROUTES.CONTACT_EDIT(contactId!)) : handleSave}
-                submitting={isSubmitting}
-                saveLabel={mode === 'view' ? 'Edit Contact' : mode === 'edit' ? 'Update Contact' : 'Save Contact'}
-                cancelLabel={mode === 'view' ? 'Back' : 'Cancel'}
-                recordView={{
-                    title: contactName || '',
-                    editHref: contactId ? ROUTES.CONTACT_EDIT(contactId) : undefined,
-                    editLabel: 'Edit Contact',
-                    backHref: ROUTES.CONTACTS,
-                }}
-                mode={mode}
-                toast={<AppToast open={toast.open} message={toast.message} severity={toast.severity} onClose={closeToast} />}
-            >
-                <SectionLabel icon={<ContactPhoneOutlinedIcon sx={{ fontSize: 18 }} />} label="Contact Details & Association" />
-                <ContactBasicInfoSection />
+            <FormConfigProvider module="contacts">
+                <CommonFormLayout
+                    breadcrumbItems={breadcrumbItems || defaultBreadcrumbs}
+                    tabs={CONTACT_FORM_TABS}
+                    activeTab="overview"
+                    onCancel={handleDiscard}
+                    onSave={mode === 'view' ? () => router.push(ROUTES.CONTACT_EDIT(contactId!)) : handleSave}
+                    submitting={isSubmitting}
+                    saveLabel={mode === 'view' ? 'Edit Contact' : mode === 'edit' ? 'Update Contact' : 'Save Contact'}
+                    cancelLabel={mode === 'view' ? 'Back' : 'Cancel'}
+                    recordView={{
+                        title: contactName || '',
+                        editHref: contactId ? ROUTES.CONTACT_EDIT(contactId) : undefined,
+                        editLabel: 'Edit Contact',
+                        backHref: ROUTES.CONTACTS,
+                    }}
+                    mode={mode}
+                    toast={<AppToast open={toast.open} message={toast.message} severity={toast.severity} onClose={closeToast} />}
+                >
+                    <SectionLabel icon={<ContactPhoneOutlinedIcon sx={{ fontSize: 18 }} />} label="Contact Details & Association" />
+                    <ContactBasicInfoSection />
 
-                <Divider sx={sectionDividerSx} />
+                    <Divider sx={sectionDividerSx} />
 
-                <SectionLabel icon={<ContactPhoneOutlinedIcon sx={{ fontSize: 18 }} />} label="Alternate Communication Channels" />
-                <ContactPhonesEmailsSection />
+                    <SectionLabel icon={<ContactPhoneOutlinedIcon sx={{ fontSize: 18 }} />} label="Alternate Communication Channels" />
+                    <ContactPhonesEmailsSection />
 
-                <Divider sx={sectionDividerSx} />
+                    <Divider sx={sectionDividerSx} />
 
-                <SectionLabel icon={<BusinessOutlinedIcon sx={{ fontSize: 18 }} />} label="Internal Assignment & Department Role" />
-                <ContactAssignmentSection />
+                    <SectionLabel icon={<BusinessOutlinedIcon sx={{ fontSize: 18 }} />} label="Internal Assignment & Department Role" />
+                    <ContactAssignmentSection />
 
-                <Divider sx={sectionDividerSx} />
+                    <Divider sx={sectionDividerSx} />
 
-                <SectionLabel icon={<TuneOutlinedIcon sx={{ fontSize: 18 }} />} label="Notes" />
-                <ContactPreferencesSection />
-            </CommonFormLayout>
+                    <SectionLabel icon={<TuneOutlinedIcon sx={{ fontSize: 18 }} />} label="Notes" />
+                    <ContactPreferencesSection />
+                    <DynamicModuleCustomFields module="contacts" tabKey="overview" sx={{ px: 0, pb: 0, mt: 3.5 }} />
+                </CommonFormLayout>
+            </FormConfigProvider>
         </FormProvider>
     );
 }

@@ -1,5 +1,5 @@
 import type { Opportunity, OpportunityLineItem, Prisma } from '../../generated/prisma/client.js';
-import { decimalToNumber, fromDateOnly, nullable, parseStringArray, stringifyStringArray, text, toDateOnly, toIso } from '../../utils/mappers.js';
+import { decimalToNumber, fromDateOnly, nullable, parseCustomFields, parseStringArray, serializeCustomFields, stringifyStringArray, text, toDateOnly, toIso } from '../../utils/mappers.js';
 import { toLineItemDtos, type LineItemDto, type LineItemTotals } from '../shared/lineItems.js';
 import type { OpportunityInput } from './opportunity.validator.js';
 
@@ -47,6 +47,8 @@ export interface OpportunityDto {
     createdAt: string;
     updatedAt: string;
     createdBy: string;
+    /** Admin-defined custom field values keyed by FormFieldDefinition.fieldKey. */
+    customFields: Record<string, unknown>;
 }
 
 export function toOpportunityDto(row: OpportunityRow): OpportunityDto {
@@ -89,6 +91,7 @@ export function toOpportunityDto(row: OpportunityRow): OpportunityDto {
         createdAt: toIso(row.createdAt),
         updatedAt: toIso(row.updatedAt),
         createdBy: row.createdBy,
+        customFields: parseCustomFields(row.customDataJson),
     };
 }
 
@@ -99,6 +102,7 @@ export function toOpportunityData(
     totals: LineItemTotals,
 ): Omit<Prisma.OpportunityUncheckedCreateInput, 'opportunityCode' | 'createdBy'> {
     return {
+        customDataJson: serializeCustomFields(input.customFields),
         opportunityName: nullable(input.opportunityName),
         productCategoryJson: stringifyStringArray(input.productCategory),
         contactName: links.contact.name,

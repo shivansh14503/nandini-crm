@@ -24,6 +24,7 @@ import {
 } from '@/components/common/Drawer';
 import { TICKET_FORM_TABS } from './TicketForm';
 import { TicketPriorityPill, TicketStatusPill, formatTicketDue } from './TicketBadges';
+import { DynamicDrawerCustomFields } from '@/components/common/Drawer/DynamicDrawerCustomFields';
 
 export interface TicketDetailDrawerProps {
     ticket: Ticket | null;
@@ -210,6 +211,9 @@ export function TicketDetailDrawer({ ticket, open, onClose, onEdit, hideBackdrop
                                 <Typography sx={{ color: '#94a3b8', fontSize: '0.86rem' }}>Unassigned</Typography>
                             )}
                         </DrawerSectionCard>
+
+                        {/* Admin-defined custom fields */}
+                        <DynamicDrawerCustomFields module="tickets" record={t} />
                     </Box>
                 ),
                 partner_company: (

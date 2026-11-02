@@ -1,5 +1,5 @@
 import type { Prisma, Ticket } from '../../generated/prisma/client.js';
-import { fromWallClock, nullable, text, toIso, toWallClock } from '../../utils/mappers.js';
+import { fromWallClock, nullable, parseCustomFields, serializeCustomFields, text, toIso, toWallClock } from '../../utils/mappers.js';
 import type { TicketInput } from './ticket.validator.js';
 
 /** `Ticket` from frontend-crm/src/types/ticket.types.ts, plus the resolved organization / contact links. */
@@ -37,6 +37,8 @@ export interface TicketDto {
     createdAt: string;
     updatedAt: string;
     createdBy: string;
+    /** Admin-defined custom field values keyed by FormFieldDefinition.fieldKey. */
+    customFields: Record<string, unknown>;
 }
 
 export function toTicketDto(row: Ticket): TicketDto {
@@ -73,6 +75,7 @@ export function toTicketDto(row: Ticket): TicketDto {
         createdAt: toIso(row.createdAt),
         updatedAt: toIso(row.updatedAt),
         createdBy: row.createdBy,
+        customFields: parseCustomFields(row.customDataJson),
     };
 }
 
@@ -81,6 +84,7 @@ export function toTicketData(
     resolved: { natureOfCall: string; organizationId: string | null; contactId: string | null },
 ): Omit<Prisma.TicketUncheckedCreateInput, 'ticketNumber' | 'createdBy'> {
     return {
+        customDataJson: serializeCustomFields(input.customFields),
         amcFlag: input.amcFlag,
         cloudFlag: input.cloudFlag,
         ticketSubject: nullable(input.ticketSubject),

@@ -12,7 +12,10 @@ export type AuditEntityType =
     | 'Ticket'
     | 'PartnerCompany'
     | 'User'
-    | 'Import';
+    | 'Import'
+    | 'DropdownCategory'
+    | 'DropdownOption'
+    | 'FormField';
 
 export type AuditAction =
     | 'CREATE'

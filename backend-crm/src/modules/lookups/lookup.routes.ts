@@ -1,6 +1,7 @@
 import { Router, type Request, type Response } from 'express';
 import { authenticate } from '../../middlewares/authMiddleware.js';
 import { sendSuccess } from '../../utils/apiResponse.js';
+import { formConfigService } from '../form-configs/formConfig.service.js';
 import { lookupService } from './lookup.service.js';
 
 /**
@@ -13,6 +14,7 @@ import { lookupService } from './lookup.service.js';
  *   GET /partner-companies                            → PartnerCompany[]
  *   GET /partner-contacts    ?partnerCompany          → PartnerCompanyContact[]
  *   GET /address-master      ?country=IN              → { countries, subdivisions }
+ *   GET /form-configs        ?includeInactive         → { categories, fieldsByModule, moduleTabs }
  */
 const router = Router();
 router.use(authenticate);
@@ -29,5 +31,6 @@ router.get('/nature-of-calls', handler(() => lookupService.natureOfCalls()));
 router.get('/partner-companies', handler(() => lookupService.partnerCompanies()));
 router.get('/partner-contacts', handler((q) => lookupService.partnerContacts(q)));
 router.get('/address-master', handler((q) => lookupService.addressMaster(q)));
+router.get('/form-configs', handler((q) => formConfigService.getConfigs(q)));
 
 export default router;

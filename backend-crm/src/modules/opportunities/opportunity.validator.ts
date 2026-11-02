@@ -4,6 +4,7 @@ import {
     booleanQuery,
     createdWithinDaysQuery,
     csvQuery,
+    customFieldsSchema,
     enumWithDefault,
     optionalDate,
     optionalEmail,
@@ -50,6 +51,8 @@ export const opportunityInputSchema = z.object({
     groupName: optionalText('Group Name', L.shortText),
     lineItems: lineItemListSchema.default([]),
     lumpSumDiscount: z.coerce.number({ error: 'Lump Sum Discount must be a number.' }).min(0, { message: 'Lump Sum Discount cannot be negative.' }).default(0),
+
+    customFields: customFieldsSchema,
 });
 
 export type OpportunityInput = z.infer<typeof opportunityInputSchema>;

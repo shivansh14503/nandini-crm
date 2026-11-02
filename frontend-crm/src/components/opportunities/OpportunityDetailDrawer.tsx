@@ -24,6 +24,7 @@ import {
 import { AppToast } from '@/components/common/AppToast';
 import { useOpportunity, useOrganization, useOrganizations, useQuotations } from '@/hooks/queries';
 import { OPPORTUNITY_FORM_TABS } from './OpportunityForm';
+import { DynamicDrawerCustomFields } from '@/components/common/Drawer/DynamicDrawerCustomFields';
 
 export interface OpportunityDetailDrawerProps {
     opportunity: Opportunity | null;
@@ -216,6 +217,9 @@ export function OpportunityDetailDrawer({
                                 )}
                             </Box>
                         </DrawerSectionCard>
+
+                        {/* Admin-defined custom fields */}
+                        <DynamicDrawerCustomFields module="opportunities" record={opp} />
 
                         {/* Product Categories */}
                         <Box>

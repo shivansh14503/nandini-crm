@@ -1,5 +1,5 @@
 import type { Prisma, Quotation, QuotationLineItem } from '../../generated/prisma/client.js';
-import { decimalToNumber, fromDateOnly, nullable, text, toDateOnly, toIso } from '../../utils/mappers.js';
+import { decimalToNumber, fromDateOnly, nullable, parseCustomFields, serializeCustomFields, text, toDateOnly, toIso } from '../../utils/mappers.js';
 import { toLineItemDtos, type LineItemDto, type LineItemTotals } from '../shared/lineItems.js';
 import type { QuotationInput } from './quotation.validator.js';
 
@@ -70,6 +70,8 @@ export interface QuotationDto {
     createdAt: string;
     updatedAt: string;
     createdBy: string;
+    /** Admin-defined custom field values keyed by FormFieldDefinition.fieldKey. */
+    customFields: Record<string, unknown>;
 }
 
 export function toQuotationDto(row: QuotationRow): QuotationDto {
@@ -133,6 +135,7 @@ export function toQuotationDto(row: QuotationRow): QuotationDto {
         createdAt: toIso(row.createdAt),
         updatedAt: toIso(row.updatedAt),
         createdBy: row.createdBy,
+        customFields: parseCustomFields(row.customDataJson),
     };
 }
 
@@ -166,6 +169,7 @@ export function toQuotationData(
           };
 
     return {
+        customDataJson: serializeCustomFields(input.customFields),
         quotationTitle: input.quotationTitle,
         quoteStage: input.quoteStage,
         quotationDate: fromDateOnly(input.quotationDate),

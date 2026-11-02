@@ -1,5 +1,5 @@
 import type { PartnerCompany, Prisma } from '../../generated/prisma/client.js';
-import { nullable, text, toIso } from '../../utils/mappers.js';
+import { nullable, parseCustomFields, serializeCustomFields, text, toIso } from '../../utils/mappers.js';
 import type { CorporateEmailDto, NormalizedEmail } from '../shared/entityEmails.js';
 import type { PartnerCompanyInput } from './partnerCompany.validator.js';
 
@@ -54,6 +54,8 @@ export interface PartnerCompanyDto {
     createdAt: string;
     updatedAt: string;
     createdBy: string;
+    /** Admin-defined custom field values keyed by FormFieldDefinition.fieldKey. */
+    customFields: Record<string, unknown>;
     updatedBy: string;
 }
 
@@ -132,6 +134,7 @@ export function toPartnerCompanyDto(row: PartnerCompany): PartnerCompanyDto {
         createdAt: toIso(row.createdAt),
         updatedAt: toIso(row.updatedAt),
         createdBy: row.createdBy,
+        customFields: parseCustomFields(row.customDataJson),
         updatedBy: text(row.updatedBy),
     };
 }
@@ -163,6 +166,7 @@ export function toPartnerCompanyData(
           };
 
     return {
+        customDataJson: serializeCustomFields(input.customFields),
         companyName: input.companyName,
         natureOfPartner: input.natureOfPartner,
         phone: input.phone,

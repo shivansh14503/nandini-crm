@@ -7,7 +7,7 @@ import type { AuthUser } from '../../types/user.types.js';
 import type { PaginatedResult } from '../../utils/apiResponse.js';
 import { generateEntityCode } from '../../utils/codeGenerator.js';
 import { HttpError } from '../../utils/httpError.js';
-import { daysAgo, nullable, stringifyStringArray } from '../../utils/mappers.js';
+import { daysAgo, nullable, serializeCustomFields, stringifyStringArray } from '../../utils/mappers.js';
 import { parsePagination } from '../../utils/pagination.js';
 import { emailsInclude, normalizeEmails, replaceEmails } from '../shared/entityEmails.js';
 import { acquireLocks, lockRecords, runInTransaction, softDeleteData, type BulkDeleteResult } from '../shared/transactions.js';
@@ -138,6 +138,7 @@ function toOrganizationData(
           };
 
     return {
+        customDataJson: serializeCustomFields(input.customFields),
         organizationName: input.organizationName,
         // Mailing / trade names follow the organization name until set explicitly (as in the form).
         mailingName: input.mailingName ?? input.organizationName,

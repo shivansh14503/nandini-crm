@@ -24,6 +24,7 @@ import {
     copyToClipboard,
 } from '@/components/common/Drawer';
 import { PRODUCT_FORM_TABS } from './ProductForm';
+import { DynamicDrawerCustomFields } from '@/components/common/Drawer/DynamicDrawerCustomFields';
 
 export interface ProductDetailDrawerProps {
     product: Product | null;
@@ -123,6 +124,9 @@ export function ProductDetailDrawer({
                                 </Box>
                             </Box>
                         </DrawerSectionCard>
+
+                        {/* Admin-defined custom fields */}
+                        <DynamicDrawerCustomFields module="products" record={p} />
 
                         {/* Section 1: Sale Information */}
                         <DrawerSectionCard

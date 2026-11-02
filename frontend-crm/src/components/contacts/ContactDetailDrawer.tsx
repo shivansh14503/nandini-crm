@@ -37,6 +37,7 @@ import { ReadOnlyField } from '@/components/forms/ReadOnlyField';
 import { findCrmUser } from '@/services/masterData.store';
 import { mailtoHref,smsHref, telHref, whatsappHref } from '@/utils/contactLinks';
 import { CONTACT_FORM_TABS } from './ContactForm';
+import { DynamicDrawerCustomFields } from '@/components/common/Drawer/DynamicDrawerCustomFields';
 
 export interface ContactDetailDrawerProps {
     contact: Contact | null;
@@ -446,6 +447,9 @@ export function ContactDetailDrawer({
                                 <Typography sx={{ color: '#94a3b8', fontSize: '0.86rem' }}>Unassigned</Typography>
                             )}
                         </DrawerSectionCard>
+
+                        {/* Admin-defined custom fields */}
+                        <DynamicDrawerCustomFields module="contacts" record={c} />
 
                         {c.description && (
                             <DrawerSectionCard p={1.8} icon={sectionIcon(<NotesOutlinedIcon sx={{ fontSize: 15 }} />)} title="Notes">

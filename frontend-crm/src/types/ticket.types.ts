@@ -38,6 +38,9 @@ export const NATURE_PRIORITY_TO_TICKET_PRIORITY: Record<NatureOfCallPriority, Ti
 };
 
 export interface TicketFormData {
+    /** Admin-defined custom field values, keyed by FormFieldDefinition.fieldKey (cf_…). */
+    customFields?: Record<string, unknown>;
+
     // Overview — left column
     amcFlag: boolean;
     ticketSubject: string;

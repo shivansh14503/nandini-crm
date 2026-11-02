@@ -76,3 +76,32 @@ export function wallClockNow(timeZone: string): Date {
 
 /** Start of the window for `createdWithinDays` filters. */
 export const daysAgo = (days: number): Date => new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+
+// ── Admin-defined custom fields (`customDataJson`) ─────────────────────────────
+
+/** Parses a `customDataJson` column into `{ [fieldKey]: value }`; malformed JSON reads as `{}`. */
+export function parseCustomFields(json: string | null | undefined): Record<string, unknown> {
+    if (!json) return {};
+    try {
+        const parsed: unknown = JSON.parse(json);
+        return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? (parsed as Record<string, unknown>) : {};
+    } catch {
+        return {};
+    }
+}
+
+/**
+ * Serializes custom field values for storage. Blank strings, empty arrays and null/undefined are dropped so
+ * cleared fields don't linger; an empty result is stored as NULL.
+ */
+export function serializeCustomFields(customFields: Record<string, unknown> | undefined): string | null {
+    if (!customFields) return null;
+    const cleaned: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(customFields)) {
+        if (value === null || value === undefined) continue;
+        if (typeof value === 'string' && value.trim() === '') continue;
+        if (Array.isArray(value) && value.length === 0) continue;
+        cleaned[key] = typeof value === 'string' ? value.trim() : value;
+    }
+    return Object.keys(cleaned).length > 0 ? JSON.stringify(cleaned) : null;
+}

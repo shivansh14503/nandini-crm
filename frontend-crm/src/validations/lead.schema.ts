@@ -9,6 +9,7 @@ import {
     zodPhoneOptional,
     zodPostalCodeOptional,
     refinePostalCodeForCountry,
+    customFieldsSchema,
 } from './common';
 import { corporateEmailSchema } from './contact.schema';
 
@@ -58,6 +59,9 @@ export const leadFormSchema = z.object({
     otherCountry: optionalString.default('India'),
     copyAddressFromLeft: z.boolean().default(false),
     otherLongitude: optionalString,
+
+    /** Admin-defined custom field values (validated against the form configuration by useRhfForm). */
+    customFields: customFieldsSchema,
 }).superRefine((data, ctx) => {
     refinePostalCodeForCountry(ctx, 'primaryPostalCode', data.primaryPostalCode, data.primaryCountry);
     refinePostalCodeForCountry(ctx, 'otherPostalCode', data.otherPostalCode, data.otherCountry);

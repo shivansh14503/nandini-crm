@@ -1,5 +1,8 @@
+'use client';
+
 import React from 'react';
 import { Box, Typography, type SxProps, type Theme } from '@mui/material';
+import { useSectionLabelOverride } from '@/context/FormConfigContext';
 
 export interface SectionLabelProps {
     icon?: React.ReactNode;
@@ -7,7 +10,9 @@ export interface SectionLabelProps {
     sx?: SxProps<Theme>;
 }
 
-export function SectionLabel({ icon, label, sx }: SectionLabelProps) {
+/** Section heading; inside a FormConfigProvider an admin-renamed section shows its new label. */
+export function SectionLabel({ icon, label: baseLabel, sx }: SectionLabelProps) {
+    const label = useSectionLabelOverride(baseLabel);
     return (
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1, ...sx }}>
             {icon && <Box sx={{ color: '#2563EB', display: 'flex' }}>{icon}</Box>}

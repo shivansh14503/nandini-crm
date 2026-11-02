@@ -17,6 +17,10 @@ export interface FormStickyFooterProps {
     /** Disables the primary action; `saveDisabledTooltip` explains why. */
     saveDisabled?: boolean;
     saveDisabledTooltip?: string;
+    /** Disables the secondary (cancel) action. */
+    cancelDisabled?: boolean;
+    /** Replaces the default status text on the left. */
+    status?: React.ReactNode;
 }
 
 /**
@@ -32,6 +36,8 @@ export function FormStickyFooter({
     mode = 'create',
     saveDisabled = false,
     saveDisabledTooltip,
+    cancelDisabled = false,
+    status,
 }: FormStickyFooterProps) {
     const isView = mode === 'view';
     return (
@@ -53,7 +59,9 @@ export function FormStickyFooter({
             }}
         >
             {/* Left: CRM Staged status indicator */}
-            {isView ? (
+            {status ? (
+                status
+            ) : isView ? (
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                     <VisibilityOutlinedIcon sx={{ fontSize: 18, color: '#64748b' }} />
                     <Typography sx={{ fontSize: '0.78rem', color: '#64748b', fontWeight: 500 }}>
@@ -75,7 +83,7 @@ export function FormStickyFooter({
                     variant="outlined"
                     size="small"
                     onClick={onCancel}
-                    disabled={submitting}
+                    disabled={submitting || cancelDisabled}
                     sx={{
                         borderColor: 'error.main',
                         color: 'error.main',

@@ -1,5 +1,5 @@
 import type { Contact, EntityEmail, Prisma } from '../../generated/prisma/client.js';
-import { nullable, parseStringArray, stringifyStringArray, text, toIso } from '../../utils/mappers.js';
+import { nullable, parseCustomFields, parseStringArray, serializeCustomFields, stringifyStringArray, text, toIso } from '../../utils/mappers.js';
 import { toEmailDtos, type CorporateEmailDto } from '../shared/entityEmails.js';
 import type { ContactInput } from './contact.validator.js';
 
@@ -29,6 +29,8 @@ export interface ContactDto {
     createdAt: string;
     updatedAt: string;
     createdBy: string;
+    /** Admin-defined custom field values keyed by FormFieldDefinition.fieldKey. */
+    customFields: Record<string, unknown>;
 }
 
 export function toContactDto(row: ContactRow): ContactDto {
@@ -55,6 +57,7 @@ export function toContactDto(row: ContactRow): ContactDto {
         createdAt: toIso(row.createdAt),
         updatedAt: toIso(row.updatedAt),
         createdBy: row.createdBy,
+        customFields: parseCustomFields(row.customDataJson),
     };
 }
 
@@ -64,6 +67,7 @@ export function toContactData(
     organization: { id: string | null; name: string },
 ): Omit<Prisma.ContactUncheckedCreateInput, 'contactCode' | 'createdBy'> {
     return {
+        customDataJson: serializeCustomFields(input.customFields),
         name: input.name,
         organizationName: organization.name,
         organizationId: organization.id,

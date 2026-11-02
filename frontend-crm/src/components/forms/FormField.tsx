@@ -1,6 +1,7 @@
 import React from 'react';
 import { Box, Typography, type SxProps, type Theme } from '@mui/material';
 import { useFormMode } from '@/context/FormModeContext';
+import { FieldNameProvider, useFieldOverride } from '@/context/FormConfigContext';
 import { ReadOnlyField } from './ReadOnlyField';
 import { getCountryNameByCode } from '@/data/addressMaster';
 import { fieldSizeSx, resolveFieldSize, type FieldSize } from './fieldSizing';
@@ -174,16 +175,29 @@ function FormFieldHeader({ label, required, hint, compact }: { label: string; re
     );
 }
 
-export function FormField({ name, viewValue, label, required, hint, size, children, sx }: FormFieldProps) {
+export function FormField({ name, viewValue, label: baseLabel, required: baseRequired, hint: baseHint, size: baseSize, children, sx }: FormFieldProps) {
     const { mode } = useFormMode();
+    // Admin overrides for this built-in field (inside a FormConfigProvider); undefined keeps the coded props.
+    const override = useFieldOverride(name, { label: baseLabel, required: baseRequired, hint: baseHint, fieldSize: baseSize });
+    if (override?.hidden) return null;
+    const label = override?.label ?? baseLabel;
+    const required = override?.required ?? baseRequired;
+    const hint = override ? override.hint : baseHint;
+    const size = override?.fieldSize ?? baseSize;
+
     if (mode === 'view') {
         if (viewValue !== undefined) {
             return <ReadOnlyField label={label} value={viewValue} hideWhenEmpty sx={{ mb: 2, ...sx }} />;
         }
         const extracted = extractViewValue(children);
         const found = extracted.found;
-        // Country fields store ISO2 codes; show the country name.
-        const value = name && /country$/i.test(name) && extracted.value ? getCountryNameByCode(extracted.value) : extracted.value;
+        // Country fields store ISO2 codes; show the country name. Dropdown values show their admin label.
+        const value =
+            name && /country$/i.test(name) && extracted.value
+                ? getCountryNameByCode(extracted.value)
+                : extracted.value && override?.optionLabels?.[extracted.value]
+                  ? override.optionLabels[extracted.value]
+                  : extracted.value;
         if (found) {
             return <ReadOnlyField label={label} value={value} hideWhenEmpty {...viewPresentation(name, value)} sx={{ mb: 2, ...sx }} />;
         }
@@ -196,7 +210,7 @@ export function FormField({ name, viewValue, label, required, hint, size, childr
             sx={[{ mb: 2, ...fieldSizeSx(resolvedSize) }, ...(Array.isArray(sx) ? sx : [sx])]}
         >
             <FormFieldHeader label={label} required={required} hint={hint} compact={resolvedSize === 'xs' || resolvedSize === 'sm'} />
-            {children}
+            <FieldNameProvider name={name}>{children}</FieldNameProvider>
         </Box>
     );
 }

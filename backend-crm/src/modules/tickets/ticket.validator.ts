@@ -4,12 +4,14 @@ import {
     booleanQuery,
     createdWithinDaysQuery,
     csvQuery,
+    customFieldsSchema,
     enumWithDefault,
     optionalEmail,
     optionalPhone,
     optionalText,
     requiredText,
     requiredWallClock,
+    textWithDefault,
 } from '../../validators/common.js';
 
 // Option lists from frontend-crm/src/types/ticket.types.ts.
@@ -20,9 +22,6 @@ export const TICKET_SOURCES = ['Call', 'Email', 'Web Portal', 'Chat', 'In-Person
 export const SUPPORT_TYPES = ['Free', 'Paid', 'AMC', 'Warranty'] as const;
 export const SUPPORT_MODES = ['Offsite Support', 'Onsite Support', 'Remote Support (AnyDesk/TeamViewer)', 'Phone Consultation'] as const;
 
-const requiredEnum = <const T extends readonly [string, ...string[]]>(field: string, values: T) =>
-    z.enum(values, { error: `${field} is required.` });
-
 /** `TicketFormData` rules from frontend-crm/src/validations/ticket.schema.ts (Nature of Call is checked against the master). */
 export const ticketInputSchema = z.object({
     amcFlag: z.boolean().default(false),
@@ -30,9 +29,10 @@ export const ticketInputSchema = z.object({
     organizationName: requiredText('Organization Name', L.organizationName),
     contactPersonName: requiredText('Contact Person Name', L.personName),
     contactNumber: optionalPhone('Contact Number'),
-    ticketPriority: requiredEnum('Ticket Priority', TICKET_PRIORITIES),
-    source: enumWithDefault('Source', TICKET_SOURCES, 'Call'),
-    supportType: enumWithDefault('Support Type', SUPPORT_TYPES, 'Free'),
+    // Option lists below are admin-customizable (ticket_* dropdown categories); system options keep their meaning.
+    ticketPriority: requiredText('Ticket Priority', 20),
+    source: textWithDefault('Source', 20, 'Call'),
+    supportType: textWithDefault('Support Type', 20, 'Free'),
     problemReported: requiredText('Problem Reported', L.longText),
     resolution: optionalText('Resolution', L.longText),
     reasonForEscalatedCalls: optionalText('Reason For Escalated Calls', L.longText),
@@ -43,15 +43,17 @@ export const ticketInputSchema = z.object({
     accountAddress: optionalText('Account Address', L.address),
     contactEmail: optionalEmail,
     leftJob: enumWithDefault('Left Job', ['No', 'Yes'], 'No'),
-    ticketStatus: enumWithDefault('Ticket Status', TICKET_STATUSES, 'New'),
+    ticketStatus: textWithDefault('Ticket Status', 30, 'New'),
     dueDate: requiredWallClock('Due Date'),
-    supportMode: requiredEnum('Support Mode', SUPPORT_MODES),
+    supportMode: requiredText('Support Mode', 50),
     problemObserved: optionalText('Problem Observed', L.longText),
     rca: optionalText('RCA', L.longText),
     addDescription: optionalText('Add Description', L.longText),
 
     partnerCompany: optionalText('Partner Company', L.organizationName),
     partnerCompanyContact: optionalText('Partner Company Contact', L.personName),
+
+    customFields: customFieldsSchema,
 });
 
 export type TicketInput = z.infer<typeof ticketInputSchema>;

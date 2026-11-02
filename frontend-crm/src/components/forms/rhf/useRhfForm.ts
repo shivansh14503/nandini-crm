@@ -14,6 +14,9 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import type { ZodType } from 'zod';
 import { getFirstErrorMessage } from '@/validations';
 import { focusFormField } from '@/utils/formFocus';
+import { getFormConfigs } from '@/services/masterData.store';
+import type { CrmModuleKey } from '@/types/formConfig.types';
+import { validateConfiguredFields } from '@/utils/formConfig';
 
 export type FormToastState = {
     open: boolean;
@@ -26,6 +29,11 @@ const CLOSED_TOAST: FormToastState = { open: false, message: '', severity: 'succ
 export interface UseRhfFormOptions<T extends FieldValues> {
     schema: ZodType<unknown>;
     defaultValues: DefaultValues<T>;
+    /**
+     * Module whose admin form configuration also applies: required custom fields, built-in fields an admin
+     * made required, and custom field formats are validated on top of `schema`.
+     */
+    module?: CrmModuleKey;
 }
 
 export interface UseRhfFormReturn<T extends FieldValues> {
@@ -44,10 +52,11 @@ export interface UseRhfFormReturn<T extends FieldValues> {
 export function useRhfForm<T extends FieldValues>({
     schema,
     defaultValues,
+    module,
 }: UseRhfFormOptions<T>): UseRhfFormReturn<T> {
     const methods = useForm<T>({
         // zod schemas with defaults have differing input/output types; the form works on the output shape.
-        resolver: zodResolver(schema as never) as unknown as Resolver<T>,
+        resolver: withConfiguredFieldRules(zodResolver(schema as never) as unknown as Resolver<T>, module),
         defaultValues,
         mode: 'onTouched',
     });
@@ -74,4 +83,32 @@ export function useRhfForm<T extends FieldValues>({
     );
 
     return { methods, toast, showToast, closeToast, createSubmitHandler };
+}
+
+/** Sets `message` at a dotted RHF path (`customFields.cf_region`) unless that path already has an error. */
+function setNestedError(errors: Record<string, unknown>, path: string, message: string): void {
+    const keys = path.split('.');
+    let node = errors;
+    for (const key of keys.slice(0, -1)) {
+        if (!node[key] || typeof node[key] !== 'object') node[key] = {};
+        node = node[key] as Record<string, unknown>;
+    }
+    const leaf = keys[keys.length - 1];
+    if (!node[leaf]) node[leaf] = { type: 'custom', message };
+}
+
+/**
+ * Wraps a resolver with the admin's field rules for `module`. The configuration is read at validation time, so
+ * forms opened before it loaded (or before an admin change) still validate against the latest rules.
+ */
+function withConfiguredFieldRules<T extends FieldValues>(base: Resolver<T>, module?: CrmModuleKey): Resolver<T> {
+    if (!module) return base;
+    return async (values, context, options) => {
+        const result = await base(values, context, options);
+        const issues = validateConfiguredFields(getFormConfigs(), module, values);
+        if (issues.length === 0) return result;
+        const errors = { ...(result.errors as Record<string, unknown>) };
+        for (const issue of issues) setNestedError(errors, issue.path, issue.message);
+        return { values: {}, errors: errors as FieldErrors<T> };
+    };
 }

@@ -5,3 +5,4 @@ export * from './DrawerStackContext';
 export * from './EntityDetailDrawer';
 export * from './RelatedModulesSidebar';
 export * from './RelatedRecordsTableView';
+export * from './DynamicDrawerCustomFields';

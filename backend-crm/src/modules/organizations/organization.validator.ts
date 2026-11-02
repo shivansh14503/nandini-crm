@@ -5,6 +5,7 @@ import {
     bulkIdsSchema,
     createdWithinDaysQuery,
     csvQuery,
+    customFieldsSchema,
     enumWithDefault,
     optionalEnum,
     optionalGst,
@@ -15,6 +16,7 @@ import {
     optionalUpperText,
     refinePostalCodeForCountry,
     requiredText,
+    textWithDefault,
 } from '../../validators/common.js';
 import { corporateEmailListSchema } from '../shared/entityEmails.js';
 
@@ -27,13 +29,23 @@ const partnerCompanyEntry = z
     .transform((entry) => (typeof entry === 'string' ? entry : entry.partnerCompanyName).trim())
     .pipe(z.string().max(L.organizationName, { message: `Partner company names cannot exceed ${L.organizationName} characters.` }));
 
-/** GST registration types outside the form's two options (legacy records, imports) and their bucket. */
-const UNREGISTERED_TYPES = new Set(['unregistered', 'consumer']);
+/**
+ * Legacy GST registration types (older records, imports) and their bucket. Anything else passes through
+ * unchanged, since admins can add their own registration types (org_registration_type).
+ */
+const LEGACY_REGISTRATION_TYPES = new Map([
+    ['unregistered', 'Unregistered'],
+    ['consumer', 'Unregistered'],
+    ['registered', 'Registered'],
+    ['regular', 'Registered'],
+    ['composition', 'Registered'],
+    ['composition scheme', 'Registered'],
+    ['sez', 'Registered'],
+]);
 
 function normalizeRegistrationType(value: unknown): unknown {
-    if (typeof value !== 'string' || !value.trim() || value === 'Registered' || value === 'Unregistered') return value;
-    // e.g. 'Composition Scheme', 'SEZ' are GST-registered; 'Consumer' is not.
-    return UNREGISTERED_TYPES.has(value.trim().toLowerCase()) ? 'Unregistered' : 'Registered';
+    if (typeof value !== 'string' || !value.trim()) return value;
+    return LEGACY_REGISTRATION_TYPES.get(value.trim().toLowerCase()) ?? value;
 }
 
 /**
@@ -59,7 +71,8 @@ const organizationFields = z.object({
     mailingName: optionalText('Mailing Name', L.organizationName),
     tradeName: optionalText('Trade Name', L.organizationName),
     natureOfBusiness: requiredText('Nature of Business', L.option),
-    accountStatus: enumWithDefault('Account Status', ACCOUNT_STATUSES, 'Active'),
+    // Admin-customizable (org_account_status / org_registration_type); the system options keep their meaning.
+    accountStatus: textWithDefault('Account Status', 20, 'Active'),
     inactivityReason: optionalText('Inactivity Reason', 500),
     typeOfEntity: requiredText('Type of Entity', L.option),
     customerType: requiredText('Customer Type', L.option),
@@ -97,7 +110,7 @@ const organizationFields = z.object({
     copyAddressFromBilling: z.boolean().default(false),
 
     // Tax & bank
-    registrationType: enumWithDefault('Registration Type', ['Registered', 'Unregistered'], 'Registered'),
+    registrationType: textWithDefault('Registration Type', 30, 'Registered'),
     panNumber: optionalPan,
     msmeRegnNumber: optionalUpperText('MSME Regn. Number', L.msme),
     accountName: optionalText('Account Name', L.organizationName),
@@ -115,6 +128,8 @@ const organizationFields = z.object({
         .array(partnerCompanyEntry)
         .max(MAX_PARTNER_COMPANIES, { message: `At most ${MAX_PARTNER_COMPANIES} partner companies are allowed.` })
         .optional(),
+
+    customFields: customFieldsSchema,
 });
 
 interface PostalFields {

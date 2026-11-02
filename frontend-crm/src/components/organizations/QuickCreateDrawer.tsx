@@ -29,6 +29,7 @@ import { FormModeProvider } from '@/context/FormModeContext';
 import { DEFAULT_COUNTRY_CODE } from '@/data/addressMaster';
 import { NATURE_OF_BUSINESS, CUSTOMER_TYPES } from './constants';
 import type { ExtendedOrganization } from '@/types/organization.types';
+import { useDropdownOptionsGetter } from '@/hooks/queries/useFormConfigs';
 
 export interface QuickCreateDrawerProps {
     open: boolean;
@@ -49,6 +50,7 @@ const DEFAULT_QUICK_FORM = {
 };
 
 export function QuickCreateDrawer({ open, onClose, onSave }: QuickCreateDrawerProps) {
+    const getOptions = useDropdownOptionsGetter();
     const [formData, setFormData] = useState(DEFAULT_QUICK_FORM);
     const [verifyingGst, setVerifyingGst] = useState(false);
     const [gstVerified, setGstVerified] = useState(false);
@@ -217,7 +219,7 @@ export function QuickCreateDrawer({ open, onClose, onSave }: QuickCreateDrawerPr
                                 placeholder="Select Nature"
                                 value={formData.natureOfBusiness}
                                 onChange={(v) => handleChange('natureOfBusiness', v)}
-                                options={NATURE_OF_BUSINESS}
+                                options={getOptions('org_nature_of_business', NATURE_OF_BUSINESS)}
                             />
                         </FormField>
 
@@ -227,7 +229,7 @@ export function QuickCreateDrawer({ open, onClose, onSave }: QuickCreateDrawerPr
                                 placeholder="Select Type"
                                 value={formData.customerType}
                                 onChange={(v) => handleChange('customerType', v)}
-                                options={CUSTOMER_TYPES}
+                                options={getOptions('org_customer_type', CUSTOMER_TYPES)}
                             />
                         </FormField>
 

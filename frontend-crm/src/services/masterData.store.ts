@@ -1,6 +1,7 @@
 import type { CrmUser } from '../types/user.types';
 import type { NatureOfCallItem } from '../types/ticket.types';
 import type { PartnerCompany, PartnerCompanyContact } from '../types/partner.types';
+import type { FormConfigsPayload } from '../types/formConfig.types';
 
 /**
  * Master data loaded from `/api/lookups/*` after sign-in (`loadMasterData`, shared through `useMasterData`).
@@ -64,4 +65,16 @@ export function findCrmUser(value: string | undefined): CrmUser | undefined {
     const v = (value || '').replace(/\s*\(You\)\s*$/i, '').trim().toLowerCase();
     if (!v) return undefined;
     return masters.users.find((x) => x.username.toLowerCase() === v || x.name.toLowerCase() === v);
+}
+
+// ── Form & dropdown configuration (/api/form-configs) ─────────────────────────
+// Loaded by useFormConfigs(); the synchronous getter lets form resolvers apply admin rules (required custom
+// fields, …) at validation time without hooks. null until the first load (forms then use built-in defaults).
+
+let formConfigs: FormConfigsPayload | null = null;
+
+export const getFormConfigs = (): FormConfigsPayload | null => formConfigs;
+
+export function setFormConfigs(data: FormConfigsPayload | null): void {
+    formConfigs = data;
 }

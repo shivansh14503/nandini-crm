@@ -378,3 +378,17 @@ export const amountSchema = zodAmount;
 export const quantitySchema = z.coerce
     .number()
     .min(1, { message: 'Quantity must be at least 1.' });
+
+// ── Admin-customizable dropdowns & custom fields ─────────────────────────────
+
+/** `customFields` bag of admin-defined field values; kept (not stripped) so it reaches the API. */
+export const customFieldsSchema = z.record(z.string(), z.unknown()).optional().default({});
+
+/**
+ * Value of an admin-customizable dropdown: the options come from the form configuration, so any non-empty
+ * value is accepted here (the API keeps system values such as 'Converted' meaningful).
+ */
+export const configurableOption = (fieldName: string, fallback?: string) =>
+    fallback === undefined
+        ? z.string({ error: () => `${fieldName} is required.` }).trim().min(1, { message: `${fieldName} is required.` })
+        : z.preprocess((v) => (v === '' || v === null ? undefined : v), z.string().trim().default(fallback));

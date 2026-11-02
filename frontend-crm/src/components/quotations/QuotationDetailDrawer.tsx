@@ -33,6 +33,7 @@ import {
     DrawerCopyButton,
 } from '@/components/common/Drawer';
 import { QUOTATION_FORM_TABS } from './CreateQuoteForm';
+import { DynamicDrawerCustomFields } from '@/components/common/Drawer/DynamicDrawerCustomFields';
 
 export interface QuotationDetailDrawerProps {
     quotation: Quotation | null;
@@ -238,6 +239,9 @@ export function QuotationDetailDrawer({
                     </Typography>
                 </DrawerSectionCard>
             )}
+
+            {/* Admin-defined custom fields */}
+            <DynamicDrawerCustomFields module="quotations" record={quotation} />
         </Box>
     );
 

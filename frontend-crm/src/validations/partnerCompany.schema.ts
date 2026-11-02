@@ -12,6 +12,7 @@ import {
     zodPanOptional,
     zodPostalCode,
     zodPostalCodeOptional,
+    customFieldsSchema,
 } from './common';
 import { corporateEmailSchema } from './contact.schema';
 
@@ -70,6 +71,9 @@ export const partnerCompanyFormSchema = z
         cinNo: optionalText('CIN No', L.cin),
         msmeRegnNumber: optionalText('MSME Regn. Number', L.msme),
         tanNumber: optionalText('TAN Number', L.tan),
+
+        /** Admin-defined custom field values (validated against the form configuration by useRhfForm). */
+        customFields: customFieldsSchema,
     })
     .superRefine((data, ctx) => {
         refinePostalCodeForCountry(ctx, 'billingPostalCode', data.billingPostalCode, data.billingCountry, true);

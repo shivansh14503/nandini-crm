@@ -9,6 +9,7 @@ import {
     zodEmailOptional,
     zodAmount,
     quantitySchema,
+    customFieldsSchema,
 } from './common';
 
 export const opportunityLineItemSchema = z.object({
@@ -72,6 +73,9 @@ export const opportunityFormSchema = z.object({
     subtotal: zodAmount.default(0),
     totalTax: zodAmount.default(0),
     grandTotal: zodAmount.default(0),
+
+    /** Admin-defined custom field values (validated against the form configuration by useRhfForm). */
+    customFields: customFieldsSchema,
 });
 
 export type OpportunityFormSchemaType = z.infer<typeof opportunityFormSchema>;

@@ -33,6 +33,7 @@ import { findCrmUser } from '@/services/masterData.store';
 import { formatAddressLine } from '@/utils/address';
 import { formatDateTime } from '@/utils/date';
 import { ORGANIZATION_FORM_TABS } from './OrganizationForm';
+import { DynamicDrawerCustomFields } from '@/components/common/Drawer/DynamicDrawerCustomFields';
 
 export interface OrganizationDetailDrawerProps {
     organization: ExtendedOrganization | null;
@@ -307,6 +308,9 @@ export function OrganizationDetailDrawer({
                                 <Typography sx={{ color: '#94a3b8', fontSize: '0.86rem' }}>Unassigned</Typography>
                             )}
                         </DrawerSectionCard>
+
+                        {/* Admin-defined custom fields */}
+                        <DynamicDrawerCustomFields module="organizations" record={org} />
 
                         {org.description && (
                             <DrawerSectionCard p={1.8} icon={sectionIcon(<NotesOutlinedIcon sx={{ fontSize: 15 }} />)} title="About">

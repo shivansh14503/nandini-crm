@@ -1,5 +1,5 @@
 import type { EntityEmail, Lead, Prisma } from '../../generated/prisma/client.js';
-import { fromDateOnly, nullable, parseStringArray, stringifyStringArray, text, toDateOnly, toIso, toIsoOrUndefined } from '../../utils/mappers.js';
+import { fromDateOnly, nullable, parseCustomFields, parseStringArray, serializeCustomFields, stringifyStringArray, text, toDateOnly, toIso, toIsoOrUndefined } from '../../utils/mappers.js';
 import { toEmailDtos, type CorporateEmailDto } from '../shared/entityEmails.js';
 import type { LeadInput } from './lead.validator.js';
 
@@ -52,6 +52,8 @@ export interface LeadDto {
     createdAt: string;
     updatedAt: string;
     createdBy: string;
+    /** Admin-defined custom field values keyed by FormFieldDefinition.fieldKey. */
+    customFields: Record<string, unknown>;
 }
 
 export function toLeadDto(row: LeadRow): LeadDto {
@@ -101,6 +103,7 @@ export function toLeadDto(row: LeadRow): LeadDto {
         createdAt: toIso(row.createdAt),
         updatedAt: toIso(row.updatedAt),
         createdBy: row.createdBy,
+        customFields: parseCustomFields(row.customDataJson),
     };
 }
 
@@ -126,6 +129,7 @@ export function toLeadData(input: LeadInput): Omit<Prisma.LeadUncheckedCreateInp
           };
 
     return {
+        customDataJson: serializeCustomFields(input.customFields),
         name: input.name,
         mobile: input.mobile,
         mailingName: nullable(input.mailingName),

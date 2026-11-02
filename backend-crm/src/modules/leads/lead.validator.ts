@@ -4,7 +4,7 @@ import {
     booleanQuery,
     createdWithinDaysQuery,
     csvQuery,
-    enumWithDefault,
+    customFieldsSchema,
     optionalDate,
     optionalPhone,
     optionalPostalCode,
@@ -14,6 +14,7 @@ import {
     requiredDate,
     requiredText,
     stringList,
+    textWithDefault,
 } from '../../validators/common.js';
 import { corporateEmailListSchema } from '../shared/entityEmails.js';
 
@@ -50,7 +51,8 @@ const leadFields = z.object({
     organizationName: optionalText('Organization Name', L.organizationName),
     department: optionalText('Department', L.option),
     leadType: requiredText('Lead Type', L.option),
-    status: enumWithDefault('Status', LEAD_STATUSES, 'New'),
+    // Admin-customizable (lead_status); 'New' / 'Converted' are system options and keep their meaning.
+    status: textWithDefault('Status', 30, 'New'),
     nextFollowupDate: requiredDate('Next Followup Date'),
     nextFollowupTime: optionalText('Next Followup Time', 20),
     description: optionalText('Description', L.longText),
@@ -71,6 +73,7 @@ const leadFields = z.object({
     otherCountry: optionalText('Other Country', L.shortText),
     otherLongitude: optionalText('Other Longitude', 30),
     copyAddressFromLeft: z.boolean().default(false),
+    customFields: customFieldsSchema,
 });
 
 function refineLeadPostalCodes(

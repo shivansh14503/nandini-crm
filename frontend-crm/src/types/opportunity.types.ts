@@ -15,6 +15,9 @@ export interface OpportunityLineItem {
 }
 
 export interface OpportunityFormData {
+    /** Admin-defined custom field values, keyed by FormFieldDefinition.fieldKey (cf_…). */
+    customFields?: Record<string, unknown>;
+
     opportunityName?: string;
     // Basic Details - Row 1
     productCategory: string[];

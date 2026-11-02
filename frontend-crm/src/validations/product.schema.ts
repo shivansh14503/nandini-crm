@@ -4,6 +4,7 @@ import {
     optionalString,
     requiredText,
     optionalText,
+    customFieldsSchema,
 } from './common';
 
 export const productFormSchema = z.object({
@@ -22,6 +23,9 @@ export const productFormSchema = z.object({
     contractCreate: optionalString.default('No'),
     description: optionalText('Description', L.longText),
     termsAndConditions: optionalText('Terms and Conditions', L.longText),
+
+    /** Admin-defined custom field values (validated against the form configuration by useRhfForm). */
+    customFields: customFieldsSchema,
 });
 
 export type ProductFormSchemaType = z.infer<typeof productFormSchema>;

@@ -6,6 +6,8 @@ import { subscribeCrmUpdates } from '@/services/crmSync';
 import { queryKeys, queryEntityFromSync } from '@/hooks/queries/queryKeys';
 import { auditLogKeys } from '@/hooks/queries/useAuditLogs';
 import { MASTER_DATA_QUERY_KEY } from '@/hooks/queries/useMasterData';
+import { FORM_CONFIGS_QUERY_KEY } from '@/hooks/queries/useFormConfigs';
+import { FORM_CONFIG_SYNC_ENTITY } from '@/services/formConfig.service';
 
 export function QueryProvider({ children }: { children: React.ReactNode }) {
     const [queryClient] = useState(
@@ -28,6 +30,11 @@ export function QueryProvider({ children }: { children: React.ReactNode }) {
     useEffect(
         () =>
             subscribeCrmUpdates(({ entity }) => {
+                // Admin form / dropdown changes only affect the configuration queries.
+                if (entity === FORM_CONFIG_SYNC_ENTITY) {
+                    queryClient.invalidateQueries({ queryKey: FORM_CONFIGS_QUERY_KEY });
+                    return;
+                }
                 const key = queryEntityFromSync(entity);
                 queryClient.invalidateQueries(key ? { queryKey: queryKeys[key].all } : undefined);
                 if (key) queryClient.invalidateQueries({ queryKey: auditLogKeys.all });

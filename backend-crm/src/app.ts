@@ -21,6 +21,8 @@ import searchRouter from './modules/search/search.routes.js';
 import lookupRouter from './modules/lookups/lookup.routes.js';
 import auditRouter from './modules/audit/audit.routes.js';
 import importRouter from './modules/imports/import.routes.js';
+import formConfigRouter from './modules/form-configs/formConfig.routes.js';
+import { seedFormConfigsSafely } from './modules/form-configs/formConfig.seed.js';
 import { closeQueues } from './jobs/queues.js';
 import { startWorkers, stopWorkers } from './jobs/workers/index.js';
 import { errorHandler, notFoundHandler } from './middlewares/errorHandler.js';
@@ -81,6 +83,7 @@ app.use('/api/partner-companies', partnerCompanyRouter);
 app.use('/api/search', searchRouter);
 app.use('/api/lookups', lookupRouter);
 app.use('/api/audit-logs', auditRouter);
+app.use('/api/form-configs', formConfigRouter);
 
 // ── 404 + global error handler ─────────────────────────────────────────────────
 app.use(notFoundHandler);
@@ -93,6 +96,8 @@ async function start(): Promise<Server> {
     }
     connectRedis();
     await connectDatabase();
+    // Missing dropdown / form-field defaults are inserted without overwriting admin customizations.
+    await seedFormConfigsSafely();
     if (ENV.RUN_WORKERS) startWorkers();
     return app.listen(ENV.PORT, () => logger.info(`API listening on port ${ENV.PORT}`));
 }

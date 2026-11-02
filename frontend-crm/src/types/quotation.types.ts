@@ -100,6 +100,9 @@ export interface QuotationLineItem {
 }
 
 export interface QuotationFormData {
+    /** Admin-defined custom field values, keyed by FormFieldDefinition.fieldKey (cf_…). */
+    customFields?: Record<string, unknown>;
+
     // ── Tab 1: Overview ───────────────────────────────────────────
     quotationTitle: string;
     quoteStage: QuoteStage;

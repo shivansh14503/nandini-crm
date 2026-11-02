@@ -272,3 +272,27 @@ export const csvQuery = z
 
 /** `?createdWithinDays=7` → records created in the last N days. */
 export const createdWithinDaysQuery = z.coerce.number().int().min(1).max(3650).optional();
+
+// ── Admin-customizable dropdowns & custom fields ─────────────────────────────
+
+/**
+ * Value of an admin-customizable dropdown (options live in `DropdownOption`, so the API can't hard-code an enum):
+ * any trimmed text up to `max`, with `fallback` when blank / missing.
+ */
+export const textWithDefault = (field: string, max: number, fallback: string) =>
+    z.preprocess(
+        (value) => (value === null || (typeof value === 'string' && value.trim() === '') ? undefined : value),
+        z.string().trim().max(max, maxMessage(field, max)).default(fallback),
+    );
+
+const MAX_CUSTOM_FIELDS = 200;
+const MAX_CUSTOM_FIELDS_JSON = 100_000;
+
+/** `customFields: { [fieldKey]: value }` from admin-defined form fields; null / missing → `{}`. */
+export const customFieldsSchema = z.preprocess(
+    (value) => (value === null || value === undefined ? {} : value),
+    z
+        .record(z.string().trim().min(1).max(80), z.unknown(), { error: 'customFields must be an object.' })
+        .refine((fields) => Object.keys(fields).length <= MAX_CUSTOM_FIELDS, { message: `At most ${MAX_CUSTOM_FIELDS} custom fields are allowed.` })
+        .refine((fields) => JSON.stringify(fields).length <= MAX_CUSTOM_FIELDS_JSON, { message: 'Custom field values are too large.' }),
+);

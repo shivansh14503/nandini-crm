@@ -3,6 +3,7 @@ import { FIELD_MAX_LENGTH as L } from '../../config/fieldLimits.js';
 import {
     booleanQuery,
     createdWithinDaysQuery,
+    customFieldsSchema,
     enumWithDefault,
     optionalPhone,
     optionalText,
@@ -39,6 +40,7 @@ export const contactInputSchema = z.object({
         .default(['Call', 'Email']),
     doNotCall: z.boolean().default(false),
     description: optionalText('Description', L.longText),
+    customFields: customFieldsSchema,
 });
 
 export type ContactInput = z.infer<typeof contactInputSchema>;

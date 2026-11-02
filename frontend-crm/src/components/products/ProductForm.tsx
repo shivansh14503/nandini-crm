@@ -29,6 +29,8 @@ import {
     RhfAmountField,
     useRhfForm,
 } from '@/components/forms';
+import { FormConfigProvider } from '@/context/FormConfigContext';
+import { DynamicModuleCustomFields } from '@/components/forms/DynamicModuleCustomFields';
 
 // ─── Option Lists ──────────────────────────────────────────────────────────────
 const PRODUCT_CATEGORIES = [
@@ -110,6 +112,7 @@ export default function ProductForm({
     const { methods, toast, showToast, closeToast, createSubmitHandler } =
         useRhfForm<ProductFormData>({
             schema: productFormSchema,
+            module: 'products',
             defaultValues: { ...DEFAULT_FORM, ...initialData },
         });
 
@@ -176,164 +179,167 @@ export default function ProductForm({
 
     return (
         <FormProvider {...methods}>
-            <CommonFormLayout
-                breadcrumbItems={breadcrumbItems || defaultBreadcrumbs}
-                tabs={PRODUCT_FORM_TABS}
-                activeTab="overview"
-                onCancel={handleDiscard}
-                onSave={mode === 'view' ? () => router.push(ROUTES.PRODUCT_EDIT(productId!)) : handleSave}
-                submitting={isSubmitting}
-                saveLabel={mode === 'view' ? 'Edit Product' : mode === 'edit' ? 'Update Product' : 'Save Product'}
-                cancelLabel={mode === 'view' ? 'Back' : 'Cancel'}
-                recordView={{
-                    title: productName || '',
-                    editHref: productId ? ROUTES.PRODUCT_EDIT(productId) : undefined,
-                    editLabel: 'Edit Product',
-                    backHref: ROUTES.PRODUCTS,
-                }}
-                mode={mode}
-                toast={
-                    <AppToast
-                        open={toast.open}
-                        message={toast.message}
-                        severity={toast.severity}
-                        onClose={closeToast}
-                    />
-                }
-            >
-                {/* ════════════════════════════════════════════════
-                    Section 1: Basic Product Info
-                   ════════════════════════════════════════════════ */}
-                <SectionLabel
-                    icon={<LocalOfferOutlinedIcon sx={{ fontSize: 18 }} />}
-                    label="Sale Information"
-                />
-
-                <FormGrid columns={3} sx={{ mt: 1 }}>
-                    <RhfTextField<ProductFormData>
-                        name="productName"
-                        label="Product Name"
-                        required
-                        placeholder="Enter product name"
-                    />
-                    <RhfSelect<ProductFormData>
-                        name="category"
-                        label="Category"
-                        placeholder="Select Category"
-                        options={PRODUCT_CATEGORIES}
-                    />
-                    <RhfSelect<ProductFormData>
-                        name="type"
-                        label="Type"
-                        placeholder="Select Type"
-                        options={PRODUCT_TYPES}
-                    />
-                    <RhfTextField<ProductFormData>
-                        name="manufacturer"
-                        label="Manufacturer"
-                        placeholder="e.g. Dell Technologies"
-                        fieldSize="md"
-                        maxLength={FIELD_MAX_LENGTH.personName}
-                    />
-                    <RhfTextField<ProductFormData>
-                        name="hsnCode"
-                        label="HSN Code"
-                        placeholder="e.g. 84715000"
-                    />
-                </FormGrid>
-
-                <Divider sx={{ my: 3.5, borderColor: '#f1f5f9' }} />
-
-                {/* ════════════════════════════════════════════════
-                    Section 2: Pricing & Tax
-                   ════════════════════════════════════════════════ */}
-                <SectionLabel
-                    icon={<LocalOfferOutlinedIcon sx={{ fontSize: 18 }} />}
-                    label="Pricing & Tax"
-                />
-
-                <FormGrid columns={3} sx={{ mt: 1 }}>
-                    {/* ── Prices ── */}
-                    <RhfAmountField<ProductFormData>
-                        name="cost"
-                        label="Cost (₹)"
-                        hint="Purchase / landed cost"
-                        placeholder="0.00"
-                        fieldSize="sm"
-                    />
-                    <RhfAmountField<ProductFormData>
-                        name="mrp"
-                        label="MRP (₹)"
-                        hint="Maximum Retail Price"
-                        placeholder="0.00"
-                        fieldSize="sm"
-                    />
-                    <RhfAmountField<ProductFormData>
-                        name="msp"
-                        label="MSP (₹)"
-                        hint="Minimum Selling Price"
-                        placeholder="0.00"
-                        fieldSize="sm"
-                    />
-
-                    {/* ── Tax ── */}
-                    <RhfSelect<ProductFormData>
-                        name="taxType"
-                        label="Tax Type"
-                        placeholder="Select Tax Type"
-                        options={TAX_TYPES}
-                    />
-                    <RhfSelect<ProductFormData>
-                        name="taxRate"
-                        label="Tax Rate"
-                        placeholder="Select Tax Rate"
-                        options={TAX_RATES}
-                    />
-                    <RhfPercentageField<ProductFormData>
-                        name="discount"
-                        label="Discount (%)"
-                        hint="e.g. 10 for 10%"
-                        placeholder="0"
-                    />
-
-                    <RhfSelect<ProductFormData>
-                        name="contractCreate"
-                        label="Contract Create"
-                        options={CONTRACT_CREATE_OPTIONS}
-                    />
-                </FormGrid>
-
-                <Divider sx={{ my: 3.5, borderColor: '#f1f5f9' }} />
-
-                {/* ════════════════════════════════════════════════
-                    Section 3: Description & Terms
-                   ════════════════════════════════════════════════ */}
-                <SectionLabel
-                    icon={<DescriptionOutlinedIcon sx={{ fontSize: 18 }} />}
-                    label="Description & Terms"
-                />
-
-                <FormGrid columns={2} sx={{ mt: 1 }}>
-                    <FormGridItem>
-                        <RhfTextField<ProductFormData>
-                            name="description"
-                            label="Description"
-                            multiline
-                            minRows={4}
-                            placeholder="Enter product description..."
+            <FormConfigProvider module="products">
+                <CommonFormLayout
+                    breadcrumbItems={breadcrumbItems || defaultBreadcrumbs}
+                    tabs={PRODUCT_FORM_TABS}
+                    activeTab="overview"
+                    onCancel={handleDiscard}
+                    onSave={mode === 'view' ? () => router.push(ROUTES.PRODUCT_EDIT(productId!)) : handleSave}
+                    submitting={isSubmitting}
+                    saveLabel={mode === 'view' ? 'Edit Product' : mode === 'edit' ? 'Update Product' : 'Save Product'}
+                    cancelLabel={mode === 'view' ? 'Back' : 'Cancel'}
+                    recordView={{
+                        title: productName || '',
+                        editHref: productId ? ROUTES.PRODUCT_EDIT(productId) : undefined,
+                        editLabel: 'Edit Product',
+                        backHref: ROUTES.PRODUCTS,
+                    }}
+                    mode={mode}
+                    toast={
+                        <AppToast
+                            open={toast.open}
+                            message={toast.message}
+                            severity={toast.severity}
+                            onClose={closeToast}
                         />
-                    </FormGridItem>
-                    <FormGridItem>
+                    }
+                >
+                    {/* ════════════════════════════════════════════════
+                        Section 1: Basic Product Info
+                       ════════════════════════════════════════════════ */}
+                    <SectionLabel
+                        icon={<LocalOfferOutlinedIcon sx={{ fontSize: 18 }} />}
+                        label="Sale Information"
+                    />
+
+                    <FormGrid columns={3} sx={{ mt: 1 }}>
                         <RhfTextField<ProductFormData>
-                            name="termsAndConditions"
-                            label="Terms and Conditions"
-                            multiline
-                            minRows={4}
-                            placeholder="Enter terms and conditions..."
+                            name="productName"
+                            label="Product Name"
+                            required
+                            placeholder="Enter product name"
                         />
-                    </FormGridItem>
-                </FormGrid>
-            </CommonFormLayout>
+                        <RhfSelect<ProductFormData>
+                            name="category"
+                            label="Category"
+                            placeholder="Select Category"
+                            options={PRODUCT_CATEGORIES}
+                        />
+                        <RhfSelect<ProductFormData>
+                            name="type"
+                            label="Type"
+                            placeholder="Select Type"
+                            options={PRODUCT_TYPES}
+                        />
+                        <RhfTextField<ProductFormData>
+                            name="manufacturer"
+                            label="Manufacturer"
+                            placeholder="e.g. Dell Technologies"
+                            fieldSize="md"
+                            maxLength={FIELD_MAX_LENGTH.personName}
+                        />
+                        <RhfTextField<ProductFormData>
+                            name="hsnCode"
+                            label="HSN Code"
+                            placeholder="e.g. 84715000"
+                        />
+                    </FormGrid>
+
+                    <Divider sx={{ my: 3.5, borderColor: '#f1f5f9' }} />
+
+                    {/* ════════════════════════════════════════════════
+                        Section 2: Pricing & Tax
+                       ════════════════════════════════════════════════ */}
+                    <SectionLabel
+                        icon={<LocalOfferOutlinedIcon sx={{ fontSize: 18 }} />}
+                        label="Pricing & Tax"
+                    />
+
+                    <FormGrid columns={3} sx={{ mt: 1 }}>
+                        {/* ── Prices ── */}
+                        <RhfAmountField<ProductFormData>
+                            name="cost"
+                            label="Cost (₹)"
+                            hint="Purchase / landed cost"
+                            placeholder="0.00"
+                            fieldSize="sm"
+                        />
+                        <RhfAmountField<ProductFormData>
+                            name="mrp"
+                            label="MRP (₹)"
+                            hint="Maximum Retail Price"
+                            placeholder="0.00"
+                            fieldSize="sm"
+                        />
+                        <RhfAmountField<ProductFormData>
+                            name="msp"
+                            label="MSP (₹)"
+                            hint="Minimum Selling Price"
+                            placeholder="0.00"
+                            fieldSize="sm"
+                        />
+
+                        {/* ── Tax ── */}
+                        <RhfSelect<ProductFormData>
+                            name="taxType"
+                            label="Tax Type"
+                            placeholder="Select Tax Type"
+                            options={TAX_TYPES}
+                        />
+                        <RhfSelect<ProductFormData>
+                            name="taxRate"
+                            label="Tax Rate"
+                            placeholder="Select Tax Rate"
+                            options={TAX_RATES}
+                        />
+                        <RhfPercentageField<ProductFormData>
+                            name="discount"
+                            label="Discount (%)"
+                            hint="e.g. 10 for 10%"
+                            placeholder="0"
+                        />
+
+                        <RhfSelect<ProductFormData>
+                            name="contractCreate"
+                            label="Contract Create"
+                            options={CONTRACT_CREATE_OPTIONS}
+                        />
+                    </FormGrid>
+
+                    <Divider sx={{ my: 3.5, borderColor: '#f1f5f9' }} />
+
+                    {/* ════════════════════════════════════════════════
+                        Section 3: Description & Terms
+                       ════════════════════════════════════════════════ */}
+                    <SectionLabel
+                        icon={<DescriptionOutlinedIcon sx={{ fontSize: 18 }} />}
+                        label="Description & Terms"
+                    />
+
+                    <FormGrid columns={2} sx={{ mt: 1 }}>
+                        <FormGridItem>
+                            <RhfTextField<ProductFormData>
+                                name="description"
+                                label="Description"
+                                multiline
+                                minRows={4}
+                                placeholder="Enter product description..."
+                            />
+                        </FormGridItem>
+                        <FormGridItem>
+                            <RhfTextField<ProductFormData>
+                                name="termsAndConditions"
+                                label="Terms and Conditions"
+                                multiline
+                                minRows={4}
+                                placeholder="Enter terms and conditions..."
+                            />
+                        </FormGridItem>
+                    </FormGrid>
+                    <DynamicModuleCustomFields module="products" tabKey="overview" sx={{ px: 0, pb: 0, mt: 3.5 }} />
+                </CommonFormLayout>
+            </FormConfigProvider>
         </FormProvider>
     );
 }

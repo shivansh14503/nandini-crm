@@ -4,9 +4,8 @@ import {
     booleanQuery,
     createdWithinDaysQuery,
     csvQuery,
-    enumWithDefault,
+    customFieldsSchema,
     optionalEmail,
-    optionalEnum,
     optionalGst,
     optionalPhone,
     optionalPostalCode,
@@ -14,6 +13,7 @@ import {
     refinePostalCodeForCountry,
     requiredDate,
     requiredText,
+    textWithDefault,
 } from '../../validators/common.js';
 import { lineItemListSchema } from '../shared/lineItems.js';
 
@@ -45,7 +45,8 @@ export const quotationInputSchema = z.preprocess(
         .object({
             // Overview
             quotationTitle: requiredText('Quotation Title', L.title),
-            quoteStage: enumWithDefault('Quote Stage', QUOTE_STAGES, 'Draft'),
+            // Admin-customizable (quote_stage); the system stages keep their meaning.
+            quoteStage: textWithDefault('Quote Stage', 30, 'Draft'),
             quotationDate: requiredDate('Quotation Date'),
             validUntil: requiredDate('Valid Until Date'),
             remarks: optionalText('Remarks', L.longText),
@@ -91,10 +92,12 @@ export const quotationInputSchema = z.preprocess(
 
             // Linked context & legacy fields
             opportunityId: optionalText('Opportunity', 50),
-            status: optionalEnum('Status', STATUS_VALUES),
+            status: optionalText('Status', 30),
             quotationSubject: optionalText('Quotation Subject', L.title),
             notes: optionalText('Internal Notes', L.longText),
             termsAndConditions: optionalText('Terms and Conditions', L.longText),
+
+            customFields: customFieldsSchema,
         })
         .superRefine((quote, ctx) => {
             refinePostalCodeForCountry(ctx, 'billingPostalCode', quote.billingPostalCode, quote.billingCountry, true);

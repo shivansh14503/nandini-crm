@@ -23,6 +23,8 @@ import {
     OpportunityBasicSection,
     OpportunityLineItemsSection,
 } from './sections';
+import { FormConfigProvider } from '@/context/FormConfigContext';
+import { DynamicModuleCustomFields } from '@/components/forms/DynamicModuleCustomFields';
 
 export type OpportunityTabKey = 'basic' | 'line_items';
 
@@ -116,6 +118,7 @@ export default function OpportunityForm({
     const { methods, toast, showToast, closeToast, createSubmitHandler } =
         useRhfForm<OpportunityFormData>({
             schema: opportunityFormSchema,
+            module: 'opportunities',
             defaultValues: { ...DEFAULT_OPPORTUNITY_FORM, ...initialData },
         });
 
@@ -204,41 +207,45 @@ export default function OpportunityForm({
 
     return (
         <FormProvider {...methods}>
-            <CommonFormLayout
-                breadcrumbItems={breadcrumbItems || defaultBreadcrumbs}
-                tabs={OPPORTUNITY_FORM_TABS}
-                activeTab={activeTab}
-                onTabChange={(tabId) => setActiveTab(tabId as OpportunityTabKey)}
-                onCancel={handleDiscard}
-                onSave={mode === 'view' ? () => router.push(ROUTES.OPPORTUNITY_EDIT(opportunityId!)) : handleSave}
-                submitting={isSubmitting}
-                saveLabel={mode === 'view' ? 'Edit Opportunity' : mode === 'edit' ? 'Update Opportunity' : 'Save Opportunity'}
-                cancelLabel={mode === 'view' ? 'Back' : 'Cancel'}
-                recordView={{
-                    title: orgName || '',
-                    editHref: opportunityId ? ROUTES.OPPORTUNITY_EDIT(opportunityId) : undefined,
-                    editLabel: 'Edit Opportunity',
-                    backHref: ROUTES.OPPORTUNITIES,
-                }}
-                mode={mode}
-                disableContentPadding
-                toast={
-                    <AppToast
-                        open={toast.open}
-                        message={toast.message}
-                        severity={toast.severity}
-                        onClose={closeToast}
-                    />
-                }
-            >
-                <div hidden={activeTab !== 'basic'}>
-                    <OpportunityBasicSection form={formValues} setField={setField} />
-                </div>
+            <FormConfigProvider module="opportunities">
+                <CommonFormLayout
+                    breadcrumbItems={breadcrumbItems || defaultBreadcrumbs}
+                    tabs={OPPORTUNITY_FORM_TABS}
+                    activeTab={activeTab}
+                    onTabChange={(tabId) => setActiveTab(tabId as OpportunityTabKey)}
+                    onCancel={handleDiscard}
+                    onSave={mode === 'view' ? () => router.push(ROUTES.OPPORTUNITY_EDIT(opportunityId!)) : handleSave}
+                    submitting={isSubmitting}
+                    saveLabel={mode === 'view' ? 'Edit Opportunity' : mode === 'edit' ? 'Update Opportunity' : 'Save Opportunity'}
+                    cancelLabel={mode === 'view' ? 'Back' : 'Cancel'}
+                    recordView={{
+                        title: orgName || '',
+                        editHref: opportunityId ? ROUTES.OPPORTUNITY_EDIT(opportunityId) : undefined,
+                        editLabel: 'Edit Opportunity',
+                        backHref: ROUTES.OPPORTUNITIES,
+                    }}
+                    mode={mode}
+                    disableContentPadding
+                    toast={
+                        <AppToast
+                            open={toast.open}
+                            message={toast.message}
+                            severity={toast.severity}
+                            onClose={closeToast}
+                        />
+                    }
+                >
+                    <div hidden={activeTab !== 'basic'}>
+                        <OpportunityBasicSection form={formValues} setField={setField} />
+                        <DynamicModuleCustomFields module="opportunities" tabKey="basic" />
+                    </div>
 
-                <div hidden={activeTab !== 'line_items'}>
-                    <OpportunityLineItemsSection />
-                </div>
-            </CommonFormLayout>
+                    <div hidden={activeTab !== 'line_items'}>
+                        <OpportunityLineItemsSection />
+                        <DynamicModuleCustomFields module="opportunities" tabKey="line_items" />
+                    </div>
+                </CommonFormLayout>
+            </FormConfigProvider>
         </FormProvider>
     );
 }

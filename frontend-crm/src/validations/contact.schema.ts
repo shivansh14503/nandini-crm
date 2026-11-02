@@ -8,6 +8,7 @@ import {
     zodPhone,
     zodPhoneOptional,
     zodEmailOptional,
+    customFieldsSchema,
 } from './common';
 
 export const corporateEmailSchema = z.object({
@@ -46,6 +47,9 @@ export const contactFormSchema = z.object({
     communicationType: z.array(z.string()).default(['Call', 'Email']),
     doNotCall: z.boolean().default(false),
     description: optionalText('Description', L.longText),
+
+    /** Admin-defined custom field values (validated against the form configuration by useRhfForm). */
+    customFields: customFieldsSchema,
 });
 
 export type ContactFormSchemaType = z.infer<typeof contactFormSchema>;

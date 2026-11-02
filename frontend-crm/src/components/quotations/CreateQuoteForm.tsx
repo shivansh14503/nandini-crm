@@ -31,6 +31,8 @@ import {
     QuotationAddressSection,
 } from './sections';
 import { normalizeAddressFields } from '@/utils/address';
+import { FormConfigProvider } from '@/context/FormConfigContext';
+import { DynamicModuleCustomFields } from '@/components/forms/DynamicModuleCustomFields';
 
 export interface CreateQuoteFormProps {
     mode?: 'create' | 'edit' | 'view';
@@ -203,6 +205,7 @@ export function CreateQuoteForm({
     const { methods, toast, showToast, closeToast } =
         useRhfForm<QuotationFormData>({
             schema: quotationFormSchema,
+            module: 'quotations',
             defaultValues: { ...EMPTY_DEFAULTS, ...initialData },
         });
 
@@ -437,50 +440,55 @@ export function CreateQuoteForm({
 
     return (
         <FormProvider {...methods}>
-            <CommonFormLayout
-                breadcrumbItems={breadcrumbItems || defaultBreadcrumbs}
-                tabs={QUOTATION_FORM_TABS}
-                activeTab={activeTab}
-                onTabChange={(tabId) => setActiveTab(tabId as QuotationTabKey)}
-                onCancel={handleDiscard}
-                onSave={mode === 'view' ? () => router.push(ROUTES.QUOTATION_EDIT(quotationId!)) : handleSave}
-                submitting={isSubmitting}
-                saveLabel={mode === 'view' ? 'Edit Quotation' : isEdit ? 'Update Quotation' : 'Save Quotation'}
-                cancelLabel={mode === 'view' ? 'Back' : 'Cancel'}
-                mode={mode}
-                disableContentPadding
-                toast={
-                    <AppToast
-                        open={toast.open}
-                        message={toast.message}
-                        severity={toast.severity}
-                        onClose={closeToast}
-                    />
-                }
-            >
-                {!addressPrepopulated && (
-                    <Box sx={{ p: 2.5, pb: 0 }}>
-                        <Alert severity="info">
-                            <strong>Address Requirement:</strong> Please ensure the complete billing address
-                            (Street, City, State, and PIN code) is provided in the &quot;Address Information&quot; tab.
-                            Quotation generation requires a valid invoice address.
-                        </Alert>
-                    </Box>
-                )}
+            <FormConfigProvider module="quotations">
+                <CommonFormLayout
+                    breadcrumbItems={breadcrumbItems || defaultBreadcrumbs}
+                    tabs={QUOTATION_FORM_TABS}
+                    activeTab={activeTab}
+                    onTabChange={(tabId) => setActiveTab(tabId as QuotationTabKey)}
+                    onCancel={handleDiscard}
+                    onSave={mode === 'view' ? () => router.push(ROUTES.QUOTATION_EDIT(quotationId!)) : handleSave}
+                    submitting={isSubmitting}
+                    saveLabel={mode === 'view' ? 'Edit Quotation' : isEdit ? 'Update Quotation' : 'Save Quotation'}
+                    cancelLabel={mode === 'view' ? 'Back' : 'Cancel'}
+                    mode={mode}
+                    disableContentPadding
+                    toast={
+                        <AppToast
+                            open={toast.open}
+                            message={toast.message}
+                            severity={toast.severity}
+                            onClose={closeToast}
+                        />
+                    }
+                >
+                    {!addressPrepopulated && (
+                        <Box sx={{ p: 2.5, pb: 0 }}>
+                            <Alert severity="info">
+                                <strong>Address Requirement:</strong> Please ensure the complete billing address
+                                (Street, City, State, and PIN code) is provided in the &quot;Address Information&quot; tab.
+                                Quotation generation requires a valid invoice address.
+                            </Alert>
+                        </Box>
+                    )}
 
-                {/* ── Keep all 3 panels mounted to preserve React Hook Form state across tabs ── */}
-                <div hidden={activeTab !== 'overview'}>
-                    <QuotationOverviewSection />
-                </div>
+                    {/* ── Keep all 3 panels mounted to preserve React Hook Form state across tabs ── */}
+                    <div hidden={activeTab !== 'overview'}>
+                        <QuotationOverviewSection />
+                        <DynamicModuleCustomFields module="quotations" tabKey="overview" />
+                    </div>
 
-                <div hidden={activeTab !== 'line_items'}>
-                    <QuotationLineItemsSection />
-                </div>
+                    <div hidden={activeTab !== 'line_items'}>
+                        <QuotationLineItemsSection />
+                        <DynamicModuleCustomFields module="quotations" tabKey="line_items" />
+                    </div>
 
-                <div hidden={activeTab !== 'address'}>
-                    <QuotationAddressSection />
-                </div>
-            </CommonFormLayout>
+                    <div hidden={activeTab !== 'address'}>
+                        <QuotationAddressSection />
+                        <DynamicModuleCustomFields module="quotations" tabKey="address" />
+                    </div>
+                </CommonFormLayout>
+            </FormConfigProvider>
         </FormProvider>
     );
 }

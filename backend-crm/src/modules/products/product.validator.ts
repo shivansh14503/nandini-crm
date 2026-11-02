@@ -4,12 +4,13 @@ import {
     booleanQuery,
     createdWithinDaysQuery,
     csvQuery,
+    customFieldsSchema,
     enumWithDefault,
     optionalAmountString,
-    optionalEnum,
     optionalPercentString,
     optionalText,
     requiredText,
+    textWithDefault,
 } from '../../validators/common.js';
 
 // Option lists from frontend-crm/src/types/product.types.ts (category is open-ended there).
@@ -25,10 +26,11 @@ export const productInputSchema = z
         }),
         hsnCode: optionalText('HSN Code', L.hsn),
         category: optionalText('Category', L.option),
-        type: optionalEnum('Type', PRODUCT_TYPES),
+        // Type / tax type / tax rate are admin-customizable (product_* dropdown categories).
+        type: optionalText('Type', 30),
         manufacturer: optionalText('Manufacturer', L.personName),
-        taxType: enumWithDefault('Tax Type', TAX_TYPES, 'GST'),
-        taxRate: optionalEnum('Tax Rate', TAX_RATES),
+        taxType: textWithDefault('Tax Type', 10, 'GST'),
+        taxRate: optionalText('Tax Rate', 10),
         discount: optionalPercentString('Discount'),
         cost: optionalAmountString('Cost'),
         mrp: optionalAmountString('MRP'),
@@ -37,6 +39,7 @@ export const productInputSchema = z
         description: optionalText('Description', L.longText),
         termsAndConditions: optionalText('Terms and Conditions', L.longText),
         isActive: z.boolean().default(true),
+        customFields: customFieldsSchema,
     })
     .superRefine((product, ctx) => {
         if (product.msp !== undefined && product.mrp !== undefined && Number(product.msp) > Number(product.mrp)) {

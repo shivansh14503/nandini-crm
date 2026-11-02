@@ -111,6 +111,9 @@ export interface CorporateEmail {
 }
 
 export interface OrganizationFormData {
+    /** Admin-defined custom field values, keyed by FormFieldDefinition.fieldKey (cf_…). */
+    customFields?: Record<string, unknown>;
+
     organizationName: string;
     /** Always equal to organizationName (read-only in the form). */
     mailingName: string;

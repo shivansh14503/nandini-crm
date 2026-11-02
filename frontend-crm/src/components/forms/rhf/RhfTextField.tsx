@@ -4,6 +4,7 @@ import React from 'react';
 import { TextField, type TextFieldProps } from '@mui/material';
 import { useController, type FieldPath, type FieldValues } from 'react-hook-form';
 import { FormField, fieldSx } from '../FormField';
+import { useFieldOverride } from '@/context/FormConfigContext';
 import {
     fieldTypeFromInput,
     isTaxIdentifierField,
@@ -60,6 +61,8 @@ export function RhfTextField<T extends FieldValues>({
     ...inputProps
 }: RhfTextFieldProps<T>) {
     const { field, fieldState } = useController<T>({ name });
+    // Admin placeholder override (label / required / hint / size are applied by FormField).
+    const override = useFieldOverride(name, { label, placeholder: inputProps.placeholder });
 
     const resolvedType = fieldType ?? fieldTypeFromInput(inputProps.type, inputProps.multiline);
     const resolvedSize = resolveFieldSize(name, resolvedType, fieldSize);
@@ -170,6 +173,7 @@ export function RhfTextField<T extends FieldValues>({
         <FormField name={name} label={label} required={required} hint={hint} size={resolvedSize}>
             <TextField
                 {...inputProps}
+                placeholder={override ? override.placeholder : inputProps.placeholder}
                 {...field}
                 value={field.value ?? ''}
                 onChange={handleChange}

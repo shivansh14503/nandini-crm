@@ -44,6 +44,7 @@ import {
     LEAD_SOURCES,
     FOLLOWUP_TYPES,
 } from '@/types/lead.types';
+import { useDropdownOptionsGetter } from '@/hooks/queries/useFormConfigs';
 
 export interface OpportunityBasicSectionProps {
     form: OpportunityFormData;
@@ -61,6 +62,7 @@ const calendarAdornment = {
 };
 
 export function OpportunityBasicSection({ form, setField }: OpportunityBasicSectionProps) {
+    const getOptions = useDropdownOptionsGetter();
     const [userLookupOpen, setUserLookupOpen] = useState(false);
 
     // ── Product Category Toggle Handler ─────────────────────────────────────────
@@ -301,7 +303,7 @@ export function OpportunityBasicSection({ form, setField }: OpportunityBasicSect
                             '&:hover': { borderColor: '#2563eb' },
                         }}
                     >
-                        {PRODUCT_CATEGORIES.map((prod) => {
+                        {getOptions('shared_product_category', PRODUCT_CATEGORIES).map((prod) => {
                             const selected = (form.productCategory || []).includes(prod);
                             return (
                                 <Chip

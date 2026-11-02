@@ -1,5 +1,5 @@
 import type { Prisma, Product } from '../../generated/prisma/client.js';
-import { decimalToString, nullable, text, toIso } from '../../utils/mappers.js';
+import { decimalToString, nullable, parseCustomFields, serializeCustomFields, text, toIso } from '../../utils/mappers.js';
 import type { ProductInput } from './product.validator.js';
 
 /** `Product` from frontend-crm/src/types/product.types.ts (prices are strings there), plus `isActive`. */
@@ -24,6 +24,8 @@ export interface ProductDto {
     createdAt: string;
     updatedAt: string;
     createdBy: string;
+    /** Admin-defined custom field values keyed by FormFieldDefinition.fieldKey. */
+    customFields: Record<string, unknown>;
 }
 
 export function toProductDto(row: Product): ProductDto {
@@ -48,12 +50,14 @@ export function toProductDto(row: Product): ProductDto {
         createdAt: toIso(row.createdAt),
         updatedAt: toIso(row.updatedAt),
         createdBy: row.createdBy,
+        customFields: parseCustomFields(row.customDataJson),
     };
 }
 
 /** Writable columns from validated input (codes and audit columns are set by the service). */
 export function toProductData(input: ProductInput): Omit<Prisma.ProductUncheckedCreateInput, 'productCode' | 'createdBy'> {
     return {
+        customDataJson: serializeCustomFields(input.customFields),
         productName: input.productName,
         hsnCode: nullable(input.hsnCode),
         category: nullable(input.category),

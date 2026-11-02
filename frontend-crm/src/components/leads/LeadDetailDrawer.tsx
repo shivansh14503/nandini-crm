@@ -30,6 +30,7 @@ import {
 } from '@/components/common/Drawer';
 import { AppToast } from '@/components/common/AppToast';
 import { LEAD_FORM_TABS } from './LeadForm';
+import { DynamicDrawerCustomFields } from '@/components/common/Drawer/DynamicDrawerCustomFields';
 
 export interface LeadDetailDrawerProps {
     lead: Lead | null;
@@ -345,6 +346,9 @@ export function LeadDetailDrawer({
                                 </Typography>
                             </DrawerSectionCard>
                         )}
+
+                        {/* Admin-defined custom fields */}
+                        <DynamicDrawerCustomFields module="leads" record={l} />
                     </Box>
                 ),
                 address: (

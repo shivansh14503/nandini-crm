@@ -31,6 +31,10 @@ import {
     AddressTab,
     TaxBankTab,
 } from './tabs';
+import { FormConfigProvider } from '@/context/FormConfigContext';
+import { DynamicModuleCustomFields } from '@/components/forms/DynamicModuleCustomFields';
+import { getFormConfigs } from '@/services/masterData.store';
+import { validateConfiguredFields } from '@/utils/formConfig';
 
 // ─── Single Source of Truth for Organization Form Tabs ──────────────────────────
 export const ORGANIZATION_FORM_TABS: (FormTabDefinition & { id: TabKey })[] = [
@@ -421,6 +425,27 @@ export default function OrganizationForm({
             if (validation.fieldName) revealField(validation.fieldName);
             return;
         }
+
+        // Admin form rules: required custom fields, built-in fields made required, custom field formats.
+        const configIssues = validateConfiguredFields(getFormConfigs(), 'organizations', currentData);
+        if (configIssues.length > 0) {
+            for (const issue of configIssues) {
+                methods.setError(issue.path as Path<OrganizationFormData>, { type: 'custom', message: issue.message });
+            }
+            const first = configIssues[0];
+            setToast({ open: true, message: first.message, severity: 'error' });
+            const customKey = first.path.startsWith('customFields.') ? first.path.slice('customFields.'.length) : undefined;
+            const customTab = customKey
+                ? (getFormConfigs()?.fieldsByModule.organizations.find((f) => f.fieldKey === customKey)?.tabKey as TabKey | undefined)
+                : undefined;
+            if (customTab && customTab !== activeTab) {
+                pendingFocusField.current = first.path;
+                setActiveTab(customTab);
+            } else {
+                revealField(first.path);
+            }
+            return;
+        }
         setSubmitting(true);
         try {
             if (mode === 'create') {
@@ -480,94 +505,99 @@ export default function OrganizationForm({
 
     return (
         <FormProvider {...methods}>
-            <CommonFormLayout
-                breadcrumbItems={breadcrumbItems || defaultBreadcrumbs}
-                tabs={tabs}
-                activeTab={activeTab}
-                onTabChange={(tabId) => setActiveTab(tabId as TabKey)}
-                onCancel={handleDiscard}
-                onSave={effectiveMode === 'view' ? () => router.push(ROUTES.ORGANIZATION_EDIT(organizationId!)) : () => handleSubmit(true)}
-                recordView={{
-                    title: form.organizationName,
-                    subtitle: [form.tradeName, [form.billingCity, form.billingState].filter(Boolean).join(', ')]
-                        .filter(Boolean)
-                        .join(' • '),
-                    avatarIcon: <ApartmentIcon sx={{ fontSize: 28 }} />,
-                    verified: form.accountVerified,
-                    statusLabel: form.accountStatus || undefined,
-                    statusColor: form.accountStatus === 'Inactive' ? '#64748b' : '#16a34a',
-                    editHref: organizationId ? ROUTES.ORGANIZATION_EDIT(organizationId) : undefined,
-                    editLabel: 'Edit Organization',
-                    editDisabled: isLocked,
-                    editDisabledTooltip: 'Only Admins can edit inactive organizations',
-                    backHref: ROUTES.ORGANIZATIONS,
-                    audit,
-                }}
-                saveDisabled={isLocked}
-                saveDisabledTooltip="Only Admins can edit inactive organizations"
-                banner={
-                    isLocked ? (
-                        <Alert severity="warning" sx={{ mb: 2.5, borderRadius: '8px' }}>
-                            <Typography sx={{ fontWeight: 700, fontSize: '0.85rem' }}>This organization is Inactive</Typography>
-                            <Typography sx={{ fontSize: '0.8rem', mt: 0.5 }}>
-                                <strong>Reason:</strong> {form.inactivityReason || 'No reason specified'}
-                            </Typography>
-                            <Typography sx={{ fontSize: '0.75rem', color: '#64748b', mt: 0.5 }}>
-                                This record is locked. Only users with the <strong>Admin</strong> role can edit or reactivate this account.
-                            </Typography>
-                        </Alert>
-                    ) : isInactive ? (
-                        <Alert severity="info" sx={{ mb: 2.5, borderRadius: '8px' }}>
-                            <strong>Inactive Organization (Admin Override):</strong> Reason: {form.inactivityReason || 'N/A'}. You have administrative privileges to edit or reactivate this organization.
-                        </Alert>
-                    ) : undefined
-                }
-                submitting={submitting}
-                saveLabel={effectiveMode === 'view' ? 'Edit Organization' : mode === 'edit' ? 'Update Organization' : 'Save Organization'}
-                cancelLabel={effectiveMode === 'view' ? 'Back' : 'Cancel'}
-                mode={effectiveMode}
-                disableContentPadding
-                toast={
-                    <AppToast
-                        open={toast.open}
-                        message={toast.message}
-                        severity={toast.severity}
-                        onClose={() => setToast((t) => ({ ...t, open: false }))}
+            <FormConfigProvider module="organizations">
+                <CommonFormLayout
+                    breadcrumbItems={breadcrumbItems || defaultBreadcrumbs}
+                    tabs={tabs}
+                    activeTab={activeTab}
+                    onTabChange={(tabId) => setActiveTab(tabId as TabKey)}
+                    onCancel={handleDiscard}
+                    onSave={effectiveMode === 'view' ? () => router.push(ROUTES.ORGANIZATION_EDIT(organizationId!)) : () => handleSubmit(true)}
+                    recordView={{
+                        title: form.organizationName,
+                        subtitle: [form.tradeName, [form.billingCity, form.billingState].filter(Boolean).join(', ')]
+                            .filter(Boolean)
+                            .join(' • '),
+                        avatarIcon: <ApartmentIcon sx={{ fontSize: 28 }} />,
+                        verified: form.accountVerified,
+                        statusLabel: form.accountStatus || undefined,
+                        statusColor: form.accountStatus === 'Inactive' ? '#64748b' : '#16a34a',
+                        editHref: organizationId ? ROUTES.ORGANIZATION_EDIT(organizationId) : undefined,
+                        editLabel: 'Edit Organization',
+                        editDisabled: isLocked,
+                        editDisabledTooltip: 'Only Admins can edit inactive organizations',
+                        backHref: ROUTES.ORGANIZATIONS,
+                        audit,
+                    }}
+                    saveDisabled={isLocked}
+                    saveDisabledTooltip="Only Admins can edit inactive organizations"
+                    banner={
+                        isLocked ? (
+                            <Alert severity="warning" sx={{ mb: 2.5, borderRadius: '8px' }}>
+                                <Typography sx={{ fontWeight: 700, fontSize: '0.85rem' }}>This organization is Inactive</Typography>
+                                <Typography sx={{ fontSize: '0.8rem', mt: 0.5 }}>
+                                    <strong>Reason:</strong> {form.inactivityReason || 'No reason specified'}
+                                </Typography>
+                                <Typography sx={{ fontSize: '0.75rem', color: '#64748b', mt: 0.5 }}>
+                                    This record is locked. Only users with the <strong>Admin</strong> role can edit or reactivate this account.
+                                </Typography>
+                            </Alert>
+                        ) : isInactive ? (
+                            <Alert severity="info" sx={{ mb: 2.5, borderRadius: '8px' }}>
+                                <strong>Inactive Organization (Admin Override):</strong> Reason: {form.inactivityReason || 'N/A'}. You have administrative privileges to edit or reactivate this organization.
+                            </Alert>
+                        ) : undefined
+                    }
+                    submitting={submitting}
+                    saveLabel={effectiveMode === 'view' ? 'Edit Organization' : mode === 'edit' ? 'Update Organization' : 'Save Organization'}
+                    cancelLabel={effectiveMode === 'view' ? 'Back' : 'Cancel'}
+                    mode={effectiveMode}
+                    disableContentPadding
+                    toast={
+                        <AppToast
+                            open={toast.open}
+                            message={toast.message}
+                            severity={toast.severity}
+                            onClose={() => setToast((t) => ({ ...t, open: false }))}
+                        />
+                    }
+                >
+                    <UnsavedChangesModal
+                        open={discardModalOpen}
+                        onKeepEditing={handleKeepEditing}
+                        onDiscardAndLeave={handleDiscardAndLeave}
+                        description="You have unsaved changes. If you leave now, they will be discarded."
                     />
-                }
-            >
-                <UnsavedChangesModal
-                    open={discardModalOpen}
-                    onKeepEditing={handleKeepEditing}
-                    onDiscardAndLeave={handleDiscardAndLeave}
-                    description="You have unsaved changes. If you leave now, they will be discarded."
-                />
 
-                {/* ── Tab Content Panels ────────────────────────────────────── */}
-                {activeTab === 'overview' && (
-                    <OverviewTab
-                        form={form}
-                        set={set}
-                        organizationId={organizationId}
-                    />
-                )}
+                    {/* ── Tab Content Panels ────────────────────────────────────── */}
+                    {activeTab === 'overview' && (
+                        <OverviewTab
+                            form={form}
+                            set={set}
+                            organizationId={organizationId}
+                        />
+                    )}
 
-                {activeTab === 'address' && (
-                    <AddressTab
-                        form={form}
-                        set={set}
-                        handleCopyAddressToggle={handleCopyAddressToggle}
-                    />
-                )}
+                    {activeTab === 'address' && (
+                        <AddressTab
+                            form={form}
+                            set={set}
+                            handleCopyAddressToggle={handleCopyAddressToggle}
+                        />
+                    )}
 
-                {activeTab === 'tax_bank' && (
-                    <TaxBankTab
-                        form={form}
-                        set={set}
-                    />
-                )}
+                    {activeTab === 'tax_bank' && (
+                        <TaxBankTab
+                            form={form}
+                            set={set}
+                        />
+                    )}
 
-            </CommonFormLayout>
+                    {/* Admin-added custom fields of the active tab */}
+                    <DynamicModuleCustomFields key={activeTab} module="organizations" tabKey={activeTab} />
+
+                </CommonFormLayout>
+            </FormConfigProvider>
         </FormProvider>
     );
 }

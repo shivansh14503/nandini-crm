@@ -22,6 +22,8 @@ import {
     LeadOverviewSection,
     LeadAddressSection,
 } from './sections';
+import { FormConfigProvider } from '@/context/FormConfigContext';
+import { DynamicModuleCustomFields } from '@/components/forms/DynamicModuleCustomFields';
 
 export type LeadTabKey = 'overview' | 'address';
 
@@ -110,6 +112,7 @@ export default function LeadForm({
 
     const { methods, toast, showToast, closeToast, createSubmitHandler } = useRhfForm<LeadFormData>({
         schema: leadFormSchema,
+        module: 'leads',
         defaultValues: { ...DEFAULT_FORM, ...initialData },
     });
     const { reset, watch, formState } = methods;
@@ -166,34 +169,38 @@ export default function LeadForm({
 
     return (
         <FormProvider {...methods}>
-            <CommonFormLayout
-                breadcrumbItems={breadcrumbItems || defaultBreadcrumbs}
-                tabs={LEAD_FORM_TABS}
-                activeTab={activeTab}
-                onTabChange={(tabId) => setActiveTab(tabId as LeadTabKey)}
-                onCancel={handleDiscard}
-                onSave={mode === 'view' ? () => router.push(ROUTES.LEAD_EDIT(leadId!)) : handleSave}
-                submitting={isSubmitting}
-                saveLabel={mode === 'view' ? 'Edit Lead' : mode === 'edit' ? 'Update Lead' : 'Save Lead'}
-                cancelLabel={mode === 'view' ? 'Back' : 'Cancel'}
-                recordView={{
-                    title: leadName || '',
-                    editHref: leadId ? ROUTES.LEAD_EDIT(leadId) : undefined,
-                    editLabel: 'Edit Lead',
-                    backHref: ROUTES.LEADS,
-                }}
-                mode={mode}
-                disableContentPadding
-                toast={<AppToast open={toast.open} message={toast.message} severity={toast.severity} onClose={closeToast} />}
-            >
-                {/* Keep both panels mounted so validation state of hidden tab is preserved */}
-                <div hidden={activeTab !== 'overview'}>
-                    <LeadOverviewSection />
-                </div>
-                <div hidden={activeTab !== 'address'}>
-                    <LeadAddressSection />
-                </div>
-            </CommonFormLayout>
+            <FormConfigProvider module="leads">
+                <CommonFormLayout
+                    breadcrumbItems={breadcrumbItems || defaultBreadcrumbs}
+                    tabs={LEAD_FORM_TABS}
+                    activeTab={activeTab}
+                    onTabChange={(tabId) => setActiveTab(tabId as LeadTabKey)}
+                    onCancel={handleDiscard}
+                    onSave={mode === 'view' ? () => router.push(ROUTES.LEAD_EDIT(leadId!)) : handleSave}
+                    submitting={isSubmitting}
+                    saveLabel={mode === 'view' ? 'Edit Lead' : mode === 'edit' ? 'Update Lead' : 'Save Lead'}
+                    cancelLabel={mode === 'view' ? 'Back' : 'Cancel'}
+                    recordView={{
+                        title: leadName || '',
+                        editHref: leadId ? ROUTES.LEAD_EDIT(leadId) : undefined,
+                        editLabel: 'Edit Lead',
+                        backHref: ROUTES.LEADS,
+                    }}
+                    mode={mode}
+                    disableContentPadding
+                    toast={<AppToast open={toast.open} message={toast.message} severity={toast.severity} onClose={closeToast} />}
+                >
+                    {/* Keep both panels mounted so validation state of hidden tab is preserved */}
+                    <div hidden={activeTab !== 'overview'}>
+                        <LeadOverviewSection />
+                        <DynamicModuleCustomFields module="leads" tabKey="overview" />
+                    </div>
+                    <div hidden={activeTab !== 'address'}>
+                        <LeadAddressSection />
+                        <DynamicModuleCustomFields module="leads" tabKey="address" />
+                    </div>
+                </CommonFormLayout>
+            </FormConfigProvider>
         </FormProvider>
     );
 }

@@ -37,6 +37,8 @@ import { NATURE_OF_PARTNER_OPTIONS, type PartnerCompanyFormData } from '@/types/
 import { normalizeAddressFields } from '@/utils/address';
 import { focusFormField } from '@/utils/formFocus';
 import { getFirstErrorMessage, partnerCompanyFormSchema } from '@/validations';
+import { FormConfigProvider } from '@/context/FormConfigContext';
+import { DynamicModuleCustomFields } from '@/components/forms/DynamicModuleCustomFields';
 
 export type PartnerCompanyTabKey = 'company_info' | 'address' | 'statutory';
 
@@ -146,6 +148,7 @@ export default function PartnerCompanyForm({
 
     const { methods, toast, showToast, closeToast } = useRhfForm<PartnerCompanyFormData>({
         schema: partnerCompanyFormSchema,
+        module: 'partner-companies',
         defaultValues: initialValues,
     });
     const { reset, control, formState, handleSubmit, setError } = methods;
@@ -276,143 +279,148 @@ export default function PartnerCompanyForm({
 
     return (
         <FormProvider {...methods}>
-            <CommonFormLayout
-                breadcrumbItems={breadcrumbItems || defaultBreadcrumbs}
-                tabs={PARTNER_COMPANY_FORM_TABS}
-                activeTab={activeTab}
-                onTabChange={(tabId) => setActiveTab(tabId as PartnerCompanyTabKey)}
-                onCancel={handleCancel}
-                onSave={mode === 'view' ? () => router.push(ROUTES.PARTNER_COMPANY_EDIT(partnerCompanyId!)) : handleSave}
-                submitting={isSubmitting}
-                saveLabel={mode === 'view' ? 'Edit Partner Company' : mode === 'edit' ? 'Update Partner Company' : 'Save Partner Company'}
-                cancelLabel={mode === 'view' ? 'Back' : 'Cancel'}
-                recordView={{
-                    title: companyName,
-                    subtitle: [watchedValues.natureOfPartner, watchedValues.billingCity].filter(Boolean).join(' • '),
-                    avatarIcon: <HandshakeOutlinedIcon sx={{ fontSize: 28 }} />,
-                    editHref: partnerCompanyId ? ROUTES.PARTNER_COMPANY_EDIT(partnerCompanyId) : undefined,
-                    editLabel: 'Edit Partner Company',
-                    backHref: ROUTES.PARTNER_COMPANIES,
-                }}
-                mode={mode}
-                disableContentPadding
-                toast={<AppToast open={toast.open} message={toast.message} severity={toast.severity} onClose={closeToast} />}
-            >
-                <UnsavedChangesModal
-                    open={discardModalOpen}
-                    onKeepEditing={handleKeepEditing}
-                    onDiscardAndLeave={handleDiscardAndLeave}
-                    description="You have unsaved changes. If you leave now, they will be discarded."
-                />
-
-                {/* All panels stay mounted so hidden tabs keep their field state and can be focused after a switch. */}
-                <Box hidden={activeTab !== 'company_info'} sx={panelSx}>
-                    <SectionLabel icon={<HandshakeOutlinedIcon sx={{ fontSize: 18 }} />} label="Company Details" sx={{ mb: 2 }} />
-                    <FormGrid columns={3}>
-                        <RhfTextField<PartnerCompanyFormData>
-                            name="companyName"
-                            label="Partner Name"
-                            required
-                            placeholder="e.g. Computer Care"
-                            maxLength={FIELD_MAX_LENGTH.organizationName}
-                        />
-                        <RhfSelect<PartnerCompanyFormData>
-                            name="natureOfPartner"
-                            label="Nature of Partner"
-                            required
-                            options={[...NATURE_OF_PARTNER_OPTIONS]}
-                            placeholder="Select Nature of Partner"
-                        />
-                        <RhfPhoneField<PartnerCompanyFormData> name="phone" label="Office Phone" required placeholder="e.g. 9876543210" />
-                        <RhfTextField<PartnerCompanyFormData> name="website" label="Website" placeholder="https://" maxLength={200} />
-                        <RhfLookup<PartnerCompanyFormData>
-                            name="assignedTo"
-                            label="Assigned to"
-                            lookupType="user"
-                            placeholder="Select assigned user"
-                        />
-                        <RhfLookup<PartnerCompanyFormData>
-                            name="principalCompany"
-                            label="Principal Company"
-                            lookupType="organization"
-                            placeholder="Search or select principal company..."
-                        />
-                        <FormGridItem span="full">
-                            <RhfEmailList name="emailAddresses" label="Email Address" required />
-                        </FormGridItem>
-                    </FormGrid>
-                    <FormGrid columns={2}>
-                        <RhfTextField<PartnerCompanyFormData>
-                            name="addDescription"
-                            label="Add Description"
-                            multiline
-                            minRows={3}
-                            maxRows={6}
-                            placeholder="Short note about this partner..."
-                            maxLength={FIELD_MAX_LENGTH.longText}
-                        />
-                        <RhfTextField<PartnerCompanyFormData>
-                            name="description"
-                            label="Description"
-                            multiline
-                            minRows={3}
-                            maxRows={6}
-                            placeholder="Partnership scope, products covered, terms..."
-                            maxLength={FIELD_MAX_LENGTH.longText}
-                        />
-                    </FormGrid>
-
-                    <Divider sx={sectionDividerSx} />
-
-                    <SectionLabel icon={<AccountBalanceOutlinedIcon sx={{ fontSize: 18 }} />} label="BANK DETAILS" sx={{ mb: 2 }} />
-                    <FormGrid columns={4}>
-                        <RhfTextField<PartnerCompanyFormData> name="bankName" label="Bank Name" placeholder="e.g. HDFC Bank, SBI" maxLength={FIELD_MAX_LENGTH.personName} />
-                        <RhfTextField<PartnerCompanyFormData> name="bankBranch" label="Branch" placeholder="e.g. Connaught Place, New Delhi" maxLength={150} />
-                        <RhfTextField<PartnerCompanyFormData>
-                            name="accountNumber"
-                            label="Account No"
-                            placeholder="e.g. 50200012345678"
-                            numericOnly
-                            maxLength={FIELD_MAX_LENGTH.bankAccount}
-                        />
-                        <RhfUppercaseField<PartnerCompanyFormData>
-                            name="bankIfscCode"
-                            label="IFSC Code"
-                            placeholder="e.g. HDFC0001234"
-                            maxLength={FIELD_MAX_LENGTH.ifsc}
-                        />
-                    </FormGrid>
-                </Box>
-
-                <Box hidden={activeTab !== 'address'} sx={panelSx}>
-                    <RhfAddressSection<PartnerCompanyFormData>
-                        billingTitle="Billing Address"
-                        shippingTitle="Shipping Address"
-                        copyLabel="Copy address from left"
-                        required
+            <FormConfigProvider module="partner-companies">
+                <CommonFormLayout
+                    breadcrumbItems={breadcrumbItems || defaultBreadcrumbs}
+                    tabs={PARTNER_COMPANY_FORM_TABS}
+                    activeTab={activeTab}
+                    onTabChange={(tabId) => setActiveTab(tabId as PartnerCompanyTabKey)}
+                    onCancel={handleCancel}
+                    onSave={mode === 'view' ? () => router.push(ROUTES.PARTNER_COMPANY_EDIT(partnerCompanyId!)) : handleSave}
+                    submitting={isSubmitting}
+                    saveLabel={mode === 'view' ? 'Edit Partner Company' : mode === 'edit' ? 'Update Partner Company' : 'Save Partner Company'}
+                    cancelLabel={mode === 'view' ? 'Back' : 'Cancel'}
+                    recordView={{
+                        title: companyName,
+                        subtitle: [watchedValues.natureOfPartner, watchedValues.billingCity].filter(Boolean).join(' • '),
+                        avatarIcon: <HandshakeOutlinedIcon sx={{ fontSize: 28 }} />,
+                        editHref: partnerCompanyId ? ROUTES.PARTNER_COMPANY_EDIT(partnerCompanyId) : undefined,
+                        editLabel: 'Edit Partner Company',
+                        backHref: ROUTES.PARTNER_COMPANIES,
+                    }}
+                    mode={mode}
+                    disableContentPadding
+                    toast={<AppToast open={toast.open} message={toast.message} severity={toast.severity} onClose={closeToast} />}
+                >
+                    <UnsavedChangesModal
+                        open={discardModalOpen}
+                        onKeepEditing={handleKeepEditing}
+                        onDiscardAndLeave={handleDiscardAndLeave}
+                        description="You have unsaved changes. If you leave now, they will be discarded."
                     />
-                </Box>
 
-                <Box hidden={activeTab !== 'statutory'} sx={panelSx}>
-                    <SectionLabel
-                        icon={<ReceiptLongOutlinedIcon sx={{ fontSize: 18 }} />}
-                        label="Statutory & Tax Identification"
-                        sx={{ mb: 2 }}
-                    />
-                    <FormGrid columns={3}>
-                        <RhfUppercaseField<PartnerCompanyFormData> name="gstNo" label="GST Number" placeholder="e.g. 06AFZFS3757G1Z9" maxLength={FIELD_MAX_LENGTH.gstin} />
-                        <RhfUppercaseField<PartnerCompanyFormData> name="panNumber" label="PAN Number" placeholder="e.g. ABCDE1234F" maxLength={FIELD_MAX_LENGTH.pan} />
-                        <RhfUppercaseField<PartnerCompanyFormData> name="cinNo" label="CIN No" placeholder="e.g. U74999DL2020PTC123456" maxLength={FIELD_MAX_LENGTH.cin} />
-                        <RhfUppercaseField<PartnerCompanyFormData>
-                            name="msmeRegnNumber"
-                            label="MSME Regn. Number"
-                            placeholder="e.g. UDYAM-DL-01-0012345"
-                            maxLength={FIELD_MAX_LENGTH.msme}
+                    {/* All panels stay mounted so hidden tabs keep their field state and can be focused after a switch. */}
+                    <Box hidden={activeTab !== 'company_info'} sx={panelSx}>
+                        <SectionLabel icon={<HandshakeOutlinedIcon sx={{ fontSize: 18 }} />} label="Company Details" sx={{ mb: 2 }} />
+                        <FormGrid columns={3}>
+                            <RhfTextField<PartnerCompanyFormData>
+                                name="companyName"
+                                label="Partner Name"
+                                required
+                                placeholder="e.g. Computer Care"
+                                maxLength={FIELD_MAX_LENGTH.organizationName}
+                            />
+                            <RhfSelect<PartnerCompanyFormData>
+                                name="natureOfPartner"
+                                label="Nature of Partner"
+                                required
+                                options={[...NATURE_OF_PARTNER_OPTIONS]}
+                                placeholder="Select Nature of Partner"
+                            />
+                            <RhfPhoneField<PartnerCompanyFormData> name="phone" label="Office Phone" required placeholder="e.g. 9876543210" />
+                            <RhfTextField<PartnerCompanyFormData> name="website" label="Website" placeholder="https://" maxLength={200} />
+                            <RhfLookup<PartnerCompanyFormData>
+                                name="assignedTo"
+                                label="Assigned to"
+                                lookupType="user"
+                                placeholder="Select assigned user"
+                            />
+                            <RhfLookup<PartnerCompanyFormData>
+                                name="principalCompany"
+                                label="Principal Company"
+                                lookupType="organization"
+                                placeholder="Search or select principal company..."
+                            />
+                            <FormGridItem span="full">
+                                <RhfEmailList name="emailAddresses" label="Email Address" required />
+                            </FormGridItem>
+                        </FormGrid>
+                        <FormGrid columns={2}>
+                            <RhfTextField<PartnerCompanyFormData>
+                                name="addDescription"
+                                label="Add Description"
+                                multiline
+                                minRows={3}
+                                maxRows={6}
+                                placeholder="Short note about this partner..."
+                                maxLength={FIELD_MAX_LENGTH.longText}
+                            />
+                            <RhfTextField<PartnerCompanyFormData>
+                                name="description"
+                                label="Description"
+                                multiline
+                                minRows={3}
+                                maxRows={6}
+                                placeholder="Partnership scope, products covered, terms..."
+                                maxLength={FIELD_MAX_LENGTH.longText}
+                            />
+                        </FormGrid>
+
+                        <Divider sx={sectionDividerSx} />
+
+                        <SectionLabel icon={<AccountBalanceOutlinedIcon sx={{ fontSize: 18 }} />} label="BANK DETAILS" sx={{ mb: 2 }} />
+                        <FormGrid columns={4}>
+                            <RhfTextField<PartnerCompanyFormData> name="bankName" label="Bank Name" placeholder="e.g. HDFC Bank, SBI" maxLength={FIELD_MAX_LENGTH.personName} />
+                            <RhfTextField<PartnerCompanyFormData> name="bankBranch" label="Branch" placeholder="e.g. Connaught Place, New Delhi" maxLength={150} />
+                            <RhfTextField<PartnerCompanyFormData>
+                                name="accountNumber"
+                                label="Account No"
+                                placeholder="e.g. 50200012345678"
+                                numericOnly
+                                maxLength={FIELD_MAX_LENGTH.bankAccount}
+                            />
+                            <RhfUppercaseField<PartnerCompanyFormData>
+                                name="bankIfscCode"
+                                label="IFSC Code"
+                                placeholder="e.g. HDFC0001234"
+                                maxLength={FIELD_MAX_LENGTH.ifsc}
+                            />
+                        </FormGrid>
+                        <DynamicModuleCustomFields module="partner-companies" tabKey="company_info" sx={{ px: 0, pb: 0, mt: 3.5 }} />
+                    </Box>
+
+                    <Box hidden={activeTab !== 'address'} sx={panelSx}>
+                        <RhfAddressSection<PartnerCompanyFormData>
+                            billingTitle="Billing Address"
+                            shippingTitle="Shipping Address"
+                            copyLabel="Copy address from left"
+                            required
                         />
-                        <RhfUppercaseField<PartnerCompanyFormData> name="tanNumber" label="TAN Number" placeholder="e.g. DELM12345E" maxLength={FIELD_MAX_LENGTH.tan} />
-                    </FormGrid>
-                </Box>
-            </CommonFormLayout>
+                        <DynamicModuleCustomFields module="partner-companies" tabKey="address" sx={{ px: 0, pb: 0, mt: 3.5 }} />
+                    </Box>
+
+                    <Box hidden={activeTab !== 'statutory'} sx={panelSx}>
+                        <SectionLabel
+                            icon={<ReceiptLongOutlinedIcon sx={{ fontSize: 18 }} />}
+                            label="Statutory & Tax Identification"
+                            sx={{ mb: 2 }}
+                        />
+                        <FormGrid columns={3}>
+                            <RhfUppercaseField<PartnerCompanyFormData> name="gstNo" label="GST Number" placeholder="e.g. 06AFZFS3757G1Z9" maxLength={FIELD_MAX_LENGTH.gstin} />
+                            <RhfUppercaseField<PartnerCompanyFormData> name="panNumber" label="PAN Number" placeholder="e.g. ABCDE1234F" maxLength={FIELD_MAX_LENGTH.pan} />
+                            <RhfUppercaseField<PartnerCompanyFormData> name="cinNo" label="CIN No" placeholder="e.g. U74999DL2020PTC123456" maxLength={FIELD_MAX_LENGTH.cin} />
+                            <RhfUppercaseField<PartnerCompanyFormData>
+                                name="msmeRegnNumber"
+                                label="MSME Regn. Number"
+                                placeholder="e.g. UDYAM-DL-01-0012345"
+                                maxLength={FIELD_MAX_LENGTH.msme}
+                            />
+                            <RhfUppercaseField<PartnerCompanyFormData> name="tanNumber" label="TAN Number" placeholder="e.g. DELM12345E" maxLength={FIELD_MAX_LENGTH.tan} />
+                        </FormGrid>
+                        <DynamicModuleCustomFields module="partner-companies" tabKey="statutory" sx={{ px: 0, pb: 0, mt: 3.5 }} />
+                    </Box>
+                </CommonFormLayout>
+            </FormConfigProvider>
         </FormProvider>
     );
 }

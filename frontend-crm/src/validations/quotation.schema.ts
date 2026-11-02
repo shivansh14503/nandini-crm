@@ -13,8 +13,9 @@ import {
     zodGstOptional,
     zodAmount,
     quantitySchema,
+    configurableOption,
+    customFieldsSchema,
 } from './common';
-import { QUOTE_STAGES } from '../types/quotation.types';
 
 export const quotationLineItemSchema = z.object({
     id: z.string(),
@@ -35,7 +36,8 @@ export const quotationLineItemSchema = z.object({
 export const quotationFormSchema = z.object({
     // ── Tab 1: Overview ───────────────────────────────────────────
     quotationTitle: requiredText('Quotation Title', L.title),
-    quoteStage: z.enum(QUOTE_STAGES as [string, ...string[]]).default('Draft'),
+    // Admin-customizable (quote_stage).
+    quoteStage: configurableOption('Quote Stage', 'Draft'),
     quotationDate: requiredString('Quotation Date'),
     validUntil: requiredString('Valid Until Date'),
     remarks: optionalText('Remarks', L.longText),
@@ -97,6 +99,9 @@ export const quotationFormSchema = z.object({
     emailAddress: zodEmailOptional,
     notes: optionalText('Internal Notes', L.longText),
     termsAndConditions: optionalText('Terms and Conditions', L.longText),
+
+    /** Admin-defined custom field values (validated against the form configuration by useRhfForm). */
+    customFields: customFieldsSchema,
 }).superRefine((data, ctx) => {
     refinePostalCodeForCountry(ctx, 'billingPostalCode', data.billingPostalCode, data.billingCountry, true);
     // An empty shipping country falls back to the billing country.

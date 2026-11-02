@@ -1,6 +1,9 @@
 import type { CorporateEmail } from './organization.types';
 
 export interface LeadFormData {
+    /** Admin-defined custom field values, keyed by FormFieldDefinition.fieldKey (cf_…). */
+    customFields?: Record<string, unknown>;
+
     // Overview - Left Column
     name: string;
     mobile: string;

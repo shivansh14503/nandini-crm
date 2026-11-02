@@ -3,6 +3,7 @@ import { FIELD_MAX_LENGTH as L } from '../../config/fieldLimits.js';
 import {
     booleanQuery,
     createdWithinDaysQuery,
+    customFieldsSchema,
     optionalGst,
     optionalIfsc,
     optionalPan,
@@ -66,6 +67,8 @@ export const partnerCompanyInputSchema = z
         cinNo: optionalUpperText('CIN No', L.cin),
         msmeRegnNumber: optionalUpperText('MSME Regn. Number', L.msme),
         tanNumber: optionalUpperText('TAN Number', L.tan),
+
+        customFields: customFieldsSchema,
     })
     .superRefine((input, ctx) => {
         refinePostalCodeForCountry(ctx, 'billingPostalCode', input.billingPostalCode, input.billingCountry, true);

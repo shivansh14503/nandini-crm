@@ -24,11 +24,15 @@ import {
     PAYMENT_TERMS_DESCRIPTIONS,
     type QuotationFormData,
 } from '@/types/quotation.types';
+import { useDropdownOptionMeta } from '@/hooks/queries/useFormConfigs';
 
 /** Select + its description stacked in one grid cell. */
 const termsColumnSx = { display: 'flex', flexDirection: 'column', gap: 2.5 } as const;
 
 export function QuotationOverviewSection() {
+    // Template descriptions come from the admin-managed options (meta.description), falling back to the built-in text.
+    const termsMeta = useDropdownOptionMeta('quote_terms_template');
+    const paymentMeta = useDropdownOptionMeta('quote_payment_terms');
     const { control, setValue, getValues } = useFormContext<QuotationFormData>();
 
     const quotationDate = useWatch({ control, name: 'quotationDate' });
@@ -66,7 +70,8 @@ export function QuotationOverviewSection() {
     // ── Auto-populate Terms & Conditions Description template ────────────────────
     useEffect(() => {
         if (termsAndCondition && termsAndCondition !== prevTermsRef.current) {
-            const template = TERMS_TEMPLATE_DESCRIPTIONS[termsAndCondition];
+            const metaText = termsMeta(termsAndCondition)?.description;
+            const template = typeof metaText === 'string' && metaText ? metaText : TERMS_TEMPLATE_DESCRIPTIONS[termsAndCondition];
             if (template) {
                 setValue('termsAndConditionDescription', template, {
                     shouldDirty: true,
@@ -75,12 +80,13 @@ export function QuotationOverviewSection() {
             }
             prevTermsRef.current = termsAndCondition;
         }
-    }, [termsAndCondition, setValue]);
+    }, [termsAndCondition, setValue, termsMeta]);
 
     // ── Auto-populate Payment Terms Description template ─────────────────────────
     useEffect(() => {
         if (paymentTerms && paymentTerms !== prevPaymentTermsRef.current) {
-            const template = PAYMENT_TERMS_DESCRIPTIONS[paymentTerms];
+            const metaText = paymentMeta(paymentTerms)?.description;
+            const template = typeof metaText === 'string' && metaText ? metaText : PAYMENT_TERMS_DESCRIPTIONS[paymentTerms];
             if (template) {
                 setValue('paymentTermsDescription', template, {
                     shouldDirty: true,
@@ -89,7 +95,7 @@ export function QuotationOverviewSection() {
             }
             prevPaymentTermsRef.current = paymentTerms;
         }
-    }, [paymentTerms, setValue]);
+    }, [paymentTerms, setValue, paymentMeta]);
 
     // ── Dynamic Prepared For Options ─────────────────────────────────────────────
     const preparedForOptions = useMemo(() => {

@@ -22,6 +22,7 @@ import type { ExtendedPartnerCompany } from '@/types/partner.types';
 import { formatAddressLine } from '@/utils/address';
 import { mailtoHref, telHref } from '@/utils/contactLinks';
 import { PARTNER_COMPANY_FORM_TABS } from './PartnerCompanyForm';
+import { DynamicDrawerCustomFields } from '@/components/common/Drawer/DynamicDrawerCustomFields';
 
 export interface PartnerCompanyDetailDrawerProps {
     partnerCompany: ExtendedPartnerCompany | null;
@@ -149,6 +150,9 @@ export function PartnerCompanyDetailDrawer({ partnerCompany, open, onClose }: Pa
                                 ))}
                             </DrawerFieldGrid>
                         </DrawerSectionCard>
+
+                        {/* Admin-defined custom fields */}
+                        <DynamicDrawerCustomFields module="partner-companies" record={p} />
 
                         {hasBank && (
                             <DrawerSectionCard p={1.8} icon={sectionIcon(<AccountBalanceOutlinedIcon sx={{ fontSize: 15 }} />)} title="Bank Details">

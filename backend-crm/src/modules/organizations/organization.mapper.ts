@@ -1,5 +1,5 @@
 import type { EntityEmail, Organization } from '../../generated/prisma/client.js';
-import { parseStringArray, text, toIso, toIsoOrUndefined } from '../../utils/mappers.js';
+import { parseCustomFields, parseStringArray, text, toIso, toIsoOrUndefined } from '../../utils/mappers.js';
 import { toEmailDtos, type CorporateEmailDto } from '../shared/entityEmails.js';
 
 export type OrganizationRow = Organization & { corporateEmails?: EntityEmail[] };
@@ -76,6 +76,8 @@ export interface OrganizationDto extends OrganizationViewerFlags {
     createdAt: string;
     updatedAt: string;
     createdBy: string;
+    /** Admin-defined custom field values keyed by FormFieldDefinition.fieldKey. */
+    customFields: Record<string, unknown>;
 }
 
 export function toOrganizationDto(
@@ -146,6 +148,7 @@ export function toOrganizationDto(
         createdAt: toIso(row.createdAt),
         updatedAt: toIso(row.updatedAt),
         createdBy: row.createdBy,
+        customFields: parseCustomFields(row.customDataJson),
         ...flags,
     };
 }

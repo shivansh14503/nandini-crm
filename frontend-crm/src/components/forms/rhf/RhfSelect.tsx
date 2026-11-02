@@ -11,6 +11,8 @@ export interface RhfSelectProps<T extends FieldValues> {
     name: FieldPath<T>;
     label: string;
     options: string[];
+    /** Display labels for values whose label differs from the stored value. */
+    optionLabels?: Record<string, string>;
     required?: boolean;
     hint?: React.ReactNode;
     placeholder?: string;
@@ -25,6 +27,7 @@ export function RhfSelect<T extends FieldValues>({
     name,
     label,
     options,
+    optionLabels,
     required,
     hint,
     placeholder,
@@ -41,6 +44,7 @@ export function RhfSelect<T extends FieldValues>({
                 value={(field.value as string) ?? ''}
                 onChange={field.onChange}
                 options={options}
+                optionLabels={optionLabels}
                 // "Select <label>" doesn't fit an xs control; a bare "Select" keeps the prompt readable.
                 placeholder={placeholder ?? (size === 'xs' ? 'Select' : undefined)}
                 disabled={disabled}

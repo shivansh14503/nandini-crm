@@ -129,6 +129,9 @@ model Organization {
   partnerCompaniesJson String? @db.NVarChar(Max)
 
   // Audit & soft delete
+  /// Admin-defined custom field values `{ [fieldKey]: value }` (see FormFieldDefinition) as JSON.
+  customDataJson String? @db.NVarChar(Max)
+
   createdBy String    @db.NVarChar(50)
   updatedBy String?   @db.NVarChar(50)
   createdAt DateTime  @default(now())
@@ -201,6 +204,9 @@ model Contact {
   communicationTypeJson String? @db.NVarChar(Max)
   doNotCall        Boolean @default(false)
   description      String? @db.NVarChar(2000)
+
+  /// Admin-defined custom field values `{ [fieldKey]: value }` (see FormFieldDefinition) as JSON.
+  customDataJson String? @db.NVarChar(Max)
 
   createdBy String    @db.NVarChar(50)
   updatedBy String?   @db.NVarChar(50)
@@ -277,6 +283,9 @@ model Lead {
   convertedContactId      String?   @db.NVarChar(50)
   convertedOpportunityId  String?   @db.NVarChar(50)
 
+  /// Admin-defined custom field values `{ [fieldKey]: value }` (see FormFieldDefinition) as JSON.
+  customDataJson String? @db.NVarChar(Max)
+
   createdBy String    @db.NVarChar(50)
   updatedBy String?   @db.NVarChar(50)
   createdAt DateTime  @default(now())
@@ -318,6 +327,9 @@ model Product {
   description        String?  @db.NVarChar(2000)
   termsAndConditions String?  @db.NVarChar(2000)
   isActive           Boolean  @default(true)
+
+  /// Admin-defined custom field values `{ [fieldKey]: value }` (see FormFieldDefinition) as JSON.
+  customDataJson String? @db.NVarChar(Max)
 
   createdBy String    @db.NVarChar(50)
   updatedBy String?   @db.NVarChar(50)
@@ -379,6 +391,9 @@ model Opportunity {
   subtotal        Decimal @default(0) @db.Decimal(18, 2)
   totalTax        Decimal @default(0) @db.Decimal(18, 2)
   grandTotal      Decimal @default(0) @db.Decimal(18, 2)
+
+  /// Admin-defined custom field values `{ [fieldKey]: value }` (see FormFieldDefinition) as JSON.
+  customDataJson String? @db.NVarChar(Max)
 
   createdBy String    @db.NVarChar(50)
   updatedBy String?   @db.NVarChar(50)
@@ -489,6 +504,9 @@ model Quotation {
   notes              String?   @db.NVarChar(2000)
   termsAndConditions String?   @db.NVarChar(4000)
 
+  /// Admin-defined custom field values `{ [fieldKey]: value }` (see FormFieldDefinition) as JSON.
+  customDataJson String? @db.NVarChar(Max)
+
   createdBy String    @db.NVarChar(50)
   updatedBy String?   @db.NVarChar(50)
   createdAt DateTime  @default(now())
@@ -566,6 +584,9 @@ model Ticket {
   assignedTo              String   @db.NVarChar(50)
   partnerCompany          String?  @db.NVarChar(200)
   partnerCompanyContact   String?  @db.NVarChar(100)
+
+  /// Admin-defined custom field values `{ [fieldKey]: value }` (see FormFieldDefinition) as JSON.
+  customDataJson String? @db.NVarChar(Max)
 
   createdBy String    @db.NVarChar(50)
   updatedBy String?   @db.NVarChar(50)
@@ -653,6 +674,9 @@ model PartnerCompany {
   tanNumber      String? @db.NVarChar(10)
 
   // Audit & soft delete
+  /// Admin-defined custom field values `{ [fieldKey]: value }` (see FormFieldDefinition) as JSON.
+  customDataJson String? @db.NVarChar(Max)
+
   createdBy String    @default("system") @db.NVarChar(50)
   updatedBy String?   @db.NVarChar(50)
   isDeleted Boolean   @default(false)
@@ -718,4 +742,79 @@ model AuditLog {
 
   @@index([entityType, entityId, createdAt])
   @@index([changedBy])
+}
+
+// ── Form & dropdown customization (admin-managed) ─────────────────────────────
+
+/// A named list of dropdown options (e.g. lead_status). Shared categories (module = 'shared') feed several forms.
+model DropdownCategory {
+  id          String   @id @default(uuid()) @db.NVarChar(50)
+  key         String   @unique @db.NVarChar(80)
+  label       String   @db.NVarChar(120)
+  /// 'shared' | 'organizations' | 'contacts' | 'leads' | 'opportunities' | 'quotations' | 'products' | 'tickets' | 'partner-companies'
+  module      String   @db.NVarChar(40)
+  description String?  @db.NVarChar(300)
+  isSystem    Boolean  @default(false)
+  /// Set when an admin deletes a built-in dropdown: the row stays as a tombstone (options removed) so start-up
+  /// seeding doesn't recreate it. Deleted rows are hidden everywhere.
+  deletedAt   DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  options DropdownOption[]
+  fields  FormFieldDefinition[]
+}
+
+/// One option of a DropdownCategory. Options are archived (isActive = false), never deleted, so stored values keep rendering.
+/// System options drive backend logic (e.g. lead 'Converted') and cannot be archived or have their value changed.
+model DropdownOption {
+  id         String   @id @default(uuid()) @db.NVarChar(50)
+  categoryId String   @db.NVarChar(50)
+  value      String   @db.NVarChar(200)
+  label      String   @db.NVarChar(200)
+  metaJson   String?  @db.NVarChar(Max)
+  sortOrder  Int      @default(0)
+  isActive   Boolean  @default(true)
+  isSystem   Boolean  @default(false)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  // Owned by exactly one category, so cascading is safe.
+  category DropdownCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([categoryId, value])
+  @@index([categoryId, isActive, sortOrder])
+}
+
+/// Per-module form layout: built-in fields (isSystem) can be relabelled / reordered / resized; custom fields
+/// (fieldKey prefixed cf_) store their values in the entity's customDataJson. Core-locked fields can't be hidden or made optional.
+model FormFieldDefinition {
+  id                  String   @id @default(uuid()) @db.NVarChar(50)
+  module              String   @db.NVarChar(40)
+  fieldKey            String   @db.NVarChar(80)
+  label               String   @db.NVarChar(120)
+  fieldType           String   @db.NVarChar(30)
+  tabKey              String   @db.NVarChar(40)
+  sectionKey          String   @db.NVarChar(80)
+  sectionLabel        String   @db.NVarChar(120)
+  sortOrder           Int      @default(0)
+  fieldSize           String?  @db.NVarChar(10)
+  placeholder         String?  @db.NVarChar(200)
+  hint                String?  @db.NVarChar(200)
+  defaultValue        String?  @db.NVarChar(500)
+  isRequired          Boolean  @default(false)
+  isCoreLocked        Boolean  @default(false)
+  isSystem            Boolean  @default(false)
+  isActive            Boolean  @default(true)
+  isVisibleInForm     Boolean  @default(true)
+  isVisibleInDrawer   Boolean  @default(true)
+  dropdownCategoryId  String?  @db.NVarChar(50)
+  validationRulesJson String?  @db.NVarChar(Max)
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  dropdownCategory DropdownCategory? @relation(fields: [dropdownCategoryId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@unique([module, fieldKey])
+  @@index([module, isActive, sortOrder])
 }

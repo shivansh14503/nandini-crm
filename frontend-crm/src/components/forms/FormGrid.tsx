@@ -4,6 +4,7 @@ import React, { createContext, useContext } from 'react';
 import { Box, type SxProps, type Theme } from '@mui/material';
 import type { Breakpoint } from '@mui/material/styles';
 import { FIELD_SIZES, FIELD_SIZE_WIDTH } from './fieldSizing';
+import { useConfiguredChildren } from './useConfiguredChildren';
 
 type ResponsiveCount = Partial<Record<Breakpoint, number>>;
 
@@ -36,6 +37,8 @@ export interface FormGridProps {
  */
 export function FormGrid({ columns = 3, children, sx }: FormGridProps) {
     const columnMap = toColumnMap(columns);
+    // Inside a module form, fields follow the admin-configured order.
+    const ordered = useConfiguredChildren(children);
     return (
         <FormGridColumnsContext.Provider value={columnMap}>
             <Box
@@ -52,7 +55,7 @@ export function FormGrid({ columns = 3, children, sx }: FormGridProps) {
                     ...sxList(sx),
                 ]}
             >
-                {children}
+                {ordered}
             </Box>
         </FormGridColumnsContext.Provider>
     );
@@ -90,6 +93,7 @@ export interface FormRowProps {
  * Unlike {@link FormGrid}, columns aren't aligned across rows; use it for one logical group.
  */
 export function FormRow({ children, sx }: FormRowProps) {
+    const ordered = useConfiguredChildren(children);
     return (
         <Box
             sx={[
@@ -105,7 +109,7 @@ export function FormRow({ children, sx }: FormRowProps) {
                 ...sxList(sx),
             ]}
         >
-            {children}
+            {ordered}
         </Box>
     );
 }

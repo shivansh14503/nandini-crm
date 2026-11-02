@@ -81,7 +81,8 @@ const NAV_ITEMS = [
         items: [
             { label: 'Partner Company', href: ROUTES.PARTNER_COMPANIES },
             { label: 'Reports', href: '/dashboard' },
-            { label: 'Settings', href: '/dashboard' },
+            { label: 'Form Customization', href: ROUTES.FORM_CUSTOMIZATION },
+            { label: 'Settings', href: ROUTES.FORM_CUSTOMIZATION },
             { label: 'Integrations', href: '/dashboard' },
         ],
     },

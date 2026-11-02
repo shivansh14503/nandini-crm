@@ -26,6 +26,7 @@ import {
     CONTACT_DESIGNATIONS,
 } from '@/types/contact.types';
 import type { ConvertLeadFormValues } from '@/validations';
+import { useDropdownOptionsGetter } from '@/hooks/queries/useFormConfigs';
 
 type F = ConvertLeadFormValues;
 
@@ -33,6 +34,7 @@ const NO_CONTACTS: Contact[] = [];
 
 /** "Create Contact OR Select Contact" section of the Convert Lead form. */
 export function ConvertContactSection() {
+    const getOptions = useDropdownOptionsGetter();
     const { setValue, control } = useFormContext<F>();
     const mobile = useWatch({ control, name: 'contactMobile' });
     const existingContactId = useWatch({ control, name: 'existingContactId' });
@@ -89,8 +91,8 @@ export function ConvertContactSection() {
                 <RhfPhoneField<F> name="contactMobile" label="Mobile" required />
                 <RhfPhoneField<F> name="contactPhone3" label="Phone 3" placeholder="Alternate phone number" />
 
-                <RhfSelect<F> name="designation" label="Designation" options={CONTACT_DESIGNATIONS} placeholder="Select Designation" />
-                <RhfSelect<F> name="department" label="Department" options={CONTACT_DEPARTMENTS} placeholder="Select Department" />
+                <RhfSelect<F> name="designation" label="Designation" options={getOptions('contact_designation', CONTACT_DESIGNATIONS)} placeholder="Select Designation" />
+                <RhfSelect<F> name="department" label="Department" options={getOptions('contact_department', CONTACT_DEPARTMENTS)} placeholder="Select Department" />
                 <RhfLookup<F> name="contactAssignedTo" label="Assigned to" lookupType="user" required placeholder="Select representative" />
 
                 <FormGridItem span={2}>
@@ -100,7 +102,7 @@ export function ConvertContactSection() {
                 <FormGridItem span="full">
                     <RhfEmailList name="contactEmails" required />
                 </FormGridItem>
-                <RhfChipGroup<F> name="communicationType" label="Communication Type" options={COMMUNICATION_TYPES} />
+                <RhfChipGroup<F> name="communicationType" label="Communication Type" options={getOptions('contact_communication_type', COMMUNICATION_TYPES)} />
                 <FormGridItem span="full">
                     <Box sx={{ display: 'flex', flexWrap: 'wrap', columnGap: 3 }}>
                         <RhfCheckbox<F> name="isPrimaryContact" label="Is Primary Contact" />
