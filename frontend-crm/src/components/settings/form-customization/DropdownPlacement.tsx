@@ -18,8 +18,9 @@ import {
     Tooltip,
     Typography,
 } from '@mui/material';
+import { GROUP_ICONS } from './ModuleHierarchySelector';
 import {
-    CRM_MODULE_KEYS,
+    CRM_MODULE_GROUPS,
     CRM_MODULE_LABELS,
     sectionKeyFromLabel,
     type CrmModuleKey,
@@ -220,7 +221,47 @@ export function ControlTypePicker({
     );
 }
 
-/** One checkbox per CRM module; each checked module gets its own tab / section row. */
+/**
+ * The CRM forms grouped like the top navbar (Sales, Support, Inventory, All), each group under a tinted header
+ * that sticks while its rows scroll by. `renderRow` draws one form's row.
+ */
+export function ModuleGroupList({ renderRow }: { renderRow: (module: CrmModuleKey, label: string) => React.ReactNode }) {
+    return (
+        <Box sx={{ border: '1px solid #e2e8f0', borderRadius: '8px', backgroundColor: '#ffffff' }}>
+            {CRM_MODULE_GROUPS.map((group, gi) => (
+                <Box key={group.key} role="group" aria-label={group.label}>
+                    <Box
+                        sx={{
+                            position: 'sticky',
+                            top: 0,
+                            zIndex: 2,
+                            px: 1.5,
+                            py: 0.5,
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: 0.6,
+                            color: '#64748b',
+                            backgroundColor: '#f1f5f9',
+                            borderTop: gi === 0 ? 'none' : '1px solid #e2e8f0',
+                            borderBottom: '1px solid #e2e8f0',
+                            borderRadius: gi === 0 ? '8px 8px 0 0' : 0,
+                        }}
+                    >
+                        {GROUP_ICONS[group.key]}
+                        <Typography sx={{ fontSize: '0.66rem', fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase' }}>{group.label}</Typography>
+                    </Box>
+                    {group.modules.map((m, i) => (
+                        <Box key={m.key} sx={{ borderTop: i === 0 ? 'none' : '1px solid #f1f5f9' }}>
+                            {renderRow(m.key, m.label)}
+                        </Box>
+                    ))}
+                </Box>
+            ))}
+        </Box>
+    );
+}
+
+/** One checkbox per CRM module (grouped like the navbar); each checked module gets its own tab / section row. */
 export function ModuleTargetsPicker({
     configs,
     targets,
@@ -241,12 +282,12 @@ export function ModuleTargetsPicker({
     };
 
     return (
-        <Box sx={{ border: '1px solid #e2e8f0', borderRadius: '8px', overflow: 'hidden' }}>
-            {CRM_MODULE_KEYS.map((module, i) => {
+        <ModuleGroupList
+            renderRow={(module, moduleName) => {
                 const placement = targets[module];
                 const linked = linkedModules?.has(module) ?? false;
                 return (
-                    <Box key={module} sx={{ px: 1.5, py: 0.75, borderTop: i === 0 ? 'none' : '1px solid #f1f5f9', backgroundColor: placement ? '#f8fafc' : '#fff' }}>
+                    <Box sx={{ px: 1.5, py: 0.75, backgroundColor: placement ? '#f8fafc' : '#fff' }}>
                         <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '190px minmax(0, 1fr)' }, alignItems: 'center', gap: 1 }}>
                             <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
                                 <Tooltip title={linked ? 'This form already has a field using this dropdown' : ''} arrow>
@@ -254,7 +295,7 @@ export function ModuleTargetsPicker({
                                         <FormControlLabel
                                             sx={{ m: 0 }}
                                             control={<Checkbox size="small" checked={Boolean(placement)} disabled={linked} onChange={(e) => toggle(module, e.target.checked)} />}
-                                            label={<Typography sx={{ fontSize: '0.84rem', fontWeight: 600, color: linked ? '#94a3b8' : '#1e293b' }}>{CRM_MODULE_LABELS[module]}</Typography>}
+                                            label={<Typography sx={{ fontSize: '0.84rem', fontWeight: 600, color: linked ? '#94a3b8' : '#1e293b' }}>{moduleName}</Typography>}
                                         />
                                     </span>
                                 </Tooltip>
@@ -266,8 +307,8 @@ export function ModuleTargetsPicker({
                         </Box>
                     </Box>
                 );
-            })}
-        </Box>
+            }}
+        />
     );
 }
 

@@ -362,6 +362,66 @@ export function categoryLockReason(s: FormConfigsPayload, category: DropdownCate
     return null;
 }
 
+// ── Modules an op affects (for "unsaved" markers per form) ──────────────────
+
+/**
+ * Forms each unsaved op changes. Rows are looked up in the draft and, for rows the draft already removed, in the
+ * saved configuration. A dropdown op counts for its owning module and every module whose fields use it.
+ */
+export function modulesTouchedBy(ops: DraftOp[], base: FormConfigsPayload, draft: FormConfigsPayload): Set<CrmModuleKey> {
+    const touched = new Set<CrmModuleKey>();
+    const isModule = (m: string): m is CrmModuleKey => (CRM_MODULE_KEYS as readonly string[]).includes(m);
+    const field = (id: string) => findFieldById(draft, id) ?? findFieldById(base, id);
+    const addCategory = (key: string) => {
+        for (const s of [draft, base]) {
+            const category = findCategoryByKey(s, key);
+            if (!category) continue;
+            if (isModule(category.module)) touched.add(category.module);
+            for (const u of category.usedBy) if (isModule(u.module)) touched.add(u.module);
+            for (const f of allFields(s)) if (f.dropdownCategoryKey === key) touched.add(f.module);
+        }
+    };
+    const addOption = (id: string) => {
+        const found = findOptionById(draft, id) ?? findOptionById(base, id);
+        if (found) addCategory(found.category.key);
+    };
+    for (const op of ops) {
+        switch (op.kind) {
+            case 'createCategory':
+                if (isModule(op.payload.module)) touched.add(op.payload.module);
+                addCategory(op.key);
+                break;
+            case 'updateCategory':
+            case 'deleteCategory':
+            case 'reorderOptions':
+                addCategory(op.categoryKey);
+                break;
+            case 'addOption':
+                addCategory(op.categoryKey);
+                break;
+            case 'updateOption':
+            case 'deleteOption':
+                addOption(op.optionId);
+                break;
+            case 'createField':
+                touched.add(op.payload.module);
+                break;
+            case 'updateField':
+            case 'deleteField': {
+                const f = field(op.fieldId);
+                if (f) touched.add(f.module);
+                break;
+            }
+            case 'reorderFields':
+            case 'renameSection':
+            case 'resetModule':
+                touched.add(op.module);
+                break;
+        }
+    }
+    return touched;
+}
+
 // ── Ids / keys an op refers to (for dropping ops of rows removed before saving) ──
 
 export function opRefersTo(op: DraftOp, id: string): boolean {

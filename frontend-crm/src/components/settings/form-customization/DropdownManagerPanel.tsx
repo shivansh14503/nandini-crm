@@ -68,7 +68,7 @@ const moduleLabel = (m: string) => CRM_MODULE_LABELS[m as CrmModuleKey] ?? m;
  * module's or shared. A dropdown whose only field on this form was deleted therefore leaves this list while
  * staying under the modules that still use it.
  */
-function categoriesForModule(configs: FormConfigsPayload, module: CrmModuleKey): DropdownCategoryDto[] {
+export function categoriesForModule(configs: FormConfigsPayload, module: CrmModuleKey): DropdownCategoryDto[] {
     return configs.categories
         .filter((c) => c.usedBy.some((u) => u.module === module) || (c.usedBy.length === 0 && (c.module === module || c.module === 'shared')))
         .sort((a, b) => (a.module === module ? 0 : 1) - (b.module === module ? 0 : 1) || a.label.localeCompare(b.label));

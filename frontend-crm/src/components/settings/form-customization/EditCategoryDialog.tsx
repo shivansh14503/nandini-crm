@@ -18,7 +18,6 @@ import {
     Typography,
 } from '@mui/material';
 import {
-    CRM_MODULE_KEYS,
     CRM_MODULE_LABELS,
     type CrmModuleKey,
     type DropdownCategoryDto,
@@ -31,6 +30,7 @@ import { useConfigDraftActions } from './useConfigDraft';
 import { allFields } from './configDraft';
 import {
     ControlTypePicker,
+    ModuleGroupList,
     PlacementFields,
     defaultPlacement,
     placementError,
@@ -195,15 +195,15 @@ export function EditCategoryDialog({
 
                 <Box>
                     {smallLabel('Use in forms')}
-                    <Box sx={{ border: '1px solid #e2e8f0', borderRadius: '8px', overflow: 'hidden' }}>
-                        {CRM_MODULE_KEYS.map((m, i) => {
+                    <ModuleGroupList
+                        renderRow={(m, moduleName) => {
                             const fields = linkedByModule.get(m);
                             const builtIn = fields?.some((f) => f.isSystem) ?? false;
                             const placement = newTargets[m];
                             const checked = fields ? kept.has(m) : Boolean(placement);
                             const removing = Boolean(fields) && !checked;
                             return (
-                                <Box key={m} sx={{ px: 1.5, py: 0.75, borderTop: i === 0 ? 'none' : '1px solid #f1f5f9', backgroundColor: removing ? '#fef2f2' : checked ? '#f8fafc' : '#fff' }}>
+                                <Box sx={{ px: 1.5, py: 0.75, backgroundColor: removing ? '#fef2f2' : checked ? '#f8fafc' : '#fff' }}>
                                     <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '190px minmax(0, 1fr)' }, alignItems: 'center', gap: 1 }}>
                                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
                                             <Tooltip title={builtIn ? 'Built-in field: it always uses this dropdown' : ''} arrow>
@@ -218,7 +218,7 @@ export function EditCategoryDialog({
                                                                 onChange={(e) => (fields ? toggleKept(m, e.target.checked) : toggleNew(m, e.target.checked))}
                                                             />
                                                         }
-                                                        label={<Typography sx={{ fontSize: '0.84rem', fontWeight: 600, color: '#1e293b' }}>{CRM_MODULE_LABELS[m]}</Typography>}
+                                                        label={<Typography sx={{ fontSize: '0.84rem', fontWeight: 600, color: '#1e293b' }}>{moduleName}</Typography>}
                                                     />
                                                 </span>
                                             </Tooltip>
@@ -236,8 +236,8 @@ export function EditCategoryDialog({
                                     </Box>
                                 </Box>
                             );
-                        })}
-                    </Box>
+                        }}
+                    />
                 </Box>
 
                 {removesAll && (

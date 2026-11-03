@@ -11,10 +11,13 @@ import { AppToast } from '@/components/common/AppToast';
 import { useAuth } from '@/context/AuthContext';
 import { FormStickyFooter } from '@/components/forms/FormStickyFooter';
 import { FormConfigsOverrideContext, useFormConfigsQuery } from '@/hooks/queries/useFormConfigs';
-import { CRM_MODULE_KEYS, CRM_MODULE_LABELS, type CrmModuleKey } from '@/types/formConfig.types';
+import ChevronRightRoundedIcon from '@mui/icons-material/ChevronRightRounded';
+import { CRM_MODULE_KEYS, moduleGroupOf, moduleNavLabel, type CrmModuleKey } from '@/types/formConfig.types';
+import { modulesTouchedBy } from './configDraft';
+import { GROUP_ICONS, MODULE_ICONS, ModuleHierarchySelector } from './ModuleHierarchySelector';
 import { PillTabs, surfaceSx, errorMessage, primaryButtonSx, secondaryButtonSx } from './builderUi';
 import { ConfigDraftActionsContext, ConfigDraftChangesContext, changedIds, useConfigDraft } from './useConfigDraft';
-import { DropdownManagerPanel } from './DropdownManagerPanel';
+import { DropdownManagerPanel, categoriesForModule } from './DropdownManagerPanel';
 import { FormFieldsBuilderPanel } from './FormFieldsBuilderPanel';
 import { FormLivePreviewPanel } from './FormLivePreviewPanel';
 
@@ -91,10 +94,19 @@ export function FormCustomizationView() {
         }
     };
 
-    const moduleItems = CRM_MODULE_KEYS.map((key) => ({
-        key,
-        label: CRM_MODULE_LABELS[key],
-        count: configs?.fieldsByModule[key]?.filter((f) => !f.isSystem && f.isActive).length || undefined,
+    const fieldCounts = useMemo(
+        () => Object.fromEntries(CRM_MODULE_KEYS.map((key) => [key, configs?.fieldsByModule[key]?.filter((f) => f.isActive).length ?? 0])),
+        [configs],
+    ) as Record<CrmModuleKey, number>;
+    const unsavedModules = useMemo(
+        () => (configs && savedConfigs ? modulesTouchedBy(ops, savedConfigs, configs) : new Set<CrmModuleKey>()),
+        [ops, savedConfigs, configs],
+    );
+    const dropdownCount = useMemo(() => (configs ? categoriesForModule(configs, module).length : 0), [configs, module]);
+    const group = moduleGroupOf(module);
+    const viewItems = VIEWS.map((v) => ({
+        ...v,
+        count: !configs ? undefined : v.key === 'dropdowns' ? dropdownCount : v.key === 'fields' ? fieldCounts[module] : undefined,
     }));
 
     return (
@@ -129,8 +141,8 @@ export function FormCustomizationView() {
                         </Typography>
                     </Box>
                 </Box>
-                <Box sx={{ px: { xs: 2, md: 3 }, py: 1.25, backgroundColor: '#f8fafc', borderTop: '1px solid #e2e8f0' }}>
-                    <PillTabs items={moduleItems} value={module} onChange={setModule} />
+                <Box sx={{ px: { xs: 2, md: 3 }, py: 1.5, backgroundColor: '#f8fafc', borderTop: '1px solid #e2e8f0' }}>
+                    <ModuleHierarchySelector value={module} onChange={setModule} fieldCounts={configs ? fieldCounts : {}} unsaved={unsavedModules} />
                 </Box>
             </Box>
 
@@ -140,7 +152,47 @@ export function FormCustomizationView() {
                 </Alert>
             )}
 
-            <PillTabs items={VIEWS} value={view} onChange={setView} sx={{ mb: 2 }} />
+            {/* ── Active form context + view switcher ── */}
+            <Box sx={{ mb: 2, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1.5, flexWrap: 'wrap' }}>
+                <Box
+                    aria-live="polite"
+                    sx={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: 0.75,
+                        px: 1.25,
+                        py: 0.6,
+                        borderRadius: '8px',
+                        border: '1px solid #e2e8f0',
+                        backgroundColor: '#ffffff',
+                        minWidth: 0,
+                        flexWrap: 'wrap',
+                    }}
+                >
+                    <Box component="span" sx={{ display: 'flex', color: '#64748b' }}>
+                        {GROUP_ICONS[group.key]}
+                    </Box>
+                    <Typography component="span" sx={{ fontSize: '0.78rem', fontWeight: 600, color: '#64748b' }}>
+                        {group.label}
+                    </Typography>
+                    <ChevronRightRoundedIcon sx={{ fontSize: 16, color: '#cbd5e1' }} />
+                    <Box component="span" sx={{ display: 'flex', color: '#2563eb' }}>
+                        {MODULE_ICONS[module]}
+                    </Box>
+                    <Typography component="span" sx={{ fontSize: '0.84rem', fontWeight: 700, color: '#0f172a' }}>
+                        {moduleNavLabel(module)}
+                    </Typography>
+                    {configs && (
+                        <Typography component="span" sx={{ fontSize: '0.74rem', color: '#64748b', ml: 0.5 }}>
+                            {dropdownCount} Dropdown{dropdownCount === 1 ? '' : 's'} • {fieldCounts[module]} Field{fieldCounts[module] === 1 ? '' : 's'}
+                        </Typography>
+                    )}
+                    {unsavedModules.has(module) && (
+                        <Box component="span" title="Unsaved changes on this form" sx={{ width: 7, height: 7, borderRadius: '50%', backgroundColor: '#f59e0b', ml: 0.25 }} />
+                    )}
+                </Box>
+                <PillTabs items={viewItems} value={view} onChange={setView} />
+            </Box>
 
             {isLoading && (
                 <Box sx={{ ...surfaceSx, py: 8, display: 'flex', justifyContent: 'center' }}>

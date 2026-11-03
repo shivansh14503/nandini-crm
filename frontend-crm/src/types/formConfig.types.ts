@@ -25,6 +25,41 @@ export const CRM_MODULE_LABELS: Record<CrmModuleKey, string> = {
     'partner-companies': 'Partner Companies',
 };
 
+export type CrmModuleGroupKey = 'sales' | 'support' | 'inventory' | 'all';
+
+export interface CrmModuleGroup {
+    key: CrmModuleGroupKey;
+    label: string;
+    /** Forms of the group, in navbar order, with their navbar name. */
+    modules: readonly { key: CrmModuleKey; label: string }[];
+}
+
+/** The CRM modules grouped as in the top navbar (components/layout/Navbar.tsx). Covers every CRM_MODULE_KEYS entry. */
+export const CRM_MODULE_GROUPS: readonly CrmModuleGroup[] = [
+    {
+        key: 'sales',
+        label: 'Sales',
+        modules: [
+            { key: 'organizations', label: 'Organizations' },
+            { key: 'contacts', label: 'Contacts' },
+            { key: 'opportunities', label: 'Opportunities' },
+            { key: 'leads', label: 'Leads' },
+            { key: 'quotations', label: 'Quotations' },
+        ],
+    },
+    { key: 'support', label: 'Support', modules: [{ key: 'tickets', label: 'Tickets' }] },
+    { key: 'inventory', label: 'Inventory', modules: [{ key: 'products', label: 'Product Catalog' }] },
+    { key: 'all', label: 'All', modules: [{ key: 'partner-companies', label: 'Partner Companies' }] },
+];
+
+/** Navbar group of a module. */
+export const moduleGroupOf = (module: CrmModuleKey): CrmModuleGroup =>
+    CRM_MODULE_GROUPS.find((g) => g.modules.some((m) => m.key === module)) ?? CRM_MODULE_GROUPS[0];
+
+/** Navbar name of a module (e.g. products → "Product Catalog"). */
+export const moduleNavLabel = (module: CrmModuleKey): string =>
+    moduleGroupOf(module).modules.find((m) => m.key === module)?.label ?? CRM_MODULE_LABELS[module];
+
 /** Control types an admin can pick for a custom field. */
 export const CUSTOM_FIELD_TYPES = [
     'text',
