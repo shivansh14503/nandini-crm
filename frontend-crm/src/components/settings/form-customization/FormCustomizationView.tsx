@@ -22,7 +22,7 @@ import ChevronRightRoundedIcon from '@mui/icons-material/ChevronRightRounded';
 import { CRM_MODULE_KEYS, moduleGroupOf, moduleNavLabel, type CrmModuleKey } from '@/types/formConfig.types';
 import { modulesTouchedBy, tabsTouchedBy, viewsTouchedForModule } from './configDraft';
 import { GROUP_ICONS, MODULE_ICONS, ModuleHierarchySelector } from './ModuleHierarchySelector';
-import { PillTabs, surfaceSx, errorMessage, primaryButtonSx, secondaryButtonSx } from './builderUi';
+import { EmptyState, PillTabs, surfaceSx, errorMessage, primaryButtonSx, secondaryButtonSx } from './builderUi';
 import { ConfigDraftActionsContext, ConfigDraftChangesContext, changedIds, useConfigDraft } from './useConfigDraft';
 import { DropdownManagerPanel, categoriesForModule } from './DropdownManagerPanel';
 import { FormFieldsBuilderPanel } from './FormFieldsBuilderPanel';
@@ -80,7 +80,8 @@ export function FormCustomizationView() {
     const [discardOpen, setDiscardOpen] = useState(false);
     useLeaveGuard(dirty);
 
-    const [module, setModule] = useState<CrmModuleKey>('leads');
+    /** No form is open until the admin picks one in the selector. */
+    const [module, setModule] = useState<CrmModuleKey | null>(null);
     const [view, setView] = useState<BuilderView>('dropdowns');
     const [toast, setToast] = useState<{ open: boolean; message: string; severity: 'success' | 'error' | 'info' | 'warning' }>({
         open: false,
@@ -118,18 +119,19 @@ export function FormCustomizationView() {
     );
     /** Which views and form tabs of the selected module have unsaved changes (orange dots). */
     const viewsTouched = useMemo(
-        () => (configs && savedConfigs ? viewsTouchedForModule(ops, savedConfigs, configs, module) : { dropdowns: false, fields: false }),
+        () =>
+            configs && savedConfigs && module ? viewsTouchedForModule(ops, savedConfigs, configs, module) : { dropdowns: false, fields: false },
         [ops, savedConfigs, configs, module],
     );
     const unsavedTabs = useMemo(
-        () => (configs && savedConfigs ? tabsTouchedBy(ops, savedConfigs, configs, module) : new Set<string>()),
+        () => (configs && savedConfigs && module ? tabsTouchedBy(ops, savedConfigs, configs, module) : new Set<string>()),
         [ops, savedConfigs, configs, module],
     );
-    const dropdownCount = useMemo(() => (configs ? categoriesForModule(configs, module).length : 0), [configs, module]);
-    const group = moduleGroupOf(module);
+    const dropdownCount = useMemo(() => (configs && module ? categoriesForModule(configs, module).length : 0), [configs, module]);
+    const group = module ? moduleGroupOf(module) : null;
     const viewItems = VIEWS.map((v) => ({
         ...v,
-        count: !configs ? undefined : v.key === 'dropdowns' ? dropdownCount : v.key === 'fields' ? fieldCounts[module] : undefined,
+        count: !configs || !module ? undefined : v.key === 'dropdowns' ? dropdownCount : v.key === 'fields' ? fieldCounts[module] : undefined,
         hasUnsaved: v.key === 'dropdowns' ? viewsTouched.dropdowns : v.key === 'fields' ? viewsTouched.fields : false,
         unsavedTooltip: v.key === 'dropdowns' ? 'Unsaved dropdown changes on this form' : 'Unsaved field, section or tab changes on this form',
     }));
@@ -186,47 +188,49 @@ export function FormCustomizationView() {
                 </Alert>
             )}
 
-            {/* ── Active form context + view switcher ── */}
-            <Box sx={{ mb: 2, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1.5, flexWrap: 'wrap' }}>
-                <Box
-                    aria-live="polite"
-                    sx={{
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        gap: 0.75,
-                        px: 1.25,
-                        py: 0.6,
-                        borderRadius: '8px',
-                        border: '1px solid #e2e8f0',
-                        backgroundColor: '#ffffff',
-                        minWidth: 0,
-                        flexWrap: 'wrap',
-                    }}
-                >
-                    <Box component="span" sx={{ display: 'flex', color: '#64748b' }}>
-                        {GROUP_ICONS[group.key]}
-                    </Box>
-                    <Typography component="span" sx={{ fontSize: '0.78rem', fontWeight: 600, color: '#64748b' }}>
-                        {group.label}
-                    </Typography>
-                    <ChevronRightRoundedIcon sx={{ fontSize: 16, color: '#cbd5e1' }} />
-                    <Box component="span" sx={{ display: 'flex', color: '#2563eb' }}>
-                        {MODULE_ICONS[module]}
-                    </Box>
-                    <Typography component="span" sx={{ fontSize: '0.84rem', fontWeight: 700, color: '#0f172a' }}>
-                        {moduleNavLabel(module)}
-                    </Typography>
-                    {configs && (
-                        <Typography component="span" sx={{ fontSize: '0.74rem', color: '#64748b', ml: 0.5 }}>
-                            {dropdownCount} Dropdown{dropdownCount === 1 ? '' : 's'} • {fieldCounts[module]} Field{fieldCounts[module] === 1 ? '' : 's'}
+            {/* ── Active form context + view switcher (only once a form is picked) ── */}
+            {module && group && (
+                <Box sx={{ mb: 2, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1.5, flexWrap: 'wrap' }}>
+                    <Box
+                        aria-live="polite"
+                        sx={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: 0.75,
+                            px: 1.25,
+                            py: 0.6,
+                            borderRadius: '8px',
+                            border: '1px solid #e2e8f0',
+                            backgroundColor: '#ffffff',
+                            minWidth: 0,
+                            flexWrap: 'wrap',
+                        }}
+                    >
+                        <Box component="span" sx={{ display: 'flex', color: '#64748b' }}>
+                            {GROUP_ICONS[group.key]}
+                        </Box>
+                        <Typography component="span" sx={{ fontSize: '0.78rem', fontWeight: 600, color: '#64748b' }}>
+                            {group.label}
                         </Typography>
-                    )}
-                    {unsavedModules.has(module) && (
-                        <Box component="span" title="Unsaved changes on this form" sx={{ width: 7, height: 7, borderRadius: '50%', backgroundColor: '#f59e0b', boxShadow: '0 0 0 2px #fef3c7', ml: 0.25 }} />
-                    )}
+                        <ChevronRightRoundedIcon sx={{ fontSize: 16, color: '#cbd5e1' }} />
+                        <Box component="span" sx={{ display: 'flex', color: '#2563eb' }}>
+                            {MODULE_ICONS[module]}
+                        </Box>
+                        <Typography component="span" sx={{ fontSize: '0.84rem', fontWeight: 700, color: '#0f172a' }}>
+                            {moduleNavLabel(module)}
+                        </Typography>
+                        {configs && (
+                            <Typography component="span" sx={{ fontSize: '0.74rem', color: '#64748b', ml: 0.5 }}>
+                                {dropdownCount} Dropdown{dropdownCount === 1 ? '' : 's'} • {fieldCounts[module]} Field{fieldCounts[module] === 1 ? '' : 's'}
+                            </Typography>
+                        )}
+                        {unsavedModules.has(module) && (
+                            <Box component="span" title="Unsaved changes on this form" sx={{ width: 7, height: 7, borderRadius: '50%', backgroundColor: '#f59e0b', boxShadow: '0 0 0 2px #fef3c7', ml: 0.25 }} />
+                        )}
+                    </Box>
+                    <PillTabs items={viewItems} value={view} onChange={setView} />
                 </Box>
-                <PillTabs items={viewItems} value={view} onChange={setView} />
-            </Box>
+            )}
 
             {isLoading && (
                 <Box sx={{ ...surfaceSx, py: 8, display: 'flex', justifyContent: 'center' }}>
@@ -248,7 +252,17 @@ export function FormCustomizationView() {
                 </Alert>
             )}
 
-            {configs && (
+            {!module && !isLoading && !error && (
+                <Box sx={surfaceSx}>
+                    <EmptyState
+                        icon={<ViewQuiltOutlinedIcon sx={{ fontSize: 36 }} />}
+                        title="Select a CRM form above to customize"
+                        description="Choose any module from Sales, Support, Inventory, or All above to manage its dropdown options, sections, built-in fields, and custom fields."
+                    />
+                </Box>
+            )}
+
+            {configs && module && (
                 <FormConfigsOverrideContext.Provider value={configs}>
                     <ConfigDraftActionsContext.Provider value={actions}>
                         <ConfigDraftChangesContext.Provider value={changed}>
@@ -284,24 +298,29 @@ export function FormCustomizationView() {
                 hideBackdrop={true}
                 showBookmark={true}
                 title="Form Customization"
-                subtitle={`${moduleNavLabel(module)} • Admin Audit Trail`}
+                subtitle={`${module ? moduleNavLabel(module) : 'All Modules'} • Admin Audit Trail`}
                 avatarIcon={<TuneOutlinedIcon sx={{ fontSize: 22 }} />}
                 verified={true}
                 badges={[
                     { label: user?.role || 'Admin', backgroundColor: '#eff6ff', color: '#1d4ed8', borderColor: '#bfdbfe' },
-                    { label: moduleNavLabel(module), backgroundColor: '#f1f5f9', color: '#475569', borderColor: '#e2e8f0' },
+                    ...(module ? [{ label: moduleNavLabel(module), backgroundColor: '#f1f5f9', color: '#475569', borderColor: '#e2e8f0' }] : []),
                 ]}
                 statusText={dirty ? `${ops.length} unsaved change${ops.length === 1 ? '' : 's'} in draft` : 'All form configurations synced'}
-                tabs={[
-                    {
-                        id: 'all-modules',
-                        label: 'All Modules',
-                        icon: <PublicOutlinedIcon sx={{ fontSize: 16 }} />,
-                        content: <AuditTrailTimeline entityType="form-configs" entityId="all" />,
-                    },
-                ]}
+                // Until a form is picked, the Changes tab alone shows the audit trail across all modules.
+                tabs={
+                    module
+                        ? [
+                              {
+                                  id: 'all-modules',
+                                  label: 'All Modules',
+                                  icon: <PublicOutlinedIcon sx={{ fontSize: 16 }} />,
+                                  content: <AuditTrailTimeline entityType="form-configs" entityId="all" />,
+                              },
+                          ]
+                        : []
+                }
                 includeChangesTab={true}
-                auditEntity={{ type: 'form-configs', id: module }}
+                auditEntity={{ type: 'form-configs', id: module ?? 'all' }}
                 defaultTabIndex={1}
             />
 

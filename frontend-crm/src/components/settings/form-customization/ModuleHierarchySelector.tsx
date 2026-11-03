@@ -43,7 +43,7 @@ const ORDER: CrmModuleKey[] = CRM_MODULE_GROUPS.flatMap((g) => g.modules.map((m)
  * The forms grouped like the top navbar (Sales, Support, Inventory, All). Each form shows its icon, its number
  * of active fields and an amber dot while it has unsaved changes.
  *
- * Keyboard: one tab stop (the selected form); arrow keys / Home / End move between forms, Enter or Space opens one.
+ * Keyboard: one tab stop (the selected form, or the first form while none is selected); arrow keys / Home / End move between forms, Enter or Space opens one.
  */
 export function ModuleHierarchySelector({
     value,
@@ -51,7 +51,8 @@ export function ModuleHierarchySelector({
     fieldCounts,
     unsaved,
 }: {
-    value: CrmModuleKey;
+    /** The open form, or null while none has been picked yet. */
+    value: CrmModuleKey | null;
     onChange: (module: CrmModuleKey) => void;
     /** Active fields per form. */
     fieldCounts: Partial<Record<CrmModuleKey, number>>;
@@ -146,7 +147,8 @@ export function ModuleHierarchySelector({
                                         role="tab"
                                         aria-selected={active}
                                         aria-label={`${m.label}${count !== undefined ? `, ${count} active fields` : ''}${hasUnsaved ? ', unsaved changes' : ''}`}
-                                        tabIndex={active ? 0 : -1}
+                                        // With nothing selected yet, the first form keeps the tablist reachable by keyboard.
+                                        tabIndex={active || (value === null && m.key === ORDER[0]) ? 0 : -1}
                                         onClick={() => onChange(m.key)}
                                         onKeyDown={onKeyDown(m.key)}
                                         sx={{
