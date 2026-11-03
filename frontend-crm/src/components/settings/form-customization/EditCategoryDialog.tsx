@@ -87,7 +87,8 @@ export function EditCategoryDialog({
     const forcedShared = effective.length > 1;
     const scopeValue = forcedShared ? 'shared' : scope;
     const onlyModule = effective.length === 1 ? effective[0] : homeModule;
-    const nextModule: DropdownCategoryDto['module'] = category.isSystem ? category.module : scopeValue === 'shared' ? 'shared' : onlyModule;
+    // Built-in dropdowns change scope just like custom ones (e.g. made Global to place them on other forms).
+    const nextModule: DropdownCategoryDto['module'] = scopeValue === 'shared' ? 'shared' : onlyModule;
     const removedModules = [...linkedByModule.keys()].filter((m) => !kept.has(m));
     const removesAll = !category.isSystem && linked.length > 0 && effective.length === 0;
 
@@ -152,20 +153,19 @@ export function EditCategoryDialog({
                 <Box>
                     {smallLabel('Scope')}
                     <Tooltip
-                        title={category.isSystem ? 'Built-in dropdowns keep their scope' : forcedShared ? 'Used on more than one form, so it is shared' : ''}
+                        title={forcedShared ? 'Used on more than one form, so it is shared' : ''}
                         arrow
                         placement="top-start"
                     >
                         <RadioGroup row value={scopeValue} onChange={(e) => setScope(e.target.value as 'module' | 'shared')}>
                             <FormControlLabel
                                 value="module"
-                                disabled={category.isSystem || forcedShared}
+                                disabled={forcedShared}
                                 control={<Radio size="small" />}
                                 label={<Typography sx={{ fontSize: '0.84rem' }}>{CRM_MODULE_LABELS[onlyModule]} only</Typography>}
                             />
                             <FormControlLabel
                                 value="shared"
-                                disabled={category.isSystem}
                                 control={<Radio size="small" />}
                                 label={<Typography sx={{ fontSize: '0.84rem' }}>Shared across modules (Global)</Typography>}
                             />

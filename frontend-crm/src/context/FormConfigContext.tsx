@@ -26,15 +26,74 @@ interface FormConfigContextValue {
     sectionClaims: Record<string, string[]>;
     /** Registers a grid as showing a section; returns the release function. */
     claimSection: (sectionId: string, gridId: string) => () => void;
+    /** Elements of built-in fields an admin moved to another section, handed from their home grid to the new one. */
+    movedFields: MovedFieldStore;
 }
 
 /** `tabKey::sectionKey` of a field's section. */
 export const sectionIdOf = (field: Pick<FormFieldDefinitionDto, 'tabKey' | 'sectionKey'>) => `${field.tabKey}::${field.sectionKey}`;
 
+/** Section the hand-built form renders a field in: a built-in field's default section, else its configured one. */
+export const homeSectionIdOf = (field: Pick<FormFieldDefinitionDto, 'tabKey' | 'sectionKey' | 'defaultSectionKey'>) =>
+    `${field.tabKey}::${field.defaultSectionKey ?? field.sectionKey}`;
+
+/** Claim id of a DynamicModuleCustomFields block: it renders a tab's sections that no grid shows. */
+export const dynamicHostIdOf = (tabKey: string) => `dyn::${tabKey}`;
+
+/** A built-in field the admin dragged out of the section the form's JSX places it in. */
+export const isMovedBuiltIn = (field: FormFieldDefinitionDto) =>
+    field.isSystem && Boolean(field.defaultSectionKey) && field.defaultSectionKey !== field.sectionKey;
+
+/** Whether something on the mounted form can show a field's (new) section: its grid, or the tab's custom-field block. */
+export const hasHostFor = (claims: Record<string, string[]>, field: FormFieldDefinitionDto) =>
+    Boolean(claims[sectionIdOf(field)]?.length || claims[dynamicHostIdOf(field.tabKey)]?.length);
+
+/**
+ * Hand-off of moved built-in fields between grids. The grid whose JSX holds the field publishes the element (each
+ * render, after commit); the grid (or custom-field block) showing the field's new section renders it there. It is
+ * a tiny external store so publishing never re-renders the form itself, only the receivers (and only on change).
+ */
+export interface MovedFieldStore {
+    publish(fieldKey: string, node: React.ReactNode): void;
+    unpublish(fieldKey: string, node: React.ReactNode): void;
+    get(fieldKey: string): React.ReactNode | undefined;
+    subscribe(listener: () => void): () => void;
+    getVersion(): number;
+}
+
+function createMovedFieldStore(): MovedFieldStore {
+    const nodes = new Map<string, React.ReactNode>();
+    const listeners = new Set<() => void>();
+    let version = 0;
+    const emit = () => {
+        version++;
+        listeners.forEach((l) => l());
+    };
+    return {
+        publish(fieldKey, node) {
+            if (nodes.get(fieldKey) === node) return;
+            nodes.set(fieldKey, node);
+            emit();
+        },
+        unpublish(fieldKey, node) {
+            if (nodes.get(fieldKey) !== node) return;
+            nodes.delete(fieldKey);
+            emit();
+        },
+        get: (fieldKey) => nodes.get(fieldKey),
+        subscribe(listener) {
+            listeners.add(listener);
+            return () => listeners.delete(listener);
+        },
+        getVersion: () => version,
+    };
+}
+
 const FormConfigContext = createContext<FormConfigContextValue | null>(null);
 
 export function FormConfigProvider({ module, children }: { module: CrmModuleKey; children: React.ReactNode }) {
     const configs = useFormConfigs();
+    const [movedFields] = useState(createMovedFieldStore);
     const [sectionClaims, setSectionClaims] = useState<Record<string, string[]>>({});
     const claimSection = useCallback((sectionId: string, gridId: string) => {
         setSectionClaims((c) => (c[sectionId]?.includes(gridId) ? c : { ...c, [sectionId]: [...(c[sectionId] ?? []), gridId] }));
@@ -51,8 +110,9 @@ export function FormConfigProvider({ module, children }: { module: CrmModuleKey;
             customFields: all.filter((f) => !f.isSystem),
             sectionClaims,
             claimSection,
+            movedFields,
         };
-    }, [configs, module, sectionClaims, claimSection]);
+    }, [configs, module, sectionClaims, claimSection, movedFields]);
     return <FormConfigContext.Provider value={value}>{children}</FormConfigContext.Provider>;
 }
 

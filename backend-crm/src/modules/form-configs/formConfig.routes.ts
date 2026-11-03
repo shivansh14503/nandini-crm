@@ -26,7 +26,7 @@ export const FORM_CONFIG_ADMIN_ROLES = ['Admin', 'Administrator', 'Super Admin']
  *   PATCH  /options/:optionId                         { value?, label?, meta?, isActive? }  (system options: no rename / archive)
  *   DELETE /options/:optionId                         permanent delete; blocked for system options (archive = PATCH isActive:false)
  *   POST   /fields                                    custom field (key auto-prefixed cf_)
- *   PATCH  /fields/:fieldId                           (core-locked: can't hide / un-require; built-in: fixed tab & section)
+ *   PATCH  /fields/:fieldId                           (core-locked: can't hide / un-require; built-in: fixed tab, any section of it)
  *   DELETE /fields/:fieldId                           permanent delete of a custom field; blocked for built-in fields
  *   PUT    /modules/:module/fields/reorder            { fieldIds }
  *   PATCH  /modules/:module/sections/:sectionKey      { sectionLabel }

@@ -795,6 +795,8 @@ model FormFieldDefinition {
   label               String   @db.NVarChar(120)
   fieldType           String   @db.NVarChar(30)
   tabKey              String   @db.NVarChar(40)
+  /// Display name of an admin-created (custom) tab; null on the built-in tabs (their names come from MODULE_TABS).
+  tabLabel            String?  @db.NVarChar(120)
   sectionKey          String   @db.NVarChar(80)
   sectionLabel        String   @db.NVarChar(120)
   sortOrder           Int      @default(0)

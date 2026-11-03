@@ -90,7 +90,11 @@ export const reorderOptionsSchema = z.object({
 // ── Form fields ──────────────────────────────────────────────────────────────
 
 const fieldSize = z.enum(FIELD_SIZES).nullable().optional();
-const tabKey = z.string().trim().max(40).regex(KEY_PATTERN, { message: KEY_MESSAGE });
+/** Built-in tab keys and admin-created tab slugs (e.g. `compliance_legal`). */
+export const TAB_KEY_PATTERN = /^[a-z][a-z0-9_]{1,39}$/;
+const tabKey = z.string().trim().max(40).regex(TAB_KEY_PATTERN, { message: KEY_MESSAGE });
+/** Display name of a custom tab (ignored on built-in tabs, whose names are fixed). */
+const tabLabel = optionalTrimmed(120);
 
 export const createFieldSchema = z
     .object({
@@ -98,6 +102,7 @@ export const createFieldSchema = z
         label: label('Label', 120),
         fieldType: z.enum(CUSTOM_FIELD_TYPES, { error: `fieldType must be one of: ${CUSTOM_FIELD_TYPES.join(', ')}.` }),
         tabKey,
+        tabLabel,
         /** Existing section to join; omitted → derived from `sectionLabel` (a new section). */
         sectionKey: z.string().trim().max(80).optional(),
         sectionLabel: label('Section', 120),
@@ -133,9 +138,10 @@ export const updateFieldSchema = z
         label: label('Label', 120).optional(),
         /** Custom select / multi-select fields only: switches between the two. */
         fieldType: z.enum(['select', 'multiselect']).optional(),
-        /** Custom fields only. */
+        /** Custom fields only (built-in fields stay on their tab). */
         tabKey: tabKey.optional(),
-        /** Custom fields only. */
+        tabLabel,
+        /** Any field: built-in fields may move between the sections of their tab. */
         sectionKey: z.string().trim().min(1).max(80).optional(),
         sectionLabel: label('Section', 120).optional(),
         fieldSize,

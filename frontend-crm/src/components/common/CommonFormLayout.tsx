@@ -1,12 +1,17 @@
 'use client';
 
-import React from 'react';
+import React, { useMemo, useState } from 'react';
 import { Box, Paper, Typography, type SxProps, type Theme } from '@mui/material';
 import { type BreadcrumbItem } from './AppBreadcrumbs';
 import { FormHeader } from '../forms/FormHeader';
 import { CommonRecordDetailView, type CommonRecordDetailViewProps } from './CommonRecordDetailView';
 import { FormModeProvider } from '@/context/FormModeContext';
 import { FormStickyFooter } from '../forms/FormStickyFooter';
+import { DynamicModuleCustomFields } from '../forms/DynamicModuleCustomFields';
+import { useFormConfigContext } from '@/context/FormConfigContext';
+
+/** Tab id used when a form without tabs gets admin-created tabs: it stands for the form's own fields. */
+const FORM_FIELDS_TAB_ID = '__form_fields__';
 
 export interface FormTabItem {
     id: string;
@@ -144,19 +149,67 @@ export function CommonFormLayout({
     saveDisabled,
     saveDisabledTooltip,
 }: CommonFormLayoutProps) {
+    // ── Admin-created (custom) tabs ──
+    // Inside a FormConfigProvider, custom tabs of the module that hold visible fields are added after the form's
+    // own tabs. Selecting one shows its fields (DynamicModuleCustomFields); the form's own panels stay mounted but
+    // hidden, so their local state survives. Works for every form, whether or not it passes onTabChange.
+    const configCtx = useFormConfigContext();
+    /** Selected custom tab, remembered with the form's own tab at that moment. */
+    const [customSelection, setCustomSelection] = useState<{ key: string; basis: string | undefined } | null>(null);
+    const customTabs = useMemo(() => {
+        if (!configCtx?.configs) return [];
+        const own = new Set((tabs ?? []).map((t) => t.id));
+        return (configCtx.configs.moduleTabs[configCtx.module] ?? []).filter(
+            (t) => t.isCustom && !own.has(t.key) && configCtx.customFields.some((f) => f.tabKey === t.key && f.isActive && f.isVisibleInForm),
+        );
+    }, [configCtx, tabs]);
+    // The form switching tabs itself (e.g. to show a validation error) leaves the custom tab.
+    const activeCustom =
+        customSelection && customSelection.basis === activeTab && customTabs.some((t) => t.key === customSelection.key) ? customSelection.key : null;
+
+    const ownTabs: FormTabItem[] =
+        tabs && tabs.length > 0
+            ? tabs
+            : customTabs.length > 0
+              ? [{ id: FORM_FIELDS_TAB_ID, label: configCtx?.configs?.moduleTabs[configCtx.module]?.[0]?.label ?? 'Details' }]
+              : [];
+    const effectiveTabs: FormTabItem[] = [...ownTabs, ...customTabs.map((t) => ({ id: t.key, label: t.label }))];
+    const effectiveActiveTab = activeCustom ?? activeTab ?? (tabs && tabs.length > 0 ? undefined : ownTabs[0]?.id);
+    const tabsClickable = Boolean(onTabChange) || customTabs.length > 0;
+    const handleTabChange = (tabId: string) => {
+        if (customTabs.some((t) => t.key === tabId)) {
+            setCustomSelection({ key: tabId, basis: activeTab });
+            return;
+        }
+        setCustomSelection(null);
+        if (tabId !== FORM_FIELDS_TAB_ID) onTabChange?.(tabId);
+    };
+    /** The form's own panels, hidden (not unmounted) while a custom tab is shown, followed by that tab's fields. */
+    const content = (padded: boolean) =>
+        customTabs.length === 0 ? (
+            children
+        ) : (
+            <>
+                <div style={{ display: activeCustom ? 'none' : 'contents' }}>{children}</div>
+                {activeCustom && configCtx && (
+                    <DynamicModuleCustomFields key={activeCustom} module={configCtx.module} tabKey={activeCustom} sx={padded ? { px: 0, pb: 0 } : { pt: 3.5 }} />
+                )}
+            </>
+        );
+
     if (mode === 'view' && recordView) {
         return (
             <CommonRecordDetailView
                 {...recordView}
                 breadcrumbItems={breadcrumbItems}
-                tabs={tabs}
-                activeTab={activeTab}
-                onTabChange={onTabChange}
+                tabs={effectiveTabs.length > 0 ? effectiveTabs : tabs}
+                activeTab={effectiveActiveTab}
+                onTabChange={tabsClickable ? handleTabChange : undefined}
                 banner={banner}
                 toast={toast}
                 padContent={!disableContentPadding}
             >
-                {children}
+                {content(!disableContentPadding)}
             </CommonRecordDetailView>
         );
     }
@@ -185,7 +238,7 @@ export function CommonFormLayout({
                 }}
             >
                 {/* ── Horizontal Navigation Tabs Bar ── */}
-                {tabs && tabs.length > 0 && (
+                {effectiveTabs.length > 0 && (
                     <Box
                         sx={{
                             backgroundColor: '#f8fafc',
@@ -198,13 +251,13 @@ export function CommonFormLayout({
                             overflowX: 'auto',
                         }}
                     >
-                        {tabs.map((tab) => {
-                            const isActive = activeTab === tab.id;
+                        {effectiveTabs.map((tab) => {
+                            const isActive = effectiveActiveTab === tab.id;
 
                             return (
                                 <Box
                                     key={tab.id}
-                                    onClick={() => onTabChange?.(tab.id)}
+                                    onClick={() => handleTabChange(tab.id)}
                                     sx={{
                                         display: 'flex',
                                         alignItems: 'center',
@@ -212,7 +265,7 @@ export function CommonFormLayout({
                                         px: 2,
                                         py: 0.9,
                                         borderRadius: '8px',
-                                        cursor: onTabChange ? 'pointer' : 'default',
+                                        cursor: tabsClickable ? 'pointer' : 'default',
                                         userSelect: 'none',
                                         whiteSpace: 'nowrap',
                                         transition: 'all 0.15s ease-in-out',
@@ -309,7 +362,7 @@ export function CommonFormLayout({
                         inert={mode === 'view'}
                         style={{ border: 'none', padding: 0, margin: 0, minWidth: 0 }}
                     >
-                        {children}
+                        {content(!disableContentPadding)}
                     </fieldset>
                     </FormModeProvider>
                 </Box>

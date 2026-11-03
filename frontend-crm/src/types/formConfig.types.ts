@@ -140,8 +140,12 @@ export interface FormFieldDefinitionDto {
     label: string;
     fieldType: FieldType;
     tabKey: string;
+    /** Name of an admin-created tab (null on built-in tabs). */
+    tabLabel?: string | null;
     sectionKey: string;
     sectionLabel: string;
+    /** Built-in fields: the section the hand-built form renders them in (null for custom fields). */
+    defaultSectionKey?: string | null;
     sortOrder: number;
     fieldSize: ConfigFieldSize | null;
     /** null → the form's built-in text. */
@@ -165,6 +169,8 @@ export interface FormFieldDefinitionDto {
 export interface ModuleTabDefinition {
     key: string;
     label: string;
+    /** Admin-created tab (stored through the fields placed on it), shown after the form's built-in tabs. */
+    isCustom?: boolean;
 }
 
 export interface FormConfigsPayload {
@@ -229,6 +235,8 @@ export interface CreateFieldPayload {
     label: string;
     fieldType: CustomFieldType;
     tabKey: string;
+    /** Name of the tab when it is an admin-created one (ignored on built-in tabs). */
+    tabLabel?: string;
     sectionKey?: string;
     sectionLabel: string;
     fieldSize?: ConfigFieldSize | null;
@@ -246,7 +254,9 @@ export interface UpdateFieldPayload {
     label?: string;
     /** Custom select / multi-select fields only: switches between the two. */
     fieldType?: 'select' | 'multiselect';
+    /** Custom fields only. */
     tabKey?: string;
+    tabLabel?: string;
     sectionKey?: string;
     sectionLabel?: string;
     fieldSize?: ConfigFieldSize | null;
@@ -258,6 +268,14 @@ export interface UpdateFieldPayload {
     isVisibleInDrawer?: boolean;
     isActive?: boolean;
     dropdownCategoryKey?: string | null;
+}
+
+/** `Compliance & Legal` → `compliance_legal`: key of an admin-created tab (the API accepts ^[a-z][a-z0-9_]{1,39}$). */
+export function tabKeyFromLabel(label: string): string {
+    const slug = sectionKeyFromLabel(label).slice(0, 36).replace(/_+$/, '');
+    if (!slug) return 'custom_tab';
+    const key = /^[a-z]/.test(slug) ? slug : `tab_${slug}`;
+    return key.length < 2 ? `${key}_tab` : key;
 }
 
 /** `PIPELINE & FOLLOW-UP` → `pipeline_follow_up` (same rule as the backend). */

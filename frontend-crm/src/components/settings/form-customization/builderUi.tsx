@@ -55,6 +55,9 @@ export interface PillTabItem<K extends string> {
     label: string;
     icon?: React.ReactNode;
     count?: number;
+    /** Shows the orange "unsaved" signal dot (same as on the module pills). */
+    hasUnsaved?: boolean;
+    unsavedTooltip?: string;
 }
 
 /** Horizontal pill tabs, matching CommonFormLayout's tab bar. */
@@ -126,6 +129,22 @@ export function PillTabs<K extends string>({
                             >
                                 {item.count}
                             </Box>
+                        )}
+                        {item.hasUnsaved && (
+                            <Tooltip title={item.unsavedTooltip ?? 'Has unsaved changes on this tab'} arrow>
+                                <Box
+                                    component="span"
+                                    aria-label={item.unsavedTooltip ?? 'Has unsaved changes on this tab'}
+                                    sx={{
+                                        width: 7,
+                                        height: 7,
+                                        borderRadius: '50%',
+                                        backgroundColor: '#f59e0b',
+                                        boxShadow: '0 0 0 2px #fef3c7',
+                                        flexShrink: 0,
+                                    }}
+                                />
+                            </Tooltip>
                         )}
                     </Box>
                 );
@@ -283,12 +302,13 @@ export function LabeledSwitch({
     );
 }
 
-export function EmptyState({ title, description, icon }: { title: string; description?: string; icon?: React.ReactNode }) {
+export function EmptyState({ title, description, icon, action }: { title: string; description?: string; icon?: React.ReactNode; action?: React.ReactNode }) {
     return (
         <Box sx={{ py: 6, px: 3, textAlign: 'center', color: '#64748b' }}>
             {icon && <Box sx={{ color: '#94a3b8', mb: 1, display: 'flex', justifyContent: 'center' }}>{icon}</Box>}
             <Typography sx={{ fontWeight: 700, color: '#1e293b', fontSize: '0.9rem' }}>{title}</Typography>
-            {description && <Typography sx={{ fontSize: '0.8rem', mt: 0.5 }}>{description}</Typography>}
+            {description && <Typography sx={{ fontSize: '0.8rem', mt: 0.5, maxWidth: 560, mx: 'auto' }}>{description}</Typography>}
+            {action && <Box sx={{ mt: 2, display: 'flex', justifyContent: 'center' }}>{action}</Box>}
         </Box>
     );
 }

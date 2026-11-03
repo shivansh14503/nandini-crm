@@ -39,6 +39,11 @@ export type DraftOp =
     | { kind: 'updateField'; fieldId: string; payload: UpdateFieldPayload; summary: string }
     | { kind: 'reorderFields'; module: CrmModuleKey; fieldIds: string[]; summary: string }
     | { kind: 'renameSection'; module: CrmModuleKey; sectionKey: string; sectionLabel: string; summary: string }
+    /**
+     * A new (admin-created) tab. It has no API call of its own: a custom tab is stored through the fields placed on
+     * it (their `tabKey` + `tabLabel`), so a tab still empty when the changes are saved is not kept.
+     */
+    | { kind: 'createTab'; module: CrmModuleKey; tabKey: string; label: string; summary: string }
     | { kind: 'resetModule'; module: CrmModuleKey; defaults: ModuleFieldDefault[]; summary: string }
     | { kind: 'updateCategory'; categoryKey: string; payload: UpdateCategoryPayload; summary: string }
     | { kind: 'deleteCategory'; categoryKey: string; summary: string }
@@ -113,6 +118,18 @@ function placeField(s: FormConfigsPayload, module: CrmModuleKey, fieldId: string
     if (insertAt < 0) insertAt = lastIndex((f) => f.tabKey === moving.tabKey);
     renumber(insertAt < 0 ? [...rest, moving] : [...rest.slice(0, insertAt + 1), moving, ...rest.slice(insertAt + 1)]);
 }
+
+/** Adds a tab to the module's tab list if missing (custom tabs appear once something is placed on them). */
+function ensureTab(s: FormConfigsPayload, module: CrmModuleKey, tabKey: string, label: string | null | undefined): void {
+    const tabs = (s.moduleTabs[module] ??= []);
+    if (!tabs.some((t) => t.key === tabKey)) tabs.push({ key: tabKey, label: label || tabKey, isCustom: true });
+}
+
+/** Name of a custom tab in the draft (stored on the fields placed on it); undefined for built-in tabs. */
+export const tabLabelOf = (s: FormConfigsPayload, module: CrmModuleKey, tabKey: string) => {
+    const tab = s.moduleTabs[module]?.find((t) => t.key === tabKey);
+    return tab?.isCustom ? tab.label : undefined;
+};
 
 function setCategoryLink(s: FormConfigsPayload, field: FormFieldDefinitionDto, key: string | null): void {
     field.dropdownCategoryKey = key;
@@ -209,8 +226,10 @@ function applyOp(s: FormConfigsPayload, op: DraftOp): void {
                 label: p.label,
                 fieldType: p.fieldType,
                 tabKey: p.tabKey,
+                tabLabel: p.tabLabel ?? null,
                 sectionKey,
                 sectionLabel: existingSection?.sectionLabel ?? p.sectionLabel,
+                defaultSectionKey: null,
                 sortOrder: 2_000_000_000,
                 fieldSize: p.fieldSize ?? null,
                 placeholder: p.placeholder ?? null,
@@ -227,6 +246,7 @@ function applyOp(s: FormConfigsPayload, op: DraftOp): void {
                 validationRules: null,
             };
             setCategoryLink(s, field, p.dropdownCategoryKey ?? op.categoryKey ?? null);
+            ensureTab(s, p.module, p.tabKey, p.tabLabel);
             fields.push(field);
             placeField(s, p.module, field.id);
             return;
@@ -239,6 +259,8 @@ function applyOp(s: FormConfigsPayload, op: DraftOp): void {
             if (p.label !== undefined) field.label = p.label;
             if (p.fieldType !== undefined) field.fieldType = p.fieldType;
             if (p.tabKey !== undefined) field.tabKey = p.tabKey;
+            if (p.tabLabel !== undefined) field.tabLabel = p.tabLabel;
+            if (field.tabKey !== before.tabKey) ensureTab(s, field.module, field.tabKey, p.tabLabel);
             if (p.sectionKey !== undefined) field.sectionKey = p.sectionKey;
             if (p.sectionLabel !== undefined) field.sectionLabel = p.sectionLabel;
             if (p.fieldSize !== undefined) field.fieldSize = p.fieldSize;
@@ -265,6 +287,10 @@ function applyOp(s: FormConfigsPayload, op: DraftOp): void {
         }
         case 'renameSection': {
             for (const field of s.fieldsByModule[op.module] ?? []) if (field.sectionKey === op.sectionKey) field.sectionLabel = op.sectionLabel;
+            return;
+        }
+        case 'createTab': {
+            ensureTab(s, op.module, op.tabKey, op.label);
             return;
         }
         case 'resetModule': {
@@ -415,11 +441,106 @@ export function modulesTouchedBy(ops: DraftOp[], base: FormConfigsPayload, draft
             case 'reorderFields':
             case 'renameSection':
             case 'resetModule':
+            case 'createTab':
                 touched.add(op.module);
                 break;
         }
     }
     return touched;
+}
+
+/**
+ * Tabs of `module` with unsaved changes: fields created, edited, moved (in or out), deleted or reordered on them,
+ * sections renamed on them, and tabs created in this draft. A reset counts for every tab whose fields it changes.
+ */
+export function tabsTouchedBy(ops: DraftOp[], base: FormConfigsPayload | undefined, draft: FormConfigsPayload | undefined, module: CrmModuleKey): Set<string> {
+    const tabs = new Set<string>();
+    const savedField = (id: string) => (base ? findFieldById(base, id) : undefined);
+    const draftField = (id: string) => (draft ? findFieldById(draft, id) : undefined);
+    /** Tabs whose fields differ in order, membership or settings between the saved and draft configuration. */
+    const changedTabs = () => {
+        const before = base?.fieldsByModule[module] ?? [];
+        const after = draft?.fieldsByModule[module] ?? [];
+        const keys = new Set([...before, ...after].map((f) => f.tabKey));
+        for (const tabKey of keys) {
+            const sig = (fields: FormFieldDefinitionDto[]) =>
+                byOrder(fields.filter((f) => f.tabKey === tabKey))
+                    .map((f) => `${f.id}|${f.sectionKey}|${f.label}|${f.isRequired}|${f.isVisibleInForm}|${f.fieldSize}`)
+                    .join('\n');
+            if (sig(before) !== sig(after)) tabs.add(tabKey);
+        }
+    };
+    for (const op of ops) {
+        switch (op.kind) {
+            case 'createField':
+                if (op.payload.module === module) tabs.add(op.payload.tabKey || 'overview');
+                break;
+            case 'updateField':
+            case 'deleteField': {
+                for (const f of [savedField(op.fieldId), draftField(op.fieldId)]) if (f?.module === module) tabs.add(f.tabKey);
+                break;
+            }
+            case 'reorderFields':
+            case 'resetModule':
+                if (op.module === module) changedTabs();
+                break;
+            case 'renameSection':
+                if (op.module !== module) break;
+                for (const f of draft?.fieldsByModule[module] ?? []) if (f.sectionKey === op.sectionKey) tabs.add(f.tabKey);
+                break;
+            case 'createTab':
+                if (op.module === module) tabs.add(op.tabKey);
+                break;
+            case 'deleteCategory': {
+                // Custom fields using the dropdown go with it; built-in ones are hidden.
+                for (const f of base?.fieldsByModule[module] ?? []) if (f.dropdownCategoryKey === op.categoryKey) tabs.add(f.tabKey);
+                break;
+            }
+            default:
+                break;
+        }
+    }
+    return tabs;
+}
+
+/** Which builder views of `module` have unsaved changes: its dropdowns, and its fields / sections / tabs. */
+export function viewsTouchedForModule(
+    ops: DraftOp[],
+    base: FormConfigsPayload | undefined,
+    draft: FormConfigsPayload | undefined,
+    module: CrmModuleKey,
+): { dropdowns: boolean; fields: boolean } {
+    /** A dropdown counts for this module if it is scoped to it, shared, or used by one of its fields. */
+    const concernsModule = (key: string) =>
+        [draft, base].some((s) => {
+            const category = s ? findCategoryByKey(s, key) : undefined;
+            if (!category) return false;
+            if (category.module === module || category.module === 'shared') return true;
+            return category.usedBy.some((u) => u.module === module) || (s?.fieldsByModule[module] ?? []).some((f) => f.dropdownCategoryKey === key);
+        });
+    const optionCategory = (id: string) => (draft && findOptionById(draft, id)) || (base && findOptionById(base, id)) || undefined;
+    const dropdowns = ops.some((op) => {
+        switch (op.kind) {
+            case 'createCategory':
+                return op.payload.module === module || op.payload.module === 'shared' || concernsModule(op.key);
+            case 'updateCategory':
+            case 'deleteCategory':
+            case 'reorderOptions':
+            case 'addOption':
+                return concernsModule(op.categoryKey);
+            case 'updateOption':
+            case 'deleteOption': {
+                const found = optionCategory(op.optionId);
+                return found ? concernsModule(found.category.key) : false;
+            }
+            case 'createField':
+                // A dropdown created inline with a new field.
+                return Boolean(op.categoryKey) && op.payload.module === module;
+            default:
+                return false;
+        }
+    });
+    return { dropdowns, fields: tabsTouchedBy(ops, base, draft, module).size > 0 };
 }
 
 // ── Ids / keys an op refers to (for dropping ops of rows removed before saving) ──
@@ -554,6 +675,9 @@ export async function replayOps(ops: DraftOp[], api: ConfigWriter): Promise<Repl
                 return;
             case 'renameSection':
                 await api.renameSection(op.module, op.sectionKey, op.sectionLabel);
+                return;
+            case 'createTab':
+                // Stored through the fields placed on it (createField / updateField carry its tabKey + tabLabel).
                 return;
             case 'resetModule':
                 await api.resetModule(op.module);

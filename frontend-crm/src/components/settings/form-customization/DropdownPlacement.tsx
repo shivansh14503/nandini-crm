@@ -23,6 +23,7 @@ import {
     CRM_MODULE_GROUPS,
     CRM_MODULE_LABELS,
     sectionKeyFromLabel,
+    tabKeyFromLabel,
     type CrmModuleKey,
     type DropdownCategoryDto,
     type FormConfigsPayload,
@@ -34,7 +35,9 @@ import { Badge, errorMessage, inputSx, primaryButtonSx, secondaryButtonSx } from
 
 /** Where a dropdown field goes on one module's form. */
 export interface Placement {
+    /** An existing tab key, or NEW_TAB (a tab created with the field, named `newTabLabel`). */
     tabKey: string;
+    newTabLabel?: string;
     /** An existing section key, DEFAULT_SECTION ("Custom Fields", created if missing) or NEW_SECTION. */
     sectionChoice: string;
     newSectionLabel: string;
@@ -47,6 +50,8 @@ const DEFAULT_SECTION_LABEL = 'CUSTOM FIELDS';
 const DEFAULT_SECTION_KEY = sectionKeyFromLabel(DEFAULT_SECTION_LABEL);
 const DEFAULT_SECTION = '__custom__';
 const NEW_SECTION = '__new__';
+/** Tab choice that creates a new (custom) tab for the field. */
+export const NEW_TAB = '__new_tab__';
 
 const sectionsOf = (configs: FormConfigsPayload, module: CrmModuleKey, tabKey: string) => groupSections(moduleFields(configs, module), tabKey);
 
@@ -54,24 +59,39 @@ const sectionsOf = (configs: FormConfigsPayload, module: CrmModuleKey, tabKey: s
 export function defaultPlacement(configs: FormConfigsPayload, module: CrmModuleKey, tabKey?: string): Placement {
     const tab = tabKey ?? configs.moduleTabs[module]?.[0]?.key ?? 'overview';
     const hasCustom = sectionsOf(configs, module, tab).some((s) => s.sectionKey === DEFAULT_SECTION_KEY);
-    return { tabKey: tab, sectionChoice: hasCustom ? DEFAULT_SECTION_KEY : DEFAULT_SECTION, newSectionLabel: '' };
+    return { tabKey: tab, newTabLabel: '', sectionChoice: hasCustom ? DEFAULT_SECTION_KEY : DEFAULT_SECTION, newSectionLabel: '' };
 }
 
-/** The tab / section a placement resolves to, or an error message. */
+/** An existing tab of the module with this name (case-insensitive), if any. */
+const tabNamed = (configs: FormConfigsPayload, module: CrmModuleKey, label: string) =>
+    (configs.moduleTabs[module] ?? []).find((t) => t.label.trim().toLowerCase() === label.trim().toLowerCase());
+
+/**
+ * The tab / section a placement resolves to, or an error message. `newTabLabel` is set when the placement
+ * creates a tab (its key is assigned when it is staged).
+ */
 export function resolvePlacement(
     configs: FormConfigsPayload,
     module: CrmModuleKey,
     p: Placement,
-): { tabKey: string; sectionKey: string; sectionLabel: string } | string {
-    if (p.sectionChoice === DEFAULT_SECTION) return { tabKey: p.tabKey, sectionKey: DEFAULT_SECTION_KEY, sectionLabel: DEFAULT_SECTION_LABEL };
+): { tabKey: string; newTabLabel?: string; sectionKey: string; sectionLabel: string } | string {
+    let tab: { tabKey: string; newTabLabel?: string } = { tabKey: p.tabKey };
+    if (p.tabKey === NEW_TAB) {
+        const name = (p.newTabLabel ?? '').trim();
+        if (!name) return `Enter a name for the new tab on the ${CRM_MODULE_LABELS[module]} form.`;
+        // A name that is already a tab of the form places the field there.
+        const existing = tabNamed(configs, module, name);
+        tab = existing ? { tabKey: existing.key } : { tabKey: NEW_TAB, newTabLabel: name };
+    }
+    if (p.sectionChoice === DEFAULT_SECTION) return { ...tab, sectionKey: DEFAULT_SECTION_KEY, sectionLabel: DEFAULT_SECTION_LABEL };
     if (p.sectionChoice === NEW_SECTION) {
         const label = p.newSectionLabel.trim();
         if (!label) return `Enter a name for the new section on the ${CRM_MODULE_LABELS[module]} form.`;
-        return { tabKey: p.tabKey, sectionKey: sectionKeyFromLabel(label) || DEFAULT_SECTION_KEY, sectionLabel: label };
+        return { ...tab, sectionKey: sectionKeyFromLabel(label) || DEFAULT_SECTION_KEY, sectionLabel: label };
     }
-    const section = sectionsOf(configs, module, p.tabKey).find((s) => s.sectionKey === p.sectionChoice);
+    const section = sectionsOf(configs, module, tab.tabKey).find((s) => s.sectionKey === p.sectionChoice);
     if (!section) return `Pick a section on the ${CRM_MODULE_LABELS[module]} form.`;
-    return { tabKey: p.tabKey, sectionKey: section.sectionKey, sectionLabel: section.sectionLabel };
+    return { ...tab, sectionKey: section.sectionKey, sectionLabel: section.sectionLabel };
 }
 
 /**
@@ -90,11 +110,14 @@ export function stageDropdownFields(
         return { module, ...r };
     });
     for (const target of resolved) {
+        // A new tab is staged first; the field then carries its key and name.
+        const tab = target.newTabLabel ? draft.createTab(target.module, target.newTabLabel) : undefined;
         draft.createField({
             module: target.module,
             label: field.label,
             fieldType: field.fieldType,
-            tabKey: target.tabKey,
+            tabKey: tab?.key ?? target.tabKey,
+            ...(tab ? { tabLabel: tab.label } : {}),
             sectionKey: target.sectionKey,
             sectionLabel: target.sectionLabel,
             isRequired: field.isRequired,
@@ -144,7 +167,7 @@ export function PlacementFields({
                     size="small"
                     fullWidth
                     value={value.tabKey}
-                    onChange={(e) => onChange(defaultPlacement(configs, module, e.target.value))}
+                    onChange={(e) => onChange({ ...defaultPlacement(configs, module, e.target.value), newTabLabel: value.newTabLabel ?? '' })}
                     sx={inputSx}
                     slotProps={{ htmlInput: { 'aria-label': `${CRM_MODULE_LABELS[module]} form tab` } }}
                 >
@@ -153,6 +176,9 @@ export function PlacementFields({
                             {t.label}
                         </MenuItem>
                     ))}
+                    <MenuItem value={NEW_TAB} sx={{ fontSize: '0.85rem', color: '#2563eb', fontWeight: 600 }}>
+                        + New tab…
+                    </MenuItem>
                 </TextField>
             </Box>
             <Box>
@@ -181,6 +207,19 @@ export function PlacementFields({
                     </MenuItem>
                 </TextField>
             </Box>
+            {value.tabKey === NEW_TAB && (
+                <TextField
+                    size="small"
+                    fullWidth
+                    autoFocus
+                    placeholder="New tab name, e.g. Compliance & Legal"
+                    value={value.newTabLabel ?? ''}
+                    onChange={(e) => onChange({ ...value, newTabLabel: e.target.value })}
+                    sx={{ ...inputSx, gridColumn: '1 / -1' }}
+                    helperText={value.newTabLabel?.trim() ? `Tab key: ${tabKeyFromLabel(value.newTabLabel)}` : undefined}
+                    slotProps={{ htmlInput: { maxLength: 60, 'aria-label': `New tab on the ${CRM_MODULE_LABELS[module]} form` } }}
+                />
+            )}
             {value.sectionChoice === NEW_SECTION && (
                 <TextField
                     size="small"
@@ -340,6 +379,11 @@ export function PlaceDropdownInFormsDialog({
 
     const save = () => {
         try {
+            // Placed on another module's form → the dropdown (built-in or custom) becomes Global.
+            const crossModule = (Object.keys(targets) as CrmModuleKey[]).some((m) => m !== category.module);
+            if (category.module !== 'shared' && crossModule && !placementError(configs, targets)) {
+                draft.updateCategory(category.key, { module: 'shared' });
+            }
             const added = stageDropdownFields(draft, configs, { label: label.trim(), ...control, categoryKey: category.key }, targets);
             notify(`'${label.trim()}' added to ${added} form${added === 1 ? '' : 's'} — click Save Changes to apply it`, 'info');
             onClose();

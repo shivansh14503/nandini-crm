@@ -1,16 +1,17 @@
 'use client';
 
-import React, { useMemo } from 'react';
+import React, { useId, useLayoutEffect, useMemo } from 'react';
 import { Box, type SxProps, type Theme } from '@mui/material';
 import { useWatch } from 'react-hook-form';
 import { useFormMode } from '@/context/FormModeContext';
-import { sectionIdOf, useFormConfigContext } from '@/context/FormConfigContext';
+import { dynamicHostIdOf, isMovedBuiltIn, sectionIdOf, useFormConfigContext } from '@/context/FormConfigContext';
 import { useModuleFormConfig } from '@/hooks/queries/useFormConfigs';
 import type { CrmModuleKey } from '@/types/formConfig.types';
 import { CUSTOM_FIELDS_KEY, groupSections, isEmptyValue } from '@/utils/formConfig';
 import { DynamicFormField } from './DynamicFormField';
 import { FormGrid } from './FormGrid';
 import { SectionLabel } from './SectionLabel';
+import { MovedFieldSlot, useMovedFields } from './useConfiguredChildren';
 
 export { useConfiguredFieldProps } from '@/hooks/queries/useFormConfigs';
 
@@ -32,7 +33,34 @@ export interface DynamicModuleCustomFieldsProps {
 export function DynamicModuleCustomFields({ module, tabKey, sx }: DynamicModuleCustomFieldsProps) {
     const { customFields } = useModuleFormConfig(module);
     const { mode } = useFormMode();
-    const sectionClaims = useFormConfigContext()?.sectionClaims;
+    const ctx = useFormConfigContext();
+    const sectionClaims = ctx?.sectionClaims;
+    const claimSection = ctx?.claimSection;
+    const store = ctx?.movedFields;
+    const hostId = useId();
+
+    // Hosts the tab's sections that no grid shows, so built-in fields can be moved into them (useConfiguredChildren).
+    useLayoutEffect(() => {
+        if (!claimSection) return;
+        return claimSection(dynamicHostIdOf(tabKey), hostId);
+    }, [claimSection, tabKey, hostId]);
+
+    /** Built-in fields dragged into a section of this tab that no grid shows: their elements come from their home grid. */
+    const movedHere = useMemo(
+        () =>
+            ctx
+                ? [...ctx.systemFields.values()].filter(
+                      (f) => f.tabKey === tabKey && f.isActive && isMovedBuiltIn(f) && !sectionClaims?.[sectionIdOf(f)]?.length,
+                  )
+                : [],
+        [ctx, tabKey, sectionClaims],
+    );
+    useMovedFields(store, movedHere.length > 0);
+    const movedNodes = movedHere.flatMap((f) => {
+        const node = store?.get(f.fieldKey);
+        return node ? [[f.fieldKey, node] as const] : [];
+    });
+    const movedKey = movedNodes.map(([key]) => key).join('|');
     const values = useWatch({ name: CUSTOM_FIELDS_KEY }) as Record<string, unknown> | undefined;
 
     const sections = useMemo(() => {
@@ -43,8 +71,10 @@ export function DynamicModuleCustomFields({ module, tabKey, sx }: DynamicModuleC
             if (field.isActive) return field.isVisibleInForm;
             return mode !== 'create' && !isEmptyValue(values?.[field.fieldKey]);
         });
-        return groupSections(visible);
-    }, [customFields, tabKey, mode, values, sectionClaims]);
+        const moved = movedHere.filter((f) => movedKey.split('|').includes(f.fieldKey));
+        return groupSections([...visible, ...moved]);
+    }, [customFields, tabKey, mode, values, sectionClaims, movedHere, movedKey]);
+    const nodeOf = new Map<string, React.ReactNode>(movedNodes);
 
     if (sections.length === 0) return null;
 
@@ -54,9 +84,13 @@ export function DynamicModuleCustomFields({ module, tabKey, sx }: DynamicModuleC
                 <Box key={`${section.tabKey}:${section.sectionKey}`}>
                     <SectionLabel label={section.sectionLabel} sx={{ mb: 2 }} />
                     <FormGrid columns={3}>
-                        {section.fields.map((field) => (
-                            <DynamicFormField key={field.id} field={field} required={field.isActive ? field.isRequired : false} />
-                        ))}
+                        {section.fields.map((field) =>
+                            field.isSystem ? (
+                                <MovedFieldSlot key={field.id} node={nodeOf.get(field.fieldKey)} />
+                            ) : (
+                                <DynamicFormField key={field.id} field={field} required={field.isActive ? field.isRequired : false} />
+                            ),
+                        )}
                     </FormGrid>
                 </Box>
             ))}

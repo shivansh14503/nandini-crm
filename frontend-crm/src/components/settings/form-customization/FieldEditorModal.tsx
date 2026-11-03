@@ -23,6 +23,7 @@ import {
     CUSTOM_FIELD_TYPES,
     FIELD_TYPE_LABELS,
     sectionKeyFromLabel,
+    tabKeyFromLabel,
     type ConfigFieldSize,
     type CrmModuleKey,
     type CustomFieldType,
@@ -46,6 +47,7 @@ export interface FieldEditorModalProps {
 }
 
 const NEW_SECTION = '__new__';
+const NEW_TAB = '__new_tab__';
 const SIZE_OPTIONS: { value: ConfigFieldSize | ''; label: string }[] = [
     { value: '', label: 'Auto' },
     { value: 'xs', label: 'XS — 140px' },
@@ -59,7 +61,9 @@ const isChoice = (type: string) => type === 'select' || type === 'multiselect';
 interface Draft {
     label: string;
     fieldType: CustomFieldType;
+    /** A tab key, or NEW_TAB (created with the field, named `newTabLabel`). */
     tabKey: string;
+    newTabLabel: string;
     sectionChoice: string;
     newSectionLabel: string;
     fieldSize: ConfigFieldSize | '';
@@ -90,6 +94,7 @@ export function FieldEditorModal({ open, onClose, module, configs, field, defaul
         label: field?.label ?? '',
         fieldType: (field?.fieldType as CustomFieldType) ?? 'text',
         tabKey: field?.tabKey ?? defaultTabKey ?? tabs[0]?.key ?? 'overview',
+        newTabLabel: '',
         sectionChoice: field?.sectionKey ?? defaultSectionKey ?? NEW_SECTION,
         newSectionLabel: '',
         fieldSize: (field?.fieldSize as ConfigFieldSize | null) ?? '',
@@ -128,12 +133,21 @@ export function FieldEditorModal({ open, onClose, module, configs, field, defaul
 
     const validate = (): string | null => {
         if (!draft.label.trim()) return 'Label is required.';
+        if (!isSystem && draft.tabKey === NEW_TAB && !draft.newTabLabel.trim()) return 'Enter a name for the new tab.';
         if (!isSystem && sectionChoice === NEW_SECTION && !draft.newSectionLabel.trim()) return 'Enter a name for the new section.';
         if (isCreate && choice) {
             if (draft.optionsMode === 'existing' && !draft.dropdownCategoryKey) return 'Choose a dropdown for the options.';
             if (draft.optionsMode === 'new' && !draft.newOptions.split('\n').some((o) => o.trim())) return 'Add at least one option.';
         }
         return null;
+    };
+
+    /** The tab to place the field on: the chosen one, or a new tab staged now (an existing tab of that name is reused). */
+    const resolveTab = (): string => {
+        if (isSystem || draft.tabKey !== NEW_TAB) return draft.tabKey;
+        const name = draft.newTabLabel.trim();
+        const existing = tabs.find((t) => t.label.trim().toLowerCase() === name.toLowerCase());
+        return existing ? existing.key : staged.createTab(module, name).key;
     };
 
     const save = async () => {
@@ -148,12 +162,13 @@ export function FieldEditorModal({ open, onClose, module, configs, field, defaul
         const sectionLabel = section ? section.sectionLabel : draft.newSectionLabel.trim();
         const sectionKey = section ? section.sectionKey : sectionKeyFromLabel(sectionLabel);
         try {
+            const tabKey = resolveTab();
             if (isCreate) {
                 const created = staged.createField({
                     module,
                     label: draft.label.trim(),
                     fieldType: draft.fieldType,
-                    tabKey: draft.tabKey,
+                    tabKey,
                     sectionKey,
                     sectionLabel,
                     fieldSize: draft.fieldSize || null,
@@ -174,7 +189,7 @@ export function FieldEditorModal({ open, onClose, module, configs, field, defaul
                 staged.updateField(field!.id, {
                     label: draft.label.trim(),
                     ...(canSwitchChoice && draft.fieldType !== field!.fieldType ? { fieldType: draft.fieldType as 'select' | 'multiselect' } : {}),
-                    ...(isSystem ? {} : { tabKey: draft.tabKey, sectionKey, sectionLabel: section ? undefined : sectionLabel }),
+                    ...(isSystem ? {} : { tabKey, sectionKey, sectionLabel: section ? undefined : sectionLabel }),
                     fieldSize: draft.fieldSize || null,
                     placeholder: draft.placeholder.trim() || null,
                     hint: draft.hint.trim() || null,
@@ -219,7 +234,7 @@ export function FieldEditorModal({ open, onClose, module, configs, field, defaul
                 )}
                 {isSystem && (
                     <Alert severity="info" sx={{ mb: 2, borderRadius: '8px', fontSize: '0.8rem' }}>
-                        Built-in fields keep their type, tab and section. Leave Placeholder / Hint empty to use the form&apos;s built-in text.
+                        Built-in fields keep their type and tab; drag one by its grip in the builder to move it to another section of its tab. Leave Placeholder / Hint empty to use the form&apos;s built-in text.
                         {locked && ' This core field always stays required and visible.'}
                     </Alert>
                 )}
@@ -257,7 +272,25 @@ export function FieldEditorModal({ open, onClose, module, configs, field, defaul
                                     {t.label}
                                 </MenuItem>
                             ))}
+                            {!isSystem && (
+                                <MenuItem value={NEW_TAB} sx={{ fontSize: '0.85rem', color: '#2563eb', fontWeight: 600 }}>
+                                    + New tab…
+                                </MenuItem>
+                            )}
                         </TextField>
+                        {!isSystem && draft.tabKey === NEW_TAB && (
+                            <TextField
+                                size="small"
+                                fullWidth
+                                autoFocus
+                                value={draft.newTabLabel}
+                                onChange={(e) => set('newTabLabel', e.target.value)}
+                                placeholder="New tab name, e.g. Compliance & Legal"
+                                sx={{ ...inputSx, mt: 1 }}
+                                helperText={draft.newTabLabel.trim() ? `Tab key: ${tabKeyFromLabel(draft.newTabLabel)}` : 'The tab appears on the form once it has a field.'}
+                                slotProps={{ htmlInput: { maxLength: 60, 'aria-label': 'New tab name' } }}
+                            />
+                        )}
                     </Box>
                     <Box>
                         {label('Section')}

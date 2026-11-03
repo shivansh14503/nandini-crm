@@ -21,6 +21,7 @@ import {
     reorderFieldsSchema,
     reorderOptionsSchema,
     renameSectionSchema,
+    TAB_KEY_PATTERN,
     updateCategorySchema,
     updateFieldSchema,
     updateOptionSchema,
@@ -67,8 +68,12 @@ export interface FormFieldDefinitionDto {
     label: string;
     fieldType: string;
     tabKey: string;
+    /** Name of an admin-created tab (null on built-in tabs). */
+    tabLabel: string | null;
     sectionKey: string;
     sectionLabel: string;
+    /** Built-in fields: the section the hand-built form renders them in (they may have been moved since). */
+    defaultSectionKey: string | null;
     sortOrder: number;
     fieldSize: string | null;
     placeholder: string | null;
@@ -88,8 +93,22 @@ export interface FormFieldDefinitionDto {
 export interface FormConfigsPayload {
     categories: DropdownCategoryDto[];
     fieldsByModule: Record<CrmModuleKey, FormFieldDefinitionDto[]>;
-    moduleTabs: typeof MODULE_TABS;
+    /** Built-in tabs of each module, followed by its admin-created tabs (from the fields placed on them). */
+    moduleTabs: Record<CrmModuleKey, { key: string; label: string; isCustom?: boolean }[]>;
 }
+
+/** Section each built-in field has on the hand-built form, by `module:fieldKey`. */
+const DEFAULT_SECTION_KEYS = new Map(DEFAULT_FIELDS.map((f) => [`${f.module}:${f.fieldKey}`, sectionKeyFromLabel(f.sectionLabel)]));
+
+/** `compliance_legal` → `Compliance Legal` (fallback name of a custom tab saved without one). */
+const titleCaseFromKey = (key: string) =>
+    key
+        .split('_')
+        .filter(Boolean)
+        .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+        .join(' ');
+
+const isBuiltInTab = (module: CrmModuleKey, tabKey: string) => MODULE_TABS[module].some((tab) => tab.key === tabKey);
 
 function parseJsonObject(json: string | null): Record<string, unknown> | null {
     if (!json) return null;
@@ -119,8 +138,10 @@ const toFieldDto = (f: FormFieldDefinition, categoryKeys: Map<string, string>): 
     label: f.label,
     fieldType: f.fieldType,
     tabKey: f.tabKey,
+    tabLabel: f.tabLabel,
     sectionKey: f.sectionKey,
     sectionLabel: f.sectionLabel,
+    defaultSectionKey: f.isSystem ? (DEFAULT_SECTION_KEYS.get(`${f.module}:${f.fieldKey}`) ?? null) : null,
     sortOrder: f.sortOrder,
     fieldSize: f.fieldSize,
     placeholder: f.placeholder,
@@ -259,10 +280,25 @@ function assertModule(module: string): asserts module is CrmModuleKey {
     if (!(CRM_MODULES as readonly string[]).includes(module)) throw HttpError.badRequest(`Unknown module '${module}'.`);
 }
 
+/** A built-in tab of the module, or a valid key for an admin-created one. */
 function assertTab(module: CrmModuleKey, tabKey: string): void {
-    if (!MODULE_TABS[module].some((tab) => tab.key === tabKey)) {
-        throw HttpError.badRequest(`'${tabKey}' is not a tab of the ${module} form.`, [{ message: 'Unknown form tab.', path: ['tabKey'] }]);
+    if (isBuiltInTab(module, tabKey)) return;
+    if (!TAB_KEY_PATTERN.test(tabKey)) {
+        throw HttpError.badRequest(`'${tabKey}' is not a valid tab of the ${module} form.`, [
+            { message: 'Use lowercase letters, digits and underscores, starting with a letter.', path: ['tabKey'] },
+        ]);
     }
+}
+
+/**
+ * The stored name for a field's tab: null on a built-in tab; on a custom tab, the name given, else the name
+ * other fields of that tab already carry, else one derived from the key.
+ */
+async function resolveTabLabel(tx: TransactionClient, module: CrmModuleKey, tabKey: string, given: string | undefined): Promise<string | null> {
+    if (isBuiltInTab(module, tabKey)) return null;
+    if (given) return given;
+    const sibling = await tx.formFieldDefinition.findFirst({ where: { module, tabKey, tabLabel: { not: null } }, select: { tabLabel: true } });
+    return sibling?.tabLabel ?? titleCaseFromKey(tabKey);
 }
 
 // ── Service ──────────────────────────────────────────────────────────────────
@@ -289,9 +325,14 @@ export const formConfigService = {
                 CrmModuleKey,
                 FormFieldDefinitionDto[]
             >;
+            const moduleTabs = Object.fromEntries(CRM_MODULES.map((m) => [m, [...MODULE_TABS[m]]])) as FormConfigsPayload['moduleTabs'];
             for (const field of fields) {
-                if ((CRM_MODULES as readonly string[]).includes(field.module)) {
-                    fieldsByModule[field.module as CrmModuleKey].push(toFieldDto(field, categoryKeys));
+                if (!(CRM_MODULES as readonly string[]).includes(field.module)) continue;
+                const module = field.module as CrmModuleKey;
+                fieldsByModule[module].push(toFieldDto(field, categoryKeys));
+                // Custom tabs exist through the fields placed on them (first seen in field order).
+                if (!moduleTabs[module].some((tab) => tab.key === field.tabKey)) {
+                    moduleTabs[module].push({ key: field.tabKey, label: field.tabLabel || titleCaseFromKey(field.tabKey), isCustom: true });
                 }
             }
             return {
@@ -314,7 +355,7 @@ export const formConfigService = {
                         .map((f) => ({ module: f.module, fieldKey: f.fieldKey, label: f.label })),
                 })),
                 fieldsByModule,
-                moduleTabs: MODULE_TABS,
+                moduleTabs,
             };
         });
     },
@@ -618,6 +659,7 @@ export const formConfigService = {
                     label: input.label,
                     fieldType: input.fieldType,
                     tabKey: input.tabKey,
+                    tabLabel: await resolveTabLabel(tx, input.module, input.tabKey, input.tabLabel),
                     sectionKey,
                     sectionLabel: existingSection?.sectionLabel ?? input.sectionLabel,
                     sortOrder,
@@ -664,12 +706,16 @@ export const formConfigService = {
             }
             if (before.isSystem) {
                 if (input.isActive === false) reject('isActive', 'Built-in fields cannot be removed; hide them instead.');
+                // Built-in fields may move between the sections of their tab (the forms render them there), but
+                // not to another tab: a hand-built form only mounts the grids of the tab being shown.
                 if (input.tabKey !== undefined && input.tabKey !== before.tabKey) reject('tabKey', 'Built-in fields stay on their original tab.');
-                if (input.sectionKey !== undefined && input.sectionKey !== before.sectionKey) {
-                    reject('sectionKey', 'Built-in fields stay in their original section (rename the section instead).');
-                }
             }
             if (input.tabKey !== undefined) assertTab(before.module, input.tabKey);
+            const nextTabKey = input.tabKey ?? before.tabKey;
+            const tabLabel =
+                nextTabKey !== before.tabKey || input.tabLabel !== undefined
+                    ? await resolveTabLabel(tx, before.module, nextTabKey, input.tabLabel)
+                    : undefined;
             if (input.fieldType !== undefined && input.fieldType !== before.fieldType) {
                 if (before.isSystem) reject('fieldType', 'Built-in fields keep their control type.');
                 if (!CHOICE_TYPES.has(before.fieldType)) reject('fieldType', 'Only select / multi-select fields can switch between the two.');
@@ -687,6 +733,7 @@ export const formConfigService = {
                     ...(input.label !== undefined ? { label: input.label } : {}),
                     ...(input.fieldType !== undefined ? { fieldType: input.fieldType } : {}),
                     ...(input.tabKey !== undefined ? { tabKey: input.tabKey } : {}),
+                    ...(tabLabel !== undefined ? { tabLabel } : {}),
                     ...(input.sectionKey !== undefined ? { sectionKey: input.sectionKey } : {}),
                     ...(input.sectionLabel !== undefined ? { sectionLabel: input.sectionLabel } : {}),
                     ...(input.fieldSize !== undefined ? { fieldSize: input.fieldSize } : {}),
@@ -843,6 +890,7 @@ export const formConfigService = {
                         sectionLabel: def.sectionLabel,
                         sectionKey: sectionKeyFromLabel(def.sectionLabel),
                         tabKey: def.tabKey,
+                        tabLabel: null,
                         sortOrder: def.sortOrder,
                         fieldSize: null,
                         placeholder: null,

@@ -7,6 +7,7 @@ import {
     type CreateCategoryPayload,
     type CreateFieldPayload,
     type CreateOptionPayload,
+    tabKeyFromLabel,
     type CrmModuleKey,
     type FormConfigsPayload,
     type UpdateCategoryPayload,
@@ -27,6 +28,7 @@ import {
     newTempId,
     opRefersTo,
     replayOps,
+    tabLabelOf,
     uniqueKey,
     withoutDraftOption,
     withoutId,
@@ -44,6 +46,8 @@ export interface ConfigDraftActions {
     updateField(fieldId: string, payload: UpdateFieldPayload): void;
     reorderFields(module: CrmModuleKey, fieldIds: string[]): void;
     renameSection(module: CrmModuleKey, sectionKey: string, sectionLabel: string): void;
+    /** Adds an admin-created tab to the module's form; returns its key (a slug of the name, unique on the form). */
+    createTab(module: CrmModuleKey, label: string): { key: string; label: string };
     resetModule(module: CrmModuleKey): Promise<void>;
     updateCategory(categoryKey: string, payload: UpdateCategoryPayload): void;
     /** Permanent deletes (admin-created dropdowns, non-system options, custom fields). */
@@ -238,20 +242,28 @@ export function useConfigDraft(base: FormConfigsPayload | undefined, refetch: ()
                 const newOptions = payload.dropdownCategoryKey ? [] : [...new Set(payload.newOptions ?? [])];
                 const categoryKey = newOptions.length ? uniqueKey(categoryKeyFor(payload.label), (k) => Boolean(findCategoryByKey(s, k))) : undefined;
                 const id = newTempId('field');
+                // Custom tabs are stored through their fields: each one carries the tab's name.
+                const tabLabel = payload.tabLabel ?? tabLabelOf(s, payload.module, payload.tabKey);
                 push({
                     kind: 'createField',
                     id,
                     fieldKey,
                     categoryKey,
                     optionIds: categoryKey ? newOptions.map(() => newTempId('opt')) : undefined,
-                    payload: { ...payload, newOptions: newOptions.length ? newOptions : undefined },
+                    payload: { ...payload, ...(tabLabel ? { tabLabel } : {}), newOptions: newOptions.length ? newOptions : undefined },
                     summary: `${moduleLabel(payload.module)}: new field '${payload.label}'`,
                 });
                 return { id, label: payload.label };
             },
 
-            updateField(fieldId, payload) {
-                const field = findFieldById(current(), fieldId) ?? fail('Field not found.');
+            updateField(fieldId, input) {
+                const s = current();
+                const field = findFieldById(s, fieldId) ?? fail('Field not found.');
+                if (field.isSystem && input.tabKey !== undefined && input.tabKey !== field.tabKey) fail(`${field.label} is a built-in field and stays on its tab.`);
+                // A field moved to another tab carries that tab's name (custom tabs are stored through their fields).
+                const movedTab = input.tabKey !== undefined && input.tabKey !== field.tabKey;
+                const tabLabel = movedTab && input.tabLabel === undefined ? tabLabelOf(s, field.module, input.tabKey!) : undefined;
+                const payload = tabLabel ? { ...input, tabLabel } : input;
                 if (field.isCoreLocked && payload.isRequired === false) fail(`${field.label} is a core field and must stay required.`);
                 if (field.isCoreLocked && payload.isVisibleInForm === false) fail(`${field.label} is a core field and cannot be hidden.`);
                 if (field.isSystem && payload.isActive === false) fail('Built-in fields cannot be removed; hide them instead.');
@@ -284,17 +296,25 @@ export function useConfigDraft(base: FormConfigsPayload | undefined, refetch: ()
                 commit([...rest, { kind: 'renameSection', module, sectionKey, sectionLabel, summary: `${moduleLabel(module)}: section renamed to '${sectionLabel}'` }]);
             },
 
+            createTab(module, label) {
+                const name = label.trim();
+                if (!name) fail('Enter a name for the new tab.');
+                const s = current();
+                const tabs = s.moduleTabs[module] ?? [];
+                if (tabs.some((t) => t.label.trim().toLowerCase() === name.toLowerCase())) fail(`The ${moduleLabel(module)} form already has a tab named '${name}'.`);
+                const key = uniqueKey(tabKeyFromLabel(name), (k) => tabs.some((t) => t.key === k), 40);
+                push({ kind: 'createTab', module, tabKey: key, label: name, summary: `${moduleLabel(module)}: new tab '${name}'` });
+                return { key, label: name };
+            },
+
             async resetModule(module) {
                 const defaults = await formConfigService.getModuleDefaults(module);
                 push({ kind: 'resetModule', module, defaults, summary: `${moduleLabel(module)}: built-in fields reset to defaults` });
             },
 
             updateCategory(categoryKey, payload) {
-                const category = findCategoryByKey(current(), categoryKey) ?? fail('Dropdown not found.');
+                if (!findCategoryByKey(current(), categoryKey)) fail('Dropdown not found.');
                 if (payload.label !== undefined && !payload.label.trim()) fail('Dropdown name is required.');
-                if (category.isSystem && payload.module !== undefined && payload.module !== category.module) {
-                    fail('Built-in dropdowns keep their module.');
-                }
                 stageCategoryUpdate(categoryKey, payload);
             },
 

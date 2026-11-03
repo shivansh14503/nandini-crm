@@ -17,6 +17,8 @@ export interface FormLivePreviewPanelProps {
     configs: FormConfigsPayload;
     /** Unsaved changes included in what's shown. */
     unsavedCount?: number;
+    /** Tabs with unsaved changes (orange dot on their pill). */
+    unsavedTabs?: Set<string>;
 }
 
 /**
@@ -24,7 +26,7 @@ export interface FormLivePreviewPanelProps {
  * required flags, visibility, dropdown options, section names and custom fields, unsaved changes included.
  * Values typed here are never saved.
  */
-export function FormLivePreviewPanel({ module, configs, unsavedCount = 0 }: FormLivePreviewPanelProps) {
+export function FormLivePreviewPanel({ module, configs, unsavedCount = 0, unsavedTabs }: FormLivePreviewPanelProps) {
     const tabs = useMemo(() => configs.moduleTabs[module] ?? [], [configs, module]);
     const [selectedTab, setTabKey] = useState(tabs[0]?.key ?? 'overview');
     const tabKey = tabs.some((t) => t.key === selectedTab) ? selectedTab : (tabs[0]?.key ?? 'overview');
@@ -43,7 +45,11 @@ export function FormLivePreviewPanel({ module, configs, unsavedCount = 0 }: Form
     return (
         <Box sx={{ ...surfaceSx, overflow: 'hidden' }}>
             <Box sx={{ ...panelHeaderSx, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1.5, flexWrap: 'wrap' }}>
-                <PillTabs items={tabs.map((t) => ({ key: t.key, label: t.label }))} value={tabKey} onChange={setTabKey} />
+                <PillTabs
+                    items={tabs.map((t) => ({ key: t.key, label: t.label, hasUnsaved: unsavedTabs?.has(t.key) ?? false }))}
+                    value={tabKey}
+                    onChange={setTabKey}
+                />
                 <Typography sx={{ fontSize: '0.74rem', color: '#64748b', display: 'flex', alignItems: 'center', gap: 0.5 }}>
                     <VisibilityOutlinedIcon sx={{ fontSize: 15 }} /> Preview of the {CRM_MODULE_LABELS[module]} form
                     {unsavedCount > 0 ? ` — includes ${unsavedCount} unsaved change${unsavedCount === 1 ? '' : 's'}` : ''}
@@ -54,7 +60,14 @@ export function FormLivePreviewPanel({ module, configs, unsavedCount = 0 }: Form
                 <FormModeProvider mode="create">
                     <Box sx={{ p: { xs: 2.5, md: 3.5 }, display: 'flex', flexDirection: 'column', gap: 3.5 }}>
                         {sections.length === 0 && (
-                            <EmptyState title="No configurable fields on this tab" description="This tab only holds built-in blocks such as addresses or line items." />
+                            <EmptyState
+                                title="No configurable fields on this tab"
+                                description={
+                                    tabs.find((t) => t.key === tabKey) && !moduleFields(configs, module).some((f) => f.tabKey === tabKey)
+                                        ? 'This tab has no fields yet. Add one under Form Fields & Sections; an empty tab is not kept when you save.'
+                                        : 'This tab only holds built-in blocks such as addresses or line items.'
+                                }
+                            />
                         )}
                         {sections.map((section) => (
                             <Box key={section.sectionKey}>

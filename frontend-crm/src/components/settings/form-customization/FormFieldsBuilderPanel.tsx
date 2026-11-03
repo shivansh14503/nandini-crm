@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useMemo, useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import {
     Box,
     Button,
@@ -32,6 +32,7 @@ import { useConfigDraftActions, useHasUnsavedChanges } from './useConfigDraft';
 import {
     CRM_MODULE_LABELS,
     FIELD_TYPE_LABELS,
+    tabKeyFromLabel,
     type ConfigFieldSize,
     type ConfiguredSection,
     type CrmModuleKey,
@@ -56,7 +57,7 @@ import {
     surfaceSx,
 } from './builderUi';
 import { FieldEditorModal } from './FieldEditorModal';
-import { useDragReorder, type RowDragProps } from './useDragReorder';
+import { useDragReorder, type GroupDragProps, type RowDragProps } from './useDragReorder';
 import { categoryAfterFieldRemoval } from './configDraft';
 
 export interface FormFieldsBuilderPanelProps {
@@ -64,13 +65,15 @@ export interface FormFieldsBuilderPanelProps {
     configs: FormConfigsPayload;
     canEdit: boolean;
     notify: (message: string, severity?: 'success' | 'error' | 'info' | 'warning') => void;
+    /** Form tabs of the module with unsaved changes (orange dot on their pill). */
+    unsavedTabs?: Set<string>;
 }
 
 const SIZES: (ConfigFieldSize | '')[] = ['', 'xs', 'sm', 'md', 'lg', 'full'];
 const GRID_COLUMNS = '28px minmax(180px, 1.6fr) 120px 92px 70px 70px 70px 104px';
 
 /** Every field of a module grouped by tab and section, with inline toggles and the custom field editor. */
-export function FormFieldsBuilderPanel({ module, configs, canEdit, notify }: FormFieldsBuilderPanelProps) {
+export function FormFieldsBuilderPanel({ module, configs, canEdit, notify, unsavedTabs }: FormFieldsBuilderPanelProps) {
     const tabs = useMemo(() => configs.moduleTabs[module] ?? [], [configs, module]);
     const [selectedTab, setTabKey] = useState(tabs[0]?.key ?? 'overview');
     // Falls back to the first tab when the module changes.
@@ -79,6 +82,7 @@ export function FormFieldsBuilderPanel({ module, configs, canEdit, notify }: For
     const [editor, setEditor] = useState<{ open: boolean; field?: FormFieldDefinitionDto; sectionKey?: string }>({ open: false });
     const [resetOpen, setResetOpen] = useState(false);
     const [deleteTarget, setDeleteTarget] = useState<FormFieldDefinitionDto | null>(null);
+    const [newTabOpen, setNewTabOpen] = useState(false);
     const [busy, setBusy] = useState(false);
     const draft = useConfigDraftActions();
 
@@ -88,6 +92,8 @@ export function FormFieldsBuilderPanel({ module, configs, canEdit, notify }: For
         [allFields, showArchived, tabKey],
     );
     const archivedCount = allFields.filter((f) => !f.isActive).length;
+    const activeTab = tabs.find((t) => t.key === tabKey);
+    const tabIsEmpty = !allFields.some((f) => f.tabKey === tabKey);
 
     /** Stages a change in the draft (saved with "Save Changes"). */
     const run = async (action: () => unknown) => {
@@ -103,27 +109,79 @@ export function FormFieldsBuilderPanel({ module, configs, canEdit, notify }: For
 
     const patch = (field: FormFieldDefinitionDto, body: UpdateFieldPayload) => run(() => draft.updateField(field.id, body));
 
+    // ── Drag and drop across the sections of the tab ──
+    /** Every row shown on the tab, section by section (archived rows can't be dragged but slide aside). */
+    const tabRows = useMemo(() => sections.flatMap((s) => s.fields), [sections]);
+    const sectionKeys = useMemo(() => sections.map((s) => s.sectionKey), [sections]);
+    const sectionOfField = useCallback((f: FormFieldDefinitionDto) => f.sectionKey, []);
+
     /**
-     * Applies a dragged order of a section's active fields to the module order: the section's fields keep the
-     * slots they occupy, filled in the new order, so every other section and tab stays where it is.
+     * Applies a drop: a field dropped into another section moves there (built-in fields too: they stay on their
+     * tab), and the tab's rows keep the module-order slots they occupy, filled in the new order, so other tabs
+     * stay where they are.
      */
-    const reorderSection = (orderedIds: string[]) => {
-        const inSection = new Set(orderedIds);
+    const applyTabReorder = (orderedIds: string[], sectionById: Record<string, string>) => {
+        const shown = new Set(orderedIds);
         let next = 0;
-        const ids = allFields.map((f) => (inSection.has(f.id) ? orderedIds[next++] : f.id));
-        void run(() => draft.reorderFields(module, ids));
+        const ids = allFields.map((f) => (shown.has(f.id) ? orderedIds[next++] : f.id));
+        try {
+            for (const field of tabRows) {
+                const target = sectionById[field.id];
+                if (!target || target === field.sectionKey) continue;
+                const section = sections.find((s) => s.sectionKey === target);
+                draft.updateField(field.id, { sectionKey: target, sectionLabel: section?.sectionLabel ?? field.sectionLabel });
+            }
+            draft.reorderFields(module, ids);
+        } catch (err) {
+            notify(errorMessage(err), 'error');
+        }
     };
+
+    const { getRowDragProps, getGroupProps, getRowDragSx } = useDragReorder({
+        items: tabRows,
+        canDrag: canEdit && !busy,
+        groups: sectionKeys,
+        groupOf: sectionOfField,
+        onReorder: applyTabReorder,
+    });
 
     const tabItems = tabs.map((t) => ({
         key: t.key,
         label: t.label,
         count: allFields.filter((f) => f.tabKey === t.key && f.isActive).length,
+        hasUnsaved: unsavedTabs?.has(t.key) ?? false,
+        unsavedTooltip: 'Unsaved changes on this tab',
     }));
 
     return (
         <Box sx={{ ...surfaceSx, overflow: 'hidden' }}>
             <Box sx={{ ...panelHeaderSx, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1.5, flexWrap: 'wrap' }}>
-                <PillTabs items={tabItems} value={tabKey} onChange={setTabKey} />
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 0, flexWrap: 'wrap' }}>
+                    <PillTabs items={tabItems} value={tabKey} onChange={setTabKey} />
+                    {canEdit && (
+                        <Button
+                            size="small"
+                            startIcon={<AddRoundedIcon sx={{ fontSize: 16 }} />}
+                            onClick={() => setNewTabOpen(true)}
+                            disabled={busy}
+                            sx={{
+                                textTransform: 'none',
+                                fontSize: '0.78rem',
+                                fontWeight: 600,
+                                borderRadius: '8px',
+                                px: 1.25,
+                                py: 0.55,
+                                color: '#2563eb',
+                                border: '1px dashed #93c5fd',
+                                backgroundColor: '#ffffff',
+                                whiteSpace: 'nowrap',
+                                '&:hover': { backgroundColor: '#eff6ff', borderColor: '#2563eb' },
+                            }}
+                        >
+                            New Tab
+                        </Button>
+                    )}
+                </Box>
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
                     {archivedCount > 0 && (
                         <FormControlLabel
@@ -170,28 +228,45 @@ export function FormFieldsBuilderPanel({ module, configs, canEdit, notify }: For
                         <span />
                     </Box>
 
-                    {sections.length === 0 && (
-                        <EmptyState
-                            icon={<ViewQuiltOutlinedIcon />}
-                            title="No configurable fields on this tab"
-                            description="Built-in composite blocks (addresses, email lists, line items) aren't listed. Add a custom field to extend this tab."
-                        />
-                    )}
+                    {sections.length === 0 &&
+                        (tabIsEmpty && unsavedTabs?.has(tabKey) ? (
+                            <EmptyState
+                                icon={<ViewQuiltOutlinedIcon />}
+                                title={`Welcome to your new tab${activeTab ? ` '${activeTab.label}'` : ''}`}
+                                description="Add a field to start its first section. The tab shows on the form, in the Live Preview and on the real CRM form once it has a field (an empty tab is not kept when you save)."
+                                action={
+                                    canEdit ? (
+                                        <Button variant="contained" size="small" startIcon={<AddRoundedIcon />} onClick={() => setEditor({ open: true })} sx={primaryButtonSx}>
+                                            Add First Field to {activeTab?.label ?? 'this tab'}
+                                        </Button>
+                                    ) : undefined
+                                }
+                            />
+                        ) : (
+                            <EmptyState
+                                icon={<ViewQuiltOutlinedIcon />}
+                                title="No configurable fields on this tab"
+                                description="Built-in composite blocks (addresses, email lists, line items) aren't listed. Add a custom field to extend this tab."
+                            />
+                        ))}
 
-                    {sections.map((section) => (
+                    {sections.map((section, index) => (
                         <SectionBlock
                             // Remounts with the saved label after a rename.
                             key={`${section.sectionKey}:${section.sectionLabel}`}
                             module={module}
                             section={section}
+                            first={index === 0}
                             canEdit={canEdit}
                             busy={busy}
                             onRename={(label) => run(() => draft.renameSection(module, section.sectionKey, label))}
                             onAddField={() => setEditor({ open: true, sectionKey: section.sectionKey })}
                             onEdit={(field) => setEditor({ open: true, field })}
-                            onReorder={reorderSection}
                             onPatch={patch}
                             onDelete={setDeleteTarget}
+                            headerProps={getGroupProps(section.sectionKey)}
+                            rowDragProps={getRowDragProps}
+                            rowDragSx={getRowDragSx}
                         />
                     ))}
                 </Box>
@@ -199,11 +274,24 @@ export function FormFieldsBuilderPanel({ module, configs, canEdit, notify }: For
 
             <Box sx={{ px: 2, py: 1.5, borderTop: '1px solid #e2e8f0', backgroundColor: '#f8fafc' }}>
                 <Typography sx={{ fontSize: '0.74rem', color: '#64748b' }}>
-                    Drag a field by its grip to move it within its section: the form shows the fields in the order listed here, custom fields
-                    included. Built-in fields stay in their own section; custom fields can be moved to another section from Edit. Composite blocks
-                    (email lists, line items, toggles) keep their place.
+                    Drag a field by its grip to reorder it or to move it into another section of this tab (built-in fields included): the form
+                    shows the fields in the order and sections listed here. Custom fields can also be moved to another tab from Edit. Composite
+                    blocks (email lists, line items, toggles) keep their place.
                 </Typography>
             </Box>
+
+            {newTabOpen && (
+                <NewTabDialog
+                    module={module}
+                    onClose={() => setNewTabOpen(false)}
+                    onCreate={(label) => {
+                        const tab = draft.createTab(module, label);
+                        setTabKey(tab.key);
+                        setNewTabOpen(false);
+                        notify(`Tab '${tab.label}' added — add a field to it, then click Save Changes`, 'info');
+                    }}
+                />
+            )}
 
             {editor.open && (
             <FieldEditorModal
@@ -283,36 +371,92 @@ function dropdownFateMessage(configs: FormConfigsPayload, module: CrmModuleKey, 
 
 // ── Section ──────────────────────────────────────────────────────────────────
 
+/** Compact dialog naming a new custom tab (its key is a slug of the name). */
+function NewTabDialog({ module, onClose, onCreate }: { module: CrmModuleKey; onClose: () => void; onCreate: (label: string) => void }) {
+    const [name, setName] = useState('');
+    const [error, setError] = useState<string | null>(null);
+    const submit = () => {
+        if (!name.trim()) {
+            setError('Enter a name for the tab.');
+            return;
+        }
+        try {
+            onCreate(name.trim());
+        } catch (err) {
+            setError(errorMessage(err));
+        }
+    };
+    return (
+        <Dialog open onClose={onClose} maxWidth="xs" fullWidth slotProps={{ paper: { sx: { borderRadius: '12px' } } }}>
+            <DialogTitle sx={{ fontWeight: 700, fontSize: '1rem', borderBottom: '1px solid #e2e8f0' }}>New Tab — {CRM_MODULE_LABELS[module]}</DialogTitle>
+            <DialogContent sx={{ pt: '20px !important', display: 'flex', flexDirection: 'column', gap: 1 }}>
+                <TextField
+                    label="Tab name"
+                    size="small"
+                    fullWidth
+                    autoFocus
+                    value={name}
+                    placeholder="e.g. Compliance & Legal"
+                    onChange={(e) => {
+                        setName(e.target.value);
+                        setError(null);
+                    }}
+                    onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                            e.preventDefault();
+                            submit();
+                        }
+                    }}
+                    error={Boolean(error)}
+                    helperText={error ?? (name.trim() ? `Tab key: ${tabKeyFromLabel(name)}` : 'Shown on the form next to the built-in tabs.')}
+                    sx={inputSx}
+                    slotProps={{ htmlInput: { maxLength: 60 } }}
+                />
+            </DialogContent>
+            <DialogActions sx={{ px: 3, py: 2, borderTop: '1px solid #e2e8f0' }}>
+                <Button onClick={onClose} variant="outlined" sx={secondaryButtonSx}>
+                    Cancel
+                </Button>
+                <Button onClick={submit} variant="contained" sx={primaryButtonSx} disabled={!name.trim()}>
+                    Create Tab
+                </Button>
+            </DialogActions>
+        </Dialog>
+    );
+}
+
 function SectionBlock({
     section,
+    first,
     canEdit,
     busy,
     onRename,
     onAddField,
     onEdit,
-    onReorder,
     onPatch,
     onDelete,
+    headerProps,
+    rowDragProps,
+    rowDragSx,
 }: {
     module: CrmModuleKey;
     section: ConfiguredSection;
+    /** First section of the tab (no divider above it). */
+    first: boolean;
     canEdit: boolean;
     busy: boolean;
     onRename: (label: string) => Promise<void>;
     onAddField: () => void;
     onEdit: (field: FormFieldDefinitionDto) => void;
-    /** New order of the section's active fields (drag and drop). */
-    onReorder: (orderedIds: string[]) => void;
     onPatch: (field: FormFieldDefinitionDto, body: UpdateFieldPayload) => Promise<void>;
     onDelete: (field: FormFieldDefinitionDto) => void;
+    /** Tab-level drag and drop: the header is the boundary a row crosses to enter this section. */
+    headerProps: GroupDragProps;
+    rowDragProps: (field: FormFieldDefinitionDto, isDraggable?: boolean) => RowDragProps;
+    rowDragSx: (field: FormFieldDefinitionDto) => Record<string, unknown>;
 }) {
     const [renaming, setRenaming] = useState(false);
     const [label, setLabel] = useState(section.sectionLabel);
-    const movable = section.fields.filter((f) => f.isActive);
-    const { orderedItems, getRowDragProps, getRowDragSx } = useDragReorder({ items: movable, canDrag: canEdit && !busy, onReorder });
-    // Active fields in their (optimistic) dragged order; archived ones keep their slots.
-    let nextActive = 0;
-    const rows = section.fields.map((f) => (f.isActive ? (orderedItems[nextActive++] ?? f) : f));
 
     const commit = () => {
         const next = label.trim();
@@ -322,8 +466,9 @@ function SectionBlock({
     };
 
     return (
-        <Box sx={{ borderBottom: '1px solid #e2e8f0' }}>
-            <Box sx={{ px: 2, pt: 2, pb: 0.5, display: 'flex', alignItems: 'center', gap: 1 }}>
+        <Box>
+            {/* Divider lives on the header so it slides with the header while a row is dragged past it. */}
+            <Box {...headerProps} sx={{ px: 2, pt: 2, pb: 0.5, display: 'flex', alignItems: 'center', gap: 1, borderTop: first ? 'none' : '1px solid #e2e8f0', backgroundColor: '#ffffff' }}>
                 {renaming ? (
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
                         <TextField
@@ -378,8 +523,7 @@ function SectionBlock({
             </Box>
 
             <Box sx={{ position: 'relative' }}>
-            {rows.map((field) => {
-                return (
+                {section.fields.map((field) => (
                     <FieldRow
                         key={field.id}
                         field={field}
@@ -388,11 +532,10 @@ function SectionBlock({
                         onEdit={() => onEdit(field)}
                         onPatch={(body) => onPatch(field, body)}
                         onDelete={() => onDelete(field)}
-                        dragProps={getRowDragProps(field, field.isActive)}
-                        dragSx={getRowDragSx(field)}
+                        dragProps={rowDragProps(field, field.isActive)}
+                        dragSx={rowDragSx(field)}
                     />
-                );
-            })}
+                ))}
             </Box>
         </Box>
     );

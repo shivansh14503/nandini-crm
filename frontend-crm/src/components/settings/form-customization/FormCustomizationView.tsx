@@ -13,7 +13,7 @@ import { FormStickyFooter } from '@/components/forms/FormStickyFooter';
 import { FormConfigsOverrideContext, useFormConfigsQuery } from '@/hooks/queries/useFormConfigs';
 import ChevronRightRoundedIcon from '@mui/icons-material/ChevronRightRounded';
 import { CRM_MODULE_KEYS, moduleGroupOf, moduleNavLabel, type CrmModuleKey } from '@/types/formConfig.types';
-import { modulesTouchedBy } from './configDraft';
+import { modulesTouchedBy, tabsTouchedBy, viewsTouchedForModule } from './configDraft';
 import { GROUP_ICONS, MODULE_ICONS, ModuleHierarchySelector } from './ModuleHierarchySelector';
 import { PillTabs, surfaceSx, errorMessage, primaryButtonSx, secondaryButtonSx } from './builderUi';
 import { ConfigDraftActionsContext, ConfigDraftChangesContext, changedIds, useConfigDraft } from './useConfigDraft';
@@ -102,11 +102,22 @@ export function FormCustomizationView() {
         () => (configs && savedConfigs ? modulesTouchedBy(ops, savedConfigs, configs) : new Set<CrmModuleKey>()),
         [ops, savedConfigs, configs],
     );
+    /** Which views and form tabs of the selected module have unsaved changes (orange dots). */
+    const viewsTouched = useMemo(
+        () => (configs && savedConfigs ? viewsTouchedForModule(ops, savedConfigs, configs, module) : { dropdowns: false, fields: false }),
+        [ops, savedConfigs, configs, module],
+    );
+    const unsavedTabs = useMemo(
+        () => (configs && savedConfigs ? tabsTouchedBy(ops, savedConfigs, configs, module) : new Set<string>()),
+        [ops, savedConfigs, configs, module],
+    );
     const dropdownCount = useMemo(() => (configs ? categoriesForModule(configs, module).length : 0), [configs, module]);
     const group = moduleGroupOf(module);
     const viewItems = VIEWS.map((v) => ({
         ...v,
         count: !configs ? undefined : v.key === 'dropdowns' ? dropdownCount : v.key === 'fields' ? fieldCounts[module] : undefined,
+        hasUnsaved: v.key === 'dropdowns' ? viewsTouched.dropdowns : v.key === 'fields' ? viewsTouched.fields : false,
+        unsavedTooltip: v.key === 'dropdowns' ? 'Unsaved dropdown changes on this form' : 'Unsaved field, section or tab changes on this form',
     }));
 
     return (
@@ -188,7 +199,7 @@ export function FormCustomizationView() {
                         </Typography>
                     )}
                     {unsavedModules.has(module) && (
-                        <Box component="span" title="Unsaved changes on this form" sx={{ width: 7, height: 7, borderRadius: '50%', backgroundColor: '#f59e0b', ml: 0.25 }} />
+                        <Box component="span" title="Unsaved changes on this form" sx={{ width: 7, height: 7, borderRadius: '50%', backgroundColor: '#f59e0b', boxShadow: '0 0 0 2px #fef3c7', ml: 0.25 }} />
                     )}
                 </Box>
                 <PillTabs items={viewItems} value={view} onChange={setView} />
@@ -219,8 +230,8 @@ export function FormCustomizationView() {
                     <ConfigDraftActionsContext.Provider value={actions}>
                         <ConfigDraftChangesContext.Provider value={changed}>
                             {view === 'dropdowns' && <DropdownManagerPanel module={module} configs={configs} canEdit={canEdit && !saving} notify={notify} />}
-                            {view === 'fields' && <FormFieldsBuilderPanel module={module} configs={configs} canEdit={canEdit && !saving} notify={notify} />}
-                            {view === 'preview' && <FormLivePreviewPanel module={module} configs={configs} unsavedCount={ops.length} />}
+                            {view === 'fields' && <FormFieldsBuilderPanel module={module} configs={configs} canEdit={canEdit && !saving} notify={notify} unsavedTabs={unsavedTabs} />}
+                            {view === 'preview' && <FormLivePreviewPanel module={module} configs={configs} unsavedCount={ops.length} unsavedTabs={unsavedTabs} />}
                         </ConfigDraftChangesContext.Provider>
                     </ConfigDraftActionsContext.Provider>
                 </FormConfigsOverrideContext.Provider>

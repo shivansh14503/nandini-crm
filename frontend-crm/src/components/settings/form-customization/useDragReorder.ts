@@ -28,6 +28,9 @@ const LIFT_SCALE = 1.012;
 const LIFT_SHADOW = '0 14px 30px -6px rgba(15, 23, 42, 0.18), 0 4px 12px -2px rgba(37, 99, 235, 0.14), 0 0 0 1.5px #60a5fa';
 /** Same three layers, transparent: lets the shadow fade out while the row settles. */
 const SETTLED_SHADOW = '0 0 0 0 rgba(15, 23, 42, 0), 0 0 0 0 rgba(37, 99, 235, 0), 0 0 0 0 rgba(96, 165, 250, 0)';
+/** Group header of the section a row is being dragged into (from another section). */
+const TARGET_GROUP_BG = '#eff6ff';
+const TARGET_GROUP_SHADOW = 'inset 3px 0 0 #2563eb, inset 0 -1px 0 #bfdbfe';
 
 /** Auto-scroll: distance from the scroll area's edge where scrolling kicks in, and the top speed (px / frame). */
 const AUTO_SCROLL_ZONE_PX = 80;
@@ -103,6 +106,17 @@ interface RowRect {
     midY: number;
 }
 
+/**
+ * One vertical block taking part in a drag: a row, or (in grouped mode) a group header. A row's group is the
+ * header above it, so moving a row past a header moves it into the neighbouring group.
+ */
+interface DragNode {
+    kind: 'item' | 'group';
+    key: string;
+    /** Group the node belongs to ('' when the list isn't grouped). */
+    group: string;
+}
+
 /** Mutable pointer session (lives in a ref so window listeners always see the latest values). */
 interface Session {
     id: string;
@@ -113,12 +127,17 @@ interface Session {
     startScrollTop: number;
     lastClientY: number;
     engaged: boolean;
-    ids: string[];
+    /** Rows and group headers in display order (captured once at drag start). */
+    nodes: DragNode[];
     rects: RowRect[];
-    /** Row elements, aligned with `ids` (captured once at drag start). */
+    /** Node elements, aligned with `nodes`. */
     els: HTMLElement[];
+    /** Lowest slot a row may take (1 when the list starts with a group header: no row above the first group). */
+    firstSlot: number;
     fromIndex: number;
     targetIndex: number;
+    /** Group header currently highlighted as the drop target (index into `nodes`, -1 for none). */
+    highlighted: number;
     deltaY: number;
     /** Distance a sibling moves to make room: dragged row height + the gap between rows. */
     stride: number;
@@ -131,6 +150,10 @@ export interface RowDragProps {
     onPointerDown: (e: ReactPointerEvent<HTMLElement>) => void;
 }
 
+export interface GroupDragProps {
+    ref: (el: HTMLElement | null) => void;
+}
+
 const NO_SX: Record<string, unknown> = {};
 
 /**
@@ -140,11 +163,15 @@ const NO_SX: Record<string, unknown> = {};
  *   All of it is inline `transform`s written straight to the row elements (compositor-only), so moving the
  *   pointer causes no React render and no Emotion style injection. Siblings are only touched when the target
  *   slot changes, and a small hysteresis keeps that slot from flickering on a boundary.
+ * - Grouped mode (`groups` + `groupOf`, with `getGroupProps(key)` spread on each group's header): rows and
+ *   headers form one list, so a row can be dragged across a header into another group. The headers slide with
+ *   the rows (the source group closes its gap, the target group parts), and the target group's header is
+ *   highlighted. `onReorder` then also receives each row's group.
  * - On release the row glides into its slot, then `onReorder` fires; the inline styles are cleared in a layout
  *   effect of the very render that puts the rows in their new order, so no frame shows old order + no offsets
  *   (or new order + old offsets). Escape / pointer-cancel glide it back instead.
  * - `orderedItems` holds the new order until `items` changes, so the rows never snap back while the parent
- *   catches up (render `orderedItems`, not `items`).
+ *   catches up (render `orderedItems`, not `items`, unless the parent updates in the same render).
  *
  * Spread `getRowDragProps(item)` on each row (and `getRowDragSx(item)` into its `sx`; it is static now). Presses
  * on inputs, buttons, selects and switches inside a row never start a drag.
@@ -153,10 +180,18 @@ export function useDragReorder<T extends { id: string }>({
     items,
     canDrag,
     onReorder,
+    groups,
+    groupOf,
 }: {
+    /** Every row taking part, in display order (rows that can't be dragged themselves still slide aside). */
     items: T[];
     canDrag: boolean;
-    onReorder: (orderedIds: string[]) => void;
+    /** New row order; in grouped mode also each row's group (`row id → group key`). */
+    onReorder: (orderedIds: string[], groupById: Record<string, string>) => void;
+    /** Grouped mode: group keys in display order. */
+    groups?: string[];
+    /** Grouped mode: the group a row is in. */
+    groupOf?: (item: T) => string;
 }) {
     /** Order committed by the last drop, applied while `items` is still what it was at that moment. */
     const [pending, setPending] = useState<{ order: string[]; basis: string } | null>(null);
@@ -170,6 +205,7 @@ export function useDragReorder<T extends { id: string }>({
     }, [items, itemsKey, pending]);
 
     const rowEls = useRef(new Map<string, HTMLElement>());
+    const groupEls = useRef(new Map<string, HTMLElement>());
     const session = useRef<Session | null>(null);
     const detachRef = useRef<(() => void) | null>(null);
     const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -179,11 +215,15 @@ export function useDragReorder<T extends { id: string }>({
     const orderedRef = useRef(orderedItems);
     const itemsKeyRef = useRef(itemsKey);
     const onReorderRef = useRef(onReorder);
+    const groupsRef = useRef(groups);
+    const groupOfRef = useRef(groupOf);
     useEffect(() => {
         orderedRef.current = orderedItems;
         itemsKeyRef.current = itemsKey;
         onReorderRef.current = onReorder;
-    }, [orderedItems, itemsKey, onReorder]);
+        groupsRef.current = groups;
+        groupOfRef.current = groupOf;
+    }, [orderedItems, itemsKey, onReorder, groups, groupOf]);
 
     // Runs after the DOM is updated and before the browser paints: the rows are in their new order, so the
     // offsets that faked that order can go in the same frame.
@@ -220,6 +260,32 @@ export function useDragReorder<T extends { id: string }>({
 
     const dragTransform = (deltaY: number, scale: number) => `translate3d(0, ${deltaY}px, 0) scale(${scale})`;
 
+    /** Group the dragged row joins at the current target slot (its own group when it hasn't moved). */
+    const targetGroupOf = (s: Session): string => {
+        const { nodes, fromIndex: from, targetIndex: to } = s;
+        if (to === from) return nodes[from].group;
+        // Moving down it lands after node `to`; moving up, after node `to - 1` (never the row itself).
+        return nodes[to > from ? to : to - 1]?.group ?? nodes[from].group;
+    };
+
+    /** Highlights the header of the group the row is being dragged into, when that's another group. */
+    const highlightTarget = (s: Session) => {
+        const group = targetGroupOf(s);
+        const index = group !== s.nodes[s.fromIndex].group ? s.nodes.findIndex((n) => n.kind === 'group' && n.key === group) : -1;
+        if (index === s.highlighted) return;
+        if (s.highlighted >= 0) {
+            const { style } = s.els[s.highlighted];
+            style.backgroundColor = '';
+            style.boxShadow = '';
+        }
+        if (index >= 0) {
+            const { style } = s.els[index];
+            style.backgroundColor = TARGET_GROUP_BG;
+            style.boxShadow = TARGET_GROUP_SHADOW;
+        }
+        s.highlighted = index;
+    };
+
     /** Sibling offsets for the current target slot. Called only when the target changes. */
     const layoutSiblings = (s: Session) => {
         const from = s.fromIndex;
@@ -231,6 +297,7 @@ export function useDragReorder<T extends { id: string }>({
             else if (to < from && index >= to && index < from) offset = s.stride;
             el.style.transform = `translate3d(0, ${offset}px, 0)`;
         });
+        highlightTarget(s);
     };
 
     const liftRows = (s: Session) => {
@@ -250,7 +317,7 @@ export function useDragReorder<T extends { id: string }>({
             } else {
                 style.zIndex = '1';
                 style.pointerEvents = 'none';
-                style.transition = `transform ${SHIFT_MS}ms ${EASE}`;
+                style.transition = `transform ${SHIFT_MS}ms ${EASE}, background-color 150ms ease, box-shadow 150ms ease`;
                 style.transform = 'translate3d(0, 0px, 0)';
             }
         });
@@ -260,6 +327,7 @@ export function useDragReorder<T extends { id: string }>({
      * Follows the pointer: moves the lifted row, and re-lays the siblings only if the target slot changed.
      * A sibling counts as passed once the leading edge is HYSTERESIS_PX beyond its middle, and as un-passed only
      * once it is HYSTERESIS_PX back on the other side, so hovering on a boundary never makes rows flicker.
+     * Group headers are siblings like any row: passing one moves the row into the neighbouring group.
      */
     const track = (s: Session, clientY: number) => {
         s.lastClientY = clientY;
@@ -277,7 +345,7 @@ export function useDragReorder<T extends { id: string }>({
         for (let i = from + 1; i < rects.length && bottom > rects[i].midY + (passed(i) ? -HYSTERESIS_PX : HYSTERESIS_PX); i++) target = i;
         if (target === from) {
             const top = self.top + s.deltaY;
-            for (let i = from - 1; i >= 0 && top < rects[i].midY + (passed(i) ? HYSTERESIS_PX : -HYSTERESIS_PX); i--) target = i;
+            for (let i = from - 1; i >= s.firstSlot && top < rects[i].midY + (passed(i) ? HYSTERESIS_PX : -HYSTERESIS_PX); i--) target = i;
         }
         if (target !== current) {
             s.targetIndex = target;
@@ -304,14 +372,28 @@ export function useDragReorder<T extends { id: string }>({
         autoScrollRef.current = requestAnimationFrame(autoScrollLoop);
     };
 
+    /** Rows (and, in grouped mode, group headers) in display order. */
+    const buildNodes = (): DragNode[] => {
+        const list = orderedRef.current;
+        const groupKeys = groupsRef.current;
+        const of = groupOfRef.current;
+        if (!groupKeys || !of) return list.map((i) => ({ kind: 'item', key: i.id, group: '' }));
+        const nodes: DragNode[] = [];
+        for (const group of groupKeys) {
+            nodes.push({ kind: 'group', key: group, group });
+            for (const item of list) if (of(item) === group) nodes.push({ kind: 'item', key: item.id, group });
+        }
+        return nodes;
+    };
+
     /** Measures the rows once and lifts the pressed one. */
     const engage = (s: Session): boolean => {
-        const ids = orderedRef.current.map((i) => i.id);
-        const fromIndex = ids.indexOf(s.id);
-        const els = ids.map((id) => rowEls.current.get(id));
+        const nodes = buildNodes();
+        const fromIndex = nodes.findIndex((n) => n.kind === 'item' && n.key === s.id);
+        const els = nodes.map((n) => (n.kind === 'item' ? rowEls.current : groupEls.current).get(n.key));
         if (fromIndex < 0 || els.some((el) => !el)) return false;
-        const rowElements = els as HTMLElement[];
-        const rects = rowElements.map((el) => {
+        const nodeElements = els as HTMLElement[];
+        const rects = nodeElements.map((el) => {
             const r = el.getBoundingClientRect();
             return { top: r.top, bottom: r.bottom, height: r.height, midY: r.top + r.height / 2 };
         });
@@ -320,14 +402,16 @@ export function useDragReorder<T extends { id: string }>({
         const prev = rects[fromIndex - 1];
         const gap = Math.max(0, next ? next.top - self.bottom : prev ? self.top - prev.bottom : 0);
 
-        const scroller = findScroller(rowElements[fromIndex]);
+        const scroller = findScroller(nodeElements[fromIndex]);
         Object.assign(s, {
             engaged: true,
-            ids,
+            nodes,
             rects,
-            els: rowElements,
+            els: nodeElements,
+            firstSlot: nodes[0]?.kind === 'group' ? 1 : 0,
             fromIndex,
             targetIndex: fromIndex,
+            highlighted: -1,
             deltaY: 0,
             stride: self.height + gap,
             scroller,
@@ -385,13 +469,24 @@ export function useDragReorder<T extends { id: string }>({
                     s.els.forEach(clearDragStyles);
                     return;
                 }
-                const next = [...s.ids];
+                const next = [...s.nodes];
                 const [moved] = next.splice(from, 1);
                 next.splice(to, 0, moved);
+                // Each row's group is the header above it in the new order.
+                const groupById: Record<string, string> = {};
+                let group = '';
+                const order: string[] = [];
+                for (const node of next) {
+                    if (node.kind === 'group') group = node.key;
+                    else {
+                        order.push(node.key);
+                        groupById[node.key] = group || node.group;
+                    }
+                }
                 // The layout effect of the render that applies `next` clears the offsets before that frame paints.
                 clearOnCommit.current = s.els;
-                setPending({ order: next, basis: itemsKeyRef.current });
-                onReorderRef.current(next);
+                setPending({ order, basis: itemsKeyRef.current });
+                onReorderRef.current(order, groupById);
             },
             to === from ? Math.max(SETTLE_MS, SHIFT_MS) : SETTLE_MS,
         );
@@ -406,11 +501,13 @@ export function useDragReorder<T extends { id: string }>({
             startScrollTop: 0,
             lastClientY: e.clientY,
             engaged: false,
-            ids: [],
+            nodes: [],
             rects: [],
             els: [],
+            firstSlot: 0,
             fromIndex: -1,
             targetIndex: -1,
+            highlighted: -1,
             deltaY: 0,
             stride: 0,
             bodyUserSelect: '',
@@ -473,9 +570,17 @@ export function useDragReorder<T extends { id: string }>({
         },
     });
 
+    /** Grouped mode: spread on each group's header (the block a row passes to enter the group). */
+    const getGroupProps = (groupKey: string): GroupDragProps => ({
+        ref: (el) => {
+            if (el) groupEls.current.set(groupKey, el);
+            else groupEls.current.delete(groupKey);
+        },
+    });
+
     /** Kept for API compatibility: all drag styling is applied to the row elements directly, so this is static. */
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const getRowDragSx = (_item: T): Record<string, unknown> => NO_SX;
 
-    return { orderedItems, getRowDragProps, getRowDragSx };
+    return { orderedItems, getRowDragProps, getGroupProps, getRowDragSx };
 }
