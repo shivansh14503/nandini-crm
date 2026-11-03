@@ -12,7 +12,9 @@ export type AuditEntityType =
     | 'quotations'
     | 'products'
     | 'tickets'
-    | 'partner-companies';
+    | 'partner-companies'
+    /** Form Customization admin trail: the id is a module key, `shared`, or `all`. */
+    | 'form-configs';
 
 interface EntityAuditLog {
     entityType: string;

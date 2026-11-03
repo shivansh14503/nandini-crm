@@ -49,7 +49,10 @@ export const ROUTES = {
     PARTNER_COMPANY_NEW: '/partner-companies/new',
     PARTNER_COMPANY_DETAIL: (id: string | number) => `/partner-companies/${id}`,
     PARTNER_COMPANY_EDIT: (id: string | number) => `/partner-companies/${id}/edit`,
-    FORM_CUSTOMIZATION: '/settings/form-customization',
+    ADMIN: '/admin',
+    FORM_CUSTOMIZATION: '/admin/form-customization',
+    ADMIN_ROLES_PERMISSIONS: '/admin/roles-permissions',
+    ADMIN_USERS: '/admin/users',
 };
 
 // ── Address lists (derived from the ISO 3166 address master) ──────────────────

@@ -25,6 +25,7 @@ import LogoutIcon from '@mui/icons-material/Logout';
 import PersonIcon from '@mui/icons-material/Person';
 import AddIcon from '@mui/icons-material/Add';
 import NotificationsIcon from '@mui/icons-material/Notifications';
+import AdminPanelSettingsOutlinedIcon from '@mui/icons-material/AdminPanelSettingsOutlined';
 import Badge from '@mui/material/Badge';
 import { useAuth } from '../../context/AuthContext';
 import { GlobalSearch } from './GlobalSearch';
@@ -81,8 +82,6 @@ const NAV_ITEMS = [
         items: [
             { label: 'Partner Company', href: ROUTES.PARTNER_COMPANIES },
             { label: 'Reports', href: '/dashboard' },
-            { label: 'Form Customization', href: ROUTES.FORM_CUSTOMIZATION },
-            { label: 'Settings', href: ROUTES.FORM_CUSTOMIZATION },
             { label: 'Integrations', href: '/dashboard' },
         ],
     },
@@ -358,6 +357,24 @@ function UserMenu({ user, onLogout }: { user: { username: string; role: string }
                                         >
                                             <PersonIcon fontSize="small" />
                                             My Profile
+                                        </MenuItem>
+                                        <MenuItem
+                                            id="admin-panel-btn"
+                                            component={Link}
+                                            href={ROUTES.ADMIN}
+                                            onClick={close}
+                                            sx={{
+                                                textDecoration: 'none',
+                                                fontSize: '0.82rem',
+                                                color: '#374151',
+                                                px: 2,
+                                                py: 0.9,
+                                                gap: 1.5,
+                                                '&:hover': { backgroundColor: '#EFF6FF', color: '#2563EB' },
+                                            }}
+                                        >
+                                            <AdminPanelSettingsOutlinedIcon fontSize="small" />
+                                            Admin Panel
                                         </MenuItem>
                                         <Divider sx={{ my: 0.5 }} />
                                         <MenuItem

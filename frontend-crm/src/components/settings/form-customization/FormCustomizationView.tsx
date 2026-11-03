@@ -6,9 +6,16 @@ import TuneOutlinedIcon from '@mui/icons-material/TuneOutlined';
 import ListAltOutlinedIcon from '@mui/icons-material/ListAltOutlined';
 import ViewQuiltOutlinedIcon from '@mui/icons-material/ViewQuiltOutlined';
 import VisibilityOutlinedIcon from '@mui/icons-material/VisibilityOutlined';
+import HistoryOutlinedIcon from '@mui/icons-material/HistoryOutlined';
+import PublicOutlinedIcon from '@mui/icons-material/PublicOutlined';
+import { useQueryClient } from '@tanstack/react-query';
 import { AppBreadcrumbsBar } from '@/components/common/AppBreadcrumbsBar';
 import { AppToast } from '@/components/common/AppToast';
+import { EntityDetailDrawer } from '@/components/common/Drawer';
+import { AuditTrailTimeline } from '@/components/common/Drawer/AuditTrailTimeline';
+import { ROUTES } from '@/config/constants';
 import { useAuth } from '@/context/AuthContext';
+import { auditLogKeys } from '@/hooks/queries/useAuditLogs';
 import { FormStickyFooter } from '@/components/forms/FormStickyFooter';
 import { FormConfigsOverrideContext, useFormConfigsQuery } from '@/hooks/queries/useFormConfigs';
 import ChevronRightRoundedIcon from '@mui/icons-material/ChevronRightRounded';
@@ -85,12 +92,19 @@ export function FormCustomizationView() {
         [],
     );
 
+    const queryClient = useQueryClient();
+    /** The admin audit trail drawer starts collapsed to its bookmark on the right edge. */
+    const [isDrawerCollapsed, setIsDrawerCollapsed] = useState(true);
+
     const handleSave = async () => {
         try {
             const count = await save();
             notify(`${count} change${count === 1 ? '' : 's'} saved — forms and dropdowns are updated for all users`, 'success');
         } catch (err) {
             notify(errorMessage(err), 'error');
+        } finally {
+            // Even a partly failed save may have applied (and audited) some changes.
+            void queryClient.invalidateQueries({ queryKey: auditLogKeys.all });
         }
     };
 
@@ -122,7 +136,7 @@ export function FormCustomizationView() {
 
     return (
         <Box sx={{ px: { xs: 2, md: 3 }, pt: 2, pb: canEdit ? 12 : 4, width: '100%', maxWidth: 1440, mx: 'auto' }}>
-            <AppBreadcrumbsBar items={[{ label: 'All' }, { label: 'Form Customization' }]} />
+            <AppBreadcrumbsBar items={[{ label: 'Administration' }, { label: 'Admin', href: ROUTES.ADMIN }, { label: 'Form Customization' }]} />
 
             {/* ── Header ── */}
             <Box sx={{ ...surfaceSx, mb: 2, overflow: 'hidden' }}>
@@ -143,7 +157,7 @@ export function FormCustomizationView() {
                     >
                         <TuneOutlinedIcon />
                     </Box>
-                    <Box sx={{ minWidth: 0 }}>
+                    <Box sx={{ minWidth: 0, flex: 1 }}>
                         <Typography component="h1" sx={{ fontWeight: 700, fontSize: '1.15rem', color: '#0f172a' }}>
                             Form & Dropdown Customization
                         </Typography>
@@ -151,6 +165,15 @@ export function FormCustomizationView() {
                             Manage dropdown options, tailor built-in fields and add custom fields for every CRM module. Changes show in the Live Preview straight away and reach every user&apos;s forms when you click Save Changes.
                         </Typography>
                     </Box>
+                    <Button
+                        variant="outlined"
+                        size="small"
+                        startIcon={<HistoryOutlinedIcon sx={{ fontSize: 16 }} />}
+                        onClick={() => setIsDrawerCollapsed(false)}
+                        sx={{ ...secondaryButtonSx, flexShrink: 0, whiteSpace: 'nowrap' }}
+                    >
+                        Activity / Changes
+                    </Button>
                 </Box>
                 <Box sx={{ px: { xs: 2, md: 3 }, py: 1.5, backgroundColor: '#f8fafc', borderTop: '1px solid #e2e8f0' }}>
                     <ModuleHierarchySelector value={module} onChange={setModule} fieldCounts={configs ? fieldCounts : {}} unsaved={unsavedModules} />
@@ -250,6 +273,37 @@ export function FormCustomizationView() {
                     status={<DraftStatus summaries={ops.map((op) => op.summary)} saving={saving} />}
                 />
             )}
+
+            {/* Admin audit trail: who changed which form / dropdown, when, and with which role. */}
+            <EntityDetailDrawer
+                open={true}
+                persistent
+                isCollapsed={isDrawerCollapsed}
+                onToggleCollapse={() => setIsDrawerCollapsed((prev) => !prev)}
+                onClose={() => setIsDrawerCollapsed(true)}
+                hideBackdrop={true}
+                showBookmark={true}
+                title="Form Customization"
+                subtitle={`${moduleNavLabel(module)} • Admin Audit Trail`}
+                avatarIcon={<TuneOutlinedIcon sx={{ fontSize: 22 }} />}
+                verified={true}
+                badges={[
+                    { label: user?.role || 'Admin', backgroundColor: '#eff6ff', color: '#1d4ed8', borderColor: '#bfdbfe' },
+                    { label: moduleNavLabel(module), backgroundColor: '#f1f5f9', color: '#475569', borderColor: '#e2e8f0' },
+                ]}
+                statusText={dirty ? `${ops.length} unsaved change${ops.length === 1 ? '' : 's'} in draft` : 'All form configurations synced'}
+                tabs={[
+                    {
+                        id: 'all-modules',
+                        label: 'All Modules',
+                        icon: <PublicOutlinedIcon sx={{ fontSize: 16 }} />,
+                        content: <AuditTrailTimeline entityType="form-configs" entityId="all" />,
+                    },
+                ]}
+                includeChangesTab={true}
+                auditEntity={{ type: 'form-configs', id: module }}
+                defaultTabIndex={1}
+            />
 
             <Dialog open={discardOpen} onClose={() => setDiscardOpen(false)} maxWidth="xs" fullWidth slotProps={{ paper: { sx: { borderRadius: '12px' } } }}>
                 <DialogTitle sx={{ fontWeight: 700, fontSize: '1rem' }}>Discard unsaved changes?</DialogTitle>

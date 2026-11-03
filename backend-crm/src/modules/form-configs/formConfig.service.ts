@@ -160,6 +160,40 @@ const toFieldDto = (f: FormFieldDefinition, categoryKeys: Map<string, string>): 
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
+/**
+ * Context stored on every form-config audit entry as `changes._meta`, so the admin Changes timeline
+ * (modules/audit/audit.service.ts) can title entries and filter them by module. `diffRecords` diffs stay
+ * alongside it; `_meta` is not a `{ from, to }` pair, so diff readers skip it.
+ */
+export interface FormConfigAuditMeta {
+    /** CRM module key, or `shared` for dropdowns several forms use. */
+    module: string;
+    categoryKey?: string;
+    categoryLabel?: string;
+    fieldKey?: string;
+    fieldLabel?: string;
+    optionLabel?: string;
+    sectionKey?: string;
+    /** Role of the admin at the time of the change (roles can change later). */
+    actorRole: string;
+}
+
+const withMeta = <T extends object>(changes: T, user: AuthUser, meta: Omit<FormConfigAuditMeta, 'actorRole'>) => ({
+    ...changes,
+    _meta: { ...meta, actorRole: user.role } satisfies FormConfigAuditMeta,
+});
+
+/** Audit context of a dropdown option: its category's module, key and label. */
+async function optionAuditMeta(tx: TransactionClient, option: DropdownOption): Promise<Omit<FormConfigAuditMeta, 'actorRole'>> {
+    const category = await tx.dropdownCategory.findUnique({ where: { id: option.categoryId }, select: { key: true, label: true, module: true } });
+    return {
+        module: category?.module ?? 'shared',
+        categoryKey: category?.key,
+        categoryLabel: category?.label,
+        optionLabel: option.label,
+    };
+}
+
 async function invalidate(): Promise<void> {
     await cacheService.invalidatePattern(`${CACHE_KEYS.lookups('form-configs')}*`);
 }
@@ -248,7 +282,11 @@ async function createCategoryWithOptions(
         entityId: category.id,
         action: 'CREATE',
         changedBy: user.username,
-        changes: { key, label: input.label, module: input.module, options: values },
+        changes: withMeta({ key, label: input.label, module: input.module, options: values }, user, {
+            module: input.module,
+            categoryKey: key,
+            categoryLabel: input.label,
+        }),
     });
     return category;
 }
@@ -407,7 +445,7 @@ export const formConfigService = {
                 entityId: before.id,
                 action: 'UPDATE',
                 changedBy: user.username,
-                changes: diffRecords(before, after),
+                changes: withMeta(diffRecords(before, after), user, { module: after.module, categoryKey: after.key, categoryLabel: after.label }),
             });
         });
         await invalidate();
@@ -444,7 +482,11 @@ export const formConfigService = {
                         entityId: f.id,
                         action: 'UPDATE' as const,
                         changedBy: user.username,
-                        changes: { dropdown: { from: category.key, to: null }, isVisibleInForm: { from: true, to: false } },
+                        changes: withMeta(
+                            { dropdown: { from: category.key, to: null }, isVisibleInForm: { from: true, to: false } },
+                            user,
+                            { module: f.module, fieldKey: f.fieldKey, fieldLabel: f.label, categoryKey: category.key, categoryLabel: category.label },
+                        ),
                     })),
                 );
             }
@@ -458,7 +500,11 @@ export const formConfigService = {
                         entityId: f.id,
                         action: 'DELETE' as const,
                         changedBy: user.username,
-                        changes: { module: f.module, fieldKey: f.fieldKey, label: f.label, reason: `dropdown '${category.key}' deleted` },
+                        changes: withMeta(
+                            { module: f.module, fieldKey: f.fieldKey, label: f.label, reason: `Dropdown '${category.label}' deleted` },
+                            user,
+                            { module: f.module, fieldKey: f.fieldKey, fieldLabel: f.label, categoryKey: category.key, categoryLabel: category.label },
+                        ),
                     })),
                 );
             }
@@ -473,14 +519,18 @@ export const formConfigService = {
                 entityId: category.id,
                 action: 'DELETE',
                 changedBy: user.username,
-                changes: {
-                    key: category.key,
-                    label: category.label,
-                    module: category.module,
-                    builtIn: category.isSystem,
-                    removedFields: custom.map((f) => `${f.module}:${f.fieldKey}`),
-                    hiddenFields: builtIn.map((f) => `${f.module}:${f.fieldKey}`),
-                },
+                changes: withMeta(
+                    {
+                        key: category.key,
+                        label: category.label,
+                        module: category.module,
+                        builtIn: category.isSystem,
+                        removedFields: custom.map((f) => `${f.module}:${f.fieldKey}`),
+                        hiddenFields: builtIn.map((f) => `${f.module}:${f.fieldKey}`),
+                    },
+                    user,
+                    { module: category.module, categoryKey: category.key, categoryLabel: category.label },
+                ),
             });
         });
         await invalidate();
@@ -527,7 +577,12 @@ export const formConfigService = {
                 entityId: saved.id,
                 action: existing ? 'STATUS_CHANGE' : 'CREATE',
                 changedBy: user.username,
-                changes: { category: category.key, value: saved.value, label: saved.label, ...(existing ? { restored: true } : {}) },
+                changes: withMeta({ category: category.key, value: saved.value, label: saved.label, ...(existing ? { restored: true } : {}) }, user, {
+                    module: category.module,
+                    categoryKey: category.key,
+                    categoryLabel: category.label,
+                    optionLabel: saved.label,
+                }),
             });
             return saved;
         });
@@ -571,7 +626,7 @@ export const formConfigService = {
                     entityId: before.id,
                     action: input.isActive !== undefined && input.isActive !== before.isActive ? 'STATUS_CHANGE' : 'UPDATE',
                     changedBy: user.username,
-                    changes,
+                    changes: withMeta(changes, user, await optionAuditMeta(tx, after)),
                 });
             }
             return after;
@@ -588,13 +643,14 @@ export const formConfigService = {
         await runInTransaction(async (tx) => {
             const option = await findOption(tx, optionId);
             if (option.isSystem) throw HttpError.badRequest('System-protected options cannot be deleted.');
+            const meta = await optionAuditMeta(tx, option);
             await tx.dropdownOption.delete({ where: { id: option.id } });
             await auditService.record(tx, {
                 entityType: 'DropdownOption',
                 entityId: option.id,
                 action: 'DELETE',
                 changedBy: user.username,
-                changes: { categoryId: option.categoryId, value: option.value, label: option.label },
+                changes: withMeta({ categoryId: option.categoryId, value: option.value, label: option.label }, user, meta),
             });
         });
         await invalidate();
@@ -619,7 +675,11 @@ export const formConfigService = {
                 entityId: category.id,
                 action: 'UPDATE',
                 changedBy: user.username,
-                changes: { reordered: ordered.length },
+                changes: withMeta({ reordered: ordered.length }, user, {
+                    module: category.module,
+                    categoryKey: category.key,
+                    categoryLabel: category.label,
+                }),
             });
         });
         await invalidate();
@@ -683,7 +743,11 @@ export const formConfigService = {
                 entityId: created.id,
                 action: 'CREATE',
                 changedBy: user.username,
-                changes: { module: created.module, fieldKey: created.fieldKey, label: created.label, fieldType: created.fieldType },
+                changes: withMeta({ module: created.module, fieldKey: created.fieldKey, label: created.label, fieldType: created.fieldType }, user, {
+                    module: created.module,
+                    fieldKey: created.fieldKey,
+                    fieldLabel: created.label,
+                }),
             });
             return created;
         });
@@ -762,14 +826,24 @@ export const formConfigService = {
                 await placeField(tx, before.module, before.id);
             }
 
-            const changes = diffRecords(before, after);
+            const changes: Record<string, { from: unknown; to: unknown }> = diffRecords(before, after);
+            // Record the linked dropdown by key (readable in the timeline) rather than by row id.
+            if (changes.dropdownCategoryId) {
+                const ids = [before.dropdownCategoryId, after.dropdownCategoryId].filter((id): id is string => Boolean(id));
+                const keys = new Map(
+                    (await tx.dropdownCategory.findMany({ where: { id: { in: ids } }, select: { id: true, key: true } })).map((c) => [c.id, c.key]),
+                );
+                const keyOf = (id: string | null) => (id ? (keys.get(id) ?? id) : null);
+                delete changes.dropdownCategoryId;
+                changes.dropdown = { from: keyOf(before.dropdownCategoryId), to: keyOf(after.dropdownCategoryId) };
+            }
             if (Object.keys(changes).length > 0) {
                 await auditService.record(tx, {
                     entityType: 'FormField',
                     entityId: before.id,
                     action: input.isActive !== undefined && input.isActive !== before.isActive ? 'STATUS_CHANGE' : 'UPDATE',
                     changedBy: user.username,
-                    changes,
+                    changes: withMeta(changes, user, { module: after.module, fieldKey: after.fieldKey, fieldLabel: after.label }),
                 });
             }
         });
@@ -792,7 +866,11 @@ export const formConfigService = {
                 entityId: field.id,
                 action: 'DELETE',
                 changedBy: user.username,
-                changes: { module: field.module, fieldKey: field.fieldKey, label: field.label, fieldType: field.fieldType },
+                changes: withMeta({ module: field.module, fieldKey: field.fieldKey, label: field.label, fieldType: field.fieldType }, user, {
+                    module: field.module,
+                    fieldKey: field.fieldKey,
+                    fieldLabel: field.label,
+                }),
             });
 
             if (!field.dropdownCategoryId) return;
@@ -806,7 +884,11 @@ export const formConfigService = {
                     entityId: category.id,
                     action: 'DELETE',
                     changedBy: user.username,
-                    changes: { key: category.key, label: category.label, reason: `last field '${field.module}:${field.fieldKey}' deleted` },
+                    changes: withMeta(
+                        { key: category.key, label: category.label, module: category.module, reason: `Last field using it ('${field.label}', ${field.module}) deleted` },
+                        user,
+                        { module: category.module, categoryKey: category.key, categoryLabel: category.label, fieldKey: field.fieldKey, fieldLabel: field.label },
+                    ),
                 });
                 return;
             }
@@ -819,7 +901,11 @@ export const formConfigService = {
                     entityId: category.id,
                     action: 'UPDATE',
                     changedBy: user.username,
-                    changes: { module: { from: category.module, to: module } },
+                    changes: withMeta({ module: { from: category.module, to: module } }, user, {
+                        module: field.module,
+                        categoryKey: category.key,
+                        categoryLabel: category.label,
+                    }),
                 });
             }
         });
@@ -848,7 +934,13 @@ export const formConfigService = {
             for (const [index, id] of ordered.entries()) {
                 await tx.formFieldDefinition.update({ where: { id }, data: { sortOrder: (index + 1) * 10 } });
             }
-            await auditService.record(tx, { entityType: 'FormField', entityId: module, action: 'UPDATE', changedBy: user.username, changes: { reordered: ordered.length } });
+            await auditService.record(tx, {
+                entityType: 'FormField',
+                entityId: module,
+                action: 'UPDATE',
+                changedBy: user.username,
+                changes: withMeta({ reordered: ordered.length }, user, { module }),
+            });
         });
         await invalidate();
         return (await formConfigService.getAllConfigs(true)).fieldsByModule[module];
@@ -865,7 +957,7 @@ export const formConfigService = {
                 entityId: `${module}:${sectionKey}`,
                 action: 'UPDATE',
                 changedBy: user.username,
-                changes: { sectionLabel },
+                changes: withMeta({ sectionLabel }, user, { module, sectionKey }),
             });
         });
         await invalidate();
@@ -908,7 +1000,13 @@ export const formConfigService = {
             // Custom fields keep their sections; re-place them after the restored built-in order.
             const customFields = await tx.formFieldDefinition.findMany({ where: { module, isSystem: false }, orderBy: { sortOrder: 'asc' }, select: { id: true } });
             for (const field of customFields) await placeField(tx, module, field.id);
-            await auditService.record(tx, { entityType: 'FormField', entityId: module, action: 'UPDATE', changedBy: user.username, changes: { reset: true } });
+            await auditService.record(tx, {
+                entityType: 'FormField',
+                entityId: module,
+                action: 'UPDATE',
+                changedBy: user.username,
+                changes: withMeta({ reset: true }, user, { module }),
+            });
         });
         await invalidate();
         return (await formConfigService.getAllConfigs(true)).fieldsByModule[module];

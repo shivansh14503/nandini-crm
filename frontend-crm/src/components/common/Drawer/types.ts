@@ -92,6 +92,11 @@ export interface EntityDetailDrawerProps {
     onToggleCollapse?: () => void;
     /** Whether this drawer renders the floating bookmark tab (default true). */
     showBookmark?: boolean;
+    /**
+     * Non-modal drawer (MUI `persistent` variant): no backdrop, focus trap or scroll lock, so the page stays usable
+     * while it is mounted. For page-level drawers kept open (collapsed to the bookmark) for the life of a page.
+     */
+    persistent?: boolean;
 }
 
 /**

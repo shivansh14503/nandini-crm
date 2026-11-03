@@ -90,6 +90,9 @@ function formatSegmentLabel(segment: string): string {
     if (lower === 'quotations' || lower === 'quotes') return 'Quotations';
     if (lower === 'quote') return 'Create Quote';
     if (lower === 'dashboard') return 'Dashboard';
+    if (lower === 'admin') return 'Admin';
+    if (lower === 'form-customization') return 'Form Customization';
+    if (lower === 'roles-permissions') return 'Roles & Permissions';
     
     // Check if it's an ID (digits or uuid format)
     if (/^[0-9a-f]{8}-[0-9a-f]{4}/i.test(segment) || /^\d+$/.test(segment)) {

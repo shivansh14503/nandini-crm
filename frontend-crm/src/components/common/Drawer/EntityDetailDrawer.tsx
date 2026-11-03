@@ -59,6 +59,7 @@ export function EntityDetailDrawer({
     isCollapsed: isCollapsedProp,
     onToggleCollapse: onToggleCollapseProp,
     showBookmark: showBookmarkProp,
+    persistent = false,
 }: EntityDetailDrawerProps) {
     const [currentTab, setCurrentTab] = useState<number>(defaultTabIndex);
     const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -220,6 +221,7 @@ export function EntityDetailDrawer({
             )}
             <Drawer
                 anchor="right"
+                variant={persistent ? 'persistent' : 'temporary'}
                 open={open}
                 onClose={onClose}
                 hideBackdrop={effectiveHideBackdrop}
