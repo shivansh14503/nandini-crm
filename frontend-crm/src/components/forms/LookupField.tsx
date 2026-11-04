@@ -13,6 +13,7 @@ import ArrowForwardIosIcon from '@mui/icons-material/ArrowForwardIos';
 import ClearIcon from '@mui/icons-material/Clear';
 import { fieldSx } from './FormField';
 import { fieldSizeSx, type FieldSize } from './fieldSizing';
+import { compareOrganizationNames } from '@/utils/organizationName';
 
 export interface LookupFieldProps {
     value: string;
@@ -32,6 +33,31 @@ export interface LookupFieldProps {
     lookupTooltip?: string;
     /** Width cap (input + action buttons) for standalone use; omit inside a FormField, which sizes its children. */
     fieldSize?: FieldSize;
+    /**
+     * How typed text filters `options`. `substring` (default): case-insensitive contains. `organization`: also keeps
+     * names that are the same / similar legal name ("abc private limited" still shows "ABC Pvt Ltd").
+     */
+    matchMode?: 'substring' | 'organization';
+}
+
+const MAX_VISIBLE_OPTIONS = 50;
+
+/** Substring matches first (in their original order), then organization-name matches ranked by closeness. */
+function filterOrganizationOptions(options: string[], inputValue: string): string[] {
+    const q = inputValue.trim().toLowerCase();
+    if (!q) return options.slice(0, MAX_VISIBLE_OPTIONS);
+    const contains: string[] = [];
+    const similar: { option: string; score: number }[] = [];
+    for (const option of options) {
+        if (option.toLowerCase().includes(q)) {
+            contains.push(option);
+        } else {
+            const { matchKind, score } = compareOrganizationNames(inputValue, option);
+            if (matchKind !== 'none') similar.push({ option, score });
+        }
+    }
+    similar.sort((a, b) => b.score - a.score);
+    return [...contains, ...similar.map((s) => s.option)].slice(0, MAX_VISIBLE_OPTIONS);
 }
 
 const actionButtonSx = {
@@ -58,6 +84,7 @@ export function LookupField({
     required = false,
     lookupTooltip = 'Select from Directory',
     fieldSize,
+    matchMode = 'substring',
 }: LookupFieldProps) {
     const handleLookup = onLookupClick ?? onSelectClick;
 
@@ -78,10 +105,12 @@ export function LookupField({
                 value={value || ''}
                 // Controlled by `value` so selections made from the lookup modal show up immediately.
                 inputValue={value || ''}
-                // Case-insensitive substring match on what is typed; capped to keep long directories snappy.
+                // Case-insensitive substring match on what is typed (plus legal-name / fuzzy matches for organizations);
+                // capped to keep long directories snappy.
                 filterOptions={(opts, { inputValue }) => {
+                    if (matchMode === 'organization') return filterOrganizationOptions(opts, inputValue);
                     const q = inputValue.trim().toLowerCase();
-                    return (q ? opts.filter((o) => o.toLowerCase().includes(q)) : opts).slice(0, 50);
+                    return (q ? opts.filter((o) => o.toLowerCase().includes(q)) : opts).slice(0, MAX_VISIBLE_OPTIONS);
                 }}
                 // Only user edits propagate; 'reset' (MUI echoing `value` back) would otherwise fight a picked option.
                 onInputChange={(_, newInputValue, reason) => {

@@ -7,6 +7,7 @@ import type { ApiResponse } from '../types/api.types';
 import { leadService } from './lead.service';
 import { notifyCrmUpdate } from './crmSync';
 import { apiClient } from './apiClient';
+import { canonicalizeOrgName } from '../utils/organizationName';
 
 export interface LeadConversionResult {
     organization: ExtendedOrganization;
@@ -19,14 +20,21 @@ export interface LeadConversionResult {
 const normalize = (value?: string) => (value ?? '').trim().toLowerCase();
 const digits = (value?: string) => (value ?? '').replace(/\D/g, '');
 
-/** The organization conversion will reuse: by explicit id, else case-insensitive name (as the API matches). */
+/**
+ * The organization conversion will reuse (as the API matches): by explicit id, else case-insensitive name, else
+ * the same legal name written differently ("ABC Private Limited" → existing "ABC Pvt Ltd").
+ */
 export function matchExistingOrganization(candidates: ExtendedOrganization[], name: string, id?: string): ExtendedOrganization | undefined {
     if (id) {
         const byId = candidates.find((o) => o.id === id);
         if (byId) return byId;
     }
     const target = normalize(name);
-    return target ? candidates.find((o) => normalize(o.organizationName) === target) : undefined;
+    if (!target) return undefined;
+    const exact = candidates.find((o) => normalize(o.organizationName) === target);
+    if (exact) return exact;
+    const canonical = canonicalizeOrgName(name);
+    return canonical ? candidates.find((o) => canonicalizeOrgName(o.organizationName) === canonical) : undefined;
 }
 
 /** The contact conversion will reuse: by explicit id, else mobile number (as the API matches). */

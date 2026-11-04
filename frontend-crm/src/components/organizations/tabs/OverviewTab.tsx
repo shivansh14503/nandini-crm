@@ -11,14 +11,12 @@ import {
     Select,
     MenuItem,
     InputAdornment,
-    CircularProgress,
 } from '@mui/material';
-import { organizationService, matchExistingOrganization } from '@/services';
-import { useOrganizations } from '@/hooks/queries/useOrganizations';
+import { OrganizationNameAutocomplete } from '../OrganizationNameAutocomplete';
+import { useOrganizationNameCheck } from '../useOrganizationNameCheck';
 import { CommonActionModal } from '@/components/common/CommonActionModal';
 
 // Icons
-import VerifiedIcon from '@mui/icons-material/Verified';
 import SwapHorizIcon from '@mui/icons-material/SwapHoriz';
 import LockOutlinedIcon from '@mui/icons-material/LockOutlined';
 
@@ -75,9 +73,6 @@ export interface OverviewTabProps {
     /** Id of the organization being edited, so its own name isn't flagged as a duplicate. */
     organizationId?: string;
 }
-
-const NAME_CHECK_DEBOUNCE_MS = 350;
-const DUPLICATE_NAME_MESSAGE = 'An organization with this name already exists.';
 
 function OverviewTabInner({
     form,
@@ -144,50 +139,25 @@ function OverviewTabInner({
         }
     }, [watchedAssignedUser, set, form?.assignedUser]);
 
-    // ── Live uniqueness check (cached list for instant feedback, API as the authority) ──
-    const { data: knownOrganizations } = useOrganizations(undefined, { enabled: !isView });
-    const [checkingName, setCheckingName] = React.useState(false);
-    const [blurTick, setBlurTick] = React.useState(0);
-    const checkNowRef = React.useRef(false);
+    // ── Live uniqueness check + suggestions (cached list for instant feedback, API as the authority) ──
     const trimmedName = organizationName.trim();
+    const nameCheck = useOrganizationNameCheck({ name: organizationName, organizationId, enabled: !isView });
+    const duplicateMessage = nameCheck.duplicate?.message;
+    const nameError = errors.organizationName;
 
+    // Mirror the check's verdict into the form: the save handler refuses while a 'duplicate' error is set.
+    // Re-asserted whenever validation replaces the error, so a resolver pass can't silently drop it.
     React.useEffect(() => {
-        if (isView || !trimmedName) {
-            setCheckingName(false);
-            return;
-        }
-        const duplicateError = (message: string) => setError('organizationName', { type: 'duplicate', message });
-
-        const cached = matchExistingOrganization((knownOrganizations ?? []).filter((o) => o.id !== organizationId), trimmedName);
-        if (cached) {
-            duplicateError(`An organization named "${trimmedName}" already exists (${cached.accountCode}).`);
-        }
-
-        const controller = new AbortController();
-        const delay = checkNowRef.current ? 0 : NAME_CHECK_DEBOUNCE_MS;
-        checkNowRef.current = false;
-        setCheckingName(true);
-        const timer = setTimeout(async () => {
-            try {
-                const result = await organizationService.checkUnique({ organizationName: trimmedName, excludeId: organizationId }, controller.signal);
-                if (controller.signal.aborted) return;
-                if (result.exists) {
-                    duplicateError(result.message || DUPLICATE_NAME_MESSAGE);
-                } else if (getFieldState('organizationName').error?.type === 'duplicate') {
-                    clearErrors('organizationName');
-                }
-            } catch {
-                // Offline / timeout: keep what the cache said; the server re-checks on save.
-            } finally {
-                if (!controller.signal.aborted) setCheckingName(false);
+        if (isView) return;
+        const current = getFieldState('organizationName').error;
+        if (duplicateMessage) {
+            if (current?.type !== 'duplicate' || current.message !== duplicateMessage) {
+                setError('organizationName', { type: 'duplicate', message: duplicateMessage });
             }
-        }, delay);
-
-        return () => {
-            controller.abort();
-            clearTimeout(timer);
-        };
-    }, [trimmedName, organizationId, isView, knownOrganizations, blurTick, setError, clearErrors, getFieldState]);
+        } else if (current?.type === 'duplicate') {
+            clearErrors('organizationName');
+        }
+    }, [duplicateMessage, trimmedName, isView, nameError?.type, nameError?.message, setError, clearErrors, getFieldState]);
 
     const handleOrgNameChange = (val: string) => {
         // Trade name keeps following the organization name until the user gives it a value of its own.
@@ -408,36 +378,18 @@ function OverviewTabInner({
                     required
                     hint="As per official registration"
                 >
-                    <TextField
-                        fullWidth
-                        size="small"
-                        placeholder="e.g. Mohit Traders Pvt Ltd"
+                    <OrganizationNameAutocomplete
                         value={organizationName}
-                        onChange={(e) => handleOrgNameChange(e.target.value)}
-                        onBlur={() => {
-                            // Check right away instead of waiting out the debounce.
-                            if (trimmedName && checkingName) {
-                                checkNowRef.current = true;
-                                setBlurTick((n) => n + 1);
-                            }
-                        }}
-                        error={Boolean(errors.organizationName)}
-                        helperText={errors.organizationName?.message}
-                        sx={fieldSx}
-                        slotProps={{
-                            input: {
-                                endAdornment: trimmedName ? (
-                                    <InputAdornment position="end">
-                                        {checkingName ? (
-                                            <CircularProgress size={16} />
-                                        ) : !errors.organizationName ? (
-                                            <VerifiedIcon sx={{ fontSize: 18, color: '#16a34a' }} />
-                                        ) : null}
-                                    </InputAdornment>
-                                ) : undefined,
-                            },
-                            htmlInput: { maxLength: FIELD_MAX_LENGTH.organizationName },
-                        }}
+                        onChange={handleOrgNameChange}
+                        // Check right away instead of waiting out the debounce.
+                        onBlur={nameCheck.checkNow}
+                        organizationId={organizationId}
+                        error={Boolean(nameError)}
+                        helperText={nameError?.message}
+                        checking={nameCheck.checking}
+                        verified={Boolean(trimmedName) && !nameError && !nameCheck.duplicate}
+                        suggestions={nameCheck.suggestions}
+                        onSelectSuggestion={(org) => handleOrgNameChange(org.organizationName)}
                     />
                 </FormField>
 

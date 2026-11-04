@@ -8,6 +8,15 @@ import type { PaginatedResult } from '../../utils/apiResponse.js';
 import { generateEntityCode } from '../../utils/codeGenerator.js';
 import { HttpError } from '../../utils/httpError.js';
 import { daysAgo, nullable, serializeCustomFields, stringifyStringArray } from '../../utils/mappers.js';
+import {
+    canonicalizeOrgName,
+    duplicateOrganizationMessage,
+    extractCoreOrgName,
+    findSimilarOrganizations,
+    isDuplicateMatchKind,
+    type OrgNameMatchKind,
+    type SimilarOrganizationResult,
+} from '../../utils/organizationName.js';
 import { parsePagination } from '../../utils/pagination.js';
 import { emailsInclude, normalizeEmails, replaceEmails } from '../shared/entityEmails.js';
 import { acquireLocks, lockRecords, runInTransaction, softDeleteData, type BulkDeleteResult } from '../shared/transactions.js';
@@ -28,13 +37,120 @@ const include = { corporateEmails: emailsInclude } as const;
 
 const notFound = () => HttpError.notFound('Organization not found');
 
+export interface SimilarOrganizationMatch {
+    id: string;
+    accountCode: string;
+    organizationName: string;
+    tradeName: string | null;
+    billingCity: string | null;
+    billingState: string | null;
+    accountStatus: string;
+    gstNo: string | null;
+    matchKind: OrgNameMatchKind;
+}
+
 export interface UniqueCheckResult {
     exists: boolean;
+    matchKind?: 'exact' | 'canonical' | 'gstNo';
     field?: 'organizationName' | 'gstNo';
+    id?: string;
     accountCode?: string;
     organizationName?: string;
     message?: string;
+    /** Existing organizations whose names match or resemble the one checked, best first. */
+    suggestions?: SimilarOrganizationMatch[];
 }
+
+// ── Name matching ────────────────────────────────────────────────────────────
+
+const SUGGESTION_LIMIT = 6;
+/** Upper bound on rows pulled for in-memory name comparison. */
+const NAME_CANDIDATE_LIMIT = 300;
+const NAME_CANDIDATE_SELECT = {
+    id: true,
+    accountCode: true,
+    organizationName: true,
+    tradeName: true,
+    billingCity: true,
+    billingState: true,
+    accountStatus: true,
+    gstNo: true,
+} as const satisfies Prisma.OrganizationSelect;
+type NameCandidate = Prisma.OrganizationGetPayload<{ select: typeof NAME_CANDIDATE_SELECT }>;
+
+/** Words too common (or too often abbreviated) to narrow the candidate query on their own. */
+const NON_DISTINCTIVE_TOKENS = new Set([
+    'and', 'of', 'the', 'for', 'in', 'india', 'indian', 'group',
+    'enterprises', 'industries', 'associates', 'international', 'technologies', 'solutions', 'services',
+]);
+
+/**
+ * Substrings that every canonical / core / close match of `name` is very likely to contain, used to narrow the
+ * SQL query before the precise in-memory comparison: the distinctive core tokens, plus a 3-letter stem of the
+ * first one so a typo later in the word still finds the record.
+ */
+function nameSearchTerms(name: string): string[] {
+    const tokens = extractCoreOrgName(name).split(' ').filter((t) => t.length >= 2);
+    const distinctive = tokens.filter((t) => !NON_DISTINCTIVE_TOKENS.has(t));
+    const picked = (distinctive.length > 0 ? distinctive : tokens).sort((a, b) => b.length - a.length).slice(0, 3);
+    const first = tokens[0];
+    if (first && first.length > 3) picked.push(first.slice(0, 3));
+    return [...new Set(picked)];
+}
+
+/** Live organizations that could match `name` (SQL Server `contains` is case-insensitive), capped. */
+async function findNameCandidates(client: TransactionClient, name: string, excludeId?: string): Promise<NameCandidate[]> {
+    const terms = nameSearchTerms(name);
+    if (terms.length === 0) return [];
+    return client.organization.findMany({
+        where: {
+            isDeleted: false,
+            ...(excludeId ? { NOT: { id: excludeId } } : {}),
+            OR: terms.map((term) => ({ organizationName: { contains: term } })),
+        },
+        select: NAME_CANDIDATE_SELECT,
+        orderBy: { organizationName: 'asc' },
+        take: NAME_CANDIDATE_LIMIT,
+    });
+}
+
+/**
+ * Live organizations whose names match `name`, best first. An exact (case-insensitive, per the SQL collation)
+ * match always leads, then canonical / core / prefix / fuzzy matches.
+ */
+async function rankNameMatches(client: TransactionClient, name: string, excludeId?: string): Promise<SimilarOrganizationResult<NameCandidate>[]> {
+    const notSelf = excludeId ? { NOT: { id: excludeId } } : {};
+    // Sequential on purpose: a transaction client runs one query at a time.
+    const exact = await client.organization.findFirst({
+        where: { organizationName: name, isDeleted: false, ...notSelf },
+        select: NAME_CANDIDATE_SELECT,
+    });
+    const candidates = await findNameCandidates(client, name, excludeId);
+    const ranked = findSimilarOrganizations(candidates, name, { limit: SUGGESTION_LIMIT + 1 }).filter((m) => m.record.id !== exact?.id);
+    return (exact ? [{ record: exact, matchKind: 'exact' as const, score: 1 }, ...ranked] : ranked).slice(0, SUGGESTION_LIMIT);
+}
+
+/** The live organization with the same legal name as `name` (exact or canonical), if any. */
+async function findSameNamedOrganization(
+    client: TransactionClient,
+    name: string,
+    excludeId?: string,
+): Promise<{ record: NameCandidate; matchKind: 'exact' | 'canonical' } | null> {
+    const top = (await rankNameMatches(client, name, excludeId))[0];
+    return top && isDuplicateMatchKind(top.matchKind) ? { record: top.record, matchKind: top.matchKind } : null;
+}
+
+const toSimilarMatch = ({ record, matchKind }: SimilarOrganizationResult<NameCandidate>): SimilarOrganizationMatch => ({
+    id: record.id,
+    accountCode: record.accountCode,
+    organizationName: record.organizationName,
+    tradeName: record.tradeName,
+    billingCity: record.billingCity,
+    billingState: record.billingState,
+    accountStatus: record.accountStatus,
+    gstNo: record.gstNo,
+    matchKind,
+});
 
 // ── Viewer flags ─────────────────────────────────────────────────────────────
 
@@ -48,17 +164,23 @@ async function viewerFlags(user: AuthUser) {
 
 // ── Integrity checks (run inside the write transaction) ──────────────────────
 
-/** Name / GSTIN locks make "check, then write" race-free (names compare case-insensitively in SQL Server). */
-async function assertUnique(tx: TransactionClient, input: OrganizationWriteInput, gstNo: string | null, excludeId?: string): Promise<void> {
+/**
+ * Name / GSTIN locks make "check, then write" race-free. The name lock is keyed on the canonical name, so
+ * concurrent "ABC Pvt Ltd" and "ABC Private Limited" creates queue behind each other and the second is rejected.
+ */
+async function assertUnique(
+    tx: TransactionClient,
+    input: OrganizationWriteInput,
+    gstNo: string | null,
+    { excludeId, checkName = true }: { excludeId?: string; checkName?: boolean } = {},
+): Promise<void> {
     const normalizedName = input.organizationName.trim();
-    await acquireLocks(tx, [`organization:name:${normalizedName.toLowerCase()}`, gstNo && `organization:gst:${gstNo}`]);
+    const nameKey = canonicalizeOrgName(normalizedName) || normalizedName.toLowerCase();
+    await acquireLocks(tx, [checkName ? `organization:name:${nameKey}` : null, gstNo && `organization:gst:${gstNo}`]);
     const notSelf = excludeId ? { NOT: { id: excludeId } } : {};
-    const sameName = await tx.organization.findFirst({
-        where: { organizationName: normalizedName, isDeleted: false, ...notSelf },
-        select: { accountCode: true },
-    });
+    const sameName = checkName ? await findSameNamedOrganization(tx, normalizedName, excludeId) : null;
     if (sameName) {
-        const message = `An organization named "${normalizedName}" already exists (${sameName.accountCode}).`;
+        const message = duplicateOrganizationMessage(sameName.matchKind, sameName.record.organizationName, sameName.record.accountCode);
         throw HttpError.conflict(message, [{ message, path: ['organizationName'] }]);
     }
     if (gstNo) {
@@ -228,13 +350,19 @@ export async function createOrganizationRecord(tx: TransactionClient, input: Org
     return dto;
 }
 
-/** Live organization by id, or else by exact (case-insensitive) name, for "find or create" flows. */
+/**
+ * Live organization by id, or else by name for "find or create" flows: exact (case-insensitive) first, then the
+ * same legal name written differently, so "ABC Private Limited" links to an existing "ABC Pvt Ltd".
+ */
 export async function findLiveOrganization(tx: TransactionClient, name: string, id?: string): Promise<OrganizationRow | null> {
     if (id) {
         const byId = await tx.organization.findFirst({ where: { id, isDeleted: false }, include });
         if (byId) return byId;
     }
-    return name ? tx.organization.findFirst({ where: { organizationName: name, isDeleted: false }, include }) : null;
+    const trimmed = name?.trim();
+    if (!trimmed) return null;
+    const sameName = await findSameNamedOrganization(tx, trimmed);
+    return sameName ? tx.organization.findFirst({ where: { id: sameName.record.id, isDeleted: false }, include }) : null;
 }
 
 /**
@@ -308,37 +436,43 @@ export const organizationService = {
         const { organizationName, gstNo, excludeId } = checkOrganizationUniqueQuerySchema.parse(query);
         const notSelf = excludeId ? { NOT: { id: excludeId } } : {};
 
+        let suggestions: SimilarOrganizationMatch[] | undefined;
         if (organizationName) {
-            const sameName = await prisma.organization.findFirst({
-                where: { organizationName, isDeleted: false, ...notSelf },
-                select: { accountCode: true, organizationName: true },
-            });
-            if (sameName) {
+            const ranked = await rankNameMatches(prisma, organizationName, excludeId);
+            suggestions = ranked.map(toSimilarMatch);
+            const top = ranked[0];
+            if (top && isDuplicateMatchKind(top.matchKind)) {
                 return {
                     exists: true,
+                    matchKind: top.matchKind,
                     field: 'organizationName',
-                    accountCode: sameName.accountCode,
-                    organizationName: sameName.organizationName,
-                    message: `An organization named "${organizationName}" already exists (${sameName.accountCode}).`,
+                    id: top.record.id,
+                    accountCode: top.record.accountCode,
+                    organizationName: top.record.organizationName,
+                    message: duplicateOrganizationMessage(top.matchKind, top.record.organizationName, top.record.accountCode),
+                    suggestions,
                 };
             }
         }
         if (gstNo) {
             const sameGst = await prisma.organization.findFirst({
                 where: { gstNo, isDeleted: false, ...notSelf },
-                select: { accountCode: true, organizationName: true },
+                select: { id: true, accountCode: true, organizationName: true },
             });
             if (sameGst) {
                 return {
                     exists: true,
+                    matchKind: 'gstNo',
                     field: 'gstNo',
+                    id: sameGst.id,
                     accountCode: sameGst.accountCode,
                     organizationName: sameGst.organizationName,
                     message: `GSTIN ${gstNo} is already registered to ${sameGst.organizationName} (${sameGst.accountCode}).`,
+                    suggestions,
                 };
             }
         }
-        return { exists: false };
+        return { exists: false, suggestions };
     },
 
     async create(body: unknown, user: AuthUser): Promise<OrganizationDto> {
@@ -361,8 +495,11 @@ export const organizationService = {
             const input = organizationInputSchema.parse(mergePatch(before, patch));
             const gstNo = gstFor(input);
             // Strict comparison on purpose: a case-only rename counts as a change and is re-checked (excluding this record).
-            if (input.organizationName !== existing.organizationName || gstNo !== existing.gstNo) {
-                await assertUnique(tx, input, gstNo, id);
+            const nameChanged = input.organizationName !== existing.organizationName;
+            if (nameChanged || gstNo !== existing.gstNo) {
+                // Only re-check the name when it changed: legacy rows may already have canonical twins, and a
+                // GSTIN-only edit shouldn't be blocked by them.
+                await assertUnique(tx, input, gstNo, { excludeId: id, checkName: nameChanged });
             }
 
             await tx.organization.update({

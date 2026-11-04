@@ -138,6 +138,7 @@ export function RhfLookup<T extends FieldValues, K extends LookupKind = LookupKi
                 required={required}
                 disabled={disabled}
                 onLookupClick={kind ? () => setModalOpen(true) : onLookupClick}
+                matchMode={kind === 'organization' || kind === 'partnerCompany' ? 'organization' : 'substring'}
             />
             {fieldState.error && (
                 <FormHelperText error sx={{ mx: 1.75 }}>

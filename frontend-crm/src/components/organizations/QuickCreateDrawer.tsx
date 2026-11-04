@@ -30,6 +30,8 @@ import { DEFAULT_COUNTRY_CODE } from '@/data/addressMaster';
 import { NATURE_OF_BUSINESS, CUSTOMER_TYPES } from './constants';
 import type { ExtendedOrganization } from '@/types/organization.types';
 import { useDropdownOptionsGetter } from '@/hooks/queries/useFormConfigs';
+import { OrganizationNameAutocomplete } from './OrganizationNameAutocomplete';
+import { useOrganizationNameCheck } from './useOrganizationNameCheck';
 
 export interface QuickCreateDrawerProps {
     open: boolean;
@@ -55,6 +57,7 @@ export function QuickCreateDrawer({ open, onClose, onSave }: QuickCreateDrawerPr
     const [verifyingGst, setVerifyingGst] = useState(false);
     const [gstVerified, setGstVerified] = useState(false);
     const [errorMsg, setErrorMsg] = useState('');
+    const nameCheck = useOrganizationNameCheck({ name: formData.organizationName, enabled: open });
 
     const handleChange = (field: string, value: string) => {
         setFormData((prev) => ({ ...prev, [field]: value }));
@@ -79,6 +82,11 @@ export function QuickCreateDrawer({ open, onClose, onSave }: QuickCreateDrawerPr
     const handleSave = (addAnother = false) => {
         if (!formData.organizationName.trim()) {
             setErrorMsg('Organization Name is required.');
+            return;
+        }
+        // Same name, or the same legal name written differently ("ABC Private Limited" vs "ABC Pvt Ltd").
+        if (nameCheck.duplicate) {
+            setErrorMsg(nameCheck.duplicate.message);
             return;
         }
 
@@ -200,14 +208,17 @@ export function QuickCreateDrawer({ open, onClose, onSave }: QuickCreateDrawerPr
                     <FormGrid columns={{ sm: 2 }} sx={{ mb: 3 }}>
                         <FormGridItem span="full">
                             <FormField name="organizationName" label="Organization Name" required size="lg">
-                                <TextField
-                                    fullWidth
-                                    size="small"
-                                    placeholder="e.g. Acme Technologies Pvt Ltd"
+                                <OrganizationNameAutocomplete
                                     value={formData.organizationName}
-                                    onChange={(e) => handleChange('organizationName', e.target.value)}
-                                    sx={fieldSx}
-                                    slotProps={{ htmlInput: { maxLength: FIELD_MAX_LENGTH.organizationName } }}
+                                    onChange={(v) => handleChange('organizationName', v)}
+                                    onBlur={nameCheck.checkNow}
+                                    placeholder="e.g. Acme Technologies Pvt Ltd"
+                                    error={Boolean(nameCheck.duplicate)}
+                                    helperText={nameCheck.duplicate?.message}
+                                    checking={nameCheck.checking}
+                                    verified={Boolean(formData.organizationName.trim()) && nameCheck.checked && !nameCheck.duplicate}
+                                    suggestions={nameCheck.suggestions}
+                                    onSelectSuggestion={(org) => handleChange('organizationName', org.organizationName)}
                                     autoFocus
                                 />
                             </FormField>

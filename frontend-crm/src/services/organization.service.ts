@@ -3,6 +3,7 @@ import type { ApiResponse } from '../types/api.types';
 import { createCrudService } from './base.service';
 import { apiClient } from './apiClient';
 import { notifyCrmUpdate } from './crmSync';
+import type { OrgNameMatchKind } from '../utils/organizationName';
 
 const baseOrganizationService = createCrudService<
     ExtendedOrganization,
@@ -10,12 +11,30 @@ const baseOrganizationService = createCrudService<
     Partial<ExtendedOrganization>
 >('/api/organizations');
 
+/** An existing organization whose name matches or resembles the one checked (server-ranked, best first). */
+export interface SimilarOrganizationMatch {
+    id: string;
+    accountCode: string;
+    organizationName: string;
+    tradeName: string | null;
+    billingCity: string | null;
+    billingState: string | null;
+    accountStatus: string;
+    gstNo: string | null;
+    matchKind: OrgNameMatchKind;
+}
+
 export interface OrganizationUniqueCheck {
     exists: boolean;
+    /** How the duplicate was found: same name (exact), same legal name written differently (canonical), or GSTIN. */
+    matchKind?: 'exact' | 'canonical' | 'gstNo';
     field?: 'organizationName' | 'gstNo';
+    id?: string;
     accountCode?: string;
     organizationName?: string;
     message?: string;
+    /** Existing organizations with matching / similar names, for the autocomplete dropdown. */
+    suggestions?: SimilarOrganizationMatch[];
 }
 
 export const organizationService = {
