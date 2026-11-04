@@ -1,7 +1,16 @@
 'use client';
 
 import React, { useId, useLayoutEffect, useRef, useSyncExternalStore } from 'react';
-import { hasHostFor, homeSectionIdOf, isMovedAcrossTabs, isMovedBuiltIn, sectionIdOf, useFormConfigContext, type MovedFieldStore } from '@/context/FormConfigContext';
+import {
+    hasHostFor,
+    homeSectionIdOf,
+    isHiddenField,
+    isMovedAcrossTabs,
+    isMovedBuiltIn,
+    sectionIdOf,
+    useFormConfigContext,
+    type MovedFieldStore,
+} from '@/context/FormConfigContext';
 import type { FormFieldDefinitionDto } from '@/types/formConfig.types';
 import { DynamicFormField } from './DynamicFormField';
 
@@ -62,6 +71,15 @@ function rawChildren(children: React.ReactNode): React.ReactNode[] {
  * Outside a provider the children are returned untouched.
  */
 export function useConfiguredChildren(children: React.ReactNode): React.ReactNode {
+    return useConfiguredGrid(children).children;
+}
+
+/**
+ * useConfiguredChildren, plus whether the grid shows nothing because the admin deleted its section: the section is
+ * deleted (see FormConfigContext.deletedSectionKeys), every cell holds a configured field that is hidden, and no
+ * custom or moved-in field is added. Such a grid should render nothing so its spacing collapses.
+ */
+export function useConfiguredGrid(children: React.ReactNode): { children: React.ReactNode; isDeletedSection: boolean } {
     const ctx = useFormConfigContext();
     const gridId = useId();
     const items = React.Children.toArray(children);
@@ -106,7 +124,7 @@ export function useConfiguredChildren(children: React.ReactNode): React.ReactNod
         ctx && isFirstClaimant ? [...ctx.systemFields.values()].filter((f) => isMovedBuiltIn(f) && sectionIdOf(f) === sectionId) : [];
     useMovedFields(store, incoming.length > 0);
 
-    if (!ctx || !anchor || !sectionId) return children;
+    if (!ctx || !anchor || !sectionId) return { children, isDeletedSection: false };
 
     const custom = isFirstClaimant ? ctx.customFields.filter((f) => f.isActive && f.isVisibleInForm && sectionIdOf(f) === sectionId) : [];
     const received = incoming.flatMap((field) => {
@@ -130,5 +148,11 @@ export function useConfiguredChildren(children: React.ReactNode): React.ReactNod
     slots.forEach((slot, k) => {
         result[slot] = sorted[k].node;
     });
-    return result;
+    const homeSectionKey = anchor.defaultSectionKey ?? anchor.sectionKey;
+    const isDeletedSection =
+        ctx.deletedSectionKeys.has(homeSectionKey) &&
+        custom.length === 0 &&
+        received.length === 0 &&
+        fields.every((field, i) => exported[i] || (field !== undefined && isHiddenField(field)));
+    return { children: result, isDeletedSection };
 }

@@ -12,10 +12,6 @@ export const formConfigController = {
         sendSuccess(res, await formConfigService.getConfigs(req.query));
     },
 
-    getModuleDefaults(req: Request, res: Response): void {
-        sendSuccess(res, formConfigService.getModuleDefaults(moduleParam(req)));
-    },
-
     // ── Categories & options ──
     async createCategory(req: Request, res: Response): Promise<void> {
         sendCreated(res, await formConfigService.createCategory(req.body, requireUser(req)), 'Dropdown created');
@@ -58,8 +54,5 @@ export const formConfigController = {
             await formConfigService.renameSection(moduleParam(req), param(req, 'sectionKey'), req.body, requireUser(req)),
             'Section renamed',
         );
-    },
-    async resetModule(req: Request, res: Response): Promise<void> {
-        sendSuccess(res, await formConfigService.resetModule(moduleParam(req), requireUser(req)), 'Form reset to defaults');
     },
 };

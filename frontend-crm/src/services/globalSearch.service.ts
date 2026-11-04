@@ -15,11 +15,12 @@ export interface GlobalSearchResult {
 
 export type GlobalSearchResults = Record<GlobalSearchCategory, GlobalSearchResult[]>;
 
+/** Result groups in Sales navbar order (leads → opportunities → organizations → contacts). */
 export const GLOBAL_SEARCH_CATEGORIES: readonly GlobalSearchCategory[] = [
-    'organizations',
-    'contacts',
     'leads',
     'opportunities',
+    'organizations',
+    'contacts',
 ];
 
 export const emptySearchResults = (): GlobalSearchResults => ({ organizations: [], contacts: [], leads: [], opportunities: [] });

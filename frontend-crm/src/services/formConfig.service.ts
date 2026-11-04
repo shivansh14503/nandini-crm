@@ -8,7 +8,6 @@ import type {
     DropdownOptionDto,
     FormConfigsPayload,
     FormFieldDefinitionDto,
-    ModuleFieldDefault,
     UpdateCategoryPayload,
     UpdateFieldPayload,
     UpdateOptionPayload,
@@ -41,12 +40,6 @@ export const formConfigService = {
         return res.data;
     },
 
-    /** Built-in field defaults of a module (what resetModule restores), used to preview a reset before saving. */
-    async getModuleDefaults(module: CrmModuleKey): Promise<ModuleFieldDefault[]> {
-        const res = await apiClient.get<ApiResponse<ModuleFieldDefault[]>>(`${BASE}/modules/${enc(module)}/defaults`);
-        return res.data;
-    },
-
     // ── Dropdowns ──
     createCategory: (payload: CreateCategoryPayload) => mutate(apiClient.post<ApiResponse<DropdownCategoryDto>>(`${BASE}/categories`, payload)),
     updateCategory: (categoryKey: string, payload: UpdateCategoryPayload) =>
@@ -66,11 +59,10 @@ export const formConfigService = {
     createField: (payload: CreateFieldPayload) => mutate(apiClient.post<ApiResponse<FormFieldDefinitionDto>>(`${BASE}/fields`, payload)),
     updateField: (fieldId: string, payload: UpdateFieldPayload) =>
         mutate(apiClient.patch<ApiResponse<FormFieldDefinitionDto>>(`${BASE}/fields/${enc(fieldId)}`, payload)),
-    /** Permanent delete of a custom field; rejected for built-in fields. */
-    deleteField: (fieldId: string) => mutate(apiClient.delete<ApiResponse<{ id: string }>>(`${BASE}/fields/${enc(fieldId)}`)),
+    /** Permanent delete: a custom field's row is removed, a built-in field becomes a hidden tombstone. */
+    deleteField:(fieldId: string) => mutate(apiClient.delete<ApiResponse<{ id: string }>>(`${BASE}/fields/${enc(fieldId)}`)),
     reorderFields: (module: CrmModuleKey, fieldIds: string[]) =>
         mutate(apiClient.put<ApiResponse<FormFieldDefinitionDto[]>>(`${BASE}/modules/${enc(module)}/fields/reorder`, { fieldIds })),
     renameSection: (module: CrmModuleKey, sectionKey: string, sectionLabel: string) =>
         mutate(apiClient.patch<ApiResponse<FormFieldDefinitionDto[]>>(`${BASE}/modules/${enc(module)}/sections/${enc(sectionKey)}`, { sectionLabel })),
-    resetModule: (module: CrmModuleKey) => mutate(apiClient.post<ApiResponse<FormFieldDefinitionDto[]>>(`${BASE}/modules/${enc(module)}/reset`)),
 };

@@ -1,12 +1,13 @@
 // ─── Admin Form & Dropdown Customization ──────────────────────────────────────
 // Mirrors backend-crm/src/modules/form-configs (GET /api/form-configs).
 
+/** In Sales navbar order (leads → opportunities → quotations → organizations → contacts), then the other forms. */
 export const CRM_MODULE_KEYS = [
-    'organizations',
-    'contacts',
     'leads',
     'opportunities',
     'quotations',
+    'organizations',
+    'contacts',
     'products',
     'tickets',
     'partner-companies',
@@ -15,11 +16,11 @@ export const CRM_MODULE_KEYS = [
 export type CrmModuleKey = (typeof CRM_MODULE_KEYS)[number];
 
 export const CRM_MODULE_LABELS: Record<CrmModuleKey, string> = {
-    organizations: 'Organizations',
-    contacts: 'Contacts',
     leads: 'Leads',
     opportunities: 'Opportunities',
     quotations: 'Quotations',
+    organizations: 'Organizations',
+    contacts: 'Contacts',
     products: 'Products',
     tickets: 'Tickets',
     'partner-companies': 'Partner Companies',
@@ -40,11 +41,11 @@ export const CRM_MODULE_GROUPS: readonly CrmModuleGroup[] = [
         key: 'sales',
         label: 'Sales',
         modules: [
+            { key: 'leads', label: 'Leads' },
+            { key: 'opportunities', label: 'Opportunities' },
+            { key: 'quotations', label: 'Quotations' },
             { key: 'organizations', label: 'Organizations' },
             { key: 'contacts', label: 'Contacts' },
-            { key: 'opportunities', label: 'Opportunities' },
-            { key: 'leads', label: 'Leads' },
-            { key: 'quotations', label: 'Quotations' },
         ],
     },
     { key: 'support', label: 'Support', modules: [{ key: 'tickets', label: 'Tickets' }] },
@@ -181,19 +182,6 @@ export interface FormConfigsPayload {
     categories: DropdownCategoryDto[];
     fieldsByModule: Record<CrmModuleKey, FormFieldDefinitionDto[]>;
     moduleTabs: Record<CrmModuleKey, ModuleTabDefinition[]>;
-}
-
-/** A built-in field's default settings (GET /api/form-configs/modules/:module/defaults): what a reset restores. */
-export interface ModuleFieldDefault {
-    fieldKey: string;
-    label: string;
-    tabKey: string;
-    sectionKey: string;
-    sectionLabel: string;
-    sortOrder: number;
-    isRequired: boolean;
-    isCoreLocked: boolean;
-    dropdownCategoryKey: string | null;
 }
 
 /** A section of a module form, as configured. */

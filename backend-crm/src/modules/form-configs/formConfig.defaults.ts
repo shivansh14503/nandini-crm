@@ -9,12 +9,13 @@
  * fixed boolean controls.
  */
 
+/** In Sales navbar order (leads → opportunities → quotations → organizations → contacts), then the other forms. */
 export const CRM_MODULES = [
-    'organizations',
-    'contacts',
     'leads',
     'opportunities',
     'quotations',
+    'organizations',
+    'contacts',
     'products',
     'tickets',
     'partner-companies',

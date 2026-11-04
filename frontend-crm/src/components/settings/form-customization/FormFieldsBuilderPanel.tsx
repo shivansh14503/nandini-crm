@@ -142,6 +142,35 @@ export function FormFieldsBuilderPanel({ module, configs, canEdit, notify, unsav
         onReorder: applyTabReorder,
     });
 
+    // ── Drag and drop of whole sections within the tab ──
+    // Section order is the order of each section's first field, so a section drop regroups the tab's fields.
+    const sectionDragItems = useMemo(() => sections.map((s) => ({ ...s, id: s.sectionKey })), [sections]);
+    const sectionDrag = useDragReorder({
+        items: sectionDragItems,
+        canDrag: canEdit && !busy && sections.length > 1,
+        onReorder: (orderedSectionKeys) => {
+            try {
+                draft.reorderFields(module, reorderTabSections(allFields, tabKey, orderedSectionKeys));
+            } catch (err) {
+                notify(errorMessage(err), 'error');
+            }
+        },
+    });
+
+    // ── Deleting sections and tabs ──
+    const [sectionDeleteTarget, setSectionDeleteTarget] = useState<{ sectionKey: string; sectionLabel: string; fields: FormFieldDefinitionDto[] } | null>(null);
+    const [tabDeleteTarget, setTabDeleteTarget] = useState<string | null>(null);
+    /** Every field of a section of this tab, archived ones included (what deleting it removes). */
+    const sectionFields = (sectionKey: string) => allFields.filter((f) => f.tabKey === tabKey && f.sectionKey === sectionKey);
+    const tabFields = (key: string) => allFields.filter((f) => f.tabKey === key);
+    const tabDeleteDisabledReason = (key: string): string | null => {
+        if (tabs.length <= 1) return 'Cannot delete tab: the form needs at least one tab';
+        const locked = tabFields(key).filter((f) => f.isCoreLocked);
+        return locked.length > 0 ? `Cannot delete tab: contains core-locked field(s): ${locked.map((f) => f.label).join(', ')}` : null;
+    };
+    const tabToDelete = tabs.find((t) => t.key === tabDeleteTarget);
+    const tabToDeleteFieldCount = tabToDelete ? tabFields(tabToDelete.key).length : 0;
+
     const tabItems = tabs.map((t) => ({
         key: t.key,
         label: t.label,
@@ -154,7 +183,13 @@ export function FormFieldsBuilderPanel({ module, configs, canEdit, notify, unsav
         <Box sx={{ ...surfaceSx, overflow: 'hidden' }}>
             <Box sx={{ ...panelHeaderSx, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1.5, flexWrap: 'wrap' }}>
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 0, flexWrap: 'wrap' }}>
-                    <PillTabs items={tabItems} value={tabKey} onChange={setTabKey} />
+                    <PillTabs
+                        items={tabItems}
+                        value={tabKey}
+                        onChange={setTabKey}
+                        onDeleteTab={canEdit && !busy ? setTabDeleteTarget : undefined}
+                        getDeleteTabDisabledReason={tabDeleteDisabledReason}
+                    />
                     {canEdit && (
                         <Button
                             size="small"
@@ -244,33 +279,44 @@ export function FormFieldsBuilderPanel({ module, configs, canEdit, notify, unsav
                             />
                         ))}
 
-                    {sections.map((section, index) => (
-                        <SectionBlock
-                            // Remounts with the saved label after a rename.
-                            key={`${section.sectionKey}:${section.sectionLabel}`}
-                            module={module}
-                            section={section}
-                            first={index === 0}
-                            canEdit={canEdit}
-                            busy={busy}
-                            onRename={(label) => run(() => draft.renameSection(module, section.sectionKey, label))}
-                            onAddField={() => setEditor({ open: true, sectionKey: section.sectionKey })}
-                            onEdit={(field) => setEditor({ open: true, field })}
-                            onPatch={patch}
-                            onDelete={setDeleteTarget}
-                            headerProps={getGroupProps(section.sectionKey)}
-                            rowDragProps={getRowDragProps}
-                            rowDragSx={getRowDragSx}
-                        />
-                    ))}
+                    {sectionDrag.orderedItems.map((section, index) => {
+                        const allSectionFields = sectionFields(section.sectionKey);
+                        const { onPointerDown: onSectionPointerDown, ...sectionBlockProps } = sectionDrag.getRowDragProps(section);
+                        return (
+                            <SectionBlock
+                                // Remounts with the saved label after a rename.
+                                key={`${section.sectionKey}:${section.sectionLabel}`}
+                                module={module}
+                                section={section}
+                                first={index === 0}
+                                canEdit={canEdit}
+                                busy={busy}
+                                onRename={(label) => run(() => draft.renameSection(module, section.sectionKey, label))}
+                                onAddField={() => setEditor({ open: true, sectionKey: section.sectionKey })}
+                                onEdit={(field) => setEditor({ open: true, field })}
+                                onPatch={patch}
+                                onDelete={setDeleteTarget}
+                                onDeleteSection={() =>
+                                    setSectionDeleteTarget({ sectionKey: section.sectionKey, sectionLabel: section.sectionLabel, fields: allSectionFields })
+                                }
+                                lockedFields={allSectionFields.filter((f) => f.isCoreLocked)}
+                                headerProps={getGroupProps(section.sectionKey)}
+                                rowDragProps={getRowDragProps}
+                                rowDragSx={getRowDragSx}
+                                sectionBlockProps={sectionBlockProps}
+                                onSectionPointerDown={onSectionPointerDown}
+                                canDragSection={sections.length > 1}
+                            />
+                        );
+                    })}
                 </Box>
             </Box>
 
             <Box sx={{ px: 2, py: 1.5, borderTop: '1px solid #e2e8f0', backgroundColor: '#f8fafc' }}>
                 <Typography sx={{ fontSize: '0.74rem', color: '#64748b' }}>
-                    Drag a field by its grip to reorder it or to move it into another section of this tab: the form
-                    shows the fields in the order and sections listed here. Any field can also be moved to another tab from Edit. Composite
-                    blocks (email lists, line items, toggles) keep their place.
+                    Drag a field by its grip to reorder it or to move it into another section of this tab, or drag a section by its
+                    header to reorder whole sections: the form shows the fields in the order and sections listed here. Any field can also
+                    be moved to another tab from Edit. Composite blocks (email lists, line items, toggles) keep their place.
                 </Typography>
             </Box>
 
@@ -322,8 +368,80 @@ export function FormFieldsBuilderPanel({ module, configs, canEdit, notify, unsav
                 )}
                 <Typography sx={{ fontSize: '0.8rem', color: '#64748b' }}>The deletion is applied when you click Save Changes.</Typography>
             </ConfirmDeleteDialog>
+
+            <ConfirmDeleteDialog
+                open={Boolean(sectionDeleteTarget)}
+                title={`Delete the '${sectionDeleteTarget?.sectionLabel ?? ''}' section?`}
+                confirmLabel="Delete Section"
+                onClose={() => setSectionDeleteTarget(null)}
+                onConfirm={() => {
+                    const target = sectionDeleteTarget;
+                    setSectionDeleteTarget(null);
+                    if (!target) return;
+                    void run(() => {
+                        draft.deleteSection(module, tabKey, target.sectionKey);
+                        notify(`Section '${target.sectionLabel}' deleted — click Save Changes to apply it`, 'info');
+                    });
+                }}
+            >
+                <Typography sx={{ fontSize: '0.85rem', color: '#475569' }}>
+                    {deletionSummary(sectionDeleteTarget?.fields.length ?? 0, 'section')}
+                </Typography>
+                <Typography sx={{ fontSize: '0.8rem', color: '#64748b' }}>{DELETION_NOTE}</Typography>
+            </ConfirmDeleteDialog>
+
+            <ConfirmDeleteDialog
+                open={Boolean(tabToDelete)}
+                title={`Delete "${tabToDelete?.label ?? ''}" tab?`}
+                confirmLabel="Delete Tab"
+                onClose={() => setTabDeleteTarget(null)}
+                onConfirm={() => {
+                    const target = tabToDelete;
+                    setTabDeleteTarget(null);
+                    if (!target) return;
+                    void run(() => {
+                        draft.deleteTab(module, target.key);
+                        if (target.key === tabKey) setTabKey(tabs.find((t) => t.key !== target.key)?.key ?? 'overview');
+                        notify(`Tab '${target.label}' deleted — click Save Changes to apply it`, 'info');
+                    });
+                }}
+            >
+                <Typography sx={{ fontSize: '0.85rem', color: '#475569' }}>
+                    {tabToDeleteFieldCount === 0
+                        ? `The tab is removed from the ${CRM_MODULE_LABELS[module]} form. It has no fields.`
+                        : `The tab is removed from the ${CRM_MODULE_LABELS[module]} form. ${deletionSummary(tabToDeleteFieldCount, 'tab')}`}
+                </Typography>
+                {tabToDeleteFieldCount > 0 && <Typography sx={{ fontSize: '0.8rem', color: '#64748b' }}>{DELETION_NOTE}</Typography>}
+            </ConfirmDeleteDialog>
         </Box>
     );
+}
+
+const DELETION_NOTE =
+    'This cannot be undone: deleted tabs, sections and fields cannot be brought back. Values already stored on existing records are kept. The deletion is applied when you click Save Changes.';
+
+/** What deleting a section / tab with `count` fields does to them. */
+function deletionSummary(count: number, scope: 'section' | 'tab'): string {
+    const fields = count === 1 ? 'The 1 field' : `All ${count} fields`;
+    return `${fields} in this ${scope} ${count === 1 ? 'is' : 'are'} permanently deleted from the form.`;
+}
+
+/**
+ * Module field ids in the order that puts the sections of `tabKey` in `orderedSectionKeys` order: each section's
+ * fields stay together in their own order, and the tab's fields keep the module-order slots they occupy, so fields
+ * of other tabs don't move. Sections not listed (e.g. ones only holding archived fields) follow in their old order.
+ */
+export function reorderTabSections(allModuleFields: FormFieldDefinitionDto[], tabKey: string, orderedSectionKeys: string[]): string[] {
+    const sorted = [...allModuleFields].sort((a, b) => a.sortOrder - b.sortOrder);
+    const bySection = new Map<string, string[]>();
+    for (const field of sorted) {
+        if (field.tabKey !== tabKey) continue;
+        bySection.set(field.sectionKey, [...(bySection.get(field.sectionKey) ?? []), field.id]);
+    }
+    const keys = [...orderedSectionKeys.filter((k) => bySection.has(k)), ...[...bySection.keys()].filter((k) => !orderedSectionKeys.includes(k))];
+    const tabIds = keys.flatMap((k) => bySection.get(k) ?? []);
+    let next = 0;
+    return sorted.map((field) => (field.tabKey === tabKey ? tabIds[next++] : field.id));
 }
 
 /** What deleting `field` does to its dropdown (same rule the draft and the API apply). */
@@ -405,9 +523,14 @@ function SectionBlock({
     onEdit,
     onPatch,
     onDelete,
+    onDeleteSection,
+    lockedFields,
     headerProps,
     rowDragProps,
     rowDragSx,
+    sectionBlockProps,
+    onSectionPointerDown,
+    canDragSection,
 }: {
     module: CrmModuleKey;
     section: ConfiguredSection;
@@ -420,11 +543,23 @@ function SectionBlock({
     onEdit: (field: FormFieldDefinitionDto) => void;
     onPatch: (field: FormFieldDefinitionDto, body: UpdateFieldPayload) => Promise<void>;
     onDelete: (field: FormFieldDefinitionDto) => void;
+    /** Opens the confirmation for deleting the whole section. */
+    onDeleteSection: () => void;
+    /** Core-locked fields of the section (archived ones included): while any, it can't be deleted. */
+    lockedFields: FormFieldDefinitionDto[];
     /** Tab-level drag and drop: the header is the boundary a row crosses to enter this section. */
     headerProps: GroupDragProps;
     rowDragProps: (field: FormFieldDefinitionDto, isDraggable?: boolean) => RowDragProps;
     rowDragSx: (field: FormFieldDefinitionDto) => Record<string, unknown>;
+    /** Section drag and drop: spread on the whole block (what moves)… */
+    sectionBlockProps: Omit<RowDragProps, 'onPointerDown'>;
+    /** …which is picked up by its header. */
+    onSectionPointerDown: RowDragProps['onPointerDown'];
+    /** False when this is the tab's only section. */
+    canDragSection: boolean;
 }) {
+    const canDeleteSection = lockedFields.length === 0;
+    const sectionDragDisabled = !canEdit || busy || !canDragSection;
     const [renaming, setRenaming] = useState(false);
     const [label, setLabel] = useState(section.sectionLabel);
 
@@ -436,9 +571,33 @@ function SectionBlock({
     };
 
     return (
-        <Box>
+        // The block is what moves in a section drag (styled by useDragReorder like a lifted field row); the drag
+        // starts from its header only, so pressing a field row still drags just that field.
+        <Box {...sectionBlockProps} sx={{ backgroundColor: '#ffffff' }}>
             {/* Divider lives on the header so it slides with the header while a row is dragged past it. */}
-            <Box {...headerProps} sx={{ px: 2, pt: 2, pb: 0.5, display: 'flex', alignItems: 'center', gap: 1, borderTop: first ? 'none' : '1px solid #e2e8f0', backgroundColor: '#ffffff' }}>
+            <Box
+                {...headerProps}
+                onPointerDown={sectionDragDisabled ? undefined : onSectionPointerDown}
+                sx={{
+                    px: 2,
+                    pt: 2,
+                    pb: 0.5,
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 1,
+                    borderTop: first ? 'none' : '1px solid #e2e8f0',
+                    backgroundColor: '#ffffff',
+                    cursor: sectionDragDisabled ? undefined : 'grab',
+                }}
+            >
+                {canEdit && (
+                    <Box sx={{ ml: -0.75 }}>
+                        <DragHandle
+                            disabled={sectionDragDisabled}
+                            title={canDragSection ? 'Drag to reorder section' : 'Only section on this tab'}
+                        />
+                    </Box>
+                )}
                 {renaming ? (
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
                         <TextField
@@ -489,6 +648,28 @@ function SectionBlock({
                     <Button size="small" startIcon={<AddRoundedIcon sx={{ fontSize: 16 }} />} onClick={onAddField} sx={{ ml: 'auto', textTransform: 'none', fontSize: '0.76rem', fontWeight: 600 }}>
                         Add field here
                     </Button>
+                )}
+                {canEdit && (
+                    <Tooltip
+                        arrow
+                        title={
+                            canDeleteSection
+                                ? 'Delete section'
+                                : `Cannot delete section: contains core-locked field(s): ${lockedFields.map((f) => f.label).join(', ')}`
+                        }
+                    >
+                        {/* span: a disabled button fires no events, so the tooltip hangs on its wrapper. */}
+                        <span>
+                            <IconButton
+                                size="small"
+                                aria-label={canDeleteSection ? `Delete section ${section.sectionLabel}` : `Section ${section.sectionLabel} can't be deleted: it holds core-locked fields`}
+                                disabled={busy || !canDeleteSection}
+                                onClick={onDeleteSection}
+                            >
+                                <DeleteOutlineOutlinedIcon sx={{ fontSize: 17, color: busy || !canDeleteSection ? undefined : dangerColor }} />
+                            </IconButton>
+                        </span>
+                    </Tooltip>
                 )}
             </Box>
 

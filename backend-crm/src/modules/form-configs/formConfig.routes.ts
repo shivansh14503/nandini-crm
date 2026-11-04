@@ -16,7 +16,6 @@ export const FORM_CONFIG_ADMIN_ROLES = ['Admin', 'Administrator', 'Super Admin']
 /**
  * /api/form-configs
  *   GET    /                                          ?includeInactive  → FormConfigsPayload (any signed-in user)
- *   GET    /modules/:module/defaults                  built-in field defaults (what reset restores)
  *   ── Admin only ──
  *   POST   /categories                                { key?, label, module, description?, options? }
  *   PATCH  /categories/:categoryKey                   { label?, description? }
@@ -30,13 +29,13 @@ export const FORM_CONFIG_ADMIN_ROLES = ['Admin', 'Administrator', 'Super Admin']
  *   DELETE /fields/:fieldId                           permanent delete of a custom field; blocked for built-in fields
  *   PUT    /modules/:module/fields/reorder            { fieldIds }
  *   PATCH  /modules/:module/sections/:sectionKey      { sectionLabel }
- *   POST   /modules/:module/reset                     module fields back to defaults (custom fields deleted)
+ *
+ * Deletes are permanent: a deleted built-in field stays a hidden tombstone and is never restored.
  */
 const router = Router();
 router.use(authenticate);
 
 router.get('/', formConfigController.getAll);
-router.get('/modules/:module/defaults', validateRequest({ params: moduleParamSchema }), formConfigController.getModuleDefaults);
 
 const admin = requireRole(...FORM_CONFIG_ADMIN_ROLES);
 
@@ -58,6 +57,5 @@ router.patch('/fields/:fieldId', admin, validateRequest({ params: fieldIdParamSc
 router.delete('/fields/:fieldId', admin, validateRequest({ params: fieldIdParamSchema }), formConfigController.deleteField);
 router.put('/modules/:module/fields/reorder', admin, validateRequest({ params: moduleParamSchema }), formConfigController.reorderFields);
 router.patch('/modules/:module/sections/:sectionKey', admin, validateRequest({ params: sectionParamSchema }), formConfigController.renameSection);
-router.post('/modules/:module/reset', admin, validateRequest({ params: moduleParamSchema }), formConfigController.resetModule);
 
 export default router;

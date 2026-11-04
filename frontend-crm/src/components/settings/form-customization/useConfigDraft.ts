@@ -48,12 +48,21 @@ export interface ConfigDraftActions {
     renameSection(module: CrmModuleKey, sectionKey: string, sectionLabel: string): void;
     /** Adds an admin-created tab to the module's form; returns its key (a slug of the name, unique on the form). */
     createTab(module: CrmModuleKey, label: string): { key: string; label: string };
-    resetModule(module: CrmModuleKey): Promise<void>;
     updateCategory(categoryKey: string, payload: UpdateCategoryPayload): void;
     /** Permanent deletes (admin-created dropdowns, non-system options, custom fields). */
     deleteCategory(categoryKey: string): void;
     deleteOption(optionId: string): void;
     deleteField(fieldId: string): void;
+    /**
+     * Deletes every field of a section (custom fields removed, built-in ones tombstoned, as deleteField does).
+     * Refused when the section holds a core-locked field.
+     */
+    deleteSection(module: CrmModuleKey, tabKey: string, sectionKey: string): void;
+    /**
+     * Deletes a tab with every field on it. Refused for the module's last tab and for a tab holding a core-locked
+     * field. Returns the number of fields deleted.
+     */
+    deleteTab(module: CrmModuleKey, tabKey: string): number;
 }
 
 export interface ConfigDraft {
@@ -73,6 +82,10 @@ const fail = (message: string): never => {
 };
 
 const moduleLabel = (m: string) => CRM_MODULE_LABELS[m as CrmModuleKey] ?? m;
+
+/** Fields of a tab that are not deleted (archived ones included). */
+const liveFieldsOn = (s: FormConfigsPayload, module: CrmModuleKey, tabKey: string) =>
+    (s.fieldsByModule[module] ?? []).filter((f) => f.tabKey === tabKey && !f.isDeleted);
 
 /**
  * Holds the builder's unsaved changes as a list of ops over the saved configuration (`base`). Edits are
@@ -305,11 +318,6 @@ export function useConfigDraft(base: FormConfigsPayload | undefined, refetch: ()
                 return { key, label: name };
             },
 
-            async resetModule(module) {
-                const defaults = await formConfigService.getModuleDefaults(module);
-                push({ kind: 'resetModule', module, defaults, summary: `${moduleLabel(module)}: built-in fields reset to defaults` });
-            },
-
             updateCategory(categoryKey, payload) {
                 if (!findCategoryByKey(current(), categoryKey)) fail('Dropdown not found.');
                 if (payload.label !== undefined && !payload.label.trim()) fail('Dropdown name is required.');
@@ -372,6 +380,32 @@ export function useConfigDraft(base: FormConfigsPayload | undefined, refetch: ()
                 }
                 dropTemp(fieldId); // earlier edits of the field are moot
                 push({ kind: 'deleteField', fieldId, summary: `${moduleLabel(field.module)}: deleted field '${field.label}'` });
+            },
+
+            deleteSection(module, tabKey, sectionKey) {
+                const fields = liveFieldsOn(current(), module, tabKey).filter((f) => f.sectionKey === sectionKey);
+                if (fields.length === 0) fail('Section not found.');
+                const locked = fields.filter((f) => f.isCoreLocked);
+                if (locked.length > 0) fail(`The section holds core field(s) that cannot be deleted: ${locked.map((f) => f.label).join(', ')}.`);
+                for (const field of fields) actions.deleteField(field.id);
+            },
+
+            deleteTab(module, tabKey) {
+                const s = current();
+                const tabs = s.moduleTabs[module] ?? [];
+                const tab = tabs.find((t) => t.key === tabKey) ?? fail('Tab not found.');
+                if (tabs.length <= 1) fail(`The ${moduleLabel(module)} form needs at least one tab.`);
+                const fields = liveFieldsOn(s, module, tabKey);
+                const locked = fields.filter((f) => f.isCoreLocked);
+                if (locked.length > 0) fail(`'${tab.label}' holds core field(s) that cannot be deleted: ${locked.map((f) => f.label).join(', ')}.`);
+                // A tab added in this draft is simply not created.
+                prune((op) => op.kind === 'createTab' && op.module === module && op.tabKey === tabKey, []);
+                // Drafted fields are dropped, saved custom fields deleted, built-in ones tombstoned.
+                for (const field of fields) actions.deleteField(field.id);
+                if (current().moduleTabs[module]?.some((t) => t.key === tabKey)) {
+                    push({ kind: 'deleteTab', module, tabKey, label: tab.label, summary: `${moduleLabel(module)}: deleted tab '${tab.label}'` });
+                }
+                return fields.length;
             },
         }),
         // eslint-disable-next-line react-hooks/exhaustive-deps -- the actions read the latest state through refs

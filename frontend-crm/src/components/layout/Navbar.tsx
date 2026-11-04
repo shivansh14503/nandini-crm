@@ -45,11 +45,11 @@ const NAV_ITEMS = [
     {
         label: 'Sales',
         items: [
+            { label: 'Leads', href: '/leads' },
+            { label: 'Opportunities', href: '/opportunities' },
+            { label: 'Quotations', href: '/quotations' },
             { label: 'Organizations', href: '/organizations' },
             { label: 'Contacts', href: '/contacts' },
-            { label: 'Opportunities', href: '/opportunities' },
-            { label: 'Leads', href: '/leads' },
-            { label: 'Quotations', href: '/quotations' },
         ],
     },
     {

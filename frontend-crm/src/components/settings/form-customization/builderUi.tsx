@@ -1,7 +1,8 @@
 'use client';
 
 import React from 'react';
-import { Box, Button, Dialog, DialogActions, DialogContent, DialogTitle, Switch, Tooltip, Typography, type SxProps, type Theme } from '@mui/material';
+import { Box, Button, Dialog, DialogActions, DialogContent, DialogTitle, IconButton, Switch, Tooltip, Typography, type SxProps, type Theme } from '@mui/material';
+import CloseRoundedIcon from '@mui/icons-material/CloseRounded';
 import DragIndicatorRoundedIcon from '@mui/icons-material/DragIndicatorRounded';
 
 /** Shared surface / control styling for the Form & Dropdown Customization screens (Nandini CRM tokens). */
@@ -60,17 +61,25 @@ export interface PillTabItem<K extends string> {
     unsavedTooltip?: string;
 }
 
-/** Horizontal pill tabs, matching CommonFormLayout's tab bar. */
+/**
+ * Horizontal pill tabs, matching CommonFormLayout's tab bar. With `onDeleteTab`, each pill gets a small delete
+ * button (always shown on the active pill, on hover / focus on the others); `getDeleteTabDisabledReason` returns
+ * why a tab can't be deleted (shown as the disabled button's tooltip), or null.
+ */
 export function PillTabs<K extends string>({
     items,
     value,
     onChange,
     sx,
+    onDeleteTab,
+    getDeleteTabDisabledReason,
 }: {
     items: PillTabItem<K>[];
     value: K;
     onChange: (key: K) => void;
     sx?: SxProps<Theme>;
+    onDeleteTab?: (key: K) => void;
+    getDeleteTabDisabledReason?: (key: K) => string | null;
 }) {
     return (
         <Box role="tablist" sx={[{ display: 'flex', alignItems: 'center', gap: 1, overflowX: 'auto', flexWrap: 'nowrap' }, ...(Array.isArray(sx) ? sx : [sx])]}>
@@ -109,6 +118,7 @@ export function PillTabs<K extends string>({
                             outline: 'none',
                             '&:hover': { backgroundColor: active ? '#ffffff' : '#f1f5f9', color: active ? '#1e3a8a' : '#1e293b' },
                             '&:focus-visible': { boxShadow: '0 0 0 2px #bfdbfe' },
+                            ...(onDeleteTab ? { pr: 0.75, '&:hover .pill-tab-delete, &:focus-within .pill-tab-delete': { opacity: 1 } } : {}),
                         }}
                     >
                         {item.icon && <Box sx={{ display: 'flex', color: active ? '#2563eb' : '#64748b' }}>{item.icon}</Box>}
@@ -146,10 +156,51 @@ export function PillTabs<K extends string>({
                                 />
                             </Tooltip>
                         )}
+                        {onDeleteTab && (
+                            <PillTabDeleteButton
+                                label={item.label}
+                                active={active}
+                                disabledReason={getDeleteTabDisabledReason?.(item.key) ?? null}
+                                onDelete={() => onDeleteTab(item.key)}
+                            />
+                        )}
                     </Box>
                 );
             })}
         </Box>
+    );
+}
+
+/** Small "×" on a pill tab; a click on it never selects the tab. */
+function PillTabDeleteButton({ label, active, disabledReason, onDelete }: { label: string; active: boolean; disabledReason: string | null; onDelete: () => void }) {
+    const disabled = Boolean(disabledReason);
+    return (
+        <Tooltip title={disabledReason ?? `Delete '${label}' tab`} arrow>
+            {/* span: a disabled button fires no events, so the tooltip hangs on its wrapper. */}
+            <Box
+                component="span"
+                className="pill-tab-delete"
+                onClick={(e) => e.stopPropagation()}
+                onKeyDown={(e) => e.stopPropagation()}
+                sx={{ display: 'inline-flex', ml: -0.25, opacity: active ? 1 : 0, transition: 'opacity 120ms ease' }}
+            >
+                <IconButton
+                    size="small"
+                    disabled={disabled}
+                    aria-label={disabled ? `Can't delete '${label}' tab: ${disabledReason}` : `Delete '${label}' tab`}
+                    onClick={onDelete}
+                    sx={{
+                        p: 0.25,
+                        color: '#94a3b8',
+                        '&:hover': { color: dangerColor, backgroundColor: '#fef2f2' },
+                        '&:focus-visible': { color: dangerColor, boxShadow: '0 0 0 2px #fecaca' },
+                        '&.Mui-disabled': { color: '#e2e8f0' },
+                    }}
+                >
+                    <CloseRoundedIcon sx={{ fontSize: 14 }} />
+                </IconButton>
+            </Box>
+        </Tooltip>
     );
 }
 
@@ -207,8 +258,8 @@ export function Badge({ tone, children, icon, title }: { tone: BadgeTone; childr
  * from the row, and buttons inside a row don't start drags. `touch-action: none` lets touch drags start here
  * without scrolling the page.
  */
-export function DragHandle({ disabled }: { disabled?: boolean }) {
-    return (
+export function DragHandle({ disabled, title }: { disabled?: boolean; title?: string }) {
+    const handle = (
         <Box
             aria-hidden
             sx={{
@@ -226,6 +277,13 @@ export function DragHandle({ disabled }: { disabled?: boolean }) {
         >
             <DragIndicatorRoundedIcon sx={{ fontSize: 18 }} />
         </Box>
+    );
+    return title ? (
+        <Tooltip title={title} arrow>
+            {handle}
+        </Tooltip>
+    ) : (
+        handle
     );
 }
 

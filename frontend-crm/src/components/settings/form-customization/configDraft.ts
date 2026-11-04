@@ -7,7 +7,6 @@ import type {
     DropdownOptionDto,
     FormConfigsPayload,
     FormFieldDefinitionDto,
-    ModuleFieldDefault,
     UpdateCategoryPayload,
     UpdateFieldPayload,
     UpdateOptionPayload,
@@ -44,7 +43,11 @@ export type DraftOp =
      * it (their `tabKey` + `tabLabel`), so a tab still empty when the changes are saved is not kept.
      */
     | { kind: 'createTab'; module: CrmModuleKey; tabKey: string; label: string; summary: string }
-    | { kind: 'resetModule'; module: CrmModuleKey; defaults: ModuleFieldDefault[]; summary: string }
+    /**
+     * A deleted tab. Like createTab it has no API call of its own: its fields are deleted by the `deleteField` ops
+     * staged with it (a built-in field becomes a tombstone), and the API stops listing a tab with no live field.
+     */
+    | { kind: 'deleteTab'; module: CrmModuleKey; tabKey: string; label: string; summary: string }
     | { kind: 'updateCategory'; categoryKey: string; payload: UpdateCategoryPayload; summary: string }
     | { kind: 'deleteCategory'; categoryKey: string; summary: string }
     | { kind: 'deleteOption'; optionId: string; summary: string }
@@ -123,6 +126,20 @@ function placeField(s: FormConfigsPayload, module: CrmModuleKey, fieldId: string
 function ensureTab(s: FormConfigsPayload, module: CrmModuleKey, tabKey: string, label: string | null | undefined): void {
     const tabs = (s.moduleTabs[module] ??= []);
     if (!tabs.some((t) => t.key === tabKey)) tabs.push({ key: tabKey, label: label || tabKey, isCustom: true });
+}
+
+/** Whether any live (not deleted) field of the module sits on the tab, archived ones included. */
+const tabHasLiveField = (s: FormConfigsPayload, module: CrmModuleKey, tabKey: string) =>
+    (s.fieldsByModule[module] ?? []).some((f) => f.tabKey === tabKey && !f.isDeleted);
+
+/**
+ * Same rule as the API's isBuiltInTabDeleted: a built-in tab whose seeded built-in fields (the ones defaulting to it)
+ * are all deleted, with no live field left on it. Built-in tabs without seeded fields are never dropped.
+ */
+export function isBuiltInTabDeleted(s: FormConfigsPayload, module: CrmModuleKey, tabKey: string): boolean {
+    const seeded = (s.fieldsByModule[module] ?? []).filter((f) => f.isSystem && (f.defaultTabKey ?? f.tabKey) === tabKey);
+    if (seeded.length === 0 || !seeded.every((f) => f.isDeleted)) return false;
+    return !tabHasLiveField(s, module, tabKey);
 }
 
 /** Name of a custom tab in the draft (stored on the fields placed on it); undefined for built-in tabs. */
@@ -293,30 +310,10 @@ function applyOp(s: FormConfigsPayload, op: DraftOp): void {
             ensureTab(s, op.module, op.tabKey, op.label);
             return;
         }
-        case 'resetModule': {
-            const fields = s.fieldsByModule[op.module] ?? [];
-            for (const def of op.defaults) {
-                const field = fields.find((f) => f.isSystem && f.fieldKey === def.fieldKey);
-                if (!field) continue;
-                Object.assign(field, {
-                    label: def.label,
-                    sectionLabel: def.sectionLabel,
-                    sectionKey: def.sectionKey,
-                    tabKey: def.tabKey,
-                    sortOrder: def.sortOrder,
-                    fieldSize: null,
-                    placeholder: null,
-                    hint: null,
-                    defaultValue: null,
-                    isRequired: def.isRequired,
-                    isCoreLocked: def.isCoreLocked,
-                    isActive: true,
-                    isVisibleInForm: true,
-                    isVisibleInDrawer: true,
-                });
-                setCategoryLink(s, field, def.dropdownCategoryKey);
-            }
-            for (const custom of byOrder(fields.filter((f) => !f.isSystem))) placeField(s, op.module, custom.id);
+        case 'deleteTab': {
+            // Its fields went with the deleteField ops staged before this one.
+            if (tabHasLiveField(s, op.module, op.tabKey)) return;
+            s.moduleTabs[op.module] = (s.moduleTabs[op.module] ?? []).filter((t) => t.key !== op.tabKey);
             return;
         }
         case 'updateCategory': {
@@ -380,6 +377,11 @@ export function applyDraft(base: FormConfigsPayload, ops: DraftOp[]): FormConfig
     if (ops.length === 0) return base;
     const s = structuredClone(base);
     for (const op of ops) applyOp(s, op);
+    // Built-in tabs whose fields were all deleted drop out, as the API drops them once saved.
+    for (const m of CRM_MODULE_KEYS) {
+        const tabs = s.moduleTabs[m];
+        if (tabs) s.moduleTabs[m] = tabs.filter((t) => t.isCustom || !isBuiltInTabDeleted(s, m, t.key));
+    }
     const fields = allFields(s);
     for (const category of s.categories) {
         category.usedBy = fields
@@ -456,8 +458,8 @@ export function modulesTouchedBy(ops: DraftOp[], base: FormConfigsPayload, draft
             }
             case 'reorderFields':
             case 'renameSection':
-            case 'resetModule':
             case 'createTab':
+            case 'deleteTab':
                 touched.add(op.module);
                 break;
         }
@@ -467,7 +469,7 @@ export function modulesTouchedBy(ops: DraftOp[], base: FormConfigsPayload, draft
 
 /**
  * Tabs of `module` with unsaved changes: fields created, edited, moved (in or out), deleted or reordered on them,
- * sections renamed on them, and tabs created in this draft. A reset counts for every tab whose fields it changes.
+ * sections renamed on them, and tabs created in this draft.
  */
 export function tabsTouchedBy(ops: DraftOp[], base: FormConfigsPayload | undefined, draft: FormConfigsPayload | undefined, module: CrmModuleKey): Set<string> {
     const tabs = new Set<string>();
@@ -497,7 +499,6 @@ export function tabsTouchedBy(ops: DraftOp[], base: FormConfigsPayload | undefin
                 break;
             }
             case 'reorderFields':
-            case 'resetModule':
                 if (op.module === module) changedTabs();
                 break;
             case 'renameSection':
@@ -619,7 +620,6 @@ export interface ConfigWriter {
     updateField(fieldId: string, payload: UpdateFieldPayload): Promise<unknown>;
     reorderFields(module: CrmModuleKey, fieldIds: string[]): Promise<unknown>;
     renameSection(module: CrmModuleKey, sectionKey: string, sectionLabel: string): Promise<unknown>;
-    resetModule(module: CrmModuleKey): Promise<unknown>;
     updateCategory(categoryKey: string, payload: UpdateCategoryPayload): Promise<unknown>;
     deleteCategory(categoryKey: string): Promise<unknown>;
     deleteOption(optionId: string): Promise<unknown>;
@@ -693,10 +693,8 @@ export async function replayOps(ops: DraftOp[], api: ConfigWriter): Promise<Repl
                 await api.renameSection(op.module, op.sectionKey, op.sectionLabel);
                 return;
             case 'createTab':
-                // Stored through the fields placed on it (createField / updateField carry its tabKey + tabLabel).
-                return;
-            case 'resetModule':
-                await api.resetModule(op.module);
+            case 'deleteTab':
+                // Stored through the fields placed on it (createField / updateField / deleteField ops).
                 return;
             case 'updateCategory':
                 await api.updateCategory(rkey(op.categoryKey), op.payload);

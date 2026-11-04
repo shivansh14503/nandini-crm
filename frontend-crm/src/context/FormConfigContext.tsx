@@ -20,6 +20,12 @@ interface FormConfigContextValue {
     systemFields: Map<string, FormFieldDefinitionDto>;
     /** Current section label by section key (built-in sections). */
     sectionLabels: Map<string, string>;
+    /**
+     * Built-in sections an admin deleted: at least one of the built-in fields the form places there was deleted, the
+     * rest are deleted or hidden, and no visible field (built-in or custom) is left in the section. Their hand-built
+     * heading and grids render nothing.
+     */
+    deletedSectionKeys: Set<string>;
     /** Custom fields of the module (archived included), in admin order. */
     customFields: FormFieldDefinitionDto[];
     /** Grids showing each section (`tabKey::sectionKey`), in mount order: the first one also shows its custom fields. */
@@ -95,6 +101,25 @@ function createMovedFieldStore(): MovedFieldStore {
     };
 }
 
+/** A field that shows nothing on the form (deleted, archived or hidden). */
+export const isHiddenField = (field: FormFieldDefinitionDto) => Boolean(field.isDeleted) || !field.isActive || !field.isVisibleInForm;
+
+/** See FormConfigContextValue.deletedSectionKeys. */
+function deletedSections(systemFields: FormFieldDefinitionDto[], live: FormFieldDefinitionDto[]): Set<string> {
+    const shown = new Set(live.filter((f) => !isHiddenField(f)).map((f) => f.sectionKey));
+    const byHome = new Map<string, FormFieldDefinitionDto[]>();
+    for (const field of systemFields) {
+        const home = field.defaultSectionKey ?? field.sectionKey;
+        byHome.set(home, [...(byHome.get(home) ?? []), field]);
+    }
+    const deleted = new Set<string>();
+    for (const [sectionKey, fields] of byHome) {
+        if (shown.has(sectionKey)) continue;
+        if (fields.some((f) => f.isDeleted) && fields.every(isHiddenField)) deleted.add(sectionKey);
+    }
+    return deleted;
+}
+
 const FormConfigContext = createContext<FormConfigContextValue | null>(null);
 
 export function FormConfigProvider({ module, children }: { module: CrmModuleKey; children: React.ReactNode }) {
@@ -114,6 +139,7 @@ export function FormConfigProvider({ module, children }: { module: CrmModuleKey;
             configs,
             systemFields: new Map(systemFields.map((f) => [f.fieldKey, f])),
             sectionLabels: new Map(live.filter((f) => f.isSystem).map((f) => [f.sectionKey, f.sectionLabel])),
+            deletedSectionKeys: deletedSections(systemFields, live),
             customFields: live.filter((f) => !f.isSystem),
             sectionClaims,
             claimSection,
@@ -149,6 +175,12 @@ export function useFieldOverride(name: string | undefined, defaults: ConfiguredF
 export function useSectionLabelOverride(label: string): string {
     const ctx = useContext(FormConfigContext);
     return ctx?.sectionLabels.get(sectionKeyFromLabel(label)) ?? label;
+}
+
+/** Whether an admin deleted the built-in section the form hard-codes as `label` (false outside a provider). */
+export function useIsSectionDeleted(label: string): boolean {
+    const ctx = useContext(FormConfigContext);
+    return Boolean(ctx?.deletedSectionKeys.has(sectionKeyFromLabel(label)));
 }
 
 // ── Current field name (lets StyledSelect find its field without a `name` prop) ──

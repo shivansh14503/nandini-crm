@@ -119,6 +119,27 @@ const titleCaseFromKey = (key: string) =>
 
 const isBuiltInTab = (module: CrmModuleKey, tabKey: string) => MODULE_TABS[module].some((tab) => tab.key === tabKey);
 
+/**
+ * A built-in tab an admin deleted: it had seeded built-in fields, every one of them is now a tombstone, and no
+ * live field (built-in or custom) sits on it. Built-in tabs without seeded fields are never dropped. Deletion is
+ * permanent. Mirrored by the admin draft (configDraft.ts).
+ */
+function isBuiltInTabDeleted(
+    module: CrmModuleKey,
+    tabKey: string,
+    rows: Pick<FormFieldDefinition, 'module' | 'fieldKey' | 'tabKey' | 'isSystem' | 'validationRulesJson'>[],
+): boolean {
+    const seeded = DEFAULT_FIELDS.filter((d) => d.module === module && d.tabKey === tabKey);
+    if (seeded.length === 0) return false;
+    const moduleRows = rows.filter((r) => r.module === module);
+    const allSeededDeleted = seeded.every((d) => {
+        const row = moduleRows.find((r) => r.isSystem && r.fieldKey === d.fieldKey);
+        return !row || isFieldTombstoned(row.validationRulesJson);
+    });
+    if (!allSeededDeleted) return false;
+    return !moduleRows.some((r) => r.tabKey === tabKey && !isFieldTombstoned(r.validationRulesJson));
+}
+
 function parseJsonObject(json: string | null): Record<string, unknown> | null {
     if (!json) return null;
     try {
@@ -402,7 +423,7 @@ export const formConfigService = {
     /** Every category (with options) and every field grouped by module. Inactive rows only with `includeInactive`. */
     async getAllConfigs(includeInactive = false): Promise<FormConfigsPayload> {
         return cacheService.getOrSet(configCacheKey(includeInactive), CONFIG_TTL_SECONDS, async () => {
-            const [categories, fields] = await Promise.all([
+            const [categories, allRows] = await Promise.all([
                 prisma.dropdownCategory.findMany({
                     where: { deletedAt: null },
                     include: {
@@ -410,17 +431,20 @@ export const formConfigService = {
                     },
                     orderBy: [{ module: 'asc' }, { label: 'asc' }],
                 }),
+                // Every row (tombstones included) so deleted built-in tabs can be detected; filtered below.
                 prisma.formFieldDefinition.findMany({
-                    where: includeInactive ? {} : { isActive: true },
                     orderBy: [{ module: 'asc' }, { sortOrder: 'asc' }, { label: 'asc' }],
                 }),
             ]);
+            const fields = includeInactive ? allRows : allRows.filter((f) => f.isActive);
             const categoryKeys = new Map(categories.map((c) => [c.id, c.key]));
             const fieldsByModule = Object.fromEntries(CRM_MODULES.map((m) => [m, [] as FormFieldDefinitionDto[]])) as Record<
                 CrmModuleKey,
                 FormFieldDefinitionDto[]
             >;
-            const moduleTabs = Object.fromEntries(CRM_MODULES.map((m) => [m, [...MODULE_TABS[m]]])) as FormConfigsPayload['moduleTabs'];
+            const moduleTabs = Object.fromEntries(
+                CRM_MODULES.map((m) => [m, MODULE_TABS[m].filter((tab) => !isBuiltInTabDeleted(m, tab.key, allRows))]),
+            ) as FormConfigsPayload['moduleTabs'];
             for (const field of fields) {
                 if (!(CRM_MODULES as readonly string[]).includes(field.module)) continue;
                 const module = field.module as CrmModuleKey;
@@ -453,22 +477,6 @@ export const formConfigService = {
                 moduleTabs,
             };
         });
-    },
-
-    /** Built-in field defaults of a module (what resetModule restores), so the admin UI can preview a reset. */
-    getModuleDefaults(module: CrmModuleKey) {
-        assertModule(module);
-        return DEFAULT_FIELDS.filter((f) => f.module === module).map((f) => ({
-            fieldKey: f.fieldKey,
-            label: f.label,
-            tabKey: f.tabKey,
-            sectionKey: sectionKeyFromLabel(f.sectionLabel),
-            sectionLabel: f.sectionLabel,
-            sortOrder: f.sortOrder,
-            isRequired: f.isRequired,
-            isCoreLocked: f.isCoreLocked,
-            dropdownCategoryKey: f.dropdownCategoryKey ?? null,
-        }));
     },
 
     async getConfigs(query: unknown): Promise<FormConfigsPayload> {
@@ -992,61 +1000,6 @@ export const formConfigService = {
                 action: 'UPDATE',
                 changedBy: user.username,
                 changes: withMeta({ sectionLabel }, user, { module, sectionKey }),
-            });
-        });
-        await invalidate();
-        return (await formConfigService.getAllConfigs(true)).fieldsByModule[module];
-    },
-
-    /**
-     * Restores the module's form to its defaults: custom fields are deleted (values already stored on records are
-     * left as they are) and every default field is restored — or recreated, if it was deleted — with its default
-     * label, tab, section, order, size, texts, required / visibility and linked dropdown.
-     */
-    async resetModule(module: CrmModuleKey, user: AuthUser): Promise<FormFieldDefinitionDto[]> {
-        assertModule(module);
-        await runInTransaction(async (tx) => {
-            const customFields = await tx.formFieldDefinition.findMany({ where: { module, isSystem: false } });
-            await tx.formFieldDefinition.deleteMany({ where: { module, isSystem: false } });
-            for (const field of customFields) await releaseFieldCategory(tx, field, user);
-
-            const categories = await tx.dropdownCategory.findMany({ where: { deletedAt: null }, select: { id: true, key: true } });
-            const categoryIds = new Map(categories.map((c) => [c.key, c.id]));
-            for (const def of DEFAULT_FIELDS.filter((f) => f.module === module)) {
-                // A field whose default dropdown an admin deleted stays unlinked and hidden.
-                const dropdownGone = Boolean(def.dropdownCategoryKey && !categoryIds.has(def.dropdownCategoryKey));
-                const defaults = {
-                    label: def.label,
-                    fieldType: def.fieldType,
-                    sectionLabel: def.sectionLabel,
-                    sectionKey: sectionKeyFromLabel(def.sectionLabel),
-                    tabKey: def.tabKey,
-                    tabLabel: null,
-                    sortOrder: def.sortOrder,
-                    fieldSize: null,
-                    placeholder: null,
-                    hint: null,
-                    defaultValue: null,
-                    validationRulesJson: null,
-                    isRequired: def.isRequired,
-                    isCoreLocked: def.isCoreLocked,
-                    isActive: true,
-                    isVisibleInForm: !dropdownGone,
-                    isVisibleInDrawer: true,
-                    dropdownCategoryId: def.dropdownCategoryKey ? (categoryIds.get(def.dropdownCategoryKey) ?? null) : null,
-                };
-                await tx.formFieldDefinition.upsert({
-                    where: { module_fieldKey: { module, fieldKey: def.fieldKey } },
-                    update: defaults,
-                    create: { ...defaults, module, fieldKey: def.fieldKey, isSystem: true },
-                });
-            }
-            await auditService.record(tx, {
-                entityType: 'FormField',
-                entityId: module,
-                action: 'UPDATE',
-                changedBy: user.username,
-                changes: withMeta({ reset: true, customFieldsDeleted: customFields.length }, user, { module }),
             });
         });
         await invalidate();

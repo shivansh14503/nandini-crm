@@ -4,7 +4,7 @@ import React, { createContext, useContext } from 'react';
 import { Box, type SxProps, type Theme } from '@mui/material';
 import type { Breakpoint } from '@mui/material/styles';
 import { FIELD_SIZES, FIELD_SIZE_WIDTH } from './fieldSizing';
-import { useConfiguredChildren } from './useConfiguredChildren';
+import { useConfiguredGrid } from './useConfiguredChildren';
 
 type ResponsiveCount = Partial<Record<Breakpoint, number>>;
 
@@ -38,7 +38,9 @@ export interface FormGridProps {
 export function FormGrid({ columns = 3, children, sx }: FormGridProps) {
     const columnMap = toColumnMap(columns);
     // Inside a module form, fields follow the admin-configured order.
-    const ordered = useConfiguredChildren(children);
+    const { children: ordered, isDeletedSection } = useConfiguredGrid(children);
+    // A section the admin deleted: nothing in it shows, so its grid (and gaps) collapse too.
+    if (isDeletedSection) return null;
     return (
         <FormGridColumnsContext.Provider value={columnMap}>
             <Box
@@ -93,7 +95,8 @@ export interface FormRowProps {
  * Unlike {@link FormGrid}, columns aren't aligned across rows; use it for one logical group.
  */
 export function FormRow({ children, sx }: FormRowProps) {
-    const ordered = useConfiguredChildren(children);
+    const { children: ordered, isDeletedSection } = useConfiguredGrid(children);
+    if (isDeletedSection) return null;
     return (
         <Box
             sx={[
