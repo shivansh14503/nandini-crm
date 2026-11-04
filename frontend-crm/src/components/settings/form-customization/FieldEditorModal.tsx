@@ -80,14 +80,13 @@ interface Draft {
 
 /**
  * Create a custom field (label, type, tab, section — existing or new —, size, texts, required / visibility and,
- * for select / multi-select, an existing dropdown or new options), or edit any field. Built-in fields keep
- * their type, tab and section; core-locked fields stay required and visible.
+ * for select / multi-select, an existing dropdown or new options), or edit any field. Every field can be moved
+ * to any tab or section; core-locked fields stay required and visible.
  * The parent mounts it per edit (with a `key`), so each opening starts from the field's saved values.
  */
 export function FieldEditorModal({ open, onClose, module, configs, field, defaultTabKey, defaultSectionKey, notify }: FieldEditorModalProps) {
     const tabs = configs.moduleTabs[module] ?? [];
     const isCreate = !field;
-    const isSystem = Boolean(field?.isSystem);
     const locked = Boolean(field?.isCoreLocked);
 
     const initialDraft = (): Draft => ({
@@ -125,16 +124,16 @@ export function FieldEditorModal({ open, onClose, module, configs, field, defaul
         [configs.categories, module],
     );
 
-    const fieldType = isSystem ? field!.fieldType : draft.fieldType;
+    const fieldType = draft.fieldType;
     const choice = isChoice(fieldType);
-    /** An existing custom dropdown field can switch between single select and multi-select chips. */
-    const canSwitchChoice = !isCreate && !isSystem && isChoice(field!.fieldType);
+    /** An existing dropdown field (unless core-locked) can switch between single select and multi-select chips. */
+    const canSwitchChoice = !isCreate && !locked && isChoice(field!.fieldType);
     const typeOptions: readonly CustomFieldType[] = isCreate ? CUSTOM_FIELD_TYPES : canSwitchChoice ? ['select', 'multiselect'] : [fieldType as CustomFieldType];
 
     const validate = (): string | null => {
         if (!draft.label.trim()) return 'Label is required.';
-        if (!isSystem && draft.tabKey === NEW_TAB && !draft.newTabLabel.trim()) return 'Enter a name for the new tab.';
-        if (!isSystem && sectionChoice === NEW_SECTION && !draft.newSectionLabel.trim()) return 'Enter a name for the new section.';
+        if (draft.tabKey === NEW_TAB && !draft.newTabLabel.trim()) return 'Enter a name for the new tab.';
+        if (sectionChoice === NEW_SECTION && !draft.newSectionLabel.trim()) return 'Enter a name for the new section.';
         if (isCreate && choice) {
             if (draft.optionsMode === 'existing' && !draft.dropdownCategoryKey) return 'Choose a dropdown for the options.';
             if (draft.optionsMode === 'new' && !draft.newOptions.split('\n').some((o) => o.trim())) return 'Add at least one option.';
@@ -144,7 +143,7 @@ export function FieldEditorModal({ open, onClose, module, configs, field, defaul
 
     /** The tab to place the field on: the chosen one, or a new tab staged now (an existing tab of that name is reused). */
     const resolveTab = (): string => {
-        if (isSystem || draft.tabKey !== NEW_TAB) return draft.tabKey;
+        if (draft.tabKey !== NEW_TAB) return draft.tabKey;
         const name = draft.newTabLabel.trim();
         const existing = tabs.find((t) => t.label.trim().toLowerCase() === name.toLowerCase());
         return existing ? existing.key : staged.createTab(module, name).key;
@@ -184,16 +183,18 @@ export function FieldEditorModal({ open, onClose, module, configs, field, defaul
                             : { newOptions: draft.newOptions.split('\n').map((o) => o.trim()).filter(Boolean) }
                         : {}),
                 });
-                notify(`Custom field '${created.label}' added — click Save Changes to apply it`, 'info');
+                notify(`Field '${created.label}' added — click Save Changes to apply it`, 'info');
             } else {
                 staged.updateField(field!.id, {
                     label: draft.label.trim(),
                     ...(canSwitchChoice && draft.fieldType !== field!.fieldType ? { fieldType: draft.fieldType as 'select' | 'multiselect' } : {}),
-                    ...(isSystem ? {} : { tabKey, sectionKey, sectionLabel: section ? undefined : sectionLabel }),
+                    tabKey,
+                    sectionKey,
+                    ...(section ? {} : { sectionLabel }),
                     fieldSize: draft.fieldSize || null,
                     placeholder: draft.placeholder.trim() || null,
                     hint: draft.hint.trim() || null,
-                    ...(isSystem ? {} : { defaultValue: draft.defaultValue.trim() || null }),
+                    defaultValue: draft.defaultValue.trim() || null,
                     ...(locked ? {} : { isRequired: draft.isRequired, isVisibleInForm: draft.isVisibleInForm }),
                     isVisibleInDrawer: draft.isVisibleInDrawer,
                     ...(choice && draft.dropdownCategoryKey && draft.dropdownCategoryKey !== field!.dropdownCategoryKey
@@ -216,10 +217,9 @@ export function FieldEditorModal({ open, onClose, module, configs, field, defaul
         <Dialog open={open} onClose={saving ? undefined : onClose} fullWidth maxWidth="md" slotProps={{ paper: { sx: { borderRadius: '12px' } } }}>
             <DialogTitle sx={{ borderBottom: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
                 <Typography component="span" sx={{ fontWeight: 700, fontSize: '1rem', color: '#0f172a' }}>
-                    {isCreate ? `Add Custom Field — ${CRM_MODULE_LABELS[module]}` : `Edit Field — ${field!.label}`}
+                    {isCreate ? `Add Field — ${CRM_MODULE_LABELS[module]}` : `Edit Field — ${field!.label}`}
                 </Typography>
-                {field && <Badge tone={isSystem ? 'system' : 'custom'}>{isSystem ? 'System' : 'Custom'}</Badge>}
-                {locked && <Badge tone="locked">Core Locked</Badge>}
+                {locked && <Badge tone="locked">Locked</Badge>}
                 {field && (
                     <Typography component="span" sx={{ fontSize: '0.74rem', color: '#64748b', fontFamily: 'monospace', ml: 'auto' }}>
                         {field.fieldKey}
@@ -232,10 +232,9 @@ export function FieldEditorModal({ open, onClose, module, configs, field, defaul
                         {error}
                     </Alert>
                 )}
-                {isSystem && (
+                {locked && (
                     <Alert severity="info" sx={{ mb: 2, borderRadius: '8px', fontSize: '0.8rem' }}>
-                        Built-in fields keep their type and tab; drag one by its grip in the builder to move it to another section of its tab. Leave Placeholder / Hint empty to use the form&apos;s built-in text.
-                        {locked && ' This core field always stays required and visible.'}
+                        This field is locked: it always stays required and visible, and cannot be archived or deleted.
                     </Alert>
                 )}
 
@@ -266,19 +265,19 @@ export function FieldEditorModal({ open, onClose, module, configs, field, defaul
 
                     <Box>
                         {label('Form Tab')}
-                        <TextField select size="small" fullWidth value={draft.tabKey} disabled={isSystem} onChange={(e) => set('tabKey', e.target.value)} sx={inputSx}>
+                        <TextField select size="small" fullWidth value={draft.tabKey} onChange={(e) => set('tabKey', e.target.value)} sx={inputSx}>
                             {tabs.map((t) => (
                                 <MenuItem key={t.key} value={t.key} sx={{ fontSize: '0.85rem' }}>
                                     {t.label}
                                 </MenuItem>
                             ))}
-                            {!isSystem && (
+                            {(
                                 <MenuItem value={NEW_TAB} sx={{ fontSize: '0.85rem', color: '#2563eb', fontWeight: 600 }}>
                                     + New tab…
                                 </MenuItem>
                             )}
                         </TextField>
-                        {!isSystem && draft.tabKey === NEW_TAB && (
+                        {draft.tabKey === NEW_TAB && (
                             <TextField
                                 size="small"
                                 fullWidth
@@ -294,20 +293,20 @@ export function FieldEditorModal({ open, onClose, module, configs, field, defaul
                     </Box>
                     <Box>
                         {label('Section')}
-                        <TextField select size="small" fullWidth value={sectionChoice} disabled={isSystem} onChange={(e) => set('sectionChoice', e.target.value)} sx={inputSx}>
+                        <TextField select size="small" fullWidth value={sectionChoice} onChange={(e) => set('sectionChoice', e.target.value)} sx={inputSx}>
                             {sections.map((s) => (
                                 <MenuItem key={s.sectionKey} value={s.sectionKey} sx={{ fontSize: '0.85rem' }}>
                                     {s.sectionLabel}
                                 </MenuItem>
                             ))}
-                            {!isSystem && (
+                            {(
                                 <MenuItem value={NEW_SECTION} sx={{ fontSize: '0.85rem', color: '#2563eb', fontWeight: 600 }}>
                                     + New section…
                                 </MenuItem>
                             )}
                         </TextField>
                     </Box>
-                    {!isSystem && sectionChoice === NEW_SECTION && (
+                    {sectionChoice === NEW_SECTION && (
                         <Box sx={{ gridColumn: '1 / -1' }}>
                             {label('New section name *')}
                             <TextField
@@ -339,7 +338,7 @@ export function FieldEditorModal({ open, onClose, module, configs, field, defaul
                             fullWidth
                             value={draft.placeholder}
                             onChange={(e) => set('placeholder', e.target.value)}
-                            placeholder={isSystem ? 'Built-in placeholder' : ''}
+                            placeholder="Leave empty to use the form's default"
                             sx={inputSx}
                             slotProps={{ htmlInput: { maxLength: 200 } }}
                         />
@@ -351,12 +350,12 @@ export function FieldEditorModal({ open, onClose, module, configs, field, defaul
                             fullWidth
                             value={draft.hint}
                             onChange={(e) => set('hint', e.target.value)}
-                            placeholder={isSystem ? 'Built-in hint' : 'Short helper text beside the label'}
+                            placeholder="Short helper text beside the label"
                             sx={inputSx}
                             slotProps={{ htmlInput: { maxLength: 200 } }}
                         />
                     </Box>
-                    {!isSystem && (
+                    {(
                         <Box>
                             {label('Default Value')}
                             <TextField
@@ -420,15 +419,10 @@ export function FieldEditorModal({ open, onClose, module, configs, field, defaul
                         label={<Typography sx={{ fontSize: '0.84rem', fontWeight: 600, color: '#374151' }}>Visible in Form</Typography>}
                     />
                     <FormControlLabel
-                        control={<Switch size="small" checked={draft.isVisibleInDrawer} disabled={isSystem} onChange={(e) => set('isVisibleInDrawer', e.target.checked)} />}
+                        control={<Switch size="small" checked={draft.isVisibleInDrawer} onChange={(e) => set('isVisibleInDrawer', e.target.checked)} />}
                         label={<Typography sx={{ fontSize: '0.84rem', fontWeight: 600, color: '#374151' }}>Visible in Drawer</Typography>}
                     />
                 </Box>
-                {isSystem && (
-                    <Typography sx={{ fontSize: '0.74rem', color: '#94a3b8', mt: 0.5 }}>
-                        Detail drawers lay out built-in fields themselves; the drawer switch applies to custom fields.
-                    </Typography>
-                )}
             </DialogContent>
             <DialogActions sx={{ px: 3, py: 2, borderTop: '1px solid #e2e8f0' }}>
                 <Button onClick={onClose} disabled={saving} variant="outlined" sx={secondaryButtonSx}>

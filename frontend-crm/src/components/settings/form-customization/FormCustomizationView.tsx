@@ -164,7 +164,7 @@ export function FormCustomizationView() {
                             Form & Dropdown Customization
                         </Typography>
                         <Typography sx={{ fontSize: '0.82rem', color: '#64748b', mt: 0.25 }}>
-                            Manage dropdown options, tailor built-in fields and add custom fields for every CRM module. Changes show in the Live Preview straight away and reach every user&apos;s forms when you click Save Changes.
+                            Manage dropdown options and customize the fields of every CRM module. Changes show in the Live Preview straight away and reach every user&apos;s forms when you click Save Changes.
                         </Typography>
                     </Box>
                     <Button
@@ -257,7 +257,7 @@ export function FormCustomizationView() {
                     <EmptyState
                         icon={<ViewQuiltOutlinedIcon sx={{ fontSize: 36 }} />}
                         title="Select a CRM form above to customize"
-                        description="Choose any module from Sales, Support, Inventory, or All above to manage its dropdown options, sections, built-in fields, and custom fields."
+                        description="Choose any module from Sales, Support, Inventory, or All above to manage its dropdown options, sections and fields."
                     />
                 </Box>
             )}

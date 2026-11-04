@@ -9,6 +9,7 @@ import {
     APP_REQUIRED_CATEGORY_KEYS,
     CRM_MODULES,
     DEFAULT_FIELDS,
+    isFieldTombstoned,
     MODULE_TABS,
     sectionKeyFromLabel,
     type CrmModuleKey,
@@ -26,6 +27,8 @@ import {
     updateFieldSchema,
     updateOptionSchema,
 } from './formConfig.validator.js';
+
+export { isFieldTombstoned };
 
 const CONFIG_TTL_SECONDS = 60 * 60;
 const configCacheKey = (includeInactive: boolean) => CACHE_KEYS.lookups(`form-configs:${includeInactive ? 'all' : 'active'}`);
@@ -74,6 +77,8 @@ export interface FormFieldDefinitionDto {
     sectionLabel: string;
     /** Built-in fields: the section the hand-built form renders them in (they may have been moved since). */
     defaultSectionKey: string | null;
+    /** Built-in fields: the tab the hand-built form renders them on (they may have been moved since). */
+    defaultTabKey: string | null;
     sortOrder: number;
     fieldSize: string | null;
     placeholder: string | null;
@@ -88,6 +93,8 @@ export interface FormFieldDefinitionDto {
     dropdownCategoryId: string | null;
     dropdownCategoryKey: string | null;
     validationRules: Record<string, unknown> | null;
+    /** A built-in field an admin deleted (kept as a tombstone so seeding does not recreate it). */
+    isDeleted: boolean;
 }
 
 export interface FormConfigsPayload {
@@ -99,6 +106,8 @@ export interface FormConfigsPayload {
 
 /** Section each built-in field has on the hand-built form, by `module:fieldKey`. */
 const DEFAULT_SECTION_KEYS = new Map(DEFAULT_FIELDS.map((f) => [`${f.module}:${f.fieldKey}`, sectionKeyFromLabel(f.sectionLabel)]));
+/** Tab each built-in field has on the hand-built form, by `module:fieldKey`. */
+const DEFAULT_TAB_KEYS = new Map(DEFAULT_FIELDS.map((f) => [`${f.module}:${f.fieldKey}`, f.tabKey as string]));
 
 /** `compliance_legal` → `Compliance Legal` (fallback name of a custom tab saved without one). */
 const titleCaseFromKey = (key: string) =>
@@ -142,6 +151,7 @@ const toFieldDto = (f: FormFieldDefinition, categoryKeys: Map<string, string>): 
     sectionKey: f.sectionKey,
     sectionLabel: f.sectionLabel,
     defaultSectionKey: f.isSystem ? (DEFAULT_SECTION_KEYS.get(`${f.module}:${f.fieldKey}`) ?? null) : null,
+    defaultTabKey: f.isSystem ? (DEFAULT_TAB_KEYS.get(`${f.module}:${f.fieldKey}`) ?? null) : null,
     sortOrder: f.sortOrder,
     fieldSize: f.fieldSize,
     placeholder: f.placeholder,
@@ -156,6 +166,7 @@ const toFieldDto = (f: FormFieldDefinition, categoryKeys: Map<string, string>): 
     dropdownCategoryId: f.dropdownCategoryId,
     dropdownCategoryKey: f.dropdownCategoryId ? (categoryKeys.get(f.dropdownCategoryId) ?? null) : null,
     validationRules: parseJsonObject(f.validationRulesJson),
+    isDeleted: isFieldTombstoned(f.validationRulesJson),
 });
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -295,6 +306,52 @@ async function createCategoryWithOptions(
  * Moves a field to just after the last other field of its tab + section (or, for a new section, after the last
  * field of its tab, else at the end), then renumbers the module's fields 10, 20, … so the order stays unambiguous.
  */
+/**
+ * After `field` was deleted (or tombstoned and unlinked): its admin-created dropdown follows it off this form —
+ * deleted when no other field uses it, otherwise handed over to the module(s) that still do.
+ */
+async function releaseFieldCategory(
+    tx: TransactionClient,
+    field: Pick<FormFieldDefinition, 'module' | 'fieldKey' | 'label' | 'dropdownCategoryId'>,
+    user: AuthUser,
+): Promise<void> {
+    if (!field.dropdownCategoryId) return;
+    const category = await tx.dropdownCategory.findUnique({ where: { id: field.dropdownCategoryId } });
+    if (!category || category.isSystem) return;
+    const remaining = await tx.formFieldDefinition.findMany({ where: { dropdownCategoryId: category.id }, select: { module: true } });
+    if (remaining.length === 0) {
+        await tx.dropdownCategory.delete({ where: { id: category.id } }); // options cascade
+        await auditService.record(tx, {
+            entityType: 'DropdownCategory',
+            entityId: category.id,
+            action: 'DELETE',
+            changedBy: user.username,
+            changes: withMeta(
+                { key: category.key, label: category.label, module: category.module, reason: `Last field using it ('${field.label}', ${field.module}) deleted` },
+                user,
+                { module: category.module, categoryKey: category.key, categoryLabel: category.label, fieldKey: field.fieldKey, fieldLabel: field.label },
+            ),
+        });
+        return;
+    }
+    const modules = [...new Set(remaining.map((f) => f.module))];
+    if (category.module === field.module && !modules.includes(field.module)) {
+        const module = modules.length > 1 ? 'shared' : modules[0];
+        await tx.dropdownCategory.update({ where: { id: category.id }, data: { module } });
+        await auditService.record(tx, {
+            entityType: 'DropdownCategory',
+            entityId: category.id,
+            action: 'UPDATE',
+            changedBy: user.username,
+            changes: withMeta({ module: { from: category.module, to: module } }, user, {
+                module: field.module,
+                categoryKey: category.key,
+                categoryLabel: category.label,
+            }),
+        });
+    }
+}
+
 async function placeField(tx: TransactionClient, module: string, fieldId: string): Promise<void> {
     const all = await tx.formFieldDefinition.findMany({
         where: { module },
@@ -764,15 +821,12 @@ export const formConfigService = {
                 throw HttpError.badRequest(message, [{ message, path: [path] }]);
             };
 
+            if (isFieldTombstoned(before.validationRulesJson)) throw HttpError.notFound('Form field not found');
+            // Only core-locked fields are protected; every other field (built-in or custom) is freely editable.
             if (before.isCoreLocked) {
+                if (input.isActive === false) reject('isActive', `${before.label} is a core field and cannot be archived.`);
                 if (input.isRequired === false && before.isRequired) reject('isRequired', `${before.label} is a core field and must stay required.`);
                 if (input.isVisibleInForm === false) reject('isVisibleInForm', `${before.label} is a core field and cannot be hidden.`);
-            }
-            if (before.isSystem) {
-                if (input.isActive === false) reject('isActive', 'Built-in fields cannot be removed; hide them instead.');
-                // Built-in fields may move between the sections of their tab (the forms render them there), but
-                // not to another tab: a hand-built form only mounts the grids of the tab being shown.
-                if (input.tabKey !== undefined && input.tabKey !== before.tabKey) reject('tabKey', 'Built-in fields stay on their original tab.');
             }
             if (input.tabKey !== undefined) assertTab(before.module, input.tabKey);
             const nextTabKey = input.tabKey ?? before.tabKey;
@@ -781,7 +835,6 @@ export const formConfigService = {
                     ? await resolveTabLabel(tx, before.module, nextTabKey, input.tabLabel)
                     : undefined;
             if (input.fieldType !== undefined && input.fieldType !== before.fieldType) {
-                if (before.isSystem) reject('fieldType', 'Built-in fields keep their control type.');
                 if (!CHOICE_TYPES.has(before.fieldType)) reject('fieldType', 'Only select / multi-select fields can switch between the two.');
             }
 
@@ -852,15 +905,31 @@ export const formConfigService = {
     },
 
     /**
-     * Permanently deletes a custom field (values already stored on records are left as they are). Its admin-created
-     * dropdown follows the field off this form: deleted when no other field uses it, otherwise handed over to the
-     * module(s) that still do, so it no longer lists under this module.
+     * Deletes a field (values already stored on records are left as they are). Core-locked fields cannot be deleted.
+     * A custom field's row is removed; a built-in field's row is kept as a tombstone (inactive, hidden, unlinked,
+     * `validationRulesJson: {"_deleted":true}`) so start-up seeding does not recreate it and the hand-built form hides
+     * its input. Either way an admin-created dropdown follows the field off this form (see releaseFieldCategory).
      */
     async deleteField(fieldId: string, user: AuthUser): Promise<{ id: string }> {
         await runInTransaction(async (tx) => {
             const field = await findField(tx, fieldId);
-            if (field.isSystem) throw HttpError.badRequest('Built-in system fields cannot be deleted; hide them instead.');
-            await tx.formFieldDefinition.delete({ where: { id: field.id } });
+            if (field.isCoreLocked) throw HttpError.badRequest('Core locked fields cannot be deleted.');
+            if (isFieldTombstoned(field.validationRulesJson)) throw HttpError.notFound('Form field not found');
+            if (field.isSystem) {
+                await tx.formFieldDefinition.update({
+                    where: { id: field.id },
+                    data: {
+                        isActive: false,
+                        isVisibleInForm: false,
+                        isVisibleInDrawer: false,
+                        isRequired: false,
+                        dropdownCategoryId: null,
+                        validationRulesJson: JSON.stringify({ _deleted: true }),
+                    },
+                });
+            } else {
+                await tx.formFieldDefinition.delete({ where: { id: field.id } });
+            }
             await auditService.record(tx, {
                 entityType: 'FormField',
                 entityId: field.id,
@@ -872,42 +941,7 @@ export const formConfigService = {
                     fieldLabel: field.label,
                 }),
             });
-
-            if (!field.dropdownCategoryId) return;
-            const category = await tx.dropdownCategory.findUnique({ where: { id: field.dropdownCategoryId } });
-            if (!category || category.isSystem) return;
-            const remaining = await tx.formFieldDefinition.findMany({ where: { dropdownCategoryId: category.id }, select: { module: true } });
-            if (remaining.length === 0) {
-                await tx.dropdownCategory.delete({ where: { id: category.id } }); // options cascade
-                await auditService.record(tx, {
-                    entityType: 'DropdownCategory',
-                    entityId: category.id,
-                    action: 'DELETE',
-                    changedBy: user.username,
-                    changes: withMeta(
-                        { key: category.key, label: category.label, module: category.module, reason: `Last field using it ('${field.label}', ${field.module}) deleted` },
-                        user,
-                        { module: category.module, categoryKey: category.key, categoryLabel: category.label, fieldKey: field.fieldKey, fieldLabel: field.label },
-                    ),
-                });
-                return;
-            }
-            const modules = [...new Set(remaining.map((f) => f.module))];
-            if (category.module === field.module && !modules.includes(field.module)) {
-                const module = modules.length > 1 ? 'shared' : modules[0];
-                await tx.dropdownCategory.update({ where: { id: category.id }, data: { module } });
-                await auditService.record(tx, {
-                    entityType: 'DropdownCategory',
-                    entityId: category.id,
-                    action: 'UPDATE',
-                    changedBy: user.username,
-                    changes: withMeta({ module: { from: category.module, to: module } }, user, {
-                        module: field.module,
-                        categoryKey: category.key,
-                        categoryLabel: category.label,
-                    }),
-                });
-            }
+            await releaseFieldCategory(tx, field, user);
         });
         await invalidate();
         return { id: fieldId };
@@ -965,47 +999,54 @@ export const formConfigService = {
     },
 
     /**
-     * Restores the module's built-in fields to their defaults (label, section label, order, size, texts,
-     * required / visibility, linked dropdown). Custom fields are kept, since records may hold their values.
+     * Restores the module's form to its defaults: custom fields are deleted (values already stored on records are
+     * left as they are) and every default field is restored — or recreated, if it was deleted — with its default
+     * label, tab, section, order, size, texts, required / visibility and linked dropdown.
      */
     async resetModule(module: CrmModuleKey, user: AuthUser): Promise<FormFieldDefinitionDto[]> {
+        assertModule(module);
         await runInTransaction(async (tx) => {
+            const customFields = await tx.formFieldDefinition.findMany({ where: { module, isSystem: false } });
+            await tx.formFieldDefinition.deleteMany({ where: { module, isSystem: false } });
+            for (const field of customFields) await releaseFieldCategory(tx, field, user);
+
             const categories = await tx.dropdownCategory.findMany({ where: { deletedAt: null }, select: { id: true, key: true } });
             const categoryIds = new Map(categories.map((c) => [c.key, c.id]));
             for (const def of DEFAULT_FIELDS.filter((f) => f.module === module)) {
                 // A field whose default dropdown an admin deleted stays unlinked and hidden.
                 const dropdownGone = Boolean(def.dropdownCategoryKey && !categoryIds.has(def.dropdownCategoryKey));
-                await tx.formFieldDefinition.updateMany({
-                    where: { module, fieldKey: def.fieldKey, isSystem: true },
-                    data: {
-                        label: def.label,
-                        sectionLabel: def.sectionLabel,
-                        sectionKey: sectionKeyFromLabel(def.sectionLabel),
-                        tabKey: def.tabKey,
-                        tabLabel: null,
-                        sortOrder: def.sortOrder,
-                        fieldSize: null,
-                        placeholder: null,
-                        hint: null,
-                        defaultValue: null,
-                        isRequired: def.isRequired,
-                        isCoreLocked: def.isCoreLocked,
-                        isActive: true,
-                        isVisibleInForm: !dropdownGone,
-                        isVisibleInDrawer: true,
-                        dropdownCategoryId: def.dropdownCategoryKey ? (categoryIds.get(def.dropdownCategoryKey) ?? null) : null,
-                    },
+                const defaults = {
+                    label: def.label,
+                    fieldType: def.fieldType,
+                    sectionLabel: def.sectionLabel,
+                    sectionKey: sectionKeyFromLabel(def.sectionLabel),
+                    tabKey: def.tabKey,
+                    tabLabel: null,
+                    sortOrder: def.sortOrder,
+                    fieldSize: null,
+                    placeholder: null,
+                    hint: null,
+                    defaultValue: null,
+                    validationRulesJson: null,
+                    isRequired: def.isRequired,
+                    isCoreLocked: def.isCoreLocked,
+                    isActive: true,
+                    isVisibleInForm: !dropdownGone,
+                    isVisibleInDrawer: true,
+                    dropdownCategoryId: def.dropdownCategoryKey ? (categoryIds.get(def.dropdownCategoryKey) ?? null) : null,
+                };
+                await tx.formFieldDefinition.upsert({
+                    where: { module_fieldKey: { module, fieldKey: def.fieldKey } },
+                    update: defaults,
+                    create: { ...defaults, module, fieldKey: def.fieldKey, isSystem: true },
                 });
             }
-            // Custom fields keep their sections; re-place them after the restored built-in order.
-            const customFields = await tx.formFieldDefinition.findMany({ where: { module, isSystem: false }, orderBy: { sortOrder: 'asc' }, select: { id: true } });
-            for (const field of customFields) await placeField(tx, module, field.id);
             await auditService.record(tx, {
                 entityType: 'FormField',
                 entityId: module,
                 action: 'UPDATE',
                 changedBy: user.username,
-                changes: withMeta({ reset: true }, user, { module }),
+                changes: withMeta({ reset: true, customFieldsDeleted: customFields.length }, user, { module }),
             });
         });
         await invalidate();

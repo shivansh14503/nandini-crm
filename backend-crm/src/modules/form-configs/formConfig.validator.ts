@@ -4,7 +4,7 @@ import { CATEGORY_MODULES, CRM_MODULES, CUSTOM_FIELD_TYPES, FIELD_SIZES } from '
 
 /**
  * Request schemas for /api/form-configs. Rules that depend on the stored row (system options can't be archived
- * or renamed, core-locked fields can't be hidden or made optional, built-in fields keep their type and place)
+ * or renamed, core-locked fields can't be archived, hidden, made optional or deleted)
  * are enforced in formConfig.service.ts, where the row is known.
  */
 
@@ -136,12 +136,12 @@ export const createFieldSchema = z
 export const updateFieldSchema = z
     .object({
         label: label('Label', 120).optional(),
-        /** Custom select / multi-select fields only: switches between the two. */
+        /** Select / multi-select fields only: switches between the two. */
         fieldType: z.enum(['select', 'multiselect']).optional(),
-        /** Custom fields only (built-in fields stay on their tab). */
+        /** Any field may move to another tab. */
         tabKey: tabKey.optional(),
         tabLabel,
-        /** Any field: built-in fields may move between the sections of their tab. */
+        /** Any field may move to another section. */
         sectionKey: z.string().trim().min(1).max(80).optional(),
         sectionLabel: label('Section', 120).optional(),
         fieldSize,
@@ -153,7 +153,7 @@ export const updateFieldSchema = z
         /** Blocked (false) for core-locked fields. */
         isVisibleInForm: z.boolean().optional(),
         isVisibleInDrawer: z.boolean().optional(),
-        /** false archives a custom field; built-in fields can only be hidden. */
+        /** false archives the field (blocked for core-locked fields). */
         isActive: z.boolean().optional(),
         /** null unlinks; select / multiselect fields only. */
         dropdownCategoryKey: z.string().trim().min(1).max(80).nullable().optional(),

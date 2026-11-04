@@ -259,16 +259,14 @@ export function useConfigDraft(base: FormConfigsPayload | undefined, refetch: ()
             updateField(fieldId, input) {
                 const s = current();
                 const field = findFieldById(s, fieldId) ?? fail('Field not found.');
-                if (field.isSystem && input.tabKey !== undefined && input.tabKey !== field.tabKey) fail(`${field.label} is a built-in field and stays on its tab.`);
                 // A field moved to another tab carries that tab's name (custom tabs are stored through their fields).
                 const movedTab = input.tabKey !== undefined && input.tabKey !== field.tabKey;
                 const tabLabel = movedTab && input.tabLabel === undefined ? tabLabelOf(s, field.module, input.tabKey!) : undefined;
                 const payload = tabLabel ? { ...input, tabLabel } : input;
                 if (field.isCoreLocked && payload.isRequired === false) fail(`${field.label} is a core field and must stay required.`);
                 if (field.isCoreLocked && payload.isVisibleInForm === false) fail(`${field.label} is a core field and cannot be hidden.`);
-                if (field.isSystem && payload.isActive === false) fail('Built-in fields cannot be removed; hide them instead.');
+                if (field.isCoreLocked && payload.isActive === false) fail(`${field.label} is a core field and cannot be archived.`);
                 if (payload.fieldType !== undefined && payload.fieldType !== field.fieldType) {
-                    if (field.isSystem) fail(`${field.label} is a built-in field and keeps its control type.`);
                     if (field.fieldType !== 'select' && field.fieldType !== 'multiselect') fail('Only select / multi-select fields can switch between the two.');
                 }
                 if (isTempId(fieldId) && payload.isActive === false) {
@@ -367,7 +365,7 @@ export function useConfigDraft(base: FormConfigsPayload | undefined, refetch: ()
 
             deleteField(fieldId) {
                 const field = findFieldById(current(), fieldId) ?? fail('Field not found.');
-                if (field.isSystem) fail('Built-in system fields cannot be deleted; hide them instead.');
+                if (field.isCoreLocked) fail(`${field.label} is a core field and cannot be deleted.`);
                 if (isTempId(fieldId)) {
                     dropTempField(fieldId);
                     return;

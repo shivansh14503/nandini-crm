@@ -30,7 +30,7 @@ export const FORM_CONFIG_ADMIN_ROLES = ['Admin', 'Administrator', 'Super Admin']
  *   DELETE /fields/:fieldId                           permanent delete of a custom field; blocked for built-in fields
  *   PUT    /modules/:module/fields/reorder            { fieldIds }
  *   PATCH  /modules/:module/sections/:sectionKey      { sectionLabel }
- *   POST   /modules/:module/reset                     built-in fields back to defaults (custom fields kept)
+ *   POST   /modules/:module/reset                     module fields back to defaults (custom fields deleted)
  */
 const router = Router();
 router.use(authenticate);

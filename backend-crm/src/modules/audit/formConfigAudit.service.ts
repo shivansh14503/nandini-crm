@@ -290,7 +290,7 @@ function fieldRevisions(row: ParsedRow, ctx: AuditContext, base: Base): AuditRev
                 return [{ ...base, tag: 'Reordered', title: `Fields reordered on ${module}`, note: plural(c.reordered, 'field') }];
             }
             if (c.reset === true) {
-                return [{ ...base, tag: 'Reset', title: `Built-in fields reset to defaults on ${module}` }];
+                return [{ ...base, tag: 'Reset', title: `Module fields reset to defaults on ${module}` }];
             }
             if (row.entityId.includes(':') && typeof c.sectionLabel === 'string') {
                 return [{ ...base, tag: 'Updated', title: `Section renamed on ${module}`, to: c.sectionLabel }];

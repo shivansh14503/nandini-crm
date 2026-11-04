@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useId, useLayoutEffect, useRef, useSyncExternalStore } from 'react';
-import { hasHostFor, homeSectionIdOf, isMovedBuiltIn, sectionIdOf, useFormConfigContext, type MovedFieldStore } from '@/context/FormConfigContext';
+import { hasHostFor, homeSectionIdOf, isMovedAcrossTabs, isMovedBuiltIn, sectionIdOf, useFormConfigContext, type MovedFieldStore } from '@/context/FormConfigContext';
 import type { FormFieldDefinitionDto } from '@/types/formConfig.types';
 import { DynamicFormField } from './DynamicFormField';
 
@@ -78,8 +78,11 @@ export function useConfiguredChildren(children: React.ReactNode): React.ReactNod
         return claimSection(sectionId, gridId);
     }, [sectionId, claimSection, gridId]);
 
-    // Cells whose field now lives in another section that is on screen: handed over to that section's host.
-    const exported = fields.map((field) => Boolean(ctx && field && isMovedBuiltIn(field) && hasHostFor(ctx.sectionClaims, field)));
+    // Cells whose field now lives in another section that is on screen: handed over to that section's host. A field
+    // moved to another tab always leaves this grid (it must not show on its old tab); its new tab renders it.
+    const exported = fields.map((field) =>
+        Boolean(ctx && field && isMovedBuiltIn(field) && (isMovedAcrossTabs(field) || hasHostFor(ctx.sectionClaims, field))),
+    );
     const published = useRef(new Map<string, React.ReactNode>());
     useLayoutEffect(() => {
         if (!store) return;
@@ -108,7 +111,12 @@ export function useConfiguredChildren(children: React.ReactNode): React.ReactNod
     const custom = isFirstClaimant ? ctx.customFields.filter((f) => f.isActive && f.isVisibleInForm && sectionIdOf(f) === sectionId) : [];
     const received = incoming.flatMap((field) => {
         const node = store?.get(field.fieldKey);
-        return node ? [{ node: <MovedFieldSlot key={`moved-${field.fieldKey}`} node={node} />, field }] : [];
+        if (node) return [{ node: <MovedFieldSlot key={`moved-${field.fieldKey}`} node={node} />, field }];
+        // Moved from another tab whose grid isn't mounted (so nothing hands its element over): render it from config.
+        if (isMovedAcrossTabs(field) && field.isActive && field.isVisibleInForm) {
+            return [{ node: <DynamicFormField key={`moved-${field.fieldKey}`} field={field} required={field.isRequired} />, field }];
+        }
+        return [];
     });
 
     const entries: { node: React.ReactNode; field?: FormFieldDefinitionDto }[] = [

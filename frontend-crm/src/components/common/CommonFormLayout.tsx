@@ -160,7 +160,12 @@ export function CommonFormLayout({
         if (!configCtx?.configs) return [];
         const own = new Set((tabs ?? []).map((t) => t.id));
         return (configCtx.configs.moduleTabs[configCtx.module] ?? []).filter(
-            (t) => t.isCustom && !own.has(t.key) && configCtx.customFields.some((f) => f.tabKey === t.key && f.isActive && f.isVisibleInForm),
+            (t) =>
+                t.isCustom &&
+                !own.has(t.key) &&
+                [...configCtx.customFields, ...configCtx.systemFields.values()].some(
+                    (f) => f.tabKey === t.key && !f.isDeleted && f.isActive && f.isVisibleInForm,
+                ),
         );
     }, [configCtx, tabs]);
     // The form switching tabs itself (e.g. to show a validation error) leaves the custom tab.

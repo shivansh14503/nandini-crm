@@ -146,6 +146,8 @@ export interface FormFieldDefinitionDto {
     sectionLabel: string;
     /** Built-in fields: the section the hand-built form renders them in (null for custom fields). */
     defaultSectionKey?: string | null;
+    /** Built-in fields: the tab the hand-built form renders them on (null for custom fields). */
+    defaultTabKey?: string | null;
     sortOrder: number;
     fieldSize: ConfigFieldSize | null;
     /** null → the form's built-in text. */
@@ -164,6 +166,8 @@ export interface FormFieldDefinitionDto {
     dropdownCategoryId: string | null;
     dropdownCategoryKey: string | null;
     validationRules: Record<string, unknown> | null;
+    /** A built-in field an admin deleted (kept as an inactive, hidden tombstone). */
+    isDeleted?: boolean;
 }
 
 export interface ModuleTabDefinition {

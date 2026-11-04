@@ -22,7 +22,6 @@ import EditOutlinedIcon from '@mui/icons-material/EditOutlined';
 import LockOutlinedIcon from '@mui/icons-material/LockOutlined';
 import ArchiveOutlinedIcon from '@mui/icons-material/ArchiveOutlined';
 import UnarchiveOutlinedIcon from '@mui/icons-material/UnarchiveOutlined';
-import RestartAltRoundedIcon from '@mui/icons-material/RestartAltRounded';
 import CheckRoundedIcon from '@mui/icons-material/CheckRounded';
 import CloseRoundedIcon from '@mui/icons-material/CloseRounded';
 import ViewQuiltOutlinedIcon from '@mui/icons-material/ViewQuiltOutlined';
@@ -72,7 +71,7 @@ export interface FormFieldsBuilderPanelProps {
 const SIZES: (ConfigFieldSize | '')[] = ['', 'xs', 'sm', 'md', 'lg', 'full'];
 const GRID_COLUMNS = '28px minmax(180px, 1.6fr) 120px 92px 70px 70px 70px 104px';
 
-/** Every field of a module grouped by tab and section, with inline toggles and the custom field editor. */
+/** Every field of a module grouped by tab and section, with inline toggles and the field editor. */
 export function FormFieldsBuilderPanel({ module, configs, canEdit, notify, unsavedTabs }: FormFieldsBuilderPanelProps) {
     const tabs = useMemo(() => configs.moduleTabs[module] ?? [], [configs, module]);
     const [selectedTab, setTabKey] = useState(tabs[0]?.key ?? 'overview');
@@ -80,7 +79,6 @@ export function FormFieldsBuilderPanel({ module, configs, canEdit, notify, unsav
     const tabKey = tabs.some((t) => t.key === selectedTab) ? selectedTab : (tabs[0]?.key ?? 'overview');
     const [showArchived, setShowArchived] = useState(false);
     const [editor, setEditor] = useState<{ open: boolean; field?: FormFieldDefinitionDto; sectionKey?: string }>({ open: false });
-    const [resetOpen, setResetOpen] = useState(false);
     const [deleteTarget, setDeleteTarget] = useState<FormFieldDefinitionDto | null>(null);
     const [newTabOpen, setNewTabOpen] = useState(false);
     const [busy, setBusy] = useState(false);
@@ -116,8 +114,7 @@ export function FormFieldsBuilderPanel({ module, configs, canEdit, notify, unsav
     const sectionOfField = useCallback((f: FormFieldDefinitionDto) => f.sectionKey, []);
 
     /**
-     * Applies a drop: a field dropped into another section moves there (built-in fields too: they stay on their
-     * tab), and the tab's rows keep the module-order slots they occupy, filled in the new order, so other tabs
+     * Applies a drop: a field dropped into another section moves there, and the tab's rows keep the module-order slots they occupy, filled in the new order, so other tabs
      * stay where they are.
      */
     const applyTabReorder = (orderedIds: string[], sectionById: Record<string, string>) => {
@@ -192,11 +189,8 @@ export function FormFieldsBuilderPanel({ module, configs, canEdit, notify, unsav
                     )}
                     {canEdit && (
                         <>
-                            <Button variant="outlined" size="small" startIcon={<RestartAltRoundedIcon />} onClick={() => setResetOpen(true)} sx={secondaryButtonSx} disabled={busy}>
-                                Reset Built-in
-                            </Button>
                             <Button variant="contained" size="small" startIcon={<AddRoundedIcon />} onClick={() => setEditor({ open: true })} sx={primaryButtonSx}>
-                                Add Custom Field
+                                Add Field
                             </Button>
                         </>
                     )}
@@ -246,7 +240,7 @@ export function FormFieldsBuilderPanel({ module, configs, canEdit, notify, unsav
                             <EmptyState
                                 icon={<ViewQuiltOutlinedIcon />}
                                 title="No configurable fields on this tab"
-                                description="Built-in composite blocks (addresses, email lists, line items) aren't listed. Add a custom field to extend this tab."
+                                description="Composite blocks (addresses, email lists, line items) aren't listed. Add a field to extend this tab."
                             />
                         ))}
 
@@ -274,8 +268,8 @@ export function FormFieldsBuilderPanel({ module, configs, canEdit, notify, unsav
 
             <Box sx={{ px: 2, py: 1.5, borderTop: '1px solid #e2e8f0', backgroundColor: '#f8fafc' }}>
                 <Typography sx={{ fontSize: '0.74rem', color: '#64748b' }}>
-                    Drag a field by its grip to reorder it or to move it into another section of this tab (built-in fields included): the form
-                    shows the fields in the order and sections listed here. Custom fields can also be moved to another tab from Edit. Composite
+                    Drag a field by its grip to reorder it or to move it into another section of this tab: the form
+                    shows the fields in the order and sections listed here. Any field can also be moved to another tab from Edit. Composite
                     blocks (email lists, line items, toggles) keep their place.
                 </Typography>
             </Box>
@@ -307,30 +301,6 @@ export function FormFieldsBuilderPanel({ module, configs, canEdit, notify, unsav
             />
             )}
 
-            <Dialog open={resetOpen} onClose={() => setResetOpen(false)} maxWidth="xs" fullWidth slotProps={{ paper: { sx: { borderRadius: '12px' } } }}>
-                <DialogTitle sx={{ fontWeight: 700, fontSize: '1rem' }}>Reset {CRM_MODULE_LABELS[module]} built-in fields?</DialogTitle>
-                <DialogContent>
-                    <Typography sx={{ fontSize: '0.85rem', color: '#475569' }}>
-                        Labels, hints, placeholders, widths, required flags, visibility and section names of the built-in fields go back to their defaults. Custom
-                        fields and dropdown options are kept. The reset shows in the preview right away and is applied when you click Save Changes.
-                    </Typography>
-                </DialogContent>
-                <DialogActions sx={{ px: 3, pb: 2 }}>
-                    <Button onClick={() => setResetOpen(false)} variant="outlined" sx={secondaryButtonSx}>
-                        Cancel
-                    </Button>
-                    <Button
-                        variant="contained"
-                        sx={{ ...primaryButtonSx, background: 'linear-gradient(135deg, #d97706 0%, #f59e0b 100%)' }}
-                        onClick={() => {
-                            setResetOpen(false);
-                            void run(() => draft.resetModule(module));
-                        }}
-                    >
-                        Reset
-                    </Button>
-                </DialogActions>
-            </Dialog>
 
             <ConfirmDeleteDialog
                 open={Boolean(deleteTarget)}
@@ -344,7 +314,7 @@ export function FormFieldsBuilderPanel({ module, configs, canEdit, notify, unsav
                 }}
             >
                 <Typography sx={{ fontSize: '0.85rem', color: '#475569' }}>
-                    The custom field is removed from the {CRM_MODULE_LABELS[module]} form and drawer for good. Values already stored on records are no
+                    The field is removed from the {CRM_MODULE_LABELS[module]} form and drawer for good. Values already stored on records are no
                     longer shown. To hide it but keep it restorable, use Archive instead.
                 </Typography>
                 {deleteTarget?.dropdownCategoryKey && (
@@ -366,7 +336,7 @@ function dropdownFateMessage(configs: FormConfigsPayload, module: CrmModuleKey, 
     if (others.length > 0 && others.every((f) => f.module !== module)) {
         return `Its dropdown will be removed from the ${CRM_MODULE_LABELS[module]} form, but kept on the other form(s) that use it.`;
     }
-    return others.length > 0 ? 'Its dropdown list is kept: other fields on this form still use it.' : 'Its built-in dropdown list is kept.';
+    return others.length > 0 ? 'Its dropdown list is kept: other fields on this form still use it.' : 'Its dropdown list is kept.';
 }
 
 // ── Section ──────────────────────────────────────────────────────────────────
@@ -408,7 +378,7 @@ function NewTabDialog({ module, onClose, onCreate }: { module: CrmModuleKey; onC
                         }
                     }}
                     error={Boolean(error)}
-                    helperText={error ?? (name.trim() ? `Tab key: ${tabKeyFromLabel(name)}` : 'Shown on the form next to the built-in tabs.')}
+                    helperText={error ?? (name.trim() ? `Tab key: ${tabKeyFromLabel(name)}` : 'Shown on the form next to the other tabs.')}
                     sx={inputSx}
                     slotProps={{ htmlInput: { maxLength: 60 } }}
                 />
@@ -592,7 +562,6 @@ function FieldRow({
                     <Typography sx={{ fontSize: '0.85rem', fontWeight: 600, color: '#1e293b' }} noWrap>
                         {field.label}
                     </Typography>
-                    <Badge tone={field.isSystem ? 'system' : 'custom'}>{field.isSystem ? 'System' : 'Custom'}</Badge>
                     {locked && (
                         <Badge tone="locked" icon={<LockOutlinedIcon sx={{ fontSize: 11 }} />} title={lockReason}>
                             Locked
@@ -648,8 +617,7 @@ function FieldRow({
             <LabeledSwitch
                 label={`${field.label} visible in drawer`}
                 checked={field.isVisibleInDrawer}
-                disabled={disabled || field.isSystem}
-                disabledReason={field.isSystem ? 'Detail drawers lay out built-in fields themselves' : undefined}
+                disabled={disabled}
                 onChange={(isVisibleInDrawer) => void onPatch({ isVisibleInDrawer })}
             />
 
@@ -661,7 +629,7 @@ function FieldRow({
                         </IconButton>
                     </Tooltip>
                 )}
-                {canEdit && !field.isSystem && (
+                {canEdit && !locked && (
                     <Tooltip title={field.isActive ? 'Archive (values on existing records are kept)' : 'Restore'} arrow>
                         <IconButton
                             size="small"
@@ -673,7 +641,7 @@ function FieldRow({
                         </IconButton>
                     </Tooltip>
                 )}
-                {canEdit && !field.isSystem && (
+                {canEdit && !locked && (
                     <Tooltip title="Delete permanently" arrow>
                         <span>
                             <IconButton size="small" aria-label={`Delete ${field.label}`} disabled={busy} onClick={onDelete}>

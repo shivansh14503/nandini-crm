@@ -45,8 +45,8 @@ const smallLabel = (text: string) => <Typography sx={{ fontSize: '0.72rem', font
 
 /**
  * Edits an existing dropdown in one go: name, scope (one module / shared), the control type and
- * Required flag of the custom fields using it, and which forms use it (check to add a field, uncheck to delete
- * that form's custom field). Everything is staged in the draft and saved with "Save Changes".
+ * Required flag of the fields using it, and which forms use it (check to add a field, uncheck to delete
+ * that form's field). Everything is staged in the draft and saved with "Save Changes".
  */
 export function EditCategoryDialog({
     category,
@@ -70,7 +70,8 @@ export function EditCategoryDialog({
         for (const f of linked) map.set(f.module, [...(map.get(f.module) ?? []), f]);
         return map;
     }, [linked]);
-    const customLinked = linked.filter((f) => !f.isSystem);
+    // Fields that may follow the dropdown's edits (control type, Required, removal): every field but core-locked ones.
+    const customLinked = linked.filter((f) => !f.isCoreLocked);
     const initialType: DropdownControlType = [...customLinked, ...linked].map((f) => f.fieldType).find(isChoiceType) ?? 'select';
     const initialRequired = customLinked[0]?.isRequired ?? false;
     const mixedTypes = new Set(customLinked.map((f) => f.fieldType)).size > 1;
@@ -87,7 +88,7 @@ export function EditCategoryDialog({
     const forcedShared = effective.length > 1;
     const scopeValue = forcedShared ? 'shared' : scope;
     const onlyModule = effective.length === 1 ? effective[0] : homeModule;
-    // Built-in dropdowns change scope just like custom ones (e.g. made Global to place them on other forms).
+    // Every dropdown can change scope (e.g. made Global to place it on other forms).
     const nextModule: DropdownCategoryDto['module'] = scopeValue === 'shared' ? 'shared' : onlyModule;
     const removedModules = [...linkedByModule.keys()].filter((m) => !kept.has(m));
     const removesAll = !category.isSystem && linked.length > 0 && effective.length === 0;
@@ -106,7 +107,7 @@ export function EditCategoryDialog({
             // 2. New forms (before any removal, so the dropdown is never left unused in between).
             const added = stageDropdownFields(draft, configs, { label: name, ...control, categoryKey: category.key }, newTargets);
 
-            // 3. Custom fields that stay: control type / Required, and the name when it mirrored the dropdown's.
+            // 3. Fields that stay: control type / Required, and the name when it mirrored the dropdown's.
             for (const field of customLinked.filter((f) => kept.has(f.module))) {
                 const update: UpdateFieldPayload = {};
                 if (touched.fieldType && field.fieldType !== control.fieldType) update.fieldType = control.fieldType;
@@ -115,8 +116,8 @@ export function EditCategoryDialog({
                 if (Object.keys(update).length > 0) draft.updateField(field.id, update);
             }
 
-            // 4. Forms unchecked: their custom fields go.
-            for (const m of removedModules) for (const field of linkedByModule.get(m) ?? []) if (!field.isSystem) draft.deleteField(field.id);
+            // 4. Forms unchecked: their fields go.
+            for (const m of removedModules) for (const field of linkedByModule.get(m) ?? []) if (!field.isCoreLocked) draft.deleteField(field.id);
 
             const changes = [added > 0 && `added to ${added} form${added === 1 ? '' : 's'}`, removedModules.length > 0 && `removed from ${removedModules.length}`]
                 .filter(Boolean)
@@ -145,7 +146,6 @@ export function EditCategoryDialog({
         <Dialog open onClose={onClose} fullWidth maxWidth="md" slotProps={{ paper: { sx: { borderRadius: '12px' } } }}>
             <DialogTitle sx={{ fontWeight: 700, fontSize: '1rem', color: '#0f172a', borderBottom: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', gap: 1 }}>
                 Edit Dropdown
-                {category.isSystem && <Badge tone="system">Built-in</Badge>}
             </DialogTitle>
             <DialogContent sx={{ pt: '20px !important', display: 'flex', flexDirection: 'column', gap: 2 }}>
                 <TextField label="Dropdown name" required size="small" value={label} onChange={(e) => setLabel(e.target.value)} sx={inputSx} slotProps={{ htmlInput: { maxLength: 120 } }} />
@@ -174,7 +174,7 @@ export function EditCategoryDialog({
                 </Box>
 
                 <Box>
-                    {smallLabel('Control type & Required (custom fields using this dropdown, and new ones)')}
+                    {smallLabel('Control type & Required (fields using this dropdown, and new ones)')}
                     <ControlTypePicker
                         fieldType={control.fieldType}
                         isRequired={control.isRequired}
@@ -198,7 +198,7 @@ export function EditCategoryDialog({
                     <ModuleGroupList
                         renderRow={(m, moduleName) => {
                             const fields = linkedByModule.get(m);
-                            const builtIn = fields?.some((f) => f.isSystem) ?? false;
+                            const builtIn = fields?.some((f) => f.isCoreLocked) ?? false;
                             const placement = newTargets[m];
                             const checked = fields ? kept.has(m) : Boolean(placement);
                             const removing = Boolean(fields) && !checked;
@@ -206,7 +206,7 @@ export function EditCategoryDialog({
                                 <Box sx={{ px: 1.5, py: 0.75, backgroundColor: removing ? '#fef2f2' : checked ? '#f8fafc' : '#fff' }}>
                                     <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '190px minmax(0, 1fr)' }, alignItems: 'center', gap: 1 }}>
                                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                                            <Tooltip title={builtIn ? 'Built-in field: it always uses this dropdown' : ''} arrow>
+                                            <Tooltip title={builtIn ? 'A locked field on this form always uses this dropdown' : ''} arrow>
                                                 <span>
                                                     <FormControlLabel
                                                         sx={{ m: 0 }}
@@ -222,7 +222,7 @@ export function EditCategoryDialog({
                                                     />
                                                 </span>
                                             </Tooltip>
-                                            {fields && <Badge tone={builtIn ? 'system' : 'active'}>{builtIn ? 'Built-in' : 'Linked'}</Badge>}
+                                            {fields && <Badge tone={builtIn ? 'locked' : 'active'}>{builtIn ? 'Locked' : 'Linked'}</Badge>}
                                         </Box>
                                         {fields && (
                                             <Typography sx={{ fontSize: '0.78rem', color: removing ? dangerColor : '#64748b' }}>

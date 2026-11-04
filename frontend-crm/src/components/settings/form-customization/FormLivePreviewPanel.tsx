@@ -65,7 +65,7 @@ export function FormLivePreviewPanel({ module, configs, unsavedCount = 0, unsave
                                 description={
                                     tabs.find((t) => t.key === tabKey) && !moduleFields(configs, module).some((f) => f.tabKey === tabKey)
                                         ? 'This tab has no fields yet. Add one under Form Fields & Sections; an empty tab is not kept when you save.'
-                                        : 'This tab only holds built-in blocks such as addresses or line items.'
+                                        : 'This tab only holds composite blocks such as addresses or line items.'
                                 }
                             />
                         )}

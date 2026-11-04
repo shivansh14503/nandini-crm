@@ -4,7 +4,7 @@ import { formConfigService } from '@/services/formConfig.service';
 import { getFormConfigs } from '@/services/masterData.store';
 import type { CrmModuleKey, FieldType, FormConfigsPayload, FormFieldDefinitionDto } from '@/types/formConfig.types';
 import type { FieldSize } from '@/components/forms/fieldSizing';
-import { activeOptionValues, findCategory, groupSections, moduleFields, optionLabelMap } from '@/utils/formConfig';
+import { activeOptionValues, allModuleFieldsIncludingDeleted, findCategory, groupSections, moduleFields, optionLabelMap } from '@/utils/formConfig';
 
 export const FORM_CONFIGS_QUERY_KEY = ['form-configs'] as const;
 const FORM_CONFIGS_STALE_MS = 5 * 60 * 1000;
@@ -101,13 +101,14 @@ export function resolveConfiguredFieldProps(
         fieldSize: (field.fieldSize as FieldSize | null) ?? defaults.fieldSize,
         options: category ? activeOptionValues(category) : defaults.options ? [...defaults.options] : undefined,
         optionLabels: optionLabelMap(category),
-        hidden: !field.isActive || !field.isVisibleInForm,
+        hidden: Boolean(field.isDeleted) || !field.isActive || !field.isVisibleInForm,
     };
 }
 
 /** Admin overrides for one built-in field of a module (label, required, hint, placeholder, size, visibility, options). */
 export function useConfiguredFieldProps(module: CrmModuleKey, fieldKey: string, defaults: ConfiguredFieldDefaults): ConfiguredFieldProps {
     const configs = useFormConfigs();
+    // Raw list (deleted built-in fields included), so a deleted field resolves to `hidden` instead of "no config".
     const field = configs?.fieldsByModule[module]?.find((f) => f.fieldKey === fieldKey && f.isSystem);
     return resolveConfiguredFieldProps(configs, field, defaults);
 }
@@ -117,6 +118,8 @@ export function useModuleFormConfig(module: CrmModuleKey) {
     const configs = useFormConfigs();
     return useMemo(() => {
         const fields = moduleFields(configs, module);
+        // Deleted built-in fields included: hand-built inputs must hide them, not fall back to "unconfigured".
+        const allFields = allModuleFieldsIncludingDeleted(configs, module);
         const tabs = configs?.moduleTabs[module] ?? [];
         const getField = (fieldKey: string) => fields.find((f) => f.fieldKey === fieldKey);
         return {
@@ -128,11 +131,11 @@ export function useModuleFormConfig(module: CrmModuleKey) {
             sectionsByTab: Object.fromEntries(tabs.map((tab) => [tab.key, groupSections(fields, tab.key)])),
             getField,
             isVisible: (fieldKey: string) => {
-                const field = getField(fieldKey);
-                return !field || (field.isActive && field.isVisibleInForm);
+                const field = allFields.find((f) => f.fieldKey === fieldKey);
+                return !field || (!field.isDeleted && field.isActive && field.isVisibleInForm);
             },
             getFieldProps: (fieldKey: string, defaults: ConfiguredFieldDefaults) =>
-                resolveConfiguredFieldProps(configs, fields.find((f) => f.fieldKey === fieldKey && f.isSystem), defaults),
+                resolveConfiguredFieldProps(configs, allFields.find((f) => f.fieldKey === fieldKey && f.isSystem), defaults),
             getOptions: (categoryKey: string, fallback: readonly string[]) => activeOptionValues(findCategory(configs, categoryKey), fallback),
             fieldTypeOf: (fieldKey: string): FieldType | undefined => getField(fieldKey)?.fieldType,
         };

@@ -4,7 +4,7 @@ import React, { useId, useLayoutEffect, useMemo } from 'react';
 import { Box, type SxProps, type Theme } from '@mui/material';
 import { useWatch } from 'react-hook-form';
 import { useFormMode } from '@/context/FormModeContext';
-import { dynamicHostIdOf, isMovedBuiltIn, sectionIdOf, useFormConfigContext } from '@/context/FormConfigContext';
+import { dynamicHostIdOf, isMovedAcrossTabs, isMovedBuiltIn, sectionIdOf, useFormConfigContext } from '@/context/FormConfigContext';
 import { useModuleFormConfig } from '@/hooks/queries/useFormConfigs';
 import type { CrmModuleKey } from '@/types/formConfig.types';
 import { CUSTOM_FIELDS_KEY, groupSections, isEmptyValue } from '@/utils/formConfig';
@@ -45,12 +45,21 @@ export function DynamicModuleCustomFields({ module, tabKey, sx }: DynamicModuleC
         return claimSection(dynamicHostIdOf(tabKey), hostId);
     }, [claimSection, tabKey, hostId]);
 
-    /** Built-in fields dragged into a section of this tab that no grid shows: their elements come from their home grid. */
+    /**
+     * Built-in fields moved into a section of this tab that no grid shows. Their elements come from their home grid
+     * when it is mounted; a field moved here from another tab (whose grid isn't mounted) is rendered from its config.
+     */
     const movedHere = useMemo(
         () =>
             ctx
                 ? [...ctx.systemFields.values()].filter(
-                      (f) => f.tabKey === tabKey && f.isActive && isMovedBuiltIn(f) && !sectionClaims?.[sectionIdOf(f)]?.length,
+                      (f) =>
+                          !f.isDeleted &&
+                          f.tabKey === tabKey &&
+                          f.isActive &&
+                          f.isVisibleInForm &&
+                          isMovedBuiltIn(f) &&
+                          !sectionClaims?.[sectionIdOf(f)]?.length,
                   )
                 : [],
         [ctx, tabKey, sectionClaims],
@@ -71,7 +80,8 @@ export function DynamicModuleCustomFields({ module, tabKey, sx }: DynamicModuleC
             if (field.isActive) return field.isVisibleInForm;
             return mode !== 'create' && !isEmptyValue(values?.[field.fieldKey]);
         });
-        const moved = movedHere.filter((f) => movedKey.split('|').includes(f.fieldKey));
+        // Same-tab moves wait for their element (so the JSX input never doubles up); cross-tab moves always show.
+        const moved = movedHere.filter((f) => isMovedAcrossTabs(f) || movedKey.split('|').includes(f.fieldKey));
         return groupSections([...visible, ...moved]);
     }, [customFields, tabKey, mode, values, sectionClaims, movedHere, movedKey]);
     const nodeOf = new Map<string, React.ReactNode>(movedNodes);
@@ -84,13 +94,14 @@ export function DynamicModuleCustomFields({ module, tabKey, sx }: DynamicModuleC
                 <Box key={`${section.tabKey}:${section.sectionKey}`}>
                     <SectionLabel label={section.sectionLabel} sx={{ mb: 2 }} />
                     <FormGrid columns={3}>
-                        {section.fields.map((field) =>
-                            field.isSystem ? (
-                                <MovedFieldSlot key={field.id} node={nodeOf.get(field.fieldKey)} />
+                        {section.fields.map((field) => {
+                            const movedNode = field.isSystem ? nodeOf.get(field.fieldKey) : undefined;
+                            return movedNode ? (
+                                <MovedFieldSlot key={field.id} node={movedNode} />
                             ) : (
                                 <DynamicFormField key={field.id} field={field} required={field.isActive ? field.isRequired : false} />
-                            ),
-                        )}
+                            );
+                        })}
                     </FormGrid>
                 </Box>
             ))}

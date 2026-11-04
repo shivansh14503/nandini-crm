@@ -223,7 +223,7 @@ export function DropdownManagerPanel({ module, configs, canEdit, notify }: Dropd
     );
 }
 
-/** Lists what deleting a dropdown takes with it; blocked while a built-in field still uses it. */
+/** Lists what deleting a dropdown takes with it; blocked while a locked field still uses it. */
 function DeleteCategoryDialog({
     category,
     configs,
@@ -261,13 +261,13 @@ function DeleteCategoryDialog({
             )}
             {category.isSystem && !category.lockReason && (
                 <Typography sx={{ fontSize: '0.8rem', color: '#64748b' }}>
-                    This is a built-in dropdown: once deleted it stays deleted (it isn&apos;t recreated on restart or by Reset Built-in).
+                    Once deleted it stays deleted (it isn&apos;t recreated on restart).
                 </Typography>
             )}
             {!category.lockReason && builtIn.length > 0 && (
                 <Box sx={{ p: 1.25, borderRadius: '8px', backgroundColor: '#fff7ed', border: '1px solid #fed7aa' }}>
                     <Typography sx={{ fontSize: '0.8rem', color: '#c2410c', fontWeight: 600 }}>
-                        {builtIn.length} built-in field{builtIn.length === 1 ? '' : 's'} using it will be hidden from the form:
+                        {builtIn.length} field{builtIn.length === 1 ? '' : 's'} using it will be unlinked and hidden from the form:
                     </Typography>
                     <Typography sx={{ fontSize: '0.78rem', color: '#c2410c', mt: 0.5 }}>
                         {builtIn.map(describe).join(' • ')}. To keep one, link it to another dropdown (Form Fields › Edit) and show it again.
@@ -277,7 +277,7 @@ function DeleteCategoryDialog({
             {!category.lockReason && custom.length > 0 && (
                 <Box sx={{ p: 1.25, borderRadius: '8px', backgroundColor: '#fff7ed', border: '1px solid #fed7aa' }}>
                     <Typography sx={{ fontSize: '0.8rem', color: '#c2410c', fontWeight: 600 }}>
-                        {custom.length} custom field{custom.length === 1 ? '' : 's'} using it will also be deleted:
+                        {custom.length} field{custom.length === 1 ? '' : 's'} using it will also be deleted:
                     </Typography>
                     <Typography sx={{ fontSize: '0.78rem', color: '#c2410c', mt: 0.5 }}>{custom.map(describe).join(' • ')}</Typography>
                 </Box>
@@ -358,7 +358,6 @@ function CategoryEditor({
                     <Badge tone={category.module === module ? 'custom' : 'shared'}>
                         {category.module === 'shared' ? 'Shared list' : moduleLabel(category.module)}
                     </Badge>
-                    {!category.isSystem && <Badge tone="custom">Admin created</Badge>}
                     {category.lockReason && (
                         <Badge tone="locked" icon={<LockOutlinedIcon sx={{ fontSize: 11 }} />} title={`Can't be deleted: ${category.lockReason}`}>
                             Locked
@@ -538,13 +537,13 @@ function OptionRow({
                 )}
                 {option.isSystem && (
                     <Badge tone="locked" icon={<LockOutlinedIcon sx={{ fontSize: 11 }} />} title="Drives CRM business logic: can be relabelled and reordered, but not archived or renamed.">
-                        System Locked
+                        Locked
                     </Badge>
                 )}
                 <Badge tone={option.isActive ? 'active' : 'archived'}>{option.isActive ? 'Active' : 'Archived'}</Badge>
             </Box>
             {canEdit && (
-                <Tooltip title={option.isSystem ? 'System options cannot be archived' : option.isActive ? 'Archive (existing records keep this value)' : 'Restore'} arrow>
+                <Tooltip title={option.isSystem ? 'Locked options cannot be archived' : option.isActive ? 'Archive (existing records keep this value)' : 'Restore'} arrow>
                     <span>
                         <LabeledSwitch
                             label={`${option.label} active`}
@@ -556,7 +555,7 @@ function OptionRow({
                 </Tooltip>
             )}
             {canEdit && (
-                <Tooltip title={option.isSystem ? 'System-protected options cannot be deleted' : 'Delete permanently (archive instead to keep it for existing records)'} arrow>
+                <Tooltip title={option.isSystem ? 'Locked options cannot be deleted' : 'Delete permanently (archive instead to keep it for existing records)'} arrow>
                     <span>
                         <IconButton size="small" aria-label={`Delete ${option.label}`} disabled={option.isSystem || busy} onClick={() => void onDelete()}>
                             <DeleteOutlineOutlinedIcon sx={{ fontSize: 17, color: option.isSystem || busy ? undefined : dangerColor }} />

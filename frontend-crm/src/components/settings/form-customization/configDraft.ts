@@ -352,8 +352,24 @@ function applyOp(s: FormConfigsPayload, op: DraftOp): void {
         case 'deleteField': {
             const field = findFieldById(s, op.fieldId);
             if (!field) return;
-            s.fieldsByModule[field.module] = s.fieldsByModule[field.module].filter((f) => f.id !== op.fieldId);
-            releaseCategory(s, field);
+            if (field.isSystem) {
+                // Mirrors the API: a built-in field stays as a hidden tombstone so the hand-built form hides its input.
+                const released = { ...field };
+                Object.assign(field, {
+                    isDeleted: true,
+                    isActive: false,
+                    isVisibleInForm: false,
+                    isVisibleInDrawer: false,
+                    isRequired: false,
+                    dropdownCategoryKey: null,
+                    dropdownCategoryId: null,
+                    validationRules: { _deleted: true },
+                });
+                releaseCategory(s, released);
+            } else {
+                s.fieldsByModule[field.module] = s.fieldsByModule[field.module].filter((f) => f.id !== op.fieldId);
+                releaseCategory(s, field);
+            }
             return;
         }
     }

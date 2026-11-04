@@ -2,7 +2,7 @@ import { prisma } from '../../config/prisma.js';
 import type { TransactionClient } from '../../config/prisma.js';
 import { logger } from '../../config/logger.js';
 import { CACHE_KEYS, cacheService } from '../../services/cache.service.js';
-import { DEFAULT_CATEGORIES, DEFAULT_FIELDS, sectionKeyFromLabel, type DefaultOption } from './formConfig.defaults.js';
+import { DEFAULT_CATEGORIES, DEFAULT_FIELDS, isFieldTombstoned, sectionKeyFromLabel, type DefaultOption } from './formConfig.defaults.js';
 
 const toOption = (option: string | DefaultOption): DefaultOption => (typeof option === 'string' ? { value: option } : option);
 
@@ -120,17 +120,20 @@ export async function ensureFormConfigsSeeded(): Promise<void> {
     for (const def of DEFAULT_FIELDS) {
         const row = fieldsByKey.get(`${def.module}:${def.fieldKey}`);
         if (!row) continue;
+        // Non-locked built-in fields may be archived or deleted (tombstoned) by an admin: leave those as they are.
+        // Only core-locked fields are forced back to active / visible / required.
+        if (!def.isCoreLocked && isFieldTombstoned(row.validationRulesJson)) continue;
         const needsLockFix =
             row.isCoreLocked !== def.isCoreLocked ||
-            !row.isActive ||
-            (def.isCoreLocked && (!row.isVisibleInForm || (def.isRequired && !row.isRequired)));
+            (def.isCoreLocked && (!row.isActive || !row.isVisibleInForm || (def.isRequired && !row.isRequired)));
         if (!needsLockFix) continue;
         await prisma.formFieldDefinition.update({
             where: { id: row.id },
             data: {
                 isCoreLocked: def.isCoreLocked,
-                isActive: true,
-                ...(def.isCoreLocked ? { isVisibleInForm: true, ...(def.isRequired ? { isRequired: true } : {}) } : {}),
+                ...(def.isCoreLocked
+                    ? { isActive: true, isVisibleInForm: true, validationRulesJson: isFieldTombstoned(row.validationRulesJson) ? null : row.validationRulesJson, ...(def.isRequired ? { isRequired: true } : {}) }
+                    : {}),
             },
         });
         changed++;

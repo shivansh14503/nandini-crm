@@ -40,6 +40,11 @@ export function optionLabelMap(category: DropdownCategoryDto | undefined): Recor
 }
 
 export function moduleFields(configs: FormConfigsPayload | null | undefined, module: CrmModuleKey): FormFieldDefinitionDto[] {
+    return [...(configs?.fieldsByModule[module] ?? [])].filter((f) => !f.isDeleted).sort((a, b) => a.sortOrder - b.sortOrder);
+}
+
+/** Like moduleFields, but keeps deleted (tombstoned) built-in fields, so the hand-built forms know to hide them. */
+export function allModuleFieldsIncludingDeleted(configs: FormConfigsPayload | null | undefined, module: CrmModuleKey): FormFieldDefinitionDto[] {
     return [...(configs?.fieldsByModule[module] ?? [])].sort((a, b) => a.sortOrder - b.sortOrder);
 }
 

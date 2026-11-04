@@ -844,3 +844,17 @@ export const DEFAULT_FIELDS: DefaultField[] = (() => {
         return { ...field, sortOrder: next };
     });
 })();
+
+/**
+ * True when a built-in field row was deleted by an admin: the row stays as a tombstone
+ * (`validationRulesJson: {"_deleted":true}`) so start-up seeding does not recreate it and the
+ * hand-built form hides its input.
+ */
+export function isFieldTombstoned(validationRulesJson: string | null | undefined): boolean {
+    if (!validationRulesJson) return false;
+    try {
+        return Boolean(JSON.parse(validationRulesJson)?._deleted);
+    } catch {
+        return false;
+    }
+}

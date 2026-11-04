@@ -3,7 +3,7 @@
 import React, { createContext, useCallback, useContext, useMemo, useState } from 'react';
 import { useFormConfigs, resolveConfiguredFieldProps, type ConfiguredFieldDefaults, type ConfiguredFieldProps } from '@/hooks/queries/useFormConfigs';
 import { sectionKeyFromLabel, type CrmModuleKey, type FormConfigsPayload, type FormFieldDefinitionDto } from '@/types/formConfig.types';
-import { moduleFields } from '@/utils/formConfig';
+import { allModuleFieldsIncludingDeleted, moduleFields } from '@/utils/formConfig';
 
 /**
  * Applies admin form customizations to the hand-built module forms without rewriting them: a form wraps its
@@ -33,16 +33,22 @@ interface FormConfigContextValue {
 /** `tabKey::sectionKey` of a field's section. */
 export const sectionIdOf = (field: Pick<FormFieldDefinitionDto, 'tabKey' | 'sectionKey'>) => `${field.tabKey}::${field.sectionKey}`;
 
-/** Section the hand-built form renders a field in: a built-in field's default section, else its configured one. */
-export const homeSectionIdOf = (field: Pick<FormFieldDefinitionDto, 'tabKey' | 'sectionKey' | 'defaultSectionKey'>) =>
-    `${field.tabKey}::${field.defaultSectionKey ?? field.sectionKey}`;
+/** Section the hand-built form renders a field in: a built-in field's default tab + section, else its configured ones. */
+export const homeSectionIdOf = (field: Pick<FormFieldDefinitionDto, 'tabKey' | 'sectionKey' | 'defaultSectionKey' | 'defaultTabKey'>) =>
+    `${field.defaultTabKey ?? field.tabKey}::${field.defaultSectionKey ?? field.sectionKey}`;
 
 /** Claim id of a DynamicModuleCustomFields block: it renders a tab's sections that no grid shows. */
 export const dynamicHostIdOf = (tabKey: string) => `dyn::${tabKey}`;
 
-/** A built-in field the admin dragged out of the section the form's JSX places it in. */
+/** A built-in field the admin moved to another tab than the one the form's JSX places it on. */
+export const isMovedAcrossTabs = (field: FormFieldDefinitionDto) =>
+    field.isSystem && Boolean(field.defaultTabKey) && field.defaultTabKey !== field.tabKey;
+
+/** A built-in field the admin dragged out of the section (or tab) the form's JSX places it in. */
 export const isMovedBuiltIn = (field: FormFieldDefinitionDto) =>
-    field.isSystem && Boolean(field.defaultSectionKey) && field.defaultSectionKey !== field.sectionKey;
+    field.isSystem &&
+    !field.isDeleted &&
+    ((Boolean(field.defaultSectionKey) && field.defaultSectionKey !== field.sectionKey) || isMovedAcrossTabs(field));
 
 /** Whether something on the mounted form can show a field's (new) section: its grid, or the tab's custom-field block. */
 export const hasHostFor = (claims: Record<string, string[]>, field: FormFieldDefinitionDto) =>
@@ -100,14 +106,15 @@ export function FormConfigProvider({ module, children }: { module: CrmModuleKey;
         return () => setSectionClaims((c) => ({ ...c, [sectionId]: (c[sectionId] ?? []).filter((id) => id !== gridId) }));
     }, []);
     const value = useMemo<FormConfigContextValue>(() => {
-        const all = moduleFields(configs, module);
-        const fields = all.filter((f) => f.isSystem);
+        const live = moduleFields(configs, module);
+        // Deleted built-in fields stay in systemFields so their hand-built inputs resolve to hidden (useFieldOverride).
+        const systemFields = allModuleFieldsIncludingDeleted(configs, module).filter((f) => f.isSystem);
         return {
             module,
             configs,
-            systemFields: new Map(fields.map((f) => [f.fieldKey, f])),
-            sectionLabels: new Map(fields.map((f) => [f.sectionKey, f.sectionLabel])),
-            customFields: all.filter((f) => !f.isSystem),
+            systemFields: new Map(systemFields.map((f) => [f.fieldKey, f])),
+            sectionLabels: new Map(live.filter((f) => f.isSystem).map((f) => [f.sectionKey, f.sectionLabel])),
+            customFields: live.filter((f) => !f.isSystem),
             sectionClaims,
             claimSection,
             movedFields,
