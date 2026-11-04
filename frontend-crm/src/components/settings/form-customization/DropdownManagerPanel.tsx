@@ -437,7 +437,11 @@ function CategoryEditor({
                             option={option}
                             canEdit={canEdit}
                             busy={busy}
-                            onRename={(label) => run(() => draft.updateOption(option.id, { label }))}
+                            // Forms store an option's value, so a regular option's value follows its new name; a system
+                            // option's value drives CRM logic and stays fixed (only its label changes).
+                            onRename={(next) =>
+                                run(() => draft.updateOption(option.id, option.isSystem ? { label: next } : { value: next, label: next }))
+                            }
                             onToggleActive={(isActive) => run(() => draft.updateOption(option.id, { isActive }))}
                             onDelete={() => run(() => draft.deleteOption(option.id))}
                             dragProps={getRowDragProps(option, option.isActive)}
@@ -481,7 +485,10 @@ function OptionRow({
             setLabel(option.label);
             return;
         }
-        if (next !== option.label) void onRename(next);
+        // Only an actual edit is staged: merely focusing a legacy option whose value differs from its label must not
+        // silently re-key it (records storing the old value would stop resolving). Any real edit syncs both.
+        if (next === option.label) return;
+        void onRename(next);
     };
 
     return (
@@ -523,7 +530,7 @@ function OptionRow({
                 ) : (
                     <Typography sx={{ fontSize: '0.85rem', fontWeight: 600, color: '#1e293b' }}>{option.label}</Typography>
                 )}
-                {option.label !== option.value && (
+                {option.isSystem && option.label !== option.value && (
                     <Typography sx={{ fontSize: '0.7rem', color: '#94a3b8', mt: 0.25 }}>
                         Stored value: <span style={{ fontFamily: 'monospace' }}>{option.value}</span>
                     </Typography>

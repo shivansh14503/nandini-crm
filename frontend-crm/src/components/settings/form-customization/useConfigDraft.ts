@@ -9,6 +9,8 @@ import {
     type CreateOptionPayload,
     tabKeyFromLabel,
     type CrmModuleKey,
+    type DropdownCategoryDto,
+    type DropdownOptionDto,
     type FormConfigsPayload,
     type UpdateCategoryPayload,
     type UpdateFieldPayload,
@@ -27,11 +29,13 @@ import {
     isTempId,
     newTempId,
     opRefersTo,
+    renameDefaultValue,
     replayOps,
     tabLabelOf,
     uniqueKey,
     withoutDraftOption,
     withoutId,
+    withRenamedDraftOption,
     type DraftOp,
     type ReplayResult,
 } from './configDraft';
@@ -193,6 +197,57 @@ export function useConfigDraft(base: FormConfigsPayload | undefined, refetch: ()
         if (next.action === 'move') stageCategoryUpdate(next.key, { module: next.module });
     };
 
+    /**
+     * Folds edits of an option created in this draft into the op creating it: its addOption op, or the option list
+     * of a dropdown new in this draft (createCategory / a field's inline `newOptions`, where the value doubles as
+     * the label). Staged field defaults using the old value follow a rename. Returns what can't be folded
+     * (archiving / restoring, or a distinct label / meta for an inline option), or null when nothing is left.
+     */
+    const foldIntoDraftOption = (category: DropdownCategoryDto, option: DropdownOptionDto, payload: UpdateOptionPayload): UpdateOptionPayload | null => {
+        const s = current();
+        const { isActive, ...edit } = payload;
+        const value = edit.value ?? option.value;
+        const renamed = value !== option.value;
+        const viaAddOption = opsRef.current.some((op) => op.kind === 'addOption' && op.id === option.id);
+        const leftover: UpdateOptionPayload = {
+            ...(isActive !== undefined ? { isActive } : {}),
+            ...(!viaAddOption && edit.label !== undefined && edit.label !== value ? { label: edit.label } : {}),
+            ...(!viaAddOption && edit.meta !== undefined ? { meta: edit.meta } : {}),
+        };
+        const renameDefault = <T extends string | null | undefined>(defaultValue: T, fieldType: string | undefined, key: string | null | undefined) =>
+            renamed && key === category.key ? renameDefaultValue(defaultValue, fieldType, option.value, value) : defaultValue;
+
+        commit(
+            opsRef.current.map((op): DraftOp => {
+                switch (op.kind) {
+                    case 'addOption': {
+                        if (op.id !== option.id) return op;
+                        const p = { ...op.payload, value, ...(edit.label !== undefined ? { label: edit.label } : {}), ...(edit.meta !== undefined ? { meta: edit.meta } : {}) };
+                        return { ...op, payload: p, summary: `${category.label}: added '${p.label ?? p.value}'` };
+                    }
+                    case 'createCategory':
+                        return renamed ? withRenamedDraftOption(op, option.id, value) : op;
+                    case 'createField': {
+                        const next = renamed ? withRenamedDraftOption(op, option.id, value) : op;
+                        if (next.kind !== 'createField' || next.payload.defaultValue === undefined) return next;
+                        const key = next.payload.dropdownCategoryKey ?? next.categoryKey;
+                        return { ...next, payload: { ...next.payload, defaultValue: renameDefault(next.payload.defaultValue, next.payload.fieldType, key) } };
+                    }
+                    case 'updateField': {
+                        if (typeof op.payload.defaultValue !== 'string') return op;
+                        const field = findFieldById(s, op.fieldId);
+                        const key = op.payload.dropdownCategoryKey !== undefined ? op.payload.dropdownCategoryKey : field?.dropdownCategoryKey;
+                        const defaultValue = renameDefault(op.payload.defaultValue, op.payload.fieldType ?? field?.fieldType, key);
+                        return defaultValue === op.payload.defaultValue ? op : { ...op, payload: { ...op.payload, defaultValue } };
+                    }
+                    default:
+                        return op;
+                }
+            }),
+        );
+        return Object.keys(leftover).length > 0 ? leftover : null;
+    };
+
     const actions = useMemo<ConfigDraftActions>(
         () => ({
             createCategory(payload) {
@@ -222,23 +277,43 @@ export function useConfigDraft(base: FormConfigsPayload | undefined, refetch: ()
                 push({ kind: 'addOption', id: newTempId('opt'), categoryKey, payload, summary: `${category.label}: added '${payload.value}'` });
             },
 
-            updateOption(optionId, payload) {
+            updateOption(optionId, input) {
                 const s = current();
                 const { category, option } = findOptionById(s, optionId) ?? fail('Option not found.');
+                let payload: UpdateOptionPayload = input.value !== undefined ? { ...input, value: input.value.trim() } : input;
                 if (option.isSystem && payload.isActive === false) fail(`'${option.label}' drives CRM logic and cannot be archived.`);
                 if (option.isSystem && payload.value !== undefined && payload.value !== option.value) fail(`'${option.label}' drives CRM logic; its value cannot change.`);
+                if (payload.value !== undefined) {
+                    const value = payload.value;
+                    if (!value) fail('Option name is required.');
+                    const duplicate = category.options.find((o) => o.id !== optionId && o.value.toLowerCase() === value.toLowerCase());
+                    if (duplicate) fail(`'${value}' is already in ${category.label}.`);
+                }
                 const created = opsRef.current.find((op) => op.kind === 'addOption' && op.id === optionId);
                 if (created && payload.isActive === false) {
                     dropTemp(optionId);
                     return;
+                }
+                // An option new in this draft: its edits go into the op creating it, so it is saved once, already renamed.
+                if (isTempId(optionId)) {
+                    const leftover = foldIntoDraftOption(category, option, payload);
+                    if (!leftover) return;
+                    payload = leftover;
                 }
                 const last = opsRef.current.at(-1);
                 if (last?.kind === 'updateOption' && last.optionId === optionId) {
                     commit([...opsRef.current.slice(0, -1), { ...last, payload: { ...last.payload, ...payload } }]);
                     return;
                 }
+                const renamedTo = payload.value ?? payload.label;
                 const what =
-                    payload.isActive === false ? `archived '${option.label}'` : payload.isActive ? `restored '${option.label}'` : `relabelled '${option.label}'`;
+                    payload.isActive === false
+                        ? `archived '${option.label}'`
+                        : payload.isActive
+                          ? `restored '${option.label}'`
+                          : renamedTo !== undefined && renamedTo !== option.label
+                            ? `renamed '${option.label}' to '${renamedTo}'`
+                            : `updated '${option.label}'`;
                 push({ kind: 'updateOption', optionId, payload, summary: `${category.label}: ${what}` });
             },
 

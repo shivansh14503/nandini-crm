@@ -148,6 +148,19 @@ export const tabLabelOf = (s: FormConfigsPayload, module: CrmModuleKey, tabKey: 
     return tab?.isCustom ? tab.label : undefined;
 };
 
+/**
+ * A field's stored default with option value `from` renamed to `to` (same rule as the API's updateOption):
+ * a select default is the value itself, a multi-select default a comma-separated list of values.
+ */
+export function renameDefaultValue<T extends string | null | undefined>(defaultValue: T, fieldType: string | undefined, from: string, to: string): T | string {
+    if (typeof defaultValue !== 'string' || from === to) return defaultValue;
+    if (fieldType === 'multiselect') {
+        const parts = defaultValue.split(',').map((v) => v.trim());
+        return parts.includes(from) ? parts.map((v) => (v === from ? to : v)).join(', ') : defaultValue;
+    }
+    return defaultValue.trim() === from ? to : defaultValue;
+}
+
 function setCategoryLink(s: FormConfigsPayload, field: FormFieldDefinitionDto, key: string | null): void {
     field.dropdownCategoryKey = key;
     field.dropdownCategoryId = key ? (findCategoryByKey(s, key)?.id ?? null) : null;
@@ -212,8 +225,16 @@ function applyOp(s: FormConfigsPayload, op: DraftOp): void {
         case 'updateOption': {
             const found = findOptionById(s, op.optionId);
             if (!found) return;
-            const { option } = found;
-            if (op.payload.value !== undefined) option.value = op.payload.value;
+            const { category, option } = found;
+            if (op.payload.value !== undefined && op.payload.value !== option.value) {
+                // Fields defaulting to the old value follow it (the API does the same).
+                for (const field of allFields(s)) {
+                    if (field.dropdownCategoryKey === category.key) {
+                        field.defaultValue = renameDefaultValue(field.defaultValue, field.fieldType, option.value, op.payload.value);
+                    }
+                }
+                option.value = op.payload.value;
+            }
             if (op.payload.label !== undefined) option.label = op.payload.label;
             if (op.payload.meta !== undefined) option.meta = op.payload.meta;
             if (op.payload.isActive !== undefined) option.isActive = op.payload.isActive;
@@ -603,6 +624,21 @@ export function withoutDraftOption(op: DraftOp, id: string): DraftOp {
             optionIds: op.optionIds.filter((_, j) => j !== i),
             payload: { ...op.payload, newOptions: op.payload.newOptions.filter((_, j) => j !== i) },
         };
+    }
+    return op;
+}
+
+/** Renames a draft option staged as part of a new dropdown (its value doubles as its label there). */
+export function withRenamedDraftOption(op: DraftOp, id: string, value: string): DraftOp {
+    if (op.kind === 'createCategory') {
+        const i = op.optionIds.indexOf(id);
+        if (i < 0) return op;
+        return { ...op, payload: { ...op.payload, options: op.payload.options.map((v, j) => (j === i ? value : v)) } };
+    }
+    if (op.kind === 'createField' && op.optionIds && op.payload.newOptions) {
+        const i = op.optionIds.indexOf(id);
+        if (i < 0) return op;
+        return { ...op, payload: { ...op.payload, newOptions: op.payload.newOptions.map((v, j) => (j === i ? value : v)) } };
     }
     return op;
 }

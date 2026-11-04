@@ -140,6 +140,19 @@ function isBuiltInTabDeleted(
     return !moduleRows.some((r) => r.tabKey === tabKey && !isFieldTombstoned(r.validationRulesJson));
 }
 
+/**
+ * A field's stored default with option value `from` renamed to `to`: a select default is the value itself,
+ * a multi-select default a comma-separated list of values. Mirrored by the builder's draft (configDraft.ts).
+ */
+function renameDefaultValue(defaultValue: string | null, fieldType: string, from: string, to: string): string | null {
+    if (defaultValue === null || from === to) return defaultValue;
+    if (fieldType === 'multiselect') {
+        const parts = defaultValue.split(',').map((v) => v.trim());
+        return parts.includes(from) ? parts.map((v) => (v === from ? to : v)).join(', ') : defaultValue;
+    }
+    return defaultValue.trim() === from ? to : defaultValue;
+}
+
 function parseJsonObject(json: string | null): Record<string, unknown> | null {
     if (!json) return null;
     try {
@@ -671,15 +684,39 @@ export const formConfigService = {
                     ]);
                 }
             }
-            if (input.value !== undefined && input.value !== before.value) {
-                const clash = await tx.dropdownOption.count({ where: { categoryId: before.categoryId, value: input.value, id: { not: before.id } } });
-                if (clash > 0) throw HttpError.conflict(`'${input.value}' already exists in this dropdown.`, [{ message: 'Duplicate option.', path: ['value'] }]);
+            // Forms store an option's value, so a regular option's value and label are one name: renaming either
+            // renames both (this also heals legacy options whose two had drifted apart). A system option's value is
+            // fixed (checked above); only its label changes.
+            const nextValue = before.isSystem ? before.value : (input.value ?? input.label ?? before.value);
+            const nextLabel = before.isSystem ? (input.label ?? before.label) : (input.label ?? input.value ?? before.label);
+            if (nextValue !== before.value) {
+                // Same rule as addOption: unique per dropdown (case-insensitive under the database's default collation).
+                const clash = await tx.dropdownOption.findFirst({
+                    where: { categoryId: before.categoryId, value: nextValue, id: { not: before.id } },
+                    select: { id: true },
+                });
+                if (clash) {
+                    throw HttpError.conflict(`Option '${nextValue}' already exists in this dropdown.`, [
+                        { message: 'Duplicate option value', path: ['value'] },
+                    ]);
+                }
+                // Fields defaulting to the old value follow the rename (a multi-select default is a comma-separated list).
+                const linkedFields = await tx.formFieldDefinition.findMany({
+                    where: { dropdownCategoryId: before.categoryId, defaultValue: { not: null } },
+                    select: { id: true, fieldType: true, defaultValue: true },
+                });
+                for (const field of linkedFields) {
+                    const defaultValue = renameDefaultValue(field.defaultValue, field.fieldType, before.value, nextValue);
+                    if (defaultValue !== field.defaultValue) {
+                        await tx.formFieldDefinition.update({ where: { id: field.id }, data: { defaultValue } });
+                    }
+                }
             }
             const after = await tx.dropdownOption.update({
                 where: { id: before.id },
                 data: {
-                    ...(input.value !== undefined ? { value: input.value } : {}),
-                    ...(input.label !== undefined ? { label: input.label } : {}),
+                    ...(nextValue !== before.value ? { value: nextValue } : {}),
+                    ...(nextLabel !== before.label ? { label: nextLabel } : {}),
                     ...(input.isActive !== undefined ? { isActive: input.isActive } : {}),
                     ...(input.meta !== undefined ? { metaJson: input.meta ? JSON.stringify(input.meta) : null } : {}),
                 },
