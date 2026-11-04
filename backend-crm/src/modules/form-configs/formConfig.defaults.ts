@@ -619,7 +619,7 @@ const RAW_DEFAULT_FIELDS: DefaultField[] = [
         sel('department', 'Department', 'lead_department'),
     ]),
     ...section('leads', 'overview', 'ORGANIZATION', [
-        t('organizationName', 'Organization Name'),
+        t('organizationName', 'Organization Name', { type: 'lookup' }),
         t('mailingName', 'Mailing Name'),
         sel('registrationType', 'Registration Type', 'lead_registration_type'),
         sel('turnover', 'Turnover', 'lead_turnover'),

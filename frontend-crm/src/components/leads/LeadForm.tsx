@@ -66,8 +66,8 @@ const DEFAULT_FORM: LeadFormData = {
     productCategory: ['Biz Analyst'],
     followupType: 'Call',
     addDescription: '',
-    registrationType: 'Registered',
-    turnover: '₹5 Cr – ₹25 Cr',
+    registrationType: '',
+    turnover: '',
     assignedTo: 'mittal.sharma',
 
     otherPhone: '',
@@ -78,7 +78,7 @@ const DEFAULT_FORM: LeadFormData = {
     nextFollowupDate: new Date(Date.now() + 86400000).toISOString().split('T')[0], // Tomorrow
     nextFollowupTime: '11:00 AM',
     description: '',
-    noOfEmployee: '11 – 50 Staff Members',
+    noOfEmployee: '',
     referredBy: '',
 
     primaryAddress: '',

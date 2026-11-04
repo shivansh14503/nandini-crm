@@ -10,6 +10,7 @@ import {
 import type { Contact } from '@/types/contact.types';
 import type { EntityLookupModalProps, LookupKind, LookupRecordMap } from '@/types/lookup.types';
 import type { ExtendedOrganization } from '@/types/organization.types';
+import { canonicalizeOrgName } from '@/utils/organizationName';
 import { UserLookupModal } from './UserLookupModal';
 import { OrganizationLookupModal } from './OrganizationLookupModal';
 import { ContactLookupModal } from './ContactLookupModal';
@@ -40,6 +41,11 @@ const sameText = (a: string, b: string) => a.trim().toLowerCase() === b.trim().t
 const findByLabel = <T,>(records: T[], label: (r: T) => string, value: string) =>
     value.trim() ? records.find((r) => sameText(label(r), value)) : undefined;
 
+const findByCanonicalOrgName = (organizations: ExtendedOrganization[], value: string) => {
+    const canonical = canonicalizeOrgName(value);
+    return canonical ? organizations.find((o) => canonicalizeOrgName(o.organizationName) === canonical) : undefined;
+};
+
 export interface LookupRecordPools {
     organizations?: ExtendedOrganization[];
     contacts?: Contact[];
@@ -55,7 +61,9 @@ export function findLookupRecord<K extends LookupKind>(
         case 'user':
             return findCrmUser(value) as LookupRecordMap[K] | undefined;
         case 'organization':
-            return findByLabel(pools.organizations ?? [], (o) => o.organizationName, value) as LookupRecordMap[K] | undefined;
+            // Exact name first, else the same legal name written differently ("ABC Private Limited" → "ABC Pvt Ltd").
+            return (findByLabel(pools.organizations ?? [], (o) => o.organizationName, value) ??
+                findByCanonicalOrgName(pools.organizations ?? [], value)) as LookupRecordMap[K] | undefined;
         case 'contact':
             return findByLabel(pools.contacts ?? [], (c) => c.name, value) as LookupRecordMap[K] | undefined;
         case 'natureOfCall':

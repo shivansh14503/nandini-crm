@@ -132,7 +132,8 @@ export function toLeadData(input: LeadInput): Omit<Prisma.LeadUncheckedCreateInp
         customDataJson: serializeCustomFields(input.customFields),
         name: input.name,
         mobile: input.mobile,
-        mailingName: nullable(input.mailingName),
+        // Mailing name always follows the organization name (read-only in the form).
+        mailingName: nullable(input.organizationName),
         designation: nullable(input.designation),
         leadSource: input.leadSource,
         productCategoryJson: stringifyStringArray(input.productCategory),
