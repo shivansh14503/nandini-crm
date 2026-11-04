@@ -389,7 +389,6 @@ function OverviewTabInner({
                         checking={nameCheck.checking}
                         verified={Boolean(trimmedName) && !nameError && !nameCheck.duplicate}
                         suggestions={nameCheck.suggestions}
-                        onSelectSuggestion={(org) => handleOrgNameChange(org.organizationName)}
                     />
                 </FormField>
 

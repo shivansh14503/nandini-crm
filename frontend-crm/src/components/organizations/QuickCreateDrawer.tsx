@@ -218,7 +218,6 @@ export function QuickCreateDrawer({ open, onClose, onSave }: QuickCreateDrawerPr
                                     checking={nameCheck.checking}
                                     verified={Boolean(formData.organizationName.trim()) && nameCheck.checked && !nameCheck.duplicate}
                                     suggestions={nameCheck.suggestions}
-                                    onSelectSuggestion={(org) => handleChange('organizationName', org.organizationName)}
                                     autoFocus
                                 />
                             </FormField>

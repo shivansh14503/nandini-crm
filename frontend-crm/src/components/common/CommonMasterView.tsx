@@ -519,7 +519,7 @@ export function CommonMasterView<T = unknown, TFilter extends string = string>({
                 ? React.cloneElement(relatedRecordsTable, {
                       isRightDrawerCollapsed,
                       rightOffset: isRightDrawerCollapsed
-                          ? 28
+                          ? 0
                           : (relatedRecordsTable.props.rightOffset ?? 580),
                   })
                 : relatedRecordsTable}

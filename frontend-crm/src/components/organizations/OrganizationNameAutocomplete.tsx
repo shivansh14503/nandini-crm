@@ -3,7 +3,6 @@
 import React from 'react';
 import {
     Box,
-    Button,
     Chip,
     CircularProgress,
     IconButton,
@@ -39,8 +38,6 @@ export interface OrganizationNameAutocompleteProps {
     /** Shows the green tick (valid and no exact / canonical duplicate). */
     verified?: boolean;
     suggestions: OrganizationNameSuggestion[];
-    /** "Use name" action: adopts the existing organization's exact name. Hidden when omitted. */
-    onSelectSuggestion?: (org: OrganizationSuggestionRecord) => void;
     /** Opening a suggestion (row click / Enter). Defaults to the record's detail page in a new tab. */
     onViewSuggestion?: (org: OrganizationSuggestionRecord) => void;
     autoFocus?: boolean;
@@ -98,7 +95,6 @@ export function OrganizationNameAutocomplete({
     checking = false,
     verified = false,
     suggestions,
-    onSelectSuggestion,
     onViewSuggestion = openInNewTab,
     autoFocus,
 }: OrganizationNameAutocompleteProps) {
@@ -335,21 +331,6 @@ export function OrganizationNameAutocomplete({
                                         </Box>
                                     </Box>
                                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.25, flexShrink: 0 }}>
-                                        {onSelectSuggestion && (
-                                            <Tooltip title="Replace what you typed with this existing name">
-                                                <Button
-                                                    size="small"
-                                                    onClick={(e) => {
-                                                        e.stopPropagation();
-                                                        onSelectSuggestion(record);
-                                                        setDismissed(true);
-                                                    }}
-                                                    sx={{ textTransform: 'none', fontSize: '0.72rem', fontWeight: 700, minWidth: 0, px: 1, color: '#2563eb' }}
-                                                >
-                                                    Use name
-                                                </Button>
-                                            </Tooltip>
-                                        )}
                                         <Tooltip title="View existing organization (new tab)">
                                             <IconButton
                                                 size="small"

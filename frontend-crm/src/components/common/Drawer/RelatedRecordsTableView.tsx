@@ -484,7 +484,8 @@ export function RelatedRecordsTableView({
         }
     };
 
-    const effectiveRightOffset = isRightDrawerCollapsed ? 28 : rightOffset;
+    // A collapsed drawer slides fully off-screen, so the table reaches the viewport edge (the bookmark tab floats above it).
+    const effectiveRightOffset = isRightDrawerCollapsed ? 0 : rightOffset;
 
     return (
         <Box
