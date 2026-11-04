@@ -296,8 +296,8 @@ export function findSimilarOrganizations<T extends { id?: string; organizationNa
 }
 
 /** The user-facing message for a duplicate name, naming how the existing record is written. */
-export function duplicateOrganizationMessage(kind: 'exact' | 'canonical', existingName: string, accountCode: string): string {
+export function duplicateOrganizationMessage(kind: 'exact' | 'canonical', existingName: string): string {
     return kind === 'exact'
-        ? `An organization named "${existingName}" already exists (${accountCode}).`
-        : `This matches existing organization "${existingName}" (${accountCode}) with a different legal format.`;
+        ? `An organization named "${existingName}" already exists.`
+        : `This matches existing organization "${existingName}" with a different legal format.`;
 }

@@ -307,9 +307,8 @@ export function OrganizationsMasterView() {
             return;
         }
 
-        const headers = ['Account Code', 'Organization Name', 'Nature of Business', 'Customer Type', 'Status', 'Billing Street', 'City', 'State', 'GST Number'];
+        const headers = ['Organization Name', 'Nature of Business', 'Customer Type', 'Status', 'Billing Street', 'City', 'State', 'GST Number'];
         const rows = recordsToExport.map((o) => [
-            o.accountCode,
             `"${o.organizationName.replace(/"/g, '""')}"`,
             `"${o.natureOfBusiness || ''}"`,
             `"${o.customerType || ''}"`,

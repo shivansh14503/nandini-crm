@@ -37,6 +37,8 @@ import { useDropdownOptionsGetter } from '@/hooks/queries/useFormConfigs';
 import { DEFAULT_COUNTRY_CODE } from '@/data/addressMaster';
 import { canonicalizeOrgName } from '@/utils/organizationName';
 import { mapOrgEmployeesToLead, mapOrgTurnoverToLead, organizationAddressToLead } from '../organizationPrefill';
+import { useLeadExistingCheck } from '../useLeadExistingCheck';
+import { useFormMode } from '@/context/FormModeContext';
 
 const groupLabelSx = { mb: 2 } as const;
 const touch = { shouldDirty: true, shouldValidate: true } as const;
@@ -61,14 +63,32 @@ const ORG_ADDRESS_RESET: Partial<Record<keyof LeadFormData, string | boolean>> =
 
 interface LinkedOrganization {
     id: string;
-    accountCode: string;
     organizationName: string;
 }
 
 /** Overview tab of the Lead form. Must be rendered inside a `FormProvider<LeadFormData>`. */
-export function LeadOverviewSection() {
+export function LeadOverviewSection({ leadId }: { leadId?: string } = {}) {
     const getOptions = useDropdownOptionsGetter();
     const { control, setValue, getValues, getFieldState } = useFormContext<LeadFormData>();
+    const { mode } = useFormMode();
+
+    // Informational only: tells the user the mobile / email is already in the CRM; never blocks the save.
+    const mobile = useWatch({ control, name: 'mobile' });
+    const emailAddresses = useWatch({ control, name: 'emailAddresses' });
+    const { mobileMatch, emailMatches } = useLeadExistingCheck({ mobile, emailAddresses, leadId, enabled: mode !== 'view' });
+    const mobileNotice = mobileMatch
+        ? `Already exists in CRM (${mobileMatch.entityType}: ${mobileMatch.name}${mobileMatch.organizationName ? `, ${mobileMatch.organizationName}` : ''})`
+        : undefined;
+    const emailNotices = React.useMemo(
+        () =>
+            Object.fromEntries(
+                Object.entries(emailMatches).map(([email, match]) => [
+                    email,
+                    `"${email}" already exists in CRM (${match.entityType}: ${match.name})`,
+                ])
+            ),
+        [emailMatches]
+    );
     const turnoverOptions = getOptions('lead_turnover', LEAD_TURNOVER_RANGES);
     const employeeOptions = getOptions('lead_employee_range', LEAD_EMPLOYEE_RANGES);
     const leadSourceOptions = getOptions('shared_lead_source', LEAD_SOURCES);
@@ -99,7 +119,7 @@ export function LeadOverviewSection() {
         for (const [key, value] of Object.entries(organizationAddressToLead(org))) {
             setValue(key as keyof LeadFormData, value, touch);
         }
-        setLinkedOrg({ id: org.id, accountCode: org.accountCode, organizationName: org.organizationName });
+        setLinkedOrg({ id: org.id, organizationName: org.organizationName });
     };
 
     const handleOrganizationCleared = () => {
@@ -129,12 +149,12 @@ export function LeadOverviewSection() {
                 <SectionLabel label="CONTACT PERSON" sx={groupLabelSx} />
                 <FormGrid columns={3}>
                     <RhfTextField<LeadFormData> name="name" label="Name" required hint="Contact person name" placeholder="Enter contact person name" />
-                    <RhfPhoneField<LeadFormData> name="mobile" label="Mobile" required hint="Primary number" />
+                    <RhfPhoneField<LeadFormData> name="mobile" label="Mobile" required hint="Primary number" notice={mobileNotice} />
                     <RhfPhoneField<LeadFormData> name="otherPhone" label="Other Phone" hint="Landline / alternate" placeholder="e.g. 0114567890" />
                     <RhfSelect<LeadFormData> name="designation" label="Designation" options={LEAD_DESIGNATIONS} placeholder="Select Designation" />
                     <RhfSelect<LeadFormData> name="department" label="Department" options={LEAD_DEPARTMENTS} placeholder="Select Department" />
                     <FormGridItem span="full">
-                        <RhfEmailList />
+                        <RhfEmailList emailNotices={emailNotices} />
                     </FormGridItem>
                 </FormGrid>
             </Box>
@@ -150,7 +170,7 @@ export function LeadOverviewSection() {
                             stillLinked && linkedOrg ? (
                                 <Chip
                                     size="small"
-                                    label={`Details & address filled from ${linkedOrg.accountCode}`}
+                                    label="Details & address auto-filled"
                                     sx={{ height: 20, fontSize: '0.68rem', fontWeight: 700, color: '#1e40af', backgroundColor: '#e0e7ff' }}
                                 />
                             ) : (

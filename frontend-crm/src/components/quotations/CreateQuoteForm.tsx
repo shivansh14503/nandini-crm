@@ -419,12 +419,7 @@ export function CreateQuoteForm({
     const handleSave = handleSubmit(onValidSubmit, onInvalidSubmit);
 
     const handleDiscard = () => {
-        if (mode === 'view') {
-            router.push(ROUTES.QUOTATIONS);
-            return;
-        }
-        if (isDirty && !window.confirm('Discard unsaved quotation data?')) return;
-        router.push(isEdit ? ROUTES.QUOTATIONS : ROUTES.OPPORTUNITIES);
+        router.push(mode === 'view' || isEdit ? ROUTES.QUOTATIONS : ROUTES.OPPORTUNITIES);
     };
 
     if (loading) {
@@ -442,6 +437,7 @@ export function CreateQuoteForm({
         <FormProvider {...methods}>
             <FormConfigProvider module="quotations">
                 <CommonFormLayout
+                    isDirty={isDirty}
                     breadcrumbItems={breadcrumbItems || defaultBreadcrumbs}
                     tabs={QUOTATION_FORM_TABS}
                     activeTab={activeTab}

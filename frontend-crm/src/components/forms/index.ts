@@ -7,6 +7,7 @@ export * from './FormStickyFooter';
 export * from './StyledSelect';
 export * from './SectionLabel';
 export * from './EmailRow';
+export * from './FieldNotice';
 export * from './ReadOnlyField';
 export * from './AddressPrimitives';
 export * from './rhf';

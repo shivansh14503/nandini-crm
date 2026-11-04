@@ -42,7 +42,6 @@ async function runSearch(q: string, limit: number): Promise<GlobalSearchResults>
                     { tradeName: { contains: q } },
                     { sapCodeTallyId: { contains: q } },
                     { billingCity: { contains: q } },
-                    { accountCode: { contains: q } },
                 ],
             },
             select: { id: true, organizationName: true, tradeName: true, billingCity: true },

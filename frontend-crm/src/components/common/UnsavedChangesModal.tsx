@@ -26,7 +26,7 @@ export function UnsavedChangesModal({
     onKeepEditing,
     onDiscardAndLeave,
     title = 'Unsaved Changes',
-    description = 'You have unsaved changes. If you leave now, your progress will be stored in your local draft, or you can discard your changes.',
+    description = 'You have unsaved changes. If you leave now, your changes will be discarded.',
 }: UnsavedChangesModalProps) {
     return (
         <Dialog

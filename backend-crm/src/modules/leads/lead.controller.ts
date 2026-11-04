@@ -12,4 +12,8 @@ export const leadController = {
         const result = await convertLead(String(req.params.id), req.body, requireUser(req));
         sendSuccess(res, result, `Lead converted to opportunity ${result.opportunity.opportunityCode}`);
     },
+
+    async checkDuplicates(req: Request, res: Response): Promise<void> {
+        sendSuccess(res, await leadService.checkDuplicates(req.query));
+    },
 };

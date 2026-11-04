@@ -55,7 +55,7 @@ export function ConvertOrganizationSection() {
         <>
             {existing && (
                 <Alert severity="info" sx={{ mb: 2 }}>
-                    Organization “{existing.organizationName}” ({existing.accountCode}) already exists and will be linked — no duplicate will be created.
+                    Organization “{existing.organizationName}” already exists and will be linked — no duplicate will be created.
                     {organizationName?.trim().toLowerCase() !== existing.organizationName.trim().toLowerCase() &&
                         ` You typed “${organizationName.trim()}”, which is the same legal name written differently.`}
                 </Alert>

@@ -170,3 +170,10 @@ export const LEAD_SORT_FIELDS = [
     'nextFollowupDate',
     'assignedTo',
 ] as const;
+
+/** GET /api/leads/check-duplicates: informational "already in the CRM" lookup for the lead form. */
+export const checkLeadDuplicatesQuerySchema = z.object({
+    mobile: z.string().trim().max(30).optional(),
+    emails: csvQuery,
+    excludeId: z.string().trim().max(64).optional(),
+});

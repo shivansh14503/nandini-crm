@@ -9,6 +9,9 @@ import { FormModeProvider } from '@/context/FormModeContext';
 import { FormStickyFooter } from '../forms/FormStickyFooter';
 import { DynamicModuleCustomFields } from '../forms/DynamicModuleCustomFields';
 import { useFormConfigContext } from '@/context/FormConfigContext';
+import { useFormContext, type FieldValues, type UseFormReturn } from 'react-hook-form';
+import { useFormDraftGuard } from '@/hooks/useFormDraftGuard';
+import { UnsavedChangesModal } from './UnsavedChangesModal';
 
 /** Tab id used when a form without tabs gets admin-created tabs: it stands for the form's own fields. */
 const FORM_FIELDS_TAB_ID = '__form_fields__';
@@ -36,6 +39,17 @@ export interface CommonFormLayoutProps {
     recordView?: Omit<CommonRecordDetailViewProps, 'tabs' | 'activeTab' | 'onTabChange' | 'children' | 'banner' | 'toast' | 'breadcrumbItems'>;
     saveDisabled?: boolean;
     saveDisabledTooltip?: string;
+    /**
+     * Whether the form has unsaved changes. Defaults to the surrounding react-hook-form `formState.isDirty`.
+     * While dirty (and not in view mode), leaving via Cancel, any in-app link, GlobalSearch, Browser Back or
+     * reload asks "Keep Editing" / "Discard & Leave" first.
+     */
+    isDirty?: boolean;
+    /**
+     * Called on "Discard & Leave", after the surrounding react-hook-form is reset, for forms that keep extra
+     * local state (needed when the destination is the same page, e.g. "New Organization" while on it).
+     */
+    onDiscard?: () => void;
     /**
      * Optional custom breadcrumb elements. If omitted, AppBreadcrumbs is rendered with optional `breadcrumbItems`.
      */
@@ -148,7 +162,23 @@ export function CommonFormLayout({
     recordView,
     saveDisabled,
     saveDisabledTooltip,
+    isDirty,
+    onDiscard,
 }: CommonFormLayoutProps) {
+    // ── Unsaved changes guard ──
+    // useFormContext() is null outside a FormProvider (typed as non-null by react-hook-form).
+    const formCtx = useFormContext() as UseFormReturn<FieldValues> | null;
+    const formDirty = isDirty ?? Boolean(formCtx?.formState.isDirty);
+    const { confirmDiscard, discardModalOpen, handleKeepEditing, handleDiscardAndLeave } = useFormDraftGuard({
+        isDirty: formDirty,
+        enabled: mode !== 'view',
+        onDiscard: () => {
+            formCtx?.reset();
+            onDiscard?.();
+        },
+    });
+    const handleCancel = () => (mode === 'view' ? onCancel() : confirmDiscard(onCancel));
+
     // ── Admin-created (custom) tabs ──
     // Inside a FormConfigProvider, custom tabs of the module that hold visible fields are added after the form's
     // own tabs. Selecting one shows its fields (DynamicModuleCustomFields); the form's own panels stay mounted but
@@ -376,7 +406,7 @@ export function CommonFormLayout({
             {/* ── Bottom Sticky Action Bar ── */}
             {!hideFooter && (
                 <FormStickyFooter
-                    onCancel={onCancel}
+                    onCancel={handleCancel}
                     onSave={onSave}
                     submitting={submitting}
                     saveLabel={saveLabel}
@@ -389,6 +419,12 @@ export function CommonFormLayout({
 
             {/* ── Notifications Toast ── */}
             {toast}
+
+            <UnsavedChangesModal
+                open={discardModalOpen}
+                onKeepEditing={handleKeepEditing}
+                onDiscardAndLeave={handleDiscardAndLeave}
+            />
         </Box>
     );
 }

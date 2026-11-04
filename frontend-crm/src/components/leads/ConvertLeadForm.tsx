@@ -151,7 +151,6 @@ export function ConvertLeadForm({ leadId, breadcrumbItems }: ConvertLeadFormProp
     });
 
     const handleDiscard = () => {
-        if (isDirty && !window.confirm('Discard unsaved lead conversion data?')) return;
         router.push(ROUTES.LEADS);
     };
 
@@ -169,6 +168,7 @@ export function ConvertLeadForm({ leadId, breadcrumbItems }: ConvertLeadFormProp
     return (
         <FormProvider {...methods}>
             <CommonFormLayout
+                isDirty={isDirty}
                 breadcrumbItems={breadcrumbItems || defaultBreadcrumbs}
                 tabs={CONVERT_TABS}
                 activeTab="convert"

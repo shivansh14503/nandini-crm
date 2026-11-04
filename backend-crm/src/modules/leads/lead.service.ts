@@ -8,14 +8,55 @@ import { generateEntityCode } from '../../utils/codeGenerator.js';
 import { HttpError } from '../../utils/httpError.js';
 import { daysAgo, fromDateOnly } from '../../utils/mappers.js';
 import { parsePagination } from '../../utils/pagination.js';
+import { normalizePhone } from '../../validators/common.js';
 import { emailsInclude, normalizeEmails, replaceEmails } from '../shared/entityEmails.js';
 import { lockRecords, runInTransaction, softDeleteData, type BulkDeleteResult } from '../shared/transactions.js';
 import { toLeadData, toLeadDto, type LeadDto } from './lead.mapper.js';
-import { CONVERTED_STATUS, LEAD_SORT_FIELDS, leadInputSchema, leadListQuerySchema, type LeadInput } from './lead.validator.js';
+import {
+    checkLeadDuplicatesQuerySchema,
+    CONVERTED_STATUS,
+    LEAD_SORT_FIELDS,
+    leadInputSchema,
+    leadListQuerySchema,
+    type LeadInput,
+} from './lead.validator.js';
 
 export const leadInclude = { emailAddresses: emailsInclude } as const;
 
 export const leadNotFound = () => HttpError.notFound('Lead not found');
+
+export interface LeadMobileMatch {
+    exists: boolean;
+    entityType?: 'Lead' | 'Contact';
+    name?: string;
+    organizationName?: string;
+}
+
+export interface LeadEmailMatch {
+    exists: true;
+    entityType: 'Lead' | 'Contact' | 'Organization';
+    name: string;
+}
+
+export interface LeadDuplicateCheck {
+    mobileMatch: LeadMobileMatch;
+    emailMatches: Record<string, LeadEmailMatch>;
+}
+
+const MIN_MOBILE_DIGITS = 7;
+
+/**
+ * Stored forms a number may have: the E.164 value new records get (`+919811234567`) plus the bare digits and
+ * the 10-digit national number legacy / imported rows may still hold.
+ */
+function phoneVariants(raw: string): string[] {
+    const normalized = normalizePhone(raw);
+    const e164 = typeof normalized === 'string' ? normalized : raw.trim();
+    const digits = e164.replace(/\D/g, '');
+    const variants = new Set([e164, digits, `+${digits}`]);
+    if (digits.length > 10) variants.add(digits.slice(-10));
+    return [...variants].filter(Boolean);
+}
 
 /** `Converted` is only ever set by POST /api/leads/:id/convert, and a converted lead stays converted. */
 export function assertStatusTransition(fromStatus: string | null, toStatus: string): void {
@@ -147,6 +188,68 @@ export const leadService = {
         });
 
         if (result.deleted > 0) await cacheService.invalidateEntityCaches('leads');
+        return result;
+    },
+
+    /**
+     * Read-only, informational lookup for the lead form: is this mobile number / are these emails already on a
+     * live lead, contact or organization? Never blocks a save.
+     */
+    async checkDuplicates(query: unknown): Promise<LeadDuplicateCheck> {
+        const { mobile, emails, excludeId } = checkLeadDuplicatesQuerySchema.parse(query ?? {});
+        const result: LeadDuplicateCheck = { mobileMatch: { exists: false }, emailMatches: {} };
+        const excludeLead = excludeId ? { id: { not: excludeId } } : {};
+
+        if (mobile && mobile.replace(/\D/g, '').length >= MIN_MOBILE_DIGITS) {
+            const variants = phoneVariants(mobile);
+            const lead = await prisma.lead.findFirst({
+                where: { isDeleted: false, ...excludeLead, OR: [{ mobile: { in: variants } }, { otherPhone: { in: variants } }] },
+                select: { name: true, organizationName: true },
+                orderBy: { createdAt: 'desc' },
+            });
+            if (lead) {
+                result.mobileMatch = { exists: true, entityType: 'Lead', name: lead.name, organizationName: lead.organizationName || undefined };
+            } else {
+                const contact = await prisma.contact.findFirst({
+                    where: { isDeleted: false, OR: [{ mobile: { in: variants } }, { officePhone: { in: variants } }] },
+                    select: { name: true, organizationName: true },
+                    orderBy: { createdAt: 'desc' },
+                });
+                if (contact) {
+                    result.mobileMatch = { exists: true, entityType: 'Contact', name: contact.name, organizationName: contact.organizationName || undefined };
+                }
+            }
+        }
+
+        const normalizedEmails = [...new Set((emails ?? []).map((e) => e.trim().toLowerCase()).filter(Boolean))];
+        if (normalizedEmails.length > 0) {
+            const rows = await prisma.entityEmail.findMany({
+                where: {
+                    email: { in: normalizedEmails },
+                    OR: [
+                        { lead: { isDeleted: false, ...excludeLead } },
+                        { contact: { isDeleted: false } },
+                        { organization: { isDeleted: false } },
+                    ],
+                },
+                select: {
+                    email: true,
+                    lead: { select: { name: true } },
+                    contact: { select: { name: true } },
+                    organization: { select: { organizationName: true } },
+                },
+            });
+            for (const row of rows) {
+                const key = row.email.trim().toLowerCase();
+                if (result.emailMatches[key]) continue;
+                if (row.lead) result.emailMatches[key] = { exists: true, entityType: 'Lead', name: row.lead.name };
+                else if (row.contact) result.emailMatches[key] = { exists: true, entityType: 'Contact', name: row.contact.name };
+                else if (row.organization) {
+                    result.emailMatches[key] = { exists: true, entityType: 'Organization', name: row.organization.organizationName };
+                }
+            }
+        }
+
         return result;
     },
 };

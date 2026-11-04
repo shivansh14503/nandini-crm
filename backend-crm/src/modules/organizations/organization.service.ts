@@ -180,7 +180,7 @@ async function assertUnique(
     const notSelf = excludeId ? { NOT: { id: excludeId } } : {};
     const sameName = checkName ? await findSameNamedOrganization(tx, normalizedName, excludeId) : null;
     if (sameName) {
-        const message = duplicateOrganizationMessage(sameName.matchKind, sameName.record.organizationName, sameName.record.accountCode);
+        const message = duplicateOrganizationMessage(sameName.matchKind, sameName.record.organizationName);
         throw HttpError.conflict(message, [{ message, path: ['organizationName'] }]);
     }
     if (gstNo) {
@@ -189,7 +189,7 @@ async function assertUnique(
             select: { accountCode: true, organizationName: true },
         });
         if (sameGst) {
-            const message = `GSTIN ${gstNo} is already registered to ${sameGst.organizationName} (${sameGst.accountCode}).`;
+            const message = `GSTIN ${gstNo} is already registered to ${sameGst.organizationName}.`;
             throw HttpError.conflict(message, [{ message, path: ['gstNo'] }]);
         }
     }
@@ -449,7 +449,7 @@ export const organizationService = {
                     id: top.record.id,
                     accountCode: top.record.accountCode,
                     organizationName: top.record.organizationName,
-                    message: duplicateOrganizationMessage(top.matchKind, top.record.organizationName, top.record.accountCode),
+                    message: duplicateOrganizationMessage(top.matchKind, top.record.organizationName),
                     suggestions,
                 };
             }
@@ -467,7 +467,7 @@ export const organizationService = {
                     id: sameGst.id,
                     accountCode: sameGst.accountCode,
                     organizationName: sameGst.organizationName,
-                    message: `GSTIN ${gstNo} is already registered to ${sameGst.organizationName} (${sameGst.accountCode}).`,
+                    message: `GSTIN ${gstNo} is already registered to ${sameGst.organizationName}.`,
                     suggestions,
                 };
             }

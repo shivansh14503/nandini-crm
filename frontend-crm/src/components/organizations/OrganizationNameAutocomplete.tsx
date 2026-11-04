@@ -282,21 +282,6 @@ export function OrganizationNameAutocomplete({
                                             <Typography sx={{ fontSize: '0.85rem', fontWeight: 700, color: '#0f172a', wordBreak: 'break-word' }}>
                                                 {highlight(record.organizationName, trimmed)}
                                             </Typography>
-                                            <Typography
-                                                component="span"
-                                                sx={{
-                                                    fontSize: '0.66rem',
-                                                    fontWeight: 700,
-                                                    color: '#475569',
-                                                    backgroundColor: '#f1f5f9',
-                                                    borderRadius: '6px',
-                                                    px: 0.75,
-                                                    py: 0.15,
-                                                    fontFamily: 'monospace',
-                                                }}
-                                            >
-                                                {record.accountCode}
-                                            </Typography>
                                             <Box
                                                 component="span"
                                                 title={record.accountStatus || 'Active'}

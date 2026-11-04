@@ -20,8 +20,6 @@ import { useAuth } from '@/context/AuthContext';
 import { ROUTES } from '@/config/constants';
 import { focusFormField } from '@/utils/formFocus';
 import { normalizeAddressFields } from '@/utils/address';
-import { useFormDraftGuard } from '@/hooks/useFormDraftGuard';
-import { UnsavedChangesModal } from '../common/UnsavedChangesModal';
 import { validateWithToast, organizationFormSchema } from '../../validations';
 import type { OrganizationFormData } from '@/types/organization.types';
 
@@ -197,8 +195,6 @@ export default function OrganizationForm({
     const pendingFocusField = useRef<string | null>(null);
     // Values "Discard" resets to: blank for create, the last loaded record for edit.
     const baselineRef = useRef<OrganizationFormData>({ ...DEFAULT_FORM, ...initialData });
-    // In edit mode drafts are restored only after the saved record has loaded, so they aren't overwritten by it.
-    const [recordLoaded, setRecordLoaded] = useState(!organizationId);
     const [submitting, setSubmitting] = useState(false);
     const [isDirty, setIsDirty] = useState(false);
     const [toast, setToast] = useState<{ open: boolean; message: string; severity: 'success' | 'error' | 'info' }>({
@@ -216,35 +212,14 @@ export default function OrganizationForm({
     const isLocked = isInactive && !isAdmin;
     const effectiveMode = isLocked ? 'view' : mode;
 
-    const draftKey = mode === 'create' ? 'crm_draft_organization_new' : `crm_draft_organization_${organizationId}`;
-    const draftValues = useMemo<OrganizationFormData>(
-        () => ({ ...form, ...methods.getValues() }),
-        // eslint-disable-next-line react-hooks/exhaustive-deps -- RHF values change together with `form` (see set())
-        [form]
-    );
-    const { clearDraft, confirmDiscard, discardModalOpen, handleKeepEditing, handleDiscardAndLeave } =
-        useFormDraftGuard<OrganizationFormData>({
-            draftKey,
-            isDirty,
-            currentValues: draftValues,
-            defaultValues: DEFAULT_FORM,
-            onRestoreDraft: (draft) => {
-                const restored = { ...DEFAULT_FORM, ...draft };
-                setForm(restored);
-                methods.reset(restored);
-                setIsDirty(true);
-                setToast({ open: true, message: 'Unsaved draft restored from your previous session.', severity: 'info' });
-            },
-            enabled: effectiveMode !== 'view' && recordLoaded,
-            navigate: (href) => router.push(href),
-            onDiscard: () => {
-                const baseline = baselineRef.current;
-                setForm(baseline);
-                methods.reset(baseline);
-                setIsDirty(false);
-                setActiveTab('overview');
-            },
-        });
+    // "Discard & Leave" (CommonFormLayout's unsaved-changes guard) resets the local mirror of the form too.
+    const handleGuardDiscard = () => {
+        const baseline = baselineRef.current;
+        setForm(baseline);
+        methods.reset(baseline);
+        setIsDirty(false);
+        setActiveTab('overview');
+    };
 
     const defaultBreadcrumbs: BreadcrumbItem[] = [
         { label: 'Sales' },
@@ -291,10 +266,7 @@ export default function OrganizationForm({
                     methods.reset(normalized);
                 }
             })
-            .catch(() => {})
-            .finally(() => {
-                if (active) setRecordLoaded(true);
-            });
+            .catch(() => {});
         return () => {
             active = false;
         };
@@ -450,7 +422,6 @@ export default function OrganizationForm({
         try {
             if (mode === 'create') {
                 await organizationService.create(currentData as OrganizationFormData);
-                clearDraft();
                 setIsDirty(false);
                 setToast({ open: true, message: 'Organization created successfully!', severity: 'success' });
                 if (redirectAfter) {
@@ -462,7 +433,6 @@ export default function OrganizationForm({
                 }
             } else if (mode === 'edit' && organizationId) {
                 await organizationService.update(organizationId, currentData as OrganizationFormData);
-                clearDraft();
                 setIsDirty(false);
                 setToast({ open: true, message: 'Organization updated successfully!', severity: 'success' });
                 setTimeout(() => router.push(ROUTES.ORGANIZATIONS), 800);
@@ -486,9 +456,8 @@ export default function OrganizationForm({
         }
     };
 
-    const handleDiscard = () => {
-        confirmDiscard(() => router.push(ROUTES.ORGANIZATIONS));
-    };
+    // While dirty, CommonFormLayout asks "Keep Editing" / "Discard & Leave" before this runs.
+    const handleDiscard = () => router.push(ROUTES.ORGANIZATIONS);
 
     // ─── Tabs Configuration (derived from ORGANIZATION_FORM_TABS) ───────────────
     const tabs = useMemo(() => [
@@ -507,6 +476,8 @@ export default function OrganizationForm({
         <FormProvider {...methods}>
             <FormConfigProvider module="organizations">
                 <CommonFormLayout
+                    isDirty={isDirty}
+                    onDiscard={handleGuardDiscard}
                     breadcrumbItems={breadcrumbItems || defaultBreadcrumbs}
                     tabs={tabs}
                     activeTab={activeTab}
@@ -562,13 +533,6 @@ export default function OrganizationForm({
                         />
                     }
                 >
-                    <UnsavedChangesModal
-                        open={discardModalOpen}
-                        onKeepEditing={handleKeepEditing}
-                        onDiscardAndLeave={handleDiscardAndLeave}
-                        description="You have unsaved changes. If you leave now, they will be discarded."
-                    />
-
                     {/* ── Tab Content Panels ────────────────────────────────────── */}
                     {activeTab === 'overview' && (
                         <OverviewTab

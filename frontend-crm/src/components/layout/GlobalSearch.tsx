@@ -15,6 +15,7 @@ import {
     type GlobalSearchResult,
 } from '@/services/globalSearch.service';
 import { useGlobalSearch } from '@/hooks/queries/useGlobalSearch';
+import { guardNavigation } from '@/hooks/useFormDraftGuard';
 
 const DEBOUNCE_MS = 150;
 
@@ -86,7 +87,8 @@ export function GlobalSearch() {
         close();
         setQuery('');
         inputRef.current?.blur();
-        router.push(result.href);
+        // A dirty form on the page asks "Keep Editing" / "Discard & Leave" first.
+        guardNavigation(() => router.push(result.href));
     };
 
     const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {

@@ -14,7 +14,6 @@ import { type BreadcrumbItem } from '../common/AppBreadcrumbs';
 import { AppToast } from '../common/AppToast';
 import { CommonFormLayout } from '../common/CommonFormLayout';
 import { type FormTabDefinition } from '../common/Drawer';
-import { UnsavedChangesModal } from '../common/UnsavedChangesModal';
 import {
     FIELD_MAX_LENGTH,
     FormGrid,
@@ -31,7 +30,6 @@ import {
 } from '@/components/forms';
 import { ROUTES } from '@/config/constants';
 import { useAuth } from '@/context/AuthContext';
-import { useFormDraftGuard } from '@/hooks/useFormDraftGuard';
 import { ApiClientError, partnerCompanyService } from '@/services';
 import { NATURE_OF_PARTNER_OPTIONS, type PartnerCompanyFormData } from '@/types/partner.types';
 import { normalizeAddressFields } from '@/utils/address';
@@ -141,10 +139,6 @@ export default function PartnerCompanyForm({
         // eslint-disable-next-line react-hooks/exhaustive-deps
         []
     );
-    // Values "Discard" resets to: blank for create, the last loaded record for edit.
-    const [baseline, setBaseline] = useState<PartnerCompanyFormData>(initialValues);
-    // In edit mode drafts are restored only after the saved record has loaded, so they aren't overwritten by it.
-    const [recordLoaded, setRecordLoaded] = useState(!partnerCompanyId);
 
     const { methods, toast, showToast, closeToast } = useRhfForm<PartnerCompanyFormData>({
         schema: partnerCompanyFormSchema,
@@ -156,24 +150,6 @@ export default function PartnerCompanyForm({
     const watchedValues = useWatch({ control }) as PartnerCompanyFormData;
     const companyName = watchedValues.companyName ?? '';
 
-    const { clearDraft, confirmDiscard, discardModalOpen, handleKeepEditing, handleDiscardAndLeave } =
-        useFormDraftGuard<PartnerCompanyFormData>({
-            draftKey: mode === 'create' ? 'crm_draft_partner_company_new' : `crm_draft_partner_company_${partnerCompanyId}`,
-            isDirty,
-            currentValues: watchedValues,
-            defaultValues: baseline,
-            onRestoreDraft: (draft) => {
-                // keepDefaultValues: the restored draft still counts as unsaved changes.
-                reset(toFormValues(draft), { keepDefaultValues: true });
-                showToast('Unsaved draft restored from your previous session.', 'info');
-            },
-            enabled: mode !== 'view' && recordLoaded,
-            navigate: (href) => router.push(href),
-            onDiscard: () => {
-                reset(baseline);
-                setActiveTab('company_info');
-            },
-        });
 
     const defaultBreadcrumbs: BreadcrumbItem[] = [
         { label: 'All' },
@@ -196,14 +172,10 @@ export default function PartnerCompanyForm({
             .getById(partnerCompanyId)
             .then((found) => {
                 if (!active || !found) return;
-                const values = toFormValues(found);
-                setBaseline(values);
-                reset(values);
+                // Also becomes the values "Discard & Leave" resets to.
+                reset(toFormValues(found));
             })
-            .catch(() => {})
-            .finally(() => {
-                if (active) setRecordLoaded(true);
-            });
+            .catch(() => {});
         return () => {
             active = false;
         };
@@ -246,7 +218,6 @@ export default function PartnerCompanyForm({
                 await partnerCompanyService.create(values);
                 showToast(`Partner company "${values.companyName}" created successfully!`, 'success');
             }
-            clearDraft();
             reset(values);
             setTimeout(() => router.push(ROUTES.PARTNER_COMPANIES), 800);
         } catch (err: unknown) {
@@ -269,18 +240,15 @@ export default function PartnerCompanyForm({
     // Built at click time: the handlers touch refs (pending focus), which must not be read during render.
     const handleSave = () => handleSubmit(handleValid, handleInvalid)();
 
-    const handleCancel = () => {
-        if (mode === 'view') {
-            router.push(ROUTES.PARTNER_COMPANIES);
-            return;
-        }
-        confirmDiscard(() => router.push(ROUTES.PARTNER_COMPANIES));
-    };
+    // While dirty, CommonFormLayout asks "Keep Editing" / "Discard & Leave" before this runs.
+    const handleCancel = () => router.push(ROUTES.PARTNER_COMPANIES);
 
     return (
         <FormProvider {...methods}>
             <FormConfigProvider module="partner-companies">
                 <CommonFormLayout
+                    isDirty={isDirty}
+                    onDiscard={() => setActiveTab('company_info')}
                     breadcrumbItems={breadcrumbItems || defaultBreadcrumbs}
                     tabs={PARTNER_COMPANY_FORM_TABS}
                     activeTab={activeTab}
@@ -302,13 +270,6 @@ export default function PartnerCompanyForm({
                     disableContentPadding
                     toast={<AppToast open={toast.open} message={toast.message} severity={toast.severity} onClose={closeToast} />}
                 >
-                    <UnsavedChangesModal
-                        open={discardModalOpen}
-                        onKeepEditing={handleKeepEditing}
-                        onDiscardAndLeave={handleDiscardAndLeave}
-                        description="You have unsaved changes. If you leave now, they will be discarded."
-                    />
-
                     {/* All panels stay mounted so hidden tabs keep their field state and can be focused after a switch. */}
                     <Box hidden={activeTab !== 'company_info'} sx={panelSx}>
                         <SectionLabel icon={<HandshakeOutlinedIcon sx={{ fontSize: 18 }} />} label="Company Details" sx={{ mb: 2 }} />

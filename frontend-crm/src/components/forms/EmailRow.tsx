@@ -13,6 +13,7 @@ import {
 } from '@mui/material';
 import DeleteIcon from '@mui/icons-material/Delete';
 import { fieldSx } from './FormField';
+import { FieldNotice } from './FieldNotice';
 import { FIELD_MAX_LENGTH } from './fieldSizing';
 import { useFormMode } from '@/context/FormModeContext';
 import { DrawerCopyButton } from '../common/Drawer/DrawerPrimitives';
@@ -22,9 +23,11 @@ export interface EmailRowProps {
     email: CorporateEmail;
     onChange: (updated: CorporateEmail) => void;
     onRemove: () => void;
+    /** Informational (non-error) note shown under the address, e.g. "Already exists in CRM". */
+    notice?: React.ReactNode;
 }
 
-export function EmailRow({ email, onChange, onRemove }: EmailRowProps) {
+export function EmailRow({ email, onChange, onRemove, notice }: EmailRowProps) {
     const { mode } = useFormMode();
     if (mode === 'view') {
         return (
@@ -68,6 +71,11 @@ export function EmailRow({ email, onChange, onRemove }: EmailRowProps) {
                     </IconButton>
                 </Tooltip>
             </Box>
+            {notice && (
+                <Box sx={{ mt: -0.5, mb: 1 }}>
+                    <FieldNotice>{notice}</FieldNotice>
+                </Box>
+            )}
             <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap', alignItems: 'center' }}>
                 <FormControlLabel
                     control={

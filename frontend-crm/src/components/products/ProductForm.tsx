@@ -169,11 +169,6 @@ export default function ProductForm({
     });
 
     const handleDiscard = () => {
-        if (mode === 'view') {
-            router.push(ROUTES.PRODUCTS);
-            return;
-        }
-        if (isDirty && !window.confirm('Discard unsaved product changes?')) return;
         router.push(ROUTES.PRODUCTS);
     };
 
@@ -181,6 +176,7 @@ export default function ProductForm({
         <FormProvider {...methods}>
             <FormConfigProvider module="products">
                 <CommonFormLayout
+                    isDirty={isDirty}
                     breadcrumbItems={breadcrumbItems || defaultBreadcrumbs}
                     tabs={PRODUCT_FORM_TABS}
                     activeTab="overview"

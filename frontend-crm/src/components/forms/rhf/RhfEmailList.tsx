@@ -14,6 +14,8 @@ export interface RhfEmailListProps {
     name?: string;
     label?: string;
     required?: boolean;
+    /** Informational (non-error) notes keyed by lowercased email address, shown under the matching row. */
+    emailNotices?: Record<string, React.ReactNode>;
 }
 
 /**
@@ -24,6 +26,7 @@ export function RhfEmailList({
     name = 'emailAddresses',
     label = 'Email Address',
     required,
+    emailNotices,
 }: RhfEmailListProps) {
     const { field, fieldState } = useController<FieldValues>({ name });
     const rows: CorporateEmail[] = Array.isArray(field.value) ? field.value : [];
@@ -107,6 +110,7 @@ export function RhfEmailList({
                     email={row}
                     onChange={(updated) => handleChange(index, updated)}
                     onRemove={() => handleRemove(index)}
+                    notice={emailNotices?.[(row.email ?? '').trim().toLowerCase()]}
                 />
             ))}
 

@@ -1,142 +1,111 @@
 'use client';
 
 import { useEffect, useState, useCallback, useRef } from 'react';
+import { useRouter } from 'next/navigation';
 
-const SAVE_DEBOUNCE_MS = 300;
+/** Prefix of the localStorage keys earlier versions stored drafts under. Purged on first use; never written. */
+const LEGACY_DRAFT_PREFIX = 'crm_draft_';
+/** Marks the duplicate history entry pushed while dirty, so Browser Back can be intercepted. */
+const HISTORY_GUARD_KEY = '__crmFormGuard';
 
-export interface UseFormDraftGuardOptions<T> {
-    /** Unique localStorage key for this form instance (e.g. per record id). */
-    draftKey: string;
+export interface UseFormDraftGuardOptions<T = unknown> {
     isDirty: boolean;
-    currentValues: T;
-    /** Pristine values; a draft identical to these is never stored. */
-    defaultValues: T;
-    onRestoreDraft: (savedValues: T) => void;
     enabled?: boolean;
     /**
-     * Called to perform an in-app navigation that was intercepted while dirty (e.g. `router.push`).
-     * When provided, clicks on same-origin links are intercepted and routed through the discard modal.
+     * Performs an in-app navigation that was intercepted while dirty. Defaults to the Next.js router
+     * (`router.replace` when the guard's own history entry is on top, so it doesn't linger, else `router.push`).
      */
     navigate?: (href: string) => void;
     /** Called when the user confirms "Discard & Leave", before navigating, so the form can reset itself. */
     onDiscard?: () => void;
+    /** @deprecated Drafts are no longer stored; ignored. */
+    draftKey?: string;
+    /** @deprecated Drafts are no longer stored; ignored. */
+    currentValues?: T;
+    /** @deprecated Drafts are no longer stored; ignored. */
+    defaultValues?: T;
+    /** @deprecated Drafts are no longer restored; ignored. */
+    onRestoreDraft?: (savedValues: T) => void;
 }
 
-function readDraft<T>(key: string): T | null {
-    if (typeof window === 'undefined') return null;
+// ── Programmatic navigation guard (e.g. GlobalSearch's Enter key) ──
+type ActiveGuard = (proceed: () => void) => void;
+let activeGuard: ActiveGuard | null = null;
+
+/**
+ * Runs `proceed` (a programmatic navigation such as `router.push`) unless a dirty form is mounted,
+ * in which case that form's "Unsaved Changes" modal opens and `proceed` runs only on "Discard & Leave".
+ */
+export function guardNavigation(proceed: () => void): void {
+    if (activeGuard) activeGuard(proceed);
+    else proceed();
+}
+
+let legacyDraftsPurged = false;
+function purgeLegacyDrafts() {
+    if (legacyDraftsPurged || typeof window === 'undefined') return;
+    legacyDraftsPurged = true;
     try {
-        const raw = window.localStorage.getItem(key);
-        if (!raw) return null;
-        const parsed: unknown = JSON.parse(raw);
-        return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? (parsed as T) : null;
+        const stale: string[] = [];
+        for (let i = 0; i < window.localStorage.length; i++) {
+            const key = window.localStorage.key(i);
+            if (key?.startsWith(LEGACY_DRAFT_PREFIX)) stale.push(key);
+        }
+        stale.forEach((key) => window.localStorage.removeItem(key));
     } catch {
-        return null;
+        // Storage unavailable: nothing to purge.
     }
 }
 
+const isGuardEntry = () =>
+    typeof window !== 'undefined' && Boolean((window.history.state as Record<string, unknown> | null)?.[HISTORY_GUARD_KEY]);
+
 /**
- * Persists in-progress form values to localStorage (debounced, in the background), restores them
- * on the next visit, warns on tab close/reload while dirty, and exposes a confirm-before-leave helper.
+ * Guards a form with unsaved changes: while `enabled && isDirty` it intercepts in-app link clicks
+ * (navbar, breadcrumbs, logo, search results), programmatic navigations routed through `guardNavigation`,
+ * Browser Back, and tab close / reload, and exposes a confirm-before-leave helper for Cancel buttons.
+ * Nothing is ever persisted: leaving after "Discard & Leave" means the next visit starts blank.
  */
-export function useFormDraftGuard<T>({
-    draftKey,
-    isDirty,
-    currentValues,
-    defaultValues,
-    onRestoreDraft,
-    enabled = true,
-    navigate,
-    onDiscard,
-}: UseFormDraftGuardOptions<T>) {
+export function useFormDraftGuard<T = unknown>({ isDirty, enabled = true, navigate, onDiscard }: UseFormDraftGuardOptions<T>) {
+    const router = useRouter();
     const [discardModalOpen, setDiscardModalOpen] = useState(false);
     const pendingNavCallback = useRef<(() => void) | null>(null);
-    const saveTimer = useRef<number | null>(null);
-    const restoredFor = useRef<string | null>(null);
+    const active = enabled && isDirty;
 
-    // Keep the latest callback without making the restore effect re-run on every render.
-    const restoreRef = useRef(onRestoreDraft);
+    const navigateRef = useRef(navigate);
+    const onDiscardRef = useRef(onDiscard);
+    const routerRef = useRef(router);
     useEffect(() => {
-        restoreRef.current = onRestoreDraft;
+        navigateRef.current = navigate;
+        onDiscardRef.current = onDiscard;
+        routerRef.current = router;
     });
 
-    const cancelPendingSave = useCallback(() => {
-        if (saveTimer.current !== null) {
-            window.clearTimeout(saveTimer.current);
-            saveTimer.current = null;
-        }
+    // 0. Wipe drafts left in localStorage by earlier versions so they can never prefill a form.
+    useEffect(purgeLegacyDrafts, []);
+
+    /** Kept for callers of the old API; there is no stored draft to clear. */
+    const clearDraft = useCallback(() => {}, []);
+
+    const openModal = useCallback((proceed: () => void) => {
+        pendingNavCallback.current = proceed;
+        setDiscardModalOpen(true);
     }, []);
 
-    const clearDraft = useCallback(() => {
-        if (typeof window === 'undefined') return;
-        cancelPendingSave();
-        try {
-            window.localStorage.removeItem(draftKey);
-        } catch {
-            // Storage unavailable: nothing to clear.
-        }
-    }, [draftKey, cancelPendingSave]);
-
-    // 1. Restore a saved draft once per key when the guard becomes enabled.
+    // 1. Browser tab close / reload protection.
     useEffect(() => {
-        if (!enabled || restoredFor.current === draftKey) return;
-        restoredFor.current = draftKey;
-        const saved = readDraft<T>(draftKey);
-        if (saved) restoreRef.current(saved);
-    }, [draftKey, enabled]);
-
-    // 2. Debounced background auto-save while the form is dirty.
-    useEffect(() => {
-        if (!enabled || !isDirty) return;
-        saveTimer.current = window.setTimeout(() => {
-            saveTimer.current = null;
-            try {
-                if (JSON.stringify(currentValues) === JSON.stringify(defaultValues)) {
-                    window.localStorage.removeItem(draftKey);
-                } else {
-                    window.localStorage.setItem(draftKey, JSON.stringify(currentValues));
-                }
-            } catch {
-                // Quota exceeded / private browsing: drafts are best-effort.
-            }
-        }, SAVE_DEBOUNCE_MS);
-        return cancelPendingSave;
-    }, [draftKey, isDirty, currentValues, defaultValues, enabled, cancelPendingSave]);
-
-    // 3. Browser tab close / reload protection.
-    useEffect(() => {
-        if (!enabled || !isDirty) return;
+        if (!active) return;
         const handleBeforeUnload = (e: BeforeUnloadEvent) => {
             e.preventDefault();
             e.returnValue = '';
         };
         window.addEventListener('beforeunload', handleBeforeUnload);
         return () => window.removeEventListener('beforeunload', handleBeforeUnload);
-    }, [enabled, isDirty]);
+    }, [active]);
 
-    // 4. Confirm before an in-app exit (e.g. Cancel button) when there are unsaved changes.
-    const confirmDiscard = useCallback(
-        (onProceed: () => void) => {
-            if (!isDirty) {
-                clearDraft();
-                onProceed();
-                return;
-            }
-            pendingNavCallback.current = onProceed;
-            setDiscardModalOpen(true);
-        },
-        [isDirty, clearDraft]
-    );
-
-    // 5. Intercept clicks on in-app links (navbar, breadcrumbs, logo) while dirty.
-    const navigateRef = useRef(navigate);
-    const onDiscardRef = useRef(onDiscard);
+    // 2. Intercept clicks on in-app links (navbar, quick create, breadcrumbs, logo, search results).
     useEffect(() => {
-        navigateRef.current = navigate;
-        onDiscardRef.current = onDiscard;
-    });
-    const interceptLinks = Boolean(navigate);
-    useEffect(() => {
-        if (!enabled || !isDirty || !interceptLinks) return;
+        if (!active) return;
         const handleClick = (e: MouseEvent) => {
             if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
             const anchor = (e.target as Element | null)?.closest?.('a[href]') as HTMLAnchorElement | null;
@@ -148,13 +117,60 @@ export function useFormDraftGuard<T>({
             e.preventDefault();
             e.stopPropagation();
             const target = url.pathname + url.search + url.hash;
-            pendingNavCallback.current = () => navigateRef.current?.(target);
-            setDiscardModalOpen(true);
+            openModal(() => {
+                if (navigateRef.current) navigateRef.current(target);
+                // Replace the guard's duplicate history entry so Back from the target returns to the form once.
+                else if (isGuardEntry()) routerRef.current.replace(target);
+                else routerRef.current.push(target);
+            });
         };
-        // Capture phase: runs before Next.js <Link> handles the click.
+        // Capture phase: runs before Next.js <Link> and component onClick handlers see the click.
         document.addEventListener('click', handleClick, true);
         return () => document.removeEventListener('click', handleClick, true);
-    }, [enabled, isDirty, interceptLinks]);
+    }, [active, openModal]);
+
+    // 3. Programmatic navigations routed through `guardNavigation` (e.g. GlobalSearch Enter key).
+    useEffect(() => {
+        if (!active) return;
+        const guard: ActiveGuard = (proceed) => openModal(proceed);
+        activeGuard = guard;
+        return () => {
+            if (activeGuard === guard) activeGuard = null;
+        };
+    }, [active, openModal]);
+
+    // 4. Browser Back: a duplicate entry of this page sits on top while dirty, so Back lands on the same URL.
+    //    We re-arm it and ask; "Discard & Leave" then steps back past both entries.
+    useEffect(() => {
+        if (!active) return;
+        const pushGuardEntry = () =>
+            window.history.pushState({ ...(window.history.state ?? {}), [HISTORY_GUARD_KEY]: true }, '', window.location.href);
+        if (!isGuardEntry()) pushGuardEntry();
+        let leaving = false;
+        const handlePopState = () => {
+            // Our own "Discard & Leave" step back, or Forward onto our own entry (still on the form).
+            if (leaving || isGuardEntry()) return;
+            pushGuardEntry();
+            openModal(() => {
+                leaving = true;
+                window.history.go(-2);
+            });
+        };
+        window.addEventListener('popstate', handlePopState);
+        return () => window.removeEventListener('popstate', handlePopState);
+    }, [active, openModal]);
+
+    // 5. Confirm before an in-app exit (e.g. Cancel button) when there are unsaved changes.
+    const confirmDiscard = useCallback(
+        (onProceed: () => void) => {
+            if (!active) {
+                onProceed();
+                return;
+            }
+            openModal(onProceed);
+        },
+        [active, openModal]
+    );
 
     const handleKeepEditing = useCallback(() => {
         setDiscardModalOpen(false);
@@ -162,13 +178,12 @@ export function useFormDraftGuard<T>({
     }, []);
 
     const handleDiscardAndLeave = useCallback(() => {
-        clearDraft();
         onDiscardRef.current?.();
         setDiscardModalOpen(false);
         const proceed = pendingNavCallback.current;
         pendingNavCallback.current = null;
         proceed?.();
-    }, [clearDraft]);
+    }, []);
 
     return {
         clearDraft,

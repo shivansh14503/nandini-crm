@@ -157,13 +157,6 @@ export default function LeadForm({
     });
 
     const handleDiscard = () => {
-        if (mode === 'view') {
-            router.push(ROUTES.LEADS);
-            return;
-        }
-        if (isDirty && !confirm('You have unsaved changes. Are you sure you want to discard them?')) {
-            return;
-        }
         router.push(ROUTES.LEADS);
     };
 
@@ -171,6 +164,7 @@ export default function LeadForm({
         <FormProvider {...methods}>
             <FormConfigProvider module="leads">
                 <CommonFormLayout
+                    isDirty={isDirty}
                     breadcrumbItems={breadcrumbItems || defaultBreadcrumbs}
                     tabs={LEAD_FORM_TABS}
                     activeTab={activeTab}
@@ -192,7 +186,7 @@ export default function LeadForm({
                 >
                     {/* Keep both panels mounted so validation state of hidden tab is preserved */}
                     <div hidden={activeTab !== 'overview'}>
-                        <LeadOverviewSection />
+                        <LeadOverviewSection leadId={leadId} />
                         <DynamicModuleCustomFields module="leads" tabKey="overview" />
                     </div>
                     <div hidden={activeTab !== 'address'}>

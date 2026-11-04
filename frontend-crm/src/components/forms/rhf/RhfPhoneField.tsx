@@ -4,6 +4,7 @@ import React from 'react';
 import { Autocomplete, Box, InputAdornment, TextField } from '@mui/material';
 import { useController, useFormContext, type FieldValues } from 'react-hook-form';
 import { FormField, fieldSx } from '../FormField';
+import { FieldNotice } from '../FieldNotice';
 import { resolveFieldSize } from '../fieldSizing';
 import type { RhfTextFieldProps } from './RhfTextField';
 import {
@@ -24,6 +25,8 @@ export type RhfPhoneFieldProps<T extends FieldValues = FieldValues> = Omit<RhfTe
      * Defaults to true only for the primary "mobile" field.
      */
     setsFormDefault?: boolean;
+    /** Informational (non-error) note shown below the input while there is no validation error. */
+    notice?: React.ReactNode;
 };
 
 function CountryFlag({ country }: { country: PhoneCountry }) {
@@ -60,6 +63,7 @@ export function RhfPhoneField<T extends FieldValues>({
     slotProps,
     defaultCountry = DEFAULT_PHONE_COUNTRY_ISO2,
     setsFormDefault = /(^|\.)mobile$/.test(name),
+    notice,
     onChange: onChangeProp,
     // Accepted for compatibility with RhfTextField call sites; the national length is derived from the country.
     maxLength: _maxLength,
@@ -154,7 +158,7 @@ export function RhfPhoneField<T extends FieldValues>({
                 fullWidth
                 size="small"
                 error={Boolean(fieldState.error)}
-                helperText={fieldState.error?.message}
+                helperText={fieldState.error?.message ?? (notice ? <FieldNotice>{notice}</FieldNotice> : undefined)}
                 sx={{ ...fieldSx, ...sx }}
                 slotProps={{
                     ...slotProps,

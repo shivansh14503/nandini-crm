@@ -278,7 +278,6 @@ export default function TicketForm({ mode = 'create', initialData, ticketId, bre
     };
 
     const handleDiscard = () => {
-        if (mode !== 'view' && isDirty && !window.confirm('Discard unsaved ticket changes?')) return;
         router.push(ROUTES.TICKETS);
     };
 
@@ -286,6 +285,7 @@ export default function TicketForm({ mode = 'create', initialData, ticketId, bre
         <FormProvider {...methods}>
             <FormConfigProvider module="tickets">
                 <CommonFormLayout
+                    isDirty={isDirty}
                     breadcrumbItems={breadcrumbItems || defaultBreadcrumbs}
                     tabs={TICKET_FORM_TABS}
                     activeTab={activeTab}

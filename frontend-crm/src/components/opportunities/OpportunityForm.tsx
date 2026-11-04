@@ -190,16 +190,6 @@ export default function OpportunityForm({
     });
 
     const handleDiscard = () => {
-        if (mode === 'view') {
-            router.push(ROUTES.OPPORTUNITIES);
-            return;
-        }
-        if (
-            isDirty &&
-            !confirm('You have unsaved changes. Are you sure you want to discard them?')
-        ) {
-            return;
-        }
         router.push(ROUTES.OPPORTUNITIES);
     };
 
@@ -209,6 +199,7 @@ export default function OpportunityForm({
         <FormProvider {...methods}>
             <FormConfigProvider module="opportunities">
                 <CommonFormLayout
+                    isDirty={isDirty}
                     breadcrumbItems={breadcrumbItems || defaultBreadcrumbs}
                     tabs={OPPORTUNITY_FORM_TABS}
                     activeTab={activeTab}

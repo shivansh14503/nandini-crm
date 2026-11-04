@@ -132,11 +132,6 @@ export default function ContactForm({
     });
 
     const handleDiscard = () => {
-        if (mode === 'view') {
-            router.push(ROUTES.CONTACTS);
-            return;
-        }
-        if (isDirty && !window.confirm('Discard unsaved contact changes?')) return;
         router.push(ROUTES.CONTACTS);
     };
 
@@ -144,6 +139,7 @@ export default function ContactForm({
         <FormProvider {...methods}>
             <FormConfigProvider module="contacts">
                 <CommonFormLayout
+                    isDirty={isDirty}
                     breadcrumbItems={breadcrumbItems || defaultBreadcrumbs}
                     tabs={CONTACT_FORM_TABS}
                     activeTab="overview"

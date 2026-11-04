@@ -145,19 +145,19 @@ export function useOrganizationNameCheck({ name, organizationId, enabled = true 
     const duplicate = React.useMemo<OrganizationNameDuplicate | null>(() => {
         if (!active) return null;
         if (serverResult) {
-            if (!serverResult.exists || serverResult.field !== 'organizationName' || !serverResult.accountCode || !serverResult.organizationName) {
+            if (!serverResult.exists || serverResult.field !== 'organizationName' || !serverResult.organizationName) {
                 return null;
             }
             const matchKind = serverResult.matchKind === 'canonical' ? 'canonical' : 'exact';
             const record = suggestions.find((s) => s.record.id === serverResult.id)?.record ?? {
                 id: serverResult.id ?? '',
-                accountCode: serverResult.accountCode,
+                accountCode: serverResult.accountCode ?? '',
                 organizationName: serverResult.organizationName,
             };
             return {
                 matchKind,
                 record,
-                message: serverResult.message || duplicateOrganizationMessage(matchKind, record.organizationName, record.accountCode),
+                message: serverResult.message || duplicateOrganizationMessage(matchKind, record.organizationName),
             };
         }
         const top = local[0];
@@ -165,7 +165,7 @@ export function useOrganizationNameCheck({ name, organizationId, enabled = true 
         return {
             matchKind: top.matchKind,
             record: fromOrganization(top.record),
-            message: duplicateOrganizationMessage(top.matchKind, top.record.organizationName, top.record.accountCode),
+            message: duplicateOrganizationMessage(top.matchKind, top.record.organizationName),
         };
     }, [active, serverResult, suggestions, local]);
 
