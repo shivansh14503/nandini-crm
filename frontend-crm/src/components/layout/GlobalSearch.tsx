@@ -57,7 +57,8 @@ export function GlobalSearch() {
     useEffect(() => {
         const onKeyDown = (e: KeyboardEvent) => {
             const slash = e.key === '/' && !e.ctrlKey && !e.metaKey && !e.altKey && !isTypingTarget(e.target);
-            const cmdK = e.key.toLowerCase() === 'k' && (e.ctrlKey || e.metaKey);
+            // `key` is missing on some synthetic keydown events (e.g. browser autofill).
+            const cmdK = e.key?.toLowerCase() === 'k' && (e.ctrlKey || e.metaKey);
             if (slash || cmdK) {
                 e.preventDefault();
                 inputRef.current?.focus();
