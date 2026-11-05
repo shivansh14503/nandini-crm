@@ -246,6 +246,7 @@ model Lead {
   followupType        String? @db.NVarChar(30)
   addDescription      String  @db.NVarChar(2000)
   registrationType    String? @db.NVarChar(30)
+  gstNo               String? @db.NVarChar(15)
   turnover            String? @db.NVarChar(30)
   assignedTo          String  @db.NVarChar(50)
   otherPhone          String? @db.NVarChar(20)
@@ -819,4 +820,61 @@ model FormFieldDefinition {
 
   @@unique([module, fieldKey])
   @@index([module, isActive, sortOrder])
+}
+
+// ─── PDF generation ─────────────────────────────────────────────────────────────
+
+/// Admin-managed Handlebars templates rendered to PDF (src/modules/pdf). HTML/CSS are sanitized on save.
+/// System templates (isSystem) are seeded from code and read-only except isActive / isDefault.
+/// pageSize / orientation have no DB default (see the Quotation.currency note); the API always sets them.
+model PdfTemplate {
+  id                  String    @id @default(uuid()) @db.NVarChar(50)
+  name                String    @db.NVarChar(120)
+  /// QUOTATION (PDF_MODULES in src/modules/pdf/pdf.types.ts)
+  module              String    @db.NVarChar(30)
+  description         String?   @db.NVarChar(500)
+  isSystem            Boolean   @default(false)
+  isDefault           Boolean   @default(false)
+  isActive            Boolean   @default(true)
+  /// A4 | Letter | Legal
+  pageSize            String    @db.NVarChar(10)
+  /// portrait | landscape
+  orientation         String    @db.NVarChar(10)
+  /// Margins in millimetres.
+  marginTop           Decimal   @default(45) @db.Decimal(5, 1)
+  marginRight         Decimal   @default(10) @db.Decimal(5, 1)
+  marginBottom        Decimal   @default(16) @db.Decimal(5, 1)
+  marginLeft          Decimal   @default(10) @db.Decimal(5, 1)
+  marginHeader        Decimal   @default(0) @db.Decimal(5, 1)
+  marginFooter        Decimal   @default(5) @db.Decimal(5, 1)
+  headerHtml          String?   @db.NVarChar(Max)
+  bodyHtml            String    @db.NVarChar(Max)
+  footerHtml          String?   @db.NVarChar(Max)
+  css                 String?   @db.NVarChar(Max)
+  /// JSON FieldVisibility `{ fields: { key: bool }, lineItemColumns: [...] }`; merged with the registry defaults.
+  fieldVisibilityJson String?   @db.NVarChar(Max)
+  /// JSON Branding (company block, accent colour, logo asset key).
+  brandingJson        String?   @db.NVarChar(Max)
+  /// Optimistic-concurrency counter; bumped on every update.
+  version             Int       @default(1)
+  createdBy           String    @db.NVarChar(50)
+  updatedBy           String?   @db.NVarChar(50)
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+  isDeleted           Boolean   @default(false)
+  deletedAt           DateTime?
+
+  @@index([module, isActive, isDeleted])
+}
+
+/// Images (logos) embedded into PDF templates as data: URIs. PNG / JPEG / WebP, at most 1 MB.
+model PdfAsset {
+  id        String   @id @default(uuid()) @db.NVarChar(50)
+  key       String   @unique @db.NVarChar(80)
+  fileName  String   @db.NVarChar(200)
+  mimeType  String   @db.NVarChar(50)
+  sizeBytes Int
+  data      Bytes    @db.VarBinary(Max)
+  createdBy String   @db.NVarChar(50)
+  createdAt DateTime @default(now())
 }

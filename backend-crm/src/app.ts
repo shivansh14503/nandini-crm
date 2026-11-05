@@ -23,6 +23,9 @@ import auditRouter from './modules/audit/audit.routes.js';
 import importRouter from './modules/imports/import.routes.js';
 import formConfigRouter from './modules/form-configs/formConfig.routes.js';
 import { seedFormConfigsSafely } from './modules/form-configs/formConfig.seed.js';
+import { pdfAssetRouter, pdfTemplateRouter } from './modules/pdf/pdf.routes.js';
+import { seedPdfTemplatesSafely } from './modules/pdf/pdfTemplate.seed.js';
+import { shutdownPdfRenderer } from './modules/pdf/renderer/puppeteerRenderer.js';
 import { closeQueues } from './jobs/queues.js';
 import { startWorkers, stopWorkers } from './jobs/workers/index.js';
 import { errorHandler, notFoundHandler } from './middlewares/errorHandler.js';
@@ -46,6 +49,8 @@ app.use(
             return callback(new Error(`CORS blocked for origin: ${origin}`));
         },
         credentials: true,
+        // The frontend reads the server's PDF file name and rate-limit retry hints.
+        exposedHeaders: ['Content-Disposition', 'Retry-After'],
     }),
 );
 app.use(
@@ -59,6 +64,9 @@ app.use(
 app.use(cookieParser());
 // Mounted before the global body parser: imports carry up to 5,000 rows and parse with their own 10 MB limit.
 app.use('/api/import', importRouter);
+// PDF templates (HTML up to ~800 KB) and logo uploads (base64) parse with their own 2 MB limit.
+app.use('/api/pdf-templates', pdfTemplateRouter);
+app.use('/api/pdf-assets', pdfAssetRouter);
 app.use(express.json({ limit: '1mb' }));
 
 // ── Health check ───────────────────────────────────────────────────────────────
@@ -99,6 +107,8 @@ async function start(): Promise<Server> {
     startDatabaseKeepAlive();
     // Missing dropdown / form-field defaults are inserted without overwriting admin customizations.
     await seedFormConfigsSafely();
+    // Built-in PDF templates (Classic / Modern / Compact); admin-created templates are never touched.
+    await seedPdfTemplatesSafely();
     if (ENV.RUN_WORKERS) startWorkers();
     return app.listen(ENV.PORT, () => logger.info(`API listening on port ${ENV.PORT}`));
 }
@@ -112,7 +122,7 @@ function registerShutdown(server: Server): void {
         server.close(async () => {
             stopDatabaseKeepAlive();
             await stopWorkers();
-            await Promise.allSettled([closeQueues(), prisma.$disconnect(), redis.quit()]);
+            await Promise.allSettled([closeQueues(), shutdownPdfRenderer(), prisma.$disconnect(), redis.quit()]);
             process.exit(0);
         });
         // Don't hang forever on keep-alive connections.

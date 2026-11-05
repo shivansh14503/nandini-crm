@@ -107,12 +107,16 @@ export function EditCategoryDialog({
             // 2. New forms (before any removal, so the dropdown is never left unused in between).
             const added = stageDropdownFields(draft, configs, { label: name, ...control, categoryKey: category.key }, newTargets);
 
-            // 3. Fields that stay: control type / Required, and the name when it mirrored the dropdown's.
-            for (const field of customLinked.filter((f) => kept.has(f.module))) {
+            // 3. Fields that stay. A renamed dropdown renames every field using it — built-in ones too, whose label
+            //    rarely equals the dropdown's ("Designation" vs "Lead Designation"). Core-locked fields can't be
+            //    removed, so they always stay, and only their label follows; control type / Required stay as built.
+            for (const field of linked.filter((f) => f.isCoreLocked || kept.has(f.module))) {
                 const update: UpdateFieldPayload = {};
-                if (touched.fieldType && field.fieldType !== control.fieldType) update.fieldType = control.fieldType;
-                if (touched.isRequired && field.isRequired !== control.isRequired) update.isRequired = control.isRequired;
-                if (name !== category.label && field.label === category.label) update.label = name;
+                if (!field.isCoreLocked) {
+                    if (touched.fieldType && field.fieldType !== control.fieldType) update.fieldType = control.fieldType;
+                    if (touched.isRequired && field.isRequired !== control.isRequired) update.isRequired = control.isRequired;
+                }
+                if (name !== category.label && field.label !== name) update.label = name;
                 if (Object.keys(update).length > 0) draft.updateField(field.id, update);
             }
 

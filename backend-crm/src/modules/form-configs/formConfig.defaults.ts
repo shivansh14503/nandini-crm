@@ -623,6 +623,7 @@ const RAW_DEFAULT_FIELDS: DefaultField[] = [
         t('organizationName', 'Organization Name', { type: 'lookup' }),
         t('mailingName', 'Mailing Name'),
         sel('registrationType', 'Registration Type', 'lead_registration_type'),
+        t('gstNo', 'GST Number', { type: 'uppercase', lock: true }),
         sel('turnover', 'Turnover', 'lead_turnover'),
         sel('noOfEmployee', 'No of Employee', 'lead_employee_range'),
     ]),

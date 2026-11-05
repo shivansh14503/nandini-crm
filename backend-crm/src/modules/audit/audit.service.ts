@@ -28,6 +28,8 @@ const ENTITY_TYPES: Record<string, AuditEntityType> = {
     partnercompanies: 'PartnerCompany',
     user: 'User',
     users: 'User',
+    'pdf-template': 'PdfTemplate',
+    'pdf-templates': 'PdfTemplate',
 };
 
 export const auditParamsSchema = z.object({
@@ -53,6 +55,9 @@ const ACTION_TITLES: Record<string, { title: string; tag: string }> = {
     LOGIN: { title: 'Signed in', tag: 'Login' },
     LOGIN_FAILED: { title: 'Failed sign-in attempt', tag: 'Security' },
     LOGOUT: { title: 'Signed out', tag: 'Logout' },
+    SET_DEFAULT: { title: 'Set as default template', tag: 'Default' },
+    DUPLICATE: { title: 'Duplicated', tag: 'Created' },
+    PDF_GENERATED: { title: 'PDF generated', tag: 'PDF' },
 };
 
 /** One timeline item per changed field for updates; one item for every other action. */
@@ -74,6 +79,9 @@ function toRevisions(entry: AuditEntryDto, time: string): AuditRevisionItem[] {
     const known = ACTION_TITLES[entry.action] ?? { title: entry.action, tag: entry.action };
     if (entry.action === 'CONVERT' && isDiff(changes.status)) {
         return [{ ...base, ...known, from: displayValue(changes.status.from), to: displayValue(changes.status.to) }];
+    }
+    if (entry.action === 'PDF_GENERATED' && typeof changes.templateName === 'string') {
+        return [{ ...base, ...known, note: `Template: ${changes.templateName}` }];
     }
     return [{ ...base, ...known }];
 }

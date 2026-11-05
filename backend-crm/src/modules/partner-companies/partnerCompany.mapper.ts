@@ -1,7 +1,7 @@
 import type { PartnerCompany, Prisma } from '../../generated/prisma/client.js';
 import { nullable, parseCustomFields, serializeCustomFields, text, toIso } from '../../utils/mappers.js';
 import type { CorporateEmailDto, NormalizedEmail } from '../shared/entityEmails.js';
-import type { PartnerCompanyInput } from './partnerCompany.validator.js';
+import type { PartnerCompanyRecordInput } from './partnerCompany.validator.js';
 
 const DEFAULT_COUNTRY = 'IN';
 
@@ -144,7 +144,7 @@ export function toPartnerCompanyDto(row: PartnerCompany): PartnerCompanyDto {
  * "copy address from billing" is enforced here rather than trusted from the client.
  */
 export function toPartnerCompanyData(
-    input: PartnerCompanyInput,
+    input: PartnerCompanyRecordInput,
     emails: readonly NormalizedEmail[],
     assignedTo: string | null,
 ): Omit<Prisma.PartnerCompanyUncheckedCreateInput, 'createdBy'> {

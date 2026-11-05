@@ -33,6 +33,7 @@ import {
 import { normalizeAddressFields } from '@/utils/address';
 import { FormConfigProvider } from '@/context/FormConfigContext';
 import { DynamicModuleCustomFields } from '@/components/forms/DynamicModuleCustomFields';
+import { PdfActionsButton } from '@/components/pdf/PdfActionsButton';
 
 export interface CreateQuoteFormProps {
     mode?: 'create' | 'edit' | 'view';
@@ -448,6 +449,7 @@ export function CreateQuoteForm({
                     saveLabel={mode === 'view' ? 'Edit Quotation' : isEdit ? 'Update Quotation' : 'Save Quotation'}
                     cancelLabel={mode === 'view' ? 'Back' : 'Cancel'}
                     mode={mode}
+                    headerExtra={mode === 'view' && quotationId ? <PdfActionsButton module="QUOTATION" recordId={quotationId} /> : undefined}
                     disableContentPadding
                     toast={
                         <AppToast

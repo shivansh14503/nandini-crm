@@ -34,6 +34,7 @@ import {
 } from '@/components/common/Drawer';
 import { QUOTATION_FORM_TABS } from './CreateQuoteForm';
 import { DynamicDrawerCustomFields } from '@/components/common/Drawer/DynamicDrawerCustomFields';
+import { PdfActionsButton } from '@/components/pdf/PdfActionsButton';
 
 export interface QuotationDetailDrawerProps {
     quotation: Quotation | null;
@@ -562,6 +563,7 @@ export function QuotationDetailDrawer({
             headerActions={{
                 onEdit: handleEdit,
                 onView: () => router.push(ROUTES.QUOTATION_DETAIL(quotation.id)),
+                custom: <PdfActionsButton module="QUOTATION" recordId={quotation.id} variant="icon" />,
             }}
             primaryAction={{
                 label: 'Edit Quotation',

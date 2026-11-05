@@ -5,7 +5,9 @@ import {
     createdWithinDaysQuery,
     csvQuery,
     customFieldsSchema,
+    GST_REGEX,
     optionalDate,
+    optionalGst,
     optionalPhone,
     optionalPostalCode,
     optionalText,
@@ -44,6 +46,7 @@ const leadFields = z.object({
     followupType: optionalText('Followup Type', L.option),
     addDescription: requiredText('Add Description', L.longText).min(3, { message: 'Add Description must be at least 3 characters.' }),
     registrationType: optionalText('Registration Type', 30),
+    gstNo: optionalGst,
     turnover: optionalText('Turnover', 30),
     assignedTo: requiredText('Assigned Representative', L.username),
 
@@ -86,10 +89,24 @@ function refineLeadPostalCodes(
     }
 }
 
-/** `LeadFormData` rules from frontend-crm/src/validations/lead.schema.ts. */
-export const leadInputSchema = leadFields.superRefine(refineLeadPostalCodes);
+/** A 'Registered' lead must carry a valid GSTIN (other registration types store none). */
+function refineLeadGst(lead: { registrationType?: string; gstNo?: string }, ctx: z.RefinementCtx): void {
+    if (lead.registrationType !== 'Registered') return;
+    const gst = lead.gstNo?.trim();
+    if (!gst) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'GST Number is required when Registration Type is Registered.', path: ['gstNo'] });
+    } else if (!GST_REGEX.test(gst.toUpperCase())) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Please enter a valid 15-character GSTIN (e.g. 07AAAAA0000A1Z5).', path: ['gstNo'] });
+    }
+}
 
-/** Bulk import: the template has no Product Category column, so it may be empty. */
+/** `LeadFormData` rules from frontend-crm/src/validations/lead.schema.ts. */
+export const leadInputSchema = leadFields.superRefine((lead, ctx) => {
+    refineLeadPostalCodes(lead, ctx);
+    refineLeadGst(lead, ctx);
+});
+
+/** Bulk import: the template has no Product Category / GSTIN columns, so those may be empty. */
 export const leadImportSchema = leadFields
     .extend({ productCategory: stringList('Product Category', 30, L.option).default([]) })
     .superRefine(refineLeadPostalCodes);

@@ -67,6 +67,7 @@ const DEFAULT_FORM: LeadFormData = {
     followupType: 'Call',
     addDescription: '',
     registrationType: '',
+    gstNo: '',
     turnover: '',
     assignedTo: 'mittal.sharma',
 

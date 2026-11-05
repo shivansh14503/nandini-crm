@@ -64,6 +64,59 @@ export const IMPORT_CONFIGS: Record<ImportEntityType, ImportEntityConfig> = {
             { key: 'addDescription', label: 'Description', required: false, aliases: ['notes', 'remarks', 'description'], sample: ['Interested in TallyPrime', ''] },
         ],
     },
+    opportunities: {
+        entity: 'opportunities',
+        singular: 'Opportunity',
+        plural: 'Opportunities',
+        fields: [
+            { key: 'organizationName', label: 'Organization Name', required: true, aliases: ['organization', 'company', 'company name', 'account'], sample: ['Acme Traders Pvt Ltd', 'Bright Tech Solutions'] },
+            { key: 'contactName', label: 'Contact Name', required: true, aliases: ['contact', 'contact person', 'person name'], sample: ['Rahul Sharma', 'Priya Verma'] },
+            { key: 'contactNumber', label: 'Contact Number', required: true, aliases: ['mobile', 'phone', 'contact mobile', 'mobile no', 'telephone'], sample: ['9876543210', '9123456780'] },
+            { key: 'emailAddress', label: 'Email', required: false, aliases: ['email address', 'contact email', 'e-mail'], sample: ['rahul@example.com', 'priya@example.com'] },
+            { key: 'productCategory', label: 'Product Category', required: false, aliases: ['product', 'category', 'products'], sample: ['TallyPrime', 'Biz Analyst'] },
+            { key: 'type', label: 'Opportunity Type', required: false, aliases: ['type', 'deal type'], sample: ['New Business', 'Existing Business'] },
+            { key: 'salesStage', label: 'Sales Stage', required: false, aliases: ['stage', 'status', 'pipeline stage'], sample: ['Qualification', 'Proposal/Price Quote'] },
+            { key: 'leadSource', label: 'Lead Source', required: false, aliases: ['source'], sample: ['Website Enquiry', 'Client Referral'] },
+            { key: 'leadGivenBy', label: 'Lead Given By', required: false, aliases: ['given by', 'referred by'], sample: ['Direct', 'Partner Network'] },
+            { key: 'addDescription', label: 'Description', required: false, aliases: ['notes', 'remarks', 'requirement', 'add description'], sample: ['Requirement for 5 TallyPrime Silver licenses', 'Annual cloud renewal discussion'] },
+        ],
+    },
+    tickets: {
+        entity: 'tickets',
+        singular: 'Ticket',
+        plural: 'Tickets',
+        fields: [
+            { key: 'organizationName', label: 'Organization Name', required: true, aliases: ['organization', 'company', 'company name', 'account'], sample: ['Acme Traders Pvt Ltd', 'Bright Tech Solutions'] },
+            { key: 'contactPersonName', label: 'Contact Person Name', required: true, aliases: ['contact', 'contact name', 'contact person', 'name'], sample: ['Rahul Sharma', 'Priya Verma'] },
+            { key: 'contactNumber', label: 'Contact Number', required: false, aliases: ['mobile', 'phone', 'contact phone', 'telephone'], sample: ['9876543210', '9123456780'] },
+            { key: 'contactEmail', label: 'Contact Email', required: false, aliases: ['email', 'email address'], sample: ['rahul@example.com', 'priya@example.com'] },
+            // Matched against the Nature Of Call master; a blank or unknown value falls back to the first active entry.
+            { key: 'natureOfCall', label: 'Nature Of Call', required: false, aliases: ['nature', 'issue type', 'call nature', 'category'], sample: ['Excel Import Issue', 'Banking Related Issue'] },
+            { key: 'ticketSubject', label: 'Ticket Subject', required: false, aliases: ['subject', 'title', 'summary'], sample: ['Tally data error on startup', 'Single user license reactivation'] },
+            { key: 'problemReported', label: 'Problem Reported', required: true, aliases: ['problem', 'issue', 'description', 'reported problem'], sample: ['Error while opening company data after power cut', 'Need license reactivation on new system'] },
+            { key: 'ticketPriority', label: 'Priority', required: false, aliases: ['ticket priority', 'urgency'], sample: ['High', 'Normal'] },
+            { key: 'ticketStatus', label: 'Status', required: false, aliases: ['ticket status', 'stage'], sample: ['New', 'Assigned'] },
+            { key: 'supportType', label: 'Support Type', required: false, aliases: ['type'], sample: ['AMC', 'Free'] },
+            { key: 'supportMode', label: 'Support Mode', required: false, aliases: ['mode'], sample: ['Remote Support (AnyDesk/TeamViewer)', 'Phone Consultation'] },
+        ],
+    },
+    'partner-companies': {
+        entity: 'partner-companies',
+        singular: 'Partner Company',
+        plural: 'Partner Companies',
+        fields: [
+            { key: 'companyName', label: 'Company Name', required: true, aliases: ['partner name', 'name', 'company', 'organization', 'partner company'], sample: ['Apex Tally Solutions', 'Synergy Softwares'] },
+            { key: 'natureOfPartner', label: 'Nature of Partner', required: false, aliases: ['nature', 'partner type', 'type'], sample: ['TALLY-3STAR PARTNER', 'TALLY-REFERRAL PARTNER'] },
+            { key: 'phone', label: 'Office Phone', required: true, aliases: ['phone', 'mobile', 'contact number', 'telephone'], sample: ['9876543210', '9123456780'] },
+            { key: 'email', label: 'Email', required: true, aliases: ['email address', 'e-mail', 'mail'], sample: ['info@apextally.com', 'contact@synergysoft.in'] },
+            { key: 'billingStreet', label: 'Billing Street', required: false, aliases: ['street', 'address', 'billing address'], sample: ['12 Nehru Place', '45 MG Road'] },
+            { key: 'billingCity', label: 'Billing City', required: false, aliases: ['city'], sample: ['New Delhi', 'Mumbai'] },
+            { key: 'billingState', label: 'Billing State', required: false, aliases: ['state'], sample: ['Delhi', 'Maharashtra'] },
+            { key: 'billingPostalCode', label: 'Billing PIN Code', required: false, aliases: ['pin', 'pincode', 'postal code', 'zip'], sample: ['110019', '400001'] },
+            { key: 'gstNo', label: 'GST Number', required: false, aliases: ['gst', 'gstin', 'gst no'], sample: ['07ABCDE1234F1Z5', '27ABCDE1234F1Z5'] },
+            { key: 'principalCompany', label: 'Principal Company', required: false, aliases: ['principal'], sample: ['Tally Solutions Pvt Ltd', 'Tally Solutions Pvt Ltd'] },
+        ],
+    },
 };
 
 const normalize = (s: string) => s.toLowerCase().replace(/[\s_\-./]+/g, ' ').trim();
@@ -107,7 +160,10 @@ export function mapAndValidateRows(entity: ImportEntityType, parsed: ParsedFile,
             values[f.key] = header ? (raw[header] ?? '').trim() : '';
             if (f.required && !values[f.key]) errors.push(`${f.label} is required`);
         });
-        if (values.email && !EMAIL_RE.test(values.email)) errors.push('Invalid email');
+        // Each entity names its email column differently.
+        for (const key of ['email', 'emailAddress', 'contactEmail']) {
+            if (values[key] && !EMAIL_RE.test(values[key])) errors.push('Invalid email');
+        }
         return { rowNumber: idx + 2, values, errors };
     });
 }
@@ -126,7 +182,7 @@ export function downloadSampleTemplate(entity: ImportEntityType): void {
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `${plural.toLowerCase()}_import_template.csv`;
+    link.download = `${plural.toLowerCase().replace(/\s+/g, '_')}_import_template.csv`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);

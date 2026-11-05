@@ -13,6 +13,7 @@ import { CommonMasterView } from '../../common/CommonMasterView';
 import { MasterHeaderActions } from '../../common/MasterHeaderActions';
 import { buildExtendedSearchConfig } from '../../common/buildExtendedSearchConfig';
 import { AppToast } from '../../common/AppToast';
+import { DataImportModal } from '../../common/import';
 import type { DataTableColumn, DataTableFilterItem } from '../../common/DataTable';
 import { ROUTES } from '@/config/constants';
 import { useAuth } from '@/context/AuthContext';
@@ -83,6 +84,7 @@ export function TicketsMasterView() {
     const [activeRelatedModule, setActiveRelatedModule] = useState<string | null>(null);
     const [secondaryDrawerEntity, setSecondaryDrawerEntity] = useState<SecondaryDrawerEntity | null>(null);
     const [isLeftSidebarCollapsed, setIsLeftSidebarCollapsed] = useState<boolean>(false);
+    const [importOpen, setImportOpen] = useState(false);
     const [toast, setToast] = useState<{ open: boolean; message: string; severity: 'success' | 'info' | 'error' }>({
         open: false,
         message: '',
@@ -331,6 +333,7 @@ export function TicketsMasterView() {
                     }}
                     onNewClick={() => router.push(ROUTES.TICKET_NEW)}
                     newButtonLabel="New Ticket"
+                    onImportClick={() => setImportOpen(true)}
                 />
             )}
             searchConfig={buildExtendedSearchConfig({
@@ -431,6 +434,15 @@ export function TicketsMasterView() {
                     onClose={() => setToast((t) => ({ ...t, open: false }))}
                 />
             }
-        />
+        >
+            <DataImportModal
+                open={importOpen}
+                entity="tickets"
+                onClose={() => setImportOpen(false)}
+                onImported={(count) => {
+                    setToast({ open: true, message: `Successfully imported ${count} ticket${count === 1 ? '' : 's'}!`, severity: 'success' });
+                }}
+            />
+        </CommonMasterView>
     );
 }

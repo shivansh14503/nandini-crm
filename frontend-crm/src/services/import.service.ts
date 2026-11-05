@@ -1,7 +1,9 @@
 import type { ApiResponse } from '../types/api.types';
 import { apiClient } from './apiClient';
+import type { ImportEntityType } from '../components/common/import/types';
 
-export type ImportEntity = 'organizations' | 'contacts' | 'products' | 'leads';
+/** Single source of truth: the import wizard's entity list. */
+export type ImportEntity = ImportEntityType;
 
 export interface ImportRowFailure {
     rowNumber: number;

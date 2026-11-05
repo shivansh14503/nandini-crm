@@ -37,6 +37,8 @@ export const ROUTES = {
     QUOTATIONS: '/quotations',
     QUOTATION_DETAIL: (id: string | number) => `/quotations/${id}`,
     QUOTATION_EDIT: (id: string | number) => `/quotations/${id}/edit`,
+    QUOTATION_PRINT: (id: string | number, templateId?: string) =>
+        `/quotations/${id}/print${templateId ? `?templateId=${encodeURIComponent(templateId)}` : ''}`,
     PRODUCTS: '/products',
     PRODUCT_NEW: '/products/new',
     PRODUCT_DETAIL: (id: string | number) => `/products/${id}`,
@@ -51,6 +53,9 @@ export const ROUTES = {
     PARTNER_COMPANY_EDIT: (id: string | number) => `/partner-companies/${id}/edit`,
     ADMIN: '/admin',
     FORM_CUSTOMIZATION: '/admin/form-customization',
+    PDF_TEMPLATES: '/admin/pdf-templates',
+    PDF_TEMPLATE_NEW: '/admin/pdf-templates/new',
+    PDF_TEMPLATE_EDIT: (id: string) => `/admin/pdf-templates/${id}`,
     ADMIN_ROLES_PERMISSIONS: '/admin/roles-permissions',
     ADMIN_USERS: '/admin/users',
 };

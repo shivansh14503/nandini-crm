@@ -15,7 +15,9 @@ export type AuditEntityType =
     | 'Import'
     | 'DropdownCategory'
     | 'DropdownOption'
-    | 'FormField';
+    | 'FormField'
+    | 'PdfTemplate'
+    | 'PdfAsset';
 
 export type AuditAction =
     | 'CREATE'
@@ -26,7 +28,10 @@ export type AuditAction =
     | 'IMPORT'
     | 'LOGIN'
     | 'LOGIN_FAILED'
-    | 'LOGOUT';
+    | 'LOGOUT'
+    | 'SET_DEFAULT'
+    | 'DUPLICATE'
+    | 'PDF_GENERATED';
 
 export interface AuditEntry {
     entityType: AuditEntityType;

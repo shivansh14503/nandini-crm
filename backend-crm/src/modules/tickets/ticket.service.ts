@@ -29,6 +29,25 @@ async function resolveNatureOfCall(tx: TransactionClient, name: string, previous
     return entry.name;
 }
 
+/**
+ * Bulk import is lenient: spreadsheets rarely spell the master exactly, so a blank, unknown or inactive Nature
+ * Of Call falls back to the first active master entry (by sort order). Fails only when the master has no active entry.
+ */
+export async function resolveImportNatureOfCall(tx: TransactionClient, name: string | undefined): Promise<string> {
+    const wanted = name?.trim();
+    if (wanted) {
+        const entry = await tx.natureOfCall.findFirst({ where: { name: wanted, isActive: true }, select: { name: true } });
+        if (entry) return entry.name;
+    }
+    const fallback = await tx.natureOfCall.findFirst({ where: { isActive: true }, orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }], select: { name: true } });
+    if (!fallback) {
+        throw HttpError.badRequest('No active Nature Of Call is configured; add one before importing tickets.', [
+            { message: 'No active Nature Of Call is configured.', path: ['natureOfCall'] },
+        ]);
+    }
+    return fallback.name;
+}
+
 /** The ticket form has no ids, so the organization and contact are linked by name when a live match exists. */
 async function resolveLinks(tx: TransactionClient, input: TicketInput): Promise<{ organizationId: string | null; contactId: string | null }> {
     const organization = await tx.organization.findFirst({

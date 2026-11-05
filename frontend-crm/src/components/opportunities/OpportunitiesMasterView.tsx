@@ -17,6 +17,7 @@ import { CommonMasterView } from '../common/CommonMasterView';
 import { MasterHeaderActions } from '../common/MasterHeaderActions';
 import { buildExtendedSearchConfig } from '../common/buildExtendedSearchConfig';
 import { AppToast } from '../common/AppToast';
+import { DataImportModal } from '../common/import';
 import { RelatedModulesSidebar, RelatedRecordsTableView } from '../common/Drawer';
 import { RelatedSecondaryDrawer, type SecondaryDrawerEntity } from '../common/RelatedSecondaryDrawer';
 import type { DataTableColumn, DataTableFilterItem } from '../common/DataTable';
@@ -61,6 +62,7 @@ export function OpportunitiesMasterView() {
     const [activeRelatedModule, setActiveRelatedModule] = useState<string | null>(null);
     const [secondaryDrawerEntity, setSecondaryDrawerEntity] = useState<SecondaryDrawerEntity | null>(null);
     const [isLeftSidebarCollapsed, setIsLeftSidebarCollapsed] = useState<boolean>(false);
+    const [importOpen, setImportOpen] = useState(false);
     const [toast, setToast] = useState<{
         open: boolean;
         message: string;
@@ -536,6 +538,7 @@ export function OpportunitiesMasterView() {
                     }}
                     onNewClick={() => router.push(ROUTES.OPPORTUNITY_NEW)}
                     newButtonLabel="New Opportunity"
+                    onImportClick={() => setImportOpen(true)}
                 />
             )}
             searchConfig={buildExtendedSearchConfig({
@@ -639,6 +642,15 @@ export function OpportunitiesMasterView() {
                     onClose={() => setToast((prev) => ({ ...prev, open: false }))}
                 />
             }
-        />
+        >
+            <DataImportModal
+                open={importOpen}
+                entity="opportunities"
+                onClose={() => setImportOpen(false)}
+                onImported={(count) => {
+                    setToast({ open: true, message: `Successfully imported ${count} opportunit${count === 1 ? 'y' : 'ies'}!`, severity: 'success' });
+                }}
+            />
+        </CommonMasterView>
     );
 }

@@ -15,6 +15,7 @@ export interface LeadFormData {
     followupType: string;
     addDescription: string;
     registrationType?: string;
+    gstNo?: string;
     turnover?: string;
     assignedTo: string;
 

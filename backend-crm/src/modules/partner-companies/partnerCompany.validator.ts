@@ -20,8 +20,8 @@ import { corporateEmailListSchema } from '../shared/entityEmails.js';
 const WEBSITE_MAX = 200;
 const BANK_BRANCH_MAX = 150;
 
-/** `PartnerCompanyFormData` rules from frontend-crm/src/validations/partnerCompany.schema.ts. */
-export const partnerCompanyInputSchema = z
+/** Field rules shared by the partner company form and bulk import. */
+const partnerCompanyFields = z
     .object({
         // Company information
         companyName: requiredText('Partner Name', L.organizationName),
@@ -69,15 +69,37 @@ export const partnerCompanyInputSchema = z
         tanNumber: optionalUpperText('TAN Number', L.tan),
 
         customFields: customFieldsSchema,
-    })
-    .superRefine((input, ctx) => {
-        refinePostalCodeForCountry(ctx, 'billingPostalCode', input.billingPostalCode, input.billingCountry, true);
-        if (!input.copyAddressFromBilling) {
-            refinePostalCodeForCountry(ctx, 'shippingPostalCode', input.shippingPostalCode, input.shippingCountry);
-        }
     });
 
+function refinePartnerPostalCodes(
+    input: { billingPostalCode?: string; billingCountry?: string; shippingPostalCode?: string; shippingCountry?: string; copyAddressFromBilling: boolean },
+    ctx: z.RefinementCtx,
+    billingRequired: boolean,
+): void {
+    refinePostalCodeForCountry(ctx, 'billingPostalCode', input.billingPostalCode, input.billingCountry, billingRequired);
+    if (!input.copyAddressFromBilling) {
+        refinePostalCodeForCountry(ctx, 'shippingPostalCode', input.shippingPostalCode, input.shippingCountry);
+    }
+}
+
+/** `PartnerCompanyFormData` rules from frontend-crm/src/validations/partnerCompany.schema.ts. */
+export const partnerCompanyInputSchema = partnerCompanyFields.superRefine((input, ctx) => refinePartnerPostalCodes(input, ctx, true));
+
+/**
+ * Bulk import: spreadsheets often carry no address, so the billing address is optional here (stored blank and
+ * completed on the next edit, where the form still requires it). Postal codes that are given are still checked.
+ */
+export const partnerCompanyImportSchema = partnerCompanyFields
+    .extend({
+        billingAddress: optionalText('Billing Street', L.address),
+        billingCity: optionalText('Billing City', L.shortText),
+        billingState: optionalText('Billing State', L.shortText),
+    })
+    .superRefine((input, ctx) => refinePartnerPostalCodes(input, ctx, false));
+
 export type PartnerCompanyInput = z.infer<typeof partnerCompanyInputSchema>;
+/** What a partner company write accepts: a form submission or an imported row (whose billing address may be blank). */
+export type PartnerCompanyRecordInput = PartnerCompanyInput | z.infer<typeof partnerCompanyImportSchema>;
 
 export const partnerCompanyListQuerySchema = z.object({
     natureOfPartner: z.string().trim().max(L.option).optional(),

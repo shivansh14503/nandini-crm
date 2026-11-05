@@ -14,6 +14,7 @@ import {
     PARTNER_COMPANY_SORT_FIELDS,
     partnerCompanyInputSchema,
     partnerCompanyListQuerySchema,
+    type PartnerCompanyRecordInput,
 } from './partnerCompany.validator.js';
 
 const notFound = () => HttpError.notFound('Partner company not found');
@@ -40,11 +41,29 @@ async function assertUniqueName(tx: TransactionClient, companyName: string, excl
 }
 
 /** Lookup lists (`/api/lookups/partner-companies`, and partner contacts, which carry the company name) and search. */
-async function invalidatePartnerCaches(): Promise<void> {
+export async function invalidatePartnerCaches(): Promise<void> {
     await Promise.all([
         cacheService.invalidateEntityCaches('partner-companies'),
         cacheService.invalidatePattern(`${CACHE_KEYS.lookups('partner-contacts')}*`),
     ]);
+}
+
+/**
+ * Inserts a partner company inside the caller's transaction (used by `create` and bulk import). The caller
+ * invalidates the partner caches once its transaction has committed.
+ */
+export async function createPartnerCompanyRecord(tx: TransactionClient, input: PartnerCompanyRecordInput, user: AuthUser): Promise<PartnerCompanyDto> {
+    await assertUniqueName(tx, input.companyName);
+    const emails = normalizeEmails(input.emailAddresses);
+    const row = await tx.partnerCompany.create({
+        data: {
+            ...toPartnerCompanyData(input, emails, nullable(input.assignedTo) ?? user.username),
+            createdBy: user.username,
+        },
+    });
+    const dto = toPartnerCompanyDto(row);
+    await auditService.record(tx, { entityType: 'PartnerCompany', entityId: row.id, action: 'CREATE', changedBy: user.username, changes: dto });
+    return dto;
 }
 
 // ── Service ──────────────────────────────────────────────────────────────────
@@ -86,20 +105,7 @@ export const partnerCompanyService = {
     async create(body: unknown, user: AuthUser): Promise<PartnerCompanyDto> {
         const input = partnerCompanyInputSchema.parse(body);
 
-        const created = await runInTransaction(async (tx) => {
-            await assertUniqueName(tx, input.companyName);
-            const emails = normalizeEmails(input.emailAddresses);
-            const row = await tx.partnerCompany.create({
-                data: {
-                    ...toPartnerCompanyData(input, emails, nullable(input.assignedTo) ?? user.username),
-                    createdBy: user.username,
-                },
-            });
-            const dto = toPartnerCompanyDto(row);
-            await auditService.record(tx, { entityType: 'PartnerCompany', entityId: row.id, action: 'CREATE', changedBy: user.username, changes: dto });
-            return dto;
-        });
-
+        const created = await runInTransaction((tx) => createPartnerCompanyRecord(tx, input, user));
         await invalidatePartnerCaches();
         return created;
     },

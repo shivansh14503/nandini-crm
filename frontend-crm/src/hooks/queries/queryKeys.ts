@@ -23,6 +23,11 @@ export const queryKeys = {
     quotations: createEntityKeys('quotations'),
     products: createEntityKeys('products'),
     partnerCompanies: createEntityKeys('partner-companies'),
+    pdfTemplates: {
+        ...createEntityKeys('pdf-templates'),
+        /** Field registry + line-item columns of a module (custom fields included). */
+        fields: (module: string) => ['pdf-templates', 'fields', module] as const,
+    },
     users: {
         all: ['users'] as const,
     },

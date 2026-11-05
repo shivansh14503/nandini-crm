@@ -1,4 +1,11 @@
-export type ImportEntityType = 'organizations' | 'contacts' | 'products' | 'leads';
+export type ImportEntityType =
+    | 'organizations'
+    | 'contacts'
+    | 'products'
+    | 'leads'
+    | 'opportunities'
+    | 'tickets'
+    | 'partner-companies';
 
 export interface ImportFieldDef {
     key: string;

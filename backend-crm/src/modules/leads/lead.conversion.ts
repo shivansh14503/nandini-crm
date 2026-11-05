@@ -58,6 +58,7 @@ function organizationPayload(values: ConvertLeadInput, lead: LeadRow) {
         billingPostalCode: lead.primaryPostalCode,
         billingCountry: lead.primaryCountry,
         registrationType: registrationTypeFor(lead),
+        gstNo: lead.gstNo ?? undefined,
         partnerCompanies: [],
     };
 }

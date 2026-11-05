@@ -13,13 +13,27 @@ import { assertStatusTransition, createLeadRecord } from '../leads/lead.service.
 import { leadImportSchema } from '../leads/lead.validator.js';
 import { createOrganizationRecord } from '../organizations/organization.service.js';
 import { organizationImportSchema } from '../organizations/organization.validator.js';
+import { createOpportunityRecord } from '../opportunities/opportunity.service.js';
+import { opportunityInputSchema } from '../opportunities/opportunity.validator.js';
+import { createPartnerCompanyRecord, invalidatePartnerCaches } from '../partner-companies/partnerCompany.service.js';
+import { partnerCompanyImportSchema } from '../partner-companies/partnerCompany.validator.js';
 import { createProductRecord } from '../products/product.service.js';
 import { productInputSchema } from '../products/product.validator.js';
 import { runInTransaction } from '../shared/transactions.js';
+import { createTicketRecord, resolveImportNatureOfCall } from '../tickets/ticket.service.js';
+import { ticketInputSchema } from '../tickets/ticket.validator.js';
 import type { TransactionClient } from '../../config/prisma.js';
 
 /** Entities and field keys of the frontend's import wizard (frontend-crm/src/components/common/import). */
-export const IMPORT_ENTITIES = ['organizations', 'contacts', 'products', 'leads'] as const;
+export const IMPORT_ENTITIES = [
+    'organizations',
+    'contacts',
+    'products',
+    'leads',
+    'opportunities',
+    'tickets',
+    'partner-companies',
+] as const;
 export type ImportEntity = (typeof IMPORT_ENTITIES)[number];
 
 export interface ImportRow {
@@ -53,6 +67,32 @@ export interface ImportResult {
 const PROGRESS_EVERY_ROWS = 20;
 /** Lead fields the template doesn't offer but the record requires; documented defaults, applied only when blank. */
 const LEAD_IMPORT_DEFAULTS = { leadSource: 'Other', leadType: 'Cold', addDescription: 'Imported via bulk import', followupType: 'Call' } as const;
+
+/** Opportunity fields the template doesn't offer (or left blank) but the record requires. */
+const OPPORTUNITY_IMPORT_DEFAULTS = {
+    productCategory: 'TallyPrime',
+    type: 'New Business',
+    salesStage: 'Qualification',
+    leadSource: 'Other',
+    followupType: 'Call',
+    addDescription: 'Imported via bulk import',
+    // Same "no commission" option lead conversion uses for new opportunities.
+    commission: 'Nil / Direct (0%)',
+} as const;
+/** Ticket fields the template doesn't offer (or left blank) but the record requires. */
+const TICKET_IMPORT_DEFAULTS = {
+    ticketPriority: 'Normal',
+    ticketStatus: 'New',
+    source: 'Call',
+    supportType: 'Free',
+    supportMode: 'Phone Consultation',
+} as const;
+const TICKET_IMPORT_DUE_IN_MS = 24 * 60 * 60 * 1000;
+/** Partner companies: Nature of Partner is required by the form; 'Other' is a standing option of that list. */
+const PARTNER_IMPORT_DEFAULT_NATURE = 'Other';
+
+/** 'A, B; C' → ['A', 'B', 'C'] (multi-value spreadsheet cells). */
+const splitList = (value: string | undefined) => (value ?? '').split(/[,;]/).map((s) => s.trim()).filter(Boolean);
 
 const emailList = (email: string | undefined) =>
     email ? [{ email, isPrimary: true, isOptedOut: false, isInvalidBounce: false }] : [];
@@ -135,6 +175,70 @@ const rowBuilders: Record<ImportEntity, (v: Record<string, string>, user: AuthUs
         });
         return (tx) => createLeadRecord(tx, input, user);
     },
+    opportunities: (v, user) => {
+        const productCategory = splitList(v.productCategory);
+        const input = opportunityInputSchema.parse({
+            organizationName: v.organizationName,
+            contactName: v.contactName,
+            contactNumber: v.contactNumber,
+            emailAddress: v.emailAddress,
+            productCategory: productCategory.length ? productCategory : [OPPORTUNITY_IMPORT_DEFAULTS.productCategory],
+            type: v.type || OPPORTUNITY_IMPORT_DEFAULTS.type,
+            salesStage: v.salesStage || OPPORTUNITY_IMPORT_DEFAULTS.salesStage,
+            leadSource: v.leadSource || OPPORTUNITY_IMPORT_DEFAULTS.leadSource,
+            leadGivenBy: v.leadGivenBy || user.username,
+            nextFollowupDate: businessToday(),
+            followupType: OPPORTUNITY_IMPORT_DEFAULTS.followupType,
+            addDescription: v.addDescription && v.addDescription.length >= 3 ? v.addDescription : OPPORTUNITY_IMPORT_DEFAULTS.addDescription,
+            commission: OPPORTUNITY_IMPORT_DEFAULTS.commission,
+            assignedTo: user.username,
+        });
+        return (tx) => createOpportunityRecord(tx, input, user);
+    },
+    tickets: (v, user) => {
+        // Nature Of Call is resolved against the master inside the write (blank / unknown → first active entry).
+        const dueDate = new Date(wallClockNow(ENV.BUSINESS_TIMEZONE).getTime() + TICKET_IMPORT_DUE_IN_MS).toISOString().slice(0, 16);
+        const fields = ticketInputSchema.omit({ natureOfCall: true }).parse({
+            organizationName: v.organizationName,
+            contactPersonName: v.contactPersonName,
+            contactNumber: v.contactNumber,
+            contactEmail: v.contactEmail,
+            ticketSubject: v.ticketSubject,
+            problemReported: v.problemReported,
+            ticketPriority: v.ticketPriority || TICKET_IMPORT_DEFAULTS.ticketPriority,
+            ticketStatus: v.ticketStatus || TICKET_IMPORT_DEFAULTS.ticketStatus,
+            source: TICKET_IMPORT_DEFAULTS.source,
+            supportType: v.supportType || TICKET_IMPORT_DEFAULTS.supportType,
+            supportMode: v.supportMode || TICKET_IMPORT_DEFAULTS.supportMode,
+            dueDate,
+            assignedTo: user.username,
+        });
+        return async (tx) => {
+            const natureOfCall = await resolveImportNatureOfCall(tx, v.natureOfCall);
+            return createTicketRecord(tx, { ...fields, natureOfCall }, user);
+        };
+    },
+    'partner-companies': (v, user) => {
+        const input = partnerCompanyImportSchema.parse({
+            companyName: v.companyName,
+            natureOfPartner: v.natureOfPartner || PARTNER_IMPORT_DEFAULT_NATURE,
+            phone: v.phone,
+            emailAddresses: emailList(v.email),
+            billingAddress: v.billingStreet,
+            billingCity: v.billingCity,
+            billingState: v.billingState,
+            billingPostalCode: v.billingPostalCode,
+            gstNo: v.gstNo,
+            principalCompany: v.principalCompany,
+            assignedTo: user.username,
+        });
+        return (tx) => createPartnerCompanyRecord(tx, input, user);
+    },
+};
+
+/** Entities whose caches reach beyond the shared lookup / search / dashboard keys. */
+const cacheInvalidators: Partial<Record<ImportEntity, () => Promise<void>>> = {
+    'partner-companies': invalidatePartnerCaches,
 };
 
 /** Human-readable reasons for a failed row. */
@@ -168,7 +272,7 @@ export async function processImport(data: ImportJobData, onProgress?: (percent: 
         }
     }
 
-    if (created > 0) await cacheService.invalidateEntityCaches(data.entity);
+    if (created > 0) await (cacheInvalidators[data.entity]?.() ?? cacheService.invalidateEntityCaches(data.entity));
     const result: ImportResult = { importId: data.importId, entity: data.entity, total: data.rows.length, created, failed };
     await auditService.enqueue({
         entityType: 'Import',

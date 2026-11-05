@@ -40,6 +40,9 @@ import {
     type ReplayResult,
 } from './configDraft';
 
+/** Field edits that move a field (kept as their own op so they apply after any reorder staged before them). */
+const PLACEMENT_KEYS = ['tabKey', 'tabLabel', 'sectionKey', 'sectionLabel'] as const;
+
 /** Staging actions: same shape as the service's writes, but they only change the unsaved draft. */
 export interface ConfigDraftActions {
     createCategory(payload: CreateCategoryPayload): { key: string; label: string };
@@ -138,9 +141,37 @@ export function useConfigDraft(base: FormConfigsPayload | undefined, refetch: ()
             ids,
         );
 
+    /**
+     * A dropdown created inline by a draft field (its `newOptions`) is named after that field and can't be edited on
+     * its own. Editing it turns it into a createCategory op of its own, staged just before the field, which then
+     * links to it; option ids are kept, so staged option edits still apply.
+     */
+    const promoteInlineCategory = (key: string) => {
+        const ops = opsRef.current;
+        const at = ops.findIndex((op) => op.kind === 'createField' && op.categoryKey === key);
+        const fieldOp = ops[at];
+        if (fieldOp?.kind !== 'createField') return;
+        const { newOptions, ...fieldPayload } = fieldOp.payload;
+        const category: DraftOp = {
+            kind: 'createCategory',
+            key,
+            optionIds: fieldOp.optionIds ?? [],
+            payload: {
+                label: fieldPayload.label,
+                module: fieldPayload.module,
+                description: `Options for the custom field "${fieldPayload.label}".`,
+                options: newOptions ?? [],
+            },
+            summary: `New dropdown '${fieldPayload.label}'`,
+        };
+        const field: DraftOp = { ...fieldOp, categoryKey: undefined, optionIds: undefined, payload: { ...fieldPayload, dropdownCategoryKey: key } };
+        commit([...ops.slice(0, at), category, field, ...ops.slice(at + 1)]);
+    };
+
     /** Stages a dropdown edit: folded into its createCategory op when the dropdown is new in this draft. */
     const stageCategoryUpdate = (key: string, payload: UpdateCategoryPayload) => {
         const category = findCategoryByKey(current(), key) ?? fail('Dropdown not found.');
+        promoteInlineCategory(key);
         const ops = opsRef.current;
         const createdAt = ops.findIndex((op) => op.kind === 'createCategory' && op.key === key);
         const created = ops[createdAt];
@@ -248,6 +279,38 @@ export function useConfigDraft(base: FormConfigsPayload | undefined, refetch: ()
         return Object.keys(leftover).length > 0 ? leftover : null;
     };
 
+    /**
+     * Folds edits of a field created in this draft into its createField op, so it is saved once, already edited.
+     * Placement (tab / section) stays a separate updateField op so it still lands after any reorder staged in
+     * between, as does re-linking a field that created its dropdown inline. Returns what is left to stage, or null.
+     */
+    const foldIntoDraftField = (fieldId: string, payload: UpdateFieldPayload): UpdateFieldPayload | null => {
+        const ops = opsRef.current;
+        const at = ops.findIndex((op) => op.kind === 'createField' && op.id === fieldId);
+        const created = ops[at];
+        if (created?.kind !== 'createField') return payload;
+
+        const leftover: UpdateFieldPayload = {};
+        for (const key of PLACEMENT_KEYS) if (payload[key] !== undefined) leftover[key] = payload[key];
+        if (payload.dropdownCategoryKey !== undefined && created.categoryKey) leftover.dropdownCategoryKey = payload.dropdownCategoryKey;
+
+        const next: CreateFieldPayload = { ...created.payload };
+        if (payload.label !== undefined) next.label = payload.label;
+        if (payload.fieldType !== undefined) next.fieldType = payload.fieldType;
+        if (payload.fieldSize !== undefined) next.fieldSize = payload.fieldSize;
+        if (payload.isRequired !== undefined) next.isRequired = payload.isRequired;
+        if (payload.isVisibleInForm !== undefined) next.isVisibleInForm = payload.isVisibleInForm;
+        if (payload.isVisibleInDrawer !== undefined) next.isVisibleInDrawer = payload.isVisibleInDrawer;
+        // Cleared (null) on an update = never set on a create.
+        if (payload.placeholder !== undefined) next.placeholder = payload.placeholder ?? undefined;
+        if (payload.hint !== undefined) next.hint = payload.hint ?? undefined;
+        if (payload.defaultValue !== undefined) next.defaultValue = payload.defaultValue ?? undefined;
+        if (payload.dropdownCategoryKey !== undefined && !created.categoryKey) next.dropdownCategoryKey = payload.dropdownCategoryKey ?? undefined;
+
+        commit(ops.map((op, i) => (i === at ? { ...created, payload: next, summary: `${moduleLabel(next.module)}: new field '${next.label}'` } : op)));
+        return Object.keys(leftover).length > 0 ? leftover : null;
+    };
+
     const actions = useMemo<ConfigDraftActions>(
         () => ({
             createCategory(payload) {
@@ -350,7 +413,7 @@ export function useConfigDraft(base: FormConfigsPayload | undefined, refetch: ()
                 // A field moved to another tab carries that tab's name (custom tabs are stored through their fields).
                 const movedTab = input.tabKey !== undefined && input.tabKey !== field.tabKey;
                 const tabLabel = movedTab && input.tabLabel === undefined ? tabLabelOf(s, field.module, input.tabKey!) : undefined;
-                const payload = tabLabel ? { ...input, tabLabel } : input;
+                let payload = tabLabel ? { ...input, tabLabel } : input;
                 if (field.isCoreLocked && payload.isRequired === false) fail(`${field.label} is a core field and must stay required.`);
                 if (field.isCoreLocked && payload.isVisibleInForm === false) fail(`${field.label} is a core field and cannot be hidden.`);
                 if (field.isCoreLocked && payload.isActive === false) fail(`${field.label} is a core field and cannot be archived.`);
@@ -360,6 +423,14 @@ export function useConfigDraft(base: FormConfigsPayload | undefined, refetch: ()
                 if (isTempId(fieldId) && payload.isActive === false) {
                     dropTempField(fieldId);
                     return;
+                }
+                // A field new in this draft: its edits go into the op creating it (isActive: true is a no-op there).
+                if (isTempId(fieldId)) {
+                    const rest = { ...payload };
+                    delete rest.isActive;
+                    const leftover = foldIntoDraftField(fieldId, rest);
+                    if (!leftover) return;
+                    payload = leftover;
                 }
                 const last = opsRef.current.at(-1);
                 if (last?.kind === 'updateField' && last.fieldId === fieldId) {

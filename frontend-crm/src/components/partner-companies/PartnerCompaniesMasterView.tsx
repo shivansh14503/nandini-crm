@@ -15,6 +15,7 @@ import { CommonMasterView } from '../common/CommonMasterView';
 import { MasterHeaderActions, outlinedHeaderButtonSx } from '../common/MasterHeaderActions';
 import { buildExtendedSearchConfig } from '../common/buildExtendedSearchConfig';
 import { AppToast } from '../common/AppToast';
+import { DataImportModal } from '../common/import';
 import type { DataTableColumn, DataTableFilterItem } from '../common/DataTable';
 import { ROUTES } from '@/config/constants';
 import { useAuth } from '@/context/AuthContext';
@@ -84,6 +85,7 @@ export function PartnerCompaniesMasterView() {
     const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
     // Tracked by id so the drawer always shows the cached copy and closes if the record is deleted.
     const [drawerId, setDrawerId] = useState<string | null>(null);
+    const [importOpen, setImportOpen] = useState(false);
     const drawerRecord = useMemo(() => (drawerId ? partners.find((p) => p.id === drawerId) ?? null : null), [partners, drawerId]);
     const [toast, setToast] = useState<{ open: boolean; message: string; severity: 'success' | 'error' | 'info' | 'warning' }>({
         open: false,
@@ -289,6 +291,7 @@ export function PartnerCompaniesMasterView() {
                     }}
                     onNewClick={() => router.push(ROUTES.PARTNER_COMPANY_NEW)}
                     newButtonLabel="New Partner Company"
+                    onImportClick={() => setImportOpen(true)}
                 >
                     <Button
                         variant="outlined"
@@ -352,6 +355,15 @@ export function PartnerCompaniesMasterView() {
             drawer={<PartnerCompanyDetailDrawer partnerCompany={drawerRecord} open={Boolean(drawerRecord)} onClose={closeDrawer} />}
             isDrawerOpen={Boolean(drawerRecord)}
             toast={<AppToast open={toast.open} message={toast.message} severity={toast.severity} onClose={() => setToast((prev) => ({ ...prev, open: false }))} />}
-        />
+        >
+            <DataImportModal
+                open={importOpen}
+                entity="partner-companies"
+                onClose={() => setImportOpen(false)}
+                onImported={(count) => {
+                    setToast({ open: true, message: `Successfully imported ${count} partner compan${count === 1 ? 'y' : 'ies'}!`, severity: 'success' });
+                }}
+            />
+        </CommonMasterView>
     );
 }

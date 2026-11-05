@@ -41,6 +41,18 @@ const envSchema = z
             .enum(['true', 'false'])
             .default('true')
             .transform((value) => value === 'true'),
+
+        /** PDF generation (src/modules/pdf): concurrent Chromium pages, per-render timeout, Redis cache TTL (0 disables). */
+        PDF_MAX_CONCURRENCY: z.coerce.number().int().min(1).max(16).default(3),
+        PDF_RENDER_TIMEOUT_MS: z.coerce.number().int().min(1000).max(120_000).default(15_000),
+        PDF_CACHE_TTL_SECONDS: z.coerce.number().int().min(0).max(86_400).default(600),
+        /** Use an installed Chrome / Chromium instead of the browser Puppeteer downloads. */
+        PUPPETEER_EXECUTABLE_PATH: z.string().trim().min(1).optional(),
+        /** Launch Chromium with --no-sandbox (needed in most containers that run as root). */
+        PDF_CHROMIUM_NO_SANDBOX: z
+            .enum(['true', 'false'])
+            .default('false')
+            .transform((value) => value === 'true'),
     })
     .superRefine((env, ctx) => {
         if (env.NODE_ENV === 'production' && (!env.JWT_SECRET || env.JWT_SECRET.length < 32)) {
@@ -79,6 +91,13 @@ export const ENV = {
     RATE_LIMIT: {
         LOGIN_MAX: env.LOGIN_RATE_LIMIT_MAX,
         LOGIN_WINDOW_SECONDS: env.LOGIN_RATE_LIMIT_WINDOW_SECONDS,
+    },
+    PDF: {
+        MAX_CONCURRENCY: env.PDF_MAX_CONCURRENCY,
+        RENDER_TIMEOUT_MS: env.PDF_RENDER_TIMEOUT_MS,
+        CACHE_TTL_SECONDS: env.PDF_CACHE_TTL_SECONDS,
+        PUPPETEER_EXECUTABLE_PATH: env.PUPPETEER_EXECUTABLE_PATH,
+        CHROMIUM_NO_SANDBOX: env.PDF_CHROMIUM_NO_SANDBOX,
     },
     COOKIE: {
         NAME: 'token',

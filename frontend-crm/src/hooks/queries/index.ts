@@ -13,3 +13,4 @@ export * from './useMasterData';
 export * from './useGlobalSearch';
 export * from './useAuditLogs';
 export * from './useFormConfigs';
+export * from './usePdfTemplates';

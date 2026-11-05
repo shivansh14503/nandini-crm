@@ -10,6 +10,8 @@ import {
     zodPostalCodeOptional,
     refinePostalCodeForCountry,
     customFieldsSchema,
+    zodGstOptional,
+    GST_REGEX,
 } from './common';
 import { corporateEmailSchema } from './contact.schema';
 
@@ -28,6 +30,7 @@ export const leadFormSchema = z.object({
     addDescription: requiredText('Add Description', L.longText)
         .min(3, { message: 'Add Description must be at least 3 characters.' }),
     registrationType: optionalString,
+    gstNo: zodGstOptional,
     turnover: optionalString,
     assignedTo: requiredString('Assigned Representative'),
 
@@ -65,6 +68,24 @@ export const leadFormSchema = z.object({
 }).superRefine((data, ctx) => {
     refinePostalCodeForCountry(ctx, 'primaryPostalCode', data.primaryPostalCode, data.primaryCountry);
     refinePostalCodeForCountry(ctx, 'otherPostalCode', data.otherPostalCode, data.otherCountry);
+
+    // GSTIN is only collected (and then required) for 'Registered' leads; matches organization.schema.ts.
+    if (data.registrationType === 'Registered') {
+        const gst = data.gstNo?.trim();
+        if (!gst) {
+            ctx.addIssue({
+                code: z.ZodIssueCode.custom,
+                message: 'GST Number is required when Registration Type is Registered.',
+                path: ['gstNo'],
+            });
+        } else if (!GST_REGEX.test(gst.toUpperCase())) {
+            ctx.addIssue({
+                code: z.ZodIssueCode.custom,
+                message: 'Please enter a valid 15-character GSTIN (e.g. 07AAAAA0000A1Z5).',
+                path: ['gstNo'],
+            });
+        }
+    }
 });
 
 export type LeadFormSchemaType = z.infer<typeof leadFormSchema>;

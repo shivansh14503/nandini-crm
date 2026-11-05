@@ -19,6 +19,7 @@ export interface LeadDto {
     followupType: string;
     addDescription: string;
     registrationType: string;
+    gstNo: string;
     turnover: string;
     assignedTo: string;
     otherPhone: string;
@@ -70,6 +71,7 @@ export function toLeadDto(row: LeadRow): LeadDto {
         followupType: text(row.followupType),
         addDescription: row.addDescription,
         registrationType: text(row.registrationType),
+        gstNo: text(row.gstNo),
         turnover: text(row.turnover),
         assignedTo: row.assignedTo,
         otherPhone: text(row.otherPhone),
@@ -140,6 +142,7 @@ export function toLeadData(input: LeadInput): Omit<Prisma.LeadUncheckedCreateInp
         followupType: input.followupType ?? 'Call',
         addDescription: input.addDescription,
         registrationType: nullable(input.registrationType),
+        gstNo: input.registrationType === 'Registered' ? nullable(input.gstNo?.toUpperCase()) : null,
         turnover: nullable(input.turnover),
         assignedTo: input.assignedTo,
         otherPhone: input.otherPhone ?? null,

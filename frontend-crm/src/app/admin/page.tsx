@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { Box, Container, Typography } from '@mui/material';
 import AdminPanelSettingsOutlinedIcon from '@mui/icons-material/AdminPanelSettingsOutlined';
 import TuneOutlinedIcon from '@mui/icons-material/TuneOutlined';
+import PictureAsPdfOutlinedIcon from '@mui/icons-material/PictureAsPdfOutlined';
 import AccountTreeOutlinedIcon from '@mui/icons-material/AccountTreeOutlined';
 import ManageAccountsOutlinedIcon from '@mui/icons-material/ManageAccountsOutlined';
 import SecurityOutlinedIcon from '@mui/icons-material/SecurityOutlined';
@@ -45,6 +46,16 @@ const ADMIN_MODULES: AdminModule[] = [
         href: ROUTES.FORM_CUSTOMIZATION,
         badge: BADGES.available,
         highlights: ['Dropdowns', 'Built-in fields', 'Custom fields', 'Audit trail'],
+    },
+    {
+        key: 'pdf-templates',
+        title: 'PDF Templates',
+        description:
+            'Design the printable layouts used for quotations: page size and margins, which fields and line-item columns appear, company branding, with a live preview against real records.',
+        icon: <PictureAsPdfOutlinedIcon />,
+        href: ROUTES.PDF_TEMPLATES,
+        badge: BADGES.available,
+        highlights: ['Templates', 'Field visibility', 'Live preview', 'Branding'],
     },
     {
         key: 'roles',

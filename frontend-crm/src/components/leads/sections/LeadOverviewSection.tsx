@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { Box, Chip, InputAdornment, TextField } from '@mui/material';
+import { Box, Chip, InputAdornment, TextField, Tooltip } from '@mui/material';
 import LockOutlinedIcon from '@mui/icons-material/LockOutlined';
 import { useFormContext, useWatch } from 'react-hook-form';
 
@@ -11,7 +11,9 @@ import {
     FormGrid,
     FormGridItem,
     SectionLabel,
+    FIELD_MAX_LENGTH,
     RhfTextField,
+    RhfUppercaseField,
     RhfPhoneField,
     RhfSelect,
     RhfLookup,
@@ -44,7 +46,7 @@ const groupLabelSx = { mb: 2 } as const;
 const touch = { shouldDirty: true, shouldValidate: true } as const;
 
 /** Organization-profile fields: filled from a picked organization, blanked whenever the organization is cleared. */
-const ORG_PROFILE_FIELDS = ['registrationType', 'turnover', 'noOfEmployee'] as const;
+const ORG_PROFILE_FIELDS = ['registrationType', 'gstNo', 'turnover', 'noOfEmployee'] as const;
 
 /** Address fields reset when a previously auto-filled organization is cleared. */
 const ORG_ADDRESS_RESET: Partial<Record<keyof LeadFormData, string | boolean>> = {
@@ -105,7 +107,9 @@ export function LeadOverviewSection({ leadId }: { leadId?: string } = {}) {
 
         // Always overwrite (blank when the organization has no / an unmappable value): switching organizations
         // must not leave the previous one's brackets behind.
-        setValue('registrationType', org.registrationType || '', touch);
+        const nextRegType = org.registrationType || '';
+        setValue('registrationType', nextRegType, touch);
+        setValue('gstNo', nextRegType === 'Registered' ? (org.gstNo || org.gstNumber || '').toUpperCase() : '', touch);
         setValue('turnover', mapOrgTurnoverToLead(org.annualTurnover, turnoverOptions) ?? '', touch);
         setValue('noOfEmployee', mapOrgEmployeesToLead(org.numberOfEmployees, employeeOptions) ?? '', touch);
 
@@ -133,6 +137,15 @@ export function LeadOverviewSection({ leadId }: { leadId?: string } = {}) {
         }
         setLinkedOrg(null);
     };
+
+    // GSTIN only applies to 'Registered' leads: clear it whenever another type (or none) is chosen.
+    const registrationType = useWatch({ control, name: 'registrationType' }) ?? '';
+    const isRegistered = registrationType === 'Registered';
+    React.useEffect(() => {
+        if (!isRegistered && getValues('gstNo')) {
+            setValue('gstNo', '', { shouldValidate: true });
+        }
+    }, [isRegistered, getValues, setValue]);
 
     // Mailing name always equals the organization name (read-only below; the API enforces the same).
     // Dirty only when the user changed the name, so loading a legacy lead with a different saved value
@@ -203,6 +216,39 @@ export function LeadOverviewSection({ leadId }: { leadId?: string } = {}) {
                         />
                     </FormField>
                     <RhfSelect<LeadFormData> name="registrationType" label="Registration Type" options={LEAD_REGISTRATION_TYPES} placeholder="Select Type" />
+                    {isRegistered ? (
+                        <RhfUppercaseField<LeadFormData>
+                            name="gstNo"
+                            label="GST Number"
+                            required
+                            disabled={false}
+                            hint="15-character GSTIN"
+                            placeholder="e.g. 06AFZFS3757G1Z9"
+                            maxLength={FIELD_MAX_LENGTH.gstin}
+                        />
+                    ) : (
+                        <Tooltip
+                            title={
+                                registrationType
+                                    ? `GST Number is disabled because Registration Type is '${registrationType}'. Select 'Registered' to enter a GST Number.`
+                                    : "Select 'Registered' in Registration Type to enable GST Number."
+                            }
+                            arrow
+                            placement="top"
+                        >
+                            {/* A span wrapper lets the tooltip fire on hover even though the input is disabled. */}
+                            <Box component="span" sx={{ display: 'block' }}>
+                                <RhfUppercaseField<LeadFormData>
+                                    name="gstNo"
+                                    label="GST Number"
+                                    required={false}
+                                    disabled
+                                    placeholder={registrationType ? `Not applicable (${registrationType})` : "Select 'Registered' to enter GSTIN"}
+                                    maxLength={FIELD_MAX_LENGTH.gstin}
+                                />
+                            </Box>
+                        </Tooltip>
+                    )}
                     <RhfSelect<LeadFormData> name="turnover" label="Turnover" hint="Annual bracket" options={turnoverOptions} placeholder="Select Turnover" />
                     <RhfSelect<LeadFormData> name="noOfEmployee" label="No of Employee" options={employeeOptions} placeholder="Select Employee Bracket" />
                 </FormGrid>

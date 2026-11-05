@@ -27,9 +27,7 @@ import { ConfigDraftActionsContext, ConfigDraftChangesContext, changedIds, useCo
 import { DropdownManagerPanel, categoriesForModule } from './DropdownManagerPanel';
 import { FormFieldsBuilderPanel } from './FormFieldsBuilderPanel';
 import { FormLivePreviewPanel } from './FormLivePreviewPanel';
-
-/** Roles allowed to change forms and dropdowns (mirrors FORM_CONFIG_ADMIN_ROLES on the API). */
-const ADMIN_ROLES = new Set(['admin', 'administrator', 'super admin']);
+import { isAdminRole } from '@/utils/adminRoles';
 
 type BuilderView = 'dropdowns' | 'fields' | 'preview';
 
@@ -73,7 +71,7 @@ function useLeaveGuard(active: boolean) {
  */
 export function FormCustomizationView() {
     const { user } = useAuth();
-    const canEdit = ADMIN_ROLES.has((user?.role ?? '').toLowerCase());
+    const canEdit = isAdminRole(user?.role);
     const { data: savedConfigs, isLoading, error, refetch } = useFormConfigsQuery();
     const { draft: configs, ops, dirty, saving, actions, save, discard } = useConfigDraft(savedConfigs, refetch);
     const changed = useMemo(() => changedIds(ops), [ops]);
