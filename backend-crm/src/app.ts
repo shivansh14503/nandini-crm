@@ -6,7 +6,7 @@ import helmet from 'helmet';
 import { pinoHttp } from 'pino-http';
 import { ENV } from './config/env.js';
 import { logger } from './config/logger.js';
-import { connectDatabase, prisma } from './config/prisma.js';
+import { connectDatabase, prisma, startDatabaseKeepAlive, stopDatabaseKeepAlive } from './config/prisma.js';
 import { connectRedis, isRedisReady, redis } from './config/redis.js';
 import authRouter from './modules/auth/auth.routes.js';
 import productRouter from './modules/products/product.routes.js';
@@ -96,6 +96,7 @@ async function start(): Promise<Server> {
     }
     connectRedis();
     await connectDatabase();
+    startDatabaseKeepAlive();
     // Missing dropdown / form-field defaults are inserted without overwriting admin customizations.
     await seedFormConfigsSafely();
     if (ENV.RUN_WORKERS) startWorkers();
@@ -109,6 +110,7 @@ function registerShutdown(server: Server): void {
         shuttingDown = true;
         logger.info({ signal }, 'Shutting down');
         server.close(async () => {
+            stopDatabaseKeepAlive();
             await stopWorkers();
             await Promise.allSettled([closeQueues(), prisma.$disconnect(), redis.quit()]);
             process.exit(0);

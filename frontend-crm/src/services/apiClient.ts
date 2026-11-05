@@ -81,6 +81,32 @@ function buildUrl(endpoint: string, params?: PaginationParams): string {
     return base.includes('?') ? `${base}&${queryString}` : `${base}?${queryString}`;
 }
 
+/** Long enough to cover the backend reconnecting to a cold database (its own connect timeout is 30s). */
+const REQUEST_TIMEOUT_MS = 30_000;
+const TIMEOUT_MESSAGE = 'The server is taking too long to respond. Please try again in a moment.';
+
+function isTimeoutError(err: unknown): boolean {
+    return err instanceof DOMException && err.name === 'TimeoutError';
+}
+
+/**
+ * Applies the default timeout when the caller passed no signal of its own. A timed-out GET is retried once,
+ * because the first request after a long idle period can be the one that wakes the backend's database.
+ */
+async function fetchWithTimeout(url: string, options: RequestInit): Promise<Response> {
+    const canTimeout = !options.signal && typeof AbortSignal !== 'undefined' && typeof AbortSignal.timeout === 'function';
+    if (!canTimeout) return fetch(url, options);
+
+    const attempts = (options.method ?? 'GET').toUpperCase() === 'GET' ? 2 : 1;
+    for (let attempt = 1; ; attempt++) {
+        try {
+            return await fetch(url, { ...options, signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS) });
+        } catch (err) {
+            if (!isTimeoutError(err) || attempt >= attempts) throw err;
+        }
+    }
+}
+
 async function request<T>(endpoint: string, options: RequestOptions = {}): Promise<T> {
     const { params, ...fetchInit } = options;
     let currentUrl = buildUrl(endpoint, params);
@@ -93,14 +119,7 @@ async function request<T>(endpoint: string, options: RequestOptions = {}): Promi
             currentOptions = next.options;
         }
 
-        if (!currentOptions.signal && typeof AbortSignal !== 'undefined' && typeof AbortSignal.timeout === 'function') {
-            currentOptions = {
-                ...currentOptions,
-                signal: AbortSignal.timeout(10000),
-            };
-        }
-
-        let response = await fetch(currentUrl, currentOptions);
+        let response = await fetchWithTimeout(currentUrl, currentOptions);
 
         for (const interceptor of responseInterceptors) {
             response = await interceptor(response);
@@ -129,7 +148,9 @@ async function request<T>(endpoint: string, options: RequestOptions = {}): Promi
 
         return (await response.json()) as T;
     } catch (err: unknown) {
-        const normalized = normalizeApiError(err);
+        const normalized = isTimeoutError(err)
+            ? new ApiClientError(TIMEOUT_MESSAGE, 408, { message: TIMEOUT_MESSAGE, status: 408 })
+            : normalizeApiError(err);
         for (const onError of errorInterceptors) {
             await onError(normalized);
         }

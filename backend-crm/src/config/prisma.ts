@@ -45,3 +45,25 @@ export async function connectDatabase(): Promise<void> {
         }
     }
 }
+
+let keepAliveTimer: NodeJS.Timeout | undefined;
+
+/**
+ * Runs `SELECT 1` on an interval so the pool never sits idle overnight. Without it the first request of the
+ * day waits for dead sockets to be replaced (and for Azure SQL Serverless to resume from auto-pause), which
+ * outlasts the frontend's request timeout and surfaces as "signal timed out" on the login page.
+ */
+export function startDatabaseKeepAlive(intervalMs = ENV.DB_KEEPALIVE_INTERVAL_MS): void {
+    if (intervalMs <= 0 || keepAliveTimer) return;
+    keepAliveTimer = setInterval(() => {
+        prisma.$queryRaw`SELECT 1`.catch((err: Error) =>
+            logger.warn({ err: err.message }, 'Database keep-alive ping failed; the pool will reconnect on next use')
+        );
+    }, intervalMs);
+    keepAliveTimer.unref();
+}
+
+export function stopDatabaseKeepAlive(): void {
+    if (keepAliveTimer) clearInterval(keepAliveTimer);
+    keepAliveTimer = undefined;
+}

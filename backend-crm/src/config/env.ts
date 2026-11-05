@@ -18,6 +18,8 @@ const envSchema = z
 
         DATABASE_URL: z.string({ error: 'DATABASE_URL (or DB_SERVER + DB_* variables) is required.' }).min(1),
         REDIS_URL: z.string().min(1).default('redis://localhost:6379'),
+        /** Ping the database this often so pooled connections (and Azure SQL Serverless) never go cold. 0 disables. */
+        DB_KEEPALIVE_INTERVAL_MS: z.coerce.number().int().min(0).default(0),
 
         LOGIN_RATE_LIMIT_MAX: z.coerce.number().int().positive().default(10),
         LOGIN_RATE_LIMIT_WINDOW_SECONDS: z.coerce.number().int().positive().default(15 * 60),
@@ -70,6 +72,7 @@ export const ENV = {
     USING_DEV_JWT_SECRET: !env.JWT_SECRET,
     SESSION_TTL_SECONDS: env.SESSION_TTL_SECONDS,
     DATABASE_URL: env.DATABASE_URL,
+    DB_KEEPALIVE_INTERVAL_MS: env.DB_KEEPALIVE_INTERVAL_MS,
     REDIS_URL: env.REDIS_URL,
     BUSINESS_TIMEZONE: env.BUSINESS_TIMEZONE,
     RUN_WORKERS: env.RUN_WORKERS,
