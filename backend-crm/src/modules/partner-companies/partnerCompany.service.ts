@@ -8,6 +8,7 @@ import { HttpError } from '../../utils/httpError.js';
 import { daysAgo, nullable } from '../../utils/mappers.js';
 import { parsePagination } from '../../utils/pagination.js';
 import { normalizeEmails } from '../shared/entityEmails.js';
+import { asPayload, checkModulePayload, loadModuleFieldConfig, validateModulePayload } from '../form-configs/customFieldValidator.js';
 import { acquireLocks, lockRecords, runInTransaction, softDeleteData, type BulkDeleteResult } from '../shared/transactions.js';
 import { toPartnerCompanyData, toPartnerCompanyDto, type PartnerCompanyDto } from './partnerCompany.mapper.js';
 import {
@@ -104,6 +105,7 @@ export const partnerCompanyService = {
 
     async create(body: unknown, user: AuthUser): Promise<PartnerCompanyDto> {
         const input = partnerCompanyInputSchema.parse(body);
+        input.customFields = await validateModulePayload('partner-companies', asPayload(body), input.customFields);
 
         const created = await runInTransaction((tx) => createPartnerCompanyRecord(tx, input, user));
         await invalidatePartnerCaches();
@@ -111,6 +113,7 @@ export const partnerCompanyService = {
     },
 
     async update(id: string, patch: Record<string, unknown>, user: AuthUser): Promise<PartnerCompanyDto> {
+        const fieldConfig = await loadModuleFieldConfig('partner-companies');
         const updated = await runInTransaction(async (tx) => {
             await lockRecords(tx, 'partnerCompany', [id]);
             const existing = await tx.partnerCompany.findFirst({ where: { id, isDeleted: false } });
@@ -121,6 +124,10 @@ export const partnerCompanyService = {
             // `officePhone` is a read alias; a patch that only sends it still means the phone.
             if ('officePhone' in patch && !('phone' in patch)) merged.phone = patch.officePhone;
             const input = partnerCompanyInputSchema.parse(merged);
+            input.customFields = checkModulePayload(fieldConfig, merged, input.customFields, {
+                submittedKeys: new Set(Object.keys(patch)),
+                previousCustomFields: before.customFields,
+            });
 
             // Strict comparison: a case-only rename is re-checked too (excluding this record).
             if (input.companyName !== existing.companyName) await assertUniqueName(tx, input.companyName, id);

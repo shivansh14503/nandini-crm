@@ -8,8 +8,11 @@ import { generateEntityCode } from '../../utils/codeGenerator.js';
 import { HttpError } from '../../utils/httpError.js';
 import { daysAgo, fromDateOnly } from '../../utils/mappers.js';
 import { parsePagination } from '../../utils/pagination.js';
-import { normalizePhone } from '../../validators/common.js';
+import { asPayload, checkModulePayload, loadModuleFieldConfig, validateModulePayload } from '../form-configs/customFieldValidator.js';
+import { assertAssigneeValid, assertRecordAccess, buildAccessScopeWhere } from '../shared/accessControl.js';
 import { emailsInclude, normalizeEmails, replaceEmails } from '../shared/entityEmails.js';
+import type { PrefetchedLookups } from '../shared/prefetch.js';
+import { codeSearchPrefix, phoneSearch, phoneVariants, phoneWhere } from '../shared/searchTerms.js';
 import { lockRecords, runInTransaction, softDeleteData, type BulkDeleteResult } from '../shared/transactions.js';
 import { toLeadData, toLeadDto, type LeadDto } from './lead.mapper.js';
 import {
@@ -24,6 +27,8 @@ import {
 export const leadInclude = { emailAddresses: emailsInclude } as const;
 
 export const leadNotFound = () => HttpError.notFound('Lead not found');
+/** Columns `assertRecordAccess` reads. */
+const OWNER_SELECT = { assignedTo: true, createdBy: true } as const;
 
 export interface LeadMobileMatch {
     exists: boolean;
@@ -44,19 +49,6 @@ export interface LeadDuplicateCheck {
 }
 
 const MIN_MOBILE_DIGITS = 7;
-
-/**
- * Stored forms a number may have: the E.164 value new records get (`+919811234567`) plus the bare digits and
- * the 10-digit national number legacy / imported rows may still hold.
- */
-function phoneVariants(raw: string): string[] {
-    const normalized = normalizePhone(raw);
-    const e164 = typeof normalized === 'string' ? normalized : raw.trim();
-    const digits = e164.replace(/\D/g, '');
-    const variants = new Set([e164, digits, `+${digits}`]);
-    if (digits.length > 10) variants.add(digits.slice(-10));
-    return [...variants].filter(Boolean);
-}
 
 /** `Converted` is only ever set by POST /api/leads/:id/convert, and a converted lead stays converted. */
 export function assertStatusTransition(fromStatus: string | null, toStatus: string): void {
@@ -79,9 +71,10 @@ async function loadLead(tx: TransactionClient | typeof prisma, id: string) {
 }
 
 /** Inserts a lead inside the caller's transaction (used by `create`, import and the seed). */
-export async function createLeadRecord(tx: TransactionClient, input: LeadInput, user: AuthUser): Promise<LeadDto> {
+export async function createLeadRecord(tx: TransactionClient, input: LeadInput, user: AuthUser, lookups: PrefetchedLookups = {}): Promise<LeadDto> {
     const leadCode = await generateEntityCode(tx, 'LD');
-    const row = await tx.lead.create({ data: { ...toLeadData(input), leadCode, createdBy: user.username } });
+    const assignedTo = (await assertAssigneeValid(tx, input.assignedTo, { activeUsernames: lookups.activeUsernames })) ?? user.username;
+    const row = await tx.lead.create({ data: { ...toLeadData({ ...input, assignedTo }), leadCode, createdBy: user.username } });
     await replaceEmails(tx, { leadId: row.id }, normalizeEmails(input.emailAddresses));
 
     const dto = toLeadDto(await loadLead(tx, row.id));
@@ -94,7 +87,7 @@ export const leadService = {
         const page = parsePagination(query, LEAD_SORT_FIELDS);
         const filters = leadListQuerySchema.parse(query ?? {});
 
-        const where: Prisma.LeadWhereInput = { isDeleted: false };
+        const where: Prisma.LeadWhereInput = { isDeleted: false, AND: [buildAccessScopeWhere(user, 'assignedTo')] };
         const statusFilter: Prisma.StringFilter = {};
         if (filters.status?.length) statusFilter.in = filters.status;
         if (filters.excludeStatus?.length) statusFilter.notIn = filters.excludeStatus;
@@ -107,7 +100,11 @@ export const leadService = {
         if (filters.nextFollowupDate) where.nextFollowupDate = fromDateOnly(filters.nextFollowupDate);
         if (filters.createdWithinDays) where.createdAt = { gte: daysAgo(filters.createdWithinDays) };
         if (page.search) {
-            where.OR = [
+            const code = codeSearchPrefix(page.search, 'LD');
+            const phone = code ? null : phoneSearch(page.search);
+            if (code) where.OR = [{ leadCode: { startsWith: code } }];
+            else if (phone) where.OR = phoneWhere(phone, ['mobile', 'otherPhone'] as const);
+            else where.OR = [
                 { leadCode: { contains: page.search } },
                 { name: { contains: page.search } },
                 { mobile: { contains: page.search } },
@@ -124,12 +121,15 @@ export const leadService = {
         return { data: rows.map(toLeadDto), total, page: page.page, limit: page.limit };
     },
 
-    async getById(id: string): Promise<LeadDto> {
-        return toLeadDto(await loadLead(prisma, id));
+    async getById(id: string, user: AuthUser): Promise<LeadDto> {
+        const row = await loadLead(prisma, id);
+        assertRecordAccess(user, row);
+        return toLeadDto(row);
     },
 
     async create(body: unknown, user: AuthUser): Promise<LeadDto> {
         const input = leadInputSchema.parse(body);
+        input.customFields = await validateModulePayload('leads', asPayload(body), input.customFields);
         assertStatusTransition(null, input.status);
 
         const created = await runInTransaction((tx) => createLeadRecord(tx, input, user));
@@ -138,14 +138,22 @@ export const leadService = {
     },
 
     async update(id: string, patch: Record<string, unknown>, user: AuthUser): Promise<LeadDto> {
+        const fieldConfig = await loadModuleFieldConfig('leads');
         const updated = await runInTransaction(async (tx) => {
             await lockRecords(tx, 'lead', [id]);
             const existing = await loadLead(tx, id);
+            assertRecordAccess(user, existing);
             const before = toLeadDto(existing);
-            const input = leadInputSchema.parse({ ...before, ...patch });
+            const merged: Record<string, unknown> = { ...before, ...patch };
+            const input = leadInputSchema.parse(merged);
+            input.customFields = checkModulePayload(fieldConfig, merged, input.customFields, {
+                submittedKeys: new Set(Object.keys(patch)),
+                previousCustomFields: before.customFields,
+            });
             assertStatusTransition(existing.status, input.status);
+            const assignedTo = (await assertAssigneeValid(tx, input.assignedTo, { previous: existing.assignedTo })) ?? existing.assignedTo;
 
-            await tx.lead.update({ where: { id }, data: { ...toLeadData(input), updatedBy: user.username } });
+            await tx.lead.update({ where: { id }, data: { ...toLeadData({ ...input, assignedTo }), updatedBy: user.username } });
             if ('emailAddresses' in patch) {
                 await replaceEmails(tx, { leadId: id }, normalizeEmails(input.emailAddresses));
             }
@@ -165,8 +173,10 @@ export const leadService = {
     async remove(id: string, user: AuthUser): Promise<void> {
         await runInTransaction(async (tx) => {
             await lockRecords(tx, 'lead', [id]);
-            const result = await tx.lead.updateMany({ where: { id, isDeleted: false }, data: softDeleteData(user) });
-            if (result.count === 0) throw leadNotFound();
+            const existing = await tx.lead.findFirst({ where: { id, isDeleted: false }, select: OWNER_SELECT });
+            if (!existing) throw leadNotFound();
+            assertRecordAccess(user, existing);
+            await tx.lead.update({ where: { id }, data: softDeleteData(user) });
             await auditService.record(tx, { entityType: 'Lead', entityId: id, action: 'DELETE', changedBy: user.username });
         });
         await cacheService.invalidateEntityCaches('leads');
@@ -175,7 +185,8 @@ export const leadService = {
     async bulkRemove(ids: string[], user: AuthUser): Promise<BulkDeleteResult> {
         const result = await runInTransaction(async (tx) => {
             await lockRecords(tx, 'lead', ids);
-            const live = await tx.lead.findMany({ where: { id: { in: ids }, isDeleted: false }, select: { id: true } });
+            const live = await tx.lead.findMany({ where: { id: { in: ids }, isDeleted: false }, select: { id: true, ...OWNER_SELECT } });
+            for (const row of live) assertRecordAccess(user, row);
             const liveIds = live.map((row) => row.id);
             if (liveIds.length > 0) {
                 await tx.lead.updateMany({ where: { id: { in: liveIds } }, data: softDeleteData(user) });

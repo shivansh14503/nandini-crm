@@ -10,7 +10,10 @@ import { daysAgo } from '../../utils/mappers.js';
 import { parsePagination } from '../../utils/pagination.js';
 import { CLOSED_SALES_STAGES, QUOTE_SALES_STAGE } from '../opportunities/opportunity.validator.js';
 import { assertTotalsMatch, calculateLineItems, lineItemsInclude, resolveProductIds, toLineItemData } from '../shared/lineItems.js';
+import { asPayload, checkModulePayload, loadModuleFieldConfig, validateModulePayload } from '../form-configs/customFieldValidator.js';
+import { assertAssigneeValid, assertRecordAccess, buildAccessScopeWhere } from '../shared/accessControl.js';
 import { assertReference } from '../shared/references.js';
+import { codeSearchPrefix } from '../shared/searchTerms.js';
 import { lockRecords, runInTransaction, softDeleteData, type BulkDeleteResult } from '../shared/transactions.js';
 import { toQuotationData, toQuotationDto, type QuotationDto, type QuotationLinks } from './quotation.mapper.js';
 import {
@@ -22,6 +25,9 @@ import {
 } from './quotation.validator.js';
 
 const include = { lineItems: lineItemsInclude, opportunity: { select: { opportunityCode: true } } } as const;
+
+/** Columns `assertRecordAccess` reads. */
+const OWNER_SELECT = { assignedTo: true, createdBy: true } as const;
 
 const notFound = () => HttpError.notFound('Quotation not found');
 
@@ -103,9 +109,10 @@ export async function createQuotationRecord(
     // Code first: its counter row lock queues concurrent creates before they take any other lock.
     const quotationCode = await generateEntityCode(tx, 'QT');
     const computed = calculateLineItems(input.lineItems, input.lumpSumDiscount);
+    const assignedTo = (await assertAssigneeValid(tx, input.assignedTo)) ?? user.username;
     const links = await resolveLinks(tx, input);
     const row = await tx.quotation.create({
-        data: { ...toQuotationData(input, links, computed.totals), quotationCode, createdBy: user.username },
+        data: { ...toQuotationData({ ...input, assignedTo }, links, computed.totals), quotationCode, createdBy: user.username },
     });
     await replaceLineItems(tx, row.id, input, computed);
     const opportunityAdvanced = links.opportunityId ? await advanceOpportunityStage(tx, links.opportunityId, user) : false;
@@ -120,7 +127,7 @@ export const quotationService = {
         const page = parsePagination(query, QUOTATION_SORT_FIELDS);
         const filters = quotationListQuerySchema.parse(query ?? {});
 
-        const where: Prisma.QuotationWhereInput = { isDeleted: false };
+        const where: Prisma.QuotationWhereInput = { isDeleted: false, AND: [buildAccessScopeWhere(user, 'assignedTo')] };
         if (filters.status?.length) where.status = { in: filters.status };
         if (filters.quoteStage?.length) where.quoteStage = { in: filters.quoteStage };
         if (filters.opportunityId) where.opportunityId = filters.opportunityId;
@@ -131,7 +138,9 @@ export const quotationService = {
         if (filters.mine) where.assignedTo = user.username;
         if (filters.createdWithinDays) where.createdAt = { gte: daysAgo(filters.createdWithinDays) };
         if (page.search) {
-            where.OR = [
+            const code = codeSearchPrefix(page.search, 'QT');
+            if (code) where.OR = [{ quotationCode: { startsWith: code } }];
+            else where.OR = [
                 { quotationCode: { contains: page.search } },
                 { quotationTitle: { contains: page.search } },
                 { organizationName: { contains: page.search } },
@@ -147,14 +156,16 @@ export const quotationService = {
         return { data: rows.map(toQuotationDto), total, page: page.page, limit: page.limit };
     },
 
-    async getById(id: string): Promise<QuotationDto> {
+    async getById(id: string, user: AuthUser): Promise<QuotationDto> {
         const row = await prisma.quotation.findFirst({ where: { id, isDeleted: false }, include });
         if (!row) throw notFound();
+        assertRecordAccess(user, row);
         return toQuotationDto(row);
     },
 
     async create(body: unknown, user: AuthUser): Promise<QuotationDto> {
         const input = quotationInputSchema.parse(body);
+        input.customFields = await validateModulePayload('quotations', asPayload(body), input.customFields);
         assertTotalsMatch(asRecord(body), calculateLineItems(input.lineItems, input.lumpSumDiscount).totals);
 
         const { quotation, opportunityAdvanced } = await runInTransaction((tx) => createQuotationRecord(tx, input, user));
@@ -167,18 +178,29 @@ export const quotationService = {
 
     /** Partial update; totals sent in the patch must match the (possibly new) line items. */
     async update(id: string, patch: Record<string, unknown>, user: AuthUser): Promise<QuotationDto> {
+        const fieldConfig = await loadModuleFieldConfig('quotations');
         const updated = await runInTransaction(async (tx) => {
             await lockRecords(tx, 'quotation', [id]);
             const existing = await tx.quotation.findFirst({ where: { id, isDeleted: false }, include });
             if (!existing) throw notFound();
+            assertRecordAccess(user, existing);
 
             const before = toQuotationDto(existing);
-            const input = quotationInputSchema.parse(mergePatch(before, patch));
+            const merged: Record<string, unknown> = mergePatch(before, patch);
+            const input = quotationInputSchema.parse(merged);
+            input.customFields = checkModulePayload(fieldConfig, merged, input.customFields, {
+                submittedKeys: new Set(Object.keys(patch)),
+                previousCustomFields: before.customFields,
+            });
             const computed = calculateLineItems(input.lineItems, input.lumpSumDiscount);
             assertTotalsMatch(patch, computed.totals);
 
             const links = await resolveLinks(tx, input, existing);
-            await tx.quotation.update({ where: { id }, data: { ...toQuotationData(input, links, computed.totals), updatedBy: user.username } });
+            const assignedTo = (await assertAssigneeValid(tx, input.assignedTo, { previous: existing.assignedTo })) ?? existing.assignedTo;
+            await tx.quotation.update({
+                where: { id },
+                data: { ...toQuotationData({ ...input, assignedTo }, links, computed.totals), updatedBy: user.username },
+            });
             if ('lineItems' in patch) await replaceLineItems(tx, id, input, computed);
 
             const after = toQuotationDto(await tx.quotation.findUniqueOrThrow({ where: { id }, include }));
@@ -196,8 +218,10 @@ export const quotationService = {
     async remove(id: string, user: AuthUser): Promise<void> {
         await runInTransaction(async (tx) => {
             await lockRecords(tx, 'quotation', [id]);
-            const result = await tx.quotation.updateMany({ where: { id, isDeleted: false }, data: softDeleteData(user) });
-            if (result.count === 0) throw notFound();
+            const existing = await tx.quotation.findFirst({ where: { id, isDeleted: false }, select: OWNER_SELECT });
+            if (!existing) throw notFound();
+            assertRecordAccess(user, existing);
+            await tx.quotation.update({ where: { id }, data: softDeleteData(user) });
             await auditService.record(tx, { entityType: 'Quotation', entityId: id, action: 'DELETE', changedBy: user.username });
         });
         await cacheService.invalidateEntityCaches('quotations');
@@ -206,7 +230,8 @@ export const quotationService = {
     async bulkRemove(ids: string[], user: AuthUser): Promise<BulkDeleteResult> {
         const result = await runInTransaction(async (tx) => {
             await lockRecords(tx, 'quotation', ids);
-            const live = await tx.quotation.findMany({ where: { id: { in: ids }, isDeleted: false }, select: { id: true } });
+            const live = await tx.quotation.findMany({ where: { id: { in: ids }, isDeleted: false }, select: { id: true, ...OWNER_SELECT } });
+            for (const row of live) assertRecordAccess(user, row);
             const liveIds = live.map((row) => row.id);
             if (liveIds.length > 0) {
                 await tx.quotation.updateMany({ where: { id: { in: liveIds } }, data: softDeleteData(user) });

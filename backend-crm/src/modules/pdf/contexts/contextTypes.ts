@@ -1,4 +1,5 @@
 import type { AuditEntityType } from '../../../services/audit.service.js';
+import type { AuthUser } from '../../../types/user.types.js';
 import type { CustomFieldMeta } from '../fieldRegistry.js';
 import type { Branding, FieldVisibility, PdfContext, PdfFieldRegistry } from '../pdf.types.js';
 
@@ -27,8 +28,8 @@ export interface RecordMeta {
 export interface PdfModuleAdapter {
     /** Audit entity the PDF_GENERATED event is recorded on (shows in the record's Changes timeline). */
     auditEntityType: AuditEntityType;
-    /** 404 when the record is missing or soft-deleted. */
-    loadRecordMeta(recordId: string): Promise<RecordMeta>;
+    /** 404 when the record is missing or soft-deleted; 403 when `user` may not access it (row-level access). */
+    loadRecordMeta(recordId: string, user: AuthUser): Promise<RecordMeta>;
     buildContext(recordId: string, input: ContextBuildInput): Promise<PdfContext>;
     buildSampleContext(input: ContextBuildInput): PdfContext;
 }

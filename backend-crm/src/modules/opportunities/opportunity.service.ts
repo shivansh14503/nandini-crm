@@ -9,7 +9,11 @@ import { HttpError } from '../../utils/httpError.js';
 import { daysAgo, fromDateOnly } from '../../utils/mappers.js';
 import { parsePagination } from '../../utils/pagination.js';
 import { calculateLineItems, lineItemsInclude, resolveProductIds, toLineItemData } from '../shared/lineItems.js';
+import { asPayload, checkModulePayload, loadModuleFieldConfig, validateModulePayload } from '../form-configs/customFieldValidator.js';
+import { assertAssigneeValid, assertRecordAccess, buildAccessScopeWhere } from '../shared/accessControl.js';
+import { findOrganizationByName, type PrefetchedLookups } from '../shared/prefetch.js';
 import { assertReference } from '../shared/references.js';
+import { codeSearchPrefix, phoneSearch, phoneWhere } from '../shared/searchTerms.js';
 import { lockRecords, runInTransaction, softDeleteData, type BulkDeleteResult } from '../shared/transactions.js';
 import { toOpportunityData, toOpportunityDto, type OpportunityDto } from './opportunity.mapper.js';
 import {
@@ -20,6 +24,9 @@ import {
 } from './opportunity.validator.js';
 
 const include = { lineItems: lineItemsInclude } as const;
+
+/** Columns `assertRecordAccess` reads. */
+const OWNER_SELECT = { assignedTo: true, createdBy: true } as const;
 
 const notFound = () => HttpError.notFound('Opportunity not found');
 
@@ -37,6 +44,7 @@ async function resolveLinks(
     tx: TransactionClient,
     input: OpportunityInput,
     previous?: { organizationId: string | null; contactId: string | null },
+    lookups?: PrefetchedLookups,
 ): Promise<{ organization: Link; contact: Link }> {
     const orgSelect = { id: true, organizationName: true, isDeleted: true } as const;
     let organization: Link;
@@ -45,7 +53,7 @@ async function resolveLinks(
         assertReference(org, input.organizationId, previous?.organizationId, 'organization', 'organizationName');
         organization = { id: org.id, name: org.organizationName };
     } else {
-        const org = await tx.organization.findFirst({ where: { organizationName: input.organizationName, isDeleted: false }, select: orgSelect });
+        const org = await findOrganizationByName(tx, input.organizationName, lookups);
         organization = org ? { id: org.id, name: org.organizationName } : { id: null, name: input.organizationName };
     }
 
@@ -82,14 +90,20 @@ async function replaceLineItems(tx: TransactionClient, opportunityId: string, in
  * Inserts an opportunity with its line items (totals computed server-side) inside the caller's
  * transaction. Used by `create` and by lead conversion; cache invalidation is the caller's job.
  */
-export async function createOpportunityRecord(tx: TransactionClient, input: OpportunityInput, user: AuthUser): Promise<OpportunityDto> {
+export async function createOpportunityRecord(
+    tx: TransactionClient,
+    input: OpportunityInput,
+    user: AuthUser,
+    lookups: PrefetchedLookups = {},
+): Promise<OpportunityDto> {
     // Code first: its counter row lock queues concurrent creates before they take any other lock.
     const opportunityCode = await generateEntityCode(tx, 'OPP');
-    const links = await resolveLinks(tx, input);
+    const assignedTo = (await assertAssigneeValid(tx, input.assignedTo, { activeUsernames: lookups.activeUsernames })) ?? user.username;
+    const links = await resolveLinks(tx, input, undefined, lookups);
     const computed = calculateLineItems(input.lineItems, input.lumpSumDiscount);
 
     const row = await tx.opportunity.create({
-        data: { ...toOpportunityData(input, links, computed.totals), opportunityCode, createdBy: user.username },
+        data: { ...toOpportunityData({ ...input, assignedTo }, links, computed.totals), opportunityCode, createdBy: user.username },
     });
     await replaceLineItems(tx, row.id, input, computed);
 
@@ -103,7 +117,7 @@ export const opportunityService = {
         const page = parsePagination(query, OPPORTUNITY_SORT_FIELDS);
         const filters = opportunityListQuerySchema.parse(query ?? {});
 
-        const where: Prisma.OpportunityWhereInput = { isDeleted: false };
+        const where: Prisma.OpportunityWhereInput = { isDeleted: false, AND: [buildAccessScopeWhere(user, 'assignedTo')] };
         const stageFilter: Prisma.StringFilter = {};
         if (filters.salesStage?.length) stageFilter.in = filters.salesStage;
         if (filters.excludeSalesStage?.length) stageFilter.notIn = filters.excludeSalesStage;
@@ -117,7 +131,11 @@ export const opportunityService = {
         if (filters.nextFollowupDate) where.nextFollowupDate = fromDateOnly(filters.nextFollowupDate);
         if (filters.createdWithinDays) where.createdAt = { gte: daysAgo(filters.createdWithinDays) };
         if (page.search) {
-            where.OR = [
+            const code = codeSearchPrefix(page.search, 'OPP');
+            const phone = code ? null : phoneSearch(page.search);
+            if (code) where.OR = [{ opportunityCode: { startsWith: code } }];
+            else if (phone) where.OR = phoneWhere(phone, ['contactNumber'] as const);
+            else where.OR = [
                 { opportunityCode: { contains: page.search } },
                 { opportunityName: { contains: page.search } },
                 { organizationName: { contains: page.search } },
@@ -135,24 +153,28 @@ export const opportunityService = {
         return { data: rows.map(toOpportunityDto), total, page: page.page, limit: page.limit };
     },
 
-    async getById(id: string): Promise<OpportunityDto> {
+    async getById(id: string, user: AuthUser): Promise<OpportunityDto> {
         const row = await prisma.opportunity.findFirst({ where: { id, isDeleted: false }, include });
         if (!row) throw notFound();
+        assertRecordAccess(user, row);
         return toOpportunityDto(row);
     },
 
     async create(body: unknown, user: AuthUser): Promise<OpportunityDto> {
         const input = opportunityInputSchema.parse(body);
+        input.customFields = await validateModulePayload('opportunities', asPayload(body), input.customFields);
         const created = await runInTransaction((tx) => createOpportunityRecord(tx, input, user));
         await cacheService.invalidateEntityCaches('opportunities');
         return created;
     },
 
     async update(id: string, patch: Record<string, unknown>, user: AuthUser): Promise<OpportunityDto> {
+        const fieldConfig = await loadModuleFieldConfig('opportunities');
         const updated = await runInTransaction(async (tx) => {
             await lockRecords(tx, 'opportunity', [id]);
             const existing = await tx.opportunity.findFirst({ where: { id, isDeleted: false }, include });
             if (!existing) throw notFound();
+            assertRecordAccess(user, existing);
 
             const before = toOpportunityDto(existing);
             const merged: Record<string, unknown> = { ...before, ...patch };
@@ -160,12 +182,17 @@ export const opportunityService = {
             if ('organizationName' in patch && !('organizationId' in patch)) delete merged.organizationId;
             if ('contactName' in patch && !('contactId' in patch)) delete merged.contactId;
             const input = opportunityInputSchema.parse(merged);
+            input.customFields = checkModulePayload(fieldConfig, merged, input.customFields, {
+                submittedKeys: new Set(Object.keys(patch)),
+                previousCustomFields: before.customFields,
+            });
 
             const links = await resolveLinks(tx, input, existing);
+            const assignedTo = (await assertAssigneeValid(tx, input.assignedTo, { previous: existing.assignedTo })) ?? existing.assignedTo;
             const computed = calculateLineItems(input.lineItems, input.lumpSumDiscount);
             await tx.opportunity.update({
                 where: { id },
-                data: { ...toOpportunityData(input, links, computed.totals), updatedBy: user.username },
+                data: { ...toOpportunityData({ ...input, assignedTo }, links, computed.totals), updatedBy: user.username },
             });
             if ('lineItems' in patch) await replaceLineItems(tx, id, input, computed);
 
@@ -184,8 +211,10 @@ export const opportunityService = {
     async remove(id: string, user: AuthUser): Promise<void> {
         await runInTransaction(async (tx) => {
             await lockRecords(tx, 'opportunity', [id]);
-            const result = await tx.opportunity.updateMany({ where: { id, isDeleted: false }, data: softDeleteData(user) });
-            if (result.count === 0) throw notFound();
+            const existing = await tx.opportunity.findFirst({ where: { id, isDeleted: false }, select: OWNER_SELECT });
+            if (!existing) throw notFound();
+            assertRecordAccess(user, existing);
+            await tx.opportunity.update({ where: { id }, data: softDeleteData(user) });
             await auditService.record(tx, { entityType: 'Opportunity', entityId: id, action: 'DELETE', changedBy: user.username });
         });
         await cacheService.invalidateEntityCaches('opportunities');
@@ -194,7 +223,8 @@ export const opportunityService = {
     async bulkRemove(ids: string[], user: AuthUser): Promise<BulkDeleteResult> {
         const result = await runInTransaction(async (tx) => {
             await lockRecords(tx, 'opportunity', ids);
-            const live = await tx.opportunity.findMany({ where: { id: { in: ids }, isDeleted: false }, select: { id: true } });
+            const live = await tx.opportunity.findMany({ where: { id: { in: ids }, isDeleted: false }, select: { id: true, ...OWNER_SELECT } });
+            for (const row of live) assertRecordAccess(user, row);
             const liveIds = live.map((row) => row.id);
             if (liveIds.length > 0) {
                 await tx.opportunity.updateMany({ where: { id: { in: liveIds } }, data: softDeleteData(user) });

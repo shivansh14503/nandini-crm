@@ -1,6 +1,8 @@
 import { prisma } from '../../../config/prisma.js';
 import { HttpError } from '../../../utils/httpError.js';
 import { decimalToNumber, parseCustomFields, text } from '../../../utils/mappers.js';
+import type { AuthUser } from '../../../types/user.types.js';
+import { assertRecordAccess } from '../../shared/accessControl.js';
 import { lineItemsInclude } from '../../shared/lineItems.js';
 import type { CustomFieldMeta } from '../fieldRegistry.js';
 import { flattenVisibility, visibleColumns } from '../fieldVisibility.js';
@@ -187,12 +189,22 @@ function fileBaseName(code: string, organizationName: string | null, contactName
     return who ? `${safeCode}_${who}` : safeCode;
 }
 
-async function loadRecordMeta(recordId: string): Promise<RecordMeta> {
+async function loadRecordMeta(recordId: string, user: AuthUser): Promise<RecordMeta> {
     const row = await prisma.quotation.findFirst({
         where: { id: recordId, isDeleted: false },
-        select: { id: true, quotationCode: true, quotationTitle: true, organizationName: true, contactName: true, updatedAt: true },
+        select: {
+            id: true,
+            quotationCode: true,
+            quotationTitle: true,
+            organizationName: true,
+            contactName: true,
+            updatedAt: true,
+            assignedTo: true,
+            createdBy: true,
+        },
     });
     if (!row) throw notFound();
+    assertRecordAccess(user, row);
     return {
         id: row.id,
         updatedAt: row.updatedAt,

@@ -9,9 +9,16 @@ import { generateEntityCode } from '../../utils/codeGenerator.js';
 import { HttpError } from '../../utils/httpError.js';
 import { daysAgo, wallClockNow } from '../../utils/mappers.js';
 import { parsePagination } from '../../utils/pagination.js';
+import { asPayload, checkModulePayload, loadModuleFieldConfig, validateModulePayload } from '../form-configs/customFieldValidator.js';
+import { assertAssigneeValid, assertRecordAccess, buildAccessScopeWhere } from '../shared/accessControl.js';
+import { findOrganizationByName, type PrefetchedLookups } from '../shared/prefetch.js';
+import { codeSearchPrefix, phoneSearch, phoneWhere } from '../shared/searchTerms.js';
 import { lockRecords, runInTransaction, softDeleteData, type BulkDeleteResult } from '../shared/transactions.js';
 import { toTicketData, toTicketDto, type TicketDto } from './ticket.mapper.js';
 import { TICKET_CLOSED_STATUSES, TICKET_SORT_FIELDS, ticketInputSchema, ticketListQuerySchema, type TicketInput } from './ticket.validator.js';
+
+/** Columns `assertRecordAccess` reads. */
+const OWNER_SELECT = { assignedTo: true, createdBy: true } as const;
 
 const notFound = () => HttpError.notFound('Ticket not found');
 
@@ -49,11 +56,12 @@ export async function resolveImportNatureOfCall(tx: TransactionClient, name: str
 }
 
 /** The ticket form has no ids, so the organization and contact are linked by name when a live match exists. */
-async function resolveLinks(tx: TransactionClient, input: TicketInput): Promise<{ organizationId: string | null; contactId: string | null }> {
-    const organization = await tx.organization.findFirst({
-        where: { organizationName: input.organizationName, isDeleted: false },
-        select: { id: true },
-    });
+async function resolveLinks(
+    tx: TransactionClient,
+    input: TicketInput,
+    lookups?: PrefetchedLookups,
+): Promise<{ organizationId: string | null; contactId: string | null }> {
+    const organization = await findOrganizationByName(tx, input.organizationName, lookups);
     const contact = organization
         ? await tx.contact.findFirst({
               where: { name: input.contactPersonName, organizationId: organization.id, isDeleted: false },
@@ -64,13 +72,14 @@ async function resolveLinks(tx: TransactionClient, input: TicketInput): Promise<
 }
 
 /** Inserts a ticket inside the caller's transaction (used by `create` and the seed). */
-export async function createTicketRecord(tx: TransactionClient, input: TicketInput, user: AuthUser): Promise<TicketDto> {
+export async function createTicketRecord(tx: TransactionClient, input: TicketInput, user: AuthUser, lookups: PrefetchedLookups = {}): Promise<TicketDto> {
     // Code first: its counter row lock queues concurrent creates before they take any other lock.
     const ticketNumber = await generateEntityCode(tx, 'TKT');
     const natureOfCall = await resolveNatureOfCall(tx, input.natureOfCall);
-    const links = await resolveLinks(tx, input);
+    const assignedTo = (await assertAssigneeValid(tx, input.assignedTo, { activeUsernames: lookups.activeUsernames })) ?? user.username;
+    const links = await resolveLinks(tx, input, lookups);
     const row = await tx.ticket.create({
-        data: { ...toTicketData(input, { natureOfCall, ...links }), ticketNumber, createdBy: user.username },
+        data: { ...toTicketData({ ...input, assignedTo }, { natureOfCall, ...links }), ticketNumber, createdBy: user.username },
     });
     const dto = toTicketDto(row);
     await auditService.record(tx, { entityType: 'Ticket', entityId: row.id, action: 'CREATE', changedBy: user.username, changes: dto });
@@ -82,7 +91,7 @@ export const ticketService = {
         const page = parsePagination(query, TICKET_SORT_FIELDS);
         const filters = ticketListQuerySchema.parse(query ?? {});
 
-        const and: Prisma.TicketWhereInput[] = [{ isDeleted: false }];
+        const and: Prisma.TicketWhereInput[] = [{ isDeleted: false }, buildAccessScopeWhere(user, 'assignedTo')];
         if (filters.ticketStatus?.length) and.push({ ticketStatus: { in: filters.ticketStatus } });
         if (filters.excludeStatus?.length) and.push({ ticketStatus: { notIn: filters.excludeStatus } });
         if (filters.ticketPriority?.length) and.push({ ticketPriority: { in: filters.ticketPriority } });
@@ -97,16 +106,22 @@ export const ticketService = {
         }
         if (filters.createdWithinDays) and.push({ createdAt: { gte: daysAgo(filters.createdWithinDays) } });
         if (page.search) {
-            and.push({
-                OR: [
-                    { ticketNumber: { contains: page.search } },
-                    { ticketSubject: { contains: page.search } },
-                    { organizationName: { contains: page.search } },
-                    { contactPersonName: { contains: page.search } },
-                    { contactNumber: { contains: page.search } },
-                    { natureOfCall: { contains: page.search } },
-                ],
-            });
+            const code = codeSearchPrefix(page.search, 'TKT');
+            const phone = code ? null : phoneSearch(page.search);
+            if (code) and.push({ ticketNumber: { startsWith: code } });
+            else if (phone) and.push({ OR: phoneWhere(phone, ['contactNumber'] as const) });
+            else {
+                and.push({
+                    OR: [
+                        { ticketNumber: { contains: page.search } },
+                        { ticketSubject: { contains: page.search } },
+                        { organizationName: { contains: page.search } },
+                        { contactPersonName: { contains: page.search } },
+                        { contactNumber: { contains: page.search } },
+                        { natureOfCall: { contains: page.search } },
+                    ],
+                });
+            }
         }
         const where: Prisma.TicketWhereInput = { AND: and };
 
@@ -117,33 +132,43 @@ export const ticketService = {
         return { data: rows.map(toTicketDto), total, page: page.page, limit: page.limit };
     },
 
-    async getById(id: string): Promise<TicketDto> {
+    async getById(id: string, user: AuthUser): Promise<TicketDto> {
         const row = await prisma.ticket.findFirst({ where: { id, isDeleted: false } });
         if (!row) throw notFound();
+        assertRecordAccess(user, row);
         return toTicketDto(row);
     },
 
     async create(body: unknown, user: AuthUser): Promise<TicketDto> {
         const input = ticketInputSchema.parse(body);
+        input.customFields = await validateModulePayload('tickets', asPayload(body), input.customFields);
         const created = await runInTransaction((tx) => createTicketRecord(tx, input, user));
         await cacheService.invalidateEntityCaches('tickets');
         return created;
     },
 
     async update(id: string, patch: Record<string, unknown>, user: AuthUser): Promise<TicketDto> {
+        const fieldConfig = await loadModuleFieldConfig('tickets');
         const updated = await runInTransaction(async (tx) => {
             await lockRecords(tx, 'ticket', [id]);
             const existing = await tx.ticket.findFirst({ where: { id, isDeleted: false } });
             if (!existing) throw notFound();
+            assertRecordAccess(user, existing);
 
             const before = toTicketDto(existing);
-            const input = ticketInputSchema.parse({ ...before, ...patch });
+            const merged: Record<string, unknown> = { ...before, ...patch };
+            const input = ticketInputSchema.parse(merged);
+            input.customFields = checkModulePayload(fieldConfig, merged, input.customFields, {
+                submittedKeys: new Set(Object.keys(patch)),
+                previousCustomFields: before.customFields,
+            });
             const natureOfCall = await resolveNatureOfCall(tx, input.natureOfCall, existing.natureOfCall);
             const links = await resolveLinks(tx, input);
+            const assignedTo = (await assertAssigneeValid(tx, input.assignedTo, { previous: existing.assignedTo })) ?? existing.assignedTo;
 
             const row = await tx.ticket.update({
                 where: { id },
-                data: { ...toTicketData(input, { natureOfCall, ...links }), updatedBy: user.username },
+                data: { ...toTicketData({ ...input, assignedTo }, { natureOfCall, ...links }), updatedBy: user.username },
             });
             const after = toTicketDto(row);
             const changes = diffRecords(before, after);
@@ -160,8 +185,10 @@ export const ticketService = {
     async remove(id: string, user: AuthUser): Promise<void> {
         await runInTransaction(async (tx) => {
             await lockRecords(tx, 'ticket', [id]);
-            const result = await tx.ticket.updateMany({ where: { id, isDeleted: false }, data: softDeleteData(user) });
-            if (result.count === 0) throw notFound();
+            const existing = await tx.ticket.findFirst({ where: { id, isDeleted: false }, select: OWNER_SELECT });
+            if (!existing) throw notFound();
+            assertRecordAccess(user, existing);
+            await tx.ticket.update({ where: { id }, data: softDeleteData(user) });
             await auditService.record(tx, { entityType: 'Ticket', entityId: id, action: 'DELETE', changedBy: user.username });
         });
         await cacheService.invalidateEntityCaches('tickets');
@@ -170,7 +197,8 @@ export const ticketService = {
     async bulkRemove(ids: string[], user: AuthUser): Promise<BulkDeleteResult> {
         const result = await runInTransaction(async (tx) => {
             await lockRecords(tx, 'ticket', ids);
-            const live = await tx.ticket.findMany({ where: { id: { in: ids }, isDeleted: false }, select: { id: true } });
+            const live = await tx.ticket.findMany({ where: { id: { in: ids }, isDeleted: false }, select: { id: true, ...OWNER_SELECT } });
+            for (const row of live) assertRecordAccess(user, row);
             const liveIds = live.map((row) => row.id);
             if (liveIds.length > 0) {
                 await tx.ticket.updateMany({ where: { id: { in: liveIds } }, data: softDeleteData(user) });

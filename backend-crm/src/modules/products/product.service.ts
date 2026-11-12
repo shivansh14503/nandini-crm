@@ -8,6 +8,8 @@ import { generateEntityCode } from '../../utils/codeGenerator.js';
 import { HttpError } from '../../utils/httpError.js';
 import { daysAgo } from '../../utils/mappers.js';
 import { parsePagination } from '../../utils/pagination.js';
+import { asPayload, checkModulePayload, loadModuleFieldConfig, validateModulePayload } from '../form-configs/customFieldValidator.js';
+import { codeSearchPrefix } from '../shared/searchTerms.js';
 import { acquireLocks, lockRecords, runInTransaction, softDeleteData, type BulkDeleteResult } from '../shared/transactions.js';
 import { toProductData, toProductDto, type ProductDto } from './product.mapper.js';
 import { PRODUCT_SORT_FIELDS, productInputSchema, productListQuerySchema, type ProductInput } from './product.validator.js';
@@ -47,7 +49,9 @@ export const productService = {
         if (filters.createdWithinDays) where.createdAt = { gte: daysAgo(filters.createdWithinDays) };
         if (page.search) {
             // SQL Server's default collation makes `contains` case-insensitive.
-            where.OR = [
+            const code = codeSearchPrefix(page.search, 'PRD');
+            if (code) where.OR = [{ productCode: { startsWith: code } }];
+            else where.OR = [
                 { productName: { contains: page.search } },
                 { productCode: { contains: page.search } },
                 { category: { contains: page.search } },
@@ -71,6 +75,7 @@ export const productService = {
 
     async create(body: unknown, actor: AuthUser): Promise<ProductDto> {
         const input = productInputSchema.parse(body);
+        input.customFields = await validateModulePayload('products', asPayload(body), input.customFields);
 
         const created = await runInTransaction((tx) => createProductRecord(tx, input, actor));
         await cacheService.invalidateEntityCaches('products');
@@ -79,13 +84,19 @@ export const productService = {
 
     /** Partial update: the patch is merged onto the stored product and the result validated as a whole. */
     async update(id: string, patch: Record<string, unknown>, actor: AuthUser): Promise<ProductDto> {
+        const fieldConfig = await loadModuleFieldConfig('products');
         const updated = await runInTransaction(async (tx) => {
             await lockRecords(tx, 'product', [id]);
             const existing = await tx.product.findFirst({ where: { id, isDeleted: false } });
             if (!existing) throw notFound();
 
             const before = toProductDto(existing);
-            const input = productInputSchema.parse({ ...before, ...patch });
+            const merged: Record<string, unknown> = { ...before, ...patch };
+            const input = productInputSchema.parse(merged);
+            input.customFields = checkModulePayload(fieldConfig, merged, input.customFields, {
+                submittedKeys: new Set(Object.keys(patch)),
+                previousCustomFields: before.customFields,
+            });
             if (input.productName !== existing.productName) await assertUniqueName(tx, input.productName, id);
 
             const row = await tx.product.update({ where: { id }, data: { ...toProductData(input), updatedBy: actor.username } });

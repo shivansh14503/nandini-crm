@@ -1,6 +1,7 @@
 /**
  * Character limits enforced by the API validators. Mirrors frontend-crm/src/config/fieldLimits.ts (the inputs'
  * `maxLength`) and must stay in sync with it and with the column widths in prisma/schema.prisma.
+ * The frontend copy is checked against this one by src/validators/contractSync.test.ts.
  */
 export const FIELD_MAX_LENGTH = {
     phone: 16,

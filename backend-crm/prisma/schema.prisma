@@ -153,6 +153,8 @@ model Organization {
   @@index([assignedUser])
   @@index([gstNo])
   @@index([isDeleted, createdAt])
+  /// List filter (status, owner) under row-level access scoping.
+  @@index([isDeleted, accountStatus, assignedUser])
 }
 
 /// Emails owned by exactly one Organization, Contact or Lead (one FK set per row).
@@ -227,6 +229,8 @@ model Contact {
   @@index([name])
   @@index([assignedTo])
   @@index([isDeleted, createdAt])
+  /// Scoped lists ("mine" / row-level access) sorted by creation date.
+  @@index([isDeleted, assignedTo, createdAt])
 }
 
 // â”€â”€ Leads â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -304,6 +308,8 @@ model Lead {
   @@index([mobile])
   @@index([nextFollowupDate])
   @@index([isDeleted, createdAt])
+  /// Scoped lists ("mine" / row-level access) sorted by creation date.
+  @@index([isDeleted, assignedTo, createdAt])
 }
 
 // â”€â”€ Products â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -415,6 +421,8 @@ model Opportunity {
   @@index([assignedTo])
   @@index([nextFollowupDate])
   @@index([isDeleted, createdAt])
+  /// Scoped lists ("mine" / row-level access) sorted by creation date.
+  @@index([isDeleted, assignedTo, createdAt])
 }
 
 model OpportunityLineItem {
@@ -525,6 +533,10 @@ model Quotation {
   @@index([quoteStage])
   @@index([assignedTo])
   @@index([isDeleted, createdAt])
+  /// Scoped lists ("mine" / row-level access) sorted by creation date.
+  @@index([isDeleted, assignedTo, createdAt])
+  /// Contact renames write the name through to linked quotations.
+  @@index([contactId])
 }
 
 model QuotationLineItem {
@@ -605,6 +617,10 @@ model Ticket {
   @@index([dueDate])
   @@index([organizationId])
   @@index([isDeleted, createdAt])
+  /// Scoped lists ("mine" / row-level access) sorted by creation date.
+  @@index([isDeleted, assignedTo, createdAt])
+  /// Contact renames write the name through to linked tickets.
+  @@index([contactId])
 }
 
 // â”€â”€ Masters (reference data, seeded) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€

@@ -8,6 +8,7 @@ import type { AuthUser } from '../../types/user.types.js';
 import { HttpError } from '../../utils/httpError.js';
 import { wallClockNow } from '../../utils/mappers.js';
 import { createContactRecord } from '../contacts/contact.service.js';
+import { checkModulePayload, loadModuleFieldConfig, type ModuleFieldConfig } from '../form-configs/customFieldValidator.js';
 import { contactInputSchema } from '../contacts/contact.validator.js';
 import { assertStatusTransition, createLeadRecord } from '../leads/lead.service.js';
 import { leadImportSchema } from '../leads/lead.validator.js';
@@ -19,10 +20,11 @@ import { createPartnerCompanyRecord, invalidatePartnerCaches } from '../partner-
 import { partnerCompanyImportSchema } from '../partner-companies/partnerCompany.validator.js';
 import { createProductRecord } from '../products/product.service.js';
 import { productInputSchema } from '../products/product.validator.js';
+import { prefetchActiveUsernames, prefetchOrganizationsByName, type PrefetchedLookups } from '../shared/prefetch.js';
 import { runInTransaction } from '../shared/transactions.js';
 import { createTicketRecord, resolveImportNatureOfCall } from '../tickets/ticket.service.js';
 import { ticketInputSchema } from '../tickets/ticket.validator.js';
-import type { TransactionClient } from '../../config/prisma.js';
+import { prisma, type TransactionClient } from '../../config/prisma.js';
 
 /** Entities and field keys of the frontend's import wizard (frontend-crm/src/components/common/import). */
 export const IMPORT_ENTITIES = [
@@ -104,13 +106,45 @@ const normalizeTaxRate = (value: string | undefined) => (value && /^\d+$/.test(v
 
 type RowWriter = (tx: TransactionClient) => Promise<unknown>;
 
+/** Per-import data loaded once before the row loop. */
+interface ImportContext {
+    /** The entity's admin form configuration (required fields, formats, validation rules). */
+    fieldConfig: ModuleFieldConfig;
+    /** Active users and the organizations the rows name, read once instead of once per row. */
+    lookups: PrefetchedLookups;
+}
+
+/** Entities whose rows link to an organization by name. */
+const LINKS_ORGANIZATION_BY_NAME: ReadonlySet<ImportEntity> = new Set(['contacts', 'opportunities', 'tickets']);
+
+/**
+ * Loads the per-import context in a few batch queries before the row loop. Organizations are only looked up by the
+ * names the rows use; a name not found here (e.g. created meanwhile) still falls back to a live query per row.
+ */
+async function loadImportContext(data: ImportJobData): Promise<ImportContext> {
+    const fieldConfig = await loadModuleFieldConfig(data.entity);
+    const activeUsernames = await prefetchActiveUsernames(prisma);
+    const organizationsByName = LINKS_ORGANIZATION_BY_NAME.has(data.entity)
+        ? await prefetchOrganizationsByName(prisma, data.rows.map((row) => row.values.organizationName))
+        : undefined;
+    return { fieldConfig, lookups: { activeUsernames, organizationsByName } };
+}
+
+/**
+ * Applies the admin form rules to a row. Required fields are enforced only for the columns the template maps
+ * (the keys of `raw`): a field the template can't carry, such as a custom field, can't be required of a spreadsheet.
+ */
+function checkRow(ctx: ImportContext, raw: Record<string, unknown>): void {
+    checkModulePayload(ctx.fieldConfig, raw, undefined, { submittedKeys: new Set(Object.keys(raw)) });
+}
+
 /**
  * Maps a row's template values onto the entity's input, validates it, and returns the write to run.
  * Mirrors `importRows` in the frontend, but with values the server would otherwise reject defaulted explicitly.
  */
-const rowBuilders: Record<ImportEntity, (v: Record<string, string>, user: AuthUser) => RowWriter> = {
-    organizations: (v, user) => {
-        const input = organizationImportSchema.parse({
+const rowBuilders: Record<ImportEntity, (v: Record<string, string>, user: AuthUser, ctx: ImportContext) => RowWriter> = {
+    organizations: (v, user, ctx) => {
+        const raw = {
             organizationName: v.organizationName,
             natureOfBusiness: v.natureOfBusiness,
             customerType: v.customerType,
@@ -121,11 +155,13 @@ const rowBuilders: Record<ImportEntity, (v: Record<string, string>, user: AuthUs
             gstNumber: v.gstNumber,
             registrationType: v.gstNumber ? 'Registered' : 'Unregistered',
             assignedUser: user.username,
-        });
-        return (tx) => createOrganizationRecord(tx, input, user);
+        };
+        const input = organizationImportSchema.parse(raw);
+        checkRow(ctx, raw);
+        return (tx) => createOrganizationRecord(tx, input, user, ctx.lookups);
     },
-    contacts: (v, user) => {
-        const input = contactInputSchema.parse({
+    contacts: (v, user, ctx) => {
+        const raw = {
             name: v.name,
             organizationName: v.organizationName,
             mobile: v.mobile,
@@ -136,12 +172,14 @@ const rowBuilders: Record<ImportEntity, (v: Record<string, string>, user: AuthUs
             department: v.department,
             description: v.description,
             communicationType: [],
-        });
-        return (tx) => createContactRecord(tx, input, user);
+        };
+        const input = contactInputSchema.parse(raw);
+        checkRow(ctx, raw);
+        return (tx) => createContactRecord(tx, input, user, ctx.lookups);
     },
-    products: (v, user) => {
+    products: (v, user, ctx) => {
         const taxRate = normalizeTaxRate(v.taxRate);
-        const input = productInputSchema.parse({
+        const raw = {
             productName: v.productName,
             hsnCode: v.hsnCode,
             category: v.category,
@@ -152,13 +190,15 @@ const rowBuilders: Record<ImportEntity, (v: Record<string, string>, user: AuthUs
             cost: v.cost,
             mrp: v.mrp,
             description: v.description,
-        });
+        };
+        const input = productInputSchema.parse(raw);
+        checkRow(ctx, raw);
         return (tx) => createProductRecord(tx, input, user);
     },
-    leads: (v, user) => {
+    leads: (v, user, ctx) => {
         const status = v.status || 'New';
         assertStatusTransition(null, status);
-        const input = leadImportSchema.parse({
+        const raw = {
             name: v.name,
             mobile: v.mobile,
             emailAddresses: emailList(v.email),
@@ -172,12 +212,14 @@ const rowBuilders: Record<ImportEntity, (v: Record<string, string>, user: AuthUs
             followupType: LEAD_IMPORT_DEFAULTS.followupType,
             nextFollowupDate: businessToday(),
             assignedTo: user.username,
-        });
-        return (tx) => createLeadRecord(tx, input, user);
+        };
+        const input = leadImportSchema.parse(raw);
+        checkRow(ctx, raw);
+        return (tx) => createLeadRecord(tx, input, user, ctx.lookups);
     },
-    opportunities: (v, user) => {
+    opportunities: (v, user, ctx) => {
         const productCategory = splitList(v.productCategory);
-        const input = opportunityInputSchema.parse({
+        const raw = {
             organizationName: v.organizationName,
             contactName: v.contactName,
             contactNumber: v.contactNumber,
@@ -192,13 +234,15 @@ const rowBuilders: Record<ImportEntity, (v: Record<string, string>, user: AuthUs
             addDescription: v.addDescription && v.addDescription.length >= 3 ? v.addDescription : OPPORTUNITY_IMPORT_DEFAULTS.addDescription,
             commission: OPPORTUNITY_IMPORT_DEFAULTS.commission,
             assignedTo: user.username,
-        });
-        return (tx) => createOpportunityRecord(tx, input, user);
+        };
+        const input = opportunityInputSchema.parse(raw);
+        checkRow(ctx, raw);
+        return (tx) => createOpportunityRecord(tx, input, user, ctx.lookups);
     },
-    tickets: (v, user) => {
+    tickets: (v, user, ctx) => {
         // Nature Of Call is resolved against the master inside the write (blank / unknown → first active entry).
         const dueDate = new Date(wallClockNow(ENV.BUSINESS_TIMEZONE).getTime() + TICKET_IMPORT_DUE_IN_MS).toISOString().slice(0, 16);
-        const fields = ticketInputSchema.omit({ natureOfCall: true }).parse({
+        const raw = {
             organizationName: v.organizationName,
             contactPersonName: v.contactPersonName,
             contactNumber: v.contactNumber,
@@ -212,14 +256,16 @@ const rowBuilders: Record<ImportEntity, (v: Record<string, string>, user: AuthUs
             supportMode: v.supportMode || TICKET_IMPORT_DEFAULTS.supportMode,
             dueDate,
             assignedTo: user.username,
-        });
+        };
+        const fields = ticketInputSchema.omit({ natureOfCall: true }).parse(raw);
+        checkRow(ctx, raw);
         return async (tx) => {
             const natureOfCall = await resolveImportNatureOfCall(tx, v.natureOfCall);
-            return createTicketRecord(tx, { ...fields, natureOfCall }, user);
+            return createTicketRecord(tx, { ...fields, natureOfCall }, user, ctx.lookups);
         };
     },
-    'partner-companies': (v, user) => {
-        const input = partnerCompanyImportSchema.parse({
+    'partner-companies': (v, user, ctx) => {
+        const raw = {
             companyName: v.companyName,
             natureOfPartner: v.natureOfPartner || PARTNER_IMPORT_DEFAULT_NATURE,
             phone: v.phone,
@@ -231,7 +277,9 @@ const rowBuilders: Record<ImportEntity, (v: Record<string, string>, user: AuthUs
             gstNo: v.gstNo,
             principalCompany: v.principalCompany,
             assignedTo: user.username,
-        });
+        };
+        const input = partnerCompanyImportSchema.parse(raw);
+        checkRow(ctx, raw);
         return (tx) => createPartnerCompanyRecord(tx, input, user);
     },
 };
@@ -258,10 +306,11 @@ export async function processImport(data: ImportJobData, onProgress?: (percent: 
     const build = rowBuilders[data.entity];
     const failed: ImportRowFailure[] = [];
     let created = 0;
+    const ctx = await loadImportContext(data);
 
     for (const [index, row] of data.rows.entries()) {
         try {
-            const write = build(row.values, data.user);
+            const write = build(row.values, data.user, ctx);
             await runInTransaction(write);
             created++;
         } catch (err) {

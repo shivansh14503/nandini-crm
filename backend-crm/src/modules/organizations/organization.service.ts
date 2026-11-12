@@ -18,7 +18,12 @@ import {
     type SimilarOrganizationResult,
 } from '../../utils/organizationName.js';
 import { parsePagination } from '../../utils/pagination.js';
+import { asPayload, checkModulePayload, loadModuleFieldConfig, validateModulePayload } from '../form-configs/customFieldValidator.js';
+import { assertAssigneeValid, assertRecordAccess, buildAccessScopeWhere } from '../shared/accessControl.js';
 import { emailsInclude, normalizeEmails, replaceEmails } from '../shared/entityEmails.js';
+import { invalidateSyncedCaches, propagateOrganizationName, type NameSyncCounts } from '../shared/nameSync.js';
+import { codeSearchPrefix, gstSearchPrefix } from '../shared/searchTerms.js';
+import type { PrefetchedLookups } from '../shared/prefetch.js';
 import { acquireLocks, lockRecords, runInTransaction, softDeleteData, type BulkDeleteResult } from '../shared/transactions.js';
 import { toOrganizationDto, type OrganizationDto, type OrganizationRow } from './organization.mapper.js';
 import {
@@ -36,6 +41,8 @@ const MAX_HIERARCHY_DEPTH = 25;
 const include = { corporateEmails: emailsInclude } as const;
 
 const notFound = () => HttpError.notFound('Organization not found');
+/** Columns `assertRecordAccess` reads. */
+const OWNER_SELECT = { assignedUser: true, createdBy: true } as const;
 
 export interface SimilarOrganizationMatch {
     id: string;
@@ -327,16 +334,23 @@ const gstFor = (input: OrganizationWriteInput): string | null => (input.registra
  * Inserts an organization (code, uniqueness, parent link, emails, audit) inside the caller's transaction.
  * Used by `create` and by lead conversion; cache invalidation is the caller's job.
  */
-export async function createOrganizationRecord(tx: TransactionClient, input: OrganizationWriteInput, user: AuthUser): Promise<OrganizationDto> {
+export async function createOrganizationRecord(
+    tx: TransactionClient,
+    input: OrganizationWriteInput,
+    user: AuthUser,
+    lookups: PrefetchedLookups = {},
+): Promise<OrganizationDto> {
     // Code first: its counter row lock queues concurrent creates before they take any other lock.
     const accountCode = await generateEntityCode(tx, 'ORG');
     await assertUnique(tx, input, gstFor(input));
+    const assignedUser =
+        (await assertAssigneeValid(tx, input.assignedUser, { path: 'assignedUser', activeUsernames: lookups.activeUsernames })) ?? user.username;
     const row = await tx.organization.create({
         data: {
             ...toOrganizationData(input, {
                 parentOrganizationId: await resolveParentId(tx, input.memberOfParentCorp),
                 verification: resolveVerification(input, user),
-                assignedUser: nullable(input.assignedUser) ?? user.username,
+                assignedUser,
             }),
             accountCode,
             createdBy: user.username,
@@ -392,7 +406,7 @@ export const organizationService = {
         const page = parsePagination(normalizedQuery, ORGANIZATION_SORT_FIELDS);
         const filters = organizationListQuerySchema.parse(normalizedQuery);
 
-        const where: Prisma.OrganizationWhereInput = { isDeleted: false };
+        const where: Prisma.OrganizationWhereInput = { isDeleted: false, AND: [buildAccessScopeWhere(user, 'assignedUser')] };
         if (filters.accountStatus) where.accountStatus = filters.accountStatus;
         if (filters.customerType?.length) where.customerType = { in: filters.customerType };
         if (filters.natureOfBusiness) where.natureOfBusiness = { contains: filters.natureOfBusiness };
@@ -402,7 +416,12 @@ export const organizationService = {
         if (filters.createdWithinDays) where.createdAt = { gte: daysAgo(filters.createdWithinDays) };
         if (filters.recent) where.id = { in: await recentViewsService.list(user.id, RECENT_ENTITY) };
         if (page.search) {
-            where.OR = [
+            // Codes and GSTINs are typed from the start: a prefix match seeks their index instead of scanning.
+            const code = codeSearchPrefix(page.search, 'ORG');
+            const gst = code ? null : gstSearchPrefix(page.search);
+            if (code) where.OR = [{ accountCode: { startsWith: code } }];
+            else if (gst) where.OR = [{ gstNo: { startsWith: gst } }];
+            else where.OR = [
                 { organizationName: { contains: page.search } },
                 { accountCode: { contains: page.search } },
                 { natureOfBusiness: { contains: page.search } },
@@ -425,6 +444,7 @@ export const organizationService = {
     async getById(id: string, user: AuthUser): Promise<OrganizationDto> {
         const row = await prisma.organization.findFirst({ where: { id, isDeleted: false }, include });
         if (!row) throw notFound();
+        assertRecordAccess(user, row);
 
         await recentViewsService.record(user.id, RECENT_ENTITY, id);
         const flagsFor = await viewerFlags(user);
@@ -477,6 +497,7 @@ export const organizationService = {
 
     async create(body: unknown, user: AuthUser): Promise<OrganizationDto> {
         const input = organizationInputSchema.parse(body);
+        input.customFields = await validateModulePayload('organizations', asPayload(body), input.customFields);
 
         const created = await runInTransaction((tx) => createOrganizationRecord(tx, input, user));
         await cacheService.invalidateEntityCaches('organizations');
@@ -484,15 +505,24 @@ export const organizationService = {
     },
 
     async update(id: string, patch: Record<string, unknown>, user: AuthUser): Promise<OrganizationDto> {
+        const fieldConfig = await loadModuleFieldConfig('organizations');
         const flagsFor = await viewerFlags(user);
+        let synced: NameSyncCounts | undefined;
 
         const updated = await runInTransaction(async (tx) => {
+            synced = undefined;
             await lockRecords(tx, 'organization', [id]);
             const existing = await tx.organization.findFirst({ where: { id, isDeleted: false }, include });
             if (!existing) throw notFound();
+            assertRecordAccess(user, existing);
 
             const before = toOrganizationDto(existing, flagsFor(existing));
-            const input = organizationInputSchema.parse(mergePatch(before, patch));
+            const merged: Record<string, unknown> = mergePatch(before, patch);
+            const input = organizationInputSchema.parse(merged);
+            input.customFields = checkModulePayload(fieldConfig, merged, input.customFields, {
+                submittedKeys: new Set(Object.keys(patch)),
+                previousCustomFields: before.customFields,
+            });
             const gstNo = gstFor(input);
             // Strict comparison on purpose: a case-only rename counts as a change and is re-checked (excluding this record).
             const nameChanged = input.organizationName !== existing.organizationName;
@@ -508,7 +538,7 @@ export const organizationService = {
                     ...toOrganizationData(input, {
                         parentOrganizationId: await resolveParentId(tx, input.memberOfParentCorp, id),
                         verification: resolveVerification(input, user, existing),
-                        assignedUser: nullable(input.assignedUser),
+                        assignedUser: await assertAssigneeValid(tx, input.assignedUser, { previous: existing.assignedUser, path: 'assignedUser' }),
                     }),
                     updatedBy: user.username,
                 },
@@ -517,25 +547,30 @@ export const organizationService = {
             if ('corporateEmails' in patch) {
                 await replaceEmails(tx, { organizationId: id }, normalizeEmails(input.corporateEmails));
             }
+            // Linked records show the organization's name; rename them in the same transaction so lists never drift.
+            if (nameChanged) synced = await propagateOrganizationName(tx, id, input.organizationName, user);
 
             const saved = await tx.organization.findUniqueOrThrow({ where: { id }, include });
             const after = toOrganizationDto(saved, flagsFor(saved));
-            const changes = diffRecords(before, after);
+            const changes: Record<string, unknown> = diffRecords(before, after);
+            if (synced && Object.keys(synced).length > 0) changes.nameSyncedTo = synced;
             if (Object.keys(changes).length > 0) {
                 await auditService.record(tx, { entityType: 'Organization', entityId: id, action: 'UPDATE', changedBy: user.username, changes });
             }
             return after;
         });
 
-        await cacheService.invalidateEntityCaches('organizations');
+        await Promise.all([cacheService.invalidateEntityCaches('organizations'), invalidateSyncedCaches(synced)]);
         return updated;
     },
 
     async remove(id: string, user: AuthUser): Promise<void> {
         await runInTransaction(async (tx) => {
             await lockRecords(tx, 'organization', [id]);
-            const result = await tx.organization.updateMany({ where: { id, isDeleted: false }, data: softDeleteData(user) });
-            if (result.count === 0) throw notFound();
+            const existing = await tx.organization.findFirst({ where: { id, isDeleted: false }, select: OWNER_SELECT });
+            if (!existing) throw notFound();
+            assertRecordAccess(user, existing);
+            await tx.organization.update({ where: { id }, data: softDeleteData(user) });
             await auditService.record(tx, { entityType: 'Organization', entityId: id, action: 'DELETE', changedBy: user.username });
         });
         await Promise.all([cacheService.invalidateEntityCaches('organizations'), recentViewsService.forget(RECENT_ENTITY, user.id, [id])]);
@@ -544,7 +579,8 @@ export const organizationService = {
     async bulkRemove(ids: string[], user: AuthUser): Promise<BulkDeleteResult> {
         const result = await runInTransaction(async (tx) => {
             await lockRecords(tx, 'organization', ids);
-            const live = await tx.organization.findMany({ where: { id: { in: ids }, isDeleted: false }, select: { id: true } });
+            const live = await tx.organization.findMany({ where: { id: { in: ids }, isDeleted: false }, select: { id: true, ...OWNER_SELECT } });
+            for (const row of live) assertRecordAccess(user, row);
             const liveIds = live.map((row) => row.id);
             if (liveIds.length > 0) {
                 await tx.organization.updateMany({ where: { id: { in: liveIds } }, data: softDeleteData(user) });
@@ -571,9 +607,10 @@ export const organizationService = {
             await lockRecords(tx, 'organization', ids);
             const targets = await tx.organization.findMany({
                 where: { id: { in: ids }, isDeleted: false },
-                select: { id: true, accountStatus: true },
+                select: { id: true, accountStatus: true, ...OWNER_SELECT },
             });
             if (targets.length === 0) throw notFound();
+            for (const row of targets) assertRecordAccess(user, row);
 
             await tx.organization.updateMany({
                 where: { id: { in: targets.map((row) => row.id) } },

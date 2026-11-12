@@ -1,6 +1,7 @@
 import { Router, type Request, type Response } from 'express';
 import { authenticate } from '../../middlewares/authMiddleware.js';
 import { sendSuccess } from '../../utils/apiResponse.js';
+import { requireUser } from '../../utils/requestContext.js';
 import { searchService } from './search.service.js';
 
 /**
@@ -11,7 +12,7 @@ const router = Router();
 router.use(authenticate);
 
 router.get('/', async (req: Request, res: Response) => {
-    sendSuccess(res, await searchService.search(req.query));
+    sendSuccess(res, await searchService.search(req.query, requireUser(req)));
 });
 
 export default router;

@@ -11,6 +11,7 @@ import type { OpportunityDto } from '../opportunities/opportunity.mapper.js';
 import { toOrganizationDto, type OrganizationDto } from '../organizations/organization.mapper.js';
 import { createOrganizationRecord, findLiveOrganization } from '../organizations/organization.service.js';
 import { organizationConversionSchema } from '../organizations/organization.validator.js';
+import { assertRecordAccess } from '../shared/accessControl.js';
 import { normalizeEmails } from '../shared/entityEmails.js';
 import { lockRecords, runSerializable } from '../shared/transactions.js';
 import { leadInclude, leadNotFound } from './lead.service.js';
@@ -129,6 +130,7 @@ export async function convertLead(leadId: string, body: unknown, user: AuthUser)
         await lockRecords(tx, 'lead', [leadId]);
         const lead = await tx.lead.findFirst({ where: { id: leadId, isDeleted: false }, include: leadInclude });
         if (!lead) throw leadNotFound();
+        assertRecordAccess(user, lead);
         if (lead.status === CONVERTED_STATUS) throw HttpError.conflict('This lead has already been converted.');
 
         const existingOrganization = await findLiveOrganization(tx, values.organizationName, values.existingOrganizationId);

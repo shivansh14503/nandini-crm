@@ -143,7 +143,7 @@ export const pdfRenderService = {
         const adapter = PDF_MODULE_ADAPTERS[module];
         const [row, meta, customFields] = await Promise.all([
             pdfTemplateService.resolveTemplate(module, params.templateId),
-            adapter.loadRecordMeta(recordId),
+            adapter.loadRecordMeta(recordId, user),
             loadCustomFieldMeta(module),
         ]);
         const template = fromRow(row, customFields);
@@ -193,6 +193,8 @@ export const pdfRenderService = {
             branding: mergeBranding(draft.branding),
         };
         const adapter = PDF_MODULE_ADAPTERS[draft.module];
+        // Previewing against a real record reads it, so it gets the same 404 / 403 checks as a download.
+        if (recordId) await adapter.loadRecordMeta(recordId, user);
         const { input, assets } = await prepareInput(template, user, customFields);
         const context = recordId ? await adapter.buildContext(recordId, input) : adapter.buildSampleContext(input);
         const compiled = compileParts(template, context, assets, 'Preview');

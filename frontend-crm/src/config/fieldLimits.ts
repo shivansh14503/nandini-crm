@@ -2,6 +2,7 @@
  * Character limits shared by form inputs (`maxLength`) and Zod schemas (`.max()`), so the UI never accepts
  * text that validation then rejects. Formatted identifiers use their exact length.
  * UI-free on purpose: imported by both `components/forms/fieldSizing` and `validations/`.
+ * Must match backend-crm/src/config/fieldLimits.ts key for key (enforced by backend-crm/src/validators/contractSync.test.ts).
  */
 export const FIELD_MAX_LENGTH = {
     phone: 16,
@@ -27,4 +28,7 @@ export const FIELD_MAX_LENGTH = {
     /** Organization "Description & Scope" (shows a live x / 1000 counter). */
     organizationDescription: 1000,
     longText: 2000,
+    /** Option values (stage, source, category, …) and usernames. */
+    option: 100,
+    username: 50,
 } as const;

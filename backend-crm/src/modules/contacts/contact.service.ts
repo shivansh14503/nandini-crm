@@ -8,7 +8,12 @@ import { generateEntityCode } from '../../utils/codeGenerator.js';
 import { HttpError } from '../../utils/httpError.js';
 import { daysAgo } from '../../utils/mappers.js';
 import { parsePagination } from '../../utils/pagination.js';
+import { asPayload, checkModulePayload, loadModuleFieldConfig, validateModulePayload } from '../form-configs/customFieldValidator.js';
+import { assertAssigneeValid, assertRecordAccess, buildAccessScopeWhere } from '../shared/accessControl.js';
 import { emailsInclude, normalizeEmails, replaceEmails } from '../shared/entityEmails.js';
+import { invalidateSyncedCaches, propagateContactName, type NameSyncCounts } from '../shared/nameSync.js';
+import { findOrganizationByName, type PrefetchedLookups } from '../shared/prefetch.js';
+import { codeSearchPrefix, phoneSearch, phoneWhere } from '../shared/searchTerms.js';
 import { acquireLocks, lockRecords, runInTransaction, softDeleteData, type BulkDeleteResult } from '../shared/transactions.js';
 import { toContactData, toContactDto, type ContactDto } from './contact.mapper.js';
 import { CONTACT_SORT_FIELDS, contactInputSchema, contactListQuerySchema, type ContactInput } from './contact.validator.js';
@@ -16,6 +21,8 @@ import { CONTACT_SORT_FIELDS, contactInputSchema, contactListQuerySchema, type C
 const include = { emailAddresses: emailsInclude } as const;
 
 const notFound = () => HttpError.notFound('Contact not found');
+/** Columns `assertRecordAccess` reads. */
+const OWNER_SELECT = { assignedTo: true, createdBy: true } as const;
 
 // ── Integrity rules (run inside the write transaction) ───────────────────────
 
@@ -35,7 +42,7 @@ async function assertUniqueMobile(tx: TransactionClient, mobile: string, exclude
  * An explicit `organizationId` must point at a live organization, whose name then wins. Otherwise the typed
  * organization name is linked to the live organization with that exact name, if there is one.
  */
-async function resolveOrganization(tx: TransactionClient, input: ContactInput): Promise<{ id: string | null; name: string }> {
+async function resolveOrganization(tx: TransactionClient, input: ContactInput, lookups?: PrefetchedLookups): Promise<{ id: string | null; name: string }> {
     if (input.organizationId) {
         const org = await tx.organization.findFirst({
             where: { id: input.organizationId, isDeleted: false },
@@ -48,10 +55,7 @@ async function resolveOrganization(tx: TransactionClient, input: ContactInput): 
         }
         return { id: org.id, name: org.organizationName };
     }
-    const byName = await tx.organization.findFirst({
-        where: { organizationName: input.organizationName, isDeleted: false },
-        select: { id: true, organizationName: true },
-    });
+    const byName = await findOrganizationByName(tx, input.organizationName, lookups);
     return byName ? { id: byName.id, name: byName.organizationName } : { id: null, name: input.organizationName };
 }
 
@@ -85,13 +89,14 @@ async function demoteOtherPrimaries(tx: TransactionClient, contactId: string, or
  * Inserts a contact (code, mobile uniqueness, organization link, emails, primary rule, audit) inside the
  * caller's transaction. Used by `create` and by lead conversion; cache invalidation is the caller's job.
  */
-export async function createContactRecord(tx: TransactionClient, input: ContactInput, user: AuthUser): Promise<ContactDto> {
+export async function createContactRecord(tx: TransactionClient, input: ContactInput, user: AuthUser, lookups: PrefetchedLookups = {}): Promise<ContactDto> {
     // Code first: its counter row lock queues concurrent creates before they take any other lock.
     const contactCode = await generateEntityCode(tx, 'CON');
     await assertUniqueMobile(tx, input.mobile);
-    const organization = await resolveOrganization(tx, input);
+    const assignedTo = (await assertAssigneeValid(tx, input.assignedTo, { activeUsernames: lookups.activeUsernames })) ?? user.username;
+    const organization = await resolveOrganization(tx, input, lookups);
     const row = await tx.contact.create({
-        data: { ...toContactData(input, organization), contactCode, createdBy: user.username },
+        data: { ...toContactData({ ...input, assignedTo }, organization), contactCode, createdBy: user.username },
     });
     await replaceEmails(tx, { contactId: row.id }, normalizeEmails(input.emailAddresses));
     if (input.isPrimaryContact) await demoteOtherPrimaries(tx, row.id, organization.id, user);
@@ -117,14 +122,18 @@ export const contactService = {
         const page = parsePagination(query, CONTACT_SORT_FIELDS);
         const filters = contactListQuerySchema.parse(query ?? {});
 
-        const where: Prisma.ContactWhereInput = { isDeleted: false };
+        const where: Prisma.ContactWhereInput = { isDeleted: false, AND: [buildAccessScopeWhere(user, 'assignedTo')] };
         if (filters.organizationId) where.organizationId = filters.organizationId;
         if (filters.assignedTo) where.assignedTo = filters.assignedTo;
         if (filters.mine) where.assignedTo = user.username;
         if (filters.isPrimaryContact !== undefined) where.isPrimaryContact = filters.isPrimaryContact;
         if (filters.createdWithinDays) where.createdAt = { gte: daysAgo(filters.createdWithinDays) };
         if (page.search) {
-            where.OR = [
+            const code = codeSearchPrefix(page.search, 'CON');
+            const phone = code ? null : phoneSearch(page.search);
+            if (code) where.OR = [{ contactCode: { startsWith: code } }];
+            else if (phone) where.OR = phoneWhere(phone, ['mobile', 'officePhone'] as const);
+            else where.OR = [
                 { name: { contains: page.search } },
                 { contactCode: { contains: page.search } },
                 { organizationName: { contains: page.search } },
@@ -142,14 +151,16 @@ export const contactService = {
         return { data: rows.map(toContactDto), total, page: page.page, limit: page.limit };
     },
 
-    async getById(id: string): Promise<ContactDto> {
+    async getById(id: string, user: AuthUser): Promise<ContactDto> {
         const row = await prisma.contact.findFirst({ where: { id, isDeleted: false }, include });
         if (!row) throw notFound();
+        assertRecordAccess(user, row);
         return toContactDto(row);
     },
 
     async create(body: unknown, user: AuthUser): Promise<ContactDto> {
         const input = contactInputSchema.parse(body);
+        input.customFields = await validateModulePayload('contacts', asPayload(body), input.customFields);
 
         const created = await runInTransaction((tx) => createContactRecord(tx, input, user));
         await cacheService.invalidateEntityCaches('contacts');
@@ -157,43 +168,57 @@ export const contactService = {
     },
 
     async update(id: string, patch: Record<string, unknown>, user: AuthUser): Promise<ContactDto> {
+        const fieldConfig = await loadModuleFieldConfig('contacts');
+        let synced: NameSyncCounts | undefined;
         const updated = await runInTransaction(async (tx) => {
+            synced = undefined;
             await lockRecords(tx, 'contact', [id]);
             const existing = await tx.contact.findFirst({ where: { id, isDeleted: false }, include });
             if (!existing) throw notFound();
+            assertRecordAccess(user, existing);
 
             const before = toContactDto(existing);
             const merged: Record<string, unknown> = { ...before, ...patch };
             // Retyping the organization name without picking a record means "re-link by name", not "keep the old id".
             if ('organizationName' in patch && !('organizationId' in patch)) delete merged.organizationId;
             const input = contactInputSchema.parse(merged);
+            input.customFields = checkModulePayload(fieldConfig, merged, input.customFields, {
+                submittedKeys: new Set(Object.keys(patch)),
+                previousCustomFields: before.customFields,
+            });
 
             if (input.mobile !== existing.mobile) await assertUniqueMobile(tx, input.mobile, id);
             const organization = await resolveOrganization(tx, input);
+            const assignedTo = (await assertAssigneeValid(tx, input.assignedTo, { previous: existing.assignedTo })) ?? existing.assignedTo;
 
-            await tx.contact.update({ where: { id }, data: { ...toContactData(input, organization), updatedBy: user.username } });
+            await tx.contact.update({ where: { id }, data: { ...toContactData({ ...input, assignedTo }, organization), updatedBy: user.username } });
             if ('emailAddresses' in patch) {
                 await replaceEmails(tx, { contactId: id }, normalizeEmails(input.emailAddresses));
             }
             if (input.isPrimaryContact) await demoteOtherPrimaries(tx, id, organization.id, user);
+            // Opportunities, quotations and tickets show the contact's name; keep them in step.
+            if (input.name !== existing.name) synced = await propagateContactName(tx, id, input.name, user);
 
             const after = toContactDto(await tx.contact.findUniqueOrThrow({ where: { id }, include }));
-            const changes = diffRecords(before, after);
+            const changes: Record<string, unknown> = diffRecords(before, after);
+            if (synced && Object.keys(synced).length > 0) changes.nameSyncedTo = synced;
             if (Object.keys(changes).length > 0) {
                 await auditService.record(tx, { entityType: 'Contact', entityId: id, action: 'UPDATE', changedBy: user.username, changes });
             }
             return after;
         });
 
-        await cacheService.invalidateEntityCaches('contacts');
+        await Promise.all([cacheService.invalidateEntityCaches('contacts'), invalidateSyncedCaches(synced)]);
         return updated;
     },
 
     async remove(id: string, user: AuthUser): Promise<void> {
         await runInTransaction(async (tx) => {
             await lockRecords(tx, 'contact', [id]);
-            const result = await tx.contact.updateMany({ where: { id, isDeleted: false }, data: softDeleteData(user) });
-            if (result.count === 0) throw notFound();
+            const existing = await tx.contact.findFirst({ where: { id, isDeleted: false }, select: OWNER_SELECT });
+            if (!existing) throw notFound();
+            assertRecordAccess(user, existing);
+            await tx.contact.update({ where: { id }, data: softDeleteData(user) });
             await auditService.record(tx, { entityType: 'Contact', entityId: id, action: 'DELETE', changedBy: user.username });
         });
         await cacheService.invalidateEntityCaches('contacts');
@@ -202,7 +227,8 @@ export const contactService = {
     async bulkRemove(ids: string[], user: AuthUser): Promise<BulkDeleteResult> {
         const result = await runInTransaction(async (tx) => {
             await lockRecords(tx, 'contact', ids);
-            const live = await tx.contact.findMany({ where: { id: { in: ids }, isDeleted: false }, select: { id: true } });
+            const live = await tx.contact.findMany({ where: { id: { in: ids }, isDeleted: false }, select: { id: true, ...OWNER_SELECT } });
+            for (const row of live) assertRecordAccess(user, row);
             const liveIds = live.map((row) => row.id);
             if (liveIds.length > 0) {
                 await tx.contact.updateMany({ where: { id: { in: liveIds } }, data: softDeleteData(user) });
