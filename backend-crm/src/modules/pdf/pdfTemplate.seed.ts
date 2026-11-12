@@ -1,28 +1,20 @@
 import { logger } from '../../config/logger.js';
 import { prisma } from '../../config/prisma.js';
+import { documentSchema, type PdfDocument } from './document/index.js';
 import { PDF_MODULES } from './pdf.types.js';
-import { toMargins } from './pdfTemplate.mapper.js';
-import { sanitizeTemplateCss, sanitizeTemplateHtml } from './sanitize.js';
+import { parseStoredDocument } from './pdfTemplate.mapper.js';
 import { SYSTEM_TEMPLATES, type SystemTemplate } from './systemTemplates/index.js';
-import { invalidateTemplate } from './templateEngine.js';
 
 const SEED_USER = 'system';
 
+/** Document content without ids (system documents get fresh ids on every build). */
+const withoutIds = (doc: PdfDocument): string => JSON.stringify(doc, (key, value: unknown) => (key === 'id' ? undefined : value));
+
 function contentOf(t: SystemTemplate) {
+    const document = documentSchema.parse(t.build());
     return {
-        description: t.description,
-        pageSize: t.pageSize,
-        orientation: t.orientation,
-        marginTop: t.margins.top,
-        marginRight: t.margins.right,
-        marginBottom: t.margins.bottom,
-        marginLeft: t.margins.left,
-        marginHeader: t.margins.header,
-        marginFooter: t.margins.footer,
-        headerHtml: sanitizeTemplateHtml(t.headerHtml) || null,
-        bodyHtml: sanitizeTemplateHtml(t.bodyHtml),
-        footerHtml: sanitizeTemplateHtml(t.footerHtml) || null,
-        css: sanitizeTemplateCss(t.css) || null,
+        document,
+        data: { description: t.description, pageSize: document.page.size, orientation: document.page.orientation, documentJson: JSON.stringify(document) },
     };
 }
 
@@ -37,37 +29,22 @@ export async function ensurePdfTemplatesSeeded(): Promise<void> {
     let defaulted = 0;
 
     for (const template of SYSTEM_TEMPLATES) {
-        const content = contentOf(template);
+        const { document, data } = contentOf(template);
         const existing = await prisma.pdfTemplate.findFirst({ where: { module: template.module, name: template.name, isSystem: true } });
         if (!existing) {
             await prisma.pdfTemplate.create({
-                data: { name: template.name, module: template.module, isSystem: true, isActive: true, isDefault: false, ...content, createdBy: SEED_USER, updatedBy: SEED_USER },
+                data: { name: template.name, module: template.module, isSystem: true, isActive: true, isDefault: false, ...data, createdBy: SEED_USER, updatedBy: SEED_USER },
             });
             created++;
             continue;
         }
-        const m = toMargins(existing);
-        const unchanged =
-            existing.description === content.description &&
-            existing.pageSize === content.pageSize &&
-            existing.orientation === content.orientation &&
-            m.top === content.marginTop &&
-            m.right === content.marginRight &&
-            m.bottom === content.marginBottom &&
-            m.left === content.marginLeft &&
-            m.header === content.marginHeader &&
-            m.footer === content.marginFooter &&
-            existing.headerHtml === content.headerHtml &&
-            existing.bodyHtml === content.bodyHtml &&
-            existing.footerHtml === content.footerHtml &&
-            existing.css === content.css &&
-            !existing.isDeleted;
+        const stored = parseStoredDocument(existing.documentJson);
+        const unchanged = !existing.isDeleted && existing.description === data.description && stored !== null && withoutIds(stored) === withoutIds(document);
         if (unchanged) continue;
         await prisma.pdfTemplate.update({
             where: { id: existing.id },
-            data: { ...content, isDeleted: false, deletedAt: null, version: { increment: 1 }, updatedBy: SEED_USER },
+            data: { ...data, isDeleted: false, deletedAt: null, version: { increment: 1 }, updatedBy: SEED_USER },
         });
-        invalidateTemplate(existing.id);
         refreshed++;
     }
 

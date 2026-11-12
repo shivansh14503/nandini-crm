@@ -94,27 +94,17 @@ export const pdfAssetService = {
         return { data: Buffer.from(row.data), mimeType: row.mimeType, fileName: row.fileName };
     },
 
-    /** Blocked while any non-deleted template references the key (in branding or `{{asset "key"}}`). */
+    /** Blocked while any non-deleted template or saved item references the key. */
     async remove(key: string, user: AuthUser): Promise<{ key: string }> {
         await runInTransaction(async (tx) => {
             const row = await tx.pdfAsset.findUnique({ where: { key }, select: { id: true, fileName: true } });
             if (!row) throw HttpError.notFound('Asset not found');
-            const users = await tx.pdfTemplate.findMany({
-                where: {
-                    isDeleted: false,
-                    OR: [
-                        { brandingJson: { contains: `"${key}"` } },
-                        { bodyHtml: { contains: key } },
-                        { headerHtml: { contains: key } },
-                        { footerHtml: { contains: key } },
-                        { css: { contains: key } },
-                    ],
-                },
-                select: { name: true },
-                take: 5,
-            });
-            if (users.length) {
-                throw HttpError.conflict(`This image is used by: ${users.map((u) => u.name).join(', ')}. Remove it from those templates first.`);
+            const quoted = `"${key}"`;
+            const users = await tx.pdfTemplate.findMany({ where: { isDeleted: false, documentJson: { contains: quoted } }, select: { name: true }, take: 5 });
+            const saved = await tx.pdfSavedItem.findMany({ where: { isDeleted: false, contentJson: { contains: quoted } }, select: { name: true }, take: 5 });
+            const names = [...users.map((u) => u.name), ...saved.map((s) => `${s.name} (saved item)`)];
+            if (names.length) {
+                throw HttpError.conflict(`This image is used by: ${names.join(', ')}. Remove it from those first.`);
             }
             await tx.pdfAsset.delete({ where: { key } });
             await auditService.record(tx, { entityType: 'PdfAsset', entityId: row.id, action: 'DELETE', changedBy: user.username, changes: { key, fileName: row.fileName } });

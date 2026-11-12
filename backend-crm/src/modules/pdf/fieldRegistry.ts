@@ -21,7 +21,7 @@ const f = (key: string, path: string, label: string, group: PdfFieldGroup, type:
 });
 
 const COMPANY_FIELDS: PdfFieldDefinition[] = [
-    f('companyLogo', 'company.logoDataUri', 'Logo', 'Company'),
+    f('companyLogo', 'company.logoDataUri', 'Logo', 'Company', 'image'),
     f('companyName', 'company.companyName', 'Company Name', 'Company'),
     f('companyAddress', 'company.companyAddress', 'Company Address', 'Company', 'multiline'),
     f('companyPhone', 'company.companyPhone', 'Company Phone', 'Company'),

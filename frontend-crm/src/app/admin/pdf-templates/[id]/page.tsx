@@ -5,7 +5,7 @@ import { useParams } from 'next/navigation';
 import { ROUTES } from '@/config/constants';
 import { LoadingScreen } from '@/components/common/LoadingScreen';
 import { AdminPageShell } from '@/components/pdf/admin/AdminPageShell';
-import { PdfTemplateEditor } from '@/components/pdf/editor/PdfTemplateEditor';
+import { PdfTemplateBuilder } from '@/components/pdf/builder/PdfTemplateBuilder';
 
 function EditPdfTemplateContent() {
     const params = useParams();
@@ -17,7 +17,7 @@ function EditPdfTemplateContent() {
             maxWidth={false}
             breadcrumbs={[{ label: 'Administration', href: ROUTES.ADMIN }, { label: 'PDF Templates', href: ROUTES.PDF_TEMPLATES }, { label: 'Edit template' }]}
         >
-            <PdfTemplateEditor templateId={id} />
+            <PdfTemplateBuilder templateId={id} />
         </AdminPageShell>
     );
 }

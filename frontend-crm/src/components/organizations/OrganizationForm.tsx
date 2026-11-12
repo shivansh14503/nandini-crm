@@ -33,6 +33,7 @@ import { FormConfigProvider } from '@/context/FormConfigContext';
 import { DynamicModuleCustomFields } from '@/components/forms/DynamicModuleCustomFields';
 import { getFormConfigs } from '@/services/masterData.store';
 import { validateConfiguredFields } from '@/utils/formConfig';
+import { useDropdownDefaults, withDropdownDefaults } from '@/components/forms/rhf/useDropdownDefaults';
 
 // ─── Single Source of Truth for Organization Form Tabs ──────────────────────────
 export const ORGANIZATION_FORM_TABS: (FormTabDefinition & { id: TabKey })[] = [
@@ -187,14 +188,20 @@ export default function OrganizationForm({
     const { user } = useAuth();
     const isAdmin = user?.role?.toLowerCase() === 'admin';
 
-    const [form, setForm] = useState<OrganizationFormData>({ ...DEFAULT_FORM, ...initialData });
+    // A new record starts from the admin's dropdown defaults (Form Builder › Dropdowns); read once, like useForm.
+    const [startValues] = useState<OrganizationFormData>(() =>
+        mode === 'create'
+            ? withDropdownDefaults(getFormConfigs(), 'organizations', { ...DEFAULT_FORM, ...initialData }, initialData)
+            : { ...DEFAULT_FORM, ...initialData },
+    );
+    const [form, setForm] = useState<OrganizationFormData>(startValues);
     // Lock is based on the status as last saved, so deactivating mid-edit doesn't lock the user out of their own unsaved change.
     const [persistedStatus, setPersistedStatus] = useState(initialData?.accountStatus ?? 'Active');
     const [activeTab, setActiveTab] = useState<TabKey>('overview');
     const [audit, setAudit] = useState<{ createdAt?: string; createdBy?: string; updatedAt?: string }>({});
     const pendingFocusField = useRef<string | null>(null);
     // Values "Discard" resets to: blank for create, the last loaded record for edit.
-    const baselineRef = useRef<OrganizationFormData>({ ...DEFAULT_FORM, ...initialData });
+    const baselineRef = useRef<OrganizationFormData>(startValues);
     const [submitting, setSubmitting] = useState(false);
     const [isDirty, setIsDirty] = useState(false);
     const [toast, setToast] = useState<{ open: boolean; message: string; severity: 'success' | 'error' | 'info' }>({
@@ -204,8 +211,17 @@ export default function OrganizationForm({
     });
 
     const methods = useForm<OrganizationFormData>({
-        defaultValues: { ...DEFAULT_FORM, ...initialData },
+        defaultValues: startValues,
         mode: 'onTouched',
+    });
+    // Configuration loaded (or changed) after the form opened: untouched dropdowns follow, in the mirror too.
+    useDropdownDefaults(methods, 'organizations', {
+        enabled: mode === 'create',
+        keep: initialData,
+        onApply: (values) => {
+            setForm((prev) => ({ ...prev, ...values }));
+            baselineRef.current = { ...baselineRef.current, ...values };
+        },
     });
 
     const isInactive = mode !== 'create' && persistedStatus === 'Inactive';
@@ -427,8 +443,9 @@ export default function OrganizationForm({
                 if (redirectAfter) {
                     setTimeout(() => router.push(ROUTES.ORGANIZATIONS), 800);
                 } else {
-                    setForm(DEFAULT_FORM);
-                    methods.reset(DEFAULT_FORM);
+                    const fresh = withDropdownDefaults(getFormConfigs(), 'organizations', DEFAULT_FORM);
+                    setForm(fresh);
+                    methods.reset(fresh);
                     setIsDirty(false);
                 }
             } else if (mode === 'edit' && organizationId) {

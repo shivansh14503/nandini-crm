@@ -17,7 +17,8 @@ export type AuditEntityType =
     | 'DropdownOption'
     | 'FormField'
     | 'PdfTemplate'
-    | 'PdfAsset';
+    | 'PdfAsset'
+    | 'PdfSavedItem';
 
 export type AuditAction =
     | 'CREATE'

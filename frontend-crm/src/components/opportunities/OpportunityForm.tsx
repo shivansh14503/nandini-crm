@@ -120,6 +120,7 @@ export default function OpportunityForm({
             schema: opportunityFormSchema,
             module: 'opportunities',
             defaultValues: { ...DEFAULT_OPPORTUNITY_FORM, ...initialData },
+            dropdownDefaults: { enabled: mode === 'create', keep: initialData },
         });
 
     const { reset, watch, setValue, formState } = methods;

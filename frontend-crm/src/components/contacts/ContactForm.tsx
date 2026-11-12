@@ -91,6 +91,7 @@ export default function ContactForm({
         schema: contactFormSchema,
         module: 'contacts',
         defaultValues: { ...DEFAULT_FORM, ...initialData },
+        dropdownDefaults: { enabled: mode === 'create', keep: initialData },
     });
     const { reset, watch, formState } = methods;
     const { isDirty, isSubmitting } = formState;

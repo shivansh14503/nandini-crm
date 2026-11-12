@@ -8,15 +8,18 @@ import type {
     PdfModule,
     PdfTemplate,
     PdfTemplateCreateInput,
-    PdfTemplateDraft,
+    PdfRenderContext,
+    PdfSavedItem,
     PdfTemplateListItem,
     PdfTemplateUpdateInput,
 } from '../types/pdfTemplate.types';
+import type { PdfDocument, SavedItemContent } from '../lib/pdf-document';
 import { ApiClientError, apiClient } from './apiClient';
 import { notifyCrmUpdate } from './crmSync';
 
 const ENDPOINT = '/api/pdf-templates';
 const ASSET_ENDPOINT = '/api/pdf-assets';
+const SAVED_ENDPOINT = '/api/pdf-saved-items';
 
 /** Record endpoints per PDF module (`GET <endpoint>/:id/pdf`). */
 const RECORD_ENDPOINTS: Record<PdfModule, string> = {
@@ -60,7 +63,7 @@ async function parseError(response: Response): Promise<ApiClientError> {
 }
 
 /**
- * Fetch for non-JSON responses (PDF / HTML). Same base URL, cookies and error shape as apiClient, so
+ * Fetch for non-JSON responses (PDF). Same base URL, cookies and error shape as apiClient, so
  * errors surface as ApiClientError with the API's `{ message, code, errors }` envelope.
  */
 async function fetchBinary(endpoint: string, init: RequestInit & { accept: string }, signal?: AbortSignal): Promise<Response> {
@@ -136,16 +139,23 @@ export const pdfTemplateService = {
         writeNotify(id);
     },
 
-    /** Fast HTML preview (string for an iframe `srcdoc`). */
-    previewHtml: async (template: PdfTemplateDraft, recordId: string | undefined, signal?: AbortSignal): Promise<string> => {
-        const res = await fetchBinary(`${ENDPOINT}/preview`, { method: 'POST', accept: 'text/html', body: JSON.stringify({ template, recordId, format: 'html' }) }, signal);
-        return res.text();
+    /** PDF of an unsaved builder document (sample data unless a record is picked). */
+    previewPdf: async (module: PdfModule, document: PdfDocument, recordId: string | undefined, signal?: AbortSignal): Promise<Blob> => {
+        const res = await fetchBinary(`${ENDPOINT}/preview`, { method: 'POST', accept: 'application/pdf', body: JSON.stringify({ module, document, recordId }) }, signal);
+        return res.blob();
     },
 
-    /** Full PDF render of a draft. */
-    previewPdf: async (template: PdfTemplateDraft, recordId: string | undefined, signal?: AbortSignal): Promise<Blob> => {
-        const res = await fetchBinary(`${ENDPOINT}/preview`, { method: 'POST', accept: 'application/pdf', body: JSON.stringify({ template, recordId, format: 'pdf' }) }, signal);
-        return res.blob();
+    /** The record (or sample) context the builder canvas renders blocks with. */
+    context: async (module: PdfModule, recordId?: string): Promise<PdfRenderContext> =>
+        (await apiClient.get<ApiResponse<PdfRenderContext>>(`${ENDPOINT}/context`, { params: { module, recordId } })).data,
+
+    savedItems: async (module: PdfModule): Promise<PdfSavedItem[]> => (await apiClient.get<ApiResponse<PdfSavedItem[]>>(SAVED_ENDPOINT, { params: { module } })).data,
+
+    saveItem: async (module: PdfModule, name: string, content: SavedItemContent): Promise<PdfSavedItem> =>
+        (await apiClient.post<ApiResponse<PdfSavedItem>>(SAVED_ENDPOINT, { module, name, content })).data,
+
+    removeSavedItem: async (id: string): Promise<void> => {
+        await apiClient.delete<ApiResponse<unknown>>(`${SAVED_ENDPOINT}/${encodeURIComponent(id)}`);
     },
 
     /** A record's PDF as a Blob plus the server's file name. */

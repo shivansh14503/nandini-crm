@@ -125,6 +125,7 @@ export default function TicketForm({ mode = 'create', initialData, ticketId, bre
         schema: ticketFormSchema,
         module: 'tickets',
         defaultValues: { ...DEFAULT_TICKET_FORM, ...initialData },
+        dropdownDefaults: { enabled: mode === 'create', keep: initialData },
     });
 
     const { reset, getValues, setValue, control, formState } = methods;
@@ -235,7 +236,8 @@ export default function TicketForm({ mode = 'create', initialData, ticketId, bre
     const autoPriorityRef = useRef<TicketPriority | null>(null);
     const handleNatureOfCallPicked = (item: NatureOfCallItem) => {
         const current = getValues('ticketPriority');
-        const untouched = current === (autoPriorityRef.current ?? DEFAULT_TICKET_FORM.ticketPriority);
+        // Before any pick, the form's starting priority (the admin's default, or empty).
+        const untouched = current === (autoPriorityRef.current ?? methods.control._defaultValues.ticketPriority ?? DEFAULT_TICKET_FORM.ticketPriority);
         if (!untouched) return;
         const suggested = NATURE_PRIORITY_TO_TICKET_PRIORITY[item.priority];
         autoPriorityRef.current = suggested;

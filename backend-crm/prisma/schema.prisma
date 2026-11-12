@@ -793,6 +793,8 @@ model DropdownOption {
   sortOrder  Int      @default(0)
   isActive   Boolean  @default(true)
   isSystem   Boolean  @default(false)
+  /// Pre-selected on new records (a single-choice field takes the first one in order).
+  isDefault  Boolean  @default(false)
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
@@ -856,21 +858,9 @@ model PdfTemplate {
   pageSize            String    @db.NVarChar(10)
   /// portrait | landscape
   orientation         String    @db.NVarChar(10)
-  /// Margins in millimetres.
-  marginTop           Decimal   @default(45) @db.Decimal(5, 1)
-  marginRight         Decimal   @default(10) @db.Decimal(5, 1)
-  marginBottom        Decimal   @default(16) @db.Decimal(5, 1)
-  marginLeft          Decimal   @default(10) @db.Decimal(5, 1)
-  marginHeader        Decimal   @default(0) @db.Decimal(5, 1)
-  marginFooter        Decimal   @default(5) @db.Decimal(5, 1)
-  headerHtml          String?   @db.NVarChar(Max)
-  bodyHtml            String    @db.NVarChar(Max)
-  footerHtml          String?   @db.NVarChar(Max)
-  css                 String?   @db.NVarChar(Max)
-  /// JSON FieldVisibility `{ fields: { key: bool }, lineItemColumns: [...] }`; merged with the registry defaults.
-  fieldVisibilityJson String?   @db.NVarChar(Max)
-  /// JSON Branding (company block, accent colour, logo asset key).
-  brandingJson        String?   @db.NVarChar(Max)
+  /// JSON PdfDocument (src/modules/pdf/document/schema.ts): page setup, theme and the header / body / footer
+  /// sections, columns and blocks. pageSize / orientation above mirror it for listing.
+  documentJson        String    @db.NVarChar(Max)
   /// Optimistic-concurrency counter; bumped on every update.
   version             Int       @default(1)
   createdBy           String    @db.NVarChar(50)
@@ -893,4 +883,21 @@ model PdfAsset {
   data      Bytes    @db.VarBinary(Max)
   createdBy String   @db.NVarChar(50)
   createdAt DateTime @default(now())
+}
+
+/// Builder library: a section or block saved by an admin, shared by every template of the module and inserted as a copy.
+model PdfSavedItem {
+  id          String    @id @default(uuid()) @db.NVarChar(50)
+  module      String    @db.NVarChar(30)
+  name        String    @db.NVarChar(120)
+  /// section | block
+  kind        String    @db.NVarChar(10)
+  /// JSON SavedItemContent ({ kind, section } | { kind, block }).
+  contentJson String    @db.NVarChar(Max)
+  createdBy   String    @db.NVarChar(50)
+  createdAt   DateTime  @default(now())
+  isDeleted   Boolean   @default(false)
+  deletedAt   DateTime?
+
+  @@index([module, isDeleted])
 }

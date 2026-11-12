@@ -5,7 +5,6 @@ import type { AuthUser } from '../../../types/user.types.js';
 import { assertRecordAccess } from '../../shared/accessControl.js';
 import { lineItemsInclude } from '../../shared/lineItems.js';
 import type { CustomFieldMeta } from '../fieldRegistry.js';
-import { flattenVisibility, visibleColumns } from '../fieldVisibility.js';
 import { amountInWords, formatCurrency, formatDate, formatDateTime, formatNumber, slugify } from '../format.js';
 import type { PdfAddress, PdfContext, PdfLineItem } from '../pdf.types.js';
 import type { ContextBuildInput, PdfModuleAdapter, RecordMeta } from './contextTypes.js';
@@ -61,11 +60,10 @@ export interface QuotationSource {
     customValues: Record<string, unknown>;
 }
 
-function buildAddress(parts: Omit<PdfAddress, 'full'>, prefix: 'billing' | 'shipping', show: Record<string, boolean>): PdfAddress {
-    const visible = (key: string) => show[`${prefix}${key}`] !== false;
-    const cityLine = [visible('City') ? parts.city : '', visible('State') ? parts.state : ''].filter(Boolean).join(', ');
-    const cityWithPin = [cityLine, visible('PostalCode') ? parts.postalCode : ''].filter(Boolean).join(' - ');
-    const full = [visible('Street') ? parts.street : '', cityWithPin, visible('Country') ? parts.country : ''].filter((p) => p && p.trim()).join('\n');
+function buildAddress(parts: Omit<PdfAddress, 'full'>): PdfAddress {
+    const cityLine = [parts.city, parts.state].filter(Boolean).join(', ');
+    const cityWithPin = [cityLine, parts.postalCode].filter(Boolean).join(' - ');
+    const full = [parts.street, cityWithPin, parts.country].filter((p) => p && p.trim()).join('\n');
     return { ...parts, full };
 }
 
@@ -84,7 +82,6 @@ function formatCustomValue(value: unknown, fieldType: string, currency: string):
 export function assembleQuotationContext(source: QuotationSource, input: ContextBuildInput): PdfContext {
     const currency = source.currency;
     const money = (value: number) => formatCurrency(value, currency);
-    const show = flattenVisibility(input.visibility);
 
     const lineItems: PdfLineItem[] = source.lineItems.map((item, index) => ({
         srNo: index + 1,
@@ -126,7 +123,7 @@ export function assembleQuotationContext(source: QuotationSource, input: Context
     for (const field of input.customFields) {
         const value = formatCustomValue(source.customValues[field.fieldKey], field.fieldType, currency);
         custom[field.fieldKey] = value;
-        if (value && show[field.fieldKey]) customList.push({ key: field.fieldKey, label: field.label, value });
+        if (value) customList.push({ key: field.fieldKey, label: field.label, value });
     }
 
     const quotation = {
@@ -148,11 +145,18 @@ export function assembleQuotationContext(source: QuotationSource, input: Context
         remarks: source.remarks,
     };
 
-    // A logo is only "shown" when there is one to show.
-    show.companyLogo = Boolean(show.companyLogo && input.logoDataUri);
-
+    const theme = input.theme;
     return {
-        company: { ...input.branding, companyName: input.branding.companyName || source.issuingCompany, logoDataUri: input.logoDataUri },
+        company: {
+            companyName: theme.companyName || source.issuingCompany,
+            companyAddress: theme.companyAddress,
+            companyPhone: theme.companyPhone,
+            companyEmail: theme.companyEmail,
+            companyGstin: theme.companyGstin,
+            companyWebsite: theme.companyWebsite,
+            ...(theme.logoAssetKey ? { logoAssetKey: theme.logoAssetKey } : {}),
+            logoDataUri: input.logoDataUri,
+        },
         record: quotation,
         quotation,
         customer: {
@@ -164,16 +168,14 @@ export function assembleQuotationContext(source: QuotationSource, input: Context
             contactMobile: source.contactMobile,
             contactEmail: source.contactEmail,
         },
-        billing: buildAddress(source.billing, 'billing', show),
-        shipping: buildAddress(source.shipping, 'shipping', show),
+        billing: buildAddress(source.billing),
+        shipping: buildAddress(source.shipping),
         salesPerson: source.salesPerson,
         lineItems,
         totals,
         terms: source.terms,
         custom,
         customList,
-        show,
-        columns: visibleColumns(input.registry, input.visibility),
         currency,
         meta: { generatedAt: formatDateTime(new Date(), input.timeZone), generatedBy: input.generatedBy },
     };

@@ -21,7 +21,8 @@
     "prisma:generate": "prisma generate",
     "prisma:validate": "prisma validate",
     "db:migrate": "prisma migrate dev",
-    "db:deploy": "prisma migrate deploy"
+    "db:deploy": "prisma migrate deploy",
+    "sync:pdf-document": "tsx scripts/syncPdfDocument.ts"
   },
   "dependencies": {
     "@fontsource/noto-sans": "^5.3.0",
@@ -33,7 +34,6 @@
     "cors": "^2.8.6",
     "dotenv": "^18.0.8",
     "express": "^5.2.1",
-    "handlebars": "^4.7.10",
     "helmet": "^8.3.0",
     "http-status-codes": "^2.3.0",
     "ioredis": "^6.0.0",
@@ -42,7 +42,6 @@
     "pino": "^10.4.0",
     "pino-http": "^11.0.0",
     "puppeteer": "^25.16.0",
-    "sanitize-html": "^2.18.1",
     "xlsx": "*",
     "zod": "^4.5.4"
   },
@@ -53,7 +52,6 @@
     "@types/express": "^5.0.6",
     "@types/jsonwebtoken": "^9.0.10",
     "@types/node": "^26.6.5",
-    "@types/sanitize-html": "^2.16.2",
     "pino-pretty": "^13.2.0",
     "prisma": "^7.10.1",
     "tsx": "^4.23.15",

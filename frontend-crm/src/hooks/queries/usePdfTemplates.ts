@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { pdfTemplateService } from '@/services/pdfTemplate.service';
+import type { SavedItemContent } from '@/lib/pdf-document';
 import type { PdfModule, PdfTemplate, PdfTemplateCreateInput, PdfTemplateUpdateInput } from '@/types/pdfTemplate.types';
 import { queryKeys } from './queryKeys';
 
@@ -31,6 +32,36 @@ export function usePdfFields(module: PdfModule) {
         queryKey: keys.fields(module),
         queryFn: () => pdfTemplateService.fields(module),
         staleTime: FIELDS_STALE_MS,
+    });
+}
+
+/** Context the builder canvas renders with: a real quotation when `recordId` is set, else sample data. */
+export function usePdfContext(module: PdfModule, recordId: string | undefined) {
+    return useQuery({
+        queryKey: keys.context(module, recordId ?? ''),
+        queryFn: () => pdfTemplateService.context(module, recordId),
+        staleTime: TEMPLATE_STALE_MS,
+        placeholderData: (previous) => previous,
+    });
+}
+
+export function usePdfSavedItems(module: PdfModule) {
+    return useQuery({ queryKey: keys.saved(module), queryFn: () => pdfTemplateService.savedItems(module), staleTime: TEMPLATE_STALE_MS });
+}
+
+export function useSavePdfItem(module: PdfModule) {
+    const queryClient = useQueryClient();
+    return useMutation({
+        mutationFn: ({ name, content }: { name: string; content: SavedItemContent }) => pdfTemplateService.saveItem(module, name, content),
+        onSuccess: () => queryClient.invalidateQueries({ queryKey: keys.saved(module) }),
+    });
+}
+
+export function useRemovePdfSavedItem(module: PdfModule) {
+    const queryClient = useQueryClient();
+    return useMutation({
+        mutationFn: (id: string) => pdfTemplateService.removeSavedItem(id),
+        onSuccess: () => queryClient.invalidateQueries({ queryKey: keys.saved(module) }),
     });
 }
 

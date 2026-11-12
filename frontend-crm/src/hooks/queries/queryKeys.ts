@@ -27,6 +27,10 @@ export const queryKeys = {
         ...createEntityKeys('pdf-templates'),
         /** Field registry + line-item columns of a module (custom fields included). */
         fields: (module: string) => ['pdf-templates', 'fields', module] as const,
+        /** Record (or sample) context the builder canvas renders with. */
+        context: (module: string, recordId: string) => ['pdf-templates', 'context', module, recordId] as const,
+        /** Saved sections / blocks library of a module. */
+        saved: (module: string) => ['pdf-templates', 'saved', module] as const,
     },
     users: {
         all: ['users'] as const,

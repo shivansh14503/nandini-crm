@@ -6,9 +6,11 @@ import type { AuthUser } from '../../types/user.types.js';
 import { HttpError } from '../../utils/httpError.js';
 import { FORM_CONFIG_ADMIN_ROLES } from '../form-configs/formConfig.routes.js';
 import { runInTransaction } from '../shared/transactions.js';
+import { validateDocumentRefs, type PdfDocument } from './document/index.js';
 import { getFieldRegistry } from './fieldRegistry.js';
-import type { PdfMargins, PdfModule } from './pdf.types.js';
+import type { PdfFieldRegistry, PdfModule } from './pdf.types.js';
 import {
+    parseStoredDocument,
     toAuditSnapshot,
     toModule,
     toPdfTemplateDto,
@@ -25,13 +27,12 @@ import {
     type TemplateCreateInput,
     type TemplateUpdateInput,
 } from './pdfTemplate.validator.js';
-import { sanitizeTemplateCss, sanitizeTemplateHtml } from './sanitize.js';
-import { invalidateTemplate, validateTemplateParts } from './templateEngine.js';
 
 /**
- * Admin-managed PDF templates. Every mutation is audited (entityType PdfTemplate) and bumps `version`, the
- * optimistic-concurrency token clients must send back on update (409 VERSION_CONFLICT when stale).
- * System templates are seeded from code: only isActive / isDefault may change; admins duplicate them to edit.
+ * Admin-managed PDF templates (block documents, see document/schema.ts). Every mutation is audited (entityType
+ * PdfTemplate) and bumps `version`, the optimistic-concurrency token clients must send back on update
+ * (409 VERSION_CONFLICT when stale). System templates are seeded from code: only isActive / isDefault may
+ * change; admins duplicate them to edit.
  */
 
 const ADMIN_ROLES = new Set<string>(FORM_CONFIG_ADMIN_ROLES.map((r) => r.toLowerCase()));
@@ -39,7 +40,10 @@ export const isPdfAdmin = (user: AuthUser): boolean => ADMIN_ROLES.has(user.role
 
 const notFound = () => HttpError.notFound('PDF template not found');
 
-const CONTENT_KEYS = ['name', 'description', 'pageSize', 'orientation', 'margins', 'headerHtml', 'bodyHtml', 'footerHtml', 'css', 'fieldVisibility', 'branding'] as const;
+const CONTENT_KEYS = ['name', 'description', 'document'] as const;
+
+/** Max stored document size (UTF-8 bytes). */
+export const DOCUMENT_MAX_BYTES = 2 * 1024 * 1024;
 
 async function findTemplate(client: TransactionClient | typeof prisma, id: string): Promise<PdfTemplate> {
     const row = await client.pdfTemplate.findFirst({ where: { id, isDeleted: false } });
@@ -55,33 +59,37 @@ async function assertUniqueName(client: TransactionClient | typeof prisma, modul
     if (clash) throw HttpError.conflict(`A ${module.toLowerCase()} template named "${name}" already exists.`, [{ message: 'Name is already in use.', path: ['name'] }]);
 }
 
-const marginData = (m: PdfMargins) => ({
-    marginTop: m.top,
-    marginRight: m.right,
-    marginBottom: m.bottom,
-    marginLeft: m.left,
-    marginHeader: m.header,
-    marginFooter: m.footer,
-});
-
-interface SanitizedParts {
-    headerHtml: string;
-    bodyHtml: string;
-    footerHtml: string;
-    css: string;
+/** Registry lookups used to check a document's field paths and line-item columns. */
+export function registryRefs(registry: PdfFieldRegistry) {
+    return {
+        fieldTypes: new Map(registry.fields.map((f) => [f.path, f.type])),
+        lineItemColumnKeys: new Set(registry.lineItemColumns.map((c) => c.key)),
+    };
 }
 
-/** Sanitizes the parts and checks they compile (422 with line / column otherwise). */
-export function prepareParts(parts: { headerHtml?: string; bodyHtml: string; footerHtml?: string; css?: string }): SanitizedParts {
-    const sanitized = {
-        headerHtml: sanitizeTemplateHtml(parts.headerHtml),
-        bodyHtml: sanitizeTemplateHtml(parts.bodyHtml),
-        footerHtml: sanitizeTemplateHtml(parts.footerHtml),
-        css: sanitizeTemplateCss(parts.css),
-    };
-    if (!sanitized.bodyHtml.trim()) throw HttpError.badRequest('Body is empty after removing unsupported markup.', [{ message: 'Body is required.', path: ['bodyHtml'] }]);
-    validateTemplateParts({ header: sanitized.headerHtml, body: sanitized.bodyHtml, footer: sanitized.footerHtml });
-    return sanitized;
+/** 400 listing every problem when the document references unknown fields / columns or breaks band rules. */
+export function assertDocumentValid(document: PdfDocument, registry: PdfFieldRegistry): string {
+    const issues = validateDocumentRefs(document, registryRefs(registry));
+    if (issues.length) {
+        throw HttpError.badRequest(
+            issues.length === 1 ? issues[0].message : `The template has ${issues.length} problems: ${issues[0].message}`,
+            issues.map((i) => ({ message: i.message, path: ['document', ...i.path.map(String)] })),
+        );
+    }
+    const json = JSON.stringify(document);
+    if (Buffer.byteLength(json, 'utf8') > DOCUMENT_MAX_BYTES) throw HttpError.badRequest('The template is too large.');
+    return json;
+}
+
+/** The row's document, or a 422 when it is unreadable (should only happen to a row the seed hasn't refreshed). */
+export function documentOf(row: PdfTemplate): PdfDocument {
+    const doc = parseStoredDocument(row.documentJson);
+    if (!doc) {
+        throw new HttpError(`Template "${row.name}" is damaged and can't be rendered. Restart the API to re-seed system templates, or recreate it.`, StatusCodes.UNPROCESSABLE_ENTITY, {
+            code: 'PDF_TEMPLATE_INVALID',
+        });
+    }
+    return doc;
 }
 
 const versionConflict = () =>
@@ -101,11 +109,7 @@ async function audit(tx: TransactionClient, row: PdfTemplate, action: 'CREATE' |
     await auditService.record(tx, { entityType: 'PdfTemplate', entityId: row.id, action, changedBy: user.username, changes });
 }
 
-async function withRegistry(row: PdfTemplate): Promise<PdfTemplateDto> {
-    return toPdfTemplateDto(row, await getFieldRegistry(toModule(row.module)));
-}
-
-function createData(input: TemplateCreateInput, parts: SanitizedParts, user: AuthUser, isSystem = false): Prisma.PdfTemplateUncheckedCreateInput {
+function createData(input: TemplateCreateInput, documentJson: string, user: AuthUser, isSystem = false): Prisma.PdfTemplateUncheckedCreateInput {
     return {
         name: input.name,
         module: input.module,
@@ -113,22 +117,16 @@ function createData(input: TemplateCreateInput, parts: SanitizedParts, user: Aut
         isSystem,
         isDefault: input.isDefault,
         isActive: input.isActive,
-        pageSize: input.pageSize,
-        orientation: input.orientation,
-        ...marginData(input.margins),
-        headerHtml: parts.headerHtml || null,
-        bodyHtml: parts.bodyHtml,
-        footerHtml: parts.footerHtml || null,
-        css: parts.css || null,
-        fieldVisibilityJson: input.fieldVisibility ? JSON.stringify(input.fieldVisibility) : null,
-        brandingJson: input.branding ? JSON.stringify(input.branding) : null,
+        pageSize: input.document.page.size,
+        orientation: input.document.page.orientation,
+        documentJson,
         createdBy: user.username,
         updatedBy: user.username,
     };
 }
 
 export const pdfTemplateService = {
-    /** Lightweight list (no HTML). Inactive templates are listed for admins only. */
+    /** Lightweight list (no document). Inactive templates are listed for admins only. */
     async list(query: unknown, user: AuthUser): Promise<PdfTemplateListItemDto[]> {
         const { module, includeInactive } = listQuerySchema.parse(query ?? {});
         const showInactive = Boolean(includeInactive) && isPdfAdmin(user);
@@ -140,21 +138,22 @@ export const pdfTemplateService = {
     },
 
     async get(id: string): Promise<PdfTemplateDto> {
-        return withRegistry(await findTemplate(prisma, id));
+        const row = await findTemplate(prisma, id);
+        return toPdfTemplateDto(row, documentOf(row));
     },
 
     async create(body: unknown, user: AuthUser): Promise<PdfTemplateDto> {
         const input = templateCreateSchema.parse(body);
         if (input.isDefault && !input.isActive) throw HttpError.badRequest('The default template must be active.', [{ message: 'Activate the template to make it the default.', path: ['isDefault'] }]);
-        const parts = prepareParts(input);
+        const documentJson = assertDocumentValid(input.document, await getFieldRegistry(input.module));
         const row = await runInTransaction(async (tx) => {
             await assertUniqueName(tx, input.module, input.name);
-            const created = await tx.pdfTemplate.create({ data: createData(input, parts, user) });
+            const created = await tx.pdfTemplate.create({ data: createData(input, documentJson, user) });
             if (created.isDefault) await clearOtherDefaults(tx, created.module, created.id, user);
             await audit(tx, created, 'CREATE', user, toAuditSnapshot(created));
             return created;
         });
-        return withRegistry(row);
+        return toPdfTemplateDto(row, input.document);
     },
 
     async update(id: string, body: unknown, user: AuthUser): Promise<PdfTemplateDto> {
@@ -172,27 +171,12 @@ export const pdfTemplateService = {
         }
         if (isDefault && !isActive) throw HttpError.badRequest('The default template cannot be deactivated.');
 
-        const parts =
-            input.bodyHtml !== undefined || input.headerHtml !== undefined || input.footerHtml !== undefined || input.css !== undefined
-                ? prepareParts({
-                      headerHtml: input.headerHtml ?? current.headerHtml ?? '',
-                      bodyHtml: input.bodyHtml ?? current.bodyHtml,
-                      footerHtml: input.footerHtml ?? current.footerHtml ?? '',
-                      css: input.css ?? current.css ?? '',
-                  })
-                : null;
+        const documentJson = input.document ? assertDocumentValid(input.document, await getFieldRegistry(toModule(current.module))) : null;
 
         const data: Prisma.PdfTemplateUpdateManyMutationInput = {
             ...(input.name !== undefined ? { name: input.name } : {}),
             ...(input.description !== undefined ? { description: input.description || null } : {}),
-            ...(input.pageSize ? { pageSize: input.pageSize } : {}),
-            ...(input.orientation ? { orientation: input.orientation } : {}),
-            ...(input.margins ? marginData(input.margins) : {}),
-            ...(parts
-                ? { headerHtml: parts.headerHtml || null, bodyHtml: parts.bodyHtml, footerHtml: parts.footerHtml || null, css: parts.css || null }
-                : {}),
-            ...(input.fieldVisibility ? { fieldVisibilityJson: JSON.stringify(input.fieldVisibility) } : {}),
-            ...(input.branding ? { brandingJson: JSON.stringify(input.branding) } : {}),
+            ...(input.document && documentJson ? { documentJson, pageSize: input.document.page.size, orientation: input.document.page.orientation } : {}),
             isActive,
             isDefault,
             version: { increment: 1 },
@@ -210,13 +194,13 @@ export const pdfTemplateService = {
             if (Object.keys(changes).length) await audit(tx, updated, 'UPDATE', user, changes);
             return updated;
         });
-        invalidateTemplate(id);
-        return withRegistry(row);
+        return toPdfTemplateDto(row, documentOf(row));
     },
 
     async duplicate(id: string, body: unknown, user: AuthUser): Promise<PdfTemplateDto> {
         const { name: requestedName } = duplicateBodySchema.parse(body ?? {});
         const source = await findTemplate(prisma, id);
+        documentOf(source);
         const row = await runInTransaction(async (tx) => {
             let name = requestedName ?? `${source.name} (Copy)`;
             if (requestedName) {
@@ -236,18 +220,7 @@ export const pdfTemplateService = {
                     isActive: true,
                     pageSize: source.pageSize,
                     orientation: source.orientation,
-                    marginTop: source.marginTop,
-                    marginRight: source.marginRight,
-                    marginBottom: source.marginBottom,
-                    marginLeft: source.marginLeft,
-                    marginHeader: source.marginHeader,
-                    marginFooter: source.marginFooter,
-                    headerHtml: source.headerHtml,
-                    bodyHtml: source.bodyHtml,
-                    footerHtml: source.footerHtml,
-                    css: source.css,
-                    fieldVisibilityJson: source.fieldVisibilityJson,
-                    brandingJson: source.brandingJson,
+                    documentJson: source.documentJson,
                     createdBy: user.username,
                     updatedBy: user.username,
                 },
@@ -255,7 +228,7 @@ export const pdfTemplateService = {
             await audit(tx, created, 'DUPLICATE', user, { sourceId: source.id, sourceName: source.name, ...toAuditSnapshot(created) });
             return created;
         });
-        return withRegistry(row);
+        return toPdfTemplateDto(row, documentOf(row));
     },
 
     async setDefault(id: string, user: AuthUser): Promise<PdfTemplateListItemDto> {
@@ -296,7 +269,6 @@ export const pdfTemplateService = {
             });
             await audit(tx, deleted, 'DELETE', user, toAuditSnapshot(current));
         });
-        invalidateTemplate(id);
         return { id };
     },
 

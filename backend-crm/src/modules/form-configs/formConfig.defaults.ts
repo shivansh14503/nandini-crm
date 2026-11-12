@@ -554,6 +554,38 @@ export const DEFAULT_CATEGORIES: DefaultCategory[] = [
     },
 ];
 
+/**
+ * Options pre-selected on new records (`DropdownOption.isDefault`), matching what the hand-built forms used to
+ * hard-code. Applied when the seed creates a category; existing databases got the same rows flagged by the
+ * 20261112010000_dropdown_option_default migration. Admins change them in Form Builder › Dropdowns: a dropdown
+ * without a default leaves the field empty, so it shows its placeholder.
+ */
+export const DEFAULT_SELECTED_OPTIONS: Readonly<Record<string, readonly string[]>> = {
+    shared_lead_source: ['Website Enquiry'],
+    shared_product_category: ['Biz Analyst'],
+    shared_followup_type: ['Call'],
+    lead_status: ['New'],
+    lead_type: ['Hot'],
+    lead_department: ['Executive Management'],
+    contact_communication_type: ['Call', 'Email'],
+    org_account_status: ['Active'],
+    org_registration_type: ['Registered'],
+    opportunity_type: ['New Business'],
+    opportunity_sales_stage: ['Qualification'],
+    opportunity_commission: ['Standard (10%)'],
+    quote_stage: ['Draft'],
+    quote_company: ['Nandini Infosystems'],
+    quote_validation_period: ['30 Days'],
+    quote_terms_template: ['Standard Terms & Conditions'],
+    quote_payment_terms: ['50% Advance & 50% on Delivery'],
+    product_tax_type: ['GST'],
+    ticket_priority: ['Normal'],
+    ticket_status: ['New'],
+    ticket_source: ['Call'],
+    ticket_support_type: ['Free'],
+    ticket_support_mode: ['Offsite Support'],
+};
+
 // ── Built-in field definitions ───────────────────────────────────────────────
 
 export interface DefaultField {

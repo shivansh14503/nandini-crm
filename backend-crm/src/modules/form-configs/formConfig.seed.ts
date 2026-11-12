@@ -2,7 +2,7 @@ import { prisma } from '../../config/prisma.js';
 import type { TransactionClient } from '../../config/prisma.js';
 import { logger } from '../../config/logger.js';
 import { CACHE_KEYS, cacheService } from '../../services/cache.service.js';
-import { DEFAULT_CATEGORIES, DEFAULT_FIELDS, isFieldTombstoned, sectionKeyFromLabel, type DefaultOption } from './formConfig.defaults.js';
+import { DEFAULT_CATEGORIES, DEFAULT_FIELDS, DEFAULT_SELECTED_OPTIONS, isFieldTombstoned, sectionKeyFromLabel, type DefaultOption } from './formConfig.defaults.js';
 
 const toOption = (option: string | DefaultOption): DefaultOption => (typeof option === 'string' ? { value: option } : option);
 
@@ -54,6 +54,8 @@ export async function ensureFormConfigsSeeded(): Promise<void> {
                     sortOrder: base + (index + 1) * 10,
                     isSystem: Boolean(o.isSystem),
                     isActive: true,
+                    // Only a brand-new dropdown takes the default selection: an admin's choice (or clearing it) stands.
+                    isDefault: isNewCategory && (DEFAULT_SELECTED_OPTIONS[def.key]?.includes(o.value) ?? false),
                 })),
             });
             changed += missing.length;

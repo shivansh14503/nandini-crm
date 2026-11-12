@@ -14,7 +14,10 @@ import { type BreadcrumbItem } from '../common/AppBreadcrumbs';
 import { AppToast } from '../common/AppToast';
 import { CommonFormLayout } from '../common/CommonFormLayout';
 import { type FormTabDefinition } from '../common/Drawer';
-import { useRhfForm } from '@/components/forms';
+import { useRhfForm, withDropdownDefaults } from '@/components/forms';
+import { getFormConfigs } from '@/services/masterData.store';
+import { findCategory } from '@/utils/formConfig';
+import { PAYMENT_TERMS_DESCRIPTIONS, TERMS_TEMPLATE_DESCRIPTIONS } from '@/types/quotation.types';
 import { ROUTES } from '@/config/constants';
 import type { Opportunity } from '@/types/opportunity.types';
 import type { Quotation, QuotationFormData } from '@/types/quotation.types';
@@ -186,6 +189,28 @@ const EMPTY_DEFAULTS: QuotationFormData = {
     termsAndConditions: '',
 };
 
+/**
+ * A quotation built from an opportunity, with the admin's dropdown defaults (stage, company, terms, …) in place
+ * of the builder's fixed ones. A terms / payment template that changes brings its own description (empty when the
+ * dropdown has no default). Values in `keep` are left as they are.
+ */
+function withAdminQuoteDefaults(values: QuotationFormData, keep?: Partial<QuotationFormData>): QuotationFormData {
+    const configs = getFormConfigs();
+    const next = withDropdownDefaults(configs, 'quotations', values, keep);
+    const describe = (categoryKey: string, value: string, fallback: Record<string, string>): string => {
+        if (!value) return '';
+        const meta = findCategory(configs, categoryKey)?.options.find((o) => o.value === value)?.meta?.description;
+        return typeof meta === 'string' && meta ? meta : (fallback[value] ?? '');
+    };
+    if (next.termsAndCondition !== values.termsAndCondition) {
+        next.termsAndConditionDescription = describe('quote_terms_template', next.termsAndCondition, TERMS_TEMPLATE_DESCRIPTIONS);
+    }
+    if (next.paymentTerms !== values.paymentTerms) {
+        next.paymentTermsDescription = describe('quote_payment_terms', next.paymentTerms, PAYMENT_TERMS_DESCRIPTIONS);
+    }
+    return next;
+}
+
 export function CreateQuoteForm({
     mode = 'create',
     quotationId,
@@ -208,6 +233,7 @@ export function CreateQuoteForm({
             schema: quotationFormSchema,
             module: 'quotations',
             defaultValues: { ...EMPTY_DEFAULTS, ...initialData },
+            dropdownDefaults: { enabled: mode === 'create', keep: initialData },
         });
 
     const { reset, handleSubmit, formState } = methods;
@@ -294,7 +320,7 @@ export function CreateQuoteForm({
                 }
 
                 reset({
-                    ...defaults,
+                    ...withAdminQuoteDefaults(defaults, initialData),
                     ...initialData,
                 });
             })

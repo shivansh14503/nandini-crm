@@ -31,6 +31,40 @@ export function activeOptionValues(category: DropdownCategoryDto | undefined, fa
         .map((o) => o.value);
 }
 
+/** Values an admin marked as default (active options only, in admin order). Empty → the field starts empty. */
+export function defaultOptionValues(category: DropdownCategoryDto | undefined): string[] {
+    if (!category) return [];
+    return category.options
+        .filter((o) => o.isActive && o.isDefault)
+        .sort((a, b) => a.sortOrder - b.sortOrder)
+        .map((o) => o.value);
+}
+
+/**
+ * Initial values of a module's built-in dropdown fields on a new record, from the admin's default options:
+ * the first default for a single choice, all of them for a multi-select (an array in `base`), and empty when the
+ * dropdown has none so the placeholder shows. Only keys `base` holds as text or a list are returned.
+ */
+export function builtInDropdownDefaults(
+    configs: FormConfigsPayload | null | undefined,
+    module: CrmModuleKey,
+    base: Record<string, unknown>,
+): Record<string, string | string[]> {
+    const result: Record<string, string | string[]> = {};
+    if (!configs) return result;
+    for (const field of moduleFields(configs, module)) {
+        if (!field.isSystem || !field.dropdownCategoryKey) continue;
+        const category = findCategory(configs, field.dropdownCategoryKey);
+        // Deleted dropdown: keep the form's own default.
+        if (!category) continue;
+        const current = base[field.fieldKey];
+        const values = defaultOptionValues(category);
+        if (Array.isArray(current)) result[field.fieldKey] = values;
+        else if (typeof current === 'string') result[field.fieldKey] = values[0] ?? '';
+    }
+    return result;
+}
+
 /** value → display label for every option (archived included), only where the label differs from the value. */
 export function optionLabelMap(category: DropdownCategoryDto | undefined): Record<string, string> | undefined {
     if (!category) return undefined;
@@ -143,10 +177,17 @@ export function validateConfiguredFields(
     return issues;
 }
 
-/** Parses a custom field's stored default (`defaultValue` is text) into the control's value shape. */
-export function parseDefaultValue(field: FormFieldDefinitionDto): unknown {
+/**
+ * Parses a custom field's stored default (`defaultValue` is text) into the control's value shape. A select /
+ * multi-select field without one falls back to its dropdown's default options (`category`).
+ */
+export function parseDefaultValue(field: FormFieldDefinitionDto, category?: DropdownCategoryDto): unknown {
     const raw = field.defaultValue?.trim();
-    if (!raw) return undefined;
+    if (!raw) {
+        const values = field.fieldType === 'select' || field.fieldType === 'multiselect' ? defaultOptionValues(category) : [];
+        if (values.length === 0) return undefined;
+        return field.fieldType === 'multiselect' ? values : values[0];
+    }
     if (field.fieldType === 'checkbox') return raw === 'true' || raw === 'Yes' || raw === '1';
     if (field.fieldType === 'multiselect') return raw.split(',').map((v) => v.trim()).filter(Boolean);
     if (field.fieldType === 'date' && raw.toLowerCase() === 'today') return new Date().toISOString().slice(0, 10);

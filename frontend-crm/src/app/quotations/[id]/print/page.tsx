@@ -5,9 +5,8 @@ import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
 import { ROUTES } from '@/config/constants';
 import { LoadingScreen } from '@/components/common/LoadingScreen';
-import { AppToast } from '@/components/common/AppToast';
 import { PdfViewerPage } from '@/components/pdf/PdfViewerPage';
-import { pdfErrorMessage, saveBlob } from '@/components/pdf/usePdfActions';
+import { pdfErrorMessage } from '@/components/pdf/usePdfActions';
 import { useSelectedPdfTemplate } from '@/components/pdf/useSelectedPdfTemplate';
 import { usePdfTemplates } from '@/hooks/queries/usePdfTemplates';
 import { useQuotation } from '@/hooks/queries/useQuotations';
@@ -30,9 +29,6 @@ function QuotationPrintContent() {
     const [attempt, setAttempt] = useState(0);
     /** Result of the latest request, tagged with its key so a stale result reads as "loading". */
     const [result, setResult] = useState<{ key: string; url?: string; error?: string } | null>(null);
-    const [downloading, setDownloading] = useState(false);
-    const [toast, setToast] = useState<string | null>(null);
-    const iframeRef = useRef<HTMLIFrameElement | null>(null);
     const requestKey = templateId ? `${templateId}:${attempt}` : null;
 
     useEffect(() => {
@@ -92,30 +88,6 @@ function QuotationPrintContent() {
         [id, router, select],
     );
 
-    const download = useCallback(async () => {
-        if (!templateId) return;
-        setDownloading(true);
-        try {
-            const { blob, fileName } = await pdfTemplateService.fetchRecordPdf(MODULE, id, templateId, 'attachment');
-            saveBlob(blob, fileName);
-        } catch (err) {
-            setToast(pdfErrorMessage(err));
-        } finally {
-            setDownloading(false);
-        }
-    }, [id, templateId]);
-
-    const print = useCallback(() => {
-        try {
-            const win = iframeRef.current?.contentWindow;
-            if (!win) throw new Error('not ready');
-            win.focus();
-            win.print();
-        } catch {
-            setToast('Use the print button in the PDF viewer toolbar to print this document.');
-        }
-    }, []);
-
     const close = useCallback(() => {
         window.close();
         // window.close() is ignored for tabs the script didn't open; fall back to the quotation.
@@ -130,26 +102,19 @@ function QuotationPrintContent() {
     const subtitle = quotation ? [quotation.organizationName || quotation.contactName, selected?.name].filter(Boolean).join(' · ') : selected?.name;
 
     return (
-        <>
-            <PdfViewerPage
-                title={title}
-                subtitle={subtitle}
-                templates={templatesQuery.data ?? []}
-                templateId={templateId}
-                onTemplateChange={changeTemplate}
-                pdfUrl={pdfUrl}
-                loading={loading}
-                error={error}
-                onRetry={() => setAttempt((n) => n + 1)}
-                onDownload={() => void download()}
-                onPrint={print}
-                onBack={() => router.push(ROUTES.QUOTATION_DETAIL(id))}
-                onClose={close}
-                downloading={downloading}
-                iframeRef={iframeRef}
-            />
-            <AppToast open={Boolean(toast)} message={toast ?? ''} severity="error" onClose={() => setToast(null)} />
-        </>
+        <PdfViewerPage
+            title={title}
+            subtitle={subtitle}
+            templates={templatesQuery.data ?? []}
+            templateId={templateId}
+            onTemplateChange={changeTemplate}
+            pdfUrl={pdfUrl}
+            loading={loading}
+            error={error}
+            onRetry={() => setAttempt((n) => n + 1)}
+            onBack={() => router.push(ROUTES.QUOTATION_DETAIL(id))}
+            onClose={close}
+        />
     );
 }
 

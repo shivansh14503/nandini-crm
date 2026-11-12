@@ -114,6 +114,7 @@ export default function ProductForm({
             schema: productFormSchema,
             module: 'products',
             defaultValues: { ...DEFAULT_FORM, ...initialData },
+            dropdownDefaults: { enabled: mode === 'create', keep: initialData },
         });
 
     const { reset, watch, formState } = methods;

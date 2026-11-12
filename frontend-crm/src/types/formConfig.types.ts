@@ -114,6 +114,11 @@ export interface DropdownOptionDto {
     isActive: boolean;
     /** Drives backend logic: can't be archived or renamed (label edits are fine). */
     isSystem: boolean;
+    /**
+     * Pre-selected on new records (a single-choice field takes the first one in order). A dropdown without one
+     * leaves the field empty, so its placeholder shows.
+     */
+    isDefault: boolean;
 }
 
 export interface DropdownCategoryDto {
@@ -220,6 +225,7 @@ export interface UpdateOptionPayload {
     label?: string;
     meta?: Record<string, unknown> | null;
     isActive?: boolean;
+    isDefault?: boolean;
 }
 
 export interface CreateFieldPayload {

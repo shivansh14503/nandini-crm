@@ -1,0 +1,393 @@
+import { z } from 'zod';
+
+/**
+ * PDF template document: the JSON a template is stored as and the builder edits.
+ *
+ *   PdfDocument → header / body / footer bands → sections → columns → blocks
+ *
+ * Styles are a closed set of numbers, enums and colours (never CSS or HTML strings), so a stored document can't
+ * inject markup; render.ts turns them into inline styles. This folder is dependency-free apart from zod and is
+ * copied verbatim into frontend-crm/src/lib/pdf-document by `npm run sync:pdf-document` (contractSync test checks).
+ */
+
+export const DOCUMENT_VERSION = 1;
+
+export const PAGE_SIZES = ['A4', 'Letter', 'Legal'] as const;
+export const ORIENTATIONS = ['portrait', 'landscape'] as const;
+export const BANDS = ['header', 'body', 'footer'] as const;
+export type Band = (typeof BANDS)[number];
+
+/** Page sizes in millimetres (portrait). */
+export const PAGE_DIMENSIONS_MM: Record<(typeof PAGE_SIZES)[number], { width: number; height: number }> = {
+    A4: { width: 210, height: 297 },
+    Letter: { width: 215.9, height: 279.4 },
+    Legal: { width: 215.9, height: 355.6 },
+};
+
+// ─── Primitives ─────────────────────────────────────────────────────────────────
+
+const id = z.string().regex(/^[\w-]{1,40}$/, { message: 'Invalid id.' });
+/** `#rgb` / `#rrggbb`, `accent` (the theme accent colour) or `transparent`. */
+export const colorSchema = z.string().regex(/^(#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})|accent|transparent)$/, { message: 'Invalid colour.' });
+const mm = (max: number) => z.number().min(0).max(max);
+const shortText = (max: number) => z.string().max(max);
+const fieldPath = z.string().regex(/^[A-Za-z][\w]*(\.[\w]+){1,3}$/, { message: 'Invalid field path.' });
+const assetKey = z.string().regex(/^[\w.-]{1,80}$/, { message: 'Invalid image key.' });
+
+const boxSchema = z.object({ top: mm(100), right: mm(100), bottom: mm(100), left: mm(100) });
+export type Box = z.infer<typeof boxSchema>;
+
+const borderSchema = z.object({
+    /** Pixels. */
+    width: z.number().min(0).max(10),
+    style: z.enum(['solid', 'dashed', 'dotted']),
+    color: colorSchema,
+    /** Pixels. */
+    radius: z.number().min(0).max(40),
+    sides: z.object({ top: z.boolean(), right: z.boolean(), bottom: z.boolean(), left: z.boolean() }),
+});
+
+/** Every style property a section, column or block can carry (all optional). */
+export const styleSchema = z.object({
+    /** Millimetres. */
+    padding: boxSchema.optional(),
+    /** Millimetres (outer spacing). */
+    margin: boxSchema.optional(),
+    background: colorSchema.optional(),
+    border: borderSchema.optional(),
+    textAlign: z.enum(['left', 'center', 'right', 'justify']).optional(),
+    verticalAlign: z.enum(['top', 'middle', 'bottom']).optional(),
+    /** Points. */
+    fontSize: z.number().min(5).max(48).optional(),
+    fontWeight: z.enum(['normal', 'bold']).optional(),
+    fontStyle: z.enum(['normal', 'italic']).optional(),
+    color: colorSchema.optional(),
+    lineHeight: z.number().min(0.8).max(3).optional(),
+    letterSpacing: z.number().min(0).max(10).optional(),
+    textTransform: z.enum(['none', 'uppercase']).optional(),
+    /** Percent of the parent width (blocks only). */
+    width: z.number().min(5).max(100).optional(),
+    /** Horizontal position of a narrowed block inside its column (blocks only; applies when width < 100). */
+    blockAlign: z.enum(['left', 'center', 'right']).optional(),
+    /** Millimetres. */
+    minHeight: mm(300).optional(),
+    /** Keep the element on one page when possible. */
+    avoidPageBreak: z.boolean().optional(),
+});
+export type Style = z.infer<typeof styleSchema>;
+
+// ─── Rich text (a TipTap-compatible subset) ─────────────────────────────────────
+
+const markSchema = z.discriminatedUnion('type', [
+    z.object({ type: z.literal('bold') }),
+    z.object({ type: z.literal('italic') }),
+    z.object({ type: z.literal('underline') }),
+    z.object({ type: z.literal('textStyle'), attrs: z.object({ color: colorSchema.nullable().optional() }) }),
+]);
+
+const inlineSchema = z.discriminatedUnion('type', [
+    z.object({ type: z.literal('text'), text: z.string().min(1).max(5000), marks: z.array(markSchema).max(6).optional() }),
+    z.object({ type: z.literal('field'), attrs: z.object({ path: fieldPath }), marks: z.array(markSchema).max(6).optional() }),
+    z.object({ type: z.literal('hardBreak') }),
+]);
+
+const paragraphSchema = z.object({
+    type: z.literal('paragraph'),
+    attrs: z.object({ textAlign: z.enum(['left', 'center', 'right', 'justify']).nullable().optional() }).optional(),
+    content: z.array(inlineSchema).max(500).optional(),
+});
+
+export const richTextSchema = z.object({ type: z.literal('doc'), content: z.array(paragraphSchema).max(200) });
+export type RichText = z.infer<typeof richTextSchema>;
+export type RichInline = z.infer<typeof inlineSchema>;
+export type RichMark = z.infer<typeof markSchema>;
+
+// ─── Blocks ─────────────────────────────────────────────────────────────────────
+
+const blockBase = { id, style: styleSchema, hideIfEmpty: z.boolean().optional() };
+
+const detailRowSchema = z.object({ id, path: fieldPath, label: shortText(80), hideIfEmpty: z.boolean() });
+
+export const LINE_ITEM_COLUMN_KEYS = ['srNo', 'productName', 'description', 'note', 'quantity', 'amount', 'discount', 'salePrice', 'taxRate', 'taxAmount', 'total'] as const;
+const lineItemColumnSchema = z.object({
+    key: z.string().regex(/^\w{1,40}$/),
+    label: shortText(60),
+    visible: z.boolean(),
+    /** Percent of the table width; omitted = share the remaining width. */
+    widthPct: z.number().min(2).max(90).optional(),
+    align: z.enum(['left', 'center', 'right']),
+});
+
+export const TOTAL_ROW_KEYS = ['totalAmount', 'totalDiscount', 'lumpSumDiscount', 'subtotal', 'totalTax', 'grandTotal'] as const;
+const totalRowSchema = z.object({ key: z.enum(TOTAL_ROW_KEYS), label: shortText(60), visible: z.boolean(), hideIfZero: z.boolean() });
+
+export const TERMS_SECTION_KEYS = ['paymentTerms', 'termsAndConditions', 'remarks'] as const;
+const termsSectionSchema = z.object({ key: z.enum(TERMS_SECTION_KEYS), title: shortText(80), visible: z.boolean() });
+
+const titleBlock = z.object({ ...blockBase, type: z.literal('title'), props: z.object({ content: richTextSchema, level: z.union([z.literal(1), z.literal(2), z.literal(3)]) }) });
+const textBlock = z.object({ ...blockBase, type: z.literal('text'), props: z.object({ content: richTextSchema }) });
+const imageBlock = z.object({
+    ...blockBase,
+    type: z.literal('image'),
+    props: z.object({
+        /** `logo` = the template's company logo. */
+        source: z.enum(['logo', 'asset']),
+        assetKey: assetKey.optional(),
+        /** Millimetres; 0 = natural size (capped by the column). */
+        widthMm: mm(300),
+        heightMm: mm(300),
+        align: z.enum(['left', 'center', 'right']),
+        alt: shortText(120),
+    }),
+});
+const dividerBlock = z.object({
+    ...blockBase,
+    type: z.literal('divider'),
+    props: z.object({ thickness: z.number().min(0.5).max(10), lineStyle: z.enum(['solid', 'dashed', 'dotted']), color: colorSchema, widthPct: z.number().min(5).max(100) }),
+});
+const spacerBlock = z.object({ ...blockBase, type: z.literal('spacer'), props: z.object({ heightMm: z.number().min(1).max(200) }) });
+const pageBreakBlock = z.object({ ...blockBase, type: z.literal('pageBreak'), props: z.object({}) });
+const fieldBlock = z.object({
+    ...blockBase,
+    type: z.literal('field'),
+    props: z.object({ path: fieldPath, label: shortText(80), showLabel: z.boolean(), layout: z.enum(['inline', 'stacked']), labelColor: colorSchema.optional(), labelBold: z.boolean() }),
+});
+const detailsListBlock = z.object({
+    ...blockBase,
+    type: z.literal('detailsList'),
+    props: z.object({
+        rows: z.array(detailRowSchema).max(40),
+        labelWidthPct: z.number().min(10).max(80),
+        labelColor: colorSchema.optional(),
+        valueBold: z.boolean(),
+        bordered: z.boolean(),
+    }),
+});
+const addressBlock = z.object({
+    ...blockBase,
+    type: z.literal('address'),
+    props: z.object({
+        which: z.enum(['billing', 'shipping']),
+        title: shortText(80),
+        parts: z.object({ street: z.boolean(), city: z.boolean(), state: z.boolean(), postalCode: z.boolean(), country: z.boolean() }),
+    }),
+});
+const lineItemsBlock = z.object({
+    ...blockBase,
+    type: z.literal('lineItems'),
+    props: z.object({
+        columns: z.array(lineItemColumnSchema).max(20),
+        descriptionUnderName: z.boolean(),
+        headerBackground: colorSchema,
+        headerColor: colorSchema,
+        borderColor: colorSchema,
+        borders: z.enum(['grid', 'rows', 'none']),
+        zebra: z.boolean(),
+        /** Points; 0 = inherit. */
+        fontSize: z.number().min(0).max(20),
+        emptyText: shortText(80),
+    }),
+});
+const totalsBlock = z.object({
+    ...blockBase,
+    type: z.literal('totals'),
+    props: z.object({
+        rows: z.array(totalRowSchema).max(10),
+        highlightGrandTotal: z.boolean(),
+        /** Grand-total highlight colours; omitted = accent background / white text. */
+        grandTotalBackground: colorSchema.optional(),
+        grandTotalColor: colorSchema.optional(),
+        bordered: z.boolean(),
+        labelWidthPct: z.number().min(20).max(80),
+    }),
+});
+const amountInWordsBlock = z.object({ ...blockBase, type: z.literal('amountInWords'), props: z.object({ label: shortText(80), showLabel: z.boolean() }) });
+const termsBlock = z.object({
+    ...blockBase,
+    type: z.literal('terms'),
+    props: z.object({ sections: z.array(termsSectionSchema).max(5), titleColor: colorSchema, showTitles: z.boolean() }),
+});
+const customFieldsBlock = z.object({
+    ...blockBase,
+    type: z.literal('customFields'),
+    props: z.object({ title: shortText(80), labelWidthPct: z.number().min(10).max(80) }),
+});
+const pageNumberBlock = z.object({
+    ...blockBase,
+    type: z.literal('pageNumber'),
+    /** `{page}` and `{total}` are replaced by the page number / page count. */
+    props: z.object({ format: shortText(60) }),
+});
+const signatureBlock = z.object({
+    ...blockBase,
+    type: z.literal('signature'),
+    props: z.object({ assetKey: assetKey.optional(), heightMm: z.number().min(5).max(80), caption: shortText(120), lineAbove: z.boolean(), align: z.enum(['left', 'center', 'right']) }),
+});
+
+export const blockSchema = z.discriminatedUnion('type', [
+    titleBlock,
+    textBlock,
+    imageBlock,
+    dividerBlock,
+    spacerBlock,
+    pageBreakBlock,
+    fieldBlock,
+    detailsListBlock,
+    addressBlock,
+    lineItemsBlock,
+    totalsBlock,
+    amountInWordsBlock,
+    termsBlock,
+    customFieldsBlock,
+    pageNumberBlock,
+    signatureBlock,
+]);
+export type Block = z.infer<typeof blockSchema>;
+export type BlockType = Block['type'];
+export type BlockOf<T extends BlockType> = Extract<Block, { type: T }>;
+
+export const BLOCK_TYPES = [
+    'title',
+    'text',
+    'image',
+    'divider',
+    'spacer',
+    'pageBreak',
+    'field',
+    'detailsList',
+    'address',
+    'lineItems',
+    'totals',
+    'amountInWords',
+    'terms',
+    'customFields',
+    'pageNumber',
+    'signature',
+] as const satisfies readonly BlockType[];
+
+/** Blocks that only make sense in one band (`pageNumber` needs Chromium's header / footer; page breaks need the body). */
+export const BLOCK_BANDS: Partial<Record<BlockType, readonly Band[]>> = {
+    pageNumber: ['header', 'footer'],
+    pageBreak: ['body'],
+    lineItems: ['body'],
+    totals: ['body'],
+    terms: ['body'],
+    customFields: ['body'],
+};
+
+// ─── Layout ─────────────────────────────────────────────────────────────────────
+
+export const columnSchema = z.object({ id, widthPct: z.number().min(5).max(100), style: styleSchema, blocks: z.array(blockSchema).max(60) });
+export type Column = z.infer<typeof columnSchema>;
+
+export const sectionSchema = z.object({ id, columns: z.array(columnSchema).min(1).max(4), style: styleSchema });
+export type Section = z.infer<typeof sectionSchema>;
+
+const marginsSchema = z.object({ top: mm(120), right: mm(80), bottom: mm(120), left: mm(80), header: mm(60), footer: mm(60) });
+export type PageMargins = z.infer<typeof marginsSchema>;
+
+export const themeSchema = z.object({
+    accentColor: z.string().regex(/^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/, { message: 'Invalid colour.' }),
+    textColor: z.string().regex(/^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/, { message: 'Invalid colour.' }),
+    /** Points. */
+    fontSize: z.number().min(6).max(16),
+    lineHeight: z.number().min(1).max(2.5),
+    logoAssetKey: assetKey.optional(),
+    companyName: shortText(200),
+    companyAddress: shortText(1000),
+    companyPhone: shortText(100),
+    companyEmail: shortText(200),
+    companyGstin: shortText(50),
+    companyWebsite: shortText(200),
+});
+export type Theme = z.infer<typeof themeSchema>;
+
+export const documentSchema = z.object({
+    version: z.literal(DOCUMENT_VERSION),
+    page: z.object({ size: z.enum(PAGE_SIZES), orientation: z.enum(ORIENTATIONS), margins: marginsSchema }),
+    theme: themeSchema,
+    header: z.array(sectionSchema).max(10),
+    body: z.array(sectionSchema).max(100),
+    footer: z.array(sectionSchema).max(10),
+});
+export type PdfDocument = z.infer<typeof documentSchema>;
+
+/** A saved (library) item: one section or one block. */
+export const savedItemContentSchema = z.discriminatedUnion('kind', [
+    z.object({ kind: z.literal('section'), section: sectionSchema }),
+    z.object({ kind: z.literal('block'), block: blockSchema }),
+]);
+export type SavedItemContent = z.infer<typeof savedItemContentSchema>;
+
+// ─── Registry-aware checks ──────────────────────────────────────────────────────
+
+export interface DocumentIssue {
+    path: (string | number)[];
+    message: string;
+}
+
+/** What `validateDocumentRefs` needs from the field registry. */
+export interface RegistryRefs {
+    /** Field path → field type. */
+    fieldTypes: Map<string, string>;
+    lineItemColumnKeys: Set<string>;
+}
+
+const walkInline = (content: RichText, visit: (path: string, at: (string | number)[]) => void, at: (string | number)[]) => {
+    content.content.forEach((p, pi) => p.content?.forEach((n, ni) => n.type === 'field' && visit(n.attrs.path, [...at, 'content', pi, 'content', ni])));
+};
+
+/**
+ * Checks a schema-valid document against the module's registry and band rules: field paths must exist (and not
+ * be image fields), line-item columns must be known, band-restricted blocks must sit in an allowed band and
+ * column widths of a section must add up to 100%.
+ */
+export function validateDocumentRefs(doc: PdfDocument, refs: RegistryRefs): DocumentIssue[] {
+    return BANDS.flatMap((band) =>
+        doc[band].flatMap((section, si) => {
+            const issues = validateSectionRefs(section, band, refs, [band, si]);
+            const total = section.columns.reduce((sum, c) => sum + c.widthPct, 0);
+            if (Math.abs(total - 100) > 0.5) issues.push({ path: [band, si], message: 'Column widths must add up to 100%.' });
+            return issues;
+        }),
+    );
+}
+
+/** Registry checks for one section; `band` null skips the band rules (saved library items). */
+export function validateSectionRefs(section: Section, band: Band | null, refs: RegistryRefs, at: (string | number)[] = []): DocumentIssue[] {
+    return section.columns.flatMap((column, ci) => column.blocks.flatMap((block, bi) => validateBlockRefs(block, band, refs, [...at, 'columns', ci, 'blocks', bi])));
+}
+
+export function validateBlockRefs(block: Block, band: Band | null, refs: RegistryRefs, at: (string | number)[] = []): DocumentIssue[] {
+    const issues: DocumentIssue[] = [];
+    const checkPath = (path: string, where: (string | number)[]) => {
+        const type = refs.fieldTypes.get(path);
+        if (!type) issues.push({ path: where, message: `Unknown field "${path}".` });
+        else if (type === 'image') issues.push({ path: where, message: `"${path}" is an image; use an Image block for it.` });
+    };
+    const allowed = BLOCK_BANDS[block.type];
+    if (band && allowed && !allowed.includes(band)) issues.push({ path: at, message: `A ${block.type} block can only be placed in the ${allowed.join(' or ')}.` });
+    switch (block.type) {
+        case 'title':
+        case 'text':
+            walkInline(block.props.content, checkPath, [...at, 'props', 'content']);
+            break;
+        case 'field':
+            checkPath(block.props.path, [...at, 'props', 'path']);
+            break;
+        case 'detailsList':
+            block.props.rows.forEach((row, ri) => checkPath(row.path, [...at, 'props', 'rows', ri, 'path']));
+            break;
+        case 'lineItems':
+            block.props.columns.forEach((col, ki) => {
+                if (!refs.lineItemColumnKeys.has(col.key)) issues.push({ path: [...at, 'props', 'columns', ki], message: `Unknown line-item column "${col.key}".` });
+            });
+            break;
+        case 'image':
+            if (block.props.source === 'asset' && !block.props.assetKey) issues.push({ path: [...at, 'props', 'assetKey'], message: 'Choose an image.' });
+            break;
+        default:
+            break;
+    }
+    return issues;
+}

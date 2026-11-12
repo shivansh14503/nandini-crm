@@ -23,7 +23,7 @@ import auditRouter from './modules/audit/audit.routes.js';
 import importRouter from './modules/imports/import.routes.js';
 import formConfigRouter from './modules/form-configs/formConfig.routes.js';
 import { seedFormConfigsSafely } from './modules/form-configs/formConfig.seed.js';
-import { pdfAssetRouter, pdfTemplateRouter } from './modules/pdf/pdf.routes.js';
+import { pdfAssetRouter, pdfSavedItemRouter, pdfTemplateRouter } from './modules/pdf/pdf.routes.js';
 import { seedPdfTemplatesSafely } from './modules/pdf/pdfTemplate.seed.js';
 import { shutdownPdfRenderer } from './modules/pdf/renderer/puppeteerRenderer.js';
 import { closeQueues } from './jobs/queues.js';
@@ -64,9 +64,10 @@ app.use(
 app.use(cookieParser());
 // Mounted before the global body parser: imports carry up to 5,000 rows and parse with their own 10 MB limit.
 app.use('/api/import', importRouter);
-// PDF templates (HTML up to ~800 KB) and logo uploads (base64) parse with their own 2 MB limit.
+// PDF template documents, saved library items and logo uploads (base64) parse with their own 2 MB limit.
 app.use('/api/pdf-templates', pdfTemplateRouter);
 app.use('/api/pdf-assets', pdfAssetRouter);
+app.use('/api/pdf-saved-items', pdfSavedItemRouter);
 app.use(express.json({ limit: '1mb' }));
 
 // ── Health check ───────────────────────────────────────────────────────────────

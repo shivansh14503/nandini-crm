@@ -115,6 +115,7 @@ export default function LeadForm({
         schema: leadFormSchema,
         module: 'leads',
         defaultValues: { ...DEFAULT_FORM, ...initialData },
+        dropdownDefaults: { enabled: mode === 'create', keep: initialData },
     });
     const { reset, watch, formState } = methods;
     const { isDirty, isSubmitting } = formState;

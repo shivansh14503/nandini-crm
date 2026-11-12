@@ -5,6 +5,7 @@ import { getFieldRegistry } from './fieldRegistry.js';
 import type { PdfModule } from './pdf.types.js';
 import { pdfAssetService } from './pdfAsset.service.js';
 import { contentDisposition, pdfRenderService } from './pdfRender.service.js';
+import { pdfSavedItemService } from './pdfSavedItem.service.js';
 import { pdfTemplateService } from './pdfTemplate.service.js';
 import { fieldsQuerySchema, recordPdfQuerySchema } from './pdfTemplate.validator.js';
 
@@ -48,21 +49,27 @@ export const pdfTemplateController = {
         sendSuccess(res, await pdfTemplateService.remove(param(req, 'id'), requireUser(req)), 'PDF template deleted');
     },
     async preview(req: Request, res: Response): Promise<void> {
-        const result = await pdfRenderService.renderPreview(req.body, requireUser(req));
-        if (result.format === 'html') {
-            sendBinary(res, Buffer.from(result.html, 'utf8'), {
-                'Content-Type': 'text/html; charset=utf-8',
-                'Cache-Control': 'private, no-store',
-                // Defence in depth: the editor shows it in a sandboxed iframe anyway.
-                'Content-Security-Policy': "default-src 'none'; img-src data:; font-src data:; style-src 'unsafe-inline'; sandbox",
-            });
-            return;
-        }
-        sendBinary(res, result.buffer, {
+        const buffer = await pdfRenderService.renderPreview(req.body, requireUser(req));
+        sendBinary(res, buffer, {
             'Content-Type': 'application/pdf',
             'Content-Disposition': contentDisposition('inline', 'preview.pdf'),
             'Cache-Control': 'private, no-store',
         });
+    },
+    async context(req: Request, res: Response): Promise<void> {
+        sendSuccess(res, await pdfRenderService.editorContext(req.query, requireUser(req)));
+    },
+};
+
+export const pdfSavedItemController = {
+    async list(req: Request, res: Response): Promise<void> {
+        sendSuccess(res, await pdfSavedItemService.list(req.query));
+    },
+    async create(req: Request, res: Response): Promise<void> {
+        sendCreated(res, await pdfSavedItemService.create(req.body, requireUser(req)), 'Saved to library');
+    },
+    async remove(req: Request, res: Response): Promise<void> {
+        sendSuccess(res, await pdfSavedItemService.remove(param(req, 'id'), requireUser(req)), 'Removed from library');
     },
 };
 

@@ -236,12 +236,14 @@ export function useConfigDraft(base: FormConfigsPayload | undefined, refetch: ()
      */
     const foldIntoDraftOption = (category: DropdownCategoryDto, option: DropdownOptionDto, payload: UpdateOptionPayload): UpdateOptionPayload | null => {
         const s = current();
-        const { isActive, ...edit } = payload;
+        // Status and default can't be sent when creating an option: they stay an update, saved right after it.
+        const { isActive, isDefault, ...edit } = payload;
         const value = edit.value ?? option.value;
         const renamed = value !== option.value;
         const viaAddOption = opsRef.current.some((op) => op.kind === 'addOption' && op.id === option.id);
         const leftover: UpdateOptionPayload = {
             ...(isActive !== undefined ? { isActive } : {}),
+            ...(isDefault !== undefined ? { isDefault } : {}),
             ...(!viaAddOption && edit.label !== undefined && edit.label !== value ? { label: edit.label } : {}),
             ...(!viaAddOption && edit.meta !== undefined ? { meta: edit.meta } : {}),
         };
@@ -376,7 +378,9 @@ export function useConfigDraft(base: FormConfigsPayload | undefined, refetch: ()
                           ? `restored '${option.label}'`
                           : renamedTo !== undefined && renamedTo !== option.label
                             ? `renamed '${option.label}' to '${renamedTo}'`
-                            : `updated '${option.label}'`;
+                            : payload.isDefault !== undefined
+                              ? `${payload.isDefault ? 'set' : 'removed'} '${option.label}' as default`
+                              : `updated '${option.label}'`;
                 push({ kind: 'updateOption', optionId, payload, summary: `${category.label}: ${what}` });
             },
 

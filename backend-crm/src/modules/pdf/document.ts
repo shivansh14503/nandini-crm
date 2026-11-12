@@ -3,13 +3,13 @@ import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import { logger } from '../../config/logger.js';
-import type { Branding, Orientation, PageSize } from './pdf.types.js';
-import { sanitizeTemplateCss } from './sanitize.js';
+import type { Theme } from './document/schema.js';
+import type { Orientation, PageSize } from './pdf.types.js';
 
 /**
  * Wraps rendered template HTML in a complete document: embedded Noto Sans (latin + latin-ext, which carries
- * the ₹ glyph), print CSS that keeps table rows together and repeats table headers, branding CSS variables
- * and finally the template's own (sanitized) CSS. Chromium never fetches anything, so fonts are inlined.
+ * the ₹ glyph) and print CSS that keeps table rows together and repeats table headers. The document's own
+ * styles are inline (document/render.ts). Chromium never fetches anything, so fonts are inlined.
  *
  * Fonts are read once from `src/modules/pdf/assets/fonts/` when present, else from the `@fontsource/noto-sans`
  * package. When neither is available the system sans-serif is used and a warning is logged.
@@ -72,12 +72,9 @@ tfoot{display:table-footer-group}
 .muted{color:#64748b}
 `;
 
-const escapeCssValue = (value: string): string => value.replace(/[^#\w-]/g, '');
-
 export interface BuildDocumentInput {
     bodyHtml: string;
-    css?: string | null;
-    branding: Branding;
+    theme: Theme;
     pageSize: PageSize;
     orientation: Orientation;
     title?: string;
@@ -86,18 +83,16 @@ export interface BuildDocumentInput {
 const escapeHtmlText = (value: string): string =>
     value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
-/** Full HTML document for the body part (also used as-is for the HTML fast preview). */
+/** Full HTML document for the body band. */
 export function buildHtmlDocument(input: BuildDocumentInput): string {
-    const accent = escapeCssValue(input.branding.accentColor) || '#1d4ed8';
-    const vars = `:root{--accent:${accent};--accent-contrast:#ffffff;--border:#cbd5e1;--muted:#64748b}`;
     const pageCss = `@page{size:${input.pageSize} ${input.orientation}}`;
+    const textColor = /^#[0-9a-f]{3,6}$/i.test(input.theme.textColor) ? input.theme.textColor : '#1f2937';
     return [
         '<!DOCTYPE html>',
         '<html lang="en"><head><meta charset="utf-8">',
         `<title>${escapeHtmlText(input.title ?? 'Document')}</title>`,
         `<style>${getFontFaceCss()}</style>`,
-        `<style>${pageCss}${vars}${BASE_CSS}</style>`,
-        `<style>${sanitizeTemplateCss(input.css)}</style>`,
+        `<style>${pageCss}${BASE_CSS}body{color:${textColor}}p{margin:0}</style>`,
         '</head><body>',
         input.bodyHtml,
         '</body></html>',
@@ -106,21 +101,16 @@ export function buildHtmlDocument(input: BuildDocumentInput): string {
 
 /**
  * Chromium renders header/footer templates in a separate context: page CSS and web fonts aren't inherited
- * and the default font size is tiny, so each gets inline styles. `offsetMm` (marginHeader / marginFooter)
- * pushes the content away from the page edge. `<span class="pageNumber">` / `totalPages` keep working.
+ * and the default font size is tiny, so each gets inline styles (the band itself carries the theme's size).
+ * `offsetMm` (margins.header / margins.footer) pushes the content away from the page edge.
+ * `<span class="pageNumber">` / `totalPages` keep working.
  */
-export function wrapHeaderFooter(
-    html: string | null | undefined,
-    kind: 'header' | 'footer',
-    layout: { offsetMm: number; leftMm: number; rightMm: number },
-    accent: string,
-): string {
+export function wrapHeaderFooter(html: string | null | undefined, kind: 'header' | 'footer', layout: { offsetMm: number; leftMm: number; rightMm: number }): string {
     if (!html || !html.trim()) return '<span></span>';
     const padding = kind === 'header' ? `padding-top:${layout.offsetMm}mm` : `padding-bottom:${layout.offsetMm}mm`;
-    const color = escapeCssValue(accent) || '#1d4ed8';
     return (
         `<div style="box-sizing:border-box;width:100%;font-family:${FONT_STACK.replace(/'/g, '')};font-size:8pt;line-height:1.35;color:#475569;` +
-        `-webkit-print-color-adjust:exact;print-color-adjust:exact;--accent:${color};${padding};` +
+        `-webkit-print-color-adjust:exact;print-color-adjust:exact;${padding};` +
         `padding-left:${layout.leftMm}mm;padding-right:${layout.rightMm}mm;">${html}</div>`
     );
 }

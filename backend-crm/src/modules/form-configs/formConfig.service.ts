@@ -46,6 +46,8 @@ export interface DropdownOptionDto {
     sortOrder: number;
     isActive: boolean;
     isSystem: boolean;
+    /** Pre-selected on new records (a single-choice field takes the first one in order). */
+    isDefault: boolean;
 }
 
 export interface DropdownCategoryDto {
@@ -172,6 +174,7 @@ const toOptionDto = (o: DropdownOption): DropdownOptionDto => ({
     sortOrder: o.sortOrder,
     isActive: o.isActive,
     isSystem: o.isSystem,
+    isDefault: o.isDefault,
 });
 
 const toFieldDto = (f: FormFieldDefinition, categoryKeys: Map<string, string>): FormFieldDefinitionDto => ({
@@ -719,6 +722,8 @@ export const formConfigService = {
                     ...(nextLabel !== before.label ? { label: nextLabel } : {}),
                     ...(input.isActive !== undefined ? { isActive: input.isActive } : {}),
                     ...(input.meta !== undefined ? { metaJson: input.meta ? JSON.stringify(input.meta) : null } : {}),
+                    // An archived option can't be offered, so it can't stay the default either.
+                    ...(input.isActive === false ? { isDefault: false } : input.isDefault !== undefined ? { isDefault: input.isDefault } : {}),
                 },
             });
             const changes = diffRecords(before, after);

@@ -24,6 +24,8 @@ import ListAltOutlinedIcon from '@mui/icons-material/ListAltOutlined';
 import SearchRoundedIcon from '@mui/icons-material/SearchRounded';
 import DeleteOutlineOutlinedIcon from '@mui/icons-material/DeleteOutlineOutlined';
 import EditOutlinedIcon from '@mui/icons-material/EditOutlined';
+import StarRoundedIcon from '@mui/icons-material/StarRounded';
+import StarBorderRoundedIcon from '@mui/icons-material/StarBorderRounded';
 import { EditCategoryDialog } from './EditCategoryDialog';
 import { useConfigDraftActions, useHasUnsavedChanges } from './useConfigDraft';
 import { CRM_MODULE_LABELS, type CrmModuleKey, type DropdownCategoryDto, type DropdownOptionDto, type FormConfigsPayload } from '@/types/formConfig.types';
@@ -315,6 +317,24 @@ function CategoryEditor({
     const sorted = [...category.options].sort((a, b) => a.sortOrder - b.sortOrder);
     const active = sorted.filter((o) => o.isActive);
     const archived = sorted.filter((o) => !o.isActive);
+    const defaults = active.filter((o) => o.isDefault);
+    // Several defaults only make sense when every field using the dropdown is a multi-select; otherwise picking
+    // a default replaces the previous one.
+    const linkedFields = Object.values(configs.fieldsByModule)
+        .flat()
+        .filter((f) => f.dropdownCategoryKey === category.key && !f.isDeleted);
+    const allowsSeveralDefaults = linkedFields.length > 0 && linkedFields.every((f) => f.fieldType === 'multiselect');
+
+    /** Marks an option as pre-selected on new records, or clears it (the field then shows its placeholder). */
+    const setDefault = (option: DropdownOptionDto, isDefault: boolean) =>
+        run(() => {
+            if (isDefault && !allowsSeveralDefaults) {
+                for (const other of category.options) {
+                    if (other.isDefault && other.id !== option.id) draft.updateOption(other.id, { isDefault: false });
+                }
+            }
+            draft.updateOption(option.id, { isDefault });
+        });
     const {
         orderedItems: orderedActive,
         getRowDragProps,
@@ -415,9 +435,17 @@ function CategoryEditor({
             )}
 
             <Box sx={{ px: 2, py: 1, display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid #f1f5f9' }}>
-                <Typography sx={{ fontSize: '0.74rem', color: '#64748b' }}>
-                    {active.length} active{archived.length > 0 ? ` • ${archived.length} archived` : ''}
-                </Typography>
+                <Box sx={{ minWidth: 0 }}>
+                    <Typography sx={{ fontSize: '0.74rem', color: '#64748b' }}>
+                        {active.length} active{archived.length > 0 ? ` • ${archived.length} archived` : ''}
+                    </Typography>
+                    <Typography sx={{ fontSize: '0.72rem', color: '#64748b', mt: 0.25 }}>
+                        {defaults.length > 0
+                            ? `Default on new records: ${defaults.map((o) => o.label).join(', ')}`
+                            : 'No default: new records start empty and show the field’s placeholder.'}
+                        {canEdit && (allowsSeveralDefaults ? ' Click ☆ to add or remove defaults.' : ' Click ☆ to set or remove the default.')}
+                    </Typography>
+                </Box>
                 {archived.length > 0 && (
                     <FormControlLabel
                         sx={{ m: 0 }}
@@ -443,6 +471,7 @@ function CategoryEditor({
                                 run(() => draft.updateOption(option.id, option.isSystem ? { label: next } : { value: next, label: next }))
                             }
                             onToggleActive={(isActive) => run(() => draft.updateOption(option.id, { isActive }))}
+                            onToggleDefault={(isDefault) => setDefault(option, isDefault)}
                             onDelete={() => run(() => draft.deleteOption(option.id))}
                             dragProps={getRowDragProps(option, option.isActive)}
                             dragSx={getRowDragSx(option)}
@@ -463,6 +492,7 @@ function OptionRow({
     busy,
     onRename,
     onToggleActive,
+    onToggleDefault,
     onDelete,
     dragProps,
     dragSx,
@@ -472,6 +502,7 @@ function OptionRow({
     busy: boolean;
     onRename: (label: string) => Promise<void>;
     onToggleActive: (isActive: boolean) => Promise<void>;
+    onToggleDefault: (isDefault: boolean) => Promise<void>;
     onDelete: () => Promise<void>;
     dragProps: RowDragProps;
     dragSx: Record<string, unknown>;
@@ -496,7 +527,7 @@ function OptionRow({
             {...(canEdit ? dragProps : {})}
             sx={{
                 display: 'grid',
-                gridTemplateColumns: canEdit ? '28px minmax(0, 1fr) auto auto auto' : 'minmax(0, 1fr) auto',
+                gridTemplateColumns: canEdit ? '28px minmax(0, 1fr) auto auto auto auto' : 'minmax(0, 1fr) auto',
                 alignItems: 'center',
                 gap: 1.25,
                 px: 2,
@@ -542,6 +573,11 @@ function OptionRow({
                         Unsaved
                     </Badge>
                 )}
+                {option.isDefault && option.isActive && (
+                    <Badge tone="custom" title="Pre-selected when a new record is created">
+                        Default
+                    </Badge>
+                )}
                 {option.isSystem && (
                     <Badge tone="locked" icon={<LockOutlinedIcon sx={{ fontSize: 11 }} />} title="Drives CRM business logic: can be relabelled and reordered, but not archived or renamed.">
                         Locked
@@ -549,6 +585,34 @@ function OptionRow({
                 )}
                 <Badge tone={option.isActive ? 'active' : 'archived'}>{option.isActive ? 'Active' : 'Archived'}</Badge>
             </Box>
+            {canEdit && (
+                <Tooltip
+                    title={
+                        !option.isActive
+                            ? 'Restore the option to make it the default'
+                            : option.isDefault
+                              ? 'Remove as default (new records show the placeholder)'
+                              : 'Set as default (pre-selected on new records)'
+                    }
+                    arrow
+                >
+                    <span>
+                        <IconButton
+                            size="small"
+                            aria-label={option.isDefault ? `Remove ${option.label} as default` : `Set ${option.label} as default`}
+                            aria-pressed={option.isDefault && option.isActive}
+                            disabled={!option.isActive || busy}
+                            onClick={() => void onToggleDefault(!option.isDefault)}
+                        >
+                            {option.isDefault && option.isActive ? (
+                                <StarRoundedIcon sx={{ fontSize: 19, color: busy ? undefined : '#f59e0b' }} />
+                            ) : (
+                                <StarBorderRoundedIcon sx={{ fontSize: 19 }} />
+                            )}
+                        </IconButton>
+                    </span>
+                </Tooltip>
+            )}
             {canEdit && (
                 <Tooltip title={option.isSystem ? 'Locked options cannot be archived' : option.isActive ? 'Archive (existing records keep this value)' : 'Restore'} arrow>
                     <span>

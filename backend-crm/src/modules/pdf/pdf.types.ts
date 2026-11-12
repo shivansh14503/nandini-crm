@@ -1,3 +1,5 @@
+import type { Theme } from './document/schema.js';
+
 /**
  * Shared types of the PDF module. Module-specific code lives only in `fieldRegistry.ts` and
  * `contexts/<module>Context.ts`; everything else works for any entry of PDF_MODULES.
@@ -12,9 +14,6 @@ export type PageSize = (typeof PAGE_SIZES)[number];
 export const ORIENTATIONS = ['portrait', 'landscape'] as const;
 export type Orientation = (typeof ORIENTATIONS)[number];
 
-export const TEMPLATE_PARTS = ['header', 'body', 'footer'] as const;
-export type TemplatePart = (typeof TEMPLATE_PARTS)[number];
-
 /** Millimetres. `header` / `footer` offset the header/footer content from the page edge. */
 export interface PdfMargins {
     top: number;
@@ -24,42 +23,6 @@ export interface PdfMargins {
     header: number;
     footer: number;
 }
-
-export const DEFAULT_MARGINS: PdfMargins = { top: 45, right: 10, bottom: 16, left: 10, header: 0, footer: 5 };
-
-export interface LineItemColumnSetting {
-    key: string;
-    label: string;
-    visible: boolean;
-    order: number;
-    widthPct?: number;
-}
-
-export interface FieldVisibility {
-    fields: Record<string, boolean>;
-    lineItemColumns: LineItemColumnSetting[];
-}
-
-export interface Branding {
-    accentColor: string;
-    logoAssetKey?: string;
-    companyName: string;
-    companyAddress: string;
-    companyPhone: string;
-    companyEmail: string;
-    companyGstin: string;
-    companyWebsite: string;
-}
-
-export const DEFAULT_BRANDING: Branding = {
-    accentColor: '#1d4ed8',
-    companyName: 'Nandini Infosys Pvt. Ltd.',
-    companyAddress: '',
-    companyPhone: '',
-    companyEmail: '',
-    companyGstin: '',
-    companyWebsite: '',
-};
 
 export type PdfFieldGroup =
     | 'Company'
@@ -72,12 +35,12 @@ export type PdfFieldGroup =
     | 'Terms'
     | 'Custom Fields';
 
-export type PdfFieldType = 'text' | 'date' | 'currency' | 'number' | 'multiline' | 'boolean';
+export type PdfFieldType = 'text' | 'date' | 'currency' | 'number' | 'multiline' | 'boolean' | 'image';
 
 export interface PdfFieldDefinition {
-    /** Visibility key (`show.<key>` in templates). */
+    /** Stable key. */
     key: string;
-    /** Handlebars path, e.g. `quotation.code`. */
+    /** Context path, e.g. `quotation.code`. */
     path: string;
     label: string;
     group: PdfFieldGroup;
@@ -100,7 +63,7 @@ export interface PdfFieldRegistry {
     lineItemColumns: LineItemColumnDefinition[];
 }
 
-// ─── Render context (plain DTO handed to Handlebars; never Prisma objects) ─────
+// ─── Render context (plain DTO handed to the document renderer; never Prisma objects) ─────
 
 export interface PdfAddress {
     street: string;
@@ -133,15 +96,8 @@ export interface PdfLineItem {
     totalFormatted: string;
 }
 
-export interface PdfColumn {
-    key: string;
-    label: string;
-    align: 'left' | 'right' | 'center';
-    widthPct?: number;
-}
-
 export interface PdfContext {
-    company: Branding & { logoDataUri: string };
+    company: Omit<Theme, 'accentColor' | 'textColor' | 'fontSize' | 'lineHeight'> & { logoDataUri: string };
     record: Record<string, unknown>;
     customer: Record<string, unknown>;
     billing: PdfAddress;
@@ -151,13 +107,9 @@ export interface PdfContext {
     totals: Record<string, unknown>;
     terms: Record<string, unknown>;
     custom: Record<string, string>;
-    /** Visible, non-empty custom fields in form order (for `{{#each customList}}`). */
+    /** Non-empty custom fields in form order. */
     customList: { key: string; label: string; value: string }[];
-    /** Flattened visibility map read by `{{#ifShow "key"}}` and `show.key`. */
-    show: Record<string, boolean>;
-    /** Visible line-item columns in display order. */
-    columns: PdfColumn[];
-    currency: string;
+        currency: string;
     meta: { generatedAt: string; generatedBy: string };
     /** Module-specific alias of `record` (e.g. `quotation`). */
     [moduleAlias: string]: unknown;

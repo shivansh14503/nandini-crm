@@ -1,8 +1,9 @@
 import assert from 'node:assert/strict';
-import { existsSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { describe, it } from 'node:test';
 import { pathToFileURL } from 'node:url';
+import { DOCUMENT_DEST, expectedFrontendFiles } from '../../scripts/syncPdfDocument.js';
 import { FIELD_MAX_LENGTH } from '../config/fieldLimits.js';
 import {
     CRM_MODULES,
@@ -42,6 +43,14 @@ async function loadFrontend<T>(relativePath: string): Promise<T> {
 }
 
 describe('backend ↔ frontend contract', { skip }, () => {
+    it('frontend lib/pdf-document is an exact copy of the PDF document model (run npm run sync:pdf-document)', () => {
+        const expected = expectedFrontendFiles();
+        assert.deepEqual(readdirSync(DOCUMENT_DEST).sort(), Object.keys(expected).sort());
+        for (const [name, content] of Object.entries(expected)) {
+            assert.equal(readFileSync(path.join(DOCUMENT_DEST, name), 'utf8'), content, `${name} is out of date`);
+        }
+    });
+
     it('fieldLimits.ts has identical keys and values', async () => {
         const frontend = await loadFrontend<FrontendFieldLimits>('config/fieldLimits.ts');
         const sorted = (limits: Record<string, number>) => Object.fromEntries(Object.entries(limits).sort(([a], [b]) => a.localeCompare(b)));

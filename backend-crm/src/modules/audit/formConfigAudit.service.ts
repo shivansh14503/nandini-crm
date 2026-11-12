@@ -267,6 +267,16 @@ function optionRevisions(row: ParsedRow, ctx: AuditContext, base: Base): AuditRe
                 to: active ? 'Active' : 'Archived',
             };
         }
+        if (prop === 'isDefault') {
+            const isDefault = diff.to === true;
+            return {
+                ...base,
+                tag: 'Updated',
+                title: `Option "${label}" ${isDefault ? 'set as default' : 'removed as default'} in${where}`,
+                from: isDefault ? 'Not default' : 'Default',
+                to: isDefault ? 'Default' : 'Not default',
+            };
+        }
         if (prop === 'label' || prop === 'value') {
             return { ...base, tag: 'Updated', title: `Option updated in${where}`, from: propValue(prop, diff.from), to: propValue(prop, diff.to), note: `${propLabel(prop)} changed` };
         }

@@ -46,9 +46,9 @@ const regionCategory: DropdownCategoryDto = {
     lockReason: null,
     usedBy: [],
     options: [
-        { id: 'o1', categoryId: 'cat-region', value: 'North', label: 'North', meta: null, sortOrder: 1, isActive: true, isSystem: false },
-        { id: 'o2', categoryId: 'cat-region', value: 'South', label: 'South', meta: null, sortOrder: 2, isActive: true, isSystem: false },
-        { id: 'o3', categoryId: 'cat-region', value: 'Legacy', label: 'Legacy', meta: null, sortOrder: 3, isActive: false, isSystem: false },
+        { id: 'o1', categoryId: 'cat-region', value: 'North', label: 'North', meta: null, sortOrder: 1, isActive: true, isSystem: false, isDefault: false },
+        { id: 'o2', categoryId: 'cat-region', value: 'South', label: 'South', meta: null, sortOrder: 2, isActive: true, isSystem: false, isDefault: false },
+        { id: 'o3', categoryId: 'cat-region', value: 'Legacy', label: 'Legacy', meta: null, sortOrder: 3, isActive: false, isSystem: false, isDefault: false },
     ],
 };
 

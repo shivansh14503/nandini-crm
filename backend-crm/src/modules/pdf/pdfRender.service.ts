@@ -2,44 +2,23 @@ import { createHash } from 'node:crypto';
 import { ENV } from '../../config/env.js';
 import { logger } from '../../config/logger.js';
 import { isRedisReady, redis } from '../../config/redis.js';
-import type { PdfTemplate } from '../../generated/prisma/client.js';
 import { auditService } from '../../services/audit.service.js';
 import type { AuthUser } from '../../types/user.types.js';
 import type { ContextBuildInput } from './contexts/contextTypes.js';
+import { collectDocumentAssetKeys, renderDocument, type PdfDocument } from './document/index.js';
 import { buildHtmlDocument, wrapHeaderFooter } from './document.js';
-import { buildFieldRegistry, loadCustomFieldMeta } from './fieldRegistry.js';
-import { mergeBranding, mergeFieldVisibility } from './fieldVisibility.js';
+import { buildFieldRegistry, loadCustomFieldMeta, type CustomFieldMeta } from './fieldRegistry.js';
 import { PDF_MODULE_ADAPTERS } from './moduleAdapters.js';
-import type { Branding, FieldVisibility, Orientation, PageSize, PdfContext, PdfMargins, PdfModule } from './pdf.types.js';
+import type { PdfContext, PdfModule } from './pdf.types.js';
 import { pdfAssetService } from './pdfAsset.service.js';
-import { toMargins, toModule } from './pdfTemplate.mapper.js';
-import { pdfTemplateService, prepareParts } from './pdfTemplate.service.js';
-import { previewBodySchema } from './pdfTemplate.validator.js';
+import { assertDocumentValid, documentOf, pdfTemplateService } from './pdfTemplate.service.js';
+import { contextQuerySchema, previewBodySchema } from './pdfTemplate.validator.js';
 import { getPdfRenderer } from './renderer/puppeteerRenderer.js';
-import { collectAssetKeys, compileTemplate, renderTemplate } from './templateEngine.js';
 
 /**
- * Template + record → PDF. Steps: resolve template → registry / visibility / branding → (cache lookup) →
- * context → compile header/body/footer → wrap document → render → (cache store) → audit.
+ * Template + record → PDF. Steps: resolve template → (cache lookup) → context → renderDocument (header / body /
+ * footer HTML) → wrap → Chromium → (cache store) → audit.
  */
-
-interface RenderableTemplate {
-    id: string;
-    name: string;
-    version: number;
-    /** Compile-cache key; undefined for unsaved drafts. */
-    cacheKey?: string;
-    module: PdfModule;
-    pageSize: PageSize;
-    orientation: Orientation;
-    margins: PdfMargins;
-    headerHtml: string;
-    bodyHtml: string;
-    footerHtml: string;
-    css: string;
-    visibility: FieldVisibility;
-    branding: Branding;
-}
 
 export interface RenderedPdf {
     buffer: Buffer;
@@ -54,16 +33,14 @@ export function contentDisposition(disposition: 'inline' | 'attachment', fileNam
 
 const sha256 = (value: string) => createHash('sha256').update(value).digest('hex');
 
-async function prepareInput(template: RenderableTemplate, user: AuthUser, customFields: ContextBuildInput['customFields']) {
-    const registry = buildFieldRegistry(template.module, customFields);
-    const assetKeys = collectAssetKeys(template.headerHtml, template.bodyHtml, template.footerHtml, template.css);
-    if (template.branding.logoAssetKey) assetKeys.push(template.branding.logoAssetKey);
-    const assets = assetKeys.length ? await pdfAssetService.loadDataUris(assetKeys) : {};
+/** Context input + the data: URIs of every image the document uses. */
+async function prepareInput(module: PdfModule, document: PdfDocument, user: AuthUser, customFields: CustomFieldMeta[]) {
+    const keys = collectDocumentAssetKeys(document);
+    const assets = keys.length ? await pdfAssetService.loadDataUris(keys) : {};
     const input: ContextBuildInput = {
-        registry,
-        visibility: template.visibility,
-        branding: template.branding,
-        logoDataUri: template.branding.logoAssetKey ? (assets[template.branding.logoAssetKey] ?? '') : '',
+        registry: buildFieldRegistry(module, customFields),
+        theme: document.theme,
+        logoDataUri: document.theme.logoAssetKey ? (assets[document.theme.logoAssetKey] ?? '') : '',
         customFields,
         generatedBy: user.username,
         timeZone: ENV.BUSINESS_TIMEZONE,
@@ -71,49 +48,19 @@ async function prepareInput(template: RenderableTemplate, user: AuthUser, custom
     return { input, assets };
 }
 
-function compileParts(template: RenderableTemplate, context: PdfContext, assets: Record<string, string>, title: string) {
-    const data = { assets };
-    const part = (source: string, name: 'header' | 'body' | 'footer') =>
-        source.trim() ? renderTemplate(compileTemplate(source, name, template.cacheKey), name, context, data) : '';
-    const body = part(template.bodyHtml, 'body');
-    const header = part(template.headerHtml, 'header');
-    const footer = part(template.footerHtml, 'footer');
-    const html = buildHtmlDocument({ bodyHtml: body, css: template.css, branding: template.branding, pageSize: template.pageSize, orientation: template.orientation, title });
-    return { html, header, footer };
-}
-
-async function renderToPdf(template: RenderableTemplate, compiled: ReturnType<typeof compileParts>, recordId?: string): Promise<Buffer> {
-    const { margins } = template;
-    const accent = template.branding.accentColor;
+async function renderToPdf(document: PdfDocument, context: PdfContext, assets: Record<string, string>, title: string, meta: { templateId: string; recordId?: string }): Promise<Buffer> {
+    const rendered = renderDocument(document, context, { mode: 'pdf', assetSrc: (key) => assets[key] ?? null });
+    const { margins } = document.page;
+    const layout = (offsetMm: number) => ({ offsetMm, leftMm: margins.left, rightMm: margins.right });
     return getPdfRenderer().renderPdf({
-        html: compiled.html,
-        headerHtml: compiled.header ? wrapHeaderFooter(compiled.header, 'header', { offsetMm: margins.header, leftMm: margins.left, rightMm: margins.right }, accent) : undefined,
-        footerHtml: compiled.footer ? wrapHeaderFooter(compiled.footer, 'footer', { offsetMm: margins.footer, leftMm: margins.left, rightMm: margins.right }, accent) : undefined,
-        pageSize: template.pageSize,
-        orientation: template.orientation,
+        html: buildHtmlDocument({ bodyHtml: rendered.body, theme: document.theme, pageSize: document.page.size, orientation: document.page.orientation, title }),
+        headerHtml: rendered.header ? wrapHeaderFooter(rendered.header, 'header', layout(margins.header)) : undefined,
+        footerHtml: rendered.footer ? wrapHeaderFooter(rendered.footer, 'footer', layout(margins.footer)) : undefined,
+        pageSize: document.page.size,
+        orientation: document.page.orientation,
         margins,
-        meta: { templateId: template.id, ...(recordId ? { recordId } : {}) },
+        meta,
     });
-}
-
-function fromRow(row: PdfTemplate, customFields: ContextBuildInput['customFields']): RenderableTemplate {
-    const module = toModule(row.module);
-    return {
-        id: row.id,
-        name: row.name,
-        version: row.version,
-        cacheKey: `${row.id}:${row.version}`,
-        module,
-        pageSize: row.pageSize === 'Letter' || row.pageSize === 'Legal' ? row.pageSize : 'A4',
-        orientation: row.orientation === 'landscape' ? 'landscape' : 'portrait',
-        margins: toMargins(row),
-        headerHtml: row.headerHtml ?? '',
-        bodyHtml: row.bodyHtml,
-        footerHtml: row.footerHtml ?? '',
-        css: row.css ?? '',
-        visibility: mergeFieldVisibility(buildFieldRegistry(module, customFields), row.fieldVisibilityJson),
-        branding: mergeBranding(row.brandingJson),
-    };
 }
 
 // ─── Redis cache (optional, fail-open) ──────────────────────────────────────────
@@ -146,21 +93,21 @@ export const pdfRenderService = {
             adapter.loadRecordMeta(recordId, user),
             loadCustomFieldMeta(module),
         ]);
-        const template = fromRow(row, customFields);
+        const document = documentOf(row);
         const fileName = `${meta.fileBaseName}.pdf`;
 
         const cacheKey = `pdf:${module}:${sha256(
-            JSON.stringify([template.id, template.version, recordId, meta.updatedAt.toISOString(), customFields.map((c) => `${c.fieldKey}:${c.label}:${c.fieldType}`)]),
+            JSON.stringify([row.id, row.version, recordId, meta.updatedAt.toISOString(), customFields.map((c) => `${c.fieldKey}:${c.label}:${c.fieldType}`)]),
         )}`;
         const cached = await cacheGet(cacheKey);
         let buffer: Buffer;
         if (cached) {
             buffer = cached;
-            logger.info({ templateId: template.id, recordId, bytes: buffer.length }, 'PDF served from cache');
+            logger.info({ templateId: row.id, recordId, bytes: buffer.length }, 'PDF served from cache');
         } else {
-            const { input, assets } = await prepareInput(template, user, customFields);
+            const { input, assets } = await prepareInput(module, document, user, customFields);
             const context = await adapter.buildContext(recordId, input);
-            buffer = await renderToPdf(template, compileParts(template, context, assets, meta.fileBaseName), recordId);
+            buffer = await renderToPdf(document, context, assets, meta.fileBaseName, { templateId: row.id, recordId });
             await cacheSet(cacheKey, buffer);
         }
 
@@ -169,44 +116,41 @@ export const pdfRenderService = {
             entityId: recordId,
             action: 'PDF_GENERATED',
             changedBy: user.username,
-            changes: { templateId: template.id, templateName: template.name, templateVersion: template.version, bytes: buffer.length, cached: Boolean(cached) },
+            changes: { templateId: row.id, templateName: row.name, templateVersion: row.version, bytes: buffer.length, cached: Boolean(cached) },
         });
         return { buffer, fileName };
     },
 
-    /** Editor preview of an unsaved draft (re-sanitized here); sample data when no record is picked. */
-    async renderPreview(body: unknown, user: AuthUser): Promise<{ format: 'html'; html: string } | { format: 'pdf'; buffer: Buffer }> {
-        const { template: draft, recordId, format } = previewBodySchema.parse(body);
-        const parts = prepareParts(draft);
-        const customFields = await loadCustomFieldMeta(draft.module);
-        const registry = buildFieldRegistry(draft.module, customFields);
-        const template: RenderableTemplate = {
-            id: draft.id ?? 'draft',
-            name: draft.name ?? 'Draft',
-            version: 0,
-            module: draft.module,
-            pageSize: draft.pageSize,
-            orientation: draft.orientation,
-            margins: draft.margins,
-            ...parts,
-            visibility: mergeFieldVisibility(registry, draft.fieldVisibility),
-            branding: mergeBranding(draft.branding),
-        };
-        const adapter = PDF_MODULE_ADAPTERS[draft.module];
+    /** PDF of an unsaved builder document; sample data when no record is picked. */
+    async renderPreview(body: unknown, user: AuthUser): Promise<Buffer> {
+        const { module, document, recordId } = previewBodySchema.parse(body);
+        const customFields = await loadCustomFieldMeta(module);
+        assertDocumentValid(document, buildFieldRegistry(module, customFields));
+        const adapter = PDF_MODULE_ADAPTERS[module];
         // Previewing against a real record reads it, so it gets the same 404 / 403 checks as a download.
         if (recordId) await adapter.loadRecordMeta(recordId, user);
-        const { input, assets } = await prepareInput(template, user, customFields);
+        const { input, assets } = await prepareInput(module, document, user, customFields);
         const context = recordId ? await adapter.buildContext(recordId, input) : adapter.buildSampleContext(input);
-        const compiled = compileParts(template, context, assets, 'Preview');
+        return renderToPdf(document, context, assets, 'Preview', { templateId: 'preview', ...(recordId ? { recordId } : {}) });
+    },
 
-        if (format === 'html') {
-            // Fast preview: header and footer are shown inline above / below the body (page numbers read "1").
-            const strip = (html: string) => html.replace(/<span class="(pageNumber|totalPages)"><\/span>/g, '1');
-            const headerBlock = compiled.header ? `<div class="pdf-preview-header" style="border-bottom:1px dashed #cbd5e1;margin-bottom:8px;padding-bottom:4px;font-size:8pt;color:#475569">${strip(compiled.header)}</div>` : '';
-            const footerBlock = compiled.footer ? `<div class="pdf-preview-footer" style="border-top:1px dashed #cbd5e1;margin-top:12px;padding-top:4px;font-size:8pt;color:#475569">${strip(compiled.footer)}</div>` : '';
-            const html = compiled.html.replace('<body>', `<body style="padding:${template.margins.top / 3}mm ${template.margins.right}mm ${template.margins.bottom / 3}mm ${template.margins.left}mm">${headerBlock}`).replace('</body>', `${footerBlock}</body>`);
-            return { format: 'html', html };
-        }
-        return { format: 'pdf', buffer: await renderToPdf(template, compiled, recordId) };
+    /**
+     * The record context the builder canvas renders blocks with (sample data without a record). Company details
+     * come from the builder's own theme, so the logo is left empty here (the canvas loads it by URL).
+     */
+    async editorContext(query: unknown, user: AuthUser): Promise<PdfContext> {
+        const { module, recordId } = contextQuerySchema.parse(query ?? {});
+        const customFields = await loadCustomFieldMeta(module);
+        const adapter = PDF_MODULE_ADAPTERS[module];
+        if (recordId) await adapter.loadRecordMeta(recordId, user);
+        const input: ContextBuildInput = {
+            registry: buildFieldRegistry(module, customFields),
+            theme: { accentColor: '#1d4ed8', textColor: '#1f2937', fontSize: 10, lineHeight: 1.4, companyName: '', companyAddress: '', companyPhone: '', companyEmail: '', companyGstin: '', companyWebsite: '' },
+            logoDataUri: '',
+            customFields,
+            generatedBy: user.username,
+            timeZone: ENV.BUSINESS_TIMEZONE,
+        };
+        return recordId ? adapter.buildContext(recordId, input) : adapter.buildSampleContext(input);
     },
 };

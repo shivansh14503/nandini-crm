@@ -5,7 +5,8 @@ import { useRouter } from 'next/navigation';
 import { Box, Button, FormControl, IconButton, InputLabel, MenuItem, Select, Tooltip, Typography } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
 import ContentCopyOutlinedIcon from '@mui/icons-material/ContentCopyOutlined';
-import StarBorderRoundedIcon from '@mui/icons-material/StarBorderRounded';
+import RadioButtonCheckedRoundedIcon from '@mui/icons-material/RadioButtonCheckedRounded';
+import RadioButtonUncheckedRoundedIcon from '@mui/icons-material/RadioButtonUncheckedRounded';
 import ToggleOnOutlinedIcon from '@mui/icons-material/ToggleOnOutlined';
 import ToggleOffOutlinedIcon from '@mui/icons-material/ToggleOffOutlined';
 import PictureAsPdfOutlinedIcon from '@mui/icons-material/PictureAsPdfOutlined';
@@ -68,6 +69,16 @@ export function PdfTemplatesListView() {
         }
     };
 
+    /** The default must be active, so an inactive template is activated first. */
+    const makeDefault = (t: PdfTemplateListItem) =>
+        run(
+            async () => {
+                if (!t.isActive) await setActive.mutateAsync({ id: t.id, isActive: true });
+                await setDefault.mutateAsync(t.id);
+            },
+            t.isActive ? `"${t.name}" is now the default` : `"${t.name}" activated and set as the default`,
+        );
+
     const columns: DataTableColumn<PdfTemplateListItem>[] = [
         {
             id: 'name',
@@ -86,7 +97,40 @@ export function PdfTemplatesListView() {
             ),
         },
         { id: 'module', label: 'Module', render: (t) => PDF_MODULE_LABELS[t.module] },
-        { id: 'default', label: 'Default', align: 'center', render: (t) => (t.isDefault ? <StatusChip tone="default">Default</StatusChip> : null) },
+        {
+            id: 'default',
+            label: 'Default',
+            align: 'center',
+            minWidth: 130,
+            render: (t) =>
+                t.isDefault ? (
+                    <Tooltip title={`Used when users click Print / PDF on a ${PDF_MODULE_LABELS[t.module].toLowerCase()}`}>
+                        <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5, color: '#1d4ed8' }}>
+                            <RadioButtonCheckedRoundedIcon sx={{ fontSize: 18 }} />
+                            <StatusChip tone="default">Default</StatusChip>
+                        </Box>
+                    </Tooltip>
+                ) : (
+                    <Tooltip title={t.isActive ? 'Use this template for Print / PDF' : 'Activates it and uses it for Print / PDF'}>
+                        <span>
+                            <Button
+                                size="small"
+                                variant="text"
+                                aria-label={`Make ${t.name} the default template`}
+                                disabled={busy}
+                                startIcon={<RadioButtonUncheckedRoundedIcon sx={{ fontSize: '18px !important' }} />}
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    void makeDefault(t);
+                                }}
+                                sx={{ textTransform: 'none', fontSize: '0.78rem', fontWeight: 600, color: '#64748b', borderRadius: '8px', px: 1, '&:hover': { color: '#1d4ed8', backgroundColor: '#eff6ff' } }}
+                            >
+                                Make default
+                            </Button>
+                        </span>
+                    </Tooltip>
+                ),
+        },
         { id: 'status', label: 'Status', align: 'center', render: (t) => <StatusChip tone={t.isActive ? 'active' : 'inactive'}>{t.isActive ? 'Active' : 'Inactive'}</StatusChip> },
         { id: 'type', label: 'Type', align: 'center', render: (t) => <StatusChip tone={t.isSystem ? 'system' : 'custom'}>{t.isSystem ? 'System' : 'Custom'}</StatusChip> },
         { id: 'page', label: 'Page', render: (t) => `${t.pageSize} · ${t.orientation === 'portrait' ? 'Portrait' : 'Landscape'}` },
@@ -129,24 +173,6 @@ export function PdfTemplatesListView() {
                     </IconButton>
                 </span>
             </Tooltip>
-            {!t.isDefault && (
-                <Tooltip title={t.isActive ? 'Set as default' : 'Activate the template to make it the default'}>
-                    <span>
-                        <IconButton
-                            size="small"
-                            aria-label={`Set ${t.name} as default`}
-                            disabled={busy || !t.isActive}
-                            onClick={(e) => {
-                                e.stopPropagation();
-                                void run(() => setDefault.mutateAsync(t.id), `"${t.name}" is now the default`);
-                            }}
-                            sx={actionIconSx}
-                        >
-                            <StarBorderRoundedIcon sx={{ fontSize: 17 }} />
-                        </IconButton>
-                    </span>
-                </Tooltip>
-            )}
             <Tooltip title={t.isDefault ? 'The default template cannot be deactivated' : t.isActive ? 'Deactivate' : 'Activate'}>
                 <span>
                     <IconButton

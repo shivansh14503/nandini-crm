@@ -1,11 +1,11 @@
 'use client';
 
-import React, { useEffect } from 'react';
+import React, { useEffect, useRef } from 'react';
 import { useFormContext, useWatch, type FieldValues } from 'react-hook-form';
 import { useFormMode } from '@/context/FormModeContext';
 import { useFormConfigs } from '@/hooks/queries/useFormConfigs';
 import type { FormFieldDefinitionDto } from '@/types/formConfig.types';
-import { activeOptionValues, fieldFormName, findCategory, optionLabelMap, parseDefaultValue } from '@/utils/formConfig';
+import { activeOptionValues, defaultOptionValues, fieldFormName, findCategory, optionLabelMap, parseDefaultValue } from '@/utils/formConfig';
 import type { FieldSize } from './fieldSizing';
 import {
     RhfAmountField,
@@ -53,17 +53,30 @@ export function DynamicFormField({ field, required, applyDefault = true }: Dynam
     const { mode } = useFormMode();
     const { getValues, setValue } = useFormContext<FieldValues>();
     const name = fieldFormName(field);
+    const category = findCategory(configs, field.dropdownCategoryKey);
+    // The dropdown's default options, as a stable dependency for the effect below.
+    const categoryDefaults = defaultOptionValues(category).join('\u0000');
 
+    // Last default this field applied: while the value still equals it (nobody changed it), a changed default
+    // replaces it, and a removed one clears it so the placeholder shows (e.g. in the admin Live Preview).
+    const appliedDefault = useRef<string | undefined>(undefined);
     useEffect(() => {
         if (!applyDefault || mode !== 'create') return;
         const current = getValues(name);
-        const fallback = parseDefaultValue(field);
-        if ((current === undefined || current === '' || current === null) && fallback !== undefined) {
+        const fallback = parseDefaultValue(field, category);
+        const isEmpty = current === undefined || current === '' || current === null || (Array.isArray(current) && current.length === 0);
+        const stillApplied = appliedDefault.current !== undefined && JSON.stringify(current) === appliedDefault.current;
+        if (!isEmpty && !stillApplied) return;
+        if (fallback !== undefined) {
             setValue(name, fallback, { shouldDirty: false });
+            appliedDefault.current = JSON.stringify(fallback);
+        } else if (stillApplied) {
+            setValue(name, field.fieldType === 'multiselect' ? [] : field.fieldType === 'checkbox' ? false : '', { shouldDirty: false });
+            appliedDefault.current = undefined;
         }
         // Only on mount / when the definition changes.
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [field.id, field.defaultValue, mode]);
+    }, [field.id, field.defaultValue, field.fieldType, categoryDefaults, mode]);
 
     // A field switched between select and multi-select keeps the values records already hold: a single pick
     // becomes a one-item list, and a list keeps its first pick, so the control never gets the wrong shape.

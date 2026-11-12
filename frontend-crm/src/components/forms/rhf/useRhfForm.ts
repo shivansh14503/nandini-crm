@@ -17,6 +17,7 @@ import { focusFormField } from '@/utils/formFocus';
 import { getFormConfigs } from '@/services/masterData.store';
 import type { CrmModuleKey } from '@/types/formConfig.types';
 import { validateConfiguredFields } from '@/utils/formConfig';
+import { useDropdownDefaults, withDropdownDefaults, type DropdownDefaultsOptions } from './useDropdownDefaults';
 
 export type FormToastState = {
     open: boolean;
@@ -34,6 +35,11 @@ export interface UseRhfFormOptions<T extends FieldValues> {
      * made required, and custom field formats are validated on top of `schema`.
      */
     module?: CrmModuleKey;
+    /**
+     * Pre-selects the admin's default option of each built-in dropdown of `module` (empty when a dropdown has
+     * none, so its placeholder shows) instead of the form's hard-coded value. Enable for new records only.
+     */
+    dropdownDefaults?: Omit<DropdownDefaultsOptions, 'onApply'>;
 }
 
 export interface UseRhfFormReturn<T extends FieldValues> {
@@ -53,13 +59,19 @@ export function useRhfForm<T extends FieldValues>({
     schema,
     defaultValues,
     module,
+    dropdownDefaults,
 }: UseRhfFormOptions<T>): UseRhfFormReturn<T> {
+    // Read once, like useForm's own defaultValues. A configuration loading later is applied by useDropdownDefaults.
+    const [initialValues] = useState(() =>
+        module && dropdownDefaults?.enabled ? withDropdownDefaults(getFormConfigs(), module, defaultValues, dropdownDefaults.keep) : defaultValues,
+    );
     const methods = useForm<T>({
         // zod schemas with defaults have differing input/output types; the form works on the output shape.
         resolver: withConfiguredFieldRules(zodResolver(schema as never) as unknown as Resolver<T>, module),
-        defaultValues,
+        defaultValues: initialValues,
         mode: 'onTouched',
     });
+    useDropdownDefaults(methods, module, { enabled: Boolean(dropdownDefaults?.enabled), keep: dropdownDefaults?.keep });
 
     const [toast, setToast] = useState<FormToastState>(CLOSED_TOAST);
 

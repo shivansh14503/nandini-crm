@@ -80,6 +80,8 @@ export const updateOptionSchema = z
         meta: metaSchema,
         /** false archives the option (blocked for system options); true restores it. */
         isActive: z.boolean().optional(),
+        /** Pre-selected on new records; false leaves the field empty (its placeholder shows). */
+        isDefault: z.boolean().optional(),
     })
     .refine((body) => Object.keys(body).length > 0, { message: 'Nothing to update.' });
 

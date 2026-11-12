@@ -1,14 +1,15 @@
 import type { AuditEntityType } from '../../../services/audit.service.js';
 import type { AuthUser } from '../../../types/user.types.js';
 import type { CustomFieldMeta } from '../fieldRegistry.js';
-import type { Branding, FieldVisibility, PdfContext, PdfFieldRegistry } from '../pdf.types.js';
+import type { Theme } from '../document/schema.js';
+import type { PdfContext, PdfFieldRegistry } from '../pdf.types.js';
 
 /** What every module's context builder receives (resolved by pdfRender.service). */
 export interface ContextBuildInput {
     registry: PdfFieldRegistry;
-    visibility: FieldVisibility;
-    branding: Branding;
-    /** data: URI of the branding logo ('' when none). */
+    /** The template theme (company details, logo key). */
+    theme: Theme;
+    /** data: URI of the theme logo ('' when none). */
     logoDataUri: string;
     customFields: CustomFieldMeta[];
     generatedBy: string;

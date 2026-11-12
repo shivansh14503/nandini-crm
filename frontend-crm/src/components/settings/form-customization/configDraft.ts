@@ -106,6 +106,7 @@ function newCategory(key: string, label: string, module: DropdownCategoryDto['mo
             sortOrder: (i + 1) * 10,
             isActive: true,
             isSystem: false,
+            isDefault: false,
         })),
     };
 }
@@ -219,6 +220,7 @@ function applyOp(s: FormConfigsPayload, op: DraftOp): void {
                 sortOrder: max + 10,
                 isActive: true,
                 isSystem: false,
+                isDefault: false,
             });
             return;
         }
@@ -238,6 +240,9 @@ function applyOp(s: FormConfigsPayload, op: DraftOp): void {
             if (op.payload.label !== undefined) option.label = op.payload.label;
             if (op.payload.meta !== undefined) option.meta = op.payload.meta;
             if (op.payload.isActive !== undefined) option.isActive = op.payload.isActive;
+            if (op.payload.isDefault !== undefined) option.isDefault = op.payload.isDefault;
+            // Same rule as the API: an archived option can't stay the default.
+            if (op.payload.isActive === false) option.isDefault = false;
             return;
         }
         case 'reorderOptions': {
