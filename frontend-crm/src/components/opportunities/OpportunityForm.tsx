@@ -1,5 +1,6 @@
 'use client';
 
+import { NO_PAST_DATES } from '@/utils/pastDates';
 import React, { useState, useCallback, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { FormProvider } from 'react-hook-form';
@@ -17,6 +18,7 @@ import { ROUTES } from '@/config/constants';
 import { opportunityFormSchema } from '../../validations';
 import type { OpportunityFormData } from '@/types/opportunity.types';
 import { opportunityService } from '../../services/opportunity.service';
+import type { RecordAuditStamp } from '../common/Drawer/RecordAuditFooter';
 
 // Modular Opportunity Form Sections
 import {
@@ -60,12 +62,12 @@ const DEFAULT_OPPORTUNITY_FORM: OpportunityFormData = {
     salesStage: 'Qualification',
     leadSource: 'Website Enquiry',
     leadGivenBy: 'Direct Inbound Marketing',
-    nextFollowupDate: new Date(Date.now() + 86400000).toISOString().split('T')[0],
-    nextFollowupTime: '11:00 AM',
+    nextFollowupDate: '',
+    nextFollowupTime: '',
     followupType: 'Call',
     addDescription: '',
     description: '',
-    assignedTo: 'mittal.sharma',
+    assignedTo: '',
 
     // Billing Details
     tallySerialNo: '',
@@ -114,10 +116,12 @@ export default function OpportunityForm({
 }: OpportunityFormProps) {
     const router = useRouter();
     const [activeTab, setActiveTab] = useState<OpportunityTabKey>('basic');
+    const [audit, setAudit] = useState<RecordAuditStamp>();
 
     const { methods, toast, showToast, closeToast, createSubmitHandler } =
         useRhfForm<OpportunityFormData>({
             schema: opportunityFormSchema,
+            noPastDates: NO_PAST_DATES.opportunity,
             module: 'opportunities',
             defaultValues: { ...DEFAULT_OPPORTUNITY_FORM, ...initialData },
             dropdownDefaults: { enabled: mode === 'create', keep: initialData },
@@ -149,6 +153,7 @@ export default function OpportunityForm({
             .then((found) => {
                 if (active && found) {
                     reset(found);
+                    setAudit({ createdAt: found.createdAt, createdBy: found.createdBy, updatedAt: found.updatedAt, updatedBy: found.updatedBy });
                 }
             })
             .catch(() => {});
@@ -215,6 +220,7 @@ export default function OpportunityForm({
                         editHref: opportunityId ? ROUTES.OPPORTUNITY_EDIT(opportunityId) : undefined,
                         editLabel: 'Edit Opportunity',
                         backHref: ROUTES.OPPORTUNITIES,
+                        audit,
                     }}
                     mode={mode}
                     disableContentPadding

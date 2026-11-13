@@ -65,4 +65,5 @@ export interface Product extends ProductFormData {
     createdAt: string;
     updatedAt: string;
     createdBy: string;
+    updatedBy?: string;
 }

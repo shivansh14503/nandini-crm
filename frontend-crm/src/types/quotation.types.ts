@@ -173,6 +173,7 @@ export interface Quotation extends QuotationFormData {
     createdAt: string;
     updatedAt: string;
     createdBy: string;
+    updatedBy?: string;
 }
 
 export const QUOTATION_STATUSES: QuotationStatus[] = [

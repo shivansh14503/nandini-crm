@@ -421,6 +421,7 @@ export function OpportunityDetailDrawer({
                 ),
             }}
             auditEntity={{ type: 'opportunities', id: opp.id }}
+            recordAudit={opp}
             includeChangesTab={true}
             primaryAction={{
                 label: 'Edit Opportunity',

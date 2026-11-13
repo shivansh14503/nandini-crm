@@ -311,28 +311,11 @@ export function ProductDetailDrawer({
                                 </>
                             )}
                         </DrawerSectionCard>
-
-                        {/* Metadata Card */}
-                        <DrawerSectionCard p={1.5} bg="#f8fafc">
-                            <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 1.5 }}>
-                                <Box>
-                                    <Typography sx={{ fontSize: '0.68rem', color: '#94a3b8' }}>Created By</Typography>
-                                    <Typography sx={{ fontSize: '0.8rem', fontWeight: 600, color: '#334155' }}>
-                                        {p.createdBy || '-'}
-                                    </Typography>
-                                </Box>
-                                <Box>
-                                    <Typography sx={{ fontSize: '0.68rem', color: '#94a3b8' }}>Last Updated</Typography>
-                                    <Typography sx={{ fontSize: '0.8rem', fontWeight: 600, color: '#334155' }}>
-                                        {p.updatedAt ? new Date(p.updatedAt).toLocaleDateString('en-IN') : 'Recently'}
-                                    </Typography>
-                                </Box>
-                            </Box>
-                        </DrawerSectionCard>
                     </Box>
                 ),
             }}
             auditEntity={{ type: 'products', id: p.id }}
+            recordAudit={p}
             includeChangesTab={true}
             statusText="In Catalog • Active"
             primaryAction={{

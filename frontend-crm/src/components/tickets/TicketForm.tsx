@@ -1,5 +1,6 @@
 'use client';
 
+import { NO_PAST_DATES } from '@/utils/pastDates';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { FormProvider, useWatch } from 'react-hook-form';
@@ -26,6 +27,7 @@ import type { ExtendedOrganization } from '@/types/organization.types';
 import type { Contact } from '@/types/contact.types';
 import type { PartnerCompany, PartnerCompanyContact } from '@/types/partner.types';
 import { ticketService } from '@/services';
+import type { RecordAuditStamp } from '../common/Drawer/RecordAuditFooter';
 import { useContacts, useMasterData, useOrganizations } from '@/hooks/queries';
 import { formatAddressLine } from '@/utils/address';
 
@@ -76,7 +78,7 @@ export const DEFAULT_TICKET_FORM: TicketFormData = {
     problemReported: '',
     resolution: '',
     reasonForEscalatedCalls: '',
-    assignedTo: 'mittal.sharma',
+    assignedTo: '',
     cloudFlag: false,
     natureOfCall: '',
     accountAddress: '',
@@ -120,9 +122,11 @@ export default function TicketForm({ mode = 'create', initialData, ticketId, bre
     const router = useRouter();
     const [activeTab, setActiveTab] = useState<TicketTabKey>('overview');
     const [ticketNumber, setTicketNumber] = useState('');
+    const [audit, setAudit] = useState<RecordAuditStamp>();
 
     const { methods, toast, showToast, closeToast, createSubmitHandler } = useRhfForm<TicketFormData>({
         schema: ticketFormSchema,
+        noPastDates: NO_PAST_DATES.ticket,
         module: 'tickets',
         defaultValues: { ...DEFAULT_TICKET_FORM, ...initialData },
         dropdownDefaults: { enabled: mode === 'create', keep: initialData },
@@ -176,6 +180,7 @@ export default function TicketForm({ mode = 'create', initialData, ticketId, bre
             .then((found) => {
                 if (active && found) {
                     setTicketNumber(found.ticketNumber);
+                    setAudit({ createdAt: found.createdAt, createdBy: found.createdBy, updatedAt: found.updatedAt, updatedBy: found.updatedBy });
                     reset({ ...DEFAULT_TICKET_FORM, ...found });
                 }
             })
@@ -302,6 +307,7 @@ export default function TicketForm({ mode = 'create', initialData, ticketId, bre
                         editHref: ticketId ? ROUTES.TICKET_EDIT(ticketId) : undefined,
                         editLabel: 'Edit Ticket',
                         backHref: ROUTES.TICKETS,
+                        audit,
                     }}
                     mode={mode}
                     toast={<AppToast open={toast.open} message={toast.message} severity={toast.severity} onClose={closeToast} />}

@@ -22,6 +22,7 @@ import lookupRouter from './modules/lookups/lookup.routes.js';
 import auditRouter from './modules/audit/audit.routes.js';
 import importRouter from './modules/imports/import.routes.js';
 import formConfigRouter from './modules/form-configs/formConfig.routes.js';
+import documentSeriesRouter from './modules/document-series/documentSeries.routes.js';
 import { seedFormConfigsSafely } from './modules/form-configs/formConfig.seed.js';
 import { pdfAssetRouter, pdfSavedItemRouter, pdfTemplateRouter } from './modules/pdf/pdf.routes.js';
 import { seedPdfTemplatesSafely } from './modules/pdf/pdfTemplate.seed.js';
@@ -93,6 +94,7 @@ app.use('/api/search', searchRouter);
 app.use('/api/lookups', lookupRouter);
 app.use('/api/audit-logs', auditRouter);
 app.use('/api/form-configs', formConfigRouter);
+app.use('/api/document-series', documentSeriesRouter);
 
 // ── 404 + global error handler ─────────────────────────────────────────────────
 app.use(notFoundHandler);

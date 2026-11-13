@@ -230,6 +230,7 @@ export function TicketDetailDrawer({ ticket, open, onClose, onEdit, hideBackdrop
                 ),
             }}
             auditEntity={{ type: 'tickets', id: t.id }}
+            recordAudit={t}
             includeChangesTab
             statusText={overdue ? `${t.ticketStatus} • Overdue` : t.ticketStatus}
             primaryAction={{ label: 'Edit Ticket', onClick: handleEdit }}

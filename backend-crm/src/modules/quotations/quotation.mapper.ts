@@ -70,6 +70,8 @@ export interface QuotationDto {
     createdAt: string;
     updatedAt: string;
     createdBy: string;
+    /** Username of the last editor; empty until the record is first modified. */
+    updatedBy: string;
     /** Admin-defined custom field values keyed by FormFieldDefinition.fieldKey. */
     customFields: Record<string, unknown>;
 }
@@ -135,6 +137,7 @@ export function toQuotationDto(row: QuotationRow): QuotationDto {
         createdAt: toIso(row.createdAt),
         updatedAt: toIso(row.updatedAt),
         createdBy: row.createdBy,
+        updatedBy: row.updatedBy ?? '',
         customFields: parseCustomFields(row.customDataJson),
     };
 }

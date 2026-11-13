@@ -1,5 +1,6 @@
 'use client';
 
+import { NO_PAST_DATES } from '@/utils/pastDates';
 import React, { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { FormProvider, type FieldErrors } from 'react-hook-form';
@@ -133,7 +134,7 @@ const EMPTY_DEFAULTS: QuotationFormData = {
     remarks: '',
     termsAndCondition: 'Standard Terms & Conditions',
     termsAndConditionDescription: '',
-    assignedTo: 'mittal.sharma',
+    assignedTo: '',
 
     opportunityName: '',
     company: 'Nandini Infosystems',
@@ -231,6 +232,7 @@ export function CreateQuoteForm({
     const { methods, toast, showToast, closeToast } =
         useRhfForm<QuotationFormData>({
             schema: quotationFormSchema,
+            noPastDates: NO_PAST_DATES.quotation,
             module: 'quotations',
             defaultValues: { ...EMPTY_DEFAULTS, ...initialData },
             dropdownDefaults: { enabled: mode === 'create', keep: initialData },

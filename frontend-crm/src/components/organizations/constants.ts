@@ -7,6 +7,7 @@ import type {
     NumberOfEmployees,
     SourceOfLead,
 } from '@/types/organization.types';
+import { LEAD_SOURCES as LEAD_FORM_LEAD_SOURCES } from '@/types/lead.types';
 
 export const NATURE_OF_BUSINESS: NatureOfBusiness[] = [
     'Agriculture & Food Processing',
@@ -94,13 +95,5 @@ export const EMPLOYEE_COUNTS: NumberOfEmployees[] = [
     '1001 & Above',
 ];
 
-export const LEAD_SOURCES: SourceOfLead[] = [
-    'Client Referral',
-    'Website Enquiry',
-    'Cold Call',
-    'Email Campaign',
-    'Exhibition / Trade Show',
-    'LinkedIn / Social Media',
-    'Partner Referral',
-    'Other',
-];
+/** Organization Lead Source (sourceOfLead) uses the lead form's Lead Source list (dropdown `shared_lead_source`). */
+export const LEAD_SOURCES: SourceOfLead[] = LEAD_FORM_LEAD_SOURCES;

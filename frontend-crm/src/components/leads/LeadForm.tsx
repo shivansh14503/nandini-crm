@@ -1,5 +1,6 @@
 'use client';
 
+import { NO_PAST_DATES } from '@/utils/pastDates';
 import React, { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { FormProvider } from 'react-hook-form';
@@ -15,6 +16,7 @@ import { ROUTES } from '@/config/constants';
 import { leadFormSchema } from '../../validations';
 import type { LeadFormData } from '@/types/lead.types';
 import { leadService } from '@/services';
+import type { RecordAuditStamp } from '../common/Drawer/RecordAuditFooter';
 import { normalizeAddressFields } from '@/utils/address';
 
 // Modular Lead Form Sections
@@ -70,15 +72,15 @@ const DEFAULT_FORM: LeadFormData = {
     registrationType: '',
     gstNo: '',
     turnover: '',
-    assignedTo: 'mittal.sharma',
+    assignedTo: '',
 
     otherPhone: '',
     organizationName: '',
     department: 'Executive Management',
     leadType: 'Hot',
     status: 'New',
-    nextFollowupDate: new Date(Date.now() + 86400000).toISOString().split('T')[0], // Tomorrow
-    nextFollowupTime: '11:00 AM',
+    nextFollowupDate: '',
+    nextFollowupTime: '',
     description: '',
     noOfEmployee: '',
     referredBy: '',
@@ -111,9 +113,11 @@ export default function LeadForm({
 }: LeadFormProps) {
     const router = useRouter();
     const [activeTab, setActiveTab] = useState<LeadTabKey>('overview');
+    const [audit, setAudit] = useState<RecordAuditStamp>();
 
     const { methods, toast, showToast, closeToast, createSubmitHandler } = useRhfForm<LeadFormData>({
         schema: leadFormSchema,
+        noPastDates: NO_PAST_DATES.followup,
         module: 'leads',
         defaultValues: { ...DEFAULT_FORM, ...initialData },
         dropdownDefaults: { enabled: mode === 'create', keep: initialData },
@@ -135,7 +139,10 @@ export default function LeadForm({
         leadService
             .getById(leadId)
             .then((found) => {
-                if (active && found) reset(normalizeAddressFields(found, LEAD_ADDRESS_PAIRS));
+                if (active && found) {
+                    reset(normalizeAddressFields(found, LEAD_ADDRESS_PAIRS));
+                    setAudit({ createdAt: found.createdAt, createdBy: found.createdBy, updatedAt: found.updatedAt, updatedBy: found.updatedBy });
+                }
             })
             .catch(() => {});
         return () => {
@@ -182,6 +189,7 @@ export default function LeadForm({
                         editHref: leadId ? ROUTES.LEAD_EDIT(leadId) : undefined,
                         editLabel: 'Edit Lead',
                         backHref: ROUTES.LEADS,
+                        audit,
                     }}
                     mode={mode}
                     disableContentPadding

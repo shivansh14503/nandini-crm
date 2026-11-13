@@ -9,6 +9,7 @@ import VerifiedIcon from '@mui/icons-material/Verified';
 import { FormModeProvider } from '@/context/FormModeContext';
 import { FormHeader } from '../forms/FormHeader';
 import type { BreadcrumbItem } from './AppBreadcrumbs';
+import { RecordAuditFooter, type RecordAuditStamp } from './Drawer/RecordAuditFooter';
 
 export interface RecordDetailTab {
     id: string;
@@ -18,11 +19,7 @@ export interface RecordDetailTab {
     sublabel?: React.ReactNode;
 }
 
-export interface RecordAuditInfo {
-    createdAt?: string;
-    createdBy?: string;
-    updatedAt?: string;
-}
+export type RecordAuditInfo = RecordAuditStamp;
 
 export interface CommonRecordDetailViewProps {
     breadcrumbItems?: BreadcrumbItem[];
@@ -52,14 +49,6 @@ export interface CommonRecordDetailViewProps {
     /** Pads the content area; off for entities whose tab panels already pad themselves. */
     padContent?: boolean;
 }
-
-const formatDate = (iso?: string) => {
-    if (!iso) return undefined;
-    const d = new Date(iso);
-    return Number.isNaN(d.getTime())
-        ? iso
-        : d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
-};
 
 const initialsOf = (text: string) =>
     text
@@ -96,14 +85,9 @@ export function CommonRecordDetailView({
     toast,
     padContent = false,
 }: CommonRecordDetailViewProps) {
-    const created = formatDate(audit?.createdAt);
-    const modified = formatDate(audit?.updatedAt);
-    const auditText = [
-        created ? `Created on ${created}${audit?.createdBy ? ` by ${audit.createdBy}` : ''}` : undefined,
-        modified ? `Last modified ${modified}` : undefined,
-    ]
-        .filter(Boolean)
-        .join(' • ');
+    // Created At / Last Modified stamps belong to the overview tab only (the first tab when none is named 'overview').
+    const overviewTabId = tabs?.find((t) => t.id === 'overview')?.id ?? tabs?.[0]?.id;
+    const showAudit = Boolean(audit) && (!overviewTabId || (activeTab ?? tabs?.[0]?.id) === overviewTabId);
 
     return (
         <Box sx={{ width: '100%', pb: 10 }}>
@@ -283,31 +267,14 @@ export function CommonRecordDetailView({
                         }}
                     >
                         {children}
+                        {showAudit && audit && (
+                            <Box sx={padContent ? undefined : { px: { xs: 2.5, md: 3.5 }, pb: 3 }}>
+                                <RecordAuditFooter audit={audit} />
+                            </Box>
+                        )}
                     </Box>
                 </FormModeProvider>
             </Paper>
-
-            {/* ── Audit footer (only when the record carries audit data) ── */}
-            {auditText && (
-            <Box
-                sx={{
-                    position: 'fixed',
-                    bottom: 0,
-                    left: 0,
-                    right: 0,
-                    zIndex: 1200,
-                    backgroundColor: '#fff',
-                    borderTop: '1px solid #e2e8f0',
-                    px: { xs: 2, md: 4 },
-                    py: 1.5,
-                    boxShadow: '0 -2px 10px rgba(0,0,0,0.05)',
-                }}
-            >
-                <Typography sx={{ fontSize: '0.78rem', color: '#64748b', fontWeight: 500 }}>
-                    {auditText}
-                </Typography>
-            </Box>
-            )}
 
             {toast}
         </Box>

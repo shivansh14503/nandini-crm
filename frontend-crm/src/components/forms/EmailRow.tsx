@@ -22,7 +22,8 @@ import type { CorporateEmail } from '@/types/organization.types';
 export interface EmailRowProps {
     email: CorporateEmail;
     onChange: (updated: CorporateEmail) => void;
-    onRemove: () => void;
+    /** Omitted for a row that can't be removed (the list's last remaining address). */
+    onRemove?: () => void;
     /** Informational (non-error) note shown under the address, e.g. "Already exists in CRM". */
     notice?: React.ReactNode;
     /** Address input placeholder (form builder › Placeholder). */
@@ -63,15 +64,17 @@ export function EmailRow({ email, onChange, onRemove, notice, placeholder = 'e.g
                     slotProps={{ htmlInput: { maxLength: FIELD_MAX_LENGTH.email } }}
                     sx={fieldSx}
                 />
-                <Tooltip title="Remove email">
-                    <IconButton
-                        onClick={onRemove}
-                        size="small"
-                        sx={{ color: '#9ca3af', '&:hover': { color: '#ef4444' }, flexShrink: 0 }}
-                    >
-                        <DeleteIcon fontSize="small" />
-                    </IconButton>
-                </Tooltip>
+                {onRemove && (
+                    <Tooltip title="Remove email">
+                        <IconButton
+                            onClick={onRemove}
+                            size="small"
+                            sx={{ color: '#9ca3af', '&:hover': { color: '#ef4444' }, flexShrink: 0 }}
+                        >
+                            <DeleteIcon fontSize="small" />
+                        </IconButton>
+                    </Tooltip>
+                )}
             </Box>
             {notice && (
                 <Box sx={{ mt: -0.5, mb: 1 }}>

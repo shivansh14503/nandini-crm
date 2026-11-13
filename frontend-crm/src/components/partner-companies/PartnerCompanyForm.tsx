@@ -28,7 +28,6 @@ import {
     useRhfForm,
 } from '@/components/forms';
 import { ROUTES } from '@/config/constants';
-import { useAuth } from '@/context/AuthContext';
 import { ApiClientError, partnerCompanyService } from '@/services';
 import { NATURE_OF_PARTNER_OPTIONS, type PartnerCompanyFormData } from '@/types/partner.types';
 import { normalizeAddressFields } from '@/utils/address';
@@ -127,13 +126,11 @@ export default function PartnerCompanyForm({
     breadcrumbItems,
 }: PartnerCompanyFormProps) {
     const router = useRouter();
-    const { user } = useAuth();
     const [activeTab, setActiveTab] = useState<PartnerCompanyTabKey>('company_info');
     const pendingFocusField = useRef<string | null>(null);
 
-    // New records default to the signed-in user as owner.
     const initialValues = useMemo<PartnerCompanyFormData>(
-        () => toFormValues({ ...DEFAULT_FORM, assignedTo: mode === 'create' ? user?.username ?? '' : '', ...initialData }),
+        () => toFormValues({ ...DEFAULT_FORM, ...initialData }),
         // Computed once per mount: later changes must not reset what the user typed.
         // eslint-disable-next-line react-hooks/exhaustive-deps
         []

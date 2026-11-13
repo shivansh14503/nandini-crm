@@ -62,7 +62,15 @@ export function RhfEmailList({
             ? DEFAULT_SIZE
             : (override.fieldSize ?? DEFAULT_SIZE)
         : (baseSize ?? DEFAULT_SIZE);
-    const rows: CorporateEmail[] = Array.isArray(field.value) ? field.value : [];
+    const savedRows: CorporateEmail[] = Array.isArray(field.value) ? field.value : [];
+    // The list always shows at least one address input and the last one can't be removed. An empty list shows a
+    // blank primary row that is only written to the form once the user fills it, so it never dirties the form.
+    const blankRowId = `eml-${React.useId()}`;
+    const rows: CorporateEmail[] =
+        savedRows.length > 0
+            ? savedRows
+            : [{ id: blankRowId, email: '', isPrimary: true, isOptedOut: false, isInvalidBounce: false }];
+    const canRemove = rows.length > 1;
 
     const errorMessage =
         (fieldState.error as { root?: { message?: string } } | undefined)?.root?.message ??
@@ -93,6 +101,7 @@ export function RhfEmailList({
         );
 
     const handleRemove = (index: number) => {
+        if (!canRemove) return;
         const next = rows.filter((_, i) => i !== index);
         if (next.length > 0 && !next.some((e) => e.isPrimary)) {
             next[0] = { ...next[0], isPrimary: true };
@@ -100,7 +109,7 @@ export function RhfEmailList({
         commit(next);
     };
 
-    if (override?.hidden || (isView && rows.length === 0)) return null;
+    if (override?.hidden || (isView && savedRows.length === 0)) return null;
 
     return (
         // Capped so the email cards (address + flags) don't stretch across wide layouts.
@@ -150,7 +159,7 @@ export function RhfEmailList({
                     key={row.id}
                     email={row}
                     onChange={(updated) => handleChange(index, updated)}
-                    onRemove={() => handleRemove(index)}
+                    onRemove={canRemove ? () => handleRemove(index) : undefined}
                     notice={emailNotices?.[(row.email ?? '').trim().toLowerCase()]}
                     placeholder={placeholder}
                 />

@@ -51,6 +51,7 @@ function searchClauses(q: string) {
           ? [{ gstNo: { startsWith: gst } }]
           : [
                 { organizationName: { contains: q } },
+                { accountCode: { contains: q } },
                 { tradeName: { contains: q } },
                 { sapCodeTallyId: { contains: q } },
                 { billingCity: { contains: q } },
@@ -61,6 +62,7 @@ function searchClauses(q: string) {
           ? phoneWhere(phone, ['mobile', 'officePhone'] as const)
           : [
                 { name: { contains: q } },
+                { contactCode: { contains: q } },
                 { mobile: { contains: compact } },
                 { officePhone: { contains: compact } },
                 { emailAddresses: { some: { email: { contains: q } } } },

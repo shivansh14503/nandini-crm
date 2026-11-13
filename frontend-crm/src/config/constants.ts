@@ -53,6 +53,7 @@ export const ROUTES = {
     PARTNER_COMPANY_EDIT: (id: string | number) => `/partner-companies/${id}/edit`,
     ADMIN: '/admin',
     FORM_CUSTOMIZATION: '/admin/form-customization',
+    DOCUMENT_SERIES: '/admin/document-series',
     PDF_TEMPLATES: '/admin/pdf-templates',
     PDF_TEMPLATE_NEW: '/admin/pdf-templates/new',
     PDF_TEMPLATE_EDIT: (id: string) => `/admin/pdf-templates/${id}`,

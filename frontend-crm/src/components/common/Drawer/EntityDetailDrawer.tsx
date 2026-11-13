@@ -28,6 +28,9 @@ import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import { type EntityDetailDrawerProps, type DrawerTabItem, buildDrawerTabs } from './types';
 import { AuditTrailTimeline } from './AuditTrailTimeline';
 import { useDrawerStack } from './DrawerStackContext';
+import { RecordAuditFooter } from './RecordAuditFooter';
+
+const CHANGES_TAB_ID = 'changes-tab';
 
 export function EntityDetailDrawer({
     open,
@@ -46,6 +49,7 @@ export function EntityDetailDrawer({
     tabContents,
     children,
     auditEntity,
+    recordAudit,
     includeChangesTab = true,
     changesTabLabel = 'Changes',
     defaultTabIndex = 0,
@@ -162,7 +166,7 @@ export function EntityDetailDrawer({
     const allTabs: DrawerTabItem[] = [...resolvedBaseTabs];
     if (includeChangesTab && auditEntity) {
         allTabs.push({
-            id: 'changes-tab',
+            id: CHANGES_TAB_ID,
             label: changesTabLabel,
             icon: <HistoryOutlinedIcon sx={{ fontSize: 16 }} />,
             content: <AuditTrailTimeline entityType={auditEntity.type} entityId={auditEntity.id} />,
@@ -171,6 +175,8 @@ export function EntityDetailDrawer({
 
     // Ensure valid currentTab index
     const activeTabIndex = Math.min(currentTab, Math.max(0, allTabs.length - 1));
+    // Created At / Last Modified stamps belong to the overview tab only (the first tab when none is named 'overview').
+    const overviewTabIndex = Math.max(0, allTabs.findIndex((t) => t.id === 'overview'));
 
     const effectiveHideBackdrop = hideBackdrop || isCollapsed;
 
@@ -435,7 +441,12 @@ export function EntityDetailDrawer({
                         <CircularProgress size={28} sx={{ color: '#2563eb' }} />
                     </Box>
                 ) : (
-                    allTabs[activeTabIndex]?.content ?? children
+                    <>
+                        {allTabs[activeTabIndex]?.content ?? children}
+                        {recordAudit && activeTabIndex === overviewTabIndex && allTabs[activeTabIndex]?.id !== CHANGES_TAB_ID && (
+                            <RecordAuditFooter audit={recordAudit} />
+                        )}
+                    </>
                 )}
             </Box>
 

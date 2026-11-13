@@ -58,7 +58,7 @@ export async function createPartnerCompanyRecord(tx: TransactionClient, input: P
     const emails = normalizeEmails(input.emailAddresses);
     const row = await tx.partnerCompany.create({
         data: {
-            ...toPartnerCompanyData(input, emails, nullable(input.assignedTo) ?? user.username),
+            ...toPartnerCompanyData(input, emails, nullable(input.assignedTo)),
             createdBy: user.username,
         },
     });

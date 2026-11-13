@@ -82,7 +82,7 @@ const organizationFields = z.object({
     customerType: optionalText('Customer Type', L.option),
     sapCodeTallyId: optionalText('SAP Code / Tally ID', L.shortCode),
     showroomBranchCode: optionalText('Showroom / Branch Code', L.shortCode),
-    sourceOfLead: optionalText('Source of Lead', L.option),
+    sourceOfLead: optionalText('Lead Source', L.option),
     memberOfParentCorp: optionalText('Parent Corporation', L.organizationName),
     numberOfEmployees: optionalText('Number of Employees', 30),
     annualTurnover: optionalText('Annual Turnover', 30),

@@ -18,7 +18,8 @@ export type AuditEntityType =
     | 'FormField'
     | 'PdfTemplate'
     | 'PdfAsset'
-    | 'PdfSavedItem';
+    | 'PdfSavedItem'
+    | 'DocumentSeries';
 
 export type AuditAction =
     | 'CREATE'

@@ -18,6 +18,7 @@ import { lockRecords, runSerializable } from '../shared/transactions.js';
 import { leadInclude, leadNotFound } from './lead.service.js';
 import type { LeadRow } from './lead.mapper.js';
 import { CONVERTED_STATUS, convertLeadSchema, type ConvertLeadInput } from './lead.validator.js';
+import { assertNotInPast, nextFollowupCheck } from '../../validators/notInPast.js';
 
 /** `LeadConversionResult` from frontend-crm/src/services/leadConversion.service.ts. */
 export interface LeadConversionResult {
@@ -144,6 +145,8 @@ function opportunityPayload(values: ConvertLeadInput, lead: LeadRow, organizatio
  */
 export async function convertLead(leadId: string, body: unknown, user: AuthUser): Promise<LeadConversionResult> {
     const values = convertLeadSchema.parse(body);
+    // The new opportunity's follow-up is a fresh value, so it can't be in the past.
+    assertNotInPast([nextFollowupCheck(values)]);
     // Loaded before the transaction (a cache miss queries through the shared client).
     const [organizationConfig, opportunityConfig] = await Promise.all([loadModuleFieldConfig('organizations'), loadModuleFieldConfig('opportunities')]);
 
