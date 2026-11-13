@@ -144,6 +144,8 @@ export function PdfActionsButton({ module, recordId, variant = 'split', disabled
                 onClose={() => setOpen(false)}
                 anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
                 transformOrigin={{ vertical: 'top', horizontal: 'right' }}
+                // Detail drawers sit at z-index 1310–1400 (CommonMasterView); MUI's default 1300 would open the menu behind them.
+                sx={{ zIndex: 1450 }}
                 slotProps={{
                     paper: { sx: { mt: 0.5, minWidth: 250, border: '1px solid #e2e8f0', borderRadius: '10px', boxShadow: '0 8px 24px rgba(15,23,42,0.10)' } },
                 }}

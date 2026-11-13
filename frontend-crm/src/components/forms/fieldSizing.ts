@@ -45,6 +45,12 @@ export const FIELD_SIZE_WIDTH: Readonly<Record<FieldSize, string>> = {
     full: '100%',
 };
 
+/**
+ * Default width of every field that opens a picker modal (organization, contact, user, partner… lookups), so they
+ * all line up: the full grid cell up to `lg`. An admin's Width in the form builder still overrides it.
+ */
+export const LOOKUP_FIELD_SIZE: FieldSize = 'lg';
+
 // Limits live in config so Zod schemas share them without importing UI code; re-exported for form callers.
 export { FIELD_MAX_LENGTH };
 
@@ -56,6 +62,47 @@ export function fieldSizeMaxWidth(size: FieldSize): { xs: string; sm: string } {
 /** `sx` fragment that applies a size token to a control or its wrapper. */
 export function fieldSizeSx(size: FieldSize) {
     return { width: '100%', maxWidth: fieldSizeMaxWidth(size) };
+}
+
+/**
+ * What a control can hold, for "Auto" width in the form builder: the field is drawn just wide enough for its
+ * longest possible value (or its label, whichever is wider) instead of a fixed token width.
+ */
+export interface FieldContentFit {
+    /** Characters of the longest value: longest dropdown option, or the input's character limit. */
+    chars: number;
+    /** Extra pixels the control draws besides the text (dropdown arrow, country picker, icons). */
+    chromePx?: number;
+    /** Uppercase / digit-heavy values (GSTIN, PAN, codes) whose glyphs run wider than average text. */
+    wide?: boolean;
+}
+
+/** Average glyph widths at the form's input (0.85rem) and label (0.82rem, semibold) font sizes. */
+const INPUT_CHAR_PX = 7.6;
+const INPUT_WIDE_CHAR_PX = 9.2;
+const LABEL_CHAR_PX = 7.4;
+/** Outlined input's horizontal padding (14px each side) plus borders. */
+const INPUT_PADDING_PX = 30;
+/** Never narrower than this, so even a 2-character field stays a usable target. */
+const MIN_FIT_PX = 96;
+/** Below this width the header hides its hint, as for `xs` / `sm` fields. */
+export const COMPACT_FIT_PX = 230;
+
+/** Pixel width that fits `fit`'s longest value and the field's label. */
+export function contentFitWidthPx(fit: FieldContentFit, label: string, required?: boolean): number {
+    const value = fit.chars * (fit.wide ? INPUT_WIDE_CHAR_PX : INPUT_CHAR_PX) + INPUT_PADDING_PX + (fit.chromePx ?? 0);
+    const header = label.length * LABEL_CHAR_PX + (required ? 10 : 0);
+    return Math.ceil(Math.max(MIN_FIT_PX, value, header));
+}
+
+/** `sx` fragment for a content-fitted field: full width on phones, the fitted width (capped by its cell) above. */
+export function contentFitSx(widthPx: number) {
+    return { width: '100%', maxWidth: { xs: '100%', sm: `${widthPx}px` } };
+}
+
+/** Characters of the longest dropdown entry as shown (display label when it differs from the stored value). */
+export function longestOptionChars(options: readonly string[], optionLabels?: Record<string, string>): number {
+    return options.reduce((max, o) => Math.max(max, (optionLabels?.[o] ?? o).length), 0);
 }
 
 interface FieldRule {

@@ -16,7 +16,7 @@ import { getFirstErrorMessage } from '@/validations';
 import { focusFormField } from '@/utils/formFocus';
 import { getFormConfigs } from '@/services/masterData.store';
 import type { CrmModuleKey } from '@/types/formConfig.types';
-import { validateConfiguredFields } from '@/utils/formConfig';
+import { validateConfiguredFields, type ConfigValidationIssue } from '@/utils/formConfig';
 import { useDropdownDefaults, withDropdownDefaults, type DropdownDefaultsOptions } from './useDropdownDefaults';
 
 export type FormToastState = {
@@ -40,6 +40,11 @@ export interface UseRhfFormOptions<T extends FieldValues> {
      * none, so its placeholder shows) instead of the form's hard-coded value. Enable for new records only.
      */
     dropdownDefaults?: Omit<DropdownDefaultsOptions, 'onApply'>;
+    /**
+     * Further configuration-driven rules, for forms that collect other modules' fields (e.g. Convert Lead requires
+     * what the organization / opportunity configurations require). Read at validation time, like `module`.
+     */
+    extraRules?: (values: T) => ConfigValidationIssue[];
 }
 
 export interface UseRhfFormReturn<T extends FieldValues> {
@@ -60,6 +65,7 @@ export function useRhfForm<T extends FieldValues>({
     defaultValues,
     module,
     dropdownDefaults,
+    extraRules,
 }: UseRhfFormOptions<T>): UseRhfFormReturn<T> {
     // Read once, like useForm's own defaultValues. A configuration loading later is applied by useDropdownDefaults.
     const [initialValues] = useState(() =>
@@ -67,7 +73,7 @@ export function useRhfForm<T extends FieldValues>({
     );
     const methods = useForm<T>({
         // zod schemas with defaults have differing input/output types; the form works on the output shape.
-        resolver: withConfiguredFieldRules(zodResolver(schema as never) as unknown as Resolver<T>, module),
+        resolver: withConfiguredFieldRules(zodResolver(schema as never) as unknown as Resolver<T>, module, extraRules),
         defaultValues: initialValues,
         mode: 'onTouched',
     });
@@ -113,11 +119,15 @@ function setNestedError(errors: Record<string, unknown>, path: string, message: 
  * Wraps a resolver with the admin's field rules for `module`. The configuration is read at validation time, so
  * forms opened before it loaded (or before an admin change) still validate against the latest rules.
  */
-function withConfiguredFieldRules<T extends FieldValues>(base: Resolver<T>, module?: CrmModuleKey): Resolver<T> {
-    if (!module) return base;
+function withConfiguredFieldRules<T extends FieldValues>(
+    base: Resolver<T>,
+    module?: CrmModuleKey,
+    extraRules?: (values: T) => ConfigValidationIssue[],
+): Resolver<T> {
+    if (!module && !extraRules) return base;
     return async (values, context, options) => {
         const result = await base(values, context, options);
-        const issues = validateConfiguredFields(getFormConfigs(), module, values);
+        const issues = [...(module ? validateConfiguredFields(getFormConfigs(), module, values) : []), ...(extraRules?.(values) ?? [])];
         if (issues.length === 0) return result;
         const errors = { ...(result.errors as Record<string, unknown>) };
         for (const issue of issues) setNestedError(errors, issue.path, issue.message);

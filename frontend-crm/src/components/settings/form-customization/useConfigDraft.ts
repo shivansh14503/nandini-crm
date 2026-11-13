@@ -422,7 +422,11 @@ export function useConfigDraft(base: FormConfigsPayload | undefined, refetch: ()
                 if (field.isCoreLocked && payload.isVisibleInForm === false) fail(`${field.label} is a core field and cannot be hidden.`);
                 if (field.isCoreLocked && payload.isActive === false) fail(`${field.label} is a core field and cannot be archived.`);
                 if (payload.fieldType !== undefined && payload.fieldType !== field.fieldType) {
+                    if (field.isSystem) fail(`${field.label} is a built-in field; its type can't be changed.`);
                     if (field.fieldType !== 'select' && field.fieldType !== 'multiselect') fail('Only select / multi-select fields can switch between the two.');
+                }
+                if (field.isSystem && payload.dropdownCategoryKey !== undefined && payload.dropdownCategoryKey !== field.dropdownCategoryKey) {
+                    fail(`${field.label} is a built-in field; its dropdown list can't be changed. Edit the list's options instead.`);
                 }
                 if (isTempId(fieldId) && payload.isActive === false) {
                     dropTempField(fieldId);

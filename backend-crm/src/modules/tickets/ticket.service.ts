@@ -24,9 +24,11 @@ const notFound = () => HttpError.notFound('Ticket not found');
 
 /**
  * Nature of Call must be an entry of the master (matched case-insensitively; the master's spelling is stored).
- * A since-deactivated entry is kept only when the ticket already used it.
+ * A since-deactivated entry is kept only when the ticket already used it. Blank stays blank: whether it is
+ * required comes from the form configuration.
  */
-async function resolveNatureOfCall(tx: TransactionClient, name: string, previous?: string): Promise<string> {
+async function resolveNatureOfCall(tx: TransactionClient, name: string | undefined, previous?: string | null): Promise<string | null> {
+    if (!name) return null;
     const entry = await tx.natureOfCall.findFirst({ where: { name }, select: { name: true, isActive: true } });
     if (!entry || (!entry.isActive && entry.name !== previous)) {
         throw HttpError.badRequest('Select a Nature Of Call from the list.', [

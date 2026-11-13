@@ -23,6 +23,7 @@ import {
     FormGridItem,
     StyledSelect,
     StateRegionField,
+    CityAutocompleteField,
     fieldSx,
 } from '@/components/forms';
 import { FormModeProvider } from '@/context/FormModeContext';
@@ -46,7 +47,7 @@ const DEFAULT_QUICK_FORM = {
     gstNumber: '',
     billingStreet: '',
     billingCity: '',
-    billingState: 'Delhi',
+    billingState: '',
     assignedUser: 'mittal.sharma (You)',
     accountStatus: 'Active',
 };
@@ -302,17 +303,14 @@ export function QuickCreateDrawer({ open, onClose, onSave }: QuickCreateDrawerPr
                             />
                         </FormField>
 
-                        <FormField name="billingCity" label="City" size="md">
-                            <TextField
-                                fullWidth
-                                size="small"
-                                placeholder="City"
-                                value={formData.billingCity}
-                                onChange={(e) => handleChange('billingCity', e.target.value)}
-                                slotProps={{ htmlInput: { maxLength: FIELD_MAX_LENGTH.shortText } }}
-                                sx={fieldSx}
-                            />
-                        </FormField>
+                        {/* Same city control as the full address forms: suggestions + dropdown arrow, free text allowed. */}
+                        <CityAutocompleteField
+                            name="billingCity"
+                            label="City"
+                            value={formData.billingCity}
+                            onChange={(v) => handleChange('billingCity', v)}
+                            countryValue={DEFAULT_COUNTRY_CODE}
+                        />
 
                         {/* Quick create is India-only; the full address form offers every country. */}
                         <StateRegionField

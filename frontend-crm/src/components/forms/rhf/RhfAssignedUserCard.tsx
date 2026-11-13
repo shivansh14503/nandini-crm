@@ -5,7 +5,7 @@ import { Avatar, Box, Chip, IconButton, Tooltip, Typography } from '@mui/materia
 import PersonOutlinedIcon from '@mui/icons-material/PersonOutlined';
 import { useFormContext, useWatch, type FieldPath, type FieldValues, type PathValue } from 'react-hook-form';
 import { FormField } from '../FormField';
-import type { FieldSize } from '../fieldSizing';
+import { LOOKUP_FIELD_SIZE, type FieldSize } from '../fieldSizing';
 import { UserLookupModal } from '@/components/common/lookup';
 import { findCrmUser } from '@/services/masterData.store';
 import { useMasterData } from '@/hooks/queries/useMasterData';
@@ -20,7 +20,7 @@ export interface RhfAssignedUserCardProps<T extends FieldValues> {
     hint?: string;
     /** Called with the picked username in addition to updating the form, for forms that mirror values elsewhere. */
     onValueChange?: (username: string) => void;
-    /** Width token (default `md`): the card only holds an avatar, a truncating name, a badge and a button. */
+    /** Width token (default: the shared picker-field width, like every field that opens a lookup modal). */
     fieldSize?: FieldSize;
 }
 
@@ -42,7 +42,7 @@ export function RhfAssignedUserCard<T extends FieldValues>({
     roleBadge = 'Primary Rep',
     hint,
     onValueChange,
-    fieldSize = 'md',
+    fieldSize = LOOKUP_FIELD_SIZE,
 }: RhfAssignedUserCardProps<T>) {
     const { control, setValue } = useFormContext<T>();
     const assignedUsername = (useWatch({ control, name }) as string | undefined) || '';
@@ -72,6 +72,7 @@ export function RhfAssignedUserCard<T extends FieldValues>({
             hint={hint}
             viewValue={assignedUsername ? `${displayName} • ${subtitle}` : ''}
             size={fieldSize}
+            fit={null}
             sx={{ mb: 0 }}
         >
             <Box

@@ -146,13 +146,13 @@ export function buildQuotationDefaultsFromOpportunity(
 
         billingAddress: addr.billingStreet,
         billingCity: addr.billingCity,
-        billingState: addr.billingState || 'Delhi',
+        billingState: addr.billingState || '',
         billingPostalCode: addr.billingPostalCode,
         billingCountry: addr.billingCountry || DEFAULT_COUNTRY_CODE,
 
         shippingAddress: addr.shippingStreet,
         shippingCity: addr.shippingCity,
-        shippingState: addr.shippingState || 'Delhi',
+        shippingState: addr.shippingState || '',
         shippingPostalCode: addr.shippingPostalCode,
         shippingCountry: addr.shippingCountry || DEFAULT_COUNTRY_CODE,
         copyAddressFromBilling: true,

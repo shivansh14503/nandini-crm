@@ -237,7 +237,7 @@ async function loadSource(recordId: string): Promise<QuotationSource> {
         opportunityCode: row.opportunity?.opportunityCode ?? '',
         preparedFor: row.preparedFor,
         otherRef: text(row.otherRef),
-        validationPeriod: row.validationPeriod,
+        validationPeriod: text(row.validationPeriod),
         issuingCompany: row.company,
         groupName: text(row.groupName),
         currency: row.currency,
@@ -279,9 +279,9 @@ async function loadSource(recordId: string): Promise<QuotationSource> {
             grandTotal: decimalToNumber(row.grandTotal),
         },
         terms: {
-            paymentTerms: row.paymentTerms,
+            paymentTerms: text(row.paymentTerms),
             paymentTermsDescription: text(row.paymentTermsDescription),
-            termsAndCondition: row.termsAndCondition,
+            termsAndCondition: text(row.termsAndCondition),
             termsAndConditionDescription: text(row.termsAndConditionDescription || row.termsAndConditions),
         },
         lineItems: (row.lineItems ?? []).map((item) => ({

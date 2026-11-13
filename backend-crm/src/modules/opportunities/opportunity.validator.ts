@@ -7,10 +7,10 @@ import {
     customFieldsSchema,
     enumWithDefault,
     optionalDate,
+    optionalDescription,
     optionalEmail,
     optionalText,
     phone,
-    requiredDate,
     requiredText,
     stringList,
 } from '../../validators/common.js';
@@ -19,10 +19,13 @@ import { lineItemListSchema } from '../shared/lineItems.js';
 export const CLOSED_SALES_STAGES = ['Closed Won', 'Closed Lost'] as const;
 export const QUOTE_SALES_STAGE = 'Proposal/Price Quote';
 
-/** `OpportunityFormData` rules from frontend-crm/src/validations/opportunity.schema.ts. */
+/**
+ * `OpportunityFormData` rules from frontend-crm/src/validations/opportunity.schema.ts. Only locked fields
+ * (docs/field-locking-policy.md) are required here; the rest are enforced from the form configuration.
+ */
 export const opportunityInputSchema = z.object({
     opportunityName: optionalText('Opportunity Name', L.organizationName),
-    productCategory: stringList('Product Category', 30, L.option).min(1, { message: 'Please select at least one Product Category.' }),
+    productCategory: stringList('Product Category', 30, L.option).default([]),
     contactName: requiredText('Contact Person', L.personName),
     contactId: optionalText('Contact', 50),
     organizationName: requiredText('Organization Name', L.organizationName),
@@ -30,21 +33,21 @@ export const opportunityInputSchema = z.object({
     contactNumber: phone('Contact Number'),
     emailAddress: optionalEmail,
     referredBy: optionalText('Referred By', L.organizationName),
-    type: requiredText('Opportunity Type', L.option),
+    type: optionalText('Opportunity Type', L.option),
     salesStage: requiredText('Sales Stage', L.option),
-    leadSource: requiredText('Lead Source', L.option),
-    leadGivenBy: requiredText('Lead Given By', L.organizationName),
-    nextFollowupDate: requiredDate('Next Followup Date'),
+    leadSource: optionalText('Lead Source', L.option),
+    leadGivenBy: optionalText('Lead Given By', L.organizationName),
+    nextFollowupDate: optionalDate('Next Followup Date'),
     nextFollowupTime: optionalText('Next Followup Time', 20),
     followupType: optionalText('Followup Type', L.option),
-    addDescription: requiredText('Add Description', L.longText).min(3, { message: 'Add Description must be at least 3 characters.' }),
+    addDescription: optionalDescription('Add Description'),
     description: optionalText('Description', L.longText),
     assignedTo: requiredText('Assigned Representative', L.username),
 
     tallySerialNo: optionalText('Tally Serial No', L.shortCode),
     invoiceNo: optionalText('Invoice No', L.shortCode),
     invoiceDate: optionalDate('Invoice Date'),
-    commission: requiredText('Commission', L.option),
+    commission: optionalText('Commission', L.option),
     addDocument: enumWithDefault('Add Document', ['Yes', 'No'], 'No'),
 
     currency: optionalText('Currency', 30),

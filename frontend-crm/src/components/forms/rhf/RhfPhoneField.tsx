@@ -140,6 +140,8 @@ export function RhfPhoneField<T extends FieldValues>({
             required={required}
             hint={hint}
             size={resolvedSize}
+            // Auto width: the longest national number plus the 90px country picker beside it.
+            fit={{ chars: maxNationalDigits(country), wide: true, chromePx: 98 }}
             viewValue={formatPhoneDisplay(value) || undefined}
         >
             <TextField

@@ -7,11 +7,13 @@ import { useFormConfigs } from '@/hooks/queries/useFormConfigs';
 import type { FormFieldDefinitionDto } from '@/types/formConfig.types';
 import { activeOptionValues, defaultOptionValues, fieldFormName, findCategory, optionLabelMap, parseDefaultValue } from '@/utils/formConfig';
 import type { FieldSize } from './fieldSizing';
+import { FieldAutoSizeProvider } from './FormField';
 import {
     RhfAmountField,
     RhfCheckbox,
     RhfChipGroup,
     RhfEmailField,
+    RhfEmailList,
     RhfPercentageField,
     RhfPhoneField,
     RhfPinCodeField,
@@ -99,42 +101,60 @@ export function DynamicFormField({ field, required, applyDefault = true }: Dynam
     const placeholder = field.placeholder ?? undefined;
     const fieldSize = (field.fieldSize as FieldSize | null) ?? TYPE_SIZE[field.fieldType];
 
-    switch (field.fieldType) {
-        case 'textarea':
-            return <RhfTextField {...common} placeholder={placeholder} multiline minRows={3} maxRows={6} fieldSize={fieldSize} maxLength={4000} />;
-        case 'number':
-            return <RhfTextField {...common} placeholder={placeholder} type="number" fieldSize={fieldSize} />;
-        case 'amount':
-            return <RhfAmountField {...common} placeholder={placeholder} fieldSize={fieldSize} />;
-        case 'percentage':
-            return <RhfPercentageField {...common} placeholder={placeholder} fieldSize={fieldSize} />;
-        case 'phone':
-            return <RhfPhoneField {...common} placeholder={placeholder} fieldSize={fieldSize} setsFormDefault={false} />;
-        case 'email':
-            return <RhfEmailField {...common} placeholder={placeholder} fieldSize={fieldSize} />;
-        case 'date':
-            return <RhfTextField {...common} type="date" fieldSize={fieldSize} slotProps={{ inputLabel: { shrink: true } }} />;
-        case 'select':
-        case 'multiselect': {
-            const category = findCategory(configs, field.dropdownCategoryKey);
-            const options = activeOptionValues(category);
-            const optionLabels = optionLabelMap(category);
-            return field.fieldType === 'select' ? (
-                <RhfSelect {...common} options={options} optionLabels={optionLabels} placeholder={placeholder} fieldSize={fieldSize} />
-            ) : (
-                <RhfChipGroup {...common} options={options} optionLabels={optionLabels} />
-            );
+    const control = ((): React.ReactNode => {
+        switch (field.fieldType) {
+            case 'textarea':
+                return <RhfTextField {...common} placeholder={placeholder} multiline minRows={3} maxRows={6} fieldSize={fieldSize} maxLength={4000} />;
+            case 'number':
+                return <RhfTextField {...common} placeholder={placeholder} type="number" fieldSize={fieldSize} />;
+            case 'amount':
+                return <RhfAmountField {...common} placeholder={placeholder} fieldSize={fieldSize} />;
+            case 'percentage':
+                return <RhfPercentageField {...common} placeholder={placeholder} fieldSize={fieldSize} />;
+            case 'phone':
+                return <RhfPhoneField {...common} placeholder={placeholder} fieldSize={fieldSize} setsFormDefault={false} />;
+            case 'email':
+                // Built-in email lists (lead / contact / partner `emailAddresses`) hold several addresses.
+                return field.isSystem && field.fieldKey === 'emailAddresses' ? (
+                    <RhfEmailList
+                        name={name}
+                        label={field.label}
+                        required={common.required}
+                        hint={common.hint}
+                        placeholder={placeholder}
+                        fieldSize={field.fieldSize as FieldSize | null}
+                    />
+                ) : (
+                    <RhfEmailField {...common} placeholder={placeholder} fieldSize={fieldSize} />
+                );
+            case 'date':
+                return <RhfTextField {...common} type="date" fieldSize={fieldSize} slotProps={{ inputLabel: { shrink: true } }} />;
+            case 'select':
+            case 'multiselect': {
+                const category = findCategory(configs, field.dropdownCategoryKey);
+                const options = activeOptionValues(category);
+                const optionLabels = optionLabelMap(category);
+                return field.fieldType === 'select' ? (
+                    <RhfSelect {...common} options={options} optionLabels={optionLabels} placeholder={placeholder} fieldSize={fieldSize} />
+                ) : (
+                    <RhfChipGroup {...common} options={options} optionLabels={optionLabels} />
+                );
+            }
+            case 'checkbox':
+                return <RhfCheckbox name={name} label={common.required ? `${field.label} *` : field.label} />;
+            case 'uppercase':
+                return <RhfUppercaseField {...common} placeholder={placeholder} fieldSize={fieldSize} maxLength={50} />;
+            case 'pincode':
+                return <RhfPinCodeField {...common} placeholder={placeholder} fieldSize={fieldSize} />;
+            case 'text':
+            case 'lookup':
+            case 'datetime':
+            default:
+                return <RhfTextField {...common} placeholder={placeholder} fieldSize={fieldSize ?? 'lg'} maxLength={500} />;
         }
-        case 'checkbox':
-            return <RhfCheckbox name={name} label={common.required ? `${field.label} *` : field.label} />;
-        case 'uppercase':
-            return <RhfUppercaseField {...common} placeholder={placeholder} fieldSize={fieldSize} maxLength={50} />;
-        case 'pincode':
-            return <RhfPinCodeField {...common} placeholder={placeholder} fieldSize={fieldSize} />;
-        case 'text':
-        case 'lookup':
-        case 'datetime':
-        default:
-            return <RhfTextField {...common} placeholder={placeholder} fieldSize={fieldSize ?? 'lg'} maxLength={500} />;
-    }
+    })();
+
+    // Lets the control size itself to its content when the admin left Width on "Auto".
+    return <FieldAutoSizeProvider auto={!field.fieldSize}>{control}</FieldAutoSizeProvider>;
 }
+

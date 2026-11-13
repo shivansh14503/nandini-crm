@@ -30,7 +30,8 @@ export const ticketInputSchema = z.object({
     contactPersonName: requiredText('Contact Person Name', L.personName),
     contactNumber: optionalPhone('Contact Number'),
     // Option lists below are admin-customizable (ticket_* dropdown categories); system options keep their meaning.
-    ticketPriority: requiredText('Ticket Priority', 20),
+    // Priority, Nature Of Call and Support Mode are admin-relaxable (the form configuration enforces them).
+    ticketPriority: optionalText('Ticket Priority', 20),
     source: textWithDefault('Source', 20, 'Call'),
     supportType: textWithDefault('Support Type', 20, 'Free'),
     problemReported: requiredText('Problem Reported', L.longText),
@@ -39,13 +40,13 @@ export const ticketInputSchema = z.object({
     assignedTo: requiredText('Assigned to', L.username),
 
     cloudFlag: z.boolean().default(false),
-    natureOfCall: requiredText('Nature Of Call', L.option),
+    natureOfCall: optionalText('Nature Of Call', L.option),
     accountAddress: optionalText('Account Address', L.address),
     contactEmail: optionalEmail,
     leftJob: enumWithDefault('Left Job', ['No', 'Yes'], 'No'),
     ticketStatus: textWithDefault('Ticket Status', 30, 'New'),
     dueDate: requiredWallClock('Due Date'),
-    supportMode: requiredText('Support Mode', 50),
+    supportMode: optionalText('Support Mode', 50),
     problemObserved: optionalText('Problem Observed', L.longText),
     rca: optionalText('RCA', L.longText),
     addDescription: optionalText('Add Description', L.longText),

@@ -9,6 +9,7 @@ export interface LeadFormData {
     mobile: string;
     emailAddresses: CorporateEmail[];
     mailingName?: string;
+    tradeName?: string;
     designation?: string;
     leadSource: string;
     productCategory: string[];

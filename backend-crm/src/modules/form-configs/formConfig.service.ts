@@ -146,6 +146,11 @@ function isBuiltInTabDeleted(
  * A field's stored default with option value `from` renamed to `to`: a select default is the value itself,
  * a multi-select default a comma-separated list of values. Mirrored by the builder's draft (configDraft.ts).
  */
+/** A built-in address Country field (`primaryCountry`, `billingCountry`, …): picks from the fixed ISO country list. */
+function isBuiltInCountryField(field: { isSystem: boolean; fieldKey: string; dropdownCategoryId: string | null }): boolean {
+    return field.isSystem && !field.dropdownCategoryId && /Country$/.test(field.fieldKey);
+}
+
 function renameDefaultValue(defaultValue: string | null, fieldType: string, from: string, to: string): string | null {
     if (defaultValue === null || from === to) return defaultValue;
     if (fieldType === 'multiselect') {
@@ -884,7 +889,22 @@ export const formConfigService = {
                 nextTabKey !== before.tabKey || input.tabLabel !== undefined
                     ? await resolveTabLabel(tx, before.module, nextTabKey, input.tabLabel)
                     : undefined;
+            // Address Country fields use the fixed ISO country list (no dropdown of their own): the only thing an
+            // admin sets is the default, which must be one of those countries, stored as its ISO2 code.
+            let defaultValue = input.defaultValue;
+            if (isBuiltInCountryField(before) && defaultValue) {
+                const iso2 = defaultValue.trim().toUpperCase();
+                const country = await tx.country.findUnique({ where: { iso2Code: iso2 }, select: { iso2Code: true } });
+                if (!country) reject('defaultValue', 'Choose the default country from the list.');
+                defaultValue = iso2;
+            }
+            if (input.dropdownCategoryKey && isBuiltInCountryField(before)) {
+                reject('dropdownCategoryKey', `${before.label} uses the fixed country list; it can't be given a dropdown.`);
+            }
+
             if (input.fieldType !== undefined && input.fieldType !== before.fieldType) {
+                // A built-in field maps to a fixed column shape (e.g. lead Status holds one value), so its type is fixed.
+                if (before.isSystem) reject('fieldType', `${before.label} is a built-in field; its type can't be changed.`);
                 if (!CHOICE_TYPES.has(before.fieldType)) reject('fieldType', 'Only select / multi-select fields can switch between the two.');
             }
 
@@ -892,6 +912,11 @@ export const formConfigService = {
             if (input.dropdownCategoryKey !== undefined) {
                 if (!CHOICE_TYPES.has(before.fieldType)) reject('dropdownCategoryKey', 'Only select / multi-select fields have dropdown options.');
                 dropdownCategoryId = input.dropdownCategoryKey === null ? null : (await findCategory(tx, input.dropdownCategoryKey)).id;
+                // Built-in fields keep their option list (system options such as lead 'Converted' live in it);
+                // edit that list's options instead.
+                if (before.isSystem && dropdownCategoryId !== before.dropdownCategoryId) {
+                    reject('dropdownCategoryKey', `${before.label} is a built-in field; its dropdown list can't be changed. Edit the list's options instead.`);
+                }
             }
 
             const after = await tx.formFieldDefinition.update({
@@ -906,7 +931,7 @@ export const formConfigService = {
                     ...(input.fieldSize !== undefined ? { fieldSize: input.fieldSize } : {}),
                     ...(input.placeholder !== undefined ? { placeholder: input.placeholder } : {}),
                     ...(input.hint !== undefined ? { hint: input.hint } : {}),
-                    ...(input.defaultValue !== undefined ? { defaultValue: input.defaultValue } : {}),
+                    ...(defaultValue !== undefined ? { defaultValue } : {}),
                     ...(input.isRequired !== undefined ? { isRequired: input.isRequired } : {}),
                     ...(input.isVisibleInForm !== undefined ? { isVisibleInForm: input.isVisibleInForm } : {}),
                     ...(input.isVisibleInDrawer !== undefined ? { isVisibleInDrawer: input.isVisibleInDrawer } : {}),
@@ -930,6 +955,19 @@ export const formConfigService = {
             }
 
             const changes: Record<string, { from: unknown; to: unknown }> = diffRecords(before, after);
+
+            // A dropdown list named after this field and used by it alone (e.g. a custom "Lead Type" field's list)
+            // follows the field's rename, keeping the Dropdowns tab in step. Lists with a name of their own
+            // (e.g. "Lead Designation") or shared with other fields (e.g. Lead Source) keep it.
+            if (after.label !== before.label && after.dropdownCategoryId) {
+                const category = await tx.dropdownCategory.findUnique({ where: { id: after.dropdownCategoryId }, select: { id: true, label: true } });
+                const sharedWith = await tx.formFieldDefinition.count({ where: { dropdownCategoryId: after.dropdownCategoryId, id: { not: after.id } } });
+                if (category && sharedWith === 0 && category.label.trim().toLowerCase() === before.label.trim().toLowerCase()) {
+                    await tx.dropdownCategory.update({ where: { id: category.id }, data: { label: after.label } });
+                    changes.dropdownLabel = { from: category.label, to: after.label };
+                }
+            }
+
             // Record the linked dropdown by key (readable in the timeline) rather than by row id.
             if (changes.dropdownCategoryId) {
                 const ids = [before.dropdownCategoryId, after.dropdownCategoryId].filter((id): id is string => Boolean(id));

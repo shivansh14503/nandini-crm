@@ -188,24 +188,24 @@ model Contact {
   id          String @id @default(uuid()) @db.NVarChar(50)
   contactCode String @unique @db.NVarChar(20)
 
-  name             String  @db.NVarChar(100)
+  name                  String  @db.NVarChar(100)
   /// Denormalized display name; organizationId is the link.
-  organizationName String  @db.NVarChar(200)
-  organizationId   String? @db.NVarChar(50)
-  mobile           String  @db.NVarChar(20)
-  officePhone      String? @db.NVarChar(20)
-  phone3           String? @db.NVarChar(20)
-  phone4           String? @db.NVarChar(20)
-  phone5           String? @db.NVarChar(20)
-  assignedTo       String  @db.NVarChar(50)
-  isPrimaryContact Boolean @default(false)
-  designation      String? @db.NVarChar(100)
-  department       String? @db.NVarChar(100)
-  leftJob          String  @default("No") @db.NVarChar(3)
+  organizationName      String  @db.NVarChar(200)
+  organizationId        String? @db.NVarChar(50)
+  mobile                String  @db.NVarChar(20)
+  officePhone           String? @db.NVarChar(20)
+  phone3                String? @db.NVarChar(20)
+  phone4                String? @db.NVarChar(20)
+  phone5                String? @db.NVarChar(20)
+  assignedTo            String  @db.NVarChar(50)
+  isPrimaryContact      Boolean @default(false)
+  designation           String? @db.NVarChar(100)
+  department            String? @db.NVarChar(100)
+  leftJob               String  @default("No") @db.NVarChar(3)
   /// string[] as JSON (e.g. ["Call","Email"]).
   communicationTypeJson String? @db.NVarChar(Max)
-  doNotCall        Boolean @default(false)
-  description      String? @db.NVarChar(2000)
+  doNotCall             Boolean @default(false)
+  description           String? @db.NVarChar(2000)
 
   /// Admin-defined custom field values `{ [fieldKey]: value }` (see FormFieldDefinition) as JSON.
   customDataJson String? @db.NVarChar(Max)
@@ -240,29 +240,30 @@ model Lead {
   leadCode String @unique @db.NVarChar(20)
 
   // Overview
-  name                String  @db.NVarChar(100)
-  mobile              String  @db.NVarChar(20)
-  mailingName         String? @db.NVarChar(200)
-  designation         String? @db.NVarChar(100)
-  leadSource          String  @db.NVarChar(50)
+  name                String    @db.NVarChar(100)
+  mobile              String?   @db.NVarChar(20)
+  mailingName         String?   @db.NVarChar(200)
+  tradeName           String?   @db.NVarChar(200)
+  designation         String?   @db.NVarChar(100)
+  leadSource          String?   @db.NVarChar(50)
   /// string[] as JSON.
-  productCategoryJson String  @db.NVarChar(Max)
-  followupType        String? @db.NVarChar(30)
-  addDescription      String  @db.NVarChar(2000)
-  registrationType    String? @db.NVarChar(30)
-  gstNo               String? @db.NVarChar(15)
-  turnover            String? @db.NVarChar(30)
-  assignedTo          String  @db.NVarChar(50)
-  otherPhone          String? @db.NVarChar(20)
-  organizationName    String? @db.NVarChar(200)
-  department          String? @db.NVarChar(100)
-  leadType            String  @db.NVarChar(30)
-  status              String  @default("New") @db.NVarChar(30)
-  nextFollowupDate    DateTime @db.Date
-  nextFollowupTime    String? @db.NVarChar(20)
-  description         String? @db.NVarChar(2000)
-  noOfEmployee        String? @db.NVarChar(30)
-  referredBy          String? @db.NVarChar(200)
+  productCategoryJson String?   @db.NVarChar(Max)
+  followupType        String?   @db.NVarChar(30)
+  addDescription      String?   @db.NVarChar(2000)
+  registrationType    String?   @db.NVarChar(30)
+  gstNo               String?   @db.NVarChar(15)
+  turnover            String?   @db.NVarChar(30)
+  assignedTo          String    @db.NVarChar(50)
+  otherPhone          String?   @db.NVarChar(20)
+  organizationName    String?   @db.NVarChar(200)
+  department          String?   @db.NVarChar(100)
+  leadType            String?   @db.NVarChar(30)
+  status              String    @default("New") @db.NVarChar(30)
+  nextFollowupDate    DateTime? @db.Date
+  nextFollowupTime    String?   @db.NVarChar(20)
+  description         String?   @db.NVarChar(2000)
+  noOfEmployee        String?   @db.NVarChar(30)
+  referredBy          String?   @db.NVarChar(200)
 
   // Primary address
   primaryAddress    String? @db.NVarChar(250)
@@ -361,7 +362,7 @@ model Opportunity {
 
   opportunityName     String?   @db.NVarChar(200)
   /// string[] as JSON.
-  productCategoryJson String    @db.NVarChar(Max)
+  productCategoryJson String?   @db.NVarChar(Max)
   contactName         String    @db.NVarChar(100)
   contactId           String?   @db.NVarChar(50)
   organizationName    String    @db.NVarChar(200)
@@ -369,14 +370,14 @@ model Opportunity {
   contactNumber       String    @db.NVarChar(20)
   emailAddress        String?   @db.NVarChar(120)
   referredBy          String?   @db.NVarChar(200)
-  type                String    @db.NVarChar(50)
+  type                String?   @db.NVarChar(50)
   salesStage          String    @db.NVarChar(50)
-  leadSource          String    @db.NVarChar(50)
-  leadGivenBy         String    @db.NVarChar(200)
-  nextFollowupDate    DateTime  @db.Date
+  leadSource          String?   @db.NVarChar(50)
+  leadGivenBy         String?   @db.NVarChar(200)
+  nextFollowupDate    DateTime? @db.Date
   nextFollowupTime    String?   @db.NVarChar(20)
   followupType        String?   @db.NVarChar(30)
-  addDescription      String    @db.NVarChar(2000)
+  addDescription      String?   @db.NVarChar(2000)
   description         String?   @db.NVarChar(2000)
   assignedTo          String    @db.NVarChar(50)
 
@@ -385,7 +386,7 @@ model Opportunity {
   invoiceNo     String?   @db.NVarChar(30)
   invoiceDate   DateTime? @db.Date
 
-  commission  String  @db.NVarChar(50)
+  commission  String? @db.NVarChar(50)
   addDocument String? @default("No") @db.NVarChar(3)
 
   // Line-item totals (verified server-side)
@@ -461,14 +462,14 @@ model Quotation {
   quotationDate                DateTime @db.Date
   validUntil                   DateTime @db.Date
   remarks                      String?  @db.NVarChar(2000)
-  termsAndCondition            String   @db.NVarChar(100)
+  termsAndCondition            String?  @db.NVarChar(100)
   termsAndConditionDescription String?  @db.NVarChar(4000)
   assignedTo                   String   @db.NVarChar(50)
   opportunityName              String   @db.NVarChar(200)
   company                      String   @db.NVarChar(100)
-  validationPeriod             String   @db.NVarChar(30)
+  validationPeriod             String?  @db.NVarChar(30)
   otherRef                     String?  @db.NVarChar(80)
-  paymentTerms                 String   @db.NVarChar(100)
+  paymentTerms                 String?  @db.NVarChar(100)
   paymentTermsDescription      String?  @db.NVarChar(4000)
   preparedFor                  String   @db.NVarChar(200)
 
@@ -484,20 +485,20 @@ model Quotation {
   grandTotal      Decimal @default(0) @db.Decimal(18, 2)
 
   // Customer & address
-  organizationName String?  @db.NVarChar(200)
-  organizationId   String?  @db.NVarChar(50)
-  contactName      String   @db.NVarChar(100)
-  contactId        String?  @db.NVarChar(50)
-  contactMobile    String?  @db.NVarChar(20)
-  mailingName      String?  @db.NVarChar(200)
-  gstNo            String?  @db.NVarChar(15)
-  contactEmail     String?  @db.NVarChar(120)
+  organizationName String? @db.NVarChar(200)
+  organizationId   String? @db.NVarChar(50)
+  contactName      String  @db.NVarChar(100)
+  contactId        String? @db.NVarChar(50)
+  contactMobile    String? @db.NVarChar(20)
+  mailingName      String? @db.NVarChar(200)
+  gstNo            String? @db.NVarChar(15)
+  contactEmail     String? @db.NVarChar(120)
 
-  billingAddress    String  @db.NVarChar(250)
-  billingCity       String  @db.NVarChar(80)
-  billingState      String  @db.NVarChar(80)
-  billingPostalCode String  @db.NVarChar(12)
-  billingCountry    String  @db.NVarChar(80)
+  billingAddress    String @db.NVarChar(250)
+  billingCity       String @db.NVarChar(80)
+  billingState      String @db.NVarChar(80)
+  billingPostalCode String @db.NVarChar(12)
+  billingCountry    String @db.NVarChar(80)
 
   shippingAddress        String? @db.NVarChar(250)
   shippingCity           String? @db.NVarChar(80)
@@ -507,11 +508,11 @@ model Quotation {
   copyAddressFromBilling Boolean @default(true)
 
   // Linked context & legacy aliases
-  opportunityId      String?   @db.NVarChar(50)
-  status             String?   @db.NVarChar(30)
-  quotationSubject   String?   @db.NVarChar(200)
-  notes              String?   @db.NVarChar(2000)
-  termsAndConditions String?   @db.NVarChar(4000)
+  opportunityId      String? @db.NVarChar(50)
+  status             String? @db.NVarChar(30)
+  quotationSubject   String? @db.NVarChar(200)
+  notes              String? @db.NVarChar(2000)
+  termsAndConditions String? @db.NVarChar(4000)
 
   /// Admin-defined custom field values `{ [fieldKey]: value }` (see FormFieldDefinition) as JSON.
   customDataJson String? @db.NVarChar(Max)
@@ -578,11 +579,11 @@ model Ticket {
   contactId               String?  @db.NVarChar(50)
   contactNumber           String?  @db.NVarChar(20)
   contactEmail            String?  @db.NVarChar(120)
-  ticketPriority          String   @db.NVarChar(20)
+  ticketPriority          String?  @db.NVarChar(20)
   source                  String   @default("Call") @db.NVarChar(20)
   supportType             String   @default("Free") @db.NVarChar(20)
-  supportMode             String   @db.NVarChar(50)
-  natureOfCall            String   @db.NVarChar(100)
+  supportMode             String?  @db.NVarChar(50)
+  natureOfCall            String?  @db.NVarChar(100)
   ticketStatus            String   @default("New") @db.NVarChar(30)
   /// Local date-time from the form (`YYYY-MM-DDTHH:mm`), stored as datetime for overdue queries.
   dueDate                 DateTime
@@ -765,18 +766,18 @@ model AuditLog {
 
 /// A named list of dropdown options (e.g. lead_status). Shared categories (module = 'shared') feed several forms.
 model DropdownCategory {
-  id          String   @id @default(uuid()) @db.NVarChar(50)
-  key         String   @unique @db.NVarChar(80)
-  label       String   @db.NVarChar(120)
+  id          String    @id @default(uuid()) @db.NVarChar(50)
+  key         String    @unique @db.NVarChar(80)
+  label       String    @db.NVarChar(120)
   /// 'shared' | 'organizations' | 'contacts' | 'leads' | 'opportunities' | 'quotations' | 'products' | 'tickets' | 'partner-companies'
-  module      String   @db.NVarChar(40)
-  description String?  @db.NVarChar(300)
-  isSystem    Boolean  @default(false)
+  module      String    @db.NVarChar(40)
+  description String?   @db.NVarChar(300)
+  isSystem    Boolean   @default(false)
   /// Set when an admin deletes a built-in dropdown: the row stays as a tombstone (options removed) so start-up
   /// seeding doesn't recreate it. Deleted rows are hidden everywhere.
   deletedAt   DateTime?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
 
   options DropdownOption[]
   fields  FormFieldDefinition[]
@@ -846,29 +847,29 @@ model FormFieldDefinition {
 /// System templates (isSystem) are seeded from code and read-only except isActive / isDefault.
 /// pageSize / orientation have no DB default (see the Quotation.currency note); the API always sets them.
 model PdfTemplate {
-  id                  String    @id @default(uuid()) @db.NVarChar(50)
-  name                String    @db.NVarChar(120)
+  id           String    @id @default(uuid()) @db.NVarChar(50)
+  name         String    @db.NVarChar(120)
   /// QUOTATION (PDF_MODULES in src/modules/pdf/pdf.types.ts)
-  module              String    @db.NVarChar(30)
-  description         String?   @db.NVarChar(500)
-  isSystem            Boolean   @default(false)
-  isDefault           Boolean   @default(false)
-  isActive            Boolean   @default(true)
+  module       String    @db.NVarChar(30)
+  description  String?   @db.NVarChar(500)
+  isSystem     Boolean   @default(false)
+  isDefault    Boolean   @default(false)
+  isActive     Boolean   @default(true)
   /// A4 | Letter | Legal
-  pageSize            String    @db.NVarChar(10)
+  pageSize     String    @db.NVarChar(10)
   /// portrait | landscape
-  orientation         String    @db.NVarChar(10)
+  orientation  String    @db.NVarChar(10)
   /// JSON PdfDocument (src/modules/pdf/document/schema.ts): page setup, theme and the header / body / footer
   /// sections, columns and blocks. pageSize / orientation above mirror it for listing.
-  documentJson        String    @db.NVarChar(Max)
+  documentJson String    @db.NVarChar(Max)
   /// Optimistic-concurrency counter; bumped on every update.
-  version             Int       @default(1)
-  createdBy           String    @db.NVarChar(50)
-  updatedBy           String?   @db.NVarChar(50)
-  createdAt           DateTime  @default(now())
-  updatedAt           DateTime  @updatedAt
-  isDeleted           Boolean   @default(false)
-  deletedAt           DateTime?
+  version      Int       @default(1)
+  createdBy    String    @db.NVarChar(50)
+  updatedBy    String?   @db.NVarChar(50)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  isDeleted    Boolean   @default(false)
+  deletedAt    DateTime?
 
   @@index([module, isActive, isDeleted])
 }

@@ -183,7 +183,6 @@ export function QuotationOverviewSection() {
                     lookupType="user"
                     placeholder="Select Representative"
                     hint="Managing representative"
-                    fieldSize="md"
                 />
                 <RhfTextField<QuotationFormData>
                     name="otherRef"

@@ -5,6 +5,7 @@ import {
     optionalString,
     requiredText,
     optionalText,
+    optionalDescription,
     zodPhone,
     zodEmailOptional,
     zodAmount,
@@ -28,11 +29,13 @@ export const opportunityLineItemSchema = z.object({
     note: optionalText('Line item note', L.longText),
 });
 
+/**
+ * Only locked fields are required here (docs/field-locking-policy.md); the rest are required by the form
+ * configuration, which useRhfForm applies on top of this schema.
+ */
 export const opportunityFormSchema = z.object({
     // Basic Details
-    productCategory: z
-        .array(z.string())
-        .min(1, { message: 'Please select at least one Product Category.' }),
+    productCategory: z.array(z.string()).default([]),
     contactName: requiredText('Contact Person', L.personName),
     contactId: optionalString,
     organizationName: requiredText('Organization Name', L.organizationName),
@@ -40,15 +43,14 @@ export const opportunityFormSchema = z.object({
     contactNumber: zodPhone,
     emailAddress: zodEmailOptional,
     referredBy: optionalString,
-    type: requiredString('Opportunity Type'),
+    type: optionalString,
     salesStage: requiredString('Sales Stage'),
-    leadSource: requiredString('Lead Source'),
-    leadGivenBy: requiredString('Lead Given By'),
-    nextFollowupDate: requiredString('Next Followup Date'),
+    leadSource: optionalString,
+    leadGivenBy: optionalString,
+    nextFollowupDate: optionalString,
     nextFollowupTime: optionalString,
     followupType: optionalString.default('Call'),
-    addDescription: requiredText('Add Description', L.longText)
-        .min(3, { message: 'Add Description must be at least 3 characters.' }),
+    addDescription: optionalDescription('Add Description', L.longText),
     description: optionalText('Description', L.longText),
     assignedTo: requiredString('Assigned Representative'),
 
@@ -58,7 +60,7 @@ export const opportunityFormSchema = z.object({
     invoiceDate: optionalString,
 
     // Commission Details
-    commission: requiredString('Commission'),
+    commission: optionalString,
 
     // Document
     addDocument: optionalString.default('No'),

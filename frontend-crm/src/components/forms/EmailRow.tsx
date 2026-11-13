@@ -25,9 +25,11 @@ export interface EmailRowProps {
     onRemove: () => void;
     /** Informational (non-error) note shown under the address, e.g. "Already exists in CRM". */
     notice?: React.ReactNode;
+    /** Address input placeholder (form builder › Placeholder). */
+    placeholder?: string;
 }
 
-export function EmailRow({ email, onChange, onRemove, notice }: EmailRowProps) {
+export function EmailRow({ email, onChange, onRemove, notice, placeholder = 'e.g. contact@domain.com' }: EmailRowProps) {
     const { mode } = useFormMode();
     if (mode === 'view') {
         return (
@@ -56,7 +58,7 @@ export function EmailRow({ email, onChange, onRemove, notice }: EmailRowProps) {
                     size="small"
                     type="email"
                     value={email.email}
-                    placeholder="e.g. contact@domain.com"
+                    placeholder={placeholder}
                     onChange={(e) => onChange({ ...email, email: e.target.value.toLowerCase().trim() })}
                     slotProps={{ htmlInput: { maxLength: FIELD_MAX_LENGTH.email } }}
                     sx={fieldSx}

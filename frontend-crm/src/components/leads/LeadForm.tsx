@@ -61,6 +61,7 @@ const DEFAULT_FORM: LeadFormData = {
         },
     ],
     mailingName: '',
+    tradeName: '',
     designation: '',
     leadSource: 'Website Enquiry',
     productCategory: ['Biz Analyst'],
@@ -84,13 +85,13 @@ const DEFAULT_FORM: LeadFormData = {
 
     primaryAddress: '',
     primaryCity: '',
-    primaryState: 'Delhi',
+    primaryState: '',
     primaryPostalCode: '',
     primaryCountry: 'IN',
 
     otherAddress: '',
     otherCity: '',
-    otherState: 'Delhi',
+    otherState: '',
     otherPostalCode: '',
     otherCountry: 'IN',
     copyAddressFromLeft: false,

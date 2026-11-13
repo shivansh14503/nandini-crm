@@ -41,15 +41,16 @@ export const quotationFormSchema = z.object({
     quotationDate: requiredString('Quotation Date'),
     validUntil: requiredString('Valid Until Date'),
     remarks: optionalText('Remarks', L.longText),
-    termsAndCondition: requiredString('Terms & Condition'),
+    // Terms, Payment Terms and Validation Period are required by the form configuration (admin-relaxable).
+    termsAndCondition: optionalString,
     termsAndConditionDescription: optionalText('Terms & Condition Description', L.longText),
     assignedTo: requiredString('Assigned Representative'),
 
     opportunityName: requiredString('Opportunity Name'),
     company: requiredString('Company'),
-    validationPeriod: requiredString('Validation Period'),
+    validationPeriod: optionalString,
     otherRef: optionalText('Other Ref.', L.shortText),
-    paymentTerms: requiredString('Payment Terms'),
+    paymentTerms: optionalString,
     paymentTermsDescription: optionalText('Payment Terms Description', L.longText),
     preparedFor: requiredString('Prepared For'),
 

@@ -1,9 +1,9 @@
 'use client';
 
 import React from 'react';
-import { Box, Chip, InputAdornment, TextField, Tooltip } from '@mui/material';
+import { Box, InputAdornment, TextField } from '@mui/material';
 import LockOutlinedIcon from '@mui/icons-material/LockOutlined';
-import { useFormContext, useWatch } from 'react-hook-form';
+import { useController, useFormContext, useWatch } from 'react-hook-form';
 
 import {
     FormField,
@@ -34,39 +34,13 @@ import {
     LEAD_EMPLOYEE_RANGES,
     type LeadFormData,
 } from '@/types/lead.types';
-import type { ExtendedOrganization } from '@/types/organization.types';
 import { useDropdownOptionsGetter } from '@/hooks/queries/useFormConfigs';
-import { DEFAULT_COUNTRY_CODE } from '@/data/addressMaster';
-import { canonicalizeOrgName } from '@/utils/organizationName';
-import { mapOrgEmployeesToLead, mapOrgTurnoverToLead, organizationAddressToLead } from '../organizationPrefill';
+import { OrganizationNameAutocomplete } from '@/components/organizations/OrganizationNameAutocomplete';
+import { useOrganizationNameCheck } from '@/components/organizations/useOrganizationNameCheck';
 import { useLeadExistingCheck } from '../useLeadExistingCheck';
 import { useFormMode } from '@/context/FormModeContext';
 
 const groupLabelSx = { mb: 2 } as const;
-const touch = { shouldDirty: true, shouldValidate: true } as const;
-
-/** Organization-profile fields: filled from a picked organization, blanked whenever the organization is cleared. */
-const ORG_PROFILE_FIELDS = ['registrationType', 'gstNo', 'turnover', 'noOfEmployee'] as const;
-
-/** Address fields reset when a previously auto-filled organization is cleared. */
-const ORG_ADDRESS_RESET: Partial<Record<keyof LeadFormData, string | boolean>> = {
-    primaryAddress: '',
-    primaryCity: '',
-    primaryState: '',
-    primaryPostalCode: '',
-    primaryCountry: DEFAULT_COUNTRY_CODE,
-    otherAddress: '',
-    otherCity: '',
-    otherState: '',
-    otherPostalCode: '',
-    otherCountry: DEFAULT_COUNTRY_CODE,
-    copyAddressFromLeft: false,
-};
-
-interface LinkedOrganization {
-    id: string;
-    organizationName: string;
-}
 
 /** Overview tab of the Lead form. Must be rendered inside a `FormProvider<LeadFormData>`. */
 export function LeadOverviewSection({ leadId }: { leadId?: string } = {}) {
@@ -95,47 +69,23 @@ export function LeadOverviewSection({ leadId }: { leadId?: string } = {}) {
     const employeeOptions = getOptions('lead_employee_range', LEAD_EMPLOYEE_RANGES);
     const leadSourceOptions = getOptions('shared_lead_source', LEAD_SOURCES);
 
-    // The organization whose details were last auto-filled into the form (drives the hint and the clear reset).
-    const [linkedOrg, setLinkedOrg] = React.useState<LinkedOrganization | null>(null);
-    const organizationName = useWatch({ control, name: 'organizationName' }) ?? '';
-    const stillLinked = Boolean(linkedOrg) && canonicalizeOrgName(organizationName) === canonicalizeOrgName(linkedOrg?.organizationName ?? '');
+    // Organization name: same live check + "already in CRM" dropdown as the organization form. Informational
+    // only here — a lead for a company that already exists is valid, so a match never blocks the save.
+    const { field: orgNameField, fieldState: orgNameState } = useController({ control, name: 'organizationName' });
+    const organizationName = orgNameField.value ?? '';
+    const nameCheck = useOrganizationNameCheck({ name: organizationName, enabled: mode !== 'view' });
+    const orgNameHelper = orgNameState.error?.message ?? (nameCheck.duplicate ? (
+        <Box component="span" sx={{ color: '#b45309', fontWeight: 600 }}>
+            {nameCheck.duplicate.message}
+        </Box>
+    ) : undefined);
 
-    const handleOrganizationSelected = (org: ExtendedOrganization) => {
-        // Typing on past an exact match (e.g. adding a trailing ".") re-matches the same record: don't re-fill
-        // over anything the user changed since.
-        if (stillLinked && linkedOrg?.id === org.id) return;
-
-        // Always overwrite (blank when the organization has no / an unmappable value): switching organizations
-        // must not leave the previous one's brackets behind.
-        const nextRegType = org.registrationType || '';
-        setValue('registrationType', nextRegType, touch);
-        setValue('gstNo', nextRegType === 'Registered' ? (org.gstNo || org.gstNumber || '').toUpperCase() : '', touch);
-        setValue('turnover', mapOrgTurnoverToLead(org.annualTurnover, turnoverOptions) ?? '', touch);
-        setValue('noOfEmployee', mapOrgEmployeesToLead(org.numberOfEmployees, employeeOptions) ?? '', touch);
-
-        if (org.sourceOfLead && leadSourceOptions.includes(org.sourceOfLead)) setValue('leadSource', org.sourceOfLead, touch);
-        if (org.assignedUser) setValue('assignedTo', org.assignedUser, touch);
-        const partner = org.partnerCompanies?.[0] || org.partnerCompany;
-        if (partner && !getValues('referredBy')?.trim()) setValue('referredBy', partner, touch);
-        if (org.description && !getValues('description')?.trim()) setValue('description', org.description, touch);
-
-        // Always overwrite the address: switching organizations must replace the previous one's.
-        for (const [key, value] of Object.entries(organizationAddressToLead(org))) {
-            setValue(key as keyof LeadFormData, value, touch);
-        }
-        setLinkedOrg({ id: org.id, organizationName: org.organizationName });
-    };
-
-    const handleOrganizationCleared = () => {
-        // These describe the organization itself, so they go with it — also on a saved lead opened for editing.
-        for (const key of ORG_PROFILE_FIELDS) setValue(key, '', touch);
-        // The address is only undone when an organization filled it in; a lead for a new company keeps the
-        // address the user typed.
-        if (!linkedOrg) return;
-        for (const [key, value] of Object.entries(ORG_ADDRESS_RESET)) {
-            setValue(key as keyof LeadFormData, value, touch);
-        }
-        setLinkedOrg(null);
+    // Trade name keeps following the organization name until the user gives it a value of its own (as on organizations).
+    const tradeName = useWatch({ control, name: 'tradeName' }) ?? '';
+    const handleOrgNameChange = (val: string) => {
+        const tradeNameFollows = !tradeName || tradeName === organizationName;
+        orgNameField.onChange(val);
+        if (tradeNameFollows) setValue('tradeName', val, { shouldValidate: true, shouldDirty: true });
     };
 
     // GSTIN only applies to 'Registered' leads: clear it whenever another type (or none) is chosen.
@@ -166,9 +116,7 @@ export function LeadOverviewSection({ leadId }: { leadId?: string } = {}) {
                     <RhfPhoneField<LeadFormData> name="otherPhone" label="Other Phone" hint="Landline / alternate" placeholder="e.g. 0114567890" />
                     <RhfSelect<LeadFormData> name="designation" label="Designation" options={LEAD_DESIGNATIONS} placeholder="Select Designation" />
                     <RhfSelect<LeadFormData> name="department" label="Department" options={LEAD_DEPARTMENTS} placeholder="Select Department" />
-                    <FormGridItem span="full">
-                        <RhfEmailList emailNotices={emailNotices} />
-                    </FormGridItem>
+                    <RhfEmailList name="emailAddresses" emailNotices={emailNotices} />
                 </FormGrid>
             </Box>
 
@@ -176,25 +124,34 @@ export function LeadOverviewSection({ leadId }: { leadId?: string } = {}) {
             <Box>
                 <SectionLabel label="ORGANIZATION" sx={groupLabelSx} />
                 <FormGrid columns={3}>
-                    <RhfLookup<LeadFormData, 'organization'>
-                        name="organizationName"
-                        label="Organization Name"
-                        hint={
-                            stillLinked && linkedOrg ? (
-                                <Chip
-                                    size="small"
-                                    label="Details & address auto-filled"
-                                    sx={{ height: 20, fontSize: '0.68rem', fontWeight: 700, color: '#1e40af', backgroundColor: '#e0e7ff' }}
-                                />
-                            ) : (
-                                'Pick existing or type new company'
-                            )
-                        }
-                        placeholder="Search or enter organization..."
-                        lookupType="organization"
-                        onSelectRecord={handleOrganizationSelected}
-                        onClearRecord={handleOrganizationCleared}
-                    />
+                    <FormField name="organizationName" label="Organization Name" hint="Company the lead belongs to">
+                        <OrganizationNameAutocomplete
+                            value={organizationName}
+                            onChange={handleOrgNameChange}
+                            onBlur={() => {
+                                orgNameField.onBlur();
+                                // Check right away instead of waiting out the debounce.
+                                nameCheck.checkNow();
+                            }}
+                            placeholder="Enter organization name..."
+                            error={Boolean(orgNameState.error)}
+                            helperText={orgNameHelper}
+                            checking={nameCheck.checking}
+                            verified={Boolean(organizationName.trim()) && !orgNameState.error && !nameCheck.duplicate}
+                            suggestions={nameCheck.suggestions}
+                        />
+                    </FormField>
+                    <FormField name="tradeName" label="Trade Name" hint="Defaults to the organization name">
+                        <TextField
+                            fullWidth
+                            size="small"
+                            placeholder="e.g. Mohit Traders"
+                            value={tradeName}
+                            onChange={(e) => setValue('tradeName', e.target.value, { shouldValidate: true, shouldDirty: true })}
+                            sx={fieldSx}
+                            slotProps={{ htmlInput: { maxLength: FIELD_MAX_LENGTH.organizationName } }}
+                        />
+                    </FormField>
                     {/* Mailing Name (always equals Organization Name) */}
                     <FormField name="mailingName" label="Mailing Name" hint="Follows Organization Name">
                         <TextField
@@ -216,38 +173,16 @@ export function LeadOverviewSection({ leadId }: { leadId?: string } = {}) {
                         />
                     </FormField>
                     <RhfSelect<LeadFormData> name="registrationType" label="Registration Type" options={LEAD_REGISTRATION_TYPES} placeholder="Select Type" />
-                    {isRegistered ? (
+                    {/* GSTIN only exists for registered businesses, so the field only appears for 'Registered'. */}
+                    {isRegistered && (
                         <RhfUppercaseField<LeadFormData>
                             name="gstNo"
                             label="GST Number"
                             required
-                            disabled={false}
                             hint="15-character GSTIN"
                             placeholder="e.g. 06AFZFS3757G1Z9"
                             maxLength={FIELD_MAX_LENGTH.gstin}
                         />
-                    ) : (
-                        <Tooltip
-                            title={
-                                registrationType
-                                    ? `GST Number is disabled because Registration Type is '${registrationType}'. Select 'Registered' to enter a GST Number.`
-                                    : "Select 'Registered' in Registration Type to enable GST Number."
-                            }
-                            arrow
-                            placement="top"
-                        >
-                            {/* A span wrapper lets the tooltip fire on hover even though the input is disabled. */}
-                            <Box component="span" sx={{ display: 'block' }}>
-                                <RhfUppercaseField<LeadFormData>
-                                    name="gstNo"
-                                    label="GST Number"
-                                    required={false}
-                                    disabled
-                                    placeholder={registrationType ? `Not applicable (${registrationType})` : "Select 'Registered' to enter GSTIN"}
-                                    maxLength={FIELD_MAX_LENGTH.gstin}
-                                />
-                            </Box>
-                        </Tooltip>
                     )}
                     <RhfSelect<LeadFormData> name="turnover" label="Turnover" hint="Annual bracket" options={turnoverOptions} placeholder="Select Turnover" />
                     <RhfSelect<LeadFormData> name="noOfEmployee" label="No of Employee" options={employeeOptions} placeholder="Select Employee Bracket" />
@@ -261,7 +196,14 @@ export function LeadOverviewSection({ leadId }: { leadId?: string } = {}) {
                     <RhfSelect<LeadFormData> name="leadSource" label="Lead Source" required options={leadSourceOptions} placeholder="Select Lead Source" />
                     <RhfSelect<LeadFormData> name="leadType" label="Lead Type" required hint="Urgency" options={LEAD_TYPES} />
                     <RhfSelect<LeadFormData> name="status" label="Status" hint="Default: New" options={LEAD_STATUSES} placeholder="Select Status" />
-                    <RhfLookup<LeadFormData> name="referredBy" label="Referred By" hint="Partner, channel or employee" placeholder="e.g. Sunil Mehta / Tally Partner" />
+                    {/* Picks from the CRM's contacts (Contact Search popup); a name can still be typed. */}
+                    <RhfLookup<LeadFormData, 'contact'>
+                        name="referredBy"
+                        label="Referred By"
+                        lookupType="contact"
+                        hint="Contact who referred the lead"
+                        placeholder="Search or select contact..."
+                    />
                     <RhfSelect<LeadFormData> name="followupType" label="Followup Type" hint="Default: Call" options={FOLLOWUP_TYPES} placeholder="Select Type" />
                     <RhfDateTimeField<LeadFormData> dateName="nextFollowupDate" timeName="nextFollowupTime" label="Next Followup Date" required hint="Date & time" />
                     <RhfLookup<LeadFormData> name="assignedTo" label="Assigned to" lookupType="user" required hint="Default: mittal.sharma" placeholder="Select Representative" />

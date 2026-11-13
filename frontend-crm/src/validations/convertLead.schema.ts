@@ -5,16 +5,18 @@ import { corporateEmailSchema } from './contact.schema';
 
 /**
  * Combined schema for the Convert Lead form. A lead conversion produces up to three records
- * (Contact, Organization, Opportunity), so all three sections are validated together.
+ * (Contact, Organization, Opportunity), so all three sections are validated together. Organization and
+ * opportunity fields an admin may relax are optional here; ConvertLeadForm requires them per the organization and
+ * opportunity form configurations (CONVERT_CONFIGURED_FIELDS).
  */
 export const convertLeadFormSchema = z.object({
     // ── Organization ───────────────────────────────────────────────────────────
     existingOrganizationId: optionalString,
     organizationName: requiredText('Organization Name', L.organizationName),
     mailingName: optionalText('Mailing Name', L.organizationName),
-    natureOfBusiness: requiredString('Nature of Business'),
-    typeOfEntity: requiredString('Type of Entity'),
-    customerType: requiredString('Customer Type'),
+    natureOfBusiness: optionalString,
+    typeOfEntity: optionalString,
+    customerType: optionalString,
     sourceOfLead: optionalString,
     memberOf: optionalText('Member of', L.organizationName),
     organizationDescription: optionalText('Organization Description', L.longText),
@@ -39,17 +41,32 @@ export const convertLeadFormSchema = z.object({
     contactAssignedTo: requiredString('Contact Assigned to'),
 
     // ── Opportunity ────────────────────────────────────────────────────────────
-    productCategory: z.array(z.string()).min(1, { message: 'Select at least one Product Category.' }),
+    productCategory: z.array(z.string()),
     principalCompany: optionalText('Principal Company', L.organizationName),
     referredBy: optionalString,
-    opportunityType: requiredString('Opportunity Type'),
-    nextFollowupDate: requiredString('Next Followup Date'),
+    opportunityType: optionalString,
+    nextFollowupDate: optionalString,
     nextFollowupTime: optionalString,
     followupType: optionalString,
     opportunityDescription: optionalText('Opportunity Description', L.longText),
-    opportunityLeadSource: requiredString('Lead Source'),
+    opportunityLeadSource: optionalString,
     opportunityAssignedTo: requiredString('Opportunity Assigned to'),
     copyActivitiesTo: z.array(z.string()),
 });
 
 export type ConvertLeadFormValues = z.infer<typeof convertLeadFormSchema>;
+
+/**
+ * Organization / opportunity built-in fields the Convert Lead form collects: module, the module's fieldKey and
+ * this form's field name. Mirrors CONVERT_*_PATHS in backend-crm lead.conversion.ts. Opportunity Add Description
+ * is left out here: the backend falls back to the lead's description when the form leaves it empty.
+ */
+export const CONVERT_CONFIGURED_FIELDS = [
+    { module: 'organizations', fieldKey: 'natureOfBusiness', name: 'natureOfBusiness' },
+    { module: 'organizations', fieldKey: 'typeOfEntity', name: 'typeOfEntity' },
+    { module: 'organizations', fieldKey: 'customerType', name: 'customerType' },
+    { module: 'opportunities', fieldKey: 'type', name: 'opportunityType' },
+    { module: 'opportunities', fieldKey: 'leadSource', name: 'opportunityLeadSource' },
+    { module: 'opportunities', fieldKey: 'productCategory', name: 'productCategory' },
+    { module: 'opportunities', fieldKey: 'nextFollowupDate', name: 'nextFollowupDate' },
+] as const satisfies readonly { module: 'organizations' | 'opportunities'; fieldKey: string; name: keyof ConvertLeadFormValues }[];

@@ -129,13 +129,18 @@ export async function ensureFormConfigsSeeded(): Promise<void> {
             row.isCoreLocked !== def.isCoreLocked ||
             (def.isCoreLocked && (!row.isActive || !row.isVisibleInForm || (def.isRequired && !row.isRequired)));
         if (!needsLockFix) continue;
+        // A field that a release unlocks takes its new default `isRequired` once (it was admin-uneditable until
+        // now); from then on it is an ordinary field and the admin's choice stands.
+        const unlocking = row.isCoreLocked && !def.isCoreLocked;
         await prisma.formFieldDefinition.update({
             where: { id: row.id },
             data: {
                 isCoreLocked: def.isCoreLocked,
                 ...(def.isCoreLocked
                     ? { isActive: true, isVisibleInForm: true, validationRulesJson: isFieldTombstoned(row.validationRulesJson) ? null : row.validationRulesJson, ...(def.isRequired ? { isRequired: true } : {}) }
-                    : {}),
+                    : unlocking
+                      ? { isRequired: def.isRequired }
+                      : {}),
             },
         });
         changed++;
@@ -145,6 +150,16 @@ export async function ensureFormConfigsSeeded(): Promise<void> {
         await cacheService.invalidatePattern(`${CACHE_KEYS.lookups('form-configs')}*`);
         logger.info({ changed }, 'Form & dropdown configuration defaults seeded');
     }
+}
+
+/** Key of the default field listed just before `fieldKey` in the same module, tab and section, if any. */
+function defaultPredecessor(module: string, fieldKey: string): string | undefined {
+    const index = DEFAULT_FIELDS.findIndex((f) => f.module === module && f.fieldKey === fieldKey);
+    const prev = index > 0 ? DEFAULT_FIELDS[index - 1] : undefined;
+    const self = DEFAULT_FIELDS[index];
+    return prev && self && prev.module === module && prev.tabKey === self.tabKey && prev.sectionLabel === self.sectionLabel
+        ? prev.fieldKey
+        : undefined;
 }
 
 /**
@@ -164,7 +179,13 @@ async function placeNewFields(tx: TransactionClient, module: string, fieldKeys: 
         const field = all.find((f) => f.isSystem && f.fieldKey === key);
         if (!field) continue;
         const lastIndex = (match: (f: (typeof all)[number]) => boolean) => ordered.reduce((idx, f, i) => (match(f) ? i : idx), -1);
-        let at = lastIndex((f) => f.tabKey === field.tabKey && f.sectionKey === field.sectionKey);
+        // Prefer the spot the defaults give it: right after the field that precedes it there, when that field is
+        // still in the same tab + section (e.g. Trade Name goes after Organization Name, not at the section's end).
+        const predecessor = defaultPredecessor(module, key);
+        let at = predecessor
+            ? lastIndex((f) => f.isSystem && f.fieldKey === predecessor && f.tabKey === field.tabKey && f.sectionKey === field.sectionKey)
+            : -1;
+        if (at < 0) at = lastIndex((f) => f.tabKey === field.tabKey && f.sectionKey === field.sectionKey);
         if (at < 0) at = lastIndex((f) => f.tabKey === field.tabKey);
         if (at < 0) ordered.push(field);
         else ordered.splice(at + 1, 0, field);

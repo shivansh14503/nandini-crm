@@ -37,6 +37,12 @@ export const optionalText = (field: string, max: number) =>
         z.string().trim().max(max, maxMessage(field, max)).optional(),
     );
 
+/** "Add Description": optional (the form configuration decides), but at least 3 characters when given. */
+export const optionalDescription = (field: string) =>
+    optionalText(field, L.longText).refine((value) => value === undefined || value.length >= 3, {
+        message: `${field} must be at least 3 characters.`,
+    });
+
 /** Optional text stored uppercase (codes such as CIN, TAN, MSME). */
 export const optionalUpperText = (field: string, max: number) =>
     optionalText(field, max).transform((value) => value?.toUpperCase());

@@ -5,7 +5,6 @@ import {
     optionalString,
     requiredText,
     optionalText,
-    zodPostalCode,
     zodPostalCodeOptional,
     refinePostalCodeForCountry,
     zodPanOptional,
@@ -35,12 +34,14 @@ export const organizationFormSchema = z
         organizationName: requiredText('Organization Name', L.organizationName),
         mailingName: optionalText('Mailing Name', L.organizationName),
         tradeName: optionalText('Trade Name', L.organizationName),
-        natureOfBusiness: requiredString('Nature of Business'),
+        // Classification and billing address are required by the form configuration (admin-relaxable,
+        // docs/field-locking-policy.md), which OrganizationForm applies on top of this schema.
+        natureOfBusiness: optionalString,
         // Admin-customizable (org_account_status / org_registration_type).
         accountStatus: configurableOption('Account Status', 'Active'),
         inactivityReason: optionalString,
-        typeOfEntity: requiredString('Type of Entity'),
-        customerType: requiredString('Customer Type'),
+        typeOfEntity: optionalString,
+        customerType: optionalString,
         sapCodeTallyId: optionalText('SAP Code / Tally ID', L.shortCode),
         showroomBranchCode: optionalText('Showroom / Branch Code', L.shortCode),
         sourceOfLead: optionalString,
@@ -58,11 +59,11 @@ export const organizationFormSchema = z
         corporateEmails: z.array(corporateEmailSchema).optional(),
 
         // Billing Address
-        billingAddress: requiredText('Billing Address', L.address),
+        billingAddress: optionalText('Billing Address', L.address),
         billingStreet: optionalText('Billing Street', L.address),
-        billingCity: requiredText('Billing City', L.shortText),
-        billingState: requiredText('Billing State', L.shortText),
-        billingPostalCode: zodPostalCode,
+        billingCity: optionalText('Billing City', L.shortText),
+        billingState: optionalText('Billing State', L.shortText),
+        billingPostalCode: zodPostalCodeOptional,
         billingCountry: optionalString.default('India'),
         billingLatitude: optionalString,
 
@@ -99,7 +100,7 @@ export const organizationFormSchema = z
         customFields: customFieldsSchema,
     })
     .superRefine((data, ctx) => {
-        refinePostalCodeForCountry(ctx, 'billingPostalCode', data.billingPostalCode, data.billingCountry, true);
+        refinePostalCodeForCountry(ctx, 'billingPostalCode', data.billingPostalCode, data.billingCountry);
         refinePostalCodeForCountry(ctx, 'shippingPostalCode', data.shippingPostalCode, data.shippingCountry);
 
         if (data.registrationType === 'Registered') {

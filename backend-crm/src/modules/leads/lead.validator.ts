@@ -7,13 +7,13 @@ import {
     customFieldsSchema,
     GST_REGEX,
     optionalDate,
+    optionalDescription,
     optionalGst,
     optionalPhone,
     optionalPostalCode,
     optionalText,
     phone,
     refinePostalCodeForCountry,
-    requiredDate,
     requiredText,
     stringList,
     textWithDefault,
@@ -34,17 +34,22 @@ export const LEAD_STATUSES = [
 ] as const;
 export const CONVERTED_STATUS = 'Converted';
 
-/** Field rules shared by the lead form and bulk import. */
+/**
+ * Field rules shared by the lead form and bulk import. Only locked fields (docs/field-locking-policy.md) are
+ * required here; fields an admin may relax are optional and enforced from the form configuration
+ * (`validateModulePayload`).
+ */
 const leadFields = z.object({
     name: requiredText('Lead Name', L.personName),
-    mobile: phone('Mobile'),
+    mobile: optionalPhone('Mobile'),
     emailAddresses: corporateEmailListSchema.default([]),
     mailingName: optionalText('Mailing Name', L.organizationName),
+    tradeName: optionalText('Trade Name', L.organizationName),
     designation: optionalText('Designation', L.option),
-    leadSource: requiredText('Lead Source', L.option),
-    productCategory: stringList('Product Category', 30, L.option).min(1, { message: 'Please select at least one Product Category.' }),
+    leadSource: optionalText('Lead Source', L.option),
+    productCategory: stringList('Product Category', 30, L.option).default([]),
     followupType: optionalText('Followup Type', L.option),
-    addDescription: requiredText('Add Description', L.longText).min(3, { message: 'Add Description must be at least 3 characters.' }),
+    addDescription: optionalDescription('Add Description'),
     registrationType: optionalText('Registration Type', 30),
     gstNo: optionalGst,
     turnover: optionalText('Turnover', 30),
@@ -53,10 +58,10 @@ const leadFields = z.object({
     otherPhone: optionalPhone('Other Phone'),
     organizationName: optionalText('Organization Name', L.organizationName),
     department: optionalText('Department', L.option),
-    leadType: requiredText('Lead Type', L.option),
+    leadType: optionalText('Lead Type', L.option),
     // Admin-customizable (lead_status); 'New' / 'Converted' are system options and keep their meaning.
     status: textWithDefault('Status', 30, 'New'),
-    nextFollowupDate: requiredDate('Next Followup Date'),
+    nextFollowupDate: optionalDate('Next Followup Date'),
     nextFollowupTime: optionalText('Next Followup Time', 20),
     description: optionalText('Description', L.longText),
     noOfEmployee: optionalText('No of Employee', 30),
@@ -106,22 +111,24 @@ export const leadInputSchema = leadFields.superRefine((lead, ctx) => {
     refineLeadGst(lead, ctx);
 });
 
-/** Bulk import: the template has no Product Category / GSTIN columns, so those may be empty. */
-export const leadImportSchema = leadFields
-    .extend({ productCategory: stringList('Product Category', 30, L.option).default([]) })
-    .superRefine(refineLeadPostalCodes);
+/** Bulk import: the template has no GSTIN column, so the GST rule is skipped. */
+export const leadImportSchema = leadFields.superRefine(refineLeadPostalCodes);
 
 export type LeadInput = z.infer<typeof leadInputSchema>;
 
-/** `ConvertLeadFormValues` rules from frontend-crm/src/validations/convertLead.schema.ts. */
+/**
+ * `ConvertLeadFormValues` rules from frontend-crm/src/validations/convertLead.schema.ts. Organization and
+ * opportunity fields an admin may relax are optional here; `convertLead` enforces them from the organization and
+ * opportunity form configurations.
+ */
 export const convertLeadSchema = z.object({
     // Organization
     existingOrganizationId: optionalText('Organization', 50),
     organizationName: requiredText('Organization Name', L.organizationName),
     mailingName: optionalText('Mailing Name', L.organizationName),
-    natureOfBusiness: requiredText('Nature of Business', L.option),
-    typeOfEntity: requiredText('Type of Entity', L.option),
-    customerType: requiredText('Customer Type', L.option),
+    natureOfBusiness: optionalText('Nature of Business', L.option),
+    typeOfEntity: optionalText('Type of Entity', L.option),
+    customerType: optionalText('Customer Type', L.option),
     sourceOfLead: optionalText('Source of Lead', L.option),
     memberOf: optionalText('Member of', L.organizationName),
     organizationDescription: optionalText('Organization Description', L.longText),
@@ -144,15 +151,15 @@ export const convertLeadSchema = z.object({
     contactAssignedTo: requiredText('Contact Assigned to', L.username),
 
     // Opportunity
-    productCategory: stringList('Product Category', 30, L.option).min(1, { message: 'Select at least one Product Category.' }),
+    productCategory: stringList('Product Category', 30, L.option).default([]),
     principalCompany: optionalText('Principal Company', L.organizationName),
     referredBy: optionalText('Referred By', L.organizationName),
-    opportunityType: requiredText('Opportunity Type', L.option),
-    nextFollowupDate: requiredDate('Next Followup Date'),
+    opportunityType: optionalText('Opportunity Type', L.option),
+    nextFollowupDate: optionalDate('Next Followup Date'),
     nextFollowupTime: optionalText('Next Followup Time', 20),
     followupType: optionalText('Followup Type', L.option),
     opportunityDescription: optionalText('Opportunity Description', L.longText),
-    opportunityLeadSource: requiredText('Lead Source', L.option),
+    opportunityLeadSource: optionalText('Lead Source', L.option),
     opportunityAssignedTo: requiredText('Opportunity Assigned to', L.username),
     copyActivitiesTo: stringList('Copy Activities to', 10, 30).default([]),
 });

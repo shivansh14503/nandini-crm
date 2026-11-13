@@ -4,7 +4,17 @@ import { useFormMode } from '@/context/FormModeContext';
 import { FieldNameProvider, useFieldOverride } from '@/context/FormConfigContext';
 import { ReadOnlyField } from './ReadOnlyField';
 import { getCountryNameByCode } from '@/data/addressMaster';
-import { fieldSizeSx, resolveFieldSize, type FieldSize } from './fieldSizing';
+import {
+    COMPACT_FIT_PX,
+    contentFitSx,
+    contentFitWidthPx,
+    fieldSizeSx,
+    isTaxIdentifierField,
+    resolveFieldMaxLength,
+    resolveFieldSize,
+    type FieldContentFit,
+    type FieldSize,
+} from './fieldSizing';
 
 export const fieldSx = {
     '& .MuiOutlinedInput-root': {
@@ -33,6 +43,12 @@ export interface FormFieldProps {
      * unrecognised names stay full width. Exposed as `data-field-size` for {@link FormRow} / {@link FormGrid}.
      */
     size?: FieldSize;
+    /**
+     * What the control can hold. When the admin leaves Width on "Auto", the field is drawn just wide enough for
+     * it instead of at `size`. Inferred from `name`'s character limit when omitted; `null` opts out (picker fields
+     * keep one shared width).
+     */
+    fit?: FieldContentFit | null;
     children: React.ReactNode;
     sx?: SxProps<Theme>;
 }
@@ -175,8 +191,32 @@ function FormFieldHeader({ label, required, hint, compact }: { label: string; re
     );
 }
 
-export function FormField({ name, viewValue, label: baseLabel, required: baseRequired, hint: baseHint, size: baseSize, children, sx }: FormFieldProps) {
+/**
+ * Set by renderers of admin-configured custom fields (which have no built-in override): `true` when the admin
+ * left Width on "Auto", so the field sizes itself to its content.
+ */
+const FieldAutoSizeContext = React.createContext<boolean | undefined>(undefined);
+
+export function FieldAutoSizeProvider({ auto, children }: { auto: boolean; children: React.ReactNode }) {
+    return <FieldAutoSizeContext.Provider value={auto}>{children}</FieldAutoSizeContext.Provider>;
+}
+
+/** Whether the field bound to `name` is on "Auto" width in the form builder (built-in or custom field). */
+export function useFieldAutoSize(name: string | undefined): boolean {
+    const customFieldAuto = React.useContext(FieldAutoSizeContext);
+    const override = useFieldOverride(name, { label: '' });
+    return customFieldAuto ?? Boolean(override?.sizeIsAuto);
+}
+
+/** Content capacity known from the field name alone (e.g. `gstNo` → 15 chars), for wrappers around custom controls. */
+function fitFromName(name: string | undefined): FieldContentFit | undefined {
+    const chars = resolveFieldMaxLength(name);
+    return chars ? { chars, wide: isTaxIdentifierField(name) } : undefined;
+}
+
+export function FormField({ name, viewValue, label: baseLabel, required: baseRequired, hint: baseHint, size: baseSize, fit, children, sx }: FormFieldProps) {
     const { mode } = useFormMode();
+    const isAuto = useFieldAutoSize(name);
     // Admin overrides for this built-in field (inside a FormConfigProvider); undefined keeps the coded props.
     const override = useFieldOverride(name, { label: baseLabel, required: baseRequired, hint: baseHint, fieldSize: baseSize });
     if (override?.hidden) return null;
@@ -203,13 +243,18 @@ export function FormField({ name, viewValue, label: baseLabel, required: baseReq
         }
     }
     const resolvedSize = resolveFieldSize(name, undefined, size);
+    // "Auto" width in the form builder: fit the field's longest possible value (and its label) rather than a token.
+    // Full-row fields (textareas, chip groups, tables) keep spanning the row.
+    const contentFit = isAuto && resolvedSize !== 'full' && fit !== null ? (fit ?? fitFromName(name)) : undefined;
+    const fitPx = contentFit ? contentFitWidthPx(contentFit, label, required) : undefined;
+    const compact = fitPx !== undefined ? fitPx < COMPACT_FIT_PX : resolvedSize === 'xs' || resolvedSize === 'sm';
     return (
         <Box
             data-field={name}
-            data-field-size={resolvedSize}
-            sx={[{ mb: 2, ...fieldSizeSx(resolvedSize) }, ...(Array.isArray(sx) ? sx : [sx])]}
+            data-field-size={fitPx !== undefined ? 'fit' : resolvedSize}
+            sx={[{ mb: 2, ...(fitPx !== undefined ? contentFitSx(fitPx) : fieldSizeSx(resolvedSize)) }, ...(Array.isArray(sx) ? sx : [sx])]}
         >
-            <FormFieldHeader label={label} required={required} hint={hint} compact={resolvedSize === 'xs' || resolvedSize === 'sm'} />
+            <FormFieldHeader label={label} required={required} hint={hint} compact={compact} />
             <FieldNameProvider name={name}>{children}</FieldNameProvider>
         </Box>
     );

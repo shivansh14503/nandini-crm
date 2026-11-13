@@ -339,7 +339,6 @@ export default function TicketForm({ mode = 'create', initialData, ticketId, bre
                                 onSelectRecord={handleContactPicked}
                                 onClearRecord={handleContactCleared}
                                 placeholder="Search or select contact..."
-                                fieldSize="md"
                             />
 
                             {/* ── Contact channels ── */}

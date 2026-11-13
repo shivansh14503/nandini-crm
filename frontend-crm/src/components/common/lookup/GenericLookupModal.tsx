@@ -25,6 +25,7 @@ import {
 } from '@mui/material';
 import CloseIcon from '@mui/icons-material/Close';
 import SearchIcon from '@mui/icons-material/Search';
+import AddIcon from '@mui/icons-material/Add';
 import RestartAltIcon from '@mui/icons-material/RestartAlt';
 import SearchOffIcon from '@mui/icons-material/SearchOff';
 import { splitMulti, joinMulti } from '@/types/lookup.types';
@@ -56,6 +57,8 @@ export interface GenericLookupModalProps<T extends { id: string }> {
     /** Shows a spinner instead of the empty state while data is being fetched. */
     loading?: boolean;
     emptyMessage?: string;
+    /** Optional button beside Search / Clear, e.g. "Create Contact" when the record isn't there yet. */
+    createAction?: { label: string; onClick: () => void };
 }
 
 const inputSx = {
@@ -116,6 +119,7 @@ function LookupDialog<T extends { id: string }>({
     showSearchBox = true,
     loading = false,
     emptyMessage,
+    createAction,
 }: GenericLookupModalProps<T>) {
     const [query, setQuery] = useState('');
     const [filters, setFilters] = useState<LookupFilterValues>(() => ({
@@ -345,6 +349,26 @@ function LookupDialog<T extends { id: string }>({
                             >
                                 Clear
                             </Button>
+                            {createAction && (
+                                <Button
+                                    variant="outlined"
+                                    size="small"
+                                    onClick={createAction.onClick}
+                                    startIcon={<AddIcon sx={{ fontSize: 16 }} />}
+                                    sx={{
+                                        textTransform: 'none',
+                                        fontWeight: 700,
+                                        borderRadius: '8px',
+                                        height: 36,
+                                        borderColor: '#bfdbfe',
+                                        color: '#1d4ed8',
+                                        backgroundColor: '#eff6ff',
+                                        '&:hover': { borderColor: '#93c5fd', backgroundColor: '#dbeafe' },
+                                    }}
+                                >
+                                    {createAction.label}
+                                </Button>
+                            )}
                         </Grid>
                     </Grid>
                 </Box>

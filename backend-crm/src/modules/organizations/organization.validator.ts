@@ -64,18 +64,22 @@ function normalizeAliases(value: unknown): unknown {
     };
 }
 
-/** Field rules shared by the organization form and lead conversion. */
+/**
+ * Field rules shared by the organization form, lead conversion and import. Only locked fields
+ * (docs/field-locking-policy.md) are required here; classification and billing address are enforced from the
+ * form configuration.
+ */
 const organizationFields = z.object({
     // Overview
     organizationName: requiredText('Organization Name', L.organizationName),
     mailingName: optionalText('Mailing Name', L.organizationName),
     tradeName: optionalText('Trade Name', L.organizationName),
-    natureOfBusiness: requiredText('Nature of Business', L.option),
+    natureOfBusiness: optionalText('Nature of Business', L.option),
     // Admin-customizable (org_account_status / org_registration_type); the system options keep their meaning.
     accountStatus: textWithDefault('Account Status', 20, 'Active'),
     inactivityReason: optionalText('Inactivity Reason', 500),
-    typeOfEntity: requiredText('Type of Entity', L.option),
-    customerType: requiredText('Customer Type', L.option),
+    typeOfEntity: optionalText('Type of Entity', L.option),
+    customerType: optionalText('Customer Type', L.option),
     sapCodeTallyId: optionalText('SAP Code / Tally ID', L.shortCode),
     showroomBranchCode: optionalText('Showroom / Branch Code', L.shortCode),
     sourceOfLead: optionalText('Source of Lead', L.option),
@@ -91,10 +95,10 @@ const organizationFields = z.object({
     corporateEmails: corporateEmailListSchema.optional(),
 
     // Billing address
-    billingAddress: requiredText('Billing Address', L.address),
+    billingAddress: optionalText('Billing Address', L.address),
     billingStreet: optionalText('Billing Street', L.address),
-    billingCity: requiredText('Billing City', L.shortText),
-    billingState: requiredText('Billing State', L.shortText),
+    billingCity: optionalText('Billing City', L.shortText),
+    billingState: optionalText('Billing State', L.shortText),
     billingPostalCode: optionalPostalCode,
     billingCountry: optionalText('Billing Country', L.shortText),
     billingLatitude: optionalText('Billing Latitude', 30),
@@ -140,8 +144,9 @@ interface PostalFields {
     copyAddressFromBilling: boolean;
 }
 
-function refinePostalCodes(org: PostalFields, ctx: z.RefinementCtx, billingRequired: boolean): void {
-    refinePostalCodeForCountry(ctx, 'billingPostalCode', org.billingPostalCode, org.billingCountry, billingRequired);
+/** Postal code formats; whether the billing PIN is required comes from the form configuration. */
+function refinePostalCodes(org: PostalFields, ctx: z.RefinementCtx): void {
+    refinePostalCodeForCountry(ctx, 'billingPostalCode', org.billingPostalCode, org.billingCountry);
     if (!org.copyAddressFromBilling) {
         refinePostalCodeForCountry(ctx, 'shippingPostalCode', org.shippingPostalCode, org.shippingCountry);
     }
@@ -151,7 +156,7 @@ function refinePostalCodes(org: PostalFields, ctx: z.RefinementCtx, billingRequi
 export const organizationInputSchema = z.preprocess(
     normalizeAliases,
     organizationFields.superRefine((org, ctx) => {
-        refinePostalCodes(org, ctx, true);
+        refinePostalCodes(org, ctx);
         if (org.registrationType === 'Registered' && !org.gstNo) {
             ctx.addIssue({ code: 'custom', path: ['gstNo'], message: 'GST Number is required for registered organizations.' });
         }
@@ -159,37 +164,19 @@ export const organizationInputSchema = z.preprocess(
 );
 
 /**
- * Organization created by lead conversion: the Convert Lead form collects no billing address or GSTIN, so
- * those are optional here (taken from the lead when present). The full form requires them on the next edit.
+ * Organization created by lead conversion: the Convert Lead form collects no GSTIN, so the GST rule is skipped
+ * (the GSTIN is taken from the lead when present). The full form requires it on the next edit.
  */
 export const organizationConversionSchema = z.preprocess(
     normalizeAliases,
-    organizationFields
-        .extend({
-            billingAddress: optionalText('Billing Address', L.address),
-            billingCity: optionalText('Billing City', L.shortText),
-            billingState: optionalText('Billing State', L.shortText),
-        })
-        .superRefine((org, ctx) => refinePostalCodes(org, ctx, false)),
+    organizationFields.superRefine((org, ctx) => refinePostalCodes(org, ctx)),
 );
 
 /**
- * Bulk import: the import template has no entity-type, address or GSTIN-requirement context, so those are
- * optional; everything that is present is still validated with the form's rules.
+ * Bulk import: the import template has no GSTIN-requirement context, so the GST rule is skipped; everything
+ * that is present is still validated with the form's rules.
  */
-export const organizationImportSchema = z.preprocess(
-    normalizeAliases,
-    organizationFields
-        .extend({
-            natureOfBusiness: optionalText('Nature of Business', L.option),
-            typeOfEntity: optionalText('Type of Entity', L.option),
-            customerType: optionalText('Customer Type', L.option),
-            billingAddress: optionalText('Billing Address', L.address),
-            billingCity: optionalText('Billing City', L.shortText),
-            billingState: optionalText('Billing State', L.shortText),
-        })
-        .superRefine((org, ctx) => refinePostalCodes(org, ctx, false)),
-);
+export const organizationImportSchema = organizationConversionSchema;
 
 export type OrganizationInput = z.infer<typeof organizationInputSchema>;
 /** Anything that can be written: the widest of the form, conversion and import inputs. */

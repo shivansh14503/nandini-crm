@@ -10,9 +10,17 @@ import {
     isTaxIdentifierField,
     resolveFieldMaxLength,
     resolveFieldSize,
+    type FieldContentFit,
     type FieldSize,
     type FieldType,
 } from '../fieldSizing';
+
+/** Native date / time pickers: fixed-length display value plus the picker icon. */
+const PICKER_FIT: Record<string, FieldContentFit> = {
+    date: { chars: 10, wide: true, chromePx: 32 },
+    time: { chars: 8, wide: true, chromePx: 32 },
+    'datetime-local': { chars: 18, wide: true, chromePx: 32 },
+};
 
 export interface RhfTextFieldProps<T extends FieldValues>
     extends Pick<
@@ -89,6 +97,12 @@ export function RhfTextField<T extends FieldValues>({
     const resolvedMaxLength =
         resolveFieldMaxLength(name, maxLength ?? (existingHtmlInput.maxLength as number | undefined)) ??
         resolveFieldMaxLength(label);
+
+    // Auto width fits the longest value the input accepts; textareas always span their row.
+    const fit: FieldContentFit | undefined = inputProps.multiline
+        ? undefined
+        : PICKER_FIT[inputProps.type ?? ''] ??
+          (resolvedMaxLength ? { chars: resolvedMaxLength, wide: isUppercase || isNumeric } : undefined);
 
     const handleChange = (
         e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
@@ -170,7 +184,7 @@ export function RhfTextField<T extends FieldValues>({
     };
 
     return (
-        <FormField name={name} label={label} required={required} hint={hint} size={resolvedSize}>
+        <FormField name={name} label={label} required={required} hint={hint} size={resolvedSize} fit={fit}>
             <TextField
                 {...inputProps}
                 placeholder={override ? override.placeholder : inputProps.placeholder}

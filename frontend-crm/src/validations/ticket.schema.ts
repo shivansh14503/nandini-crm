@@ -20,7 +20,8 @@ export const ticketFormSchema = z.object({
     contactPersonName: requiredText('Contact Person Name', L.personName),
     contactNumber: zodPhoneOptional,
     // Priority / source / support type / status / mode options are admin-customizable (ticket_* dropdowns).
-    ticketPriority: configurableOption('Ticket Priority'),
+    // Priority, Nature Of Call and Support Mode are required by the form configuration (admin-relaxable).
+    ticketPriority: optionalString,
     source: configurableOption('Source', 'Call'),
     supportType: configurableOption('Support Type', 'Free'),
     problemReported: requiredText('Problem Reported', L.longText),
@@ -30,8 +31,8 @@ export const ticketFormSchema = z.object({
 
     // Overview — right column
     cloudFlag: z.boolean().default(false),
-    natureOfCall: requiredString('Nature Of Call').refine(
-        (v) => getNatureOfCalls().some((n) => n.name.toLowerCase() === v.toLowerCase()),
+    natureOfCall: optionalString.refine(
+        (v) => !v || getNatureOfCalls().some((n) => n.name.toLowerCase() === v.toLowerCase()),
         { message: 'Select a Nature Of Call from the list.' }
     ),
     accountAddress: optionalText('Account Address', L.address),
@@ -41,7 +42,7 @@ export const ticketFormSchema = z.object({
     dueDate: requiredString('Due Date').refine((v) => !Number.isNaN(new Date(v).getTime()), {
         message: 'Due Date must be a valid date and time.',
     }),
-    supportMode: configurableOption('Support Mode'),
+    supportMode: optionalString,
     problemObserved: optionalText('Problem Observed', L.longText),
     rca: optionalText('RCA', L.longText),
     addDescription: optionalText('Add Description', L.longText),
