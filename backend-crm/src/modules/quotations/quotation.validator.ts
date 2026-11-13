@@ -50,14 +50,15 @@ export const quotationInputSchema = z.preprocess(
             quotationDate: requiredDate('Quotation Date'),
             validUntil: requiredDate('Valid Until Date'),
             remarks: optionalText('Remarks', L.longText),
-            termsAndCondition: requiredText('Terms & Condition', L.option),
+            // Terms, payment terms and validation period are admin-relaxable (form configuration enforces them).
+            termsAndCondition: optionalText('Terms & Condition', L.option),
             termsAndConditionDescription: optionalText('Terms & Condition Description', L.longText),
             assignedTo: requiredText('Assigned Representative', L.username),
             opportunityName: requiredText('Opportunity Name', L.organizationName),
             company: requiredText('Company', L.option),
-            validationPeriod: requiredText('Validation Period', 30),
+            validationPeriod: optionalText('Validation Period', 30),
             otherRef: optionalText('Other Ref.', L.shortText),
-            paymentTerms: requiredText('Payment Terms', L.option),
+            paymentTerms: optionalText('Payment Terms', L.option),
             paymentTermsDescription: optionalText('Payment Terms Description', L.longText),
             preparedFor: requiredText('Prepared For', L.organizationName),
 

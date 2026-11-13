@@ -107,7 +107,7 @@ export const IMPORT_CONFIGS: Record<ImportEntityType, ImportEntityConfig> = {
         fields: [
             { key: 'companyName', label: 'Company Name', required: true, aliases: ['partner name', 'name', 'company', 'organization', 'partner company'], sample: ['Apex Tally Solutions', 'Synergy Softwares'] },
             { key: 'natureOfPartner', label: 'Nature of Partner', required: false, aliases: ['nature', 'partner type', 'type'], sample: ['TALLY-3STAR PARTNER', 'TALLY-REFERRAL PARTNER'] },
-            { key: 'phone', label: 'Office Phone', required: true, aliases: ['phone', 'mobile', 'contact number', 'telephone'], sample: ['9876543210', '9123456780'] },
+            { key: 'phone', label: 'Office Phone', aliases: ['phone', 'mobile', 'contact number', 'telephone'], sample: ['9876543210', '9123456780'] },
             { key: 'email', label: 'Email', required: true, aliases: ['email address', 'e-mail', 'mail'], sample: ['info@apextally.com', 'contact@synergysoft.in'] },
             { key: 'billingStreet', label: 'Billing Street', required: false, aliases: ['street', 'address', 'billing address'], sample: ['12 Nehru Place', '45 MG Road'] },
             { key: 'billingCity', label: 'Billing City', required: false, aliases: ['city'], sample: ['New Delhi', 'Mumbai'] },

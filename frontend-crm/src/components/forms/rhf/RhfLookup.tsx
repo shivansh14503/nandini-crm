@@ -5,7 +5,7 @@ import { FormHelperText } from '@mui/material';
 import { useController, type FieldPath, type FieldValues } from 'react-hook-form';
 import { FormField } from '../FormField';
 import { LookupField } from '../LookupField';
-import { resolveFieldSize, type FieldSize } from '../fieldSizing';
+import { LOOKUP_FIELD_SIZE, resolveFieldSize, type FieldSize } from '../fieldSizing';
 import { RecordLookupModal, LOOKUP_DISPLAY_VALUE, findLookupRecord } from '@/components/common/lookup';
 import { findCrmUser, formatCrmUserDisplay, getAssignableUserNames, getPartnerCompanies } from '@/services/masterData.store';
 import { useContacts, useOrganizations } from '@/hooks/queries';
@@ -67,8 +67,8 @@ export function RhfLookup<T extends FieldValues, K extends LookupKind = LookupKi
     // The form keeps the username (API contract); the input and read-only view show the full name.
     const storesUsername = kind === 'user' && userValueField === 'username';
     const displayValue = storesUsername ? formatCrmUserDisplay(value) : value;
-    // Usernames are short; record lookups (organizations, contacts…) keep the wider `lg` default.
-    const size = resolveFieldSize(name, 'lookup', fieldSize ?? (kind === 'user' ? 'md' : undefined));
+    // Every picker field (user, organization, contact…) shares one default width so they line up.
+    const size = resolveFieldSize(name, 'lookup', fieldSize ?? LOOKUP_FIELD_SIZE);
     // Subscribes to the user directory so suggestions fill in once it loads (API mode).
     const { users, partnerCompanies } = useMasterData();
     // Records feed both inline suggestions (when no explicit `options`) and exact-match auto-population.
@@ -129,7 +129,7 @@ export function RhfLookup<T extends FieldValues, K extends LookupKind = LookupKi
     };
 
     return (
-        <FormField name={name} label={label} required={required} hint={hint} size={size} viewValue={storesUsername ? displayValue : undefined}>
+        <FormField name={name} label={label} required={required} hint={hint} size={size} fit={null} viewValue={storesUsername ? displayValue : undefined}>
             <LookupField
                 value={displayValue}
                 onChange={handleChange}

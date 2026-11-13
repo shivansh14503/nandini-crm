@@ -219,6 +219,8 @@ export function StateRegionField({
         <FormField name={name} label={label} required={required} hint={hint} size={size}>
             <Autocomplete<string, false, false, true>
                 freeSolo
+                // Free text hides MUI's dropdown arrow; show it (as on Country) whenever there's a list to open.
+                forcePopupIcon={hasSubdivisions}
                 options={options}
                 value={value || null}
                 inputValue={value ?? ''}
@@ -301,6 +303,8 @@ export function CityAutocompleteField({
         <FormField name={name} label={label} required={required} hint={hint} size={size}>
             <Autocomplete<string, false, false, true>
                 freeSolo
+                // Free text hides MUI's dropdown arrow; show it (as on Country) whenever there are suggestions.
+                forcePopupIcon={suggestions.length > 0}
                 options={suggestions}
                 value={value || null}
                 inputValue={value ?? ''}

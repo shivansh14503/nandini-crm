@@ -1,7 +1,11 @@
 'use client';
 
 import React from 'react';
-import { Box, Typography } from '@mui/material';
+import { Box, IconButton, Tooltip, Typography } from '@mui/material';
+import PhoneInTalkOutlinedIcon from '@mui/icons-material/PhoneInTalkOutlined';
+import SmsOutlinedIcon from '@mui/icons-material/SmsOutlined';
+import WhatsAppIcon from '@mui/icons-material/WhatsApp';
+import { smsHref, telHref, whatsappHref } from '@/utils/contactLinks';
 import type { CrmUser } from '@/types/user.types';
 import { CRM_USER_DEPARTMENTS } from '@/types/user.types';
 import type { ExtendedOrganization } from '@/types/organization.types';
@@ -162,29 +166,92 @@ export const ORGANIZATION_LOOKUP_PRESET: LookupPreset<ExtendedOrganization> = {
 
 // ─── Contacts ─────────────────────────────────────────────────────────────────
 
-const primaryEmail = (c: Contact) => (c.emailAddresses.find((e) => e.isPrimary) ?? c.emailAddresses[0])?.email ?? '';
+/** A contact row in the picker: the contact plus its organization's Customer Type (looked up by the modal). */
+export type ContactLookupRow = Contact & { customerType: string };
 
-export const CONTACT_LOOKUP_PRESET: LookupPreset<Contact> = {
+/** Digits only, so "98100 12345", "+91-9810012345" and "9810012345" all match a typed "98100". */
+const phoneDigits = (value: string | undefined) => (value ?? '').replace(/\D/g, '');
+const containsPhone = (value: string | undefined, filter: string | undefined) => {
+    const wanted = phoneDigits(filter);
+    return !wanted || phoneDigits(value).includes(wanted);
+};
+
+/** Mobile number with call / SMS / WhatsApp shortcuts (call and SMS hidden when the contact is on Do Not Call). */
+function ContactMobileCell({ contact }: { contact: Contact }) {
+    if (!contact.mobile) return <>-</>;
+    const actions = [
+        ...(contact.doNotCall
+            ? []
+            : [
+                  { label: 'Call', href: telHref(contact.mobile), icon: <PhoneInTalkOutlinedIcon sx={{ fontSize: 14 }} />, color: '#2563eb' },
+                  { label: 'Send SMS', href: smsHref(contact.mobile), icon: <SmsOutlinedIcon sx={{ fontSize: 14 }} />, color: '#7c3aed' },
+              ]),
+        { label: 'WhatsApp', href: whatsappHref(contact.mobile), icon: <WhatsAppIcon sx={{ fontSize: 14 }} />, color: '#16a34a', external: true },
+    ].filter((a) => a.href);
+    return (
+        <Box>
+            <Box sx={{ display: 'flex', gap: 0.5, mb: 0.3 }}>
+                {actions.map((a) => (
+                    <Tooltip key={a.label} title={a.label}>
+                        <IconButton
+                            component="a"
+                            href={a.href}
+                            aria-label={`${a.label} ${contact.name}`}
+                            size="small"
+                            // A shortcut, not a pick: don't select the row.
+                            onClick={(e: React.MouseEvent) => e.stopPropagation()}
+                            onKeyDown={(e: React.KeyboardEvent) => e.stopPropagation()}
+                            {...('external' in a && a.external ? { target: '_blank', rel: 'noopener noreferrer' } : {})}
+                            sx={{ width: 24, height: 24, color: a.color, border: '1px solid #e2e8f0', borderRadius: '6px' }}
+                        >
+                            {a.icon}
+                        </IconButton>
+                    </Tooltip>
+                ))}
+            </Box>
+            <Typography sx={{ fontSize: '0.8rem', color: '#475569' }}>{contact.mobile}</Typography>
+        </Box>
+    );
+}
+
+export const CONTACT_LOOKUP_PRESET: LookupPreset<ContactLookupRow> = {
     title: 'Contact Search',
     subtitle: 'Select a contact. Click a row to choose it.',
-    searchPlaceholder: 'Name, mobile or email',
+    searchPlaceholder: '',
+    showSearchBox: false,
+    rowsPerPage: 10,
+    emptyMessage: 'No contacts found matching search criteria',
     columns: [
-        { id: 'name', label: 'Name', minWidth: 160, render: (c) => <PrimaryText>{c.name}</PrimaryText> },
-        { id: 'organizationName', label: 'Organization Name', minWidth: 200 },
-        { id: 'designation', label: 'Designation', minWidth: 150 },
-        { id: 'mobile', label: 'Mobile', minWidth: 110 },
-        { id: 'officePhone', label: 'Office Phone', minWidth: 110 },
-        { id: 'leftJob', label: 'Left Job', minWidth: 80 },
-        { id: 'assignedTo', label: 'Assigned to', minWidth: 140, getValue: (c) => userName(c.assignedTo) },
+        { id: 'name', label: 'Name', minWidth: 160, sortable: true, render: (c) => <PrimaryText>{c.name}</PrimaryText> },
+        { id: 'organizationName', label: 'Organization Name', minWidth: 190, sortable: true },
+        { id: 'customerType', label: 'Customer Type', minWidth: 120, sortable: true },
+        { id: 'mobile', label: 'Mobile', minWidth: 130, sortable: true, render: (c) => <ContactMobileCell contact={c} /> },
+        { id: 'officePhone', label: 'Office Phone', minWidth: 120, sortable: true },
+        { id: 'leftJob', label: 'Left Job', minWidth: 80, sortable: true },
+        { id: 'assignedTo', label: 'Assigned to', minWidth: 140, sortable: true, getValue: (c) => userName(c.assignedTo) },
     ],
     filterFields: [
-        { key: 'organizationName', label: 'Organization', type: 'text', width: 3 },
-        { key: 'leftJob', label: 'Left Job', type: 'select', defaultValue: '', options: yesNoOptions },
+        { key: 'name', label: 'Name', type: 'text', width: 4, placeholder: 'Contact name...' },
+        { key: 'mobile', label: 'Mobile', type: 'text', width: 4, placeholder: 'Mobile number...' },
+        { key: 'leftJob', label: 'Left Job', type: 'multiselect', width: 4, options: toOptions(['No', 'Yes']) },
+        { key: 'officePhone', label: 'Office Phone', type: 'text', width: 4, placeholder: 'Office phone...' },
+        { key: 'email', label: 'Any Email', type: 'text', width: 4, placeholder: 'Any of the contact’s emails...' },
+        { key: 'organizationName', label: 'Organization Name', type: 'text', width: 4, placeholder: 'Organization...' },
+        // Options come from the user directory, which loads after import; ContactLookupModal fills them in.
+        { key: 'assignedTo', label: 'Assigned to', type: 'multiselect', width: 4, options: [] },
     ],
-    searchPredicate: (c, f, q) => {
-        if (!containsText(c.organizationName, f.organizationName)) return false;
-        if (f.leftJob && c.leftJob !== f.leftJob) return false;
-        return includesQuery(q, c.name, c.mobile, c.officePhone, primaryEmail(c), c.contactCode);
+    searchPredicate: (c, f) => {
+        if (!containsText(c.name, f.name?.trim())) return false;
+        if (!containsPhone(c.mobile, f.mobile)) return false;
+        if (!containsPhone(c.officePhone, f.officePhone)) return false;
+        if (!containsText(c.organizationName, f.organizationName?.trim())) return false;
+        const email = f.email?.trim();
+        if (email && !c.emailAddresses.some((e) => containsText(e.email, email))) return false;
+        const leftJob = splitMulti(f.leftJob);
+        if (leftJob.length && !leftJob.includes(c.leftJob)) return false;
+        const owners = splitMulti(f.assignedTo);
+        if (owners.length && !owners.includes(c.assignedTo)) return false;
+        return true;
     },
 };
 

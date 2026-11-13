@@ -87,8 +87,15 @@ const MAX_PATTERN_LENGTH = 200;
 export function isEmptyValue(value: unknown): boolean {
     if (value === undefined || value === null) return true;
     if (typeof value === 'string') return value.trim() === '';
-    if (Array.isArray(value)) return value.length === 0;
+    // A list is empty when every entry is: e.g. email rows whose addresses are all blank.
+    if (Array.isArray(value)) return value.every(isEmptyListEntry);
     return false;
+}
+
+/** A list entry with no value: a blank string, or a row object (e.g. an email row) whose `email` is blank. */
+function isEmptyListEntry(entry: unknown): boolean {
+    if (entry && typeof entry === 'object' && 'email' in entry) return isEmptyValue((entry as { email?: unknown }).email);
+    return isEmptyValue(entry);
 }
 
 const isScalar = (value: unknown): value is string | number | boolean =>
@@ -266,9 +273,7 @@ export function checkModulePayload(
         if (message) issues.push({ path, message });
     }
 
-    if (issues.length > 0) {
-        throw new HttpError(issues[0].message, StatusCodes.BAD_REQUEST, { code: 'VALIDATION_ERROR', errors: issues });
-    }
+    throwFieldIssues(issues);
 
     const sanitized: Record<string, unknown> = {};
     for (const [key, value] of Object.entries(input)) {
@@ -277,6 +282,31 @@ export function checkModulePayload(
         sanitized[key] = field.isActive ? normalizeValue(field, value) : value;
     }
     return sanitized;
+}
+
+/**
+ * `isRequired` of a module's built-in fields when another form collects them (e.g. Convert Lead creating an
+ * organization and an opportunity). `paths` maps each built-in `fieldKey` to that form's field name; `values` are
+ * keyed by `fieldKey`. Hidden and archived fields are never required, as in the module's own form.
+ */
+export function configuredRequiredIssues(
+    config: ModuleFieldConfig,
+    values: Record<string, unknown>,
+    paths: Record<string, string>,
+): ApiFieldError[] {
+    const issues: ApiFieldError[] = [];
+    for (const [fieldKey, path] of Object.entries(paths)) {
+        const field = config.fields.find((f) => f.isSystem && f.fieldKey === fieldKey);
+        if (!field || !field.isActive || !field.isVisibleInForm || !field.isRequired) continue;
+        if (isEmptyValue(values[fieldKey])) issues.push({ path: [path], message: `${field.label} is required.` });
+    }
+    return issues;
+}
+
+export function throwFieldIssues(issues: ApiFieldError[]): void {
+    if (issues.length > 0) {
+        throw new HttpError(issues[0].message, StatusCodes.BAD_REQUEST, { code: 'VALIDATION_ERROR', errors: issues });
+    }
 }
 
 /**

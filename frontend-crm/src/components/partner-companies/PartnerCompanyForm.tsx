@@ -17,7 +17,6 @@ import { type FormTabDefinition } from '../common/Drawer';
 import {
     FIELD_MAX_LENGTH,
     FormGrid,
-    FormGridItem,
     RhfAddressSection,
     RhfEmailList,
     RhfLookup,
@@ -304,9 +303,7 @@ export default function PartnerCompanyForm({
                                 lookupType="organization"
                                 placeholder="Search or select principal company..."
                             />
-                            <FormGridItem span="full">
-                                <RhfEmailList name="emailAddresses" label="Email Address" required />
-                            </FormGridItem>
+                            <RhfEmailList name="emailAddresses" label="Email Address" required />
                         </FormGrid>
                         <FormGrid columns={2}>
                             <RhfTextField<PartnerCompanyFormData>

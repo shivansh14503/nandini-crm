@@ -7,10 +7,10 @@ import {
     optionalGst,
     optionalIfsc,
     optionalPan,
+    optionalPhone,
     optionalPostalCode,
     optionalText,
     optionalUpperText,
-    phone,
     refinePostalCodeForCountry,
     requiredText,
 } from '../../validators/common.js';
@@ -20,13 +20,16 @@ import { corporateEmailListSchema } from '../shared/entityEmails.js';
 const WEBSITE_MAX = 200;
 const BANK_BRANCH_MAX = 150;
 
-/** Field rules shared by the partner company form and bulk import. */
+/**
+ * Field rules shared by the partner company form and bulk import. Only the Partner Name is locked
+ * (docs/field-locking-policy.md); nature, phone and billing address are enforced from the form configuration.
+ */
 const partnerCompanyFields = z
     .object({
         // Company information
         companyName: requiredText('Partner Name', L.organizationName),
-        natureOfPartner: requiredText('Nature of Partner', L.option),
-        phone: phone('Office Phone'),
+        natureOfPartner: optionalText('Nature of Partner', L.option),
+        phone: optionalPhone('Office Phone'),
         website: optionalText('Website', WEBSITE_MAX),
         emailAddresses: corporateEmailListSchema.default([]).superRefine((emails, ctx) => {
             if (!emails.some((row) => row.email)) {
@@ -45,10 +48,10 @@ const partnerCompanyFields = z
         bankIfscCode: optionalIfsc,
 
         // Billing address (same rules as the organization form, which uses the same address section)
-        billingAddress: requiredText('Billing Street', L.address),
+        billingAddress: optionalText('Billing Street', L.address),
         billingStreet: optionalText('Billing Street', L.address),
-        billingCity: requiredText('Billing City', L.shortText),
-        billingState: requiredText('Billing State', L.shortText),
+        billingCity: optionalText('Billing City', L.shortText),
+        billingState: optionalText('Billing State', L.shortText),
         billingPostalCode: optionalPostalCode,
         billingCountry: optionalText('Billing Country', L.shortText),
 
@@ -71,31 +74,22 @@ const partnerCompanyFields = z
         customFields: customFieldsSchema,
     });
 
+/** Postal code formats; whether the billing PIN is required comes from the form configuration. */
 function refinePartnerPostalCodes(
     input: { billingPostalCode?: string; billingCountry?: string; shippingPostalCode?: string; shippingCountry?: string; copyAddressFromBilling: boolean },
     ctx: z.RefinementCtx,
-    billingRequired: boolean,
 ): void {
-    refinePostalCodeForCountry(ctx, 'billingPostalCode', input.billingPostalCode, input.billingCountry, billingRequired);
+    refinePostalCodeForCountry(ctx, 'billingPostalCode', input.billingPostalCode, input.billingCountry);
     if (!input.copyAddressFromBilling) {
         refinePostalCodeForCountry(ctx, 'shippingPostalCode', input.shippingPostalCode, input.shippingCountry);
     }
 }
 
 /** `PartnerCompanyFormData` rules from frontend-crm/src/validations/partnerCompany.schema.ts. */
-export const partnerCompanyInputSchema = partnerCompanyFields.superRefine((input, ctx) => refinePartnerPostalCodes(input, ctx, true));
+export const partnerCompanyInputSchema = partnerCompanyFields.superRefine((input, ctx) => refinePartnerPostalCodes(input, ctx));
 
-/**
- * Bulk import: spreadsheets often carry no address, so the billing address is optional here (stored blank and
- * completed on the next edit, where the form still requires it). Postal codes that are given are still checked.
- */
-export const partnerCompanyImportSchema = partnerCompanyFields
-    .extend({
-        billingAddress: optionalText('Billing Street', L.address),
-        billingCity: optionalText('Billing City', L.shortText),
-        billingState: optionalText('Billing State', L.shortText),
-    })
-    .superRefine((input, ctx) => refinePartnerPostalCodes(input, ctx, false));
+/** Bulk import: the same rules (spreadsheets often carry no address; required fields come from the form configuration). */
+export const partnerCompanyImportSchema = partnerCompanyInputSchema;
 
 export type PartnerCompanyInput = z.infer<typeof partnerCompanyInputSchema>;
 /** What a partner company write accepts: a form submission or an imported row (whose billing address may be blank). */

@@ -26,6 +26,9 @@ import {
     convertLeadFormSchema,
     type ConvertLeadFormValues,
 } from '@/validations';
+import { CONVERT_CONFIGURED_FIELDS } from '@/validations/convertLead.schema';
+import { getFormConfigs } from '@/services/masterData.store';
+import { validateBorrowedFields } from '@/utils/formConfig';
 import {
     ConvertContactSection,
     ConvertOpportunitySection,
@@ -94,6 +97,13 @@ export function ConvertLeadForm({ leadId, breadcrumbItems }: ConvertLeadFormProp
         useRhfForm<ConvertLeadFormValues>({
             schema: convertLeadFormSchema,
             defaultValues: EMPTY_DEFAULTS,
+            // An existing organization is linked as-is, so only a new one must meet the organization form's rules.
+            extraRules: (values) =>
+                validateBorrowedFields(
+                    getFormConfigs(),
+                    values.existingOrganizationId ? CONVERT_CONFIGURED_FIELDS.filter((f) => f.module !== 'organizations') : CONVERT_CONFIGURED_FIELDS,
+                    values,
+                ),
         });
 
     const { reset, formState } = methods;

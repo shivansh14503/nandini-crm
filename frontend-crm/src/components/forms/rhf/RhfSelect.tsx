@@ -3,9 +3,14 @@
 import React from 'react';
 import { FormHelperText, type SxProps, type Theme } from '@mui/material';
 import { useController, type FieldPath, type FieldValues } from 'react-hook-form';
-import { FormField } from '../FormField';
+import { FormField, useFieldAutoSize } from '../FormField';
 import { StyledSelect } from '../StyledSelect';
-import { resolveFieldSize, resolveOptionsFieldSize, type FieldSize } from '../fieldSizing';
+import { useFieldOverride } from '@/context/FormConfigContext';
+import { longestOptionChars, resolveFieldSize, resolveOptionsFieldSize, type FieldContentFit, type FieldSize } from '../fieldSizing';
+
+const SELECT_PROMPT = 'Select';
+/** Dropdown arrow plus its gap. */
+const SELECT_ARROW_PX = 34;
 
 export interface RhfSelectProps<T extends FieldValues> {
     name: FieldPath<T>;
@@ -37,16 +42,23 @@ export function RhfSelect<T extends FieldValues>({
 }: RhfSelectProps<T>) {
     const { field, fieldState } = useController<T>({ name });
     const size = resolveFieldSize(name, 'select', fieldSize ?? resolveOptionsFieldSize(options));
+    // Auto width fits the longest option the dropdown actually shows (admin-managed list when configured).
+    const override = useFieldOverride(name, { label, options });
+    const fit: FieldContentFit = {
+        chars: Math.max(SELECT_PROMPT.length, longestOptionChars(override?.options ?? options, override?.optionLabels ?? optionLabels)),
+        chromePx: SELECT_ARROW_PX,
+    };
+    // A long "Select <label>" prompt would be cut off in a fitted / xs control; a bare "Select" stays readable.
+    const narrow = useFieldAutoSize(name) || size === 'xs';
 
     return (
-        <FormField name={name} label={label} required={required} hint={hint} size={size} sx={sx}>
+        <FormField name={name} label={label} required={required} hint={hint} size={size} fit={fit} sx={sx}>
             <StyledSelect
                 value={(field.value as string) ?? ''}
                 onChange={field.onChange}
                 options={options}
                 optionLabels={optionLabels}
-                // "Select <label>" doesn't fit an xs control; a bare "Select" keeps the prompt readable.
-                placeholder={placeholder ?? (size === 'xs' ? 'Select' : undefined)}
+                placeholder={placeholder && !(narrow && placeholder.length > fit.chars) ? placeholder : narrow ? SELECT_PROMPT : undefined}
                 disabled={disabled}
             />
             {fieldState.error && (

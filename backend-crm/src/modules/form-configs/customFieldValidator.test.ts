@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { HttpError } from '../../utils/httpError.js';
-import { buildModuleFieldConfig, checkModulePayload, type ModuleFieldConfig } from './customFieldValidator.js';
+import { buildModuleFieldConfig, checkModulePayload, configuredRequiredIssues, type ModuleFieldConfig } from './customFieldValidator.js';
 import type { DropdownCategoryDto, FormConfigsPayload, FormFieldDefinitionDto } from './formConfig.service.js';
 
 function field(overrides: Partial<FormFieldDefinitionDto> & Pick<FormFieldDefinitionDto, 'fieldKey'>): FormFieldDefinitionDto {
@@ -221,5 +221,23 @@ describe('checkModulePayload: stored values and unknown keys', () => {
 
     it('returns an empty bag when no custom fields were sent', () => {
         assert.deepEqual(checkModulePayload(configWith([]), {}, undefined), {});
+    });
+});
+
+describe('configuredRequiredIssues (fields another form collects, e.g. Convert Lead)', () => {
+    const config = configWith([
+        field({ fieldKey: 'type', label: 'Type', isSystem: true, isRequired: true }),
+        field({ fieldKey: 'leadSource', label: 'Lead Source', isSystem: true, isRequired: false }),
+        field({ fieldKey: 'commission', label: 'Commission', isSystem: true, isRequired: true, isVisibleInForm: false }),
+    ]);
+    const paths = { type: 'opportunityType', leadSource: 'opportunityLeadSource', commission: 'commission' };
+
+    it("reports required built-in fields under the other form's names", () => {
+        const issues = configuredRequiredIssues(config, { type: '', leadSource: '' }, paths);
+        assert.deepEqual(issues, [{ path: ['opportunityType'], message: 'Type is required.' }]);
+    });
+
+    it('ignores optional and hidden fields, and passes filled values', () => {
+        assert.deepEqual(configuredRequiredIssues(config, { type: 'New Business' }, paths), []);
     });
 });

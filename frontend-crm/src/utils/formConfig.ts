@@ -45,6 +45,14 @@ export function defaultOptionValues(category: DropdownCategoryDto | undefined): 
  * the first default for a single choice, all of them for a multi-select (an array in `base`), and empty when the
  * dropdown has none so the placeholder shows. Only keys `base` holds as text or a list are returned.
  */
+/**
+ * A built-in address Country field (`primaryCountry`, `billingCountry`, …). It picks from the fixed ISO country list,
+ * so the form builder offers only its default country (stored as the ISO2 code), never new options.
+ */
+export function isBuiltInCountryField(field: Pick<FormFieldDefinitionDto, 'isSystem' | 'fieldKey' | 'dropdownCategoryKey'>): boolean {
+    return field.isSystem && !field.dropdownCategoryKey && /Country$/.test(field.fieldKey);
+}
+
 export function builtInDropdownDefaults(
     configs: FormConfigsPayload | null | undefined,
     module: CrmModuleKey,
@@ -53,6 +61,15 @@ export function builtInDropdownDefaults(
     const result: Record<string, string | string[]> = {};
     if (!configs) return result;
     for (const field of moduleFields(configs, module)) {
+        // Admin's default country for an address block; the block's State belongs to the old country, so it resets.
+        if (isBuiltInCountryField(field)) {
+            const country = field.defaultValue?.trim().toUpperCase();
+            if (!country || typeof base[field.fieldKey] !== 'string' || base[field.fieldKey] === country) continue;
+            result[field.fieldKey] = country;
+            const stateKey = field.fieldKey.replace(/Country$/, 'State');
+            if (typeof base[stateKey] === 'string' && base[stateKey]) result[stateKey] = '';
+            continue;
+        }
         if (!field.isSystem || !field.dropdownCategoryKey) continue;
         const category = findCategory(configs, field.dropdownCategoryKey);
         // Deleted dropdown: keep the form's own default.
@@ -101,8 +118,15 @@ export function groupSections(fields: FormFieldDefinitionDto[], tabKey?: string)
 export function isEmptyValue(value: unknown): boolean {
     if (value === undefined || value === null) return true;
     if (typeof value === 'string') return value.trim() === '';
-    if (Array.isArray(value)) return value.length === 0;
+    // A list is empty when every entry is: e.g. email rows whose addresses are all blank.
+    if (Array.isArray(value)) return value.every(isEmptyListEntry);
     return false;
+}
+
+/** A list entry with no value: a blank string, or a row object (e.g. an email row) whose `email` is blank. */
+function isEmptyListEntry(entry: unknown): boolean {
+    if (entry && typeof entry === 'object' && 'email' in entry) return isEmptyValue((entry as { email?: unknown }).email);
+    return isEmptyValue(entry);
 }
 
 function readPath(values: unknown, path: string): unknown {
@@ -173,6 +197,24 @@ export function validateConfiguredFields(
             const message = validateCustomValue(field, value);
             if (message) issues.push({ path, message });
         }
+    }
+    return issues;
+}
+
+/**
+ * `isRequired` of built-in fields of other modules that a form collects under its own names (e.g. Convert Lead
+ * creating an organization and an opportunity). Hidden and archived fields are never required.
+ */
+export function validateBorrowedFields(
+    configs: FormConfigsPayload | null | undefined,
+    fields: readonly { module: CrmModuleKey; fieldKey: string; name: string }[],
+    values: unknown,
+): ConfigValidationIssue[] {
+    const issues: ConfigValidationIssue[] = [];
+    for (const { module, fieldKey, name } of fields) {
+        const field = moduleFields(configs, module).find((f) => f.isSystem && f.fieldKey === fieldKey);
+        if (!field || !field.isActive || !field.isVisibleInForm || !field.isRequired) continue;
+        if (isEmptyValue(readPath(values, name))) issues.push({ path: name, message: `${field.label} is required.` });
     }
     return issues;
 }

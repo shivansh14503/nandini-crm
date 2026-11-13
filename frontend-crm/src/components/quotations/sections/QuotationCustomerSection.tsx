@@ -82,7 +82,6 @@ export function QuotationCustomerSection() {
                 required
                 lookupType="user"
                 placeholder="Select sales rep"
-                fieldSize="md"
             />
         </FormGrid>
     );

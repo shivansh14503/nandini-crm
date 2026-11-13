@@ -5,7 +5,7 @@ import {
     optionalString,
     requiredText,
     optionalText,
-    zodPhone,
+    optionalDescription,
     zodPhoneOptional,
     zodPostalCodeOptional,
     refinePostalCodeForCountry,
@@ -15,20 +15,23 @@ import {
 } from './common';
 import { corporateEmailSchema } from './contact.schema';
 
+/**
+ * Only locked fields are required here (docs/field-locking-policy.md). Fields an admin may relax (Mobile, Lead
+ * Source, Lead Type, Next Followup Date, Product Category, Add Description) are required by the form
+ * configuration, which useRhfForm applies on top of this schema.
+ */
 export const leadFormSchema = z.object({
     // Overview - Left Column
     name: requiredText('Lead Name', L.personName),
-    mobile: zodPhone,
+    mobile: zodPhoneOptional,
     emailAddresses: z.array(corporateEmailSchema).optional().default([]),
     mailingName: optionalText('Mailing Name', L.organizationName),
+    tradeName: optionalText('Trade Name', L.organizationName),
     designation: optionalString,
-    leadSource: requiredString('Lead Source'),
-    productCategory: z
-        .array(z.string())
-        .min(1, { message: 'Please select at least one Product Category.' }),
+    leadSource: optionalString,
+    productCategory: z.array(z.string()).default([]),
     followupType: optionalString.default('Call'),
-    addDescription: requiredText('Add Description', L.longText)
-        .min(3, { message: 'Add Description must be at least 3 characters.' }),
+    addDescription: optionalDescription('Add Description', L.longText),
     registrationType: optionalString,
     gstNo: zodGstOptional,
     turnover: optionalString,
@@ -38,9 +41,9 @@ export const leadFormSchema = z.object({
     otherPhone: zodPhoneOptional,
     organizationName: optionalText('Organization Name', L.organizationName),
     department: optionalString,
-    leadType: requiredString('Lead Type'),
+    leadType: optionalString,
     status: optionalString.default('New'),
-    nextFollowupDate: requiredString('Next Followup Date'),
+    nextFollowupDate: optionalString,
     nextFollowupTime: optionalString,
     description: optionalText('Description', L.longText),
     noOfEmployee: optionalString,

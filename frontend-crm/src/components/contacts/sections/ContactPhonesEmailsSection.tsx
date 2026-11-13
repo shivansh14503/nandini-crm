@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { FormGrid, FormGridItem, RhfPhoneField, RhfEmailList } from '@/components/forms';
+import { FormGrid, RhfPhoneField, RhfEmailList } from '@/components/forms';
 import type { ContactFormData } from '@/types/contact.types';
 
 /**
@@ -15,9 +15,8 @@ export function ContactPhonesEmailsSection() {
             <RhfPhoneField<ContactFormData> name="phone4" label="Phone 4" placeholder="Office extension / desk" />
             <RhfPhoneField<ContactFormData> name="phone5" label="Phone 5" placeholder="Additional mobile" />
 
-            <FormGridItem span="full">
-                <RhfEmailList required />
-            </FormGridItem>
+            {/* Required by default; the form builder can relax it. */}
+            <RhfEmailList name="emailAddresses" />
         </FormGrid>
     );
 }

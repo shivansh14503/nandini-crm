@@ -24,6 +24,7 @@ import {
     FormGrid,
     FormGridItem,
     LookupField,
+    LOOKUP_FIELD_SIZE,
     StyledSelect,
     SectionLabel,
     fieldSx,
@@ -103,7 +104,7 @@ export function OpportunityBasicSection({ form, setField }: OpportunityBasicSect
                     />
                 </FormField>
 
-                <FormField name="contactName" label="Contact" required hint="Primary decision maker">
+                <FormField name="contactName" label="Contact" required size={LOOKUP_FIELD_SIZE} fit={null} hint="Primary decision maker">
                     <LookupField
                         value={form.contactName}
                         onChange={(val) => setField('contactName', val)}
@@ -139,7 +140,7 @@ export function OpportunityBasicSection({ form, setField }: OpportunityBasicSect
                     onChange={(e) => setField('emailAddress', e.target.value)}
                 />
 
-                <FormField name="referredBy" label="Referred By" size="lg" hint="Partner, agent, or client">
+                <FormField name="referredBy" label="Referred By" size={LOOKUP_FIELD_SIZE} fit={null} hint="Partner, agent, or client">
                     <LookupField
                         value={form.referredBy || ''}
                         onChange={(val) => setField('referredBy', val)}
@@ -154,7 +155,7 @@ export function OpportunityBasicSection({ form, setField }: OpportunityBasicSect
                     />
                 </FormField>
 
-                <FormField name="leadGivenBy" label="Lead Given By" size="lg" required hint="Referrer or internal sponsor">
+                <FormField name="leadGivenBy" label="Lead Given By" size={LOOKUP_FIELD_SIZE} fit={null} required hint="Referrer or internal sponsor">
                     <LookupField
                         value={form.leadGivenBy}
                         onChange={(val) => setField('leadGivenBy', val)}
@@ -245,7 +246,7 @@ export function OpportunityBasicSection({ form, setField }: OpportunityBasicSect
                     </Box>
                 </FormField>
 
-                <FormField name="assignedTo" label="Assigned to" required size="md" hint="Account executive">
+                <FormField name="assignedTo" label="Assigned to" required size={LOOKUP_FIELD_SIZE} fit={null} hint="Account executive">
                     <LookupField
                         value={form.assignedTo}
                         onChange={(val) => setField('assignedTo', val)}

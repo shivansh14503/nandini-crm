@@ -166,13 +166,13 @@ const EMPTY_DEFAULTS: QuotationFormData = {
 
     billingAddress: '',
     billingCity: '',
-    billingState: 'Delhi',
+    billingState: '',
     billingPostalCode: '',
     billingCountry: 'IN',
 
     shippingAddress: '',
     shippingCity: '',
-    shippingState: 'Delhi',
+    shippingState: '',
     shippingPostalCode: '',
     shippingCountry: 'IN',
     copyAddressFromBilling: true,

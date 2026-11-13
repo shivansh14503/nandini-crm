@@ -3,6 +3,7 @@
 import React, { useMemo, useState } from 'react';
 import {
     Alert,
+    Autocomplete,
     Box,
     Button,
     Dialog,
@@ -30,7 +31,8 @@ import {
     type FormConfigsPayload,
     type FormFieldDefinitionDto,
 } from '@/types/formConfig.types';
-import { groupSections, moduleFields } from '@/utils/formConfig';
+import { groupSections, isBuiltInCountryField, moduleFields } from '@/utils/formConfig';
+import { COUNTRY_OPTIONS, getCountryByCode, type CountryMasterItem } from '@/data/addressMaster';
 import { Badge, errorMessage, inputSx, primaryButtonSx, secondaryButtonSx } from './builderUi';
 
 export interface FieldEditorModalProps {
@@ -126,8 +128,12 @@ export function FieldEditorModal({ open, onClose, module, configs, field, defaul
 
     const fieldType = draft.fieldType;
     const choice = isChoice(fieldType);
-    /** An existing dropdown field (unless core-locked) can switch between single select and multi-select chips. */
-    const canSwitchChoice = !isCreate && !locked && isChoice(field!.fieldType);
+    /** Built-in fields keep their type and dropdown list (they map to fixed columns and system options). */
+    const builtIn = Boolean(field?.isSystem);
+    /** Address Country: the fixed ISO list; only its default country is configurable. */
+    const countryField = Boolean(field && isBuiltInCountryField(field));
+    /** An existing custom dropdown field can switch between single select and multi-select chips. */
+    const canSwitchChoice = !isCreate && !locked && !builtIn && isChoice(field!.fieldType);
     const typeOptions: readonly CustomFieldType[] = isCreate ? CUSTOM_FIELD_TYPES : canSwitchChoice ? ['select', 'multiselect'] : [fieldType as CustomFieldType];
 
     const validate = (): string | null => {
@@ -197,7 +203,7 @@ export function FieldEditorModal({ open, onClose, module, configs, field, defaul
                     defaultValue: draft.defaultValue.trim() || null,
                     ...(locked ? {} : { isRequired: draft.isRequired, isVisibleInForm: draft.isVisibleInForm }),
                     isVisibleInDrawer: draft.isVisibleInDrawer,
-                    ...(choice && draft.dropdownCategoryKey && draft.dropdownCategoryKey !== field!.dropdownCategoryKey
+                    ...(choice && !builtIn && draft.dropdownCategoryKey && draft.dropdownCategoryKey !== field!.dropdownCategoryKey
                         ? { dropdownCategoryKey: draft.dropdownCategoryKey }
                         : {}),
                 });
@@ -355,7 +361,23 @@ export function FieldEditorModal({ open, onClose, module, configs, field, defaul
                             slotProps={{ htmlInput: { maxLength: 200 } }}
                         />
                     </Box>
-                    {(
+                    {countryField ? (
+                        <Box>
+                            {label('Default Country')}
+                            <Autocomplete<CountryMasterItem>
+                                size="small"
+                                options={COUNTRY_OPTIONS as CountryMasterItem[]}
+                                value={getCountryByCode(draft.defaultValue) ?? null}
+                                onChange={(_, c) => set('defaultValue', c?.iso2Code ?? '')}
+                                getOptionLabel={(c) => c.countryName}
+                                getOptionKey={(c) => c.iso2Code}
+                                isOptionEqualToValue={(a, b) => a.iso2Code === b.iso2Code}
+                                renderInput={(params) => (
+                                    <TextField {...params} placeholder="No default (form's own)" sx={inputSx} helperText="Pre-selected on new records" />
+                                )}
+                            />
+                        </Box>
+                    ) : (
                         <Box>
                             {label('Default Value')}
                             <TextField
@@ -373,7 +395,14 @@ export function FieldEditorModal({ open, onClose, module, configs, field, defaul
                     )}
                 </Box>
 
-                {choice && (
+                {countryField && (
+                    <Alert severity="info" sx={{ mt: 2.5, borderRadius: '8px', fontSize: '0.8rem' }}>
+                        Countries come from the fixed ISO country list, so options can&apos;t be added or removed here. Pick the
+                        default country above.
+                    </Alert>
+                )}
+
+                {choice && !countryField && (
                     <Box sx={{ mt: 2.5, p: 2, borderRadius: '10px', border: '1px solid #e2e8f0', backgroundColor: '#f8fafc' }}>
                         <Typography sx={{ fontSize: '0.8rem', fontWeight: 700, color: '#1e293b', mb: 1 }}>Dropdown Options</Typography>
                         {isCreate && (
@@ -383,7 +412,17 @@ export function FieldEditorModal({ open, onClose, module, configs, field, defaul
                             </RadioGroup>
                         )}
                         {draft.optionsMode === 'existing' || !isCreate ? (
-                            <TextField select size="small" fullWidth value={draft.dropdownCategoryKey} onChange={(e) => set('dropdownCategoryKey', e.target.value)} sx={inputSx} label="Dropdown">
+                            <TextField
+                                select
+                                size="small"
+                                fullWidth
+                                value={draft.dropdownCategoryKey}
+                                onChange={(e) => set('dropdownCategoryKey', e.target.value)}
+                                disabled={builtIn}
+                                helperText={builtIn ? "Built-in fields keep their dropdown. Edit its options under Dropdowns." : undefined}
+                                sx={inputSx}
+                                label="Dropdown"
+                            >
                                 {categories.map((c) => (
                                     <MenuItem key={c.key} value={c.key} sx={{ fontSize: '0.85rem' }}>
                                         {c.label}

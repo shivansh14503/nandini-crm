@@ -168,6 +168,19 @@ function setCategoryLink(s: FormConfigsPayload, field: FormFieldDefinitionDto, k
 }
 
 /**
+ * Same rule as the API's updateField: a dropdown named after `field` (its old label) and used by it alone follows
+ * the rename (custom "Lead Type" → "Rating" renames its list too). Lists with a name of their own
+ * (e.g. "Lead Designation") or shared with other fields keep it.
+ */
+function renameOwnDropdown(s: FormConfigsPayload, field: FormFieldDefinitionDto, oldLabel: string): void {
+    const key = field.dropdownCategoryKey;
+    const category = key ? findCategoryByKey(s, key) : undefined;
+    if (!category || category.label.trim().toLowerCase() !== oldLabel.trim().toLowerCase()) return;
+    if (allFields(s).some((f) => f.id !== field.id && f.dropdownCategoryKey === key)) return;
+    category.label = field.label;
+}
+
+/**
  * What happens to a dropdown when `removed` (a field linked to it) is deleted. Same rule as the API's deleteField:
  * an admin-created dropdown no other field uses is deleted; one other modules still use is handed over to them
  * (their module, or `shared` when several), so it stops listing under the removed field's module.
@@ -298,7 +311,7 @@ function applyOp(s: FormConfigsPayload, op: DraftOp): void {
             const field = findFieldById(s, op.fieldId);
             if (!field) return;
             const p = op.payload;
-            const before = { tabKey: field.tabKey, sectionKey: field.sectionKey };
+            const before = { tabKey: field.tabKey, sectionKey: field.sectionKey, label: field.label };
             if (p.label !== undefined) field.label = p.label;
             if (p.fieldType !== undefined) field.fieldType = p.fieldType;
             if (p.tabKey !== undefined) field.tabKey = p.tabKey;
@@ -315,6 +328,7 @@ function applyOp(s: FormConfigsPayload, op: DraftOp): void {
             if (p.isVisibleInDrawer !== undefined) field.isVisibleInDrawer = p.isVisibleInDrawer;
             if (p.isActive !== undefined) field.isActive = p.isActive;
             if (p.dropdownCategoryKey !== undefined) setCategoryLink(s, field, p.dropdownCategoryKey);
+            if (field.label !== before.label) renameOwnDropdown(s, field, before.label);
             if (field.tabKey !== before.tabKey || field.sectionKey !== before.sectionKey) {
                 const target = s.fieldsByModule[field.module].find((f) => f.id !== field.id && f.tabKey === field.tabKey && f.sectionKey === field.sectionKey);
                 if (target && p.sectionLabel === undefined) field.sectionLabel = target.sectionLabel;

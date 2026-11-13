@@ -4,13 +4,11 @@ import {
     optionalString,
     optionalText,
     refinePostalCodeForCountry,
-    requiredPhoneSchema,
-    requiredString,
     requiredText,
     zodGstOptional,
     zodIfscOptional,
     zodPanOptional,
-    zodPostalCode,
+    zodPhoneOptional,
     zodPostalCodeOptional,
     customFieldsSchema,
 } from './common';
@@ -21,15 +19,15 @@ const WEBSITE_MAX = 200;
 const BANK_BRANCH_MAX = 150;
 
 /**
- * Partner Company form. Address rules match the organization form, since both use `RhfAddressSection` with the
- * billing column required (street, city, state, postal code).
+ * Partner Company form. Only the Partner Name is locked (docs/field-locking-policy.md); Nature of Partner, Office
+ * Phone and the billing address are required by the form configuration, which useRhfForm applies on top.
  */
 export const partnerCompanyFormSchema = z
     .object({
         // Company information
         companyName: requiredText('Partner Name', L.organizationName),
-        natureOfPartner: requiredString('Nature of Partner'),
-        phone: requiredPhoneSchema('Office Phone'),
+        natureOfPartner: optionalString,
+        phone: zodPhoneOptional,
         website: optionalText('Website', WEBSITE_MAX),
         emailAddresses: z
             .array(corporateEmailSchema)
@@ -49,11 +47,11 @@ export const partnerCompanyFormSchema = z
         bankIfscCode: zodIfscOptional,
 
         // Billing address
-        billingAddress: requiredText('Billing Street', L.address),
+        billingAddress: optionalText('Billing Street', L.address),
         billingStreet: optionalText('Billing Street', L.address),
-        billingCity: requiredText('Billing City', L.shortText),
-        billingState: requiredText('Billing State', L.shortText),
-        billingPostalCode: zodPostalCode,
+        billingCity: optionalText('Billing City', L.shortText),
+        billingState: optionalText('Billing State', L.shortText),
+        billingPostalCode: zodPostalCodeOptional,
         billingCountry: optionalString.default('IN'),
 
         // Shipping address
@@ -76,7 +74,7 @@ export const partnerCompanyFormSchema = z
         customFields: customFieldsSchema,
     })
     .superRefine((data, ctx) => {
-        refinePostalCodeForCountry(ctx, 'billingPostalCode', data.billingPostalCode, data.billingCountry, true);
+        refinePostalCodeForCountry(ctx, 'billingPostalCode', data.billingPostalCode, data.billingCountry);
         if (!data.copyAddressFromBilling) {
             refinePostalCodeForCountry(ctx, 'shippingPostalCode', data.shippingPostalCode, data.shippingCountry);
         }

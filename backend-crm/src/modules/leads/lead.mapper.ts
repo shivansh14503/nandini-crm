@@ -1,5 +1,5 @@
 import type { EntityEmail, Lead, Prisma } from '../../generated/prisma/client.js';
-import { fromDateOnly, nullable, parseCustomFields, parseStringArray, serializeCustomFields, stringifyStringArray, text, toDateOnly, toIso, toIsoOrUndefined } from '../../utils/mappers.js';
+import { fromDateOnly, fromOptionalDateOnly, nullable, parseCustomFields, parseStringArray, serializeCustomFields, stringifyStringArray, text, toDateOnly, toIso, toIsoOrUndefined } from '../../utils/mappers.js';
 import { toEmailDtos, type CorporateEmailDto } from '../shared/entityEmails.js';
 import type { LeadInput } from './lead.validator.js';
 
@@ -13,6 +13,7 @@ export interface LeadDto {
     mobile: string;
     emailAddresses: CorporateEmailDto[];
     mailingName: string;
+    tradeName: string;
     designation: string;
     leadSource: string;
     productCategory: string[];
@@ -62,14 +63,15 @@ export function toLeadDto(row: LeadRow): LeadDto {
         id: row.id,
         leadCode: row.leadCode,
         name: row.name,
-        mobile: row.mobile,
+        mobile: text(row.mobile),
         emailAddresses: toEmailDtos(row.emailAddresses),
         mailingName: text(row.mailingName),
+        tradeName: text(row.tradeName),
         designation: text(row.designation),
-        leadSource: row.leadSource,
+        leadSource: text(row.leadSource),
         productCategory: parseStringArray(row.productCategoryJson),
         followupType: text(row.followupType),
-        addDescription: row.addDescription,
+        addDescription: text(row.addDescription),
         registrationType: text(row.registrationType),
         gstNo: text(row.gstNo),
         turnover: text(row.turnover),
@@ -77,7 +79,7 @@ export function toLeadDto(row: LeadRow): LeadDto {
         otherPhone: text(row.otherPhone),
         organizationName: text(row.organizationName),
         department: text(row.department),
-        leadType: row.leadType,
+        leadType: text(row.leadType),
         status: row.status,
         nextFollowupDate: toDateOnly(row.nextFollowupDate),
         nextFollowupTime: text(row.nextFollowupTime),
@@ -133,14 +135,16 @@ export function toLeadData(input: LeadInput): Omit<Prisma.LeadUncheckedCreateInp
     return {
         customDataJson: serializeCustomFields(input.customFields),
         name: input.name,
-        mobile: input.mobile,
+        mobile: nullable(input.mobile),
         // Mailing name always follows the organization name (read-only in the form).
         mailingName: nullable(input.organizationName),
+        // Trade name defaults to the organization name, as on organizations.
+        tradeName: nullable(input.tradeName) ?? nullable(input.organizationName),
         designation: nullable(input.designation),
-        leadSource: input.leadSource,
+        leadSource: nullable(input.leadSource),
         productCategoryJson: stringifyStringArray(input.productCategory),
         followupType: input.followupType ?? 'Call',
-        addDescription: input.addDescription,
+        addDescription: nullable(input.addDescription),
         registrationType: nullable(input.registrationType),
         gstNo: input.registrationType === 'Registered' ? nullable(input.gstNo?.toUpperCase()) : null,
         turnover: nullable(input.turnover),
@@ -148,9 +152,9 @@ export function toLeadData(input: LeadInput): Omit<Prisma.LeadUncheckedCreateInp
         otherPhone: input.otherPhone ?? null,
         organizationName: nullable(input.organizationName),
         department: nullable(input.department),
-        leadType: input.leadType,
+        leadType: nullable(input.leadType),
         status: input.status,
-        nextFollowupDate: fromDateOnly(input.nextFollowupDate),
+        nextFollowupDate: fromOptionalDateOnly(input.nextFollowupDate),
         nextFollowupTime: nullable(input.nextFollowupTime),
         description: nullable(input.description),
         noOfEmployee: nullable(input.noOfEmployee),

@@ -5,8 +5,12 @@ import { Box, Button, FormHelperText, Typography } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
 import { useController, type FieldValues } from 'react-hook-form';
 import { EmailRow } from '../EmailRow';
-import { fieldSizeSx } from '../fieldSizing';
+import { fieldSizeSx, type FieldSize } from '../fieldSizing';
 import { useFormMode } from '@/context/FormModeContext';
+import { useFieldOverride } from '@/context/FormConfigContext';
+
+/** Width of the email cards when the form builder leaves Width on "Auto". */
+const DEFAULT_SIZE: FieldSize = 'lg';
 import type { CorporateEmail } from '@/types/organization.types';
 
 export interface RhfEmailListProps {
@@ -14,6 +18,14 @@ export interface RhfEmailListProps {
     name?: string;
     label?: string;
     required?: boolean;
+    hint?: React.ReactNode;
+    /** Placeholder of each address input. */
+    placeholder?: string;
+    /**
+     * Width token, for renderers outside a module form (the builder preview passes the admin's choice). Inside a
+     * module form the form builder's Width wins; "Auto" (or none) keeps `lg`.
+     */
+    fieldSize?: FieldSize | null;
     /** Informational (non-error) notes keyed by lowercased email address, shown under the matching row. */
     emailNotices?: Record<string, React.ReactNode>;
 }
@@ -24,11 +36,32 @@ export interface RhfEmailListProps {
  */
 export function RhfEmailList({
     name = 'emailAddresses',
-    label = 'Email Address',
-    required,
+    label: baseLabel = 'Email Address',
+    required: baseRequired,
+    hint: baseHint,
+    placeholder: basePlaceholder,
+    fieldSize: baseSize,
     emailNotices,
 }: RhfEmailListProps) {
     const { field, fieldState } = useController<FieldValues>({ name });
+    // Form builder settings for this field: label, hint, placeholder, width, required (only tightened), visibility.
+    const override = useFieldOverride(name, {
+        label: baseLabel,
+        required: baseRequired,
+        hint: baseHint,
+        placeholder: basePlaceholder,
+        fieldSize: DEFAULT_SIZE,
+    });
+    const label = override?.label ?? baseLabel;
+    const required = override?.required ?? baseRequired;
+    const hint = override ? override.hint : baseHint;
+    const placeholder = (override ? override.placeholder : basePlaceholder) || undefined;
+    // "Auto" keeps the card width that fits an address plus its flags.
+    const size: FieldSize = override
+        ? override.sizeIsAuto
+            ? DEFAULT_SIZE
+            : (override.fieldSize ?? DEFAULT_SIZE)
+        : (baseSize ?? DEFAULT_SIZE);
     const rows: CorporateEmail[] = Array.isArray(field.value) ? field.value : [];
 
     const errorMessage =
@@ -67,20 +100,28 @@ export function RhfEmailList({
         commit(next);
     };
 
-    if (isView && rows.length === 0) return null;
+    if (override?.hidden || (isView && rows.length === 0)) return null;
 
     return (
         // Capped so the email cards (address + flags) don't stretch across wide layouts.
-        <Box sx={{ mb: 1, ...fieldSizeSx('lg') }}>
-            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
-                <Typography sx={{ fontWeight: 600, color: '#374151', fontSize: '0.82rem' }}>
-                    {label}
-                    {required && (
-                        <Box component="span" sx={{ color: '#ef4444', ml: 0.4 }}>
-                            *
-                        </Box>
+        // A grid cell like any other field: `data-field-size="full"` makes FormGrid span the whole row.
+        <Box data-field={name} data-field-size={size} sx={{ mb: 1, minWidth: 0, ...fieldSizeSx(size) }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1, mb: 1 }}>
+                <Box sx={{ display: 'flex', alignItems: 'baseline', gap: 1, minWidth: 0 }}>
+                    <Typography sx={{ fontWeight: 600, color: '#374151', fontSize: '0.82rem', whiteSpace: 'nowrap' }}>
+                        {label}
+                        {required && (
+                            <Box component="span" sx={{ color: '#ef4444', ml: 0.4 }}>
+                                *
+                            </Box>
+                        )}
+                    </Typography>
+                    {hint && !isView && (
+                        <Typography variant="caption" noWrap sx={{ color: '#9ca3af', fontSize: '0.72rem' }}>
+                            {hint}
+                        </Typography>
                     )}
-                </Typography>
+                </Box>
                 {!isView && (
                 <Button
                     size="small"
@@ -111,6 +152,7 @@ export function RhfEmailList({
                     onChange={(updated) => handleChange(index, updated)}
                     onRemove={() => handleRemove(index)}
                     notice={emailNotices?.[(row.email ?? '').trim().toLowerCase()]}
+                    placeholder={placeholder}
                 />
             ))}
 

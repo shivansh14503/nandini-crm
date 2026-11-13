@@ -22,6 +22,9 @@ export const toIsoOrUndefined = (value: Date | null | undefined): string | undef
 export const toDateOnly = (value: Date | null | undefined): string => (value ? value.toISOString().slice(0, 10) : '');
 
 /** `YYYY-MM-DD` (or full ISO) → Date at UTC midnight for `@db.Date` columns. */
+/** `fromDateOnly` for an optional date: blank / missing → null (clears the column). */
+export const fromOptionalDateOnly = (value: string | null | undefined): Date | null => (value ? fromDateOnly(value) : null);
+
 export function fromDateOnly(value: string): Date {
     const date = new Date(/^\d{4}-\d{2}-\d{2}$/.test(value) ? `${value}T00:00:00.000Z` : value);
     if (Number.isNaN(date.getTime())) throw new Error(`Invalid date: ${value}`);

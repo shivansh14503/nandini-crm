@@ -9,6 +9,7 @@ import { createOpportunityRecord } from '../opportunities/opportunity.service.js
 import { opportunityInputSchema } from '../opportunities/opportunity.validator.js';
 import type { OpportunityDto } from '../opportunities/opportunity.mapper.js';
 import { toOrganizationDto, type OrganizationDto } from '../organizations/organization.mapper.js';
+import { configuredRequiredIssues, loadModuleFieldConfig, throwFieldIssues } from '../form-configs/customFieldValidator.js';
 import { createOrganizationRecord, findLiveOrganization } from '../organizations/organization.service.js';
 import { organizationConversionSchema } from '../organizations/organization.validator.js';
 import { assertRecordAccess } from '../shared/accessControl.js';
@@ -27,6 +28,22 @@ export interface LeadConversionResult {
     contactCreated: boolean;
 }
 
+/** Organization built-in fields the Convert Lead form collects (fieldKey → convert form field). */
+const CONVERT_ORGANIZATION_PATHS: Record<string, string> = {
+    natureOfBusiness: 'natureOfBusiness',
+    typeOfEntity: 'typeOfEntity',
+    customerType: 'customerType',
+};
+
+/** Opportunity built-in fields the Convert Lead form collects (fieldKey → convert form field). */
+const CONVERT_OPPORTUNITY_PATHS: Record<string, string> = {
+    type: 'opportunityType',
+    leadSource: 'opportunityLeadSource',
+    productCategory: 'productCategory',
+    nextFollowupDate: 'nextFollowupDate',
+    addDescription: 'opportunityDescription',
+};
+
 const UNREGISTERED_TYPES = new Set(['unregistered', 'consumer']);
 const NEW_OPPORTUNITY_STAGE = 'Qualification';
 const NEW_OPPORTUNITY_COMMISSION = 'Nil / Direct (0%)';
@@ -43,6 +60,8 @@ function organizationPayload(values: ConvertLeadInput, lead: LeadRow) {
     return {
         organizationName: values.organizationName,
         mailingName: values.mailingName,
+        // Carry over a trade name the user set on the lead; otherwise the organization defaults it to its name.
+        tradeName: lead.tradeName && lead.tradeName !== lead.organizationName ? lead.tradeName : undefined,
         natureOfBusiness: values.natureOfBusiness,
         accountStatus: 'Active',
         typeOfEntity: values.typeOfEntity,
@@ -89,16 +108,16 @@ function contactPayload(values: ConvertLeadInput, organization: OrganizationDto)
  * may leave empty: Add Description falls back to the lead's (required) description, and Lead Given By to the
  * lead's creator.
  */
-function opportunityPayload(values: ConvertLeadInput, lead: LeadRow, organization: OrganizationDto, contact: ContactDto) {
+function opportunityPayload(values: ConvertLeadInput, lead: LeadRow, organization: OrganizationDto | null, contact: ContactDto | null) {
     const primaryEmail = normalizeEmails(values.contactEmails).find((row) => row.isPrimary)?.email;
     const description = values.opportunityDescription;
     return {
         productCategory: values.productCategory,
-        contactName: contact.name,
-        contactId: contact.id,
-        organizationName: organization.organizationName,
-        organizationId: organization.id,
-        contactNumber: contact.mobile,
+        contactName: contact?.name,
+        contactId: contact?.id,
+        organizationName: organization?.organizationName,
+        organizationId: organization?.id,
+        contactNumber: contact?.mobile,
         emailAddress: primaryEmail,
         referredBy: values.referredBy,
         type: values.opportunityType,
@@ -108,7 +127,7 @@ function opportunityPayload(values: ConvertLeadInput, lead: LeadRow, organizatio
         nextFollowupDate: values.nextFollowupDate,
         nextFollowupTime: values.nextFollowupTime,
         followupType: values.followupType,
-        addDescription: description && description.length >= 3 ? description : lead.addDescription,
+        addDescription: description && description.length >= 3 ? description : (lead.addDescription ?? undefined),
         description,
         assignedTo: values.opportunityAssignedTo,
         commission: NEW_OPPORTUNITY_COMMISSION,
@@ -125,6 +144,8 @@ function opportunityPayload(values: ConvertLeadInput, lead: LeadRow, organizatio
  */
 export async function convertLead(leadId: string, body: unknown, user: AuthUser): Promise<LeadConversionResult> {
     const values = convertLeadSchema.parse(body);
+    // Loaded before the transaction (a cache miss queries through the shared client).
+    const [organizationConfig, opportunityConfig] = await Promise.all([loadModuleFieldConfig('organizations'), loadModuleFieldConfig('opportunities')]);
 
     const result = await runSerializable(async (tx) => {
         await lockRecords(tx, 'lead', [leadId]);
@@ -134,6 +155,13 @@ export async function convertLead(leadId: string, body: unknown, user: AuthUser)
         if (lead.status === CONVERTED_STATUS) throw HttpError.conflict('This lead has already been converted.');
 
         const existingOrganization = await findLiveOrganization(tx, values.organizationName, values.existingOrganizationId);
+        // Fields the admin made required on the organization / opportunity forms, as the Convert Lead form names them.
+        const opportunityIssues = configuredRequiredIssues(opportunityConfig, opportunityPayload(values, lead, null, null), CONVERT_OPPORTUNITY_PATHS);
+        const organizationIssues = existingOrganization
+            ? []
+            : configuredRequiredIssues(organizationConfig, organizationPayload(values, lead), CONVERT_ORGANIZATION_PATHS);
+        throwFieldIssues([...organizationIssues, ...opportunityIssues]);
+
         const organization = existingOrganization
             ? toOrganizationDto(existingOrganization, { isMyAccount: existingOrganization.assignedUser === user.username, isRecentlyViewed: false })
             : await createOrganizationRecord(tx, organizationConversionSchema.parse(organizationPayload(values, lead)), user);

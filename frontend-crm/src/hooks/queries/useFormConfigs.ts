@@ -78,6 +78,8 @@ export interface ConfiguredFieldProps {
     /** value → label for options whose label differs from the stored value. */
     optionLabels?: Record<string, string>;
     hidden: boolean;
+    /** The admin left Width on "Auto": the field sizes itself to its content instead of a fixed token. */
+    sizeIsAuto: boolean;
 }
 
 /**
@@ -90,7 +92,7 @@ export function resolveConfiguredFieldProps(
     defaults: ConfiguredFieldDefaults,
 ): ConfiguredFieldProps {
     if (!field) {
-        return { ...defaults, options: defaults.options ? [...defaults.options] : undefined, hidden: false };
+        return { ...defaults, options: defaults.options ? [...defaults.options] : undefined, hidden: false, sizeIsAuto: false };
     }
     const category = findCategory(configs, field.dropdownCategoryKey);
     return {
@@ -102,6 +104,7 @@ export function resolveConfiguredFieldProps(
         options: category ? activeOptionValues(category) : defaults.options ? [...defaults.options] : undefined,
         optionLabels: optionLabelMap(category),
         hidden: Boolean(field.isDeleted) || !field.isActive || !field.isVisibleInForm,
+        sizeIsAuto: !field.fieldSize,
     };
 }
 

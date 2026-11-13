@@ -606,10 +606,12 @@ interface FieldSpec {
     key: string;
     label: string;
     type: FieldType;
-    /** Required in the form and API (implies core-locked). */
+    /** Locked and required: the system depends on it (identity, relation, ownership, logic). */
     req?: boolean;
-    /** Core-locked without being required (e.g. conditionally required). */
+    /** Locked without being required (e.g. conditionally required, or an identity the system falls back from). */
     lock?: boolean;
+    /** Required by default, but an admin may make it optional or hide it (docs/field-locking-policy.md). */
+    soft?: boolean;
     cat?: string;
 }
 
@@ -625,20 +627,26 @@ function section(module: CrmModuleKey, tabKey: string, sectionLabel: string, fie
         tabKey,
         sectionLabel,
         sortOrder: 0, // assigned per module below
-        isRequired: Boolean(f.req),
+        isRequired: Boolean(f.req || f.soft),
         isCoreLocked: Boolean(f.req || f.lock),
         dropdownCategoryKey: f.cat,
     }));
 }
 
-/** Country / State / City / PIN / Street of one address column (the shared address block of the forms). */
-function addressFields(prefix: string, required: boolean): FieldSpec[] {
+/**
+ * Country / State / City / PIN / Street of one address column (the shared address block of the forms).
+ * `locked`: required and locked; `soft`: required by default, an admin may relax it; `optional`: free.
+ */
+function addressFields(prefix: string, mode: 'locked' | 'soft' | 'optional'): FieldSpec[] {
+    const required: Partial<FieldSpec> = mode === 'locked' ? { req: true } : mode === 'soft' ? { soft: true } : {};
+    // A locked State is locked without the config flag (the backend requires it); a soft one is a plain default.
+    const state: Partial<FieldSpec> = mode === 'locked' ? { lock: true } : required;
     return [
-        sel(`${prefix}Country`, 'Country', undefined, { req: required }),
-        sel(`${prefix}State`, 'State / Region', undefined, { lock: required }),
-        t(`${prefix}City`, 'City', { req: required }),
-        t(`${prefix}PostalCode`, 'PIN / Postal Code', { type: 'pincode', req: required }),
-        t(`${prefix}Address`, 'Street', { type: 'textarea', req: required }),
+        sel(`${prefix}Country`, 'Country', undefined, required),
+        sel(`${prefix}State`, 'State / Region', undefined, state),
+        t(`${prefix}City`, 'City', required),
+        t(`${prefix}PostalCode`, 'PIN / Postal Code', { type: 'pincode', ...required }),
+        t(`${prefix}Address`, 'Street', { type: 'textarea', ...required }),
     ];
 }
 
@@ -646,13 +654,16 @@ const RAW_DEFAULT_FIELDS: DefaultField[] = [
     // ── Leads ──
     ...section('leads', 'overview', 'CONTACT PERSON', [
         t('name', 'Name', { req: true }),
-        t('mobile', 'Mobile', { type: 'phone', req: true }),
+        t('mobile', 'Mobile', { type: 'phone', soft: true }),
         t('otherPhone', 'Other Phone', { type: 'phone' }),
         sel('designation', 'Designation', 'lead_designation'),
         sel('department', 'Department', 'lead_department'),
+        // Repeatable email list (one row per address, with Primary / Opted out / Bounced flags).
+        t('emailAddresses', 'Email Address', { type: 'email' }),
     ]),
     ...section('leads', 'overview', 'ORGANIZATION', [
-        t('organizationName', 'Organization Name', { type: 'lookup' }),
+        t('organizationName', 'Organization Name'),
+        t('tradeName', 'Trade Name'),
         t('mailingName', 'Mailing Name'),
         sel('registrationType', 'Registration Type', 'lead_registration_type'),
         t('gstNo', 'GST Number', { type: 'uppercase', lock: true }),
@@ -660,21 +671,21 @@ const RAW_DEFAULT_FIELDS: DefaultField[] = [
         sel('noOfEmployee', 'No of Employee', 'lead_employee_range'),
     ]),
     ...section('leads', 'overview', 'PIPELINE & FOLLOW-UP', [
-        sel('leadSource', 'Lead Source', 'shared_lead_source', { req: true }),
-        sel('leadType', 'Lead Type', 'lead_type', { req: true }),
+        sel('leadSource', 'Lead Source', 'shared_lead_source', { soft: true }),
+        sel('leadType', 'Lead Type', 'lead_type', { soft: true }),
         sel('status', 'Status', 'lead_status'),
         t('referredBy', 'Referred By', { type: 'lookup' }),
         sel('followupType', 'Followup Type', 'shared_followup_type'),
-        t('nextFollowupDate', 'Next Followup Date', { type: 'datetime', req: true }),
+        t('nextFollowupDate', 'Next Followup Date', { type: 'datetime', soft: true }),
         t('assignedTo', 'Assigned to', { type: 'lookup', req: true }),
-        { key: 'productCategory', label: 'Product Category', type: 'multiselect', cat: 'shared_product_category', req: true },
+        { key: 'productCategory', label: 'Product Category', type: 'multiselect', cat: 'shared_product_category', soft: true },
     ]),
     ...section('leads', 'overview', 'NOTES', [
-        t('addDescription', 'Add Description', { type: 'textarea', req: true }),
+        t('addDescription', 'Add Description', { type: 'textarea', soft: true }),
         t('description', 'Description', { type: 'textarea' }),
     ]),
-    ...section('leads', 'address', 'PRIMARY ADDRESS', addressFields('primary', false)),
-    ...section('leads', 'address', 'OTHER ADDRESS', addressFields('other', false)),
+    ...section('leads', 'address', 'PRIMARY ADDRESS', addressFields('primary', 'optional')),
+    ...section('leads', 'address', 'OTHER ADDRESS', addressFields('other', 'optional')),
 
     // ── Contacts ──
     ...section('contacts', 'overview', 'Contact Details & Association', [
@@ -687,6 +698,7 @@ const RAW_DEFAULT_FIELDS: DefaultField[] = [
         t('phone3', 'Phone 3', { type: 'phone' }),
         t('phone4', 'Phone 4', { type: 'phone' }),
         t('phone5', 'Phone 5', { type: 'phone' }),
+        t('emailAddresses', 'Email Address', { type: 'email', soft: true }),
     ]),
     ...section('contacts', 'overview', 'Internal Assignment & Department Role', [
         sel('designation', 'Designation', 'contact_designation'),
@@ -700,11 +712,11 @@ const RAW_DEFAULT_FIELDS: DefaultField[] = [
     ...section('organizations', 'overview', 'Organization Details', [
         t('organizationName', 'Organization Name', { req: true }),
         t('tradeName', 'Trade Name'),
-        t('mailingName', 'Mailing Name', { lock: true }),
-        sel('natureOfBusiness', 'Nature of Business', 'org_nature_of_business', { req: true }),
-        sel('typeOfEntity', 'Type of Entity', 'org_type_of_entity', { req: true }),
-        sel('customerType', 'Customer Type', 'org_customer_type', { req: true }),
-        sel('accountStatus', 'Account Status', 'org_account_status', { lock: true }),
+        t('mailingName', 'Mailing Name'),
+        sel('natureOfBusiness', 'Nature of Business', 'org_nature_of_business', { soft: true }),
+        sel('typeOfEntity', 'Type of Entity', 'org_type_of_entity', { soft: true }),
+        sel('customerType', 'Customer Type', 'org_customer_type', { soft: true }),
+        sel('accountStatus', 'Account Status', 'org_account_status'),
         t('sapCodeTallyId', 'SAP Code / Tally ID'),
         t('showroomBranchCode', 'Showroom / Branch Code'),
         sel('sourceOfLead', 'Source of Lead', 'org_source_of_lead'),
@@ -715,8 +727,8 @@ const RAW_DEFAULT_FIELDS: DefaultField[] = [
         t('assignedUser', 'Assigned to (Account Executive)', { type: 'lookup', req: true }),
         t('description', 'Add Description & Scope', { type: 'textarea' }),
     ]),
-    ...section('organizations', 'address', 'Billing Address', addressFields('billing', true)),
-    ...section('organizations', 'address', 'Shipping Address', addressFields('shipping', false)),
+    ...section('organizations', 'address', 'Billing Address', addressFields('billing', 'soft')),
+    ...section('organizations', 'address', 'Shipping Address', addressFields('shipping', 'optional')),
     ...section('organizations', 'tax_bank', 'Tax Identification & Compliance', [
         sel('registrationType', 'Registration Type', 'org_registration_type', { req: true }),
         t('gstNo', 'GST Number', { type: 'uppercase', lock: true }),
@@ -738,16 +750,17 @@ const RAW_DEFAULT_FIELDS: DefaultField[] = [
     ...section('opportunities', 'basic', 'Primary Opportunity Details', [
         t('organizationName', 'Organization name', { type: 'lookup', req: true }),
         t('contactName', 'Contact', { type: 'lookup', req: true }),
+        t('emailAddress', 'Email Address', { type: 'email' }),
         t('referredBy', 'Referred By', { type: 'lookup' }),
-        t('leadGivenBy', 'Lead Given By', { type: 'lookup', req: true }),
-        sel('type', 'Type', 'opportunity_type', { req: true }),
-        sel('leadSource', 'Lead Source', 'shared_lead_source', { req: true }),
+        t('leadGivenBy', 'Lead Given By', { type: 'lookup', soft: true }),
+        sel('type', 'Type', 'opportunity_type', { soft: true }),
+        sel('leadSource', 'Lead Source', 'shared_lead_source', { soft: true }),
         sel('salesStage', 'Sales Stage', 'opportunity_sales_stage', { req: true }),
         sel('followupType', 'Followup Type', 'shared_followup_type'),
-        t('nextFollowupDate', 'Next Followup Date', { type: 'datetime', req: true }),
+        t('nextFollowupDate', 'Next Followup Date', { type: 'datetime', soft: true }),
         t('assignedTo', 'Assigned to', { type: 'lookup', req: true }),
-        { key: 'productCategory', label: 'Product Category', type: 'multiselect', cat: 'shared_product_category', req: true },
-        t('addDescription', 'Add Description', { type: 'textarea', req: true }),
+        { key: 'productCategory', label: 'Product Category', type: 'multiselect', cat: 'shared_product_category', soft: true },
+        t('addDescription', 'Add Description', { type: 'textarea', soft: true }),
         t('description', 'Description', { type: 'textarea' }),
     ]),
     ...section('opportunities', 'basic', 'Billing Details', [
@@ -755,7 +768,7 @@ const RAW_DEFAULT_FIELDS: DefaultField[] = [
         t('invoiceNo', 'Invoice No'),
         t('invoiceDate', 'Invoice Date', { type: 'date' }),
     ]),
-    ...section('opportunities', 'basic', 'Commission & Documentation', [sel('commission', 'Commission', 'opportunity_commission', { req: true })]),
+    ...section('opportunities', 'basic', 'Commission & Documentation', [sel('commission', 'Commission', 'opportunity_commission', { soft: true })]),
 
     // ── Quotations ──
     ...section('quotations', 'overview', 'OVERVIEW', [
@@ -763,7 +776,7 @@ const RAW_DEFAULT_FIELDS: DefaultField[] = [
         t('opportunityName', 'Opportunity', { req: true }),
         sel('company', 'Company', 'quote_company', { req: true }),
         t('quotationDate', 'Quotation Date', { type: 'date', req: true }),
-        sel('validationPeriod', 'Validation Period', 'quote_validation_period', { req: true }),
+        sel('validationPeriod', 'Validation Period', 'quote_validation_period', { soft: true }),
         t('validUntil', 'Valid Until', { type: 'date', req: true }),
         sel('quoteStage', 'Quote Stage', 'quote_stage', { req: true }),
         sel('preparedFor', 'Prepared For', undefined, { req: true }),
@@ -771,9 +784,9 @@ const RAW_DEFAULT_FIELDS: DefaultField[] = [
         t('otherRef', 'Other Ref.'),
     ]),
     ...section('quotations', 'overview', 'Terms & Payment', [
-        sel('termsAndCondition', 'Terms & Condition', 'quote_terms_template', { req: true }),
+        sel('termsAndCondition', 'Terms & Condition', 'quote_terms_template', { soft: true }),
         t('termsAndConditionDescription', 'Terms & Condition Description', { type: 'textarea' }),
-        sel('paymentTerms', 'Payment Terms', 'quote_payment_terms', { req: true }),
+        sel('paymentTerms', 'Payment Terms', 'quote_payment_terms', { soft: true }),
         t('paymentTermsDescription', 'Payment Terms Description', { type: 'textarea' }),
         t('remarks', 'Remarks', { type: 'textarea' }),
     ]),
@@ -785,8 +798,8 @@ const RAW_DEFAULT_FIELDS: DefaultField[] = [
         t('contactMobile', 'Contact Mobile No', { type: 'phone' }),
         t('contactEmail', 'Contact Email Address', { type: 'email' }),
     ]),
-    ...section('quotations', 'address', 'BILLING ADDRESS', addressFields('billing', true)),
-    ...section('quotations', 'address', 'SHIPPING ADDRESS', addressFields('shipping', false)),
+    ...section('quotations', 'address', 'BILLING ADDRESS', addressFields('billing', 'locked')),
+    ...section('quotations', 'address', 'SHIPPING ADDRESS', addressFields('shipping', 'optional')),
 
     // ── Products ──
     ...section('products', 'overview', 'Sale Information', [
@@ -816,14 +829,14 @@ const RAW_DEFAULT_FIELDS: DefaultField[] = [
         t('contactPersonName', 'Contact Person Name', { type: 'lookup', req: true }),
         t('contactNumber', 'Contact Number', { type: 'phone' }),
         t('contactEmail', 'Contact Email', { type: 'email' }),
-        t('natureOfCall', 'Nature Of Call', { type: 'lookup', req: true }),
+        t('natureOfCall', 'Nature Of Call', { type: 'lookup', soft: true }),
     ]),
     ...section('tickets', 'overview', 'Classification & SLA', [
-        sel('ticketPriority', 'Ticket Priority', 'ticket_priority', { req: true }),
+        sel('ticketPriority', 'Ticket Priority', 'ticket_priority', { soft: true }),
         sel('ticketStatus', 'Ticket Status', 'ticket_status'),
         sel('source', 'Source', 'ticket_source'),
         sel('supportType', 'Support Type', 'ticket_support_type'),
-        sel('supportMode', 'Support Mode', 'ticket_support_mode', { req: true }),
+        sel('supportMode', 'Support Mode', 'ticket_support_mode', { soft: true }),
         t('dueDate', 'Due Date', { type: 'datetime', req: true }),
         t('assignedTo', 'Assigned to', { type: 'lookup', req: true }),
     ]),
@@ -844,11 +857,12 @@ const RAW_DEFAULT_FIELDS: DefaultField[] = [
     // ── Partner companies ──
     ...section('partner-companies', 'company_info', 'Company Details', [
         t('companyName', 'Partner Name', { req: true }),
-        sel('natureOfPartner', 'Nature of Partner', 'partner_nature', { req: true }),
-        t('phone', 'Office Phone', { type: 'phone', req: true }),
+        sel('natureOfPartner', 'Nature of Partner', 'partner_nature', { soft: true }),
+        t('phone', 'Office Phone', { type: 'phone', soft: true }),
         t('website', 'Website'),
         t('assignedTo', 'Assigned to', { type: 'lookup' }),
         t('principalCompany', 'Principal Company', { type: 'lookup' }),
+        t('emailAddresses', 'Email Address', { type: 'email', req: true }),
         t('addDescription', 'Add Description', { type: 'textarea' }),
         t('description', 'Description', { type: 'textarea' }),
     ]),
@@ -858,8 +872,8 @@ const RAW_DEFAULT_FIELDS: DefaultField[] = [
         t('accountNumber', 'Account No'),
         t('bankIfscCode', 'IFSC Code', { type: 'uppercase' }),
     ]),
-    ...section('partner-companies', 'address', 'Billing Address', addressFields('billing', true)),
-    ...section('partner-companies', 'address', 'Shipping Address', addressFields('shipping', false)),
+    ...section('partner-companies', 'address', 'Billing Address', addressFields('billing', 'soft')),
+    ...section('partner-companies', 'address', 'Shipping Address', addressFields('shipping', 'optional')),
     ...section('partner-companies', 'statutory', 'Statutory & Tax Identification', [
         t('gstNo', 'GST Number', { type: 'uppercase' }),
         t('panNumber', 'PAN Number', { type: 'uppercase' }),

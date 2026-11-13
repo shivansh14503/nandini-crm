@@ -106,6 +106,15 @@ export const optionalText = (fieldName: string, max: number) =>
         .optional()
         .or(z.literal(''));
 
+/**
+ * "Add Description" on leads / opportunities: optional here (the form configuration decides whether it's
+ * required, see docs/field-locking-policy.md), but at least 3 characters when given.
+ */
+export const optionalDescription = (fieldName: string, max: number) =>
+    optionalText(fieldName, max).refine((value) => !value || value.length >= 3, {
+        message: `${fieldName} must be at least 3 characters.`,
+    });
+
 // ── Central DRY Zod Validation Dictionary ─────────────────────────────────────
 
 /** International phone in E.164 (legacy 10-digit Indian numbers are upgraded to +91). */
