@@ -13,6 +13,7 @@ import { assertTotalsMatch, calculateLineItems, lineItemsInclude, resolveProduct
 import { asPayload, checkModulePayload, loadModuleFieldConfig, validateModulePayload } from '../form-configs/customFieldValidator.js';
 import { assertAssigneeValid, assertRecordAccess, buildAccessScopeWhere } from '../shared/accessControl.js';
 import { assertReference } from '../shared/references.js';
+import { assertNotInPast, type PastCheck } from '../../validators/notInPast.js';
 import { codeSearchPrefix } from '../shared/searchTerms.js';
 import { lockRecords, runInTransaction, softDeleteData, type BulkDeleteResult } from '../shared/transactions.js';
 import { toQuotationData, toQuotationDto, type QuotationDto, type QuotationLinks } from './quotation.mapper.js';
@@ -96,6 +97,12 @@ function mergePatch(before: QuotationDto, patch: Record<string, unknown>): Recor
     return merged;
 }
 
+/** Quotation and validity dates can't be set in the past (unchanged stored values pass). */
+const quotationPastChecks = (input: { quotationDate: string; validUntil: string }, before?: QuotationDto): PastCheck[] => [
+    { kind: 'date', path: 'quotationDate', label: 'Quotation Date', value: input.quotationDate, previous: before?.quotationDate },
+    { kind: 'date', path: 'validUntil', label: 'Valid Until', value: input.validUntil, previous: before?.validUntil },
+];
+
 /**
  * Inserts a quotation (totals computed server-side) inside the caller's transaction and advances
  * the linked opportunity's stage. `create` verifies client totals first; the seed uses this directly.
@@ -166,6 +173,7 @@ export const quotationService = {
     async create(body: unknown, user: AuthUser): Promise<QuotationDto> {
         const input = quotationInputSchema.parse(body);
         input.customFields = await validateModulePayload('quotations', asPayload(body), input.customFields);
+        assertNotInPast(quotationPastChecks(input));
         assertTotalsMatch(asRecord(body), calculateLineItems(input.lineItems, input.lumpSumDiscount).totals);
 
         const { quotation, opportunityAdvanced } = await runInTransaction((tx) => createQuotationRecord(tx, input, user));
@@ -192,6 +200,7 @@ export const quotationService = {
                 submittedKeys: new Set(Object.keys(patch)),
                 previousCustomFields: before.customFields,
             });
+            assertNotInPast(quotationPastChecks(input, before));
             const computed = calculateLineItems(input.lineItems, input.lumpSumDiscount);
             assertTotalsMatch(patch, computed.totals);
 

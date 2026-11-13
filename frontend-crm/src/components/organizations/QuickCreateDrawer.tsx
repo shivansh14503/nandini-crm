@@ -48,7 +48,7 @@ const DEFAULT_QUICK_FORM = {
     billingStreet: '',
     billingCity: '',
     billingState: '',
-    assignedUser: 'mittal.sharma (You)',
+    assignedUser: '',
     accountStatus: 'Active',
 };
 

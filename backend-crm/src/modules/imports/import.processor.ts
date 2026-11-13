@@ -135,7 +135,8 @@ async function loadImportContext(data: ImportJobData): Promise<ImportContext> {
  * (the keys of `raw`): a field the template can't carry, such as a custom field, can't be required of a spreadsheet.
  */
 function checkRow(ctx: ImportContext, raw: Record<string, unknown>): void {
-    checkModulePayload(ctx.fieldConfig, raw, undefined, { submittedKeys: new Set(Object.keys(raw)) });
+    // Imports carry historical data, so custom dates before today are accepted.
+    checkModulePayload(ctx.fieldConfig, raw, undefined, { submittedKeys: new Set(Object.keys(raw)), allowPastDates: true });
 }
 
 /**

@@ -84,7 +84,7 @@ const DEFAULT_FORM: OrganizationFormData = {
     verifiedBy: '',
     activeAmc: false,
     activeCloud: false,
-    assignedUser: 'mittal.sharma',
+    assignedUser: '',
 
     // Billing Address
     billingAddress: '',
@@ -198,7 +198,7 @@ export default function OrganizationForm({
     // Lock is based on the status as last saved, so deactivating mid-edit doesn't lock the user out of their own unsaved change.
     const [persistedStatus, setPersistedStatus] = useState(initialData?.accountStatus ?? 'Active');
     const [activeTab, setActiveTab] = useState<TabKey>('overview');
-    const [audit, setAudit] = useState<{ createdAt?: string; createdBy?: string; updatedAt?: string }>({});
+    const [audit, setAudit] = useState<{ createdAt?: string; createdBy?: string; updatedAt?: string; updatedBy?: string }>({});
     const pendingFocusField = useRef<string | null>(null);
     // Values "Discard" resets to: blank for create, the last loaded record for edit.
     const baselineRef = useRef<OrganizationFormData>(startValues);
@@ -275,6 +275,7 @@ export default function OrganizationForm({
                         createdAt: found.createdAt,
                         createdBy: found.createdBy,
                         updatedAt: found.updatedAt,
+                        updatedBy: found.updatedBy,
                     });
                     baselineRef.current = { ...DEFAULT_FORM, ...normalized };
                     setPersistedStatus(normalized.accountStatus);

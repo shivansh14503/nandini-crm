@@ -5,15 +5,11 @@ import {
     Box,
     TextField,
     Chip,
-    MenuItem,
-    Select,
-    FormControl,
     InputAdornment,
     Divider,
 } from '@mui/material';
 import ArticleOutlinedIcon from '@mui/icons-material/ArticleOutlined';
 import CalendarTodayOutlinedIcon from '@mui/icons-material/CalendarTodayOutlined';
-import AccessTimeOutlinedIcon from '@mui/icons-material/AccessTimeOutlined';
 import CheckIcon from '@mui/icons-material/Check';
 import ReceiptLongOutlinedIcon from '@mui/icons-material/ReceiptLongOutlined';
 import MonetizationOnOutlinedIcon from '@mui/icons-material/MonetizationOnOutlined';
@@ -33,6 +29,8 @@ import {
     RhfEmailField,
 } from '@/components/forms';
 import { UserLookupModal } from '@/components/common/lookup';
+import { TimeSlotSelect } from '@/components/forms/TimeSlotSelect';
+import { localToday } from '@/utils/pastDates';
 import type { OpportunityFormData } from '@/types/opportunity.types';
 import {
     OPPORTUNITY_SALES_STAGES,
@@ -220,29 +218,15 @@ export function OpportunityBasicSection({ form, setField }: OpportunityBasicSect
                             type="date"
                             value={form.nextFollowupDate}
                             onChange={(e) => setField('nextFollowupDate', e.target.value)}
-                            slotProps={calendarAdornment}
+                            slotProps={{ ...calendarAdornment, htmlInput: { min: localToday() } }}
                             sx={fieldSx}
                         />
-                        <FormControl size="small" fullWidth sx={fieldSx}>
-                            <Select
-                                value={form.nextFollowupTime || '11:00 AM'}
-                                onChange={(e) => setField('nextFollowupTime', e.target.value)}
-                                startAdornment={
-                                    <InputAdornment position="start">
-                                        <AccessTimeOutlinedIcon sx={{ fontSize: 16, color: '#64748b' }} />
-                                    </InputAdornment>
-                                }
-                            >
-                                <MenuItem value="09:30 AM">09:30 AM</MenuItem>
-                                <MenuItem value="10:00 AM">10:00 AM</MenuItem>
-                                <MenuItem value="11:00 AM">11:00 AM</MenuItem>
-                                <MenuItem value="12:00 PM">12:00 PM</MenuItem>
-                                <MenuItem value="02:30 PM">02:30 PM</MenuItem>
-                                <MenuItem value="03:30 PM">03:30 PM</MenuItem>
-                                <MenuItem value="04:30 PM">04:30 PM</MenuItem>
-                                <MenuItem value="05:30 PM">05:30 PM</MenuItem>
-                            </Select>
-                        </FormControl>
+                        <TimeSlotSelect
+                            value={form.nextFollowupTime || ''}
+                            onChange={(value) => setField('nextFollowupTime', value)}
+                            date={form.nextFollowupDate}
+                            ariaLabel="Next followup time"
+                        />
                     </Box>
                 </FormField>
 
@@ -413,7 +397,7 @@ export function OpportunityBasicSection({ form, setField }: OpportunityBasicSect
                         type="date"
                         value={form.invoiceDate || ''}
                         onChange={(e) => setField('invoiceDate', e.target.value)}
-                        slotProps={calendarAdornment}
+                        slotProps={{ ...calendarAdornment, htmlInput: { min: localToday() } }}
                         sx={fieldSx}
                     />
                 </FormField>

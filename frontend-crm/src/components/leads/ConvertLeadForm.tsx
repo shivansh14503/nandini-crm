@@ -1,5 +1,6 @@
 'use client';
 
+import { NO_PAST_DATES } from '@/utils/pastDates';
 import React, { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { FormProvider } from 'react-hook-form';
@@ -60,7 +61,7 @@ const EMPTY_DEFAULTS: ConvertLeadFormValues = {
     sourceOfLead: '',
     memberOf: '',
     organizationDescription: '',
-    organizationAssignedTo: 'mittal.sharma',
+    organizationAssignedTo: '',
 
     existingContactId: '',
     contactName: '',
@@ -73,18 +74,18 @@ const EMPTY_DEFAULTS: ConvertLeadFormValues = {
     communicationType: ['Call', 'Email'],
     doNotCall: false,
     contactDescription: '',
-    contactAssignedTo: 'mittal.sharma',
+    contactAssignedTo: '',
 
     productCategory: ['Biz Analyst'],
     principalCompany: '',
     referredBy: '',
     opportunityType: 'New Business',
-    nextFollowupDate: new Date(Date.now() + 86400000).toISOString().split('T')[0],
-    nextFollowupTime: '11:00 AM',
+    nextFollowupDate: '',
+    nextFollowupTime: '',
     followupType: 'Call',
     opportunityDescription: '',
     opportunityLeadSource: 'Website Enquiry',
-    opportunityAssignedTo: 'mittal.sharma',
+    opportunityAssignedTo: '',
     copyActivitiesTo: [],
 };
 
@@ -96,6 +97,7 @@ export function ConvertLeadForm({ leadId, breadcrumbItems }: ConvertLeadFormProp
     const { methods, toast, showToast, closeToast, createSubmitHandler } =
         useRhfForm<ConvertLeadFormValues>({
             schema: convertLeadFormSchema,
+            noPastDates: NO_PAST_DATES.followup,
             defaultValues: EMPTY_DEFAULTS,
             // An existing organization is linked as-is, so only a new one must meet the organization form's rules.
             extraRules: (values) =>

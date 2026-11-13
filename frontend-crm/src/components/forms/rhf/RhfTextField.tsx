@@ -14,6 +14,7 @@ import {
     type FieldSize,
     type FieldType,
 } from '../fieldSizing';
+import { localNow, localToday } from '@/utils/pastDates';
 
 /** Native date / time pickers: fixed-length display value plus the picker icon. */
 const PICKER_FIT: Record<string, FieldContentFit> = {
@@ -139,11 +140,15 @@ export function RhfTextField<T extends FieldValues>({
         inputProps.onChange?.(e);
     };
 
+    // Date pickers start at today: past days can't be picked anywhere in the CRM (forms also reject typed ones).
+    const pickerMin = inputProps.type === 'date' ? localToday() : inputProps.type === 'datetime-local' ? localNow() : undefined;
+    const resolvedMin = min ?? (existingHtmlInput.min as string | number | undefined) ?? pickerMin;
+
     const mergedSlotProps = {
         ...slotProps,
         htmlInput: {
             ...existingHtmlInput,
-            ...(min !== undefined ? { min } : {}),
+            ...(resolvedMin !== undefined ? { min: resolvedMin } : {}),
             ...(max !== undefined ? { max } : {}),
             ...(step !== undefined ? { step } : {}),
             ...(isNumeric

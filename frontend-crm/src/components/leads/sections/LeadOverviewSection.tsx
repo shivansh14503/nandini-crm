@@ -159,7 +159,8 @@ export function LeadOverviewSection({ leadId }: { leadId?: string } = {}) {
                             size="small"
                             value={organizationName}
                             placeholder="Same as organization name"
-                            sx={{ ...fieldSx, '& .MuiOutlinedInput-root': { backgroundColor: '#f8fafc', color: '#475569' } }}
+                            // Layered on fieldSx (not spread over it) so the input keeps the standard size and font.
+                            sx={[fieldSx, { '& .MuiOutlinedInput-root': { backgroundColor: '#f8fafc', color: '#475569' } }]}
                             slotProps={{
                                 htmlInput: { readOnly: true, tabIndex: -1, 'aria-readonly': true },
                                 input: {
@@ -206,7 +207,7 @@ export function LeadOverviewSection({ leadId }: { leadId?: string } = {}) {
                     />
                     <RhfSelect<LeadFormData> name="followupType" label="Followup Type" hint="Default: Call" options={FOLLOWUP_TYPES} placeholder="Select Type" />
                     <RhfDateTimeField<LeadFormData> dateName="nextFollowupDate" timeName="nextFollowupTime" label="Next Followup Date" required hint="Date & time" />
-                    <RhfLookup<LeadFormData> name="assignedTo" label="Assigned to" lookupType="user" required hint="Default: mittal.sharma" placeholder="Select Representative" />
+                    <RhfLookup<LeadFormData> name="assignedTo" label="Assigned to" lookupType="user" required placeholder="Select Representative" />
                     <RhfChipGroup<LeadFormData> name="productCategory" label="Product Category" required options={PRODUCT_CATEGORIES} />
                 </FormGrid>
             </Box>

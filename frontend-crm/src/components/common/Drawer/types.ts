@@ -1,6 +1,7 @@
 import React from 'react';
 import type { SxProps, Theme } from '@mui/material';
 import type { AuditEntityType } from '@/hooks/queries/useAuditLogs';
+import type { RecordAuditStamp } from './RecordAuditFooter';
 
 export interface DrawerTabItem {
     id: string;
@@ -76,6 +77,8 @@ export interface EntityDetailDrawerProps {
     children?: React.ReactNode;
     /** The record whose revision trail the 'Changes' tab loads; the tab is omitted without it. */
     auditEntity?: { type: AuditEntityType; id: string };
+    /** Created At / Last Modified stamps shown at the bottom of the overview tab only. */
+    recordAudit?: RecordAuditStamp;
     includeChangesTab?: boolean; // Default true: attaches the standardized 'Changes' tab (needs auditEntity)
     changesTabLabel?: string; // Default 'Changes'
     defaultTabIndex?: number;

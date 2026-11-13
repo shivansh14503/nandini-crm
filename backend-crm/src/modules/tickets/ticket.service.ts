@@ -12,6 +12,7 @@ import { parsePagination } from '../../utils/pagination.js';
 import { asPayload, checkModulePayload, loadModuleFieldConfig, validateModulePayload } from '../form-configs/customFieldValidator.js';
 import { assertAssigneeValid, assertRecordAccess, buildAccessScopeWhere } from '../shared/accessControl.js';
 import { findOrganizationByName, type PrefetchedLookups } from '../shared/prefetch.js';
+import { assertNotInPast, type PastCheck } from '../../validators/notInPast.js';
 import { codeSearchPrefix, phoneSearch, phoneWhere } from '../shared/searchTerms.js';
 import { lockRecords, runInTransaction, softDeleteData, type BulkDeleteResult } from '../shared/transactions.js';
 import { toTicketData, toTicketDto, type TicketDto } from './ticket.mapper.js';
@@ -74,6 +75,15 @@ async function resolveLinks(
 }
 
 /** Inserts a ticket inside the caller's transaction (used by `create` and the seed). */
+/** The due date-time can't be set in the past (an unchanged stored value passes, so overdue tickets stay editable). */
+const dueDateCheck = (input: { dueDate: string }, before?: TicketDto): PastCheck => ({
+    kind: 'dateTime',
+    path: 'dueDate',
+    label: 'Due Date',
+    value: input.dueDate,
+    previous: before?.dueDate,
+});
+
 export async function createTicketRecord(tx: TransactionClient, input: TicketInput, user: AuthUser, lookups: PrefetchedLookups = {}): Promise<TicketDto> {
     // Code first: its counter row lock queues concurrent creates before they take any other lock.
     const ticketNumber = await generateEntityCode(tx, 'TKT');
@@ -144,6 +154,7 @@ export const ticketService = {
     async create(body: unknown, user: AuthUser): Promise<TicketDto> {
         const input = ticketInputSchema.parse(body);
         input.customFields = await validateModulePayload('tickets', asPayload(body), input.customFields);
+        assertNotInPast([dueDateCheck(input)]);
         const created = await runInTransaction((tx) => createTicketRecord(tx, input, user));
         await cacheService.invalidateEntityCaches('tickets');
         return created;
@@ -164,6 +175,7 @@ export const ticketService = {
                 submittedKeys: new Set(Object.keys(patch)),
                 previousCustomFields: before.customFields,
             });
+            assertNotInPast([dueDateCheck(input, before)]);
             const natureOfCall = await resolveNatureOfCall(tx, input.natureOfCall, existing.natureOfCall);
             const links = await resolveLinks(tx, input);
             const assignedTo = (await assertAssigneeValid(tx, input.assignedTo, { previous: existing.assignedTo })) ?? existing.assignedTo;

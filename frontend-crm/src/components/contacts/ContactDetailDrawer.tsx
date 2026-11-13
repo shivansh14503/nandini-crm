@@ -462,6 +462,7 @@ export function ContactDetailDrawer({
                 ),
             }}
             auditEntity={{ type: 'contacts', id: c.id }}
+            recordAudit={c}
             includeChangesTab={true}
             statusText={leftJob ? 'Former employee' : 'Direct Channel Active'}
             primaryAction={{

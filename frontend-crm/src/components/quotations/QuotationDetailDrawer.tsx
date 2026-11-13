@@ -577,6 +577,7 @@ export function QuotationDetailDrawer({
                 address: renderAddress(),
             }}
             auditEntity={{ type: 'quotations', id: quotation.id }}
+            recordAudit={quotation}
             includeChangesTab={true}
         />
     );

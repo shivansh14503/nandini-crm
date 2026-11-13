@@ -84,6 +84,7 @@ export interface Ticket extends TicketFormData {
     createdAt: string;
     updatedAt: string;
     createdBy: string;
+    updatedBy?: string;
 }
 
 export const TICKET_PRIORITIES: TicketPriority[] = ['Low', 'Normal', 'High', 'Urgent'];

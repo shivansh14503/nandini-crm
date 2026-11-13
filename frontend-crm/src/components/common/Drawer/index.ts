@@ -1,5 +1,6 @@
 export * from './types';
 export * from './AuditTrailTimeline';
+export * from './RecordAuditFooter';
 export * from './DrawerPrimitives';
 export * from './DrawerStackContext';
 export * from './EntityDetailDrawer';

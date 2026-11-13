@@ -410,7 +410,8 @@ function OverviewTabInner({
                         fullWidth
                         size="small"
                         value={organizationName}
-                        sx={{ ...fieldSx, '& .MuiOutlinedInput-root': { backgroundColor: '#f8fafc', color: '#475569' } }}
+                        // Layered on fieldSx (not spread over it) so the input keeps the standard size and font.
+                        sx={[fieldSx, { '& .MuiOutlinedInput-root': { backgroundColor: '#f8fafc', color: '#475569' } }]}
                         slotProps={{
                             htmlInput: { readOnly: true, tabIndex: -1, 'aria-readonly': true },
                             input: {
@@ -546,10 +547,10 @@ function OverviewTabInner({
                 </FormField>
 
                 {/* ── Business profile ── */}
-                <FormField name="sourceOfLead" label="Source of Lead" size="md">
+                <FormField name="sourceOfLead" label="Lead Source" size="md">
                     <StyledSelect
-                        label="Source of Lead"
-                        placeholder="Select Source of Lead"
+                        label="Lead Source"
+                        placeholder="Select Lead Source"
                         value={form.sourceOfLead}
                         onChange={(v) => set('sourceOfLead', v as SourceOfLead)}
                         options={LEAD_SOURCES}

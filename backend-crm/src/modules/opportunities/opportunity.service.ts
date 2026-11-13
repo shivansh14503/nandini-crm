@@ -13,6 +13,7 @@ import { asPayload, checkModulePayload, loadModuleFieldConfig, validateModulePay
 import { assertAssigneeValid, assertRecordAccess, buildAccessScopeWhere } from '../shared/accessControl.js';
 import { findOrganizationByName, type PrefetchedLookups } from '../shared/prefetch.js';
 import { assertReference } from '../shared/references.js';
+import { assertNotInPast, nextFollowupCheck, type PastCheck } from '../../validators/notInPast.js';
 import { codeSearchPrefix, phoneSearch, phoneWhere } from '../shared/searchTerms.js';
 import { lockRecords, runInTransaction, softDeleteData, type BulkDeleteResult } from '../shared/transactions.js';
 import { toOpportunityData, toOpportunityDto, type OpportunityDto } from './opportunity.mapper.js';
@@ -90,6 +91,12 @@ async function replaceLineItems(tx: TransactionClient, opportunityId: string, in
  * Inserts an opportunity with its line items (totals computed server-side) inside the caller's
  * transaction. Used by `create` and by lead conversion; cache invalidation is the caller's job.
  */
+/** Dates users set on an opportunity can't be in the past (unchanged stored values pass). */
+const opportunityPastChecks = (input: OpportunityInput, before?: OpportunityDto): PastCheck[] => [
+    nextFollowupCheck(input, before),
+    { kind: 'date', path: 'invoiceDate', label: 'Invoice Date', value: input.invoiceDate, previous: before?.invoiceDate },
+];
+
 export async function createOpportunityRecord(
     tx: TransactionClient,
     input: OpportunityInput,
@@ -163,6 +170,7 @@ export const opportunityService = {
     async create(body: unknown, user: AuthUser): Promise<OpportunityDto> {
         const input = opportunityInputSchema.parse(body);
         input.customFields = await validateModulePayload('opportunities', asPayload(body), input.customFields);
+        assertNotInPast(opportunityPastChecks(input));
         const created = await runInTransaction((tx) => createOpportunityRecord(tx, input, user));
         await cacheService.invalidateEntityCaches('opportunities');
         return created;
@@ -186,6 +194,7 @@ export const opportunityService = {
                 submittedKeys: new Set(Object.keys(patch)),
                 previousCustomFields: before.customFields,
             });
+            assertNotInPast(opportunityPastChecks(input, before));
 
             const links = await resolveLinks(tx, input, existing);
             const assignedTo = (await assertAssigneeValid(tx, input.assignedTo, { previous: existing.assignedTo })) ?? existing.assignedTo;

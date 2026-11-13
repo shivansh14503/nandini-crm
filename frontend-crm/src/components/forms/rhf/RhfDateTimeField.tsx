@@ -3,12 +3,13 @@
 import React from 'react';
 import { Box, FormHelperText, InputAdornment, TextField } from '@mui/material';
 import CalendarTodayOutlinedIcon from '@mui/icons-material/CalendarTodayOutlined';
-import AccessTimeOutlinedIcon from '@mui/icons-material/AccessTimeOutlined';
 import { useController, type FieldPath, type FieldValues } from 'react-hook-form';
 import { FormField, fieldSx } from '../FormField';
 import { useFormMode } from '@/context/FormModeContext';
 import { ReadOnlyField } from '../ReadOnlyField';
 import type { FieldSize } from '../fieldSizing';
+import { TimeSlotSelect } from '../TimeSlotSelect';
+import { localNow, localToday } from '@/utils/pastDates';
 
 export interface RhfDateTimeFieldProps<T extends FieldValues> {
     dateName: FieldPath<T>;
@@ -65,7 +66,11 @@ export function RhfDateTimeField<T extends FieldValues>({
                     fullWidth
                     size="small"
                     error={Boolean(date.fieldState.error)}
-                    slotProps={adornment(<CalendarTodayOutlinedIcon sx={{ fontSize: 16, color: '#64748b' }} />)}
+                    slotProps={{
+                        ...adornment(<CalendarTodayOutlinedIcon sx={{ fontSize: 16, color: '#64748b' }} />),
+                        // Past dates and times are greyed out in the picker.
+                        htmlInput: { min: localNow() },
+                    }}
                     sx={fieldSx}
                 />
                 {error && <FormHelperText error>{error}</FormHelperText>}
@@ -93,19 +98,22 @@ export function RhfDateTimeField<T extends FieldValues>({
                     fullWidth
                     size="small"
                     error={Boolean(date.fieldState.error)}
-                    slotProps={adornment(<CalendarTodayOutlinedIcon sx={{ fontSize: 16, color: '#64748b' }} />)}
+                    slotProps={{
+                        ...adornment(<CalendarTodayOutlinedIcon sx={{ fontSize: 16, color: '#64748b' }} />),
+                        // Past days are greyed out in the picker (the form also rejects a typed past date).
+                        htmlInput: { min: localToday() },
+                    }}
                     sx={fieldSx}
                 />
                 {timeName && (
-                    <TextField
-                        {...time.field}
-                        value={time.field.value ?? ''}
-                        fullWidth
-                        size="small"
-                        placeholder="e.g. 11:30 AM"
+                    <TimeSlotSelect
+                        name={time.field.name}
+                        value={typeof time.field.value === 'string' ? time.field.value : ''}
+                        onChange={time.field.onChange}
+                        onBlur={time.field.onBlur}
+                        date={typeof date.field.value === 'string' ? date.field.value : ''}
                         error={Boolean(time.fieldState.error)}
-                        slotProps={adornment(<AccessTimeOutlinedIcon sx={{ fontSize: 16, color: '#64748b' }} />)}
-                        sx={fieldSx}
+                        ariaLabel={`${label} time`}
                     />
                 )}
             </Box>

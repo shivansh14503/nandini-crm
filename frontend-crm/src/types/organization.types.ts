@@ -91,16 +91,8 @@ export type NumberOfEmployees =
     // Open fallback keeps legacy stored/mock values compiling.
     | (string & Record<never, never>);
 
-export type SourceOfLead =
-    | 'Client Referral'
-    | 'Website Enquiry'
-    | 'Cold Call'
-    | 'Email Campaign'
-    | 'Exhibition / Trade Show'
-    | 'LinkedIn / Social Media'
-    | 'Partner Referral'
-    | 'Direct Customer'
-    | 'Other';
+/** A value of the lead form's Lead Source dropdown (`shared_lead_source`), which organizations share. */
+export type SourceOfLead = string;
 
 export interface CorporateEmail {
     id: string;
@@ -193,6 +185,7 @@ export interface Organization extends OrganizationFormData {
     createdAt: string;
     updatedAt: string;
     createdBy: string;
+    updatedBy?: string;
 }
 
 export interface ExtendedOrganization extends Organization {

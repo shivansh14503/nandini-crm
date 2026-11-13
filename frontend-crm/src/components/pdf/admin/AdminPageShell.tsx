@@ -20,12 +20,15 @@ export function AdminPageShell({
     children,
     maxWidth = 'xl',
     footer = true,
+    deniedMessage = 'Only administrators can manage PDF templates. Ask an Admin or Super Admin for access.',
 }: {
     breadcrumbs: BreadcrumbItem[];
     loadingMessage: string;
     children: React.ReactNode;
     maxWidth?: 'lg' | 'xl' | false;
     footer?: boolean;
+    /** Shown instead of the page to signed-in users who aren't administrators. */
+    deniedMessage?: string;
 }) {
     const router = useRouter();
     const { user, loading, error, clearError, isAuthenticated } = useAuth();
@@ -47,7 +50,7 @@ export function AdminPageShell({
                     children
                 ) : (
                     <Alert severity="warning" sx={{ borderRadius: '10px', fontSize: '13px' }}>
-                        Only administrators can manage PDF templates. Ask an Admin or Super Admin for access.
+                        {deniedMessage}
                     </Alert>
                 )}
             </Container>

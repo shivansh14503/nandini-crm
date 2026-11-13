@@ -56,6 +56,7 @@ export interface Lead extends LeadFormData {
     createdAt: string;
     updatedAt: string;
     createdBy: string;
+    updatedBy?: string;
 }
 
 // Option Lists based on reference screenshots & Nandini Infosys products

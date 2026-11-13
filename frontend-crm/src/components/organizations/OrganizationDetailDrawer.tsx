@@ -393,6 +393,7 @@ export function OrganizationDetailDrawer({
                 ),
             }}
             auditEntity={{ type: 'organizations', id: org.id }}
+            recordAudit={org}
             includeChangesTab={true}
             statusText={isActive ? 'Ready for Order Processing' : 'Inactive account'}
             primaryAction={{

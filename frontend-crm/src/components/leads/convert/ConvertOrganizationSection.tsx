@@ -24,7 +24,7 @@ type F = ConvertLeadFormValues;
 /** "Create Organization OR Select Organization" section of the Convert Lead form. */
 export function ConvertOrganizationSection() {
     const getOptions = useDropdownOptionsGetter();
-    const { control, setValue } = useFormContext<F>();
+    const { control, setValue, getValues } = useFormContext<F>();
     const organizationName = useWatch({ control, name: 'organizationName' });
 
     const { data: organizations = NO_ORGANIZATIONS } = useOrganizations();
@@ -46,10 +46,11 @@ export function ConvertOrganizationSection() {
         setValue('natureOfBusiness', existing.natureOfBusiness || '', opts);
         setValue('typeOfEntity', existing.typeOfEntity || '', opts);
         setValue('customerType', existing.customerType || '', opts);
-        setValue('sourceOfLead', existing.sourceOfLead || '', opts);
+        // An organization without a source of its own takes the lead's Lead Source.
+        setValue('sourceOfLead', existing.sourceOfLead || getValues('opportunityLeadSource') || '', opts);
         setValue('memberOf', existing.memberOfParentCorp ?? '', opts);
         setValue('organizationDescription', existing.description ?? '', opts);
-    }, [existing, setValue]);
+    }, [existing, setValue, getValues]);
 
     return (
         <>
@@ -77,7 +78,7 @@ export function ConvertOrganizationSection() {
                 <RhfSelect<F> name="typeOfEntity" label="Type of Entity" required options={getOptions('org_type_of_entity', ENTITY_TYPES)} placeholder="Select Type of Entity" />
                 <RhfSelect<F> name="customerType" label="Customer Type" required options={getOptions('org_customer_type', CUSTOMER_TYPES)} placeholder="Select Customer Type" />
 
-                <RhfSelect<F> name="sourceOfLead" label="Source of Lead" options={getOptions('org_source_of_lead', ORG_LEAD_SOURCES)} placeholder="Select Source of Lead" />
+                <RhfSelect<F> name="sourceOfLead" label="Lead Source" options={getOptions('shared_lead_source', ORG_LEAD_SOURCES)} placeholder="Select Lead Source" />
                 <RhfLookup<F> name="organizationAssignedTo" label="Assigned to" lookupType="user" required placeholder="Select representative" />
 
                 <RhfTextField<F> name="organizationDescription" label="Description" multiline minRows={3} placeholder="Notes about this organization..." />

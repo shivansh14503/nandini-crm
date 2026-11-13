@@ -67,7 +67,7 @@ const DEFAULT_FORM: ContactFormData = {
             isInvalidBounce: false,
         },
     ],
-    assignedTo: 'mittal.sharma',
+    assignedTo: '',
     isPrimaryContact: false,
     designation: '',
     department: '',

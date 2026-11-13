@@ -29,6 +29,7 @@ export interface Contact extends ContactFormData {
     createdAt: string;
     updatedAt: string;
     createdBy: string;
+    updatedBy?: string;
 }
 
 export const CONTACT_DESIGNATIONS: string[] = [

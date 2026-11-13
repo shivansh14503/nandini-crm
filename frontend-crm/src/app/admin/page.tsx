@@ -8,6 +8,7 @@ import AdminPanelSettingsOutlinedIcon from '@mui/icons-material/AdminPanelSettin
 import TuneOutlinedIcon from '@mui/icons-material/TuneOutlined';
 import PictureAsPdfOutlinedIcon from '@mui/icons-material/PictureAsPdfOutlined';
 import AccountTreeOutlinedIcon from '@mui/icons-material/AccountTreeOutlined';
+import FormatListNumberedOutlinedIcon from '@mui/icons-material/FormatListNumberedOutlined';
 import ManageAccountsOutlinedIcon from '@mui/icons-material/ManageAccountsOutlined';
 import SecurityOutlinedIcon from '@mui/icons-material/SecurityOutlined';
 import ArrowForwardRoundedIcon from '@mui/icons-material/ArrowForwardRounded';
@@ -56,6 +57,16 @@ const ADMIN_MODULES: AdminModule[] = [
         href: ROUTES.PDF_TEMPLATES,
         badge: BADGES.available,
         highlights: ['Templates', 'Field visibility', 'Live preview', 'Branding'],
+    },
+    {
+        key: 'document-series',
+        title: 'Document Series',
+        description:
+            'Control how record numbers are built (e.g. NIPL/L/26-27/1004): a common company prefix, module prefixes, financial year, suffix, digits and starting numbers.',
+        icon: <FormatListNumberedOutlinedIcon />,
+        href: ROUTES.DOCUMENT_SERIES,
+        badge: BADGES.available,
+        highlights: ['Company prefix', 'Financial year', 'Suffix', 'Numbering'],
     },
     {
         key: 'roles',

@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
     useForm,
     type DefaultValues,
@@ -16,7 +16,8 @@ import { getFirstErrorMessage } from '@/validations';
 import { focusFormField } from '@/utils/formFocus';
 import { getFormConfigs } from '@/services/masterData.store';
 import type { CrmModuleKey } from '@/types/formConfig.types';
-import { validateConfiguredFields, type ConfigValidationIssue } from '@/utils/formConfig';
+import { moduleFields, validateConfiguredFields, type ConfigValidationIssue } from '@/utils/formConfig';
+import { pastDateIssues, type PastDateField } from '@/utils/pastDates';
 import { useDropdownDefaults, withDropdownDefaults, type DropdownDefaultsOptions } from './useDropdownDefaults';
 
 export type FormToastState = {
@@ -45,6 +46,11 @@ export interface UseRhfFormOptions<T extends FieldValues> {
      * what the organization / opportunity configurations require). Read at validation time, like `module`.
      */
     extraRules?: (values: T) => ConfigValidationIssue[];
+    /**
+     * Built-in date / date-time fields that can't be set in the past. `module`'s custom date fields are added
+     * automatically. Values equal to the form's loaded defaults (an existing record's own dates) still pass.
+     */
+    noPastDates?: PastDateField[];
 }
 
 export interface UseRhfFormReturn<T extends FieldValues> {
@@ -66,17 +72,29 @@ export function useRhfForm<T extends FieldValues>({
     module,
     dropdownDefaults,
     extraRules,
+    noPastDates,
 }: UseRhfFormOptions<T>): UseRhfFormReturn<T> {
     // Read once, like useForm's own defaultValues. A configuration loading later is applied by useDropdownDefaults.
     const [initialValues] = useState(() =>
         module && dropdownDefaults?.enabled ? withDropdownDefaults(getFormConfigs(), module, defaultValues, dropdownDefaults.keep) : defaultValues,
     );
+    // The resolver reads the form's current defaults (updated by `reset` when an existing record loads), so an
+    // existing record's own past dates still validate. The ref is read only when validation runs, never in render.
+    const formRef = useRef<UseFormReturn<T> | null>(null);
+    /* eslint-disable react-hooks/refs -- `initial` is called by the resolver when validation runs, not during render */
     const methods = useForm<T>({
         // zod schemas with defaults have differing input/output types; the form works on the output shape.
-        resolver: withConfiguredFieldRules(zodResolver(schema as never) as unknown as Resolver<T>, module, extraRules),
+        resolver: withConfiguredFieldRules(zodResolver(schema as never) as unknown as Resolver<T>, module, extraRules, {
+            fields: noPastDates ?? [],
+            initial: () => formRef.current?.formState.defaultValues ?? initialValues,
+        }),
         defaultValues: initialValues,
         mode: 'onTouched',
     });
+    /* eslint-enable react-hooks/refs */
+    useEffect(() => {
+        formRef.current = methods;
+    }, [methods]);
     useDropdownDefaults(methods, module, { enabled: Boolean(dropdownDefaults?.enabled), keep: dropdownDefaults?.keep });
 
     const [toast, setToast] = useState<FormToastState>(CLOSED_TOAST);
@@ -121,13 +139,25 @@ function setNestedError(errors: Record<string, unknown>, path: string, message: 
  */
 function withConfiguredFieldRules<T extends FieldValues>(
     base: Resolver<T>,
-    module?: CrmModuleKey,
-    extraRules?: (values: T) => ConfigValidationIssue[],
+    module: CrmModuleKey | undefined,
+    extraRules: ((values: T) => ConfigValidationIssue[]) | undefined,
+    pastDates: { fields: PastDateField[]; initial: () => unknown },
 ): Resolver<T> {
-    if (!module && !extraRules) return base;
+    if (!module && !extraRules && pastDates.fields.length === 0) return base;
     return async (values, context, options) => {
         const result = await base(values, context, options);
-        const issues = [...(module ? validateConfiguredFields(getFormConfigs(), module, values) : []), ...(extraRules?.(values) ?? [])];
+        const configs = getFormConfigs();
+        // Admin-defined date fields of the module can't be set in the past either.
+        const customDates: PastDateField[] = module
+            ? moduleFields(configs, module)
+                  .filter((f) => !f.isSystem && f.isActive && f.fieldType === 'date')
+                  .map((f) => ({ name: `customFields.${f.fieldKey}`, label: f.label, kind: 'date' as const }))
+            : [];
+        const issues = [
+            ...(module ? validateConfiguredFields(configs, module, values) : []),
+            ...(extraRules?.(values) ?? []),
+            ...pastDateIssues([...pastDates.fields, ...customDates], values, pastDates.initial()),
+        ];
         if (issues.length === 0) return result;
         const errors = { ...(result.errors as Record<string, unknown>) };
         for (const issue of issues) setNestedError(errors, issue.path, issue.message);

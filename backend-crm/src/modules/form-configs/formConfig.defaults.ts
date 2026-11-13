@@ -124,7 +124,6 @@ export const APP_REQUIRED_CATEGORY_KEYS: ReadonlySet<string> = new Set([
     'org_nature_of_business',
     'org_type_of_entity',
     'org_customer_type',
-    'org_source_of_lead',
     'contact_designation',
     'contact_department',
     'contact_communication_type',
@@ -138,7 +137,7 @@ export const DEFAULT_CATEGORIES: DefaultCategory[] = [
         key: 'shared_lead_source',
         label: 'Lead Source',
         module: 'shared',
-        description: 'Where a lead or opportunity came from (Leads, Opportunities).',
+        description: 'Where a lead, opportunity or organization came from (Leads, Opportunities, Organizations).',
         options: [
             'Client Referral',
             'Website Enquiry',
@@ -347,21 +346,7 @@ export const DEFAULT_CATEGORIES: DefaultCategory[] = [
         module: 'organizations',
         options: ['Less than 20', '21 To 50', '51 To 100', '101 To 250', '251 To 500', '501 To 1000', '1001 & Above'],
     },
-    {
-        key: 'org_source_of_lead',
-        label: 'Source of Lead',
-        module: 'organizations',
-        options: [
-            'Client Referral',
-            'Website Enquiry',
-            'Cold Call',
-            'Email Campaign',
-            'Exhibition / Trade Show',
-            'LinkedIn / Social Media',
-            'Partner Referral',
-            'Other',
-        ],
-    },
+    // Organizations' Lead Source (sourceOfLead) shares the lead form's 'shared_lead_source' dropdown.
     {
         key: 'org_registration_type',
         label: 'GST Registration Type',
@@ -719,7 +704,7 @@ const RAW_DEFAULT_FIELDS: DefaultField[] = [
         sel('accountStatus', 'Account Status', 'org_account_status'),
         t('sapCodeTallyId', 'SAP Code / Tally ID'),
         t('showroomBranchCode', 'Showroom / Branch Code'),
-        sel('sourceOfLead', 'Source of Lead', 'org_source_of_lead'),
+        sel('sourceOfLead', 'Lead Source', 'shared_lead_source'),
         sel('annualTurnover', 'Annual Turnover', 'org_annual_turnover'),
         sel('numberOfEmployees', 'Number of Employees', 'org_employee_count'),
         t('memberOfParentCorp', 'Member of (Parent Corporation)', { type: 'lookup' }),

@@ -12,6 +12,7 @@ import { asPayload, checkModulePayload, loadModuleFieldConfig, validateModulePay
 import { assertAssigneeValid, assertRecordAccess, buildAccessScopeWhere } from '../shared/accessControl.js';
 import { emailsInclude, normalizeEmails, replaceEmails } from '../shared/entityEmails.js';
 import type { PrefetchedLookups } from '../shared/prefetch.js';
+import { assertNotInPast, nextFollowupCheck } from '../../validators/notInPast.js';
 import { codeSearchPrefix, phoneSearch, phoneVariants, phoneWhere } from '../shared/searchTerms.js';
 import { lockRecords, runInTransaction, softDeleteData, type BulkDeleteResult } from '../shared/transactions.js';
 import { toLeadData, toLeadDto, type LeadDto } from './lead.mapper.js';
@@ -131,6 +132,7 @@ export const leadService = {
         const input = leadInputSchema.parse(body);
         input.customFields = await validateModulePayload('leads', asPayload(body), input.customFields);
         assertStatusTransition(null, input.status);
+        assertNotInPast([nextFollowupCheck(input)]);
 
         const created = await runInTransaction((tx) => createLeadRecord(tx, input, user));
         await cacheService.invalidateEntityCaches('leads');
@@ -151,6 +153,7 @@ export const leadService = {
                 previousCustomFields: before.customFields,
             });
             assertStatusTransition(existing.status, input.status);
+            assertNotInPast([nextFollowupCheck(input, before)]);
             const assignedTo = (await assertAssigneeValid(tx, input.assignedTo, { previous: existing.assignedTo })) ?? existing.assignedTo;
 
             await tx.lead.update({ where: { id }, data: { ...toLeadData({ ...input, assignedTo }), updatedBy: user.username } });

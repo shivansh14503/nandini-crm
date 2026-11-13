@@ -207,6 +207,7 @@ export function PartnerCompanyDetailDrawer({ partnerCompany, open, onClose }: Pa
                 ),
             }}
             auditEntity={{ type: 'partner-companies', id: p.id }}
+            recordAudit={p}
             includeChangesTab
             statusText={p.natureOfPartner || 'Partner Company'}
             primaryAction={{ label: 'Edit Partner Company', onClick: handleEdit }}

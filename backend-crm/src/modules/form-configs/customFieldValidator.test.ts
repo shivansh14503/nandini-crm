@@ -119,7 +119,7 @@ describe('checkModulePayload: formats and rules', () => {
         ['amount', '1999.99', '-5'],
         ['percentage', '100', '101'],
         ['pincode', '110001', '1'],
-        ['date', '2026-11-06', '06/11/2026'],
+        ['date', '2099-11-06', '06/11/2099'],
         ['checkbox', false, 'yes'],
         ['multiselect', ['a'], 'a'],
     ];
@@ -161,6 +161,21 @@ describe('checkModulePayload: formats and rules', () => {
     it('applies rules to built-in fields an admin configured', () => {
         const config = configWith([field({ fieldKey: 'designation', label: 'Designation', isSystem: true, validationRules: { maxLength: 3 } })]);
         assert.equal(issuesOf(() => checkModulePayload(config, { designation: 'Chief' }, {}))[0].path[0], 'designation');
+    });
+});
+
+describe('checkModulePayload: past dates', () => {
+    const config = configWith([field({ fieldKey: 'cf_visit', label: 'Site Visit', fieldType: 'date' })]);
+    const now = '2026-11-13T15:10';
+
+    it('rejects a custom date before today and accepts today onwards', () => {
+        assert.equal(issuesOf(() => checkModulePayload(config, {}, { cf_visit: '2026-11-12' }, { now }))[0].message, 'Site Visit cannot be in the past.');
+        assert.doesNotThrow(() => checkModulePayload(config, {}, { cf_visit: '2026-11-13' }, { now }));
+    });
+
+    it('keeps an unchanged stored date and lets imports load past dates', () => {
+        assert.doesNotThrow(() => checkModulePayload(config, {}, { cf_visit: '2025-01-01' }, { now, previousCustomFields: { cf_visit: '2025-01-01' } }));
+        assert.doesNotThrow(() => checkModulePayload(config, {}, { cf_visit: '2025-01-01' }, { now, allowPastDates: true }));
     });
 });
 

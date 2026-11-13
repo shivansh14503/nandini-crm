@@ -1,5 +1,6 @@
 import { StatusCodes } from 'http-status-codes';
 import { HttpError, type ApiFieldError } from '../../utils/httpError.js';
+import { businessNow } from '../../validators/notInPast.js';
 import type { CrmModuleKey } from './formConfig.defaults.js';
 // Type-only: the service (and with it the Prisma client and env checks) is loaded on first use, so the pure checks
 // below import cleanly in unit tests.
@@ -46,6 +47,13 @@ export interface PayloadCheckOptions {
      * (stored values pass, as in the form), and values of since-archived options stay valid.
      */
     previousCustomFields?: Record<string, unknown>;
+    /**
+     * Accept custom date values before today. Imports load historical data and set this; forms and the API don't,
+     * so users can't pick a date that has already passed (stored values pass unchanged, see above).
+     */
+    allowPastDates?: boolean;
+    /** Business-timezone wall clock (`YYYY-MM-DDTHH:mm`) to compare dates with; defaults to now (tests pin it). */
+    now?: string;
 }
 
 const sameValue = (a: unknown, b: unknown) => a === b || JSON.stringify(a) === JSON.stringify(b);
@@ -236,7 +244,8 @@ export function checkModulePayload(
     customFields: Record<string, unknown> | undefined,
     options: PayloadCheckOptions = {},
 ): Record<string, unknown> {
-    const { submittedKeys, previousCustomFields } = options;
+    const { submittedKeys, previousCustomFields, allowPastDates } = options;
+    const today = (options.now ?? businessNow()).slice(0, 10);
     const input = customFields ?? {};
     const issues: ApiFieldError[] = [];
     const customDefs = new Map<string, FormFieldDefinitionDto>();
@@ -269,6 +278,9 @@ export function checkModulePayload(
             ruleError(field, value) ??
             (isCustom && (field.fieldType === 'select' || field.fieldType === 'multiselect')
                 ? optionError(field, value, previousCustomFields?.[field.fieldKey], config)
+                : undefined) ??
+            (isCustom && field.fieldType === 'date' && !allowPastDates && typeof value === 'string' && value.trim().slice(0, 10) < today
+                ? `${field.label} cannot be in the past.`
                 : undefined);
         if (message) issues.push({ path, message });
     }
