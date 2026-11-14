@@ -677,9 +677,11 @@ export function Navbar() {
 
     return (
         <AppBar
-            position="static"
+            // Sticky (not fixed) so it stays at the top while scrolling without pages needing a top offset.
+            position="sticky"
             elevation={0}
             sx={{
+                top: 0,
                 backgroundColor: '#FFFFFF',
                 borderBottom: '1px solid #E5E7EB',
                 zIndex: 1200,

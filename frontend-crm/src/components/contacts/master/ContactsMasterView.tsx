@@ -18,7 +18,7 @@ import { AppToast } from '../../common/AppToast';
 import { DataImportModal } from '../../common/import';
 import { RelatedModulesSidebar, RelatedRecordsTableView } from '../../common/Drawer';
 import { RelatedSecondaryDrawer, type SecondaryDrawerEntity } from '../../common/RelatedSecondaryDrawer';
-import type { DataTableColumn, DataTableFilterItem } from '../../common/DataTable';
+import { documentNumberColumn, type DataTableColumn, type DataTableFilterItem } from '../../common/DataTable';
 import { ROUTES } from '@/config/constants';
 import { useAuth } from '@/context/AuthContext';
 import { useRelatedModulesForEntity } from '@/config/relatedModules.config';
@@ -197,6 +197,13 @@ export function ContactsMasterView() {
     // ── Declarative Column Definitions ──────────────────────────────────────
     const columns: DataTableColumn<Contact>[] = useMemo(
         () => [
+            documentNumberColumn<Contact>({
+                id: 'contactCode',
+                label: 'CONTACT NO.',
+                getNumber: (c) => c.contactCode,
+                getHref: (c) => ROUTES.CONTACT_DETAIL(c.id),
+                onOpen: (c) => setDrawerContactId(c.id),
+            }),
             {
                 id: 'name',
                 label: 'NAME',

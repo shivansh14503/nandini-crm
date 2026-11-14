@@ -130,6 +130,7 @@ export default function TicketForm({ mode = 'create', initialData, ticketId, bre
         module: 'tickets',
         defaultValues: { ...DEFAULT_TICKET_FORM, ...initialData },
         dropdownDefaults: { enabled: mode === 'create', keep: initialData },
+        assigneeField: 'assignedTo',
     });
 
     const { reset, getValues, setValue, control, formState } = methods;

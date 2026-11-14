@@ -4,13 +4,11 @@ import React, { useState } from 'react';
 import {
     Box,
     TextField,
-    Chip,
     InputAdornment,
     Divider,
 } from '@mui/material';
 import ArticleOutlinedIcon from '@mui/icons-material/ArticleOutlined';
 import CalendarTodayOutlinedIcon from '@mui/icons-material/CalendarTodayOutlined';
-import CheckIcon from '@mui/icons-material/Check';
 import ReceiptLongOutlinedIcon from '@mui/icons-material/ReceiptLongOutlined';
 import MonetizationOnOutlinedIcon from '@mui/icons-material/MonetizationOnOutlined';
 
@@ -30,6 +28,7 @@ import {
 } from '@/components/forms';
 import { UserLookupModal } from '@/components/common/lookup';
 import { TimeSlotSelect } from '@/components/forms/TimeSlotSelect';
+import { MultiAutocompleteInput, MultiSelectChips } from '@/components/forms/rhf/RhfMultiAutocomplete';
 import { localToday } from '@/utils/pastDates';
 import type { OpportunityFormData } from '@/types/opportunity.types';
 import {
@@ -63,20 +62,6 @@ const calendarAdornment = {
 export function OpportunityBasicSection({ form, setField }: OpportunityBasicSectionProps) {
     const getOptions = useDropdownOptionsGetter();
     const [userLookupOpen, setUserLookupOpen] = useState(false);
-
-    // ── Product Category Toggle Handler ─────────────────────────────────────────
-    const handleToggleProduct = (product: string) => {
-        const current = form.productCategory || [];
-        const exists = current.includes(product);
-        if (exists) {
-            setField(
-                'productCategory',
-                current.filter((p) => p !== product)
-            );
-        } else {
-            setField('productCategory', [...current, product]);
-        }
-    };
 
     return (
         <Box sx={{ p: { xs: 2.5, md: 3.5 } }}>
@@ -260,63 +245,16 @@ export function OpportunityBasicSection({ form, setField }: OpportunityBasicSect
                     required
                     size="full"
                     viewValue={
-                        (form.productCategory || []).length > 0 ? (
-                            <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.75 }}>
-                                {(form.productCategory || []).map((prod) => (
-                                    <Chip
-                                        key={prod}
-                                        label={prod}
-                                        size="small"
-                                        sx={{ fontSize: '0.76rem', fontWeight: 600, cursor: 'default', color: '#1d4ed8', backgroundColor: '#eff6ff' }}
-                                    />
-                                ))}
-                            </Box>
-                        ) : null
+                        (form.productCategory || []).length > 0 ? <MultiSelectChips values={form.productCategory || []} /> : null
                     }
                     hint={`${(form.productCategory || []).length} category selected`}
                 >
-                    <Box
-                        sx={{
-                            border: '1px solid #cbd5e1',
-                            borderRadius: '8px',
-                            p: 1.5,
-                            backgroundColor: '#ffffff',
-                            display: 'flex',
-                            flexWrap: 'wrap',
-                            gap: 0.8,
-                            transition: 'border-color 0.15s ease',
-                            '&:hover': { borderColor: '#2563eb' },
-                        }}
-                    >
-                        {getOptions('shared_product_category', PRODUCT_CATEGORIES).map((prod) => {
-                            const selected = (form.productCategory || []).includes(prod);
-                            return (
-                                <Chip
-                                    key={prod}
-                                    label={prod}
-                                    onClick={() => handleToggleProduct(prod)}
-                                    icon={
-                                        selected ? (
-                                            <CheckIcon sx={{ fontSize: '14px !important', color: '#166534 !important' }} />
-                                        ) : undefined
-                                    }
-                                    sx={{
-                                        fontSize: '0.78rem',
-                                        fontWeight: selected ? 700 : 500,
-                                        height: 28,
-                                        cursor: 'pointer',
-                                        backgroundColor: selected ? '#dcfce7' : '#f8fafc',
-                                        color: selected ? '#15803d' : '#475569',
-                                        border: selected ? '1.5px solid #86efac' : '1px solid #e2e8f0',
-                                        transition: 'all 0.15s ease',
-                                        '&:hover': {
-                                            backgroundColor: selected ? '#bbf7d0' : '#e2e8f0',
-                                        },
-                                    }}
-                                />
-                            );
-                        })}
-                    </Box>
+                    <MultiAutocompleteInput
+                        value={form.productCategory || []}
+                        onChange={(next) => setField('productCategory', next)}
+                        options={getOptions('shared_product_category', PRODUCT_CATEGORIES)}
+                        placeholder="Search and select products..."
+                    />
                 </FormField>
             </FormGrid>
 

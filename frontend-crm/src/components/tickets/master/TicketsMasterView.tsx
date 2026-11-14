@@ -8,13 +8,12 @@ import PersonOutlinedIcon from '@mui/icons-material/PersonOutlined';
 import PendingActionsOutlinedIcon from '@mui/icons-material/PendingActionsOutlined';
 import PriorityHighIcon from '@mui/icons-material/PriorityHigh';
 import NewReleasesOutlinedIcon from '@mui/icons-material/NewReleasesOutlined';
-import { RecordLink } from '../../common/RecordLink';
 import { CommonMasterView } from '../../common/CommonMasterView';
 import { MasterHeaderActions } from '../../common/MasterHeaderActions';
 import { buildExtendedSearchConfig } from '../../common/buildExtendedSearchConfig';
 import { AppToast } from '../../common/AppToast';
 import { DataImportModal } from '../../common/import';
-import type { DataTableColumn, DataTableFilterItem } from '../../common/DataTable';
+import { documentNumberColumn, type DataTableColumn, type DataTableFilterItem } from '../../common/DataTable';
 import { ROUTES } from '@/config/constants';
 import { useAuth } from '@/context/AuthContext';
 import { findCrmUser } from '@/services/masterData.store';
@@ -193,35 +192,25 @@ export function TicketsMasterView() {
     // ── Declarative Column Definitions ────────────────────────────────────────
     const columns: DataTableColumn<Ticket>[] = useMemo(
         () => [
-            {
+            documentNumberColumn<Ticket>({
                 id: 'ticketNumber',
-                label: 'TICKET',
-                sortable: true,
+                label: 'TICKET NO.',
                 locked: true,
-                minWidth: 260,
+                getNumber: (t) => t.ticketNumber,
+                getHref: (t) => ROUTES.TICKET_DETAIL(t.id),
+                onOpen: (t) => setDrawerTicketId(t.id),
+            }),
+            {
+                id: 'ticketSubject',
+                label: 'SUBJECT',
+                sortable: true,
+                minWidth: 220,
                 render: (t) => (
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 0 }}>
                         <ConfirmationNumberOutlinedIcon sx={{ fontSize: 16, color: '#7c3aed', flexShrink: 0 }} />
-                        <Box sx={{ minWidth: 0 }}>
-                            <RecordLink
-                                href={ROUTES.TICKET_DETAIL(t.id)}
-                                onOpen={() => setDrawerTicketId(t.id)}
-                                sx={{
-                                    fontWeight: 700,
-                                    color: '#1d4ed8',
-                                    fontSize: '0.82rem',
-                                    fontFamily: 'monospace',
-                                    cursor: 'pointer',
-                                    lineHeight: 1.2,
-                                    '&:hover': { textDecoration: 'underline' },
-                                }}
-                            >
-                                {t.ticketNumber}
-                            </RecordLink>
-                            <Typography noWrap sx={{ fontSize: '0.74rem', color: '#64748b', maxWidth: 260 }}>
-                                {t.ticketSubject || t.problemReported}
-                            </Typography>
-                        </Box>
+                        <Typography noWrap sx={{ fontSize: '0.8rem', color: '#1e293b', fontWeight: 600, maxWidth: 280 }}>
+                            {t.ticketSubject || t.problemReported || '-'}
+                        </Typography>
                     </Box>
                 ),
             },

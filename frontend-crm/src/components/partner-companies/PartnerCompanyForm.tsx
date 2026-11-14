@@ -141,6 +141,7 @@ export default function PartnerCompanyForm({
         module: 'partner-companies',
         defaultValues: initialValues,
         dropdownDefaults: { enabled: mode === 'create', keep: initialData },
+        assigneeField: 'assignedTo',
     });
     const { reset, control, formState, handleSubmit, setError } = methods;
     const { isDirty, isSubmitting } = formState;

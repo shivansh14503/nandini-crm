@@ -14,6 +14,7 @@ import ClearIcon from '@mui/icons-material/Clear';
 import { fieldSx } from './FormField';
 import { fieldSizeSx, type FieldSize } from './fieldSizing';
 import { compareOrganizationNames } from '@/utils/organizationName';
+import { useTabSelect } from './useTabSelect';
 
 export interface LookupFieldProps {
     value: string;
@@ -87,6 +88,14 @@ export function LookupField({
     matchMode = 'substring',
 }: LookupFieldProps) {
     const handleLookup = onLookupClick ?? onSelectClick;
+    // Typed names are allowed: Tab keeps the typed text unless the user arrowed to a suggestion.
+    const tabSelect = useTabSelect({
+        freeText: true,
+        // Only user edits propagate; 'reset' (MUI echoing `value` back) would otherwise fight a picked option.
+        onInputChange: (_, newInputValue, reason) => {
+            if (reason === 'input' || reason === 'clear') onChange(newInputValue);
+        },
+    });
 
     const handleClear = () => {
         onChange('');
@@ -97,6 +106,7 @@ export function LookupField({
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, ...(fieldSize ? fieldSizeSx(fieldSize) : {}) }}>
             {/* Always an Autocomplete (even with no options yet) so the input isn't remounted, and loses focus, when suggestions load mid-typing. */}
             <Autocomplete
+                {...tabSelect}
                 freeSolo
                 // The separate [X] button already clears the field; hide the Autocomplete's built-in clear icon.
                 disableClearable
@@ -111,10 +121,6 @@ export function LookupField({
                     if (matchMode === 'organization') return filterOrganizationOptions(opts, inputValue);
                     const q = inputValue.trim().toLowerCase();
                     return (q ? opts.filter((o) => o.toLowerCase().includes(q)) : opts).slice(0, MAX_VISIBLE_OPTIONS);
-                }}
-                // Only user edits propagate; 'reset' (MUI echoing `value` back) would otherwise fight a picked option.
-                onInputChange={(_, newInputValue, reason) => {
-                    if (reason === 'input' || reason === 'clear') onChange(newInputValue);
                 }}
                 onChange={(_, newValue) => onChange(newValue || '')}
                 sx={{ flex: 1, ...fieldSx }}

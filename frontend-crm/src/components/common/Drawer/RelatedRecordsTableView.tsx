@@ -2,6 +2,7 @@
 
 import React, { useEffect, useMemo, useState } from 'react';
 import { getCountryNameByCode } from '@/data/addressMaster';
+import { wasModified } from './RecordAuditFooter';
 import {
     Box,
     Typography,
@@ -360,7 +361,19 @@ function getColumnsForModule(moduleKey: string): DataTableColumn<RelatedRow>[] {
                 { id: 'category', label: 'Category', minWidth: 140, sortable: true, render: (r) => String(r.category || '-') },
                 { id: 'quantity', label: 'Quantity', minWidth: 100, sortable: true, render: (r) => String(r.quantity ?? '-') },
                 { id: 'total', label: 'Amount', minWidth: 130, sortable: true, render: (r) => (r.total !== undefined ? formatCurrency(r.total) : formatCurrency(r.mrp)) },
-                { id: 'updatedAt', label: 'Date Modified', minWidth: 130, sortable: true, render: (r) => String(r.updatedAt || r.dateModified || '-') },
+                {
+                    id: 'updatedAt',
+                    label: 'Date Modified',
+                    minWidth: 130,
+                    sortable: true,
+                    // Blank until the product is edited after creation.
+                    render: (r) =>
+                        r.updatedAt
+                            ? wasModified({ createdAt: r.createdAt as string, updatedAt: r.updatedAt as string, updatedBy: r.updatedBy as string })
+                                ? String(r.updatedAt)
+                                : ''
+                            : String(r.dateModified || ''),
+                },
                 { id: 'createdAt', label: 'Date Created', minWidth: 130, sortable: true, render: (r) => String(r.createdAt || r.dateCreated || '-') },
             ];
 

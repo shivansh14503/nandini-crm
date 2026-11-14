@@ -125,6 +125,7 @@ export default function OpportunityForm({
             module: 'opportunities',
             defaultValues: { ...DEFAULT_OPPORTUNITY_FORM, ...initialData },
             dropdownDefaults: { enabled: mode === 'create', keep: initialData },
+            assigneeField: 'assignedTo',
         });
 
     const { reset, watch, setValue, formState } = methods;

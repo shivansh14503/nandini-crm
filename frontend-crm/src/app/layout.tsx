@@ -5,6 +5,7 @@ import { ThemeRegistry } from "@/theme/ThemeRegistry";
 import { QueryProvider } from "@/context/QueryProvider";
 import { AuthProvider } from "@/context/AuthContext";
 import { CrmDataBootstrap } from "@/components/common/CrmDataBootstrap";
+import { EnterTogglesCheckboxes } from "@/components/common/EnterTogglesCheckboxes";
 import { APP_CONFIG } from "@/config/constants";
 
 const geistSans = Geist({
@@ -33,6 +34,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           <QueryProvider>
             <AuthProvider>
               <CrmDataBootstrap />
+              <EnterTogglesCheckboxes />
               {children}
             </AuthProvider>
           </QueryProvider>

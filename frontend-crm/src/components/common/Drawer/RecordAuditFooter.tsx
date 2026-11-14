@@ -13,6 +13,24 @@ export interface RecordAuditStamp {
     updatedBy?: string | null;
 }
 
+/** `updatedAt` is stamped on create too; a gap under this is the same save, not an edit. */
+const CREATE_STAMP_TOLERANCE_MS = 2000;
+
+/**
+ * Whether a record was changed after it was created. The backend leaves `updatedBy` empty on create but still
+ * sets `updatedAt` (to the creation time), so: edited by someone, or updated clearly later than created
+ * (covers system updates that record no user).
+ */
+export function wasModified(stamp: RecordAuditStamp): boolean {
+    if (stamp.updatedBy) return true;
+    if (!stamp.updatedAt) return false;
+    const updated = new Date(stamp.updatedAt).getTime();
+    const created = stamp.createdAt ? new Date(stamp.createdAt).getTime() : NaN;
+    if (Number.isNaN(updated)) return false;
+    if (Number.isNaN(created)) return true;
+    return updated - created > CREATE_STAMP_TOLERANCE_MS;
+}
+
 const formatDateTime = (iso?: string | null) => {
     if (!iso) return undefined;
     const d = new Date(iso);
@@ -27,52 +45,62 @@ const formatDateTime = (iso?: string | null) => {
     });
 };
 
-function AuditRow({ icon, label, at, by }: { icon: React.ReactNode; label: string; at?: string; by?: string | null }) {
+/** One stamp: label on top, date below it, "by user" under that. Everything left-aligned and read in one glance. */
+function AuditItem({ icon, label, at, by }: { icon: React.ReactNode; label: string; at?: string; by?: string | null }) {
     return (
-        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 2, py: 1 }}>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.8, color: '#64748b', flexShrink: 0 }}>
+        <Box sx={{ minWidth: 0 }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.6, color: '#94a3b8', mb: 0.4 }}>
                 {icon}
-                <Typography sx={{ fontSize: '0.74rem', fontWeight: 600, color: '#64748b' }}>{label}</Typography>
+                <Typography
+                    sx={{ fontSize: '0.66rem', fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', color: '#94a3b8' }}
+                >
+                    {label}
+                </Typography>
             </Box>
-            <Typography sx={{ fontSize: '0.78rem', fontWeight: 600, color: '#334155', textAlign: 'right', minWidth: 0 }}>
-                {at ?? '-'}
-                {by && (
-                    <Box component="span" sx={{ color: '#64748b', fontWeight: 500 }}>
-                        {' '}by {by}
-                    </Box>
-                )}
+            {/* Fixed line heights keep both items the same height, even when "Last Modified" is blank. */}
+            <Typography
+                noWrap
+                sx={{ fontSize: '0.8rem', fontWeight: 600, color: at ? '#334155' : '#94a3b8', lineHeight: 1.45, minHeight: '1.45em' }}
+            >
+                {at ?? '- - -'}
+            </Typography>
+            <Typography noWrap sx={{ fontSize: '0.74rem', color: '#64748b', lineHeight: 1.45, minHeight: '1.45em' }}>
+                {by ? `by ${by}` : ''}
             </Typography>
         </Box>
     );
 }
 
-/** "Last Modified" above "Created At", shown at the bottom of a record's overview tab (drawer and view page). */
+/** Created / Last Modified stamps, side by side as the footer of a record's overview tab (drawer and view page). */
 export function RecordAuditFooter({ audit }: { audit: RecordAuditStamp }) {
     if (!audit.createdAt && !audit.updatedAt) return null;
-    // A record that was never edited has no updatedBy: its last modification is its creation.
-    const modifiedBy = audit.updatedBy || audit.createdBy;
+    // Never edited since it was created: "Last Modified" stays blank.
+    const modified = wasModified(audit);
     return (
         <Box
+            component="footer"
             sx={{
-                mt: 2.5,
-                px: 1.5,
-                borderRadius: '10px',
-                border: '1px solid #eef2f6',
-                backgroundColor: '#f8fafc',
-                '& > * + *': { borderTop: '1px solid #eef2f6' },
+                mt: 3,
+                pt: 1.5,
+                borderTop: '1px solid #e2e8f0',
+                display: 'grid',
+                // Two columns, stacking only when the panel is too narrow for both.
+                gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
+                columnGap: 3,
+                rowGap: 1.5,
             }}
         >
-            <AuditRow
-                icon={<EditCalendarOutlinedIcon sx={{ fontSize: 15 }} />}
-                label="Last Modified"
-                at={formatDateTime(audit.updatedAt ?? audit.createdAt)}
-                by={modifiedBy}
-            />
-            <AuditRow
-                icon={<EventAvailableOutlinedIcon sx={{ fontSize: 15 }} />}
-                label="Created At"
+            <AuditItem
+                icon={<EventAvailableOutlinedIcon sx={{ fontSize: 14 }} />}
+                label="Created"
                 at={formatDateTime(audit.createdAt)}
                 by={audit.createdBy}
+            />
+            <AuditItem
+                icon={<EditCalendarOutlinedIcon sx={{ fontSize: 14 }} />}
+                label="Last Modified"
+                at={modified ? formatDateTime(audit.updatedAt) : undefined}
+                by={modified ? audit.updatedBy : undefined}
             />
         </Box>
     );

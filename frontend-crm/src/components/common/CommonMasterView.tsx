@@ -17,7 +17,11 @@ import {
     type DataTableToolbarProps,
     type SortOrder,
     useColumnVisibility,
+    MAX_PINNED_COLUMNS,
+    useFormFieldColumns,
+    isCrmModuleKey,
 } from './DataTable';
+import type { CrmModuleKey } from '@/types/formConfig.types';
 
 export interface MasterViewHeaderActionsContext {
     /** Opens the shared column visibility popover anchored to the given element. */
@@ -49,6 +53,11 @@ export interface CommonMasterViewProps<T = unknown, TFilter extends string = str
      * Identifies this table. When set, column visibility is persisted to localStorage.
      */
     tableId?: string;
+    /**
+     * Form whose fields the column manager offers (every built-in and custom field). Defaults to `tableId` when
+     * that is a form module key; pass `null` to offer only the hand-built columns.
+     */
+    formModule?: CrmModuleKey | null;
     /**
      * Declarative search & toolbar configuration.
      */
@@ -196,6 +205,7 @@ export function CommonMasterView<T = unknown, TFilter extends string = string>({
     filters,
     headerActions,
     tableId,
+    formModule,
     searchConfig,
     toolbar,
     columns,
@@ -294,8 +304,10 @@ export function CommonMasterView<T = unknown, TFilter extends string = string>({
         [isRightDrawerCollapsed, toggleRightDrawerCollapsed, resetRightDrawerCollapsed]
     );
 
-    const { visibleColumnIds, activeColumns, toggleColumn, resetDefaults } =
-        useColumnVisibility<T>(columns, tableId);
+    const resolvedFormModule = formModule === undefined ? (isCrmModuleKey(tableId) ? tableId : undefined) : (formModule ?? undefined);
+    const allColumns = useFormFieldColumns<T>(columns, resolvedFormModule);
+    const { visibleColumnIds, activeColumns, pinnedColumnIds, toggleColumn, setColumnsVisible, togglePin, resetDefaults } =
+        useColumnVisibility<T>(allColumns, tableId);
     const [columnAnchorEl, setColumnAnchorEl] = React.useState<HTMLElement | null>(null);
     const openColumnManager = React.useCallback((el: HTMLElement) => setColumnAnchorEl(el), []);
     const closeColumnManager = React.useCallback(() => setColumnAnchorEl(null), []);
@@ -440,7 +452,11 @@ export function CommonMasterView<T = unknown, TFilter extends string = string>({
                 >
                     {columns && (
                         <ColumnVisibilityPopover<T>
-                            columns={columns}
+                            columns={allColumns ?? columns}
+                            onSetColumnsVisible={setColumnsVisible}
+                            pinnedColumnIds={pinnedColumnIds}
+                            onTogglePin={togglePin}
+                            maxPinned={MAX_PINNED_COLUMNS}
                             visibleColumnIds={visibleColumnIds}
                             onToggleColumn={toggleColumn}
                             onResetDefaults={resetDefaults}

@@ -15,7 +15,7 @@ import { AppToast } from '../../common/AppToast';
 import { DataImportModal } from '../../common/import';
 import { RelatedModulesSidebar, RelatedRecordsTableView } from '../../common/Drawer';
 import { RelatedSecondaryDrawer, type SecondaryDrawerEntity } from '../../common/RelatedSecondaryDrawer';
-import type { DataTableColumn, DataTableFilterItem } from '../../common/DataTable';
+import { documentNumberColumn, type DataTableColumn, type DataTableFilterItem } from '../../common/DataTable';
 import { ROUTES } from '@/config/constants';
 import { useRelatedModulesForEntity } from '@/config/relatedModules.config';
 import type { Product } from '@/types/product.types';
@@ -193,6 +193,13 @@ export function ProductsMasterView() {
     // ── Declarative Column Definitions ────────────────────────────────────────
     const columns: DataTableColumn<Product>[] = useMemo(
         () => [
+            documentNumberColumn<Product>({
+                id: 'productCode',
+                label: 'PRODUCT NO.',
+                getNumber: (p) => p.productCode,
+                getHref: (p) => ROUTES.PRODUCT_DETAIL(p.id),
+                onOpen: (p) => setDrawerProductId(p.id),
+            }),
             {
                 id: 'productName',
                 label: 'PRODUCT NAME',
@@ -201,25 +208,20 @@ export function ProductsMasterView() {
                 render: (p) => (
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                         <InventoryOutlinedIcon sx={{ fontSize: 16, color: '#2563eb' }} />
-                        <Box>
-                            <RecordLink
-                                href={ROUTES.PRODUCT_DETAIL(p.id)}
-                                onOpen={() => setDrawerProductId(p.id)}
-                                sx={{
-                                    fontWeight: 700,
-                                    color: '#1d4ed8',
-                                    fontSize: '0.82rem',
-                                    cursor: 'pointer',
-                                    lineHeight: 1.2,
-                                    '&:hover': { textDecoration: 'underline' },
-                                }}
-                            >
-                                {p.productName}
-                            </RecordLink>
-                            <Typography sx={{ fontSize: '0.72rem', color: '#94a3b8' }}>
-                                {p.productCode}
-                            </Typography>
-                        </Box>
+                        <RecordLink
+                            href={ROUTES.PRODUCT_DETAIL(p.id)}
+                            onOpen={() => setDrawerProductId(p.id)}
+                            sx={{
+                                fontWeight: 700,
+                                color: '#1d4ed8',
+                                fontSize: '0.82rem',
+                                cursor: 'pointer',
+                                lineHeight: 1.2,
+                                '&:hover': { textDecoration: 'underline' },
+                            }}
+                        >
+                            {p.productName}
+                        </RecordLink>
                     </Box>
                 ),
             },

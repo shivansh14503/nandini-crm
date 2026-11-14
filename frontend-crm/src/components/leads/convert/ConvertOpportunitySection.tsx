@@ -5,6 +5,7 @@ import React from 'react';
 import {
     FormGrid,
     RhfChipGroup,
+    RhfMultiAutocomplete,
     RhfDateTimeField,
     RhfLookup,
     RhfSelect,
@@ -28,7 +29,7 @@ export function ConvertOpportunitySection() {
     const getOptions = useDropdownOptionsGetter();
     return (
         <FormGrid columns={3}>
-            <RhfChipGroup<F> name="productCategory" label="Product Category" required options={getOptions('shared_product_category', PRODUCT_CATEGORIES)} />
+            <RhfMultiAutocomplete<F> name="productCategory" label="Product Category" required options={getOptions('shared_product_category', PRODUCT_CATEGORIES)} placeholder="Search and select products..." />
 
             <RhfTextField<F> name="organizationName" label="Organization Name" required disabled />
             <RhfTextField<F> name="principalCompany" label="Principal Company" placeholder="Principal / OEM company" />

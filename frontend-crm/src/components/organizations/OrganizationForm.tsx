@@ -34,6 +34,7 @@ import { DynamicModuleCustomFields } from '@/components/forms/DynamicModuleCusto
 import { getFormConfigs } from '@/services/masterData.store';
 import { validateConfiguredFields } from '@/utils/formConfig';
 import { useDropdownDefaults, withDropdownDefaults } from '@/components/forms/rhf/useDropdownDefaults';
+import { withDefaultAssignee } from '@/components/forms/rhf/useRhfForm';
 
 // ─── Single Source of Truth for Organization Form Tabs ──────────────────────────
 export const ORGANIZATION_FORM_TABS: (FormTabDefinition & { id: TabKey })[] = [
@@ -191,7 +192,11 @@ export default function OrganizationForm({
     // A new record starts from the admin's dropdown defaults (Form Builder › Dropdowns); read once, like useForm.
     const [startValues] = useState<OrganizationFormData>(() =>
         mode === 'create'
-            ? withDropdownDefaults(getFormConfigs(), 'organizations', { ...DEFAULT_FORM, ...initialData }, initialData)
+            ? withDefaultAssignee(
+                  withDropdownDefaults(getFormConfigs(), 'organizations', { ...DEFAULT_FORM, ...initialData }, initialData),
+                  'assignedUser',
+                  user?.username,
+              )
             : { ...DEFAULT_FORM, ...initialData },
     );
     const [form, setForm] = useState<OrganizationFormData>(startValues);
@@ -444,7 +449,11 @@ export default function OrganizationForm({
                 if (redirectAfter) {
                     setTimeout(() => router.push(ROUTES.ORGANIZATIONS), 800);
                 } else {
-                    const fresh = withDropdownDefaults(getFormConfigs(), 'organizations', DEFAULT_FORM);
+                    const fresh = withDefaultAssignee(
+                        withDropdownDefaults(getFormConfigs(), 'organizations', DEFAULT_FORM),
+                        'assignedUser',
+                        user?.username,
+                    );
                     setForm(fresh);
                     methods.reset(fresh);
                     setIsDirty(false);
