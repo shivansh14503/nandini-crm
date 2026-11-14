@@ -69,7 +69,7 @@ export function CommonRecordDetailView({
     avatarIcon,
     verified,
     statusLabel,
-    statusColor = '#16a34a',
+    statusColor = 'var(--mui-palette-success-main)',
     editHref,
     editLabel = 'Edit Record',
     editDisabled,
@@ -101,7 +101,7 @@ export function CommonRecordDetailView({
                 sx={{
                     mb: 2,
                     p: { xs: 2, md: 2.5 },
-                    border: '1px solid #e2e8f0',
+                    border: '1px solid var(--mui-palette-border-main)',
                     borderRadius: '12px',
                     display: 'flex',
                     alignItems: 'center',
@@ -121,7 +121,7 @@ export function CommonRecordDetailView({
                             fontWeight: 800,
                             fontSize: '1.1rem',
                             color: '#fff',
-                            background: 'linear-gradient(135deg, #1d4ed8 0%, #2563eb 100%)',
+                            background: 'linear-gradient(135deg, var(--crm-fill-blue-700) 0%, var(--crm-fill-blue-600) 100%)',
                         }}
                     >
                         {avatarIcon ?? initialsOf(title)}
@@ -130,13 +130,13 @@ export function CommonRecordDetailView({
                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
                             <Typography
                                 component="h1"
-                                sx={{ fontSize: '22px', fontWeight: 700, color: '#0f172a', lineHeight: 1.25 }}
+                                sx={{ fontSize: '22px', fontWeight: 700, color: 'var(--crm-slate-900)', lineHeight: 1.25 }}
                             >
                                 {title || '—'}
                             </Typography>
                             {verified && (
                                 <Tooltip title="Verified">
-                                    <VerifiedIcon sx={{ fontSize: 20, color: '#16a34a' }} />
+                                    <VerifiedIcon sx={{ fontSize: 20, color: 'var(--mui-palette-success-main)' }} />
                                 </Tooltip>
                             )}
                             {statusLabel && (
@@ -155,7 +155,7 @@ export function CommonRecordDetailView({
                             )}
                         </Box>
                         {subtitle && (
-                            <Typography sx={{ fontSize: '0.82rem', color: '#64748b', fontFamily: 'monospace', mt: 0.3 }}>
+                            <Typography sx={{ fontSize: '0.82rem', color: 'var(--mui-palette-text-secondary)', fontFamily: 'monospace', mt: 0.3 }}>
                                 {subtitle}
                             </Typography>
                         )}
@@ -172,8 +172,8 @@ export function CommonRecordDetailView({
                             textTransform: 'none',
                             fontWeight: 600,
                             borderRadius: '8px',
-                            borderColor: '#e2e8f0',
-                            color: '#334155',
+                            borderColor: 'var(--mui-palette-border-main)',
+                            color: 'var(--crm-slate-700)',
                             height: 36,
                         }}
                     >
@@ -193,7 +193,7 @@ export function CommonRecordDetailView({
                                         borderRadius: '8px',
                                         height: 36,
                                         boxShadow: 'none',
-                                        background: 'linear-gradient(135deg, #1d4ed8 0%, #2563eb 100%)',
+                                        background: 'linear-gradient(135deg, var(--crm-fill-blue-700) 0%, var(--crm-fill-blue-600) 100%)',
                                     }}
                                 >
                                     {editLabel}
@@ -208,7 +208,7 @@ export function CommonRecordDetailView({
             <Paper
                 elevation={0}
                 sx={{
-                    border: '1px solid #e2e8f0',
+                    border: '1px solid var(--mui-palette-border-main)',
                     borderRadius: '12px',
                     overflow: 'hidden',
                     boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
@@ -221,10 +221,10 @@ export function CommonRecordDetailView({
                         variant="scrollable"
                         scrollButtons="auto"
                         sx={{
-                            borderBottom: '1px solid #e2e8f0',
+                            borderBottom: '1px solid var(--mui-palette-border-main)',
                             minHeight: 46,
                             px: { xs: 1, md: 2 },
-                            '& .MuiTabs-indicator': { height: 3, borderRadius: '3px 3px 0 0', backgroundColor: '#2563eb' },
+                            '& .MuiTabs-indicator': { height: 3, borderRadius: '3px 3px 0 0', backgroundColor: 'var(--mui-palette-primary-main)' },
                         }}
                     >
                         {tabs.map((tab) => (
@@ -237,7 +237,7 @@ export function CommonRecordDetailView({
                                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
                                         {tab.label}
                                         {tab.sublabel && (
-                                            <Typography component="span" sx={{ fontSize: '0.74rem', color: '#94a3b8', fontWeight: 400 }}>
+                                            <Typography component="span" sx={{ fontSize: '0.74rem', color: 'var(--mui-palette-text-muted)', fontWeight: 400 }}>
                                                 {tab.sublabel}
                                             </Typography>
                                         )}
@@ -248,8 +248,8 @@ export function CommonRecordDetailView({
                                     fontWeight: 600,
                                     fontSize: '0.84rem',
                                     minHeight: 46,
-                                    color: '#64748b',
-                                    '&.Mui-selected': { color: '#1e3a8a', fontWeight: 700 },
+                                    color: 'var(--mui-palette-text-secondary)',
+                                    '&.Mui-selected': { color: 'var(--crm-text-blue-900)', fontWeight: 700 },
                                 }}
                             />
                         ))}

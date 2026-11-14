@@ -39,7 +39,7 @@ export function DynamicDrawerCustomFields({ module, record }: DynamicDrawerCusto
                 <DrawerSectionCard
                     key={`${section.tabKey}:${section.sectionKey}`}
                     title={section.sectionLabel}
-                    icon={<TuneOutlinedIcon sx={{ fontSize: 16, color: '#2563eb' }} />}
+                    icon={<TuneOutlinedIcon sx={{ fontSize: 16, color: 'var(--crm-text-blue-600)' }} />}
                 >
                     <DrawerFieldGrid>
                         {section.fields.map((field) => {

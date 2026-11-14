@@ -461,8 +461,8 @@ export function CreateQuoteForm({
     if (loading) {
         return (
             <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', py: 12 }}>
-                <CircularProgress size={36} sx={{ color: '#2563eb' }} />
-                <Typography sx={{ ml: 2, color: '#64748b', fontSize: '0.9rem' }}>
+                <CircularProgress size={36} sx={{ color: 'var(--crm-text-blue-600)' }} />
+                <Typography sx={{ ml: 2, color: 'var(--mui-palette-text-secondary)', fontSize: '0.9rem' }}>
                     {isEdit ? 'Loading quotation details...' : 'Loading opportunity and commercial details...'}
                 </Typography>
             </Box>

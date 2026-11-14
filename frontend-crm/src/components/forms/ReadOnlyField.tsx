@@ -30,7 +30,7 @@ export function ReadOnlyField({
     copyable,
     copyText,
     badge,
-    badgeColor = '#475569',
+    badgeColor = 'var(--crm-slate-600)',
     hint,
     hideWhenEmpty,
     sx,
@@ -45,7 +45,7 @@ export function ReadOnlyField({
                 sx={{
                     fontSize: '0.68rem',
                     fontWeight: 600,
-                    color: '#64748b',
+                    color: 'var(--mui-palette-text-secondary)',
                     textTransform: 'uppercase',
                     letterSpacing: '0.04em',
                     mb: 0.4,
@@ -55,7 +55,7 @@ export function ReadOnlyField({
             </Typography>
 
             {empty ? (
-                <Typography sx={{ color: '#94a3b8', fontSize: '0.86rem' }} aria-label="Not provided">
+                <Typography sx={{ color: 'var(--mui-palette-text-muted)', fontSize: '0.86rem' }} aria-label="Not provided">
                     —
                 </Typography>
             ) : (
@@ -79,7 +79,7 @@ export function ReadOnlyField({
                             sx={{
                                 fontSize: '0.86rem',
                                 fontWeight: 600,
-                                color: '#0f172a',
+                                color: 'var(--crm-slate-900)',
                                 lineHeight: 1.35,
                                 wordBreak: 'break-word',
                                 whiteSpace: 'pre-wrap',
@@ -93,7 +93,7 @@ export function ReadOnlyField({
             )}
 
             {hint && (
-                <Typography sx={{ fontSize: '0.72rem', color: '#94a3b8', mt: 0.3 }}>{hint}</Typography>
+                <Typography sx={{ fontSize: '0.72rem', color: 'var(--mui-palette-text-muted)', mt: 0.3 }}>{hint}</Typography>
             )}
         </Box>
     );

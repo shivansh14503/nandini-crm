@@ -31,8 +31,8 @@ export function FieldSearchList({ fields, onPick, autoFocusRef }: { fields: PdfF
                 const { key, ...rest } = props;
                 return (
                     <Box component="li" key={key} {...rest} sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start !important' }}>
-                        <Typography sx={{ fontSize: '0.82rem', fontWeight: 600, color: '#0f172a' }}>{f.label}</Typography>
-                        <Typography sx={{ fontSize: '0.7rem', color: '#64748b', fontFamily: 'monospace' }}>{f.path}</Typography>
+                        <Typography sx={{ fontSize: '0.82rem', fontWeight: 600, color: 'var(--crm-slate-900)' }}>{f.label}</Typography>
+                        <Typography sx={{ fontSize: '0.7rem', color: 'var(--mui-palette-text-secondary)', fontFamily: 'monospace' }}>{f.path}</Typography>
                     </Box>
                 );
             }}
@@ -86,7 +86,7 @@ export function FieldPickerButton({
                 disableAutoFocus
                 anchorOrigin={{ vertical: 'bottom', horizontal: 'left' }}
                 slotProps={{
-                    paper: { sx: { mt: 0.5, p: 1.5, width: 360, borderRadius: '10px', border: '1px solid #e2e8f0', boxShadow: '0 8px 24px rgba(15,23,42,0.10)' } },
+                    paper: { sx: { mt: 0.5, p: 1.5, width: 360, borderRadius: '10px', border: '1px solid var(--mui-palette-border-main)', boxShadow: '0 8px 24px rgba(15,23,42,0.10)' } },
                     transition: { onEntered: () => searchRef.current?.focus() },
                 }}
             >

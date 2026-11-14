@@ -3,7 +3,7 @@ import type { ApiResponse } from '../types/api.types';
 import { createCrudService } from './base.service';
 import { apiClient } from './apiClient';
 import { notifyCrmUpdate } from './crmSync';
-import type { OrgNameMatchKind } from '../utils/organizationName';
+import type { OrgNameMatchField, OrgNameMatchKind } from '../utils/organizationName';
 
 const baseOrganizationService = createCrudService<
     ExtendedOrganization,
@@ -22,6 +22,8 @@ export interface SimilarOrganizationMatch {
     accountStatus: string;
     gstNo: string | null;
     matchKind: OrgNameMatchKind;
+    /** Whether the legal name or the trade name matched (older servers omit it: legal name). */
+    matchedField?: OrgNameMatchField;
 }
 
 export interface OrganizationUniqueCheck {
@@ -32,6 +34,9 @@ export interface OrganizationUniqueCheck {
     id?: string;
     accountCode?: string;
     organizationName?: string;
+    /** For a name duplicate: the existing organization's legal name or its trade name matched. */
+    matchedField?: OrgNameMatchField;
+    tradeName?: string | null;
     message?: string;
     /** Existing organizations with matching / similar names, for the autocomplete dropdown. */
     suggestions?: SimilarOrganizationMatch[];

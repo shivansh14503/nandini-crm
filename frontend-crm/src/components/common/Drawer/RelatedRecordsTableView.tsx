@@ -114,7 +114,7 @@ function renderPrimaryCell(value: unknown, mono = false): React.ReactNode {
             sx={{
                 fontSize: '0.78rem',
                 fontWeight: 700,
-                color: '#1d4ed8',
+                color: 'var(--crm-text-blue-700)',
                 fontFamily: mono ? 'monospace' : 'inherit',
                 cursor: 'pointer',
                 '&:hover': { textDecoration: 'underline' },
@@ -128,9 +128,9 @@ function renderPrimaryCell(value: unknown, mono = false): React.ReactNode {
 function renderStatusPill(status: unknown): React.ReactNode {
     const label = String(status || 'Active');
     const lower = label.toLowerCase();
-    let bg = '#f1f5f9';
-    let color = '#475569';
-    let border = '#cbd5e1';
+    let bg = 'var(--mui-palette-background-hover)';
+    let color = 'var(--crm-slate-600)';
+    let border = 'var(--mui-palette-border-strong)';
 
     if (
         lower.includes('active') ||
@@ -140,9 +140,9 @@ function renderStatusPill(status: unknown): React.ReactNode {
         lower.includes('published') ||
         lower.includes('resolved')
     ) {
-        bg = '#ecfdf5';
-        color = '#047857';
-        border = '#a7f3d0';
+        bg = 'var(--mui-palette-success-soft)';
+        color = 'var(--crm-emerald-700)';
+        border = 'var(--mui-palette-success-softBorder)';
     } else if (
         lower.includes('open') ||
         lower.includes('sent') ||
@@ -151,17 +151,17 @@ function renderStatusPill(status: unknown): React.ReactNode {
         lower.includes('in progress') ||
         lower.includes('proposal')
     ) {
-        bg = '#eff6ff';
-        color = '#1d4ed8';
-        border = '#bfdbfe';
+        bg = 'var(--mui-palette-primary-soft)';
+        color = 'var(--crm-text-blue-700)';
+        border = 'var(--mui-palette-primary-softBorder)';
     } else if (lower.includes('pending') || lower.includes('negotiation') || lower.includes('warm')) {
-        bg = '#fffbeb';
-        color = '#b45309';
-        border = '#fde68a';
+        bg = 'var(--mui-palette-warning-soft)';
+        color = 'var(--crm-amber-700)';
+        border = 'var(--mui-palette-warning-softBorder)';
     } else if (lower.includes('rejected') || lower.includes('lost') || lower.includes('expired')) {
-        bg = '#fef2f2';
-        color = '#b91c1c';
-        border = '#fecaca';
+        bg = 'var(--mui-palette-error-soft)';
+        color = 'var(--crm-red-700)';
+        border = 'var(--mui-palette-error-softBorder)';
     }
 
     return (
@@ -512,8 +512,8 @@ export function RelatedRecordsTableView({
                 left: leftOffset,
                 right: effectiveRightOffset,
                 zIndex: 1290, // Tucks nicely underneath both side panels
-                backgroundColor: '#ffffff',
-                borderRight: '1px solid #cbd5e1', // Adds a clean edge
+                backgroundColor: 'var(--mui-palette-background-paper)',
+                borderRight: '1px solid var(--mui-palette-border-strong)', // Adds a clean edge
                 display: 'flex',
                 flexDirection: 'column',
                 transition: 'left 0.25s cubic-bezier(0.4, 0, 0.2, 1), right 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
@@ -527,18 +527,18 @@ export function RelatedRecordsTableView({
                     height: 42,
                     minHeight: 42,
                     px: 2,
-                    backgroundColor: '#475569',
+                    backgroundColor: '#475569', // stays dark in both themes (white text)
                     color: '#ffffff',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'space-between',
                     gap: 1.5,
                     flexShrink: 0,
-                    borderBottom: '1px solid #334155',
+                    borderBottom: '1px solid var(--crm-slate-700)',
                 }}
             >
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 0 }}>
-                    <Box sx={{ display: 'flex', alignItems: 'center', color: '#e2e8f0' }}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', color: 'var(--crm-slate-200)' }}>
                         {getModuleIcon(moduleKey)}
                     </Box>
                     <Typography
@@ -573,7 +573,7 @@ export function RelatedRecordsTableView({
                             sx={{
                                 fontSize: '0.72rem',
                                 fontWeight: 500,
-                                color: '#cbd5e1',
+                                color: 'var(--crm-slate-300)',
                                 ml: 0.5,
                                 display: { xs: 'none', lg: 'inline' },
                             }}
@@ -596,7 +596,7 @@ export function RelatedRecordsTableView({
                             width: { xs: 130, md: 190 },
                         }}
                     >
-                        <SearchIcon sx={{ fontSize: 14, color: '#cbd5e1', mr: 0.6 }} />
+                        <SearchIcon sx={{ fontSize: 14, color: 'var(--crm-slate-300)', mr: 0.6 }} />
                         <InputBase
                             value={searchQuery}
                             onChange={(e) => setSearchQuery(e.target.value)}
@@ -606,7 +606,7 @@ export function RelatedRecordsTableView({
                                 color: '#ffffff',
                                 width: '100%',
                                 '& input::placeholder': {
-                                    color: '#cbd5e1',
+                                    color: 'var(--crm-slate-300)',
                                     opacity: 0.85,
                                 },
                             }}
@@ -621,7 +621,7 @@ export function RelatedRecordsTableView({
                                 onClick={onClose}
                                 aria-label="Close related view"
                                 sx={{
-                                    color: '#cbd5e1',
+                                    color: 'var(--crm-slate-300)',
                                     p: 0.6,
                                     borderRadius: '6px',
                                     flexShrink: 0,
@@ -643,7 +643,7 @@ export function RelatedRecordsTableView({
                 sx={{
                     flex: 1,
                     overflow: 'auto',
-                    backgroundColor: '#ffffff',
+                    backgroundColor: 'var(--mui-palette-background-paper)',
                     display: 'flex',
                     flexDirection: 'column',
                 }}

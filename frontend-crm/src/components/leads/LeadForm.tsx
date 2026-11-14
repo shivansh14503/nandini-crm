@@ -3,7 +3,7 @@
 import { NO_PAST_DATES } from '@/utils/pastDates';
 import React, { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { FormProvider } from 'react-hook-form';
+import { FormProvider, type Path } from 'react-hook-form';
 import ArticleOutlinedIcon from '@mui/icons-material/ArticleOutlined';
 import PlaceOutlinedIcon from '@mui/icons-material/PlaceOutlined';
 
@@ -15,7 +15,7 @@ import { useRhfForm } from '../forms/rhf';
 import { ROUTES } from '@/config/constants';
 import { leadFormSchema } from '../../validations';
 import type { LeadFormData } from '@/types/lead.types';
-import { leadService } from '@/services';
+import { ApiClientError, leadService } from '@/services';
 import type { RecordAuditStamp } from '../common/Drawer/RecordAuditFooter';
 import { normalizeAddressFields } from '@/utils/address';
 
@@ -163,7 +163,20 @@ export default function LeadForm({
             reset(values);
             setTimeout(() => router.push(ROUTES.LEADS), 800);
         } catch (err: unknown) {
-            showToast(err instanceof Error ? err.message : 'An error occurred while saving the lead.', 'error');
+            let message = err instanceof Error ? err.message : 'An error occurred while saving the lead.';
+            if (err instanceof ApiClientError) {
+                // 409 / 400 responses name the offending fields (e.g. a GSTIN another lead uses): mark them inline.
+                const fieldErrors = (err.details?.errors ?? []).filter((e) => e.path?.[0]);
+                fieldErrors.forEach((fieldErr) => {
+                    methods.setError(fieldErr.path.join('.') as Path<LeadFormData>, { type: 'server', message: fieldErr.message });
+                });
+                if (fieldErrors.length > 0) {
+                    message = fieldErrors[0].message || message;
+                    // Address fields live on their own tab; everything else is on Overview.
+                    setActiveTab(/^(primary|other)/.test(String(fieldErrors[0].path[0])) ? 'address' : 'overview');
+                }
+            }
+            showToast(message, 'error');
         }
     });
 

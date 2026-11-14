@@ -38,18 +38,18 @@ const JOB_POLL_MS = 1000;
 const TERMINAL_STATES = new Set(['completed', 'failed']);
 
 const primaryBtnSx = {
-    background: 'linear-gradient(135deg, #1d4ed8 0%, #2563eb 100%)',
+    background: 'linear-gradient(135deg, var(--crm-fill-blue-700) 0%, var(--crm-fill-blue-600) 100%)',
     color: '#fff',
     textTransform: 'none',
     fontWeight: 700,
     borderRadius: '8px',
     px: 2.5,
     boxShadow: 'none',
-    '&:hover': { background: 'linear-gradient(135deg, #1e40af 0%, #1d4ed8 100%)', boxShadow: 'none' },
-    '&.Mui-disabled': { background: '#cbd5e1', color: '#fff' },
+    '&:hover': { background: 'linear-gradient(135deg, var(--crm-fill-blue-800) 0%, var(--crm-fill-blue-700) 100%)', boxShadow: 'none' },
+    '&.Mui-disabled': { background: 'var(--crm-slate-300)', color: '#fff' },
 } as const;
 
-const textBtnSx = { textTransform: 'none', fontWeight: 600, color: '#475569' } as const;
+const textBtnSx = { textTransform: 'none', fontWeight: 600, color: 'var(--crm-slate-600)' } as const;
 
 /** Mounts a fresh wizard each time it opens so no state carries over between imports. */
 export function DataImportModal(props: DataImportModalProps) {
@@ -137,7 +137,7 @@ function DataImportWizard({ open, entity, onClose, onImported }: DataImportModal
             maxWidth="md"
             slotProps={{ paper: { sx: { borderRadius: '14px', boxShadow: '0 20px 50px rgba(15,23,42,0.18)' } } }}
         >
-            <DialogTitle sx={{ fontSize: '1.05rem', fontWeight: 800, color: '#0f172a', pb: 1 }}>
+            <DialogTitle sx={{ fontSize: '1.05rem', fontWeight: 800, color: 'var(--crm-slate-900)', pb: 1 }}>
                 Import {config.plural}
             </DialogTitle>
             <DialogContent sx={{ pt: 1 }}>
@@ -190,7 +190,7 @@ function DataImportWizard({ open, entity, onClose, onImported }: DataImportModal
                     />
                 )}
             </DialogContent>
-            <DialogActions sx={{ px: 3, py: 2, borderTop: '1px solid #e2e8f0' }}>
+            <DialogActions sx={{ px: 3, py: 2, borderTop: '1px solid var(--mui-palette-border-main)' }}>
                 <Button onClick={onClose} disabled={starting} sx={textBtnSx}>
                     {step === 3 ? (running ? 'Run in background' : 'Close') : 'Cancel'}
                 </Button>
@@ -244,11 +244,11 @@ function ImportResultsStep({ plural, total, progress, state, result, error }: {
     if (!result) {
         return (
             <Box sx={{ py: 3 }}>
-                <Typography sx={{ fontSize: '0.85rem', fontWeight: 600, color: '#0f172a', mb: 1 }}>
+                <Typography sx={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--crm-slate-900)', mb: 1 }}>
                     {STATE_LABELS[state] ?? 'Importing…'} ({total} rows)
                 </Typography>
                 <LinearProgress variant={progress > 0 ? 'determinate' : 'indeterminate'} value={progress} sx={{ height: 8, borderRadius: 4 }} />
-                <Typography sx={{ fontSize: '0.72rem', color: '#64748b', mt: 1 }}>
+                <Typography sx={{ fontSize: '0.72rem', color: 'var(--mui-palette-text-secondary)', mt: 1 }}>
                     You can close this window; the import keeps running on the server.
                 </Typography>
             </Box>
@@ -262,11 +262,11 @@ function ImportResultsStep({ plural, total, progress, state, result, error }: {
                 {failedCount > 0 ? `; ${failedCount} row${failedCount === 1 ? '' : 's'} could not be imported.` : '.'}
             </Alert>
             {failedCount > 0 && (
-                <Box sx={{ maxHeight: 280, overflowY: 'auto', border: '1px solid #e2e8f0', borderRadius: '8px' }}>
+                <Box sx={{ maxHeight: 280, overflowY: 'auto', border: '1px solid var(--mui-palette-border-main)', borderRadius: '8px' }}>
                     {result.failed.map((row) => (
-                        <Box key={row.rowNumber} sx={{ px: 1.5, py: 1, borderBottom: '1px solid #f1f5f9', display: 'flex', gap: 1.5 }}>
-                            <Typography sx={{ fontSize: '0.75rem', fontWeight: 700, color: '#334155', minWidth: 56 }}>Row {row.rowNumber}</Typography>
-                            <Typography sx={{ fontSize: '0.75rem', color: '#b91c1c' }}>{row.errors.join(' · ')}</Typography>
+                        <Box key={row.rowNumber} sx={{ px: 1.5, py: 1, borderBottom: '1px solid var(--mui-palette-border-light)', display: 'flex', gap: 1.5 }}>
+                            <Typography sx={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--crm-slate-700)', minWidth: 56 }}>Row {row.rowNumber}</Typography>
+                            <Typography sx={{ fontSize: '0.75rem', color: 'var(--crm-red-700)' }}>{row.errors.join(' · ')}</Typography>
                         </Box>
                     ))}
                 </Box>

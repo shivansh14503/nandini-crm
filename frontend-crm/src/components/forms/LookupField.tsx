@@ -65,11 +65,11 @@ const actionButtonSx = {
     width: 34,
     height: 34,
     borderRadius: '6px',
-    backgroundColor: '#1e3a8a',
+    backgroundColor: 'var(--crm-fill-blue-900)',
     color: '#fff',
     flexShrink: 0,
-    '&:hover': { backgroundColor: '#1d4ed8' },
-    '&.Mui-disabled': { backgroundColor: '#e2e8f0', color: '#94a3b8' },
+    '&:hover': { backgroundColor: 'var(--crm-fill-blue-700)' },
+    '&.Mui-disabled': { backgroundColor: 'var(--crm-slate-200)', color: 'var(--mui-palette-text-muted)' },
 } as const;
 
 export function LookupField({
@@ -146,7 +146,7 @@ export function LookupField({
                         sx={actionButtonSx}
                     >
                         {loading ? (
-                            <CircularProgress size={14} sx={{ color: '#94a3b8' }} />
+                            <CircularProgress size={14} sx={{ color: 'var(--mui-palette-text-muted)' }} />
                         ) : (
                             <ArrowForwardIosIcon sx={{ fontSize: 13 }} />
                         )}

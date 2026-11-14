@@ -25,6 +25,12 @@ const clearableText = (max: number) =>
         z.string().trim().max(max).nullable().optional(),
     );
 
+/**
+ * A field's placeholder / hint: null resets it to the form's own (coded) text, while '' is kept and blanks it
+ * (the admin cleared the text, so the form shows none).
+ */
+const blankableText = (max: number) => z.string().trim().max(max).nullable().optional();
+
 const label = (field: string, max: number) =>
     z.string({ error: `${field} is required.` }).trim().min(1, { message: `${field} is required.` }).max(max, { message: `${field} cannot exceed ${max} characters.` });
 
@@ -147,8 +153,8 @@ export const updateFieldSchema = z
         sectionKey: z.string().trim().min(1).max(80).optional(),
         sectionLabel: label('Section', 120).optional(),
         fieldSize,
-        placeholder: clearableText(200),
-        hint: clearableText(200),
+        placeholder: blankableText(200),
+        hint: blankableText(200),
         defaultValue: clearableText(500),
         /** Blocked (false) for core-locked fields. */
         isRequired: z.boolean().optional(),

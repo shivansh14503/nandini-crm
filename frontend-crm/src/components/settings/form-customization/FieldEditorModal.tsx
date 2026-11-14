@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
     Alert,
     Autocomplete,
@@ -34,6 +34,19 @@ import {
 import { groupSections, isBuiltInCountryField, moduleFields } from '@/utils/formConfig';
 import { COUNTRY_OPTIONS, getCountryByCode, type CountryMasterItem } from '@/data/addressMaster';
 import { Badge, errorMessage, inputSx, primaryButtonSx, secondaryButtonSx } from './builderUi';
+import { useCodedFieldDefaults } from '@/context/CodedFieldDefaultsContext';
+
+/**
+ * What to store for a field's placeholder / hint: null (= the form's own text) while it's still the form's coded
+ * text, so an untouched prefill never becomes an override; '' when the admin cleared it (the form then shows
+ * none); otherwise the admin's text.
+ */
+const storedText = (value: string, coded: string | undefined, saved: string | null | undefined, cleared: boolean): string | null => {
+    const text = value.trim();
+    if (text) return text === coded?.trim() ? null : text;
+    // Empty: blank only if the admin emptied the box (or it was saved blank); an untouched empty box changes nothing.
+    return cleared || saved === '' ? '' : (saved ?? null);
+};
 
 export interface FieldEditorModalProps {
     open: boolean;
@@ -90,6 +103,8 @@ export function FieldEditorModal({ open, onClose, module, configs, field, defaul
     const tabs = configs.moduleTabs[module] ?? [];
     const isCreate = !field;
     const locked = Boolean(field?.isCoreLocked);
+    // The placeholder / hint the hand-built form codes for this built-in field: prefilled when not overridden.
+    const coded = useCodedFieldDefaults(field?.isSystem ? field.fieldKey : undefined);
 
     const initialDraft = (): Draft => ({
         label: field?.label ?? '',
@@ -99,8 +114,8 @@ export function FieldEditorModal({ open, onClose, module, configs, field, defaul
         sectionChoice: field?.sectionKey ?? defaultSectionKey ?? NEW_SECTION,
         newSectionLabel: '',
         fieldSize: (field?.fieldSize as ConfigFieldSize | null) ?? '',
-        placeholder: field?.placeholder ?? '',
-        hint: field?.hint ?? '',
+        placeholder: field?.placeholder ?? coded.placeholder ?? '',
+        hint: field?.hint ?? coded.hint ?? '',
         defaultValue: field?.defaultValue ?? '',
         isRequired: field?.isRequired ?? false,
         isVisibleInForm: field?.isVisibleInForm ?? true,
@@ -115,7 +130,29 @@ export function FieldEditorModal({ open, onClose, module, configs, field, defaul
     const [saving, setSaving] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
-    const set = <K extends keyof Draft>(key: K, value: Draft[K]) => setDraft((d) => ({ ...d, [key]: value }));
+    const touched = useRef(new Set<keyof Draft>());
+    const set = <K extends keyof Draft>(key: K, value: Draft[K]) => {
+        touched.current.add(key);
+        setDraft((d) => ({ ...d, [key]: value }));
+    };
+
+    // The form's coded texts are read in the background; fill them in if they arrive after the editor opened.
+    useEffect(() => {
+        setDraft((d) => {
+            const next = { ...d };
+            if (field?.placeholder == null && coded.placeholder && !d.placeholder && !touched.current.has('placeholder')) next.placeholder = coded.placeholder;
+            if (field?.hint == null && coded.hint && !d.hint && !touched.current.has('hint')) next.hint = coded.hint;
+            return next.placeholder === d.placeholder && next.hint === d.hint ? d : next;
+        });
+    }, [coded.placeholder, coded.hint, field?.placeholder, field?.hint]);
+
+    /** Helper under a prefilled text box of a built-in field. */
+    const codedHelper = (value: string, codedText: string | undefined) => {
+        if (!field?.isSystem) return undefined;
+        if (!value.trim()) return 'Empty — the form shows no text here';
+        if (codedText && value.trim() === codedText.trim()) return "The form's default text — edit or clear it";
+        return undefined;
+    };
 
     const sections = useMemo(() => groupSections(moduleFields(configs, module), draft.tabKey), [configs, module, draft.tabKey]);
     // A pre-selected section that isn't on the chosen tab falls back to "new section".
@@ -198,8 +235,8 @@ export function FieldEditorModal({ open, onClose, module, configs, field, defaul
                     sectionKey,
                     ...(section ? {} : { sectionLabel }),
                     fieldSize: draft.fieldSize || null,
-                    placeholder: draft.placeholder.trim() || null,
-                    hint: draft.hint.trim() || null,
+                    placeholder: storedText(draft.placeholder, coded.placeholder, field!.placeholder, touched.current.has('placeholder')),
+                    hint: storedText(draft.hint, coded.hint, field!.hint, touched.current.has('hint')),
                     defaultValue: draft.defaultValue.trim() || null,
                     ...(locked ? {} : { isRequired: draft.isRequired, isVisibleInForm: draft.isVisibleInForm }),
                     isVisibleInDrawer: draft.isVisibleInDrawer,
@@ -217,17 +254,17 @@ export function FieldEditorModal({ open, onClose, module, configs, field, defaul
         }
     };
 
-    const label = (text: string) => <Typography sx={{ fontSize: '0.78rem', fontWeight: 600, color: '#374151', mb: 0.6 }}>{text}</Typography>;
+    const label = (text: string) => <Typography sx={{ fontSize: '0.78rem', fontWeight: 600, color: 'var(--crm-gray-700)', mb: 0.6 }}>{text}</Typography>;
 
     return (
         <Dialog open={open} onClose={saving ? undefined : onClose} fullWidth maxWidth="md" slotProps={{ paper: { sx: { borderRadius: '12px' } } }}>
-            <DialogTitle sx={{ borderBottom: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
-                <Typography component="span" sx={{ fontWeight: 700, fontSize: '1rem', color: '#0f172a' }}>
+            <DialogTitle sx={{ borderBottom: '1px solid var(--mui-palette-border-main)', display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
+                <Typography component="span" sx={{ fontWeight: 700, fontSize: '1rem', color: 'var(--crm-slate-900)' }}>
                     {isCreate ? `Add Field — ${CRM_MODULE_LABELS[module]}` : `Edit Field — ${field!.label}`}
                 </Typography>
                 {locked && <Badge tone="locked">Locked</Badge>}
                 {field && (
-                    <Typography component="span" sx={{ fontSize: '0.74rem', color: '#64748b', fontFamily: 'monospace', ml: 'auto' }}>
+                    <Typography component="span" sx={{ fontSize: '0.74rem', color: 'var(--mui-palette-text-secondary)', fontFamily: 'monospace', ml: 'auto' }}>
                         {field.fieldKey}
                     </Typography>
                 )}
@@ -278,7 +315,7 @@ export function FieldEditorModal({ open, onClose, module, configs, field, defaul
                                 </MenuItem>
                             ))}
                             {(
-                                <MenuItem value={NEW_TAB} sx={{ fontSize: '0.85rem', color: '#2563eb', fontWeight: 600 }}>
+                                <MenuItem value={NEW_TAB} sx={{ fontSize: '0.85rem', color: 'var(--crm-text-blue-600)', fontWeight: 600 }}>
                                     + New tab…
                                 </MenuItem>
                             )}
@@ -306,7 +343,7 @@ export function FieldEditorModal({ open, onClose, module, configs, field, defaul
                                 </MenuItem>
                             ))}
                             {(
-                                <MenuItem value={NEW_SECTION} sx={{ fontSize: '0.85rem', color: '#2563eb', fontWeight: 600 }}>
+                                <MenuItem value={NEW_SECTION} sx={{ fontSize: '0.85rem', color: 'var(--crm-text-blue-600)', fontWeight: 600 }}>
                                     + New section…
                                 </MenuItem>
                             )}
@@ -344,7 +381,8 @@ export function FieldEditorModal({ open, onClose, module, configs, field, defaul
                             fullWidth
                             value={draft.placeholder}
                             onChange={(e) => set('placeholder', e.target.value)}
-                            placeholder="Leave empty to use the form's default"
+                            placeholder="Text shown inside the empty input"
+                            helperText={codedHelper(draft.placeholder, coded.placeholder)}
                             sx={inputSx}
                             slotProps={{ htmlInput: { maxLength: 200 } }}
                         />
@@ -357,6 +395,7 @@ export function FieldEditorModal({ open, onClose, module, configs, field, defaul
                             value={draft.hint}
                             onChange={(e) => set('hint', e.target.value)}
                             placeholder="Short helper text beside the label"
+                            helperText={codedHelper(draft.hint, coded.hint)}
                             sx={inputSx}
                             slotProps={{ htmlInput: { maxLength: 200 } }}
                         />
@@ -403,8 +442,8 @@ export function FieldEditorModal({ open, onClose, module, configs, field, defaul
                 )}
 
                 {choice && !countryField && (
-                    <Box sx={{ mt: 2.5, p: 2, borderRadius: '10px', border: '1px solid #e2e8f0', backgroundColor: '#f8fafc' }}>
-                        <Typography sx={{ fontSize: '0.8rem', fontWeight: 700, color: '#1e293b', mb: 1 }}>Dropdown Options</Typography>
+                    <Box sx={{ mt: 2.5, p: 2, borderRadius: '10px', border: '1px solid var(--mui-palette-border-main)', backgroundColor: 'var(--mui-palette-background-subtle)' }}>
+                        <Typography sx={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--mui-palette-text-primary)', mb: 1 }}>Dropdown Options</Typography>
                         {isCreate && (
                             <RadioGroup row value={draft.optionsMode} onChange={(e) => set('optionsMode', e.target.value as Draft['optionsMode'])} sx={{ mb: 1 }}>
                                 <FormControlLabel value="new" control={<Radio size="small" />} label={<Typography sx={{ fontSize: '0.82rem' }}>Create new options</Typography>} />
@@ -426,7 +465,7 @@ export function FieldEditorModal({ open, onClose, module, configs, field, defaul
                                 {categories.map((c) => (
                                     <MenuItem key={c.key} value={c.key} sx={{ fontSize: '0.85rem' }}>
                                         {c.label}
-                                        <Typography component="span" sx={{ ml: 1, fontSize: '0.72rem', color: '#94a3b8' }}>
+                                        <Typography component="span" sx={{ ml: 1, fontSize: '0.72rem', color: 'var(--mui-palette-text-muted)' }}>
                                             {c.module === 'shared' ? 'Shared' : CRM_MODULE_LABELS[c.module as CrmModuleKey]} • {c.options.filter((o) => o.isActive).length} options
                                         </Typography>
                                     </MenuItem>
@@ -451,19 +490,19 @@ export function FieldEditorModal({ open, onClose, module, configs, field, defaul
                 <Box sx={{ mt: 2.5, display: 'flex', flexWrap: 'wrap', gap: 3 }}>
                     <FormControlLabel
                         control={<Switch size="small" checked={locked ? true : draft.isRequired} disabled={locked} onChange={(e) => set('isRequired', e.target.checked)} />}
-                        label={<Typography sx={{ fontSize: '0.84rem', fontWeight: 600, color: '#374151' }}>Required</Typography>}
+                        label={<Typography sx={{ fontSize: '0.84rem', fontWeight: 600, color: 'var(--crm-gray-700)' }}>Required</Typography>}
                     />
                     <FormControlLabel
                         control={<Switch size="small" checked={locked ? true : draft.isVisibleInForm} disabled={locked} onChange={(e) => set('isVisibleInForm', e.target.checked)} />}
-                        label={<Typography sx={{ fontSize: '0.84rem', fontWeight: 600, color: '#374151' }}>Visible in Form</Typography>}
+                        label={<Typography sx={{ fontSize: '0.84rem', fontWeight: 600, color: 'var(--crm-gray-700)' }}>Visible in Form</Typography>}
                     />
                     <FormControlLabel
                         control={<Switch size="small" checked={draft.isVisibleInDrawer} onChange={(e) => set('isVisibleInDrawer', e.target.checked)} />}
-                        label={<Typography sx={{ fontSize: '0.84rem', fontWeight: 600, color: '#374151' }}>Visible in Drawer</Typography>}
+                        label={<Typography sx={{ fontSize: '0.84rem', fontWeight: 600, color: 'var(--crm-gray-700)' }}>Visible in Drawer</Typography>}
                     />
                 </Box>
             </DialogContent>
-            <DialogActions sx={{ px: 3, py: 2, borderTop: '1px solid #e2e8f0' }}>
+            <DialogActions sx={{ px: 3, py: 2, borderTop: '1px solid var(--mui-palette-border-main)' }}>
                 <Button onClick={onClose} disabled={saving} variant="outlined" sx={secondaryButtonSx}>
                     Cancel
                 </Button>

@@ -35,8 +35,8 @@ export interface PdfActionsButtonProps {
     disabled?: boolean;
 }
 
-const gradient = 'linear-gradient(135deg, #1d4ed8 0%, #2563eb 100%)';
-const gradientHover = 'linear-gradient(135deg, #1e40af 0%, #1d4ed8 100%)';
+const gradient = 'linear-gradient(135deg, var(--crm-fill-blue-700) 0%, var(--crm-fill-blue-600) 100%)';
+const gradientHover = 'linear-gradient(135deg, var(--crm-fill-blue-800) 0%, var(--crm-fill-blue-700) 100%)';
 
 const baseSx = {
     background: gradient,
@@ -47,20 +47,20 @@ const baseSx = {
     height: 36,
     boxShadow: 'none',
     '&:hover': { background: gradientHover, boxShadow: 'none' },
-    '&.Mui-disabled': { background: '#cbd5e1', color: '#fff' },
+    '&.Mui-disabled': { background: 'var(--crm-slate-300)', color: '#fff' },
 } as const;
 
-const menuItemSx = { fontSize: '0.84rem', fontWeight: 500, color: '#334155' } as const;
+const menuItemSx = { fontSize: '0.84rem', fontWeight: 500, color: 'var(--crm-slate-700)' } as const;
 const menuTextProps = { primary: { sx: { fontSize: '0.84rem' } } } as const;
 
 const iconButtonSx = {
     width: 30,
     height: 30,
     borderRadius: '8px',
-    border: '1px solid #e2e8f0',
-    color: '#64748b',
-    backgroundColor: '#ffffff',
-    '&:hover': { color: '#1d4ed8', backgroundColor: '#eff6ff', borderColor: '#bfdbfe' },
+    border: '1px solid var(--mui-palette-border-main)',
+    color: 'var(--mui-palette-text-secondary)',
+    backgroundColor: 'var(--mui-palette-background-paper)',
+    '&:hover': { color: 'var(--crm-blue-700)', backgroundColor: 'var(--mui-palette-primary-soft)', borderColor: 'var(--mui-palette-primary-softBorder)' },
 } as const;
 
 /** "Print / PDF" split button: preview (main action), download, print and the template to use. */
@@ -147,29 +147,29 @@ export function PdfActionsButton({ module, recordId, variant = 'split', disabled
                 // Detail drawers sit at z-index 1310–1400 (CommonMasterView); MUI's default 1300 would open the menu behind them.
                 sx={{ zIndex: 1450 }}
                 slotProps={{
-                    paper: { sx: { mt: 0.5, minWidth: 250, border: '1px solid #e2e8f0', borderRadius: '10px', boxShadow: '0 8px 24px rgba(15,23,42,0.10)' } },
+                    paper: { sx: { mt: 0.5, minWidth: 250, border: '1px solid var(--mui-palette-border-main)', borderRadius: '10px', boxShadow: '0 8px 24px rgba(15,23,42,0.10)' } },
                 }}
             >
                 <MenuItem onClick={run(() => preview(templateId))} sx={menuItemSx}>
                     <ListItemIcon sx={{ minWidth: 30 }}>
-                        <OpenInNewIcon sx={{ fontSize: 18, color: '#2563eb' }} />
+                        <OpenInNewIcon sx={{ fontSize: 18, color: 'var(--crm-text-blue-600)' }} />
                     </ListItemIcon>
                     <ListItemText slotProps={menuTextProps}>Preview</ListItemText>
                 </MenuItem>
                 <MenuItem onClick={run(() => void download(templateId))} disabled={busy !== null} sx={menuItemSx}>
                     <ListItemIcon sx={{ minWidth: 30 }}>
-                        {busy === 'download' ? <CircularProgress size={16} /> : <DownloadIcon sx={{ fontSize: 18, color: '#2563eb' }} />}
+                        {busy === 'download' ? <CircularProgress size={16} /> : <DownloadIcon sx={{ fontSize: 18, color: 'var(--crm-text-blue-600)' }} />}
                     </ListItemIcon>
                     <ListItemText slotProps={menuTextProps}>Download PDF</ListItemText>
                 </MenuItem>
                 <MenuItem onClick={run(() => void print(templateId))} disabled={busy !== null} sx={menuItemSx}>
                     <ListItemIcon sx={{ minWidth: 30 }}>
-                        {busy === 'print' ? <CircularProgress size={16} /> : <PrintIcon sx={{ fontSize: 18, color: '#2563eb' }} />}
+                        {busy === 'print' ? <CircularProgress size={16} /> : <PrintIcon sx={{ fontSize: 18, color: 'var(--crm-text-blue-600)' }} />}
                     </ListItemIcon>
                     <ListItemText slotProps={menuTextProps}>Print</ListItemText>
                 </MenuItem>
                 <Divider sx={{ my: 0.5 }} />
-                <ListSubheader sx={{ lineHeight: '28px', fontSize: '0.7rem', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                <ListSubheader sx={{ lineHeight: '28px', fontSize: '0.7rem', fontWeight: 700, color: 'var(--mui-palette-text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
                     Template
                 </ListSubheader>
                 {(templates ?? []).map((t) => {
@@ -184,13 +184,13 @@ export function PdfActionsButton({ module, recordId, variant = 'split', disabled
                             sx={menuItemSx}
                         >
                             <ListItemIcon sx={{ minWidth: 30 }}>
-                                {checked ? <RadioButtonCheckedIcon sx={{ fontSize: 18, color: '#2563eb' }} /> : <RadioButtonUncheckedIcon sx={{ fontSize: 18, color: '#94a3b8' }} />}
+                                {checked ? <RadioButtonCheckedIcon sx={{ fontSize: 18, color: 'var(--crm-text-blue-600)' }} /> : <RadioButtonUncheckedIcon sx={{ fontSize: 18, color: 'var(--mui-palette-text-muted)' }} />}
                             </ListItemIcon>
                             <ListItemText slotProps={menuTextProps}>{t.name}</ListItemText>
                             {t.isDefault && (
                                 <Box
                                     component="span"
-                                    sx={{ ml: 1, px: 0.75, py: 0.1, borderRadius: '6px', fontSize: '0.66rem', fontWeight: 700, color: '#1d4ed8', backgroundColor: '#eff6ff', border: '1px solid #bfdbfe' }}
+                                    sx={{ ml: 1, px: 0.75, py: 0.1, borderRadius: '6px', fontSize: '0.66rem', fontWeight: 700, color: 'var(--crm-text-blue-700)', backgroundColor: 'var(--mui-palette-primary-soft)', border: '1px solid var(--mui-palette-primary-softBorder)' }}
                                 >
                                     Default
                                 </Box>

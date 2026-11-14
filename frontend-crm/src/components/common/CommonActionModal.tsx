@@ -33,7 +33,7 @@ export interface CommonActionModalProps {
 }
 
 const CONFIRM_GRADIENTS: Record<NonNullable<CommonActionModalProps['confirmColor']>, string> = {
-    primary: 'linear-gradient(135deg, #1d4ed8 0%, #2563eb 100%)',
+    primary: 'linear-gradient(135deg, var(--crm-fill-blue-700) 0%, var(--crm-fill-blue-600) 100%)',
     warning: 'linear-gradient(135deg, #d97706 0%, #f59e0b 100%)',
     error: 'linear-gradient(135deg, #b91c1c 0%, #dc2626 100%)',
 };
@@ -91,15 +91,15 @@ export function CommonActionModal({
             aria-labelledby="common-action-modal-title"
         >
             <DialogTitle component="div" sx={{ display: 'flex', alignItems: 'flex-start', gap: 1.5, pb: 1 }}>
-                <Avatar sx={{ bgcolor: '#fef3c7', color: '#d97706', width: 40, height: 40 }}>
+                <Avatar sx={{ bgcolor: 'var(--crm-amber-100)', color: 'var(--mui-palette-warning-main)', width: 40, height: 40 }}>
                     <WarningAmberRoundedIcon />
                 </Avatar>
                 <Box>
-                    <Typography id="common-action-modal-title" sx={{ fontWeight: 700, fontSize: '1.05rem', color: '#0f172a' }}>
+                    <Typography id="common-action-modal-title" sx={{ fontWeight: 700, fontSize: '1.05rem', color: 'var(--crm-slate-900)' }}>
                         {title}
                     </Typography>
                     {description && (
-                        <Typography sx={{ fontSize: '0.82rem', color: '#64748b', mt: 0.25 }}>
+                        <Typography sx={{ fontSize: '0.82rem', color: 'var(--mui-palette-text-secondary)', mt: 0.25 }}>
                             {description}
                         </Typography>
                     )}
@@ -151,7 +151,7 @@ export function CommonActionModal({
                     variant="outlined"
                     onClick={handleClose}
                     disabled={loading}
-                    sx={{ textTransform: 'none', fontWeight: 600, borderRadius: '8px', borderColor: '#e2e8f0', color: '#334155' }}
+                    sx={{ textTransform: 'none', fontWeight: 600, borderRadius: '8px', borderColor: 'var(--mui-palette-border-main)', color: 'var(--crm-slate-700)' }}
                 >
                     {cancelLabel}
                 </Button>

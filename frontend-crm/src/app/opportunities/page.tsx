@@ -24,7 +24,7 @@ export default function OpportunitiesPage() {
     if (!user) return null;
 
     return (
-        <Box sx={{ minHeight: '100vh', backgroundColor: '#f8fafc', display: 'flex', flexDirection: 'column' }}>
+        <Box sx={{ minHeight: '100vh', backgroundColor: 'var(--mui-palette-background-subtle)', display: 'flex', flexDirection: 'column' }}>
             <Navbar />
             <ErrorAlert error={error} onClose={clearError} />
             <OpportunitiesMasterView />

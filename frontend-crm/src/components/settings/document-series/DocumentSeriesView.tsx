@@ -102,10 +102,10 @@ const draftFrom = (config: DocumentSeriesConfig): Draft => ({
 const headCellSx = {
     fontSize: '0.72rem',
     fontWeight: 700,
-    color: '#475569',
+    color: 'var(--crm-slate-600)',
     textTransform: 'uppercase',
     letterSpacing: '0.03em',
-    backgroundColor: '#f8fafc',
+    backgroundColor: 'var(--mui-palette-background-subtle)',
     whiteSpace: 'nowrap',
     py: 1.25,
 } as const;
@@ -113,11 +113,11 @@ const headCellSx = {
 const cellSx = { py: 1, px: 1.25, verticalAlign: 'top', whiteSpace: 'nowrap' } as const;
 /** Fixed input widths so typing never squeezes other columns; the table scrolls sideways instead. */
 const fixedInputSx = (width: number) => ({ ...inputSx, width, '& .MuiOutlinedInput-input': { py: '7px', px: '10px' } }) as const;
-const fieldLabelSx = { fontSize: '0.75rem', fontWeight: 600, color: '#334155', mb: 0.5 } as const;
+const fieldLabelSx = { fontSize: '0.75rem', fontWeight: 600, color: 'var(--crm-slate-700)', mb: 0.5 } as const;
 
 function ErrorText({ message }: { message?: string }) {
     if (!message) return null;
-    return <Typography sx={{ fontSize: '0.7rem', color: '#dc2626', mt: 0.4, lineHeight: 1.3, whiteSpace: 'normal', maxWidth: 160 }}>{message}</Typography>;
+    return <Typography sx={{ fontSize: '0.7rem', color: 'var(--mui-palette-error-main)', mt: 0.4, lineHeight: 1.3, whiteSpace: 'normal', maxWidth: 160 }}>{message}</Typography>;
 }
 
 function AddSeriesDialog({
@@ -142,11 +142,11 @@ function AddSeriesDialog({
         <Dialog open={open} onClose={close} fullWidth maxWidth="xs">
             <DialogTitle sx={{ fontSize: '1rem', fontWeight: 700 }}>Add series</DialogTitle>
             <DialogContent dividers>
-                <Typography sx={{ fontSize: '0.8rem', color: '#64748b', mb: 1.5 }}>
+                <Typography sx={{ fontSize: '0.8rem', color: 'var(--mui-palette-text-secondary)', mb: 1.5 }}>
                     Choose the modules to give their own series. You can set each one&apos;s prefix, suffix and numbering in the table.
                 </Typography>
                 {options.length === 0 ? (
-                    <Typography sx={{ fontSize: '0.85rem', color: '#334155' }}>Every module already has a series.</Typography>
+                    <Typography sx={{ fontSize: '0.85rem', color: 'var(--crm-slate-700)' }}>Every module already has a series.</Typography>
                 ) : (
                     <Box sx={{ display: 'flex', flexDirection: 'column' }}>
                         {options.map((o) => (
@@ -155,10 +155,10 @@ function AddSeriesDialog({
                                 control={<Checkbox size="small" checked={selected.includes(o.module)} onChange={() => toggle(o.module)} />}
                                 label={
                                     <Box>
-                                        <Typography component="span" sx={{ fontSize: '0.85rem', fontWeight: 600, color: '#0f172a' }}>
+                                        <Typography component="span" sx={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--crm-slate-900)' }}>
                                             {o.label}
                                         </Typography>
-                                        <Typography component="span" sx={{ fontSize: '0.75rem', color: '#94a3b8', ml: 1 }}>
+                                        <Typography component="span" sx={{ fontSize: '0.75rem', color: 'var(--mui-palette-text-muted)', ml: 1 }}>
                                             now {o.nextCode}
                                         </Typography>
                                     </Box>
@@ -301,9 +301,9 @@ export function DocumentSeriesView() {
                         width: 40,
                         height: 40,
                         borderRadius: '10px',
-                        backgroundColor: '#eff6ff',
-                        border: '1px solid #bfdbfe',
-                        color: '#2563eb',
+                        backgroundColor: 'var(--mui-palette-primary-soft)',
+                        border: '1px solid var(--mui-palette-primary-softBorder)',
+                        color: 'var(--crm-text-blue-600)',
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',
@@ -313,12 +313,12 @@ export function DocumentSeriesView() {
                     <FormatListNumberedOutlinedIcon />
                 </Box>
                 <Box sx={{ flex: 1, minWidth: 220 }}>
-                    <Typography component="h1" sx={{ fontWeight: 700, fontSize: '1.1rem', color: '#0f172a' }}>
+                    <Typography component="h1" sx={{ fontWeight: 700, fontSize: '1.1rem', color: 'var(--crm-slate-900)' }}>
                         Document Series
                     </Typography>
-                    <Typography sx={{ fontSize: '0.8rem', color: '#64748b', mt: 0.25 }}>
+                    <Typography sx={{ fontSize: '0.8rem', color: 'var(--mui-palette-text-secondary)', mt: 0.25 }}>
                         Build record numbers from a company prefix, module prefix, financial year and running number, e.g.{' '}
-                        <Box component="span" sx={{ fontFamily: 'monospace', fontWeight: 700, color: '#1d4ed8' }}>
+                        <Box component="span" sx={{ fontFamily: 'monospace', fontWeight: 700, color: 'var(--crm-text-blue-700)' }}>
                             {sampleCode}
                         </Box>
                     </Typography>
@@ -346,8 +346,8 @@ export function DocumentSeriesView() {
             {/* Common settings */}
             <Box sx={{ ...surfaceSx, overflow: 'hidden' }}>
                 <Box sx={panelHeaderSx}>
-                    <Typography sx={{ fontWeight: 700, fontSize: '0.85rem', color: '#0f172a' }}>Common settings</Typography>
-                    <Typography sx={{ fontSize: '0.75rem', color: '#64748b' }}>Shared by every series.</Typography>
+                    <Typography sx={{ fontWeight: 700, fontSize: '0.85rem', color: 'var(--crm-slate-900)' }}>Common settings</Typography>
+                    <Typography sx={{ fontSize: '0.75rem', color: 'var(--mui-palette-text-secondary)' }}>Shared by every series.</Typography>
                 </Box>
                 <Box sx={{ p: 2, display: 'grid', gap: 2, gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, minmax(0, 1fr))', lg: 'repeat(4, minmax(0, 1fr))' } }}>
                     <Box>
@@ -423,13 +423,13 @@ export function DocumentSeriesView() {
                             {FY_FORMATS.map((format) => (
                                 <MenuItem key={format} value={format} sx={{ fontSize: '0.85rem' }}>
                                     {formatFinancialYear(fy.startYear, draft.settings.fyStartMonth, format)}
-                                    <Box component="span" sx={{ color: '#94a3b8', ml: 1, fontSize: '0.75rem' }}>
+                                    <Box component="span" sx={{ color: 'var(--mui-palette-text-muted)', ml: 1, fontSize: '0.75rem' }}>
                                         ({format})
                                     </Box>
                                 </MenuItem>
                             ))}
                         </TextField>
-                        <Typography sx={{ fontSize: '0.7rem', color: '#64748b', mt: 0.4 }}>Current financial year: {fy.label}</Typography>
+                        <Typography sx={{ fontSize: '0.7rem', color: 'var(--mui-palette-text-secondary)', mt: 0.4 }}>Current financial year: {fy.label}</Typography>
                     </Box>
                 </Box>
             </Box>
@@ -438,8 +438,8 @@ export function DocumentSeriesView() {
             <Box sx={{ ...surfaceSx, overflow: 'hidden', minWidth: 0 }}>
                 <Box sx={{ ...panelHeaderSx, display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 1 }}>
                     <Box sx={{ flex: 1, minWidth: 200 }}>
-                        <Typography sx={{ fontWeight: 700, fontSize: '0.85rem', color: '#0f172a' }}>Series</Typography>
-                        <Typography sx={{ fontSize: '0.75rem', color: '#64748b' }}>
+                        <Typography sx={{ fontWeight: 700, fontSize: '0.85rem', color: 'var(--crm-slate-900)' }}>Series</Typography>
+                        <Typography sx={{ fontSize: '0.75rem', color: 'var(--mui-palette-text-secondary)' }}>
                             Order: company prefix · module prefix · financial year · number · suffix
                         </Typography>
                     </Box>
@@ -457,8 +457,8 @@ export function DocumentSeriesView() {
 
                 {draft.rows.length === 0 ? (
                     <Box sx={{ py: 5, px: 3, textAlign: 'center' }}>
-                        <Typography sx={{ fontWeight: 700, color: '#1e293b', fontSize: '0.9rem' }}>No series yet</Typography>
-                        <Typography sx={{ fontSize: '0.8rem', color: '#64748b', mt: 0.5 }}>
+                        <Typography sx={{ fontWeight: 700, color: 'var(--mui-palette-text-primary)', fontSize: '0.9rem' }}>No series yet</Typography>
+                        <Typography sx={{ fontSize: '0.8rem', color: 'var(--mui-palette-text-secondary)', mt: 0.5 }}>
                             All modules use their current numbering. Add a series to number a module like {sampleCode}.
                         </Typography>
                         <Button variant="outlined" startIcon={<AddIcon />} sx={{ ...secondaryButtonSx, mt: 2 }} onClick={() => setAddOpen(true)}>
@@ -501,7 +501,7 @@ export function DocumentSeriesView() {
                                     return (
                                         <TableRow key={row.module} hover>
                                             <TableCell sx={{ ...cellSx, pt: 1.75 }}>
-                                                <Typography sx={{ fontSize: '0.84rem', fontWeight: 600, color: '#0f172a' }}>{row.label}</Typography>
+                                                <Typography sx={{ fontSize: '0.84rem', fontWeight: 600, color: 'var(--crm-slate-900)' }}>{row.label}</Typography>
                                             </TableCell>
                                             <TableCell sx={cellSx}>
                                                 <TextField
@@ -560,10 +560,10 @@ export function DocumentSeriesView() {
                                                 <ErrorText message={err('startingNumber')} />
                                             </TableCell>
                                             <TableCell sx={{ ...cellSx, pt: 1.75 }}>
-                                                <Typography sx={{ fontSize: '0.84rem', color: '#334155' }}>{lastIssued(row.module)}</Typography>
+                                                <Typography sx={{ fontSize: '0.84rem', color: 'var(--crm-slate-700)' }}>{lastIssued(row.module)}</Typography>
                                             </TableCell>
                                             <TableCell sx={{ ...cellSx, pt: 1.75 }}>
-                                                <Typography sx={{ fontSize: '0.84rem', fontFamily: 'monospace', fontWeight: 700, color: '#1d4ed8' }}>
+                                                <Typography sx={{ fontSize: '0.84rem', fontFamily: 'monospace', fontWeight: 700, color: 'var(--crm-text-blue-700)' }}>
                                                     {previewFor(row)}
                                                 </Typography>
                                             </TableCell>
@@ -573,7 +573,7 @@ export function DocumentSeriesView() {
                                                         size="small"
                                                         aria-label={`Remove ${row.label} series`}
                                                         onClick={() => removeRow(row.module)}
-                                                        sx={{ color: '#94a3b8', '&:hover': { color: '#ef4444', backgroundColor: '#fef2f2' } }}
+                                                        sx={{ color: 'var(--mui-palette-text-muted)', '&:hover': { color: 'var(--crm-red-500)', backgroundColor: 'var(--mui-palette-error-soft)' } }}
                                                     >
                                                         <DeleteOutlineRoundedIcon fontSize="small" />
                                                     </IconButton>
@@ -588,14 +588,14 @@ export function DocumentSeriesView() {
                 )}
 
                 {unadded.length > 0 && draft.rows.length > 0 && (
-                    <Box sx={{ px: 2, py: 1.25, borderTop: '1px solid #e2e8f0', backgroundColor: '#fcfdfe' }}>
-                        <Typography sx={{ fontSize: '0.75rem', color: '#64748b' }}>
+                    <Box sx={{ px: 2, py: 1.25, borderTop: '1px solid var(--mui-palette-border-main)', backgroundColor: 'var(--mui-palette-background-subtle)' }}>
+                        <Typography sx={{ fontSize: '0.75rem', color: 'var(--mui-palette-text-secondary)' }}>
                             Using current numbering:{' '}
                             {unadded.map((u, i) => (
                                 <React.Fragment key={u.module}>
                                     {i > 0 && ', '}
                                     {u.label}{' '}
-                                    <Box component="span" sx={{ fontFamily: 'monospace', color: '#475569' }}>
+                                    <Box component="span" sx={{ fontFamily: 'monospace', color: 'var(--crm-slate-600)' }}>
                                         ({u.nextCode})
                                     </Box>
                                 </React.Fragment>
@@ -606,7 +606,7 @@ export function DocumentSeriesView() {
             </Box>
 
             {config.settings.updatedAt && (
-                <Typography sx={{ fontSize: '0.72rem', color: '#94a3b8', textAlign: 'right' }}>
+                <Typography sx={{ fontSize: '0.72rem', color: 'var(--mui-palette-text-muted)', textAlign: 'right' }}>
                     Last saved by {config.settings.updatedBy ?? 'unknown'} on{' '}
                     {new Date(config.settings.updatedAt).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' })}
                 </Typography>

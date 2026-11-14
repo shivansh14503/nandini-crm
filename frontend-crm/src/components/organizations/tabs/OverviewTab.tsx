@@ -210,9 +210,9 @@ function OverviewTabInner({
                         display: 'flex',
                         alignItems: 'center',
                         p: 1.75,
-                        border: '1px solid #e2e8f0',
+                        border: '1px solid var(--mui-palette-border-main)',
                         borderRadius: '10px',
-                        backgroundColor: '#f8fafc',
+                        backgroundColor: 'var(--mui-palette-background-subtle)',
                         gap: 2,
                     }}
                 >
@@ -224,21 +224,21 @@ function OverviewTabInner({
                             alignItems: 'center',
                             justifyContent: 'space-between',
                             pr: 2,
-                            borderRight: '1px solid #e2e8f0',
+                            borderRight: '1px solid var(--mui-palette-border-main)',
                         }}
                     >
                         <Box>
                             <Typography
                                 sx={{
                                     fontWeight: 700,
-                                    color: '#1e293b',
+                                    color: 'var(--mui-palette-text-primary)',
                                     fontSize: '0.82rem',
                                     lineHeight: 1.3,
                                 }}
                             >
                                 Account Verified
                             </Typography>
-                            <Typography sx={{ color: '#94a3b8', fontSize: '0.72rem' }}>
+                            <Typography sx={{ color: 'var(--mui-palette-text-muted)', fontSize: '0.72rem' }}>
                                 {verifiedCaption}
                             </Typography>
                         </Box>
@@ -251,7 +251,7 @@ function OverviewTabInner({
                                     fontSize: '0.76rem',
                                     fontWeight: 700,
                                     cursor: 'default',
-                                    color: form.accountVerified ? '#16a34a' : '#64748b',
+                                    color: form.accountVerified ? 'var(--mui-palette-success-main)' : 'var(--mui-palette-text-secondary)',
                                     backgroundColor: form.accountVerified ? '#16a34a1a' : '#64748b1a',
                                 }}
                             />
@@ -269,7 +269,7 @@ function OverviewTabInner({
                                         transform: 'translateX(20px)',
                                         color: '#fff',
                                         '& + .MuiSwitch-track': {
-                                            backgroundColor: '#16a34a',
+                                            backgroundColor: 'var(--mui-palette-success-main)',
                                             opacity: 1,
                                             border: 0,
                                         },
@@ -282,7 +282,7 @@ function OverviewTabInner({
                                 },
                                 '& .MuiSwitch-track': {
                                     borderRadius: 12,
-                                    backgroundColor: '#cbd5e1',
+                                    backgroundColor: 'var(--crm-slate-300)',
                                     opacity: 1,
                                 },
                             }}
@@ -304,14 +304,14 @@ function OverviewTabInner({
                             <Typography
                                 sx={{
                                     fontWeight: 700,
-                                    color: '#1e293b',
+                                    color: 'var(--mui-palette-text-primary)',
                                     fontSize: '0.82rem',
                                     lineHeight: 1.3,
                                 }}
                             >
                                 Provide Support
                             </Typography>
-                            <Typography sx={{ color: '#94a3b8', fontSize: '0.72rem' }}>
+                            <Typography sx={{ color: 'var(--mui-palette-text-muted)', fontSize: '0.72rem' }}>
                                 Active AMC entitlement
                             </Typography>
                         </Box>
@@ -324,7 +324,7 @@ function OverviewTabInner({
                                     fontSize: '0.76rem',
                                     fontWeight: 700,
                                     cursor: 'default',
-                                    color: form.provideSupport === 'Yes' ? '#16a34a' : '#64748b',
+                                    color: form.provideSupport === 'Yes' ? 'var(--mui-palette-success-main)' : 'var(--mui-palette-text-secondary)',
                                     backgroundColor: form.provideSupport === 'Yes' ? '#16a34a1a' : '#64748b1a',
                                 }}
                             />
@@ -338,13 +338,13 @@ function OverviewTabInner({
                                 sx={{
                                     fontSize: '0.82rem',
                                     borderRadius: '8px',
-                                    backgroundColor: '#fff',
+                                    backgroundColor: 'var(--mui-palette-background-paper)',
                                     height: 34,
                                     '& .MuiOutlinedInput-notchedOutline': {
-                                        borderColor: '#cbd5e1',
+                                        borderColor: 'var(--mui-palette-border-strong)',
                                     },
                                     '&:hover .MuiOutlinedInput-notchedOutline': {
-                                        borderColor: '#94a3b8',
+                                        borderColor: 'var(--crm-slate-400)',
                                     },
                                 }}
                             >
@@ -411,13 +411,13 @@ function OverviewTabInner({
                         size="small"
                         value={organizationName}
                         // Layered on fieldSx (not spread over it) so the input keeps the standard size and font.
-                        sx={[fieldSx, { '& .MuiOutlinedInput-root': { backgroundColor: '#f8fafc', color: '#475569' } }]}
+                        sx={[fieldSx, { '& .MuiOutlinedInput-root': { backgroundColor: 'var(--mui-palette-background-subtle)', color: 'var(--crm-slate-600)' } }]}
                         slotProps={{
                             htmlInput: { readOnly: true, tabIndex: -1, 'aria-readonly': true },
                             input: {
                                 endAdornment: (
                                     <InputAdornment position="end">
-                                        <LockOutlinedIcon sx={{ fontSize: 16, color: '#94a3b8' }} />
+                                        <LockOutlinedIcon sx={{ fontSize: 16, color: 'var(--mui-palette-text-muted)' }} />
                                     </InputAdornment>
                                 ),
                             },
@@ -463,8 +463,8 @@ function OverviewTabInner({
                                 sx={{
                                     fontSize: '0.7rem',
                                     height: 20,
-                                    backgroundColor: '#dcfce7',
-                                    color: '#16a34a',
+                                    backgroundColor: 'var(--crm-green-100)',
+                                    color: 'var(--mui-palette-success-main)',
                                     fontWeight: 700,
                                 }}
                             />
@@ -525,7 +525,7 @@ function OverviewTabInner({
                             input: {
                                 endAdornment: (
                                     <InputAdornment position="end">
-                                        <SwapHorizIcon sx={{ fontSize: 18, color: '#94a3b8' }} />
+                                        <SwapHorizIcon sx={{ fontSize: 18, color: 'var(--mui-palette-text-muted)' }} />
                                     </InputAdornment>
                                 ),
                             },

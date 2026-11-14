@@ -15,6 +15,7 @@ import type { PrefetchedLookups } from '../shared/prefetch.js';
 import { assertNotInPast, nextFollowupCheck } from '../../validators/notInPast.js';
 import { codeSearchPrefix, phoneSearch, phoneVariants, phoneWhere } from '../shared/searchTerms.js';
 import { lockRecords, runInTransaction, softDeleteData, type BulkDeleteResult } from '../shared/transactions.js';
+import { assertTaxIdsUnique } from '../shared/taxIdentifiers.js';
 import { toLeadData, toLeadDto, type LeadDto } from './lead.mapper.js';
 import {
     checkLeadDuplicatesQuerySchema,
@@ -73,6 +74,7 @@ async function loadLead(tx: TransactionClient | typeof prisma, id: string) {
 
 /** Inserts a lead inside the caller's transaction (used by `create`, import and the seed). */
 export async function createLeadRecord(tx: TransactionClient, input: LeadInput, user: AuthUser, lookups: PrefetchedLookups = {}): Promise<LeadDto> {
+    await assertTaxIdsUnique(tx, 'lead', { gstNo: input.gstNo });
     const leadCode = await generateEntityCode(tx, 'LD');
     const assignedTo = (await assertAssigneeValid(tx, input.assignedTo, { activeUsernames: lookups.activeUsernames })) ?? user.username;
     const row = await tx.lead.create({ data: { ...toLeadData({ ...input, assignedTo }), leadCode, createdBy: user.username } });
@@ -154,6 +156,7 @@ export const leadService = {
             });
             assertStatusTransition(existing.status, input.status);
             assertNotInPast([nextFollowupCheck(input, before)]);
+            await assertTaxIdsUnique(tx, 'lead', { gstNo: input.gstNo }, { excludeId: id, previous: { gstNo: existing.gstNo } });
             const assignedTo = (await assertAssigneeValid(tx, input.assignedTo, { previous: existing.assignedTo })) ?? existing.assignedTo;
 
             await tx.lead.update({ where: { id }, data: { ...toLeadData({ ...input, assignedTo }), updatedBy: user.username } });

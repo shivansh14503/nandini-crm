@@ -67,7 +67,7 @@ export function RhfDateTimeField<T extends FieldValues>({
                     size="small"
                     error={Boolean(date.fieldState.error)}
                     slotProps={{
-                        ...adornment(<CalendarTodayOutlinedIcon sx={{ fontSize: 16, color: '#64748b' }} />),
+                        ...adornment(<CalendarTodayOutlinedIcon sx={{ fontSize: 16, color: 'var(--mui-palette-text-secondary)' }} />),
                         // Past dates and times are greyed out in the picker.
                         htmlInput: { min: localNow() },
                     }}
@@ -99,7 +99,7 @@ export function RhfDateTimeField<T extends FieldValues>({
                     size="small"
                     error={Boolean(date.fieldState.error)}
                     slotProps={{
-                        ...adornment(<CalendarTodayOutlinedIcon sx={{ fontSize: 16, color: '#64748b' }} />),
+                        ...adornment(<CalendarTodayOutlinedIcon sx={{ fontSize: 16, color: 'var(--mui-palette-text-secondary)' }} />),
                         // Past days are greyed out in the picker (the form also rejects a typed past date).
                         htmlInput: { min: localToday() },
                     }}

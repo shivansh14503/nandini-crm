@@ -117,28 +117,28 @@ export function LeadDetailDrawer({
             avatarBg={
                 isHot
                     ? 'linear-gradient(135deg, #dc2626 0%, #b91c1c 100%)'
-                    : 'linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%)'
+                    : 'linear-gradient(135deg, var(--crm-fill-blue-600) 0%, var(--crm-fill-blue-700) 100%)'
             }
             verified={true}
             badges={[
                 {
                     label: l.leadType || 'Normal',
                     icon: isHot ? <LocalFireDepartmentIcon sx={{ fontSize: '13px !important' }} /> : undefined,
-                    color: isHot ? '#b91c1c' : isWarm ? '#b45309' : '#1e3a8a',
-                    backgroundColor: isHot ? '#fee2e2' : isWarm ? '#fef3c7' : '#eff6ff',
-                    borderColor: isHot ? '#fca5a5' : isWarm ? '#fde68a' : '#bfdbfe',
+                    color: isHot ? 'var(--crm-red-700)' : isWarm ? 'var(--crm-amber-700)' : 'var(--crm-text-blue-900)',
+                    backgroundColor: isHot ? 'var(--crm-red-100)' : isWarm ? 'var(--crm-amber-100)' : 'var(--mui-palette-primary-soft)',
+                    borderColor: isHot ? 'var(--crm-red-300)' : isWarm ? 'var(--mui-palette-warning-softBorder)' : 'var(--mui-palette-primary-softBorder)',
                 },
                 {
                     label: l.status,
-                    color: '#047857',
-                    backgroundColor: '#ecfdf5',
-                    borderColor: '#a7f3d0',
+                    color: 'var(--crm-emerald-700)',
+                    backgroundColor: 'var(--mui-palette-success-soft)',
+                    borderColor: 'var(--mui-palette-success-softBorder)',
                 },
                 {
                     label: l.assignedTo || 'Unassigned',
-                    color: '#475569',
-                    backgroundColor: '#f1f5f9',
-                    borderColor: '#cbd5e1',
+                    color: 'var(--crm-slate-600)',
+                    backgroundColor: 'var(--mui-palette-background-hover)',
+                    borderColor: 'var(--mui-palette-border-strong)',
                 },
             ]}
             headerActions={{
@@ -150,15 +150,15 @@ export function LeadDetailDrawer({
                 overview: (
                     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
                         {/* Linked Organization Card */}
-                        <DrawerSectionCard title="PROSPECTIVE ORGANIZATION" bg="#f8fafc">
+                        <DrawerSectionCard title="PROSPECTIVE ORGANIZATION" bg="var(--mui-palette-background-subtle)">
                             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 0.5 }}>
-                                <ApartmentIcon sx={{ fontSize: 18, color: '#2563eb' }} />
-                                <Typography sx={{ fontSize: '0.98rem', fontWeight: 800, color: '#1d4ed8' }}>
+                                <ApartmentIcon sx={{ fontSize: 18, color: 'var(--crm-text-blue-600)' }} />
+                                <Typography sx={{ fontSize: '0.98rem', fontWeight: 800, color: 'var(--crm-text-blue-700)' }}>
                                     {l.organizationName || 'Individual Prospect / Non-Entity'}
                                 </Typography>
                             </Box>
                             {l.mailingName && l.mailingName !== l.organizationName && (
-                                <Typography sx={{ fontSize: '0.75rem', color: '#64748b', mt: 0.3 }}>
+                                <Typography sx={{ fontSize: '0.75rem', color: 'var(--mui-palette-text-secondary)', mt: 0.3 }}>
                                     Mailing Name: {l.mailingName}
                                 </Typography>
                             )}
@@ -167,10 +167,10 @@ export function LeadDetailDrawer({
                         {/* Next Followup Highlight Card */}
                         <DrawerSectionCard
                             title="NEXT SCHEDULED FOLLOWUP"
-                            icon={<CalendarMonthOutlinedIcon sx={{ fontSize: 18, color: '#d97706' }} />}
-                            titleSx={{ fontSize: '0.8rem', fontWeight: 800, color: '#92400e' }}
-                            bg="#fffbeb"
-                            borderColor="#fde68a"
+                            icon={<CalendarMonthOutlinedIcon sx={{ fontSize: 18, color: 'var(--mui-palette-warning-main)' }} />}
+                            titleSx={{ fontSize: '0.8rem', fontWeight: 800, color: 'var(--crm-amber-800)' }}
+                            bg="var(--mui-palette-warning-soft)"
+                            borderColor="var(--mui-palette-warning-softBorder)"
                             action={
                                 l.followupType ? (
                                     <Chip
@@ -180,22 +180,22 @@ export function LeadDetailDrawer({
                                             height: 20,
                                             fontSize: '0.68rem',
                                             fontWeight: 700,
-                                            backgroundColor: '#fef3c7',
-                                            color: '#b45309',
-                                            border: '1px solid #fcd34d',
+                                            backgroundColor: 'var(--crm-amber-100)',
+                                            color: 'var(--crm-amber-700)',
+                                            border: '1px solid var(--crm-amber-300)',
                                         }}
                                     />
                                 ) : undefined
                             }
                         >
                             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, my: 0.5 }}>
-                                <Typography sx={{ fontSize: '0.94rem', fontWeight: 700, color: '#78350f' }}>
+                                <Typography sx={{ fontSize: '0.94rem', fontWeight: 700, color: 'var(--crm-amber-900)' }}>
                                     {l.nextFollowupDate}
                                 </Typography>
                                 {l.nextFollowupTime && (
                                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.4 }}>
-                                        <AccessTimeOutlinedIcon sx={{ fontSize: 14, color: '#b45309' }} />
-                                        <Typography sx={{ fontSize: '0.82rem', fontWeight: 600, color: '#92400e' }}>
+                                        <AccessTimeOutlinedIcon sx={{ fontSize: 14, color: 'var(--crm-amber-700)' }} />
+                                        <Typography sx={{ fontSize: '0.82rem', fontWeight: 600, color: 'var(--crm-amber-800)' }}>
                                             {l.nextFollowupTime}
                                         </Typography>
                                     </Box>
@@ -208,11 +208,11 @@ export function LeadDetailDrawer({
                                         mt: 1,
                                         p: 1.2,
                                         borderRadius: '6px',
-                                        backgroundColor: '#ffffff',
-                                        border: '1px solid #fed7aa',
+                                        backgroundColor: 'var(--mui-palette-background-paper)',
+                                        border: '1px solid var(--crm-orange-200)',
                                     }}
                                 >
-                                    <Typography sx={{ fontSize: '0.74rem', color: '#9a3412', fontWeight: 500, lineHeight: 1.4 }}>
+                                    <Typography sx={{ fontSize: '0.74rem', color: 'var(--crm-orange-800)', fontWeight: 500, lineHeight: 1.4 }}>
                                         &quot;{l.addDescription}&quot;
                                     </Typography>
                                 </Box>
@@ -228,19 +228,19 @@ export function LeadDetailDrawer({
                                             key={idx}
                                             label={prod}
                                             size="small"
-                                            icon={<CheckCircleOutlinedIcon sx={{ fontSize: '13px !important', color: '#15803d !important' }} />}
+                                            icon={<CheckCircleOutlinedIcon sx={{ fontSize: '13px !important', color: 'var(--crm-green-700) !important' }} />}
                                             sx={{
                                                 height: 24,
                                                 fontSize: '0.74rem',
                                                 fontWeight: 700,
-                                                backgroundColor: '#dcfce7',
-                                                color: '#166534',
-                                                border: '1px solid #86efac',
+                                                backgroundColor: 'var(--crm-green-100)',
+                                                color: 'var(--crm-green-800)',
+                                                border: '1px solid var(--crm-green-300)',
                                             }}
                                         />
                                     ))
                                 ) : (
-                                    <Typography sx={{ fontSize: '0.8rem', color: '#94a3b8' }}>None specified</Typography>
+                                    <Typography sx={{ fontSize: '0.8rem', color: 'var(--mui-palette-text-muted)' }}>None specified</Typography>
                                 )}
                             </Box>
                         </DrawerSectionCard>
@@ -248,11 +248,11 @@ export function LeadDetailDrawer({
                         {/* Contact Phone & Channels */}
                         <DrawerSectionCard
                             title="Direct Phone & Email"
-                            icon={<PhoneOutlinedIcon sx={{ fontSize: 16, color: '#2563eb' }} />}
+                            icon={<PhoneOutlinedIcon sx={{ fontSize: 16, color: 'var(--crm-text-blue-600)' }} />}
                         >
                             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.2 }}>
                                 <DrawerChannelRow
-                                    icon={<PhoneOutlinedIcon sx={{ fontSize: 16, color: '#16a34a' }} />}
+                                    icon={<PhoneOutlinedIcon sx={{ fontSize: 16, color: 'var(--mui-palette-success-main)' }} />}
                                     value={l.mobile}
                                     valueWeight={700}
                                     caption="Primary Mobile / WhatsApp"
@@ -262,11 +262,11 @@ export function LeadDetailDrawer({
 
                                 {l.otherPhone && (
                                     <>
-                                        <Divider sx={{ borderColor: '#f1f5f9' }} />
+                                        <Divider sx={{ borderColor: 'var(--mui-palette-border-light)' }} />
                                         <DrawerChannelRow
-                                            icon={<PhoneOutlinedIcon sx={{ fontSize: 16, color: '#64748b' }} />}
+                                            icon={<PhoneOutlinedIcon sx={{ fontSize: 16, color: 'var(--mui-palette-text-secondary)' }} />}
                                             value={l.otherPhone}
-                                            valueColor="#334155"
+                                            valueColor="var(--crm-slate-700)"
                                             caption="Other / Landline Phone"
                                             copyValue={l.otherPhone}
                                             copyTitle="Copy Phone"
@@ -276,11 +276,11 @@ export function LeadDetailDrawer({
 
                                 {l.emailAddresses && l.emailAddresses.length > 0 && (
                                     <>
-                                        <Divider sx={{ borderColor: '#f1f5f9' }} />
+                                        <Divider sx={{ borderColor: 'var(--mui-palette-border-light)' }} />
                                         {l.emailAddresses.map((em, idx) => (
                                             <DrawerChannelRow
                                                 key={idx}
-                                                icon={<EmailOutlinedIcon sx={{ fontSize: 16, color: '#2563eb' }} />}
+                                                icon={<EmailOutlinedIcon sx={{ fontSize: 16, color: 'var(--crm-text-blue-600)' }} />}
                                                 value={em.email}
                                                 caption={em.isPrimary ? 'Primary Official Email' : 'Alternate Email'}
                                                 badgeLabel={em.isPrimary ? 'PRIMARY' : undefined}
@@ -301,38 +301,38 @@ export function LeadDetailDrawer({
                                     value: l.turnover || 'Not Disclosed',
                                     valueSize: '0.82rem',
                                     valueWeight: 600,
-                                    valueColor: '#334155',
+                                    valueColor: 'var(--crm-slate-700)',
                                 },
                                 {
                                     label: 'NO OF EMPLOYEES',
                                     value: l.noOfEmployee || '11 – 50 Staff',
                                     valueSize: '0.82rem',
                                     valueWeight: 600,
-                                    valueColor: '#334155',
+                                    valueColor: 'var(--crm-slate-700)',
                                 },
                             ]}
                         />
 
                         {/* Source & Representative Details */}
-                        <DrawerSectionCard bg="#f8fafc">
+                        <DrawerSectionCard bg="var(--mui-palette-background-subtle)">
                             <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 1.5 }}>
                                 <Box>
-                                    <Typography sx={{ fontSize: '0.68rem', fontWeight: 700, color: '#64748b' }}>LEAD SOURCE</Typography>
-                                    <Typography sx={{ fontSize: '0.82rem', fontWeight: 600, color: '#1e3a8a', mt: 0.3 }}>
+                                    <Typography sx={{ fontSize: '0.68rem', fontWeight: 700, color: 'var(--mui-palette-text-secondary)' }}>LEAD SOURCE</Typography>
+                                    <Typography sx={{ fontSize: '0.82rem', fontWeight: 600, color: 'var(--crm-text-blue-900)', mt: 0.3 }}>
                                         {leadSourceLabel(l.leadSource)}
                                     </Typography>
                                 </Box>
                                 <Box>
-                                    <Typography sx={{ fontSize: '0.68rem', fontWeight: 700, color: '#64748b' }}>ASSIGNED TO</Typography>
-                                    <Typography sx={{ fontSize: '0.82rem', fontWeight: 600, color: '#0f172a', mt: 0.3 }}>
+                                    <Typography sx={{ fontSize: '0.68rem', fontWeight: 700, color: 'var(--mui-palette-text-secondary)' }}>ASSIGNED TO</Typography>
+                                    <Typography sx={{ fontSize: '0.82rem', fontWeight: 600, color: 'var(--crm-slate-900)', mt: 0.3 }}>
                                         {l.assignedTo}
                                     </Typography>
                                 </Box>
                             </Box>
                             {l.referredBy && (
-                                <Box sx={{ mt: 1.2, pt: 1, borderTop: '1px dashed #cbd5e1' }}>
-                                    <Typography sx={{ fontSize: '0.68rem', fontWeight: 700, color: '#64748b' }}>REFERRED BY</Typography>
-                                    <Typography sx={{ fontSize: '0.8rem', color: '#334155', mt: 0.2 }}>
+                                <Box sx={{ mt: 1.2, pt: 1, borderTop: '1px dashed var(--mui-palette-border-strong)' }}>
+                                    <Typography sx={{ fontSize: '0.68rem', fontWeight: 700, color: 'var(--mui-palette-text-secondary)' }}>REFERRED BY</Typography>
+                                    <Typography sx={{ fontSize: '0.8rem', color: 'var(--crm-slate-700)', mt: 0.2 }}>
                                         {l.referredBy}
                                     </Typography>
                                 </Box>
@@ -342,7 +342,7 @@ export function LeadDetailDrawer({
                         {/* Long Description */}
                         {l.description && (
                             <DrawerSectionCard title="BACKGROUND CONTEXT & NOTES">
-                                <Typography sx={{ fontSize: '0.82rem', color: '#334155', lineHeight: 1.5 }}>
+                                <Typography sx={{ fontSize: '0.82rem', color: 'var(--crm-slate-700)', lineHeight: 1.5 }}>
                                     {l.description}
                                 </Typography>
                             </DrawerSectionCard>
@@ -357,27 +357,27 @@ export function LeadDetailDrawer({
                         {/* Primary Address Card */}
                         <DrawerSectionCard
                             title="PRIMARY REGISTERED ADDRESS"
-                            icon={<PlaceOutlinedIcon sx={{ fontSize: 18, color: '#2563eb' }} />}
+                            icon={<PlaceOutlinedIcon sx={{ fontSize: 18, color: 'var(--crm-text-blue-600)' }} />}
                         >
-                            <Typography sx={{ fontSize: '0.84rem', color: '#1e293b', fontWeight: 500, lineHeight: 1.4 }}>
+                            <Typography sx={{ fontSize: '0.84rem', color: 'var(--mui-palette-text-primary)', fontWeight: 500, lineHeight: 1.4 }}>
                                 {l.primaryAddress || 'No primary address specified'}
                             </Typography>
-                            <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2, mt: 1.2, pt: 1, borderTop: '1px solid #f1f5f9' }}>
+                            <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2, mt: 1.2, pt: 1, borderTop: '1px solid var(--mui-palette-border-light)' }}>
                                 <Box>
-                                    <Typography sx={{ fontSize: '0.68rem', color: '#64748b', fontWeight: 700 }}>CITY / STATE</Typography>
-                                    <Typography sx={{ fontSize: '0.8rem', color: '#334155' }}>
+                                    <Typography sx={{ fontSize: '0.68rem', color: 'var(--mui-palette-text-secondary)', fontWeight: 700 }}>CITY / STATE</Typography>
+                                    <Typography sx={{ fontSize: '0.8rem', color: 'var(--crm-slate-700)' }}>
                                         {l.primaryCity || '-'}, {l.primaryState || '-'}
                                     </Typography>
                                 </Box>
                                 <Box>
-                                    <Typography sx={{ fontSize: '0.68rem', color: '#64748b', fontWeight: 700 }}>POSTAL PIN</Typography>
-                                    <Typography sx={{ fontSize: '0.8rem', color: '#334155' }}>
+                                    <Typography sx={{ fontSize: '0.68rem', color: 'var(--mui-palette-text-secondary)', fontWeight: 700 }}>POSTAL PIN</Typography>
+                                    <Typography sx={{ fontSize: '0.8rem', color: 'var(--crm-slate-700)' }}>
                                         {l.primaryPostalCode || '-'}
                                     </Typography>
                                 </Box>
                                 <Box>
-                                    <Typography sx={{ fontSize: '0.68rem', color: '#64748b', fontWeight: 700 }}>COUNTRY</Typography>
-                                    <Typography sx={{ fontSize: '0.8rem', color: '#334155' }}>
+                                    <Typography sx={{ fontSize: '0.68rem', color: 'var(--mui-palette-text-secondary)', fontWeight: 700 }}>COUNTRY</Typography>
+                                    <Typography sx={{ fontSize: '0.8rem', color: 'var(--crm-slate-700)' }}>
                                         {getCountryNameByCode(l.primaryCountry || 'IN')}
                                     </Typography>
                                 </Box>
@@ -387,27 +387,27 @@ export function LeadDetailDrawer({
                         {/* Other Address Card */}
                         <DrawerSectionCard
                             title="OTHER / DISPATCH ADDRESS"
-                            icon={<BusinessOutlinedIcon sx={{ fontSize: 18, color: '#64748b' }} />}
+                            icon={<BusinessOutlinedIcon sx={{ fontSize: 18, color: 'var(--mui-palette-text-secondary)' }} />}
                         >
-                            <Typography sx={{ fontSize: '0.84rem', color: '#1e293b', fontWeight: 500, lineHeight: 1.4 }}>
+                            <Typography sx={{ fontSize: '0.84rem', color: 'var(--mui-palette-text-primary)', fontWeight: 500, lineHeight: 1.4 }}>
                                 {l.otherAddress || 'Same as primary address or not provided'}
                             </Typography>
-                            <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2, mt: 1.2, pt: 1, borderTop: '1px solid #f1f5f9' }}>
+                            <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2, mt: 1.2, pt: 1, borderTop: '1px solid var(--mui-palette-border-light)' }}>
                                 <Box>
-                                    <Typography sx={{ fontSize: '0.68rem', color: '#64748b', fontWeight: 700 }}>CITY / STATE</Typography>
-                                    <Typography sx={{ fontSize: '0.8rem', color: '#334155' }}>
+                                    <Typography sx={{ fontSize: '0.68rem', color: 'var(--mui-palette-text-secondary)', fontWeight: 700 }}>CITY / STATE</Typography>
+                                    <Typography sx={{ fontSize: '0.8rem', color: 'var(--crm-slate-700)' }}>
                                         {l.otherCity || '-'}, {l.otherState || '-'}
                                     </Typography>
                                 </Box>
                                 <Box>
-                                    <Typography sx={{ fontSize: '0.68rem', color: '#64748b', fontWeight: 700 }}>POSTAL PIN</Typography>
-                                    <Typography sx={{ fontSize: '0.8rem', color: '#334155' }}>
+                                    <Typography sx={{ fontSize: '0.68rem', color: 'var(--mui-palette-text-secondary)', fontWeight: 700 }}>POSTAL PIN</Typography>
+                                    <Typography sx={{ fontSize: '0.8rem', color: 'var(--crm-slate-700)' }}>
                                         {l.otherPostalCode || '-'}
                                     </Typography>
                                 </Box>
                                 <Box>
-                                    <Typography sx={{ fontSize: '0.68rem', color: '#64748b', fontWeight: 700 }}>COUNTRY</Typography>
-                                    <Typography sx={{ fontSize: '0.8rem', color: '#334155' }}>
+                                    <Typography sx={{ fontSize: '0.68rem', color: 'var(--mui-palette-text-secondary)', fontWeight: 700 }}>COUNTRY</Typography>
+                                    <Typography sx={{ fontSize: '0.8rem', color: 'var(--crm-slate-700)' }}>
                                         {getCountryNameByCode(l.otherCountry || 'IN')}
                                     </Typography>
                                 </Box>
@@ -428,7 +428,7 @@ export function LeadDetailDrawer({
             secondaryAction={{
                 label: isConverted ? 'Lead Converted' : 'Convert Lead',
                 icon: isConverted ? (
-                    <CheckCircleOutlinedIcon sx={{ fontSize: 16, color: '#059669' }} />
+                    <CheckCircleOutlinedIcon sx={{ fontSize: 16, color: 'var(--crm-emerald-600)' }} />
                 ) : (
                     <PublishedWithChangesIcon sx={{ fontSize: 16 }} />
                 ),
@@ -446,12 +446,12 @@ export function LeadDetailDrawer({
                     height: 36,
                     px: 1.8,
                     borderRadius: '6px',
-                    color: isConverted ? '#047857' : hasOrg ? '#047857' : '#dc2626',
-                    borderColor: isConverted ? '#a7f3d0' : hasOrg ? '#a7f3d0' : '#fca5a5',
-                    backgroundColor: isConverted ? '#ecfdf5' : hasOrg ? '#ecfdf5' : '#fef2f2',
+                    color: isConverted ? 'var(--crm-emerald-700)' : hasOrg ? 'var(--crm-emerald-700)' : 'var(--mui-palette-error-main)',
+                    borderColor: isConverted ? 'var(--mui-palette-success-softBorder)' : hasOrg ? 'var(--mui-palette-success-softBorder)' : 'var(--crm-red-300)',
+                    backgroundColor: isConverted ? 'var(--mui-palette-success-soft)' : hasOrg ? 'var(--mui-palette-success-soft)' : 'var(--mui-palette-error-soft)',
                     '&:hover': {
-                        borderColor: isConverted ? '#047857' : hasOrg ? '#059669' : '#ef4444',
-                        backgroundColor: isConverted ? '#d1fae5' : hasOrg ? '#d1fae5' : '#fee2e2',
+                        borderColor: isConverted ? 'var(--crm-emerald-700)' : hasOrg ? 'var(--crm-emerald-600)' : 'var(--crm-red-500)',
+                        backgroundColor: isConverted ? 'var(--crm-emerald-100)' : hasOrg ? 'var(--crm-emerald-100)' : 'var(--crm-red-100)',
                     },
                 },
             }}

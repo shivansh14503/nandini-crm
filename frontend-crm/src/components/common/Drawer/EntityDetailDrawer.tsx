@@ -109,8 +109,8 @@ export function EntityDetailDrawer({
     const headerIconButtonSx = {
         width: 30,
         height: 30,
-        color: '#475569',
-        border: '1px solid #e2e8f0',
+        color: 'var(--crm-slate-600)',
+        border: '1px solid var(--mui-palette-border-main)',
         borderRadius: '8px',
         p: 0,
         transition: 'all 0.15s ease',
@@ -120,13 +120,13 @@ export function EntityDetailDrawer({
         fontSize: '0.82rem',
         textTransform: 'none',
         fontWeight: 600,
-        color: '#334155',
-        borderColor: '#cbd5e1',
+        color: 'var(--crm-slate-700)',
+        borderColor: 'var(--mui-palette-border-strong)',
         height: 36,
         px: 1.8,
         borderRadius: '8px',
         transition: 'all 0.15s ease',
-        '&:hover': { borderColor: '#94a3b8', backgroundColor: '#f8fafc' },
+        '&:hover': { borderColor: 'var(--crm-slate-400)', backgroundColor: 'var(--mui-palette-background-subtle)' },
         ...secondaryAction?.sx,
     } as const;
 
@@ -134,15 +134,15 @@ export function EntityDetailDrawer({
         fontSize: '0.82rem',
         textTransform: 'none',
         fontWeight: 700,
-        background: 'linear-gradient(135deg, #1d4ed8 0%, #2563eb 100%)',
+        background: 'linear-gradient(135deg, var(--crm-fill-blue-700) 0%, var(--crm-fill-blue-600) 100%)',
         height: 36,
         px: 2.2,
         borderRadius: '8px',
         boxShadow: 'none',
         transition: 'all 0.15s ease',
         '&:hover': {
-            background: 'linear-gradient(135deg, #1e40af 0%, #1d4ed8 100%)',
-            boxShadow: '0 4px 14px rgba(37, 99, 235, 0.35)',
+            background: 'linear-gradient(135deg, var(--crm-fill-blue-800) 0%, var(--crm-fill-blue-700) 100%)',
+            boxShadow: '0 4px 14px rgb(var(--crm-accent-rgb) / 0.35)',
         },
         ...primaryAction?.sx,
     } as const;
@@ -202,7 +202,7 @@ export function EntityDetailDrawer({
                             zIndex: 1410,
                             width: 24,
                             height: 56,
-                            backgroundColor: '#2563eb',
+                            backgroundColor: 'var(--mui-palette-primary-main)',
                             color: '#ffffff',
                             borderRadius: '8px 0 0 8px',
                             display: 'flex',
@@ -243,8 +243,8 @@ export function EntityDetailDrawer({
                     paper: {
                         sx: {
                             width,
-                            backgroundColor: '#ffffff',
-                            borderLeft: '1px solid #e2e8f0',
+                            backgroundColor: 'var(--mui-palette-background-paper)',
+                            borderLeft: '1px solid var(--mui-palette-border-main)',
                             boxShadow: isCollapsed ? 'none' : '-12px 0 40px rgba(15, 23, 42, 0.08)',
                             display: 'flex',
                             flexDirection: 'column',
@@ -257,7 +257,7 @@ export function EntityDetailDrawer({
                 }}
             >
             {/* ── Top Header Section ────────────────────────────────────────────── */}
-            <Box sx={{ p: 2.5, pb: 2, borderBottom: '1px solid #f1f5f9', backgroundColor: '#ffffff' }}>
+            <Box sx={{ p: 2.5, pb: 2, borderBottom: '1px solid var(--mui-palette-border-light)', backgroundColor: 'var(--mui-palette-background-paper)' }}>
                 <Box sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 1.5 }}>
                     {/* Identity Banner */}
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, minWidth: 0 }}>
@@ -287,17 +287,17 @@ export function EntityDetailDrawer({
                                     sx={{
                                         fontSize: '1.15rem',
                                         fontWeight: 800,
-                                        color: '#0f172a',
+                                        color: 'var(--crm-slate-900)',
                                         letterSpacing: '-0.01em',
                                         lineHeight: 1.25,
                                     }}
                                 >
                                     {title}
                                 </Typography>
-                                {verified && <VerifiedIcon sx={{ fontSize: 18, color: '#2563eb', flexShrink: 0 }} />}
+                                {verified && <VerifiedIcon sx={{ fontSize: 18, color: 'var(--crm-text-blue-600)', flexShrink: 0 }} />}
                             </Box>
                             {subtitle && (
-                                <Typography noWrap sx={{ fontSize: '0.8rem', color: '#64748b', fontWeight: 500, mt: 0.3 }}>
+                                <Typography noWrap sx={{ fontSize: '0.8rem', color: 'var(--mui-palette-text-secondary)', fontWeight: 500, mt: 0.3 }}>
                                     {subtitle}
                                 </Typography>
                             )}
@@ -311,7 +311,7 @@ export function EntityDetailDrawer({
                                 <IconButton
                                     size="small"
                                     onClick={headerActions.onSync}
-                                    sx={{ ...headerIconButtonSx, '&:hover': { color: '#0284c7', backgroundColor: '#f0f9ff', borderColor: '#bae6fd' } }}
+                                    sx={{ ...headerIconButtonSx, '&:hover': { color: 'var(--mui-palette-info-main)', backgroundColor: 'var(--mui-palette-info-soft)', borderColor: 'var(--mui-palette-info-softBorder)' } }}
                                 >
                                     <SyncOutlinedIcon sx={{ fontSize: 16 }} />
                                 </IconButton>
@@ -323,7 +323,7 @@ export function EntityDetailDrawer({
                                 <IconButton
                                     size="small"
                                     onClick={headerActions.onView}
-                                    sx={{ ...headerIconButtonSx, '&:hover': { color: '#059669', backgroundColor: '#ecfdf5', borderColor: '#a7f3d0' } }}
+                                    sx={{ ...headerIconButtonSx, '&:hover': { color: 'var(--crm-emerald-600)', backgroundColor: 'var(--mui-palette-success-soft)', borderColor: 'var(--mui-palette-success-softBorder)' } }}
                                 >
                                     <VisibilityOutlinedIcon sx={{ fontSize: 16 }} />
                                 </IconButton>
@@ -336,7 +336,7 @@ export function EntityDetailDrawer({
                             <IconButton
                                 size="small"
                                 onClick={onClose}
-                                sx={{ ...headerIconButtonSx, ml: 0.5, '&:hover': { color: '#dc2626', backgroundColor: '#fef2f2', borderColor: '#fecaca' } }}
+                                sx={{ ...headerIconButtonSx, ml: 0.5, '&:hover': { color: 'var(--mui-palette-error-main)', backgroundColor: 'var(--mui-palette-error-soft)', borderColor: 'var(--mui-palette-error-softBorder)' } }}
                             >
                                 <CloseIcon sx={{ fontSize: 16 }} />
                             </IconButton>
@@ -354,9 +354,9 @@ export function EntityDetailDrawer({
                                     display: 'inline-flex',
                                     alignItems: 'center',
                                     gap: 0.5,
-                                    backgroundColor: b.backgroundColor || '#f1f5f9',
-                                    color: b.color || '#475569',
-                                    border: `1px solid ${b.borderColor || '#e2e8f0'}`,
+                                    backgroundColor: b.backgroundColor || 'var(--mui-palette-background-hover)',
+                                    color: b.color || 'var(--crm-slate-600)',
+                                    border: `1px solid ${b.borderColor || 'var(--mui-palette-border-main)'}`,
                                     px: 1.2,
                                     py: 0.35,
                                     borderRadius: '9999px',
@@ -374,7 +374,7 @@ export function EntityDetailDrawer({
             </Box>
 
             {/* ── Tabs Navigation Bar ───────────────────────────────────────── */}
-            <Box sx={{ borderBottom: '1px solid #e2e8f0', backgroundColor: '#f8fafc', px: 0.5 }}>
+            <Box sx={{ borderBottom: '1px solid var(--mui-palette-border-main)', backgroundColor: 'var(--mui-palette-background-subtle)', px: 0.5 }}>
                 <Tabs
                     value={activeTabIndex}
                     onChange={(_, val) => setCurrentTab(val)}
@@ -383,7 +383,7 @@ export function EntityDetailDrawer({
                     sx={{
                         minHeight: 44,
                         '& .MuiTabs-indicator': {
-                            backgroundColor: '#2563eb',
+                            backgroundColor: 'var(--mui-palette-primary-main)',
                             height: 3,
                             borderRadius: '3px 3px 0 0',
                         },
@@ -407,8 +407,8 @@ export function EntityDetailDrawer({
                                                     px: 0.6,
                                                     py: 0.1,
                                                     borderRadius: '10px',
-                                                    backgroundColor: activeTabIndex === idx ? '#dbeafe' : '#e2e8f0',
-                                                    color: activeTabIndex === idx ? '#1d4ed8' : '#64748b',
+                                                    backgroundColor: activeTabIndex === idx ? 'var(--crm-blue-100)' : 'var(--crm-slate-200)',
+                                                    color: activeTabIndex === idx ? 'var(--crm-text-blue-700)' : 'var(--mui-palette-text-secondary)',
                                                 }}
                                             >
                                                 {tab.badge}
@@ -423,7 +423,7 @@ export function EntityDetailDrawer({
                                 minHeight: 44,
                                 fontSize: '0.8rem',
                                 fontWeight: 600, // constant weight so switching tabs never shifts the layout
-                                color: activeTabIndex === idx ? '#2563eb !important' : '#64748b',
+                                color: activeTabIndex === idx ? 'var(--crm-text-blue-600) !important' : 'var(--mui-palette-text-secondary)',
                                 transition: 'color 0.15s ease',
                                 textTransform: 'none',
                                 px: 1.5,
@@ -435,10 +435,10 @@ export function EntityDetailDrawer({
             </Box>
 
             {/* ── Scrollable Tab Content ───────────────────────────────────────── */}
-            <Box sx={{ flex: 1, overflowY: 'auto', p: 2.5, backgroundColor: '#ffffff' }}>
+            <Box sx={{ flex: 1, overflowY: 'auto', p: 2.5, backgroundColor: 'var(--mui-palette-background-paper)' }}>
                 {loading ? (
                     <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', py: 8 }}>
-                        <CircularProgress size={28} sx={{ color: '#2563eb' }} />
+                        <CircularProgress size={28} sx={{ color: 'var(--crm-text-blue-600)' }} />
                     </Box>
                 ) : (
                     <>
@@ -455,8 +455,8 @@ export function EntityDetailDrawer({
                 sx={{
                     p: 2,
                     px: 2.5,
-                    borderTop: '1px solid #f1f5f9',
-                    backgroundColor: '#ffffff',
+                    borderTop: '1px solid var(--mui-palette-border-light)',
+                    backgroundColor: 'var(--mui-palette-background-paper)',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'space-between',
@@ -473,7 +473,7 @@ export function EntityDetailDrawer({
                             boxShadow: '0 0 0 3px rgba(16, 185, 129, 0.2)',
                         }}
                     />
-                    <Typography sx={{ fontSize: '0.78rem', fontWeight: 600, color: '#334155' }}>
+                    <Typography sx={{ fontSize: '0.78rem', fontWeight: 600, color: 'var(--crm-slate-700)' }}>
                         {statusText}
                     </Typography>
                 </Box>

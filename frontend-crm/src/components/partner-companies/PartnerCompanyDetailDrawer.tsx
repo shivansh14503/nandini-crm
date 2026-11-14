@@ -39,15 +39,15 @@ const sectionIcon = (icon: React.ReactElement) => (
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            color: '#2563eb',
-            backgroundColor: '#eff6ff',
+            color: 'var(--crm-text-blue-600)',
+            backgroundColor: 'var(--mui-palette-primary-soft)',
         }}
     >
         {icon}
     </Box>
 );
 
-const linkSx = { color: '#1d4ed8', fontWeight: 600, textDecoration: 'none', '&:hover': { textDecoration: 'underline' } } as const;
+const linkSx = { color: 'var(--crm-blue-700)', fontWeight: 600, textDecoration: 'none', '&:hover': { textDecoration: 'underline' } } as const;
 
 const fullRow = { gridColumn: '1 / -1' } as const;
 
@@ -84,9 +84,9 @@ export function PartnerCompanyDetailDrawer({ partnerCompany, open, onClose }: Pa
               {
                   label: p.natureOfPartner,
                   icon: <CategoryOutlinedIcon sx={{ fontSize: 13 }} />,
-                  backgroundColor: '#eff6ff',
-                  color: '#1d4ed8',
-                  borderColor: '#bfdbfe',
+                  backgroundColor: 'var(--mui-palette-primary-soft)',
+                  color: 'var(--crm-text-blue-700)',
+                  borderColor: 'var(--mui-palette-primary-softBorder)',
               },
           ]
         : [];
@@ -98,7 +98,7 @@ export function PartnerCompanyDetailDrawer({ partnerCompany, open, onClose }: Pa
             title={p.companyName}
             subtitle={[p.billingCity, p.principalCompany && `Principal: ${p.principalCompany}`].filter(Boolean).join(' • ') || 'Partner Company'}
             avatarIcon={<HandshakeOutlinedIcon sx={{ fontSize: 22 }} />}
-            avatarBg="linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%)"
+            avatarBg="linear-gradient(135deg, var(--crm-fill-blue-600) 0%, var(--crm-fill-blue-700) 100%)"
             verified={false}
             badges={badges}
             headerActions={{ onEdit: handleEdit, onView: () => router.push(ROUTES.PARTNER_COMPANY_DETAIL(p.id)) }}
@@ -109,7 +109,7 @@ export function PartnerCompanyDetailDrawer({ partnerCompany, open, onClose }: Pa
                         <DrawerSectionCard p={1.8} icon={sectionIcon(<HandshakeOutlinedIcon sx={{ fontSize: 15 }} />)} title="Company Details">
                             <DrawerFieldGrid sx={{ mt: 0 }}>
                                 <ReadOnlyField label="Partner Name" value={p.companyName} sx={fullRow} />
-                                <ReadOnlyField label="Nature of Partner" value={p.natureOfPartner} badge badgeColor="#1d4ed8" />
+                                <ReadOnlyField label="Nature of Partner" value={p.natureOfPartner} badge badgeColor="var(--crm-text-blue-700)" />
                                 <ReadOnlyField label="Assigned to" value={assignedName} />
                                 <ReadOnlyField label="Principal Company" value={p.principalCompany} />
                                 <ReadOnlyField
@@ -168,7 +168,7 @@ export function PartnerCompanyDetailDrawer({ partnerCompany, open, onClose }: Pa
                         {(p.addDescription || p.description) && (
                             <DrawerSectionCard p={1.8} icon={sectionIcon(<NotesOutlinedIcon sx={{ fontSize: 15 }} />)} title="Notes">
                                 {[p.addDescription, p.description].filter(Boolean).map((note, i) => (
-                                    <Typography key={i} sx={{ fontSize: '0.84rem', color: '#334155', lineHeight: 1.55, whiteSpace: 'pre-wrap', mb: 1 }}>
+                                    <Typography key={i} sx={{ fontSize: '0.84rem', color: 'var(--crm-slate-700)', lineHeight: 1.55, whiteSpace: 'pre-wrap', mb: 1 }}>
                                         {note}
                                     </Typography>
                                 ))}
@@ -201,7 +201,7 @@ export function PartnerCompanyDetailDrawer({ partnerCompany, open, onClose }: Pa
                                 <ReadOnlyField label="TAN Number" value={p.tanNumber} copyable />
                             </DrawerFieldGrid>
                         ) : (
-                            <Typography sx={{ fontSize: '0.82rem', color: '#94a3b8' }}>No statutory identifiers recorded.</Typography>
+                            <Typography sx={{ fontSize: '0.82rem', color: 'var(--mui-palette-text-muted)' }}>No statutory identifiers recorded.</Typography>
                         )}
                     </DrawerSectionCard>
                 ),

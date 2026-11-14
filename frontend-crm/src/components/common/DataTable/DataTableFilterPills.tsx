@@ -18,15 +18,15 @@ export function DataTableFilterPills<TFilter extends string = string>({
             cursor: 'pointer',
             fontSize: '0.8rem',
             fontWeight: isActive ? 700 : 500,
-            backgroundColor: isActive ? '#eff6ff' : '#fff',
-            color: isActive ? '#1d4ed8' : '#475569',
-            border: isActive ? '1px solid #93c5fd' : '1px solid #e2e8f0',
-            boxShadow: isActive ? '0 1px 2px rgba(37,99,235,0.1)' : 'none',
+            backgroundColor: isActive ? 'var(--mui-palette-primary-soft)' : 'var(--mui-palette-background-paper)',
+            color: isActive ? 'var(--crm-text-blue-700)' : 'var(--crm-slate-600)',
+            border: isActive ? '1px solid var(--crm-blue-300)' : '1px solid var(--mui-palette-border-main)',
+            boxShadow: isActive ? '0 1px 2px rgb(var(--crm-accent-rgb) / 0.1)' : 'none',
             display: 'flex',
             alignItems: 'center',
             gap: 0.8,
             transition: 'all 0.15s ease',
-            '&:hover': { borderColor: '#93c5fd', backgroundColor: '#eff6ff' },
+            '&:hover': { borderColor: 'var(--crm-blue-300)', backgroundColor: 'var(--mui-palette-primary-soft)' },
         });
 
         return (
@@ -57,7 +57,7 @@ export function DataTableFilterPills<TFilter extends string = string>({
                                     sx={{
                                         fontSize: '0.72rem',
                                         fontWeight: tab.id === 'all' ? 700 : 400,
-                                        color: isActive && tab.id === 'all' ? '#1d4ed8' : '#64748b',
+                                        color: isActive && tab.id === 'all' ? 'var(--crm-text-blue-700)' : 'var(--mui-palette-text-secondary)',
                                     }}
                                 >
                                     {tab.count.toLocaleString()}
@@ -74,9 +74,9 @@ export function DataTableFilterPills<TFilter extends string = string>({
         <Box sx={{ display: 'flex', gap: 1, overflowX: 'auto', pb: 0.5 }}>
             {filters.map((tab) => {
                 const isActive = activeFilter === tab.id;
-                const tabColor = tab.activeColor || '#1d4ed8';
-                const activeBg = tab.activeBgColor || '#eff6ff';
-                const activeBadgeBg = tab.activeBadgeBgColor || '#dbeafe';
+                const tabColor = tab.activeColor || 'var(--crm-blue-700)';
+                const activeBg = tab.activeBgColor || 'var(--mui-palette-primary-soft)';
+                const activeBadgeBg = tab.activeBadgeBgColor || 'var(--crm-blue-100)';
 
                 return (
                     <Chip
@@ -86,7 +86,7 @@ export function DataTableFilterPills<TFilter extends string = string>({
                                 ? React.cloneElement(tab.icon as React.ReactElement<{ sx?: object }>, {
                                       sx: {
                                           fontSize: 15,
-                                          color: isActive ? `${tabColor} !important` : '#64748b !important',
+                                          color: isActive ? `${tabColor} !important` : 'var(--mui-palette-text-secondary) !important',
                                       },
                                   })
                                 : undefined
@@ -103,8 +103,8 @@ export function DataTableFilterPills<TFilter extends string = string>({
                                             borderRadius: '10px',
                                             fontSize: '0.7rem',
                                             fontWeight: 700,
-                                            backgroundColor: isActive ? activeBadgeBg : '#e2e8f0',
-                                            color: isActive ? (tab.activeColor || '#1e40af') : '#475569',
+                                            backgroundColor: isActive ? activeBadgeBg : 'var(--crm-slate-200)',
+                                            color: isActive ? (tab.activeColor || 'var(--crm-text-blue-800)') : 'var(--crm-slate-600)',
                                         }}
                                     >
                                         {tab.count}
@@ -114,18 +114,18 @@ export function DataTableFilterPills<TFilter extends string = string>({
                         }
                         onClick={() => onFilterChange(tab.id)}
                         sx={{
-                            backgroundColor: isActive ? activeBg : '#ffffff',
-                            color: isActive ? tabColor : '#334155',
+                            backgroundColor: isActive ? activeBg : 'var(--mui-palette-background-paper)',
+                            color: isActive ? tabColor : 'var(--crm-slate-700)',
                             border: isActive
-                                ? `1.5px solid ${tab.activeColor || '#3b82f6'}`
-                                : '1px solid #cbd5e1',
+                                ? `1.5px solid ${tab.activeColor || 'var(--crm-blue-500)'}`
+                                : '1px solid var(--mui-palette-border-strong)',
                             fontWeight: isActive ? 700 : 500,
                             fontSize: '0.8rem',
                             height: 32,
                             cursor: 'pointer',
                             whiteSpace: 'nowrap',
                             '&:hover': {
-                                backgroundColor: isActive ? activeBadgeBg : '#f8fafc',
+                                backgroundColor: isActive ? activeBadgeBg : 'var(--mui-palette-background-subtle)',
                             },
                         }}
                     />

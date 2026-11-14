@@ -146,7 +146,7 @@ export function QuotationAddressSection() {
                 />
             </FormGrid>
 
-            <Divider sx={{ my: 3.5, borderColor: '#f1f5f9' }} />
+            <Divider sx={{ my: 3.5, borderColor: 'var(--mui-palette-border-light)' }} />
 
             {/* ── Bottom Section: Reusable Billing & Shipping Address Grid ── */}
             <RhfAddressSection<QuotationFormData>

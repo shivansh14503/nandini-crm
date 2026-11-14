@@ -66,7 +66,7 @@ const CSV_COLUMNS: CsvColumn<ExtendedPartnerCompany>[] = [
     { header: 'Date Created', value: (p) => (p.createdAt ? formatDateTime(p.createdAt) : '') },
 ];
 
-const cellTextSx = { fontSize: '0.8rem', color: '#475569' } as const;
+const cellTextSx = { fontSize: '0.8rem', color: 'var(--crm-slate-600)' } as const;
 
 export function PartnerCompaniesMasterView() {
     const router = useRouter();
@@ -192,11 +192,11 @@ export function PartnerCompaniesMasterView() {
                 minWidth: 220,
                 render: (p) => (
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                        <HandshakeOutlinedIcon sx={{ fontSize: 16, color: '#2563eb' }} />
+                        <HandshakeOutlinedIcon sx={{ fontSize: 16, color: 'var(--crm-text-blue-600)' }} />
                         <RecordLink
                             href={ROUTES.PARTNER_COMPANY_DETAIL(p.id)}
                             onOpen={() => setDrawerId(p.id)}
-                            sx={{ fontWeight: 700, color: '#1d4ed8', fontSize: '0.82rem', cursor: 'pointer', '&:hover': { textDecoration: 'underline' } }}
+                            sx={{ fontWeight: 700, color: 'var(--crm-blue-700)', fontSize: '0.82rem', cursor: 'pointer', '&:hover': { textDecoration: 'underline' } }}
                         >
                             {p.companyName}
                         </RecordLink>
@@ -213,7 +213,7 @@ export function PartnerCompaniesMasterView() {
                         <Chip
                             label={p.natureOfPartner}
                             size="small"
-                            sx={{ height: 22, fontSize: '0.7rem', fontWeight: 700, backgroundColor: '#eff6ff', color: '#1d4ed8', border: '1px solid #bfdbfe' }}
+                            sx={{ height: 22, fontSize: '0.7rem', fontWeight: 700, backgroundColor: 'var(--mui-palette-primary-soft)', color: 'var(--crm-text-blue-700)', border: '1px solid var(--mui-palette-primary-softBorder)' }}
                         />
                     ) : (
                         <Typography sx={cellTextSx}>-</Typography>
@@ -230,9 +230,9 @@ export function PartnerCompaniesMasterView() {
                             component="a"
                             href={telHref(p.phone)}
                             onClick={(e: React.MouseEvent) => e.stopPropagation()}
-                            sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.6, ...cellTextSx, textDecoration: 'none', '&:hover': { color: '#1d4ed8' } }}
+                            sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.6, ...cellTextSx, textDecoration: 'none', '&:hover': { color: 'var(--crm-blue-700)' } }}
                         >
-                            <PhoneOutlinedIcon sx={{ fontSize: 14, color: '#94a3b8' }} />
+                            <PhoneOutlinedIcon sx={{ fontSize: 14, color: 'var(--mui-palette-text-muted)' }} />
                             {p.phone}
                         </Box>
                     ) : (
@@ -246,7 +246,7 @@ export function PartnerCompaniesMasterView() {
                 minWidth: 200,
                 render: (p) => (
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.6 }}>
-                        <EmailOutlinedIcon sx={{ fontSize: 14, color: '#94a3b8' }} />
+                        <EmailOutlinedIcon sx={{ fontSize: 14, color: 'var(--mui-palette-text-muted)' }} />
                         <Typography sx={cellTextSx}>{primaryEmail(p) || '-'}</Typography>
                     </Box>
                 ),
@@ -264,14 +264,14 @@ export function PartnerCompaniesMasterView() {
                 label: 'ASSIGNED TO',
                 sortable: true,
                 minWidth: 140,
-                render: (p) => <Typography sx={{ fontSize: '0.78rem', color: '#64748b' }}>{assigneeOf(p) || '-'}</Typography>,
+                render: (p) => <Typography sx={{ fontSize: '0.78rem', color: 'var(--mui-palette-text-secondary)' }}>{assigneeOf(p) || '-'}</Typography>,
             },
             {
                 id: 'createdAt',
                 label: 'DATE CREATED',
                 sortable: true,
                 minWidth: 150,
-                render: (p) => <Typography sx={{ fontSize: '0.78rem', color: '#64748b' }}>{p.createdAt ? formatDateTime(p.createdAt) : '-'}</Typography>,
+                render: (p) => <Typography sx={{ fontSize: '0.78rem', color: 'var(--mui-palette-text-secondary)' }}>{p.createdAt ? formatDateTime(p.createdAt) : '-'}</Typography>,
             },
         ],
         []
@@ -353,7 +353,7 @@ export function PartnerCompaniesMasterView() {
             emptyDescription="Add the channel and referral partners you work with to track them across tickets and organizations."
             emptyActionLabel="Create Partner Company"
             onEmptyAction={() => router.push(ROUTES.PARTNER_COMPANY_NEW)}
-            emptyIcon={<HandshakeOutlinedIcon sx={{ fontSize: 48, color: '#cbd5e1' }} />}
+            emptyIcon={<HandshakeOutlinedIcon sx={{ fontSize: 48, color: 'var(--crm-slate-300)' }} />}
             pagination={{
                 page,
                 rowsPerPage,

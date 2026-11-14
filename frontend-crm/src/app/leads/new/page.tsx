@@ -23,7 +23,7 @@ export default function NewLeadPage() {
     if (!user) return null;
 
     return (
-        <Box sx={{ minHeight: '100vh', backgroundColor: '#f8fafc' }}>
+        <Box sx={{ minHeight: '100vh', backgroundColor: 'var(--mui-palette-background-subtle)' }}>
             <Navbar />
 
             <Container maxWidth="xl" sx={{ pt: 2.5, pb: 1 }}>

@@ -32,7 +32,7 @@ function moveItem<T>(list: T[], from: number, to: number): void {
 }
 
 function RowActions({ index, count, onMove, onRemove, disabled, label }: { index: number; count: number; onMove: (to: number) => void; onRemove?: () => void; disabled: boolean; label: string }) {
-    const btn = { width: 24, height: 24, color: '#64748b' } as const;
+    const btn = { width: 24, height: 24, color: 'var(--mui-palette-text-secondary)' } as const;
     return (
         <Box sx={{ display: 'flex', flexShrink: 0 }}>
             <IconButton size="small" aria-label={`Move ${label} up`} disabled={disabled || index === 0} onClick={() => onMove(index - 1)} sx={btn}>
@@ -42,7 +42,7 @@ function RowActions({ index, count, onMove, onRemove, disabled, label }: { index
                 <ArrowDownwardRoundedIcon sx={{ fontSize: 15 }} />
             </IconButton>
             {onRemove && (
-                <IconButton size="small" aria-label={`Remove ${label}`} disabled={disabled} onClick={onRemove} sx={{ ...btn, '&:hover': { color: '#dc2626' } }}>
+                <IconButton size="small" aria-label={`Remove ${label}`} disabled={disabled} onClick={onRemove} sx={{ ...btn, '&:hover': { color: 'var(--mui-palette-error-main)' } }}>
                     <CloseRoundedIcon sx={{ fontSize: 15 }} />
                 </IconButton>
             )}
@@ -50,7 +50,7 @@ function RowActions({ index, count, onMove, onRemove, disabled, label }: { index
     );
 }
 
-const rowSx = { display: 'flex', alignItems: 'center', gap: 0.75, p: 0.75, borderRadius: '8px', border: '1px solid #e2e8f0', backgroundColor: '#f8fafc' } as const;
+const rowSx = { display: 'flex', alignItems: 'center', gap: 0.75, p: 0.75, borderRadius: '8px', border: '1px solid var(--mui-palette-border-main)', backgroundColor: 'var(--mui-palette-background-subtle)' } as const;
 
 function fieldLabel(fields: PdfFieldDefinition[], path: string): string {
     return fields.find((f) => f.path === path)?.label ?? `Unknown field (${path})`;
@@ -88,7 +88,7 @@ function ImageSettings({ block, set, disabled }: Props<'image'>) {
             {p.source === 'asset' ? (
                 <ImageUploadField value={p.assetKey} onChange={(key) => set((pp) => void (pp.assetKey = key))} onError={(m) => notify(m, 'error')} disabled={disabled} removable={false} />
             ) : (
-                <Typography sx={{ fontSize: '0.74rem', color: '#64748b' }}>Uses the logo set in Document settings → Company.</Typography>
+                <Typography sx={{ fontSize: '0.74rem', color: 'var(--mui-palette-text-secondary)' }}>Uses the logo set in Document settings → Company.</Typography>
             )}
             <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1 }}>
                 <Field label="Width" hint="0 = natural">
@@ -156,7 +156,7 @@ function FieldSettings({ block, set, disabled, fields, accent }: Props<'field'>)
         <>
             <Field label="Field">
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                    <Typography sx={{ fontSize: '0.8rem', fontWeight: 600, color: '#0f172a', flex: 1, minWidth: 0 }} noWrap>
+                    <Typography sx={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--crm-slate-900)', flex: 1, minWidth: 0 }} noWrap>
                         {fieldLabel(fields, p.path)}
                     </Typography>
                     <FieldPickerButton
@@ -212,11 +212,11 @@ function DetailsListSettings({ block, set, disabled, fields, accent }: Props<'de
                                 <RowActions index={i} count={p.rows.length} label={`row ${i + 1}`} disabled={disabled} onMove={(to) => set((pp) => moveItem(pp.rows, i, to))} onRemove={() => set((pp) => void pp.rows.splice(i, 1))} />
                             </Box>
                             <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                                <Typography sx={{ fontSize: '0.7rem', color: '#64748b', flex: 1, minWidth: 0 }} noWrap title={row.path}>
+                                <Typography sx={{ fontSize: '0.7rem', color: 'var(--mui-palette-text-secondary)', flex: 1, minWidth: 0 }} noWrap title={row.path}>
                                     {fieldLabel(fields, row.path)}
                                 </Typography>
                                 <Tooltip title="Hide the row when the value is empty" arrow>
-                                    <Box component="label" sx={{ display: 'flex', alignItems: 'center', fontSize: '0.68rem', color: '#64748b' }}>
+                                    <Box component="label" sx={{ display: 'flex', alignItems: 'center', fontSize: '0.68rem', color: 'var(--mui-palette-text-secondary)' }}>
                                         <Checkbox size="small" checked={row.hideIfEmpty} disabled={disabled} onChange={(e) => set((pp) => void (pp.rows[i].hideIfEmpty = e.target.checked))} sx={{ p: 0.25 }} />
                                         Hide empty
                                     </Box>
@@ -298,7 +298,7 @@ function LineItemsSettings({ block, set, disabled, accent }: Props<'lineItems'>)
                                 <RowActions index={i} count={p.columns.length} label={`${col.label} column`} disabled={disabled} onMove={(to) => set((pp) => moveItem(pp.columns, i, to))} />
                             </Box>
                             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, pl: 3.5 }}>
-                                <Typography component="span" sx={{ fontSize: '0.7rem', color: '#64748b' }}>
+                                <Typography component="span" sx={{ fontSize: '0.7rem', color: 'var(--mui-palette-text-secondary)' }}>
                                     Width
                                 </Typography>
                                 <NumberInput value={col.widthPct} onChange={(v) => set((pp) => void (pp.columns[i].widthPct = v), `colw-${col.key}`)} min={2} max={90} unit="%" optional disabled={disabled} ariaLabel={`${col.label} width`} width={96} />
@@ -385,7 +385,7 @@ function TotalsSettings({ block, set, disabled, accent }: Props<'totals'>) {
                             <RowActions index={i} count={p.rows.length} label={row.label} disabled={disabled} onMove={(to) => set((pp) => moveItem(pp.rows, i, to))} />
                         </Box>
                     ))}
-                    <Typography sx={{ fontSize: '0.68rem', color: '#94a3b8' }}>Second tick box: hide the row when its amount is zero.</Typography>
+                    <Typography sx={{ fontSize: '0.68rem', color: 'var(--mui-palette-text-muted)' }}>Second tick box: hide the row when its amount is zero.</Typography>
                 </Box>
             </Field>
             <SwitchRow label="Highlight grand total" checked={p.highlightGrandTotal} onChange={(v) => set((pp) => void (pp.highlightGrandTotal = v))} disabled={disabled} />
@@ -538,7 +538,7 @@ export function BlockSettings({ block }: { block: Block }) {
             );
             break;
         case 'pageBreak':
-            content = <Typography sx={{ fontSize: '0.78rem', color: '#64748b' }}>Everything after this block starts on a new page.</Typography>;
+            content = <Typography sx={{ fontSize: '0.78rem', color: 'var(--mui-palette-text-secondary)' }}>Everything after this block starts on a new page.</Typography>;
             break;
         case 'field':
             content = <FieldSettings block={block} {...common} />;
@@ -577,7 +577,7 @@ export function BlockSettings({ block }: { block: Block }) {
                     <Field label="Label column width">
                         <NumberInput value={block.props.labelWidthPct} onChange={(v) => set(((pp: BlockOf<'customFields'>['props']) => void (pp.labelWidthPct = v ?? 35)) as never, 'cf-w')} min={10} max={80} unit="%" disabled={disabled} ariaLabel="Label column width" />
                     </Field>
-                    <Typography sx={{ fontSize: '0.72rem', color: '#64748b' }}>Lists every custom quotation field that has a value ({Array.isArray(context.customList) ? context.customList.length : 0} in this preview).</Typography>
+                    <Typography sx={{ fontSize: '0.72rem', color: 'var(--mui-palette-text-secondary)' }}>Lists every custom quotation field that has a value ({Array.isArray(context.customList) ? context.customList.length : 0} in this preview).</Typography>
                 </>
             );
             break;

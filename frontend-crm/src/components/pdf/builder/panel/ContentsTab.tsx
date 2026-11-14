@@ -42,15 +42,15 @@ const tileSx = {
     gap: 0.75,
     height: 84,
     borderRadius: '10px',
-    border: '1px solid #e2e8f0',
-    backgroundColor: '#fff',
-    color: '#334155',
+    border: '1px solid var(--mui-palette-border-main)',
+    backgroundColor: 'var(--mui-palette-background-paper)',
+    color: 'var(--crm-slate-700)',
     cursor: 'grab',
     userSelect: 'none',
     touchAction: 'none',
     transition: 'border-color 120ms, box-shadow 120ms',
-    '&:hover': { borderColor: '#93c5fd', boxShadow: '0 2px 8px rgba(37,99,235,0.12)' },
-    '&:focus-visible': { outline: '2px solid #2563eb', outlineOffset: 2 },
+    '&:hover': { borderColor: 'var(--crm-blue-300)', boxShadow: '0 2px 8px rgb(var(--crm-accent-rgb) / 0.12)' },
+    '&:focus-visible': { outline: '2px solid var(--mui-palette-primary-main)', outlineOffset: 2 },
 } as const;
 
 function DraggableTile({ id, data, onActivate, disabled, children, title, sx }: { id: string; data: DragSource; onActivate: () => void; disabled: boolean; children: React.ReactNode; title: string; sx?: object }) {
@@ -118,13 +118,13 @@ function BlocksPanel({ factory, disabled }: { factory: BlockFactoryInput; disabl
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
             {BLOCK_GROUPS.map((group) => (
                 <Box key={group.label}>
-                    <Typography sx={{ fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.6, color: '#94a3b8', mb: 1 }}>{group.label}</Typography>
+                    <Typography sx={{ fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.6, color: 'var(--mui-palette-text-muted)', mb: 1 }}>{group.label}</Typography>
                     <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 1 }}>
                         {group.types.map((type: BlockType) => {
                             const Icon = BLOCK_ICONS[type];
                             return (
                                 <DraggableTile key={type} id={`palette-block:${type}`} data={{ source: 'palette-block', blockType: type }} title={BLOCK_DESCRIPTIONS[type]} disabled={disabled} onActivate={() => appendBlock(createBlock(type, factory))}>
-                                    <Icon sx={{ fontSize: 24, color: '#1d4ed8' }} />
+                                    <Icon sx={{ fontSize: 24, color: 'var(--crm-text-blue-700)' }} />
                                     <Typography sx={{ fontSize: '0.74rem', fontWeight: 600, textAlign: 'center', lineHeight: 1.2, px: 0.5 }}>{BLOCK_LABELS[type]}</Typography>
                                 </DraggableTile>
                             );
@@ -132,7 +132,7 @@ function BlocksPanel({ factory, disabled }: { factory: BlockFactoryInput; disabl
                     </Box>
                 </Box>
             ))}
-            <Typography sx={{ fontSize: '0.7rem', color: '#94a3b8' }}>Drag a block onto the page, or click to add it after the selection.</Typography>
+            <Typography sx={{ fontSize: '0.7rem', color: 'var(--mui-palette-text-muted)' }}>Drag a block onto the page, or click to add it after the selection.</Typography>
         </Box>
     );
 }
@@ -142,7 +142,7 @@ function SectionsPanel({ factory, disabled }: { factory: BlockFactoryInput; disa
     return (
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
             <Box>
-                <Typography sx={{ fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.6, color: '#94a3b8', mb: 1 }}>Empty columns</Typography>
+                <Typography sx={{ fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.6, color: 'var(--mui-palette-text-muted)', mb: 1 }}>Empty columns</Typography>
                 <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1 }}>
                     {SECTION_PRESETS.map((preset) => (
                         <DraggableTile
@@ -154,19 +154,19 @@ function SectionsPanel({ factory, disabled }: { factory: BlockFactoryInput; disa
                             onActivate={() => appendSection(createSection(preset.widths))}
                             sx={{ height: 'auto', alignItems: 'stretch', p: 1.25, gap: 1 }}
                         >
-                            <Typography sx={{ fontSize: '0.76rem', fontWeight: 700, color: '#0f172a' }}>{preset.label}</Typography>
+                            <Typography sx={{ fontSize: '0.76rem', fontWeight: 700, color: 'var(--crm-slate-900)' }}>{preset.label}</Typography>
                             <Box sx={{ display: 'flex', gap: '4px', height: 22 }}>
                                 {preset.widths.map((w, i) => (
-                                    <Box key={i} sx={{ flex: w, borderRadius: '3px', border: '1px dashed #93c5fd', backgroundColor: '#eff6ff' }} />
+                                    <Box key={i} sx={{ flex: w, borderRadius: '3px', border: '1px dashed var(--crm-blue-300)', backgroundColor: 'var(--mui-palette-primary-soft)' }} />
                                 ))}
                             </Box>
-                            <Typography sx={{ fontSize: '0.66rem', color: '#64748b' }}>{preset.description}</Typography>
+                            <Typography sx={{ fontSize: '0.66rem', color: 'var(--mui-palette-text-secondary)' }}>{preset.description}</Typography>
                         </DraggableTile>
                     ))}
                 </Box>
             </Box>
             <Box>
-                <Typography sx={{ fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.6, color: '#94a3b8', mb: 1 }}>Pre-built layouts</Typography>
+                <Typography sx={{ fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.6, color: 'var(--mui-palette-text-muted)', mb: 1 }}>Pre-built layouts</Typography>
                 <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
                     {PREBUILT_LAYOUTS.map((layout) => (
                         <DraggableTile
@@ -178,17 +178,17 @@ function SectionsPanel({ factory, disabled }: { factory: BlockFactoryInput; disa
                             onActivate={() => appendSection(layout.build(factory), layout.band)}
                             sx={{ height: 'auto', flexDirection: 'row', justifyContent: 'flex-start', p: 1.25, gap: 1.25 }}
                         >
-                            <ViewWeekOutlinedIcon sx={{ color: '#1d4ed8', fontSize: 22 }} />
+                            <ViewWeekOutlinedIcon sx={{ color: 'var(--crm-text-blue-700)', fontSize: 22 }} />
                             <Box sx={{ minWidth: 0 }}>
-                                <Typography sx={{ fontSize: '0.8rem', fontWeight: 700, color: '#0f172a' }}>
+                                <Typography sx={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--crm-slate-900)' }}>
                                     {layout.label}
                                     {layout.band !== 'body' && (
-                                        <Box component="span" sx={{ ml: 0.75, fontSize: '0.62rem', fontWeight: 700, color: '#7c3aed', backgroundColor: '#f5f3ff', px: 0.5, borderRadius: '4px', textTransform: 'uppercase' }}>
+                                        <Box component="span" sx={{ ml: 0.75, fontSize: '0.62rem', fontWeight: 700, color: 'var(--crm-violet-600)', backgroundColor: 'var(--crm-violet-50)', px: 0.5, borderRadius: '4px', textTransform: 'uppercase' }}>
                                             {BAND_LABELS[layout.band]}
                                         </Box>
                                     )}
                                 </Typography>
-                                <Typography sx={{ fontSize: '0.7rem', color: '#64748b' }}>{layout.description}</Typography>
+                                <Typography sx={{ fontSize: '0.7rem', color: 'var(--mui-palette-text-secondary)' }}>{layout.description}</Typography>
                             </Box>
                         </DraggableTile>
                     ))}
@@ -206,7 +206,7 @@ function SavedPanel({ disabled }: { disabled: boolean }) {
     const [toDelete, setToDelete] = useState<PdfSavedItem | null>(null);
 
     if (saved.isLoading) return <CircularProgress size={22} sx={{ mx: 'auto', mt: 4, display: 'block' }} />;
-    if (saved.error) return <Typography sx={{ fontSize: '0.8rem', color: '#b91c1c' }}>{errorMessage(saved.error, 'The library could not be loaded.')}</Typography>;
+    if (saved.error) return <Typography sx={{ fontSize: '0.8rem', color: 'var(--crm-red-700)' }}>{errorMessage(saved.error, 'The library could not be loaded.')}</Typography>;
     const items = saved.data ?? [];
     if (items.length === 0) {
         return <EmptyState icon={<BookmarksOutlinedIcon />} title="No saved items yet" description="Select a section or block on the page and click the bookmark icon to save it here. Saved items are shared by all quotation templates." />;
@@ -221,25 +221,25 @@ function SavedPanel({ disabled }: { disabled: boolean }) {
                 return (
                     <Box key={item.id} sx={{ position: 'relative' }}>
                         <DraggableTile id={`saved:${item.id}`} data={{ source: 'saved', item }} title="Drag onto the page or click to insert a copy" disabled={disabled} onActivate={() => insert(item)} sx={{ height: 'auto', flexDirection: 'row', justifyContent: 'flex-start', p: 1.25, pr: 5, gap: 1.25 }}>
-                            <Icon sx={{ color: '#1d4ed8', fontSize: 22 }} />
+                            <Icon sx={{ color: 'var(--crm-text-blue-700)', fontSize: 22 }} />
                             <Box sx={{ minWidth: 0 }}>
-                                <Typography noWrap sx={{ fontSize: '0.8rem', fontWeight: 700, color: '#0f172a' }}>
+                                <Typography noWrap sx={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--crm-slate-900)' }}>
                                     {item.name}
                                 </Typography>
-                                <Typography sx={{ fontSize: '0.68rem', color: '#64748b' }}>
+                                <Typography sx={{ fontSize: '0.68rem', color: 'var(--mui-palette-text-secondary)' }}>
                                     {item.content.kind === 'section' ? `Section · ${item.content.section.columns.length} column${item.content.section.columns.length > 1 ? 's' : ''}` : `${BLOCK_LABELS[item.content.block.type]} block`} · by {item.createdBy}
                                 </Typography>
                             </Box>
                         </DraggableTile>
                         <Tooltip title="Delete from library" arrow>
-                            <IconButton size="small" aria-label={`Delete ${item.name} from the library`} disabled={disabled} onClick={() => setToDelete(item)} sx={{ position: 'absolute', right: 6, top: '50%', transform: 'translateY(-50%)', color: '#94a3b8', '&:hover': { color: '#dc2626' } }}>
+                            <IconButton size="small" aria-label={`Delete ${item.name} from the library`} disabled={disabled} onClick={() => setToDelete(item)} sx={{ position: 'absolute', right: 6, top: '50%', transform: 'translateY(-50%)', color: 'var(--mui-palette-text-muted)', '&:hover': { color: 'var(--mui-palette-error-main)' } }}>
                                 <DeleteOutlineRoundedIcon sx={{ fontSize: 18 }} />
                             </IconButton>
                         </Tooltip>
                     </Box>
                 );
             })}
-            <Typography sx={{ fontSize: '0.7rem', color: '#94a3b8' }}>Inserting places a copy: editing it never changes other templates.</Typography>
+            <Typography sx={{ fontSize: '0.7rem', color: 'var(--mui-palette-text-muted)' }}>Inserting places a copy: editing it never changes other templates.</Typography>
             <ConfirmDeleteDialog
                 open={Boolean(toDelete)}
                 title={`Delete “${toDelete?.name ?? ''}” from the library?`}
@@ -270,7 +270,7 @@ export function ContentsTab() {
 
     return (
         <Box sx={{ display: 'flex', flexDirection: 'column', minHeight: 0, flex: 1 }}>
-            <Box role="tablist" aria-label="Contents" sx={{ display: 'flex', gap: 0.5, m: 1.5, p: 0.5, borderRadius: '10px', backgroundColor: '#f1f5f9' }}>
+            <Box role="tablist" aria-label="Contents" sx={{ display: 'flex', gap: 0.5, m: 1.5, p: 0.5, borderRadius: '10px', backgroundColor: 'var(--mui-palette-background-hover)' }}>
                 {tabs.map((t) => {
                     const active = t.key === tab;
                     return (
@@ -297,8 +297,8 @@ export function ContentsTab() {
                                 cursor: 'pointer',
                                 fontSize: '0.8rem',
                                 fontWeight: 600,
-                                color: active ? '#1d4ed8' : '#64748b',
-                                backgroundColor: active ? '#fff' : 'transparent',
+                                color: active ? 'var(--crm-text-blue-700)' : 'var(--mui-palette-text-secondary)',
+                                backgroundColor: active ? 'var(--mui-palette-background-paper)' : 'transparent',
                                 boxShadow: active ? '0 1px 3px rgba(15,23,42,0.08)' : 'none',
                             }}
                         >

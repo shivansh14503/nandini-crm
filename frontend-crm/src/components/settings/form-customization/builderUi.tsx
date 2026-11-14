@@ -9,16 +9,16 @@ import DragIndicatorRoundedIcon from '@mui/icons-material/DragIndicatorRounded';
 
 export const surfaceSx = {
     borderRadius: '12px',
-    border: '1px solid #e2e8f0',
-    backgroundColor: '#ffffff',
+    border: '1px solid var(--mui-palette-border-main)',
+    backgroundColor: 'var(--mui-palette-background-paper)',
     boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
 } as const;
 
 export const panelHeaderSx = {
     px: 2,
     py: 1.25,
-    backgroundColor: '#f8fafc',
-    borderBottom: '1px solid #e2e8f0',
+    backgroundColor: 'var(--mui-palette-background-subtle)',
+    borderBottom: '1px solid var(--mui-palette-border-main)',
 } as const;
 
 export const primaryButtonSx = {
@@ -27,8 +27,8 @@ export const primaryButtonSx = {
     fontSize: '0.82rem',
     borderRadius: '8px',
     boxShadow: 'none',
-    background: 'linear-gradient(135deg, #1d4ed8 0%, #2563eb 100%)',
-    '&:hover': { boxShadow: '0 2px 6px rgba(37,99,235,0.25)' },
+    background: 'linear-gradient(135deg, var(--crm-fill-blue-700) 0%, var(--crm-fill-blue-600) 100%)',
+    '&:hover': { boxShadow: '0 2px 6px rgb(var(--crm-accent-rgb) / 0.25)' },
 } as const;
 
 export const secondaryButtonSx = {
@@ -36,18 +36,18 @@ export const secondaryButtonSx = {
     fontWeight: 600,
     fontSize: '0.82rem',
     borderRadius: '8px',
-    color: '#334155',
-    borderColor: '#cbd5e1',
-    '&:hover': { borderColor: '#94a3b8', backgroundColor: '#f8fafc' },
+    color: 'var(--crm-slate-700)',
+    borderColor: 'var(--mui-palette-border-strong)',
+    '&:hover': { borderColor: 'var(--crm-slate-400)', backgroundColor: 'var(--mui-palette-background-subtle)' },
 } as const;
 
 export const inputSx = {
     '& .MuiOutlinedInput-root': {
         borderRadius: '8px',
-        backgroundColor: '#fff',
+        backgroundColor: 'var(--mui-palette-background-paper)',
         fontSize: '0.85rem',
-        '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: '#2563EB' },
-        '&.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: '#2563EB', borderWidth: '1.5px' },
+        '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: 'var(--mui-palette-primary-main)' },
+        '&.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: 'var(--mui-palette-primary-main)', borderWidth: '1.5px' },
     },
 } as const;
 
@@ -109,19 +109,19 @@ export function PillTabs<K extends string>({
                             userSelect: 'none',
                             whiteSpace: 'nowrap',
                             transition: 'all 0.15s ease-in-out',
-                            backgroundColor: active ? '#ffffff' : 'transparent',
-                            border: active ? '1px solid #cbd5e1' : '1px solid transparent',
+                            backgroundColor: active ? 'var(--mui-palette-background-paper)' : 'transparent',
+                            border: active ? '1px solid var(--mui-palette-border-strong)' : '1px solid transparent',
                             boxShadow: active ? '0 1px 3px rgba(0,0,0,0.06)' : 'none',
-                            color: active ? '#1e3a8a' : '#64748b',
+                            color: active ? 'var(--crm-text-blue-900)' : 'var(--mui-palette-text-secondary)',
                             fontWeight: active ? 700 : 500,
                             fontSize: '0.82rem',
                             outline: 'none',
-                            '&:hover': { backgroundColor: active ? '#ffffff' : '#f1f5f9', color: active ? '#1e3a8a' : '#1e293b' },
-                            '&:focus-visible': { boxShadow: '0 0 0 2px #bfdbfe' },
+                            '&:hover': { backgroundColor: active ? 'var(--mui-palette-background-paper)' : 'var(--mui-palette-background-hover)', color: active ? 'var(--crm-blue-900)' : 'var(--mui-palette-text-primary)' },
+                            '&:focus-visible': { boxShadow: '0 0 0 2px var(--crm-blue-200)' },
                             ...(onDeleteTab ? { pr: 0.75, '&:hover .pill-tab-delete, &:focus-within .pill-tab-delete': { opacity: 1 } } : {}),
                         }}
                     >
-                        {item.icon && <Box sx={{ display: 'flex', color: active ? '#2563eb' : '#64748b' }}>{item.icon}</Box>}
+                        {item.icon && <Box sx={{ display: 'flex', color: active ? 'var(--crm-text-blue-600)' : 'var(--mui-palette-text-secondary)' }}>{item.icon}</Box>}
                         <span>{item.label}</span>
                         {item.count !== undefined && (
                             <Box
@@ -132,9 +132,9 @@ export function PillTabs<K extends string>({
                                     fontSize: '0.68rem',
                                     fontWeight: 600,
                                     lineHeight: 1.6,
-                                    border: `1px solid ${active ? '#93c5fd' : '#e2e8f0'}`,
-                                    backgroundColor: active ? '#eff6ff' : '#f8fafc',
-                                    color: active ? '#2563eb' : '#64748b',
+                                    border: `1px solid ${active ? 'var(--crm-blue-300)' : 'var(--mui-palette-border-main)'}`,
+                                    backgroundColor: active ? 'var(--mui-palette-primary-soft)' : 'var(--mui-palette-background-subtle)',
+                                    color: active ? 'var(--crm-text-blue-600)' : 'var(--mui-palette-text-secondary)',
                                 }}
                             >
                                 {item.count}
@@ -150,7 +150,7 @@ export function PillTabs<K extends string>({
                                         height: 7,
                                         borderRadius: '50%',
                                         backgroundColor: '#f59e0b',
-                                        boxShadow: '0 0 0 2px #fef3c7',
+                                        boxShadow: '0 0 0 2px var(--crm-amber-100)',
                                         flexShrink: 0,
                                     }}
                                 />
@@ -191,10 +191,10 @@ function PillTabDeleteButton({ label, active, disabledReason, onDelete }: { labe
                     onClick={onDelete}
                     sx={{
                         p: 0.25,
-                        color: '#94a3b8',
-                        '&:hover': { color: dangerColor, backgroundColor: '#fef2f2' },
-                        '&:focus-visible': { color: dangerColor, boxShadow: '0 0 0 2px #fecaca' },
-                        '&.Mui-disabled': { color: '#e2e8f0' },
+                        color: 'var(--mui-palette-text-muted)',
+                        '&:hover': { color: dangerColor, backgroundColor: 'var(--mui-palette-error-soft)' },
+                        '&:focus-visible': { color: dangerColor, boxShadow: '0 0 0 2px var(--crm-red-200)' },
+                        '&.Mui-disabled': { color: 'var(--crm-slate-200)' },
                     }}
                 >
                     <CloseRoundedIcon sx={{ fontSize: 14 }} />
@@ -207,14 +207,14 @@ function PillTabDeleteButton({ label, active, disabledReason, onDelete }: { labe
 export type BadgeTone = 'system' | 'custom' | 'active' | 'archived' | 'locked' | 'shared' | 'neutral' | 'unsaved';
 
 const BADGE_TONES: Record<BadgeTone, { bg: string; color: string; border: string }> = {
-    system: { bg: '#f1f5f9', color: '#475569', border: '#e2e8f0' },
-    custom: { bg: '#eff6ff', color: '#1d4ed8', border: '#bfdbfe' },
-    active: { bg: '#dcfce7', color: '#166534', border: '#86efac' },
-    archived: { bg: '#f8fafc', color: '#94a3b8', border: '#e2e8f0' },
-    locked: { bg: '#fef3c7', color: '#b45309', border: '#fde68a' },
-    shared: { bg: '#f5f3ff', color: '#6d28d9', border: '#ddd6fe' },
-    neutral: { bg: '#ffffff', color: '#475569', border: '#cbd5e1' },
-    unsaved: { bg: '#fff7ed', color: '#c2410c', border: '#fed7aa' },
+    system: { bg: 'var(--mui-palette-background-hover)', color: 'var(--crm-slate-600)', border: 'var(--mui-palette-border-main)' },
+    custom: { bg: 'var(--mui-palette-primary-soft)', color: 'var(--crm-text-blue-700)', border: 'var(--mui-palette-primary-softBorder)' },
+    active: { bg: 'var(--crm-green-100)', color: 'var(--crm-green-800)', border: 'var(--crm-green-300)' },
+    archived: { bg: 'var(--mui-palette-background-subtle)', color: 'var(--mui-palette-text-muted)', border: 'var(--mui-palette-border-main)' },
+    locked: { bg: 'var(--crm-amber-100)', color: 'var(--crm-amber-700)', border: 'var(--mui-palette-warning-softBorder)' },
+    shared: { bg: 'var(--crm-violet-50)', color: 'var(--crm-violet-700)', border: 'var(--crm-violet-200)' },
+    neutral: { bg: 'var(--mui-palette-background-paper)', color: 'var(--crm-slate-600)', border: 'var(--mui-palette-border-strong)' },
+    unsaved: { bg: 'var(--crm-orange-50)', color: 'var(--crm-orange-700)', border: 'var(--crm-orange-200)' },
 };
 
 export function Badge({ tone, children, icon, title }: { tone: BadgeTone; children: React.ReactNode; icon?: React.ReactNode; title?: string }) {
@@ -267,12 +267,12 @@ export function DragHandle({ disabled, title }: { disabled?: boolean; title?: st
                 alignItems: 'center',
                 p: 0.25,
                 borderRadius: '4px',
-                color: disabled ? '#e2e8f0' : '#94a3b8',
+                color: disabled ? 'var(--crm-slate-200)' : 'var(--mui-palette-text-muted)',
                 cursor: disabled ? 'default' : 'grab',
                 transition: 'color 120ms ease, background-color 120ms ease',
                 touchAction: disabled ? undefined : 'none',
-                '&:hover': disabled ? undefined : { color: '#64748b', backgroundColor: '#f1f5f9' },
-                '&:active': disabled ? undefined : { cursor: 'grabbing', color: '#2563eb', backgroundColor: '#eff6ff' },
+                '&:hover': disabled ? undefined : { color: 'var(--mui-palette-text-secondary)', backgroundColor: 'var(--mui-palette-background-hover)' },
+                '&:active': disabled ? undefined : { cursor: 'grabbing', color: 'var(--crm-text-blue-600)', backgroundColor: 'var(--mui-palette-primary-soft)' },
             }}
         >
             <DragIndicatorRoundedIcon sx={{ fontSize: 18 }} />
@@ -287,7 +287,7 @@ export function DragHandle({ disabled, title }: { disabled?: boolean; title?: st
     );
 }
 
-export const dangerColor = '#ef4444';
+export const dangerColor = 'var(--crm-red-500)';
 
 /** Red "delete" confirmation. */
 export function ConfirmDeleteDialog({
@@ -309,8 +309,8 @@ export function ConfirmDeleteDialog({
 }) {
     return (
         <Dialog open={open} onClose={onClose} maxWidth="xs" fullWidth slotProps={{ paper: { sx: { borderRadius: '12px' } } }}>
-            <DialogTitle sx={{ fontWeight: 700, fontSize: '1rem', color: '#0f172a' }}>{title}</DialogTitle>
-            <DialogContent sx={{ fontSize: '0.85rem', color: '#475569', display: 'flex', flexDirection: 'column', gap: 1 }}>{children}</DialogContent>
+            <DialogTitle sx={{ fontWeight: 700, fontSize: '1rem', color: 'var(--crm-slate-900)' }}>{title}</DialogTitle>
+            <DialogContent sx={{ fontSize: '0.85rem', color: 'var(--crm-slate-600)', display: 'flex', flexDirection: 'column', gap: 1 }}>{children}</DialogContent>
             <DialogActions sx={{ px: 3, pb: 2 }}>
                 <Button onClick={onClose} variant="outlined" sx={secondaryButtonSx}>
                     Cancel
@@ -362,9 +362,9 @@ export function LabeledSwitch({
 
 export function EmptyState({ title, description, icon, action }: { title: string; description?: string; icon?: React.ReactNode; action?: React.ReactNode }) {
     return (
-        <Box sx={{ py: 6, px: 3, textAlign: 'center', color: '#64748b' }}>
-            {icon && <Box sx={{ color: '#94a3b8', mb: 1, display: 'flex', justifyContent: 'center' }}>{icon}</Box>}
-            <Typography sx={{ fontWeight: 700, color: '#1e293b', fontSize: '0.9rem' }}>{title}</Typography>
+        <Box sx={{ py: 6, px: 3, textAlign: 'center', color: 'var(--mui-palette-text-secondary)' }}>
+            {icon && <Box sx={{ color: 'var(--mui-palette-text-muted)', mb: 1, display: 'flex', justifyContent: 'center' }}>{icon}</Box>}
+            <Typography sx={{ fontWeight: 700, color: 'var(--mui-palette-text-primary)', fontSize: '0.9rem' }}>{title}</Typography>
             {description && <Typography sx={{ fontSize: '0.8rem', mt: 0.5, maxWidth: 560, mx: 'auto' }}>{description}</Typography>}
             {action && <Box sx={{ mt: 2, display: 'flex', justifyContent: 'center' }}>{action}</Box>}
         </Box>

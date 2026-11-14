@@ -46,7 +46,7 @@ export interface ColumnVisibilityPopoverProps<T> {
 const sectionLabelSx = {
     fontSize: '0.7rem',
     fontWeight: 700,
-    color: '#64748b',
+    color: 'var(--mui-palette-text-secondary)',
     letterSpacing: '0.05em',
     textTransform: 'uppercase',
 } as const;
@@ -58,7 +58,7 @@ const linkBtnSx = {
     minWidth: 0,
     px: 0.75,
     py: 0,
-    color: '#2563eb',
+    color: 'var(--crm-text-blue-600)',
 } as const;
 
 /**
@@ -196,8 +196,8 @@ export function ColumnVisibilityPopover<T>({
                         }}
                         sx={{
                             p: 0.5,
-                            color: pinned ? '#2563eb' : '#cbd5e1',
-                            '&:hover': { color: '#2563eb', backgroundColor: '#eff6ff' },
+                            color: pinned ? 'var(--crm-text-blue-600)' : 'var(--crm-slate-300)',
+                            '&:hover': { color: 'var(--mui-palette-primary-main)', backgroundColor: 'var(--mui-palette-primary-soft)' },
                         }}
                     >
                         {pinned ? (
@@ -226,7 +226,7 @@ export function ColumnVisibilityPopover<T>({
                     pl: dragHandle ? 0.25 : 1.25,
                     pr: 1.25,
                     cursor: disabled ? 'not-allowed' : 'pointer',
-                    '&:hover': { backgroundColor: '#f8fafc' },
+                    '&:hover': { backgroundColor: 'var(--mui-palette-background-subtle)' },
                 }}
             >
                 {dragHandle}
@@ -237,12 +237,12 @@ export function ColumnVisibilityPopover<T>({
                     tabIndex={-1}
                     disableRipple
                     slotProps={{ input: { 'aria-label': column.label } }}
-                    sx={{ p: 0.75, color: '#94a3b8', '&.Mui-checked': { color: '#2563eb' } }}
+                    sx={{ p: 0.75, color: 'var(--mui-palette-text-muted)', '&.Mui-checked': { color: 'var(--crm-text-blue-600)' } }}
                 />
                 <Typography
                     sx={{
                         fontSize: '0.82rem',
-                        color: checked ? '#1e293b' : '#64748b',
+                        color: checked ? 'var(--mui-palette-text-primary)' : 'var(--mui-palette-text-secondary)',
                         py: 0.75,
                         userSelect: 'none',
                         textTransform: 'capitalize',
@@ -259,9 +259,9 @@ export function ColumnVisibilityPopover<T>({
                         sx={{
                             fontSize: '0.64rem',
                             fontWeight: 600,
-                            color: '#475569',
-                            backgroundColor: '#f1f5f9',
-                            border: '1px solid #e2e8f0',
+                            color: 'var(--crm-slate-600)',
+                            backgroundColor: 'var(--mui-palette-background-hover)',
+                            border: '1px solid var(--mui-palette-border-main)',
                             borderRadius: '4px',
                             px: 0.6,
                             py: 0.1,
@@ -289,7 +289,7 @@ export function ColumnVisibilityPopover<T>({
             <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1, px: 1.5, pt: 1, pb: 0.25 }}>
                 <Typography sx={sectionLabelSx}>
                     {section.kind === 'pinned' ? (
-                        <Box component="span" sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5, color: '#1d4ed8' }}>
+                        <Box component="span" sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5, color: 'var(--crm-text-blue-700)' }}>
                             <PushPinIcon sx={{ fontSize: 13 }} />
                             {section.label}
                         </Box>
@@ -352,7 +352,7 @@ export function ColumnVisibilityPopover<T>({
                         mt: 0.75,
                         width: 320,
                         maxWidth: 'calc(100vw - 32px)',
-                        border: '1px solid #e2e8f0',
+                        border: '1px solid var(--mui-palette-border-main)',
                         borderRadius: '10px',
                         boxShadow: '0 10px 30px rgba(15, 23, 42, 0.12)',
                         overflow: 'hidden',
@@ -368,13 +368,13 @@ export function ColumnVisibilityPopover<T>({
                     alignItems: 'center',
                     justifyContent: 'space-between',
                     gap: 1,
-                    borderBottom: '1px solid #f1f5f9',
-                    backgroundColor: '#fff',
+                    borderBottom: '1px solid var(--mui-palette-border-light)',
+                    backgroundColor: 'var(--mui-palette-background-paper)',
                 }}
             >
                 <Box>
-                    <Typography sx={{ fontSize: '0.85rem', fontWeight: 700, color: '#0f172a' }}>Modify Columns</Typography>
-                    <Typography sx={{ fontSize: '0.72rem', color: '#64748b' }}>
+                    <Typography sx={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--crm-slate-900)' }}>Modify Columns</Typography>
+                    <Typography sx={{ fontSize: '0.72rem', color: 'var(--mui-palette-text-secondary)' }}>
                         {visibleCount} of {columns.length} visible
                     </Typography>
                 </Box>
@@ -382,7 +382,7 @@ export function ColumnVisibilityPopover<T>({
                     <Button
                         size="small"
                         onClick={onResetDefaults}
-                        sx={{ textTransform: 'none', fontWeight: 600, fontSize: '0.76rem', minWidth: 0, px: 1, color: '#2563eb' }}
+                        sx={{ textTransform: 'none', fontWeight: 600, fontSize: '0.76rem', minWidth: 0, px: 1, color: 'var(--crm-text-blue-600)' }}
                     >
                         Reset
                     </Button>
@@ -394,13 +394,13 @@ export function ColumnVisibilityPopover<T>({
                     <Button size="small" disabled={everyVisible} onClick={() => onSetColumnsVisible(allToggleable, true)} sx={linkBtnSx}>
                         Select all
                     </Button>
-                    <Typography sx={{ color: '#cbd5e1', fontSize: '0.75rem' }}>|</Typography>
+                    <Typography sx={{ color: 'var(--crm-slate-300)', fontSize: '0.75rem' }}>|</Typography>
                     {/* One column always stays visible (the table can't be empty). */}
                     <Button size="small" disabled={noneVisible} onClick={() => onSetColumnsVisible(allToggleable, false)} sx={linkBtnSx}>
                         Clear all
                     </Button>
                     {(onReorderColumns || onReorderPinned) && !searching && (
-                        <Typography sx={{ ml: 'auto', pr: 0.75, display: 'flex', alignItems: 'center', fontSize: '0.7rem', color: '#94a3b8' }}>
+                        <Typography sx={{ ml: 'auto', pr: 0.75, display: 'flex', alignItems: 'center', fontSize: '0.7rem', color: 'var(--mui-palette-text-muted)' }}>
                             <DragIndicatorIcon sx={{ fontSize: 14 }} /> Drag to reorder
                         </Typography>
                     )}
@@ -421,7 +421,7 @@ export function ColumnVisibilityPopover<T>({
                             input: {
                                 startAdornment: (
                                     <InputAdornment position="start">
-                                        <SearchIcon sx={{ fontSize: 18, color: '#94a3b8' }} />
+                                        <SearchIcon sx={{ fontSize: 18, color: 'var(--mui-palette-text-muted)' }} />
                                     </InputAdornment>
                                 ),
                             },
@@ -443,16 +443,16 @@ export function ColumnVisibilityPopover<T>({
                     pb: 0.5,
                     '&::-webkit-scrollbar': { width: 6 },
                     '&::-webkit-scrollbar-track': { background: 'transparent' },
-                    '&::-webkit-scrollbar-thumb': { background: '#cbd5e1', borderRadius: 3 },
-                    '&::-webkit-scrollbar-thumb:hover': { background: '#94a3b8' },
+                    '&::-webkit-scrollbar-thumb': { background: 'var(--crm-slate-300)', borderRadius: 3 },
+                    '&::-webkit-scrollbar-thumb:hover': { background: 'var(--crm-slate-400)' },
                 }}
             >
                 {sections.length === 0 && (
-                    <Typography sx={{ fontSize: '0.8rem', color: '#94a3b8', px: 1.75, py: 2 }}>No fields match “{query}”.</Typography>
+                    <Typography sx={{ fontSize: '0.8rem', color: 'var(--mui-palette-text-muted)', px: 1.75, py: 2 }}>No fields match “{query}”.</Typography>
                 )}
                 {sections.map((section, index) => (
                     <React.Fragment key={section.key}>
-                        {index > 0 && <Divider sx={{ my: 0.75, borderColor: '#f1f5f9' }} />}
+                        {index > 0 && <Divider sx={{ my: 0.75, borderColor: 'var(--mui-palette-border-light)' }} />}
                         {renderSectionHeader(section)}
                         {renderSection(section)}
                     </React.Fragment>
@@ -475,11 +475,11 @@ function SortableRow({ id, label, children }: { id: string; label: string; child
             sx={{
                 display: 'flex',
                 alignItems: 'center',
-                color: '#cbd5e1',
+                color: 'var(--crm-slate-300)',
                 cursor: isDragging ? 'grabbing' : 'grab',
                 touchAction: 'none',
                 borderRadius: '4px',
-                '&:hover, &:focus-visible': { color: '#64748b', outline: 'none', backgroundColor: '#f1f5f9' },
+                '&:hover, &:focus-visible': { color: 'var(--mui-palette-text-secondary)', outline: 'none', backgroundColor: 'var(--mui-palette-background-hover)' },
             }}
         >
             <DragIndicatorIcon sx={{ fontSize: 18 }} />
@@ -492,7 +492,7 @@ function SortableRow({ id, label, children }: { id: string; label: string; child
             sx={{
                 position: 'relative',
                 zIndex: isDragging ? 2 : 'auto',
-                backgroundColor: isDragging ? '#fff' : undefined,
+                backgroundColor: isDragging ? 'var(--mui-palette-background-paper)' : undefined,
                 boxShadow: isDragging ? '0 6px 16px rgba(15,23,42,0.15)' : undefined,
                 borderRadius: isDragging ? '6px' : undefined,
             }}

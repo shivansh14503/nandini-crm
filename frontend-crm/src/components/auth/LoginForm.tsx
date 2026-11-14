@@ -74,7 +74,7 @@ export function LoginForm() {
                     sx={{
                         fontSize: '13px',
                         fontWeight: 600,
-                        color: '#4A5568',
+                        color: 'var(--crm-slate-600)',
                         mb: 0.75,
                         letterSpacing: '0.1px',
                     }}
@@ -94,7 +94,7 @@ export function LoginForm() {
                         input: {
                             startAdornment: (
                                 <InputAdornment position="start">
-                                    <PersonOutlineIcon sx={{ color: '#A0AEC0', fontSize: '20px' }} />
+                                    <PersonOutlineIcon sx={{ color: 'var(--mui-palette-text-muted)', fontSize: '20px' }} />
                                 </InputAdornment>
                             ),
                         },
@@ -102,9 +102,9 @@ export function LoginForm() {
                     sx={{
                         '& .MuiOutlinedInput-root': {
                             borderRadius: '10px',
-                            backgroundColor: '#FAFBFC',
+                            backgroundColor: 'var(--mui-palette-background-subtle)',
                             fontSize: '14px',
-                            '& fieldset': { borderColor: '#DDE3EC' },
+                            '& fieldset': { borderColor: 'var(--mui-palette-border-main)' },
                             '&:hover fieldset': { borderColor: 'primary.main' },
                             '&.Mui-focused fieldset': {
                                 borderColor: 'primary.main',
@@ -112,9 +112,9 @@ export function LoginForm() {
                             },
                         },
                         '& .MuiInputBase-input': {
-                            color: '#2D3748',
+                            color: 'var(--mui-palette-text-primary)',
                             py: '12px',
-                            '&::placeholder': { color: '#A0AEC0', opacity: 1 },
+                            '&::placeholder': { color: 'var(--mui-palette-text-muted)', opacity: 1 },
                         },
                     }}
                 />
@@ -134,7 +134,7 @@ export function LoginForm() {
                         sx={{
                             fontSize: '13px',
                             fontWeight: 600,
-                            color: '#4A5568',
+                            color: 'var(--crm-slate-600)',
                             letterSpacing: '0.1px',
                         }}
                     >
@@ -145,7 +145,7 @@ export function LoginForm() {
                         underline="hover"
                         sx={{
                             fontSize: '13px',
-                            color: 'primary.main',
+                            color: 'var(--crm-text-blue-600)',
                             fontWeight: 500,
                             cursor: 'pointer',
                             '&:hover': { color: 'primary.dark' },
@@ -168,7 +168,7 @@ export function LoginForm() {
                         input: {
                             startAdornment: (
                                 <InputAdornment position="start">
-                                    <LockOutlinedIcon sx={{ color: '#A0AEC0', fontSize: '20px' }} />
+                                    <LockOutlinedIcon sx={{ color: 'var(--mui-palette-text-muted)', fontSize: '20px' }} />
                                 </InputAdornment>
                             ),
                             endAdornment: (
@@ -179,7 +179,7 @@ export function LoginForm() {
                                         onClick={handleTogglePassword}
                                         edge="end"
                                         sx={{
-                                            color: '#A0AEC0',
+                                            color: 'var(--mui-palette-text-muted)',
                                             '&:hover': { color: 'primary.main' },
                                             transition: 'color 0.2s',
                                         }}
@@ -197,9 +197,9 @@ export function LoginForm() {
                     sx={{
                         '& .MuiOutlinedInput-root': {
                             borderRadius: '10px',
-                            backgroundColor: '#FAFBFC',
+                            backgroundColor: 'var(--mui-palette-background-subtle)',
                             fontSize: '14px',
-                            '& fieldset': { borderColor: '#DDE3EC' },
+                            '& fieldset': { borderColor: 'var(--mui-palette-border-main)' },
                             '&:hover fieldset': { borderColor: 'primary.main' },
                             '&.Mui-focused fieldset': {
                                 borderColor: 'primary.main',
@@ -207,9 +207,9 @@ export function LoginForm() {
                             },
                         },
                         '& .MuiInputBase-input': {
-                            color: '#2D3748',
+                            color: 'var(--mui-palette-text-primary)',
                             py: '12px',
-                            '&::placeholder': { color: '#A0AEC0', opacity: 1 },
+                            '&::placeholder': { color: 'var(--mui-palette-text-muted)', opacity: 1 },
                         },
                     }}
                 />
@@ -229,20 +229,20 @@ export function LoginForm() {
                     fontWeight: 600,
                     letterSpacing: '0.3px',
                     textTransform: 'none',
-                    background: 'linear-gradient(135deg, #1565C0 0%, #1976D2 100%)',
-                    boxShadow: '0 4px 14px rgba(21, 101, 192, 0.4)',
+                    background: 'linear-gradient(135deg, var(--crm-fill-blue-700) 0%, var(--crm-fill-blue-600) 100%)',
+                    boxShadow: '0 4px 14px rgb(var(--crm-accent-rgb) / 0.4)',
                     transition: 'all 0.25s ease',
                     '&:hover': {
-                        background: 'linear-gradient(135deg, #0D47A1 0%, #1565C0 100%)',
-                        boxShadow: '0 6px 20px rgba(21, 101, 192, 0.5)',
+                        background: 'linear-gradient(135deg, var(--crm-fill-blue-900) 0%, var(--crm-fill-blue-700) 100%)',
+                        boxShadow: '0 6px 20px rgb(var(--crm-accent-rgb) / 0.5)',
                         transform: 'translateY(-1px)',
                     },
                     '&:active': {
                         transform: 'translateY(0px)',
-                        boxShadow: '0 2px 8px rgba(21, 101, 192, 0.35)',
+                        boxShadow: '0 2px 8px rgb(var(--crm-accent-rgb) / 0.35)',
                     },
                     '&.Mui-disabled': {
-                        background: '#B0C4DE',
+                        background: 'var(--crm-slate-300)',
                         boxShadow: 'none',
                     },
                 }}

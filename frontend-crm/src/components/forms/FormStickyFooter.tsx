@@ -47,8 +47,8 @@ export function FormStickyFooter({
                 bottom: 0,
                 left: 0,
                 right: 0,
-                backgroundColor: '#fff',
-                borderTop: '1px solid #e2e8f0',
+                backgroundColor: 'var(--mui-palette-background-paper)',
+                borderTop: '1px solid var(--mui-palette-border-main)',
                 px: { xs: 2, md: 4 },
                 py: 1.5,
                 display: 'flex',
@@ -63,15 +63,15 @@ export function FormStickyFooter({
                 status
             ) : isView ? (
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                    <VisibilityOutlinedIcon sx={{ fontSize: 18, color: '#64748b' }} />
-                    <Typography sx={{ fontSize: '0.78rem', color: '#64748b', fontWeight: 500 }}>
+                    <VisibilityOutlinedIcon sx={{ fontSize: 18, color: 'var(--mui-palette-text-secondary)' }} />
+                    <Typography sx={{ fontSize: '0.78rem', color: 'var(--mui-palette-text-secondary)', fontWeight: 500 }}>
                         Read-only view
                     </Typography>
                 </Box>
             ) : (
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                     <Box sx={{ width: 8, height: 8, borderRadius: '50%', backgroundColor: '#22c55e' }} />
-                    <Typography sx={{ fontSize: '0.78rem', color: '#64748b', fontWeight: 500 }}>
+                    <Typography sx={{ fontSize: '0.78rem', color: 'var(--mui-palette-text-secondary)', fontWeight: 500 }}>
                         All changes staged locally in CRM memory buffer
                     </Typography>
                 </Box>
@@ -118,15 +118,15 @@ export function FormStickyFooter({
                         ) : undefined
                     }
                     sx={{
-                        background: 'linear-gradient(135deg, #1d4ed8 0%, #2563eb 100%)',
+                        background: 'linear-gradient(135deg, var(--crm-fill-blue-700) 0%, var(--crm-fill-blue-600) 100%)',
                         borderRadius: '8px',
                         fontSize: '0.82rem',
                         textTransform: 'none',
                         fontWeight: 700,
                         px: 3,
                         height: 36,
-                        boxShadow: '0 2px 8px rgba(37,99,235,0.3)',
-                        '&:hover': { background: 'linear-gradient(135deg, #1e40af 0%, #1d4ed8 100%)' },
+                        boxShadow: '0 2px 8px rgb(var(--crm-accent-rgb) / 0.3)',
+                        '&:hover': { background: 'linear-gradient(135deg, var(--crm-fill-blue-800) 0%, var(--crm-fill-blue-700) 100%)' },
                     }}
                 >
                     {saveLabel}

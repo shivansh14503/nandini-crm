@@ -222,7 +222,7 @@ export function BuilderDnd({ children }: { children: React.ReactNode }) {
             </DraggingContext.Provider>
             <DragOverlay dropAnimation={null}>
                 {overlay && (
-                    <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.75, px: 1.25, py: 0.6, borderRadius: '8px', backgroundColor: '#1d4ed8', color: '#fff', boxShadow: '0 6px 18px rgba(15,23,42,0.25)', pointerEvents: 'none' }}>
+                    <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.75, px: 1.25, py: 0.6, borderRadius: '8px', backgroundColor: 'var(--crm-fill-blue-700)', color: '#fff', boxShadow: '0 6px 18px rgba(15,23,42,0.25)', pointerEvents: 'none' }}>
                         {overlay.icon}
                         <Typography sx={{ fontSize: '0.78rem', fontWeight: 700, whiteSpace: 'nowrap' }}>{overlay.label}</Typography>
                     </Box>

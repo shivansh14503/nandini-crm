@@ -41,7 +41,7 @@ export function NewTemplateDialog({
 
     return (
         <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth slotProps={{ paper: { sx: { borderRadius: '12px' } } }}>
-            <DialogTitle sx={{ fontSize: '1rem', fontWeight: 700, color: '#0f172a' }}>New PDF template</DialogTitle>
+            <DialogTitle sx={{ fontSize: '1rem', fontWeight: 700, color: 'var(--crm-slate-900)' }}>New PDF template</DialogTitle>
             <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: '8px !important' }}>
                 <FormControl size="small" fullWidth sx={inputSx}>
                     <InputLabel id="new-template-module">Module</InputLabel>
@@ -54,7 +54,7 @@ export function NewTemplateDialog({
                     </Select>
                 </FormControl>
                 <Box>
-                    <Typography id="new-template-source" sx={{ fontSize: '0.8rem', fontWeight: 700, color: '#334155', mb: 0.5 }}>
+                    <Typography id="new-template-source" sx={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--crm-slate-700)', mb: 0.5 }}>
                         Start from
                     </Typography>
                     <RadioGroup aria-labelledby="new-template-source" value={sourceValue} onChange={(e) => setSource(e.target.value)}>
@@ -65,8 +65,8 @@ export function NewTemplateDialog({
                                 control={<Radio size="small" />}
                                 label={
                                     <Box>
-                                        <Typography sx={{ fontSize: '0.84rem', fontWeight: 600, color: '#0f172a' }}>{t.name}</Typography>
-                                        <Typography sx={{ fontSize: '0.75rem', color: '#64748b' }}>{t.description}</Typography>
+                                        <Typography sx={{ fontSize: '0.84rem', fontWeight: 600, color: 'var(--crm-slate-900)' }}>{t.name}</Typography>
+                                        <Typography sx={{ fontSize: '0.75rem', color: 'var(--mui-palette-text-secondary)' }}>{t.description}</Typography>
                                     </Box>
                                 }
                                 sx={{ alignItems: 'flex-start', mb: 0.75, '& .MuiRadio-root': { pt: 0.25 } }}
@@ -77,8 +77,8 @@ export function NewTemplateDialog({
                             control={<Radio size="small" />}
                             label={
                                 <Box>
-                                    <Typography sx={{ fontSize: '0.84rem', fontWeight: 600, color: '#0f172a' }}>Blank</Typography>
-                                    <Typography sx={{ fontSize: '0.75rem', color: '#64748b' }}>A minimal starting point with the line-items table.</Typography>
+                                    <Typography sx={{ fontSize: '0.84rem', fontWeight: 600, color: 'var(--crm-slate-900)' }}>Blank</Typography>
+                                    <Typography sx={{ fontSize: '0.75rem', color: 'var(--mui-palette-text-secondary)' }}>A minimal starting point with the line-items table.</Typography>
                                 </Box>
                             }
                             sx={{ alignItems: 'flex-start', '& .MuiRadio-root': { pt: 0.25 } }}

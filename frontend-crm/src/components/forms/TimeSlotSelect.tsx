@@ -46,11 +46,11 @@ export function TimeSlotSelect({ value, onChange, date, error, ariaLabel = 'Time
                 displayEmpty
                 onBlur={onBlur}
                 onChange={(e) => onChange(String(e.target.value))}
-                renderValue={(v) => (v ? String(v) : <Box component="span" sx={{ color: '#9ca3af' }}>Select time</Box>)}
+                renderValue={(v) => (v ? String(v) : <Box component="span" sx={{ color: 'var(--crm-gray-400)' }}>Select time</Box>)}
                 inputProps={{ 'aria-label': ariaLabel }}
                 startAdornment={
                     <InputAdornment position="start">
-                        <AccessTimeOutlinedIcon sx={{ fontSize: 16, color: '#64748b' }} />
+                        <AccessTimeOutlinedIcon sx={{ fontSize: 16, color: 'var(--mui-palette-text-secondary)' }} />
                     </InputAdornment>
                 }
                 MenuProps={{

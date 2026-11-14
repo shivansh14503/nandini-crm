@@ -20,7 +20,7 @@ export function LoadingScreen({ message, minHeight = '100vh' }: LoadingScreenPro
                 gap: 2,
             }}
         >
-            <CircularProgress sx={{ color: 'primary.main' }} />
+            <CircularProgress sx={{ color: 'var(--crm-text-blue-600)' }} />
             {message && (
                 <Typography variant="body2" sx={{ color: 'text.secondary' }}>
                     {message}

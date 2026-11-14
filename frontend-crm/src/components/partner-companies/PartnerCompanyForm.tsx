@@ -109,7 +109,7 @@ function toFormValues(record: Partial<PartnerCompanyFormData>): PartnerCompanyFo
     return normalizeAddressFields(values, ADDRESS_PAIRS);
 }
 
-const sectionDividerSx = { my: 3.5, borderColor: '#f1f5f9' } as const;
+const sectionDividerSx = { my: 3.5, borderColor: 'var(--mui-palette-border-light)' } as const;
 const panelSx = { p: { xs: 2.5, md: 3.5 } } as const;
 
 export interface PartnerCompanyFormProps {

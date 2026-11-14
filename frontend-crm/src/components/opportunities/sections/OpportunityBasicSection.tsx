@@ -53,7 +53,7 @@ const calendarAdornment = {
     input: {
         startAdornment: (
             <InputAdornment position="start">
-                <CalendarTodayOutlinedIcon sx={{ fontSize: 16, color: '#64748b' }} />
+                <CalendarTodayOutlinedIcon sx={{ fontSize: 16, color: 'var(--mui-palette-text-secondary)' }} />
             </InputAdornment>
         ),
     },
@@ -297,7 +297,7 @@ export function OpportunityBasicSection({ form, setField }: OpportunityBasicSect
             {/* ══════════════════════════════════════════════════════════════════════ */}
             {/* BILLING DETAILS                                                       */}
             {/* ══════════════════════════════════════════════════════════════════════ */}
-            <Divider sx={{ my: 3.5, borderColor: '#f1f5f9' }} />
+            <Divider sx={{ my: 3.5, borderColor: 'var(--mui-palette-border-light)' }} />
             <SectionLabel
                 icon={<ReceiptLongOutlinedIcon sx={{ fontSize: 18 }} />}
                 label="Billing Details"
@@ -344,7 +344,7 @@ export function OpportunityBasicSection({ form, setField }: OpportunityBasicSect
             {/* ══════════════════════════════════════════════════════════════════════ */}
             {/* COMMISSION & DOCUMENTATION                                            */}
             {/* ══════════════════════════════════════════════════════════════════════ */}
-            <Divider sx={{ my: 3.5, borderColor: '#f1f5f9' }} />
+            <Divider sx={{ my: 3.5, borderColor: 'var(--mui-palette-border-light)' }} />
             <SectionLabel
                 icon={<MonetizationOnOutlinedIcon sx={{ fontSize: 18 }} />}
                 label="Commission & Documentation"

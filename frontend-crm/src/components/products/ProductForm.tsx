@@ -89,7 +89,7 @@ export const PRODUCT_FORM_TABS: FormTabDefinition[] = [
     {
         id: 'overview',
         label: 'Overview',
-        icon: <InventoryOutlinedIcon sx={{ fontSize: 18, color: '#2563eb' }} />,
+        icon: <InventoryOutlinedIcon sx={{ fontSize: 18, color: 'var(--crm-text-blue-600)' }} />,
     },
 ];
 
@@ -243,7 +243,7 @@ export default function ProductForm({
                         />
                     </FormGrid>
 
-                    <Divider sx={{ my: 3.5, borderColor: '#f1f5f9' }} />
+                    <Divider sx={{ my: 3.5, borderColor: 'var(--mui-palette-border-light)' }} />
 
                     {/* ════════════════════════════════════════════════
                         Section 2: Pricing & Tax
@@ -304,7 +304,7 @@ export default function ProductForm({
                         />
                     </FormGrid>
 
-                    <Divider sx={{ my: 3.5, borderColor: '#f1f5f9' }} />
+                    <Divider sx={{ my: 3.5, borderColor: 'var(--mui-palette-border-light)' }} />
 
                     {/* ════════════════════════════════════════════════
                         Section 3: Description & Terms

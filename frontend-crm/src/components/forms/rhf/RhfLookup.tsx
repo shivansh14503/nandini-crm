@@ -11,6 +11,7 @@ import { findCrmUser, formatCrmUserDisplay, getAssignableUserNames, getPartnerCo
 import { useContacts, useOrganizations } from '@/hooks/queries';
 import { useMasterData } from '@/hooks/queries/useMasterData';
 import type { LookupKind, LookupRecordMap } from '@/types/lookup.types';
+import { useConfiguredPlaceholder } from '@/context/FormConfigContext';
 
 export interface RhfLookupProps<T extends FieldValues, K extends LookupKind = LookupKind> {
     name: FieldPath<T>;
@@ -49,7 +50,7 @@ export function RhfLookup<T extends FieldValues, K extends LookupKind = LookupKi
     options,
     required,
     hint,
-    placeholder,
+    placeholder: codedPlaceholder = 'Type or select...',
     disabled,
     lookupType = 'custom',
     onLookupClick,
@@ -60,6 +61,7 @@ export function RhfLookup<T extends FieldValues, K extends LookupKind = LookupKi
     excludeValues,
 }: RhfLookupProps<T, K>) {
     const { field, fieldState } = useController<T>({ name });
+    const placeholder = useConfiguredPlaceholder(name, codedPlaceholder);
     const [modalOpen, setModalOpen] = useState(false);
     const value = (field.value as string) ?? '';
 
@@ -134,7 +136,7 @@ export function RhfLookup<T extends FieldValues, K extends LookupKind = LookupKi
                 value={displayValue}
                 onChange={handleChange}
                 options={suggestions}
-                placeholder={placeholder}
+                placeholder={placeholder ?? ''}
                 required={required}
                 disabled={disabled}
                 onLookupClick={kind ? () => setModalOpen(true) : onLookupClick}

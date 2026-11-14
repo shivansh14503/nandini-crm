@@ -85,17 +85,17 @@ function ScrollArrow({
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                backgroundColor: 'rgba(255,255,255,0.95)',
-                border: '1px solid #cbd5e1',
+                backgroundColor: 'var(--mui-palette-background-paper)',
+                border: '1px solid var(--mui-palette-border-strong)',
                 boxShadow: '0 2px 8px rgba(15, 23, 42, 0.15)',
-                color: '#334155',
+                color: 'var(--crm-slate-700)',
                 cursor: 'pointer',
                 userSelect: 'none',
                 opacity: visible ? 1 : 0,
                 pointerEvents: visible ? 'auto' : 'none',
                 transition: 'opacity 0.15s ease, background-color 0.15s ease',
-                '&:hover': { backgroundColor: '#eff6ff', color: '#1d4ed8', borderColor: '#93c5fd' },
-                '&:active': { backgroundColor: '#dbeafe' },
+                '&:hover': { backgroundColor: 'var(--mui-palette-primary-soft)', color: 'var(--crm-blue-700)', borderColor: 'var(--crm-blue-300)' },
+                '&:active': { backgroundColor: 'var(--crm-blue-100)' },
             }}
         >
             <Icon sx={{ fontSize: 20 }} />
@@ -167,16 +167,19 @@ export function DataTable<T>({
         return {
             position: 'sticky',
             left: lefts[slot] ?? 0,
-            // Above scrolling cells; frozen header cells also above the (sticky) header row.
-            zIndex: header ? 4 : 1,
+            // Above scrolling cells (and anything positioned inside them); frozen header cells also above the
+            // (sticky) header row and the frozen body cells.
+            zIndex: header ? 4 : 2,
             ...(header ? {} : { backgroundColor: 'inherit' }),
             ...(slot === frozenCount - 1 && {
-                borderRight: '1px solid #e2e8f0',
+                borderRight: '1px solid var(--mui-palette-border-main)',
                 boxShadow: '6px 0 8px -6px rgba(15, 23, 42, 0.18)',
             }),
         } as const;
     };
-    const columnSlot = (columnIndex: number) => (columnIndex < pinnedCount ? firstColumnSlot + columnIndex : -1);
+    /** Header cell stacking: unfrozen sticky header cells (MUI: 2) sit above the frozen body cells (2) too. */
+    const headerSx = (slot: number) => ({ zIndex: 3, ...frozenSx(slot, true) });
+    const columnSlot =(columnIndex: number) => (columnIndex < pinnedCount ? firstColumnSlot + columnIndex : -1);
 
     // Determine row selection state helper
     const isRowSelected = (rowId: string): boolean => {
@@ -264,10 +267,10 @@ export function DataTable<T>({
             align={actionsAlign}
             ref={slot >= 0 ? registerHeaderCell(slot) : undefined}
             sx={{
-                ...frozenSx(slot, true),
-                backgroundColor: '#f8fafc',
-                borderBottom: '1px solid #e2e8f0',
-                color: '#64748b',
+                ...headerSx(slot),
+                backgroundColor: 'var(--mui-palette-background-subtle)',
+                borderBottom: '1px solid var(--mui-palette-border-main)',
+                color: 'var(--mui-palette-text-secondary)',
                 fontWeight: 700,
                 fontSize: '0.74rem',
                 letterSpacing: '0.04em',
@@ -307,21 +310,21 @@ export function DataTable<T>({
                 cursor: isPanning ? 'grabbing' : undefined,
                 userSelect: isPanning ? 'none' : undefined,
                 scrollbarWidth: 'auto',
-                scrollbarColor: '#94a3b8 #f1f5f9',
+                scrollbarColor: 'var(--mui-palette-text-muted) var(--crm-slate-100)',
                 '&::-webkit-scrollbar': {
                     width: '10px',
                     height: '12px',
                 },
                 '&::-webkit-scrollbar-track': {
-                    backgroundColor: '#f1f5f9',
+                    backgroundColor: 'var(--mui-palette-background-hover)',
                     borderRadius: '6px',
                 },
                 '&::-webkit-scrollbar-thumb': {
-                    backgroundColor: '#94a3b8',
+                    backgroundColor: 'var(--crm-slate-400)',
                     borderRadius: '6px',
-                    border: '2px solid #f1f5f9',
+                    border: '2px solid var(--mui-palette-border-light)',
                     '&:hover': {
-                        backgroundColor: '#64748b',
+                        backgroundColor: 'var(--crm-slate-500)',
                     },
                 },
             }}
@@ -337,16 +340,16 @@ export function DataTable<T>({
             >
                 {/* ── Table Header ───────────────────────────────────────────── */}
                 <TableHead>
-                    <TableRow sx={{ backgroundColor: '#f8fafc' }}>
+                    <TableRow sx={{ backgroundColor: 'var(--mui-palette-background-subtle)' }}>
                         {/* Checkbox Column */}
                         {selectable && (
                             <TableCell
                                 padding="checkbox"
                                 ref={checkboxSlot >= 0 ? registerHeaderCell(checkboxSlot) : undefined}
                                 sx={{
-                                    ...frozenSx(checkboxSlot, true),
-                                    backgroundColor: '#f8fafc',
-                                    borderBottom: '1px solid #e2e8f0',
+                                    ...headerSx(checkboxSlot),
+                                    backgroundColor: 'var(--mui-palette-background-subtle)',
+                                    borderBottom: '1px solid var(--mui-palette-border-main)',
                                     width: 40,
                                     pl: 1.5,
                                 }}
@@ -358,8 +361,8 @@ export function DataTable<T>({
                                     onChange={(e) => onToggleSelectAll?.(e.target.checked)}
                                     sx={{
                                         p: 0.5,
-                                        color: '#94a3b8',
-                                        '&.Mui-checked': { color: '#2563eb' },
+                                        color: 'var(--mui-palette-text-muted)',
+                                        '&.Mui-checked': { color: 'var(--crm-text-blue-600)' },
                                     }}
                                 />
                             </TableCell>
@@ -385,10 +388,10 @@ export function DataTable<T>({
                                             : undefined
                                     }
                                     sx={{
-                                        ...frozenSx(slot, true),
-                                        backgroundColor: '#f8fafc',
-                                        borderBottom: '1px solid #e2e8f0',
-                                        color: isSorted ? '#1e3a8a' : '#64748b',
+                                        ...headerSx(slot),
+                                        backgroundColor: 'var(--mui-palette-background-subtle)',
+                                        borderBottom: '1px solid var(--mui-palette-border-main)',
+                                        color: isSorted ? 'var(--crm-text-blue-900)' : 'var(--mui-palette-text-secondary)',
                                         fontWeight: 700,
                                         fontSize: '0.74rem',
                                         letterSpacing: '0.04em',
@@ -399,7 +402,7 @@ export function DataTable<T>({
                                         userSelect: 'none',
                                         whiteSpace: 'nowrap',
                                         transition: 'color 0.15s ease',
-                                        '&:hover': isSortable ? { color: '#1e293b' } : {},
+                                        '&:hover': isSortable ? { color: 'var(--mui-palette-text-primary)' } : {},
                                     }}
                                 >
                                     <Box
@@ -421,7 +424,7 @@ export function DataTable<T>({
                                                 component="span"
                                                 sx={{
                                                     display: 'inline-flex',
-                                                    color: isSorted ? '#2563eb' : '#94a3b8',
+                                                    color: isSorted ? 'var(--crm-text-blue-600)' : 'var(--mui-palette-text-muted)',
                                                 }}
                                             >
                                                 {isSorted ? (
@@ -460,19 +463,21 @@ export function DataTable<T>({
                                 onClick={handleRowClick ? () => handleRowClick(row) : undefined}
                                 sx={{
                                     // Explicit so frozen cells (background: inherit) cover what scrolls beneath them.
-                                    backgroundColor: '#ffffff',
+                                    backgroundColor: 'var(--mui-palette-background-paper)',
                                     cursor: handleRowClick ? 'pointer' : 'default',
                                     transition: 'background-color 0.12s ease',
-                                    '&:hover': { backgroundColor: '#f8fafc' },
+                                    // Opaque, and as specific as MUI's own `hover` rule (a translucent action.hover): frozen
+                                    // cells inherit the row colour, so a translucent one let scrolled cells show through them.
+                                    '&:hover, &.MuiTableRow-hover:hover': { backgroundColor: 'var(--mui-palette-background-subtle)' },
                                     ...(isActive && {
-                                        backgroundColor: '#eff6ff !important',
-                                        boxShadow: 'inset 3px 0 0 #2563eb',
+                                        backgroundColor: 'var(--mui-palette-primary-soft) !important',
+                                        boxShadow: 'inset 3px 0 0 var(--mui-palette-primary-main)',
                                     }),
                                     '&.Mui-selected': {
-                                        backgroundColor: '#eff6ff !important',
+                                        backgroundColor: 'var(--mui-palette-primary-soft) !important',
                                     },
                                     '&.Mui-selected:hover': {
-                                        backgroundColor: '#dbeafe !important',
+                                        backgroundColor: 'var(--crm-blue-100) !important',
                                     },
                                 }}
                             >
@@ -490,8 +495,8 @@ export function DataTable<T>({
                                             onClick={(e) => e.stopPropagation()}
                                             sx={{
                                                 p: 0.5,
-                                                color: '#cbd5e1',
-                                                '&.Mui-checked': { color: '#2563eb' },
+                                                color: 'var(--crm-slate-300)',
+                                                '&.Mui-checked': { color: 'var(--crm-text-blue-600)' },
                                             }}
                                         />
                                     </TableCell>
@@ -505,7 +510,7 @@ export function DataTable<T>({
                                             ...frozenSx(actionsSlot, false),
                                             py: 1,
                                             px: 1,
-                                            borderBottom: '1px solid #f1f5f9',
+                                            borderBottom: '1px solid var(--mui-palette-border-light)',
                                             width: actionsWidth,
                                             minWidth: actionsWidth,
                                         }}
@@ -539,8 +544,8 @@ export function DataTable<T>({
                                                 ...frozenSx(columnSlot(columnIndex), false),
                                                 py: 1.2,
                                                 fontSize: '0.8rem',
-                                                color: '#334155',
-                                                borderBottom: '1px solid #f1f5f9',
+                                                color: 'var(--crm-slate-700)',
+                                                borderBottom: '1px solid var(--mui-palette-border-light)',
                                             }}
                                         >
                                             {/* max-width on a <td> is ignored by auto table layout: cap an inner box instead. */}
@@ -558,7 +563,7 @@ export function DataTable<T>({
                                         sx={{
                                             py: 1,
                                             px: 1,
-                                            borderBottom: '1px solid #f1f5f9',
+                                            borderBottom: '1px solid var(--mui-palette-border-light)',
                                             width: actionsWidth,
                                             minWidth: actionsWidth,
                                         }}

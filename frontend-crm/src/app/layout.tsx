@@ -7,6 +7,8 @@ import { AuthProvider } from "@/context/AuthContext";
 import { CrmDataBootstrap } from "@/components/common/CrmDataBootstrap";
 import { EnterTogglesCheckboxes } from "@/components/common/EnterTogglesCheckboxes";
 import { APP_CONFIG } from "@/config/constants";
+import InitColorSchemeScript from "@mui/material/InitColorSchemeScript";
+import { COLOR_SCHEME_DEFAULT_MODE, COLOR_SCHEME_STORAGE_KEY } from "@/theme/colorScheme";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -28,8 +30,15 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html
       lang="en"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+      // InitColorSchemeScript adds the `.light` / `.dark` class before React hydrates.
+      suppressHydrationWarning
     >
       <body className="min-h-full m-0">
+        <InitColorSchemeScript
+          attribute="class"
+          defaultMode={COLOR_SCHEME_DEFAULT_MODE}
+          modeStorageKey={COLOR_SCHEME_STORAGE_KEY}
+        />
         <ThemeRegistry>
           <QueryProvider>
             <AuthProvider>

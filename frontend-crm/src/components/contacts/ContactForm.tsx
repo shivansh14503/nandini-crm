@@ -39,7 +39,7 @@ export const CONTACT_FORM_TABS: FormTabDefinition[] = [
     {
         id: 'overview',
         label: 'Overview',
-        icon: <PersonOutlinedIcon sx={{ fontSize: 18, color: '#2563eb' }} />,
+        icon: <PersonOutlinedIcon sx={{ fontSize: 18, color: 'var(--crm-text-blue-600)' }} />,
     },
 ];
 
@@ -77,7 +77,7 @@ const DEFAULT_FORM: ContactFormData = {
     description: '',
 };
 
-const sectionDividerSx = { my: 3.5, borderColor: '#f1f5f9' } as const;
+const sectionDividerSx = { my: 3.5, borderColor: 'var(--mui-palette-border-light)' } as const;
 
 export default function ContactForm({
     mode = 'create',

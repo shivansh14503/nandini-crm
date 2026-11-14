@@ -413,7 +413,7 @@ export function CommonMasterView<T = unknown, TFilter extends string = string>({
                 display: 'flex',
                 flexDirection: 'column',
                 minHeight: 'calc(100vh - 64px)',
-                backgroundColor: '#f8fafc',
+                backgroundColor: 'var(--mui-palette-background-subtle)',
                 width: '100%',
                 minWidth: 0,
                 ...sx,
@@ -469,9 +469,9 @@ export function CommonMasterView<T = unknown, TFilter extends string = string>({
                     sx={{
                         position: 'relative',
                         zIndex: 1,
-                        border: '1px solid #e2e8f0',
+                        border: '1px solid var(--mui-palette-border-main)',
                         borderRadius: '10px',
-                        backgroundColor: '#ffffff',
+                        backgroundColor: 'var(--mui-palette-background-paper)',
                         display: 'flex',
                         flexDirection: 'column',
                         flex: 1,
@@ -561,7 +561,7 @@ export function CommonMasterView<T = unknown, TFilter extends string = string>({
                     },
                     '.MuiModal-root.MuiDrawer-root ~ .MuiModal-root.MuiDrawer-root .MuiDrawer-paper': {
                         pointerEvents: 'auto',
-                        borderLeft: '1px solid #cbd5e1',
+                        borderLeft: '1px solid var(--mui-palette-border-strong)',
                         boxShadow: '-12px 0 40px rgba(15, 23, 42, 0.22)',
                     },
                 }}

@@ -25,12 +25,12 @@ const SETTLE_MS = 180;
 const SHIFT_MS = 220;
 const EASE = 'cubic-bezier(0.2, 0, 0, 1)';
 const LIFT_SCALE = 1.012;
-const LIFT_SHADOW = '0 14px 30px -6px rgba(15, 23, 42, 0.18), 0 4px 12px -2px rgba(37, 99, 235, 0.14), 0 0 0 1.5px #60a5fa';
+const LIFT_SHADOW = '0 14px 30px -6px rgba(15, 23, 42, 0.18), 0 4px 12px -2px rgb(var(--crm-accent-rgb) / 0.14), 0 0 0 1.5px var(--crm-blue-400)';
 /** Same three layers, transparent: lets the shadow fade out while the row settles. */
-const SETTLED_SHADOW = '0 0 0 0 rgba(15, 23, 42, 0), 0 0 0 0 rgba(37, 99, 235, 0), 0 0 0 0 rgba(96, 165, 250, 0)';
+const SETTLED_SHADOW = '0 0 0 0 rgba(15, 23, 42, 0), 0 0 0 0 rgb(var(--crm-accent-rgb) / 0), 0 0 0 0 rgb(var(--crm-accent-rgb) / 0)';
 /** Group header of the section a row is being dragged into (from another section). */
-const TARGET_GROUP_BG = '#eff6ff';
-const TARGET_GROUP_SHADOW = 'inset 3px 0 0 #2563eb, inset 0 -1px 0 #bfdbfe';
+const TARGET_GROUP_BG = 'var(--mui-palette-primary-soft)';
+const TARGET_GROUP_SHADOW = 'inset 3px 0 0 var(--mui-palette-primary-main), inset 0 -1px 0 var(--crm-blue-200)';
 
 /** Auto-scroll: distance from the scroll area's edge where scrolling kicks in, and the top speed (px / frame). */
 const AUTO_SCROLL_ZONE_PX = 80;
@@ -307,7 +307,7 @@ export function useDragReorder<T extends { id: string }>({
             style.willChange = 'transform';
             if (index === s.fromIndex) {
                 style.zIndex = '30';
-                style.backgroundColor = '#ffffff';
+                style.backgroundColor = 'var(--mui-palette-background-paper)';
                 style.borderRadius = '8px';
                 style.cursor = 'grabbing';
                 style.boxShadow = LIFT_SHADOW;

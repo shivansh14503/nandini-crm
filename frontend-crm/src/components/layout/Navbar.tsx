@@ -29,6 +29,7 @@ import AdminPanelSettingsOutlinedIcon from '@mui/icons-material/AdminPanelSettin
 import Badge from '@mui/material/Badge';
 import { useAuth } from '../../context/AuthContext';
 import { GlobalSearch } from './GlobalSearch';
+import { ThemeModeToggle } from './ThemeModeToggle';
 import { APP_CONFIG, ROUTES } from '@/config/constants';
 
 /* ─── Nav pill definitions ─────────────────────────────── */
@@ -177,21 +178,21 @@ function NavPill({ item }: { item: { label: string; icon?: React.ReactNode; item
                     />
                 }
                 sx={{
-                    color: open ? '#2563EB' : '#374151',
+                    color: open ? 'var(--crm-text-blue-600)' : 'var(--crm-gray-700)',
                     fontWeight: 500,
                     fontSize: '0.8rem',
                     textTransform: 'none',
                     borderRadius: '6px',
                     px: 1.5,
                     py: 0.6,
-                    backgroundColor: open ? '#EFF6FF' : 'transparent',
-                    border: open ? '1px solid #BFDBFE' : '1px solid transparent',
+                    backgroundColor: open ? 'var(--mui-palette-primary-soft)' : 'transparent',
+                    border: open ? '1px solid var(--mui-palette-primary-softBorder)' : '1px solid transparent',
                     whiteSpace: 'nowrap',
                     minWidth: 'unset',
                     '&:hover': {
-                        backgroundColor: '#EFF6FF',
-                        color: '#2563EB',
-                        border: '1px solid #BFDBFE',
+                        backgroundColor: 'var(--mui-palette-primary-soft)',
+                        color: 'var(--mui-palette-primary-main)',
+                        border: '1px solid var(--mui-palette-primary-softBorder)',
                     },
                     transition: 'all 0.15s ease',
                 }}
@@ -217,7 +218,7 @@ function NavPill({ item }: { item: { label: string; icon?: React.ReactNode; item
                                 minWidth: 180,
                                 borderRadius: '10px',
                                 overflow: 'hidden',
-                                border: '1px solid #E5E7EB',
+                                border: '1px solid var(--crm-gray-200)',
                                 boxShadow: '0 8px 30px rgba(0,0,0,0.10)',
                             }}
                         >
@@ -232,10 +233,10 @@ function NavPill({ item }: { item: { label: string; icon?: React.ReactNode; item
                                             sx={{
                                                 textDecoration: 'none',
                                                 fontSize: '0.82rem',
-                                                color: '#374151',
+                                                color: 'var(--crm-gray-700)',
                                                 px: 2,
                                                 py: 0.9,
-                                                '&:hover': { backgroundColor: '#EFF6FF', color: '#2563EB' },
+                                                '&:hover': { backgroundColor: 'var(--mui-palette-primary-soft)', color: 'var(--mui-palette-primary-main)' },
                                             }}
                                         >
                                             {sub.label}
@@ -275,10 +276,10 @@ function UserMenu({ user, onLogout }: { user: { username: string; role: string }
                     textAlign: 'left',
                     cursor: 'pointer',
                     borderRadius: '8px',
-                    border: open ? '1px solid #BFDBFE' : '1px solid transparent',
-                    backgroundColor: open ? '#EFF6FF' : 'transparent',
+                    border: open ? '1px solid var(--mui-palette-primary-softBorder)' : '1px solid transparent',
+                    backgroundColor: open ? 'var(--mui-palette-primary-soft)' : 'transparent',
                     transition: 'all 0.15s ease',
-                    '&:hover': { backgroundColor: '#F3F4F6' },
+                    '&:hover': { backgroundColor: 'var(--crm-gray-100)' },
                 }}
             >
                 <Avatar
@@ -287,23 +288,23 @@ function UserMenu({ user, onLogout }: { user: { username: string; role: string }
                         height: 32,
                         fontSize: '0.75rem',
                         fontWeight: 700,
-                        background: 'linear-gradient(135deg, #3B82F6, #2563EB)',
+                        background: 'linear-gradient(135deg, var(--crm-fill-blue-500), var(--crm-fill-blue-600))',
                     }}
                 >
                     {initials}
                 </Avatar>
                 <Box sx={{ display: { xs: 'none', md: 'block' } }}>
-                    <Typography sx={{ fontSize: '0.8rem', fontWeight: 600, color: '#111827', lineHeight: 1.2 }}>
+                    <Typography sx={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--crm-gray-900)', lineHeight: 1.2 }}>
                         {user.username}
                     </Typography>
-                    <Typography sx={{ fontSize: '0.7rem', color: '#6B7280', lineHeight: 1.2 }}>
+                    <Typography sx={{ fontSize: '0.7rem', color: 'var(--crm-gray-500)', lineHeight: 1.2 }}>
                         {user.role}
                     </Typography>
                 </Box>
                 <KeyboardArrowDownIcon
                     sx={{
                         fontSize: 16,
-                        color: '#9CA3AF',
+                        color: 'var(--crm-gray-400)',
                         transition: 'transform 0.2s',
                         transform: open ? 'rotate(180deg)' : 'rotate(0deg)',
                     }}
@@ -328,17 +329,17 @@ function UserMenu({ user, onLogout }: { user: { username: string; role: string }
                                 minWidth: 200,
                                 borderRadius: '10px',
                                 overflow: 'hidden',
-                                border: '1px solid #E5E7EB',
+                                border: '1px solid var(--crm-gray-200)',
                                 boxShadow: '0 8px 30px rgba(0,0,0,0.10)',
                             }}
                         >
                             <ClickAwayListener onClickAway={handleClickAway}>
                                 <Box>
-                                    <Box sx={{ px: 2, py: 1.5, backgroundColor: '#F9FAFB' }}>
-                                        <Typography sx={{ fontSize: '0.85rem', fontWeight: 700, color: '#111827' }}>
+                                    <Box sx={{ px: 2, py: 1.5, backgroundColor: 'var(--crm-gray-50)' }}>
+                                        <Typography sx={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--crm-gray-900)' }}>
                                             {user.username}
                                         </Typography>
-                                        <Typography sx={{ fontSize: '0.75rem', color: '#6B7280' }}>
+                                        <Typography sx={{ fontSize: '0.75rem', color: 'var(--crm-gray-500)' }}>
                                             {user.role}
                                         </Typography>
                                     </Box>
@@ -348,11 +349,11 @@ function UserMenu({ user, onLogout }: { user: { username: string; role: string }
                                             onClick={close}
                                             sx={{
                                                 fontSize: '0.82rem',
-                                                color: '#374151',
+                                                color: 'var(--crm-gray-700)',
                                                 px: 2,
                                                 py: 0.9,
                                                 gap: 1.5,
-                                                '&:hover': { backgroundColor: '#EFF6FF', color: '#2563EB' },
+                                                '&:hover': { backgroundColor: 'var(--mui-palette-primary-soft)', color: 'var(--mui-palette-primary-main)' },
                                             }}
                                         >
                                             <PersonIcon fontSize="small" />
@@ -366,11 +367,11 @@ function UserMenu({ user, onLogout }: { user: { username: string; role: string }
                                             sx={{
                                                 textDecoration: 'none',
                                                 fontSize: '0.82rem',
-                                                color: '#374151',
+                                                color: 'var(--crm-gray-700)',
                                                 px: 2,
                                                 py: 0.9,
                                                 gap: 1.5,
-                                                '&:hover': { backgroundColor: '#EFF6FF', color: '#2563EB' },
+                                                '&:hover': { backgroundColor: 'var(--mui-palette-primary-soft)', color: 'var(--mui-palette-primary-main)' },
                                             }}
                                         >
                                             <AdminPanelSettingsOutlinedIcon fontSize="small" />
@@ -385,11 +386,11 @@ function UserMenu({ user, onLogout }: { user: { username: string; role: string }
                                             }}
                                             sx={{
                                                 fontSize: '0.82rem',
-                                                color: '#EF4444',
+                                                color: 'var(--crm-red-500)',
                                                 px: 2,
                                                 py: 0.9,
                                                 gap: 1.5,
-                                                '&:hover': { backgroundColor: '#FEF2F2', color: '#DC2626' },
+                                                '&:hover': { backgroundColor: 'var(--mui-palette-error-soft)', color: 'var(--mui-palette-error-main)' },
                                             }}
                                         >
                                             <LogoutIcon fontSize="small" />
@@ -433,11 +434,11 @@ function NotificationBell() {
                     width: 36,
                     height: 36,
                     borderRadius: '8px',
-                    border: open ? '1px solid #BFDBFE' : '1px solid transparent',
-                    backgroundColor: open ? '#EFF6FF' : 'transparent',
+                    border: open ? '1px solid var(--mui-palette-primary-softBorder)' : '1px solid transparent',
+                    backgroundColor: open ? 'var(--mui-palette-primary-soft)' : 'transparent',
                     cursor: 'pointer',
                     transition: 'all 0.15s ease',
-                    '&:hover': { backgroundColor: '#F3F4F6' },
+                    '&:hover': { backgroundColor: 'var(--crm-gray-100)' },
                 }}
             >
                 <Badge
@@ -453,7 +454,7 @@ function NotificationBell() {
                         },
                     }}
                 >
-                    <NotificationsIcon sx={{ fontSize: 20, color: '#6B7280' }} />
+                    <NotificationsIcon sx={{ fontSize: 20, color: 'var(--crm-gray-500)' }} />
                 </Badge>
             </Box>
 
@@ -475,18 +476,18 @@ function NotificationBell() {
                                 width: 320,
                                 borderRadius: '12px',
                                 overflow: 'hidden',
-                                border: '1px solid #E5E7EB',
+                                border: '1px solid var(--crm-gray-200)',
                                 boxShadow: '0 8px 30px rgba(0,0,0,0.12)',
                             }}
                         >
                             <ClickAwayListener onClickAway={handleClickAway}>
                                 <Box>
                                     {/* Header */}
-                                    <Box sx={{ px: 2, py: 1.5, display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid #E5E7EB', backgroundColor: '#F9FAFB' }}>
-                                        <Typography sx={{ fontSize: '0.85rem', fontWeight: 700, color: '#111827' }}>
+                                    <Box sx={{ px: 2, py: 1.5, display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid var(--crm-gray-200)', backgroundColor: 'var(--crm-gray-50)' }}>
+                                        <Typography sx={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--crm-gray-900)' }}>
                                             Notifications
                                         </Typography>
-                                        <Badge badgeContent={unreadCount} sx={{ '& .MuiBadge-badge': { backgroundColor: '#2563EB', color: '#fff', fontSize: '0.6rem' } }}>
+                                        <Badge badgeContent={unreadCount} sx={{ '& .MuiBadge-badge': { backgroundColor: 'var(--mui-palette-primary-main)', color: '#fff', fontSize: '0.6rem' } }}>
                                             <Box />
                                         </Badge>
                                     </Box>
@@ -500,9 +501,9 @@ function NotificationBell() {
                                                     display: 'flex',
                                                     gap: 1.5,
                                                     alignItems: 'flex-start',
-                                                    backgroundColor: notif.unread ? '#F0F7FF' : '#FFFFFF',
+                                                    backgroundColor: notif.unread ? 'var(--mui-palette-primary-soft)' : 'var(--mui-palette-background-paper)',
                                                     cursor: 'pointer',
-                                                    '&:hover': { backgroundColor: '#EFF6FF' },
+                                                    '&:hover': { backgroundColor: 'var(--mui-palette-primary-soft)' },
                                                     transition: 'background 0.12s',
                                                 }}
                                             >
@@ -511,19 +512,19 @@ function NotificationBell() {
                                                         width: 8,
                                                         height: 8,
                                                         borderRadius: '50%',
-                                                        backgroundColor: notif.unread ? '#2563EB' : 'transparent',
+                                                        backgroundColor: notif.unread ? 'var(--mui-palette-primary-main)' : 'transparent',
                                                         flexShrink: 0,
                                                         mt: 0.8,
                                                     }}
                                                 />
                                                 <Box sx={{ flex: 1, minWidth: 0 }}>
-                                                    <Typography sx={{ fontSize: '0.82rem', fontWeight: notif.unread ? 700 : 500, color: '#111827', lineHeight: 1.3 }}>
+                                                    <Typography sx={{ fontSize: '0.82rem', fontWeight: notif.unread ? 700 : 500, color: 'var(--crm-gray-900)', lineHeight: 1.3 }}>
                                                         {notif.title}
                                                     </Typography>
-                                                    <Typography sx={{ fontSize: '0.75rem', color: '#6B7280', mt: 0.3, lineHeight: 1.4 }}>
+                                                    <Typography sx={{ fontSize: '0.75rem', color: 'var(--crm-gray-500)', mt: 0.3, lineHeight: 1.4 }}>
                                                         {notif.desc}
                                                     </Typography>
-                                                    <Typography sx={{ fontSize: '0.7rem', color: '#9CA3AF', mt: 0.4 }}>
+                                                    <Typography sx={{ fontSize: '0.7rem', color: 'var(--crm-gray-400)', mt: 0.4 }}>
                                                         {notif.time}
                                                     </Typography>
                                                 </Box>
@@ -532,8 +533,8 @@ function NotificationBell() {
                                         </Box>
                                     ))}
                                     {/* Footer */}
-                                    <Box sx={{ px: 2, py: 1, borderTop: '1px solid #E5E7EB', textAlign: 'center' }}>
-                                        <Typography sx={{ fontSize: '0.78rem', color: '#2563EB', fontWeight: 600, cursor: 'pointer', '&:hover': { textDecoration: 'underline' } }}>
+                                    <Box sx={{ px: 2, py: 1, borderTop: '1px solid var(--crm-gray-200)', textAlign: 'center' }}>
+                                        <Typography sx={{ fontSize: '0.78rem', color: 'var(--mui-palette-primary-main)', fontWeight: 600, cursor: 'pointer', '&:hover': { textDecoration: 'underline' } }}>
                                             See all notifications
                                         </Typography>
                                     </Box>
@@ -580,8 +581,8 @@ function CreateButton() {
                 }
                 sx={{
                     background: open
-                        ? 'linear-gradient(135deg, #1D4ED8, #2563EB)'
-                        : 'linear-gradient(135deg, #2563EB, #3B82F6)',
+                        ? 'linear-gradient(135deg, var(--crm-fill-blue-700), var(--crm-fill-blue-600))'
+                        : 'linear-gradient(135deg, var(--crm-fill-blue-600), var(--crm-fill-blue-500))',
                     color: '#FFFFFF',
                     fontWeight: 600,
                     fontSize: '0.8rem',
@@ -589,11 +590,11 @@ function CreateButton() {
                     borderRadius: '8px',
                     px: 1.8,
                     py: 0.6,
-                    boxShadow: '0 2px 8px rgba(37,99,235,0.35)',
+                    boxShadow: '0 2px 8px rgb(var(--crm-accent-rgb) / 0.35)',
                     whiteSpace: 'nowrap',
                     '&:hover': {
-                        background: 'linear-gradient(135deg, #1D4ED8, #2563EB)',
-                        boxShadow: '0 4px 14px rgba(37,99,235,0.45)',
+                        background: 'linear-gradient(135deg, var(--crm-fill-blue-700), var(--crm-fill-blue-600))',
+                        boxShadow: '0 4px 14px rgb(var(--crm-accent-rgb) / 0.45)',
                     },
                     transition: 'all 0.15s ease',
                 }}
@@ -619,14 +620,14 @@ function CreateButton() {
                                 minWidth: 180,
                                 borderRadius: '10px',
                                 overflow: 'hidden',
-                                border: '1px solid #E5E7EB',
+                                border: '1px solid var(--crm-gray-200)',
                                 boxShadow: '0 8px 30px rgba(0,0,0,0.10)',
                             }}
                         >
                             <ClickAwayListener onClickAway={handleClickAway}>
                                 <Box>
-                                    <Box sx={{ px: 2, py: 1, backgroundColor: '#F9FAFB', borderBottom: '1px solid #E5E7EB' }}>
-                                        <Typography sx={{ fontSize: '0.7rem', fontWeight: 700, color: '#6B7280', letterSpacing: '0.05em', textTransform: 'uppercase' }}>
+                                    <Box sx={{ px: 2, py: 1, backgroundColor: 'var(--crm-gray-50)', borderBottom: '1px solid var(--crm-gray-200)' }}>
+                                        <Typography sx={{ fontSize: '0.7rem', fontWeight: 700, color: 'var(--crm-gray-500)', letterSpacing: '0.05em', textTransform: 'uppercase' }}>
                                             Quick Create
                                         </Typography>
                                     </Box>
@@ -640,14 +641,14 @@ function CreateButton() {
                                                 sx={{
                                                     textDecoration: 'none',
                                                     fontSize: '0.82rem',
-                                                    color: '#374151',
+                                                    color: 'var(--crm-gray-700)',
                                                     px: 2,
                                                     py: 0.9,
                                                     gap: 1.5,
-                                                    '&:hover': { backgroundColor: '#EFF6FF', color: '#2563EB' },
+                                                    '&:hover': { backgroundColor: 'var(--mui-palette-primary-soft)', color: 'var(--mui-palette-primary-main)' },
                                                 }}
                                             >
-                                                <AddIcon sx={{ fontSize: 14, color: '#9CA3AF' }} />
+                                                <AddIcon sx={{ fontSize: 14, color: 'var(--crm-gray-400)' }} />
                                                 {item.label}
                                             </MenuItem>
                                         ))}
@@ -682,8 +683,8 @@ export function Navbar() {
             elevation={0}
             sx={{
                 top: 0,
-                backgroundColor: '#FFFFFF',
-                borderBottom: '1px solid #E5E7EB',
+                backgroundColor: 'var(--mui-palette-background-paper)',
+                borderBottom: '1px solid var(--crm-gray-200)',
                 zIndex: 1200,
             }}
         >
@@ -719,7 +720,7 @@ export function Navbar() {
                                 sx={{
                                     fontSize: '0.85rem',
                                     fontWeight: 800,
-                                    color: '#111827',
+                                    color: 'var(--crm-gray-900)',
                                     lineHeight: 1.15,
                                     letterSpacing: '-0.01em',
                                 }}
@@ -729,7 +730,7 @@ export function Navbar() {
                             <Typography
                                 sx={{
                                     fontSize: '0.62rem',
-                                    color: '#6B7280',
+                                    color: 'var(--crm-gray-500)',
                                     lineHeight: 1.2,
                                     letterSpacing: '0.04em',
                                     textTransform: 'uppercase',
@@ -757,6 +758,9 @@ export function Navbar() {
                     {/* Create button */}
                     <CreateButton />
 
+                    {/* Light / dark / system */}
+                    <ThemeModeToggle />
+
                     {/* Notification bell */}
                     <NotificationBell />
 
@@ -765,7 +769,7 @@ export function Navbar() {
                         sx={{
                             width: '1px',
                             height: 24,
-                            backgroundColor: '#E5E7EB',
+                            backgroundColor: 'var(--crm-gray-200)',
                             flexShrink: 0,
                         }}
                     />

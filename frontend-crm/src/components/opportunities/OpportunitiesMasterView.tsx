@@ -38,12 +38,12 @@ const formatCurrency = (val: number) =>
         maximumFractionDigits: 0,
     }).format(val);
 
-const plainCellSx = { fontSize: '0.78rem', color: '#334155' } as const;
+const plainCellSx = { fontSize: '0.78rem', color: 'var(--crm-slate-700)' } as const;
 
 /** Yes / No cell for derived flags (Quote Created, Quote Sent). */
 function YesNo({ value }: { value: boolean }) {
     return (
-        <Typography sx={{ fontSize: '0.76rem', fontWeight: 600, color: value ? '#047857' : '#94a3b8' }}>
+        <Typography sx={{ fontSize: '0.76rem', fontWeight: 600, color: value ? 'var(--crm-emerald-700)' : 'var(--mui-palette-text-muted)' }}>
             {value ? 'Yes' : 'No'}
         </Typography>
     );
@@ -128,7 +128,7 @@ export function OpportunitiesMasterView() {
                 count: opportunities.filter(
                     (o) => !['Closed Won', 'Closed Lost'].includes(o.salesStage)
                 ).length,
-                activeColor: '#2563eb',
+                activeColor: 'var(--mui-palette-primary-main)',
             },
             {
                 id: 'closing_soon',
@@ -137,21 +137,21 @@ export function OpportunitiesMasterView() {
                 count: opportunities.filter((o) =>
                     ['Proposal/Price Quote', 'Negotiation'].includes(o.salesStage)
                 ).length,
-                activeColor: '#d97706',
+                activeColor: 'var(--mui-palette-warning-main)',
             },
             {
                 id: 'won',
                 label: 'Closed Won',
                 icon: <CheckCircleOutlinedIcon sx={{ fontSize: 16 }} />,
                 count: opportunities.filter((o) => o.salesStage === 'Closed Won').length,
-                activeColor: '#16a34a',
+                activeColor: 'var(--mui-palette-success-main)',
             },
             {
                 id: 'high_value',
                 label: 'High Value (₹1L+)',
                 icon: <WorkspacePremiumOutlinedIcon sx={{ fontSize: 16 }} />,
                 count: opportunities.filter((o) => (o.grandTotal || 0) >= 100000).length,
-                activeColor: '#7c3aed',
+                activeColor: 'var(--crm-violet-600)',
             },
             {
                 id: 'my_deals',
@@ -330,13 +330,13 @@ export function OpportunitiesMasterView() {
                 minWidth: 180,
                 render: (o) => (
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                        <TrendingUpOutlinedIcon sx={{ fontSize: 16, color: '#2563eb', flexShrink: 0 }} />
+                        <TrendingUpOutlinedIcon sx={{ fontSize: 16, color: 'var(--crm-text-blue-600)', flexShrink: 0 }} />
                         <RecordLink
                             href={ROUTES.OPPORTUNITY_DETAIL(o.id)}
                             onOpen={() => setDrawerOppId(o.id)}
                             sx={{
                                 fontWeight: 700,
-                                color: '#1d4ed8',
+                                color: 'var(--crm-text-blue-700)',
                                 fontSize: '0.82rem',
                                 cursor: 'pointer',
                                 '&:hover': { textDecoration: 'underline' },
@@ -354,8 +354,8 @@ export function OpportunitiesMasterView() {
                 minWidth: 180,
                 render: (o) => (
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.8 }}>
-                        <ApartmentIcon sx={{ fontSize: 15, color: '#64748b', flexShrink: 0 }} />
-                        <Typography sx={{ fontSize: '0.8rem', color: '#1e293b', fontWeight: 600 }}>
+                        <ApartmentIcon sx={{ fontSize: 15, color: 'var(--mui-palette-text-secondary)', flexShrink: 0 }} />
+                        <Typography sx={{ fontSize: '0.8rem', color: 'var(--mui-palette-text-primary)', fontWeight: 600 }}>
                             {o.organizationName || '-'}
                         </Typography>
                     </Box>
@@ -378,14 +378,14 @@ export function OpportunitiesMasterView() {
                                         height: 20,
                                         fontSize: '0.66rem',
                                         fontWeight: 600,
-                                        backgroundColor: '#eff6ff',
-                                        color: '#1d4ed8',
-                                        border: '1px solid #bfdbfe',
+                                        backgroundColor: 'var(--mui-palette-primary-soft)',
+                                        color: 'var(--crm-text-blue-700)',
+                                        border: '1px solid var(--mui-palette-primary-softBorder)',
                                     }}
                                 />
                             ))
                         ) : (
-                            <Typography sx={{ fontSize: '0.78rem', color: '#94a3b8' }}>-</Typography>
+                            <Typography sx={{ fontSize: '0.78rem', color: 'var(--mui-palette-text-muted)' }}>-</Typography>
                         )}
                     </Box>
                 ),
@@ -410,7 +410,7 @@ export function OpportunitiesMasterView() {
                             <CalendarMonthOutlinedIcon
                                 sx={{
                                     fontSize: 16,
-                                    color: isToday ? '#d97706' : '#64748b',
+                                    color: isToday ? 'var(--mui-palette-warning-main)' : 'var(--mui-palette-text-secondary)',
                                 }}
                             />
                             <Box>
@@ -418,7 +418,7 @@ export function OpportunitiesMasterView() {
                                     sx={{
                                         fontSize: '0.78rem',
                                         fontWeight: isToday ? 700 : 500,
-                                        color: isToday ? '#b45309' : '#334155',
+                                        color: isToday ? 'var(--crm-amber-700)' : 'var(--crm-slate-700)',
                                     }}
                                 >
                                     {o.nextFollowupDate || '-'}
@@ -432,9 +432,9 @@ export function OpportunitiesMasterView() {
                                                 borderRadius: '4px',
                                                 fontSize: '0.62rem',
                                                 fontWeight: 800,
-                                                backgroundColor: '#fef3c7',
-                                                color: '#b45309',
-                                                border: '1px solid #fde68a',
+                                                backgroundColor: 'var(--crm-amber-100)',
+                                                color: 'var(--crm-amber-700)',
+                                                border: '1px solid var(--mui-palette-warning-softBorder)',
                                             }}
                                         >
                                             TODAY
@@ -442,7 +442,7 @@ export function OpportunitiesMasterView() {
                                     )}
                                 </Typography>
                                 {o.followupType && (
-                                    <Typography sx={{ fontSize: '0.7rem', color: '#64748b' }}>
+                                    <Typography sx={{ fontSize: '0.7rem', color: 'var(--mui-palette-text-secondary)' }}>
                                         {o.followupType} {o.nextFollowupTime ? `• ${o.nextFollowupTime}` : ''}
                                     </Typography>
                                 )}
@@ -457,26 +457,26 @@ export function OpportunitiesMasterView() {
                 sortable: true,
                 minWidth: 150,
                 render: (o) => {
-                    let bg = '#eff6ff';
-                    let color = '#1d4ed8';
-                    let border = '#bfdbfe';
+                    let bg = 'var(--mui-palette-primary-soft)';
+                    let color = 'var(--crm-text-blue-700)';
+                    let border = 'var(--mui-palette-primary-softBorder)';
 
                     if (o.salesStage === 'Closed Won') {
-                        bg = '#ecfdf5';
-                        color = '#047857';
-                        border = '#a7f3d0';
+                        bg = 'var(--mui-palette-success-soft)';
+                        color = 'var(--crm-emerald-700)';
+                        border = 'var(--mui-palette-success-softBorder)';
                     } else if (o.salesStage === 'Closed Lost') {
-                        bg = '#fef2f2';
-                        color = '#b91c1c';
-                        border = '#fecaca';
+                        bg = 'var(--mui-palette-error-soft)';
+                        color = 'var(--crm-red-700)';
+                        border = 'var(--mui-palette-error-softBorder)';
                     } else if (o.salesStage.includes('Proposal') || o.salesStage.includes('Negotiation')) {
-                        bg = '#fffbeb';
-                        color = '#b45309';
-                        border = '#fde68a';
+                        bg = 'var(--mui-palette-warning-soft)';
+                        color = 'var(--crm-amber-700)';
+                        border = 'var(--mui-palette-warning-softBorder)';
                     } else if (o.salesStage.includes('Value') || o.salesStage.includes('Needs')) {
-                        bg = '#f5f3ff';
-                        color = '#6d28d9';
-                        border = '#ddd6fe';
+                        bg = 'var(--crm-violet-50)';
+                        color = 'var(--crm-violet-700)';
+                        border = 'var(--crm-violet-200)';
                     }
 
                     return (
@@ -486,7 +486,7 @@ export function OpportunitiesMasterView() {
                             icon={
                                 o.salesStage === 'Closed Won' ? (
                                     <CheckCircleOutlinedIcon
-                                        sx={{ fontSize: '13px !important', color: '#047857 !important' }}
+                                        sx={{ fontSize: '13px !important', color: 'var(--crm-emerald-700) !important' }}
                                     />
                                 ) : undefined
                             }
@@ -509,7 +509,7 @@ export function OpportunitiesMasterView() {
                 sortable: true,
                 minWidth: 150,
                 render: (o) => (
-                    <Typography sx={{ fontSize: '0.82rem', fontWeight: 700, color: '#0f172a' }}>
+                    <Typography sx={{ fontSize: '0.82rem', fontWeight: 700, color: 'var(--crm-slate-900)' }}>
                         {formatCurrency(o.subtotal ?? (o.grandTotal || 0) - (o.totalTax || 0))}
                     </Typography>
                 ),
@@ -618,7 +618,7 @@ export function OpportunitiesMasterView() {
             emptyDescription="Create your first deal opportunity and track it from qualification to closed won."
             emptyActionLabel="Create Opportunity"
             onEmptyAction={() => router.push(ROUTES.OPPORTUNITY_NEW)}
-            emptyIcon={<TrendingUpOutlinedIcon sx={{ fontSize: 48, color: '#cbd5e1' }} />}
+            emptyIcon={<TrendingUpOutlinedIcon sx={{ fontSize: 48, color: 'var(--crm-slate-300)' }} />}
             minHeight={300}
             pagination={{
                 page,

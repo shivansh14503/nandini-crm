@@ -76,10 +76,10 @@ export function QuotationDetailDrawer({
     };
 
     const statusColorMap: Record<string, { bg: string; color: string; border: string }> = {
-        Draft: { bg: '#f1f5f9', color: '#475569', border: '#cbd5e1' },
-        Sent: { bg: '#eff6ff', color: '#1d4ed8', border: '#bfdbfe' },
-        Accepted: { bg: '#ecfdf5', color: '#047857', border: '#a7f3d0' },
-        Rejected: { bg: '#fef2f2', color: '#b91c1c', border: '#fecaca' },
+        Draft: { bg: 'var(--mui-palette-background-hover)', color: 'var(--crm-slate-600)', border: 'var(--mui-palette-border-strong)' },
+        Sent: { bg: 'var(--mui-palette-primary-soft)', color: 'var(--crm-text-blue-700)', border: 'var(--mui-palette-primary-softBorder)' },
+        Accepted: { bg: 'var(--mui-palette-success-soft)', color: 'var(--crm-emerald-700)', border: 'var(--mui-palette-success-softBorder)' },
+        Rejected: { bg: 'var(--mui-palette-error-soft)', color: 'var(--crm-red-700)', border: 'var(--mui-palette-error-softBorder)' },
     };
 
     const currentStatus = String(quotation.quoteStage || quotation.status || 'Draft');
@@ -95,13 +95,13 @@ export function QuotationDetailDrawer({
                 elevation={0}
                 sx={{
                     p: 2,
-                    backgroundColor: '#f8fafc',
+                    backgroundColor: 'var(--mui-palette-background-subtle)',
                     borderRadius: '8px',
-                    border: '1px solid #e2e8f0',
+                    border: '1px solid var(--mui-palette-border-main)',
                 }}
             >
                 <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 0.5 }}>
-                    <Typography sx={{ fontSize: '0.72rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>
+                    <Typography sx={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--mui-palette-text-secondary)', textTransform: 'uppercase' }}>
                         Quotation Title / Subject
                     </Typography>
                     <Chip
@@ -117,10 +117,10 @@ export function QuotationDetailDrawer({
                         }}
                     />
                 </Box>
-                <Typography sx={{ fontSize: '0.94rem', fontWeight: 700, color: '#1e293b' }}>
+                <Typography sx={{ fontSize: '0.94rem', fontWeight: 700, color: 'var(--mui-palette-text-primary)' }}>
                     {quotation.quotationTitle || quotation.quotationSubject || 'Quotation Document'}
                 </Typography>
-                <Typography sx={{ fontSize: '0.75rem', color: '#64748b', mt: 0.3 }}>
+                <Typography sx={{ fontSize: '0.75rem', color: 'var(--mui-palette-text-secondary)', mt: 0.3 }}>
                     Quote Code: {quotation.quotationCode} • Prepared For: {quotation.preparedFor || 'Customer'}
                 </Typography>
             </Paper>
@@ -128,7 +128,7 @@ export function QuotationDetailDrawer({
             {/* Timeline & Validity Grid */}
             <DrawerSectionCard
                 title="KEY TIMELINES & VALIDITY"
-                icon={<CalendarTodayOutlinedIcon sx={{ fontSize: 16, color: '#2563eb' }} />}
+                icon={<CalendarTodayOutlinedIcon sx={{ fontSize: 16, color: 'var(--crm-text-blue-600)' }} />}
             >
                 <Box
                     sx={{
@@ -139,20 +139,20 @@ export function QuotationDetailDrawer({
                     }}
                 >
                     <Box>
-                        <Typography sx={{ fontSize: '0.72rem', color: '#64748b' }}>Quotation Date:</Typography>
-                        <Typography sx={{ fontSize: '0.84rem', fontWeight: 600, color: '#0f172a' }}>
+                        <Typography sx={{ fontSize: '0.72rem', color: 'var(--mui-palette-text-secondary)' }}>Quotation Date:</Typography>
+                        <Typography sx={{ fontSize: '0.84rem', fontWeight: 600, color: 'var(--crm-slate-900)' }}>
                             {quotation.quotationDate || quotation.quoteDate || '-'}
                         </Typography>
                     </Box>
                     <Box>
-                        <Typography sx={{ fontSize: '0.72rem', color: '#64748b' }}>Valid Until:</Typography>
-                        <Typography sx={{ fontSize: '0.84rem', fontWeight: 600, color: '#b45309' }}>
+                        <Typography sx={{ fontSize: '0.72rem', color: 'var(--mui-palette-text-secondary)' }}>Valid Until:</Typography>
+                        <Typography sx={{ fontSize: '0.84rem', fontWeight: 600, color: 'var(--crm-amber-700)' }}>
                             {quotation.validUntil || '-'}
                         </Typography>
                     </Box>
                     <Box>
-                        <Typography sx={{ fontSize: '0.72rem', color: '#64748b' }}>Validation Period:</Typography>
-                        <Typography sx={{ fontSize: '0.84rem', fontWeight: 600, color: '#0f172a' }}>
+                        <Typography sx={{ fontSize: '0.72rem', color: 'var(--mui-palette-text-secondary)' }}>Validation Period:</Typography>
+                        <Typography sx={{ fontSize: '0.84rem', fontWeight: 600, color: 'var(--crm-slate-900)' }}>
                             {quotation.validationPeriod || '30 Days'}
                         </Typography>
                     </Box>
@@ -162,31 +162,31 @@ export function QuotationDetailDrawer({
             {/* Deal & Commercial Context */}
             <DrawerSectionCard
                 title="DEAL & RELATIONSHIP DETAILS"
-                icon={<BusinessOutlinedIcon sx={{ fontSize: 16, color: '#2563eb' }} />}
+                icon={<BusinessOutlinedIcon sx={{ fontSize: 16, color: 'var(--crm-text-blue-600)' }} />}
             >
                 <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.2, mt: 1 }}>
                     <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <Typography sx={{ fontSize: '0.78rem', color: '#64748b' }}>Linked Opportunity:</Typography>
-                        <Typography sx={{ fontSize: '0.84rem', fontWeight: 600, color: '#2563eb' }}>
+                        <Typography sx={{ fontSize: '0.78rem', color: 'var(--mui-palette-text-secondary)' }}>Linked Opportunity:</Typography>
+                        <Typography sx={{ fontSize: '0.84rem', fontWeight: 600, color: 'var(--crm-text-blue-600)' }}>
                             {quotation.opportunityName || quotation.opportunityCode || '-'}
                         </Typography>
                     </Box>
                     <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <Typography sx={{ fontSize: '0.78rem', color: '#64748b' }}>Issuing Entity:</Typography>
-                        <Typography sx={{ fontSize: '0.84rem', fontWeight: 600, color: '#1e293b' }}>
+                        <Typography sx={{ fontSize: '0.78rem', color: 'var(--mui-palette-text-secondary)' }}>Issuing Entity:</Typography>
+                        <Typography sx={{ fontSize: '0.84rem', fontWeight: 600, color: 'var(--mui-palette-text-primary)' }}>
                             {quotation.company || 'Nandini Infosystems'}
                         </Typography>
                     </Box>
                     <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <Typography sx={{ fontSize: '0.78rem', color: '#64748b' }}>Assigned Representative:</Typography>
-                        <Typography sx={{ fontSize: '0.84rem', fontWeight: 600, color: '#1e293b' }}>
+                        <Typography sx={{ fontSize: '0.78rem', color: 'var(--mui-palette-text-secondary)' }}>Assigned Representative:</Typography>
+                        <Typography sx={{ fontSize: '0.84rem', fontWeight: 600, color: 'var(--mui-palette-text-primary)' }}>
                             {quotation.assignedTo || '-'}
                         </Typography>
                     </Box>
                     {quotation.otherRef && (
                         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                            <Typography sx={{ fontSize: '0.78rem', color: '#64748b' }}>Other Reference / PO:</Typography>
-                            <Typography sx={{ fontSize: '0.84rem', fontWeight: 600, color: '#1e293b' }}>
+                            <Typography sx={{ fontSize: '0.78rem', color: 'var(--mui-palette-text-secondary)' }}>Other Reference / PO:</Typography>
+                            <Typography sx={{ fontSize: '0.84rem', fontWeight: 600, color: 'var(--mui-palette-text-primary)' }}>
                                 {quotation.otherRef}
                             </Typography>
                         </Box>
@@ -197,16 +197,16 @@ export function QuotationDetailDrawer({
             {/* Payment & Terms Section */}
             <DrawerSectionCard
                 title="PAYMENT & COMMERCIAL TERMS"
-                icon={<PaymentOutlinedIcon sx={{ fontSize: 16, color: '#2563eb' }} />}
+                icon={<PaymentOutlinedIcon sx={{ fontSize: 16, color: 'var(--crm-text-blue-600)' }} />}
             >
                 <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5, mt: 1 }}>
                     <Box>
-                        <Typography sx={{ fontSize: '0.72rem', color: '#64748b' }}>Payment Terms:</Typography>
-                        <Typography sx={{ fontSize: '0.84rem', fontWeight: 700, color: '#0f172a' }}>
+                        <Typography sx={{ fontSize: '0.72rem', color: 'var(--mui-palette-text-secondary)' }}>Payment Terms:</Typography>
+                        <Typography sx={{ fontSize: '0.84rem', fontWeight: 700, color: 'var(--crm-slate-900)' }}>
                             {quotation.paymentTerms || 'Standard Payment Terms'}
                         </Typography>
                         {quotation.paymentTermsDescription && (
-                            <Typography sx={{ fontSize: '0.76rem', color: '#475569', mt: 0.5, lineHeight: 1.5 }}>
+                            <Typography sx={{ fontSize: '0.76rem', color: 'var(--crm-slate-600)', mt: 0.5, lineHeight: 1.5 }}>
                                 {quotation.paymentTermsDescription}
                             </Typography>
                         )}
@@ -215,12 +215,12 @@ export function QuotationDetailDrawer({
                     <Divider sx={{ borderStyle: 'dashed' }} />
 
                     <Box>
-                        <Typography sx={{ fontSize: '0.72rem', color: '#64748b' }}>Terms & Conditions:</Typography>
-                        <Typography sx={{ fontSize: '0.84rem', fontWeight: 700, color: '#0f172a' }}>
+                        <Typography sx={{ fontSize: '0.72rem', color: 'var(--mui-palette-text-secondary)' }}>Terms & Conditions:</Typography>
+                        <Typography sx={{ fontSize: '0.84rem', fontWeight: 700, color: 'var(--crm-slate-900)' }}>
                             {quotation.termsAndCondition || quotation.termsAndConditions || 'Standard Terms'}
                         </Typography>
                         {quotation.termsAndConditionDescription && (
-                            <Typography sx={{ fontSize: '0.76rem', color: '#475569', mt: 0.5, lineHeight: 1.5, whiteSpace: 'pre-line' }}>
+                            <Typography sx={{ fontSize: '0.76rem', color: 'var(--crm-slate-600)', mt: 0.5, lineHeight: 1.5, whiteSpace: 'pre-line' }}>
                                 {quotation.termsAndConditionDescription}
                             </Typography>
                         )}
@@ -232,10 +232,10 @@ export function QuotationDetailDrawer({
             {(quotation.remarks || quotation.notes) && (
                 <DrawerSectionCard
                     title="REMARKS & INTERNAL NOTES"
-                    icon={<NotesOutlinedIcon sx={{ fontSize: 16, color: '#64748b' }} />}
-                    bg="#fafafa"
+                    icon={<NotesOutlinedIcon sx={{ fontSize: 16, color: 'var(--mui-palette-text-secondary)' }} />}
+                    bg="var(--mui-palette-background-subtle)"
                 >
-                    <Typography sx={{ fontSize: '0.8rem', color: '#334155', fontStyle: 'italic', mt: 0.5, lineHeight: 1.6 }}>
+                    <Typography sx={{ fontSize: '0.8rem', color: 'var(--crm-slate-700)', fontStyle: 'italic', mt: 0.5, lineHeight: 1.6 }}>
                         {quotation.remarks || quotation.notes}
                     </Typography>
                 </DrawerSectionCard>
@@ -254,10 +254,10 @@ export function QuotationDetailDrawer({
             {/* Group Header */}
             <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                 <Box>
-                    <Typography sx={{ fontSize: '0.88rem', fontWeight: 700, color: '#1e293b' }}>
+                    <Typography sx={{ fontSize: '0.88rem', fontWeight: 700, color: 'var(--mui-palette-text-primary)' }}>
                         {quotation.groupName || 'Software Licenses & Add-ons'}
                     </Typography>
-                    <Typography sx={{ fontSize: '0.74rem', color: '#64748b' }}>
+                    <Typography sx={{ fontSize: '0.74rem', color: 'var(--mui-palette-text-secondary)' }}>
                         Currency: {quotation.currency || 'Indian Rupee: ₹'}
                     </Typography>
                 </Box>
@@ -265,9 +265,9 @@ export function QuotationDetailDrawer({
                     label={`${quotation.lineItems?.length || 0} Items`}
                     size="small"
                     sx={{
-                        backgroundColor: '#eff6ff',
-                        color: '#1d4ed8',
-                        border: '1px solid #bfdbfe',
+                        backgroundColor: 'var(--mui-palette-primary-soft)',
+                        color: 'var(--crm-text-blue-700)',
+                        border: '1px solid var(--mui-palette-primary-softBorder)',
                         fontWeight: 700,
                         fontSize: '0.72rem',
                     }}
@@ -276,8 +276,8 @@ export function QuotationDetailDrawer({
 
             {/* Line Items Cards */}
             {!quotation.lineItems || quotation.lineItems.length === 0 ? (
-                <Box sx={{ p: 4, textAlign: 'center', backgroundColor: '#f8fafc', borderRadius: '8px', border: '1px dashed #cbd5e1' }}>
-                    <Typography sx={{ fontSize: '0.84rem', color: '#64748b' }}>
+                <Box sx={{ p: 4, textAlign: 'center', backgroundColor: 'var(--mui-palette-background-subtle)', borderRadius: '8px', border: '1px dashed var(--mui-palette-border-strong)' }}>
+                    <Typography sx={{ fontSize: '0.84rem', color: 'var(--mui-palette-text-secondary)' }}>
                         No product line items attached to this quotation.
                     </Typography>
                 </Box>
@@ -287,16 +287,16 @@ export function QuotationDetailDrawer({
                         <DrawerSectionCard key={item.id || idx} p={1.8}>
                             <Box sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', mb: 1 }}>
                                 <Box sx={{ pr: 2 }}>
-                                    <Typography sx={{ fontSize: '0.86rem', fontWeight: 700, color: '#0f172a' }}>
+                                    <Typography sx={{ fontSize: '0.86rem', fontWeight: 700, color: 'var(--crm-slate-900)' }}>
                                         {item.productName}
                                     </Typography>
                                     {item.description && (
-                                        <Typography sx={{ fontSize: '0.75rem', color: '#64748b', mt: 0.3, lineHeight: 1.4 }}>
+                                        <Typography sx={{ fontSize: '0.75rem', color: 'var(--mui-palette-text-secondary)', mt: 0.3, lineHeight: 1.4 }}>
                                             {item.description}
                                         </Typography>
                                     )}
                                 </Box>
-                                <Typography sx={{ fontSize: '0.94rem', fontWeight: 800, color: '#15803d', whiteSpace: 'nowrap' }}>
+                                <Typography sx={{ fontSize: '0.94rem', fontWeight: 800, color: 'var(--crm-green-700)', whiteSpace: 'nowrap' }}>
                                     ₹{(item.total || 0).toLocaleString('en-IN')}
                                 </Typography>
                             </Box>
@@ -307,27 +307,27 @@ export function QuotationDetailDrawer({
                                     gridTemplateColumns: 'repeat(4, 1fr)',
                                     gap: 1,
                                     pt: 1,
-                                    borderTop: '1px dashed #e2e8f0',
+                                    borderTop: '1px dashed var(--mui-palette-border-main)',
                                     fontSize: '0.75rem',
                                 }}
                             >
                                 <Box>
-                                    <Typography sx={{ color: '#64748b', fontSize: '0.7rem' }}>Quantity:</Typography>
+                                    <Typography sx={{ color: 'var(--mui-palette-text-secondary)', fontSize: '0.7rem' }}>Quantity:</Typography>
                                     <Typography sx={{ fontWeight: 600 }}>{item.quantity}</Typography>
                                 </Box>
                                 <Box>
-                                    <Typography sx={{ color: '#64748b', fontSize: '0.7rem' }}>Unit Price:</Typography>
+                                    <Typography sx={{ color: 'var(--mui-palette-text-secondary)', fontSize: '0.7rem' }}>Unit Price:</Typography>
                                     <Typography sx={{ fontWeight: 600 }}>₹{(item.amount || 0).toLocaleString('en-IN')}</Typography>
                                 </Box>
                                 <Box>
-                                    <Typography sx={{ color: '#64748b', fontSize: '0.7rem' }}>Discount:</Typography>
-                                    <Typography sx={{ fontWeight: 600, color: '#dc2626' }}>
+                                    <Typography sx={{ color: 'var(--mui-palette-text-secondary)', fontSize: '0.7rem' }}>Discount:</Typography>
+                                    <Typography sx={{ fontWeight: 600, color: 'var(--mui-palette-error-main)' }}>
                                         {item.discount > 0 ? `${item.discount}${item.discountType === 'percentage' ? '%' : '₹'}` : '₹0'}
                                     </Typography>
                                 </Box>
                                 <Box>
-                                    <Typography sx={{ color: '#64748b', fontSize: '0.7rem' }}>Tax ({item.taxRate}):</Typography>
-                                    <Typography sx={{ fontWeight: 600, color: '#2563eb' }}>₹{(item.taxAmount || 0).toLocaleString('en-IN')}</Typography>
+                                    <Typography sx={{ color: 'var(--mui-palette-text-secondary)', fontSize: '0.7rem' }}>Tax ({item.taxRate}):</Typography>
+                                    <Typography sx={{ fontWeight: 600, color: 'var(--crm-text-blue-600)' }}>₹{(item.taxAmount || 0).toLocaleString('en-IN')}</Typography>
                                 </Box>
                             </Box>
                         </DrawerSectionCard>
@@ -340,27 +340,27 @@ export function QuotationDetailDrawer({
                 elevation={0}
                 sx={{
                     p: 2.2,
-                    backgroundColor: '#f8fafc',
+                    backgroundColor: 'var(--mui-palette-background-subtle)',
                     borderRadius: '8px',
-                    border: '1.5px solid #bfdbfe',
+                    border: '1.5px solid var(--mui-palette-primary-softBorder)',
                 }}
             >
-                <Typography sx={{ fontSize: '0.8rem', fontWeight: 700, color: '#1e3a8a', mb: 1.5, textTransform: 'uppercase' }}>
+                <Typography sx={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--crm-text-blue-900)', mb: 1.5, textTransform: 'uppercase' }}>
                     Commercial Breakdown
                 </Typography>
 
                 <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
                     <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
-                        <Typography sx={{ fontSize: '0.82rem', color: '#64748b' }}>Total Gross Amount:</Typography>
-                        <Typography sx={{ fontSize: '0.84rem', fontWeight: 600, color: '#1e293b' }}>
+                        <Typography sx={{ fontSize: '0.82rem', color: 'var(--mui-palette-text-secondary)' }}>Total Gross Amount:</Typography>
+                        <Typography sx={{ fontSize: '0.84rem', fontWeight: 600, color: 'var(--mui-palette-text-primary)' }}>
                             {formatCurrency(quotation.totalAmount)}
                         </Typography>
                     </Box>
 
                     {quotation.totalDiscount > 0 && (
                         <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
-                            <Typography sx={{ fontSize: '0.82rem', color: '#dc2626' }}>Item Discounts:</Typography>
-                            <Typography sx={{ fontSize: '0.84rem', fontWeight: 600, color: '#dc2626' }}>
+                            <Typography sx={{ fontSize: '0.82rem', color: 'var(--mui-palette-error-main)' }}>Item Discounts:</Typography>
+                            <Typography sx={{ fontSize: '0.84rem', fontWeight: 600, color: 'var(--mui-palette-error-main)' }}>
                                 - {formatCurrency(quotation.totalDiscount)}
                             </Typography>
                         </Box>
@@ -368,34 +368,34 @@ export function QuotationDetailDrawer({
 
                     {quotation.lumpSumDiscount > 0 && (
                         <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
-                            <Typography sx={{ fontSize: '0.82rem', color: '#dc2626' }}>Lump Sum Discount:</Typography>
-                            <Typography sx={{ fontSize: '0.84rem', fontWeight: 600, color: '#dc2626' }}>
+                            <Typography sx={{ fontSize: '0.82rem', color: 'var(--mui-palette-error-main)' }}>Lump Sum Discount:</Typography>
+                            <Typography sx={{ fontSize: '0.84rem', fontWeight: 600, color: 'var(--mui-palette-error-main)' }}>
                                 - {formatCurrency(quotation.lumpSumDiscount)}
                             </Typography>
                         </Box>
                     )}
 
                     <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
-                        <Typography sx={{ fontSize: '0.82rem', color: '#475569' }}>Subtotal:</Typography>
-                        <Typography sx={{ fontSize: '0.84rem', fontWeight: 700, color: '#0f172a' }}>
+                        <Typography sx={{ fontSize: '0.82rem', color: 'var(--crm-slate-600)' }}>Subtotal:</Typography>
+                        <Typography sx={{ fontSize: '0.84rem', fontWeight: 700, color: 'var(--crm-slate-900)' }}>
                             {formatCurrency(quotation.subtotal)}
                         </Typography>
                     </Box>
 
                     <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
-                        <Typography sx={{ fontSize: '0.82rem', color: '#64748b' }}>Tax (GST):</Typography>
-                        <Typography sx={{ fontSize: '0.84rem', fontWeight: 600, color: '#2563eb' }}>
+                        <Typography sx={{ fontSize: '0.82rem', color: 'var(--mui-palette-text-secondary)' }}>Tax (GST):</Typography>
+                        <Typography sx={{ fontSize: '0.84rem', fontWeight: 600, color: 'var(--crm-text-blue-600)' }}>
                             + {formatCurrency(quotation.totalTax)}
                         </Typography>
                     </Box>
 
-                    <Divider sx={{ my: 0.5, borderColor: '#cbd5e1' }} />
+                    <Divider sx={{ my: 0.5, borderColor: 'var(--mui-palette-border-strong)' }} />
 
                     <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <Typography sx={{ fontSize: '0.94rem', fontWeight: 800, color: '#0f172a' }}>
+                        <Typography sx={{ fontSize: '0.94rem', fontWeight: 800, color: 'var(--crm-slate-900)' }}>
                             Grand Total:
                         </Typography>
-                        <Typography sx={{ fontSize: '1.18rem', fontWeight: 800, color: '#15803d' }}>
+                        <Typography sx={{ fontSize: '1.18rem', fontWeight: 800, color: 'var(--crm-green-700)' }}>
                             {formatCurrency(quotation.grandTotal)}
                         </Typography>
                     </Box>
@@ -412,30 +412,30 @@ export function QuotationDetailDrawer({
             {/* Customer & Organization Header Card */}
             <DrawerSectionCard
                 title="ORGANIZATION & CONTACT"
-                icon={<ApartmentOutlinedIcon sx={{ fontSize: 16, color: '#2563eb' }} />}
-                bg="#f8fafc"
+                icon={<ApartmentOutlinedIcon sx={{ fontSize: 16, color: 'var(--crm-text-blue-600)' }} />}
+                bg="var(--mui-palette-background-subtle)"
             >
                 <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.2, mt: 1 }}>
                     <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                            <BusinessOutlinedIcon sx={{ fontSize: 16, color: '#2563eb' }} />
-                            <Typography sx={{ fontSize: '0.9rem', fontWeight: 700, color: '#1e3a8a' }}>
+                            <BusinessOutlinedIcon sx={{ fontSize: 16, color: 'var(--crm-text-blue-600)' }} />
+                            <Typography sx={{ fontSize: '0.9rem', fontWeight: 700, color: 'var(--crm-text-blue-900)' }}>
                                 {quotation.organizationName || 'Unspecified Organization'}
                             </Typography>
                         </Box>
                         {quotation.gstNo && (
-                            <DrawerCopyButton text={quotation.gstNo} title="Copy GSTIN" iconColor="#94a3b8" />
+                            <DrawerCopyButton text={quotation.gstNo} title="Copy GSTIN" iconColor="var(--mui-palette-text-muted)" />
                         )}
                     </Box>
 
                     {quotation.mailingName && quotation.mailingName !== quotation.organizationName && (
-                        <Typography sx={{ fontSize: '0.75rem', color: '#64748b' }}>
+                        <Typography sx={{ fontSize: '0.75rem', color: 'var(--mui-palette-text-secondary)' }}>
                             Mailing Name: {quotation.mailingName}
                         </Typography>
                     )}
 
                     {quotation.gstNo && (
-                        <Typography sx={{ fontSize: '0.75rem', color: '#475569', fontWeight: 600 }}>
+                        <Typography sx={{ fontSize: '0.75rem', color: 'var(--crm-slate-600)', fontWeight: 600 }}>
                             GSTIN: {quotation.gstNo}
                         </Typography>
                     )}
@@ -444,8 +444,8 @@ export function QuotationDetailDrawer({
 
                     {/* Contact Person Details */}
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                        <PersonOutlinedIcon sx={{ fontSize: 16, color: '#64748b' }} />
-                        <Typography sx={{ fontSize: '0.84rem', fontWeight: 600, color: '#1e293b' }}>
+                        <PersonOutlinedIcon sx={{ fontSize: 16, color: 'var(--mui-palette-text-secondary)' }} />
+                        <Typography sx={{ fontSize: '0.84rem', fontWeight: 600, color: 'var(--mui-palette-text-primary)' }}>
                             {quotation.contactName}
                         </Typography>
                     </Box>
@@ -453,15 +453,15 @@ export function QuotationDetailDrawer({
                     {(quotation.contactMobile || quotation.contactNumber) && (
                         <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                                <PhoneOutlinedIcon sx={{ fontSize: 16, color: '#64748b' }} />
-                                <Typography sx={{ fontSize: '0.8rem', color: '#334155' }}>
+                                <PhoneOutlinedIcon sx={{ fontSize: 16, color: 'var(--mui-palette-text-secondary)' }} />
+                                <Typography sx={{ fontSize: '0.8rem', color: 'var(--crm-slate-700)' }}>
                                     {quotation.contactMobile || quotation.contactNumber}
                                 </Typography>
                             </Box>
                             <DrawerCopyButton
                                 text={quotation.contactMobile || quotation.contactNumber || ''}
                                 title="Copy Phone Number"
-                                iconColor="#94a3b8"
+                                iconColor="var(--mui-palette-text-muted)"
                             />
                         </Box>
                     )}
@@ -469,15 +469,15 @@ export function QuotationDetailDrawer({
                     {(quotation.contactEmail || quotation.emailAddress) && (
                         <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                                <EmailOutlinedIcon sx={{ fontSize: 16, color: '#64748b' }} />
-                                <Typography sx={{ fontSize: '0.8rem', color: '#334155' }}>
+                                <EmailOutlinedIcon sx={{ fontSize: 16, color: 'var(--mui-palette-text-secondary)' }} />
+                                <Typography sx={{ fontSize: '0.8rem', color: 'var(--crm-slate-700)' }}>
                                     {quotation.contactEmail || quotation.emailAddress}
                                 </Typography>
                             </Box>
                             <DrawerCopyButton
                                 text={quotation.contactEmail || quotation.emailAddress || ''}
                                 title="Copy Email Address"
-                                iconColor="#94a3b8"
+                                iconColor="var(--mui-palette-text-muted)"
                             />
                         </Box>
                     )}
@@ -487,9 +487,9 @@ export function QuotationDetailDrawer({
             {/* Billing Address Card */}
             <DrawerSectionCard
                 title="BILLING ADDRESS"
-                icon={<LocationOnOutlinedIcon sx={{ fontSize: 16, color: '#2563eb' }} />}
+                icon={<LocationOnOutlinedIcon sx={{ fontSize: 16, color: 'var(--crm-text-blue-600)' }} />}
             >
-                <Typography sx={{ fontSize: '0.84rem', color: '#1e293b', lineHeight: 1.6, mt: 0.5 }}>
+                <Typography sx={{ fontSize: '0.84rem', color: 'var(--mui-palette-text-primary)', lineHeight: 1.6, mt: 0.5 }}>
                     {quotation.billingAddress || '-'}<br />
                     {quotation.billingCity ? `${quotation.billingCity}, ` : ''}
                     {quotation.billingState || ''}
@@ -501,7 +501,7 @@ export function QuotationDetailDrawer({
             {/* Shipping Address Card */}
             <DrawerSectionCard
                 title="SHIPPING ADDRESS"
-                icon={<LocationOnOutlinedIcon sx={{ fontSize: 16, color: '#2563eb' }} />}
+                icon={<LocationOnOutlinedIcon sx={{ fontSize: 16, color: 'var(--crm-text-blue-600)' }} />}
                 action={
                     quotation.copyAddressFromBilling ? (
                         <Chip
@@ -511,15 +511,15 @@ export function QuotationDetailDrawer({
                                 height: 20,
                                 fontSize: '0.68rem',
                                 fontWeight: 600,
-                                backgroundColor: '#f0fdf4',
-                                color: '#166534',
-                                border: '1px solid #bbf7d0',
+                                backgroundColor: 'var(--crm-green-50)',
+                                color: 'var(--crm-green-800)',
+                                border: '1px solid var(--crm-green-200)',
                             }}
                         />
                     ) : undefined
                 }
             >
-                <Typography sx={{ fontSize: '0.84rem', color: '#1e293b', lineHeight: 1.6, mt: 0.5 }}>
+                <Typography sx={{ fontSize: '0.84rem', color: 'var(--mui-palette-text-primary)', lineHeight: 1.6, mt: 0.5 }}>
                     {(quotation.shippingAddress || quotation.billingAddress) || '-'}<br />
                     {(quotation.shippingCity || quotation.billingCity) ? `${quotation.shippingCity || quotation.billingCity}, ` : ''}
                     {quotation.shippingState || quotation.billingState || ''}
@@ -538,7 +538,7 @@ export function QuotationDetailDrawer({
             subtitle={`${quotation.quotationTitle || quotation.quotationSubject || 'Quotation'} • ${quotation.organizationName}`}
             avatarText={quotation.quotationCode.replace(/^QT-0*/i, 'QT-')}
             avatarIcon={<RequestQuoteOutlinedIcon sx={{ fontSize: 24, color: '#ffffff' }} />}
-            avatarBg="linear-gradient(135deg, #1d4ed8 0%, #2563eb 100%)"
+            avatarBg="linear-gradient(135deg, var(--crm-fill-blue-700) 0%, var(--crm-fill-blue-600) 100%)"
             statusText={`Valid Until: ${quotation.validUntil || quotation.quoteDate || '-'}`}
             badges={[
                 {
@@ -549,15 +549,15 @@ export function QuotationDetailDrawer({
                 },
                 {
                     label: `₹${(quotation.grandTotal || 0).toLocaleString('en-IN')}`,
-                    backgroundColor: '#f0fdf4',
-                    color: '#15803d',
-                    borderColor: '#bbf7d0',
+                    backgroundColor: 'var(--crm-green-50)',
+                    color: 'var(--crm-green-700)',
+                    borderColor: 'var(--crm-green-200)',
                 },
                 {
                     label: quotation.assignedTo || 'Unassigned',
-                    backgroundColor: '#f1f5f9',
-                    color: '#475569',
-                    borderColor: '#cbd5e1',
+                    backgroundColor: 'var(--mui-palette-background-hover)',
+                    color: 'var(--crm-slate-600)',
+                    borderColor: 'var(--mui-palette-border-strong)',
                 },
             ]}
             headerActions={{

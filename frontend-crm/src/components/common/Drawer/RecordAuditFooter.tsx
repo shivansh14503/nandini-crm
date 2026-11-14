@@ -49,10 +49,10 @@ const formatDateTime = (iso?: string | null) => {
 function AuditItem({ icon, label, at, by }: { icon: React.ReactNode; label: string; at?: string; by?: string | null }) {
     return (
         <Box sx={{ minWidth: 0 }}>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.6, color: '#94a3b8', mb: 0.4 }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.6, color: 'var(--mui-palette-text-muted)', mb: 0.4 }}>
                 {icon}
                 <Typography
-                    sx={{ fontSize: '0.66rem', fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', color: '#94a3b8' }}
+                    sx={{ fontSize: '0.66rem', fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--mui-palette-text-muted)' }}
                 >
                     {label}
                 </Typography>
@@ -60,11 +60,11 @@ function AuditItem({ icon, label, at, by }: { icon: React.ReactNode; label: stri
             {/* Fixed line heights keep both items the same height, even when "Last Modified" is blank. */}
             <Typography
                 noWrap
-                sx={{ fontSize: '0.8rem', fontWeight: 600, color: at ? '#334155' : '#94a3b8', lineHeight: 1.45, minHeight: '1.45em' }}
+                sx={{ fontSize: '0.8rem', fontWeight: 600, color: at ? 'var(--crm-slate-700)' : 'var(--mui-palette-text-muted)', lineHeight: 1.45, minHeight: '1.45em' }}
             >
                 {at ?? '- - -'}
             </Typography>
-            <Typography noWrap sx={{ fontSize: '0.74rem', color: '#64748b', lineHeight: 1.45, minHeight: '1.45em' }}>
+            <Typography noWrap sx={{ fontSize: '0.74rem', color: 'var(--mui-palette-text-secondary)', lineHeight: 1.45, minHeight: '1.45em' }}>
                 {by ? `by ${by}` : ''}
             </Typography>
         </Box>
@@ -82,7 +82,7 @@ export function RecordAuditFooter({ audit }: { audit: RecordAuditStamp }) {
             sx={{
                 mt: 3,
                 pt: 1.5,
-                borderTop: '1px solid #e2e8f0',
+                borderTop: '1px solid var(--mui-palette-border-main)',
                 display: 'grid',
                 // Two columns, stacking only when the panel is too narrow for both.
                 gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',

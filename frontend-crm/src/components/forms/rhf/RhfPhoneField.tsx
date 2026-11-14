@@ -8,6 +8,10 @@ import { FieldNotice } from '../FieldNotice';
 import { resolveFieldSize } from '../fieldSizing';
 import { useTabSelect } from '../useTabSelect';
 import type { RhfTextFieldProps } from './RhfTextField';
+import { useConfiguredPlaceholder } from '@/context/FormConfigContext';
+import { digitsOnly, useUndoSafeSanitizer, type TextSanitizer } from '../undoSafeInput';
+
+const phoneText: TextSanitizer = (text) => (text.trim().startsWith('+') ? text : digitsOnly(text));
 import {
     DEFAULT_PHONE_COUNTRY_ISO2,
     getPhoneCountry,
@@ -58,7 +62,7 @@ export function RhfPhoneField<T extends FieldValues>({
     hint,
     fieldSize,
     fieldType = 'phone',
-    placeholder = 'e.g. 9811234567',
+    placeholder: codedPlaceholder = 'e.g. 9811234567',
     disabled,
     sx,
     slotProps,
@@ -71,6 +75,7 @@ export function RhfPhoneField<T extends FieldValues>({
     ...rest
 }: RhfPhoneFieldProps<T>) {
     void _maxLength;
+    const placeholder = useConfiguredPlaceholder(name, codedPlaceholder);
     const { field, fieldState } = useController<T>({ name });
     const inputRef = React.useRef<HTMLInputElement | null>(null);
     const [open, setOpen] = React.useState(false);
@@ -121,6 +126,9 @@ export function RhfPhoneField<T extends FieldValues>({
         setTimeout(() => inputRef.current?.focus(), 0);
     };
 
+    // Digits only, filtered before insertion so Ctrl+Z keeps working; a "+…" international number passes through.
+    const sanitizerRef = useUndoSafeSanitizer(phoneText);
+
     const handleNumberChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const raw = e.target.value;
         if (raw.trim().startsWith('+')) {
@@ -153,6 +161,7 @@ export function RhfPhoneField<T extends FieldValues>({
                 inputRef={(el: HTMLInputElement | null) => {
                     inputRef.current = el;
                     field.ref(el);
+                    return sanitizerRef(el);
                 }}
                 name={name}
                 value={national}

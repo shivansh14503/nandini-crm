@@ -4,6 +4,7 @@ import React, { createContext, useCallback, useContext, useMemo, useState } from
 import { useFormConfigs, resolveConfiguredFieldProps, type ConfiguredFieldDefaults, type ConfiguredFieldProps } from '@/hooks/queries/useFormConfigs';
 import { sectionKeyFromLabel, type CrmModuleKey, type FormConfigsPayload, type FormFieldDefinitionDto } from '@/types/formConfig.types';
 import { allModuleFieldsIncludingDeleted, moduleFields } from '@/utils/formConfig';
+import { useCodedDefaultsRecorder } from './CodedFieldDefaultsContext';
 
 /**
  * Applies admin form customizations to the hand-built module forms without rewriting them: a form wraps its
@@ -165,10 +166,30 @@ export function useFormConfigModule(): CrmModuleKey | undefined {
  */
 export function useFieldOverride(name: string | undefined, defaults: ConfiguredFieldDefaults): ConfiguredFieldProps | undefined {
     const ctx = useContext(FormConfigContext);
+    const recorder = useCodedDefaultsRecorder();
+    if (recorder) {
+        // Form builder harvest: report the coded texts and render the form exactly as coded.
+        if (name) {
+            recorder.record(name, {
+                placeholder: defaults.placeholder || undefined,
+                hint: typeof defaults.hint === 'string' && defaults.hint ? defaults.hint : undefined,
+            });
+        }
+        return undefined;
+    }
     if (!ctx || !name) return undefined;
     const field = ctx.systemFields.get(name);
     if (!field) return undefined;
     return resolveConfiguredFieldProps(ctx.configs, field, defaults);
+}
+
+/**
+ * The placeholder to show for the built-in field bound to `name`: the admin's override, else the coded one.
+ * For controls whose placeholder isn't otherwise run through {@link useFieldOverride} (phone, lookup, address…).
+ */
+export function useConfiguredPlaceholder(name: string | undefined, coded: string | undefined): string | undefined {
+    const override = useFieldOverride(name, { label: '', placeholder: coded });
+    return override ? override.placeholder : coded;
 }
 
 /** Admin-renamed label of a built-in section, matched by the slug of the label the form hard-codes. */

@@ -91,7 +91,7 @@ export function PartnerLicensingTab({ form, set }: PartnerLicensingTabProps) {
                                         <IconButton
                                             size="small"
                                             onClick={handleClearInput}
-                                            sx={{ color: '#9ca3af' }}
+                                            sx={{ color: 'var(--crm-gray-400)' }}
                                         >
                                             <ClearIcon sx={{ fontSize: 16 }} />
                                         </IconButton>
@@ -106,7 +106,7 @@ export function PartnerLicensingTab({ form, set }: PartnerLicensingTabProps) {
                         onClick={handleAddPartner}
                         startIcon={<AddIcon fontSize="small" />}
                         sx={{
-                            background: 'linear-gradient(135deg, #2563EB 0%, #1d4ed8 100%)',
+                            background: 'linear-gradient(135deg, var(--crm-fill-blue-600) 0%, var(--crm-fill-blue-700) 100%)',
                             borderRadius: '8px',
                             textTransform: 'none',
                             fontWeight: 600,
@@ -114,8 +114,8 @@ export function PartnerLicensingTab({ form, set }: PartnerLicensingTabProps) {
                             height: 38,
                             px: 2,
                             whiteSpace: 'nowrap',
-                            boxShadow: '0 2px 6px rgba(37,99,235,0.25)',
-                            '&:hover': { background: 'linear-gradient(135deg, #1d4ed8 0%, #1e3a8a 100%)' },
+                            boxShadow: '0 2px 6px rgb(var(--crm-accent-rgb) / 0.25)',
+                            '&:hover': { background: 'linear-gradient(135deg, var(--crm-fill-blue-700) 0%, var(--crm-fill-blue-900) 100%)' },
                         }}
                     >
                         Add Company
@@ -130,14 +130,14 @@ export function PartnerLicensingTab({ form, set }: PartnerLicensingTabProps) {
                 elevation={0}
                 sx={{
                     maxWidth: fieldSizeMaxWidth('lg'),
-                    border: '1px solid #e2e8f0',
+                    border: '1px solid var(--mui-palette-border-main)',
                     borderRadius: '10px',
                     overflow: 'hidden',
                 }}
             >
                 <Table size="small">
                     <TableHead>
-                        <TableRow sx={{ backgroundColor: '#0284c7' }}>
+                        <TableRow sx={{ backgroundColor: 'var(--mui-palette-info-main)' }}>
                             <TableCell
                                 sx={{
                                     color: '#fff',
@@ -183,9 +183,9 @@ export function PartnerLicensingTab({ form, set }: PartnerLicensingTabProps) {
                                     sx={{
                                         textAlign: 'center',
                                         py: 4,
-                                        color: '#9ca3af',
+                                        color: 'var(--crm-gray-400)',
                                         fontSize: '0.84rem',
-                                        backgroundColor: '#fafafa',
+                                        backgroundColor: 'var(--mui-palette-background-subtle)',
                                     }}
                                 >
                                     <Box
@@ -196,11 +196,11 @@ export function PartnerLicensingTab({ form, set }: PartnerLicensingTabProps) {
                                             gap: 1,
                                         }}
                                     >
-                                        <BusinessIcon sx={{ fontSize: 28, color: '#cbd5e1' }} />
-                                        <Typography sx={{ fontSize: '0.82rem', color: '#64748b' }}>
+                                        <BusinessIcon sx={{ fontSize: 28, color: 'var(--crm-slate-300)' }} />
+                                        <Typography sx={{ fontSize: '0.82rem', color: 'var(--mui-palette-text-secondary)' }}>
                                             No partner companies linked yet.
                                         </Typography>
-                                        <Typography sx={{ fontSize: '0.74rem', color: '#9ca3af' }}>
+                                        <Typography sx={{ fontSize: '0.74rem', color: 'var(--crm-gray-400)' }}>
                                             Type a company name above and click &quot;Add Company&quot;.
                                         </Typography>
                                     </Box>
@@ -211,15 +211,15 @@ export function PartnerLicensingTab({ form, set }: PartnerLicensingTabProps) {
                                 <TableRow
                                     key={`${name}-${index}`}
                                     sx={{
-                                        '&:nth-of-type(even)': { backgroundColor: '#f8fafc' },
-                                        '&:hover': { backgroundColor: '#f1f5f9' },
+                                        '&:nth-of-type(even)': { backgroundColor: 'var(--mui-palette-background-subtle)' },
+                                        '&:hover': { backgroundColor: 'var(--mui-palette-background-hover)' },
                                     }}
                                 >
                                     <TableCell
                                         sx={{
                                             fontSize: '0.82rem',
                                             fontWeight: 600,
-                                            color: '#64748b',
+                                            color: 'var(--mui-palette-text-secondary)',
                                             py: 1.2,
                                         }}
                                     >
@@ -229,7 +229,7 @@ export function PartnerLicensingTab({ form, set }: PartnerLicensingTabProps) {
                                         sx={{
                                             fontSize: '0.84rem',
                                             fontWeight: 600,
-                                            color: '#1e293b',
+                                            color: 'var(--mui-palette-text-primary)',
                                             py: 1.2,
                                         }}
                                     >
@@ -240,8 +240,8 @@ export function PartnerLicensingTab({ form, set }: PartnerLicensingTabProps) {
                                                 sx={{
                                                     height: 20,
                                                     fontSize: '0.68rem',
-                                                    backgroundColor: '#e0e7ff',
-                                                    color: '#4338ca',
+                                                    backgroundColor: 'var(--crm-indigo-100)',
+                                                    color: 'var(--crm-indigo-700)',
                                                     fontWeight: 600,
                                                 }}
                                             />
@@ -254,8 +254,8 @@ export function PartnerLicensingTab({ form, set }: PartnerLicensingTabProps) {
                                             size="small"
                                             onClick={() => handleRemovePartner(index)}
                                             sx={{
-                                                color: '#9ca3af',
-                                                '&:hover': { color: '#ef4444' },
+                                                color: 'var(--crm-gray-400)',
+                                                '&:hover': { color: 'var(--crm-red-500)' },
                                             }}
                                         >
                                             <DeleteIcon fontSize="small" />

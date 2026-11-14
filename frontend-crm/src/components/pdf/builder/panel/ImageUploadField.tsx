@@ -46,12 +46,12 @@ export function ImageUploadField({
     return (
         <Box>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-                <Box sx={{ width: 120, height: 56, borderRadius: '8px', border: '1px dashed #cbd5e1', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: '#f8fafc', overflow: 'hidden', flexShrink: 0 }}>
+                <Box sx={{ width: 120, height: 56, borderRadius: '8px', border: '1px dashed var(--mui-palette-border-strong)', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: 'var(--mui-palette-background-subtle)', overflow: 'hidden', flexShrink: 0 }}>
                     {value ? (
                         // eslint-disable-next-line @next/next/no-img-element -- authenticated API image, not a static asset
                         <img src={pdfTemplateService.assetUrl(value)} alt="" style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} />
                     ) : (
-                        <Typography sx={{ fontSize: '0.7rem', color: '#94a3b8' }}>{emptyLabel}</Typography>
+                        <Typography sx={{ fontSize: '0.7rem', color: 'var(--mui-palette-text-muted)' }}>{emptyLabel}</Typography>
                     )}
                 </Box>
                 <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.75 }}>
@@ -78,13 +78,13 @@ export function ImageUploadField({
                         {value ? 'Replace' : 'Upload'}
                     </Button>
                     {value && removable && (
-                        <Button size="small" variant="text" disabled={disabled} startIcon={<DeleteOutlinedIcon sx={{ fontSize: 16 }} />} onClick={() => onChange(undefined)} sx={{ textTransform: 'none', fontSize: '0.78rem', color: '#64748b' }}>
+                        <Button size="small" variant="text" disabled={disabled} startIcon={<DeleteOutlinedIcon sx={{ fontSize: 16 }} />} onClick={() => onChange(undefined)} sx={{ textTransform: 'none', fontSize: '0.78rem', color: 'var(--mui-palette-text-secondary)' }}>
                             Remove
                         </Button>
                     )}
                 </Box>
             </Box>
-            <Typography sx={{ fontSize: '0.68rem', color: '#94a3b8', mt: 0.5 }}>PNG, JPEG or WebP, up to 1 MB.</Typography>
+            <Typography sx={{ fontSize: '0.68rem', color: 'var(--mui-palette-text-muted)', mt: 0.5 }}>PNG, JPEG or WebP, up to 1 MB.</Typography>
         </Box>
     );
 }

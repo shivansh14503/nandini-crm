@@ -41,7 +41,7 @@ export function AdminPageShell({
     if (!user) return null;
 
     return (
-        <Box sx={{ minHeight: '100vh', backgroundColor: '#f8fafc', display: 'flex', flexDirection: 'column' }}>
+        <Box sx={{ minHeight: '100vh', backgroundColor: 'var(--mui-palette-background-subtle)', display: 'flex', flexDirection: 'column' }}>
             <Navbar />
             <ErrorAlert error={error} onClose={clearError} />
             <Container maxWidth={maxWidth} sx={{ pt: 2, pb: 4, flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>

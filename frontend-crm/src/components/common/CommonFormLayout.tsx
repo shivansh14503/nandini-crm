@@ -9,6 +9,7 @@ import { FormModeProvider } from '@/context/FormModeContext';
 import { FormStickyFooter } from '../forms/FormStickyFooter';
 import { DynamicModuleCustomFields } from '../forms/DynamicModuleCustomFields';
 import { useFormConfigContext } from '@/context/FormConfigContext';
+import { useCodedDefaultsRecorder } from '@/context/CodedFieldDefaultsContext';
 import { useFormContext, type FieldValues, type UseFormReturn } from 'react-hook-form';
 import { useFormDraftGuard } from '@/hooks/useFormDraftGuard';
 import { UnsavedChangesModal } from './UnsavedChangesModal';
@@ -169,9 +170,11 @@ export function CommonFormLayout({
     // useFormContext() is null outside a FormProvider (typed as non-null by react-hook-form).
     const formCtx = useFormContext() as UseFormReturn<FieldValues> | null;
     const formDirty = isDirty ?? Boolean(formCtx?.formState.isDirty);
+    // The form builder's hidden copy of a form (read for its coded texts) must never guard navigation.
+    const isHarvestCopy = Boolean(useCodedDefaultsRecorder());
     const { confirmDiscard, discardModalOpen, handleKeepEditing, handleDiscardAndLeave } = useFormDraftGuard({
         isDirty: formDirty,
-        enabled: mode !== 'view',
+        enabled: mode !== 'view' && !isHarvestCopy,
         onDiscard: () => {
             formCtx?.reset();
             onDiscard?.();
@@ -265,8 +268,8 @@ export function CommonFormLayout({
                 elevation={0}
                 sx={{
                     borderRadius: '12px',
-                    border: '1px solid #e2e8f0',
-                    backgroundColor: '#ffffff',
+                    border: '1px solid var(--mui-palette-border-main)',
+                    backgroundColor: 'var(--mui-palette-background-paper)',
                     overflow: 'hidden',
                     boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
                     ...paperSx,
@@ -276,8 +279,8 @@ export function CommonFormLayout({
                 {effectiveTabs.length > 0 && (
                     <Box
                         sx={{
-                            backgroundColor: '#f8fafc',
-                            borderBottom: '1px solid #e2e8f0',
+                            backgroundColor: 'var(--mui-palette-background-subtle)',
+                            borderBottom: '1px solid var(--mui-palette-border-main)',
                             px: { xs: 2, md: 2.5 },
                             py: 1,
                             display: 'flex',
@@ -304,15 +307,15 @@ export function CommonFormLayout({
                                         userSelect: 'none',
                                         whiteSpace: 'nowrap',
                                         transition: 'all 0.15s ease-in-out',
-                                        backgroundColor: isActive ? '#ffffff' : 'transparent',
-                                        border: isActive ? '1px solid #cbd5e1' : '1px solid transparent',
+                                        backgroundColor: isActive ? 'var(--mui-palette-background-paper)' : 'transparent',
+                                        border: isActive ? '1px solid var(--mui-palette-border-strong)' : '1px solid transparent',
                                         boxShadow: isActive ? '0 1px 3px rgba(0,0,0,0.06)' : 'none',
-                                        color: isActive ? '#1e3a8a' : '#64748b',
+                                        color: isActive ? 'var(--crm-text-blue-900)' : 'var(--mui-palette-text-secondary)',
                                         fontWeight: isActive ? 700 : 500,
                                         fontSize: '0.84rem',
                                         '&:hover': {
-                                            backgroundColor: isActive ? '#ffffff' : '#f1f5f9',
-                                            color: isActive ? '#1e3a8a' : '#1e293b',
+                                            backgroundColor: isActive ? 'var(--mui-palette-background-paper)' : 'var(--mui-palette-background-hover)',
+                                            color: isActive ? 'var(--crm-blue-900)' : 'var(--mui-palette-text-primary)',
                                         },
                                     }}
                                 >
@@ -321,7 +324,7 @@ export function CommonFormLayout({
                                             sx={{
                                                 display: 'flex',
                                                 alignItems: 'center',
-                                                color: isActive ? '#2563eb' : '#64748b',
+                                                color: isActive ? 'var(--crm-text-blue-600)' : 'var(--mui-palette-text-secondary)',
                                             }}
                                         >
                                             {tab.icon}
@@ -343,9 +346,9 @@ export function CommonFormLayout({
                                                 px: 1,
                                                 py: 0.2,
                                                 borderRadius: '9999px',
-                                                border: '1px solid #93c5fd',
-                                                backgroundColor: '#eff6ff',
-                                                color: '#2563eb',
+                                                border: '1px solid var(--crm-blue-300)',
+                                                backgroundColor: 'var(--mui-palette-primary-soft)',
+                                                color: 'var(--crm-text-blue-600)',
                                                 fontSize: '0.72rem',
                                                 fontWeight: 600,
                                                 lineHeight: 1.2,
@@ -358,7 +361,7 @@ export function CommonFormLayout({
                                     {tab.sublabel && (
                                         <Typography
                                             component="span"
-                                            sx={{ fontSize: '0.76rem', color: '#94a3b8', fontWeight: 400 }}
+                                            sx={{ fontSize: '0.76rem', color: 'var(--mui-palette-text-muted)', fontWeight: 400 }}
                                         >
                                             {tab.sublabel}
                                         </Typography>

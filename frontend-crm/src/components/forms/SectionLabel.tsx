@@ -20,12 +20,12 @@ export function SectionLabel({ icon, label: baseLabel, sx }: SectionLabelProps) 
     if (deleted) return null;
     return (
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1, ...sx }}>
-            {icon && <Box sx={{ color: '#2563EB', display: 'flex' }}>{icon}</Box>}
+            {icon && <Box sx={{ color: 'var(--crm-text-blue-600)', display: 'flex' }}>{icon}</Box>}
             <Typography
                 variant="subtitle2"
                 sx={{
                     fontWeight: 700,
-                    color: '#1e3a5f',
+                    color: 'var(--mui-palette-text-primary)',
                     fontSize: '0.82rem',
                     letterSpacing: '0.02em',
                 }}

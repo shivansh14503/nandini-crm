@@ -15,6 +15,7 @@ import {
     type FieldType,
 } from '../fieldSizing';
 import { localNow, localToday } from '@/utils/pastDates';
+import { digitsOnly, emailText, setInputValueIfChanged, upperCase, useUndoSafeSanitizer } from '../undoSafeInput';
 
 /** Native date / time pickers: fixed-length display value plus the picker icon. */
 const PICKER_FIT: Record<string, FieldContentFit> = {
@@ -105,6 +106,10 @@ export function RhfTextField<T extends FieldValues>({
         : PICKER_FIT[inputProps.type ?? ''] ??
           (resolvedMaxLength ? { chars: resolvedMaxLength, wide: isUppercase || isNumeric } : undefined);
 
+    // Filter typed / pasted text before it's inserted, so the value below rarely needs rewriting and Ctrl+Z
+    // keeps working (rewriting an input's value from script clears its undo history).
+    const sanitizerRef = useUndoSafeSanitizer(isNumeric ? digitsOnly : isUppercase ? upperCase : isEmail ? emailText : undefined);
+
     const handleChange = (
         e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
     ) => {
@@ -114,25 +119,25 @@ export function RhfTextField<T extends FieldValues>({
             if (resolvedMaxLength) {
                 val = val.slice(0, resolvedMaxLength);
             }
-            e.target.value = val;
+            setInputValueIfChanged(e.target, val);
         } else if (isUppercase) {
             val = val.toUpperCase();
             if (resolvedMaxLength) {
                 val = val.slice(0, resolvedMaxLength);
             }
-            e.target.value = val;
+            setInputValueIfChanged(e.target, val);
         } else if (isEmail) {
             val = val.toLowerCase().trim();
-            e.target.value = val;
+            setInputValueIfChanged(e.target, val);
         } else if (inputProps.type === 'number') {
             const num = parseFloat(val);
             if (!isNaN(num)) {
                 if (max !== undefined && num > Number(max)) {
                     val = String(max);
-                    e.target.value = val;
+                    setInputValueIfChanged(e.target, val);
                 } else if (min !== undefined && num < Number(min)) {
                     val = String(min);
-                    e.target.value = val;
+                    setInputValueIfChanged(e.target, val);
                 }
             }
         }
@@ -165,22 +170,22 @@ export function RhfTextField<T extends FieldValues>({
                     if (resolvedMaxLength) {
                         val = val.slice(0, resolvedMaxLength);
                     }
-                    target.value = val;
+                    setInputValueIfChanged(target, val);
                 } else if (isUppercase && target.value) {
                     let val = target.value.toUpperCase();
                     if (resolvedMaxLength) {
                         val = val.slice(0, resolvedMaxLength);
                     }
-                    target.value = val;
+                    setInputValueIfChanged(target, val);
                 } else if (isEmail && target.value) {
-                    target.value = target.value.toLowerCase().trim();
+                    setInputValueIfChanged(target, target.value.toLowerCase().trim());
                 } else if (inputProps.type === 'number' && target.value) {
                     const num = parseFloat(target.value);
                     if (!isNaN(num)) {
                         if (max !== undefined && num > Number(max)) {
-                            target.value = String(max);
+                            setInputValueIfChanged(target, String(max));
                         } else if (min !== undefined && num < Number(min)) {
-                            target.value = String(min);
+                            setInputValueIfChanged(target, String(min));
                         }
                     }
                 }
@@ -196,6 +201,7 @@ export function RhfTextField<T extends FieldValues>({
                 {...field}
                 value={field.value ?? ''}
                 onChange={handleChange}
+                inputRef={sanitizerRef}
                 fullWidth
                 size="small"
                 slotProps={mergedSlotProps}

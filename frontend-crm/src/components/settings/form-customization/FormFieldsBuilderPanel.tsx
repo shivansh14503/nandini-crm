@@ -203,11 +203,11 @@ export function FormFieldsBuilderPanel({ module, configs, canEdit, notify, unsav
                                 borderRadius: '8px',
                                 px: 1.25,
                                 py: 0.55,
-                                color: '#2563eb',
-                                border: '1px dashed #93c5fd',
-                                backgroundColor: '#ffffff',
+                                color: 'var(--crm-text-blue-600)',
+                                border: '1px dashed var(--crm-blue-300)',
+                                backgroundColor: 'var(--mui-palette-background-paper)',
                                 whiteSpace: 'nowrap',
-                                '&:hover': { backgroundColor: '#eff6ff', borderColor: '#2563eb' },
+                                '&:hover': { backgroundColor: 'var(--mui-palette-primary-soft)', borderColor: 'var(--mui-palette-primary-main)' },
                             }}
                         >
                             New Tab
@@ -219,7 +219,7 @@ export function FormFieldsBuilderPanel({ module, configs, canEdit, notify, unsav
                         <FormControlLabel
                             sx={{ m: 0, mr: 1 }}
                             control={<Switch size="small" checked={showArchived} onChange={(e) => setShowArchived(e.target.checked)} />}
-                            label={<Typography sx={{ fontSize: '0.76rem', color: '#475569' }}>Show archived ({archivedCount})</Typography>}
+                            label={<Typography sx={{ fontSize: '0.76rem', color: 'var(--crm-slate-600)' }}>Show archived ({archivedCount})</Typography>}
                         />
                     )}
                     {canEdit && (
@@ -243,8 +243,8 @@ export function FormFieldsBuilderPanel({ module, configs, canEdit, notify, unsav
                             alignItems: 'center',
                             px: 2,
                             py: 1,
-                            borderBottom: '1px solid #e2e8f0',
-                            '& > *': { fontSize: '0.68rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.04em' },
+                            borderBottom: '1px solid var(--mui-palette-border-main)',
+                            '& > *': { fontSize: '0.68rem', fontWeight: 700, color: 'var(--mui-palette-text-secondary)', textTransform: 'uppercase', letterSpacing: '0.04em' },
                         }}
                     >
                         <span />
@@ -312,8 +312,8 @@ export function FormFieldsBuilderPanel({ module, configs, canEdit, notify, unsav
                 </Box>
             </Box>
 
-            <Box sx={{ px: 2, py: 1.5, borderTop: '1px solid #e2e8f0', backgroundColor: '#f8fafc' }}>
-                <Typography sx={{ fontSize: '0.74rem', color: '#64748b' }}>
+            <Box sx={{ px: 2, py: 1.5, borderTop: '1px solid var(--mui-palette-border-main)', backgroundColor: 'var(--mui-palette-background-subtle)' }}>
+                <Typography sx={{ fontSize: '0.74rem', color: 'var(--mui-palette-text-secondary)' }}>
                     Drag a field by its grip to reorder it or to move it into another section of this tab, or drag a section by its
                     header to reorder whole sections: the form shows the fields in the order and sections listed here. Any field can also
                     be moved to another tab from Edit. Composite blocks (email lists, line items, toggles) keep their place.
@@ -359,14 +359,14 @@ export function FormFieldsBuilderPanel({ module, configs, canEdit, notify, unsav
                     if (target) void run(() => draft.deleteField(target.id));
                 }}
             >
-                <Typography sx={{ fontSize: '0.85rem', color: '#475569' }}>
+                <Typography sx={{ fontSize: '0.85rem', color: 'var(--crm-slate-600)' }}>
                     The field is removed from the {CRM_MODULE_LABELS[module]} form and drawer for good. Values already stored on records are no
                     longer shown. To hide it but keep it restorable, use Archive instead.
                 </Typography>
                 {deleteTarget?.dropdownCategoryKey && (
-                    <Typography sx={{ fontSize: '0.8rem', color: '#64748b' }}>{dropdownFateMessage(configs, module, deleteTarget)}</Typography>
+                    <Typography sx={{ fontSize: '0.8rem', color: 'var(--mui-palette-text-secondary)' }}>{dropdownFateMessage(configs, module, deleteTarget)}</Typography>
                 )}
-                <Typography sx={{ fontSize: '0.8rem', color: '#64748b' }}>The deletion is applied when you click Save Changes.</Typography>
+                <Typography sx={{ fontSize: '0.8rem', color: 'var(--mui-palette-text-secondary)' }}>The deletion is applied when you click Save Changes.</Typography>
             </ConfirmDeleteDialog>
 
             <ConfirmDeleteDialog
@@ -384,10 +384,10 @@ export function FormFieldsBuilderPanel({ module, configs, canEdit, notify, unsav
                     });
                 }}
             >
-                <Typography sx={{ fontSize: '0.85rem', color: '#475569' }}>
+                <Typography sx={{ fontSize: '0.85rem', color: 'var(--crm-slate-600)' }}>
                     {deletionSummary(sectionDeleteTarget?.fields.length ?? 0, 'section')}
                 </Typography>
-                <Typography sx={{ fontSize: '0.8rem', color: '#64748b' }}>{DELETION_NOTE}</Typography>
+                <Typography sx={{ fontSize: '0.8rem', color: 'var(--mui-palette-text-secondary)' }}>{DELETION_NOTE}</Typography>
             </ConfirmDeleteDialog>
 
             <ConfirmDeleteDialog
@@ -406,12 +406,12 @@ export function FormFieldsBuilderPanel({ module, configs, canEdit, notify, unsav
                     });
                 }}
             >
-                <Typography sx={{ fontSize: '0.85rem', color: '#475569' }}>
+                <Typography sx={{ fontSize: '0.85rem', color: 'var(--crm-slate-600)' }}>
                     {tabToDeleteFieldCount === 0
                         ? `The tab is removed from the ${CRM_MODULE_LABELS[module]} form. It has no fields.`
                         : `The tab is removed from the ${CRM_MODULE_LABELS[module]} form. ${deletionSummary(tabToDeleteFieldCount, 'tab')}`}
                 </Typography>
-                {tabToDeleteFieldCount > 0 && <Typography sx={{ fontSize: '0.8rem', color: '#64748b' }}>{DELETION_NOTE}</Typography>}
+                {tabToDeleteFieldCount > 0 && <Typography sx={{ fontSize: '0.8rem', color: 'var(--mui-palette-text-secondary)' }}>{DELETION_NOTE}</Typography>}
             </ConfirmDeleteDialog>
         </Box>
     );
@@ -476,7 +476,7 @@ function NewTabDialog({ module, onClose, onCreate }: { module: CrmModuleKey; onC
     };
     return (
         <Dialog open onClose={onClose} maxWidth="xs" fullWidth slotProps={{ paper: { sx: { borderRadius: '12px' } } }}>
-            <DialogTitle sx={{ fontWeight: 700, fontSize: '1rem', borderBottom: '1px solid #e2e8f0' }}>New Tab — {CRM_MODULE_LABELS[module]}</DialogTitle>
+            <DialogTitle sx={{ fontWeight: 700, fontSize: '1rem', borderBottom: '1px solid var(--mui-palette-border-main)' }}>New Tab — {CRM_MODULE_LABELS[module]}</DialogTitle>
             <DialogContent sx={{ pt: '20px !important', display: 'flex', flexDirection: 'column', gap: 1 }}>
                 <TextField
                     label="Tab name"
@@ -501,7 +501,7 @@ function NewTabDialog({ module, onClose, onCreate }: { module: CrmModuleKey; onC
                     slotProps={{ htmlInput: { maxLength: 60 } }}
                 />
             </DialogContent>
-            <DialogActions sx={{ px: 3, py: 2, borderTop: '1px solid #e2e8f0' }}>
+            <DialogActions sx={{ px: 3, py: 2, borderTop: '1px solid var(--mui-palette-border-main)' }}>
                 <Button onClick={onClose} variant="outlined" sx={secondaryButtonSx}>
                     Cancel
                 </Button>
@@ -573,7 +573,7 @@ function SectionBlock({
     return (
         // The block is what moves in a section drag (styled by useDragReorder like a lifted field row); the drag
         // starts from its header only, so pressing a field row still drags just that field.
-        <Box {...sectionBlockProps} sx={{ backgroundColor: '#ffffff' }}>
+        <Box {...sectionBlockProps} sx={{ backgroundColor: 'var(--mui-palette-background-paper)' }}>
             {/* Divider lives on the header so it slides with the header while a row is dragged past it. */}
             <Box
                 {...headerProps}
@@ -585,8 +585,8 @@ function SectionBlock({
                     display: 'flex',
                     alignItems: 'center',
                     gap: 1,
-                    borderTop: first ? 'none' : '1px solid #e2e8f0',
-                    backgroundColor: '#ffffff',
+                    borderTop: first ? 'none' : '1px solid var(--mui-palette-border-main)',
+                    backgroundColor: 'var(--mui-palette-background-paper)',
                     cursor: sectionDragDisabled ? undefined : 'grab',
                 }}
             >
@@ -616,7 +616,7 @@ function SectionBlock({
                             slotProps={{ htmlInput: { maxLength: 120, 'aria-label': 'Section name' } }}
                         />
                         <IconButton size="small" aria-label="Save section name" onClick={commit}>
-                            <CheckRoundedIcon sx={{ fontSize: 18, color: '#16a34a' }} />
+                            <CheckRoundedIcon sx={{ fontSize: 18, color: 'var(--mui-palette-success-main)' }} />
                         </IconButton>
                         <IconButton
                             size="small"
@@ -635,13 +635,13 @@ function SectionBlock({
                         {canEdit && (
                             <Tooltip title="Rename section" arrow>
                                 <IconButton size="small" aria-label={`Rename ${section.sectionLabel}`} onClick={() => setRenaming(true)} disabled={busy}>
-                                    <EditOutlinedIcon sx={{ fontSize: 15, color: '#64748b' }} />
+                                    <EditOutlinedIcon sx={{ fontSize: 15, color: 'var(--mui-palette-text-secondary)' }} />
                                 </IconButton>
                             </Tooltip>
                         )}
                     </>
                 )}
-                <Typography sx={{ fontSize: '0.72rem', color: '#94a3b8' }}>
+                <Typography sx={{ fontSize: '0.72rem', color: 'var(--mui-palette-text-muted)' }}>
                     {section.fields.length} field{section.fields.length === 1 ? '' : 's'}
                 </Typography>
                 {canEdit && (
@@ -728,11 +728,11 @@ function FieldRow({
                 alignItems: 'center',
                 px: 2,
                 py: 0.9,
-                borderTop: '1px solid #f1f5f9',
+                borderTop: '1px solid var(--mui-palette-border-light)',
                 opacity: field.isActive ? 1 : 0.6,
-                backgroundColor: field.isActive ? 'transparent' : '#fafafa',
+                backgroundColor: field.isActive ? 'transparent' : 'var(--mui-palette-background-subtle)',
                 transition: 'background-color 0.12s, box-shadow 0.12s',
-                '&:hover': { backgroundColor: '#f8fafc' },
+                '&:hover': { backgroundColor: 'var(--mui-palette-background-subtle)' },
                 ...dragSx,
             }}
         >
@@ -740,7 +740,7 @@ function FieldRow({
 
             <Box sx={{ minWidth: 0 }}>
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, flexWrap: 'wrap' }}>
-                    <Typography sx={{ fontSize: '0.85rem', fontWeight: 600, color: '#1e293b' }} noWrap>
+                    <Typography sx={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--mui-palette-text-primary)' }} noWrap>
                         {field.label}
                     </Typography>
                     {locked && (
@@ -755,7 +755,7 @@ function FieldRow({
                         </Badge>
                     )}
                 </Box>
-                <Typography sx={{ fontSize: '0.7rem', color: '#94a3b8', fontFamily: 'monospace' }} noWrap>
+                <Typography sx={{ fontSize: '0.7rem', color: 'var(--mui-palette-text-muted)', fontFamily: 'monospace' }} noWrap>
                     {field.fieldKey}
                     {field.dropdownCategoryKey ? ` · ${field.dropdownCategoryKey}` : ''}
                 </Typography>
@@ -806,7 +806,7 @@ function FieldRow({
                 {canEdit && field.isActive && (
                     <Tooltip title="Edit field" arrow>
                         <IconButton size="small" aria-label={`Edit ${field.label}`} onClick={onEdit} disabled={busy}>
-                            <EditOutlinedIcon sx={{ fontSize: 17, color: '#2563eb' }} />
+                            <EditOutlinedIcon sx={{ fontSize: 17, color: 'var(--crm-text-blue-600)' }} />
                         </IconButton>
                     </Tooltip>
                 )}
@@ -818,7 +818,7 @@ function FieldRow({
                             disabled={busy}
                             onClick={() => void onPatch({ isActive: !field.isActive })}
                         >
-                            {field.isActive ? <ArchiveOutlinedIcon sx={{ fontSize: 17, color: '#b45309' }} /> : <UnarchiveOutlinedIcon sx={{ fontSize: 17, color: '#16a34a' }} />}
+                            {field.isActive ? <ArchiveOutlinedIcon sx={{ fontSize: 17, color: 'var(--crm-amber-700)' }} /> : <UnarchiveOutlinedIcon sx={{ fontSize: 17, color: 'var(--mui-palette-success-main)' }} />}
                         </IconButton>
                     </Tooltip>
                 )}

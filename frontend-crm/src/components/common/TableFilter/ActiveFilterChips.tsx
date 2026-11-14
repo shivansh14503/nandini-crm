@@ -21,12 +21,12 @@ export function ActiveFilterChips({ controller }: { controller: TableFilterContr
                 gap: 0.75,
                 px: 1.5,
                 py: 1,
-                borderBottom: '1px solid #f1f5f9',
-                backgroundColor: '#f8fbff',
+                borderBottom: '1px solid var(--mui-palette-border-light)',
+                backgroundColor: 'var(--mui-palette-background-subtle)',
             }}
         >
-            <FilterListIcon sx={{ fontSize: 16, color: '#2563eb' }} />
-            <Typography sx={{ fontSize: '0.75rem', fontWeight: 700, color: '#1e40af', mr: 0.5 }}>
+            <FilterListIcon sx={{ fontSize: 16, color: 'var(--crm-text-blue-600)' }} />
+            <Typography sx={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--crm-text-blue-800)', mr: 0.5 }}>
                 {controller.filteredRows.length.toLocaleString('en-IN')} match
             </Typography>
             {entries.map(([key, c]) => {
@@ -42,9 +42,9 @@ export function ActiveFilterChips({ controller }: { controller: TableFilterContr
                             height: 24,
                             fontSize: '0.72rem',
                             fontWeight: 600,
-                            backgroundColor: '#fff',
-                            border: '1px solid #bfdbfe',
-                            color: '#1e40af',
+                            backgroundColor: 'var(--mui-palette-background-paper)',
+                            border: '1px solid var(--mui-palette-primary-softBorder)',
+                            color: 'var(--crm-text-blue-800)',
                             maxWidth: 360,
                         }}
                     />

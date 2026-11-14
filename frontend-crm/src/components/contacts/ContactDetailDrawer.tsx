@@ -55,8 +55,8 @@ const sectionIcon = (icon: React.ReactElement) => (
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            color: '#2563eb',
-            backgroundColor: '#eff6ff',
+            color: 'var(--crm-text-blue-600)',
+            backgroundColor: 'var(--mui-palette-primary-soft)',
         }}
     >
         {icon}
@@ -90,8 +90,8 @@ function ChannelActionButton({ label, href, icon, color, external }: ChannelActi
                 sx={{
                     width: 28,
                     height: 28,
-                    color: '#64748b',
-                    border: '1px solid #e2e8f0',
+                    color: 'var(--mui-palette-text-secondary)',
+                    border: '1px solid var(--mui-palette-border-main)',
                     borderRadius: '8px',
                     transition: 'all 0.15s ease',
                     '&:hover': { color, borderColor: color, backgroundColor: `${color}0f` },
@@ -116,10 +116,10 @@ function ChannelRow({ icon, value, caption, tag, actions, copyTitle }: ChannelRo
     return (
         <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1.5, py: 1 }}>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.25, minWidth: 0 }}>
-                <Box sx={{ color: '#94a3b8', display: 'flex', flexShrink: 0 }}>{icon}</Box>
+                <Box sx={{ color: 'var(--mui-palette-text-muted)', display: 'flex', flexShrink: 0 }}>{icon}</Box>
                 <Box sx={{ minWidth: 0 }}>
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, minWidth: 0 }}>
-                        <Typography noWrap sx={{ fontSize: '0.86rem', fontWeight: 700, color: '#0f172a' }}>
+                        <Typography noWrap sx={{ fontSize: '0.86rem', fontWeight: 700, color: 'var(--crm-slate-900)' }}>
                             {value}
                         </Typography>
                         {tag && (
@@ -129,9 +129,9 @@ function ChannelRow({ icon, value, caption, tag, actions, copyTitle }: ChannelRo
                                     fontSize: '0.6rem',
                                     fontWeight: 800,
                                     letterSpacing: '0.05em',
-                                    color: '#1d4ed8',
-                                    backgroundColor: '#eff6ff',
-                                    border: '1px solid #bfdbfe',
+                                    color: 'var(--crm-text-blue-700)',
+                                    backgroundColor: 'var(--mui-palette-primary-soft)',
+                                    border: '1px solid var(--mui-palette-primary-softBorder)',
                                     borderRadius: '9999px',
                                     px: 0.75,
                                     lineHeight: 1.6,
@@ -142,14 +142,14 @@ function ChannelRow({ icon, value, caption, tag, actions, copyTitle }: ChannelRo
                             </Box>
                         )}
                     </Box>
-                    <Typography sx={{ fontSize: '0.7rem', color: '#64748b' }}>{caption}</Typography>
+                    <Typography sx={{ fontSize: '0.7rem', color: 'var(--mui-palette-text-secondary)' }}>{caption}</Typography>
                 </Box>
             </Box>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, flexShrink: 0 }}>
                 {actions.filter((a) => a.href).map((a) => (
                     <ChannelActionButton key={a.label} {...a} />
                 ))}
-                <DrawerCopyButton text={value} title={copyTitle} iconColor="#64748b" />
+                <DrawerCopyButton text={value} title={copyTitle} iconColor="var(--mui-palette-text-secondary)" />
             </Box>
         </Box>
     );
@@ -159,7 +159,7 @@ const callAction = (phone: string): ChannelAction => ({
     label: 'Call',
     href: telHref(phone),
     icon: <CallOutlinedIcon sx={{ fontSize: 15 }} />,
-    color: '#2563eb',
+    color: 'var(--crm-text-blue-600)',
 });
 
 export function ContactDetailDrawer({
@@ -200,31 +200,31 @@ export function ContactDetailDrawer({
             ? {
                   label: 'Left Organization / Former Employee',
                   icon: <LogoutOutlinedIcon sx={{ fontSize: 13 }} />,
-                  backgroundColor: '#fef2f2',
-                  color: '#b91c1c',
-                  borderColor: '#fecaca',
+                  backgroundColor: 'var(--mui-palette-error-soft)',
+                  color: 'var(--crm-red-700)',
+                  borderColor: 'var(--mui-palette-error-softBorder)',
               }
             : {
                   label: 'Active Employee',
                   icon: <CheckCircleOutlinedIcon sx={{ fontSize: 13 }} />,
-                  backgroundColor: '#ecfdf5',
-                  color: '#059669',
-                  borderColor: '#a7f3d0',
+                  backgroundColor: 'var(--mui-palette-success-soft)',
+                  color: 'var(--crm-emerald-600)',
+                  borderColor: 'var(--mui-palette-success-softBorder)',
               },
         c.isPrimaryContact
             ? {
                   label: 'Primary Contact',
                   icon: <StarOutlinedIcon sx={{ fontSize: 13 }} />,
-                  backgroundColor: '#eff6ff',
-                  color: '#1d4ed8',
-                  borderColor: '#bfdbfe',
+                  backgroundColor: 'var(--mui-palette-primary-soft)',
+                  color: 'var(--crm-text-blue-700)',
+                  borderColor: 'var(--mui-palette-primary-softBorder)',
               }
             : {
                   label: 'Corporate Contact',
                   icon: <BadgeOutlinedIcon sx={{ fontSize: 13 }} />,
-                  backgroundColor: '#f8fafc',
-                  color: '#475569',
-                  borderColor: '#e2e8f0',
+                  backgroundColor: 'var(--mui-palette-background-subtle)',
+                  color: 'var(--crm-slate-600)',
+                  borderColor: 'var(--mui-palette-border-main)',
               },
     ];
 
@@ -244,7 +244,7 @@ export function ContactDetailDrawer({
             onClose={onClose}
             title={c.name}
             subtitle={`${c.designation ? `${c.designation} • ` : ''}${c.organizationName || 'Independent Contact'}`}
-            avatarBg="linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%)"
+            avatarBg="linear-gradient(135deg, var(--crm-fill-blue-600) 0%, var(--crm-fill-blue-700) 100%)"
             verified={false}
             badges={badges}
             headerActions={{
@@ -264,7 +264,7 @@ export function ContactDetailDrawer({
                                     value={
                                         c.organizationName ? (
                                             <Box component="span" sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.75 }}>
-                                                <ApartmentIcon sx={{ fontSize: 16, color: '#2563eb' }} />
+                                                <ApartmentIcon sx={{ fontSize: 16, color: 'var(--crm-text-blue-600)' }} />
                                                 {organizationId ? (
                                                     <Typography
                                                         component={Link}
@@ -272,7 +272,7 @@ export function ContactDetailDrawer({
                                                         sx={{
                                                             fontSize: '0.9rem',
                                                             fontWeight: 700,
-                                                            color: '#1d4ed8',
+                                                            color: 'var(--crm-text-blue-700)',
                                                             textDecoration: 'none',
                                                             '&:hover': { textDecoration: 'underline' },
                                                         }}
@@ -297,7 +297,7 @@ export function ContactDetailDrawer({
                                             : 'Corporate contact · not an authorized signatory'
                                     }
                                     badge
-                                    badgeColor={c.isPrimaryContact ? '#1d4ed8' : '#475569'}
+                                    badgeColor={c.isPrimaryContact ? 'var(--crm-blue-700)' : 'var(--crm-slate-600)'}
                                 />
                             </DrawerFieldGrid>
                         </DrawerSectionCard>
@@ -311,17 +311,17 @@ export function ContactDetailDrawer({
                                         px: 1.25,
                                         py: 0.75,
                                         borderRadius: '8px',
-                                        backgroundColor: '#fef2f2',
-                                        border: '1px solid #fecaca',
+                                        backgroundColor: 'var(--mui-palette-error-soft)',
+                                        border: '1px solid var(--mui-palette-error-softBorder)',
                                         fontSize: '0.74rem',
                                         fontWeight: 600,
-                                        color: '#b91c1c',
+                                        color: 'var(--crm-red-700)',
                                     }}
                                 >
                                     Do Not Call (DND) is active for this contact.
                                 </Box>
                             )}
-                            <Box sx={{ '& > * + *': { borderTop: '1px dashed #e2e8f0' } }}>
+                            <Box sx={{ '& > * + *': { borderTop: '1px dashed var(--mui-palette-border-main)' } }}>
                                 {c.mobile && (
                                     <ChannelRow
                                         icon={<SmartphoneOutlinedIcon sx={{ fontSize: 18 }} />}
@@ -334,14 +334,14 @@ export function ContactDetailDrawer({
                                                 label: 'WhatsApp',
                                                 href: whatsappHref(c.mobile),
                                                 icon: <WhatsAppIcon sx={{ fontSize: 15 }} />,
-                                                color: '#16a34a',
+                                                color: 'var(--mui-palette-success-main)',
                                                 external: true,
                                             },
                                             {
                                                 label: 'Send SMS',
                                                 href: smsHref(c.mobile),
                                                 icon: <SmsOutlinedIcon sx={{ fontSize: 15 }} />,
-                                                color: '#7c3aed',
+                                                color: 'var(--crm-violet-600)',
                                             },
                                         ]}
                                     />
@@ -378,14 +378,14 @@ export function ContactDetailDrawer({
                                                 label: 'Send email',
                                                 href: mailtoHref(em.email),
                                                 icon: <MailOutlineIcon sx={{ fontSize: 15 }} />,
-                                                color: '#2563eb',
+                                                color: 'var(--crm-text-blue-600)',
                                             },
                                         ]}
                                     />
                                 ))}
                             </Box>
                             {!c.mobile && !c.officePhone && extraPhones.length === 0 && emails.length === 0 && (
-                                <Typography sx={{ fontSize: '0.82rem', color: '#94a3b8' }}>No phone numbers or emails recorded.</Typography>
+                                <Typography sx={{ fontSize: '0.82rem', color: 'var(--mui-palette-text-muted)' }}>No phone numbers or emails recorded.</Typography>
                             )}
                         </DrawerSectionCard>
 
@@ -402,9 +402,9 @@ export function ContactDetailDrawer({
                                                 height: 24,
                                                 fontWeight: 700,
                                                 fontSize: '0.72rem',
-                                                backgroundColor: '#eff6ff',
-                                                color: '#1d4ed8',
-                                                border: '1px solid #dbeafe',
+                                                backgroundColor: 'var(--mui-palette-primary-soft)',
+                                                color: 'var(--crm-text-blue-700)',
+                                                border: '1px solid var(--crm-blue-100)',
                                                 cursor: 'default',
                                             }}
                                         />
@@ -435,16 +435,16 @@ export function ContactDetailDrawer({
                                         {getInitials(assignedDisplayName)}
                                     </Box>
                                     <Box>
-                                        <Typography sx={{ fontSize: '0.88rem', fontWeight: 700, color: '#0f172a', lineHeight: 1.3 }}>
+                                        <Typography sx={{ fontSize: '0.88rem', fontWeight: 700, color: 'var(--crm-slate-900)', lineHeight: 1.3 }}>
                                             {assignedDisplayName}
                                         </Typography>
-                                        <Typography sx={{ fontSize: '0.72rem', color: '#64748b' }}>
+                                        <Typography sx={{ fontSize: '0.72rem', color: 'var(--mui-palette-text-secondary)' }}>
                                             {assignedUser ? `${assignedUser.role} • ${assignedUser.department}` : 'Account Manager'}
                                         </Typography>
                                     </Box>
                                 </Box>
                             ) : (
-                                <Typography sx={{ color: '#94a3b8', fontSize: '0.86rem' }}>Unassigned</Typography>
+                                <Typography sx={{ color: 'var(--mui-palette-text-muted)', fontSize: '0.86rem' }}>Unassigned</Typography>
                             )}
                         </DrawerSectionCard>
 
@@ -453,7 +453,7 @@ export function ContactDetailDrawer({
 
                         {c.description && (
                             <DrawerSectionCard p={1.8} icon={sectionIcon(<NotesOutlinedIcon sx={{ fontSize: 15 }} />)} title="Notes">
-                                <Typography sx={{ fontSize: '0.84rem', color: '#334155', lineHeight: 1.55, whiteSpace: 'pre-wrap' }}>
+                                <Typography sx={{ fontSize: '0.84rem', color: 'var(--crm-slate-700)', lineHeight: 1.55, whiteSpace: 'pre-wrap' }}>
                                     {c.description}
                                 </Typography>
                             </DrawerSectionCard>

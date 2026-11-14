@@ -219,8 +219,8 @@ export function TicketsMasterView() {
                 minWidth: 220,
                 render: (t) => (
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 0 }}>
-                        <ConfirmationNumberOutlinedIcon sx={{ fontSize: 16, color: '#7c3aed', flexShrink: 0 }} />
-                        <Typography noWrap sx={{ fontSize: '0.8rem', color: '#1e293b', fontWeight: 600, maxWidth: 280 }}>
+                        <ConfirmationNumberOutlinedIcon sx={{ fontSize: 16, color: 'var(--crm-violet-600)', flexShrink: 0 }} />
+                        <Typography noWrap sx={{ fontSize: '0.8rem', color: 'var(--mui-palette-text-primary)', fontWeight: 600, maxWidth: 280 }}>
                             {t.ticketSubject || t.problemReported || '-'}
                         </Typography>
                     </Box>
@@ -232,7 +232,7 @@ export function TicketsMasterView() {
                 sortable: true,
                 minWidth: 200,
                 render: (t) => (
-                    <Typography noWrap sx={{ fontSize: '0.8rem', fontWeight: 600, color: '#334155', maxWidth: 240 }}>
+                    <Typography noWrap sx={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--crm-slate-700)', maxWidth: 240 }}>
                         {t.organizationName || '-'}
                     </Typography>
                 ),
@@ -244,8 +244,8 @@ export function TicketsMasterView() {
                 minWidth: 150,
                 render: (t) => (
                     <Box>
-                        <Typography sx={{ fontSize: '0.8rem', color: '#334155', lineHeight: 1.3 }}>{t.contactPersonName || '-'}</Typography>
-                        {t.contactNumber && <Typography sx={{ fontSize: '0.72rem', color: '#94a3b8' }}>{t.contactNumber}</Typography>}
+                        <Typography sx={{ fontSize: '0.8rem', color: 'var(--crm-slate-700)', lineHeight: 1.3 }}>{t.contactPersonName || '-'}</Typography>
+                        {t.contactNumber && <Typography sx={{ fontSize: '0.72rem', color: 'var(--mui-palette-text-muted)' }}>{t.contactNumber}</Typography>}
                     </Box>
                 ),
             },
@@ -268,7 +268,7 @@ export function TicketsMasterView() {
                 label: 'NATURE OF CALL',
                 sortable: true,
                 minWidth: 150,
-                render: (t) => <Typography sx={{ fontSize: '0.78rem', color: '#475569' }}>{t.natureOfCall || '-'}</Typography>,
+                render: (t) => <Typography sx={{ fontSize: '0.78rem', color: 'var(--crm-slate-600)' }}>{t.natureOfCall || '-'}</Typography>,
             },
             {
                 id: 'dueDate',
@@ -279,10 +279,10 @@ export function TicketsMasterView() {
                     const overdue = isTicketOverdue(t, now);
                     return (
                         <Box>
-                            <Typography sx={{ fontSize: '0.78rem', fontWeight: overdue ? 700 : 500, color: overdue ? '#dc2626' : '#475569' }}>
+                            <Typography sx={{ fontSize: '0.78rem', fontWeight: overdue ? 700 : 500, color: overdue ? 'var(--mui-palette-error-main)' : 'var(--crm-slate-600)' }}>
                                 {formatTicketDue(t.dueDate)}
                             </Typography>
-                            {overdue && <Typography sx={{ fontSize: '0.68rem', fontWeight: 700, color: '#dc2626' }}>Overdue</Typography>}
+                            {overdue && <Typography sx={{ fontSize: '0.68rem', fontWeight: 700, color: 'var(--mui-palette-error-main)' }}>Overdue</Typography>}
                         </Box>
                     );
                 },
@@ -292,7 +292,7 @@ export function TicketsMasterView() {
                 label: 'ASSIGNED TO',
                 sortable: true,
                 minWidth: 140,
-                render: (t) => <Typography sx={{ fontSize: '0.78rem', color: '#475569' }}>{assigneeName(t.assignedTo) || '-'}</Typography>,
+                render: (t) => <Typography sx={{ fontSize: '0.78rem', color: 'var(--crm-slate-600)' }}>{assigneeName(t.assignedTo) || '-'}</Typography>,
             },
         ],
         [now]
@@ -374,7 +374,7 @@ export function TicketsMasterView() {
             emptyDescription="No support tickets match your current search and filter criteria."
             emptyActionLabel="Log Ticket"
             onEmptyAction={() => router.push(ROUTES.TICKET_NEW)}
-            emptyIcon={<ConfirmationNumberOutlinedIcon sx={{ fontSize: 48, color: '#cbd5e1' }} />}
+            emptyIcon={<ConfirmationNumberOutlinedIcon sx={{ fontSize: 48, color: 'var(--crm-slate-300)' }} />}
             pagination={{
                 page,
                 rowsPerPage,

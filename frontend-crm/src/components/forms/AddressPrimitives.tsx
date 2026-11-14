@@ -14,6 +14,8 @@ import { FIELD_MAX_LENGTH, type FieldSize } from './fieldSizing';
 import { ReadOnlyField } from './ReadOnlyField';
 import { useTabSelect } from './useTabSelect';
 import { useFormMode } from '@/context/FormModeContext';
+import { useConfiguredPlaceholder } from '@/context/FormConfigContext';
+import { useUndoSafeSanitizer } from './undoSafeInput';
 import {
     COUNTRY_OPTIONS,
     DEFAULT_COUNTRY_CODE,
@@ -128,13 +130,14 @@ export function CountrySelectField({
     onChange,
     required,
     disabled,
-    placeholder = 'Select Country',
+    placeholder: codedPlaceholder = 'Select Country',
     hint,
     error,
     size = 'md',
 }: CountrySelectFieldProps) {
     const { mode } = useFormMode();
     const tabSelect = useTabSelect();
+    const placeholder = useConfiguredPlaceholder(name, codedPlaceholder);
     if (mode === 'view') {
         return <ReadOnlyField label={label} value={getCountryNameByCode(value)} hideWhenEmpty sx={{ mb: 2 }} />;
     }
@@ -158,7 +161,7 @@ export function CountrySelectField({
                     return (
                         <Box component="li" key={key} {...rest} sx={{ display: 'flex', justifyContent: 'space-between', gap: 1 }}>
                             <Typography sx={{ fontSize: '0.84rem' }}>{option.countryName}</Typography>
-                            <Typography sx={{ fontSize: '0.72rem', color: '#94a3b8', fontFamily: 'monospace' }}>
+                            <Typography sx={{ fontSize: '0.72rem', color: 'var(--mui-palette-text-muted)', fontFamily: 'monospace' }}>
                                 {option.iso2Code}
                             </Typography>
                         </Box>
@@ -218,13 +221,13 @@ export function StateRegionField({
             if (reason === 'input' || reason === 'clear') onChange(next);
         },
     });
+    const resolvedPlaceholder = useConfiguredPlaceholder(
+        name,
+        placeholder ?? (manualEntry || !hasSubdivisions ? 'Type state / province / region' : 'Search or select state / region'),
+    );
     if (mode === 'view') {
         return <ReadOnlyField label={label} value={value} hideWhenEmpty sx={{ mb: 2 }} />;
     }
-
-    const resolvedPlaceholder =
-        placeholder ??
-        (manualEntry || !hasSubdivisions ? 'Type state / province / region' : 'Search or select state / region');
 
     return (
         <FormField name={name} label={label} required={required} hint={hint} size={size}>
@@ -298,12 +301,13 @@ export function CityAutocompleteField({
     countryValue,
     required,
     disabled,
-    placeholder = 'Enter city',
+    placeholder: codedPlaceholder = 'Enter city',
     hint,
     error,
     size = 'md',
 }: CityAutocompleteFieldProps) {
     const { mode } = useFormMode();
+    const placeholder = useConfiguredPlaceholder(name, codedPlaceholder);
     // Any city can be typed: Tab keeps the typed text unless the user arrowed to a suggestion.
     const tabSelect = useTabSelect({
         freeText: true,
@@ -371,14 +375,18 @@ export function PostalCodeField({
     size = 'xs',
 }: PostalCodeFieldProps) {
     const config = getPostalCodeConfig(countryValue);
+    const resolvedPlaceholder = useConfiguredPlaceholder(name, placeholder ?? config.placeholder);
+    // Filter before insertion (keeps Ctrl+Z working) instead of only rewriting the value afterwards.
+    const sanitizerRef = useUndoSafeSanitizer(config.sanitize);
     return (
         <FormField name={name} label={label ?? config.label} required={required} hint={hint} size={size}>
             <TextField
+                inputRef={sanitizerRef}
                 fullWidth
                 size="small"
                 value={value ?? ''}
                 onChange={(e) => onChange(config.sanitize(e.target.value))}
-                placeholder={placeholder ?? config.placeholder}
+                placeholder={resolvedPlaceholder}
                 disabled={disabled}
                 error={Boolean(error)}
                 helperText={error}

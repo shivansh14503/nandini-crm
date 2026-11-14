@@ -34,7 +34,7 @@ export function RhfCheckbox<T extends FieldValues>({ name, label }: RhfCheckboxP
                     />
                 }
                 label={
-                    <Typography sx={{ fontSize: '0.84rem', fontWeight: 600, color: '#374151' }}>
+                    <Typography sx={{ fontSize: '0.84rem', fontWeight: 600, color: 'var(--crm-gray-700)' }}>
                         {label}
                     </Typography>
                 }

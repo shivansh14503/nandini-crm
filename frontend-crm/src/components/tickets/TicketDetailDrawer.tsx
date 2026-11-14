@@ -35,7 +35,7 @@ export interface TicketDetailDrawerProps {
 }
 
 const sectionIcon = (icon: React.ReactNode) => (
-    <Box sx={{ color: '#2563eb', display: 'inline-flex' }}>{icon}</Box>
+    <Box sx={{ color: 'var(--crm-text-blue-600)', display: 'inline-flex' }}>{icon}</Box>
 );
 
 const getInitials = (name: string) => {
@@ -48,10 +48,10 @@ function TextBlock({ label, value }: { label: string; value?: string }) {
     if (!value?.trim()) return null;
     return (
         <Box sx={{ '& + &': { mt: 1.5 } }}>
-            <Typography sx={{ fontSize: '0.68rem', fontWeight: 700, color: '#64748b', letterSpacing: 0.3, mb: 0.4 }}>
+            <Typography sx={{ fontSize: '0.68rem', fontWeight: 700, color: 'var(--mui-palette-text-secondary)', letterSpacing: 0.3, mb: 0.4 }}>
                 {label.toUpperCase()}
             </Typography>
-            <Typography sx={{ fontSize: '0.84rem', color: '#334155', lineHeight: 1.55, whiteSpace: 'pre-wrap' }}>{value}</Typography>
+            <Typography sx={{ fontSize: '0.84rem', color: 'var(--crm-slate-700)', lineHeight: 1.55, whiteSpace: 'pre-wrap' }}>{value}</Typography>
         </Box>
     );
 }
@@ -61,7 +61,7 @@ const flagChip = (label: string) => (
         key={label}
         label={label}
         size="small"
-        sx={{ height: 20, fontSize: '0.68rem', fontWeight: 700, backgroundColor: '#eff6ff', color: '#1d4ed8', border: '1px solid #bfdbfe' }}
+        sx={{ height: 20, fontSize: '0.68rem', fontWeight: 700, backgroundColor: 'var(--mui-palette-primary-soft)', color: 'var(--crm-text-blue-700)', border: '1px solid var(--mui-palette-primary-softBorder)' }}
     />
 );
 
@@ -92,15 +92,15 @@ export function TicketDetailDrawer({ ticket, open, onClose, onEdit, hideBackdrop
                 {
                     label: t.ticketNumber,
                     isMonospace: true,
-                    backgroundColor: '#eff6ff',
-                    color: '#1d4ed8',
-                    borderColor: '#bfdbfe',
+                    backgroundColor: 'var(--mui-palette-primary-soft)',
+                    color: 'var(--crm-text-blue-700)',
+                    borderColor: 'var(--mui-palette-primary-softBorder)',
                 },
                 {
                     label: t.natureOfCall || 'General',
-                    backgroundColor: '#f8fafc',
-                    color: '#475569',
-                    borderColor: '#e2e8f0',
+                    backgroundColor: 'var(--mui-palette-background-subtle)',
+                    color: 'var(--crm-slate-600)',
+                    borderColor: 'var(--mui-palette-border-main)',
                 },
             ]}
             headerActions={{
@@ -113,15 +113,15 @@ export function TicketDetailDrawer({ ticket, open, onClose, onEdit, hideBackdrop
                     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
                         <DrawerMetricGrid
                             items={[
-                                { label: 'PRIORITY', value: <TicketPriorityPill priority={t.ticketPriority} />, bg: '#f8fafc', borderColor: '#f1f5f9', p: 1.2 },
-                                { label: 'STATUS', value: <TicketStatusPill status={t.ticketStatus} />, bg: '#f8fafc', borderColor: '#f1f5f9', p: 1.2 },
+                                { label: 'PRIORITY', value: <TicketPriorityPill priority={t.ticketPriority} />, bg: 'var(--mui-palette-background-subtle)', borderColor: 'var(--mui-palette-border-light)', p: 1.2 },
+                                { label: 'STATUS', value: <TicketStatusPill status={t.ticketStatus} />, bg: 'var(--mui-palette-background-subtle)', borderColor: 'var(--mui-palette-border-light)', p: 1.2 },
                                 {
                                     label: 'SUPPORT TYPE',
                                     value: t.supportType,
                                     valueSize: '0.92rem',
                                     valueWeight: 800,
-                                    bg: '#f8fafc',
-                                    borderColor: '#f1f5f9',
+                                    bg: 'var(--mui-palette-background-subtle)',
+                                    borderColor: 'var(--mui-palette-border-light)',
                                     p: 1.2,
                                     sublabel: flags.length ? <Box sx={{ display: 'flex', gap: 0.5, mt: 0.6 }}>{flags.map(flagChip)}</Box> : undefined,
                                 },
@@ -130,13 +130,13 @@ export function TicketDetailDrawer({ ticket, open, onClose, onEdit, hideBackdrop
                                     value: formatTicketDue(t.dueDate),
                                     valueSize: '0.86rem',
                                     valueWeight: 800,
-                                    labelColor: overdue ? '#b91c1c' : undefined,
-                                    valueColor: overdue ? '#b91c1c' : '#0f172a',
-                                    bg: overdue ? '#fef2f2' : '#f8fafc',
-                                    borderColor: overdue ? '#fecaca' : '#f1f5f9',
+                                    labelColor: overdue ? 'var(--crm-red-700)' : undefined,
+                                    valueColor: overdue ? 'var(--crm-red-700)' : 'var(--crm-slate-900)',
+                                    bg: overdue ? 'var(--mui-palette-error-soft)' : 'var(--mui-palette-background-subtle)',
+                                    borderColor: overdue ? 'var(--mui-palette-error-softBorder)' : 'var(--mui-palette-border-light)',
                                     p: 1.2,
                                     sublabel: overdue ? (
-                                        <Typography sx={{ fontSize: '0.7rem', fontWeight: 700, color: '#dc2626', mt: 0.4 }}>Overdue</Typography>
+                                        <Typography sx={{ fontSize: '0.7rem', fontWeight: 700, color: 'var(--mui-palette-error-main)', mt: 0.4 }}>Overdue</Typography>
                                     ) : undefined,
                                 },
                             ]}
@@ -161,7 +161,7 @@ export function TicketDetailDrawer({ ticket, open, onClose, onEdit, hideBackdrop
                                     <TextBlock label="Additional Description" value={t.addDescription} />
                                 </>
                             ) : (
-                                <Typography sx={{ color: '#94a3b8', fontSize: '0.84rem' }}>No resolution recorded yet.</Typography>
+                                <Typography sx={{ color: 'var(--mui-palette-text-muted)', fontSize: '0.84rem' }}>No resolution recorded yet.</Typography>
                             )}
                         </DrawerSectionCard>
 
@@ -199,16 +199,16 @@ export function TicketDetailDrawer({ ticket, open, onClose, onEdit, hideBackdrop
                                         {getInitials(assignedDisplayName)}
                                     </Box>
                                     <Box>
-                                        <Typography sx={{ fontSize: '0.88rem', fontWeight: 700, color: '#0f172a', lineHeight: 1.3 }}>
+                                        <Typography sx={{ fontSize: '0.88rem', fontWeight: 700, color: 'var(--crm-slate-900)', lineHeight: 1.3 }}>
                                             {assignedDisplayName}
                                         </Typography>
-                                        <Typography sx={{ fontSize: '0.72rem', color: '#64748b' }}>
+                                        <Typography sx={{ fontSize: '0.72rem', color: 'var(--mui-palette-text-secondary)' }}>
                                             {assignedUser ? `${assignedUser.role} • ${assignedUser.department}` : 'Support Representative'}
                                         </Typography>
                                     </Box>
                                 </Box>
                             ) : (
-                                <Typography sx={{ color: '#94a3b8', fontSize: '0.86rem' }}>Unassigned</Typography>
+                                <Typography sx={{ color: 'var(--mui-palette-text-muted)', fontSize: '0.86rem' }}>Unassigned</Typography>
                             )}
                         </DrawerSectionCard>
 
@@ -224,7 +224,7 @@ export function TicketDetailDrawer({ ticket, open, onClose, onEdit, hideBackdrop
                                 <ReadOnlyField label="Partner Company Contact" value={t.partnerCompanyContact} />
                             </Box>
                         ) : (
-                            <Typography sx={{ color: '#94a3b8', fontSize: '0.84rem' }}>No partner company involved.</Typography>
+                            <Typography sx={{ color: 'var(--mui-palette-text-muted)', fontSize: '0.84rem' }}>No partner company involved.</Typography>
                         )}
                     </DrawerSectionCard>
                 ),

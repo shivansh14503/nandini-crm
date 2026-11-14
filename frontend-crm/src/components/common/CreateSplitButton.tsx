@@ -13,8 +13,8 @@ export interface CreateSplitButtonProps {
     disabled?: boolean;
 }
 
-const gradient = 'linear-gradient(135deg, #1d4ed8 0%, #2563eb 100%)';
-const gradientHover = 'linear-gradient(135deg, #1e40af 0%, #1d4ed8 100%)';
+const gradient = 'linear-gradient(135deg, var(--crm-fill-blue-700) 0%, var(--crm-fill-blue-600) 100%)';
+const gradientHover = 'linear-gradient(135deg, var(--crm-fill-blue-800) 0%, var(--crm-fill-blue-700) 100%)';
 
 const baseSx = {
     background: gradient,
@@ -25,10 +25,10 @@ const baseSx = {
     height: 36,
     boxShadow: 'none',
     '&:hover': { background: gradientHover, boxShadow: 'none' },
-    '&.Mui-disabled': { background: '#cbd5e1', color: '#fff' },
+    '&.Mui-disabled': { background: 'var(--crm-slate-300)', color: '#fff' },
 } as const;
 
-const menuItemSx = { fontSize: '0.84rem', fontWeight: 500, color: '#334155' } as const;
+const menuItemSx = { fontSize: '0.84rem', fontWeight: 500, color: 'var(--crm-slate-700)' } as const;
 
 export function CreateSplitButton({ newButtonLabel, onNewClick, onImportClick, disabled }: CreateSplitButtonProps) {
     const [anchorEl, setAnchorEl] = useState<HTMLDivElement | null>(null);
@@ -79,19 +79,19 @@ export function CreateSplitButton({ newButtonLabel, onNewClick, onImportClick, d
                 transformOrigin={{ vertical: 'top', horizontal: 'right' }}
                 slotProps={{
                     paper: {
-                        sx: { mt: 0.5, minWidth: 230, border: '1px solid #e2e8f0', borderRadius: '10px', boxShadow: '0 8px 24px rgba(15,23,42,0.10)' },
+                        sx: { mt: 0.5, minWidth: 230, border: '1px solid var(--mui-palette-border-main)', borderRadius: '10px', boxShadow: '0 8px 24px rgba(15,23,42,0.10)' },
                     },
                 }}
             >
                 <MenuItem onClick={run(onNewClick)} sx={menuItemSx}>
                     <ListItemIcon sx={{ minWidth: 30 }}>
-                        <AddIcon sx={{ fontSize: 18, color: '#2563eb' }} />
+                        <AddIcon sx={{ fontSize: 18, color: 'var(--crm-text-blue-600)' }} />
                     </ListItemIcon>
                     <ListItemText slotProps={{ primary: { sx: { fontSize: '0.84rem' } } }}>{newButtonLabel}</ListItemText>
                 </MenuItem>
                 <MenuItem onClick={run(onImportClick)} sx={menuItemSx}>
                     <ListItemIcon sx={{ minWidth: 30 }}>
-                        <FileUploadOutlinedIcon sx={{ fontSize: 18, color: '#2563eb' }} />
+                        <FileUploadOutlinedIcon sx={{ fontSize: 18, color: 'var(--crm-text-blue-600)' }} />
                     </ListItemIcon>
                     <ListItemText slotProps={{ primary: { sx: { fontSize: '0.84rem' } } }}>Import from CSV / Excel</ListItemText>
                 </MenuItem>

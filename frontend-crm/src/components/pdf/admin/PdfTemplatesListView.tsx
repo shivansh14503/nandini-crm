@@ -31,8 +31,8 @@ const actionIconSx = {
     width: 28,
     height: 28,
     borderRadius: '6px',
-    color: '#64748b',
-    '&:hover': { color: '#1d4ed8', backgroundColor: '#eff6ff' },
+    color: 'var(--mui-palette-text-secondary)',
+    '&:hover': { color: 'var(--crm-blue-700)', backgroundColor: 'var(--mui-palette-primary-soft)' },
 } as const;
 
 const formatUpdated = (iso: string) => {
@@ -87,9 +87,9 @@ export function PdfTemplatesListView() {
             minWidth: 220,
             render: (t) => (
                 <Box sx={{ minWidth: 0 }}>
-                    <Typography sx={{ fontSize: '0.85rem', fontWeight: 700, color: '#0f172a' }}>{t.name}</Typography>
+                    <Typography sx={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--crm-slate-900)' }}>{t.name}</Typography>
                     {t.description && (
-                        <Typography noWrap sx={{ fontSize: '0.75rem', color: '#64748b', maxWidth: 420 }}>
+                        <Typography noWrap sx={{ fontSize: '0.75rem', color: 'var(--mui-palette-text-secondary)', maxWidth: 420 }}>
                             {t.description}
                         </Typography>
                     )}
@@ -105,7 +105,7 @@ export function PdfTemplatesListView() {
             render: (t) =>
                 t.isDefault ? (
                     <Tooltip title={`Used when users click Print / PDF on a ${PDF_MODULE_LABELS[t.module].toLowerCase()}`}>
-                        <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5, color: '#1d4ed8' }}>
+                        <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5, color: 'var(--crm-text-blue-700)' }}>
                             <RadioButtonCheckedRoundedIcon sx={{ fontSize: 18 }} />
                             <StatusChip tone="default">Default</StatusChip>
                         </Box>
@@ -123,7 +123,7 @@ export function PdfTemplatesListView() {
                                     e.stopPropagation();
                                     void makeDefault(t);
                                 }}
-                                sx={{ textTransform: 'none', fontSize: '0.78rem', fontWeight: 600, color: '#64748b', borderRadius: '8px', px: 1, '&:hover': { color: '#1d4ed8', backgroundColor: '#eff6ff' } }}
+                                sx={{ textTransform: 'none', fontSize: '0.78rem', fontWeight: 600, color: 'var(--mui-palette-text-secondary)', borderRadius: '8px', px: 1, '&:hover': { color: 'var(--crm-blue-700)', backgroundColor: 'var(--mui-palette-primary-soft)' } }}
                             >
                                 Make default
                             </Button>
@@ -140,8 +140,8 @@ export function PdfTemplatesListView() {
             minWidth: 170,
             render: (t) => (
                 <Box>
-                    <Typography sx={{ fontSize: '0.8rem', color: '#334155' }}>{formatUpdated(t.updatedAt)}</Typography>
-                    <Typography sx={{ fontSize: '0.72rem', color: '#94a3b8' }}>{t.updatedBy || t.createdBy}</Typography>
+                    <Typography sx={{ fontSize: '0.8rem', color: 'var(--crm-slate-700)' }}>{formatUpdated(t.updatedAt)}</Typography>
+                    <Typography sx={{ fontSize: '0.72rem', color: 'var(--mui-palette-text-muted)' }}>{t.updatedBy || t.createdBy}</Typography>
                 </Box>
             ),
         },
@@ -185,7 +185,7 @@ export function PdfTemplatesListView() {
                         }}
                         sx={actionIconSx}
                     >
-                        {t.isActive ? <ToggleOnOutlinedIcon sx={{ fontSize: 18, color: '#059669' }} /> : <ToggleOffOutlinedIcon sx={{ fontSize: 18 }} />}
+                        {t.isActive ? <ToggleOnOutlinedIcon sx={{ fontSize: 18, color: 'var(--crm-emerald-600)' }} /> : <ToggleOffOutlinedIcon sx={{ fontSize: 18 }} />}
                     </IconButton>
                 </span>
             </Tooltip>
@@ -195,14 +195,14 @@ export function PdfTemplatesListView() {
     return (
         <>
             <Box sx={{ ...surfaceSx, p: { xs: 2, md: 2.5 }, mb: 2, display: 'flex', alignItems: 'center', gap: 1.5, flexWrap: 'wrap' }}>
-                <Box sx={{ width: 40, height: 40, borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: '#eff6ff', border: '1px solid #bfdbfe', color: '#2563eb' }}>
+                <Box sx={{ width: 40, height: 40, borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: 'var(--mui-palette-primary-soft)', border: '1px solid var(--mui-palette-primary-softBorder)', color: 'var(--crm-text-blue-600)' }}>
                     <PictureAsPdfOutlinedIcon />
                 </Box>
                 <Box sx={{ flex: '1 1 260px', minWidth: 0 }}>
-                    <Typography component="h1" sx={{ fontSize: '1.05rem', fontWeight: 700, color: '#0f172a' }}>
+                    <Typography component="h1" sx={{ fontSize: '1.05rem', fontWeight: 700, color: 'var(--crm-slate-900)' }}>
                         PDF Templates
                     </Typography>
-                    <Typography sx={{ fontSize: '0.8rem', color: '#64748b' }}>
+                    <Typography sx={{ fontSize: '0.8rem', color: 'var(--mui-palette-text-secondary)' }}>
                         System templates are read-only; duplicate one to customise it. The default template is used when users click Print / PDF.
                     </Typography>
                 </Box>

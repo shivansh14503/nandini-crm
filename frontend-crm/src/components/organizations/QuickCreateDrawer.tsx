@@ -33,6 +33,7 @@ import type { ExtendedOrganization } from '@/types/organization.types';
 import { useDropdownOptionsGetter } from '@/hooks/queries/useFormConfigs';
 import { OrganizationNameAutocomplete } from './OrganizationNameAutocomplete';
 import { useOrganizationNameCheck } from './useOrganizationNameCheck';
+import { upperCase, useUndoSafeSanitizer } from '@/components/forms/undoSafeInput';
 
 export interface QuickCreateDrawerProps {
     open: boolean;
@@ -55,6 +56,8 @@ const DEFAULT_QUICK_FORM = {
 export function QuickCreateDrawer({ open, onClose, onSave }: QuickCreateDrawerProps) {
     const getOptions = useDropdownOptionsGetter();
     const [formData, setFormData] = useState(DEFAULT_QUICK_FORM);
+    // Uppercase GSTIN as it's typed / pasted, keeping Ctrl+Z working.
+    const gstInputRef = useUndoSafeSanitizer(upperCase);
     const [verifyingGst, setVerifyingGst] = useState(false);
     const [gstVerified, setGstVerified] = useState(false);
     const [errorMsg, setErrorMsg] = useState('');
@@ -169,11 +172,11 @@ export function QuickCreateDrawer({ open, onClose, onSave }: QuickCreateDrawerPr
                             width: 32,
                             height: 32,
                             borderRadius: '8px',
-                            backgroundColor: '#1e3a8a',
+                            backgroundColor: 'var(--crm-fill-blue-900)',
                             display: 'flex',
                             alignItems: 'center',
                             justifyContent: 'center',
-                            color: '#60a5fa',
+                            color: 'var(--crm-text-blue-400)',
                         }}
                     >
                         <AddIcon fontSize="small" />
@@ -182,7 +185,7 @@ export function QuickCreateDrawer({ open, onClose, onSave }: QuickCreateDrawerPr
                         <Typography variant="subtitle1" sx={{ fontWeight: 700, fontSize: '0.98rem', color: '#fff' }}>
                             Quick Create Organization
                         </Typography>
-                        <Typography variant="caption" sx={{ color: '#94a3b8', fontSize: '0.74rem' }}>
+                        <Typography variant="caption" sx={{ color: 'var(--mui-palette-text-muted)', fontSize: '0.74rem' }}>
                             Add an account directly to the master directory
                         </Typography>
                     </Box>
@@ -190,7 +193,7 @@ export function QuickCreateDrawer({ open, onClose, onSave }: QuickCreateDrawerPr
                 <IconButton
                     size="small"
                     onClick={onClose}
-                    sx={{ color: '#94a3b8', '&:hover': { color: '#fff' } }}
+                    sx={{ color: 'var(--mui-palette-text-muted)', '&:hover': { color: '#fff' } }}
                 >
                     <CloseIcon fontSize="small" />
                 </IconButton>
@@ -252,8 +255,8 @@ export function QuickCreateDrawer({ open, onClose, onSave }: QuickCreateDrawerPr
                                 hint={
                                     gstVerified ? (
                                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                                            <CheckCircleOutlinedIcon sx={{ fontSize: 14, color: '#16a34a' }} />
-                                            <Typography sx={{ fontSize: '0.74rem', color: '#16a34a', fontWeight: 600 }}>
+                                            <CheckCircleOutlinedIcon sx={{ fontSize: 14, color: 'var(--mui-palette-success-main)' }} />
+                                            <Typography sx={{ fontSize: '0.74rem', color: 'var(--mui-palette-success-main)', fontWeight: 600 }}>
                                                 GSTIN Verified
                                             </Typography>
                                         </Box>
@@ -266,7 +269,7 @@ export function QuickCreateDrawer({ open, onClose, onSave }: QuickCreateDrawerPr
                                                 fontSize: '0.74rem',
                                                 fontWeight: 700,
                                                 textTransform: 'none',
-                                                color: '#2563eb',
+                                                color: 'var(--crm-text-blue-600)',
                                                 p: 0,
                                                 minWidth: 0,
                                                 '&:hover': { textDecoration: 'underline', backgroundColor: 'transparent' },
@@ -284,6 +287,7 @@ export function QuickCreateDrawer({ open, onClose, onSave }: QuickCreateDrawerPr
                                     placeholder="E.G. 07AAAAA0000A1Z5"
                                     value={formData.gstNumber}
                                     onChange={(e) => handleChange('gstNumber', e.target.value.toUpperCase())}
+                                    inputRef={gstInputRef}
                                     slotProps={{ htmlInput: { maxLength: FIELD_MAX_LENGTH.gstin } }}
                                     sx={fieldSx}
                                 />
@@ -339,13 +343,13 @@ export function QuickCreateDrawer({ open, onClose, onSave }: QuickCreateDrawerPr
                                     gap: 1,
                                     height: 38,
                                     px: 1.5,
-                                    border: '1px solid #d1d5db',
+                                    border: '1px solid var(--crm-gray-300)',
                                     borderRadius: '8px',
-                                    backgroundColor: '#fff',
+                                    backgroundColor: 'var(--mui-palette-background-paper)',
                                 }}
                             >
                                 <Box sx={{ width: 8, height: 8, borderRadius: '50%', backgroundColor: '#22c55e' }} />
-                                <Typography sx={{ fontSize: '0.82rem', fontWeight: 600, color: '#15803d' }}>
+                                <Typography sx={{ fontSize: '0.82rem', fontWeight: 600, color: 'var(--crm-green-700)' }}>
                                     Active Account
                                 </Typography>
                             </Box>
@@ -358,15 +362,15 @@ export function QuickCreateDrawer({ open, onClose, onSave }: QuickCreateDrawerPr
                     sx={{
                         p: 1.8,
                         borderRadius: '8px',
-                        backgroundColor: '#eff6ff',
-                        border: '1px solid #bfdbfe',
+                        backgroundColor: 'var(--mui-palette-primary-soft)',
+                        border: '1px solid var(--mui-palette-primary-softBorder)',
                         display: 'flex',
                         alignItems: 'flex-start',
                         gap: 1.2,
                     }}
                 >
-                    <InfoOutlinedIcon sx={{ fontSize: 18, color: '#2563eb', mt: 0.2, flexShrink: 0 }} />
-                    <Typography sx={{ fontSize: '0.76rem', color: '#1e40af', lineHeight: 1.45 }}>
+                    <InfoOutlinedIcon sx={{ fontSize: 18, color: 'var(--crm-text-blue-600)', mt: 0.2, flexShrink: 0 }} />
+                    <Typography sx={{ fontSize: '0.76rem', color: 'var(--crm-text-blue-800)', lineHeight: 1.45 }}>
                         Creating this organization will automatically verify with GSTN and make it accessible across Sales &amp; Invoicing.
                     </Typography>
                 </Box>
@@ -377,8 +381,8 @@ export function QuickCreateDrawer({ open, onClose, onSave }: QuickCreateDrawerPr
                 sx={{
                     px: 3,
                     py: 2,
-                    borderTop: '1px solid #e2e8f0',
-                    backgroundColor: '#fff',
+                    borderTop: '1px solid var(--mui-palette-border-main)',
+                    backgroundColor: 'var(--mui-palette-background-paper)',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'space-between',
@@ -390,10 +394,10 @@ export function QuickCreateDrawer({ open, onClose, onSave }: QuickCreateDrawerPr
                     onClick={onClose}
                     sx={{
                         textTransform: 'none',
-                        color: '#64748b',
+                        color: 'var(--mui-palette-text-secondary)',
                         fontWeight: 600,
                         fontSize: '0.84rem',
-                        '&:hover': { backgroundColor: '#f1f5f9' },
+                        '&:hover': { backgroundColor: 'var(--mui-palette-background-hover)' },
                     }}
                 >
                     Cancel
@@ -404,7 +408,7 @@ export function QuickCreateDrawer({ open, onClose, onSave }: QuickCreateDrawerPr
                         variant="contained"
                         onClick={() => handleSave(false)}
                         sx={{
-                            background: 'linear-gradient(135deg, #1d4ed8 0%, #2563eb 100%)',
+                            background: 'linear-gradient(135deg, var(--crm-fill-blue-700) 0%, var(--crm-fill-blue-600) 100%)',
                             color: '#fff',
                             textTransform: 'none',
                             fontWeight: 700,
@@ -412,8 +416,8 @@ export function QuickCreateDrawer({ open, onClose, onSave }: QuickCreateDrawerPr
                             borderRadius: '8px',
                             height: 36,
                             px: 2.2,
-                            boxShadow: '0 2px 6px rgba(37,99,235,0.3)',
-                            '&:hover': { background: 'linear-gradient(135deg, #1e40af 0%, #1d4ed8 100%)' },
+                            boxShadow: '0 2px 6px rgb(var(--crm-accent-rgb) / 0.3)',
+                            '&:hover': { background: 'linear-gradient(135deg, var(--crm-fill-blue-800) 0%, var(--crm-fill-blue-700) 100%)' },
                         }}
                     >
                         Save Organization

@@ -57,7 +57,7 @@ export function RhfChipGroup<T extends FieldValues>({
                                     key={option}
                                     label={display(option)}
                                     size="small"
-                                    sx={{ fontSize: '0.74rem', fontWeight: 600, cursor: 'default', color: '#1d4ed8', backgroundColor: '#eff6ff' }}
+                                    sx={{ fontSize: '0.74rem', fontWeight: 600, cursor: 'default', color: 'var(--crm-text-blue-700)', backgroundColor: 'var(--mui-palette-primary-soft)' }}
                                 />
                             ))}
                         </Box>
@@ -90,9 +90,9 @@ export function RhfChipGroup<T extends FieldValues>({
                                 fontSize: '0.74rem',
                                 fontWeight: 600,
                                 cursor: 'pointer',
-                                backgroundColor: isArchived ? '#fef3c7' : active ? '#dcfce7' : '#f1f5f9',
-                                color: isArchived ? '#b45309' : active ? '#166534' : '#475569',
-                                border: `1px ${isArchived ? 'dashed' : 'solid'} ${isArchived ? '#fde68a' : active ? '#86efac' : '#e2e8f0'}`,
+                                backgroundColor: isArchived ? 'var(--crm-amber-100)' : active ? 'var(--crm-green-100)' : 'var(--mui-palette-background-hover)',
+                                color: isArchived ? 'var(--crm-amber-700)' : active ? 'var(--crm-green-800)' : 'var(--crm-slate-600)',
+                                border: `1px ${isArchived ? 'dashed' : 'solid'} ${isArchived ? 'var(--mui-palette-warning-softBorder)' : active ? 'var(--crm-green-300)' : 'var(--mui-palette-border-main)'}`,
                             }}
                         />
                     );

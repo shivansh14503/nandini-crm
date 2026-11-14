@@ -153,13 +153,13 @@ export function RhfAddressSection<T extends FieldValues>({
             <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' }, gap: { xs: 3, md: 4 } }}>
                 {billingLine && (
                     <Box sx={columnSx}>
-                        <SectionLabel icon={<PlaceOutlinedIcon sx={{ fontSize: 18, color: '#2563eb' }} />} label={billingTitle} sx={{ mb: 1 }} />
+                        <SectionLabel icon={<PlaceOutlinedIcon sx={{ fontSize: 18, color: 'var(--crm-text-blue-600)' }} />} label={billingTitle} sx={{ mb: 1 }} />
                         <ReadOnlyField label="Address" value={billingLine} copyable />
                     </Box>
                 )}
                 {shippingLine && (
                     <Box sx={columnSx}>
-                        <SectionLabel icon={<LocalShippingOutlinedIcon sx={{ fontSize: 18, color: '#64748b' }} />} label={shippingTitle} sx={{ mb: 1 }} />
+                        <SectionLabel icon={<LocalShippingOutlinedIcon sx={{ fontSize: 18, color: 'var(--mui-palette-text-secondary)' }} />} label={shippingTitle} sx={{ mb: 1 }} />
                         <ReadOnlyField label="Address" value={shippingLine} copyable />
                     </Box>
                 )}
@@ -179,7 +179,7 @@ export function RhfAddressSection<T extends FieldValues>({
             <Box sx={columnSx}>
                 <Box sx={headerRowSx}>
                     <SectionLabel
-                        icon={<PlaceOutlinedIcon sx={{ fontSize: 18, color: '#2563eb' }} />}
+                        icon={<PlaceOutlinedIcon sx={{ fontSize: 18, color: 'var(--crm-text-blue-600)' }} />}
                         label={billingTitle}
                         sx={{ mb: 0 }}
                     />
@@ -225,7 +225,7 @@ export function RhfAddressSection<T extends FieldValues>({
             <Box sx={columnSx}>
                 <Box sx={headerRowSx}>
                     <SectionLabel
-                        icon={<LocalShippingOutlinedIcon sx={{ fontSize: 18, color: '#64748b' }} />}
+                        icon={<LocalShippingOutlinedIcon sx={{ fontSize: 18, color: 'var(--mui-palette-text-secondary)' }} />}
                         label={shippingTitle}
                         sx={{ mb: 0 }}
                     />

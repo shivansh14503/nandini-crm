@@ -19,15 +19,15 @@ import {
 export const fieldSx = {
     '& .MuiOutlinedInput-root': {
         borderRadius: '8px',
-        backgroundColor: '#fff',
+        backgroundColor: 'var(--mui-palette-background-paper)',
         fontSize: '0.85rem',
-        '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: '#2563EB' },
+        '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: 'var(--mui-palette-primary-main)' },
         '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
-            borderColor: '#2563EB',
+            borderColor: 'var(--mui-palette-primary-main)',
             borderWidth: '1.5px',
         },
     },
-    '& .MuiInputLabel-root.Mui-focused': { color: '#2563EB' },
+    '& .MuiInputLabel-root.Mui-focused': { color: 'var(--crm-text-blue-600)' },
 };
 
 export interface FormFieldProps {
@@ -99,10 +99,10 @@ function extractViewValue(children: React.ReactNode): { found: boolean; value?: 
 function viewPresentation(name: string | undefined, value: string | undefined) {
     const copyable = Boolean(name && (COPYABLE_FIELDS.has(name) || COPYABLE_PATTERN.test(name)));
     if (name === 'accountStatus' && value) {
-        return { copyable, badge: true, badgeColor: value === 'Active' ? '#16a34a' : '#64748b' };
+        return { copyable, badge: true, badgeColor: value === 'Active' ? 'var(--mui-palette-success-main)' : 'var(--mui-palette-text-secondary)' };
     }
     if (name === 'customerType' && value) {
-        return { copyable, badge: true, badgeColor: '#1d4ed8' };
+        return { copyable, badge: true, badgeColor: 'var(--crm-text-blue-700)' };
     }
     return { copyable, badge: false, badgeColor: undefined };
 }
@@ -161,11 +161,11 @@ function FormFieldHeader({ label, required, hint, compact }: { label: string; re
                 ref={labelRef}
                 component="span"
                 variant="body2"
-                sx={{ fontWeight: 600, color: '#374151', fontSize: '0.82rem', whiteSpace: 'nowrap', flexShrink: 0 }}
+                sx={{ fontWeight: 600, color: 'var(--crm-gray-700)', fontSize: '0.82rem', whiteSpace: 'nowrap', flexShrink: 0 }}
             >
                 {label}
                 {required && (
-                    <Box component="span" sx={{ color: '#ef4444', ml: 0.4 }}>
+                    <Box component="span" sx={{ color: 'var(--crm-red-500)', ml: 0.4 }}>
                         *
                     </Box>
                 )}
@@ -179,7 +179,7 @@ function FormFieldHeader({ label, required, hint, compact }: { label: string; re
                     ]}
                 >
                     {typeof hint === 'string' ? (
-                        <Typography variant="caption" sx={{ color: '#9ca3af', fontSize: '0.72rem' }}>
+                        <Typography variant="caption" sx={{ color: 'var(--crm-gray-400)', fontSize: '0.72rem' }}>
                             {hint}
                         </Typography>
                     ) : (

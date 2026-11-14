@@ -28,6 +28,10 @@ import { DropdownManagerPanel, categoriesForModule } from './DropdownManagerPane
 import { FormFieldsBuilderPanel } from './FormFieldsBuilderPanel';
 import { FormLivePreviewPanel } from './FormLivePreviewPanel';
 import { isAdminRole } from '@/utils/adminRoles';
+import { CodedFieldDefaultsProvider, type CodedFieldDefaultsMap } from '@/context/CodedFieldDefaultsContext';
+import { CodedDefaultsHarvester } from './CodedDefaultsHarvester';
+
+const NO_CODED_DEFAULTS: CodedFieldDefaultsMap = {};
 
 type BuilderView = 'dropdowns' | 'fields' | 'preview';
 
@@ -81,6 +85,8 @@ export function FormCustomizationView() {
     /** No form is open until the admin picks one in the selector. */
     const [module, setModule] = useState<CrmModuleKey | null>(null);
     const [view, setView] = useState<BuilderView>('dropdowns');
+    /** Placeholders / hints the selected module's form codes for its built-in fields (prefill the field editor). */
+    const [coded, setCoded] = useState<{ module: CrmModuleKey | null; defaults: CodedFieldDefaultsMap }>({ module: null, defaults: NO_CODED_DEFAULTS });
     const [toast, setToast] = useState<{ open: boolean; message: string; severity: 'success' | 'error' | 'info' | 'warning' }>({
         open: false,
         message: '',
@@ -146,9 +152,9 @@ export function FormCustomizationView() {
                             width: 40,
                             height: 40,
                             borderRadius: '10px',
-                            backgroundColor: '#eff6ff',
-                            border: '1px solid #bfdbfe',
-                            color: '#2563eb',
+                            backgroundColor: 'var(--mui-palette-primary-soft)',
+                            border: '1px solid var(--mui-palette-primary-softBorder)',
+                            color: 'var(--crm-text-blue-600)',
                             display: 'flex',
                             alignItems: 'center',
                             justifyContent: 'center',
@@ -158,10 +164,10 @@ export function FormCustomizationView() {
                         <TuneOutlinedIcon />
                     </Box>
                     <Box sx={{ minWidth: 0, flex: 1 }}>
-                        <Typography component="h1" sx={{ fontWeight: 700, fontSize: '1.15rem', color: '#0f172a' }}>
+                        <Typography component="h1" sx={{ fontWeight: 700, fontSize: '1.15rem', color: 'var(--crm-slate-900)' }}>
                             Form & Dropdown Customization
                         </Typography>
-                        <Typography sx={{ fontSize: '0.82rem', color: '#64748b', mt: 0.25 }}>
+                        <Typography sx={{ fontSize: '0.82rem', color: 'var(--mui-palette-text-secondary)', mt: 0.25 }}>
                             Manage dropdown options and customize the fields of every CRM module. Changes show in the Live Preview straight away and reach every user&apos;s forms when you click Save Changes.
                         </Typography>
                     </Box>
@@ -175,7 +181,7 @@ export function FormCustomizationView() {
                         Activity / Changes
                     </Button>
                 </Box>
-                <Box sx={{ px: { xs: 2, md: 3 }, py: 1.5, backgroundColor: '#f8fafc', borderTop: '1px solid #e2e8f0' }}>
+                <Box sx={{ px: { xs: 2, md: 3 }, py: 1.5, backgroundColor: 'var(--mui-palette-background-subtle)', borderTop: '1px solid var(--mui-palette-border-main)' }}>
                     <ModuleHierarchySelector value={module} onChange={setModule} fieldCounts={configs ? fieldCounts : {}} unsaved={unsavedModules} />
                 </Box>
             </Box>
@@ -198,32 +204,32 @@ export function FormCustomizationView() {
                             px: 1.25,
                             py: 0.6,
                             borderRadius: '8px',
-                            border: '1px solid #e2e8f0',
-                            backgroundColor: '#ffffff',
+                            border: '1px solid var(--mui-palette-border-main)',
+                            backgroundColor: 'var(--mui-palette-background-paper)',
                             minWidth: 0,
                             flexWrap: 'wrap',
                         }}
                     >
-                        <Box component="span" sx={{ display: 'flex', color: '#64748b' }}>
+                        <Box component="span" sx={{ display: 'flex', color: 'var(--mui-palette-text-secondary)' }}>
                             {GROUP_ICONS[group.key]}
                         </Box>
-                        <Typography component="span" sx={{ fontSize: '0.78rem', fontWeight: 600, color: '#64748b' }}>
+                        <Typography component="span" sx={{ fontSize: '0.78rem', fontWeight: 600, color: 'var(--mui-palette-text-secondary)' }}>
                             {group.label}
                         </Typography>
-                        <ChevronRightRoundedIcon sx={{ fontSize: 16, color: '#cbd5e1' }} />
-                        <Box component="span" sx={{ display: 'flex', color: '#2563eb' }}>
+                        <ChevronRightRoundedIcon sx={{ fontSize: 16, color: 'var(--crm-slate-300)' }} />
+                        <Box component="span" sx={{ display: 'flex', color: 'var(--crm-text-blue-600)' }}>
                             {MODULE_ICONS[module]}
                         </Box>
-                        <Typography component="span" sx={{ fontSize: '0.84rem', fontWeight: 700, color: '#0f172a' }}>
+                        <Typography component="span" sx={{ fontSize: '0.84rem', fontWeight: 700, color: 'var(--crm-slate-900)' }}>
                             {moduleNavLabel(module)}
                         </Typography>
                         {configs && (
-                            <Typography component="span" sx={{ fontSize: '0.74rem', color: '#64748b', ml: 0.5 }}>
+                            <Typography component="span" sx={{ fontSize: '0.74rem', color: 'var(--mui-palette-text-secondary)', ml: 0.5 }}>
                                 {dropdownCount} Dropdown{dropdownCount === 1 ? '' : 's'} • {fieldCounts[module]} Field{fieldCounts[module] === 1 ? '' : 's'}
                             </Typography>
                         )}
                         {unsavedModules.has(module) && (
-                            <Box component="span" title="Unsaved changes on this form" sx={{ width: 7, height: 7, borderRadius: '50%', backgroundColor: '#f59e0b', boxShadow: '0 0 0 2px #fef3c7', ml: 0.25 }} />
+                            <Box component="span" title="Unsaved changes on this form" sx={{ width: 7, height: 7, borderRadius: '50%', backgroundColor: '#f59e0b', boxShadow: '0 0 0 2px var(--crm-amber-100)', ml: 0.25 }} />
                         )}
                     </Box>
                     <PillTabs items={viewItems} value={view} onChange={setView} />
@@ -261,15 +267,21 @@ export function FormCustomizationView() {
             )}
 
             {configs && module && (
-                <FormConfigsOverrideContext.Provider value={configs}>
-                    <ConfigDraftActionsContext.Provider value={actions}>
-                        <ConfigDraftChangesContext.Provider value={changed}>
-                            {view === 'dropdowns' && <DropdownManagerPanel module={module} configs={configs} canEdit={canEdit && !saving} notify={notify} />}
-                            {view === 'fields' && <FormFieldsBuilderPanel module={module} configs={configs} canEdit={canEdit && !saving} notify={notify} unsavedTabs={unsavedTabs} />}
-                            {view === 'preview' && <FormLivePreviewPanel module={module} configs={configs} unsavedCount={ops.length} unsavedTabs={unsavedTabs} />}
-                        </ConfigDraftChangesContext.Provider>
-                    </ConfigDraftActionsContext.Provider>
-                </FormConfigsOverrideContext.Provider>
+                <CodedFieldDefaultsProvider value={coded.module === module ? coded.defaults : NO_CODED_DEFAULTS}>
+                    <FormConfigsOverrideContext.Provider value={configs}>
+                        <ConfigDraftActionsContext.Provider value={actions}>
+                            <ConfigDraftChangesContext.Provider value={changed}>
+                                {view === 'dropdowns' && <DropdownManagerPanel module={module} configs={configs} canEdit={canEdit && !saving} notify={notify} />}
+                                {view === 'fields' && <FormFieldsBuilderPanel module={module} configs={configs} canEdit={canEdit && !saving} notify={notify} unsavedTabs={unsavedTabs} />}
+                                {view === 'preview' && <FormLivePreviewPanel module={module} configs={configs} unsavedCount={ops.length} unsavedTabs={unsavedTabs} />}
+                            </ConfigDraftChangesContext.Provider>
+                        </ConfigDraftActionsContext.Provider>
+                    </FormConfigsOverrideContext.Provider>
+                </CodedFieldDefaultsProvider>
+            )}
+            {/* Hidden copy of the module's real form, read for the placeholders / hints its fields are coded with. */}
+            {configs && module && (
+                <CodedDefaultsHarvester key={module} module={module} onChange={(defaults) => setCoded({ module, defaults })} />
             )}
 
             {canEdit && configs && (
@@ -300,8 +312,8 @@ export function FormCustomizationView() {
                 avatarIcon={<TuneOutlinedIcon sx={{ fontSize: 22 }} />}
                 verified={true}
                 badges={[
-                    { label: user?.role || 'Admin', backgroundColor: '#eff6ff', color: '#1d4ed8', borderColor: '#bfdbfe' },
-                    ...(module ? [{ label: moduleNavLabel(module), backgroundColor: '#f1f5f9', color: '#475569', borderColor: '#e2e8f0' }] : []),
+                    { label: user?.role || 'Admin', backgroundColor: 'var(--crm-blue-50)', color: 'var(--crm-text-blue-700)', borderColor: 'var(--mui-palette-primary-softBorder)' },
+                    ...(module ? [{ label: moduleNavLabel(module), backgroundColor: 'var(--mui-palette-background-hover)', color: 'var(--crm-slate-600)', borderColor: 'var(--mui-palette-border-main)' }] : []),
                 ]}
                 statusText={dirty ? `${ops.length} unsaved change${ops.length === 1 ? '' : 's'} in draft` : 'All form configurations synced'}
                 // Until a form is picked, the Changes tab alone shows the audit trail across all modules.
@@ -325,7 +337,7 @@ export function FormCustomizationView() {
             <Dialog open={discardOpen} onClose={() => setDiscardOpen(false)} maxWidth="xs" fullWidth slotProps={{ paper: { sx: { borderRadius: '12px' } } }}>
                 <DialogTitle sx={{ fontWeight: 700, fontSize: '1rem' }}>Discard unsaved changes?</DialogTitle>
                 <DialogContent>
-                    <Typography sx={{ fontSize: '0.85rem', color: '#475569' }}>
+                    <Typography sx={{ fontSize: '0.85rem', color: 'var(--crm-slate-600)' }}>
                         {ops.length} unsaved change{ops.length === 1 ? '' : 's'} will be thrown away and the builder goes back to the saved configuration.
                     </Typography>
                 </DialogContent>
@@ -360,15 +372,15 @@ function DraftStatus({ summaries, saving }: { summaries: string[]; saving: boole
         return (
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                 <CircularProgress size={12} />
-                <Typography sx={{ fontSize: '0.78rem', color: '#64748b', fontWeight: 500 }}>Saving changes…</Typography>
+                <Typography sx={{ fontSize: '0.78rem', color: 'var(--mui-palette-text-secondary)', fontWeight: 500 }}>Saving changes…</Typography>
             </Box>
         );
     }
     if (count === 0) {
         return (
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                {dot('#22c55e')}
-                <Typography sx={{ fontSize: '0.78rem', color: '#64748b', fontWeight: 500 }}>All changes saved</Typography>
+                {dot('var(--crm-green-500)')}
+                <Typography sx={{ fontSize: '0.78rem', color: 'var(--mui-palette-text-secondary)', fontWeight: 500 }}>All changes saved</Typography>
             </Box>
         );
     }
@@ -389,8 +401,8 @@ function DraftStatus({ summaries, saving }: { summaries: string[]; saving: boole
             }
         >
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, cursor: 'default' }}>
-                {dot('#f59e0b')}
-                <Typography sx={{ fontSize: '0.78rem', color: '#b45309', fontWeight: 600 }}>
+                {dot('var(--crm-amber-500)')}
+                <Typography sx={{ fontSize: '0.78rem', color: 'var(--crm-amber-700)', fontWeight: 600 }}>
                     {count} unsaved change{count === 1 ? '' : 's'} — showing in the preview, not yet applied to the CRM
                 </Typography>
             </Box>

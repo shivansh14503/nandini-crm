@@ -28,9 +28,9 @@ export function AuditTrailTimeline({ entityType, entityId }: AuditTrailTimelineP
     }
     if (isError || items.length === 0) {
         return (
-            <Box sx={{ py: 5, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1, color: '#94a3b8' }}>
+            <Box sx={{ py: 5, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1, color: 'var(--mui-palette-text-muted)' }}>
                 <HistoryOutlinedIcon sx={{ fontSize: 32 }} />
-                <Typography sx={{ fontSize: '0.8rem', fontWeight: 600, color: '#64748b' }}>
+                <Typography sx={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--mui-palette-text-secondary)' }}>
                     {isError ? 'The revision trail could not be loaded.' : 'No revisions yet'}
                 </Typography>
                 <Typography sx={{ fontSize: '0.72rem' }}>
@@ -46,13 +46,13 @@ function RevisionList({ items }: { items: AuditRevisionItem[] }) {
     return (
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
             <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 0.5 }}>
-                <Typography sx={{ fontSize: '0.8rem', fontWeight: 700, color: '#0f172a' }}>
+                <Typography sx={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--crm-slate-900)' }}>
                     Revision Trail & Field Edits
                 </Typography>
                 <Chip
                     label={`${items.length} ${items.length === 1 ? 'Revision' : 'Revisions'} Tracked`}
                     size="small"
-                    sx={{ height: 20, fontSize: '0.66rem', fontWeight: 700, backgroundColor: '#f1f5f9', color: '#475569' }}
+                    sx={{ height: 20, fontSize: '0.66rem', fontWeight: 700, backgroundColor: 'var(--mui-palette-background-hover)', color: 'var(--crm-slate-600)' }}
                 />
             </Box>
 
@@ -62,8 +62,8 @@ function RevisionList({ items }: { items: AuditRevisionItem[] }) {
                     sx={{
                         p: 1.6,
                         borderRadius: '8px',
-                        border: '1px solid #e2e8f0',
-                        backgroundColor: '#ffffff',
+                        border: '1px solid var(--mui-palette-border-main)',
+                        backgroundColor: 'var(--mui-palette-background-paper)',
                         position: 'relative',
                         pl: 2,
                         '&::before': {
@@ -73,16 +73,16 @@ function RevisionList({ items }: { items: AuditRevisionItem[] }) {
                             top: 10,
                             bottom: 10,
                             width: 3,
-                            backgroundColor: idx === 0 ? '#2563eb' : '#94a3b8',
+                            backgroundColor: idx === 0 ? 'var(--mui-palette-primary-main)' : 'var(--crm-slate-400)',
                             borderRadius: '0 2px 2px 0',
                         },
                     }}
                 >
                     <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                        <Typography sx={{ fontSize: '0.8rem', fontWeight: 700, color: '#0f172a' }}>
+                        <Typography sx={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--crm-slate-900)' }}>
                             {evt.title}
                         </Typography>
-                        <Typography sx={{ fontSize: '0.68rem', color: '#94a3b8' }}>
+                        <Typography sx={{ fontSize: '0.68rem', color: 'var(--mui-palette-text-muted)' }}>
                             {evt.time}
                         </Typography>
                     </Box>
@@ -93,32 +93,32 @@ function RevisionList({ items }: { items: AuditRevisionItem[] }) {
                                 <Chip
                                     label={`From: ${evt.from}`}
                                     size="small"
-                                    sx={{ height: 18, fontSize: '0.64rem', color: '#64748b', backgroundColor: '#f1f5f9' }}
+                                    sx={{ height: 18, fontSize: '0.64rem', color: 'var(--mui-palette-text-secondary)', backgroundColor: 'var(--mui-palette-background-hover)' }}
                                 />
                             )}
                             {evt.from && evt.to && (
-                                <Typography sx={{ fontSize: '0.72rem', color: '#94a3b8' }}>→</Typography>
+                                <Typography sx={{ fontSize: '0.72rem', color: 'var(--mui-palette-text-muted)' }}>→</Typography>
                             )}
                             {evt.to && (
                                 <Chip
                                     label={`To: ${evt.to}`}
                                     size="small"
-                                    sx={{ height: 18, fontSize: '0.64rem', fontWeight: 700, color: '#1d4ed8', backgroundColor: '#eff6ff' }}
+                                    sx={{ height: 18, fontSize: '0.64rem', fontWeight: 700, color: 'var(--crm-text-blue-700)', backgroundColor: 'var(--mui-palette-primary-soft)' }}
                                 />
                             )}
                         </Box>
                     )}
 
                     {evt.note && (
-                        <Typography sx={{ fontSize: '0.72rem', color: '#475569', mt: 0.8 }}>
+                        <Typography sx={{ fontSize: '0.72rem', color: 'var(--crm-slate-600)', mt: 0.8 }}>
                             {evt.note}
                         </Typography>
                     )}
 
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.6, mt: 0.8, pt: 0.6, borderTop: '1px dashed #f1f5f9' }}>
-                        <PersonOutlinedIcon sx={{ fontSize: 13, color: '#94a3b8' }} />
-                        <Typography sx={{ fontSize: '0.68rem', color: '#64748b' }}>
-                            Edited by <strong style={{ color: '#334155' }}>{evt.author}</strong>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.6, mt: 0.8, pt: 0.6, borderTop: '1px dashed var(--mui-palette-border-light)' }}>
+                        <PersonOutlinedIcon sx={{ fontSize: 13, color: 'var(--mui-palette-text-muted)' }} />
+                        <Typography sx={{ fontSize: '0.68rem', color: 'var(--mui-palette-text-secondary)' }}>
+                            Edited by <strong style={{ color: 'var(--crm-slate-700)' }}>{evt.author}</strong>
                         </Typography>
                     </Box>
                 </Box>

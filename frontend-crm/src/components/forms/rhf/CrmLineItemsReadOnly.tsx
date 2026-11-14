@@ -10,17 +10,17 @@ const money = (n: number | undefined) => `₹${(n ?? 0).toLocaleString('en-IN')}
 const headCellSx = {
     fontSize: '0.7rem',
     fontWeight: 700,
-    color: '#64748b',
+    color: 'var(--mui-palette-text-secondary)',
     textTransform: 'uppercase',
     letterSpacing: '0.04em',
-    backgroundColor: '#f8fafc',
+    backgroundColor: 'var(--mui-palette-background-subtle)',
     whiteSpace: 'nowrap',
 } as const;
 
 const SummaryRow = ({ label, value, color, bold }: { label: string; value: string; color?: string; bold?: boolean }) => (
     <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <Typography sx={{ fontSize: '0.8rem', color: '#64748b' }}>{label}</Typography>
-        <Typography sx={{ fontSize: '0.86rem', fontWeight: bold ? 800 : 600, color: color ?? '#0f172a' }}>{value}</Typography>
+        <Typography sx={{ fontSize: '0.8rem', color: 'var(--mui-palette-text-secondary)' }}>{label}</Typography>
+        <Typography sx={{ fontSize: '0.86rem', fontWeight: bold ? 800 : 600, color: color ?? 'var(--crm-slate-900)' }}>{value}</Typography>
     </Box>
 );
 
@@ -38,9 +38,9 @@ export function CrmLineItemsReadOnly({ value }: { value: CrmLineItemsValues }) {
             </Box>
 
             {items.length === 0 ? (
-                <Typography sx={{ fontSize: '0.86rem', color: '#94a3b8' }}>No line items on this record.</Typography>
+                <Typography sx={{ fontSize: '0.86rem', color: 'var(--mui-palette-text-muted)' }}>No line items on this record.</Typography>
             ) : (
-                <Paper variant="outlined" sx={{ borderRadius: '10px', borderColor: '#e2e8f0', overflowX: 'auto' }}>
+                <Paper variant="outlined" sx={{ borderRadius: '10px', borderColor: 'var(--mui-palette-border-main)', overflowX: 'auto' }}>
                     <Table size="small">
                         <TableHead>
                             <TableRow>
@@ -58,10 +58,10 @@ export function CrmLineItemsReadOnly({ value }: { value: CrmLineItemsValues }) {
                         <TableBody>
                             {items.map((item) => (
                                 <TableRow key={item.id}>
-                                    <TableCell sx={{ fontSize: '0.84rem', fontWeight: 600, color: '#0f172a', minWidth: 220 }}>
+                                    <TableCell sx={{ fontSize: '0.84rem', fontWeight: 600, color: 'var(--crm-slate-900)', minWidth: 220 }}>
                                         {item.productName || '—'}
                                         {(item.description || item.note) && (
-                                            <Typography sx={{ fontSize: '0.74rem', color: '#64748b', fontWeight: 400, mt: 0.3 }}>
+                                            <Typography sx={{ fontSize: '0.74rem', color: 'var(--mui-palette-text-secondary)', fontWeight: 400, mt: 0.3 }}>
                                                 {[item.description, item.note].filter(Boolean).join(' • ')}
                                             </Typography>
                                         )}
@@ -92,18 +92,18 @@ export function CrmLineItemsReadOnly({ value }: { value: CrmLineItemsValues }) {
             {items.length > 0 && (
                 <Paper
                     variant="outlined"
-                    sx={{ p: 2.5, borderRadius: '10px', borderColor: '#bfdbfe', backgroundColor: '#f8fafc', maxWidth: 420, ml: { md: 'auto' }, width: '100%' }}
+                    sx={{ p: 2.5, borderRadius: '10px', borderColor: 'var(--mui-palette-primary-softBorder)', backgroundColor: 'var(--mui-palette-background-subtle)', maxWidth: 420, ml: { md: 'auto' }, width: '100%' }}
                 >
                     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.2 }}>
                         <SummaryRow label="Total" value={money(value.totalAmount)} />
-                        {hasDiscount && <SummaryRow label="Discount" value={`- ${money(value.totalDiscount)}`} color="#dc2626" />}
+                        {hasDiscount && <SummaryRow label="Discount" value={`- ${money(value.totalDiscount)}`} color="var(--mui-palette-error-main)" />}
                         {(value.lumpSumDiscount ?? 0) > 0 && (
-                            <SummaryRow label="Lump Sum Discount" value={`- ${money(value.lumpSumDiscount)}`} color="#dc2626" />
+                            <SummaryRow label="Lump Sum Discount" value={`- ${money(value.lumpSumDiscount)}`} color="var(--mui-palette-error-main)" />
                         )}
                         <SummaryRow label="Subtotal" value={money(value.subtotal)} bold />
-                        {hasTax && <SummaryRow label="Tax" value={`+ ${money(value.totalTax)}`} color="#2563eb" />}
+                        {hasTax && <SummaryRow label="Tax" value={`+ ${money(value.totalTax)}`} color="var(--crm-text-blue-600)" />}
                         <Divider />
-                        <SummaryRow label="Grand Total" value={money(value.grandTotal)} color="#15803d" bold />
+                        <SummaryRow label="Grand Total" value={money(value.grandTotal)} color="var(--crm-green-700)" bold />
                     </Box>
                 </Paper>
             )}

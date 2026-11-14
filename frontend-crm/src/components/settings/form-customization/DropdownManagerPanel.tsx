@@ -94,14 +94,14 @@ export function DropdownManagerPanel({ module, configs, canEdit, notify }: Dropd
             {/* ── Category list ── */}
             <Box sx={{ ...surfaceSx, overflow: 'hidden' }}>
                 <Box sx={{ ...panelHeaderSx, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1 }}>
-                    <Typography sx={{ fontWeight: 700, fontSize: '0.82rem', color: '#1e293b' }}>Dropdowns ({categories.length})</Typography>
+                    <Typography sx={{ fontWeight: 700, fontSize: '0.82rem', color: 'var(--mui-palette-text-primary)' }}>Dropdowns ({categories.length})</Typography>
                     {canEdit && (
                         <Button size="small" startIcon={<AddRoundedIcon />} onClick={() => setCreateOpen(true)} sx={{ ...secondaryButtonSx, py: 0.3 }} variant="outlined">
                             New
                         </Button>
                     )}
                 </Box>
-                <Box sx={{ p: 1.25, borderBottom: '1px solid #f1f5f9' }}>
+                <Box sx={{ p: 1.25, borderBottom: '1px solid var(--mui-palette-border-light)' }}>
                     <TextField
                         size="small"
                         fullWidth
@@ -113,7 +113,7 @@ export function DropdownManagerPanel({ module, configs, canEdit, notify }: Dropd
                             input: {
                                 startAdornment: (
                                     <InputAdornment position="start">
-                                        <SearchRoundedIcon sx={{ fontSize: 18, color: '#94a3b8' }} />
+                                        <SearchRoundedIcon sx={{ fontSize: 18, color: 'var(--mui-palette-text-muted)' }} />
                                     </InputAdornment>
                                 ),
                             },
@@ -143,18 +143,18 @@ export function DropdownManagerPanel({ module, configs, canEdit, notify }: Dropd
                                     mb: 0.4,
                                     borderRadius: '8px',
                                     cursor: 'pointer',
-                                    border: `1px solid ${active ? '#bfdbfe' : 'transparent'}`,
-                                    backgroundColor: active ? '#eff6ff' : 'transparent',
-                                    '&:hover': { backgroundColor: active ? '#eff6ff' : '#f8fafc' },
+                                    border: `1px solid ${active ? 'var(--mui-palette-primary-softBorder)' : 'transparent'}`,
+                                    backgroundColor: active ? 'var(--mui-palette-primary-soft)' : 'transparent',
+                                    '&:hover': { backgroundColor: active ? 'var(--mui-palette-primary-soft)' : 'var(--mui-palette-background-subtle)' },
                                     outline: 'none',
-                                    '&:focus-visible': { boxShadow: '0 0 0 2px #bfdbfe' },
+                                    '&:focus-visible': { boxShadow: '0 0 0 2px var(--crm-blue-200)' },
                                 }}
                             >
                                 <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1 }}>
-                                    <Typography sx={{ fontSize: '0.84rem', fontWeight: active ? 700 : 600, color: active ? '#1e3a8a' : '#1e293b' }} noWrap>
+                                    <Typography sx={{ fontSize: '0.84rem', fontWeight: active ? 700 : 600, color: active ? 'var(--crm-text-blue-900)' : 'var(--mui-palette-text-primary)' }} noWrap>
                                         {c.label}
                                     </Typography>
-                                    <Typography sx={{ fontSize: '0.72rem', color: '#64748b', flexShrink: 0 }}>{activeCount}</Typography>
+                                    <Typography sx={{ fontSize: '0.72rem', color: 'var(--mui-palette-text-secondary)', flexShrink: 0 }}>{activeCount}</Typography>
                                 </Box>
                                 {isShared && (
                                     <Box sx={{ mt: 0.5, display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
@@ -252,39 +252,39 @@ function DeleteCategoryDialog({
             onClose={onClose}
             onConfirm={onConfirm}
         >
-            <Typography sx={{ fontSize: '0.85rem', color: '#475569' }}>
+            <Typography sx={{ fontSize: '0.85rem', color: 'var(--crm-slate-600)' }}>
                 The dropdown and all {category.options.length} of its options are removed. Values already stored on records stay as plain text.
             </Typography>
             {category.lockReason && (
-                <Box sx={{ p: 1.25, borderRadius: '8px', backgroundColor: '#fef2f2', border: '1px solid #fecaca' }}>
-                    <Typography sx={{ fontSize: '0.8rem', color: '#b91c1c', fontWeight: 600 }}>Can&apos;t delete: {category.lockReason}</Typography>
+                <Box sx={{ p: 1.25, borderRadius: '8px', backgroundColor: 'var(--mui-palette-error-soft)', border: '1px solid var(--mui-palette-error-softBorder)' }}>
+                    <Typography sx={{ fontSize: '0.8rem', color: 'var(--crm-red-700)', fontWeight: 600 }}>Can&apos;t delete: {category.lockReason}</Typography>
                 </Box>
             )}
             {category.isSystem && !category.lockReason && (
-                <Typography sx={{ fontSize: '0.8rem', color: '#64748b' }}>
+                <Typography sx={{ fontSize: '0.8rem', color: 'var(--mui-palette-text-secondary)' }}>
                     Once deleted it stays deleted (it isn&apos;t recreated on restart).
                 </Typography>
             )}
             {!category.lockReason && builtIn.length > 0 && (
-                <Box sx={{ p: 1.25, borderRadius: '8px', backgroundColor: '#fff7ed', border: '1px solid #fed7aa' }}>
-                    <Typography sx={{ fontSize: '0.8rem', color: '#c2410c', fontWeight: 600 }}>
+                <Box sx={{ p: 1.25, borderRadius: '8px', backgroundColor: 'var(--crm-orange-50)', border: '1px solid var(--crm-orange-200)' }}>
+                    <Typography sx={{ fontSize: '0.8rem', color: 'var(--crm-orange-700)', fontWeight: 600 }}>
                         {builtIn.length} field{builtIn.length === 1 ? '' : 's'} using it will be unlinked and hidden from the form:
                     </Typography>
-                    <Typography sx={{ fontSize: '0.78rem', color: '#c2410c', mt: 0.5 }}>
+                    <Typography sx={{ fontSize: '0.78rem', color: 'var(--crm-orange-700)', mt: 0.5 }}>
                         {builtIn.map(describe).join(' • ')}. To keep one, link it to another dropdown (Form Fields › Edit) and show it again.
                     </Typography>
                 </Box>
             )}
             {!category.lockReason && custom.length > 0 && (
-                <Box sx={{ p: 1.25, borderRadius: '8px', backgroundColor: '#fff7ed', border: '1px solid #fed7aa' }}>
-                    <Typography sx={{ fontSize: '0.8rem', color: '#c2410c', fontWeight: 600 }}>
+                <Box sx={{ p: 1.25, borderRadius: '8px', backgroundColor: 'var(--crm-orange-50)', border: '1px solid var(--crm-orange-200)' }}>
+                    <Typography sx={{ fontSize: '0.8rem', color: 'var(--crm-orange-700)', fontWeight: 600 }}>
                         {custom.length} field{custom.length === 1 ? '' : 's'} using it will also be deleted:
                     </Typography>
-                    <Typography sx={{ fontSize: '0.78rem', color: '#c2410c', mt: 0.5 }}>{custom.map(describe).join(' • ')}</Typography>
+                    <Typography sx={{ fontSize: '0.78rem', color: 'var(--crm-orange-700)', mt: 0.5 }}>{custom.map(describe).join(' • ')}</Typography>
                 </Box>
             )}
-            {linked.length === 0 && <Typography sx={{ fontSize: '0.8rem', color: '#64748b' }}>No form field uses this dropdown.</Typography>}
-            <Typography sx={{ fontSize: '0.8rem', color: '#64748b' }}>The deletion is applied when you click Save Changes.</Typography>
+            {linked.length === 0 && <Typography sx={{ fontSize: '0.8rem', color: 'var(--mui-palette-text-secondary)' }}>No form field uses this dropdown.</Typography>}
+            <Typography sx={{ fontSize: '0.8rem', color: 'var(--mui-palette-text-secondary)' }}>The deletion is applied when you click Save Changes.</Typography>
         </ConfirmDeleteDialog>
     );
 }
@@ -373,7 +373,7 @@ function CategoryEditor({
         <Box sx={{ ...surfaceSx, overflow: 'hidden' }}>
             <Box sx={{ ...panelHeaderSx, py: 1.75 }}>
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
-                    <Typography sx={{ fontWeight: 700, fontSize: '0.95rem', color: '#0f172a' }}>{category.label}</Typography>
+                    <Typography sx={{ fontWeight: 700, fontSize: '0.95rem', color: 'var(--crm-slate-900)' }}>{category.label}</Typography>
                     <Badge tone={category.module === module ? 'custom' : 'shared'}>
                         {category.module === 'shared' ? 'Shared list' : moduleLabel(category.module)}
                     </Badge>
@@ -398,7 +398,7 @@ function CategoryEditor({
                                         startIcon={<DeleteOutlineOutlinedIcon />}
                                         onClick={onDelete}
                                         disabled={Boolean(category.lockReason)}
-                                        sx={{ ...secondaryButtonSx, py: 0.3, color: dangerColor, borderColor: '#fecaca', '&:hover': { borderColor: dangerColor, backgroundColor: '#fef2f2' } }}
+                                        sx={{ ...secondaryButtonSx, py: 0.3, color: dangerColor, borderColor: 'var(--mui-palette-error-softBorder)', '&:hover': { borderColor: dangerColor, backgroundColor: 'var(--mui-palette-error-soft)' } }}
                                     >
                                         Delete Dropdown
                                     </Button>
@@ -410,7 +410,7 @@ function CategoryEditor({
             </Box>
 
             {canEdit && (
-                <Box sx={{ p: 2, borderBottom: '1px solid #f1f5f9', display: 'flex', gap: 1, alignItems: 'center' }}>
+                <Box sx={{ p: 2, borderBottom: '1px solid var(--mui-palette-border-light)', display: 'flex', gap: 1, alignItems: 'center' }}>
                     <TextField
                         size="small"
                         fullWidth
@@ -433,12 +433,12 @@ function CategoryEditor({
                 </Box>
             )}
 
-            <Box sx={{ px: 2, py: 1, display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid #f1f5f9' }}>
+            <Box sx={{ px: 2, py: 1, display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid var(--mui-palette-border-light)' }}>
                 <Box sx={{ minWidth: 0 }}>
-                    <Typography sx={{ fontSize: '0.74rem', color: '#64748b' }}>
+                    <Typography sx={{ fontSize: '0.74rem', color: 'var(--mui-palette-text-secondary)' }}>
                         {active.length} active{archived.length > 0 ? ` • ${archived.length} archived` : ''}
                     </Typography>
-                    <Typography sx={{ fontSize: '0.72rem', color: '#64748b', mt: 0.25 }}>
+                    <Typography sx={{ fontSize: '0.72rem', color: 'var(--mui-palette-text-secondary)', mt: 0.25 }}>
                         {defaults.length > 0
                             ? `Default on new records: ${defaults.map((o) => o.label).join(', ')}`
                             : 'No default: new records start empty and show the field’s placeholder.'}
@@ -449,7 +449,7 @@ function CategoryEditor({
                     <FormControlLabel
                         sx={{ m: 0 }}
                         control={<Switch size="small" checked={showArchived} onChange={(e) => setShowArchived(e.target.checked)} />}
-                        label={<Typography sx={{ fontSize: '0.76rem', color: '#475569' }}>Show archived</Typography>}
+                        label={<Typography sx={{ fontSize: '0.76rem', color: 'var(--crm-slate-600)' }}>Show archived</Typography>}
                     />
                 )}
             </Box>
@@ -531,8 +531,8 @@ function OptionRow({
                 gap: 1.25,
                 px: 2,
                 py: 0.9,
-                borderBottom: '1px solid #f1f5f9',
-                backgroundColor: option.isActive ? '#ffffff' : '#fafafa',
+                borderBottom: '1px solid var(--mui-palette-border-light)',
+                backgroundColor: option.isActive ? 'var(--mui-palette-background-paper)' : 'var(--mui-palette-background-subtle)',
                 opacity: option.isActive ? 1 : 0.75,
                 transition: 'background-color 0.12s, box-shadow 0.12s',
                 ...dragSx,
@@ -555,13 +555,13 @@ function OptionRow({
                             if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
                             if (e.key === 'Escape') setLabel(option.label);
                         }}
-                        slotProps={{ input: { disableUnderline: false, sx: { fontSize: '0.85rem', fontWeight: 600, color: '#1e293b' } }, htmlInput: { maxLength: 200, 'aria-label': `Label for ${option.value}` } }}
+                        slotProps={{ input: { disableUnderline: false, sx: { fontSize: '0.85rem', fontWeight: 600, color: 'var(--mui-palette-text-primary)' } }, htmlInput: { maxLength: 200, 'aria-label': `Label for ${option.value}` } }}
                     />
                 ) : (
-                    <Typography sx={{ fontSize: '0.85rem', fontWeight: 600, color: '#1e293b' }}>{option.label}</Typography>
+                    <Typography sx={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--mui-palette-text-primary)' }}>{option.label}</Typography>
                 )}
                 {option.isSystem && option.label !== option.value && (
-                    <Typography sx={{ fontSize: '0.7rem', color: '#94a3b8', mt: 0.25 }}>
+                    <Typography sx={{ fontSize: '0.7rem', color: 'var(--mui-palette-text-muted)', mt: 0.25 }}>
                         Stored value: <span style={{ fontFamily: 'monospace' }}>{option.value}</span>
                     </Typography>
                 )}
@@ -604,7 +604,7 @@ function OptionRow({
                             onClick={() => void onToggleDefault(!option.isDefault)}
                         >
                             {option.isDefault && option.isActive ? (
-                                <DefaultBookmarkOnIcon sx={{ fontSize: 19, color: busy ? undefined : '#f59e0b' }} />
+                                <DefaultBookmarkOnIcon sx={{ fontSize: 19, color: busy ? undefined : 'var(--crm-amber-500)' }} />
                             ) : (
                                 <DefaultBookmarkOffIcon sx={{ fontSize: 19 }} />
                             )}
@@ -694,7 +694,7 @@ function CreateCategoryDialog({
 
     return (
         <Dialog open={open} onClose={saving ? undefined : onClose} fullWidth maxWidth={scope === 'shared' ? 'md' : 'sm'} slotProps={{ paper: { sx: { borderRadius: '12px' } } }}>
-            <DialogTitle sx={{ fontWeight: 700, fontSize: '1rem', color: '#0f172a', borderBottom: '1px solid #e2e8f0' }}>New Dropdown</DialogTitle>
+            <DialogTitle sx={{ fontWeight: 700, fontSize: '1rem', color: 'var(--crm-slate-900)', borderBottom: '1px solid var(--mui-palette-border-main)' }}>New Dropdown</DialogTitle>
             <DialogContent sx={{ pt: '20px !important', display: 'flex', flexDirection: 'column', gap: 2 }}>
                 <TextField label="Dropdown name" required size="small" value={label} onChange={(e) => setLabel(e.target.value)} sx={inputSx} slotProps={{ htmlInput: { maxLength: 120 } }} autoFocus />
                 <TextField
@@ -713,10 +713,10 @@ function CreateCategoryDialog({
                 </RadioGroup>
 
                 {/* ── Add to Form(s) ── */}
-                <Box sx={{ borderTop: '1px solid #e2e8f0', pt: 2, display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+                <Box sx={{ borderTop: '1px solid var(--mui-palette-border-main)', pt: 2, display: 'flex', flexDirection: 'column', gap: 1.5 }}>
                     <Box>
-                        <Typography sx={{ fontWeight: 700, fontSize: '0.85rem', color: '#0f172a' }}>Add to Form(s)</Typography>
-                        <Typography sx={{ fontSize: '0.76rem', color: '#64748b' }}>
+                        <Typography sx={{ fontWeight: 700, fontSize: '0.85rem', color: 'var(--crm-slate-900)' }}>Add to Form(s)</Typography>
+                        <Typography sx={{ fontSize: '0.76rem', color: 'var(--mui-palette-text-secondary)' }}>
                             Places a field named &lsquo;{label.trim() || 'Dropdown name'}&rsquo; that uses this dropdown.
                         </Typography>
                     </Box>
@@ -731,12 +731,12 @@ function CreateCategoryDialog({
                     {scope === 'module' && placeOnForm && <PlacementFields configs={configs} module={module} value={placement} onChange={setPlacement} />}
                     {scope === 'shared' && <ModuleTargetsPicker configs={configs} targets={sharedTargets} onChange={setSharedTargets} />}
                     {scope === 'shared' && targetCount === 0 && (
-                        <Typography sx={{ fontSize: '0.76rem', color: '#64748b' }}>No form selected: the dropdown is only created (add it to forms later).</Typography>
+                        <Typography sx={{ fontSize: '0.76rem', color: 'var(--mui-palette-text-secondary)' }}>No form selected: the dropdown is only created (add it to forms later).</Typography>
                     )}
-                    {targetError && <Typography sx={{ fontSize: '0.78rem', color: '#b91c1c' }}>{targetError}</Typography>}
+                    {targetError && <Typography sx={{ fontSize: '0.78rem', color: 'var(--crm-red-700)' }}>{targetError}</Typography>}
                 </Box>
             </DialogContent>
-            <DialogActions sx={{ px: 3, py: 2, borderTop: '1px solid #e2e8f0' }}>
+            <DialogActions sx={{ px: 3, py: 2, borderTop: '1px solid var(--mui-palette-border-main)' }}>
                 <Button onClick={onClose} disabled={saving} variant="outlined" sx={secondaryButtonSx}>
                     Cancel
                 </Button>

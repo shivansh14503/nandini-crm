@@ -177,6 +177,8 @@ export interface OrganizationFormProps {
     initialData?: Partial<OrganizationFormData>;
     organizationId?: string;
     breadcrumbItems?: BreadcrumbItem[];
+    /** Tab shown first (this form mounts only the active tab). */
+    initialTab?: TabKey;
 }
 
 export default function OrganizationForm({
@@ -184,6 +186,7 @@ export default function OrganizationForm({
     initialData,
     organizationId,
     breadcrumbItems,
+    initialTab = 'overview',
 }: OrganizationFormProps) {
     const router = useRouter();
     const { user } = useAuth();
@@ -202,7 +205,7 @@ export default function OrganizationForm({
     const [form, setForm] = useState<OrganizationFormData>(startValues);
     // Lock is based on the status as last saved, so deactivating mid-edit doesn't lock the user out of their own unsaved change.
     const [persistedStatus, setPersistedStatus] = useState(initialData?.accountStatus ?? 'Active');
-    const [activeTab, setActiveTab] = useState<TabKey>('overview');
+    const [activeTab, setActiveTab] = useState<TabKey>(initialTab);
     const [audit, setAudit] = useState<{ createdAt?: string; createdBy?: string; updatedAt?: string; updatedBy?: string }>({});
     const pendingFocusField = useRef<string | null>(null);
     // Values "Discard" resets to: blank for create, the last loaded record for edit.
@@ -520,7 +523,7 @@ export default function OrganizationForm({
                         avatarIcon: <ApartmentIcon sx={{ fontSize: 28 }} />,
                         verified: form.accountVerified,
                         statusLabel: form.accountStatus || undefined,
-                        statusColor: form.accountStatus === 'Inactive' ? '#64748b' : '#16a34a',
+                        statusColor: form.accountStatus === 'Inactive' ? 'var(--mui-palette-text-secondary)' : 'var(--mui-palette-success-main)',
                         editHref: organizationId ? ROUTES.ORGANIZATION_EDIT(organizationId) : undefined,
                         editLabel: 'Edit Organization',
                         editDisabled: isLocked,
@@ -537,7 +540,7 @@ export default function OrganizationForm({
                                 <Typography sx={{ fontSize: '0.8rem', mt: 0.5 }}>
                                     <strong>Reason:</strong> {form.inactivityReason || 'No reason specified'}
                                 </Typography>
-                                <Typography sx={{ fontSize: '0.75rem', color: '#64748b', mt: 0.5 }}>
+                                <Typography sx={{ fontSize: '0.75rem', color: 'var(--mui-palette-text-secondary)', mt: 0.5 }}>
                                     This record is locked. Only users with the <strong>Admin</strong> role can edit or reactivate this account.
                                 </Typography>
                             </Alert>

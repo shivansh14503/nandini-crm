@@ -20,11 +20,16 @@ export interface OrgNameComparison {
     reason?: string;
 }
 
+/** Which name of an existing organization the typed name matched. */
+export type OrgNameMatchField = 'organizationName' | 'tradeName';
+
 export interface SimilarOrganizationResult<T> {
     record: T;
     matchKind: OrgNameMatchKind;
     score: number;
     reason?: string;
+    /** The organization's legal name, or its trade name (checked in the same search). */
+    matchedField: OrgNameMatchField;
 }
 
 /** Exact and canonical matches are the same legal name: treated as duplicates, not just suggestions. */
@@ -278,7 +283,7 @@ export function compareOrganizationNames(inputName: string, candidateName: strin
  * Ranks `candidates` by how closely their name matches `query` (best first, then alphabetically).
  * `excludeId` skips the record being edited; `limit` defaults to 6.
  */
-export function findSimilarOrganizations<T extends { id?: string; organizationName: string }>(
+export function findSimilarOrganizations<T extends { id?: string; organizationName: string; tradeName?: string | null }>(
     candidates: readonly T[],
     query: string,
     options: { excludeId?: string; limit?: number } = {},
@@ -288,15 +293,33 @@ export function findSimilarOrganizations<T extends { id?: string; organizationNa
     const matches: SimilarOrganizationResult<T>[] = [];
     for (const record of candidates) {
         if (!record?.organizationName || (excludeId && record.id === excludeId)) continue;
-        const { matchKind, score, reason } = compareOrganizationNames(query, record.organizationName);
-        if (matchKind !== 'none') matches.push({ record, matchKind, score, reason });
+        const byName = compareOrganizationNames(query, record.organizationName);
+        // The trade name is checked in the same search; it counts only when it matches better than the legal name.
+        const byTrade = record.tradeName?.trim() ? compareOrganizationNames(query, record.tradeName) : null;
+        const tradeWins = byTrade !== null && byTrade.matchKind !== 'none' && byTrade.score > byName.score;
+        const best = tradeWins ? byTrade : byName;
+        if (best.matchKind === 'none') continue;
+        matches.push({
+            record,
+            matchKind: best.matchKind,
+            score: best.score,
+            reason: tradeWins ? `Matches the trade name "${record.tradeName!.trim()}"` : best.reason,
+            matchedField: tradeWins ? 'tradeName' : 'organizationName',
+        });
     }
     matches.sort((a, b) => b.score - a.score || a.record.organizationName.localeCompare(b.record.organizationName));
     return matches.slice(0, limit);
 }
 
 /** The user-facing message for a duplicate name, naming how the existing record is written. */
-export function duplicateOrganizationMessage(kind: 'exact' | 'canonical', existingName: string): string {
+export function duplicateOrganizationMessage(
+    kind: 'exact' | 'canonical',
+    existingName: string,
+    matched?: { field: OrgNameMatchField; tradeName?: string | null },
+): string {
+    if (matched?.field === 'tradeName') {
+        return `"${matched.tradeName?.trim() ?? ''}" is already the trade name of organization "${existingName}".`;
+    }
     return kind === 'exact'
         ? `An organization named "${existingName}" already exists.`
         : `This matches existing organization "${existingName}" with a different legal format.`;

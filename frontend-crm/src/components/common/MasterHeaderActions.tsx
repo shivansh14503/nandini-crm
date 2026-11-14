@@ -17,16 +17,16 @@ export interface MasterHeaderActionsProps {
 }
 
 export const outlinedHeaderButtonSx = {
-    borderColor: '#e2e8f0',
-    color: '#334155',
-    backgroundColor: '#fff',
+    borderColor: 'var(--mui-palette-border-main)',
+    color: 'var(--crm-slate-700)',
+    backgroundColor: 'var(--mui-palette-background-paper)',
     textTransform: 'none',
     fontWeight: 600,
     fontSize: '0.8rem',
     borderRadius: '8px',
     height: 36,
     px: 1.8,
-    '&:hover': { borderColor: '#cbd5e1', backgroundColor: '#f8fafc' },
+    '&:hover': { borderColor: 'var(--mui-palette-border-strong)', backgroundColor: 'var(--mui-palette-background-subtle)' },
 } as const;
 
 /** Standard right-aligned header action row shared by the entity master views. */
@@ -68,7 +68,7 @@ export function MasterHeaderActions({
                     startIcon={<AddIcon sx={{ fontSize: 16 }} />}
                     onClick={onNewClick}
                     sx={{
-                        background: 'linear-gradient(135deg, #1d4ed8 0%, #2563eb 100%)',
+                        background: 'linear-gradient(135deg, var(--crm-fill-blue-700) 0%, var(--crm-fill-blue-600) 100%)',
                         color: '#fff',
                         textTransform: 'none',
                         fontWeight: 700,
@@ -77,7 +77,7 @@ export function MasterHeaderActions({
                         height: 36,
                         px: 2,
                         boxShadow: 'none',
-                        '&:hover': { background: 'linear-gradient(135deg, #1e40af 0%, #1d4ed8 100%)' },
+                        '&:hover': { background: 'linear-gradient(135deg, var(--crm-fill-blue-800) 0%, var(--crm-fill-blue-700) 100%)' },
                     }}
                 >
                     {newButtonLabel}

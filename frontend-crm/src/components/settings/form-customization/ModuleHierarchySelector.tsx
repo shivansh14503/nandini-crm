@@ -106,8 +106,8 @@ export function ModuleHierarchySelector({
                         role="group"
                         aria-labelledby={headingId}
                         sx={{
-                            backgroundColor: '#ffffff',
-                            border: `1px solid ${groupActive ? '#bfdbfe' : '#e2e8f0'}`,
+                            backgroundColor: 'var(--mui-palette-background-paper)',
+                            border: `1px solid ${groupActive ? 'var(--mui-palette-primary-softBorder)' : 'var(--mui-palette-border-main)'}`,
                             borderRadius: '10px',
                             px: 1.25,
                             py: 1,
@@ -120,15 +120,15 @@ export function ModuleHierarchySelector({
                             transition: 'border-color 150ms ease',
                         }}
                     >
-                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.6, color: groupActive ? '#2563eb' : '#64748b' }}>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.6, color: groupActive ? 'var(--crm-text-blue-600)' : 'var(--mui-palette-text-secondary)' }}>
                             {GROUP_ICONS[group.key]}
                             <Typography
                                 id={headingId}
-                                sx={{ fontSize: '0.68rem', fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', color: '#64748b' }}
+                                sx={{ fontSize: '0.68rem', fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--mui-palette-text-secondary)' }}
                             >
                                 {group.label}
                             </Typography>
-                            <Typography sx={{ fontSize: '0.68rem', color: '#94a3b8', fontWeight: 600 }}>
+                            <Typography sx={{ fontSize: '0.68rem', color: 'var(--mui-palette-text-muted)', fontWeight: 600 }}>
                                 · {group.modules.length} form{group.modules.length === 1 ? '' : 's'}
                             </Typography>
                         </Box>
@@ -167,21 +167,21 @@ export function ModuleHierarchySelector({
                                             transition: 'background-color 150ms ease, border-color 150ms ease, color 150ms ease, box-shadow 150ms ease',
                                             ...(active
                                                 ? {
-                                                      background: 'linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%)',
-                                                      border: '1px solid #60a5fa',
-                                                      color: '#1e3a8a',
-                                                      boxShadow: '0 1px 3px rgba(37, 99, 235, 0.12)',
+                                                      background: 'linear-gradient(135deg, var(--crm-blue-50) 0%, var(--crm-blue-100) 100%)',
+                                                      border: '1px solid var(--crm-blue-400)',
+                                                      color: 'var(--crm-text-blue-900)',
+                                                      boxShadow: '0 1px 3px rgb(var(--crm-accent-rgb) / 0.12)',
                                                   }
                                                 : {
-                                                      backgroundColor: '#f8fafc',
-                                                      border: '1px solid #e2e8f0',
-                                                      color: '#334155',
-                                                      '&:hover': { backgroundColor: '#f1f5f9', borderColor: '#cbd5e1', color: '#0f172a' },
+                                                      backgroundColor: 'var(--mui-palette-background-subtle)',
+                                                      border: '1px solid var(--mui-palette-border-main)',
+                                                      color: 'var(--crm-slate-700)',
+                                                      '&:hover': { backgroundColor: 'var(--mui-palette-background-hover)', borderColor: 'var(--mui-palette-border-strong)', color: 'var(--crm-slate-900)' },
                                                   }),
-                                            '&:focus-visible': { boxShadow: '0 0 0 2px #93c5fd' },
+                                            '&:focus-visible': { boxShadow: '0 0 0 2px var(--crm-blue-300)' },
                                         }}
                                     >
-                                        <Box component="span" sx={{ display: 'flex', color: active ? '#2563eb' : '#64748b' }}>
+                                        <Box component="span" sx={{ display: 'flex', color: active ? 'var(--crm-text-blue-600)' : 'var(--mui-palette-text-secondary)' }}>
                                             {MODULE_ICONS[m.key]}
                                         </Box>
                                         <span>{m.label}</span>
@@ -195,9 +195,9 @@ export function ModuleHierarchySelector({
                                                     fontSize: '0.66rem',
                                                     fontWeight: 700,
                                                     lineHeight: 1.6,
-                                                    border: `1px solid ${active ? '#93c5fd' : '#e2e8f0'}`,
-                                                    backgroundColor: active ? '#ffffff' : '#ffffff',
-                                                    color: active ? '#2563eb' : '#64748b',
+                                                    border: `1px solid ${active ? 'var(--crm-blue-300)' : 'var(--mui-palette-border-main)'}`,
+                                                    backgroundColor: active ? 'var(--mui-palette-background-paper)' : 'var(--mui-palette-background-paper)',
+                                                    color: active ? 'var(--crm-text-blue-600)' : 'var(--mui-palette-text-secondary)',
                                                 }}
                                             >
                                                 {count}
@@ -207,7 +207,7 @@ export function ModuleHierarchySelector({
                                             <Box
                                                 component="span"
                                                 title="Unsaved changes"
-                                                sx={{ width: 7, height: 7, borderRadius: '50%', backgroundColor: '#f59e0b', flexShrink: 0, boxShadow: '0 0 0 2px #fef3c7' }}
+                                                sx={{ width: 7, height: 7, borderRadius: '50%', backgroundColor: '#f59e0b', flexShrink: 0, boxShadow: '0 0 0 2px var(--crm-amber-100)' }}
                                             />
                                         )}
                                     </Box>

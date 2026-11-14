@@ -19,8 +19,8 @@ export function FieldNotice({ children }: { children: React.ReactNode }) {
                 fontSize: '0.72rem',
                 lineHeight: 1.4,
                 fontWeight: 500,
-                color: '#b45309',
-                backgroundColor: '#fffbeb',
+                color: 'var(--crm-amber-700)',
+                backgroundColor: 'var(--mui-palette-warning-soft)',
             }}
         >
             <InfoOutlinedIcon sx={{ fontSize: 14, mt: '1px', flexShrink: 0 }} />

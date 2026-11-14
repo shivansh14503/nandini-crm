@@ -38,10 +38,12 @@ export function StyledSelect({
 }: StyledSelectProps) {
     const { mode } = useFormMode();
     const fieldName = useCurrentFieldName();
-    const override = useFieldOverride(fieldName, { label: label ?? '', options: baseOptions, placeholder: basePlaceholder });
+    // The prompt the select shows when empty (also what the form builder offers as the field's placeholder).
+    const codedPlaceholder = basePlaceholder || (label ? `Select ${label.replace(/\s*\*$/, '')}` : 'Select an option');
+    const override = useFieldOverride(fieldName, { label: label ?? '', options: baseOptions, placeholder: codedPlaceholder });
     const options = override?.options ?? baseOptions;
     const optionLabels = override?.optionLabels ?? baseOptionLabels;
-    const placeholder = override ? override.placeholder : basePlaceholder;
+    const placeholder = override ? override.placeholder : codedPlaceholder;
     const display = (v: string) => optionLabels?.[v] ?? v;
 
     if (mode === 'view') {
@@ -51,8 +53,8 @@ export function StyledSelect({
     const isArchivedValue = Boolean(value) && !options.includes(value);
     const menuOptions = isArchivedValue ? [...options, value] : options;
 
-    const placeholderText =
-        placeholder || (label ? `Select ${label.replace(/\s*\*$/, '')}` : 'Select an option');
+    // An admin-cleared placeholder stays empty (no "Select …" fallback).
+    const placeholderText = placeholder ?? '';
 
     return (
         <FormControl
@@ -70,20 +72,20 @@ export function StyledSelect({
                 renderValue={(selected) => {
                     if (!selected) {
                         return (
-                            <Typography component="span" sx={{ color: '#9ca3af', fontSize: '0.85rem' }}>
+                            <Typography component="span" sx={{ color: 'var(--crm-gray-400)', fontSize: '0.85rem' }}>
                                 {placeholderText}
                             </Typography>
                         );
                     }
                     return (
-                        <Typography component="span" sx={{ color: '#1e293b', fontSize: '0.85rem' }}>
+                        <Typography component="span" sx={{ color: 'var(--mui-palette-text-primary)', fontSize: '0.85rem' }}>
                             {display(selected)}
                         </Typography>
                     );
                 }}
                 sx={{ fontSize: '0.85rem' }}
             >
-                <MenuItem value="" disabled sx={{ fontSize: '0.85rem', color: '#9ca3af', display: 'none' }}>
+                <MenuItem value="" disabled sx={{ fontSize: '0.85rem', color: 'var(--crm-gray-400)', display: 'none' }}>
                     <em>{placeholderText}</em>
                 </MenuItem>
                 {menuOptions.map((o) => {
@@ -101,9 +103,9 @@ export function StyledSelect({
                                             fontWeight: 700,
                                             letterSpacing: '0.04em',
                                             textTransform: 'uppercase',
-                                            color: '#b45309',
-                                            backgroundColor: '#fef3c7',
-                                            border: '1px solid #fde68a',
+                                            color: 'var(--crm-amber-700)',
+                                            backgroundColor: 'var(--crm-amber-100)',
+                                            border: '1px solid var(--mui-palette-warning-softBorder)',
                                             borderRadius: '4px',
                                             px: 0.6,
                                             py: 0.1,

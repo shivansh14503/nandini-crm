@@ -149,7 +149,7 @@ export function useAutoBreadcrumbs(customItems?: BreadcrumbItem[]): BreadcrumbIt
 
 function BreadcrumbsView({
     items,
-    separator = <NavigateNextIcon fontSize="small" sx={{ color: '#9ca3af', fontSize: 16 }} />,
+    separator = <NavigateNextIcon fontSize="small" sx={{ color: 'var(--crm-gray-400)', fontSize: 16 }} />,
     sx,
 }: {
     items: BreadcrumbItem[];
@@ -177,7 +177,7 @@ function BreadcrumbsView({
                             key={`${item.label}-${index}`}
                             sx={{
                                 fontSize: '0.8rem',
-                                color: '#1e293b',
+                                color: 'var(--mui-palette-text-primary)',
                                 fontWeight: 700,
                             }}
                         >
@@ -195,9 +195,9 @@ function BreadcrumbsView({
                             underline="hover"
                             sx={{
                                 fontSize: '0.8rem',
-                                color: '#6b7280',
+                                color: 'var(--crm-gray-500)',
                                 transition: 'color 0.15s ease',
-                                '&:hover': { color: '#2563EB' },
+                                '&:hover': { color: 'var(--mui-palette-primary-main)' },
                             }}
                         >
                             {item.label}
@@ -210,7 +210,7 @@ function BreadcrumbsView({
                         key={`${item.label}-${index}`}
                         sx={{
                             fontSize: '0.8rem',
-                            color: '#6b7280',
+                            color: 'var(--crm-gray-500)',
                         }}
                     >
                         {item.label}
@@ -231,7 +231,7 @@ function DynamicBreadcrumbs({
 
 export function AppBreadcrumbs({
     items,
-    separator = <NavigateNextIcon fontSize="small" sx={{ color: '#9ca3af', fontSize: 16 }} />,
+    separator = <NavigateNextIcon fontSize="small" sx={{ color: 'var(--crm-gray-400)', fontSize: 16 }} />,
     sx,
 }: AppBreadcrumbsProps) {
     // If static custom items are provided, render directly without triggering usePathname

@@ -78,8 +78,8 @@ export function RelatedModulesSidebar({
                     zIndex: 1300,
                     width: isCollapsed ? 72 : 260,
                     transition: 'width 0.2s ease, transform 225ms cubic-bezier(0, 0, 0.2, 1) 0ms',
-                    borderRight: '1px solid #e2e8f0',
-                    backgroundColor: '#ffffff',
+                    borderRight: '1px solid var(--mui-palette-border-main)',
+                    backgroundColor: 'var(--mui-palette-background-paper)',
                     overflowX: 'hidden',
                     boxShadow: '8px 0 32px rgba(15, 23, 42, 0.12)',
                     display: 'flex',
@@ -94,12 +94,12 @@ export function RelatedModulesSidebar({
                     height: 64,
                     minHeight: 64,
                     px: isCollapsed ? 1 : 2,
-                    borderBottom: '1px solid #e2e8f0',
+                    borderBottom: '1px solid var(--mui-palette-border-main)',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: isCollapsed ? 'center' : 'space-between',
                     gap: 1,
-                    backgroundColor: '#ffffff',
+                    backgroundColor: 'var(--mui-palette-background-paper)',
                     flexShrink: 0,
                 }}
             >
@@ -127,12 +127,12 @@ export function RelatedModulesSidebar({
                     onClick={handleToggleCollapse}
                     aria-label={isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
                     sx={{
-                        color: '#475569',
+                        color: 'var(--crm-slate-600)',
                         borderRadius: '8px',
                         p: 0.75,
                         '&:hover': {
-                            backgroundColor: '#f1f5f9',
-                            color: '#0f172a',
+                            backgroundColor: 'var(--mui-palette-background-hover)',
+                            color: 'var(--crm-slate-900)',
                         },
                     }}
                 >
@@ -160,12 +160,12 @@ export function RelatedModulesSidebar({
                                     px: isCollapsed ? 0 : 1.25,
                                     py: 0.85,
                                     justifyContent: isCollapsed ? 'center' : 'flex-start',
-                                    backgroundColor: isActive ? '#eff6ff !important' : 'transparent',
-                                    color: isActive ? '#1d4ed8' : '#334155',
+                                    backgroundColor: isActive ? 'var(--mui-palette-primary-soft) !important' : 'transparent',
+                                    color: isActive ? 'var(--crm-text-blue-700)' : 'var(--crm-slate-700)',
                                     transition: 'background-color 0.15s ease, color 0.15s ease',
                                     '&:hover': {
-                                        backgroundColor: isActive ? '#eff6ff' : '#f8fafc',
-                                        color: isActive ? '#1d4ed8' : '#0f172a',
+                                        backgroundColor: isActive ? 'var(--mui-palette-primary-soft)' : 'var(--mui-palette-background-subtle)',
+                                        color: isActive ? 'var(--crm-blue-700)' : 'var(--crm-slate-900)',
                                     },
                                 }}
                             >
@@ -173,7 +173,7 @@ export function RelatedModulesSidebar({
                                     sx={{
                                         minWidth: isCollapsed ? 'auto' : 32,
                                         mr: isCollapsed ? 0 : 0.5,
-                                        color: isActive ? '#1d4ed8' : '#64748b',
+                                        color: isActive ? 'var(--crm-text-blue-700)' : 'var(--mui-palette-text-secondary)',
                                         display: 'flex',
                                         alignItems: 'center',
                                         justifyContent: 'center',
@@ -194,7 +194,7 @@ export function RelatedModulesSidebar({
                                                     height: 16,
                                                     minWidth: 16,
                                                     px: 0.4,
-                                                    backgroundColor: '#2563eb',
+                                                    backgroundColor: 'var(--mui-palette-primary-main)',
                                                 },
                                             }}
                                         >
@@ -215,7 +215,7 @@ export function RelatedModulesSidebar({
                                                     sx: {
                                                         fontSize: '0.8rem',
                                                         fontWeight: isActive ? 700 : 600,
-                                                        color: isActive ? '#1d4ed8' : '#334155',
+                                                        color: isActive ? 'var(--crm-text-blue-700)' : 'var(--crm-slate-700)',
                                                     },
                                                 },
                                             }}
@@ -232,20 +232,20 @@ export function RelatedModulesSidebar({
                                                 borderRadius: '6px',
                                                 ml: 1,
                                                 backgroundColor: isActive
-                                                    ? '#dbeafe'
+                                                    ? 'var(--crm-blue-100)'
                                                     : hasCount
-                                                      ? '#eff6ff'
-                                                      : '#f1f5f9',
+                                                      ? 'var(--mui-palette-primary-soft)'
+                                                      : 'var(--mui-palette-background-hover)',
                                                 color: isActive
-                                                    ? '#1d4ed8'
+                                                    ? 'var(--crm-text-blue-700)'
                                                     : hasCount
-                                                      ? '#2563eb'
-                                                      : '#64748b',
+                                                      ? 'var(--crm-text-blue-600)'
+                                                      : 'var(--mui-palette-text-secondary)',
                                                 border: isActive
-                                                    ? '1px solid #93c5fd'
+                                                    ? '1px solid var(--crm-blue-300)'
                                                     : hasCount
-                                                      ? '1px solid #bfdbfe'
-                                                      : '1px solid #e2e8f0',
+                                                      ? '1px solid var(--mui-palette-primary-softBorder)'
+                                                      : '1px solid var(--mui-palette-border-main)',
                                                 '& .MuiChip-label': {
                                                     px: 0.75,
                                                 },

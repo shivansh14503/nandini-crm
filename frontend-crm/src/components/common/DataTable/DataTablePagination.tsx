@@ -40,8 +40,8 @@ export function DataTablePagination({
             <Box
                 sx={{
                     p: 1.8,
-                    borderTop: '1px solid #e2e8f0',
-                    backgroundColor: '#fff',
+                    borderTop: '1px solid var(--mui-palette-border-main)',
+                    backgroundColor: 'var(--mui-palette-background-paper)',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'space-between',
@@ -52,7 +52,7 @@ export function DataTablePagination({
                 {/* Left: Rows per page & showing records */}
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                        <Typography sx={{ fontSize: '0.78rem', color: '#64748b' }}>
+                        <Typography sx={{ fontSize: '0.78rem', color: 'var(--mui-palette-text-secondary)' }}>
                             Rows per page:
                         </Typography>
                         <FormControl size="small">
@@ -75,13 +75,13 @@ export function DataTablePagination({
                         </FormControl>
                     </Box>
 
-                    <Typography sx={{ fontSize: '0.78rem', color: '#64748b' }}>
+                    <Typography sx={{ fontSize: '0.78rem', color: 'var(--mui-palette-text-secondary)' }}>
                         Showing{' '}
-                        <Typography component="span" sx={{ fontWeight: 600, color: '#1e293b' }}>
+                        <Typography component="span" sx={{ fontWeight: 600, color: 'var(--mui-palette-text-primary)' }}>
                             {startItem} - {endItem}
                         </Typography>{' '}
                         of{' '}
-                        <Typography component="span" sx={{ fontWeight: 600, color: '#1e293b' }}>
+                        <Typography component="span" sx={{ fontWeight: 600, color: 'var(--mui-palette-text-primary)' }}>
                             {displayTotalCount ?? totalCount.toLocaleString()}
                         </Typography>{' '}
                         {entityLabel}
@@ -97,8 +97,8 @@ export function DataTablePagination({
                         sx={{
                             textTransform: 'none',
                             fontSize: '0.76rem',
-                            color: '#64748b',
-                            border: '1px solid #e2e8f0',
+                            color: 'var(--mui-palette-text-secondary)',
+                            border: '1px solid var(--mui-palette-border-main)',
                             borderRadius: '6px',
                             minWidth: 44,
                             height: 28,
@@ -114,8 +114,8 @@ export function DataTablePagination({
                         sx={{
                             textTransform: 'none',
                             fontSize: '0.76rem',
-                            color: '#64748b',
-                            border: '1px solid #e2e8f0',
+                            color: 'var(--mui-palette-text-secondary)',
+                            border: '1px solid var(--mui-palette-border-main)',
                             borderRadius: '6px',
                             minWidth: 44,
                             height: 28,
@@ -137,9 +137,9 @@ export function DataTablePagination({
                                 p: 0,
                                 fontSize: '0.76rem',
                                 fontWeight: currentPage1Based === pageNum ? 700 : 500,
-                                backgroundColor: currentPage1Based === pageNum ? '#eff6ff' : 'transparent',
-                                color: currentPage1Based === pageNum ? '#1d4ed8' : '#64748b',
-                                border: currentPage1Based === pageNum ? '1px solid #93c5fd' : '1px solid #e2e8f0',
+                                backgroundColor: currentPage1Based === pageNum ? 'var(--mui-palette-primary-soft)' : 'transparent',
+                                color: currentPage1Based === pageNum ? 'var(--crm-text-blue-700)' : 'var(--mui-palette-text-secondary)',
+                                border: currentPage1Based === pageNum ? '1px solid var(--crm-blue-300)' : '1px solid var(--mui-palette-border-main)',
                                 borderRadius: '6px',
                             }}
                         >
@@ -149,7 +149,7 @@ export function DataTablePagination({
 
                     {totalPages > 3 && (
                         <>
-                            <Typography sx={{ color: '#94a3b8', fontSize: '0.76rem' }}>...</Typography>
+                            <Typography sx={{ color: 'var(--mui-palette-text-muted)', fontSize: '0.76rem' }}>...</Typography>
                             <Button
                                 size="small"
                                 onClick={() => onPageChange(totalPages - 1)}
@@ -159,8 +159,8 @@ export function DataTablePagination({
                                     p: 0,
                                     fontSize: '0.76rem',
                                     fontWeight: 500,
-                                    color: '#64748b',
-                                    border: '1px solid #e2e8f0',
+                                    color: 'var(--mui-palette-text-secondary)',
+                                    border: '1px solid var(--mui-palette-border-main)',
                                     borderRadius: '6px',
                                 }}
                             >
@@ -176,8 +176,8 @@ export function DataTablePagination({
                         sx={{
                             textTransform: 'none',
                             fontSize: '0.76rem',
-                            color: '#64748b',
-                            border: '1px solid #e2e8f0',
+                            color: 'var(--mui-palette-text-secondary)',
+                            border: '1px solid var(--mui-palette-border-main)',
                             borderRadius: '6px',
                             minWidth: 44,
                             height: 28,
@@ -193,8 +193,8 @@ export function DataTablePagination({
                         sx={{
                             textTransform: 'none',
                             fontSize: '0.76rem',
-                            color: '#64748b',
-                            border: '1px solid #e2e8f0',
+                            color: 'var(--mui-palette-text-secondary)',
+                            border: '1px solid var(--mui-palette-border-main)',
                             borderRadius: '6px',
                             minWidth: 44,
                             height: 28,
@@ -213,18 +213,18 @@ export function DataTablePagination({
             sx={{
                 px: 2,
                 py: 1,
-                borderTop: '1px solid #e2e8f0',
+                borderTop: '1px solid var(--mui-palette-border-main)',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'space-between',
                 flexWrap: 'wrap',
                 gap: 2,
-                backgroundColor: '#ffffff',
+                backgroundColor: 'var(--mui-palette-background-paper)',
             }}
         >
             {/* Rows per page selector */}
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                <Typography sx={{ fontSize: '0.78rem', color: '#64748b' }}>
+                <Typography sx={{ fontSize: '0.78rem', color: 'var(--mui-palette-text-secondary)' }}>
                     Rows per page:
                 </Typography>
                 <Select
@@ -235,7 +235,7 @@ export function DataTablePagination({
                         fontSize: '0.78rem',
                         height: 28,
                         '& .MuiSelect-select': { py: 0.5, px: 1 },
-                        '& .MuiOutlinedInput-notchedOutline': { borderColor: '#cbd5e1' },
+                        '& .MuiOutlinedInput-notchedOutline': { borderColor: 'var(--mui-palette-border-strong)' },
                     }}
                 >
                     {pageSizeOptions.map((size) => (
@@ -248,7 +248,7 @@ export function DataTablePagination({
 
             {/* Range and page switcher */}
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-                <Typography sx={{ fontSize: '0.78rem', color: '#64748b' }}>
+                <Typography sx={{ fontSize: '0.78rem', color: 'var(--mui-palette-text-secondary)' }}>
                     {totalCount > 0 ? `${startItem}-${endItem} of ${totalCount}` : '0 of 0'}
                 </Typography>
 
@@ -258,7 +258,7 @@ export function DataTablePagination({
                         disabled={page === 0}
                         onClick={() => onPageChange(page - 1)}
                         sx={{
-                            border: '1px solid #e2e8f0',
+                            border: '1px solid var(--mui-palette-border-main)',
                             borderRadius: '6px',
                             p: 0.4,
                             '&:disabled': { opacity: 0.4 },
@@ -267,7 +267,7 @@ export function DataTablePagination({
                         <ChevronLeftIcon sx={{ fontSize: 18 }} />
                     </IconButton>
 
-                    <Typography sx={{ fontSize: '0.78rem', fontWeight: 600, color: '#334155', px: 0.5 }}>
+                    <Typography sx={{ fontSize: '0.78rem', fontWeight: 600, color: 'var(--crm-slate-700)', px: 0.5 }}>
                         {page + 1} / {totalPages}
                     </Typography>
 
@@ -276,7 +276,7 @@ export function DataTablePagination({
                         disabled={page >= totalPages - 1}
                         onClick={() => onPageChange(page + 1)}
                         sx={{
-                            border: '1px solid #e2e8f0',
+                            border: '1px solid var(--mui-palette-border-main)',
                             borderRadius: '6px',
                             p: 0.4,
                             '&:disabled': { opacity: 0.4 },

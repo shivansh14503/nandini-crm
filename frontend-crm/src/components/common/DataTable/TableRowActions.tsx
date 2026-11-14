@@ -59,10 +59,10 @@ export function TableRowActions({
                         href={viewHref}
                         onClick={(e: React.MouseEvent) => e.stopPropagation()}
                         sx={{
-                            color: '#64748b',
+                            color: 'var(--mui-palette-text-secondary)',
                             p: 0.5,
                             borderRadius: '6px',
-                            '&:hover': { color: '#2563eb', backgroundColor: '#eff6ff' },
+                            '&:hover': { color: 'var(--mui-palette-primary-main)', backgroundColor: 'var(--mui-palette-primary-soft)' },
                         }}
                     >
                         <VisibilityOutlinedIcon sx={{ fontSize: 16 }} />
@@ -80,10 +80,10 @@ export function TableRowActions({
                             onEdit?.();
                         }}
                         sx={{
-                            color: '#64748b',
+                            color: 'var(--mui-palette-text-secondary)',
                             p: 0.5,
                             borderRadius: '6px',
-                            '&:hover': { color: '#2563eb', backgroundColor: '#eff6ff' },
+                            '&:hover': { color: 'var(--mui-palette-primary-main)', backgroundColor: 'var(--mui-palette-primary-soft)' },
                         }}
                     >
                         <EditOutlinedIcon sx={{ fontSize: 16 }} />
@@ -100,10 +100,10 @@ export function TableRowActions({
                             onDelete();
                         }}
                         sx={{
-                            color: '#64748b',
+                            color: 'var(--mui-palette-text-secondary)',
                             p: 0.5,
                             borderRadius: '6px',
-                            '&:hover': { color: '#dc2626', backgroundColor: '#fef2f2' },
+                            '&:hover': { color: 'var(--mui-palette-error-main)', backgroundColor: 'var(--mui-palette-error-soft)' },
                         }}
                     >
                         <DeleteOutlinedIcon sx={{ fontSize: 16 }} />

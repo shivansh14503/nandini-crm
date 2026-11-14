@@ -12,8 +12,8 @@ import { useFieldOverride } from '@/context/FormConfigContext';
 import { ReadOnlyField } from '../ReadOnlyField';
 import { useTabSelect } from '../useTabSelect';
 
-const chipSx = { fontSize: '0.74rem', fontWeight: 600, height: 24, color: '#1d4ed8', backgroundColor: '#eff6ff' } as const;
-const archivedChipSx = { ...chipSx, color: '#b45309', backgroundColor: '#fef3c7', border: '1px dashed #fde68a' } as const;
+const chipSx = { fontSize: '0.74rem', fontWeight: 600, height: 24, color: 'var(--crm-text-blue-700)', backgroundColor: 'var(--mui-palette-primary-soft)' } as const;
+const archivedChipSx = { ...chipSx, color: 'var(--crm-amber-700)', backgroundColor: 'var(--crm-amber-100)', border: '1px dashed var(--mui-palette-warning-softBorder)' } as const;
 
 /** Read-only chips of a multi-select value (view mode). */
 export function MultiSelectChips({ values, optionLabels }: { values: readonly string[]; optionLabels?: Record<string, string> }) {
@@ -182,7 +182,7 @@ export function RhfMultiAutocomplete<T extends FieldValues>({
                 onBlur={field.onBlur}
                 options={options}
                 optionLabels={optionLabels}
-                placeholder={override?.placeholder ?? placeholder}
+                placeholder={override ? (override.placeholder ?? '') : placeholder}
                 error={Boolean(fieldState.error)}
                 inputRef={field.ref}
             />

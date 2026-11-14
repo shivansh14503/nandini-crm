@@ -31,7 +31,7 @@ export function AuthCard({ children }: AuthCardProps) {
                     maxWidth: 480,
                     borderRadius: '16px',
                     boxShadow: '0 4px 32px rgba(0, 0, 0, 0.08)',
-                    border: '1px solid #E8ECF0',
+                    border: '1px solid var(--mui-palette-border-main)',
                     backgroundColor: 'background.paper',
                 }}
             >

@@ -50,7 +50,7 @@ export function FormLivePreviewPanel({ module, configs, unsavedCount = 0, unsave
                     value={tabKey}
                     onChange={setTabKey}
                 />
-                <Typography sx={{ fontSize: '0.74rem', color: '#64748b', display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                <Typography sx={{ fontSize: '0.74rem', color: 'var(--mui-palette-text-secondary)', display: 'flex', alignItems: 'center', gap: 0.5 }}>
                     <VisibilityOutlinedIcon sx={{ fontSize: 15 }} /> Preview of the {CRM_MODULE_LABELS[module]} form
                     {unsavedCount > 0 ? ` — includes ${unsavedCount} unsaved change${unsavedCount === 1 ? '' : 's'}` : ''}
                 </Typography>
@@ -83,8 +83,8 @@ export function FormLivePreviewPanel({ module, configs, unsavedCount = 0, unsave
                 </FormModeProvider>
             </FormProvider>
 
-            <Box sx={{ px: 2, py: 1.5, borderTop: '1px solid #e2e8f0', backgroundColor: '#f8fafc' }}>
-                <Typography sx={{ fontSize: '0.74rem', color: '#64748b' }}>
+            <Box sx={{ px: 2, py: 1.5, borderTop: '1px solid var(--mui-palette-border-main)', backgroundColor: 'var(--mui-palette-background-subtle)' }}>
+                <Typography sx={{ fontSize: '0.74rem', color: 'var(--mui-palette-text-secondary)' }}>
                     Lookups, date-time pickers and country / state pickers are previewed as simple inputs. Fields appear in the configured order, as on
                     the real form. Composite blocks (email lists, line items, toggles) aren&apos;t part of the preview.
                 </Typography>

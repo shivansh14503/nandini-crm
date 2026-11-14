@@ -79,15 +79,15 @@ export function ProductDetailDrawer({
                 {
                     label: `SKU: ${p.productCode}`,
                     isMonospace: true,
-                    backgroundColor: '#eff6ff',
-                    color: '#1d4ed8',
-                    borderColor: '#bfdbfe',
+                    backgroundColor: 'var(--mui-palette-primary-soft)',
+                    color: 'var(--crm-text-blue-700)',
+                    borderColor: 'var(--mui-palette-primary-softBorder)',
                 },
                 {
                     label: `Tax: ${p.taxRate || '18%'} (${p.taxType || 'GST'})`,
-                    backgroundColor: '#f8fafc',
-                    color: '#475569',
-                    borderColor: '#e2e8f0',
+                    backgroundColor: 'var(--mui-palette-background-subtle)',
+                    color: 'var(--crm-slate-600)',
+                    borderColor: 'var(--mui-palette-border-main)',
                 },
             ]}
             headerActions={{
@@ -99,11 +99,11 @@ export function ProductDetailDrawer({
                 overview: (
                     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
                         {/* Primary Product Header Card */}
-                        <DrawerSectionCard title="PRODUCT IDENTITY & CODE" bg="#f8fafc">
+                        <DrawerSectionCard title="PRODUCT IDENTITY & CODE" bg="var(--mui-palette-background-subtle)">
                             <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mt: 0.5 }}>
                                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                                    <InventoryOutlinedIcon sx={{ fontSize: 20, color: '#2563eb' }} />
-                                    <Typography sx={{ fontSize: '1.02rem', fontWeight: 800, color: '#0f172a' }}>
+                                    <InventoryOutlinedIcon sx={{ fontSize: 20, color: 'var(--crm-text-blue-600)' }} />
+                                    <Typography sx={{ fontSize: '1.02rem', fontWeight: 800, color: 'var(--crm-slate-900)' }}>
                                         {p.productName}
                                     </Typography>
                                 </Box>
@@ -115,12 +115,12 @@ export function ProductDetailDrawer({
                                             fontFamily: 'monospace',
                                             fontWeight: 700,
                                             fontSize: '0.72rem',
-                                            backgroundColor: '#eff6ff',
-                                            color: '#1d4ed8',
-                                            border: '1px solid #bfdbfe',
+                                            backgroundColor: 'var(--mui-palette-primary-soft)',
+                                            color: 'var(--crm-text-blue-700)',
+                                            border: '1px solid var(--mui-palette-primary-softBorder)',
                                         }}
                                     />
-                                    <DrawerCopyButton text={p.productCode} title="Copy SKU Code" iconColor="#94a3b8" />
+                                    <DrawerCopyButton text={p.productCode} title="Copy SKU Code" iconColor="var(--mui-palette-text-muted)" />
                                 </Box>
                             </Box>
                         </DrawerSectionCard>
@@ -131,7 +131,7 @@ export function ProductDetailDrawer({
                         {/* Section 1: Sale Information */}
                         <DrawerSectionCard
                             title="Sale Information & Classification"
-                            icon={<LocalOfferOutlinedIcon sx={{ fontSize: 16, color: '#2563eb' }} />}
+                            icon={<LocalOfferOutlinedIcon sx={{ fontSize: 16, color: 'var(--crm-text-blue-600)' }} />}
                         >
                             <DrawerMetricGrid
                                 items={[
@@ -140,8 +140,8 @@ export function ProductDetailDrawer({
                                         value: p.category || 'General Equipment',
                                         valueSize: '0.92rem',
                                         valueWeight: 800,
-                                        bg: '#f8fafc',
-                                        borderColor: '#f1f5f9',
+                                        bg: 'var(--mui-palette-background-subtle)',
+                                        borderColor: 'var(--mui-palette-border-light)',
                                         p: 1.2,
                                     },
                                     {
@@ -149,8 +149,8 @@ export function ProductDetailDrawer({
                                         value: p.type || 'Physical Goods',
                                         valueSize: '0.92rem',
                                         valueWeight: 800,
-                                        bg: '#f8fafc',
-                                        borderColor: '#f1f5f9',
+                                        bg: 'var(--mui-palette-background-subtle)',
+                                        borderColor: 'var(--mui-palette-border-light)',
                                         p: 1.2,
                                     },
                                     {
@@ -158,11 +158,11 @@ export function ProductDetailDrawer({
                                         value: p.hsnCode || '84715000',
                                         valueSize: '0.92rem',
                                         valueWeight: 800,
-                                        labelColor: '#1d4ed8',
-                                        valueColor: '#1d4ed8',
+                                        labelColor: 'var(--crm-text-blue-700)',
+                                        valueColor: 'var(--crm-text-blue-700)',
                                         monospace: true,
-                                        bg: '#eff6ff',
-                                        borderColor: '#bfdbfe',
+                                        bg: 'var(--mui-palette-primary-soft)',
+                                        borderColor: 'var(--mui-palette-primary-softBorder)',
                                         p: 1.2,
                                     },
                                     {
@@ -170,8 +170,8 @@ export function ProductDetailDrawer({
                                         value: p.manufacturer || 'Authorized Vendor',
                                         valueSize: '0.92rem',
                                         valueWeight: 800,
-                                        bg: '#f8fafc',
-                                        borderColor: '#f1f5f9',
+                                        bg: 'var(--mui-palette-background-subtle)',
+                                        borderColor: 'var(--mui-palette-border-light)',
                                         p: 1.2,
                                     },
                                 ]}
@@ -181,7 +181,7 @@ export function ProductDetailDrawer({
                         {/* Section 2: Pricing & Tax */}
                         <DrawerSectionCard
                             title="Pricing Structure & Margins"
-                            icon={<ReceiptLongOutlinedIcon sx={{ fontSize: 16, color: '#2563eb' }} />}
+                            icon={<ReceiptLongOutlinedIcon sx={{ fontSize: 16, color: 'var(--crm-text-blue-600)' }} />}
                         >
                             <DrawerMetricGrid
                                 items={[
@@ -190,12 +190,12 @@ export function ProductDetailDrawer({
                                         value: formatCurrency(p.mrp),
                                         valueSize: '1.15rem',
                                         valueWeight: 800,
-                                        labelColor: '#166534',
-                                        valueColor: '#14532d',
-                                        bg: '#f0fdf4',
-                                        borderColor: '#bbf7d0',
+                                        labelColor: 'var(--crm-green-800)',
+                                        valueColor: 'var(--crm-green-900)',
+                                        bg: 'var(--crm-green-50)',
+                                        borderColor: 'var(--crm-green-200)',
                                         sublabel: profitMargin ? (
-                                            <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.4, mt: 0.5, color: '#15803d', fontSize: '0.7rem', fontWeight: 700 }}>
+                                            <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.4, mt: 0.5, color: 'var(--crm-green-700)', fontSize: '0.7rem', fontWeight: 700 }}>
                                                 <TrendingUpIcon sx={{ fontSize: 13 }} />
                                                 +{profitMargin}% Gross Margin
                                             </Box>
@@ -206,12 +206,12 @@ export function ProductDetailDrawer({
                                         value: formatCurrency(p.msp),
                                         valueSize: '1.15rem',
                                         valueWeight: 800,
-                                        labelColor: '#1e40af',
-                                        valueColor: '#1e3a8a',
-                                        bg: '#eff6ff',
-                                        borderColor: '#bfdbfe',
+                                        labelColor: 'var(--crm-text-blue-800)',
+                                        valueColor: 'var(--crm-text-blue-900)',
+                                        bg: 'var(--mui-palette-primary-soft)',
+                                        borderColor: 'var(--mui-palette-primary-softBorder)',
                                         sublabel: (
-                                            <Typography sx={{ fontSize: '0.72rem', color: '#60a5fa', mt: 0.5 }}>
+                                            <Typography sx={{ fontSize: '0.72rem', color: 'var(--crm-text-blue-400)', mt: 0.5 }}>
                                                 Bottom line floor price
                                             </Typography>
                                         ),
@@ -221,25 +221,25 @@ export function ProductDetailDrawer({
                                         value: formatCurrency(p.cost),
                                         valueSize: '1.05rem',
                                         valueWeight: 800,
-                                        valueColor: '#334155',
-                                        bg: '#f8fafc',
+                                        valueColor: 'var(--crm-slate-700)',
+                                        bg: 'var(--mui-palette-background-subtle)',
                                     },
                                     {
                                         label: 'STANDARD DISCOUNT',
                                         value: p.discount ? `${p.discount}%` : '0%',
                                         valueSize: '1.05rem',
                                         valueWeight: 800,
-                                        labelColor: '#854d0e',
-                                        valueColor: '#713f12',
-                                        bg: '#fefce8',
-                                        borderColor: '#fef08a',
+                                        labelColor: 'var(--crm-yellow-800)',
+                                        valueColor: 'var(--crm-yellow-900)',
+                                        bg: 'var(--crm-yellow-50)',
+                                        borderColor: 'var(--crm-yellow-200)',
                                     },
                                 ]}
                             />
 
-                            <Divider sx={{ my: 1.5, borderColor: '#f1f5f9' }} />
+                            <Divider sx={{ my: 1.5, borderColor: 'var(--mui-palette-border-light)' }} />
 
-                            <Typography sx={{ fontSize: '0.72rem', fontWeight: 700, color: '#64748b', mb: 1 }}>
+                            <Typography sx={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--mui-palette-text-secondary)', mb: 1 }}>
                                 TAX SPECIFICATION & CONTRACT
                             </Typography>
                             <DrawerMetricGrid
@@ -250,17 +250,17 @@ export function ProductDetailDrawer({
                                         label: 'TAX TYPE',
                                         value: p.taxType || 'GST',
                                         valueSize: '0.84rem',
-                                        bg: '#f8fafc',
-                                        borderColor: '#f1f5f9',
+                                        bg: 'var(--mui-palette-background-subtle)',
+                                        borderColor: 'var(--mui-palette-border-light)',
                                         p: 1,
                                     },
                                     {
                                         label: 'TAX RATE',
                                         value: p.taxRate || '18%',
                                         valueSize: '0.84rem',
-                                        valueColor: '#2563eb',
-                                        bg: '#f8fafc',
-                                        borderColor: '#f1f5f9',
+                                        valueColor: 'var(--crm-text-blue-600)',
+                                        bg: 'var(--mui-palette-background-subtle)',
+                                        borderColor: 'var(--mui-palette-border-light)',
                                         p: 1,
                                     },
                                     {
@@ -273,13 +273,13 @@ export function ProductDetailDrawer({
                                                     height: 18,
                                                     fontSize: '0.66rem',
                                                     fontWeight: 700,
-                                                    backgroundColor: p.contractCreate === 'Yes' ? '#ecfdf5' : '#f1f5f9',
-                                                    color: p.contractCreate === 'Yes' ? '#047857' : '#64748b',
+                                                    backgroundColor: p.contractCreate === 'Yes' ? 'var(--mui-palette-success-soft)' : 'var(--mui-palette-background-hover)',
+                                                    color: p.contractCreate === 'Yes' ? 'var(--crm-emerald-700)' : 'var(--mui-palette-text-secondary)',
                                                 }}
                                             />
                                         ),
-                                        bg: '#f8fafc',
-                                        borderColor: '#f1f5f9',
+                                        bg: 'var(--mui-palette-background-subtle)',
+                                        borderColor: 'var(--mui-palette-border-light)',
                                         p: 1,
                                     },
                                 ]}
@@ -289,23 +289,23 @@ export function ProductDetailDrawer({
                         {/* Section 3: Description & Terms */}
                         <DrawerSectionCard
                             title="Description & Commercial Terms"
-                            icon={<DescriptionOutlinedIcon sx={{ fontSize: 16, color: '#2563eb' }} />}
+                            icon={<DescriptionOutlinedIcon sx={{ fontSize: 16, color: 'var(--crm-text-blue-600)' }} />}
                         >
-                            <Typography sx={{ fontSize: '0.82rem', color: '#475569', lineHeight: 1.6, whiteSpace: 'pre-wrap', mb: 1.5 }}>
+                            <Typography sx={{ fontSize: '0.82rem', color: 'var(--crm-slate-600)', lineHeight: 1.6, whiteSpace: 'pre-wrap', mb: 1.5 }}>
                                 {p.description ||
                                     `${p.productName} engineered for high reliability in enterprise environments. Fully compliant with OEM standard specifications and backed by national warranty support.`}
                             </Typography>
 
                             {p.termsAndConditions && (
                                 <>
-                                    <Divider sx={{ my: 1.5, borderColor: '#f1f5f9' }} />
+                                    <Divider sx={{ my: 1.5, borderColor: 'var(--mui-palette-border-light)' }} />
                                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.8, mb: 0.8 }}>
-                                        <GavelOutlinedIcon sx={{ fontSize: 15, color: '#64748b' }} />
-                                        <Typography sx={{ fontSize: '0.74rem', fontWeight: 700, color: '#64748b' }}>
+                                        <GavelOutlinedIcon sx={{ fontSize: 15, color: 'var(--mui-palette-text-secondary)' }} />
+                                        <Typography sx={{ fontSize: '0.74rem', fontWeight: 700, color: 'var(--mui-palette-text-secondary)' }}>
                                             TERMS & CONDITIONS
                                         </Typography>
                                     </Box>
-                                    <Typography sx={{ fontSize: '0.8rem', color: '#475569', lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>
+                                    <Typography sx={{ fontSize: '0.8rem', color: 'var(--crm-slate-600)', lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>
                                         {p.termsAndConditions}
                                     </Typography>
                                 </>

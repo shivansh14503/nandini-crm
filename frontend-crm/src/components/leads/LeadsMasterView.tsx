@@ -33,7 +33,7 @@ import { LeadDetailDrawer } from './LeadDetailDrawer';
 import { formatDateTime } from '@/utils/date';
 import { formatPhoneDisplay } from '@/utils/phone';
 
-const plainCellSx = { fontSize: '0.78rem', color: '#334155' } as const;
+const plainCellSx = { fontSize: '0.78rem', color: 'var(--crm-slate-700)' } as const;
 
 
 /** Stable empty list while the first page loads (keeps memoized filters from recomputing). */
@@ -102,9 +102,9 @@ export function LeadsMasterView() {
                 label: 'Hot Leads',
                 icon: <LocalFireDepartmentOutlinedIcon sx={{ fontSize: 16 }} />,
                 count: baseLeads.filter((l) => l.leadType === 'Hot').length,
-                activeColor: '#dc2626',
-                activeBgColor: '#fef2f2',
-                activeBadgeBgColor: '#fee2e2',
+                activeColor: 'var(--mui-palette-error-main)',
+                activeBgColor: 'var(--mui-palette-error-soft)',
+                activeBadgeBgColor: 'var(--crm-red-100)',
             },
             {
                 id: 'new',
@@ -117,7 +117,7 @@ export function LeadsMasterView() {
                 label: 'Followup Today',
                 icon: <TodayOutlinedIcon sx={{ fontSize: 16 }} />,
                 count: baseLeads.filter((l) => l.nextFollowupDate === todayStr).length,
-                activeColor: '#d97706',
+                activeColor: 'var(--mui-palette-warning-main)',
             },
             {
                 id: 'my_leads',
@@ -238,13 +238,13 @@ export function LeadsMasterView() {
                 render: (l) => (
                     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.3 }}>
                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                            <PersonOutlinedIcon sx={{ fontSize: 16, color: '#2563eb', flexShrink: 0 }} />
+                            <PersonOutlinedIcon sx={{ fontSize: 16, color: 'var(--crm-text-blue-600)', flexShrink: 0 }} />
                             <RecordLink
                                 href={ROUTES.LEAD_DETAIL(l.id)}
                                 onOpen={() => setDrawerLeadId(l.id)}
                                 sx={{
                                     fontWeight: 700,
-                                    color: '#1d4ed8',
+                                    color: 'var(--crm-text-blue-700)',
                                     fontSize: '0.82rem',
                                     cursor: 'pointer',
                                     '&:hover': { textDecoration: 'underline' },
@@ -254,7 +254,7 @@ export function LeadsMasterView() {
                             </RecordLink>
                         </Box>
                         {l.designation && (
-                            <Typography sx={{ fontSize: '0.7rem', color: '#64748b', pl: 3 }} noWrap>
+                            <Typography sx={{ fontSize: '0.7rem', color: 'var(--mui-palette-text-secondary)', pl: 3 }} noWrap>
                                 {l.designation}
                             </Typography>
                         )}
@@ -285,14 +285,14 @@ export function LeadsMasterView() {
                                         height: 20,
                                         fontSize: '0.68rem',
                                         fontWeight: 600,
-                                        backgroundColor: '#f0fdf4',
-                                        color: '#166534',
-                                        border: '1px solid #bbf7d0',
+                                        backgroundColor: 'var(--crm-green-50)',
+                                        color: 'var(--crm-green-800)',
+                                        border: '1px solid var(--crm-green-200)',
                                     }}
                                 />
                             ))
                         ) : (
-                            <Typography sx={{ fontSize: '0.78rem', color: '#94a3b8' }}>-</Typography>
+                            <Typography sx={{ fontSize: '0.78rem', color: 'var(--mui-palette-text-muted)' }}>-</Typography>
                         )}
                     </Box>
                 ),
@@ -304,13 +304,13 @@ export function LeadsMasterView() {
                 minWidth: 180,
                 render: (l) => (
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.8 }}>
-                        <ApartmentIcon sx={{ fontSize: 15, color: '#64748b', flexShrink: 0 }} />
+                        <ApartmentIcon sx={{ fontSize: 15, color: 'var(--mui-palette-text-secondary)', flexShrink: 0 }} />
                         <Box>
-                            <Typography sx={{ fontSize: '0.8rem', color: '#1e293b', fontWeight: 600 }}>
+                            <Typography sx={{ fontSize: '0.8rem', color: 'var(--mui-palette-text-primary)', fontWeight: 600 }}>
                                 {l.organizationName || 'Individual Prospect'}
                             </Typography>
                             {l.primaryCity && (
-                                <Typography sx={{ fontSize: '0.7rem', color: '#64748b' }}>
+                                <Typography sx={{ fontSize: '0.7rem', color: 'var(--mui-palette-text-secondary)' }}>
                                     {l.primaryCity}{l.primaryState ? `, ${l.primaryState}` : ''}
                                 </Typography>
                             )}
@@ -324,34 +324,34 @@ export function LeadsMasterView() {
                 sortable: true,
                 minWidth: 120,
                 render: (l) => {
-                    let bg = '#eff6ff';
-                    let color = '#1d4ed8';
-                    let border = '#bfdbfe';
+                    let bg = 'var(--mui-palette-primary-soft)';
+                    let color = 'var(--crm-text-blue-700)';
+                    let border = 'var(--mui-palette-primary-softBorder)';
 
                     if (l.status === 'New') {
-                        bg = '#eff6ff';
-                        color = '#1e40af';
-                        border = '#bfdbfe';
+                        bg = 'var(--mui-palette-primary-soft)';
+                        color = 'var(--crm-text-blue-800)';
+                        border = 'var(--mui-palette-primary-softBorder)';
                     } else if (l.status === 'Contacted' || l.status === 'In Discussion') {
-                        bg = '#f5f3ff';
-                        color = '#6d28d9';
-                        border = '#ddd6fe';
+                        bg = 'var(--crm-violet-50)';
+                        color = 'var(--crm-violet-700)';
+                        border = 'var(--crm-violet-200)';
                     } else if (l.status === 'Demo Scheduled') {
-                        bg = '#fdf4ff';
-                        color = '#a21caf';
-                        border = '#f5d0fe';
+                        bg = 'var(--crm-fuchsia-50)';
+                        color = 'var(--crm-fuchsia-700)';
+                        border = 'var(--crm-fuchsia-200)';
                     } else if (l.status === 'Proposal Sent' || l.status === 'Negotiation') {
-                        bg = '#fffbeb';
-                        color = '#b45309';
-                        border = '#fde68a';
+                        bg = 'var(--mui-palette-warning-soft)';
+                        color = 'var(--crm-amber-700)';
+                        border = 'var(--mui-palette-warning-softBorder)';
                     } else if (l.status === 'Converted') {
-                        bg = '#ecfdf5';
-                        color = '#047857';
-                        border = '#a7f3d0';
+                        bg = 'var(--mui-palette-success-soft)';
+                        color = 'var(--crm-emerald-700)';
+                        border = 'var(--mui-palette-success-softBorder)';
                     } else if (l.status.includes('Lost') || l.status.includes('Unqualified')) {
-                        bg = '#fef2f2';
-                        color = '#b91c1c';
-                        border = '#fecaca';
+                        bg = 'var(--mui-palette-error-soft)';
+                        color = 'var(--crm-red-700)';
+                        border = 'var(--mui-palette-error-softBorder)';
                     }
 
                     return (
@@ -380,7 +380,7 @@ export function LeadsMasterView() {
                     const email = (l.emailAddresses?.find((e) => e.isPrimary) ?? l.emailAddresses?.[0])?.email;
                     return (
                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.6 }}>
-                            {email && <EmailOutlinedIcon sx={{ fontSize: 14, color: '#94a3b8' }} />}
+                            {email && <EmailOutlinedIcon sx={{ fontSize: 14, color: 'var(--mui-palette-text-muted)' }} />}
                             <Typography sx={plainCellSx}>{email || '-'}</Typography>
                         </Box>
                     );
@@ -395,7 +395,7 @@ export function LeadsMasterView() {
                     const phone = l.mobile || l.otherPhone;
                     return (
                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.6 }}>
-                            {phone && <PhoneOutlinedIcon sx={{ fontSize: 14, color: '#64748b' }} />}
+                            {phone && <PhoneOutlinedIcon sx={{ fontSize: 14, color: 'var(--mui-palette-text-secondary)' }} />}
                             <Typography sx={{ ...plainCellSx, fontWeight: 600 }}>
                                 {phone ? formatPhoneDisplay(phone) || phone : '-'}
                             </Typography>
@@ -425,7 +425,7 @@ export function LeadsMasterView() {
                             <CalendarMonthOutlinedIcon
                                 sx={{
                                     fontSize: 16,
-                                    color: isToday ? '#d97706' : '#64748b',
+                                    color: isToday ? 'var(--mui-palette-warning-main)' : 'var(--mui-palette-text-secondary)',
                                 }}
                             />
                             <Box>
@@ -433,7 +433,7 @@ export function LeadsMasterView() {
                                     sx={{
                                         fontSize: '0.78rem',
                                         fontWeight: isToday ? 700 : 500,
-                                        color: isToday ? '#b45309' : '#334155',
+                                        color: isToday ? 'var(--crm-amber-700)' : 'var(--crm-slate-700)',
                                     }}
                                 >
                                     {l.nextFollowupDate || '-'}
@@ -447,9 +447,9 @@ export function LeadsMasterView() {
                                                 borderRadius: '4px',
                                                 fontSize: '0.62rem',
                                                 fontWeight: 800,
-                                                backgroundColor: '#fef3c7',
-                                                color: '#b45309',
-                                                border: '1px solid #fde68a',
+                                                backgroundColor: 'var(--crm-amber-100)',
+                                                color: 'var(--crm-amber-700)',
+                                                border: '1px solid var(--mui-palette-warning-softBorder)',
                                             }}
                                         >
                                             TODAY
@@ -457,7 +457,7 @@ export function LeadsMasterView() {
                                     )}
                                 </Typography>
                                 {(l.nextFollowupTime || l.followupType) && (
-                                    <Typography sx={{ fontSize: '0.7rem', color: '#64748b' }}>
+                                    <Typography sx={{ fontSize: '0.7rem', color: 'var(--mui-palette-text-secondary)' }}>
                                         {l.followupType ? `${l.followupType} • ` : ''}
                                         {l.nextFollowupTime || ''}
                                     </Typography>
@@ -473,7 +473,7 @@ export function LeadsMasterView() {
                 sortable: true,
                 minWidth: 130,
                 render: (l) => (
-                    <Typography sx={{ fontSize: '0.78rem', color: '#475569', fontWeight: 500 }}>
+                    <Typography sx={{ fontSize: '0.78rem', color: 'var(--crm-slate-600)', fontWeight: 500 }}>
                         {l.assignedTo || '-'}
                     </Typography>
                 ),
@@ -569,7 +569,7 @@ export function LeadsMasterView() {
             emptyDescription="Record new prospective clients, followups, and product interests to begin converting sales."
             emptyActionLabel="Create Lead"
             onEmptyAction={() => router.push(ROUTES.LEAD_NEW)}
-            emptyIcon={<PersonOutlinedIcon sx={{ fontSize: 48, color: '#cbd5e1' }} />}
+            emptyIcon={<PersonOutlinedIcon sx={{ fontSize: 48, color: 'var(--crm-slate-300)' }} />}
             minHeight={300}
             pagination={{
                 page,

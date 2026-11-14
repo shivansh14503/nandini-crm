@@ -6,12 +6,12 @@ import { Box } from '@mui/material';
 type ChipTone = 'default' | 'active' | 'inactive' | 'system' | 'custom' | 'neutral';
 
 const TONES: Record<ChipTone, { color: string; backgroundColor: string; borderColor: string }> = {
-    default: { color: '#1d4ed8', backgroundColor: '#eff6ff', borderColor: '#bfdbfe' },
-    active: { color: '#047857', backgroundColor: '#ecfdf5', borderColor: '#a7f3d0' },
-    inactive: { color: '#64748b', backgroundColor: '#f1f5f9', borderColor: '#e2e8f0' },
-    system: { color: '#7c3aed', backgroundColor: '#f5f3ff', borderColor: '#ddd6fe' },
-    custom: { color: '#b45309', backgroundColor: '#fffbeb', borderColor: '#fde68a' },
-    neutral: { color: '#475569', backgroundColor: '#f8fafc', borderColor: '#e2e8f0' },
+    default: { color: 'var(--crm-text-blue-700)', backgroundColor: 'var(--mui-palette-primary-soft)', borderColor: 'var(--mui-palette-primary-softBorder)' },
+    active: { color: 'var(--crm-emerald-700)', backgroundColor: 'var(--mui-palette-success-soft)', borderColor: 'var(--mui-palette-success-softBorder)' },
+    inactive: { color: 'var(--mui-palette-text-secondary)', backgroundColor: 'var(--mui-palette-background-hover)', borderColor: 'var(--mui-palette-border-main)' },
+    system: { color: 'var(--crm-violet-600)', backgroundColor: 'var(--crm-violet-50)', borderColor: 'var(--crm-violet-200)' },
+    custom: { color: 'var(--crm-amber-700)', backgroundColor: 'var(--mui-palette-warning-soft)', borderColor: 'var(--mui-palette-warning-softBorder)' },
+    neutral: { color: 'var(--crm-slate-600)', backgroundColor: 'var(--mui-palette-background-subtle)', borderColor: 'var(--mui-palette-border-main)' },
 };
 
 /** Small status pill matching the admin hub badges. */

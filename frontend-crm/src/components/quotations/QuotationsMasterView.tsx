@@ -38,21 +38,21 @@ const formatCurrency = (val: number = 0) =>
         maximumFractionDigits: 0,
     }).format(val);
 
-const plainCellSx = { fontSize: '0.78rem', color: '#334155' } as const;
+const plainCellSx = { fontSize: '0.78rem', color: 'var(--crm-slate-700)' } as const;
 
 const STAGE_COLORS: Record<string, { bg: string; color: string; border: string }> = {
-    Draft: { bg: '#f1f5f9', color: '#475569', border: '#cbd5e1' },
-    Negotiation: { bg: '#fffbeb', color: '#b45309', border: '#fde68a' },
-    Delivered: { bg: '#eff6ff', color: '#1d4ed8', border: '#bfdbfe' },
-    'On Hold': { bg: '#fff1f2', color: '#be123c', border: '#fecdd3' },
-    Confirmed: { bg: '#ecfdf5', color: '#047857', border: '#a7f3d0' },
-    'Closed Accepted': { bg: '#ecfdf5', color: '#047857', border: '#a7f3d0' },
-    'Closed Lost': { bg: '#fef2f2', color: '#b91c1c', border: '#fecaca' },
-    'Closed Dead': { bg: '#f1f5f9', color: '#64748b', border: '#cbd5e1' },
+    Draft: { bg: 'var(--mui-palette-background-hover)', color: 'var(--crm-slate-600)', border: 'var(--mui-palette-border-strong)' },
+    Negotiation: { bg: 'var(--mui-palette-warning-soft)', color: 'var(--crm-amber-700)', border: 'var(--mui-palette-warning-softBorder)' },
+    Delivered: { bg: 'var(--mui-palette-primary-soft)', color: 'var(--crm-text-blue-700)', border: 'var(--mui-palette-primary-softBorder)' },
+    'On Hold': { bg: 'var(--crm-rose-50)', color: 'var(--crm-rose-700)', border: 'var(--crm-rose-200)' },
+    Confirmed: { bg: 'var(--mui-palette-success-soft)', color: 'var(--crm-emerald-700)', border: 'var(--mui-palette-success-softBorder)' },
+    'Closed Accepted': { bg: 'var(--mui-palette-success-soft)', color: 'var(--crm-emerald-700)', border: 'var(--mui-palette-success-softBorder)' },
+    'Closed Lost': { bg: 'var(--mui-palette-error-soft)', color: 'var(--crm-red-700)', border: 'var(--mui-palette-error-softBorder)' },
+    'Closed Dead': { bg: 'var(--mui-palette-background-hover)', color: 'var(--mui-palette-text-secondary)', border: 'var(--mui-palette-border-strong)' },
     // Older records still carry the legacy status names.
-    Sent: { bg: '#eff6ff', color: '#1d4ed8', border: '#bfdbfe' },
-    Accepted: { bg: '#ecfdf5', color: '#047857', border: '#a7f3d0' },
-    Rejected: { bg: '#fef2f2', color: '#b91c1c', border: '#fecaca' },
+    Sent: { bg: 'var(--mui-palette-primary-soft)', color: 'var(--crm-text-blue-700)', border: 'var(--mui-palette-primary-softBorder)' },
+    Accepted: { bg: 'var(--mui-palette-success-soft)', color: 'var(--crm-emerald-700)', border: 'var(--mui-palette-success-softBorder)' },
+    Rejected: { bg: 'var(--mui-palette-error-soft)', color: 'var(--crm-red-700)', border: 'var(--mui-palette-error-softBorder)' },
 };
 
 /** Stable empty list while the first page loads (keeps memoized filters from recomputing). */
@@ -161,28 +161,28 @@ export function QuotationsMasterView() {
                 label: 'Draft',
                 icon: <DraftsOutlinedIcon sx={{ fontSize: 16 }} />,
                 count: quotations.filter((q) => q.status === 'Draft').length,
-                activeColor: '#64748b',
+                activeColor: 'var(--mui-palette-text-secondary)',
             },
             {
                 id: 'sent',
                 label: 'Sent',
                 icon: <SendOutlinedIcon sx={{ fontSize: 16 }} />,
                 count: quotations.filter((q) => q.status === 'Sent').length,
-                activeColor: '#2563eb',
+                activeColor: 'var(--mui-palette-primary-main)',
             },
             {
                 id: 'accepted',
                 label: 'Accepted',
                 icon: <CheckCircleOutlinedIcon sx={{ fontSize: 16 }} />,
                 count: quotations.filter((q) => q.status === 'Accepted').length,
-                activeColor: '#059669',
+                activeColor: 'var(--crm-emerald-600)',
             },
             {
                 id: 'rejected',
                 label: 'Rejected',
                 icon: <CancelOutlinedIcon sx={{ fontSize: 16 }} />,
                 count: quotations.filter((q) => q.status === 'Rejected').length,
-                activeColor: '#dc2626',
+                activeColor: 'var(--mui-palette-error-main)',
             },
         ];
     }, [quotations]);
@@ -252,7 +252,7 @@ export function QuotationsMasterView() {
                 sortable: true,
                 minWidth: 200,
                 render: (row) => (
-                    <Typography sx={{ fontSize: '0.8rem', fontWeight: 600, color: '#1e293b' }}>
+                    <Typography sx={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--mui-palette-text-primary)' }}>
                         {row.quotationTitle || row.quotationSubject || '-'}
                     </Typography>
                 ),
@@ -263,7 +263,7 @@ export function QuotationsMasterView() {
                 sortable: true,
                 minWidth: 160,
                 render: (row) => (
-                    <Typography sx={{ fontSize: '0.8rem', fontWeight: 600, color: '#2563eb' }}>
+                    <Typography sx={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--crm-text-blue-600)' }}>
                         {row.opportunityName || row.opportunityCode || '-'}
                     </Typography>
                 ),
@@ -277,7 +277,7 @@ export function QuotationsMasterView() {
                 render: (row) => {
                     const revised = wasModified(row);
                     return (
-                        <Typography sx={{ fontSize: '0.76rem', fontWeight: 600, color: revised ? '#b45309' : '#94a3b8' }}>
+                        <Typography sx={{ fontSize: '0.76rem', fontWeight: 600, color: revised ? 'var(--crm-amber-700)' : 'var(--mui-palette-text-muted)' }}>
                             {revised ? 'Yes' : 'No'}
                         </Typography>
                     );
@@ -314,8 +314,8 @@ export function QuotationsMasterView() {
                 minWidth: 150,
                 render: (row) => (
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.8 }}>
-                        <PersonOutlinedIcon sx={{ fontSize: 15, color: '#94a3b8' }} />
-                        <Typography sx={{ fontSize: '0.8rem', color: '#475569' }}>{row.contactName || '-'}</Typography>
+                        <PersonOutlinedIcon sx={{ fontSize: 15, color: 'var(--mui-palette-text-muted)' }} />
+                        <Typography sx={{ fontSize: '0.8rem', color: 'var(--crm-slate-600)' }}>{row.contactName || '-'}</Typography>
                     </Box>
                 ),
             },
@@ -326,8 +326,8 @@ export function QuotationsMasterView() {
                 minWidth: 180,
                 render: (row) => (
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.8 }}>
-                        <ApartmentIcon sx={{ fontSize: 15, color: '#64748b' }} />
-                        <Typography sx={{ fontSize: '0.8rem', fontWeight: 500, color: '#334155' }}>
+                        <ApartmentIcon sx={{ fontSize: 15, color: 'var(--mui-palette-text-secondary)' }} />
+                        <Typography sx={{ fontSize: '0.8rem', fontWeight: 500, color: 'var(--crm-slate-700)' }}>
                             {row.organizationName || '-'}
                         </Typography>
                     </Box>
@@ -340,7 +340,7 @@ export function QuotationsMasterView() {
                 align: 'right',
                 minWidth: 130,
                 render: (row) => (
-                    <Typography sx={{ fontSize: '0.82rem', fontWeight: 700, color: '#0f172a' }}>
+                    <Typography sx={{ fontSize: '0.82rem', fontWeight: 700, color: 'var(--crm-slate-900)' }}>
                         {formatCurrency(row.grandTotal)}
                     </Typography>
                 ),

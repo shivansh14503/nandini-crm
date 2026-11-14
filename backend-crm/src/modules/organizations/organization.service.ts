@@ -14,10 +14,12 @@ import {
     extractCoreOrgName,
     findSimilarOrganizations,
     isDuplicateMatchKind,
+    type OrgNameMatchField,
     type OrgNameMatchKind,
     type SimilarOrganizationResult,
 } from '../../utils/organizationName.js';
 import { parsePagination } from '../../utils/pagination.js';
+import { assertTaxIdsUnique } from '../shared/taxIdentifiers.js';
 import { asPayload, checkModulePayload, loadModuleFieldConfig, validateModulePayload } from '../form-configs/customFieldValidator.js';
 import { assertAssigneeValid, assertRecordAccess, buildAccessScopeWhere } from '../shared/accessControl.js';
 import { emailsInclude, normalizeEmails, replaceEmails } from '../shared/entityEmails.js';
@@ -54,6 +56,8 @@ export interface SimilarOrganizationMatch {
     accountStatus: string;
     gstNo: string | null;
     matchKind: OrgNameMatchKind;
+    /** Whether the legal name or the trade name matched. */
+    matchedField: OrgNameMatchField;
 }
 
 export interface UniqueCheckResult {
@@ -63,6 +67,9 @@ export interface UniqueCheckResult {
     id?: string;
     accountCode?: string;
     organizationName?: string;
+    /** For a name duplicate: whether it matched the existing organization's legal name or its trade name. */
+    matchedField?: OrgNameMatchField;
+    tradeName?: string | null;
     message?: string;
     /** Existing organizations whose names match or resemble the one checked, best first. */
     suggestions?: SimilarOrganizationMatch[];
@@ -113,7 +120,8 @@ async function findNameCandidates(client: TransactionClient, name: string, exclu
         where: {
             isDeleted: false,
             ...(excludeId ? { NOT: { id: excludeId } } : {}),
-            OR: terms.map((term) => ({ organizationName: { contains: term } })),
+            // Trade names are searched too: a new name may duplicate another organization's trade name.
+            OR: terms.flatMap((term) => [{ organizationName: { contains: term } }, { tradeName: { contains: term } }]),
         },
         select: NAME_CANDIDATE_SELECT,
         orderBy: { organizationName: 'asc' },
@@ -128,13 +136,21 @@ async function findNameCandidates(client: TransactionClient, name: string, exclu
 async function rankNameMatches(client: TransactionClient, name: string, excludeId?: string): Promise<SimilarOrganizationResult<NameCandidate>[]> {
     const notSelf = excludeId ? { NOT: { id: excludeId } } : {};
     // Sequential on purpose: a transaction client runs one query at a time.
-    const exact = await client.organization.findFirst({
+    // Exact legal name first; failing that, an exact trade name.
+    const exactName = await client.organization.findFirst({
         where: { organizationName: name, isDeleted: false, ...notSelf },
         select: NAME_CANDIDATE_SELECT,
     });
+    const exactTrade = exactName
+        ? null
+        : await client.organization.findFirst({ where: { tradeName: name, isDeleted: false, ...notSelf }, select: NAME_CANDIDATE_SELECT });
+    const exact = exactName ?? exactTrade;
     const candidates = await findNameCandidates(client, name, excludeId);
     const ranked = findSimilarOrganizations(candidates, name, { limit: SUGGESTION_LIMIT + 1 }).filter((m) => m.record.id !== exact?.id);
-    return (exact ? [{ record: exact, matchKind: 'exact' as const, score: 1 }, ...ranked] : ranked).slice(0, SUGGESTION_LIMIT);
+    const lead = exact
+        ? [{ record: exact, matchKind: 'exact' as const, score: 1, matchedField: exactName ? ('organizationName' as const) : ('tradeName' as const) }]
+        : [];
+    return [...lead, ...ranked].slice(0, SUGGESTION_LIMIT);
 }
 
 /** The live organization with the same legal name as `name` (exact or canonical), if any. */
@@ -142,12 +158,16 @@ async function findSameNamedOrganization(
     client: TransactionClient,
     name: string,
     excludeId?: string,
-): Promise<{ record: NameCandidate; matchKind: 'exact' | 'canonical' } | null> {
+): Promise<{ record: NameCandidate; matchKind: 'exact' | 'canonical'; matchedField: OrgNameMatchField } | null> {
     const top = (await rankNameMatches(client, name, excludeId))[0];
-    return top && isDuplicateMatchKind(top.matchKind) ? { record: top.record, matchKind: top.matchKind } : null;
+    return top && isDuplicateMatchKind(top.matchKind) ? { record: top.record, matchKind: top.matchKind, matchedField: top.matchedField } : null;
 }
 
-const toSimilarMatch = ({ record, matchKind }: SimilarOrganizationResult<NameCandidate>): SimilarOrganizationMatch => ({
+/** Duplicate message for a match, naming the trade name when that's what matched. */
+const sameNameMessage = (match: { record: NameCandidate; matchKind: 'exact' | 'canonical'; matchedField: OrgNameMatchField }) =>
+    duplicateOrganizationMessage(match.matchKind, match.record.organizationName, { field: match.matchedField, tradeName: match.record.tradeName });
+
+const toSimilarMatch = ({ record, matchKind, matchedField }: SimilarOrganizationResult<NameCandidate>): SimilarOrganizationMatch => ({
     id: record.id,
     accountCode: record.accountCode,
     organizationName: record.organizationName,
@@ -157,6 +177,7 @@ const toSimilarMatch = ({ record, matchKind }: SimilarOrganizationResult<NameCan
     accountStatus: record.accountStatus,
     gstNo: record.gstNo,
     matchKind,
+    matchedField,
 });
 
 // ── Viewer flags ─────────────────────────────────────────────────────────────
@@ -179,7 +200,7 @@ async function assertUnique(
     tx: TransactionClient,
     input: OrganizationWriteInput,
     gstNo: string | null,
-    { excludeId, checkName = true }: { excludeId?: string; checkName?: boolean } = {},
+    { excludeId, checkName = true, previousPan }: { excludeId?: string; checkName?: boolean; previousPan?: string | null } = {},
 ): Promise<void> {
     const normalizedName = input.organizationName.trim();
     const nameKey = canonicalizeOrgName(normalizedName) || normalizedName.toLowerCase();
@@ -187,7 +208,7 @@ async function assertUnique(
     const notSelf = excludeId ? { NOT: { id: excludeId } } : {};
     const sameName = checkName ? await findSameNamedOrganization(tx, normalizedName, excludeId) : null;
     if (sameName) {
-        const message = duplicateOrganizationMessage(sameName.matchKind, sameName.record.organizationName);
+        const message = sameNameMessage(sameName);
         throw HttpError.conflict(message, [{ message, path: ['organizationName'] }]);
     }
     if (gstNo) {
@@ -200,6 +221,8 @@ async function assertUnique(
             throw HttpError.conflict(message, [{ message, path: ['gstNo'] }]);
         }
     }
+    // PAN: unique among organizations too (an unchanged PAN on update isn't re-checked).
+    await assertTaxIdsUnique(tx, 'organization', { panNumber: input.panNumber }, { excludeId, previous: excludeId ? { panNumber: previousPan } : undefined });
 }
 
 /**
@@ -469,7 +492,9 @@ export const organizationService = {
                     id: top.record.id,
                     accountCode: top.record.accountCode,
                     organizationName: top.record.organizationName,
-                    message: duplicateOrganizationMessage(top.matchKind, top.record.organizationName),
+                    matchedField: top.matchedField,
+                    tradeName: top.record.tradeName,
+                    message: sameNameMessage({ record: top.record, matchKind: top.matchKind, matchedField: top.matchedField }),
                     suggestions,
                 };
             }
@@ -526,10 +551,10 @@ export const organizationService = {
             const gstNo = gstFor(input);
             // Strict comparison on purpose: a case-only rename counts as a change and is re-checked (excluding this record).
             const nameChanged = input.organizationName !== existing.organizationName;
-            if (nameChanged || gstNo !== existing.gstNo) {
+            if (nameChanged || gstNo !== existing.gstNo || (input.panNumber ?? null) !== (existing.panNumber ?? null)) {
                 // Only re-check the name when it changed: legacy rows may already have canonical twins, and a
                 // GSTIN-only edit shouldn't be blocked by them.
-                await assertUnique(tx, input, gstNo, { excludeId: id, checkName: nameChanged });
+                await assertUnique(tx, input, gstNo, { excludeId: id, checkName: nameChanged, previousPan: existing.panNumber });
             }
 
             await tx.organization.update({

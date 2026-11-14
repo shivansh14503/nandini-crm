@@ -52,13 +52,13 @@ function DocumentSettings({ meta, onMetaChange, isNew, isCurrentDefault }: { met
                     <TextInput value={meta.description} onChange={(v) => onMetaChange({ description: v })} disabled={disabled} ariaLabel="Template description" multiline maxLength={500} />
                 </Field>
                 <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                    <Typography sx={{ fontSize: '0.8rem', fontWeight: 600, color: '#334155' }}>Active</Typography>
+                    <Typography sx={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--crm-slate-700)' }}>Active</Typography>
                     <LabeledSwitch label="Active" checked={meta.isActive} disabled={disabled || isCurrentDefault} disabledReason={isCurrentDefault ? 'The default template must stay active.' : undefined} onChange={(v) => onMetaChange({ isActive: v, ...(v ? {} : { isDefault: false }) })} />
                 </Box>
                 <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                     <Box>
-                        <Typography sx={{ fontSize: '0.8rem', fontWeight: 600, color: '#334155' }}>Default</Typography>
-                        <Typography sx={{ fontSize: '0.68rem', color: '#94a3b8' }}>Used when users click Print / PDF</Typography>
+                        <Typography sx={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--crm-slate-700)' }}>Default</Typography>
+                        <Typography sx={{ fontSize: '0.68rem', color: 'var(--mui-palette-text-muted)' }}>Used when users click Print / PDF</Typography>
                     </Box>
                     <LabeledSwitch
                         label="Default"
@@ -68,7 +68,7 @@ function DocumentSettings({ meta, onMetaChange, isNew, isCurrentDefault }: { met
                         onChange={(v) => onMetaChange({ isDefault: v })}
                     />
                 </Box>
-                {isNew && <Typography sx={{ fontSize: '0.7rem', color: '#94a3b8' }}>Nothing is stored until you click Create template.</Typography>}
+                {isNew && <Typography sx={{ fontSize: '0.7rem', color: 'var(--mui-palette-text-muted)' }}>Nothing is stored until you click Create template.</Typography>}
             </PanelSection>
             <PanelSection title="Page">
                 <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1 }}>
@@ -92,7 +92,7 @@ function DocumentSettings({ meta, onMetaChange, isNew, isCurrentDefault }: { met
                     <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 0.5 }}>
                         {(['top', 'right', 'bottom', 'left'] as const).map((k) => (
                             <Box key={k}>
-                                <Typography sx={{ fontSize: '0.64rem', color: '#94a3b8', textAlign: 'center', textTransform: 'capitalize' }}>{k}</Typography>
+                                <Typography sx={{ fontSize: '0.64rem', color: 'var(--mui-palette-text-muted)', textAlign: 'center', textTransform: 'capitalize' }}>{k}</Typography>
                                 <NumberInput value={m[k]} onChange={(v) => setMargin(k, v)} min={0} max={k === 'top' || k === 'bottom' ? 120 : 80} step={0.5} disabled={disabled} ariaLabel={`${k} margin (mm)`} />
                             </Box>
                         ))}
@@ -171,10 +171,10 @@ function SectionSettings({ id }: { id: string }) {
                                         aria-label={preset.label}
                                         aria-pressed={active}
                                         onClick={() => edit((d) => setColumnWidths(d, id, preset.widths))}
-                                        sx={{ display: 'flex', gap: '2px', p: 0.75, height: 30, borderRadius: '6px', border: `1px solid ${active ? '#2563eb' : '#cbd5e1'}`, backgroundColor: active ? '#eff6ff' : '#fff', cursor: 'pointer' }}
+                                        sx={{ display: 'flex', gap: '2px', p: 0.75, height: 30, borderRadius: '6px', border: `1px solid ${active ? 'var(--mui-palette-primary-main)' : 'var(--mui-palette-border-strong)'}`, backgroundColor: active ? 'var(--mui-palette-primary-soft)' : 'var(--mui-palette-background-paper)', cursor: 'pointer' }}
                                     >
                                         {preset.widths.map((w, i) => (
-                                            <Box key={i} sx={{ flex: w, backgroundColor: active ? '#93c5fd' : '#e2e8f0', borderRadius: '2px' }} />
+                                            <Box key={i} sx={{ flex: w, backgroundColor: active ? 'var(--crm-blue-300)' : 'var(--crm-slate-200)', borderRadius: '2px' }} />
                                         ))}
                                     </Box>
                                 </Tooltip>
@@ -231,7 +231,7 @@ function ColumnSettings({ id }: { id: string }) {
     return (
         <>
             <PanelSection title="Column" defaultExpanded>
-                <Typography sx={{ fontSize: '0.78rem', color: '#475569' }}>
+                <Typography sx={{ fontSize: '0.78rem', color: 'var(--crm-slate-600)' }}>
                     Column {at.columnIndex + 1} of {at.section.columns.length} · {Math.round(at.column.widthPct)}% wide · {at.column.blocks.length} block{at.column.blocks.length === 1 ? '' : 's'}
                 </Typography>
                 <Box>
@@ -246,7 +246,7 @@ function ColumnSettings({ id }: { id: string }) {
                     >
                         {at.section.columns.length === 1 ? 'Delete column and section' : 'Delete column'}
                     </Button>
-                    <Typography sx={{ fontSize: '0.68rem', color: '#94a3b8', mt: 0.5 }}>
+                    <Typography sx={{ fontSize: '0.68rem', color: 'var(--mui-palette-text-muted)', mt: 0.5 }}>
                         {at.section.columns.length === 1
                             ? 'This is the only column, so the whole section is removed.'
                             : 'Its blocks are deleted too; the neighbouring column takes over its width.'}
@@ -343,24 +343,24 @@ export function StylingTab({ meta, onMetaChange, isNew, isCurrentDefault }: { me
 
     return (
         <Box sx={{ display: 'flex', flexDirection: 'column', minHeight: 0, flex: 1 }}>
-            <Box sx={{ px: 2, py: 1, borderBottom: '1px solid #e2e8f0', backgroundColor: '#f8fafc' }}>
-                <Breadcrumbs separator="›" aria-label="Selection path" sx={{ '& .MuiBreadcrumbs-separator': { mx: 0.5, color: '#94a3b8' } }}>
+            <Box sx={{ px: 2, py: 1, borderBottom: '1px solid var(--mui-palette-border-main)', backgroundColor: 'var(--mui-palette-background-subtle)' }}>
+                <Breadcrumbs separator="›" aria-label="Selection path" sx={{ '& .MuiBreadcrumbs-separator': { mx: 0.5, color: 'var(--mui-palette-text-muted)' } }}>
                     {crumbs.map((c, i) =>
                         i === crumbs.length - 1 ? (
-                            <Typography key={c.label} sx={{ fontSize: '0.74rem', fontWeight: 700, color: '#1d4ed8' }}>
+                            <Typography key={c.label} sx={{ fontSize: '0.74rem', fontWeight: 700, color: 'var(--crm-text-blue-700)' }}>
                                 {c.label}
                             </Typography>
                         ) : (
-                            <Link key={c.label} component="button" type="button" underline="hover" onClick={() => select(c.selection)} sx={{ fontSize: '0.74rem', color: '#475569' }}>
+                            <Link key={c.label} component="button" type="button" underline="hover" onClick={() => select(c.selection)} sx={{ fontSize: '0.74rem', color: 'var(--crm-slate-600)' }}>
                                 {c.label}
                             </Link>
                         ),
                     )}
                 </Breadcrumbs>
             </Box>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.25, px: 2, py: 1.5, borderBottom: '1px solid #e2e8f0' }}>
-                <Box sx={{ width: 36, height: 36, borderRadius: '8px', backgroundColor: '#eff6ff', color: '#1d4ed8', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{icon}</Box>
-                <Typography sx={{ fontSize: '1rem', fontWeight: 700, color: '#0f172a', flex: 1, minWidth: 0 }} noWrap title={title}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.25, px: 2, py: 1.5, borderBottom: '1px solid var(--mui-palette-border-main)' }}>
+                <Box sx={{ width: 36, height: 36, borderRadius: '8px', backgroundColor: 'var(--mui-palette-primary-soft)', color: 'var(--crm-text-blue-700)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{icon}</Box>
+                <Typography sx={{ fontSize: '1rem', fontWeight: 700, color: 'var(--crm-slate-900)', flex: 1, minWidth: 0 }} noWrap title={title}>
                     {title}
                 </Typography>
                 {selection && (

@@ -151,7 +151,7 @@ function BuilderShell(props: ShellProps) {
             >
                 <DialogTitle sx={{ fontSize: '1rem', fontWeight: 700 }}>Save to library</DialogTitle>
                 <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
-                    <Typography sx={{ fontSize: '0.82rem', color: '#475569' }}>Saved items appear in Contents → Saved for every quotation template. Inserting one places a copy.</Typography>
+                    <Typography sx={{ fontSize: '0.82rem', color: 'var(--crm-slate-600)' }}>Saved items appear in Contents → Saved for every quotation template. Inserting one places a copy.</Typography>
                     <TextField
                         inputRef={libraryNameRef}
                         size="small"
@@ -350,7 +350,7 @@ function BuilderLayout({ module, template, initialMeta, contextLoading, record, 
     };
 
     const zoomIndex = ZOOMS.indexOf(zoom);
-    const iconBtn = { width: 32, height: 32, borderRadius: '8px', border: '1px solid #e2e8f0' } as const;
+    const iconBtn = { width: 32, height: 32, borderRadius: '8px', border: '1px solid var(--mui-palette-border-main)' } as const;
 
     return (
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5, flex: 1, minHeight: 0 }}>
@@ -360,7 +360,7 @@ function BuilderLayout({ module, template, initialMeta, contextLoading, record, 
                     Templates
                 </Button>
                 <Box sx={{ minWidth: 0, flex: '1 1 200px', ml: 0.5 }}>
-                    <Typography component="h1" noWrap sx={{ fontSize: '0.98rem', fontWeight: 700, color: '#0f172a' }}>
+                    <Typography component="h1" noWrap sx={{ fontSize: '0.98rem', fontWeight: 700, color: 'var(--crm-slate-900)' }}>
                         {meta.name || (isNew ? 'New PDF template' : template?.name)}
                     </Typography>
                     <Box sx={{ display: 'flex', gap: 0.5, mt: 0.25, flexWrap: 'wrap' }}>
@@ -395,7 +395,7 @@ function BuilderLayout({ module, template, initialMeta, contextLoading, record, 
                     <IconButton aria-label="Zoom out" size="small" disabled={zoomIndex <= 0} onClick={() => setZoom(ZOOMS[Math.max(0, zoomIndex - 1)])} sx={iconBtn}>
                         <ZoomOutRoundedIcon sx={{ fontSize: 18 }} />
                     </IconButton>
-                    <Typography sx={{ fontSize: '0.76rem', fontWeight: 600, color: '#334155', width: 42, textAlign: 'center' }}>{Math.round(zoom * 100)}%</Typography>
+                    <Typography sx={{ fontSize: '0.76rem', fontWeight: 600, color: 'var(--crm-slate-700)', width: 42, textAlign: 'center' }}>{Math.round(zoom * 100)}%</Typography>
                     <IconButton aria-label="Zoom in" size="small" disabled={zoomIndex >= ZOOMS.length - 1} onClick={() => setZoom(ZOOMS[Math.min(ZOOMS.length - 1, zoomIndex + 1)])} sx={iconBtn}>
                         <ZoomInRoundedIcon sx={{ fontSize: 18 }} />
                     </IconButton>
@@ -456,13 +456,13 @@ function BuilderLayout({ module, template, initialMeta, contextLoading, record, 
             <Dialog open={preview.open} onClose={closePreview} maxWidth="lg" fullWidth slotProps={{ paper: { sx: { borderRadius: '12px', height: '90vh' } } }}>
                 <DialogTitle sx={{ fontSize: '1rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: 1 }}>
                     PDF preview
-                    <Typography component="span" sx={{ fontSize: '0.78rem', color: '#64748b', fontWeight: 500 }}>
+                    <Typography component="span" sx={{ fontSize: '0.78rem', color: 'var(--mui-palette-text-secondary)', fontWeight: 500 }}>
                         {record ? record.label : 'Sample data'} · unsaved changes included
                     </Typography>
                 </DialogTitle>
                 <DialogContent sx={{ p: 0, display: 'flex', flexDirection: 'column' }}>
                     {preview.loading && (
-                        <Box sx={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 1.5, color: '#64748b' }}>
+                        <Box sx={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 1.5, color: 'var(--mui-palette-text-secondary)' }}>
                             <CircularProgress size={22} /> Generating PDF…
                         </Box>
                     )}
@@ -484,7 +484,7 @@ function BuilderLayout({ module, template, initialMeta, contextLoading, record, 
             <Dialog open={conflictOpen} onClose={() => setConflictOpen(false)} slotProps={{ paper: { sx: { borderRadius: '12px' } } }}>
                 <DialogTitle sx={{ fontSize: '1rem', fontWeight: 700 }}>This template was changed by someone else</DialogTitle>
                 <DialogContent>
-                    <Typography sx={{ fontSize: '0.85rem', color: '#475569' }}>
+                    <Typography sx={{ fontSize: '0.85rem', color: 'var(--crm-slate-600)' }}>
                         Another administrator saved this template after you opened it. Reload to see their version (your changes are discarded), or overwrite it with yours.
                     </Typography>
                 </DialogContent>

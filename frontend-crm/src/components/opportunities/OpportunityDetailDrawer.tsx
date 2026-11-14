@@ -121,14 +121,14 @@ export function OpportunityDetailDrawer({
     const getStageColor = (stage: string) => {
         switch (stage) {
             case 'Closed Won':
-                return { bg: '#dcfce7', text: '#15803d', border: '#86efac' };
+                return { bg: 'var(--crm-green-100)', text: 'var(--crm-green-700)', border: 'var(--crm-green-300)' };
             case 'Closed Lost':
-                return { bg: '#fee2e2', text: '#b91c1c', border: '#fca5a5' };
+                return { bg: 'var(--crm-red-100)', text: 'var(--crm-red-700)', border: 'var(--crm-red-300)' };
             case 'Negotiation':
             case 'Proposal/Price Quote':
-                return { bg: '#fef3c7', text: '#b45309', border: '#fde68a' };
+                return { bg: 'var(--crm-amber-100)', text: 'var(--crm-amber-700)', border: 'var(--mui-palette-warning-softBorder)' };
             default:
-                return { bg: '#eff6ff', text: '#1d4ed8', border: '#bfdbfe' };
+                return { bg: 'var(--mui-palette-primary-soft)', text: 'var(--crm-text-blue-700)', border: 'var(--mui-palette-primary-softBorder)' };
         }
     };
 
@@ -142,7 +142,7 @@ export function OpportunityDetailDrawer({
             title={opp.organizationName}
             subtitle={`${opp.opportunityCode} • ${opp.contactName}`}
             avatarText={opp.organizationName.substring(0, 2).toUpperCase()}
-            avatarBg="#1e3a8a"
+            avatarBg="var(--crm-fill-blue-900)"
             badges={[
                 {
                     label: opp.salesStage,
@@ -152,15 +152,15 @@ export function OpportunityDetailDrawer({
                 },
                 {
                     label: `₹${opp.grandTotal.toLocaleString('en-IN')}`,
-                    backgroundColor: '#f0fdf4',
-                    color: '#15803d',
-                    borderColor: '#bbf7d0',
+                    backgroundColor: 'var(--crm-green-50)',
+                    color: 'var(--crm-green-700)',
+                    borderColor: 'var(--crm-green-200)',
                 },
                 {
                     label: opp.type,
-                    backgroundColor: '#f1f5f9',
-                    color: '#475569',
-                    borderColor: '#cbd5e1',
+                    backgroundColor: 'var(--mui-palette-background-hover)',
+                    color: 'var(--crm-slate-600)',
+                    borderColor: 'var(--mui-palette-border-strong)',
                 },
             ]}
             headerActions={{
@@ -172,14 +172,14 @@ export function OpportunityDetailDrawer({
                 basic: (
                     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5 }}>
                         {/* Organization & Deal Card */}
-                        <DrawerSectionCard title="CLIENT ORGANIZATION" bg="#f8fafc">
+                        <DrawerSectionCard title="CLIENT ORGANIZATION" bg="var(--mui-palette-background-subtle)">
                             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 0.5 }}>
-                                <BusinessOutlinedIcon sx={{ fontSize: 18, color: '#2563eb' }} />
-                                <Typography sx={{ fontSize: '0.98rem', fontWeight: 800, color: '#1e293b' }}>
+                                <BusinessOutlinedIcon sx={{ fontSize: 18, color: 'var(--crm-text-blue-600)' }} />
+                                <Typography sx={{ fontSize: '0.98rem', fontWeight: 800, color: 'var(--mui-palette-text-primary)' }}>
                                     {opp.organizationName}
                                 </Typography>
                             </Box>
-                            <Typography sx={{ fontSize: '0.75rem', color: '#64748b', mt: 0.3 }}>
+                            <Typography sx={{ fontSize: '0.75rem', color: 'var(--mui-palette-text-secondary)', mt: 0.3 }}>
                                 Deal Ref: {opp.opportunityCode} • Type: {opp.type}
                             </Typography>
                         </DrawerSectionCard>
@@ -188,31 +188,31 @@ export function OpportunityDetailDrawer({
                         <DrawerSectionCard title="CONTACT PERSON DETAILS">
                             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.2, mt: 1 }}>
                                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                                    <PersonOutlinedIcon sx={{ fontSize: 16, color: '#64748b' }} />
-                                    <Typography sx={{ fontSize: '0.85rem', fontWeight: 600, color: '#1e293b' }}>
+                                    <PersonOutlinedIcon sx={{ fontSize: 16, color: 'var(--mui-palette-text-secondary)' }} />
+                                    <Typography sx={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--mui-palette-text-primary)' }}>
                                         {opp.contactName}
                                     </Typography>
                                 </Box>
 
                                 <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                                        <PhoneOutlinedIcon sx={{ fontSize: 16, color: '#64748b' }} />
-                                        <Typography sx={{ fontSize: '0.82rem', color: '#1e293b' }}>
+                                        <PhoneOutlinedIcon sx={{ fontSize: 16, color: 'var(--mui-palette-text-secondary)' }} />
+                                        <Typography sx={{ fontSize: '0.82rem', color: 'var(--mui-palette-text-primary)' }}>
                                             {opp.contactNumber}
                                         </Typography>
                                     </Box>
-                                    <DrawerCopyButton text={opp.contactNumber} title="Copy Phone Number" iconColor="#94a3b8" />
+                                    <DrawerCopyButton text={opp.contactNumber} title="Copy Phone Number" iconColor="var(--mui-palette-text-muted)" />
                                 </Box>
 
                                 {opp.emailAddress && (
                                     <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                                            <EmailOutlinedIcon sx={{ fontSize: 16, color: '#64748b' }} />
-                                            <Typography sx={{ fontSize: '0.82rem', color: '#1e293b' }}>
+                                            <EmailOutlinedIcon sx={{ fontSize: 16, color: 'var(--mui-palette-text-secondary)' }} />
+                                            <Typography sx={{ fontSize: '0.82rem', color: 'var(--mui-palette-text-primary)' }}>
                                                 {opp.emailAddress}
                                             </Typography>
                                         </Box>
-                                        <DrawerCopyButton text={opp.emailAddress} title="Copy Email" iconColor="#94a3b8" />
+                                        <DrawerCopyButton text={opp.emailAddress} title="Copy Email" iconColor="var(--mui-palette-text-muted)" />
                                     </Box>
                                 )}
                             </Box>
@@ -223,7 +223,7 @@ export function OpportunityDetailDrawer({
 
                         {/* Product Categories */}
                         <Box>
-                            <Typography sx={{ fontSize: '0.68rem', fontWeight: 700, color: '#64748b', mb: 1, letterSpacing: '0.04em' }}>
+                            <Typography sx={{ fontSize: '0.68rem', fontWeight: 700, color: 'var(--mui-palette-text-secondary)', mb: 1, letterSpacing: '0.04em' }}>
                                 PRODUCT INTEREST
                             </Typography>
                             <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.8 }}>
@@ -235,9 +235,9 @@ export function OpportunityDetailDrawer({
                                         sx={{
                                             fontSize: '0.75rem',
                                             fontWeight: 600,
-                                            backgroundColor: '#eff6ff',
-                                            color: '#1d4ed8',
-                                            border: '1px solid #bfdbfe',
+                                            backgroundColor: 'var(--mui-palette-primary-soft)',
+                                            color: 'var(--crm-text-blue-700)',
+                                            border: '1px solid var(--mui-palette-primary-softBorder)',
                                         }}
                                     />
                                 ))}
@@ -245,14 +245,14 @@ export function OpportunityDetailDrawer({
                         </Box>
 
                         {/* Next Followup Info */}
-                        <DrawerSectionCard bg="#fffbeb" borderColor="#fde68a">
+                        <DrawerSectionCard bg="var(--mui-palette-warning-soft)" borderColor="var(--mui-palette-warning-softBorder)">
                             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-                                <CalendarMonthOutlinedIcon sx={{ fontSize: 20, color: '#b45309' }} />
+                                <CalendarMonthOutlinedIcon sx={{ fontSize: 20, color: 'var(--crm-amber-700)' }} />
                                 <Box>
-                                    <Typography sx={{ fontSize: '0.8rem', fontWeight: 700, color: '#92400e' }}>
+                                    <Typography sx={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--crm-amber-800)' }}>
                                         Next Followup: {opp.nextFollowupDate} {opp.nextFollowupTime ? `at ${opp.nextFollowupTime}` : ''}
                                     </Typography>
-                                    <Typography sx={{ fontSize: '0.72rem', color: '#b45309' }}>
+                                    <Typography sx={{ fontSize: '0.72rem', color: 'var(--crm-amber-700)' }}>
                                         Method: {opp.followupType || 'Call'} • Lead Given By: {opp.leadGivenBy}
                                     </Typography>
                                 </Box>
@@ -262,14 +262,14 @@ export function OpportunityDetailDrawer({
                         {/* Scope & Descriptions */}
                         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
                             <DrawerSectionCard title="ACTION BRIEF / ADD DESCRIPTION">
-                                <Typography sx={{ fontSize: '0.82rem', color: '#334155', lineHeight: 1.5 }}>
+                                <Typography sx={{ fontSize: '0.82rem', color: 'var(--crm-slate-700)', lineHeight: 1.5 }}>
                                     {opp.addDescription}
                                 </Typography>
                             </DrawerSectionCard>
 
                             {opp.description && (
                                 <DrawerSectionCard title="DETAILED SCOPE / NOTES">
-                                    <Typography sx={{ fontSize: '0.82rem', color: '#334155', lineHeight: 1.5 }}>
+                                    <Typography sx={{ fontSize: '0.82rem', color: 'var(--crm-slate-700)', lineHeight: 1.5 }}>
                                         {opp.description}
                                     </Typography>
                                 </DrawerSectionCard>
@@ -277,29 +277,29 @@ export function OpportunityDetailDrawer({
                         </Box>
 
                         {/* Billing Details & Commission */}
-                        <DrawerSectionCard title="BILLING & COMMISSION" bg="#f8fafc">
+                        <DrawerSectionCard title="BILLING & COMMISSION" bg="var(--mui-palette-background-subtle)">
                             <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1.5, mt: 1 }}>
                                 <Box>
-                                    <Typography sx={{ fontSize: '0.7rem', color: '#64748b' }}>Tally Serial No:</Typography>
-                                    <Typography sx={{ fontSize: '0.82rem', fontWeight: 600, color: '#1e293b' }}>
+                                    <Typography sx={{ fontSize: '0.7rem', color: 'var(--mui-palette-text-secondary)' }}>Tally Serial No:</Typography>
+                                    <Typography sx={{ fontSize: '0.82rem', fontWeight: 600, color: 'var(--mui-palette-text-primary)' }}>
                                         {opp.tallySerialNo || '—'}
                                     </Typography>
                                 </Box>
                                 <Box>
-                                    <Typography sx={{ fontSize: '0.7rem', color: '#64748b' }}>Invoice No:</Typography>
-                                    <Typography sx={{ fontSize: '0.82rem', fontWeight: 600, color: '#1e293b' }}>
+                                    <Typography sx={{ fontSize: '0.7rem', color: 'var(--mui-palette-text-secondary)' }}>Invoice No:</Typography>
+                                    <Typography sx={{ fontSize: '0.82rem', fontWeight: 600, color: 'var(--mui-palette-text-primary)' }}>
                                         {opp.invoiceNo || '—'}
                                     </Typography>
                                 </Box>
                                 <Box>
-                                    <Typography sx={{ fontSize: '0.7rem', color: '#64748b' }}>Commission:</Typography>
-                                    <Typography sx={{ fontSize: '0.82rem', fontWeight: 600, color: '#1e293b' }}>
+                                    <Typography sx={{ fontSize: '0.7rem', color: 'var(--mui-palette-text-secondary)' }}>Commission:</Typography>
+                                    <Typography sx={{ fontSize: '0.82rem', fontWeight: 600, color: 'var(--mui-palette-text-primary)' }}>
                                         {opp.commission || 'Standard (10%)'}
                                     </Typography>
                                 </Box>
                                 <Box>
-                                    <Typography sx={{ fontSize: '0.7rem', color: '#64748b' }}>Document Attached:</Typography>
-                                    <Typography sx={{ fontSize: '0.82rem', fontWeight: 600, color: '#1e293b' }}>
+                                    <Typography sx={{ fontSize: '0.7rem', color: 'var(--mui-palette-text-secondary)' }}>Document Attached:</Typography>
+                                    <Typography sx={{ fontSize: '0.82rem', fontWeight: 600, color: 'var(--mui-palette-text-primary)' }}>
                                         {opp.addDocument || 'No'}
                                     </Typography>
                                 </Box>
@@ -310,17 +310,17 @@ export function OpportunityDetailDrawer({
                 line_items: (
                     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5 }}>
                         <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                            <Typography sx={{ fontSize: '0.85rem', fontWeight: 700, color: '#1e293b' }}>
+                            <Typography sx={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--mui-palette-text-primary)' }}>
                                 {opp.groupName || 'Products & Services'}
                             </Typography>
-                            <Typography sx={{ fontSize: '0.78rem', color: '#64748b' }}>
+                            <Typography sx={{ fontSize: '0.78rem', color: 'var(--mui-palette-text-secondary)' }}>
                                 Currency: {opp.currency || 'Indian Rupee: ₹'}
                             </Typography>
                         </Box>
 
                         {!opp.lineItems || opp.lineItems.length === 0 ? (
-                            <Box sx={{ p: 3, textAlign: 'center', backgroundColor: '#f8fafc', borderRadius: '8px' }}>
-                                <Typography sx={{ fontSize: '0.82rem', color: '#64748b' }}>
+                            <Box sx={{ p: 3, textAlign: 'center', backgroundColor: 'var(--mui-palette-background-subtle)', borderRadius: '8px' }}>
+                                <Typography sx={{ fontSize: '0.82rem', color: 'var(--mui-palette-text-secondary)' }}>
                                     No line items specified for this opportunity.
                                 </Typography>
                             </Box>
@@ -330,16 +330,16 @@ export function OpportunityDetailDrawer({
                                     <DrawerSectionCard key={item.id || idx} p={1.8}>
                                         <Box sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', mb: 1 }}>
                                             <Box>
-                                                <Typography sx={{ fontSize: '0.85rem', fontWeight: 700, color: '#1e293b' }}>
+                                                <Typography sx={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--mui-palette-text-primary)' }}>
                                                     {item.productName}
                                                 </Typography>
                                                 {item.description && (
-                                                    <Typography sx={{ fontSize: '0.75rem', color: '#64748b', mt: 0.3 }}>
+                                                    <Typography sx={{ fontSize: '0.75rem', color: 'var(--mui-palette-text-secondary)', mt: 0.3 }}>
                                                         {item.description}
                                                     </Typography>
                                                 )}
                                             </Box>
-                                            <Typography sx={{ fontSize: '0.92rem', fontWeight: 800, color: '#15803d' }}>
+                                            <Typography sx={{ fontSize: '0.92rem', fontWeight: 800, color: 'var(--crm-green-700)' }}>
                                                 ₹{item.total.toLocaleString('en-IN')}
                                             </Typography>
                                         </Box>
@@ -350,26 +350,26 @@ export function OpportunityDetailDrawer({
                                                 gridTemplateColumns: 'repeat(4, 1fr)',
                                                 gap: 1,
                                                 pt: 1,
-                                                borderTop: '1px dashed #e2e8f0',
+                                                borderTop: '1px dashed var(--mui-palette-border-main)',
                                                 fontSize: '0.75rem',
                                             }}
                                         >
                                             <Box>
-                                                <Typography sx={{ color: '#64748b' }}>Qty:</Typography>
+                                                <Typography sx={{ color: 'var(--mui-palette-text-secondary)' }}>Qty:</Typography>
                                                 <Typography sx={{ fontWeight: 600 }}>{item.quantity}</Typography>
                                             </Box>
                                             <Box>
-                                                <Typography sx={{ color: '#64748b' }}>Unit Price:</Typography>
+                                                <Typography sx={{ color: 'var(--mui-palette-text-secondary)' }}>Unit Price:</Typography>
                                                 <Typography sx={{ fontWeight: 600 }}>₹{item.amount.toLocaleString('en-IN')}</Typography>
                                             </Box>
                                             <Box>
-                                                <Typography sx={{ color: '#64748b' }}>Discount:</Typography>
-                                                <Typography sx={{ fontWeight: 600, color: '#dc2626' }}>
+                                                <Typography sx={{ color: 'var(--mui-palette-text-secondary)' }}>Discount:</Typography>
+                                                <Typography sx={{ fontWeight: 600, color: 'var(--mui-palette-error-main)' }}>
                                                     {item.discount > 0 ? `${item.discount}${item.discountType === 'percentage' ? '%' : '₹'}` : '0'}
                                                 </Typography>
                                             </Box>
                                             <Box>
-                                                <Typography sx={{ color: '#64748b' }}>Tax ({item.taxRate}):</Typography>
+                                                <Typography sx={{ color: 'var(--mui-palette-text-secondary)' }}>Tax ({item.taxRate}):</Typography>
                                                 <Typography sx={{ fontWeight: 600 }}>₹{item.taxAmount.toLocaleString('en-IN')}</Typography>
                                             </Box>
                                         </Box>
@@ -381,37 +381,37 @@ export function OpportunityDetailDrawer({
                         {/* Financial Summary */}
                         <DrawerSectionCard
                             title="FINANCIAL TOTALS"
-                            titleSx={{ fontSize: '0.75rem', color: '#1e3a8a', letterSpacing: '0.03em' }}
-                            bg="#f8fafc"
-                            borderColor="#cbd5e1"
+                            titleSx={{ fontSize: '0.75rem', color: 'var(--crm-text-blue-900)', letterSpacing: '0.03em' }}
+                            bg="var(--mui-palette-background-subtle)"
+                            borderColor="var(--mui-palette-border-strong)"
                         >
                             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1, mt: 1 }}>
                                 <Box sx={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.82rem' }}>
-                                    <Typography sx={{ color: '#64748b' }}>Gross Total:</Typography>
+                                    <Typography sx={{ color: 'var(--mui-palette-text-secondary)' }}>Gross Total:</Typography>
                                     <Typography sx={{ fontWeight: 600 }}>₹{opp.totalAmount.toLocaleString('en-IN')}</Typography>
                                 </Box>
                                 <Box sx={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.82rem' }}>
-                                    <Typography sx={{ color: '#64748b' }}>Total Discount:</Typography>
-                                    <Typography sx={{ fontWeight: 600, color: '#dc2626' }}>- ₹{opp.totalDiscount.toLocaleString('en-IN')}</Typography>
+                                    <Typography sx={{ color: 'var(--mui-palette-text-secondary)' }}>Total Discount:</Typography>
+                                    <Typography sx={{ fontWeight: 600, color: 'var(--mui-palette-error-main)' }}>- ₹{opp.totalDiscount.toLocaleString('en-IN')}</Typography>
                                 </Box>
                                 <Box sx={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.82rem' }}>
-                                    <Typography sx={{ color: '#64748b' }}>Subtotal:</Typography>
+                                    <Typography sx={{ color: 'var(--mui-palette-text-secondary)' }}>Subtotal:</Typography>
                                     <Typography sx={{ fontWeight: 700 }}>₹{opp.subtotal.toLocaleString('en-IN')}</Typography>
                                 </Box>
                                 <Box sx={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.82rem' }}>
-                                    <Typography sx={{ color: '#64748b' }}>Tax Total:</Typography>
-                                    <Typography sx={{ fontWeight: 600, color: '#2563eb' }}>+ ₹{opp.totalTax.toLocaleString('en-IN')}</Typography>
+                                    <Typography sx={{ color: 'var(--mui-palette-text-secondary)' }}>Tax Total:</Typography>
+                                    <Typography sx={{ fontWeight: 600, color: 'var(--crm-text-blue-600)' }}>+ ₹{opp.totalTax.toLocaleString('en-IN')}</Typography>
                                 </Box>
                                 {opp.lumpSumDiscount > 0 && (
                                     <Box sx={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.82rem' }}>
-                                        <Typography sx={{ color: '#64748b' }}>Lump Sum Discount:</Typography>
-                                        <Typography sx={{ fontWeight: 600, color: '#dc2626' }}>- ₹{opp.lumpSumDiscount.toLocaleString('en-IN')}</Typography>
+                                        <Typography sx={{ color: 'var(--mui-palette-text-secondary)' }}>Lump Sum Discount:</Typography>
+                                        <Typography sx={{ fontWeight: 600, color: 'var(--mui-palette-error-main)' }}>- ₹{opp.lumpSumDiscount.toLocaleString('en-IN')}</Typography>
                                     </Box>
                                 )}
                                 <Divider sx={{ my: 0.5 }} />
                                 <Box sx={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.94rem' }}>
-                                    <Typography sx={{ fontWeight: 800, color: '#0f172a' }}>Grand Total:</Typography>
-                                    <Typography sx={{ fontWeight: 800, color: '#15803d', fontSize: '1.05rem' }}>
+                                    <Typography sx={{ fontWeight: 800, color: 'var(--crm-slate-900)' }}>Grand Total:</Typography>
+                                    <Typography sx={{ fontWeight: 800, color: 'var(--crm-green-700)', fontSize: '1.05rem' }}>
                                         ₹{opp.grandTotal.toLocaleString('en-IN')}
                                     </Typography>
                                 </Box>
@@ -431,7 +431,7 @@ export function OpportunityDetailDrawer({
             secondaryAction={{
                 label: isQuoteCreated ? 'Quote Created' : 'Create Quote',
                 icon: isQuoteCreated ? (
-                    <CheckCircleOutlinedIcon sx={{ fontSize: 16, color: '#059669' }} />
+                    <CheckCircleOutlinedIcon sx={{ fontSize: 16, color: 'var(--crm-emerald-600)' }} />
                 ) : (
                     <RequestQuoteOutlinedIcon sx={{ fontSize: 16 }} />
                 ),
@@ -449,12 +449,12 @@ export function OpportunityDetailDrawer({
                     height: 36,
                     px: 1.8,
                     borderRadius: '6px',
-                    color: isQuoteCreated ? '#047857' : hasAddress ? '#047857' : '#dc2626',
-                    borderColor: isQuoteCreated ? '#a7f3d0' : hasAddress ? '#a7f3d0' : '#fca5a5',
-                    backgroundColor: isQuoteCreated ? '#ecfdf5' : hasAddress ? '#ecfdf5' : '#fef2f2',
+                    color: isQuoteCreated ? 'var(--crm-emerald-700)' : hasAddress ? 'var(--crm-emerald-700)' : 'var(--mui-palette-error-main)',
+                    borderColor: isQuoteCreated ? 'var(--mui-palette-success-softBorder)' : hasAddress ? 'var(--mui-palette-success-softBorder)' : 'var(--crm-red-300)',
+                    backgroundColor: isQuoteCreated ? 'var(--mui-palette-success-soft)' : hasAddress ? 'var(--mui-palette-success-soft)' : 'var(--mui-palette-error-soft)',
                     '&:hover': {
-                        borderColor: isQuoteCreated ? '#047857' : hasAddress ? '#059669' : '#ef4444',
-                        backgroundColor: isQuoteCreated ? '#d1fae5' : hasAddress ? '#d1fae5' : '#fee2e2',
+                        borderColor: isQuoteCreated ? 'var(--crm-emerald-700)' : hasAddress ? 'var(--crm-emerald-600)' : 'var(--crm-red-500)',
+                        backgroundColor: isQuoteCreated ? 'var(--crm-emerald-100)' : hasAddress ? 'var(--crm-emerald-100)' : 'var(--crm-red-100)',
                     },
                 },
             }}

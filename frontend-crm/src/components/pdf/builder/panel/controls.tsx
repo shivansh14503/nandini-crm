@@ -25,9 +25,9 @@ import type { Box as BoxSpacing, Style } from '@/lib/pdf-document';
 
 /** Compact controls for the Styling panel. All are controlled; `disabled` mirrors read-only templates. */
 
-export const labelSx = { fontSize: '0.74rem', fontWeight: 600, color: '#475569' } as const;
+export const labelSx = { fontSize: '0.74rem', fontWeight: 600, color: 'var(--crm-slate-600)' } as const;
 const smallInputSx = {
-    '& .MuiOutlinedInput-root': { borderRadius: '7px', fontSize: '0.8rem', backgroundColor: '#fff' },
+    '& .MuiOutlinedInput-root': { borderRadius: '7px', fontSize: '0.8rem', backgroundColor: 'var(--mui-palette-background-paper)' },
     '& .MuiOutlinedInput-input': { py: '6px', px: '8px' },
     '& .MuiInputAdornment-root p': { fontSize: '0.72rem' },
 } as const;
@@ -40,10 +40,10 @@ export function PanelSection({ title, children, defaultExpanded = false }: { tit
             elevation={0}
             square
             slotProps={{ transition: { unmountOnExit: true } }}
-            sx={{ borderBottom: '1px solid #e2e8f0', '&::before': { display: 'none' }, backgroundColor: 'transparent' }}
+            sx={{ borderBottom: '1px solid var(--mui-palette-border-main)', '&::before': { display: 'none' }, backgroundColor: 'transparent' }}
         >
             <AccordionSummary expandIcon={<ExpandMoreRoundedIcon />} sx={{ px: 2, minHeight: 46, '& .MuiAccordionSummary-content': { my: 1 } }}>
-                <Typography sx={{ fontSize: '0.86rem', fontWeight: 700, color: '#1e293b' }}>{title}</Typography>
+                <Typography sx={{ fontSize: '0.86rem', fontWeight: 700, color: 'var(--mui-palette-text-primary)' }}>{title}</Typography>
             </AccordionSummary>
             <AccordionDetails sx={{ px: 2, pt: 0, pb: 2, display: 'flex', flexDirection: 'column', gap: 1.5 }}>{children}</AccordionDetails>
         </Accordion>
@@ -57,7 +57,7 @@ export function Field({ label, children, hint }: { label: string; children: Reac
                 {label}
             </Typography>
             {children}
-            {hint && <Typography sx={{ fontSize: '0.68rem', color: '#94a3b8' }}>{hint}</Typography>}
+            {hint && <Typography sx={{ fontSize: '0.68rem', color: 'var(--mui-palette-text-muted)' }}>{hint}</Typography>}
         </Box>
     );
 }
@@ -151,7 +151,7 @@ export function SelectInput<T extends string | number>({ value, onChange, option
                 value={value}
                 onChange={(e) => onChange(e.target.value as T)}
                 inputProps={{ 'aria-label': ariaLabel }}
-                sx={{ borderRadius: '7px', fontSize: '0.8rem', backgroundColor: '#fff', '& .MuiSelect-select': { py: '6px', px: '8px' } }}
+                sx={{ borderRadius: '7px', fontSize: '0.8rem', backgroundColor: 'var(--mui-palette-background-paper)', '& .MuiSelect-select': { py: '6px', px: '8px' } }}
             >
                 {options.map((o) => (
                     <MenuItem key={String(o.value)} value={o.value} sx={{ fontSize: '0.82rem' }}>
@@ -167,8 +167,8 @@ export function SwitchRow({ label, checked, onChange, disabled, hint }: { label:
     return (
         <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1 }}>
             <Box>
-                <Typography sx={{ fontSize: '0.8rem', color: '#334155', fontWeight: 600 }}>{label}</Typography>
-                {hint && <Typography sx={{ fontSize: '0.68rem', color: '#94a3b8' }}>{hint}</Typography>}
+                <Typography sx={{ fontSize: '0.8rem', color: 'var(--crm-slate-700)', fontWeight: 600 }}>{label}</Typography>
+                {hint && <Typography sx={{ fontSize: '0.68rem', color: 'var(--mui-palette-text-muted)' }}>{hint}</Typography>}
             </Box>
             <Switch size="small" checked={checked} disabled={disabled} onChange={(e) => onChange(e.target.checked)} slotProps={{ input: { 'aria-label': label } }} />
         </Box>
@@ -217,7 +217,7 @@ export function ColorInput({ value, onChange, accent, allowAccent = true, allowN
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
             <Box
                 component="label"
-                sx={{ position: 'relative', width: 30, height: 30, flexShrink: 0, borderRadius: '7px', border: '1px solid #cbd5e1', cursor: disabled ? 'default' : 'pointer', overflow: 'hidden', background: shown || 'repeating-conic-gradient(#e2e8f0 0 25%, #fff 0 50%) 0 0 / 10px 10px' }}
+                sx={{ position: 'relative', width: 30, height: 30, flexShrink: 0, borderRadius: '7px', border: '1px solid var(--mui-palette-border-strong)', cursor: disabled ? 'default' : 'pointer', overflow: 'hidden', background: shown || 'repeating-conic-gradient(#e2e8f0 0 25%, #fff 0 50%) 0 0 / 10px 10px' }}
             >
                 <input
                     type="color"
@@ -250,7 +250,7 @@ export function ColorInput({ value, onChange, accent, allowAccent = true, allowN
                         type="button"
                         disabled={disabled}
                         onClick={() => onChange('accent')}
-                        sx={{ px: 0.75, height: 30, borderRadius: '7px', border: `1px solid ${value === 'accent' ? '#2563eb' : '#cbd5e1'}`, backgroundColor: value === 'accent' ? '#eff6ff' : '#fff', fontSize: '0.7rem', fontWeight: 700, color: '#334155', cursor: 'pointer' }}
+                        sx={{ px: 0.75, height: 30, borderRadius: '7px', border: `1px solid ${value === 'accent' ? 'var(--mui-palette-primary-main)' : 'var(--mui-palette-border-strong)'}`, backgroundColor: value === 'accent' ? 'var(--mui-palette-primary-soft)' : 'var(--mui-palette-background-paper)', fontSize: '0.7rem', fontWeight: 700, color: 'var(--crm-slate-700)', cursor: 'pointer' }}
                     >
                         Accent
                     </Box>
@@ -274,13 +274,13 @@ export function SpacingInput({ value, onChange, disabled, ariaLabel, max = 50 }:
             <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 0.5, flex: 1 }}>
                 {(['top', 'right', 'bottom', 'left'] as const).map((side) => (
                     <Box key={side}>
-                        <Typography sx={{ fontSize: '0.64rem', color: '#94a3b8', textAlign: 'center', textTransform: 'capitalize' }}>{side}</Typography>
+                        <Typography sx={{ fontSize: '0.64rem', color: 'var(--mui-palette-text-muted)', textAlign: 'center', textTransform: 'capitalize' }}>{side}</Typography>
                         <NumberInput value={v[side]} onChange={(n) => set(side, n)} min={0} max={max} step={0.5} disabled={disabled} ariaLabel={`${ariaLabel} ${side} (mm)`} />
                     </Box>
                 ))}
             </Box>
             <Tooltip title={linked ? 'Edit sides separately' : 'Same value on all sides'} arrow>
-                <IconButton size="small" aria-label={linked ? 'Unlink sides' : 'Link sides'} aria-pressed={linked} onClick={() => setLinked((l) => !l)} sx={{ mb: '3px', color: linked ? '#1d4ed8' : '#94a3b8' }}>
+                <IconButton size="small" aria-label={linked ? 'Unlink sides' : 'Link sides'} aria-pressed={linked} onClick={() => setLinked((l) => !l)} sx={{ mb: '3px', color: linked ? 'var(--crm-text-blue-700)' : 'var(--mui-palette-text-muted)' }}>
                     {linked ? <LinkRoundedIcon sx={{ fontSize: 18 }} /> : <LinkOffRoundedIcon sx={{ fontSize: 18 }} />}
                 </IconButton>
             </Tooltip>
@@ -315,7 +315,7 @@ export function StyleEditor({
     groups: StyleGroup[];
     kind: 'section' | 'column' | 'block';
 }) {
-    const border = style.border ?? { width: 0, style: 'solid' as const, color: '#cbd5e1', radius: 0, sides: { top: true, right: true, bottom: true, left: true } };
+    const border = style.border ?? { width: 0, style: 'solid' as const, color: 'var(--crm-slate-300)', radius: 0, sides: { top: true, right: true, bottom: true, left: true } };
     const setBorder = (patch: Partial<typeof border>) => {
         const next = { ...border, ...patch };
         onChange({ border: next.width === 0 && next.radius === 0 ? undefined : next });

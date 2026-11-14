@@ -36,10 +36,10 @@ export interface LookupPreset<T> {
 export function StatusChip({ status }: { status: string }) {
     const isActive = status === 'Active';
     const isInactive = status === 'Inactive';
-    const bg = isActive ? '#ecfdf5' : isInactive ? '#fef2f2' : '#f1f5f9';
-    const color = isActive ? '#059669' : isInactive ? '#dc2626' : '#64748b';
-    const border = isActive ? '#a7f3d0' : isInactive ? '#fecaca' : '#e2e8f0';
-    const dot = isActive ? '#10b981' : isInactive ? '#ef4444' : '#94a3b8';
+    const bg = isActive ? 'var(--mui-palette-success-soft)' : isInactive ? 'var(--mui-palette-error-soft)' : 'var(--mui-palette-background-hover)';
+    const color = isActive ? 'var(--crm-emerald-600)' : isInactive ? 'var(--mui-palette-error-main)' : 'var(--mui-palette-text-secondary)';
+    const border = isActive ? 'var(--mui-palette-success-softBorder)' : isInactive ? 'var(--mui-palette-error-softBorder)' : 'var(--mui-palette-border-main)';
+    const dot = isActive ? 'var(--crm-emerald-500)' : isInactive ? 'var(--crm-red-500)' : 'var(--mui-palette-text-muted)';
     return (
         <Box
             component="span"
@@ -64,7 +64,7 @@ export function StatusChip({ status }: { status: string }) {
 }
 
 const PrimaryText = ({ children }: { children: React.ReactNode }) => (
-    <Typography sx={{ fontSize: '0.82rem', fontWeight: 700, color: '#1d4ed8', '&:hover': { textDecoration: 'underline' } }}>
+    <Typography sx={{ fontSize: '0.82rem', fontWeight: 700, color: 'var(--crm-blue-700)', '&:hover': { textDecoration: 'underline' } }}>
         {children}
     </Typography>
 );
@@ -183,10 +183,10 @@ function ContactMobileCell({ contact }: { contact: Contact }) {
         ...(contact.doNotCall
             ? []
             : [
-                  { label: 'Call', href: telHref(contact.mobile), icon: <PhoneInTalkOutlinedIcon sx={{ fontSize: 14 }} />, color: '#2563eb' },
-                  { label: 'Send SMS', href: smsHref(contact.mobile), icon: <SmsOutlinedIcon sx={{ fontSize: 14 }} />, color: '#7c3aed' },
+                  { label: 'Call', href: telHref(contact.mobile), icon: <PhoneInTalkOutlinedIcon sx={{ fontSize: 14 }} />, color: 'var(--crm-text-blue-600)' },
+                  { label: 'Send SMS', href: smsHref(contact.mobile), icon: <SmsOutlinedIcon sx={{ fontSize: 14 }} />, color: 'var(--crm-violet-600)' },
               ]),
-        { label: 'WhatsApp', href: whatsappHref(contact.mobile), icon: <WhatsAppIcon sx={{ fontSize: 14 }} />, color: '#16a34a', external: true },
+        { label: 'WhatsApp', href: whatsappHref(contact.mobile), icon: <WhatsAppIcon sx={{ fontSize: 14 }} />, color: 'var(--mui-palette-success-main)', external: true },
     ].filter((a) => a.href);
     return (
         <Box>
@@ -202,14 +202,14 @@ function ContactMobileCell({ contact }: { contact: Contact }) {
                             onClick={(e: React.MouseEvent) => e.stopPropagation()}
                             onKeyDown={(e: React.KeyboardEvent) => e.stopPropagation()}
                             {...('external' in a && a.external ? { target: '_blank', rel: 'noopener noreferrer' } : {})}
-                            sx={{ width: 24, height: 24, color: a.color, border: '1px solid #e2e8f0', borderRadius: '6px' }}
+                            sx={{ width: 24, height: 24, color: a.color, border: '1px solid var(--mui-palette-border-main)', borderRadius: '6px' }}
                         >
                             {a.icon}
                         </IconButton>
                     </Tooltip>
                 ))}
             </Box>
-            <Typography sx={{ fontSize: '0.8rem', color: '#475569' }}>{contact.mobile}</Typography>
+            <Typography sx={{ fontSize: '0.8rem', color: 'var(--crm-slate-600)' }}>{contact.mobile}</Typography>
         </Box>
     );
 }
@@ -258,9 +258,9 @@ export const CONTACT_LOOKUP_PRESET: LookupPreset<ContactLookupRow> = {
 // ─── Nature of Call ───────────────────────────────────────────────────────────
 
 const CALL_PRIORITY_COLORS: Record<NatureOfCallItem['priority'], { color: string; bg: string; border: string }> = {
-    High: { color: '#dc2626', bg: '#fef2f2', border: '#fecaca' },
-    Medium: { color: '#d97706', bg: '#fffbeb', border: '#fde68a' },
-    Low: { color: '#2563eb', bg: '#eff6ff', border: '#bfdbfe' },
+    High: { color: 'var(--mui-palette-error-main)', bg: 'var(--mui-palette-error-soft)', border: 'var(--mui-palette-error-softBorder)' },
+    Medium: { color: 'var(--mui-palette-warning-main)', bg: 'var(--mui-palette-warning-soft)', border: 'var(--mui-palette-warning-softBorder)' },
+    Low: { color: 'var(--crm-text-blue-600)', bg: 'var(--mui-palette-primary-soft)', border: 'var(--mui-palette-primary-softBorder)' },
 };
 
 export const NATURE_OF_CALL_LOOKUP_PRESET: LookupPreset<NatureOfCallItem> = {

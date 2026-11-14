@@ -43,7 +43,7 @@ export function RhfSelect<T extends FieldValues>({
     const { field, fieldState } = useController<T>({ name });
     const size = resolveFieldSize(name, 'select', fieldSize ?? resolveOptionsFieldSize(options));
     // Auto width fits the longest option the dropdown actually shows (admin-managed list when configured).
-    const override = useFieldOverride(name, { label, options });
+    const override = useFieldOverride(name, { label, options, placeholder });
     const fit: FieldContentFit = {
         chars: Math.max(SELECT_PROMPT.length, longestOptionChars(override?.options ?? options, override?.optionLabels ?? optionLabels)),
         chromePx: SELECT_ARROW_PX,

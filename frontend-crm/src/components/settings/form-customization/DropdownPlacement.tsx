@@ -136,7 +136,7 @@ export function placementError(configs: FormConfigsPayload, targets: PlacementTa
     return undefined;
 }
 
-const smallLabel = (text: string) => <Typography sx={{ fontSize: '0.72rem', fontWeight: 600, color: '#64748b', mb: 0.4 }}>{text}</Typography>;
+const smallLabel = (text: string) => <Typography sx={{ fontSize: '0.72rem', fontWeight: 600, color: 'var(--mui-palette-text-secondary)', mb: 0.4 }}>{text}</Typography>;
 
 // ── Controls ─────────────────────────────────────────────────────────────────
 
@@ -176,7 +176,7 @@ export function PlacementFields({
                             {t.label}
                         </MenuItem>
                     ))}
-                    <MenuItem value={NEW_TAB} sx={{ fontSize: '0.85rem', color: '#2563eb', fontWeight: 600 }}>
+                    <MenuItem value={NEW_TAB} sx={{ fontSize: '0.85rem', color: 'var(--crm-text-blue-600)', fontWeight: 600 }}>
                         + New tab…
                     </MenuItem>
                 </TextField>
@@ -202,7 +202,7 @@ export function PlacementFields({
                             {DEFAULT_SECTION_LABEL} (new)
                         </MenuItem>
                     )}
-                    <MenuItem value={NEW_SECTION} sx={{ fontSize: '0.85rem', color: '#2563eb', fontWeight: 600 }}>
+                    <MenuItem value={NEW_SECTION} sx={{ fontSize: '0.85rem', color: 'var(--crm-text-blue-600)', fontWeight: 600 }}>
                         + New section…
                     </MenuItem>
                 </TextField>
@@ -266,7 +266,7 @@ export function ControlTypePicker({
  */
 export function ModuleGroupList({ renderRow }: { renderRow: (module: CrmModuleKey, label: string) => React.ReactNode }) {
     return (
-        <Box sx={{ border: '1px solid #e2e8f0', borderRadius: '8px', backgroundColor: '#ffffff' }}>
+        <Box sx={{ border: '1px solid var(--mui-palette-border-main)', borderRadius: '8px', backgroundColor: 'var(--mui-palette-background-paper)' }}>
             {CRM_MODULE_GROUPS.map((group, gi) => (
                 <Box key={group.key} role="group" aria-label={group.label}>
                     <Box
@@ -279,10 +279,10 @@ export function ModuleGroupList({ renderRow }: { renderRow: (module: CrmModuleKe
                             display: 'flex',
                             alignItems: 'center',
                             gap: 0.6,
-                            color: '#64748b',
-                            backgroundColor: '#f1f5f9',
-                            borderTop: gi === 0 ? 'none' : '1px solid #e2e8f0',
-                            borderBottom: '1px solid #e2e8f0',
+                            color: 'var(--mui-palette-text-secondary)',
+                            backgroundColor: 'var(--mui-palette-background-hover)',
+                            borderTop: gi === 0 ? 'none' : '1px solid var(--mui-palette-border-main)',
+                            borderBottom: '1px solid var(--mui-palette-border-main)',
                             borderRadius: gi === 0 ? '8px 8px 0 0' : 0,
                         }}
                     >
@@ -290,7 +290,7 @@ export function ModuleGroupList({ renderRow }: { renderRow: (module: CrmModuleKe
                         <Typography sx={{ fontSize: '0.66rem', fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase' }}>{group.label}</Typography>
                     </Box>
                     {group.modules.map((m, i) => (
-                        <Box key={m.key} sx={{ borderTop: i === 0 ? 'none' : '1px solid #f1f5f9' }}>
+                        <Box key={m.key} sx={{ borderTop: i === 0 ? 'none' : '1px solid var(--mui-palette-border-light)' }}>
                             {renderRow(m.key, m.label)}
                         </Box>
                     ))}
@@ -326,7 +326,7 @@ export function ModuleTargetsPicker({
                 const placement = targets[module];
                 const linked = linkedModules?.has(module) ?? false;
                 return (
-                    <Box sx={{ px: 1.5, py: 0.75, backgroundColor: placement ? '#f8fafc' : '#fff' }}>
+                    <Box sx={{ px: 1.5, py: 0.75, backgroundColor: placement ? 'var(--mui-palette-background-subtle)' : 'var(--mui-palette-background-paper)' }}>
                         <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '190px minmax(0, 1fr)' }, alignItems: 'center', gap: 1 }}>
                             <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
                                 <Tooltip title={linked ? 'This form already has a field using this dropdown' : ''} arrow>
@@ -334,7 +334,7 @@ export function ModuleTargetsPicker({
                                         <FormControlLabel
                                             sx={{ m: 0 }}
                                             control={<Checkbox size="small" checked={Boolean(placement)} disabled={linked} onChange={(e) => toggle(module, e.target.checked)} />}
-                                            label={<Typography sx={{ fontSize: '0.84rem', fontWeight: 600, color: linked ? '#94a3b8' : '#1e293b' }}>{moduleName}</Typography>}
+                                            label={<Typography sx={{ fontSize: '0.84rem', fontWeight: 600, color: linked ? 'var(--mui-palette-text-muted)' : 'var(--mui-palette-text-primary)' }}>{moduleName}</Typography>}
                                         />
                                     </span>
                                 </Tooltip>
@@ -394,7 +394,7 @@ export function PlaceDropdownInFormsDialog({
 
     return (
         <Dialog open onClose={onClose} fullWidth maxWidth="md" slotProps={{ paper: { sx: { borderRadius: '12px' } } }}>
-            <DialogTitle sx={{ fontWeight: 700, fontSize: '1rem', color: '#0f172a', borderBottom: '1px solid #e2e8f0' }}>Add &lsquo;{category.label}&rsquo; to Forms</DialogTitle>
+            <DialogTitle sx={{ fontWeight: 700, fontSize: '1rem', color: 'var(--crm-slate-900)', borderBottom: '1px solid var(--mui-palette-border-main)' }}>Add &lsquo;{category.label}&rsquo; to Forms</DialogTitle>
             <DialogContent sx={{ pt: '20px !important', display: 'flex', flexDirection: 'column', gap: 2 }}>
                 <TextField label="Field label" required size="small" value={label} onChange={(e) => setLabel(e.target.value)} sx={inputSx} slotProps={{ htmlInput: { maxLength: 120 } }} />
                 <ControlTypePicker fieldType={control.fieldType} isRequired={control.isRequired} onChange={setControl} />
@@ -402,9 +402,9 @@ export function PlaceDropdownInFormsDialog({
                     {smallLabel('Forms')}
                     <ModuleTargetsPicker configs={configs} targets={targets} onChange={setTargets} linkedModules={linkedModules} />
                 </Box>
-                {error && count > 0 && <Typography sx={{ fontSize: '0.78rem', color: '#b91c1c' }}>{error}</Typography>}
+                {error && count > 0 && <Typography sx={{ fontSize: '0.78rem', color: 'var(--crm-red-700)' }}>{error}</Typography>}
             </DialogContent>
-            <DialogActions sx={{ px: 3, py: 2, borderTop: '1px solid #e2e8f0' }}>
+            <DialogActions sx={{ px: 3, py: 2, borderTop: '1px solid var(--mui-palette-border-main)' }}>
                 <Button onClick={onClose} variant="outlined" sx={secondaryButtonSx}>
                     Cancel
                 </Button>

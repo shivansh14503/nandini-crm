@@ -117,22 +117,22 @@ export function GlobalSearch() {
                         display: { xs: 'none', md: 'flex' },
                         alignItems: 'center',
                         gap: 1,
-                        backgroundColor: '#F3F4F6',
-                        border: '1px solid #E5E7EB',
+                        backgroundColor: 'var(--crm-gray-100)',
+                        border: '1px solid var(--crm-gray-200)',
                         borderRadius: '8px',
                         px: 1.5,
                         py: 0.5,
                         width: 220,
                         transition: 'all 0.2s ease',
                         '&:focus-within': {
-                            backgroundColor: '#FFFFFF',
-                            borderColor: '#93C5FD',
+                            backgroundColor: 'var(--mui-palette-background-paper)',
+                            borderColor: 'var(--crm-blue-300)',
                             boxShadow: '0 0 0 3px rgba(147,197,253,0.3)',
                             width: 300,
                         },
                     }}
                 >
-                    <SearchIcon sx={{ fontSize: 16, color: '#9CA3AF', flexShrink: 0 }} />
+                    <SearchIcon sx={{ fontSize: 16, color: 'var(--crm-gray-400)', flexShrink: 0 }} />
                     <InputBase
                         inputRef={inputRef}
                         value={query}
@@ -154,16 +154,16 @@ export function GlobalSearch() {
                         }}
                         sx={{
                             fontSize: '0.8rem',
-                            color: '#374151',
+                            color: 'var(--crm-gray-700)',
                             width: '100%',
-                            '& input::placeholder': { color: '#9CA3AF', opacity: 1 },
+                            '& input::placeholder': { color: 'var(--crm-gray-400)', opacity: 1 },
                         }}
                     />
                     <Typography
                         sx={{
                             fontSize: '0.65rem',
-                            color: '#9CA3AF',
-                            backgroundColor: '#E5E7EB',
+                            color: 'var(--crm-gray-400)',
+                            backgroundColor: 'var(--crm-gray-200)',
                             borderRadius: '4px',
                             px: 0.6,
                             py: 0.2,
@@ -191,20 +191,20 @@ export function GlobalSearch() {
                             maxWidth: 'calc(100vw - 32px)',
                             maxHeight: 420,
                             overflowY: 'auto',
-                            border: '1px solid #e2e8f0',
+                            border: '1px solid var(--mui-palette-border-main)',
                             borderRadius: '10px',
                             boxShadow: '0 12px 32px rgba(15, 23, 42, 0.14)',
                             py: 0.5,
                         }}
                     >
                         {flat.length === 0 ? (
-                            <Typography sx={{ px: 2, py: 2.5, fontSize: '0.82rem', color: '#64748b', textAlign: 'center' }}>
+                            <Typography sx={{ px: 2, py: 2.5, fontSize: '0.82rem', color: 'var(--mui-palette-text-secondary)', textAlign: 'center' }}>
                                 No matching records found for &lsquo;{trimmed}&rsquo;
                             </Typography>
                         ) : (
                             GLOBAL_SEARCH_CATEGORIES.filter((c) => results[c].length > 0).map((category) => (
                                 <Box key={category} sx={{ py: 0.5 }}>
-                                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, px: 1.75, py: 0.5, color: '#64748b' }}>
+                                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, px: 1.75, py: 0.5, color: 'var(--mui-palette-text-secondary)' }}>
                                         {CATEGORY_META[category].icon}
                                         <Typography sx={{ fontSize: '0.7rem', fontWeight: 700, letterSpacing: '0.05em', textTransform: 'uppercase' }}>
                                             {CATEGORY_META[category].label}
@@ -214,8 +214,8 @@ export function GlobalSearch() {
                                             sx={{
                                                 fontSize: '0.66rem',
                                                 fontWeight: 700,
-                                                color: '#1d4ed8',
-                                                backgroundColor: '#eff6ff',
+                                                color: 'var(--crm-text-blue-700)',
+                                                backgroundColor: 'var(--mui-palette-primary-soft)',
                                                 borderRadius: '999px',
                                                 px: 0.75,
                                                 lineHeight: 1.6,
@@ -248,18 +248,18 @@ export function GlobalSearch() {
                                                     px: 1.75,
                                                     py: 0.9,
                                                     textDecoration: 'none',
-                                                    backgroundColor: active ? '#eff6ff' : 'transparent',
+                                                    backgroundColor: active ? 'var(--mui-palette-primary-soft)' : 'transparent',
                                                 }}
                                             >
-                                                <Box sx={{ color: active ? '#2563eb' : '#94a3b8', display: 'flex' }}>
+                                                <Box sx={{ color: active ? 'var(--crm-text-blue-600)' : 'var(--mui-palette-text-muted)', display: 'flex' }}>
                                                     {CATEGORY_META[category].icon}
                                                 </Box>
                                                 <Box sx={{ minWidth: 0, flex: 1 }}>
-                                                    <Typography noWrap sx={{ fontSize: '0.84rem', fontWeight: 600, color: '#0f172a' }}>
+                                                    <Typography noWrap sx={{ fontSize: '0.84rem', fontWeight: 600, color: 'var(--crm-slate-900)' }}>
                                                         {result.title}
                                                     </Typography>
                                                     {result.subtitle && (
-                                                        <Typography noWrap sx={{ fontSize: '0.74rem', color: '#64748b' }}>
+                                                        <Typography noWrap sx={{ fontSize: '0.74rem', color: 'var(--mui-palette-text-secondary)' }}>
                                                             {result.subtitle}
                                                         </Typography>
                                                     )}
@@ -270,8 +270,8 @@ export function GlobalSearch() {
                                                         sx={{
                                                             fontSize: '0.68rem',
                                                             fontWeight: 700,
-                                                            color: '#475569',
-                                                            backgroundColor: '#f1f5f9',
+                                                            color: 'var(--crm-slate-600)',
+                                                            backgroundColor: 'var(--mui-palette-background-hover)',
                                                             borderRadius: '6px',
                                                             px: 0.75,
                                                             py: 0.2,

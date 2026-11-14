@@ -48,20 +48,20 @@ import type { Ticket } from '@/types/ticket.types';
 import type { FilterTab, SortField } from './master';
 import { formatDateTime } from '@/utils/date';
 
-const plainCellSx = { fontSize: '0.78rem', color: '#334155' } as const;
+const plainCellSx = { fontSize: '0.78rem', color: 'var(--crm-slate-700)' } as const;
 
 const getNatureBadgeStyle = (nature: string = '') => {
     const n = nature.toLowerCase();
-    if (n.includes('education')) return { backgroundColor: '#f3e8ff', color: '#7e22ce', border: '1px solid #d8b4fe' };
-    if (n.includes('construction')) return { backgroundColor: '#fff7ed', color: '#c2410c', border: '1px solid #fed7aa' };
-    if (n.includes('distributor') || n.includes('trading') || n.includes('wholesale')) return { backgroundColor: '#eff6ff', color: '#1d4ed8', border: '1px solid #bfdbfe' };
-    if (n.includes('transportation') || n.includes('logistics')) return { backgroundColor: '#ecfeff', color: '#0e7490', border: '1px solid #a5f3fc' };
-    if (n.includes('consulting')) return { backgroundColor: '#eef2ff', color: '#4338ca', border: '1px solid #c7d2fe' };
-    if (n.includes('it') || n.includes('software')) return { backgroundColor: '#f0f9ff', color: '#0284c7', border: '1px solid #bae6fd' };
-    if (n.includes('manufacturing')) return { backgroundColor: '#ecfdf5', color: '#047857', border: '1px solid #a7f3d0' };
-    if (n.includes('healthcare')) return { backgroundColor: '#fff1f2', color: '#be123c', border: '1px solid #fecdd3' };
-    if (n.includes('retail')) return { backgroundColor: '#fefce8', color: '#a16207', border: '1px solid #fef08a' };
-    return { backgroundColor: '#f8fafc', color: '#475569', border: '1px solid #cbd5e1' };
+    if (n.includes('education')) return { backgroundColor: 'var(--crm-purple-100)', color: 'var(--crm-purple-700)', border: '1px solid var(--crm-purple-300)' };
+    if (n.includes('construction')) return { backgroundColor: 'var(--crm-orange-50)', color: 'var(--crm-orange-700)', border: '1px solid var(--crm-orange-200)' };
+    if (n.includes('distributor') || n.includes('trading') || n.includes('wholesale')) return { backgroundColor: 'var(--mui-palette-primary-soft)', color: 'var(--crm-text-blue-700)', border: '1px solid var(--mui-palette-primary-softBorder)' };
+    if (n.includes('transportation') || n.includes('logistics')) return { backgroundColor: 'var(--crm-cyan-50)', color: 'var(--crm-cyan-700)', border: '1px solid var(--crm-cyan-200)' };
+    if (n.includes('consulting')) return { backgroundColor: 'var(--crm-indigo-50)', color: 'var(--crm-indigo-700)', border: '1px solid var(--crm-indigo-200)' };
+    if (n.includes('it') || n.includes('software')) return { backgroundColor: 'var(--mui-palette-info-soft)', color: 'var(--mui-palette-info-main)', border: '1px solid var(--mui-palette-info-softBorder)' };
+    if (n.includes('manufacturing')) return { backgroundColor: 'var(--mui-palette-success-soft)', color: 'var(--crm-emerald-700)', border: '1px solid var(--mui-palette-success-softBorder)' };
+    if (n.includes('healthcare')) return { backgroundColor: 'var(--crm-rose-50)', color: 'var(--crm-rose-700)', border: '1px solid var(--crm-rose-200)' };
+    if (n.includes('retail')) return { backgroundColor: 'var(--crm-yellow-50)', color: 'var(--crm-yellow-700)', border: '1px solid var(--crm-yellow-200)' };
+    return { backgroundColor: 'var(--mui-palette-background-subtle)', color: 'var(--crm-slate-600)', border: '1px solid var(--mui-palette-border-strong)' };
 };
 
 const formatNatureLabel = (nature: string = '') => {
@@ -395,23 +395,23 @@ export function OrganizationsMasterView() {
             {
                 id: 'recent',
                 label: 'Recently Viewed',
-                icon: <HistoryIcon sx={{ fontSize: 15, color: '#94a3b8' }} />,
+                icon: <HistoryIcon sx={{ fontSize: 15, color: 'var(--mui-palette-text-muted)' }} />,
                 count: organizations.filter((o) => o.isRecentlyViewed).length,
             },
             {
                 id: 'my',
                 label: 'My Accounts',
-                icon: <PersonOutlinedIcon sx={{ fontSize: 16, color: '#94a3b8' }} />,
+                icon: <PersonOutlinedIcon sx={{ fontSize: 16, color: 'var(--mui-palette-text-muted)' }} />,
             },
             {
                 id: 'distributor',
                 label: 'Distributor/Trading',
-                dotColor: '#2563eb',
+                dotColor: 'var(--mui-palette-primary-main)',
             },
             {
                 id: 'enduser',
                 label: 'End User',
-                dotColor: '#10b981',
+                dotColor: 'var(--crm-emerald-500)',
             },
         ],
         [organizations]
@@ -433,11 +433,11 @@ export function OrganizationsMasterView() {
                                 width: 28,
                                 height: 28,
                                 borderRadius: '6px',
-                                backgroundColor: '#eff6ff',
+                                backgroundColor: 'var(--mui-palette-primary-soft)',
                                 display: 'flex',
                                 alignItems: 'center',
                                 justifyContent: 'center',
-                                color: '#2563eb',
+                                color: 'var(--crm-text-blue-600)',
                                 flexShrink: 0,
                             }}
                         >
@@ -450,7 +450,7 @@ export function OrganizationsMasterView() {
                                 sx={{
                                     fontSize: '0.82rem',
                                     fontWeight: 700,
-                                    color: '#1d4ed8',
+                                    color: 'var(--crm-text-blue-700)',
                                     cursor: 'pointer',
                                     lineHeight: 1.3,
                                     '&:hover': { textDecoration: 'underline' },
@@ -460,7 +460,7 @@ export function OrganizationsMasterView() {
                             </RecordLink>
                             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 0.2 }}>
                                 {org.tradeName && org.tradeName !== org.organizationName && (
-                                    <Typography sx={{ fontSize: '0.7rem', color: '#94a3b8' }}>{org.tradeName}</Typography>
+                                    <Typography sx={{ fontSize: '0.7rem', color: 'var(--mui-palette-text-muted)' }}>{org.tradeName}</Typography>
                                 )}
                                 {org.accountVerified && (
                                     <Box
@@ -468,12 +468,12 @@ export function OrganizationsMasterView() {
                                         sx={{
                                             fontSize: '0.62rem',
                                             fontWeight: 700,
-                                            color: '#059669',
-                                            backgroundColor: '#ecfdf5',
+                                            color: 'var(--crm-emerald-600)',
+                                            backgroundColor: 'var(--mui-palette-success-soft)',
                                             px: 0.6,
                                             py: 0.1,
                                             borderRadius: '4px',
-                                            border: '1px solid #a7f3d0',
+                                            border: '1px solid var(--mui-palette-success-softBorder)',
                                         }}
                                     >
                                         Verified
@@ -524,9 +524,9 @@ export function OrganizationsMasterView() {
                             borderRadius: '6px',
                             fontSize: '0.72rem',
                             fontWeight: 600,
-                            backgroundColor: '#f1f5f9',
-                            color: '#334155',
-                            border: '1px solid #e2e8f0',
+                            backgroundColor: 'var(--mui-palette-background-hover)',
+                            color: 'var(--crm-slate-700)',
+                            border: '1px solid var(--mui-palette-border-main)',
                         }}
                     >
                         {org.customerType}
@@ -552,9 +552,9 @@ export function OrganizationsMasterView() {
                                 borderRadius: '12px',
                                 fontSize: '0.72rem',
                                 fontWeight: 700,
-                                backgroundColor: isActive ? '#ecfdf5' : '#fef3c7',
-                                color: isActive ? '#059669' : '#d97706',
-                                border: isActive ? '1px solid #a7f3d0' : '1px solid #fde68a',
+                                backgroundColor: isActive ? 'var(--mui-palette-success-soft)' : 'var(--crm-amber-100)',
+                                color: isActive ? 'var(--crm-emerald-600)' : 'var(--mui-palette-warning-main)',
+                                border: isActive ? '1px solid var(--mui-palette-success-softBorder)' : '1px solid var(--mui-palette-warning-softBorder)',
                             }}
                         >
                             <Box
@@ -577,7 +577,7 @@ export function OrganizationsMasterView() {
                 sortable: true,
                 minWidth: 160,
                 render: (org) => (
-                    <Typography sx={{ fontSize: '0.78rem', color: '#475569' }}>
+                    <Typography sx={{ fontSize: '0.78rem', color: 'var(--crm-slate-600)' }}>
                         {org.billingStreet || org.billingAddress || '-'}
                     </Typography>
                 ),
@@ -588,7 +588,7 @@ export function OrganizationsMasterView() {
                 sortable: true,
                 minWidth: 120,
                 render: (org) => (
-                    <Typography sx={{ fontSize: '0.78rem', color: '#475569' }}>
+                    <Typography sx={{ fontSize: '0.78rem', color: 'var(--crm-slate-600)' }}>
                         {org.billingCity || '-'}
                     </Typography>
                 ),
@@ -599,7 +599,7 @@ export function OrganizationsMasterView() {
                 sortable: true,
                 minWidth: 120,
                 render: (org) => (
-                    <Typography sx={{ fontSize: '0.78rem', color: '#475569' }}>
+                    <Typography sx={{ fontSize: '0.78rem', color: 'var(--crm-slate-600)' }}>
                         {org.billingState || '-'}
                     </Typography>
                 ),
@@ -610,7 +610,7 @@ export function OrganizationsMasterView() {
                 sortable: true,
                 minWidth: 150,
                 render: (org) => (
-                    <Typography sx={{ fontSize: '0.78rem', color: '#334155', fontFamily: 'monospace' }}>
+                    <Typography sx={{ fontSize: '0.78rem', color: 'var(--crm-slate-700)', fontFamily: 'monospace' }}>
                         {org.gstNo || org.gstNumber || '-'}
                     </Typography>
                 ),
@@ -628,7 +628,7 @@ export function OrganizationsMasterView() {
                 sortable: true,
                 minWidth: 130,
                 render: (org) => (
-                    <Typography sx={{ fontSize: '0.78rem', fontWeight: 600, color: '#334155' }}>
+                    <Typography sx={{ fontSize: '0.78rem', color: 'var(--crm-slate-700)' }}>
                         {org.annualTurnover || '-'}
                     </Typography>
                 ),

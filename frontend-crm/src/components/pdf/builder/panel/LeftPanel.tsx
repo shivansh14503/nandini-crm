@@ -19,9 +19,9 @@ export function LeftPanel(props: { meta: TemplateMeta; onMetaChange: (patch: Par
         <Box
             component="aside"
             aria-label="Template builder panel"
-            sx={{ width: { xs: '100%', md: 380 }, flexShrink: 0, display: 'flex', flexDirection: 'column', minHeight: 0, borderRight: { md: '1px solid #e2e8f0' }, backgroundColor: '#fff' }}
+            sx={{ width: { xs: '100%', md: 380 }, flexShrink: 0, display: 'flex', flexDirection: 'column', minHeight: 0, borderRight: { md: '1px solid var(--crm-slate-200)' }, backgroundColor: 'var(--mui-palette-background-paper)' }}
         >
-            <Box role="tablist" aria-label="Panel" sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', borderBottom: '1px solid #e2e8f0' }}>
+            <Box role="tablist" aria-label="Panel" sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', borderBottom: '1px solid var(--mui-palette-border-main)' }}>
                 {tabs.map((t) => {
                     const active = panelTab === t.key;
                     return (
@@ -43,10 +43,10 @@ export function LeftPanel(props: { meta: TemplateMeta; onMetaChange: (patch: Par
                                 cursor: 'pointer',
                                 fontSize: '0.9rem',
                                 fontWeight: active ? 700 : 500,
-                                color: active ? '#0f172a' : '#64748b',
-                                borderBottom: `2px solid ${active ? '#1d4ed8' : 'transparent'}`,
+                                color: active ? 'var(--crm-slate-900)' : 'var(--mui-palette-text-secondary)',
+                                borderBottom: `2px solid ${active ? 'var(--crm-blue-700)' : 'transparent'}`,
                                 mb: '-1px',
-                                '&:hover': { color: '#0f172a' },
+                                '&:hover': { color: 'var(--crm-slate-900)' },
                             }}
                         >
                             {t.label}

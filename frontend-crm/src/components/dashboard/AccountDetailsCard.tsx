@@ -13,7 +13,7 @@ export function AccountDetailsCard({ user }: AccountDetailsCardProps) {
             elevation={0}
             sx={{
                 borderRadius: '16px',
-                border: '1px solid #E8ECF0',
+                border: '1px solid var(--mui-palette-border-main)',
                 backgroundColor: 'background.paper',
                 boxShadow: '0 4px 20px rgba(0, 0, 0, 0.05)',
                 p: 2,
@@ -30,9 +30,9 @@ export function AccountDetailsCard({ user }: AccountDetailsCardProps) {
                 <Box
                     sx={{
                         p: 2.5,
-                        backgroundColor: '#F8FAFC',
+                        backgroundColor: 'var(--mui-palette-background-subtle)',
                         borderRadius: '10px',
-                        border: '1px solid #E2E8F0',
+                        border: '1px solid var(--mui-palette-border-main)',
                         display: 'inline-block',
                         minWidth: 280,
                     }}

@@ -54,22 +54,22 @@ type TabId = 'recent' | 'advanced';
 const EMPTY: FilterCriteria = { conditions: {} };
 
 const primaryBtnSx = {
-    background: 'linear-gradient(135deg, #1d4ed8 0%, #2563eb 100%)',
+    background: 'linear-gradient(135deg, var(--crm-fill-blue-700) 0%, var(--crm-fill-blue-600) 100%)',
     color: '#fff',
     textTransform: 'none',
     fontWeight: 700,
     borderRadius: '8px',
     px: 2.5,
     boxShadow: 'none',
-    '&:hover': { background: 'linear-gradient(135deg, #1e40af 0%, #1d4ed8 100%)', boxShadow: 'none' },
-    '&.Mui-disabled': { background: '#cbd5e1', color: '#fff' },
+    '&:hover': { background: 'linear-gradient(135deg, var(--crm-fill-blue-800) 0%, var(--crm-fill-blue-700) 100%)', boxShadow: 'none' },
+    '&.Mui-disabled': { background: 'var(--crm-slate-300)', color: '#fff' },
 } as const;
-const textBtnSx = { textTransform: 'none', fontWeight: 600, color: '#475569' } as const;
+const textBtnSx = { textTransform: 'none', fontWeight: 600, color: 'var(--crm-slate-600)' } as const;
 const inputSx = {
-    '& .MuiOutlinedInput-root': { fontSize: '0.8rem', borderRadius: '6px', backgroundColor: '#fff', minHeight: 36 },
+    '& .MuiOutlinedInput-root': { fontSize: '0.8rem', borderRadius: '6px', backgroundColor: 'var(--mui-palette-background-paper)', minHeight: 36 },
     '& .MuiInputBase-input': { py: '7px' },
 } as const;
-const labelSx = { fontSize: '0.74rem', fontWeight: 700, color: '#475569', mb: 0.5 } as const;
+const labelSx = { fontSize: '0.74rem', fontWeight: 700, color: 'var(--crm-slate-600)', mb: 0.5 } as const;
 
 function relativeTime(iso: string): string {
     const diff = Date.now() - new Date(iso).getTime();
@@ -179,7 +179,7 @@ function FilterDialog({ controller, sortOptions }: TableFilterModalProps) {
             slotProps={{ paper: { sx: { borderRadius: '14px', boxShadow: '0 20px 50px rgba(15,23,42,0.18)', height: 'min(680px, 88vh)' } } }}
         >
             <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1, pb: 0, pr: 1.5 }}>
-                <Typography sx={{ fontSize: '1.05rem', fontWeight: 800, color: '#0f172a', flex: 1 }}>Filter {moduleLabel}</Typography>
+                <Typography sx={{ fontSize: '1.05rem', fontWeight: 800, color: 'var(--crm-slate-900)', flex: 1 }}>Filter {moduleLabel}</Typography>
                 <IconButton size="small" onClick={controller.close} aria-label="Close filter">
                     <CloseIcon fontSize="small" />
                 </IconButton>
@@ -191,7 +191,7 @@ function FilterDialog({ controller, sortOptions }: TableFilterModalProps) {
                 sx={{
                     px: 3,
                     minHeight: 40,
-                    borderBottom: '1px solid #e2e8f0',
+                    borderBottom: '1px solid var(--mui-palette-border-main)',
                     '& .MuiTab-root': { minHeight: 40, textTransform: 'none', fontWeight: 700, fontSize: '0.82rem' },
                 }}
             >
@@ -204,7 +204,7 @@ function FilterDialog({ controller, sortOptions }: TableFilterModalProps) {
                 <Tab value="advanced" icon={<TuneIcon sx={{ fontSize: 17 }} />} iconPosition="start" label="Advanced" />
             </Tabs>
 
-            <DialogContent sx={{ flex: 1, overflowY: 'auto', pt: '16px !important', backgroundColor: tab === 'advanced' ? '#f8fafc' : '#fff' }}>
+            <DialogContent sx={{ flex: 1, overflowY: 'auto', pt: '16px !important', backgroundColor: tab === 'advanced' ? 'var(--mui-palette-background-subtle)' : 'var(--mui-palette-background-paper)' }}>
                 {error && (
                     <Alert severity="error" onClose={() => setError(null)} sx={{ mb: 2, fontSize: '0.8rem' }}>
                         {error}
@@ -229,8 +229,8 @@ function FilterDialog({ controller, sortOptions }: TableFilterModalProps) {
                     <Box>
                         {/* My Filters */}
                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2, flexWrap: 'wrap' }}>
-                            <BookmarkBorderIcon sx={{ fontSize: 18, color: '#64748b' }} />
-                            <Typography sx={{ fontSize: '0.8rem', fontWeight: 700, color: '#334155' }}>My Filters</Typography>
+                            <BookmarkBorderIcon sx={{ fontSize: 18, color: 'var(--mui-palette-text-secondary)' }} />
+                            <Typography sx={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--crm-slate-700)' }}>My Filters</Typography>
                             <TextField
                                 select
                                 size="small"
@@ -263,7 +263,7 @@ function FilterDialog({ controller, sortOptions }: TableFilterModalProps) {
                                             if (item) void handleDeleteSaved(item);
                                         }}
                                     >
-                                        <DeleteOutlineIcon fontSize="small" sx={{ color: '#ef4444' }} />
+                                        <DeleteOutlineIcon fontSize="small" sx={{ color: 'var(--crm-red-500)' }} />
                                     </IconButton>
                                 </Tooltip>
                             )}
@@ -289,7 +289,7 @@ function FilterDialog({ controller, sortOptions }: TableFilterModalProps) {
                                                             setCondition(key, null);
                                                         }}
                                                     >
-                                                        <CloseIcon sx={{ fontSize: 14, color: '#94a3b8' }} />
+                                                        <CloseIcon sx={{ fontSize: 14, color: 'var(--mui-palette-text-muted)' }} />
                                                     </IconButton>
                                                 </Tooltip>
                                             )}
@@ -319,7 +319,7 @@ function FilterDialog({ controller, sortOptions }: TableFilterModalProps) {
                                             ...params.slotProps,
                                             input: {
                                                 ...params.slotProps.input,
-                                                startAdornment: <AddIcon sx={{ fontSize: 18, color: '#2563eb', ml: 0.5 }} />,
+                                                startAdornment: <AddIcon sx={{ fontSize: 18, color: 'var(--crm-text-blue-600)', ml: 0.5 }} />,
                                             },
                                         }}
                                     />
@@ -329,7 +329,7 @@ function FilterDialog({ controller, sortOptions }: TableFilterModalProps) {
 
                         {/* Order by */}
                         {controller.canSort && sortOptions.length > 0 && (
-                            <Box sx={{ display: 'flex', alignItems: 'flex-end', gap: 2, mt: 2.5, pt: 2, borderTop: '1px dashed #e2e8f0', flexWrap: 'wrap' }}>
+                            <Box sx={{ display: 'flex', alignItems: 'flex-end', gap: 2, mt: 2.5, pt: 2, borderTop: '1px dashed var(--mui-palette-border-main)', flexWrap: 'wrap' }}>
                                 <Box sx={{ minWidth: 240 }}>
                                     <Typography sx={labelSx}>Order by column</Typography>
                                     <TextField
@@ -378,7 +378,7 @@ function FilterDialog({ controller, sortOptions }: TableFilterModalProps) {
                         )}
 
                         {/* Save filter as */}
-                        <Box sx={{ display: 'flex', alignItems: 'flex-end', gap: 1, mt: 2.5, pt: 2, borderTop: '1px dashed #e2e8f0' }}>
+                        <Box sx={{ display: 'flex', alignItems: 'flex-end', gap: 1, mt: 2.5, pt: 2, borderTop: '1px dashed var(--mui-palette-border-main)' }}>
                             <Box sx={{ flex: 1, maxWidth: 360 }}>
                                 <Typography sx={labelSx}>Save filter as</Typography>
                                 <TextField
@@ -412,7 +412,7 @@ function FilterDialog({ controller, sortOptions }: TableFilterModalProps) {
             </DialogContent>
 
             {tab === 'advanced' && (
-                <DialogActions sx={{ px: 3, py: 1.5, borderTop: '1px solid #e2e8f0', gap: 1 }}>
+                <DialogActions sx={{ px: 3, py: 1.5, borderTop: '1px solid var(--mui-palette-border-main)', gap: 1 }}>
                     <Button
                         onClick={() => {
                             setDraft(EMPTY);
@@ -424,7 +424,7 @@ function FilterDialog({ controller, sortOptions }: TableFilterModalProps) {
                     >
                         Clear
                     </Button>
-                    <Typography sx={{ flex: 1, fontSize: '0.78rem', color: '#64748b', textAlign: 'right', pr: 1 }}>
+                    <Typography sx={{ flex: 1, fontSize: '0.78rem', color: 'var(--mui-palette-text-secondary)', textAlign: 'right', pr: 1 }}>
                         {draftCount > 0 ? `${matchCount.toLocaleString('en-IN')} matching record${matchCount === 1 ? '' : 's'}` : 'No filters set'}
                     </Typography>
                     <Button onClick={controller.close} sx={textBtnSx}>
@@ -465,9 +465,9 @@ function RecentList({
     }
     if (items.length === 0) {
         return (
-            <Box sx={{ textAlign: 'center', py: 6, color: '#64748b' }}>
-                <HistoryIcon sx={{ fontSize: 40, color: '#cbd5e1' }} />
-                <Typography sx={{ fontWeight: 700, color: '#334155', mt: 1 }}>No recent filters yet</Typography>
+            <Box sx={{ textAlign: 'center', py: 6, color: 'var(--mui-palette-text-secondary)' }}>
+                <HistoryIcon sx={{ fontSize: 40, color: 'var(--crm-slate-300)' }} />
+                <Typography sx={{ fontWeight: 700, color: 'var(--crm-slate-700)', mt: 1 }}>No recent filters yet</Typography>
                 <Typography sx={{ fontSize: '0.8rem', mt: 0.5 }}>Your last 10 searches show up here, so you can run them again in one click.</Typography>
                 <Button onClick={onGoAdvanced} sx={{ mt: 2, textTransform: 'none', fontWeight: 700 }} startIcon={<TuneIcon />}>
                     Build a filter
@@ -497,14 +497,14 @@ function RecentList({
                             gap: 1.5,
                             p: 1.25,
                             pl: 1.5,
-                            border: '1px solid #e2e8f0',
+                            border: '1px solid var(--mui-palette-border-main)',
                             borderRadius: '8px',
                             cursor: 'pointer',
                             transition: 'all 0.15s',
-                            '&:hover, &:focus-visible': { borderColor: '#93c5fd', backgroundColor: '#f8fbff', outline: 'none' },
+                            '&:hover, &:focus-visible': { borderColor: 'var(--crm-blue-300)', backgroundColor: 'var(--mui-palette-background-subtle)', outline: 'none' },
                         }}
                     >
-                        <HistoryIcon sx={{ fontSize: 18, color: '#94a3b8', flexShrink: 0 }} />
+                        <HistoryIcon sx={{ fontSize: 18, color: 'var(--mui-palette-text-muted)', flexShrink: 0 }} />
                         <Box sx={{ flex: 1, minWidth: 0, display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
                             {parts.length ? (
                                 parts.map((p) => (
@@ -512,14 +512,14 @@ function RecentList({
                                         key={p}
                                         label={p}
                                         size="small"
-                                        sx={{ height: 22, fontSize: '0.72rem', fontWeight: 600, backgroundColor: '#eff6ff', color: '#1e40af', maxWidth: '100%' }}
+                                        sx={{ height: 22, fontSize: '0.72rem', fontWeight: 600, backgroundColor: 'var(--mui-palette-primary-soft)', color: 'var(--crm-text-blue-800)', maxWidth: '100%' }}
                                     />
                                 ))
                             ) : (
-                                <Typography sx={{ fontSize: '0.78rem', color: '#94a3b8' }}>Uses fields that no longer exist</Typography>
+                                <Typography sx={{ fontSize: '0.78rem', color: 'var(--mui-palette-text-muted)' }}>Uses fields that no longer exist</Typography>
                             )}
                         </Box>
-                        <Typography sx={{ fontSize: '0.72rem', color: '#94a3b8', whiteSpace: 'nowrap' }}>{relativeTime(item.lastUsedAt)}</Typography>
+                        <Typography sx={{ fontSize: '0.72rem', color: 'var(--mui-palette-text-muted)', whiteSpace: 'nowrap' }}>{relativeTime(item.lastUsedAt)}</Typography>
                         <Tooltip title="Edit in Advanced">
                             <IconButton
                                 size="small"

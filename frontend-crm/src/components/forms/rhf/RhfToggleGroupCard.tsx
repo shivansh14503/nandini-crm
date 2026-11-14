@@ -30,9 +30,9 @@ export function RhfToggleGroupCard<T extends FieldValues>({ items, onValueChange
                 gap: 2,
                 p: 1.75,
                 mb: 2,
-                border: '1px solid #e2e8f0',
+                border: '1px solid var(--mui-palette-border-main)',
                 borderRadius: '10px',
-                backgroundColor: '#f8fafc',
+                backgroundColor: 'var(--mui-palette-background-subtle)',
             }}
         >
             {items.map((item) => (
@@ -61,8 +61,8 @@ function ToggleCell<T extends FieldValues>({
     return (
         <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1 }}>
             <Box>
-                <Typography sx={{ fontWeight: 700, color: '#1e293b', fontSize: '0.82rem', lineHeight: 1.3 }}>{item.label}</Typography>
-                {item.caption && <Typography sx={{ color: '#94a3b8', fontSize: '0.72rem' }}>{item.caption}</Typography>}
+                <Typography sx={{ fontWeight: 700, color: 'var(--mui-palette-text-primary)', fontSize: '0.82rem', lineHeight: 1.3 }}>{item.label}</Typography>
+                {item.caption && <Typography sx={{ color: 'var(--mui-palette-text-muted)', fontSize: '0.72rem' }}>{item.caption}</Typography>}
             </Box>
             {isView ? (
                 <Chip
@@ -73,7 +73,7 @@ function ToggleCell<T extends FieldValues>({
                         fontSize: '0.76rem',
                         fontWeight: 700,
                         cursor: 'default',
-                        color: checked ? '#16a34a' : '#64748b',
+                        color: checked ? 'var(--mui-palette-success-main)' : 'var(--mui-palette-text-secondary)',
                         backgroundColor: checked ? '#16a34a1a' : '#64748b1a',
                     }}
                 />

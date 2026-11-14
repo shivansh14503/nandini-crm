@@ -10,6 +10,7 @@ import { parsePagination } from '../../utils/pagination.js';
 import { normalizeEmails } from '../shared/entityEmails.js';
 import { asPayload, checkModulePayload, loadModuleFieldConfig, validateModulePayload } from '../form-configs/customFieldValidator.js';
 import { acquireLocks, lockRecords, runInTransaction, softDeleteData, type BulkDeleteResult } from '../shared/transactions.js';
+import { assertTaxIdsUnique } from '../shared/taxIdentifiers.js';
 import { toPartnerCompanyData, toPartnerCompanyDto, type PartnerCompanyDto } from './partnerCompany.mapper.js';
 import {
     PARTNER_COMPANY_SORT_FIELDS,
@@ -55,6 +56,7 @@ export async function invalidatePartnerCaches(): Promise<void> {
  */
 export async function createPartnerCompanyRecord(tx: TransactionClient, input: PartnerCompanyRecordInput, user: AuthUser): Promise<PartnerCompanyDto> {
     await assertUniqueName(tx, input.companyName);
+    await assertTaxIdsUnique(tx, 'partnerCompany', input);
     const emails = normalizeEmails(input.emailAddresses);
     const row = await tx.partnerCompany.create({
         data: {
@@ -131,6 +133,7 @@ export const partnerCompanyService = {
 
             // Strict comparison: a case-only rename is re-checked too (excluding this record).
             if (input.companyName !== existing.companyName) await assertUniqueName(tx, input.companyName, id);
+            await assertTaxIdsUnique(tx, 'partnerCompany', input, { excludeId: id, previous: existing });
 
             const row = await tx.partnerCompany.update({
                 where: { id },

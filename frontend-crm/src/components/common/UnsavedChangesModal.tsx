@@ -39,18 +39,18 @@ export function UnsavedChangesModal({
             aria-describedby="unsaved-changes-description"
         >
             <DialogTitle component="div" sx={{ display: 'flex', alignItems: 'flex-start', gap: 1.5, pb: 1 }}>
-                <Avatar sx={{ bgcolor: '#fef3c7', color: '#d97706', width: 40, height: 40 }}>
+                <Avatar sx={{ bgcolor: 'var(--crm-amber-100)', color: 'var(--mui-palette-warning-main)', width: 40, height: 40 }}>
                     <WarningAmberRoundedIcon />
                 </Avatar>
                 <Box>
-                    <Typography id="unsaved-changes-title" sx={{ fontWeight: 700, fontSize: '1.05rem', color: '#0f172a' }}>
+                    <Typography id="unsaved-changes-title" sx={{ fontWeight: 700, fontSize: '1.05rem', color: 'var(--crm-slate-900)' }}>
                         {title}
                     </Typography>
                 </Box>
             </DialogTitle>
 
             <DialogContent>
-                <Typography id="unsaved-changes-description" sx={{ fontSize: '0.85rem', color: '#64748b', lineHeight: 1.6 }}>
+                <Typography id="unsaved-changes-description" sx={{ fontSize: '0.85rem', color: 'var(--mui-palette-text-secondary)', lineHeight: 1.6 }}>
                     {description}
                 </Typography>
             </DialogContent>
@@ -60,7 +60,7 @@ export function UnsavedChangesModal({
                     autoFocus
                     variant="outlined"
                     onClick={onKeepEditing}
-                    sx={{ textTransform: 'none', fontWeight: 600, borderRadius: '8px', borderColor: '#2563eb', color: '#2563eb' }}
+                    sx={{ textTransform: 'none', fontWeight: 600, borderRadius: '8px', borderColor: 'var(--mui-palette-primary-main)', color: 'var(--crm-text-blue-600)' }}
                 >
                     Keep Editing
                 </Button>

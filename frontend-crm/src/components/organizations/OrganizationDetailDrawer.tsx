@@ -53,8 +53,8 @@ const sectionIcon = (icon: React.ReactElement) => (
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            color: '#2563eb',
-            backgroundColor: '#eff6ff',
+            color: 'var(--crm-text-blue-600)',
+            backgroundColor: 'var(--mui-palette-primary-soft)',
         }}
     >
         {icon}
@@ -70,7 +70,7 @@ const getInitials = (name: string) => {
 function IdentifierRow({ label, value }: { label: string; value?: string }) {
     return (
         <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1.5, py: 0.9 }}>
-            <Typography sx={{ fontSize: '0.68rem', fontWeight: 600, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+            <Typography sx={{ fontSize: '0.68rem', fontWeight: 600, color: 'var(--mui-palette-text-secondary)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
                 {label}
             </Typography>
             {value ? (
@@ -81,9 +81,9 @@ function IdentifierRow({ label, value }: { label: string; value?: string }) {
                             fontFamily: 'monospace',
                             fontSize: '0.82rem',
                             fontWeight: 700,
-                            color: '#0f172a',
-                            backgroundColor: '#f1f5f9',
-                            border: '1px solid #e2e8f0',
+                            color: 'var(--crm-slate-900)',
+                            backgroundColor: 'var(--mui-palette-background-hover)',
+                            border: '1px solid var(--mui-palette-border-main)',
                             borderRadius: '6px',
                             px: 1,
                             py: 0.2,
@@ -94,10 +94,10 @@ function IdentifierRow({ label, value }: { label: string; value?: string }) {
                     >
                         {value}
                     </Box>
-                    <DrawerCopyButton text={value} title={`Copy ${label}`} iconColor="#64748b" />
+                    <DrawerCopyButton text={value} title={`Copy ${label}`} iconColor="var(--mui-palette-text-secondary)" />
                 </Box>
             ) : (
-                <Typography sx={{ color: '#94a3b8', fontSize: '0.86rem' }}>—</Typography>
+                <Typography sx={{ color: 'var(--mui-palette-text-muted)', fontSize: '0.86rem' }}>—</Typography>
             )}
         </Box>
     );
@@ -123,18 +123,18 @@ function AddressCard({ title, street, city, state, postalCode, country }: Addres
 
     return (
         <DrawerSectionCard
-            bg="#f8fafc"
+            bg="var(--mui-palette-background-subtle)"
             title={title}
-            action={<DrawerCopyButton text={oneLine} title={`Copy ${title.toLowerCase()}`} iconColor="#64748b" />}
+            action={<DrawerCopyButton text={oneLine} title={`Copy ${title.toLowerCase()}`} iconColor="var(--mui-palette-text-secondary)" />}
         >
             {street && (
-                <Typography sx={{ fontSize: '0.84rem', fontWeight: 700, color: '#0f172a', whiteSpace: 'pre-line' }}>
+                <Typography sx={{ fontSize: '0.84rem', fontWeight: 700, color: 'var(--crm-slate-900)', whiteSpace: 'pre-line' }}>
                     {street}
                 </Typography>
             )}
-            {locality && <Typography sx={{ fontSize: '0.78rem', color: '#475569', mt: 0.3 }}>{locality}</Typography>}
+            {locality && <Typography sx={{ fontSize: '0.78rem', color: 'var(--crm-slate-600)', mt: 0.3 }}>{locality}</Typography>}
             {country && (
-                <Typography sx={{ fontSize: '0.74rem', color: '#64748b', mt: 0.3 }}>{getCountryNameByCode(country)}</Typography>
+                <Typography sx={{ fontSize: '0.74rem', color: 'var(--mui-palette-text-secondary)', mt: 0.3 }}>{getCountryNameByCode(country)}</Typography>
             )}
         </DrawerSectionCard>
     );
@@ -172,33 +172,33 @@ export function OrganizationDetailDrawer({
 
     const badges: DrawerBadgeItem[] = [
         isActive
-            ? { label: 'Active', backgroundColor: '#ecfdf5', color: '#059669', borderColor: '#a7f3d0' }
-            : { label: 'Inactive', backgroundColor: '#fef3c7', color: '#b45309', borderColor: '#fde68a' },
+            ? { label: 'Active', backgroundColor: 'var(--mui-palette-success-soft)', color: 'var(--crm-emerald-600)', borderColor: 'var(--mui-palette-success-softBorder)' }
+            : { label: 'Inactive', backgroundColor: 'var(--crm-amber-100)', color: 'var(--crm-amber-700)', borderColor: 'var(--mui-palette-warning-softBorder)' },
         org.accountVerified
             ? {
                   label: org.verifiedAt
                       ? `Verified: ${formatDateTime(org.verifiedAt)} by ${org.verifiedBy || 'Admin'}`
                       : 'Verified',
                   icon: <CheckCircleOutlinedIcon sx={{ fontSize: 13 }} />,
-                  backgroundColor: '#ecfdf5',
-                  color: '#059669',
-                  borderColor: '#a7f3d0',
+                  backgroundColor: 'var(--mui-palette-success-soft)',
+                  color: 'var(--crm-emerald-600)',
+                  borderColor: 'var(--mui-palette-success-softBorder)',
               }
             : {
                   label: 'Not Verified',
                   icon: <HighlightOffOutlinedIcon sx={{ fontSize: 13 }} />,
-                  backgroundColor: '#f1f5f9',
-                  color: '#64748b',
-                  borderColor: '#e2e8f0',
+                  backgroundColor: 'var(--mui-palette-background-hover)',
+                  color: 'var(--mui-palette-text-secondary)',
+                  borderColor: 'var(--mui-palette-border-main)',
               },
         ...(org.activeAmc
             ? [
                   {
                       label: 'Active AMC',
                       icon: <VerifiedUserOutlinedIcon sx={{ fontSize: 13 }} />,
-                      backgroundColor: '#eff6ff',
-                      color: '#1d4ed8',
-                      borderColor: '#bfdbfe',
+                      backgroundColor: 'var(--mui-palette-primary-soft)',
+                      color: 'var(--crm-text-blue-700)',
+                      borderColor: 'var(--mui-palette-primary-softBorder)',
                   },
               ]
             : []),
@@ -207,9 +207,9 @@ export function OrganizationDetailDrawer({
                   {
                       label: 'Active Cloud',
                       icon: <CloudDoneOutlinedIcon sx={{ fontSize: 13 }} />,
-                      backgroundColor: '#f0fdf4',
-                      color: '#15803d',
-                      borderColor: '#bbf7d0',
+                      backgroundColor: 'var(--crm-green-50)',
+                      color: 'var(--crm-green-700)',
+                      borderColor: 'var(--crm-green-200)',
                   },
               ]
             : []),
@@ -238,9 +238,9 @@ export function OrganizationDetailDrawer({
                                 {
                                     label: 'ANNUAL TURNOVER',
                                     value: org.annualTurnover || '—',
-                                    bg: '#eff6ff',
-                                    borderColor: '#dbeafe',
-                                    labelColor: '#1d4ed8',
+                                    bg: 'var(--mui-palette-primary-soft)',
+                                    borderColor: 'var(--crm-blue-100)',
+                                    labelColor: 'var(--crm-text-blue-700)',
                                     valueSize: '1rem',
                                     valueWeight: 800,
                                     p: 1.75,
@@ -248,9 +248,9 @@ export function OrganizationDetailDrawer({
                                 {
                                     label: 'EMPLOYEES',
                                     value: org.numberOfEmployees || '—',
-                                    bg: '#f0fdf4',
-                                    borderColor: '#dcfce7',
-                                    labelColor: '#15803d',
+                                    bg: 'var(--crm-green-50)',
+                                    borderColor: 'var(--crm-green-100)',
+                                    labelColor: 'var(--crm-green-700)',
                                     valueSize: '1rem',
                                     valueWeight: 800,
                                     p: 1.75,
@@ -268,8 +268,8 @@ export function OrganizationDetailDrawer({
                             </DrawerFieldGrid>
                         </DrawerSectionCard>
 
-                        <DrawerSectionCard p={1.8} bg="#f8fafc" icon={sectionIcon(<TagOutlinedIcon sx={{ fontSize: 15 }} />)} title="Account Identifiers">
-                            <Box sx={{ '& > * + *': { borderTop: '1px dashed #e2e8f0' } }}>
+                        <DrawerSectionCard p={1.8} bg="var(--mui-palette-background-subtle)" icon={sectionIcon(<TagOutlinedIcon sx={{ fontSize: 15 }} />)} title="Account Identifiers">
+                            <Box sx={{ '& > * + *': { borderTop: '1px dashed var(--mui-palette-border-main)' } }}>
                                 <IdentifierRow label="SAP Code / Tally ID" value={org.sapCodeTallyId} />
                                 <IdentifierRow label="Showroom Code" value={org.showroomBranchCode} />
                             </Box>
@@ -296,16 +296,16 @@ export function OrganizationDetailDrawer({
                                         {getInitials(assignedDisplayName)}
                                     </Box>
                                     <Box>
-                                        <Typography sx={{ fontSize: '0.88rem', fontWeight: 700, color: '#0f172a', lineHeight: 1.3 }}>
+                                        <Typography sx={{ fontSize: '0.88rem', fontWeight: 700, color: 'var(--crm-slate-900)', lineHeight: 1.3 }}>
                                             {assignedDisplayName}
                                         </Typography>
-                                        <Typography sx={{ fontSize: '0.72rem', color: '#64748b' }}>
+                                        <Typography sx={{ fontSize: '0.72rem', color: 'var(--mui-palette-text-secondary)' }}>
                                             {assignedUser ? `${assignedUser.role} • ${assignedUser.department}` : 'Assigned user'}
                                         </Typography>
                                     </Box>
                                 </Box>
                             ) : (
-                                <Typography sx={{ color: '#94a3b8', fontSize: '0.86rem' }}>Unassigned</Typography>
+                                <Typography sx={{ color: 'var(--mui-palette-text-muted)', fontSize: '0.86rem' }}>Unassigned</Typography>
                             )}
                         </DrawerSectionCard>
 
@@ -314,7 +314,7 @@ export function OrganizationDetailDrawer({
 
                         {org.description && (
                             <DrawerSectionCard p={1.8} icon={sectionIcon(<NotesOutlinedIcon sx={{ fontSize: 15 }} />)} title="About">
-                                <Typography sx={{ fontSize: '0.84rem', color: '#334155', lineHeight: 1.55, whiteSpace: 'pre-wrap' }}>
+                                <Typography sx={{ fontSize: '0.84rem', color: 'var(--crm-slate-700)', lineHeight: 1.55, whiteSpace: 'pre-wrap' }}>
                                     {org.description}
                                 </Typography>
                             </DrawerSectionCard>
@@ -353,7 +353,7 @@ export function OrganizationDetailDrawer({
                             </DrawerFieldGrid>
                         </DrawerSectionCard>
 
-                        <DrawerSectionCard p={1.8} bg="#f8fafc" title="Operating Bank Account">
+                        <DrawerSectionCard p={1.8} bg="var(--mui-palette-background-subtle)" title="Operating Bank Account">
                             <DrawerFieldGrid>
                                 <ReadOnlyField label="Bank Name" value={org.bankName} />
                                 <ReadOnlyField label="Account Name" value={org.accountName} />

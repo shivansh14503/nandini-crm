@@ -212,11 +212,11 @@ export function AddressTab({ form, set, handleCopyAddressToggle }: AddressTabPro
                                         size="small"
                                         checked={copying}
                                         onChange={(e) => handleCopyAddressToggle(e.target.checked)}
-                                        sx={{ color: '#2563EB', '&.Mui-checked': { color: '#2563EB' }, p: 0.5 }}
+                                        sx={{ color: 'var(--crm-text-blue-600)', '&.Mui-checked': { color: 'var(--crm-text-blue-600)' }, p: 0.5 }}
                                     />
                                 }
                                 label={
-                                    <Typography sx={{ fontSize: '0.78rem', color: '#374151', fontWeight: 600 }}>
+                                    <Typography sx={{ fontSize: '0.78rem', color: 'var(--crm-gray-700)', fontWeight: 600 }}>
                                         Copy address from left
                                     </Typography>
                                 }

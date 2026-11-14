@@ -12,23 +12,23 @@ interface PillColors {
 }
 
 export const TICKET_PRIORITY_COLORS: Record<TicketPriority, PillColors> = {
-    Urgent: { bg: '#fef2f2', color: '#b91c1c', border: '#fecaca', dot: '#dc2626' },
-    High: { bg: '#fef2f2', color: '#dc2626', border: '#fecaca', dot: '#ef4444' },
-    Normal: { bg: '#fffbeb', color: '#b45309', border: '#fde68a', dot: '#f59e0b' },
-    Low: { bg: '#f1f5f9', color: '#475569', border: '#e2e8f0', dot: '#94a3b8' },
+    Urgent: { bg: 'var(--mui-palette-error-soft)', color: 'var(--crm-red-700)', border: 'var(--mui-palette-error-softBorder)', dot: 'var(--mui-palette-error-main)' },
+    High: { bg: 'var(--mui-palette-error-soft)', color: 'var(--mui-palette-error-main)', border: 'var(--mui-palette-error-softBorder)', dot: 'var(--crm-red-500)' },
+    Normal: { bg: 'var(--mui-palette-warning-soft)', color: 'var(--crm-amber-700)', border: 'var(--mui-palette-warning-softBorder)', dot: 'var(--crm-amber-500)' },
+    Low: { bg: 'var(--mui-palette-background-hover)', color: 'var(--crm-slate-600)', border: 'var(--mui-palette-border-main)', dot: 'var(--mui-palette-text-muted)' },
 };
 
 export const TICKET_STATUS_COLORS: Record<TicketStatus, PillColors> = {
-    New: { bg: '#eff6ff', color: '#1d4ed8', border: '#bfdbfe', dot: '#3b82f6' },
-    Assigned: { bg: '#eef2ff', color: '#4338ca', border: '#c7d2fe', dot: '#6366f1' },
-    'In Progress': { bg: '#f5f3ff', color: '#6d28d9', border: '#ddd6fe', dot: '#8b5cf6' },
-    'Pending Customer': { bg: '#fffbeb', color: '#b45309', border: '#fde68a', dot: '#f59e0b' },
-    Escalated: { bg: '#fef2f2', color: '#dc2626', border: '#fecaca', dot: '#ef4444' },
-    Resolved: { bg: '#ecfdf5', color: '#059669', border: '#a7f3d0', dot: '#10b981' },
-    Closed: { bg: '#ecfdf5', color: '#047857', border: '#a7f3d0', dot: '#059669' },
+    New: { bg: 'var(--mui-palette-primary-soft)', color: 'var(--crm-text-blue-700)', border: 'var(--mui-palette-primary-softBorder)', dot: 'var(--crm-blue-500)' },
+    Assigned: { bg: 'var(--crm-indigo-50)', color: 'var(--crm-indigo-700)', border: 'var(--crm-indigo-200)', dot: 'var(--crm-indigo-500)' },
+    'In Progress': { bg: 'var(--crm-violet-50)', color: 'var(--crm-violet-700)', border: 'var(--crm-violet-200)', dot: 'var(--crm-violet-500)' },
+    'Pending Customer': { bg: 'var(--mui-palette-warning-soft)', color: 'var(--crm-amber-700)', border: 'var(--mui-palette-warning-softBorder)', dot: 'var(--crm-amber-500)' },
+    Escalated: { bg: 'var(--mui-palette-error-soft)', color: 'var(--mui-palette-error-main)', border: 'var(--mui-palette-error-softBorder)', dot: 'var(--crm-red-500)' },
+    Resolved: { bg: 'var(--mui-palette-success-soft)', color: 'var(--crm-emerald-600)', border: 'var(--mui-palette-success-softBorder)', dot: 'var(--crm-emerald-500)' },
+    Closed: { bg: 'var(--mui-palette-success-soft)', color: 'var(--crm-emerald-700)', border: 'var(--mui-palette-success-softBorder)', dot: 'var(--crm-emerald-600)' },
 };
 
-const FALLBACK: PillColors = { bg: '#f1f5f9', color: '#475569', border: '#e2e8f0', dot: '#94a3b8' };
+const FALLBACK: PillColors = { bg: 'var(--mui-palette-background-hover)', color: 'var(--crm-slate-600)', border: 'var(--mui-palette-border-main)', dot: 'var(--mui-palette-text-muted)' };
 
 function Pill({ label, colors, rounded }: { label: string; colors: PillColors; rounded: string }) {
     return (

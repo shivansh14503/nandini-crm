@@ -36,7 +36,7 @@ import { ContactDetailDrawer } from '../ContactDetailDrawer';
 /** Stable empty list while the first page loads (keeps memoized filters from recomputing). */
 const NO_RECORDS: Contact[] = [];
 const NO_ORGANIZATIONS: ExtendedOrganization[] = [];
-const plainCellSx = { fontSize: '0.78rem', color: '#334155' } as const;
+const plainCellSx = { fontSize: '0.78rem', color: 'var(--crm-slate-700)' } as const;
 export function ContactsMasterView() {
     const router = useRouter();
     const { user } = useAuth();
@@ -244,13 +244,13 @@ export function ContactsMasterView() {
                 minWidth: 200,
                 render: (c) => (
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                        <PersonOutlinedIcon sx={{ fontSize: 16, color: '#2563eb' }} />
+                        <PersonOutlinedIcon sx={{ fontSize: 16, color: 'var(--crm-text-blue-600)' }} />
                         <RecordLink
                             href={ROUTES.CONTACT_DETAIL(c.id)}
                             onOpen={() => setDrawerContactId(c.id)}
                             sx={{
                                 fontWeight: 700,
-                                color: '#1d4ed8',
+                                color: 'var(--crm-text-blue-700)',
                                 fontSize: '0.82rem',
                                 cursor: 'pointer',
                                 '&:hover': { textDecoration: 'underline' },
@@ -266,9 +266,9 @@ export function ContactsMasterView() {
                                     height: 18,
                                     fontSize: '0.64rem',
                                     fontWeight: 700,
-                                    backgroundColor: '#eff6ff',
-                                    color: '#1d4ed8',
-                                    border: '1px solid #bfdbfe',
+                                    backgroundColor: 'var(--mui-palette-primary-soft)',
+                                    color: 'var(--crm-text-blue-700)',
+                                    border: '1px solid var(--mui-palette-primary-softBorder)',
                                 }}
                             />
                         )}
@@ -289,8 +289,8 @@ export function ContactsMasterView() {
                 minWidth: 180,
                 render: (c) => (
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.8 }}>
-                        <ApartmentIcon sx={{ fontSize: 14, color: '#64748b' }} />
-                        <Typography sx={{ fontSize: '0.8rem', color: '#334155', fontWeight: 500 }}>
+                        <ApartmentIcon sx={{ fontSize: 14, color: 'var(--mui-palette-text-secondary)' }} />
+                        <Typography sx={{ fontSize: '0.8rem', color: 'var(--crm-slate-700)', fontWeight: 500 }}>
                             {c.organizationName || '-'}
                         </Typography>
                     </Box>
@@ -303,7 +303,7 @@ export function ContactsMasterView() {
                 minWidth: 140,
                 render: (c) => (
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.6 }}>
-                        <PhoneOutlinedIcon sx={{ fontSize: 14, color: '#94a3b8' }} />
+                        <PhoneOutlinedIcon sx={{ fontSize: 14, color: 'var(--mui-palette-text-muted)' }} />
                         <Typography sx={plainCellSx}>{c.mobile ? formatPhoneDisplay(c.mobile) || c.mobile : '-'}</Typography>
                     </Box>
                 ),
@@ -327,7 +327,7 @@ export function ContactsMasterView() {
                     const email = (c.emailAddresses?.find((e) => e.isPrimary) ?? c.emailAddresses?.[0])?.email;
                     return (
                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.6 }}>
-                            <EmailOutlinedIcon sx={{ fontSize: 14, color: '#94a3b8' }} />
+                            <EmailOutlinedIcon sx={{ fontSize: 14, color: 'var(--mui-palette-text-muted)' }} />
                             <Typography sx={plainCellSx}>{email || '-'}</Typography>
                         </Box>
                     );
@@ -350,7 +350,7 @@ export function ContactsMasterView() {
                     wasModified(c) ? (
                         <Typography sx={plainCellSx}>{formatDateTime(c.updatedAt) || '-'}</Typography>
                     ) : (
-                        <Typography sx={{ ...plainCellSx, color: '#94a3b8' }}>- - -</Typography>
+                        <Typography sx={{ ...plainCellSx, color: 'var(--mui-palette-text-muted)' }}>- - -</Typography>
                     ),
             },
             {
@@ -440,7 +440,7 @@ export function ContactsMasterView() {
             emptyDescription="Create your first contact person and link them to an active organization account."
             emptyActionLabel="Create Contact"
             onEmptyAction={() => router.push(ROUTES.CONTACT_NEW)}
-            emptyIcon={<PersonOutlinedIcon sx={{ fontSize: 48, color: '#cbd5e1' }} />}
+            emptyIcon={<PersonOutlinedIcon sx={{ fontSize: 48, color: 'var(--crm-slate-300)' }} />}
             pagination={{
                 page,
                 rowsPerPage,

@@ -50,8 +50,8 @@ export function DrawerSectionCard({
     title,
     icon,
     action,
-    bg = '#ffffff',
-    borderColor = '#eef2f6',
+    bg = 'var(--mui-palette-background-paper)',
+    borderColor = 'var(--mui-palette-border-light)',
     p = 2,
     titleSx,
     sx,
@@ -84,11 +84,11 @@ export function DrawerSectionCard({
                                 sx={{
                                     fontSize: '0.72rem',
                                     fontWeight: 700,
-                                    color: '#475569',
+                                    color: 'var(--crm-slate-600)',
                                     textTransform: 'uppercase',
                                     letterSpacing: '0.05em',
                                     // Subtle left accent when there is no icon
-                                    ...(!icon && { borderLeft: '3px solid #2563eb', pl: 1, lineHeight: 1.2 }),
+                                    ...(!icon && { borderLeft: '3px solid var(--mui-palette-primary-main)', pl: 1, lineHeight: 1.2 }),
                                     ...titleSx,
                                 }}
                             >
@@ -152,15 +152,15 @@ export function DrawerMetricGrid({ items, columns = 2, gap = 1.5 }: DrawerMetric
                     sx={{
                         p: item.p ?? 1.5,
                         borderRadius: '10px',
-                        backgroundColor: item.bg || '#ffffff',
-                        border: `1px solid ${item.borderColor || '#e2e8f0'}`,
+                        backgroundColor: item.bg || 'var(--mui-palette-background-paper)',
+                        border: `1px solid ${item.borderColor || 'var(--mui-palette-border-main)'}`,
                     }}
                 >
                     <Typography
                         sx={{
                             fontSize: '0.68rem',
                             fontWeight: 700,
-                            color: item.labelColor || '#64748b',
+                            color: item.labelColor || 'var(--mui-palette-text-secondary)',
                             letterSpacing: '0.04em',
                         }}
                     >
@@ -171,7 +171,7 @@ export function DrawerMetricGrid({ items, columns = 2, gap = 1.5 }: DrawerMetric
                             sx={{
                                 fontSize: item.valueSize || '0.88rem',
                                 fontWeight: item.valueWeight || 700,
-                                color: item.valueColor || '#0f172a',
+                                color: item.valueColor || 'var(--crm-slate-900)',
                                 fontFamily: item.monospace ? 'monospace' : 'inherit',
                                 mt: 0.3,
                             }}
@@ -183,7 +183,7 @@ export function DrawerMetricGrid({ items, columns = 2, gap = 1.5 }: DrawerMetric
                     )}
                     {item.sublabel && (
                         typeof item.sublabel === 'string' ? (
-                            <Typography sx={{ fontSize: '0.72rem', color: '#64748b', mt: 0.5 }}>
+                            <Typography sx={{ fontSize: '0.72rem', color: 'var(--mui-palette-text-secondary)', mt: 0.5 }}>
                                 {item.sublabel}
                             </Typography>
                         ) : (
@@ -217,11 +217,11 @@ export function DrawerChannelRow({
     copyValue,
     copyTitle = 'Copy',
     badgeLabel,
-    badgeBg = '#eff6ff',
-    badgeColor = '#1d4ed8',
+    badgeBg = 'var(--mui-palette-primary-soft)',
+    badgeColor = 'var(--crm-text-blue-700)',
     badgeBorder,
     valueWeight = 600,
-    valueColor = '#0f172a',
+    valueColor = 'var(--crm-slate-900)',
 }: DrawerChannelRowProps) {
     return (
         <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
@@ -232,7 +232,7 @@ export function DrawerChannelRow({
                         {value}
                     </Typography>
                     {caption && (
-                        <Typography sx={{ fontSize: '0.68rem', color: '#64748b' }}>
+                        <Typography sx={{ fontSize: '0.68rem', color: 'var(--mui-palette-text-secondary)' }}>
                             {caption}
                         </Typography>
                     )}

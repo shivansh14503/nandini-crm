@@ -33,7 +33,7 @@ export function AppPageLayout({
         <Box
             sx={{
                 minHeight: '100vh',
-                backgroundColor: '#f8fafc',
+                backgroundColor: 'var(--mui-palette-background-subtle)',
                 display: 'flex',
                 flexDirection: 'column',
                 ...sx,

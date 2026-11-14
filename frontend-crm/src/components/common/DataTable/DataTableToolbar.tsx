@@ -69,7 +69,7 @@ export function DataTableToolbar({
                     justifyContent: 'space-between',
                     flexWrap: 'wrap',
                     gap: 1.5,
-                    borderBottom: '1px solid #f1f5f9',
+                    borderBottom: '1px solid var(--mui-palette-border-light)',
                 }}
             >
                 {/* Left Controls */}
@@ -81,12 +81,12 @@ export function DataTableToolbar({
                             checked={isAllPageSelected}
                             indeterminate={isSomePageSelected}
                             onChange={onToggleSelectAll}
-                            sx={{ p: 0.5, color: '#94a3b8', '&.Mui-checked': { color: '#2563eb' } }}
+                            sx={{ p: 0.5, color: 'var(--mui-palette-text-muted)', '&.Mui-checked': { color: 'var(--crm-text-blue-600)' } }}
                         />
                         <IconButton
                             size="small"
                             onClick={(e) => setSelectMenuAnchor(e.currentTarget)}
-                            sx={{ p: 0.2, color: '#94a3b8' }}
+                            sx={{ p: 0.2, color: 'var(--mui-palette-text-muted)' }}
                         >
                             <KeyboardArrowDownIcon sx={{ fontSize: 14 }} />
                         </IconButton>
@@ -142,16 +142,16 @@ export function DataTableToolbar({
                                 endIcon={<KeyboardArrowDownIcon sx={{ fontSize: 16 }} />}
                                 onClick={(e) => setBulkMenuAnchor(e.currentTarget)}
                                 sx={{
-                                    borderColor: '#e2e8f0',
-                                    color: '#334155',
+                                    borderColor: 'var(--mui-palette-border-main)',
+                                    color: 'var(--crm-slate-700)',
                                     textTransform: 'none',
                                     fontWeight: 700,
                                     fontSize: '0.78rem',
                                     borderRadius: '6px',
                                     height: 32,
                                     px: 1.5,
-                                    backgroundColor: '#fff',
-                                    '&:hover': { borderColor: '#cbd5e1', backgroundColor: '#f8fafc' },
+                                    backgroundColor: 'var(--mui-palette-background-paper)',
+                                    '&:hover': { borderColor: 'var(--mui-palette-border-strong)', backgroundColor: 'var(--mui-palette-background-subtle)' },
                                 }}
                             >
                                 BULK ACTION
@@ -172,7 +172,7 @@ export function DataTableToolbar({
                                         }}
                                         sx={{
                                             fontSize: '0.8rem',
-                                            color: item.color === 'error' ? '#ef4444' : undefined,
+                                            color: item.color === 'error' ? 'var(--crm-red-500)' : undefined,
                                         }}
                                     >
                                         {item.label}
@@ -190,12 +190,12 @@ export function DataTableToolbar({
                                 aria-label="Filter"
                                 onClick={onFilterClick}
                                 sx={{
-                                    border: `1px solid ${filterCount ? '#93c5fd' : '#e2e8f0'}`,
+                                    border: `1px solid ${filterCount ? 'var(--crm-blue-300)' : 'var(--mui-palette-border-main)'}`,
                                     borderRadius: '6px',
                                     width: 32,
                                     height: 32,
-                                    color: filterCount ? '#2563eb' : '#64748b',
-                                    backgroundColor: filterCount ? '#eff6ff' : undefined,
+                                    color: filterCount ? 'var(--crm-text-blue-600)' : 'var(--mui-palette-text-secondary)',
+                                    backgroundColor: filterCount ? 'var(--mui-palette-primary-soft)' : undefined,
                                 }}
                             >
                                 <Badge
@@ -215,7 +215,7 @@ export function DataTableToolbar({
                                 size="small"
                                 aria-label="Modify Columns"
                                 onClick={(e) => onColumnClick(e.currentTarget)}
-                                sx={{ border: '1px solid #e2e8f0', borderRadius: '6px', width: 32, height: 32, color: '#64748b' }}
+                                sx={{ border: '1px solid var(--mui-palette-border-main)', borderRadius: '6px', width: 32, height: 32, color: 'var(--mui-palette-text-secondary)' }}
                             >
                                 <ViewColumnIcon sx={{ fontSize: 16 }} />
                             </IconButton>
@@ -234,23 +234,23 @@ export function DataTableToolbar({
                                 height: 32,
                                 fontSize: '0.8rem',
                                 borderRadius: '6px',
-                                backgroundColor: '#fff',
-                                '& fieldset': { borderColor: '#e2e8f0' },
-                                '&:hover fieldset': { borderColor: '#cbd5e1' },
-                                '&.Mui-focused fieldset': { borderColor: '#2563eb' },
+                                backgroundColor: 'var(--mui-palette-background-paper)',
+                                '& fieldset': { borderColor: 'var(--mui-palette-border-main)' },
+                                '&:hover fieldset': { borderColor: 'var(--mui-palette-border-strong)' },
+                                '&.Mui-focused fieldset': { borderColor: 'var(--mui-palette-primary-main)' },
                             },
                         }}
                         slotProps={{
                             input: {
                                 startAdornment: (
                                     <InputAdornment position="start">
-                                        <SearchIcon sx={{ fontSize: 16, color: '#94a3b8' }} />
+                                        <SearchIcon sx={{ fontSize: 16, color: 'var(--mui-palette-text-muted)' }} />
                                     </InputAdornment>
                                 ),
                                 endAdornment: searchQuery ? (
                                     <InputAdornment position="end">
                                         <IconButton size="small" onClick={() => onSearchChange('')} sx={{ p: 0.2 }}>
-                                            <ClearIcon sx={{ fontSize: 14, color: '#94a3b8' }} />
+                                            <ClearIcon sx={{ fontSize: 14, color: 'var(--mui-palette-text-muted)' }} />
                                         </IconButton>
                                     </InputAdornment>
                                 ) : undefined,
@@ -262,14 +262,14 @@ export function DataTableToolbar({
                 {/* Right: Showing records & Mini Pager */}
                 {onPageChange && (
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-                        <Typography sx={{ fontSize: '0.78rem', color: '#64748b' }}>
+                        <Typography sx={{ fontSize: '0.78rem', color: 'var(--mui-palette-text-secondary)' }}>
                             Showing{' '}
-                            <Typography component="span" sx={{ fontWeight: 700, color: '#1e293b' }}>
+                            <Typography component="span" sx={{ fontWeight: 700, color: 'var(--mui-palette-text-primary)' }}>
                                 {totalRecords === 0 ? 0 : (currentPage - 1) * rowsPerPage + 1} -{' '}
                                 {Math.min(currentPage * rowsPerPage, totalRecords)}
                             </Typography>{' '}
                             of{' '}
-                            <Typography component="span" sx={{ fontWeight: 700, color: '#1e293b' }}>
+                            <Typography component="span" sx={{ fontWeight: 700, color: 'var(--mui-palette-text-primary)' }}>
                                 {displayTotalRecords ?? totalRecords.toLocaleString()}
                             </Typography>{' '}
                             records
@@ -280,7 +280,7 @@ export function DataTableToolbar({
                                 size="small"
                                 disabled={currentPage === 1}
                                 onClick={() => onPageChange(Math.max(1, currentPage - 1))}
-                                sx={{ border: '1px solid #e2e8f0', borderRadius: '4px', width: 26, height: 26 }}
+                                sx={{ border: '1px solid var(--mui-palette-border-main)', borderRadius: '4px', width: 26, height: 26 }}
                             >
                                 &lt;
                             </IconButton>
@@ -291,10 +291,10 @@ export function DataTableToolbar({
                                     display: 'flex',
                                     alignItems: 'center',
                                     justifyContent: 'center',
-                                    border: '1px solid #93c5fd',
+                                    border: '1px solid var(--crm-blue-300)',
                                     borderRadius: '4px',
-                                    backgroundColor: '#eff6ff',
-                                    color: '#1d4ed8',
+                                    backgroundColor: 'var(--mui-palette-primary-soft)',
+                                    color: 'var(--crm-text-blue-700)',
                                     fontWeight: 700,
                                     fontSize: '0.76rem',
                                 }}
@@ -305,7 +305,7 @@ export function DataTableToolbar({
                                 size="small"
                                 disabled={currentPage >= totalPages}
                                 onClick={() => onPageChange(Math.min(totalPages, currentPage + 1))}
-                                sx={{ border: '1px solid #e2e8f0', borderRadius: '4px', width: 26, height: 26 }}
+                                sx={{ border: '1px solid var(--mui-palette-border-main)', borderRadius: '4px', width: 26, height: 26 }}
                             >
                                 &gt;
                             </IconButton>
@@ -313,7 +313,7 @@ export function DataTableToolbar({
                                 size="small"
                                 disabled={currentPage >= totalPages}
                                 onClick={() => onPageChange(totalPages)}
-                                sx={{ border: '1px solid #e2e8f0', borderRadius: '4px', width: 26, height: 26 }}
+                                sx={{ border: '1px solid var(--mui-palette-border-main)', borderRadius: '4px', width: 26, height: 26 }}
                             >
                                 &gt;&gt;
                             </IconButton>
@@ -328,13 +328,13 @@ export function DataTableToolbar({
         <Box
             sx={{
                 p: 1.5,
-                borderBottom: '1px solid #e2e8f0',
+                borderBottom: '1px solid var(--mui-palette-border-main)',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'space-between',
                 flexWrap: 'wrap',
                 gap: 1.5,
-                backgroundColor: '#ffffff',
+                backgroundColor: 'var(--mui-palette-background-paper)',
             }}
         >
             {/* Search Input Box */}
@@ -346,24 +346,24 @@ export function DataTableToolbar({
                     px: 1.5,
                     py: 0.5,
                     borderRadius: '8px',
-                    border: '1px solid #cbd5e1',
-                    backgroundColor: '#f8fafc',
+                    border: '1px solid var(--mui-palette-border-strong)',
+                    backgroundColor: 'var(--mui-palette-background-subtle)',
                     width: searchWidth,
                     '&:focus-within': {
-                        borderColor: '#2563eb',
-                        backgroundColor: '#fff',
-                        boxShadow: '0 0 0 2px rgba(37,99,235,0.1)',
+                        borderColor: 'var(--mui-palette-primary-main)',
+                        backgroundColor: 'var(--mui-palette-background-paper)',
+                        boxShadow: '0 0 0 2px rgb(var(--crm-accent-rgb) / 0.1)',
                     },
                 }}
             >
-                <SearchIcon sx={{ fontSize: 18, color: '#94a3b8' }} />
+                <SearchIcon sx={{ fontSize: 18, color: 'var(--mui-palette-text-muted)' }} />
                 <InputBase
                     placeholder={searchPlaceholder}
                     value={searchQuery}
                     onChange={(e) => onSearchChange(e.target.value)}
                     sx={{
                         fontSize: '0.82rem',
-                        color: '#1e293b',
+                        color: 'var(--mui-palette-text-primary)',
                         width: '100%',
                     }}
                 />
@@ -373,7 +373,7 @@ export function DataTableToolbar({
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                 {selectedCount > 0 ? (
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-                        <Typography sx={{ fontSize: '0.8rem', fontWeight: 600, color: '#1d4ed8' }}>
+                        <Typography sx={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--crm-text-blue-700)' }}>
                             {selectedCount} selected
                         </Typography>
                         {onBulkDelete && (
@@ -405,11 +405,11 @@ export function DataTableToolbar({
                             aria-label="Modify Columns"
                             onClick={(e) => onColumnClick(e.currentTarget)}
                             sx={{
-                                color: '#64748b',
-                                border: '1px solid #e2e8f0',
+                                color: 'var(--mui-palette-text-secondary)',
+                                border: '1px solid var(--mui-palette-border-main)',
                                 borderRadius: '8px',
                                 p: 0.8,
-                                '&:hover': { backgroundColor: '#f1f5f9', color: '#1d4ed8' },
+                                '&:hover': { backgroundColor: 'var(--mui-palette-background-hover)', color: 'var(--crm-blue-700)' },
                             }}
                         >
                             <ViewColumnIcon sx={{ fontSize: 18 }} />
@@ -423,11 +423,11 @@ export function DataTableToolbar({
                             size="small"
                             onClick={onRefresh}
                             sx={{
-                                color: '#64748b',
-                                border: '1px solid #e2e8f0',
+                                color: 'var(--mui-palette-text-secondary)',
+                                border: '1px solid var(--mui-palette-border-main)',
                                 borderRadius: '8px',
                                 p: 0.8,
-                                '&:hover': { backgroundColor: '#f1f5f9', color: '#1d4ed8' },
+                                '&:hover': { backgroundColor: 'var(--mui-palette-background-hover)', color: 'var(--crm-blue-700)' },
                             }}
                         >
                             <RefreshIcon sx={{ fontSize: 18 }} />
@@ -441,15 +441,15 @@ export function DataTableToolbar({
                         startIcon={<AddIcon sx={{ fontSize: 18 }} />}
                         onClick={onNewClick}
                         sx={{
-                            background: 'linear-gradient(135deg, #1d4ed8 0%, #2563eb 100%)',
+                            background: 'linear-gradient(135deg, var(--crm-fill-blue-700) 0%, var(--crm-fill-blue-600) 100%)',
                             borderRadius: '8px',
                             textTransform: 'none',
                             fontWeight: 700,
                             fontSize: '0.82rem',
                             height: 34,
                             px: 2,
-                            boxShadow: '0 2px 6px rgba(37,99,235,0.25)',
-                            '&:hover': { background: 'linear-gradient(135deg, #1e40af 0%, #1d4ed8 100%)' },
+                            boxShadow: '0 2px 6px rgb(var(--crm-accent-rgb) / 0.25)',
+                            '&:hover': { background: 'linear-gradient(135deg, var(--crm-fill-blue-800) 0%, var(--crm-fill-blue-700) 100%)' },
                         }}
                     >
                         {newButtonLabel}

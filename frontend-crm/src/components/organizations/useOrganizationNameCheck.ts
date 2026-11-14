@@ -8,6 +8,7 @@ import {
     duplicateOrganizationMessage,
     findSimilarOrganizations,
     isDuplicateMatchKind,
+    type OrgNameMatchField,
     type OrgNameMatchKind,
 } from '@/utils/organizationName';
 import type { ExtendedOrganization } from '@/types/organization.types';
@@ -29,11 +30,14 @@ export interface OrganizationNameSuggestion {
     matchKind: OrgNameMatchKind;
     score: number;
     reason?: string;
+    /** The typed name matched this organization's legal name or its trade name. */
+    matchedField: OrgNameMatchField;
 }
 
-/** An existing organization with the same legal name (exact or canonically equal). */
+/** An existing organization with the same legal name or trade name (exact or canonically equal). */
 export interface OrganizationNameDuplicate {
     matchKind: 'exact' | 'canonical';
+    matchedField: OrgNameMatchField;
     record: OrganizationSuggestionRecord;
     message: string;
 }
@@ -74,7 +78,7 @@ const fromOrganization = (o: ExtendedOrganization): OrganizationSuggestionRecord
 });
 
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
-const fromServerMatch = ({ matchKind, ...record }: SimilarOrganizationMatch): OrganizationSuggestionRecord => record;
+const fromServerMatch = ({ matchKind, matchedField, ...record }: SimilarOrganizationMatch): OrganizationSuggestionRecord => record;
 
 /**
  * Live duplicate detection + suggestions for an organization name. The cached organization list gives instant
@@ -130,12 +134,13 @@ export function useOrganizationNameCheck({ name, organizationId, enabled = true 
         for (const m of local) {
             // Once the server has answered, a cached "same organization" it doesn't confirm is stale (deleted / renamed).
             if (serverResult && isDuplicateMatchKind(m.matchKind) && !serverIds.has(m.record.id)) continue;
-            byId.set(m.record.id, { record: fromOrganization(m.record), matchKind: m.matchKind, score: m.score, reason: m.reason });
+            byId.set(m.record.id, { record: fromOrganization(m.record), matchKind: m.matchKind, score: m.score, reason: m.reason, matchedField: m.matchedField });
         }
         for (const match of serverResult?.suggestions ?? []) {
             if (byId.has(match.id)) continue;
-            const { score, reason } = compareOrganizationNames(trimmed, match.organizationName);
-            byId.set(match.id, { record: fromServerMatch(match), matchKind: match.matchKind, score: score || 0.75, reason });
+            const matchedField = match.matchedField ?? 'organizationName';
+            const { score, reason } = compareOrganizationNames(trimmed, matchedField === 'tradeName' ? (match.tradeName ?? '') : match.organizationName);
+            byId.set(match.id, { record: fromServerMatch(match), matchKind: match.matchKind, score: score || 0.75, reason, matchedField });
         }
         return [...byId.values()]
             .sort((a, b) => b.score - a.score || a.record.organizationName.localeCompare(b.record.organizationName))
@@ -149,23 +154,32 @@ export function useOrganizationNameCheck({ name, organizationId, enabled = true 
                 return null;
             }
             const matchKind = serverResult.matchKind === 'canonical' ? 'canonical' : 'exact';
+            const matchedField = serverResult.matchedField ?? 'organizationName';
             const record = suggestions.find((s) => s.record.id === serverResult.id)?.record ?? {
                 id: serverResult.id ?? '',
                 accountCode: serverResult.accountCode ?? '',
                 organizationName: serverResult.organizationName,
+                tradeName: serverResult.tradeName ?? null,
             };
             return {
                 matchKind,
+                matchedField,
                 record,
-                message: serverResult.message || duplicateOrganizationMessage(matchKind, record.organizationName),
+                message:
+                    serverResult.message ||
+                    duplicateOrganizationMessage(matchKind, record.organizationName, { field: matchedField, tradeName: record.tradeName }),
             };
         }
         const top = local[0];
         if (!top || !isDuplicateMatchKind(top.matchKind)) return null;
         return {
             matchKind: top.matchKind,
+            matchedField: top.matchedField,
             record: fromOrganization(top.record),
-            message: duplicateOrganizationMessage(top.matchKind, top.record.organizationName),
+            message: duplicateOrganizationMessage(top.matchKind, top.record.organizationName, {
+                field: top.matchedField,
+                tradeName: top.record.tradeName,
+            }),
         };
     }, [active, serverResult, suggestions, local]);
 

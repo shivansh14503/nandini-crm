@@ -64,11 +64,11 @@ export interface GenericLookupModalProps<T extends { id: string }> {
 const inputSx = {
     '& .MuiOutlinedInput-root': {
         fontSize: '0.82rem',
-        backgroundColor: '#fff',
+        backgroundColor: 'var(--mui-palette-background-paper)',
         borderRadius: '8px',
-        '& fieldset': { borderColor: '#e2e8f0' },
-        '&:hover fieldset': { borderColor: '#cbd5e1' },
-        '&.Mui-focused fieldset': { borderColor: '#2563eb' },
+        '& fieldset': { borderColor: 'var(--mui-palette-border-main)' },
+        '&:hover fieldset': { borderColor: 'var(--mui-palette-border-strong)' },
+        '&.Mui-focused fieldset': { borderColor: 'var(--mui-palette-primary-main)' },
     },
     '& .MuiInputLabel-root': { fontSize: '0.8rem' },
 } as const;
@@ -76,10 +76,10 @@ const inputSx = {
 const headCellSx = {
     fontSize: '0.68rem',
     fontWeight: 700,
-    color: '#64748b',
+    color: 'var(--mui-palette-text-secondary)',
     letterSpacing: 0.4,
-    backgroundColor: '#f8fafc',
-    borderBottom: '1px solid #e2e8f0',
+    backgroundColor: 'var(--mui-palette-background-subtle)',
+    borderBottom: '1px solid var(--mui-palette-border-main)',
     whiteSpace: 'nowrap',
 } as const;
 
@@ -189,10 +189,10 @@ function LookupDialog<T extends { id: string }>({
                 paper: { sx: { borderRadius: '14px', boxShadow: '0 20px 50px rgba(15,23,42,0.18)', maxHeight: '88vh' } },
             }}
         >
-            <DialogTitle id="lookup-dialog-title" sx={{ display: 'flex', alignItems: 'center', gap: 1.5, pb: 1.5, borderBottom: '1px solid #e2e8f0' }}>
+            <DialogTitle id="lookup-dialog-title" sx={{ display: 'flex', alignItems: 'center', gap: 1.5, pb: 1.5, borderBottom: '1px solid var(--mui-palette-border-main)' }}>
                 <Box sx={{ flex: 1, minWidth: 0 }}>
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                        <Typography component="span" sx={{ fontSize: '1.05rem', fontWeight: 800, color: '#0f172a' }}>
+                        <Typography component="span" sx={{ fontSize: '1.05rem', fontWeight: 800, color: 'var(--crm-slate-900)' }}>
                             {title}
                         </Typography>
                         <Box
@@ -203,17 +203,17 @@ function LookupDialog<T extends { id: string }>({
                                 borderRadius: '10px',
                                 fontSize: '0.7rem',
                                 fontWeight: 700,
-                                color: '#1d4ed8',
-                                backgroundColor: '#eff6ff',
-                                border: '1px solid #bfdbfe',
+                                color: 'var(--crm-text-blue-700)',
+                                backgroundColor: 'var(--mui-palette-primary-soft)',
+                                border: '1px solid var(--mui-palette-primary-softBorder)',
                             }}
                         >
                             {data.length} records
                         </Box>
                     </Box>
-                    {subtitle && <Typography sx={{ fontSize: '0.78rem', color: '#64748b', mt: 0.3 }}>{subtitle}</Typography>}
+                    {subtitle && <Typography sx={{ fontSize: '0.78rem', color: 'var(--mui-palette-text-secondary)', mt: 0.3 }}>{subtitle}</Typography>}
                 </Box>
-                <IconButton aria-label="Close" onClick={onClose} size="small" sx={{ color: '#64748b' }}>
+                <IconButton aria-label="Close" onClick={onClose} size="small" sx={{ color: 'var(--mui-palette-text-secondary)' }}>
                     <CloseIcon fontSize="small" />
                 </IconButton>
             </DialogTitle>
@@ -226,7 +226,7 @@ function LookupDialog<T extends { id: string }>({
                         e.preventDefault();
                         firstRowRef.current?.focus();
                     }}
-                    sx={{ px: 3, py: 2, backgroundColor: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}
+                    sx={{ px: 3, py: 2, backgroundColor: 'var(--mui-palette-background-subtle)', borderBottom: '1px solid var(--mui-palette-border-main)' }}
                 >
                     <Grid container spacing={1.5} sx={{ alignItems: 'center' }}>
                         {showSearchBox && (
@@ -247,7 +247,7 @@ function LookupDialog<T extends { id: string }>({
                                     input: {
                                         startAdornment: (
                                             <InputAdornment position="start">
-                                                <SearchIcon sx={{ fontSize: 18, color: '#94a3b8' }} />
+                                                <SearchIcon sx={{ fontSize: 18, color: 'var(--mui-palette-text-muted)' }} />
                                             </InputAdornment>
                                         ),
                                     },
@@ -319,14 +319,14 @@ function LookupDialog<T extends { id: string }>({
                                 size="small"
                                 startIcon={<SearchIcon sx={{ fontSize: 16 }} />}
                                 sx={{
-                                    background: 'linear-gradient(135deg, #1d4ed8 0%, #2563eb 100%)',
+                                    background: 'linear-gradient(135deg, var(--crm-fill-blue-700) 0%, var(--crm-fill-blue-600) 100%)',
                                     textTransform: 'none',
                                     fontWeight: 700,
                                     borderRadius: '8px',
                                     height: 36,
                                     px: 2,
                                     boxShadow: 'none',
-                                    '&:hover': { background: 'linear-gradient(135deg, #1e40af 0%, #1d4ed8 100%)', boxShadow: 'none' },
+                                    '&:hover': { background: 'linear-gradient(135deg, var(--crm-fill-blue-800) 0%, var(--crm-fill-blue-700) 100%)', boxShadow: 'none' },
                                 }}
                             >
                                 Search
@@ -341,10 +341,10 @@ function LookupDialog<T extends { id: string }>({
                                     fontWeight: 600,
                                     borderRadius: '8px',
                                     height: 36,
-                                    borderColor: '#e2e8f0',
-                                    color: '#475569',
-                                    backgroundColor: '#fff',
-                                    '&:hover': { borderColor: '#cbd5e1', backgroundColor: '#f8fafc' },
+                                    borderColor: 'var(--mui-palette-border-main)',
+                                    color: 'var(--crm-slate-600)',
+                                    backgroundColor: 'var(--mui-palette-background-paper)',
+                                    '&:hover': { borderColor: 'var(--mui-palette-border-strong)', backgroundColor: 'var(--mui-palette-background-subtle)' },
                                 }}
                             >
                                 Clear
@@ -360,10 +360,10 @@ function LookupDialog<T extends { id: string }>({
                                         fontWeight: 700,
                                         borderRadius: '8px',
                                         height: 36,
-                                        borderColor: '#bfdbfe',
-                                        color: '#1d4ed8',
-                                        backgroundColor: '#eff6ff',
-                                        '&:hover': { borderColor: '#93c5fd', backgroundColor: '#dbeafe' },
+                                        borderColor: 'var(--mui-palette-primary-softBorder)',
+                                        color: 'var(--crm-text-blue-700)',
+                                        backgroundColor: 'var(--mui-palette-primary-soft)',
+                                        '&:hover': { borderColor: 'var(--crm-blue-300)', backgroundColor: 'var(--crm-blue-100)' },
                                     }}
                                 >
                                     {createAction.label}
@@ -414,14 +414,14 @@ function LookupDialog<T extends { id: string }>({
                                         }}
                                         sx={{
                                             cursor: 'pointer',
-                                            '&:hover': { backgroundColor: '#f8fafc !important' },
-                                            '&.Mui-selected': { backgroundColor: '#eff6ff' },
-                                            '&:focus-visible': { outline: '2px solid #2563eb', outlineOffset: -2 },
-                                            '& td': { borderBottom: '1px solid #f1f5f9' },
+                                            '&:hover': { backgroundColor: 'var(--mui-palette-background-subtle) !important' },
+                                            '&.Mui-selected': { backgroundColor: 'var(--mui-palette-primary-soft)' },
+                                            '&:focus-visible': { outline: '2px solid var(--mui-palette-primary-main)', outlineOffset: -2 },
+                                            '& td': { borderBottom: '1px solid var(--mui-palette-border-light)' },
                                         }}
                                     >
                                         {columns.map((c) => (
-                                            <TableCell key={c.id} align={c.align} sx={{ fontSize: '0.8rem', color: '#475569', py: 1.1, width: c.width }}>
+                                            <TableCell key={c.id} align={c.align} sx={{ fontSize: '0.8rem', color: 'var(--crm-slate-600)', py: 1.1, width: c.width }}>
                                                 {c.render ? c.render(row) : cellText(row, c) || '-'}
                                             </TableCell>
                                         ))}
@@ -439,11 +439,11 @@ function LookupDialog<T extends { id: string }>({
 
                     {!loading && filtered.length === 0 && (
                         <Box sx={{ py: 6, textAlign: 'center' }}>
-                            <SearchOffIcon sx={{ fontSize: 36, color: '#cbd5e1' }} />
-                            <Typography sx={{ fontWeight: 700, fontSize: '0.9rem', color: '#334155', mt: 1 }}>
+                            <SearchOffIcon sx={{ fontSize: 36, color: 'var(--crm-slate-300)' }} />
+                            <Typography sx={{ fontWeight: 700, fontSize: '0.9rem', color: 'var(--crm-slate-700)', mt: 1 }}>
                                 {emptyMessage ?? 'No matching records'}
                             </Typography>
-                            <Typography sx={{ fontSize: '0.78rem', color: '#94a3b8', mt: 0.3 }}>
+                            <Typography sx={{ fontSize: '0.78rem', color: 'var(--mui-palette-text-muted)', mt: 0.3 }}>
                                 Try a different search term or clear the filters.
                             </Typography>
                         </Box>
@@ -457,11 +457,11 @@ function LookupDialog<T extends { id: string }>({
                         alignItems: 'center',
                         justifyContent: 'space-between',
                         px: 3,
-                        borderTop: '1px solid #e2e8f0',
-                        backgroundColor: '#fff',
+                        borderTop: '1px solid var(--mui-palette-border-main)',
+                        backgroundColor: 'var(--mui-palette-background-paper)',
                     }}
                 >
-                    <Typography sx={{ fontSize: '0.78rem', color: '#64748b' }}>
+                    <Typography sx={{ fontSize: '0.78rem', color: 'var(--mui-palette-text-secondary)' }}>
                         ({rangeStart} - {rangeEnd} of {filtered.length})
                     </Typography>
                     <TablePagination
@@ -474,7 +474,7 @@ function LookupDialog<T extends { id: string }>({
                         showLastButton
                         onPageChange={(_, p) => setPage(p)}
                         labelDisplayedRows={() => `Page ${safePage + 1} of ${pageCount}`}
-                        sx={{ '& .MuiTablePagination-displayedRows': { fontSize: '0.78rem', color: '#64748b' } }}
+                        sx={{ '& .MuiTablePagination-displayedRows': { fontSize: '0.78rem', color: 'var(--mui-palette-text-secondary)' } }}
                     />
                 </Box>
             </DialogContent>

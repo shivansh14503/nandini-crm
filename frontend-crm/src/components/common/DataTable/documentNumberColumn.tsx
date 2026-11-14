@@ -37,7 +37,7 @@ export function documentNumberColumn<T>({
         minWidth: 140,
         render: (row) => {
             const value = getNumber(row);
-            if (!value) return <Typography sx={{ fontSize: '0.8rem', color: '#94a3b8' }}>-</Typography>;
+            if (!value) return <Typography sx={{ fontSize: '0.8rem', color: 'var(--mui-palette-text-muted)' }}>-</Typography>;
             return (
                 <RecordLink
                     href={getHref(row)}
@@ -45,7 +45,7 @@ export function documentNumberColumn<T>({
                     sx={{
                         fontSize: '0.8rem',
                         fontWeight: 700,
-                        color: '#1d4ed8',
+                        color: 'var(--crm-text-blue-700)',
                         fontFamily: 'monospace',
                         whiteSpace: 'nowrap',
                         cursor: 'pointer',

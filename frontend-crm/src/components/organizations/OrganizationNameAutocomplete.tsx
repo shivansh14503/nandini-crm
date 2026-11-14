@@ -64,7 +64,7 @@ function highlight(name: string, query: string): React.ReactNode {
     const parts = name.split(new RegExp(`(${words.join('|')})`, 'gi'));
     return parts.map((part, i) =>
         i % 2 === 1 ? (
-            <Box key={i} component="span" sx={{ color: '#1d4ed8', fontWeight: 800 }}>
+            <Box key={i} component="span" sx={{ color: 'var(--crm-text-blue-700)', fontWeight: 800 }}>
                 {part}
             </Box>
         ) : (
@@ -171,7 +171,7 @@ export function OrganizationNameAutocomplete({
                                     {checking ? (
                                         <CircularProgress size={16} />
                                     ) : verified ? (
-                                        <VerifiedIcon sx={{ fontSize: 18, color: '#16a34a' }} />
+                                        <VerifiedIcon sx={{ fontSize: 18, color: 'var(--mui-palette-success-main)' }} />
                                     ) : null}
                                 </InputAdornment>
                             ) : undefined,
@@ -205,7 +205,7 @@ export function OrganizationNameAutocomplete({
                         maxWidth: 'calc(100vw - 32px)',
                         maxHeight: 400,
                         overflowY: 'auto',
-                        border: '1px solid #e2e8f0',
+                        border: '1px solid var(--mui-palette-border-main)',
                         borderRadius: '10px',
                         boxShadow: '0 12px 32px rgba(15, 23, 42, 0.14)',
                     }}
@@ -218,9 +218,9 @@ export function OrganizationNameAutocomplete({
                             gap: 0.75,
                             px: 1.75,
                             py: 0.9,
-                            borderBottom: '1px solid #f1f5f9',
-                            backgroundColor: duplicateCount > 0 ? '#fffbeb' : '#f8fafc',
-                            color: duplicateCount > 0 ? '#b45309' : '#64748b',
+                            borderBottom: '1px solid var(--mui-palette-border-light)',
+                            backgroundColor: duplicateCount > 0 ? 'var(--mui-palette-warning-soft)' : 'var(--mui-palette-background-subtle)',
+                            color: duplicateCount > 0 ? 'var(--crm-amber-700)' : 'var(--mui-palette-text-secondary)',
                             position: 'sticky',
                             top: 0,
                             zIndex: 1,
@@ -235,8 +235,8 @@ export function OrganizationNameAutocomplete({
                             sx={{
                                 fontSize: '0.66rem',
                                 fontWeight: 700,
-                                color: duplicateCount > 0 ? '#b45309' : '#1d4ed8',
-                                backgroundColor: duplicateCount > 0 ? '#fef3c7' : '#eff6ff',
+                                color: duplicateCount > 0 ? 'var(--crm-amber-700)' : 'var(--crm-text-blue-700)',
+                                backgroundColor: duplicateCount > 0 ? 'var(--crm-amber-100)' : 'var(--mui-palette-primary-soft)',
                                 borderRadius: '999px',
                                 px: 0.75,
                                 lineHeight: 1.6,
@@ -270,24 +270,24 @@ export function OrganizationNameAutocomplete({
                                         py: 1,
                                         cursor: 'pointer',
                                         borderLeft: '3px solid',
-                                        borderLeftColor: same ? '#f59e0b' : 'transparent',
-                                        backgroundColor: active ? (same ? '#fffbeb' : '#eff6ff') : 'transparent',
+                                        borderLeftColor: same ? 'var(--crm-amber-500)' : 'transparent',
+                                        backgroundColor: active ? (same ? 'var(--mui-palette-warning-soft)' : 'var(--mui-palette-primary-soft)') : 'transparent',
                                     }}
                                 >
-                                    <Box sx={{ color: same ? '#d97706' : active ? '#2563eb' : '#94a3b8', display: 'flex', pt: 0.25 }}>
+                                    <Box sx={{ color: same ? 'var(--mui-palette-warning-main)' : active ? 'var(--crm-text-blue-600)' : 'var(--mui-palette-text-muted)', display: 'flex', pt: 0.25 }}>
                                         <ApartmentIcon sx={{ fontSize: 18 }} />
                                     </Box>
                                     <Box sx={{ minWidth: 0, flex: 1 }}>
                                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, flexWrap: 'wrap' }}>
-                                            <Typography sx={{ fontSize: '0.85rem', fontWeight: 700, color: '#0f172a', wordBreak: 'break-word' }}>
+                                            <Typography sx={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--crm-slate-900)', wordBreak: 'break-word' }}>
                                                 {highlight(record.organizationName, trimmed)}
                                             </Typography>
                                             <Box
                                                 component="span"
                                                 title={record.accountStatus || 'Active'}
-                                                sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.4, fontSize: '0.68rem', fontWeight: 600, color: isActiveStatus ? '#15803d' : '#64748b' }}
+                                                sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.4, fontSize: '0.68rem', fontWeight: 600, color: isActiveStatus ? 'var(--crm-green-700)' : 'var(--mui-palette-text-secondary)' }}
                                             >
-                                                <Box sx={{ width: 6, height: 6, borderRadius: '50%', backgroundColor: isActiveStatus ? '#22c55e' : '#94a3b8' }} />
+                                                <Box sx={{ width: 6, height: 6, borderRadius: '50%', backgroundColor: isActiveStatus ? '#22c55e' : 'var(--crm-slate-400)' }} />
                                                 {record.accountStatus || 'Active'}
                                             </Box>
                                         </Box>
@@ -299,17 +299,22 @@ export function OrganizationNameAutocomplete({
                                                     height: 20,
                                                     fontSize: '0.66rem',
                                                     fontWeight: 700,
-                                                    color: same ? '#b45309' : '#1e40af',
-                                                    backgroundColor: same ? '#fef3c7' : '#e0e7ff',
+                                                    color: same ? 'var(--crm-amber-700)' : 'var(--crm-text-blue-800)',
+                                                    backgroundColor: same ? 'var(--crm-amber-100)' : 'var(--crm-indigo-100)',
                                                 }}
                                             />
-                                            {matchKind === 'canonical' && (
-                                                <Typography sx={{ fontSize: '0.72rem', color: '#92400e' }}>
+                                            {suggestion.matchedField === 'tradeName' && record.tradeName && (
+                                                <Typography sx={{ fontSize: '0.72rem', color: same ? 'var(--crm-amber-800)' : 'var(--crm-text-blue-800)' }}>
+                                                    Trade name “{highlight(record.tradeName, trimmed)}”
+                                                </Typography>
+                                            )}
+                                            {matchKind === 'canonical' && suggestion.matchedField !== 'tradeName' && (
+                                                <Typography sx={{ fontSize: '0.72rem', color: 'var(--crm-amber-800)' }}>
                                                     Written as “{record.organizationName}”
                                                 </Typography>
                                             )}
                                             {details && (
-                                                <Typography noWrap sx={{ fontSize: '0.72rem', color: '#64748b', minWidth: 0 }}>
+                                                <Typography noWrap sx={{ fontSize: '0.72rem', color: 'var(--mui-palette-text-secondary)', minWidth: 0 }}>
                                                     {details}
                                                 </Typography>
                                             )}
@@ -324,7 +329,7 @@ export function OrganizationNameAutocomplete({
                                                     e.stopPropagation();
                                                     onViewSuggestion(record);
                                                 }}
-                                                sx={{ color: '#64748b', '&:hover': { color: '#2563eb' } }}
+                                                sx={{ color: 'var(--mui-palette-text-secondary)', '&:hover': { color: 'var(--mui-palette-primary-main)' } }}
                                             >
                                                 <OpenInNewIcon sx={{ fontSize: 16 }} />
                                             </IconButton>

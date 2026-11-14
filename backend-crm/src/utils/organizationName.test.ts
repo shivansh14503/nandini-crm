@@ -120,6 +120,19 @@ describe('findSimilarOrganizations', () => {
         );
     });
 
+    it('checks trade names in the same search', () => {
+        const withTrade = [
+            { id: '1', organizationName: 'Mohit Traders Pvt Ltd', tradeName: 'Sunrise Mart' },
+            { id: '2', organizationName: 'Sunrise Exports', tradeName: null },
+        ];
+        const [top] = findSimilarOrganizations(withTrade, 'Sunrise Mart');
+        assert.equal(top.record.id, '1');
+        assert.equal(top.matchKind, 'exact');
+        assert.equal(top.matchedField, 'tradeName');
+        // A legal-name match keeps reporting the legal name.
+        assert.equal(findSimilarOrganizations(withTrade, 'Mohit Traders Pvt Ltd')[0].matchedField, 'organizationName');
+    });
+
     it('respects the limit', () => {
         assert.equal(findSimilarOrganizations(orgs, 'abc', { limit: 2 }).length, 2);
         assert.deepEqual(findSimilarOrganizations(orgs, ''), []);

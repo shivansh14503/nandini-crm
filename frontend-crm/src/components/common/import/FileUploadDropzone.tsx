@@ -46,15 +46,15 @@ export function FileUploadDropzone({ loading, error, entityPlural, onFileSelecte
                 }}
                 sx={{
                     border: '2px dashed',
-                    borderColor: dragging ? '#2563eb' : '#cbd5e1',
-                    backgroundColor: dragging ? '#eff6ff' : '#f8fafc',
+                    borderColor: dragging ? 'var(--mui-palette-primary-main)' : 'var(--mui-palette-border-strong)',
+                    backgroundColor: dragging ? 'var(--mui-palette-primary-soft)' : 'var(--mui-palette-background-subtle)',
                     borderRadius: '12px',
                     py: 5,
                     px: 2,
                     textAlign: 'center',
                     cursor: 'pointer',
                     transition: 'all 0.15s ease',
-                    '&:hover': { borderColor: '#2563eb', backgroundColor: '#eff6ff' },
+                    '&:hover': { borderColor: 'var(--mui-palette-primary-main)', backgroundColor: 'var(--mui-palette-primary-soft)' },
                 }}
             >
                 <input
@@ -70,12 +70,12 @@ export function FileUploadDropzone({ loading, error, entityPlural, onFileSelecte
                 {loading ? (
                     <CircularProgress size={32} />
                 ) : (
-                    <CloudUploadOutlinedIcon sx={{ fontSize: 40, color: '#2563eb' }} />
+                    <CloudUploadOutlinedIcon sx={{ fontSize: 40, color: 'var(--crm-text-blue-600)' }} />
                 )}
-                <Typography sx={{ mt: 1, fontWeight: 700, fontSize: '0.92rem', color: '#0f172a' }}>
+                <Typography sx={{ mt: 1, fontWeight: 700, fontSize: '0.92rem', color: 'var(--crm-slate-900)' }}>
                     {loading ? 'Reading file…' : 'Drag & drop your file here, or click to browse'}
                 </Typography>
-                <Typography sx={{ fontSize: '0.78rem', color: '#64748b', mt: 0.4 }}>
+                <Typography sx={{ fontSize: '0.78rem', color: 'var(--mui-palette-text-secondary)', mt: 0.4 }}>
                     Supports .csv, .xlsx and .xls (max 10 MB)
                 </Typography>
             </Box>
@@ -90,7 +90,7 @@ export function FileUploadDropzone({ loading, error, entityPlural, onFileSelecte
                 sx={{
                     mt: 2.5,
                     p: 1.8,
-                    border: '1px solid #e2e8f0',
+                    border: '1px solid var(--mui-palette-border-main)',
                     borderRadius: '10px',
                     display: 'flex',
                     alignItems: 'center',
@@ -99,7 +99,7 @@ export function FileUploadDropzone({ loading, error, entityPlural, onFileSelecte
                     flexWrap: 'wrap',
                 }}
             >
-                <Typography sx={{ fontSize: '0.78rem', color: '#475569', maxWidth: 420 }}>
+                <Typography sx={{ fontSize: '0.78rem', color: 'var(--crm-slate-600)', maxWidth: 420 }}>
                     Not sure about the format? Use our template: the first row must contain column headers, followed by one {entityPlural.toLowerCase().replace(/s$/, '')} per row.
                 </Typography>
                 <Button
@@ -110,10 +110,10 @@ export function FileUploadDropzone({ loading, error, entityPlural, onFileSelecte
                         textTransform: 'none',
                         fontWeight: 600,
                         fontSize: '0.78rem',
-                        borderColor: '#e2e8f0',
-                        color: '#1d4ed8',
+                        borderColor: 'var(--mui-palette-border-main)',
+                        color: 'var(--crm-text-blue-700)',
                         borderRadius: '8px',
-                        '&:hover': { borderColor: '#bfdbfe', backgroundColor: '#eff6ff' },
+                        '&:hover': { borderColor: 'var(--mui-palette-primary-softBorder)', backgroundColor: 'var(--mui-palette-primary-soft)' },
                     }}
                 >
                     📄 Download Sample Template (CSV)

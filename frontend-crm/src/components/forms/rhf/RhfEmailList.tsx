@@ -117,16 +117,16 @@ export function RhfEmailList({
         <Box data-field={name} data-field-size={size} sx={{ mb: 1, minWidth: 0, ...fieldSizeSx(size) }}>
             <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1, mb: 1 }}>
                 <Box sx={{ display: 'flex', alignItems: 'baseline', gap: 1, minWidth: 0 }}>
-                    <Typography sx={{ fontWeight: 600, color: '#374151', fontSize: '0.82rem', whiteSpace: 'nowrap' }}>
+                    <Typography sx={{ fontWeight: 600, color: 'var(--crm-gray-700)', fontSize: '0.82rem', whiteSpace: 'nowrap' }}>
                         {label}
                         {required && (
-                            <Box component="span" sx={{ color: '#ef4444', ml: 0.4 }}>
+                            <Box component="span" sx={{ color: 'var(--crm-red-500)', ml: 0.4 }}>
                                 *
                             </Box>
                         )}
                     </Typography>
                     {hint && !isView && (
-                        <Typography variant="caption" noWrap sx={{ color: '#9ca3af', fontSize: '0.72rem' }}>
+                        <Typography variant="caption" noWrap sx={{ color: 'var(--crm-gray-400)', fontSize: '0.72rem' }}>
                             {hint}
                         </Typography>
                     )}
@@ -140,13 +140,13 @@ export function RhfEmailList({
                         textTransform: 'none',
                         fontSize: '0.75rem',
                         fontWeight: 600,
-                        color: '#2563eb',
-                        backgroundColor: '#eff6ff',
+                        color: 'var(--crm-text-blue-600)',
+                        backgroundColor: 'var(--mui-palette-primary-soft)',
                         px: 1.2,
                         py: 0.3,
                         borderRadius: '6px',
-                        border: '1px solid #bfdbfe',
-                        '&:hover': { backgroundColor: '#dbeafe' },
+                        border: '1px solid var(--mui-palette-primary-softBorder)',
+                        '&:hover': { backgroundColor: 'var(--crm-blue-100)' },
                     }}
                 >
                     Add Email

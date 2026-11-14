@@ -115,7 +115,7 @@ export function useFormFieldColumns<T>(
                         const text = formatFieldCell(field, readFieldValue(row, field), configs);
                         return (
                             // Wraps within the column width (the table caps cell width), so the full value shows.
-                            <Typography sx={{ fontSize: '0.78rem', color: text ? '#334155' : '#94a3b8' }}>
+                            <Typography sx={{ fontSize: '0.78rem', color: text ? 'var(--crm-slate-700)' : 'var(--mui-palette-text-muted)' }}>
                                 {text || '-'}
                             </Typography>
                         );

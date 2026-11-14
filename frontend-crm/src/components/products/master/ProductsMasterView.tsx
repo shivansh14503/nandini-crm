@@ -27,11 +27,11 @@ import { ProductDetailDrawer } from '../ProductDetailDrawer';
 const RECENTLY_ADDED_DAYS = 7;
 
 const TAX_RATE_COLORS: Record<string, { bg: string; color: string; border: string }> = {
-    '0%': { bg: '#f0fdf4', color: '#15803d', border: '#bbf7d0' },
-    '5%': { bg: '#eff6ff', color: '#1d4ed8', border: '#bfdbfe' },
-    '12%': { bg: '#fefce8', color: '#854d0e', border: '#fde68a' },
-    '18%': { bg: '#fff7ed', color: '#c2410c', border: '#fed7aa' },
-    '28%': { bg: '#fef2f2', color: '#b91c1c', border: '#fecaca' },
+    '0%': { bg: 'var(--crm-green-50)', color: 'var(--crm-green-700)', border: 'var(--crm-green-200)' },
+    '5%': { bg: 'var(--mui-palette-primary-soft)', color: 'var(--crm-text-blue-700)', border: 'var(--mui-palette-primary-softBorder)' },
+    '12%': { bg: 'var(--crm-yellow-50)', color: 'var(--crm-yellow-800)', border: 'var(--mui-palette-warning-softBorder)' },
+    '18%': { bg: 'var(--crm-orange-50)', color: 'var(--crm-orange-700)', border: 'var(--crm-orange-200)' },
+    '28%': { bg: 'var(--mui-palette-error-soft)', color: 'var(--crm-red-700)', border: 'var(--mui-palette-error-softBorder)' },
 };
 
 
@@ -219,13 +219,13 @@ export function ProductsMasterView() {
                 minWidth: 220,
                 render: (p) => (
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                        <InventoryOutlinedIcon sx={{ fontSize: 16, color: '#2563eb' }} />
+                        <InventoryOutlinedIcon sx={{ fontSize: 16, color: 'var(--crm-text-blue-600)' }} />
                         <RecordLink
                             href={ROUTES.PRODUCT_DETAIL(p.id)}
                             onOpen={() => setDrawerProductId(p.id)}
                             sx={{
                                 fontWeight: 700,
-                                color: '#1d4ed8',
+                                color: 'var(--crm-text-blue-700)',
                                 fontSize: '0.82rem',
                                 cursor: 'pointer',
                                 lineHeight: 1.2,
@@ -243,7 +243,7 @@ export function ProductsMasterView() {
                 sortable: true,
                 minWidth: 140,
                 render: (p) => (
-                    <Typography sx={{ fontSize: '0.8rem', color: '#334155', fontWeight: 500 }}>
+                    <Typography sx={{ fontSize: '0.8rem', color: 'var(--crm-slate-700)', fontWeight: 500 }}>
                         {p.category || '-'}
                     </Typography>
                 ),
@@ -254,7 +254,7 @@ export function ProductsMasterView() {
                 sortable: true,
                 minWidth: 160,
                 render: (p) => (
-                    <Typography sx={{ fontSize: '0.8rem', color: '#475569' }}>
+                    <Typography sx={{ fontSize: '0.8rem', color: 'var(--crm-slate-600)' }}>
                         {p.manufacturer || '-'}
                     </Typography>
                 ),
@@ -265,7 +265,7 @@ export function ProductsMasterView() {
                 sortable: true,
                 minWidth: 110,
                 render: (p) => (
-                    <Typography sx={{ fontSize: '0.78rem', color: '#64748b', fontFamily: 'monospace' }}>
+                    <Typography sx={{ fontSize: '0.78rem', color: 'var(--mui-palette-text-secondary)', fontFamily: 'monospace' }}>
                         {p.hsnCode || '-'}
                     </Typography>
                 ),
@@ -276,7 +276,7 @@ export function ProductsMasterView() {
                 sortable: true,
                 minWidth: 100,
                 render: (p) => (
-                    <Typography sx={{ fontSize: '0.8rem', fontWeight: 600, color: '#1e293b' }}>
+                    <Typography sx={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--mui-palette-text-primary)' }}>
                         {p.mrp ? `₹${Number(p.mrp).toLocaleString('en-IN')}` : '-'}
                     </Typography>
                 ),
@@ -287,7 +287,7 @@ export function ProductsMasterView() {
                 sortable: true,
                 minWidth: 80,
                 render: (p) => {
-                    const style = TAX_RATE_COLORS[p.taxRate || ''] || { bg: '#f1f5f9', color: '#475569', border: '#cbd5e1' };
+                    const style = TAX_RATE_COLORS[p.taxRate || ''] || { bg: 'var(--mui-palette-background-hover)', color: 'var(--crm-slate-600)', border: 'var(--mui-palette-border-strong)' };
                     return p.taxRate ? (
                         <Chip
                             label={p.taxRate}
@@ -302,7 +302,7 @@ export function ProductsMasterView() {
                             }}
                         />
                     ) : (
-                        <Typography sx={{ fontSize: '0.78rem', color: '#94a3b8' }}>-</Typography>
+                        <Typography sx={{ fontSize: '0.78rem', color: 'var(--mui-palette-text-muted)' }}>-</Typography>
                     );
                 },
             },
@@ -312,7 +312,7 @@ export function ProductsMasterView() {
                 sortable: true,
                 minWidth: 100,
                 render: (p) => (
-                    <Typography sx={{ fontSize: '0.78rem', color: '#64748b' }}>
+                    <Typography sx={{ fontSize: '0.78rem', color: 'var(--mui-palette-text-secondary)' }}>
                         {p.type || '-'}
                     </Typography>
                 ),
@@ -390,7 +390,7 @@ export function ProductsMasterView() {
             emptyDescription="Add your first product to start building the catalog. You can define pricing, HSN codes, and tax rates."
             emptyActionLabel="Add Product"
             onEmptyAction={() => router.push(ROUTES.PRODUCT_NEW)}
-            emptyIcon={<InventoryOutlinedIcon sx={{ fontSize: 48, color: '#cbd5e1' }} />}
+            emptyIcon={<InventoryOutlinedIcon sx={{ fontSize: 48, color: 'var(--crm-slate-300)' }} />}
             pagination={{
                 page,
                 rowsPerPage,

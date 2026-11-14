@@ -41,7 +41,7 @@ import {
 import { Badge, dangerColor, errorMessage, inputSx, primaryButtonSx, secondaryButtonSx } from './builderUi';
 
 const isChoiceType = (t: string): t is DropdownControlType => t === 'select' || t === 'multiselect';
-const smallLabel = (text: string) => <Typography sx={{ fontSize: '0.72rem', fontWeight: 600, color: '#64748b', mb: 0.4 }}>{text}</Typography>;
+const smallLabel = (text: string) => <Typography sx={{ fontSize: '0.72rem', fontWeight: 600, color: 'var(--mui-palette-text-secondary)', mb: 0.4 }}>{text}</Typography>;
 
 /**
  * Edits an existing dropdown in one go: name, scope (one module / shared), the control type and
@@ -148,7 +148,7 @@ export function EditCategoryDialog({
 
     return (
         <Dialog open onClose={onClose} fullWidth maxWidth="md" slotProps={{ paper: { sx: { borderRadius: '12px' } } }}>
-            <DialogTitle sx={{ fontWeight: 700, fontSize: '1rem', color: '#0f172a', borderBottom: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', gap: 1 }}>
+            <DialogTitle sx={{ fontWeight: 700, fontSize: '1rem', color: 'var(--crm-slate-900)', borderBottom: '1px solid var(--mui-palette-border-main)', display: 'flex', alignItems: 'center', gap: 1 }}>
                 Edit Dropdown
             </DialogTitle>
             <DialogContent sx={{ pt: '20px !important', display: 'flex', flexDirection: 'column', gap: 2 }}>
@@ -191,7 +191,7 @@ export function EditCategoryDialog({
                         }}
                     />
                     {mixedTypes && !touched.fieldType && (
-                        <Typography sx={{ fontSize: '0.74rem', color: '#64748b' }}>
+                        <Typography sx={{ fontSize: '0.74rem', color: 'var(--mui-palette-text-secondary)' }}>
                             The fields using it mix single and multi-select; pick a type to apply it to all of them.
                         </Typography>
                     )}
@@ -207,7 +207,7 @@ export function EditCategoryDialog({
                             const checked = fields ? kept.has(m) : Boolean(placement);
                             const removing = Boolean(fields) && !checked;
                             return (
-                                <Box sx={{ px: 1.5, py: 0.75, backgroundColor: removing ? '#fef2f2' : checked ? '#f8fafc' : '#fff' }}>
+                                <Box sx={{ px: 1.5, py: 0.75, backgroundColor: removing ? 'var(--mui-palette-error-soft)' : checked ? 'var(--mui-palette-background-subtle)' : 'var(--mui-palette-background-paper)' }}>
                                     <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '190px minmax(0, 1fr)' }, alignItems: 'center', gap: 1 }}>
                                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
                                             <Tooltip title={builtIn ? 'A locked field on this form always uses this dropdown' : ''} arrow>
@@ -222,14 +222,14 @@ export function EditCategoryDialog({
                                                                 onChange={(e) => (fields ? toggleKept(m, e.target.checked) : toggleNew(m, e.target.checked))}
                                                             />
                                                         }
-                                                        label={<Typography sx={{ fontSize: '0.84rem', fontWeight: 600, color: '#1e293b' }}>{moduleName}</Typography>}
+                                                        label={<Typography sx={{ fontSize: '0.84rem', fontWeight: 600, color: 'var(--mui-palette-text-primary)' }}>{moduleName}</Typography>}
                                                     />
                                                 </span>
                                             </Tooltip>
                                             {fields && <Badge tone={builtIn ? 'locked' : 'active'}>{builtIn ? 'Locked' : 'Linked'}</Badge>}
                                         </Box>
                                         {fields && (
-                                            <Typography sx={{ fontSize: '0.78rem', color: removing ? dangerColor : '#64748b' }}>
+                                            <Typography sx={{ fontSize: '0.78rem', color: removing ? dangerColor : 'var(--mui-palette-text-secondary)' }}>
                                                 {removing ? 'Will be deleted: ' : 'Field: '}
                                                 {fields.map((f) => `${f.label}${f.isActive ? '' : ' (archived)'}`).join(', ')}
                                             </Typography>
@@ -249,9 +249,9 @@ export function EditCategoryDialog({
                         No form will use this dropdown any more, so it is deleted together with its last field when you save.
                     </Alert>
                 )}
-                {error && <Typography sx={{ fontSize: '0.78rem', color: '#b91c1c' }}>{error}</Typography>}
+                {error && <Typography sx={{ fontSize: '0.78rem', color: 'var(--crm-red-700)' }}>{error}</Typography>}
             </DialogContent>
-            <DialogActions sx={{ px: 3, py: 2, borderTop: '1px solid #e2e8f0' }}>
+            <DialogActions sx={{ px: 3, py: 2, borderTop: '1px solid var(--mui-palette-border-main)' }}>
                 <Button onClick={onClose} variant="outlined" sx={secondaryButtonSx}>
                     Cancel
                 </Button>

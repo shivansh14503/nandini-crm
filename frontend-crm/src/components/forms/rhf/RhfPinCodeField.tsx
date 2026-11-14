@@ -2,6 +2,8 @@
 
 import React from 'react';
 import { TextField } from '@mui/material';
+import { useConfiguredPlaceholder } from '@/context/FormConfigContext';
+import { useUndoSafeSanitizer } from '../undoSafeInput';
 import {
     useController,
     useFormContext,
@@ -51,6 +53,9 @@ export function RhfPinCodeField<T extends FieldValues>({
     const watchedCountry = useWatch({ control, name: (countryFieldName ?? name) as Path<T> });
     const country = countryFieldName ? (watchedCountry as string | undefined) : countryCode;
     const config = getPostalCodeConfig(country);
+    const resolvedPlaceholder = useConfiguredPlaceholder(name, placeholder ?? config.placeholder);
+    // Filter before insertion (keeps Ctrl+Z working) instead of only rewriting the value afterwards.
+    const sanitizerRef = useUndoSafeSanitizer(config.sanitize);
 
     return (
         <FormField name={name} label={label ?? config.label} required={required} hint={hint} size={fieldSize}>
@@ -58,9 +63,10 @@ export function RhfPinCodeField<T extends FieldValues>({
                 {...field}
                 value={field.value ?? ''}
                 onChange={(e) => field.onChange(config.sanitize(e.target.value))}
+                inputRef={sanitizerRef}
                 fullWidth
                 size="small"
-                placeholder={placeholder ?? config.placeholder}
+                placeholder={resolvedPlaceholder}
                 disabled={disabled}
                 error={Boolean(fieldState.error)}
                 helperText={fieldState.error?.message}

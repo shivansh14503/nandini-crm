@@ -4,6 +4,7 @@ import React, { useEffect, useRef } from 'react';
 import { useFormContext, useWatch, type FieldValues } from 'react-hook-form';
 import { useFormMode } from '@/context/FormModeContext';
 import { useFormConfigs } from '@/hooks/queries/useFormConfigs';
+import { useCodedFieldDefaults } from '@/context/CodedFieldDefaultsContext';
 import type { FormFieldDefinitionDto } from '@/types/formConfig.types';
 import { activeOptionValues, defaultOptionValues, fieldFormName, findCategory, optionLabelMap, parseDefaultValue } from '@/utils/formConfig';
 import type { FieldSize } from './fieldSizing';
@@ -55,6 +56,8 @@ export function DynamicFormField({ field, required, applyDefault = true }: Dynam
     const { mode } = useFormMode();
     const { getValues, setValue } = useFormContext<FieldValues>();
     const name = fieldFormName(field);
+    // Form builder Live Preview: a built-in field without overrides shows the texts its hand-built form codes.
+    const coded = useCodedFieldDefaults(field.isSystem ? field.fieldKey : undefined);
     const category = findCategory(configs, field.dropdownCategoryKey);
     // The dropdown's default options, as a stable dependency for the effect below.
     const categoryDefaults = defaultOptionValues(category).join('\u0000');
@@ -96,9 +99,9 @@ export function DynamicFormField({ field, required, applyDefault = true }: Dynam
         name,
         label: field.label,
         required: required ?? field.isRequired,
-        hint: field.hint ?? undefined,
+        hint: field.hint ?? coded.hint,
     };
-    const placeholder = field.placeholder ?? undefined;
+    const placeholder = field.placeholder ?? coded.placeholder;
     const fieldSize = (field.fieldSize as FieldSize | null) ?? TYPE_SIZE[field.fieldType];
 
     const control = ((): React.ReactNode => {

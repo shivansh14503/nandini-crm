@@ -75,7 +75,7 @@ export function LeadOverviewSection({ leadId }: { leadId?: string } = {}) {
     const organizationName = orgNameField.value ?? '';
     const nameCheck = useOrganizationNameCheck({ name: organizationName, enabled: mode !== 'view' });
     const orgNameHelper = orgNameState.error?.message ?? (nameCheck.duplicate ? (
-        <Box component="span" sx={{ color: '#b45309', fontWeight: 600 }}>
+        <Box component="span" sx={{ color: 'var(--crm-amber-700)', fontWeight: 600 }}>
             {nameCheck.duplicate.message}
         </Box>
     ) : undefined);
@@ -160,13 +160,13 @@ export function LeadOverviewSection({ leadId }: { leadId?: string } = {}) {
                             value={organizationName}
                             placeholder="Same as organization name"
                             // Layered on fieldSx (not spread over it) so the input keeps the standard size and font.
-                            sx={[fieldSx, { '& .MuiOutlinedInput-root': { backgroundColor: '#f8fafc', color: '#475569' } }]}
+                            sx={[fieldSx, { '& .MuiOutlinedInput-root': { backgroundColor: 'var(--mui-palette-background-subtle)', color: 'var(--crm-slate-600)' } }]}
                             slotProps={{
                                 htmlInput: { readOnly: true, tabIndex: -1, 'aria-readonly': true },
                                 input: {
                                     endAdornment: (
                                         <InputAdornment position="end">
-                                            <LockOutlinedIcon sx={{ fontSize: 16, color: '#94a3b8' }} />
+                                            <LockOutlinedIcon sx={{ fontSize: 16, color: 'var(--mui-palette-text-muted)' }} />
                                         </InputAdornment>
                                     ),
                                 },

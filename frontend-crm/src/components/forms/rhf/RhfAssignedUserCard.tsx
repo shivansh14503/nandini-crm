@@ -82,22 +82,22 @@ export function RhfAssignedUserCard<T extends FieldValues>({
                     justifyContent: 'space-between',
                     gap: 1,
                     p: 1.5,
-                    border: '1px solid #e2e8f0',
+                    border: '1px solid var(--mui-palette-border-main)',
                     borderRadius: '8px',
-                    backgroundColor: '#fff',
+                    backgroundColor: 'var(--mui-palette-background-paper)',
                     transition: 'border-color 0.15s ease',
-                    '&:hover': { borderColor: '#cbd5e1' },
+                    '&:hover': { borderColor: 'var(--mui-palette-border-strong)' },
                 }}
             >
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, minWidth: 0 }}>
-                    <Avatar sx={{ width: 32, height: 32, fontSize: '0.78rem', fontWeight: 700, backgroundColor: '#1d4ed8', flexShrink: 0 }}>
+                    <Avatar sx={{ width: 32, height: 32, fontSize: '0.78rem', fontWeight: 700, backgroundColor: 'var(--crm-fill-blue-700)', flexShrink: 0 }}>
                         {getInitials(displayName)}
                     </Avatar>
                     <Box sx={{ minWidth: 0 }}>
-                        <Typography noWrap sx={{ fontSize: '0.84rem', fontWeight: 600, color: '#1e293b', lineHeight: 1.2 }}>
+                        <Typography noWrap sx={{ fontSize: '0.84rem', fontWeight: 600, color: 'var(--mui-palette-text-primary)', lineHeight: 1.2 }}>
                             {displayName}
                         </Typography>
-                        <Typography noWrap sx={{ fontSize: '0.72rem', color: '#64748b', mt: 0.2 }}>
+                        <Typography noWrap sx={{ fontSize: '0.72rem', color: 'var(--mui-palette-text-secondary)', mt: 0.2 }}>
                             {subtitle}
                         </Typography>
                     </Box>
@@ -108,7 +108,7 @@ export function RhfAssignedUserCard<T extends FieldValues>({
                             label={roleBadge}
                             size="small"
                             variant="outlined"
-                            sx={{ fontSize: '0.7rem', height: 22, borderColor: '#cbd5e1', color: '#475569', backgroundColor: '#f8fafc', fontWeight: 500 }}
+                            sx={{ fontSize: '0.7rem', height: 22, borderColor: 'var(--mui-palette-border-strong)', color: 'var(--crm-slate-600)', backgroundColor: 'var(--mui-palette-background-subtle)', fontWeight: 500 }}
                         />
                     )}
                     {!isView && (
@@ -117,7 +117,7 @@ export function RhfAssignedUserCard<T extends FieldValues>({
                                 size="small"
                                 aria-label="Change assigned user"
                                 onClick={() => setLookupOpen(true)}
-                                sx={{ color: '#64748b', width: 28, height: 28, '&:hover': { color: '#1d4ed8', backgroundColor: '#eff6ff' } }}
+                                sx={{ color: 'var(--mui-palette-text-secondary)', width: 28, height: 28, '&:hover': { color: 'var(--crm-blue-700)', backgroundColor: 'var(--mui-palette-primary-soft)' } }}
                             >
                                 <PersonOutlinedIcon sx={{ fontSize: 18 }} />
                             </IconButton>

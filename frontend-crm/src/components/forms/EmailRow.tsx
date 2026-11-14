@@ -35,11 +35,11 @@ export function EmailRow({ email, onChange, onRemove, notice, placeholder = 'e.g
     if (mode === 'view') {
         return (
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap', py: 0.75 }}>
-                <Typography sx={{ fontSize: '0.88rem', fontWeight: 600, color: '#0f172a' }}>{email.email || '—'}</Typography>
+                <Typography sx={{ fontSize: '0.88rem', fontWeight: 600, color: 'var(--crm-slate-900)' }}>{email.email || '—'}</Typography>
                 {email.email && <DrawerCopyButton text={email.email} title="Copy email" />}
-                {email.isPrimary && <Chip label="Primary" size="small" sx={{ height: 20, fontSize: '0.68rem', fontWeight: 700, color: '#1d4ed8', backgroundColor: '#eff6ff' }} />}
-                {email.isOptedOut && <Chip label="Opted Out (DND)" size="small" sx={{ height: 20, fontSize: '0.68rem', fontWeight: 700, color: '#b45309', backgroundColor: '#fef3c7' }} />}
-                {email.isInvalidBounce && <Chip label="Invalid Bounce" size="small" sx={{ height: 20, fontSize: '0.68rem', fontWeight: 700, color: '#b91c1c', backgroundColor: '#fee2e2' }} />}
+                {email.isPrimary && <Chip label="Primary" size="small" sx={{ height: 20, fontSize: '0.68rem', fontWeight: 700, color: 'var(--crm-text-blue-700)', backgroundColor: 'var(--mui-palette-primary-soft)' }} />}
+                {email.isOptedOut && <Chip label="Opted Out (DND)" size="small" sx={{ height: 20, fontSize: '0.68rem', fontWeight: 700, color: 'var(--crm-amber-700)', backgroundColor: 'var(--crm-amber-100)' }} />}
+                {email.isInvalidBounce && <Chip label="Invalid Bounce" size="small" sx={{ height: 20, fontSize: '0.68rem', fontWeight: 700, color: 'var(--crm-red-700)', backgroundColor: 'var(--crm-red-100)' }} />}
             </Box>
         );
     }
@@ -47,10 +47,10 @@ export function EmailRow({ email, onChange, onRemove, notice, placeholder = 'e.g
         <Box
             sx={{
                 mb: 1.5,
-                border: '1px solid #e5e7eb',
+                border: '1px solid var(--crm-gray-200)',
                 borderRadius: '8px',
                 p: 1.5,
-                backgroundColor: '#ffffff',
+                backgroundColor: 'var(--mui-palette-background-paper)',
             }}
         >
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
@@ -69,7 +69,7 @@ export function EmailRow({ email, onChange, onRemove, notice, placeholder = 'e.g
                         <IconButton
                             onClick={onRemove}
                             size="small"
-                            sx={{ color: '#9ca3af', '&:hover': { color: '#ef4444' }, flexShrink: 0 }}
+                            sx={{ color: 'var(--crm-gray-400)', '&:hover': { color: 'var(--crm-red-500)' }, flexShrink: 0 }}
                         >
                             <DeleteIcon fontSize="small" />
                         </IconButton>
@@ -88,11 +88,11 @@ export function EmailRow({ email, onChange, onRemove, notice, placeholder = 'e.g
                             size="small"
                             checked={email.isPrimary}
                             onChange={() => onChange({ ...email, isPrimary: true })}
-                            sx={{ color: '#2563EB', '&.Mui-checked': { color: '#2563EB' }, p: 0.5 }}
+                            sx={{ color: 'var(--crm-text-blue-600)', '&.Mui-checked': { color: 'var(--crm-text-blue-600)' }, p: 0.5 }}
                         />
                     }
                     label={
-                        <Typography sx={{ fontSize: '0.78rem', color: '#374151', fontWeight: 500 }}>
+                        <Typography sx={{ fontSize: '0.78rem', color: 'var(--crm-gray-700)', fontWeight: 500 }}>
                             Primary Contact
                         </Typography>
                     }
@@ -109,7 +109,7 @@ export function EmailRow({ email, onChange, onRemove, notice, placeholder = 'e.g
                             />
                         }
                         label={
-                            <Typography sx={{ fontSize: '0.78rem', color: '#374151' }}>
+                            <Typography sx={{ fontSize: '0.78rem', color: 'var(--crm-gray-700)' }}>
                                 Opted Out (DND)
                             </Typography>
                         }
@@ -125,7 +125,7 @@ export function EmailRow({ email, onChange, onRemove, notice, placeholder = 'e.g
                             />
                         }
                         label={
-                            <Typography sx={{ fontSize: '0.78rem', color: '#374151' }}>
+                            <Typography sx={{ fontSize: '0.78rem', color: 'var(--crm-gray-700)' }}>
                                 Invalid Bounce
                             </Typography>
                         }

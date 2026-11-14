@@ -32,9 +32,9 @@ interface AdminModule {
 }
 
 const BADGES = {
-    available: { label: 'Available', color: '#047857', backgroundColor: '#ecfdf5', borderColor: '#a7f3d0' },
-    comingSoon: { label: 'Coming Soon', color: '#b45309', backgroundColor: '#fffbeb', borderColor: '#fde68a' },
-    superAdmin: { label: 'Super Admin / Admin', color: '#1d4ed8', backgroundColor: '#eff6ff', borderColor: '#bfdbfe' },
+    available: { label: 'Available', color: 'var(--crm-emerald-700)', backgroundColor: 'var(--mui-palette-success-soft)', borderColor: 'var(--mui-palette-success-softBorder)' },
+    comingSoon: { label: 'Coming Soon', color: 'var(--crm-amber-700)', backgroundColor: 'var(--mui-palette-warning-soft)', borderColor: 'var(--mui-palette-warning-softBorder)' },
+    superAdmin: { label: 'Super Admin / Admin', color: 'var(--crm-text-blue-700)', backgroundColor: 'var(--mui-palette-primary-soft)', borderColor: 'var(--mui-palette-primary-softBorder)' },
 } as const;
 
 const ADMIN_MODULES: AdminModule[] = [
@@ -108,8 +108,8 @@ function ModuleCard({ module }: { module: AdminModule }) {
                 p: 2.5,
                 height: '100%',
                 borderRadius: '12px',
-                border: '1px solid #e2e8f0',
-                backgroundColor: '#ffffff',
+                border: '1px solid var(--mui-palette-border-main)',
+                backgroundColor: 'var(--mui-palette-background-paper)',
                 color: 'inherit',
                 textDecoration: 'none',
                 transition: 'border-color 0.15s ease, box-shadow 0.15s ease',
@@ -117,13 +117,13 @@ function ModuleCard({ module }: { module: AdminModule }) {
                     ? {
                           cursor: 'pointer',
                           '&:hover, &:focus-visible': {
-                              borderColor: '#93c5fd',
-                              boxShadow: '0 4px 16px rgba(37, 99, 235, 0.10)',
+                              borderColor: 'var(--crm-blue-300)',
+                              boxShadow: '0 4px 16px rgb(var(--crm-accent-rgb) / 0.10)',
                               outline: 'none',
                           },
                           '&:hover .admin-card-cta, &:focus-visible .admin-card-cta': { gap: 1 },
                       }
-                    : { backgroundColor: '#fcfdfe' }),
+                    : { backgroundColor: 'var(--mui-palette-background-subtle)' }),
             }}
         >
             <Box sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 1.5 }}>
@@ -136,9 +136,9 @@ function ModuleCard({ module }: { module: AdminModule }) {
                         alignItems: 'center',
                         justifyContent: 'center',
                         flexShrink: 0,
-                        backgroundColor: active ? '#eff6ff' : '#f1f5f9',
-                        border: `1px solid ${active ? '#bfdbfe' : '#e2e8f0'}`,
-                        color: active ? '#2563eb' : '#64748b',
+                        backgroundColor: active ? 'var(--mui-palette-primary-soft)' : 'var(--mui-palette-background-hover)',
+                        border: `1px solid ${active ? 'var(--mui-palette-primary-softBorder)' : 'var(--mui-palette-border-main)'}`,
+                        color: active ? 'var(--crm-text-blue-600)' : 'var(--mui-palette-text-secondary)',
                     }}
                 >
                     {module.icon}
@@ -162,10 +162,10 @@ function ModuleCard({ module }: { module: AdminModule }) {
             </Box>
 
             <Box>
-                <Typography component="h2" sx={{ fontSize: '0.95rem', fontWeight: 700, color: active ? '#0f172a' : '#334155' }}>
+                <Typography component="h2" sx={{ fontSize: '0.95rem', fontWeight: 700, color: active ? 'var(--crm-slate-900)' : 'var(--crm-slate-700)' }}>
                     {module.title}
                 </Typography>
-                <Typography sx={{ fontSize: '0.8rem', color: '#64748b', mt: 0.5, lineHeight: 1.55 }}>{module.description}</Typography>
+                <Typography sx={{ fontSize: '0.8rem', color: 'var(--mui-palette-text-secondary)', mt: 0.5, lineHeight: 1.55 }}>{module.description}</Typography>
             </Box>
 
             <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.75 }}>
@@ -173,24 +173,24 @@ function ModuleCard({ module }: { module: AdminModule }) {
                     <Box
                         key={h}
                         component="span"
-                        sx={{ px: 1, py: 0.25, borderRadius: '6px', fontSize: '0.7rem', fontWeight: 600, color: '#475569', backgroundColor: '#f8fafc', border: '1px solid #e2e8f0' }}
+                        sx={{ px: 1, py: 0.25, borderRadius: '6px', fontSize: '0.7rem', fontWeight: 600, color: 'var(--crm-slate-600)', backgroundColor: 'var(--mui-palette-background-subtle)', border: '1px solid var(--mui-palette-border-main)' }}
                     >
                         {h}
                     </Box>
                 ))}
             </Box>
 
-            <Box sx={{ mt: 'auto', pt: 1.5, borderTop: '1px dashed #e2e8f0' }}>
+            <Box sx={{ mt: 'auto', pt: 1.5, borderTop: '1px dashed var(--mui-palette-border-main)' }}>
                 {active ? (
                     <Box
                         className="admin-card-cta"
-                        sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5, fontSize: '0.8rem', fontWeight: 700, color: '#2563eb', transition: 'gap 0.15s ease' }}
+                        sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5, fontSize: '0.8rem', fontWeight: 700, color: 'var(--crm-text-blue-600)', transition: 'gap 0.15s ease' }}
                     >
                         Open module
                         <ArrowForwardRoundedIcon sx={{ fontSize: 16 }} />
                     </Box>
                 ) : (
-                    <Typography sx={{ fontSize: '0.76rem', fontWeight: 600, color: '#94a3b8' }}>Planned for an upcoming release</Typography>
+                    <Typography sx={{ fontSize: '0.76rem', fontWeight: 600, color: 'var(--mui-palette-text-muted)' }}>Planned for an upcoming release</Typography>
                 )}
             </Box>
         </Box>
@@ -212,22 +212,22 @@ export default function AdminHubPage() {
     if (!user) return null;
 
     return (
-        <Box sx={{ minHeight: '100vh', backgroundColor: '#f8fafc', display: 'flex', flexDirection: 'column' }}>
+        <Box sx={{ minHeight: '100vh', backgroundColor: 'var(--mui-palette-background-subtle)', display: 'flex', flexDirection: 'column' }}>
             <Navbar />
             <ErrorAlert error={error} onClose={clearError} />
 
             <Container maxWidth="xl" sx={{ pt: 2, pb: 4, flex: 1 }}>
                 <AppBreadcrumbsBar items={[{ label: 'Administration' }, { label: 'Admin' }]} />
 
-                <Box sx={{ mb: 2.5, p: { xs: 2, md: 3 }, borderRadius: '12px', border: '1px solid #e2e8f0', backgroundColor: '#ffffff', display: 'flex', alignItems: 'flex-start', gap: 1.5 }}>
+                <Box sx={{ mb: 2.5, p: { xs: 2, md: 3 }, borderRadius: '12px', border: '1px solid var(--mui-palette-border-main)', backgroundColor: 'var(--mui-palette-background-paper)', display: 'flex', alignItems: 'flex-start', gap: 1.5 }}>
                     <Box
                         sx={{
                             width: 40,
                             height: 40,
                             borderRadius: '10px',
-                            backgroundColor: '#eff6ff',
-                            border: '1px solid #bfdbfe',
-                            color: '#2563eb',
+                            backgroundColor: 'var(--mui-palette-primary-soft)',
+                            border: '1px solid var(--mui-palette-primary-softBorder)',
+                            color: 'var(--crm-text-blue-600)',
                             display: 'flex',
                             alignItems: 'center',
                             justifyContent: 'center',
@@ -237,12 +237,12 @@ export default function AdminHubPage() {
                         <AdminPanelSettingsOutlinedIcon />
                     </Box>
                     <Box sx={{ minWidth: 0 }}>
-                        <Typography component="h1" sx={{ fontWeight: 700, fontSize: '1.15rem', color: '#0f172a' }}>
+                        <Typography component="h1" sx={{ fontWeight: 700, fontSize: '1.15rem', color: 'var(--crm-slate-900)' }}>
                             Administration Hub
                         </Typography>
-                        <Typography sx={{ fontSize: '0.82rem', color: '#64748b', mt: 0.25 }}>
+                        <Typography sx={{ fontSize: '0.82rem', color: 'var(--mui-palette-text-secondary)', mt: 0.25 }}>
                             Configure how Nandini CRM works for your organization. Signed in as{' '}
-                            <strong style={{ color: '#334155' }}>{user.username}</strong> ({user.role}).
+                            <strong style={{ color: 'var(--crm-slate-700)' }}>{user.username}</strong> ({user.role}).
                         </Typography>
                     </Box>
                 </Box>

@@ -45,11 +45,11 @@ const CONVERT_TABS = [
     {
         id: 'convert',
         label: 'Convert Lead',
-        icon: <TransformOutlinedIcon sx={{ fontSize: 18, color: '#2563eb' }} />,
+        icon: <TransformOutlinedIcon sx={{ fontSize: 18, color: 'var(--crm-text-blue-600)' }} />,
     },
 ];
 
-const sectionDividerSx = { my: 3.5, borderColor: '#f1f5f9' } as const;
+const sectionDividerSx = { my: 3.5, borderColor: 'var(--mui-palette-border-light)' } as const;
 
 const EMPTY_DEFAULTS: ConvertLeadFormValues = {
     existingOrganizationId: '',
@@ -169,8 +169,8 @@ export function ConvertLeadForm({ leadId, breadcrumbItems }: ConvertLeadFormProp
     if (loading) {
         return (
             <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', py: 12 }}>
-                <CircularProgress size={36} sx={{ color: '#2563eb' }} />
-                <Typography sx={{ ml: 2, color: '#64748b', fontSize: '0.9rem' }}>
+                <CircularProgress size={36} sx={{ color: 'var(--crm-text-blue-600)' }} />
+                <Typography sx={{ ml: 2, color: 'var(--mui-palette-text-secondary)', fontSize: '0.9rem' }}>
                     Loading lead data...
                 </Typography>
             </Box>

@@ -256,12 +256,12 @@ export function CrmLineItemsEditor({ value, onChange, error }: CrmLineItemsEdito
                 sx={{
                     p: 2.5,
                     borderRadius: '8px',
-                    backgroundColor: '#ffffff',
-                    border: '1px solid #cbd5e1',
+                    backgroundColor: 'var(--mui-palette-background-paper)',
+                    border: '1px solid var(--mui-palette-border-strong)',
                     mb: 4,
                 }}
             >
-                <Typography sx={{ fontSize: '0.92rem', fontWeight: 700, color: '#1e293b', mb: 2 }}>
+                <Typography sx={{ fontSize: '0.92rem', fontWeight: 700, color: 'var(--mui-palette-text-primary)', mb: 2 }}>
                     Line Items
                 </Typography>
 
@@ -291,12 +291,12 @@ export function CrmLineItemsEditor({ value, onChange, error }: CrmLineItemsEdito
                             sx={{
                                 p: 4,
                                 textAlign: 'center',
-                                backgroundColor: '#f8fafc',
-                                border: '1px dashed #cbd5e1',
+                                backgroundColor: 'var(--mui-palette-background-subtle)',
+                                border: '1px dashed var(--mui-palette-border-strong)',
                                 borderRadius: '8px',
                             }}
                         >
-                            <Typography sx={{ fontSize: '0.86rem', color: '#64748b', mb: 1.5 }}>
+                            <Typography sx={{ fontSize: '0.86rem', color: 'var(--mui-palette-text-secondary)', mb: 1.5 }}>
                                 No product line items added yet. Click below to add products or services.
                             </Typography>
                             <Button
@@ -304,13 +304,13 @@ export function CrmLineItemsEditor({ value, onChange, error }: CrmLineItemsEdito
                                 startIcon={<AddIcon />}
                                 onClick={handleAddLineItem}
                                 sx={{
-                                    backgroundColor: '#1e3a8a',
+                                    backgroundColor: 'var(--crm-fill-blue-900)',
                                     color: '#ffffff',
                                     textTransform: 'none',
                                     fontWeight: 700,
                                     fontSize: '0.82rem',
                                     px: 2.5,
-                                    '&:hover': { backgroundColor: '#1d4ed8' },
+                                    '&:hover': { backgroundColor: 'var(--crm-fill-blue-700)' },
                                 }}
                             >
                                 Add Product Line
@@ -326,13 +326,13 @@ export function CrmLineItemsEditor({ value, onChange, error }: CrmLineItemsEdito
                                     gap: 1.5,
                                     px: 1.5,
                                     py: 1,
-                                    backgroundColor: '#f1f5f9',
+                                    backgroundColor: 'var(--mui-palette-background-hover)',
                                     borderRadius: '6px 6px 0 0',
-                                    border: '1px solid #e2e8f0',
+                                    border: '1px solid var(--mui-palette-border-main)',
                                     borderBottom: 'none',
                                     fontSize: '0.74rem',
                                     fontWeight: 700,
-                                    color: '#475569',
+                                    color: 'var(--crm-slate-600)',
                                 }}
                             >
                                 <Box>Quantity</Box>
@@ -350,11 +350,11 @@ export function CrmLineItemsEditor({ value, onChange, error }: CrmLineItemsEdito
                                 <Box
                                     key={item.id || idx}
                                     sx={{
-                                        border: '1px solid #e2e8f0',
-                                        borderTop: idx > 0 ? 'none' : '1px solid #e2e8f0',
+                                        border: '1px solid var(--mui-palette-border-main)',
+                                        borderTop: idx > 0 ? 'none' : '1px solid var(--mui-palette-border-main)',
                                         p: 1.5,
-                                        backgroundColor: idx % 2 === 0 ? '#ffffff' : '#fafafa',
-                                        '&:hover': { backgroundColor: '#f8fafc' },
+                                        backgroundColor: idx % 2 === 0 ? 'var(--mui-palette-background-paper)' : 'var(--mui-palette-background-subtle)',
+                                        '&:hover': { backgroundColor: 'var(--mui-palette-background-subtle)' },
                                     }}
                                 >
                                     {/* Main numbers row */}
@@ -456,8 +456,8 @@ export function CrmLineItemsEditor({ value, onChange, error }: CrmLineItemsEdito
                                                 ...fieldSx,
                                                 '& .MuiInputBase-input': {
                                                     fontWeight: 600,
-                                                    color: '#1e293b',
-                                                    backgroundColor: '#f1f5f9',
+                                                    color: 'var(--mui-palette-text-primary)',
+                                                    backgroundColor: 'var(--mui-palette-background-hover)',
                                                 },
                                             }}
                                         />
@@ -473,7 +473,7 @@ export function CrmLineItemsEditor({ value, onChange, error }: CrmLineItemsEdito
                                                     ...fieldSx,
                                                     '& .MuiInputBase-input': {
                                                         fontWeight: 600,
-                                                        backgroundColor: '#f1f5f9',
+                                                        backgroundColor: 'var(--mui-palette-background-hover)',
                                                     },
                                                 }}
                                             />
@@ -502,8 +502,8 @@ export function CrmLineItemsEditor({ value, onChange, error }: CrmLineItemsEdito
                                                 ...fieldSx,
                                                 '& .MuiInputBase-input': {
                                                     fontWeight: 700,
-                                                    color: '#1e3a8a',
-                                                    backgroundColor: '#eff6ff',
+                                                    color: 'var(--crm-text-blue-900)',
+                                                    backgroundColor: 'var(--mui-palette-primary-soft)',
                                                 },
                                             }}
                                         />
@@ -517,7 +517,7 @@ export function CrmLineItemsEditor({ value, onChange, error }: CrmLineItemsEdito
                                                     sx={{
                                                         width: 32,
                                                         height: 32,
-                                                        backgroundColor: '#1e3a8a',
+                                                        backgroundColor: 'var(--crm-fill-blue-900)',
                                                         color: '#ffffff',
                                                         borderRadius: '4px',
                                                         '&:hover': { backgroundColor: '#b91c1c' },
@@ -536,11 +536,11 @@ export function CrmLineItemsEditor({ value, onChange, error }: CrmLineItemsEdito
                                             gridTemplateColumns: '1fr 1fr',
                                             gap: 2,
                                             pt: 1,
-                                            borderTop: '1px dashed #e2e8f0',
+                                            borderTop: '1px dashed var(--mui-palette-border-main)',
                                         }}
                                     >
                                         <Box>
-                                            <Typography sx={{ fontSize: '0.72rem', color: '#64748b', mb: 0.5 }}>
+                                            <Typography sx={{ fontSize: '0.72rem', color: 'var(--mui-palette-text-secondary)', mb: 0.5 }}>
                                                 Description:
                                             </Typography>
                                             <TextField
@@ -558,7 +558,7 @@ export function CrmLineItemsEditor({ value, onChange, error }: CrmLineItemsEdito
                                             />
                                         </Box>
                                         <Box>
-                                            <Typography sx={{ fontSize: '0.72rem', color: '#64748b', mb: 0.5 }}>
+                                            <Typography sx={{ fontSize: '0.72rem', color: 'var(--mui-palette-text-secondary)', mb: 0.5 }}>
                                                 Note:
                                             </Typography>
                                             <TextField
@@ -588,7 +588,7 @@ export function CrmLineItemsEditor({ value, onChange, error }: CrmLineItemsEdito
                     startIcon={<AddIcon />}
                     onClick={handleAddLineItem}
                     sx={{
-                        backgroundColor: '#1e3a8a',
+                        backgroundColor: 'var(--crm-fill-blue-900)',
                         color: '#ffffff',
                         textTransform: 'uppercase',
                         fontWeight: 700,
@@ -597,7 +597,7 @@ export function CrmLineItemsEditor({ value, onChange, error }: CrmLineItemsEdito
                         px: 2.2,
                         py: 0.8,
                         borderRadius: '4px',
-                        '&:hover': { backgroundColor: '#1d4ed8' },
+                        '&:hover': { backgroundColor: 'var(--crm-fill-blue-700)' },
                     }}
                 >
                     ADD PRODUCT LINE
@@ -618,29 +618,29 @@ export function CrmLineItemsEditor({ value, onChange, error }: CrmLineItemsEdito
                     sx={{
                         p: 2.5,
                         borderRadius: '8px',
-                        border: '1px solid #cbd5e1',
-                        backgroundColor: '#ffffff',
+                        border: '1px solid var(--mui-palette-border-strong)',
+                        backgroundColor: 'var(--mui-palette-background-paper)',
                     }}
                 >
-                    <Typography sx={{ fontSize: '0.85rem', fontWeight: 700, color: '#334155', mb: 2 }}>
+                    <Typography sx={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--crm-slate-700)', mb: 2 }}>
                         Overall Deal Adjustments
                     </Typography>
 
                     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
                         <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                            <Typography sx={{ fontSize: '0.8rem', color: '#64748b' }}>Total Gross:</Typography>
-                            <Typography sx={{ fontSize: '0.85rem', fontWeight: 600, color: '#1e293b' }}>
+                            <Typography sx={{ fontSize: '0.8rem', color: 'var(--mui-palette-text-secondary)' }}>Total Gross:</Typography>
+                            <Typography sx={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--mui-palette-text-primary)' }}>
                                 ₹{totalAmount.toLocaleString('en-IN')}
                             </Typography>
                         </Box>
                         <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                            <Typography sx={{ fontSize: '0.8rem', color: '#64748b' }}>Item Discounts:</Typography>
-                            <Typography sx={{ fontSize: '0.85rem', fontWeight: 600, color: '#dc2626' }}>
+                            <Typography sx={{ fontSize: '0.8rem', color: 'var(--mui-palette-text-secondary)' }}>Item Discounts:</Typography>
+                            <Typography sx={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--mui-palette-error-main)' }}>
                                 - ₹{totalDiscount.toLocaleString('en-IN')}
                             </Typography>
                         </Box>
                         <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                            <Typography sx={{ fontSize: '0.8rem', color: '#64748b' }}>Lump Sum Discount:</Typography>
+                            <Typography sx={{ fontSize: '0.8rem', color: 'var(--mui-palette-text-secondary)' }}>Lump Sum Discount:</Typography>
                             <TextField
                                 size="small"
                                 type="number"
@@ -659,45 +659,45 @@ export function CrmLineItemsEditor({ value, onChange, error }: CrmLineItemsEdito
                     sx={{
                         p: 2.5,
                         borderRadius: '8px',
-                        border: '1.5px solid #bfdbfe',
-                        backgroundColor: '#f8fafc',
+                        border: '1.5px solid var(--mui-palette-primary-softBorder)',
+                        backgroundColor: 'var(--mui-palette-background-subtle)',
                     }}
                 >
-                    <Typography sx={{ fontSize: '0.85rem', fontWeight: 700, color: '#1e3a8a', mb: 2 }}>
+                    <Typography sx={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--crm-text-blue-900)', mb: 2 }}>
                         Summary Breakdown
                     </Typography>
 
                     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.2 }}>
                         <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                            <Typography sx={{ fontSize: '0.8rem', color: '#64748b' }}>Total:</Typography>
+                            <Typography sx={{ fontSize: '0.8rem', color: 'var(--mui-palette-text-secondary)' }}>Total:</Typography>
                             <Typography sx={{ fontSize: '0.85rem', fontWeight: 600 }}>
                                 ₹{totalAmount.toLocaleString('en-IN')}
                             </Typography>
                         </Box>
                         <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                            <Typography sx={{ fontSize: '0.8rem', color: '#64748b' }}>Discount:</Typography>
-                            <Typography sx={{ fontSize: '0.85rem', fontWeight: 600, color: '#dc2626' }}>
+                            <Typography sx={{ fontSize: '0.8rem', color: 'var(--mui-palette-text-secondary)' }}>Discount:</Typography>
+                            <Typography sx={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--mui-palette-error-main)' }}>
                                 - ₹{totalDiscount.toLocaleString('en-IN')}
                             </Typography>
                         </Box>
                         <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                            <Typography sx={{ fontSize: '0.8rem', color: '#64748b' }}>Subtotal:</Typography>
+                            <Typography sx={{ fontSize: '0.8rem', color: 'var(--mui-palette-text-secondary)' }}>Subtotal:</Typography>
                             <Typography sx={{ fontSize: '0.85rem', fontWeight: 700 }}>
                                 ₹{subtotal.toLocaleString('en-IN')}
                             </Typography>
                         </Box>
                         <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                            <Typography sx={{ fontSize: '0.8rem', color: '#64748b' }}>Tax:</Typography>
-                            <Typography sx={{ fontSize: '0.85rem', fontWeight: 600, color: '#2563eb' }}>
+                            <Typography sx={{ fontSize: '0.8rem', color: 'var(--mui-palette-text-secondary)' }}>Tax:</Typography>
+                            <Typography sx={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--crm-text-blue-600)' }}>
                                 + ₹{totalTax.toLocaleString('en-IN')}
                             </Typography>
                         </Box>
                         <Divider sx={{ my: 0.5 }} />
                         <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                            <Typography sx={{ fontSize: '0.92rem', fontWeight: 800, color: '#0f172a' }}>
+                            <Typography sx={{ fontSize: '0.92rem', fontWeight: 800, color: 'var(--crm-slate-900)' }}>
                                 Grand Total:
                             </Typography>
-                            <Typography sx={{ fontSize: '1.15rem', fontWeight: 800, color: '#15803d' }}>
+                            <Typography sx={{ fontSize: '1.15rem', fontWeight: 800, color: 'var(--crm-green-700)' }}>
                                 ₹{grandTotal.toLocaleString('en-IN')}
                             </Typography>
                         </Box>
