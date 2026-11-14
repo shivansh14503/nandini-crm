@@ -11,14 +11,13 @@ import CancelOutlinedIcon from '@mui/icons-material/CancelOutlined';
 import ApartmentIcon from '@mui/icons-material/Apartment';
 import PersonOutlinedIcon from '@mui/icons-material/PersonOutlined';
 
-import { RecordLink } from '../common/RecordLink';
 import { CommonMasterView } from '../common/CommonMasterView';
 import { MasterHeaderActions } from '../common/MasterHeaderActions';
 import { buildExtendedSearchConfig } from '../common/buildExtendedSearchConfig';
 import { AppToast } from '../common/AppToast';
 import { RelatedModulesSidebar, RelatedRecordsTableView } from '../common/Drawer';
 import { RelatedSecondaryDrawer, type SecondaryDrawerEntity } from '../common/RelatedSecondaryDrawer';
-import type { DataTableColumn, DataTableFilterItem } from '../common/DataTable';
+import { documentNumberColumn, type DataTableColumn, type DataTableFilterItem } from '../common/DataTable';
 import { ROUTES } from '@/config/constants';
 import { useRelatedModulesForEntity } from '@/config/relatedModules.config';
 import type { Quotation } from '@/types/quotation.types';
@@ -238,30 +237,16 @@ export function QuotationsMasterView() {
     // ── Columns ───────────────────────────────────────────────────────────────
     const columns: DataTableColumn<Quotation>[] = useMemo(
         () => [
-            {
+            documentNumberColumn<Quotation>({
                 id: 'quotationCode',
-                label: 'QUOTE CODE',
-                sortable: true,
-                minWidth: 150,
-                render: (row) => (
-                    <RecordLink
-                        href={ROUTES.QUOTATION_DETAIL(row.id)}
-                        onOpen={() => setDrawerQuotationId(row.id)}
-                        sx={{
-                            fontSize: '0.82rem',
-                            fontWeight: 700,
-                            color: '#1d4ed8',
-                            fontFamily: 'monospace',
-                            cursor: 'pointer',
-                            '&:hover': { textDecoration: 'underline' },
-                        }}
-                    >
-                        {row.quotationCode}
-                    </RecordLink>
-                ),
-            },
+                label: 'QUOTATION NO.',
+                getNumber: (row) => row.quotationCode,
+                getHref: (row) => ROUTES.QUOTATION_DETAIL(row.id),
+                onOpen: (row) => setDrawerQuotationId(row.id),
+            }),
             {
                 id: 'quotationSubject',
+                fieldKey: 'quotationTitle',
                 label: 'SUBJECT',
                 sortable: false,
                 minWidth: 220,
@@ -348,6 +333,7 @@ export function QuotationsMasterView() {
             },
             {
                 id: 'quoteDate',
+                fieldKey: 'quotationDate',
                 label: 'DATE',
                 sortable: true,
                 minWidth: 120,
@@ -370,6 +356,7 @@ export function QuotationsMasterView() {
             },
             {
                 id: 'status',
+                fieldKey: 'quoteStage',
                 label: 'STATUS',
                 sortable: true,
                 minWidth: 110,

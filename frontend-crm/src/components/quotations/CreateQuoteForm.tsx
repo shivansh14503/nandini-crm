@@ -15,7 +15,8 @@ import { type BreadcrumbItem } from '../common/AppBreadcrumbs';
 import { AppToast } from '../common/AppToast';
 import { CommonFormLayout } from '../common/CommonFormLayout';
 import { type FormTabDefinition } from '../common/Drawer';
-import { useRhfForm, withDropdownDefaults } from '@/components/forms';
+import { useRhfForm, withDefaultAssignee, withDropdownDefaults } from '@/components/forms';
+import { useAuth } from '@/context/AuthContext';
 import { getFormConfigs } from '@/services/masterData.store';
 import { findCategory } from '@/utils/formConfig';
 import { PAYMENT_TERMS_DESCRIPTIONS, TERMS_TEMPLATE_DESCRIPTIONS } from '@/types/quotation.types';
@@ -220,6 +221,7 @@ export function CreateQuoteForm({
     breadcrumbItems,
 }: CreateQuoteFormProps) {
     const router = useRouter();
+    const username = useAuth().user?.username;
     const isEdit = mode !== 'create';
     const [quotation, setQuotation] = useState<Quotation | null>(null);
     const [opportunity, setOpportunity] = useState<Opportunity | null>(null);
@@ -236,6 +238,7 @@ export function CreateQuoteForm({
             module: 'quotations',
             defaultValues: { ...EMPTY_DEFAULTS, ...initialData },
             dropdownDefaults: { enabled: mode === 'create', keep: initialData },
+            assigneeField: 'assignedTo',
         });
 
     const { reset, handleSubmit, formState } = methods;
@@ -321,10 +324,14 @@ export function CreateQuoteForm({
                     setAddressPrepopulated(false);
                 }
 
-                reset({
-                    ...withAdminQuoteDefaults(defaults, initialData),
-                    ...initialData,
-                });
+                // Assigned to follows the opportunity's owner; without one, the logged-in user.
+                reset(
+                    withDefaultAssignee(
+                        { ...withAdminQuoteDefaults(defaults, initialData), ...initialData },
+                        'assignedTo',
+                        username
+                    )
+                );
             })
             .catch((err) => {
                 if (active) {
@@ -341,7 +348,7 @@ export function CreateQuoteForm({
         return () => {
             active = false;
         };
-    }, [isEdit, quotationId, opportunityId, initialData, reset, router, showToast]);
+    }, [isEdit, quotationId, opportunityId, initialData, reset, router, showToast, username]);
 
     const defaultBreadcrumbs: BreadcrumbItem[] = isEdit
         ? [

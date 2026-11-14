@@ -92,6 +92,7 @@ export default function ContactForm({
         module: 'contacts',
         defaultValues: { ...DEFAULT_FORM, ...initialData },
         dropdownDefaults: { enabled: mode === 'create', keep: initialData },
+        assigneeField: 'assignedTo',
     });
     const { reset, watch, formState } = methods;
     const { isDirty, isSubmitting } = formState;

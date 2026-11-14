@@ -192,13 +192,16 @@ export function DataTableToolbar({
                     )}
 
                     {onColumnClick && (
-                        <IconButton
-                            size="small"
-                            onClick={(e) => onColumnClick(e.currentTarget)}
-                            sx={{ border: '1px solid #e2e8f0', borderRadius: '6px', width: 32, height: 32, color: '#64748b' }}
-                        >
-                            <ViewColumnIcon sx={{ fontSize: 16 }} />
-                        </IconButton>
+                        <Tooltip title="Modify Columns">
+                            <IconButton
+                                size="small"
+                                aria-label="Modify Columns"
+                                onClick={(e) => onColumnClick(e.currentTarget)}
+                                sx={{ border: '1px solid #e2e8f0', borderRadius: '6px', width: 32, height: 32, color: '#64748b' }}
+                            >
+                                <ViewColumnIcon sx={{ fontSize: 16 }} />
+                            </IconButton>
+                        </Tooltip>
                     )}
 
                     {/* Search within table */}
@@ -378,9 +381,10 @@ export function DataTableToolbar({
                 {extraActions}
 
                 {onColumnClick && (
-                    <Tooltip title="Manage Columns">
+                    <Tooltip title="Modify Columns">
                         <IconButton
                             size="small"
+                            aria-label="Modify Columns"
                             onClick={(e) => onColumnClick(e.currentTarget)}
                             sx={{
                                 color: '#64748b',

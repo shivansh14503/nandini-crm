@@ -562,6 +562,7 @@ export function OrganizationsMasterView() {
             },
             {
                 id: 'billingStreet',
+                fieldKey: 'billingAddress',
                 category: 'more',
                 label: 'BILLING STREET',
                 sortable: true,

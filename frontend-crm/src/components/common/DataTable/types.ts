@@ -18,6 +18,18 @@ export interface DataTableColumn<T> {
     category?: 'basic' | 'more';
     /** Cannot be hidden from the column manager (e.g. the primary Name/Code column). */
     locked?: boolean;
+    /**
+     * Form field (FormFieldDefinition.fieldKey) this column already shows, when it differs from `id`. Keeps the
+     * column manager from adding a second column for the same field.
+     */
+    fieldKey?: string;
+    /** Column manager heading for columns generated from form fields (the form section label). */
+    group?: string;
+    /**
+     * Frozen at the table's left edge while it scrolls sideways. Set by the column manager (pins come first in the
+     * column list); not meant to be set in column definitions.
+     */
+    pinned?: boolean;
 }
 
 export interface DataTableFilterItem<TFilter extends string = string> {

@@ -5,7 +5,6 @@ import { useRouter } from 'next/navigation';
 import { Box, Chip, Typography } from '@mui/material';
 import GroupOutlinedIcon from '@mui/icons-material/GroupOutlined';
 import LocalFireDepartmentOutlinedIcon from '@mui/icons-material/LocalFireDepartmentOutlined';
-import LocalFireDepartmentIcon from '@mui/icons-material/LocalFireDepartment';
 import FiberNewOutlinedIcon from '@mui/icons-material/FiberNewOutlined';
 import TodayOutlinedIcon from '@mui/icons-material/TodayOutlined';
 import AccountCircleOutlinedIcon from '@mui/icons-material/AccountCircleOutlined';
@@ -22,7 +21,7 @@ import { AppToast } from '../common/AppToast';
 import { DataImportModal } from '../common/import';
 import { RelatedModulesSidebar, RelatedRecordsTableView } from '../common/Drawer';
 import { RelatedSecondaryDrawer, type SecondaryDrawerEntity } from '../common/RelatedSecondaryDrawer';
-import type { DataTableColumn, DataTableFilterItem } from '../common/DataTable';
+import { documentNumberColumn, type DataTableColumn, type DataTableFilterItem } from '../common/DataTable';
 import { ROUTES } from '@/config/constants';
 import { useAuth } from '@/context/AuthContext';
 import { useRelatedModulesForEntity } from '@/config/relatedModules.config';
@@ -30,6 +29,10 @@ import type { Lead } from '@/types/lead.types';
 import { useLeads, useBulkDeleteLeads } from '@/hooks/queries';
 import type { LeadFilterTab } from './master';
 import { LeadDetailDrawer } from './LeadDetailDrawer';
+import { formatDateTime } from '@/utils/date';
+import { formatPhoneDisplay } from '@/utils/phone';
+
+const plainCellSx = { fontSize: '0.78rem', color: '#334155' } as const;
 
 
 /** Stable empty list while the first page loads (keeps memoized filters from recomputing). */
@@ -46,8 +49,9 @@ export function LeadsMasterView() {
     const [selectedIds, setSelectedIds] = useState<string[]>([]);
     const [page, setPage] = useState(0);
     const [rowsPerPage, setRowsPerPage] = useState(10);
-    const [sortField, setSortField] = useState<string>('name');
-    const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
+    // Newest leads first by default.
+    const [sortField, setSortField] = useState<string>('createdAt');
+    const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
     // Tracked by id so the drawer always shows the cached copy and closes if the lead is deleted.
     const [drawerLeadId, setDrawerLeadId] = useState<string | null>(null);
     const selectedDrawerLead = useMemo(
@@ -206,9 +210,16 @@ export function LeadsMasterView() {
     // ── Declarative Column Definitions ────────────────────────────────────────
     const columns: DataTableColumn<Lead>[] = useMemo(
         () => [
+            documentNumberColumn<Lead>({
+                id: 'leadCode',
+                label: 'LEAD NUMBER',
+                getNumber: (l) => l.leadCode,
+                getHref: (l) => ROUTES.LEAD_DETAIL(l.id),
+                onOpen: (l) => setDrawerLeadId(l.id),
+            }),
             {
                 id: 'name',
-                label: 'LEAD NAME',
+                label: 'NAME',
                 sortable: true,
                 minWidth: 200,
                 render: (l) => (
@@ -229,76 +240,24 @@ export function LeadsMasterView() {
                                 {l.name}
                             </RecordLink>
                         </Box>
-                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.8, pl: 3 }}>
-                            <Chip
-                                label={l.leadCode}
-                                size="small"
-                                sx={{
-                                    height: 18,
-                                    fontSize: '0.62rem',
-                                    fontWeight: 700,
-                                    backgroundColor: '#f1f5f9',
-                                    color: '#475569',
-                                    fontFamily: 'monospace',
-                                }}
-                            />
-                            {l.designation && (
-                                <Typography sx={{ fontSize: '0.7rem', color: '#64748b' }} noWrap>
-                                    {l.designation}
-                                </Typography>
-                            )}
-                        </Box>
-                    </Box>
-                ),
-            },
-            {
-                id: 'organizationName',
-                label: 'ORGANIZATION',
-                sortable: true,
-                minWidth: 180,
-                render: (l) => (
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.8 }}>
-                        <ApartmentIcon sx={{ fontSize: 15, color: '#64748b', flexShrink: 0 }} />
-                        <Box>
-                            <Typography sx={{ fontSize: '0.8rem', color: '#1e293b', fontWeight: 600 }}>
-                                {l.organizationName || 'Individual Prospect'}
+                        {l.designation && (
+                            <Typography sx={{ fontSize: '0.7rem', color: '#64748b', pl: 3 }} noWrap>
+                                {l.designation}
                             </Typography>
-                            {l.primaryCity && (
-                                <Typography sx={{ fontSize: '0.7rem', color: '#64748b' }}>
-                                    {l.primaryCity}{l.primaryState ? `, ${l.primaryState}` : ''}
-                                </Typography>
-                            )}
-                        </Box>
-                    </Box>
-                ),
-            },
-            {
-                id: 'mobile',
-                label: 'CONTACT INFO',
-                sortable: true,
-                minWidth: 160,
-                render: (l) => (
-                    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.4 }}>
-                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.6 }}>
-                            <PhoneOutlinedIcon sx={{ fontSize: 14, color: '#64748b' }} />
-                            <Typography sx={{ fontSize: '0.78rem', color: '#334155', fontWeight: 600 }}>
-                                {l.mobile || l.otherPhone || '-'}
-                            </Typography>
-                        </Box>
-                        {l.emailAddresses?.[0]?.email && (
-                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.6 }}>
-                                <EmailOutlinedIcon sx={{ fontSize: 13, color: '#94a3b8' }} />
-                                <Typography sx={{ fontSize: '0.74rem', color: '#64748b' }} noWrap>
-                                    {l.emailAddresses[0].email}
-                                </Typography>
-                            </Box>
                         )}
                     </Box>
                 ),
             },
             {
+                id: 'leadSource',
+                label: 'LEAD SOURCE',
+                sortable: true,
+                minWidth: 140,
+                render: (l) => <Typography sx={plainCellSx}>{l.leadSource || '-'}</Typography>,
+            },
+            {
                 id: 'productCategory',
-                label: 'PRODUCT / SOLUTION',
+                label: 'PRODUCT CATEGORY',
                 sortable: false,
                 minWidth: 170,
                 render: (l) => (
@@ -326,30 +285,25 @@ export function LeadsMasterView() {
                 ),
             },
             {
-                id: 'leadType',
-                label: 'LEAD TYPE',
+                id: 'organizationName',
+                label: 'ORGANIZATION NAME',
                 sortable: true,
-                minWidth: 110,
-                render: (l) => {
-                    const isHot = l.leadType === 'Hot';
-                    const isWarm = l.leadType === 'Warm';
-
-                    return (
-                        <Chip
-                            icon={isHot ? <LocalFireDepartmentIcon sx={{ fontSize: '13px !important', color: '#dc2626 !important' }} /> : undefined}
-                            label={l.leadType || 'Normal'}
-                            size="small"
-                            sx={{
-                                height: 22,
-                                fontSize: '0.72rem',
-                                fontWeight: 700,
-                                backgroundColor: isHot ? '#fee2e2' : isWarm ? '#fef3c7' : '#f1f5f9',
-                                color: isHot ? '#991b1b' : isWarm ? '#92400e' : '#475569',
-                                border: isHot ? '1px solid #fecaca' : isWarm ? '1px solid #fde68a' : '1px solid #e2e8f0',
-                            }}
-                        />
-                    );
-                },
+                minWidth: 180,
+                render: (l) => (
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.8 }}>
+                        <ApartmentIcon sx={{ fontSize: 15, color: '#64748b', flexShrink: 0 }} />
+                        <Box>
+                            <Typography sx={{ fontSize: '0.8rem', color: '#1e293b', fontWeight: 600 }}>
+                                {l.organizationName || 'Individual Prospect'}
+                            </Typography>
+                            {l.primaryCity && (
+                                <Typography sx={{ fontSize: '0.7rem', color: '#64748b' }}>
+                                    {l.primaryCity}{l.primaryState ? `, ${l.primaryState}` : ''}
+                                </Typography>
+                            )}
+                        </Box>
+                    </Box>
+                ),
             },
             {
                 id: 'status',
@@ -404,8 +358,50 @@ export function LeadsMasterView() {
                 },
             },
             {
+                // The lead's email list; the primary address (else the first) is shown.
+                id: 'emailAddresses',
+                label: 'EMAIL',
+                sortable: false,
+                minWidth: 190,
+                render: (l) => {
+                    const email = (l.emailAddresses?.find((e) => e.isPrimary) ?? l.emailAddresses?.[0])?.email;
+                    return (
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.6 }}>
+                            {email && <EmailOutlinedIcon sx={{ fontSize: 14, color: '#94a3b8' }} />}
+                            <Typography sx={plainCellSx}>{email || '-'}</Typography>
+                        </Box>
+                    );
+                },
+            },
+            {
+                id: 'mobile',
+                label: 'MOBILE',
+                sortable: true,
+                minWidth: 140,
+                render: (l) => {
+                    const phone = l.mobile || l.otherPhone;
+                    return (
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.6 }}>
+                            {phone && <PhoneOutlinedIcon sx={{ fontSize: 14, color: '#64748b' }} />}
+                            <Typography sx={{ ...plainCellSx, fontWeight: 600 }}>
+                                {phone ? formatPhoneDisplay(phone) || phone : '-'}
+                            </Typography>
+                        </Box>
+                    );
+                },
+            },
+            {
+                // Leads keep no remarks log: "Add Description" is the action-items note updated on each follow-up.
+                id: 'addDescription',
+                label: 'LATEST REMARKS',
+                sortable: true,
+                minWidth: 220,
+                width: 280,
+                render: (l) => <Typography sx={plainCellSx}>{l.addDescription || '-'}</Typography>,
+            },
+            {
                 id: 'nextFollowupDate',
-                label: 'NEXT FOLLOWUP',
+                label: 'NEXT FOLLOWUP DATE',
                 sortable: true,
                 minWidth: 150,
                 render: (l) => {
@@ -460,7 +456,7 @@ export function LeadsMasterView() {
             },
             {
                 id: 'assignedTo',
-                label: 'ASSIGNED TO',
+                label: 'USER',
                 sortable: true,
                 minWidth: 130,
                 render: (l) => (
@@ -468,6 +464,13 @@ export function LeadsMasterView() {
                         {l.assignedTo || '-'}
                     </Typography>
                 ),
+            },
+            {
+                id: 'createdAt',
+                label: 'DATE CREATED',
+                sortable: true,
+                minWidth: 170,
+                render: (l) => <Typography sx={plainCellSx}>{formatDateTime(l.createdAt) || '-'}</Typography>,
             },
         ],
         [todayStr]

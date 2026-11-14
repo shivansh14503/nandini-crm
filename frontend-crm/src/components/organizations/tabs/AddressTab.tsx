@@ -37,6 +37,15 @@ type Side = 'billing' | 'shipping';
 
 /** Country + State, City + PIN side by side within each address column; one column on phones. */
 const ADDRESS_GRID_COLUMNS = { sm: 2 };
+/** Heading row of each address column. Same fixed height on both sides, so the fields below line up. */
+const headerRowSx = {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: 1,
+    minHeight: 32,
+} as const;
 
 /** Field keys per column; street is stored in both `*Street` and `*Address`, which the form keeps in sync. */
 const KEYS = {
@@ -186,22 +195,16 @@ export function AddressTab({ form, set, handleCopyAddressToggle }: AddressTabPro
             >
                 {/* ── LEFT COLUMN: Billing Address ─────────────────── */}
                 <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5 }}>
-                    <SectionLabel icon={<PlaceOutlinedIcon sx={{ fontSize: 18 }} />} label="Billing Address" />
+                    <Box sx={headerRowSx}>
+                        <SectionLabel icon={<PlaceOutlinedIcon sx={{ fontSize: 18 }} />} label="Billing Address" sx={{ mb: 0 }} />
+                    </Box>
                     {renderColumn('billing')}
                 </Box>
 
                 {/* ── RIGHT COLUMN: Shipping Address ────────────────── */}
                 <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5 }}>
-                    <Box
-                        sx={{
-                            display: 'flex',
-                            justifyContent: 'space-between',
-                            alignItems: 'center',
-                            flexWrap: 'wrap',
-                            gap: 1,
-                        }}
-                    >
-                        <SectionLabel icon={<LocalShippingOutlinedIcon sx={{ fontSize: 18 }} />} label="Shipping Address" />
+                    <Box sx={headerRowSx}>
+                        <SectionLabel icon={<LocalShippingOutlinedIcon sx={{ fontSize: 18 }} />} label="Shipping Address" sx={{ mb: 0 }} />
                         {!isView && (
                             <FormControlLabel
                                 control={

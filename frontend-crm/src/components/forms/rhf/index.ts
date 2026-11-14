@@ -11,6 +11,7 @@ export * from './RhfAssignedUserCard';
 export * from './RhfToggleGroupCard';
 export * from './RhfCheckbox';
 export * from './RhfChipGroup';
+export * from './RhfMultiAutocomplete';
 export * from './RhfDateTimeField';
 export * from './RhfEmailList';
 export * from './useRhfForm';

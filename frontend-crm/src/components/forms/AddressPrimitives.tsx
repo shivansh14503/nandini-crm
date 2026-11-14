@@ -12,6 +12,7 @@ import {
 import { FormField, fieldSx } from './FormField';
 import { FIELD_MAX_LENGTH, type FieldSize } from './fieldSizing';
 import { ReadOnlyField } from './ReadOnlyField';
+import { useTabSelect } from './useTabSelect';
 import { useFormMode } from '@/context/FormModeContext';
 import {
     COUNTRY_OPTIONS,
@@ -133,6 +134,7 @@ export function CountrySelectField({
     size = 'md',
 }: CountrySelectFieldProps) {
     const { mode } = useFormMode();
+    const tabSelect = useTabSelect();
     if (mode === 'view') {
         return <ReadOnlyField label={label} value={getCountryNameByCode(value)} hideWhenEmpty sx={{ mb: 2 }} />;
     }
@@ -142,6 +144,7 @@ export function CountrySelectField({
     return (
         <FormField name={name} label={label} required={required} hint={hint} size={size}>
             <Autocomplete<CountryMasterItem, false, false, false>
+                {...tabSelect}
                 options={COUNTRY_OPTIONS as CountryMasterItem[]}
                 value={selected}
                 onChange={(_, option) => onChange(option?.iso2Code ?? '')}
@@ -149,7 +152,6 @@ export function CountrySelectField({
                 isOptionEqualToValue={(option, v) => option.iso2Code === v.iso2Code}
                 filterOptions={filterCountries}
                 disabled={disabled}
-                autoHighlight
                 size="small"
                 renderOption={(props, option) => {
                     const { key, ...rest } = props as React.HTMLAttributes<HTMLLIElement> & { key: string };
@@ -205,12 +207,21 @@ export function StateRegionField({
 }: StateRegionFieldProps) {
     const { mode } = useFormMode();
     const [manualEntry, setManualEntry] = React.useState(false);
+    const options = getStateOptionLabelsForCountry(countryIso2OrDefault(countryValue));
+    const hasSubdivisions = options.length > 1;
+    // A list field with a "Not listed" escape: Tab picks the highlighted state, never "Not listed" (then the
+    // typed text stays). Once the user chose to type a region manually, Tab never picks.
+    const tabSelect = useTabSelect({
+        freeText: manualEntry || !hasSubdivisions,
+        skipLabels: STATE_TAB_SKIP,
+        onInputChange: (_, next, reason) => {
+            if (reason === 'input' || reason === 'clear') onChange(next);
+        },
+    });
     if (mode === 'view') {
         return <ReadOnlyField label={label} value={value} hideWhenEmpty sx={{ mb: 2 }} />;
     }
 
-    const options = getStateOptionLabelsForCountry(countryIso2OrDefault(countryValue));
-    const hasSubdivisions = options.length > 1;
     const resolvedPlaceholder =
         placeholder ??
         (manualEntry || !hasSubdivisions ? 'Type state / province / region' : 'Search or select state / region');
@@ -218,6 +229,7 @@ export function StateRegionField({
     return (
         <FormField name={name} label={label} required={required} hint={hint} size={size}>
             <Autocomplete<string, false, false, true>
+                {...tabSelect}
                 freeSolo
                 // Free text hides MUI's dropdown arrow; show it (as on Country) whenever there's a list to open.
                 forcePopupIcon={hasSubdivisions}
@@ -231,9 +243,6 @@ export function StateRegionField({
                         return;
                     }
                     onChange(next ?? '');
-                }}
-                onInputChange={(_, next, reason) => {
-                    if (reason === 'input' || reason === 'clear') onChange(next);
                 }}
                 // Diacritic-insensitive search ('haryana' finds 'Haryāna'); 'Not listed' always stays available.
                 filterOptions={(opts, state) =>
@@ -257,6 +266,8 @@ export function StateRegionField({
         </FormField>
     );
 }
+
+const STATE_TAB_SKIP = [STATE_NOT_LISTED] as const;
 
 // ── City ──────────────────────────────────────────────────────────────────────
 
@@ -293,6 +304,13 @@ export function CityAutocompleteField({
     size = 'md',
 }: CityAutocompleteFieldProps) {
     const { mode } = useFormMode();
+    // Any city can be typed: Tab keeps the typed text unless the user arrowed to a suggestion.
+    const tabSelect = useTabSelect({
+        freeText: true,
+        onInputChange: (_, next, reason) => {
+            if (reason === 'input' || reason === 'clear') onChange(next);
+        },
+    });
     if (mode === 'view') {
         return <ReadOnlyField label={label} value={value} hideWhenEmpty sx={{ mb: 2 }} />;
     }
@@ -302,6 +320,7 @@ export function CityAutocompleteField({
     return (
         <FormField name={name} label={label} required={required} hint={hint} size={size}>
             <Autocomplete<string, false, false, true>
+                {...tabSelect}
                 freeSolo
                 // Free text hides MUI's dropdown arrow; show it (as on Country) whenever there are suggestions.
                 forcePopupIcon={suggestions.length > 0}
@@ -309,9 +328,6 @@ export function CityAutocompleteField({
                 value={value || null}
                 inputValue={value ?? ''}
                 onChange={(_, next) => onChange(next ?? '')}
-                onInputChange={(_, next, reason) => {
-                    if (reason === 'input' || reason === 'clear') onChange(next);
-                }}
                 filterOptions={(opts, state) =>
                     state.inputValue ? opts.filter((o) => matchesSearch(o, state.inputValue)) : opts
                 }

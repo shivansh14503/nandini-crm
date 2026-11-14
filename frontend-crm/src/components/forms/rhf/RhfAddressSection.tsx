@@ -41,6 +41,16 @@ export interface RhfAddressSectionProps<T extends FieldValues> {
 }
 
 const columnSx = { display: 'flex', flexDirection: 'column', gap: 2 } as const;
+/** Heading row of each address column. Same fixed height on both sides, so the fields below line up. */
+const headerRowSx = {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    flexWrap: 'wrap',
+    gap: 1,
+    minHeight: 32,
+    mb: 1,
+} as const;
 
 /** Country + State, City + PIN side by side within each address column; one column on phones. */
 const ADDRESS_GRID_COLUMNS = { sm: 2 };
@@ -167,11 +177,13 @@ export function RhfAddressSection<T extends FieldValues>({
         >
             {/* ── Left Column: Billing / Primary Address ── */}
             <Box sx={columnSx}>
-                <SectionLabel
-                    icon={<PlaceOutlinedIcon sx={{ fontSize: 18, color: '#2563eb' }} />}
-                    label={billingTitle}
-                    sx={{ mb: 1 }}
-                />
+                <Box sx={headerRowSx}>
+                    <SectionLabel
+                        icon={<PlaceOutlinedIcon sx={{ fontSize: 18, color: '#2563eb' }} />}
+                        label={billingTitle}
+                        sx={{ mb: 0 }}
+                    />
+                </Box>
                 <FormGrid columns={ADDRESS_GRID_COLUMNS}>
                     <RhfCountrySelect<T> name={billingFields.country} required={required} disabled={disabled} />
                     <RhfStateRegionField<T>
@@ -211,21 +223,16 @@ export function RhfAddressSection<T extends FieldValues>({
 
             {/* ── Right Column: Shipping / Other Address ── */}
             <Box sx={columnSx}>
-                <Box
-                    sx={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'space-between',
-                        flexWrap: 'wrap',
-                        gap: 1,
-                        mb: 1,
-                    }}
-                >
+                <Box sx={headerRowSx}>
                     <SectionLabel
                         icon={<LocalShippingOutlinedIcon sx={{ fontSize: 18, color: '#64748b' }} />}
                         label={shippingTitle}
+                        sx={{ mb: 0 }}
                     />
-                    <RhfCheckbox<T> name={copyFieldName} label={copyLabel} />
+                    {/* The checkbox's own bottom margin would make this row taller than the left one. */}
+                    <Box sx={{ display: 'flex', alignItems: 'center', '& .MuiFormControlLabel-root': { mb: 0 } }}>
+                        <RhfCheckbox<T> name={copyFieldName} label={copyLabel} />
+                    </Box>
                 </Box>
 
                 <FormGrid columns={ADDRESS_GRID_COLUMNS}>

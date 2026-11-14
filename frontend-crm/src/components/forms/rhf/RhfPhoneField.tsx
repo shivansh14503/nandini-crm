@@ -6,6 +6,7 @@ import { useController, useFormContext, type FieldValues } from 'react-hook-form
 import { FormField, fieldSx } from '../FormField';
 import { FieldNotice } from '../FieldNotice';
 import { resolveFieldSize } from '../fieldSizing';
+import { useTabSelect } from '../useTabSelect';
 import type { RhfTextFieldProps } from './RhfTextField';
 import {
     DEFAULT_PHONE_COUNTRY_ISO2,
@@ -73,6 +74,8 @@ export function RhfPhoneField<T extends FieldValues>({
     const { field, fieldState } = useController<T>({ name });
     const inputRef = React.useRef<HTMLInputElement | null>(null);
     const [open, setOpen] = React.useState(false);
+    // Typing "ind" + Tab picks the highlighted country; the pick then focuses the number input.
+    const tabSelect = useTabSelect({ onClose: () => setOpen(false) });
     const { control } = useFormContext<T>();
     // Country chosen in any other phone field of this form; empty untouched fields default to it.
     const sharedIso2 = React.useSyncExternalStore(
@@ -178,16 +181,15 @@ export function RhfPhoneField<T extends FieldValues>({
                         startAdornment: (
                             <InputAdornment position="start" sx={{ mr: 0.5, ml: 0 }}>
                                 <Autocomplete<PhoneCountry, false, true, false>
+                                    {...tabSelect}
                                     options={PHONE_COUNTRIES as PhoneCountry[]}
                                     value={country}
                                     disableClearable
-                                    autoHighlight
                                     selectOnFocus
                                     openOnFocus
                                     disabled={disabled}
                                     open={open}
                                     onOpen={() => setOpen(true)}
-                                    onClose={() => setOpen(false)}
                                     onChange={handleCountryChange}
                                     isOptionEqualToValue={(a, b) => a.iso2 === b.iso2}
                                     getOptionLabel={(c) => `${c.iso3} ${c.dialCode}`}

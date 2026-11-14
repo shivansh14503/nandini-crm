@@ -15,6 +15,7 @@ import type { ZodType } from 'zod';
 import { getFirstErrorMessage } from '@/validations';
 import { focusFormField } from '@/utils/formFocus';
 import { getFormConfigs } from '@/services/masterData.store';
+import { useAuth } from '@/context/AuthContext';
 import type { CrmModuleKey } from '@/types/formConfig.types';
 import { moduleFields, validateConfiguredFields, type ConfigValidationIssue } from '@/utils/formConfig';
 import { pastDateIssues, type PastDateField } from '@/utils/pastDates';
@@ -51,6 +52,19 @@ export interface UseRhfFormOptions<T extends FieldValues> {
      * automatically. Values equal to the form's loaded defaults (an existing record's own dates) still pass.
      */
     noPastDates?: PastDateField[];
+    /**
+     * "Assigned to" field that starts as the logged-in user on new records (when `dropdownDefaults.enabled`),
+     * unless `defaultValues` already name someone (e.g. carried over from a source record).
+     */
+    assigneeField?: Path<T>;
+}
+
+/** `values` with `field` set to `username` when it is empty. */
+export function withDefaultAssignee<V>(values: V, field: string | undefined, username: string | undefined): V {
+    if (!field || !username) return values;
+    const current = (values as Record<string, unknown>)[field];
+    if (typeof current === 'string' && current.trim()) return values;
+    return { ...values, [field]: username };
 }
 
 export interface UseRhfFormReturn<T extends FieldValues> {
@@ -73,11 +87,15 @@ export function useRhfForm<T extends FieldValues>({
     dropdownDefaults,
     extraRules,
     noPastDates,
+    assigneeField,
 }: UseRhfFormOptions<T>): UseRhfFormReturn<T> {
+    const { user } = useAuth();
     // Read once, like useForm's own defaultValues. A configuration loading later is applied by useDropdownDefaults.
-    const [initialValues] = useState(() =>
-        module && dropdownDefaults?.enabled ? withDropdownDefaults(getFormConfigs(), module, defaultValues, dropdownDefaults.keep) : defaultValues,
-    );
+    const [initialValues] = useState(() => {
+        if (!dropdownDefaults?.enabled) return defaultValues;
+        const withDropdowns = module ? withDropdownDefaults(getFormConfigs(), module, defaultValues, dropdownDefaults.keep) : defaultValues;
+        return withDefaultAssignee(withDropdowns, assigneeField, user?.username);
+    });
     // The resolver reads the form's current defaults (updated by `reset` when an existing record loads), so an
     // existing record's own past dates still validate. The ref is read only when validation runs, never in render.
     const formRef = useRef<UseFormReturn<T> | null>(null);
