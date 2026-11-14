@@ -15,6 +15,7 @@ import ApartmentIcon from '@mui/icons-material/Apartment';
 import CalendarMonthOutlinedIcon from '@mui/icons-material/CalendarMonthOutlined';
 import { RecordLink } from '../common/RecordLink';
 import { CommonMasterView } from '../common/CommonMasterView';
+import { useTableFilter } from '../common/TableFilter';
 import { MasterHeaderActions } from '../common/MasterHeaderActions';
 import { buildExtendedSearchConfig } from '../common/buildExtendedSearchConfig';
 import { AppToast } from '../common/AppToast';
@@ -52,6 +53,17 @@ export function LeadsMasterView() {
     // Newest leads first by default.
     const [sortField, setSortField] = useState<string>('createdAt');
     const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
+    const tableFilter = useTableFilter<Lead>({
+        module: 'leads',
+        rows: leads,
+        onSortChange: (s) => {
+            setSortField(s.field);
+            setSortOrder(s.order);
+        },
+        onChange: () => setPage(0),
+    });
+    /** Leads left by the Filter dialog: the tabs, search and counts work on these. */
+    const baseLeads = tableFilter.filteredRows;
     // Tracked by id so the drawer always shows the cached copy and closes if the lead is deleted.
     const [drawerLeadId, setDrawerLeadId] = useState<string | null>(null);
     const selectedDrawerLead = useMemo(
@@ -82,13 +94,13 @@ export function LeadsMasterView() {
                 id: 'all',
                 label: 'All Leads',
                 icon: <GroupOutlinedIcon sx={{ fontSize: 16 }} />,
-                count: leads.length,
+                count: baseLeads.length,
             },
             {
                 id: 'hot',
                 label: 'Hot Leads',
                 icon: <LocalFireDepartmentOutlinedIcon sx={{ fontSize: 16 }} />,
-                count: leads.filter((l) => l.leadType === 'Hot').length,
+                count: baseLeads.filter((l) => l.leadType === 'Hot').length,
                 activeColor: '#dc2626',
                 activeBgColor: '#fef2f2',
                 activeBadgeBgColor: '#fee2e2',
@@ -97,27 +109,27 @@ export function LeadsMasterView() {
                 id: 'new',
                 label: 'New Enquiries',
                 icon: <FiberNewOutlinedIcon sx={{ fontSize: 16 }} />,
-                count: leads.filter((l) => l.status === 'New').length,
+                count: baseLeads.filter((l) => l.status === 'New').length,
             },
             {
                 id: 'followup_today',
                 label: 'Followup Today',
                 icon: <TodayOutlinedIcon sx={{ fontSize: 16 }} />,
-                count: leads.filter((l) => l.nextFollowupDate === todayStr).length,
+                count: baseLeads.filter((l) => l.nextFollowupDate === todayStr).length,
                 activeColor: '#d97706',
             },
             {
                 id: 'my_leads',
                 label: 'My Leads',
                 icon: <AccountCircleOutlinedIcon sx={{ fontSize: 16 }} />,
-                count: currentUsername ? leads.filter((l) => (l.assignedTo || '').includes(currentUsername)).length : 0,
+                count: currentUsername ? baseLeads.filter((l) => (l.assignedTo || '').includes(currentUsername)).length : 0,
             },
         ];
-    }, [leads, todayStr, currentUsername]);
+    }, [baseLeads, todayStr, currentUsername]);
 
     // ── Filter Logic ──────────────────────────────────────────────────────────
     const filteredLeads = useMemo(() => {
-        return leads.filter((lead) => {
+        return baseLeads.filter((lead) => {
             if (activeTab === 'hot' && lead.leadType !== 'Hot') return false;
             if (activeTab === 'new' && lead.status !== 'New') return false;
             if (activeTab === 'followup_today' && lead.nextFollowupDate !== todayStr) return false;
@@ -150,7 +162,7 @@ export function LeadsMasterView() {
 
             return true;
         });
-    }, [leads, activeTab, searchQuery, todayStr, currentUsername]);
+    }, [baseLeads, activeTab, searchQuery, todayStr, currentUsername]);
 
     // ── Sort Logic ────────────────────────────────────────────────────────────
     const sortedLeads = useMemo(() => {
@@ -504,6 +516,7 @@ export function LeadsMasterView() {
                 },
             }}
             tableId="leads"
+            tableFilter={tableFilter}
             headerActions={() => (
                 <MasterHeaderActions
                     onRefresh={async () => {

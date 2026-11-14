@@ -938,3 +938,24 @@ model PdfSavedItem {
 
   @@index([module, isDeleted])
 }
+
+/// A user's table filter (Filter dialog on every list): `recent` = the last 10 applied, `saved` = named via "Save filter as".
+/// Personal UI state, so rows are hard-deleted (recents are trimmed, saved ones removed by their owner).
+model TableFilter {
+  id           String   @id @default(uuid()) @db.NVarChar(50)
+  username     String   @db.NVarChar(50)
+  /// CrmModuleKey, e.g. leads.
+  module       String   @db.NVarChar(30)
+  /// recent | saved
+  kind         String   @db.NVarChar(10)
+  /// Saved filters only.
+  name         String?  @db.NVarChar(120)
+  /// JSON TableFilterCriteria ({ conditions, sort? }).
+  criteriaJson String   @db.NVarChar(Max)
+  /// Hash of the normalized criteria: re-applying the same filter bumps the existing recent entry.
+  fingerprint  String   @db.NVarChar(64)
+  createdAt    DateTime @default(now())
+  lastUsedAt   DateTime @default(now())
+
+  @@index([username, module, kind])
+}

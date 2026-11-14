@@ -6,11 +6,5 @@ export type OpportunityFilterTab =
     | 'my_deals'
     | 'high_value';
 
-export type OpportunitySortField =
-    | 'opportunityCode'
-    | 'organizationName'
-    | 'salesStage'
-    | 'grandTotal'
-    | 'nextFollowupDate'
-    | 'assignedTo'
-    | 'createdAt';
+/** Any column's field key: the table sorts on `row[sortField]`, including columns added from the form. */
+export type OpportunitySortField = string;

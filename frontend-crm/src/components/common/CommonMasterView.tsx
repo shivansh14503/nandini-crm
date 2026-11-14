@@ -22,6 +22,7 @@ import {
     isCrmModuleKey,
 } from './DataTable';
 import type { CrmModuleKey } from '@/types/formConfig.types';
+import { ActiveFilterChips, TableFilterModal, type FilterSortOption, type TableFilterController } from './TableFilter';
 
 export interface MasterViewHeaderActionsContext {
     /** Opens the shared column visibility popover anchored to the given element. */
@@ -58,6 +59,11 @@ export interface CommonMasterViewProps<T = unknown, TFilter extends string = str
      * that is a form module key; pass `null` to offer only the hand-built columns.
      */
     formModule?: CrmModuleKey | null;
+    /**
+     * Filter dialog (Recent / Advanced) from `useTableFilter`: wires the toolbar's filter button, shows the applied
+     * filter as chips above the table and renders the dialog. Pass its `filteredRows` on to the view's own logic.
+     */
+    tableFilter?: TableFilterController<T>;
     /**
      * Declarative search & toolbar configuration.
      */
@@ -177,6 +183,12 @@ export interface CommonMasterViewProps<T = unknown, TFilter extends string = str
     paperSx?: SxProps<Theme>;
 }
 
+/** 'NEXT FOLLOWUP DATE' → 'Next Followup Date'. */
+function titleCaseHeader(label: string): string {
+    if (label !== label.toUpperCase()) return label;
+    return label.toLowerCase().replace(/(^|[\s\-/(&])([a-z])/g, (_, sep: string, ch: string) => sep + ch.toUpperCase());
+}
+
 function isPaginationConfig(
     value: DataTablePaginationProps | React.ReactNode
 ): value is DataTablePaginationProps {
@@ -206,6 +218,7 @@ export function CommonMasterView<T = unknown, TFilter extends string = string>({
     headerActions,
     tableId,
     formModule,
+    tableFilter,
     searchConfig,
     toolbar,
     columns,
@@ -263,18 +276,18 @@ export function CommonMasterView<T = unknown, TFilter extends string = string>({
                 Boolean(secondaryDrawer.props.entity))
     );
 
-    // Collapse the whole stack together; expand again whenever the stack changes.
-    React.useEffect(() => {
-        if (!isDrawerOpen) {
-            setIsRightDrawerCollapsed(false);
-        }
-    }, [isDrawerOpen]);
-
-    React.useEffect(() => {
-        if (hasSecondaryDrawer) {
-            setIsRightDrawerCollapsed(false);
-        }
-    }, [hasSecondaryDrawer]);
+    // Collapse the whole stack together; expand again whenever the stack changes (drawer closed, or a secondary
+    // drawer stacked). Adjusted during render rather than in an effect, so no extra render pass.
+    const [prevDrawerOpen, setPrevDrawerOpen] = React.useState(isDrawerOpen);
+    const [prevHasSecondary, setPrevHasSecondary] = React.useState(hasSecondaryDrawer);
+    if (isDrawerOpen !== prevDrawerOpen) {
+        setPrevDrawerOpen(isDrawerOpen);
+        if (!isDrawerOpen) setIsRightDrawerCollapsed(false);
+    }
+    if (hasSecondaryDrawer !== prevHasSecondary) {
+        setPrevHasSecondary(hasSecondaryDrawer);
+        if (hasSecondaryDrawer) setIsRightDrawerCollapsed(false);
+    }
 
     const toggleRightDrawerCollapsed = React.useCallback(() => {
         setIsRightDrawerCollapsed((prev) => !prev);
@@ -323,9 +336,20 @@ export function CommonMasterView<T = unknown, TFilter extends string = string>({
         (searchConfig ? (
             <DataTableToolbar
                 {...searchConfig}
+                onFilterClick={searchConfig.onFilterClick ?? tableFilter?.open}
+                filterCount={searchConfig.filterCount ?? tableFilter?.activeCount}
                 onColumnClick={searchConfig.onColumnClick ?? (columns ? openColumnManager : undefined)}
             />
         ) : null);
+
+    // "Order by" offers the sortable columns (built-in and form-field ones), by their header text.
+    const filterSortOptions = React.useMemo<FilterSortOption[]>(() => {
+        const seen = new Set<string>();
+        return (allColumns ?? [])
+            .filter((c) => c.sortable)
+            .map((c) => ({ field: c.sortKey ?? c.id, label: typeof c.label === 'string' ? titleCaseHeader(c.label) : c.id }))
+            .filter((o) => (seen.has(o.field) ? false : (seen.add(o.field), true)));
+    }, [allColumns]);
 
     const resolvedTable =
         table ??
@@ -468,6 +492,13 @@ export function CommonMasterView<T = unknown, TFilter extends string = string>({
 
                     {/* Search & Action Toolbar */}
                     {resolvedToolbar}
+
+                    {tableFilter && (
+                        <>
+                            <ActiveFilterChips controller={tableFilter as TableFilterController} />
+                            <TableFilterModal controller={tableFilter as TableFilterController} sortOptions={filterSortOptions} />
+                        </>
+                    )}
 
                     {/* Table View */}
                     {resolvedTable}

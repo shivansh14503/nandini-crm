@@ -9,6 +9,7 @@ import NewReleasesOutlinedIcon from '@mui/icons-material/NewReleasesOutlined';
 import StarBorderIcon from '@mui/icons-material/StarBorder';
 import { RecordLink } from '../../common/RecordLink';
 import { CommonMasterView } from '../../common/CommonMasterView';
+import { useTableFilter } from '../../common/TableFilter';
 import { MasterHeaderActions } from '../../common/MasterHeaderActions';
 import { buildExtendedSearchConfig } from '../../common/buildExtendedSearchConfig';
 import { AppToast } from '../../common/AppToast';
@@ -39,7 +40,7 @@ const NO_RECORDS: Product[] = [];
 export function ProductsMasterView() {
     const router = useRouter();
 
-    const { data: products = NO_RECORDS, refetch } = useProducts();
+    const { data: allProducts = NO_RECORDS, refetch } = useProducts();
     const bulkDeleteMutation = useBulkDeleteProducts();
     const [activeTab, setActiveTab] = useState<ProductFilterTab>('all');
     const [searchQuery, setSearchQuery] = useState('');
@@ -48,6 +49,17 @@ export function ProductsMasterView() {
     const [rowsPerPage, setRowsPerPage] = useState(10);
     const [sortField, setSortField] = useState<string>('productName');
     const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
+    const tableFilter = useTableFilter<Product>({
+        module: 'products',
+        rows: allProducts,
+        onSortChange: (s) => {
+            setSortField(s.field);
+            setSortOrder(s.order);
+        },
+        onChange: () => setPage(0),
+    });
+    /** Records left by the Filter dialog: tabs, counts, search and bulk actions work on these. */
+    const products = tableFilter.filteredRows;
     // Tracked by id so the drawer always shows the cached copy and closes if the product is deleted.
     const [drawerProductId, setDrawerProductId] = useState<string | null>(null);
     const selectedDrawerProduct = useMemo(
@@ -326,6 +338,7 @@ export function ProductsMasterView() {
                 },
             }}
             tableId="products"
+            tableFilter={tableFilter}
             headerActions={() => (
                 <MasterHeaderActions
                     onRefresh={async () => {

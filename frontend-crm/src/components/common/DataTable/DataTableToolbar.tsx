@@ -2,6 +2,7 @@
 
 import React, { useState } from 'react';
 import {
+    Badge,
     Box,
     Button,
     Checkbox,
@@ -52,6 +53,7 @@ export function DataTableToolbar({
     onPageChange,
     bulkActionItems = [],
     onFilterClick,
+    filterCount = 0,
     onColumnClick,
 }: DataTableToolbarProps) {
     const [selectMenuAnchor, setSelectMenuAnchor] = useState<null | HTMLElement>(null);
@@ -182,13 +184,29 @@ export function DataTableToolbar({
 
                     {/* Filter & Column Layout Buttons */}
                     {onFilterClick && (
-                        <IconButton
-                            size="small"
-                            onClick={onFilterClick}
-                            sx={{ border: '1px solid #e2e8f0', borderRadius: '6px', width: 32, height: 32, color: '#64748b' }}
-                        >
-                            <FilterListIcon sx={{ fontSize: 16 }} />
-                        </IconButton>
+                        <Tooltip title={filterCount ? `Filter (${filterCount} applied)` : 'Filter'}>
+                            <IconButton
+                                size="small"
+                                aria-label="Filter"
+                                onClick={onFilterClick}
+                                sx={{
+                                    border: `1px solid ${filterCount ? '#93c5fd' : '#e2e8f0'}`,
+                                    borderRadius: '6px',
+                                    width: 32,
+                                    height: 32,
+                                    color: filterCount ? '#2563eb' : '#64748b',
+                                    backgroundColor: filterCount ? '#eff6ff' : undefined,
+                                }}
+                            >
+                                <Badge
+                                    badgeContent={filterCount}
+                                    color="primary"
+                                    sx={{ '& .MuiBadge-badge': { fontSize: '0.6rem', height: 15, minWidth: 15, top: -6, right: -6 } }}
+                                >
+                                    <FilterListIcon sx={{ fontSize: 16 }} />
+                                </Badge>
+                            </IconButton>
+                        </Tooltip>
                     )}
 
                     {onColumnClick && (

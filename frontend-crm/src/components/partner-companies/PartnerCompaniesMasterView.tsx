@@ -12,6 +12,7 @@ import FileDownloadOutlinedIcon from '@mui/icons-material/FileDownloadOutlined';
 
 import { RecordLink } from '../common/RecordLink';
 import { CommonMasterView } from '../common/CommonMasterView';
+import { useTableFilter } from '../common/TableFilter';
 import { MasterHeaderActions, outlinedHeaderButtonSx } from '../common/MasterHeaderActions';
 import { buildExtendedSearchConfig } from '../common/buildExtendedSearchConfig';
 import { AppToast } from '../common/AppToast';
@@ -74,7 +75,7 @@ export function PartnerCompaniesMasterView() {
     // Re-renders once the user directory loads, so "Assigned to" shows full names.
     useMasterData();
 
-    const { data: partners = NO_RECORDS, refetch } = usePartnerCompanies();
+    const { data: allPartners = NO_RECORDS, refetch } = usePartnerCompanies();
     const bulkDeleteMutation = useBulkDeletePartnerCompanies();
     const [activeTab, setActiveTab] = useState<PartnerCompanyFilterTab>('all');
     const [searchQuery, setSearchQuery] = useState('');
@@ -83,6 +84,17 @@ export function PartnerCompaniesMasterView() {
     const [rowsPerPage, setRowsPerPage] = useState(10);
     const [sortField, setSortField] = useState<string>('companyName');
     const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
+    const tableFilter = useTableFilter<ExtendedPartnerCompany>({
+        module: 'partner-companies',
+        rows: allPartners,
+        onSortChange: (s) => {
+            setSortField(s.field);
+            setSortOrder(s.order);
+        },
+        onChange: () => setPage(0),
+    });
+    /** Records left by the Filter dialog: tabs, counts, search and bulk actions work on these. */
+    const partners = tableFilter.filteredRows;
     // Tracked by id so the drawer always shows the cached copy and closes if the record is deleted.
     const [drawerId, setDrawerId] = useState<string | null>(null);
     const [importOpen, setImportOpen] = useState(false);
@@ -279,6 +291,7 @@ export function PartnerCompaniesMasterView() {
                 },
             }}
             tableId="partner-companies"
+            tableFilter={tableFilter}
             headerActions={() => (
                 <MasterHeaderActions
                     onRefresh={async () => {

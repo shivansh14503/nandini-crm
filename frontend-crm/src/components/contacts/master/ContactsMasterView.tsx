@@ -12,6 +12,7 @@ import EmailOutlinedIcon from '@mui/icons-material/EmailOutlined';
 import ApartmentIcon from '@mui/icons-material/Apartment';
 import { RecordLink } from '../../common/RecordLink';
 import { CommonMasterView } from '../../common/CommonMasterView';
+import { useTableFilter } from '../../common/TableFilter';
 import { MasterHeaderActions } from '../../common/MasterHeaderActions';
 import { buildExtendedSearchConfig } from '../../common/buildExtendedSearchConfig';
 import { AppToast } from '../../common/AppToast';
@@ -22,7 +23,11 @@ import { documentNumberColumn, type DataTableColumn, type DataTableFilterItem } 
 import { ROUTES } from '@/config/constants';
 import { useAuth } from '@/context/AuthContext';
 import { useRelatedModulesForEntity } from '@/config/relatedModules.config';
-import { useContacts, useBulkDeleteContacts } from '@/hooks/queries';
+import { useContacts, useBulkDeleteContacts, useOrganizations } from '@/hooks/queries';
+import { wasModified } from '../../common/Drawer/RecordAuditFooter';
+import { formatDateTime } from '@/utils/date';
+import { formatPhoneDisplay } from '@/utils/phone';
+import type { ExtendedOrganization } from '@/types/organization.types';
 import type { Contact } from '@/types/contact.types';
 import type { ContactFilterTab } from './types';
 import { ContactDetailDrawer } from '../ContactDetailDrawer';
@@ -30,22 +35,46 @@ import { ContactDetailDrawer } from '../ContactDetailDrawer';
 
 /** Stable empty list while the first page loads (keeps memoized filters from recomputing). */
 const NO_RECORDS: Contact[] = [];
+const NO_ORGANIZATIONS: ExtendedOrganization[] = [];
+const plainCellSx = { fontSize: '0.78rem', color: '#334155' } as const;
 export function ContactsMasterView() {
     const router = useRouter();
     const { user } = useAuth();
     const currentUsername = user?.username || '';
 
-    const { data: contacts = NO_RECORDS, refetch } = useContacts();
+    const { data: allContacts = NO_RECORDS, refetch } = useContacts();
     const bulkDeleteMutation = useBulkDeleteContacts();
     const [activeTab, setActiveTab] = useState<ContactFilterTab>('all');
     const [searchQuery, setSearchQuery] = useState('');
     const [selectedIds, setSelectedIds] = useState<string[]>([]);
     const [page, setPage] = useState(0);
     const [rowsPerPage, setRowsPerPage] = useState(10);
-    const [sortField, setSortField] = useState<string>('name');
-    const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
+    const [sortField, setSortField] = useState<string>('createdAt');
+    const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
+    const tableFilter = useTableFilter<Contact>({
+        module: 'contacts',
+        rows: allContacts,
+        onSortChange: (s) => {
+            setSortField(s.field);
+            setSortOrder(s.order);
+        },
+        onChange: () => setPage(0),
+    });
+    /** Records left by the Filter dialog: tabs, counts, search and bulk actions work on these. */
+    const contacts = tableFilter.filteredRows;
     // Tracked by id so the drawer always shows the cached copy and closes if the contact is deleted.
     const [drawerContactId, setDrawerContactId] = useState<string | null>(null);
+
+    // Location column: the contact's organization's billing city and state.
+    const { data: organizations = NO_ORGANIZATIONS } = useOrganizations();
+    const locationOf = useMemo(() => {
+        const byId = new Map(organizations.map((o) => [o.id, o]));
+        const byName = new Map(organizations.map((o) => [o.organizationName.trim().toLowerCase(), o]));
+        return (c: Contact) => {
+            const org = (c.organizationId && byId.get(c.organizationId)) || byName.get((c.organizationName || '').trim().toLowerCase());
+            return org ? [org.billingCity, org.billingState].filter(Boolean).join(', ') : '';
+        };
+    }, [organizations]);
     const selectedDrawerContact = useMemo(
         () => (drawerContactId ? contacts.find((c) => c.id === drawerContactId) ?? null : null),
         [contacts, drawerContactId]
@@ -197,13 +226,17 @@ export function ContactsMasterView() {
     // ── Declarative Column Definitions ──────────────────────────────────────
     const columns: DataTableColumn<Contact>[] = useMemo(
         () => [
-            documentNumberColumn<Contact>({
-                id: 'contactCode',
-                label: 'CONTACT NO.',
-                getNumber: (c) => c.contactCode,
-                getHref: (c) => ROUTES.CONTACT_DETAIL(c.id),
-                onOpen: (c) => setDrawerContactId(c.id),
-            }),
+            {
+                // Not one of the basic columns; switch it on from Modify Columns.
+                ...documentNumberColumn<Contact>({
+                    id: 'contactCode',
+                    label: 'CONTACT NO.',
+                    getNumber: (c) => c.contactCode,
+                    getHref: (c) => ROUTES.CONTACT_DETAIL(c.id),
+                    onOpen: (c) => setDrawerContactId(c.id),
+                }),
+                defaultHidden: true,
+            },
             {
                 id: 'name',
                 label: 'NAME',
@@ -243,8 +276,15 @@ export function ContactsMasterView() {
                 ),
             },
             {
+                id: 'designation',
+                label: 'JOB TITLE',
+                sortable: true,
+                minWidth: 150,
+                render: (c) => <Typography sx={plainCellSx}>{c.designation || '-'}</Typography>,
+            },
+            {
                 id: 'organizationName',
-                label: 'ORGANIZATION',
+                label: 'ORGANIZATION NAME',
                 sortable: true,
                 minWidth: 180,
                 render: (c) => (
@@ -258,56 +298,70 @@ export function ContactsMasterView() {
             },
             {
                 id: 'mobile',
-                label: 'MOBILE / PHONE',
+                label: 'MOBILE',
                 sortable: true,
-                minWidth: 150,
+                minWidth: 140,
                 render: (c) => (
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.6 }}>
                         <PhoneOutlinedIcon sx={{ fontSize: 14, color: '#94a3b8' }} />
-                        <Typography sx={{ fontSize: '0.8rem', color: '#475569' }}>
-                            {c.mobile || c.officePhone || '-'}
-                        </Typography>
+                        <Typography sx={plainCellSx}>{c.mobile ? formatPhoneDisplay(c.mobile) || c.mobile : '-'}</Typography>
                     </Box>
+                ),
+            },
+            {
+                id: 'officePhone',
+                label: 'OFFICE PHONE',
+                sortable: true,
+                minWidth: 140,
+                render: (c) => (
+                    <Typography sx={plainCellSx}>{c.officePhone ? formatPhoneDisplay(c.officePhone) || c.officePhone : '-'}</Typography>
                 ),
             },
             {
                 id: 'email',
+                fieldKey: 'emailAddresses',
                 label: 'EMAIL',
-                sortable: true,
+                sortable: false,
                 minWidth: 180,
-                render: (c) => (
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.6 }}>
-                        <EmailOutlinedIcon sx={{ fontSize: 14, color: '#94a3b8' }} />
-                        <Typography sx={{ fontSize: '0.8rem', color: '#475569' }}>
-                            {c.emailAddresses?.[0]?.email || '-'}
-                        </Typography>
-                    </Box>
-                ),
+                render: (c) => {
+                    const email = (c.emailAddresses?.find((e) => e.isPrimary) ?? c.emailAddresses?.[0])?.email;
+                    return (
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.6 }}>
+                            <EmailOutlinedIcon sx={{ fontSize: 14, color: '#94a3b8' }} />
+                            <Typography sx={plainCellSx}>{email || '-'}</Typography>
+                        </Box>
+                    );
+                },
             },
             {
-                id: 'designation',
-                label: 'DESIGNATION',
-                sortable: true,
-                minWidth: 160,
-                render: (c) => (
-                    <Typography sx={{ fontSize: '0.78rem', color: '#334155', fontWeight: 500 }}>
-                        {c.designation || c.department || '-'}
-                    </Typography>
-                ),
+                // Derived: the linked organization's billing city and state (contacts have no address of their own).
+                id: 'location',
+                label: 'LOCATION',
+                sortable: false,
+                minWidth: 150,
+                render: (c) => <Typography sx={plainCellSx}>{locationOf(c) || '-'}</Typography>,
             },
             {
-                id: 'assignedTo',
-                label: 'ASSIGNED TO',
+                id: 'updatedAt',
+                label: 'DATE MODIFIED',
                 sortable: true,
-                minWidth: 140,
-                render: (c) => (
-                    <Typography sx={{ fontSize: '0.78rem', color: '#64748b' }}>
-                        {c.assignedTo || '-'}
-                    </Typography>
-                ),
+                minWidth: 170,
+                render: (c) =>
+                    wasModified(c) ? (
+                        <Typography sx={plainCellSx}>{formatDateTime(c.updatedAt) || '-'}</Typography>
+                    ) : (
+                        <Typography sx={{ ...plainCellSx, color: '#94a3b8' }}>- - -</Typography>
+                    ),
+            },
+            {
+                id: 'createdAt',
+                label: 'DATE CREATED',
+                sortable: true,
+                minWidth: 170,
+                render: (c) => <Typography sx={plainCellSx}>{formatDateTime(c.createdAt) || '-'}</Typography>,
             },
         ],
-        []
+        [locationOf]
     );
 
     const relatedModules = useRelatedModulesForEntity('contact', selectedDrawerContact, setActiveRelatedModule);
@@ -334,6 +388,7 @@ export function ContactsMasterView() {
                 },
             }}
             tableId="contacts"
+            tableFilter={tableFilter}
             headerActions={() => (
                 <MasterHeaderActions
                     onRefresh={async () => {

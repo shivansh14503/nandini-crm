@@ -1,9 +1,4 @@
 export type FilterTab = 'all' | 'recent' | 'my' | 'distributor' | 'enduser';
 
-export type SortField =
-    | 'organizationName'
-    | 'natureOfBusiness'
-    | 'customerType'
-    | 'accountStatus'
-    | 'billingStreet'
-    | 'billingCity';
+/** Any column's field key: the table sorts on `row[sortField]`, including columns added from the form. */
+export type SortField = string;

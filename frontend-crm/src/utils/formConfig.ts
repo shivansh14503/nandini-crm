@@ -251,3 +251,58 @@ export function formatCustomValue(field: FormFieldDefinitionDto, value: unknown,
     if (field.fieldType === 'percentage') return `${String(value)}%`;
     return label(String(value));
 }
+
+const labelKey = (label: string) => label.trim().replace(/\s+/g, ' ').toUpperCase();
+
+/** 'BILLING' → 'Billing'; mixed-case text is kept. */
+function capitalizeWords(text: string): string {
+    if (text !== text.toUpperCase()) return text;
+    return text.toLowerCase().replace(/(^|[\s\-/(&])([a-z])/g, (_, sep: string, ch: string) => sep + ch.toUpperCase());
+}
+
+/**
+ * Prefix for a field whose label repeats in the form, from its section: 'Billing Address' → 'Billing', so the two
+ * City fields read Billing City and Shipping City. Falls back to the field key's first word (`shippingCity` →
+ * 'Shipping') when the section label is empty or only says "Address".
+ */
+function sectionPrefix(field: FormFieldDefinitionDto): string {
+    const section = (field.sectionLabel || '')
+        .trim()
+        .replace(/\s+/g, ' ')
+        .replace(/\s*\b(address|details|information|info)$/i, '')
+        .trim();
+    if (section) return capitalizeWords(section);
+    const firstWord = field.fieldKey.match(/^[a-z]+/)?.[0] ?? '';
+    return firstWord && firstWord !== field.fieldKey ? firstWord[0].toUpperCase() + firstWord.slice(1) : '';
+}
+
+/**
+ * A label per form field that no other field (or `reserved` label) shares: a repeated label gets its section
+ * prefix (City → Billing City / Shipping City); if that still clashes, the tab name, then a number. Fields in
+ * `skip` get no label and claim none. Used for table columns and filter fields, so neither lists two "City"s.
+ */
+export function distinctFieldLabels(
+    fields: FormFieldDefinitionDto[],
+    options: { reserved?: Iterable<string>; skip?: ReadonlySet<string> } = {}
+): Map<string, string> {
+    const count = new Map<string, number>();
+    for (const f of fields) count.set(labelKey(f.label), (count.get(labelKey(f.label)) ?? 0) + 1);
+    const taken = new Set([...(options.reserved ?? [])].map(labelKey));
+
+    const labels = new Map<string, string>();
+    for (const f of fields) {
+        if (options.skip?.has(f.fieldKey)) continue;
+        const base = f.label.trim().replace(/\s+/g, ' ');
+        let label = base;
+        if ((count.get(labelKey(base)) ?? 0) > 1 || taken.has(labelKey(base))) {
+            const prefix = sectionPrefix(f);
+            if (prefix && !labelKey(base).startsWith(`${labelKey(prefix)} `)) label = `${prefix} ${base}`;
+        }
+        if (taken.has(labelKey(label))) label = `${label} (${capitalizeWords(f.tabLabel || f.tabKey.replace(/_/g, ' '))})`;
+        const stem = label;
+        for (let n = 2; taken.has(labelKey(label)); n += 1) label = `${stem} ${n}`;
+        taken.add(labelKey(label));
+        labels.set(f.fieldKey, label);
+    }
+    return labels;
+}

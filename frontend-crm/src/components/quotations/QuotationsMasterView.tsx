@@ -12,6 +12,7 @@ import ApartmentIcon from '@mui/icons-material/Apartment';
 import PersonOutlinedIcon from '@mui/icons-material/PersonOutlined';
 
 import { CommonMasterView } from '../common/CommonMasterView';
+import { useTableFilter } from '../common/TableFilter';
 import { MasterHeaderActions } from '../common/MasterHeaderActions';
 import { buildExtendedSearchConfig } from '../common/buildExtendedSearchConfig';
 import { AppToast } from '../common/AppToast';
@@ -23,9 +24,12 @@ import { useRelatedModulesForEntity } from '@/config/relatedModules.config';
 import type { Quotation } from '@/types/quotation.types';
 import { useQuotations, useDeleteQuotation, useBulkDeleteQuotations } from '@/hooks/queries';
 import { QuotationDetailDrawer } from './QuotationDetailDrawer';
+import { wasModified } from '../common/Drawer/RecordAuditFooter';
+import { formatDateTime } from '@/utils/date';
 
 export type QuotationFilterTab = 'all' | 'draft' | 'sent' | 'accepted' | 'rejected';
-export type QuotationSortField = 'quotationCode' | 'organizationName' | 'grandTotal' | 'quoteDate' | 'validUntil' | 'status';
+/** Any column's field key: the table sorts on `row[sortField]`, including columns added from the form. */
+export type QuotationSortField = string;
 
 const formatCurrency = (val: number = 0) =>
     new Intl.NumberFormat('en-IN', {
@@ -34,13 +38,29 @@ const formatCurrency = (val: number = 0) =>
         maximumFractionDigits: 0,
     }).format(val);
 
+const plainCellSx = { fontSize: '0.78rem', color: '#334155' } as const;
+
+const STAGE_COLORS: Record<string, { bg: string; color: string; border: string }> = {
+    Draft: { bg: '#f1f5f9', color: '#475569', border: '#cbd5e1' },
+    Negotiation: { bg: '#fffbeb', color: '#b45309', border: '#fde68a' },
+    Delivered: { bg: '#eff6ff', color: '#1d4ed8', border: '#bfdbfe' },
+    'On Hold': { bg: '#fff1f2', color: '#be123c', border: '#fecdd3' },
+    Confirmed: { bg: '#ecfdf5', color: '#047857', border: '#a7f3d0' },
+    'Closed Accepted': { bg: '#ecfdf5', color: '#047857', border: '#a7f3d0' },
+    'Closed Lost': { bg: '#fef2f2', color: '#b91c1c', border: '#fecaca' },
+    'Closed Dead': { bg: '#f1f5f9', color: '#64748b', border: '#cbd5e1' },
+    // Older records still carry the legacy status names.
+    Sent: { bg: '#eff6ff', color: '#1d4ed8', border: '#bfdbfe' },
+    Accepted: { bg: '#ecfdf5', color: '#047857', border: '#a7f3d0' },
+    Rejected: { bg: '#fef2f2', color: '#b91c1c', border: '#fecaca' },
+};
 
 /** Stable empty list while the first page loads (keeps memoized filters from recomputing). */
 const NO_RECORDS: Quotation[] = [];
 export function QuotationsMasterView() {
     const router = useRouter();
 
-    const { data: quotations = NO_RECORDS, refetch } = useQuotations();
+    const { data: allQuotations = NO_RECORDS, refetch } = useQuotations();
     const deleteMutation = useDeleteQuotation();
     const bulkDeleteMutation = useBulkDeleteQuotations();
     const [activeTab, setActiveTab] = useState<QuotationFilterTab>('all');
@@ -48,8 +68,19 @@ export function QuotationsMasterView() {
     const [selectedIds, setSelectedIds] = useState<string[]>([]);
     const [page, setPage] = useState(0);
     const [rowsPerPage, setRowsPerPage] = useState(10);
-    const [sortField, setSortField] = useState<QuotationSortField>('quotationCode');
+    const [sortField, setSortField] = useState<QuotationSortField>('createdAt');
     const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
+    const tableFilter = useTableFilter<Quotation>({
+        module: 'quotations',
+        rows: allQuotations,
+        onSortChange: (s) => {
+            setSortField(s.field as QuotationSortField);
+            setSortOrder(s.order);
+        },
+        onChange: () => setPage(0),
+    });
+    /** Records left by the Filter dialog: tabs, counts, search and bulk actions work on these. */
+    const quotations = tableFilter.filteredRows;
     // Tracked by id so the drawer always shows the cached copy and closes if the quotation is deleted.
     const [drawerQuotationId, setDrawerQuotationId] = useState<string | null>(null);
     const selectedDrawerQuotation = useMemo(
@@ -185,38 +216,9 @@ export function QuotationsMasterView() {
 
         // Sorting
         result.sort((a, b) => {
-            let valA: string | number = '';
-            let valB: string | number = '';
-
-            switch (sortField) {
-                case 'quotationCode':
-                    valA = a.quotationCode || '';
-                    valB = b.quotationCode || '';
-                    break;
-                case 'organizationName':
-                    valA = a.organizationName || '';
-                    valB = b.organizationName || '';
-                    break;
-                case 'grandTotal':
-                    valA = a.grandTotal || 0;
-                    valB = b.grandTotal || 0;
-                    break;
-                case 'quoteDate':
-                    valA = a.quoteDate || '';
-                    valB = b.quoteDate || '';
-                    break;
-                case 'validUntil':
-                    valA = a.validUntil || '';
-                    valB = b.validUntil || '';
-                    break;
-                case 'status':
-                    valA = a.status || '';
-                    valB = b.status || '';
-                    break;
-                default:
-                    valA = a.quotationCode || '';
-                    valB = b.quotationCode || '';
-            }
+            // Any column's field key: numbers compare as numbers, everything else as text.
+            const valA = (a as unknown as Record<string, unknown>)[sortField] ?? '';
+            const valB = (b as unknown as Record<string, unknown>)[sortField] ?? '';
 
             if (typeof valA === 'number' && typeof valB === 'number') {
                 return sortOrder === 'asc' ? valA - valB : valB - valA;
@@ -239,140 +241,59 @@ export function QuotationsMasterView() {
         () => [
             documentNumberColumn<Quotation>({
                 id: 'quotationCode',
-                label: 'QUOTATION NO.',
+                label: 'QUOTATION NUMBER',
                 getNumber: (row) => row.quotationCode,
                 getHref: (row) => ROUTES.QUOTATION_DETAIL(row.id),
                 onOpen: (row) => setDrawerQuotationId(row.id),
             }),
             {
-                id: 'quotationSubject',
-                fieldKey: 'quotationTitle',
-                label: 'SUBJECT',
-                sortable: false,
-                minWidth: 220,
-                render: (row) => (
-                    <Typography
-                        noWrap
-                        sx={{
-                            fontSize: '0.8rem',
-                            fontWeight: 600,
-                            color: '#1e293b',
-                            maxWidth: 240,
-                        }}
-                        title={row.quotationSubject}
-                    >
-                        {row.quotationSubject || 'Quotation'}
-                    </Typography>
-                ),
-            },
-            {
-                id: 'organizationName',
-                label: 'ORGANIZATION',
+                id: 'quotationTitle',
+                label: 'TITLE',
                 sortable: true,
                 minWidth: 200,
                 render: (row) => (
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.8 }}>
-                        <ApartmentIcon sx={{ fontSize: 15, color: '#64748b' }} />
-                        <Typography
-                            noWrap
-                            sx={{
-                                fontSize: '0.8rem',
-                                fontWeight: 500,
-                                color: '#334155',
-                                maxWidth: 180,
-                            }}
-                        >
-                            {row.organizationName}
-                        </Typography>
-                    </Box>
+                    <Typography sx={{ fontSize: '0.8rem', fontWeight: 600, color: '#1e293b' }}>
+                        {row.quotationTitle || row.quotationSubject || '-'}
+                    </Typography>
                 ),
             },
             {
-                id: 'contactName',
-                label: 'CONTACT PERSON',
+                id: 'opportunityName',
+                label: 'OPPORTUNITY',
                 sortable: true,
                 minWidth: 160,
                 render: (row) => (
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.8 }}>
-                        <PersonOutlinedIcon sx={{ fontSize: 15, color: '#94a3b8' }} />
-                        <Typography sx={{ fontSize: '0.8rem', color: '#475569' }}>
-                            {row.contactName}
-                        </Typography>
-                    </Box>
+                    <Typography sx={{ fontSize: '0.8rem', fontWeight: 600, color: '#2563eb' }}>
+                        {row.opportunityName || row.opportunityCode || '-'}
+                    </Typography>
                 ),
             },
             {
-                id: 'opportunityCode',
-                label: 'OPPORTUNITY',
+                // Derived: the quotation was edited after it was first saved.
+                id: 'revised',
+                label: 'REVISED',
                 sortable: false,
-                minWidth: 140,
-                render: (row) => (
-                    <Typography
-                        sx={{
-                            fontSize: '0.8rem',
-                            fontWeight: 600,
-                            color: '#2563eb',
-                            fontFamily: 'monospace',
-                        }}
-                    >
-                        {row.opportunityCode || row.opportunityId || '-'}
-                    </Typography>
-                ),
-            },
-            {
-                id: 'grandTotal',
-                label: 'TOTAL AMOUNT',
-                sortable: true,
-                align: 'right',
-                minWidth: 140,
-                render: (row) => (
-                    <Typography sx={{ fontSize: '0.82rem', fontWeight: 700, color: '#0f172a' }}>
-                        {formatCurrency(row.grandTotal)}
-                    </Typography>
-                ),
-            },
-            {
-                id: 'quoteDate',
-                fieldKey: 'quotationDate',
-                label: 'DATE',
-                sortable: true,
-                minWidth: 120,
-                render: (row) => (
-                    <Typography sx={{ fontSize: '0.78rem', color: '#64748b' }}>
-                        {row.quoteDate}
-                    </Typography>
-                ),
-            },
-            {
-                id: 'validUntil',
-                label: 'VALID UNTIL',
-                sortable: true,
-                minWidth: 120,
-                render: (row) => (
-                    <Typography sx={{ fontSize: '0.78rem', color: '#64748b' }}>
-                        {row.validUntil}
-                    </Typography>
-                ),
-            },
-            {
-                id: 'status',
-                fieldKey: 'quoteStage',
-                label: 'STATUS',
-                sortable: true,
-                minWidth: 110,
+                minWidth: 100,
                 render: (row) => {
-                    const statusMap: Record<string, { bg: string; color: string; border: string }> = {
-                        Draft: { bg: '#f1f5f9', color: '#475569', border: '#cbd5e1' },
-                        Sent: { bg: '#eff6ff', color: '#1d4ed8', border: '#bfdbfe' },
-                        Accepted: { bg: '#ecfdf5', color: '#047857', border: '#a7f3d0' },
-                        Rejected: { bg: '#fef2f2', color: '#b91c1c', border: '#fecaca' },
-                    };
-                    const currentStatus = String(row.quoteStage || row.status || 'Draft');
-                    const st = statusMap[currentStatus] || statusMap.Draft;
-
+                    const revised = wasModified(row);
+                    return (
+                        <Typography sx={{ fontSize: '0.76rem', fontWeight: 600, color: revised ? '#b45309' : '#94a3b8' }}>
+                            {revised ? 'Yes' : 'No'}
+                        </Typography>
+                    );
+                },
+            },
+            {
+                id: 'quoteStage',
+                label: 'QUOTE STAGE',
+                sortable: true,
+                minWidth: 130,
+                render: (row) => {
+                    const stage = String(row.quoteStage || row.status || 'Draft');
+                    const st = STAGE_COLORS[stage] ?? STAGE_COLORS.Draft;
                     return (
                         <Chip
-                            label={currentStatus}
+                            label={stage}
                             size="small"
                             sx={{
                                 backgroundColor: st.bg,
@@ -385,6 +306,65 @@ export function QuotationsMasterView() {
                         />
                     );
                 },
+            },
+            {
+                id: 'contactName',
+                label: 'CONTACT',
+                sortable: true,
+                minWidth: 150,
+                render: (row) => (
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.8 }}>
+                        <PersonOutlinedIcon sx={{ fontSize: 15, color: '#94a3b8' }} />
+                        <Typography sx={{ fontSize: '0.8rem', color: '#475569' }}>{row.contactName || '-'}</Typography>
+                    </Box>
+                ),
+            },
+            {
+                id: 'organizationName',
+                label: 'ORGANIZATION',
+                sortable: true,
+                minWidth: 180,
+                render: (row) => (
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.8 }}>
+                        <ApartmentIcon sx={{ fontSize: 15, color: '#64748b' }} />
+                        <Typography sx={{ fontSize: '0.8rem', fontWeight: 500, color: '#334155' }}>
+                            {row.organizationName || '-'}
+                        </Typography>
+                    </Box>
+                ),
+            },
+            {
+                id: 'grandTotal',
+                label: 'GRAND TOTAL',
+                sortable: true,
+                align: 'right',
+                minWidth: 130,
+                render: (row) => (
+                    <Typography sx={{ fontSize: '0.82rem', fontWeight: 700, color: '#0f172a' }}>
+                        {formatCurrency(row.grandTotal)}
+                    </Typography>
+                ),
+            },
+            {
+                id: 'validUntil',
+                label: 'VALID UNTIL',
+                sortable: true,
+                minWidth: 120,
+                render: (row) => <Typography sx={plainCellSx}>{row.validUntil || '-'}</Typography>,
+            },
+            {
+                id: 'assignedTo',
+                label: 'USER',
+                sortable: true,
+                minWidth: 120,
+                render: (row) => <Typography sx={plainCellSx}>{row.assignedTo || '-'}</Typography>,
+            },
+            {
+                id: 'createdAt',
+                label: 'DATE CREATED',
+                sortable: true,
+                minWidth: 170,
+                render: (row) => <Typography sx={plainCellSx}>{formatDateTime(row.createdAt) || '-'}</Typography>,
             },
         ],
         []
@@ -418,6 +398,7 @@ export function QuotationsMasterView() {
                 variant: 'pill',
             }}
             tableId="quotations"
+            tableFilter={tableFilter}
             headerActions={() => (
                 <MasterHeaderActions
                     onRefresh={async () => {

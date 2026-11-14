@@ -9,6 +9,7 @@ import PendingActionsOutlinedIcon from '@mui/icons-material/PendingActionsOutlin
 import PriorityHighIcon from '@mui/icons-material/PriorityHigh';
 import NewReleasesOutlinedIcon from '@mui/icons-material/NewReleasesOutlined';
 import { CommonMasterView } from '../../common/CommonMasterView';
+import { useTableFilter } from '../../common/TableFilter';
 import { MasterHeaderActions } from '../../common/MasterHeaderActions';
 import { buildExtendedSearchConfig } from '../../common/buildExtendedSearchConfig';
 import { AppToast } from '../../common/AppToast';
@@ -65,7 +66,7 @@ export function TicketsMasterView() {
     const { user } = useAuth();
     const currentUsername = user?.username || '';
 
-    const { data: tickets = NO_RECORDS, dataUpdatedAt: now, refetch } = useTickets();
+    const { data: allTickets = NO_RECORDS, dataUpdatedAt: now, refetch } = useTickets();
     const bulkDeleteMutation = useBulkDeleteTickets();
     const [activeTab, setActiveTab] = useState<TicketFilterTab>('all');
     const [searchQuery, setSearchQuery] = useState('');
@@ -74,6 +75,17 @@ export function TicketsMasterView() {
     const [rowsPerPage, setRowsPerPage] = useState(25);
     const [sortField, setSortField] = useState<TicketSortField>('ticketNumber');
     const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
+    const tableFilter = useTableFilter<Ticket>({
+        module: 'tickets',
+        rows: allTickets,
+        onSortChange: (s) => {
+            setSortField(s.field as TicketSortField);
+            setSortOrder(s.order);
+        },
+        onChange: () => setPage(0),
+    });
+    /** Records left by the Filter dialog: tabs, counts, search and bulk actions work on these. */
+    const tickets = tableFilter.filteredRows;
     // Tracked by id so the drawer always shows the cached copy and closes if the ticket is deleted.
     const [drawerTicketId, setDrawerTicketId] = useState<string | null>(null);
     const selectedDrawerTicket = useMemo(
@@ -310,6 +322,7 @@ export function TicketsMasterView() {
                 },
             }}
             tableId="tickets"
+            tableFilter={tableFilter}
             headerActions={() => (
                 <MasterHeaderActions
                     onRefresh={async () => {

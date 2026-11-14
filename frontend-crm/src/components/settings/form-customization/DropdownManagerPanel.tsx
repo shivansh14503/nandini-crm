@@ -24,8 +24,7 @@ import ListAltOutlinedIcon from '@mui/icons-material/ListAltOutlined';
 import SearchRoundedIcon from '@mui/icons-material/SearchRounded';
 import DeleteOutlineOutlinedIcon from '@mui/icons-material/DeleteOutlineOutlined';
 import EditOutlinedIcon from '@mui/icons-material/EditOutlined';
-import StarRoundedIcon from '@mui/icons-material/StarRounded';
-import StarBorderRoundedIcon from '@mui/icons-material/StarBorderRounded';
+import { DefaultBookmarkOffIcon, DefaultBookmarkOnIcon } from './defaultOptionIcons';
 import { EditCategoryDialog } from './EditCategoryDialog';
 import { useConfigDraftActions, useHasUnsavedChanges } from './useConfigDraft';
 import { CRM_MODULE_LABELS, type CrmModuleKey, type DropdownCategoryDto, type DropdownOptionDto, type FormConfigsPayload } from '@/types/formConfig.types';
@@ -443,7 +442,7 @@ function CategoryEditor({
                         {defaults.length > 0
                             ? `Default on new records: ${defaults.map((o) => o.label).join(', ')}`
                             : 'No default: new records start empty and show the field’s placeholder.'}
-                        {canEdit && (allowsSeveralDefaults ? ' Click ☆ to add or remove defaults.' : ' Click ☆ to set or remove the default.')}
+                        {canEdit && (allowsSeveralDefaults ? ' Click the bookmark to add or remove defaults.' : ' Click the bookmark to set or remove the default.')}
                     </Typography>
                 </Box>
                 {archived.length > 0 && (
@@ -605,9 +604,9 @@ function OptionRow({
                             onClick={() => void onToggleDefault(!option.isDefault)}
                         >
                             {option.isDefault && option.isActive ? (
-                                <StarRoundedIcon sx={{ fontSize: 19, color: busy ? undefined : '#f59e0b' }} />
+                                <DefaultBookmarkOnIcon sx={{ fontSize: 19, color: busy ? undefined : '#f59e0b' }} />
                             ) : (
-                                <StarBorderRoundedIcon sx={{ fontSize: 19 }} />
+                                <DefaultBookmarkOffIcon sx={{ fontSize: 19 }} />
                             )}
                         </IconButton>
                     </span>

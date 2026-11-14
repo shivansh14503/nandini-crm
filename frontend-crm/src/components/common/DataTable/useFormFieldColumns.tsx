@@ -4,7 +4,15 @@ import { useMemo } from 'react';
 import { Typography } from '@mui/material';
 import { useFormConfigs } from '@/hooks/queries/useFormConfigs';
 import { CRM_MODULE_KEYS, type CrmModuleKey, type FormConfigsPayload, type FormFieldDefinitionDto } from '@/types/formConfig.types';
-import { CUSTOM_FIELDS_KEY, findCategory, formatCustomValue, isBuiltInCountryField, moduleFields, optionLabelMap } from '@/utils/formConfig';
+import {
+    CUSTOM_FIELDS_KEY,
+    distinctFieldLabels,
+    findCategory,
+    formatCustomValue,
+    isBuiltInCountryField,
+    moduleFields,
+    optionLabelMap,
+} from '@/utils/formConfig';
 import { formatPhoneDisplay } from '@/utils/phone';
 import { getCountryNameByCode } from '@/data/addressMaster';
 import type { DataTableColumn } from './types';
@@ -70,18 +78,33 @@ export function useFormFieldColumns<T>(
         const tabLabel = (field: FormFieldDefinitionDto) =>
             tabs.find((t) => t.key === field.tabKey)?.label || field.tabLabel || titleCase(field.tabKey.replace(/_/g, ' ').toUpperCase());
 
-        const extra: DataTableColumn<T>[] = moduleFields(configs, module)
-            .filter((f) => f.isActive && f.isVisibleInForm && !covered.has(f.fieldKey))
-            // Tab order first, then the field's place in the form (moduleFields is already in form order).
-            .map((field, order) => ({ field, order }))
-            .sort((a, b) => (tabIndex.get(a.field.tabKey) ?? tabs.length) - (tabIndex.get(b.field.tabKey) ?? tabs.length) || a.order - b.order)
-            .map(({ field }) => {
+        const liveFields = moduleFields(configs, module).filter((f) => f.isActive && f.isVisibleInForm);
+        const byKey = new Map(liveFields.map((f) => [f.fieldKey, f]));
+        // Tab order first, then the field's place in the form (moduleFields is already in form order).
+        const formOrder = new Map(
+            liveFields.map((f, i) => [f.fieldKey, (tabIndex.get(f.tabKey) ?? tabs.length) * 10_000 + i])
+        );
+        const labels = distinctFieldLabels(liveFields, { reserved: columns.map((c) => c.label), skip: covered });
+
+        // Columns the table shows by default are the Basic Columns; a hand-built one that starts hidden goes under
+        // its form field's tab, like the generated ones.
+        const placed = columns.map((col) => {
+            const field = byKey.get(col.fieldKey ?? col.id);
+            if (col.group || !col.defaultHidden || !field) return col;
+            return { ...col, group: tabLabel(field), groupOrder: formOrder.get(field.fieldKey) };
+        });
+
+        const extra: DataTableColumn<T>[] = liveFields
+            .filter((f) => !covered.has(f.fieldKey))
+            .sort((a, b) => (formOrder.get(a.fieldKey) ?? 0) - (formOrder.get(b.fieldKey) ?? 0))
+            .map((field) => {
                 const isLong = LONG_TEXT_TYPES.has(field.fieldType);
                 return {
                     id: field.isSystem ? field.fieldKey : `${CUSTOM_FIELDS_KEY}.${field.fieldKey}`,
                     fieldKey: field.fieldKey,
-                    label: field.label.toUpperCase(),
+                    label: (labels.get(field.fieldKey) ?? field.label).toUpperCase(),
                     group: tabLabel(field),
+                    groupOrder: formOrder.get(field.fieldKey),
                     defaultHidden: true,
                     // Master views sort on row[sortField]; custom values live one level down.
                     sortable: field.isSystem && field.fieldType !== 'multiselect',
@@ -100,7 +123,7 @@ export function useFormFieldColumns<T>(
                 };
             });
 
-        return extra.length > 0 ? [...columns, ...extra] : columns;
+        return [...placed, ...extra];
     }, [columns, module, configs]);
 }
 

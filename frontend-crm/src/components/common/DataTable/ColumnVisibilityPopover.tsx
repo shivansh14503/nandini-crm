@@ -41,8 +41,8 @@ interface ColumnSection<T> {
 }
 
 /**
- * "Pinned" first (in pin order), then basic columns, "More columns", and one section per form section
- * (generated form-field columns). A pinned column is listed only under "Pinned".
+ * "Pinned" first (in pin order), then basic columns, then one section per form tab, in the form's tab and field
+ * order. A pinned column is listed only under "Pinned".
  */
 function buildSections<T>(columns: DataTableColumn<T>[], pinnedIds: readonly string[]): ColumnSection<T>[] {
     const sections = new Map<string, ColumnSection<T>>();
@@ -58,14 +58,14 @@ function buildSections<T>(columns: DataTableColumn<T>[], pinnedIds: readonly str
     const pinned = pinnedIds.map((id) => byId.get(id)).filter((c): c is DataTableColumn<T> => Boolean(c));
     sections.set('pinned', { key: 'pinned', label: 'Pinned', columns: pinned });
     sections.set('basic', { key: 'basic', label: 'Basic Columns', columns: [] });
-    sections.set('more', { key: 'more', label: 'More Columns', columns: [] });
     const pinnedSet = new Set(pinnedIds);
+    const order = (c: DataTableColumn<T>) => c.groupOrder ?? Number.MAX_SAFE_INTEGER;
+    const grouped = columns.filter((c) => c.group && !pinnedSet.has(c.id)).sort((a, b) => order(a) - order(b));
     for (const column of columns) {
-        if (pinnedSet.has(column.id)) continue;
-        if (column.group) add(`group:${column.group}`, column.group, column);
-        else if (column.category === 'more') add('more', 'More Columns', column);
-        else add('basic', 'Basic Columns', column);
+        if (pinnedSet.has(column.id) || column.group) continue;
+        add('basic', 'Basic Columns', column);
     }
+    for (const column of grouped) add(`group:${column.group}`, column.group as string, column);
     return [...sections.values()].filter((s) => s.columns.length > 0);
 }
 

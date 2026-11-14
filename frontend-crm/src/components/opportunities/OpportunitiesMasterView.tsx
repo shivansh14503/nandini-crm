@@ -11,21 +11,23 @@ import AccountCircleOutlinedIcon from '@mui/icons-material/AccountCircleOutlined
 import WorkspacePremiumOutlinedIcon from '@mui/icons-material/WorkspacePremiumOutlined';
 import ApartmentIcon from '@mui/icons-material/Apartment';
 import CalendarMonthOutlinedIcon from '@mui/icons-material/CalendarMonthOutlined';
-import PersonOutlinedIcon from '@mui/icons-material/PersonOutlined';
 import { RecordLink } from '../common/RecordLink';
 import { CommonMasterView } from '../common/CommonMasterView';
+import { useTableFilter } from '../common/TableFilter';
 import { MasterHeaderActions } from '../common/MasterHeaderActions';
 import { buildExtendedSearchConfig } from '../common/buildExtendedSearchConfig';
 import { AppToast } from '../common/AppToast';
 import { DataImportModal } from '../common/import';
 import { RelatedModulesSidebar, RelatedRecordsTableView } from '../common/Drawer';
 import { RelatedSecondaryDrawer, type SecondaryDrawerEntity } from '../common/RelatedSecondaryDrawer';
-import type { DataTableColumn, DataTableFilterItem } from '../common/DataTable';
+import { documentNumberColumn, type DataTableColumn, type DataTableFilterItem } from '../common/DataTable';
 import { ROUTES } from '@/config/constants';
 import { useAuth } from '@/context/AuthContext';
 import { useRelatedModulesForEntity } from '@/config/relatedModules.config';
 import type { Opportunity } from '@/types/opportunity.types';
-import { useOpportunities, useBulkDeleteOpportunities } from '@/hooks/queries';
+import { useOpportunities, useBulkDeleteOpportunities, useQuotations } from '@/hooks/queries';
+import type { Quotation } from '@/types/quotation.types';
+import { formatDateTime } from '@/utils/date';
 import type { OpportunityFilterTab, OpportunitySortField } from './master';
 import { OpportunityDetailDrawer } from './OpportunityDetailDrawer';
 
@@ -36,6 +38,18 @@ const formatCurrency = (val: number) =>
         maximumFractionDigits: 0,
     }).format(val);
 
+const plainCellSx = { fontSize: '0.78rem', color: '#334155' } as const;
+
+/** Yes / No cell for derived flags (Quote Created, Quote Sent). */
+function YesNo({ value }: { value: boolean }) {
+    return (
+        <Typography sx={{ fontSize: '0.76rem', fontWeight: 600, color: value ? '#047857' : '#94a3b8' }}>
+            {value ? 'Yes' : 'No'}
+        </Typography>
+    );
+}
+
+const NO_QUOTES: Quotation[] = [];
 
 /** Stable empty list while the first page loads (keeps memoized filters from recomputing). */
 const NO_RECORDS: Opportunity[] = [];
@@ -44,7 +58,7 @@ export function OpportunitiesMasterView() {
     const { user } = useAuth();
     const currentUsername = user?.username || '';
 
-    const { data: opportunities = NO_RECORDS, refetch } = useOpportunities();
+    const { data: allOpportunities = NO_RECORDS, refetch } = useOpportunities();
     const bulkDeleteMutation = useBulkDeleteOpportunities();
     const [activeTab, setActiveTab] = useState<OpportunityFilterTab>('all');
     const [searchQuery, setSearchQuery] = useState('');
@@ -53,6 +67,17 @@ export function OpportunitiesMasterView() {
     const [rowsPerPage, setRowsPerPage] = useState(10);
     const [sortField, setSortField] = useState<OpportunitySortField>('createdAt');
     const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
+    const tableFilter = useTableFilter<Opportunity>({
+        module: 'opportunities',
+        rows: allOpportunities,
+        onSortChange: (s) => {
+            setSortField(s.field as OpportunitySortField);
+            setSortOrder(s.order);
+        },
+        onChange: () => setPage(0),
+    });
+    /** Records left by the Filter dialog: tabs, counts, search and bulk actions work on these. */
+    const opportunities = tableFilter.filteredRows;
     // Tracked by id so the drawer always shows the cached copy and closes if the deal is deleted.
     const [drawerOppId, setDrawerOppId] = useState<string | null>(null);
     const selectedDrawerOpp = useMemo(
@@ -72,6 +97,17 @@ export function OpportunitiesMasterView() {
         message: '',
         severity: 'success',
     });
+
+    // Quotations per deal, for the Quote Created / Quote Sent columns.
+    const { data: quotations = NO_QUOTES } = useQuotations();
+    const quotesByOpp = useMemo(() => {
+        const map = new Map<string, Quotation[]>();
+        for (const q of quotations) {
+            if (!q.opportunityId) continue;
+            map.set(q.opportunityId, [...(map.get(q.opportunityId) ?? []), q]);
+        }
+        return map;
+    }, [quotations]);
 
     const todayStr = useMemo(() => new Date().toISOString().split('T')[0], []);
 
@@ -183,9 +219,9 @@ export function OpportunitiesMasterView() {
     // ── Sort Logic ────────────────────────────────────────────────────────────
     const sortedOpportunities = useMemo(() => {
         return [...filteredOpportunities].sort((a, b) => {
-            if (sortField === 'grandTotal') {
-                const valA = a.grandTotal || 0;
-                const valB = b.grandTotal || 0;
+            if (sortField === 'grandTotal' || sortField === 'subtotal') {
+                const valA = Number(a[sortField]) || 0;
+                const valB = Number(b[sortField]) || 0;
                 return sortOrder === 'asc' ? valA - valB : valB - valA;
             }
 
@@ -265,59 +301,154 @@ export function OpportunitiesMasterView() {
     const columns: DataTableColumn<Opportunity>[] = useMemo(
         () => [
             {
-                id: 'opportunityCode',
-                label: 'DEAL / CODE',
+                id: 'assignedTo',
+                label: 'USER',
                 sortable: true,
-                minWidth: 190,
+                minWidth: 120,
+                render: (o) => <Typography sx={plainCellSx}>{o.assignedTo || '-'}</Typography>,
+            },
+            {
+                // Derived: the deal has at least one quotation linked to it.
+                id: 'quoteCreated',
+                label: 'QUOTE CREATED',
+                sortable: false,
+                minWidth: 120,
+                render: (o) => <YesNo value={(quotesByOpp.get(o.id)?.length ?? 0) > 0} />,
+            },
+            documentNumberColumn<Opportunity>({
+                id: 'opportunityCode',
+                label: 'OPP NUMBER',
+                getNumber: (o) => o.opportunityCode,
+                getHref: (o) => ROUTES.OPPORTUNITY_DETAIL(o.id),
+                onOpen: (o) => setDrawerOppId(o.id),
+            }),
+            {
+                id: 'opportunityName',
+                label: 'NAME',
+                sortable: true,
+                minWidth: 180,
                 render: (o) => (
-                    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.3 }}>
-                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                            <TrendingUpOutlinedIcon sx={{ fontSize: 16, color: '#2563eb', flexShrink: 0 }} />
-                            <RecordLink
-                                href={ROUTES.OPPORTUNITY_DETAIL(o.id)}
-                                onOpen={() => setDrawerOppId(o.id)}
-                                sx={{
-                                    fontWeight: 700,
-                                    color: '#1d4ed8',
-                                    fontSize: '0.82rem',
-                                    cursor: 'pointer',
-                                    '&:hover': { textDecoration: 'underline' },
-                                }}
-                            >
-                                {o.opportunityCode}
-                            </RecordLink>
-                        </Box>
-                        <Box sx={{ pl: 3 }}>
-                            <Typography sx={{ fontSize: '0.72rem', color: '#64748b' }} noWrap>
-                                {o.groupName || 'Primary Solution'}
-                            </Typography>
-                        </Box>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                        <TrendingUpOutlinedIcon sx={{ fontSize: 16, color: '#2563eb', flexShrink: 0 }} />
+                        <RecordLink
+                            href={ROUTES.OPPORTUNITY_DETAIL(o.id)}
+                            onOpen={() => setDrawerOppId(o.id)}
+                            sx={{
+                                fontWeight: 700,
+                                color: '#1d4ed8',
+                                fontSize: '0.82rem',
+                                cursor: 'pointer',
+                                '&:hover': { textDecoration: 'underline' },
+                            }}
+                        >
+                            {o.opportunityName || o.organizationName || o.opportunityCode}
+                        </RecordLink>
                     </Box>
                 ),
             },
             {
                 id: 'organizationName',
-                label: 'ORGANIZATION & CONTACT',
+                label: 'ORGANIZATION NAME',
                 sortable: true,
-                minWidth: 200,
+                minWidth: 180,
                 render: (o) => (
-                    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.3 }}>
-                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.8 }}>
-                            <ApartmentIcon sx={{ fontSize: 15, color: '#64748b', flexShrink: 0 }} />
-                            <Typography sx={{ fontSize: '0.8rem', color: '#1e293b', fontWeight: 600 }}>
-                                {o.organizationName}
-                            </Typography>
-                        </Box>
-                        {o.contactName && (
-                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.6, pl: 2.8 }}>
-                                <PersonOutlinedIcon sx={{ fontSize: 13, color: '#94a3b8' }} />
-                                <Typography sx={{ fontSize: '0.72rem', color: '#64748b' }} noWrap>
-                                    {o.contactName} ({o.contactNumber})
-                                </Typography>
-                            </Box>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.8 }}>
+                        <ApartmentIcon sx={{ fontSize: 15, color: '#64748b', flexShrink: 0 }} />
+                        <Typography sx={{ fontSize: '0.8rem', color: '#1e293b', fontWeight: 600 }}>
+                            {o.organizationName || '-'}
+                        </Typography>
+                    </Box>
+                ),
+            },
+            {
+                id: 'productCategory',
+                label: 'PRODUCT CATEGORY',
+                sortable: false,
+                minWidth: 170,
+                render: (o) => (
+                    <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
+                        {o.productCategory && o.productCategory.length > 0 ? (
+                            o.productCategory.map((cat, idx) => (
+                                <Chip
+                                    key={idx}
+                                    label={cat}
+                                    size="small"
+                                    sx={{
+                                        height: 20,
+                                        fontSize: '0.66rem',
+                                        fontWeight: 600,
+                                        backgroundColor: '#eff6ff',
+                                        color: '#1d4ed8',
+                                        border: '1px solid #bfdbfe',
+                                    }}
+                                />
+                            ))
+                        ) : (
+                            <Typography sx={{ fontSize: '0.78rem', color: '#94a3b8' }}>-</Typography>
                         )}
                     </Box>
                 ),
+            },
+            {
+                id: 'type',
+                label: 'TYPE',
+                sortable: true,
+                minWidth: 130,
+                render: (o) => <Typography sx={plainCellSx}>{o.type || '-'}</Typography>,
+            },
+            {
+                id: 'nextFollowupDate',
+                label: 'NEXT FOLLOWUP DATE',
+                sortable: true,
+                minWidth: 140,
+                render: (o) => {
+                    const isToday = o.nextFollowupDate === todayStr;
+
+                    return (
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.8 }}>
+                            <CalendarMonthOutlinedIcon
+                                sx={{
+                                    fontSize: 16,
+                                    color: isToday ? '#d97706' : '#64748b',
+                                }}
+                            />
+                            <Box>
+                                <Typography
+                                    sx={{
+                                        fontSize: '0.78rem',
+                                        fontWeight: isToday ? 700 : 500,
+                                        color: isToday ? '#b45309' : '#334155',
+                                    }}
+                                >
+                                    {o.nextFollowupDate || '-'}
+                                    {isToday && (
+                                        <Box
+                                            component="span"
+                                            sx={{
+                                                ml: 0.6,
+                                                px: 0.6,
+                                                py: 0.1,
+                                                borderRadius: '4px',
+                                                fontSize: '0.62rem',
+                                                fontWeight: 800,
+                                                backgroundColor: '#fef3c7',
+                                                color: '#b45309',
+                                                border: '1px solid #fde68a',
+                                            }}
+                                        >
+                                            TODAY
+                                        </Box>
+                                    )}
+                                </Typography>
+                                {o.followupType && (
+                                    <Typography sx={{ fontSize: '0.7rem', color: '#64748b' }}>
+                                        {o.followupType} {o.nextFollowupTime ? `• ${o.nextFollowupTime}` : ''}
+                                    </Typography>
+                                )}
+                            </Box>
+                        </Box>
+                    );
+                },
             },
             {
                 id: 'salesStage',
@@ -371,135 +502,43 @@ export function OpportunitiesMasterView() {
                 },
             },
             {
-                id: 'grandTotal',
-                label: 'DEAL VALUE',
-                sortable: true,
-                minWidth: 130,
-                render: (o) => (
-                    <Box sx={{ display: 'flex', flexDirection: 'column' }}>
-                        <Typography sx={{ fontSize: '0.84rem', fontWeight: 700, color: '#0f172a' }}>
-                            {formatCurrency(o.grandTotal || 0)}
-                        </Typography>
-                        {o.lineItems && o.lineItems.length > 0 && (
-                            <Typography sx={{ fontSize: '0.68rem', color: '#64748b' }}>
-                                {o.lineItems.length} line item(s)
-                            </Typography>
-                        )}
-                    </Box>
-                ),
-            },
-            {
-                id: 'productCategory',
-                label: 'PRODUCT CATEGORY',
-                sortable: false,
-                minWidth: 170,
-                render: (o) => (
-                    <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
-                        {o.productCategory && o.productCategory.length > 0 ? (
-                            o.productCategory.map((cat, idx) => (
-                                <Chip
-                                    key={idx}
-                                    label={cat}
-                                    size="small"
-                                    sx={{
-                                        height: 20,
-                                        fontSize: '0.66rem',
-                                        fontWeight: 600,
-                                        backgroundColor: '#eff6ff',
-                                        color: '#1d4ed8',
-                                        border: '1px solid #bfdbfe',
-                                    }}
-                                />
-                            ))
-                        ) : (
-                            <Typography sx={{ fontSize: '0.78rem', color: '#94a3b8' }}>-</Typography>
-                        )}
-                    </Box>
-                ),
-            },
-            {
-                id: 'type',
-                label: 'TYPE & SOURCE',
+                // Line items after discount, before tax.
+                id: 'subtotal',
+                label: 'ACTUAL (BEFORE TAX)',
                 sortable: true,
                 minWidth: 150,
                 render: (o) => (
-                    <Box sx={{ display: 'flex', flexDirection: 'column' }}>
-                        <Typography sx={{ fontSize: '0.78rem', color: '#334155', fontWeight: 600 }}>
-                            {o.type || 'New Business'}
-                        </Typography>
-                        <Typography sx={{ fontSize: '0.7rem', color: '#64748b' }}>
-                            via {o.leadSource}
-                        </Typography>
-                    </Box>
-                ),
-            },
-            {
-                id: 'nextFollowupDate',
-                label: 'NEXT FOLLOWUP',
-                sortable: true,
-                minWidth: 140,
-                render: (o) => {
-                    const isToday = o.nextFollowupDate === todayStr;
-
-                    return (
-                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.8 }}>
-                            <CalendarMonthOutlinedIcon
-                                sx={{
-                                    fontSize: 16,
-                                    color: isToday ? '#d97706' : '#64748b',
-                                }}
-                            />
-                            <Box>
-                                <Typography
-                                    sx={{
-                                        fontSize: '0.78rem',
-                                        fontWeight: isToday ? 700 : 500,
-                                        color: isToday ? '#b45309' : '#334155',
-                                    }}
-                                >
-                                    {o.nextFollowupDate || '-'}
-                                    {isToday && (
-                                        <Box
-                                            component="span"
-                                            sx={{
-                                                ml: 0.6,
-                                                px: 0.6,
-                                                py: 0.1,
-                                                borderRadius: '4px',
-                                                fontSize: '0.62rem',
-                                                fontWeight: 800,
-                                                backgroundColor: '#fef3c7',
-                                                color: '#b45309',
-                                                border: '1px solid #fde68a',
-                                            }}
-                                        >
-                                            TODAY
-                                        </Box>
-                                    )}
-                                </Typography>
-                                {o.followupType && (
-                                    <Typography sx={{ fontSize: '0.7rem', color: '#64748b' }}>
-                                        {o.followupType} {o.nextFollowupTime ? `• ${o.nextFollowupTime}` : ''}
-                                    </Typography>
-                                )}
-                            </Box>
-                        </Box>
-                    );
-                },
-            },
-            {
-                id: 'assignedTo',
-                label: 'ASSIGNED TO',
-                sortable: true,
-                minWidth: 130,
-                render: (o) => (
-                    <Typography sx={{ fontSize: '0.78rem', color: '#475569', fontWeight: 500 }}>
-                        {o.assignedTo || '-'}
+                    <Typography sx={{ fontSize: '0.82rem', fontWeight: 700, color: '#0f172a' }}>
+                        {formatCurrency(o.subtotal ?? (o.grandTotal || 0) - (o.totalTax || 0))}
                     </Typography>
                 ),
             },
+            {
+                // No remarks log on deals: "Add Description" is the note updated on each follow-up (as on leads).
+                id: 'addDescription',
+                label: 'LATEST REMARKS',
+                sortable: false,
+                minWidth: 220,
+                width: 280,
+                render: (o) => <Typography sx={plainCellSx}>{o.addDescription || '-'}</Typography>,
+            },
+            {
+                // Derived: a linked quotation has moved past Draft.
+                id: 'quoteSent',
+                label: 'QUOTE SENT',
+                sortable: false,
+                minWidth: 110,
+                render: (o) => <YesNo value={(quotesByOpp.get(o.id) ?? []).some((q) => q.quoteStage && q.quoteStage !== 'Draft')} />,
+            },
+            {
+                id: 'createdAt',
+                label: 'DATE CREATED',
+                sortable: true,
+                minWidth: 170,
+                render: (o) => <Typography sx={plainCellSx}>{formatDateTime(o.createdAt) || '-'}</Typography>,
+            },
         ],
-        [todayStr]
+        [todayStr, quotesByOpp]
     );
 
     const relatedModules = useRelatedModulesForEntity('opportunity', selectedDrawerOpp, setActiveRelatedModule);
@@ -526,6 +565,7 @@ export function OpportunitiesMasterView() {
                 },
             }}
             tableId="opportunities"
+            tableFilter={tableFilter}
             headerActions={() => (
                 <MasterHeaderActions
                     onRefresh={async () => {

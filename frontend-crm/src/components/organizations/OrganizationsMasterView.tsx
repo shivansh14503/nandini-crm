@@ -17,6 +17,7 @@ import { useRelatedModulesForEntity } from '@/config/relatedModules.config';
 import { RecordLink } from '../common/RecordLink';
 import { useAuth } from '@/context/AuthContext';
 import { CommonMasterView } from '../common/CommonMasterView';
+import { useTableFilter } from '../common/TableFilter';
 import { AppToast } from '../common/AppToast';
 import { MasterHeaderActions, outlinedHeaderButtonSx } from '../common/MasterHeaderActions';
 import { DataImportModal } from '../common/import';
@@ -45,6 +46,9 @@ import { ProductDetailDrawer } from '../products/ProductDetailDrawer';
 import { TicketDetailDrawer } from '../tickets/TicketDetailDrawer';
 import type { Ticket } from '@/types/ticket.types';
 import type { FilterTab, SortField } from './master';
+import { formatDateTime } from '@/utils/date';
+
+const plainCellSx = { fontSize: '0.78rem', color: '#334155' } as const;
 
 const getNatureBadgeStyle = (nature: string = '') => {
     const n = nature.toLowerCase();
@@ -74,15 +78,26 @@ export function OrganizationsMasterView() {
     const isAdmin = user?.role?.toLowerCase() === 'admin';
 
     // ── State ─────────────────────────────────────────────────────────────────
-    const { data: organizations = NO_RECORDS, refetch } = useOrganizations();
+    const { data: allOrganizations = NO_RECORDS, refetch } = useOrganizations();
     const bulkDeleteMutation = useBulkDeleteOrganizations();
     const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
     const [activeTab, setActiveTab] = useState<FilterTab>('all');
     const [searchQuery, setSearchQuery] = useState('');
     const [rowsPerPage, setRowsPerPage] = useState<number>(25);
     const [currentPage, setCurrentPage] = useState<number>(1);
-    const [sortField, setSortField] = useState<SortField>('organizationName');
-    const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
+    const [sortField, setSortField] = useState<SortField>('createdAt');
+    const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
+    const tableFilter = useTableFilter<ExtendedOrganization>({
+        module: 'organizations',
+        rows: allOrganizations,
+        onSortChange: (s) => {
+            setSortField(s.field as SortField);
+            setSortOrder(s.order);
+        },
+        onChange: () => setCurrentPage(1),
+    });
+    /** Records left by the Filter dialog: tabs, counts, search and bulk actions work on these. */
+    const organizations = tableFilter.filteredRows;
 
     // Detail View Side Drawer & Three-Panel LIFO Stack State
     // Tracked by id so the drawer always shows the cached copy and closes if the organization is deleted.
@@ -407,9 +422,8 @@ export function OrganizationsMasterView() {
         () => [
             {
                 id: 'organizationName',
-                category: 'basic',
                 locked: true,
-                label: 'ORGANIZATION NAME',
+                label: 'NAME',
                 sortable: true,
                 minWidth: 240,
                 render: (org) => (
@@ -472,7 +486,6 @@ export function OrganizationsMasterView() {
             },
             {
                 id: 'natureOfBusiness',
-                category: 'basic',
                 label: 'NATURE OF BUSINESS',
                 sortable: true,
                 minWidth: 160,
@@ -498,7 +511,6 @@ export function OrganizationsMasterView() {
             },
             {
                 id: 'customerType',
-                category: 'basic',
                 label: 'CUSTOMER TYPE',
                 sortable: true,
                 minWidth: 130,
@@ -523,7 +535,6 @@ export function OrganizationsMasterView() {
             },
             {
                 id: 'accountStatus',
-                category: 'basic',
                 label: 'STATUS',
                 sortable: true,
                 minWidth: 110,
@@ -561,21 +572,18 @@ export function OrganizationsMasterView() {
                 },
             },
             {
-                id: 'billingStreet',
-                fieldKey: 'billingAddress',
-                category: 'more',
+                id: 'billingAddress',
                 label: 'BILLING STREET',
                 sortable: true,
                 minWidth: 160,
                 render: (org) => (
-                    <Typography noWrap sx={{ fontSize: '0.78rem', color: '#475569', maxWidth: 200 }}>
-                        {org.billingStreet || '-'}
+                    <Typography sx={{ fontSize: '0.78rem', color: '#475569' }}>
+                        {org.billingStreet || org.billingAddress || '-'}
                     </Typography>
                 ),
             },
             {
                 id: 'billingCity',
-                category: 'more',
                 label: 'BILLING CITY',
                 sortable: true,
                 minWidth: 120,
@@ -587,7 +595,6 @@ export function OrganizationsMasterView() {
             },
             {
                 id: 'billingState',
-                category: 'more',
                 label: 'BILLING STATE',
                 sortable: true,
                 minWidth: 120,
@@ -598,9 +605,26 @@ export function OrganizationsMasterView() {
                 ),
             },
             {
+                id: 'gstNo',
+                label: 'GST NUMBER',
+                sortable: true,
+                minWidth: 150,
+                render: (org) => (
+                    <Typography sx={{ fontSize: '0.78rem', color: '#334155', fontFamily: 'monospace' }}>
+                        {org.gstNo || org.gstNumber || '-'}
+                    </Typography>
+                ),
+            },
+            {
+                id: 'numberOfEmployees',
+                label: 'NO. OF EMPLOYEES',
+                sortable: true,
+                minWidth: 130,
+                render: (org) => <Typography sx={plainCellSx}>{org.numberOfEmployees || '-'}</Typography>,
+            },
+            {
                 id: 'annualTurnover',
-                category: 'more',
-                label: 'ANNUAL TURNOVER',
+                label: 'TURNOVER',
                 sortable: true,
                 minWidth: 130,
                 render: (org) => (
@@ -611,15 +635,17 @@ export function OrganizationsMasterView() {
             },
             {
                 id: 'assignedUser',
-                category: 'more',
-                label: 'ASSIGNED USER',
+                label: 'USER',
                 sortable: true,
-                minWidth: 140,
-                render: (org) => (
-                    <Typography sx={{ fontSize: '0.78rem', color: '#64748b' }}>
-                        {org.assignedUser || '-'}
-                    </Typography>
-                ),
+                minWidth: 130,
+                render: (org) => <Typography sx={plainCellSx}>{org.assignedUser || '-'}</Typography>,
+            },
+            {
+                id: 'createdAt',
+                label: 'DATE CREATED',
+                sortable: true,
+                minWidth: 170,
+                render: (org) => <Typography sx={plainCellSx}>{formatDateTime(org.createdAt) || '-'}</Typography>,
             },
         ],
         []
@@ -663,6 +689,7 @@ export function OrganizationsMasterView() {
                 variant: 'pill',
             }}
             tableId="organizations"
+            tableFilter={tableFilter}
             headerActions={headerActions}
             searchConfig={{
                 variant: 'extended',
