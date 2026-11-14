@@ -319,8 +319,18 @@ export function CommonMasterView<T = unknown, TFilter extends string = string>({
 
     const resolvedFormModule = formModule === undefined ? (isCrmModuleKey(tableId) ? tableId : undefined) : (formModule ?? undefined);
     const allColumns = useFormFieldColumns<T>(columns, resolvedFormModule);
-    const { visibleColumnIds, activeColumns, pinnedColumnIds, toggleColumn, setColumnsVisible, togglePin, resetDefaults } =
-        useColumnVisibility<T>(allColumns, tableId);
+    const {
+        orderedColumns,
+        visibleColumnIds,
+        activeColumns,
+        pinnedColumnIds,
+        toggleColumn,
+        setColumnsVisible,
+        togglePin,
+        reorderColumns,
+        reorderPinned,
+        resetDefaults,
+    } = useColumnVisibility<T>(allColumns, tableId);
     const [columnAnchorEl, setColumnAnchorEl] = React.useState<HTMLElement | null>(null);
     const openColumnManager = React.useCallback((el: HTMLElement) => setColumnAnchorEl(el), []);
     const closeColumnManager = React.useCallback(() => setColumnAnchorEl(null), []);
@@ -476,10 +486,12 @@ export function CommonMasterView<T = unknown, TFilter extends string = string>({
                 >
                     {columns && (
                         <ColumnVisibilityPopover<T>
-                            columns={allColumns ?? columns}
+                            columns={orderedColumns}
                             onSetColumnsVisible={setColumnsVisible}
                             pinnedColumnIds={pinnedColumnIds}
                             onTogglePin={togglePin}
+                            onReorderColumns={reorderColumns}
+                            onReorderPinned={reorderPinned}
                             maxPinned={MAX_PINNED_COLUMNS}
                             visibleColumnIds={visibleColumnIds}
                             onToggleColumn={toggleColumn}

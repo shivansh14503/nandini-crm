@@ -21,7 +21,7 @@ import PublishedWithChangesIcon from '@mui/icons-material/PublishedWithChanges';
 
 import { ROUTES } from '@/config/constants';
 import type { Lead } from '@/types/lead.types';
-import { useLead } from '@/hooks/queries';
+import { useLead, useDropdownOptionLabel } from '@/hooks/queries';
 import {
     EntityDetailDrawer,
     DrawerSectionCard,
@@ -52,6 +52,7 @@ export function LeadDetailDrawer({
     const router = useRouter();
 
     const { data: freshLead } = useLead(open && lead?.id ? lead.id : undefined);
+    const leadSourceLabel = useDropdownOptionLabel('shared_lead_source');
 
     useEffect(() => {
         if (freshLead) {
@@ -318,7 +319,7 @@ export function LeadDetailDrawer({
                                 <Box>
                                     <Typography sx={{ fontSize: '0.68rem', fontWeight: 700, color: '#64748b' }}>LEAD SOURCE</Typography>
                                     <Typography sx={{ fontSize: '0.82rem', fontWeight: 600, color: '#1e3a8a', mt: 0.3 }}>
-                                        {l.leadSource}
+                                        {leadSourceLabel(l.leadSource)}
                                     </Typography>
                                 </Box>
                                 <Box>

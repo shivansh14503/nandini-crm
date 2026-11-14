@@ -14,15 +14,36 @@ export const MAX_PINNED_COLUMNS = 4;
 /**
  * Explicit choices that differ from each column's default: `hidden` lists columns shown by default that the user
  * hid, `shown` lists `defaultHidden` columns the user switched on. Columns added later keep their own default.
- * `pinned` lists the columns frozen at the table's left edge, in the order they were pinned.
+ * `pinned` lists the columns frozen at the table's left edge, in the order they were pinned. `order` is the
+ * user's column order (from dragging in Modify Columns); empty = the table's built-in order.
  */
 interface VisibilityPrefs {
     hidden: string[];
     shown: string[];
     pinned: string[];
+    order: string[];
 }
 
-const EMPTY_PREFS: VisibilityPrefs = { hidden: [], shown: [], pinned: [] };
+const EMPTY_PREFS: VisibilityPrefs = { hidden: [], shown: [], pinned: [], order: [] };
+
+/**
+ * Every column in display order: the saved order first, then columns it doesn't know (added later) right after
+ * the column that precedes them in the built-in order, so they show up where the table defines them.
+ */
+function orderColumns<T>(columns: DataTableColumn<T>[], order: readonly string[]): DataTableColumn<T>[] {
+    if (order.length === 0) return columns;
+    const byId = new Map(columns.map((c) => [c.id, c]));
+    const result = order.filter((id, i) => byId.has(id) && order.indexOf(id) === i);
+    const placed = new Set(result);
+    columns.forEach((column, i) => {
+        if (placed.has(column.id)) return;
+        const prev = i > 0 ? columns[i - 1].id : null;
+        const at = prev ? result.indexOf(prev) : -1;
+        result.splice(at + 1, 0, column.id);
+        placed.add(column.id);
+    });
+    return result.map((id) => byId.get(id)!);
+}
 
 function readRaw(tableId: string | undefined): string {
     if (!tableId) return '';
@@ -62,7 +83,7 @@ function parsePrefs(raw: string): VisibilityPrefs | null {
         if (Array.isArray(parsed)) return { ...EMPTY_PREFS, hidden: strings(parsed) };
         if (parsed && typeof parsed === 'object') {
             const obj = parsed as Record<string, unknown>;
-            return { hidden: strings(obj.hidden), shown: strings(obj.shown), pinned: strings(obj.pinned) };
+            return { hidden: strings(obj.hidden), shown: strings(obj.shown), pinned: strings(obj.pinned), order: strings(obj.order) };
         }
         return null;
     } catch {
@@ -71,6 +92,8 @@ function parsePrefs(raw: string): VisibilityPrefs | null {
 }
 
 export interface ColumnVisibility<T> {
+    /** Every column (shown or not) in the user's order. */
+    orderedColumns: DataTableColumn<T>[];
     visibleColumnIds: Set<string>;
     /** Visible columns in display order: pinned ones first (flagged `pinned`, in pin order), then the rest. */
     activeColumns: DataTableColumn<T>[];
@@ -81,6 +104,10 @@ export interface ColumnVisibility<T> {
     setColumnsVisible: (columnIds: string[], visible: boolean) => void;
     /** Pins a column (showing it if hidden) or unpins it. Ignored past MAX_PINNED_COLUMNS. */
     togglePin: (columnId: string) => void;
+    /** New order of the visible, unpinned columns (as listed in Modify Columns → Shown). */
+    reorderColumns: (columnIds: string[]) => void;
+    /** New order of the pinned columns. */
+    reorderPinned: (columnIds: string[]) => void;
     resetDefaults: () => void;
 }
 
@@ -100,11 +127,12 @@ export function useColumnVisibility<T>(
         () => ''
     );
 
-    const allColumns = useMemo(() => columns ?? [], [columns]);
     const prefs = useMemo<VisibilityPrefs>(
         () => (tableId ? parsePrefs(storedRaw) : localPrefs) ?? EMPTY_PREFS,
         [tableId, storedRaw, localPrefs]
     );
+    // In the user's order: everything below (visibility, display, the column manager) follows it.
+    const allColumns = useMemo(() => orderColumns(columns ?? [], prefs.order), [columns, prefs.order]);
 
     const visibleColumnIds = useMemo(() => {
         const hidden = new Set(prefs.hidden);
@@ -167,7 +195,7 @@ export function useColumnVisibility<T>(
                     hidden.add(id);
                 }
             }
-            return { hidden: [...hidden], shown: [...shown], pinned };
+            return { ...base, hidden: [...hidden], shown: [...shown], pinned };
         },
         [allColumns, visibleColumnIds]
     );
@@ -196,7 +224,34 @@ export function useColumnVisibility<T>(
         [commit, prefs, pinnedColumnIds, withVisibility]
     );
 
+    const reorderColumns = useCallback(
+        (columnIds: string[]) => {
+            // The dragged columns take the slots they held, in their new order; every other column stays put.
+            const moved = new Set(columnIds);
+            const queue = [...columnIds];
+            const order = allColumns.map((c) => (moved.has(c.id) ? (queue.shift() ?? c.id) : c.id));
+            commit({ ...prefs, order });
+        },
+        [allColumns, commit, prefs]
+    );
+
+    const reorderPinned = useCallback(
+        (columnIds: string[]) => commit({ ...prefs, pinned: columnIds.filter((id) => pinnedColumnIds.includes(id)) }),
+        [commit, prefs, pinnedColumnIds]
+    );
+
     const resetDefaults = useCallback(() => commit(EMPTY_PREFS), [commit]);
 
-    return { visibleColumnIds, activeColumns, pinnedColumnIds, toggleColumn, setColumnsVisible, togglePin, resetDefaults };
+    return {
+        orderedColumns: allColumns,
+        visibleColumnIds,
+        activeColumns,
+        pinnedColumnIds,
+        toggleColumn,
+        setColumnsVisible,
+        togglePin,
+        reorderColumns,
+        reorderPinned,
+        resetDefaults,
+    };
 }

@@ -25,7 +25,7 @@ import { ROUTES } from '@/config/constants';
 import { useAuth } from '@/context/AuthContext';
 import { useRelatedModulesForEntity } from '@/config/relatedModules.config';
 import type { Opportunity } from '@/types/opportunity.types';
-import { useOpportunities, useBulkDeleteOpportunities, useQuotations } from '@/hooks/queries';
+import { useOpportunities, useBulkDeleteOpportunities, useQuotations, useDropdownOptionLabel } from '@/hooks/queries';
 import type { Quotation } from '@/types/quotation.types';
 import { formatDateTime } from '@/utils/date';
 import type { OpportunityFilterTab, OpportunitySortField } from './master';
@@ -57,6 +57,7 @@ export function OpportunitiesMasterView() {
     const router = useRouter();
     const { user } = useAuth();
     const currentUsername = user?.username || '';
+    const leadSourceLabel = useDropdownOptionLabel('shared_lead_source');
 
     const { data: allOpportunities = NO_RECORDS, refetch } = useOpportunities();
     const bulkDeleteMutation = useBulkDeleteOpportunities();
@@ -192,7 +193,7 @@ export function OpportunitiesMasterView() {
                 const inEmail = (opp.emailAddress || '').toLowerCase().includes(q);
                 const inStage = opp.salesStage.toLowerCase().includes(q);
                 const inType = opp.type.toLowerCase().includes(q);
-                const inSource = opp.leadSource.toLowerCase().includes(q);
+                const inSource = leadSourceLabel(opp.leadSource).toLowerCase().includes(q);
                 const inAssigned = opp.assignedTo.toLowerCase().includes(q);
                 const inProduct = (opp.productCategory || []).some((p) =>
                     p.toLowerCase().includes(q)
@@ -214,7 +215,7 @@ export function OpportunitiesMasterView() {
 
             return true;
         });
-    }, [opportunities, activeTab, searchQuery, currentUsername]);
+    }, [opportunities, activeTab, searchQuery, currentUsername, leadSourceLabel]);
 
     // ── Sort Logic ────────────────────────────────────────────────────────────
     const sortedOpportunities = useMemo(() => {

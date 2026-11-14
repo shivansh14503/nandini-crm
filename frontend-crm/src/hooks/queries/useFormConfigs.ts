@@ -50,6 +50,18 @@ export function useDropdownOptionsGetter(): (categoryKey: string, fallbackOption
     return useCallback((categoryKey, fallbackOptions) => activeOptionValues(findCategory(configs, categoryKey), fallbackOptions), [configs]);
 }
 
+/**
+ * Display label of a stored dropdown value (archived options included). Records store the option's value, which
+ * stays fixed when an admin renames the option, so hand-built cells and drawers must show this instead of the raw value.
+ */
+export function useDropdownOptionLabel(categoryKey: string): (value: string | null | undefined) => string {
+    const configs = useFormConfigs();
+    return useMemo(() => {
+        const labels = optionLabelMap(findCategory(configs, categoryKey)) ?? {};
+        return (value) => (value ? labels[value] ?? value : '');
+    }, [configs, categoryKey]);
+}
+
 /** An option's `meta` (e.g. a terms template's `description`), archived options included. */
 export function useDropdownOptionMeta(categoryKey: string): (value: string) => Record<string, unknown> | undefined {
     const configs = useFormConfigs();

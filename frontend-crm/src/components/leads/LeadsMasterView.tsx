@@ -27,7 +27,7 @@ import { ROUTES } from '@/config/constants';
 import { useAuth } from '@/context/AuthContext';
 import { useRelatedModulesForEntity } from '@/config/relatedModules.config';
 import type { Lead } from '@/types/lead.types';
-import { useLeads, useBulkDeleteLeads } from '@/hooks/queries';
+import { useLeads, useBulkDeleteLeads, useDropdownOptionLabel } from '@/hooks/queries';
 import type { LeadFilterTab } from './master';
 import { LeadDetailDrawer } from './LeadDetailDrawer';
 import { formatDateTime } from '@/utils/date';
@@ -42,6 +42,7 @@ export function LeadsMasterView() {
     const router = useRouter();
     const { user } = useAuth();
     const currentUsername = user?.username || '';
+    const leadSourceLabel = useDropdownOptionLabel('shared_lead_source');
 
     const { data: leads = NO_RECORDS, refetch } = useLeads();
     const bulkDeleteMutation = useBulkDeleteLeads();
@@ -144,7 +145,7 @@ export function LeadsMasterView() {
                 const inEmail = (lead.emailAddresses || []).some((e) => e.email.toLowerCase().includes(q));
                 const inProduct = (lead.productCategory || []).some((p) => p.toLowerCase().includes(q));
                 const inStatus = lead.status.toLowerCase().includes(q);
-                const inSource = lead.leadSource.toLowerCase().includes(q);
+                const inSource = leadSourceLabel(lead.leadSource).toLowerCase().includes(q);
                 const inAssigned = lead.assignedTo.toLowerCase().includes(q);
 
                 return (
@@ -162,7 +163,7 @@ export function LeadsMasterView() {
 
             return true;
         });
-    }, [baseLeads, activeTab, searchQuery, todayStr, currentUsername]);
+    }, [baseLeads, activeTab, searchQuery, todayStr, currentUsername, leadSourceLabel]);
 
     // ── Sort Logic ────────────────────────────────────────────────────────────
     const sortedLeads = useMemo(() => {
@@ -265,7 +266,7 @@ export function LeadsMasterView() {
                 label: 'LEAD SOURCE',
                 sortable: true,
                 minWidth: 140,
-                render: (l) => <Typography sx={plainCellSx}>{l.leadSource || '-'}</Typography>,
+                render: (l) => <Typography sx={plainCellSx}>{leadSourceLabel(l.leadSource) || '-'}</Typography>,
             },
             {
                 id: 'productCategory',
@@ -485,7 +486,7 @@ export function LeadsMasterView() {
                 render: (l) => <Typography sx={plainCellSx}>{formatDateTime(l.createdAt) || '-'}</Typography>,
             },
         ],
-        [todayStr]
+        [todayStr, leadSourceLabel]
     );
 
     const relatedModules = useRelatedModulesForEntity('lead', selectedDrawerLead, setActiveRelatedModule);

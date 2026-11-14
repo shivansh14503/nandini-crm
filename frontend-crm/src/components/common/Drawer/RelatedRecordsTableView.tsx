@@ -34,6 +34,7 @@ import {
     useRelatedDatasets,
     type CrmEntityType,
 } from '@/config/relatedModules.config';
+import { useDropdownOptionLabel } from '@/hooks/queries/useFormConfigs';
 
 export interface RelatedRecordsTableViewProps {
     open: boolean;
@@ -179,7 +180,7 @@ function renderStatusPill(status: unknown): React.ReactNode {
     );
 }
 
-function getColumnsForModule(moduleKey: string): DataTableColumn<RelatedRow>[] {
+function getColumnsForModule(moduleKey: string, leadSourceLabel: (value: string) => string): DataTableColumn<RelatedRow>[] {
     switch (moduleKey) {
         case 'activities':
             return [
@@ -263,7 +264,7 @@ function getColumnsForModule(moduleKey: string): DataTableColumn<RelatedRow>[] {
                 { id: 'name', label: 'Name', minWidth: 170, sortable: true, render: (r) => renderPrimaryCell(r.name) },
                 { id: 'organizationName', label: 'Organization Name', minWidth: 190, sortable: true, accessor: 'organizationName' },
                 { id: 'status', label: 'Status', minWidth: 130, sortable: true, render: (r) => renderStatusPill(r.status) },
-                { id: 'leadSource', label: 'Lead Source', minWidth: 140, sortable: true, accessor: 'leadSource' },
+                { id: 'leadSource', label: 'Lead Source', minWidth: 140, sortable: true, render: (r) => leadSourceLabel(String(r.leadSource ?? '')) },
                 {
                     id: 'productCategory',
                     label: 'Product Category',
@@ -440,7 +441,8 @@ export function RelatedRecordsTableView({
 
     const moduleKey = useMemo(() => normalizeModuleKey(moduleId), [moduleId]);
 
-    const columns = useMemo(() => getColumnsForModule(moduleKey), [moduleKey]);
+    const leadSourceLabel = useDropdownOptionLabel('shared_lead_source');
+    const columns = useMemo(() => getColumnsForModule(moduleKey, leadSourceLabel), [moduleKey, leadSourceLabel]);
 
     const datasets = useRelatedDatasets(entityType, entityData, open);
 
