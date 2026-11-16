@@ -17,3 +17,4 @@ export * from '../common/CommonFormLayout';
 
 export * from './DynamicFormField';
 export * from './DynamicModuleCustomFields';
+export * from './TimePicker';
