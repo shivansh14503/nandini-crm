@@ -11,11 +11,49 @@ import {
     type Theme,
 } from '@mui/material';
 import ContentCopyOutlinedIcon from '@mui/icons-material/ContentCopyOutlined';
+import CheckIcon from '@mui/icons-material/Check';
 
-export function copyToClipboard(text: string) {
-    if (typeof navigator !== 'undefined' && navigator.clipboard) {
-        navigator.clipboard.writeText(text);
+/** Legacy copy via a hidden textarea; still works where the Clipboard API is unavailable. */
+function copyWithTextarea(text: string): boolean {
+    const textarea = document.createElement('textarea');
+    textarea.value = text;
+    textarea.setAttribute('readonly', '');
+    textarea.style.position = 'fixed';
+    textarea.style.top = '0';
+    textarea.style.left = '0';
+    textarea.style.opacity = '0';
+    // Inside an open MUI drawer/dialog the focus trap would pull focus back; append next to the active element.
+    const host = document.activeElement?.closest('[role="dialog"], [role="presentation"]') ?? document.body;
+    host.appendChild(textarea);
+    const previous = document.activeElement as HTMLElement | null;
+    textarea.focus();
+    textarea.select();
+    let ok = false;
+    try {
+        ok = document.execCommand('copy');
+    } catch {
+        ok = false;
     }
+    host.removeChild(textarea);
+    previous?.focus?.();
+    return ok;
+}
+
+/**
+ * Copies text to the clipboard. The Clipboard API only exists on secure pages (https / localhost), so the CRM
+ * opened by server IP over http falls back to the legacy copy command.
+ */
+export async function copyToClipboard(text: string): Promise<boolean> {
+    if (typeof window === 'undefined') return false;
+    if (window.isSecureContext && navigator.clipboard?.writeText) {
+        try {
+            await navigator.clipboard.writeText(text);
+            return true;
+        } catch {
+            // Permission denied or document not focused: try the fallback.
+        }
+    }
+    return copyWithTextarea(text);
 }
 
 export interface DrawerCopyButtonProps {
@@ -25,10 +63,28 @@ export interface DrawerCopyButtonProps {
 }
 
 export function DrawerCopyButton({ text, title = 'Copy', iconColor }: DrawerCopyButtonProps) {
+    const [status, setStatus] = React.useState<'idle' | 'copied' | 'failed'>('idle');
+    React.useEffect(() => {
+        if (status === 'idle') return;
+        const timer = window.setTimeout(() => setStatus('idle'), 1500);
+        return () => window.clearTimeout(timer);
+    }, [status]);
+
+    const handleClick = async (e: React.MouseEvent) => {
+        // Drawers and table rows often react to clicks themselves.
+        e.stopPropagation();
+        setStatus((await copyToClipboard(text)) ? 'copied' : 'failed');
+    };
+
+    const tooltip = status === 'copied' ? 'Copied!' : status === 'failed' ? 'Copy failed' : title;
     return (
-        <Tooltip title={title}>
-            <IconButton size="small" onClick={() => copyToClipboard(text)}>
-                <ContentCopyOutlinedIcon sx={{ fontSize: 14, color: iconColor }} />
+        <Tooltip title={tooltip} open={status !== 'idle' ? true : undefined} placement="top">
+            <IconButton size="small" onClick={handleClick} aria-label={title}>
+                {status === 'copied' ? (
+                    <CheckIcon sx={{ fontSize: 14, color: 'var(--mui-palette-success-main)' }} />
+                ) : (
+                    <ContentCopyOutlinedIcon sx={{ fontSize: 14, color: iconColor }} />
+                )}
             </IconButton>
         </Tooltip>
     );
