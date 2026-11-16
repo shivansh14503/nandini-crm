@@ -74,7 +74,7 @@ const organizationFields = z.object({
     // Overview
     organizationName: requiredUpperText('Organization Name', L.organizationName),
     mailingName: optionalText('Mailing Name', L.organizationName),
-    tradeName: optionalText('Trade Name', L.organizationName),
+    tradeName: optionalUpperText('Trade Name', L.organizationName),
     natureOfBusiness: optionalText('Nature of Business', L.option),
     // Admin-customizable (org_account_status / org_registration_type); the system options keep their meaning.
     accountStatus: textWithDefault('Account Status', 20, 'Active'),

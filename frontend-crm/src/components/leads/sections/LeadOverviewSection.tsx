@@ -39,6 +39,7 @@ import { OrganizationNameAutocomplete } from '@/components/organizations/Organiz
 import { useOrganizationNameCheck } from '@/components/organizations/useOrganizationNameCheck';
 import { useLeadExistingCheck } from '../useLeadExistingCheck';
 import { useFormMode } from '@/context/FormModeContext';
+import { upperCase, useUndoSafeSanitizer } from '@/components/forms/undoSafeInput';
 
 const groupLabelSx = { mb: 2 } as const;
 
@@ -82,6 +83,8 @@ export function LeadOverviewSection({ leadId }: { leadId?: string } = {}) {
 
     // Trade name keeps following the organization name until the user gives it a value of its own (as on organizations).
     const tradeName = useWatch({ control, name: 'tradeName' }) ?? '';
+    // Trade names are stored uppercase, like organization names.
+    const tradeNameSanitizerRef = useUndoSafeSanitizer(upperCase);
     const handleOrgNameChange = (val: string) => {
         const tradeNameFollows = !tradeName || tradeName === organizationName;
         orgNameField.onChange(val);
@@ -147,7 +150,8 @@ export function LeadOverviewSection({ leadId }: { leadId?: string } = {}) {
                             size="small"
                             placeholder="e.g. Mohit Traders"
                             value={tradeName}
-                            onChange={(e) => setValue('tradeName', e.target.value, { shouldValidate: true, shouldDirty: true })}
+                            inputRef={tradeNameSanitizerRef}
+                            onChange={(e) => setValue('tradeName', e.target.value.toUpperCase(), { shouldValidate: true, shouldDirty: true })}
                             sx={fieldSx}
                             slotProps={{ htmlInput: { maxLength: FIELD_MAX_LENGTH.organizationName } }}
                         />

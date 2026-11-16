@@ -958,7 +958,7 @@ export const formConfigService = {
 
             // A dropdown list named after this field and used by it alone (e.g. a custom "Lead Type" field's list)
             // follows the field's rename, keeping the Dropdowns tab in step. Lists with a name of their own
-            // (e.g. "Lead Designation") or shared with other fields (e.g. Lead Source) keep it.
+            // (e.g. "GST Registration Type") or shared with other fields (e.g. Lead Source) keep it.
             if (after.label !== before.label && after.dropdownCategoryId) {
                 const category = await tx.dropdownCategory.findUnique({ where: { id: after.dropdownCategoryId }, select: { id: true, label: true } });
                 const sharedWith = await tx.formFieldDefinition.count({ where: { dropdownCategoryId: after.dropdownCategoryId, id: { not: after.id } } });

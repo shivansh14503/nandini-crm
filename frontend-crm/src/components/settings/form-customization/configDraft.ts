@@ -170,7 +170,7 @@ function setCategoryLink(s: FormConfigsPayload, field: FormFieldDefinitionDto, k
 /**
  * Same rule as the API's updateField: a dropdown named after `field` (its old label) and used by it alone follows
  * the rename (custom "Lead Type" → "Rating" renames its list too). Lists with a name of their own
- * (e.g. "Lead Designation") or shared with other fields keep it.
+ * (e.g. "GST Registration Type") or shared with other fields keep it.
  */
 function renameOwnDropdown(s: FormConfigsPayload, field: FormFieldDefinitionDto, oldLabel: string): void {
     const key = field.dropdownCategoryKey;

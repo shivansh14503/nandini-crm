@@ -108,7 +108,7 @@ export function EditCategoryDialog({
             const added = stageDropdownFields(draft, configs, { label: name, ...control, categoryKey: category.key }, newTargets);
 
             // 3. Fields that stay. A renamed dropdown renames every field using it — built-in ones too, whose label
-            //    rarely equals the dropdown's ("Designation" vs "Lead Designation"). Core-locked fields can't be
+            //    rarely equals the dropdown's ("Registration Type" vs "GST Registration Type"). Core-locked fields can't be
             //    removed, so they always stay, and only their label follows; control type / Required stay as built.
             for (const field of linked.filter((f) => f.isCoreLocked || kept.has(f.module))) {
                 const update: UpdateFieldPayload = {};
