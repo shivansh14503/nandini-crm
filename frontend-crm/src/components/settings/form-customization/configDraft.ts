@@ -278,7 +278,8 @@ function applyOp(s: FormConfigsPayload, op: DraftOp): void {
             const field: FormFieldDefinitionDto = {
                 id: op.id,
                 module: p.module,
-                fieldKey: op.fieldKey,
+                fieldKey: p.fieldKey ?? op.fieldKey,
+                previousFieldKeys: [],
                 label: p.label,
                 fieldType: p.fieldType,
                 tabKey: p.tabKey,
@@ -312,6 +313,12 @@ function applyOp(s: FormConfigsPayload, op: DraftOp): void {
             if (!field) return;
             const p = op.payload;
             const before = { tabKey: field.tabKey, sectionKey: field.sectionKey, label: field.label };
+            if (p.fieldKey !== undefined && p.fieldKey !== field.fieldKey) {
+                // Mirrors the API: the old API name stays an alias of the field.
+                const previous = (field.previousFieldKeys ?? []).filter((k) => k !== field.fieldKey && k !== p.fieldKey);
+                field.previousFieldKeys = [...previous, field.fieldKey];
+                field.fieldKey = p.fieldKey;
+            }
             if (p.label !== undefined) field.label = p.label;
             if (p.fieldType !== undefined) field.fieldType = p.fieldType;
             if (p.tabKey !== undefined) field.tabKey = p.tabKey;

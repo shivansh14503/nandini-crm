@@ -1,9 +1,11 @@
 'use client';
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { formConfigService } from '@/services/formConfig.service';
 import {
     CRM_MODULE_LABELS,
+    customFieldKeyError,
     type CreateCategoryPayload,
     type CreateFieldPayload,
     type CreateOptionPayload,
@@ -90,6 +92,17 @@ const fail = (message: string): never => {
 
 const moduleLabel = (m: string) => CRM_MODULE_LABELS[m as CrmModuleKey] ?? m;
 
+/**
+ * Same checks the API makes on a requested API name, as far as the draft can tell: its shape, and no other field of
+ * the module holding it. (Values a deleted field left under it are only known to the API, which refuses on save.)
+ */
+function assertKeyFree(s: FormConfigsPayload, module: CrmModuleKey, key: string, selfId?: string): void {
+    const shape = customFieldKeyError(key);
+    if (shape) fail(shape);
+    const owner = (s.fieldsByModule[module] ?? []).find((f) => f.fieldKey === key && f.id !== selfId);
+    if (owner) fail(`The API name '${key}' is already used by '${owner.label}'.`);
+}
+
 /** Fields of a tab that are not deleted (archived ones included). */
 const liveFieldsOn = (s: FormConfigsPayload, module: CrmModuleKey, tabKey: string) =>
     (s.fieldsByModule[module] ?? []).filter((f) => f.tabKey === tabKey && !f.isDeleted);
@@ -100,6 +113,7 @@ const liveFieldsOn = (s: FormConfigsPayload, module: CrmModuleKey, tabKey: strin
  * `refetch` reloads the saved configuration once a save finishes.
  */
 export function useConfigDraft(base: FormConfigsPayload | undefined, refetch: () => Promise<unknown>): ConfigDraft {
+    const queryClient = useQueryClient();
     const [ops, setOps] = useState<DraftOp[]>([]);
     const [saving, setSaving] = useState(false);
     // While saving, each API write refreshes `base`; the draft keeps using the snapshot the ops were made on.
@@ -297,6 +311,15 @@ export function useConfigDraft(base: FormConfigsPayload | undefined, refetch: ()
         if (payload.dropdownCategoryKey !== undefined && created.categoryKey) leftover.dropdownCategoryKey = payload.dropdownCategoryKey;
 
         const next: CreateFieldPayload = { ...created.payload };
+        // API name: one the admin typed is kept; otherwise it follows the label while the field is unsaved.
+        let fieldKey = created.fieldKey;
+        if (payload.fieldKey !== undefined) {
+            next.fieldKey = payload.fieldKey;
+            fieldKey = payload.fieldKey;
+        } else if (payload.label !== undefined && payload.label !== created.payload.label && !created.payload.fieldKey) {
+            const taken = new Set((current().fieldsByModule[created.payload.module] ?? []).filter((f) => f.id !== fieldId).map((f) => f.fieldKey));
+            fieldKey = uniqueKey(customFieldKeyFor(payload.label), (k) => taken.has(k));
+        }
         if (payload.label !== undefined) next.label = payload.label;
         if (payload.fieldType !== undefined) next.fieldType = payload.fieldType;
         if (payload.fieldSize !== undefined) next.fieldSize = payload.fieldSize;
@@ -309,7 +332,7 @@ export function useConfigDraft(base: FormConfigsPayload | undefined, refetch: ()
         if (payload.defaultValue !== undefined) next.defaultValue = payload.defaultValue ?? undefined;
         if (payload.dropdownCategoryKey !== undefined && !created.categoryKey) next.dropdownCategoryKey = payload.dropdownCategoryKey ?? undefined;
 
-        commit(ops.map((op, i) => (i === at ? { ...created, payload: next, summary: `${moduleLabel(next.module)}: new field '${next.label}'` } : op)));
+        commit(ops.map((op, i) => (i === at ? { ...created, fieldKey, payload: next, summary: `${moduleLabel(next.module)}: new field '${next.label}'` } : op)));
         return Object.keys(leftover).length > 0 ? leftover : null;
     };
 
@@ -393,7 +416,8 @@ export function useConfigDraft(base: FormConfigsPayload | undefined, refetch: ()
             createField(payload) {
                 const s = current();
                 const taken = new Set((s.fieldsByModule[payload.module] ?? []).map((f) => f.fieldKey));
-                const fieldKey = uniqueKey(customFieldKeyFor(payload.label), (k) => taken.has(k));
+                if (payload.fieldKey) assertKeyFree(s, payload.module, payload.fieldKey);
+                const fieldKey = payload.fieldKey ?? uniqueKey(customFieldKeyFor(payload.label), (k) => taken.has(k));
                 const newOptions = payload.dropdownCategoryKey ? [] : [...new Set(payload.newOptions ?? [])];
                 const categoryKey = newOptions.length ? uniqueKey(categoryKeyFor(payload.label), (k) => Boolean(findCategoryByKey(s, k))) : undefined;
                 const id = newTempId('field');
@@ -418,6 +442,15 @@ export function useConfigDraft(base: FormConfigsPayload | undefined, refetch: ()
                 const movedTab = input.tabKey !== undefined && input.tabKey !== field.tabKey;
                 const tabLabel = movedTab && input.tabLabel === undefined ? tabLabelOf(s, field.module, input.tabKey!) : undefined;
                 let payload = tabLabel ? { ...input, tabLabel } : input;
+                if (payload.fieldKey !== undefined) {
+                    if (payload.fieldKey === field.fieldKey) {
+                        payload = { ...payload };
+                        delete payload.fieldKey;
+                    } else {
+                        if (field.isSystem) fail(`${field.label} is a built-in field; its API name can't be changed.`);
+                        assertKeyFree(s, field.module, payload.fieldKey, field.id);
+                    }
+                }
                 if (field.isCoreLocked && payload.isRequired === false) fail(`${field.label} is a core field and must stay required.`);
                 if (field.isCoreLocked && payload.isVisibleInForm === false) fail(`${field.label} is a core field and cannot be hidden.`);
                 if (field.isCoreLocked && payload.isActive === false) fail(`${field.label} is a core field and cannot be archived.`);
@@ -583,13 +616,16 @@ export function useConfigDraft(base: FormConfigsPayload | undefined, refetch: ()
             }
             return result.saved;
         } finally {
+            // A renamed API name moved record values and saved filters on the server: reload every cached copy.
+            const renamedKey = pending.slice(0, result?.saved ?? 0).some((op) => op.kind === 'updateField' && op.payload.fieldKey !== undefined);
+            if (renamedKey) void queryClient.invalidateQueries();
             // Whatever was saved is now part of `base`; anything left (after a failure) stays staged on top of it.
             await refetch().catch(() => undefined);
             commit(result?.remaining ?? pending);
             setFrozenBase(null);
             setSaving(false);
         }
-    }, [refetch]);
+    }, [refetch, queryClient]);
 
     return { draft, ops, dirty: ops.length > 0, saving, actions, save, discard };
 }

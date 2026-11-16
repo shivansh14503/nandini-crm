@@ -8,6 +8,7 @@ function field(overrides: Partial<FormFieldDefinitionDto> & Pick<FormFieldDefini
     return {
         id: overrides.fieldKey,
         module: 'contacts',
+        previousFieldKeys: [],
         label: overrides.fieldKey,
         fieldType: 'text',
         tabKey: 'overview',
@@ -254,5 +255,33 @@ describe('configuredRequiredIssues (fields another form collects, e.g. Convert L
 
     it('ignores optional and hidden fields, and passes filled values', () => {
         assert.deepEqual(configuredRequiredIssues(config, { type: 'New Business' }, paths), []);
+    });
+});
+
+describe('checkModulePayload: renamed API names (aliases)', () => {
+    const config = configWith([
+        field({ fieldKey: 'cf_po_ref', label: 'PO Ref', previousFieldKeys: ['cf_po_number', 'cf_reused'] }),
+        // cf_reused was taken back by another field: the live owner wins.
+        field({ fieldKey: 'cf_reused', label: 'Reused' }),
+        field({ fieldKey: 'cf_required', label: 'Required One', isRequired: true, previousFieldKeys: ['cf_old_required'] }),
+    ]);
+
+    it('stores a value sent under an old API name under the current one', () => {
+        const stored = checkModulePayload(config, {}, { cf_po_number: 'PO-7', cf_required: 'x' });
+        assert.deepEqual(stored, { cf_po_ref: 'PO-7', cf_required: 'x' });
+    });
+
+    it('lets the current key win when both are sent', () => {
+        const stored = checkModulePayload(config, {}, { cf_po_number: 'old', cf_po_ref: 'new', cf_required: 'x' });
+        assert.deepEqual(stored, { cf_po_ref: 'new', cf_required: 'x' });
+    });
+
+    it('never treats a key a live field holds as an alias', () => {
+        const stored = checkModulePayload(config, {}, { cf_reused: 'mine', cf_required: 'x' });
+        assert.deepEqual(stored, { cf_reused: 'mine', cf_required: 'x' });
+    });
+
+    it('satisfies a required field sent under its old name', () => {
+        assert.deepEqual(checkModulePayload(config, {}, { cf_old_required: 'y' }), { cf_required: 'y' });
     });
 });

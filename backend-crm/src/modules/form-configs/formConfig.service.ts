@@ -6,6 +6,15 @@ import type { AuthUser } from '../../types/user.types.js';
 import { HttpError } from '../../utils/httpError.js';
 import { runInTransaction } from '../shared/transactions.js';
 import {
+    assertFieldKeyAvailable,
+    countRecordsWithKey,
+    describeMigration,
+    migrateFieldKey,
+    nextPreviousKeys,
+    parsePreviousKeys,
+    serializePreviousKeys,
+} from './fieldKeyRename.js';
+import {
     APP_REQUIRED_CATEGORY_KEYS,
     CRM_MODULES,
     DEFAULT_FIELDS,
@@ -70,6 +79,8 @@ export interface FormFieldDefinitionDto {
     id: string;
     module: string;
     fieldKey: string;
+    /** Custom fields: API names the field had before being renamed (still accepted on writes), oldest first. */
+    previousFieldKeys: string[];
     label: string;
     fieldType: string;
     tabKey: string;
@@ -186,6 +197,7 @@ const toFieldDto = (f: FormFieldDefinition, categoryKeys: Map<string, string>): 
     id: f.id,
     module: f.module,
     fieldKey: f.fieldKey,
+    previousFieldKeys: f.isSystem ? [] : parsePreviousKeys(f.previousFieldKeysJson),
     label: f.label,
     fieldType: f.fieldType,
     tabKey: f.tabKey,
@@ -296,12 +308,16 @@ async function uniqueKey(base: string, exists: (key: string) => Promise<boolean>
     return candidate;
 }
 
-/** `cf_` + a snake_case key from the label, unique within the module. */
-async function customFieldKey(tx: TransactionClient, module: string, label: string): Promise<string> {
+/**
+ * `cf_` + a snake_case key from the label, unique within the module. Keys records still hold values under (left by
+ * a deleted field) are skipped, so a new field never shows another field's old data.
+ */
+async function customFieldKey(tx: TransactionClient, module: CrmModuleKey, label: string): Promise<string> {
     const slug = sectionKeyFromLabel(label).replace(/^(\d)/, 'f_$1') || 'field';
     return uniqueKey(
         `${CUSTOM_PREFIX}${slug}`,
-        async (fieldKey) => (await tx.formFieldDefinition.count({ where: { module, fieldKey } })) > 0,
+        async (fieldKey) =>
+            (await tx.formFieldDefinition.count({ where: { module, fieldKey } })) > 0 || (await countRecordsWithKey(tx, module, fieldKey)) > 0,
         80,
     );
 }
@@ -823,11 +839,14 @@ export const formConfigService = {
                 select: { sectionLabel: true },
             });
             const sortOrder = 2_000_000_000; // temporary; placeField puts it at the end of its section
+            // An API name the admin chose, else one derived from the label.
+            if (input.fieldKey) await assertFieldKeyAvailable(tx, input.module, input.fieldKey);
+            const fieldKey = input.fieldKey ?? (await customFieldKey(tx, input.module, input.label));
 
             const created = await tx.formFieldDefinition.create({
                 data: {
                     module: input.module,
-                    fieldKey: await customFieldKey(tx, input.module, input.label),
+                    fieldKey,
                     label: input.label,
                     fieldType: input.fieldType,
                     tabKey: input.tabKey,
@@ -869,6 +888,7 @@ export const formConfigService = {
 
     async updateField(fieldId: string, body: unknown, user: AuthUser): Promise<FormFieldDefinitionDto> {
         const input = updateFieldSchema.parse(body);
+        let keyRenamedIn: CrmModuleKey | null = null;
         await runInTransaction(async (tx) => {
             const before = await findField(tx, fieldId);
             assertModule(before.module);
@@ -919,9 +939,28 @@ export const formConfigService = {
                 }
             }
 
+            // API name: a custom field's may be renamed, moving everything stored under the old one; a built-in
+            // field's is the column it maps to, so it is fixed.
+            const renameKey = input.fieldKey !== undefined && input.fieldKey !== before.fieldKey ? input.fieldKey : null;
+            let migrationNote: string | undefined;
+            if (renameKey) {
+                if (before.isSystem) reject('fieldKey', `${before.label} is a built-in field; its API name can't be changed.`);
+                await assertFieldKeyAvailable(tx, before.module, renameKey, before.id);
+                migrationNote = describeMigration(await migrateFieldKey(tx, before.module, before.fieldKey, renameKey));
+                keyRenamedIn = before.module;
+            }
+
             const after = await tx.formFieldDefinition.update({
                 where: { id: before.id },
                 data: {
+                    ...(renameKey
+                        ? {
+                              fieldKey: renameKey,
+                              previousFieldKeysJson: serializePreviousKeys(
+                                  nextPreviousKeys(parsePreviousKeys(before.previousFieldKeysJson), before.fieldKey, renameKey),
+                              ),
+                          }
+                        : {}),
                     ...(input.label !== undefined ? { label: input.label } : {}),
                     ...(input.fieldType !== undefined ? { fieldType: input.fieldType } : {}),
                     ...(input.tabKey !== undefined ? { tabKey: input.tabKey } : {}),
@@ -954,7 +993,10 @@ export const formConfigService = {
                 await placeField(tx, before.module, before.id);
             }
 
-            const changes: Record<string, { from: unknown; to: unknown }> = diffRecords(before, after);
+            const changes: Record<string, unknown> = diffRecords(before, after);
+            // The alias list is bookkeeping; the fieldKey diff already says what changed.
+            delete changes.previousFieldKeysJson;
+            if (migrationNote) changes.reason = migrationNote;
 
             // A dropdown list named after this field and used by it alone (e.g. a custom "Lead Type" field's list)
             // follows the field's rename, keeping the Dropdowns tab in step. Lists with a name of their own
@@ -989,6 +1031,8 @@ export const formConfigService = {
             }
         });
         await invalidate();
+        // Cached records, search results and dashboards still hold values under the old API name.
+        if (keyRenamedIn) await cacheService.invalidateEntityCaches(keyRenamedIn);
         return formConfigService.getField(fieldId);
     },
 

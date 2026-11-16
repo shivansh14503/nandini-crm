@@ -868,6 +868,9 @@ model FormFieldDefinition {
   isVisibleInDrawer   Boolean  @default(true)
   dropdownCategoryId  String?  @db.NVarChar(50)
   validationRulesJson String?  @db.NVarChar(Max)
+  /// Custom fields only: JSON array of the API names (`cf_…`) the field had before an admin renamed it, newest
+  /// last. Writes still sending an old key are stored under the current one (see customFieldValidator.ts).
+  previousFieldKeysJson String? @db.NVarChar(2000)
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
 

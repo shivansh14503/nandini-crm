@@ -65,6 +65,7 @@ const moduleLabel = (module: string | undefined) => (module ? (MODULE_LABELS[mod
 
 /** Admin-facing names of form field / dropdown properties. */
 const PROP_LABELS: Record<string, string> = {
+    fieldKey: 'API Name',
     isRequired: 'Required',
     isVisibleInForm: 'Visible on Form',
     isVisibleInDrawer: 'Visible in Drawer',
