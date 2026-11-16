@@ -63,7 +63,7 @@ export const ROUTES = {
 
 // ── Address lists (derived from the ISO 3166 address master) ──────────────────
 // Kept for backward compatibility while forms move to the country-aware helpers in src/data/addressMaster.ts.
-// Values stay plain ASCII ('Haryana', not 'Haryāna') so they keep matching existing saved records.
+// Values stay plain ASCII so they keep matching existing saved records.
 
 /**
  * Indian states and union territories, alphabetical, without diacritics.

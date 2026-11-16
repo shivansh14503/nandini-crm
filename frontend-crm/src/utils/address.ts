@@ -12,7 +12,7 @@ export function normalizeCountryValue(country?: string | null): string {
 
 /**
  * Returns a copy of `record` with each [countryField, stateField] pair normalised: country to ISO2
- * (see normalizeCountryValue) and state to the master's canonical name ('Haryana' → 'Haryāna'; manual entries kept).
+ * (see normalizeCountryValue) and state to the master's canonical name ('orissa' → 'Odisha'; manual entries kept).
  * Use when loading saved records into forms so legacy data prefills the address master fields.
  */
 export function normalizeAddressFields<T extends object>(

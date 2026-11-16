@@ -247,7 +247,7 @@ export function StateRegionField({
                     }
                     onChange(next ?? '');
                 }}
-                // Diacritic-insensitive search ('haryana' finds 'Haryāna'); 'Not listed' always stays available.
+                // Diacritic-insensitive search ('karnten' finds 'Kärnten'); 'Not listed' always stays available.
                 filterOptions={(opts, state) =>
                     state.inputValue
                         ? [...opts.filter((o) => o !== STATE_NOT_LISTED && matchesSearch(o, state.inputValue)), STATE_NOT_LISTED]
