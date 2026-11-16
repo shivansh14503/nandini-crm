@@ -54,7 +54,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 }
             })
             .finally(() => {
-                setLoading(false);
+                // A cancelled check (StrictMode runs this effect twice in dev) must not end loading: until the
+                // live check answers, the user is still unknown and pages would redirect to /login.
+                if (active) setLoading(false);
             });
         return () => {
             active = false;
