@@ -198,7 +198,7 @@ export const DEFAULT_CATEGORIES: DefaultCategory[] = [
     // ── Leads ──
     {
         key: 'lead_status',
-        label: 'Lead Status',
+        label: 'Status',
         module: 'leads',
         description: "'New' is the default and 'Converted' is set by the Convert action.",
         options: withSystem(
@@ -209,7 +209,7 @@ export const DEFAULT_CATEGORIES: DefaultCategory[] = [
     { key: 'lead_type', label: 'Lead Type', module: 'leads', options: ['Hot', 'Warm', 'Cold', 'Corporate', 'SME', 'Enterprise'] },
     {
         key: 'lead_designation',
-        label: 'Lead Designation',
+        label: 'Designation',
         module: 'leads',
         options: [
             'Managing Director / MD',
@@ -228,7 +228,7 @@ export const DEFAULT_CATEGORIES: DefaultCategory[] = [
     },
     {
         key: 'lead_department',
-        label: 'Lead Department',
+        label: 'Department',
         module: 'leads',
         options: [
             'Executive Management',
@@ -244,7 +244,7 @@ export const DEFAULT_CATEGORIES: DefaultCategory[] = [
     },
     {
         key: 'lead_turnover',
-        label: 'Lead Turnover Range',
+        label: 'Turnover',
         module: 'leads',
         options: [
             'Below ₹25 Lakhs',
@@ -258,7 +258,7 @@ export const DEFAULT_CATEGORIES: DefaultCategory[] = [
     },
     {
         key: 'lead_employee_range',
-        label: 'Lead Employee Range',
+        label: 'No of Employee',
         module: 'leads',
         options: ['1 – 10 Staff Members', '11 – 50 Staff Members', '51 – 200 Staff Members', '201 – 500 Staff Members', '500+ Staff Members'],
     },

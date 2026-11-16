@@ -47,7 +47,7 @@ const leadFields = z.object({
     mobile: optionalPhone('Mobile'),
     emailAddresses: corporateEmailListSchema.default([]),
     mailingName: optionalText('Mailing Name', L.organizationName),
-    tradeName: optionalText('Trade Name', L.organizationName),
+    tradeName: optionalUpperText('Trade Name', L.organizationName),
     designation: optionalText('Designation', L.option),
     leadSource: optionalText('Lead Source', L.option),
     productCategory: stringList('Product Category', 30, L.option).default([]),

@@ -22,6 +22,7 @@ import LockOutlinedIcon from '@mui/icons-material/LockOutlined';
 
 import { useFormContext, useWatch, FormProvider, useForm } from 'react-hook-form';
 import { useFormMode } from '@/context/FormModeContext';
+import { upperCase, useUndoSafeSanitizer } from '@/components/forms/undoSafeInput';
 import { useAuth } from '@/context/AuthContext';
 import { formatDateTime } from '@/utils/date';
 
@@ -84,6 +85,8 @@ function OverviewTabInner({
 
     const organizationName = useWatch({ control, name: 'organizationName' }) ?? form?.organizationName ?? '';
     const tradeName = useWatch({ control, name: 'tradeName' }) ?? form?.tradeName ?? '';
+    // Trade names are stored uppercase, like organization names.
+    const tradeNameSanitizerRef = useUndoSafeSanitizer(upperCase);
     const { user } = useAuth();
     const currentAccountStatus = (useWatch({ control, name: 'accountStatus' }) ?? form?.accountStatus ?? 'Active') as AccountStatus;
     const isView = useFormMode().mode === 'view';
@@ -398,7 +401,8 @@ function OverviewTabInner({
                         size="small"
                         placeholder="e.g. Mohit Traders"
                         value={tradeName}
-                        onChange={(e) => handleTradeNameChange(e.target.value)}
+                        inputRef={tradeNameSanitizerRef}
+                        onChange={(e) => handleTradeNameChange(e.target.value.toUpperCase())}
                         sx={fieldSx}
                         slotProps={{ htmlInput: { maxLength: FIELD_MAX_LENGTH.organizationName } }}
                     />
