@@ -76,6 +76,8 @@ const PROP_LABELS: Record<string, string> = {
     metaJson: 'Option Settings',
     dropdown: 'Linked Dropdown',
     dropdownCategoryId: 'Linked Dropdown',
+    dropdownLabel: 'Dropdown Name',
+    dropdownKey: 'Dropdown Key',
     tabKey: 'Tab',
     tabLabel: 'Tab Name',
     sectionKey: 'Section',

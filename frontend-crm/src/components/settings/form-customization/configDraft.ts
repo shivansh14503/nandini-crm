@@ -682,10 +682,10 @@ export interface ConfigWriter {
     updateOption(optionId: string, payload: UpdateOptionPayload): Promise<unknown>;
     reorderOptions(categoryKey: string, optionIds: string[]): Promise<unknown>;
     createField(payload: CreateFieldPayload): Promise<FormFieldDefinitionDto>;
-    updateField(fieldId: string, payload: UpdateFieldPayload): Promise<unknown>;
+    updateField(fieldId: string, payload: UpdateFieldPayload): Promise<Pick<FormFieldDefinitionDto, 'dropdownCategoryKey'>>;
     reorderFields(module: CrmModuleKey, fieldIds: string[]): Promise<unknown>;
     renameSection(module: CrmModuleKey, sectionKey: string, sectionLabel: string): Promise<unknown>;
-    updateCategory(categoryKey: string, payload: UpdateCategoryPayload): Promise<unknown>;
+    updateCategory(categoryKey: string, payload: UpdateCategoryPayload): Promise<Pick<DropdownCategoryDto, 'key'>>;
     deleteCategory(categoryKey: string): Promise<unknown>;
     deleteOption(optionId: string): Promise<unknown>;
     deleteField(fieldId: string): Promise<unknown>;
@@ -710,6 +710,12 @@ export async function replayOps(ops: DraftOp[], api: ConfigWriter): Promise<Repl
     const rkey = (key: string) => keys.get(key) ?? key;
     const realIds = (list: string[]) => list.map(rid).filter((id) => !isTempId(id));
     const rkeyOpt = <T extends string | null | undefined>(key: T): T => (typeof key === 'string' ? (rkey(key) as T) : key);
+    /** A saved dropdown's key changed (renaming an admin-created dropdown renames its key): later ops use the new one. */
+    const rekey = (from: string, to: string) => {
+        if (from === to) return;
+        for (const [draftKey, savedKey] of keys) if (savedKey === from) keys.set(draftKey, to);
+        keys.set(from, to);
+    };
 
     /** Maps the draft ids of a new dropdown's options to the saved ones (matched by value). */
     const mapOptions = async (draftKey: string, savedKey: string, values: string[], draftIds: string[]) => {
@@ -748,9 +754,16 @@ export async function replayOps(ops: DraftOp[], api: ConfigWriter): Promise<Repl
                 }
                 return;
             }
-            case 'updateField':
-                await api.updateField(rid(op.fieldId), { ...op.payload, dropdownCategoryKey: rkeyOpt(op.payload.dropdownCategoryKey) });
+            case 'updateField': {
+                // A renamed field can take its own dropdown's name, and with it a new key (see the API's updateField).
+                const keyBefore =
+                    op.payload.label !== undefined
+                        ? allFields(await api.getAllConfigs()).find((f) => f.id === rid(op.fieldId))?.dropdownCategoryKey
+                        : undefined;
+                const updated = await api.updateField(rid(op.fieldId), { ...op.payload, dropdownCategoryKey: rkeyOpt(op.payload.dropdownCategoryKey) });
+                if (keyBefore && updated.dropdownCategoryKey) rekey(keyBefore, updated.dropdownCategoryKey);
                 return;
+            }
             case 'reorderFields':
                 await api.reorderFields(op.module, realIds(op.fieldIds));
                 return;
@@ -761,9 +774,11 @@ export async function replayOps(ops: DraftOp[], api: ConfigWriter): Promise<Repl
             case 'deleteTab':
                 // Stored through the fields placed on it (createField / updateField / deleteField ops).
                 return;
-            case 'updateCategory':
-                await api.updateCategory(rkey(op.categoryKey), op.payload);
+            case 'updateCategory': {
+                const from = rkey(op.categoryKey);
+                rekey(from, (await api.updateCategory(from, op.payload)).key);
                 return;
+            }
             case 'deleteCategory':
                 await api.deleteCategory(rkey(op.categoryKey));
                 return;

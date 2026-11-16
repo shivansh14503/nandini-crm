@@ -328,6 +328,23 @@ async function customFieldKey(tx: TransactionClient, module: CrmModuleKey, label
     );
 }
 
+/** The key an admin-created dropdown gets from its name: `custom_` + snake_case (e.g. "Lead Rating" → custom_lead_rating). */
+const customCategoryKeyBase = (label: string) => `custom_${sectionKeyFromLabel(label) || 'list'}`;
+
+/**
+ * The key a dropdown should have once named `label`. An admin-created dropdown's key follows its name (unique; it
+ * keeps its own key when that already matches). Nothing stores the key itself: fields link to the dropdown by id, so
+ * renaming it moves nothing. Built-in dropdowns keep their key: the app's code and start-up seeding look them up by it.
+ */
+async function categoryKeyForLabel(tx: TransactionClient, category: { key: string; isSystem: boolean }, label: string): Promise<string> {
+    if (category.isSystem) return category.key;
+    return uniqueKey(
+        customCategoryKeyBase(label),
+        async (candidate) => candidate !== category.key && (await tx.dropdownCategory.count({ where: { key: candidate } })) > 0,
+        80,
+    );
+}
+
 async function createCategoryWithOptions(
     tx: TransactionClient,
     input: { key?: string; label: string; module: string; description?: string; options: string[] },
@@ -336,7 +353,7 @@ async function createCategoryWithOptions(
     const key =
         input.key ??
         (await uniqueKey(
-            `custom_${sectionKeyFromLabel(input.label) || 'list'}`,
+            customCategoryKeyBase(input.label),
             async (candidate) => (await tx.dropdownCategory.count({ where: { key: candidate } })) > 0,
             80,
         ));
@@ -538,11 +555,15 @@ export const formConfigService = {
 
     async updateCategory(categoryKey: string, body: unknown, user: AuthUser): Promise<DropdownCategoryDto> {
         const input = updateCategorySchema.parse(body);
+        let renamedTo = categoryKey;
         await runInTransaction(async (tx) => {
             const before = await findCategory(tx, categoryKey);
+            // Renaming an admin-created dropdown renames its key to match.
+            const key = input.label !== undefined && input.label !== before.label ? await categoryKeyForLabel(tx, before, input.label) : before.key;
             const after = await tx.dropdownCategory.update({
                 where: { id: before.id },
                 data: {
+                    ...(key !== before.key ? { key } : {}),
                     ...(input.label !== undefined ? { label: input.label } : {}),
                     ...(input.description !== undefined ? { description: input.description } : {}),
                     ...(input.module !== undefined ? { module: input.module } : {}),
@@ -555,9 +576,10 @@ export const formConfigService = {
                 changedBy: user.username,
                 changes: withMeta(diffRecords(before, after), user, { module: after.module, categoryKey: after.key, categoryLabel: after.label }),
             });
+            renamedTo = after.key;
         });
         await invalidate();
-        return formConfigService.getCategory(categoryKey);
+        return formConfigService.getCategory(renamedTo);
     },
 
     /**
@@ -1027,11 +1049,16 @@ export const formConfigService = {
             // follows the field's rename, keeping the Dropdowns tab in step. Lists with a name of their own
             // (e.g. "GST Registration Type") or shared with other fields (e.g. Lead Source) keep it.
             if (after.label !== before.label && after.dropdownCategoryId) {
-                const category = await tx.dropdownCategory.findUnique({ where: { id: after.dropdownCategoryId }, select: { id: true, label: true } });
+                const category = await tx.dropdownCategory.findUnique({
+                    where: { id: after.dropdownCategoryId },
+                    select: { id: true, key: true, label: true, isSystem: true },
+                });
                 const sharedWith = await tx.formFieldDefinition.count({ where: { dropdownCategoryId: after.dropdownCategoryId, id: { not: after.id } } });
                 if (category && sharedWith === 0 && category.label.trim().toLowerCase() === before.label.trim().toLowerCase()) {
-                    await tx.dropdownCategory.update({ where: { id: category.id }, data: { label: after.label } });
+                    const key = await categoryKeyForLabel(tx, category, after.label);
+                    await tx.dropdownCategory.update({ where: { id: category.id }, data: { label: after.label, ...(key !== category.key ? { key } : {}) } });
                     changes.dropdownLabel = { from: category.label, to: after.label };
+                    if (key !== category.key) changes.dropdownKey = { from: category.key, to: key };
                 }
             }
 
