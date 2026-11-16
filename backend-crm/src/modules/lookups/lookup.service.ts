@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { prisma } from '../../config/prisma.js';
 import type { Prisma } from '../../generated/prisma/client.js';
 import { CACHE_KEYS, cacheService } from '../../services/cache.service.js';
+import { normalizePlaceName } from '../../utils/cityMaster.js';
 import { booleanQuery } from '../../validators/common.js';
 
 /**
@@ -90,6 +91,24 @@ export const partnerContactsQuerySchema = z.object({ partnerCompany: z.string().
 export const addressMasterQuerySchema = z.object({
     country: z.string().trim().toUpperCase().regex(/^[A-Z]{2}$/, { message: 'country must be an ISO 3166-1 alpha-2 code.' }).optional(),
 });
+
+export const citiesQuerySchema = z.object({
+    country: z.string().trim().toUpperCase().regex(/^[A-Z]{2}$/, { message: 'country must be an ISO 3166-1 alpha-2 code.' }),
+    /** ISO 3166-2 code ('IN-DL'); narrows to that state's cities. */
+    state: z.string().trim().toUpperCase().regex(/^[A-Z]{2}-[A-Z0-9]{1,6}$/).optional().catch(undefined),
+    search: z.string().trim().max(100).optional().catch(undefined),
+    limit: z.coerce.number().int().min(1).max(100).catch(20).default(20),
+});
+
+/** Biggest cities first (SQL Server sorts NULL populations last in DESC), then alphabetically. */
+const BY_SIZE_THEN_NAME: Prisma.CityOrderByWithRelationInput[] = [{ population: 'desc' }, { searchName: 'asc' }];
+
+/** One city suggestion for the address forms. */
+export interface CityLookupDto {
+    cityName: string;
+    /** ISO 3166-2 code of the city's state ('' when unknown), so a pick can fill in an empty state. */
+    subdivisionCode: string;
+}
 
 export const lookupService = {
     async users(query: unknown): Promise<CrmUserDto[]> {
@@ -287,5 +306,43 @@ export const lookupService = {
                 })),
             };
         });
+    },
+
+    /**
+     * City suggestions for a country (and optionally a state), diacritic/case-insensitive: names starting with the
+     * search come first, then names containing it, each biggest first. Without a search, a state's biggest cities
+     * (cached); a country-wide list without a search is empty.
+     */
+    async cities(query: unknown): Promise<CityLookupDto[]> {
+        const { country, state, search, limit } = citiesQuerySchema.parse(query ?? {});
+        const term = normalizePlaceName(search);
+        if (!term && !state) return [];
+
+        const scope: Prisma.CityWhereInput = state ? { subdivisionCode: state } : { countryIso2: country };
+        const select = { cityName: true, subdivisionCode: true } as const;
+        const toDto = (rows: { cityName: string; subdivisionCode: string | null }[]) =>
+            rows.map((c) => ({ cityName: c.cityName, subdivisionCode: c.subdivisionCode ?? '' }));
+
+        if (!term) {
+            return cacheService.getOrSet(`${CACHE_KEYS.addressMaster}:cities:${state}:${limit}`, ADDRESS_MASTER_TTL_SECONDS, async () =>
+                toDto(await prisma.city.findMany({ where: scope, select, orderBy: BY_SIZE_THEN_NAME, take: limit })),
+            );
+        }
+
+        // Prefix matches use the (scope, searchName) index; the contains pass only runs when they don't fill the list.
+        const prefix = await prisma.city.findMany({
+            where: { ...scope, searchName: { startsWith: term } },
+            select,
+            orderBy: BY_SIZE_THEN_NAME,
+            take: limit,
+        });
+        if (prefix.length >= limit) return toDto(prefix);
+        const contains = await prisma.city.findMany({
+            where: { ...scope, searchName: { contains: term }, NOT: { searchName: { startsWith: term } } },
+            select,
+            orderBy: BY_SIZE_THEN_NAME,
+            take: limit - prefix.length,
+        });
+        return toDto([...prefix, ...contains]);
     },
 };

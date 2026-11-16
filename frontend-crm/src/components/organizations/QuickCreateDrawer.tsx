@@ -314,6 +314,8 @@ export function QuickCreateDrawer({ open, onClose, onSave }: QuickCreateDrawerPr
                             value={formData.billingCity}
                             onChange={(v) => handleChange('billingCity', v)}
                             countryValue={DEFAULT_COUNTRY_CODE}
+                            stateValue={formData.billingState}
+                            onStateSuggested={(v) => handleChange('billingState', v)}
                         />
 
                         {/* Quick create is India-only; the full address form offers every country. */}

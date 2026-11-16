@@ -767,6 +767,7 @@ model Country {
   numericCode Int
 
   subdivisions Subdivision[]
+  cities       City[]
 }
 
 /// ISO 3166-2 states / provinces / regions (seeded from State_Region_Master).
@@ -777,8 +778,30 @@ model Subdivision {
   subdivisionType String @db.NVarChar(60)
 
   country Country @relation(fields: [countryIso2], references: [iso2Code], onDelete: Cascade, onUpdate: NoAction)
+  cities  City[]
 
   @@index([countryIso2])
+}
+
+/// City suggestions for address forms (seeded from seed-data/cities.csv.gz, built by scripts/buildCityMaster.ts).
+/// A lookup only: addresses keep the city as free text, so nothing references this table.
+model City {
+  id              Int     @id @default(autoincrement())
+  countryIso2     String  @db.NVarChar(2)
+  /// ISO 3166-2 code; null when the source state couldn't be matched to a subdivision.
+  subdivisionCode String? @db.NVarChar(10)
+  cityName        String  @db.NVarChar(150)
+  /// cityName lowercased, without diacritics or punctuation (`normalizePlaceName`) — what searches match against.
+  searchName      String  @db.NVarChar(150)
+  /// Upstream population estimate (null when unknown); bigger cities are suggested first.
+  population      Int?
+
+  country     Country     @relation(fields: [countryIso2], references: [iso2Code], onDelete: Cascade, onUpdate: NoAction)
+  // NoAction: SQL Server rejects a second cascade path (Country → Subdivision → City); the seed deletes cities first.
+  subdivision Subdivision? @relation(fields: [subdivisionCode], references: [subdivisionCode], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([countryIso2, searchName])
+  @@index([subdivisionCode, searchName])
 }
 
 // â”€â”€ Audit trail â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€

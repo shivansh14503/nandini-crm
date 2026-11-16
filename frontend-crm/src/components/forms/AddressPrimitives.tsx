@@ -9,6 +9,8 @@ import {
     Typography,
     type AutocompleteRenderInputParams,
 } from '@mui/material';
+import { keepPreviousData, useQuery } from '@tanstack/react-query';
+import { cityService, type CitySuggestion } from '@/services/city.service';
 import { FormField, fieldSx } from './FormField';
 import { FIELD_MAX_LENGTH, type FieldSize } from './fieldSizing';
 import { ReadOnlyField } from './ReadOnlyField';
@@ -274,31 +276,45 @@ const STATE_TAB_SKIP = [STATE_NOT_LISTED] as const;
 
 // ── City ──────────────────────────────────────────────────────────────────────
 
-// Suggestions only (Address_Field_Design: "Allow manual entry; do not require a global city master").
-const CITY_SUGGESTIONS: Record<string, string[]> = {
-    IN: [
-        'Ahmedabad', 'Bengaluru', 'Bhopal', 'Bhubaneswar', 'Chandigarh', 'Chennai', 'Coimbatore', 'Dehradun',
-        'Faridabad', 'Ghaziabad', 'Gurugram', 'Guwahati', 'Hyderabad', 'Indore', 'Jaipur', 'Kanpur', 'Kochi',
-        'Kolkata', 'Lucknow', 'Ludhiana', 'Mumbai', 'Mysuru', 'Nagpur', 'Nashik', 'New Delhi', 'Noida', 'Patna',
-        'Pune', 'Raipur', 'Rajkot', 'Ranchi', 'Surat', 'Thiruvananthapuram', 'Vadodara', 'Varanasi',
-        'Visakhapatnam',
-    ],
-};
+const CITY_SEARCH_DEBOUNCE_MS = 250;
+const CITY_SUGGESTION_LIMIT = 20;
+
+function useDebouncedValue<V>(value: V, delayMs: number): V {
+    const [debounced, setDebounced] = React.useState(value);
+    React.useEffect(() => {
+        const timer = setTimeout(() => setDebounced(value), delayMs);
+        return () => clearTimeout(timer);
+    }, [value, delayMs]);
+    return debounced;
+}
+
+const subdivisionName = (iso2: string, code: string) =>
+    code ? (getSubdivisionsByCountry(iso2).find((s) => s.subdivisionCode === code)?.subdivisionName ?? '') : '';
 
 export interface CityAutocompleteFieldProps extends BaseFieldProps {
     value: string;
     onChange: (value: string) => void;
-    /** Used only to pick suggestions; any city can be typed. */
+    /** Country (ISO2 or name) whose cities are suggested; any city can still be typed. */
     countryValue?: string;
+    /** Selected state (name or ISO 3166-2 code); narrows suggestions to its cities. */
+    stateValue?: string;
+    /** Called with the state's name when the user picks a suggestion while the state is still empty. */
+    onStateSuggested?: (stateName: string) => void;
 }
 
-/** Free-text city input with optional suggestions for the selected country. */
+/**
+ * Free-text city input with server-side suggestions from the city master (`/api/lookups/cities`), narrowed by the
+ * selected state. Suggestions only (Address_Field_Design: "Allow manual entry; do not require a global city
+ * master"): whatever is typed is kept.
+ */
 export function CityAutocompleteField({
     name,
     label = 'City',
     value,
     onChange,
     countryValue,
+    stateValue,
+    onStateSuggested,
     required,
     disabled,
     placeholder: codedPlaceholder = 'Enter city',
@@ -308,6 +324,7 @@ export function CityAutocompleteField({
 }: CityAutocompleteFieldProps) {
     const { mode } = useFormMode();
     const placeholder = useConfiguredPlaceholder(name, codedPlaceholder);
+    const [open, setOpen] = React.useState(false);
     // Any city can be typed: Tab keeps the typed text unless the user arrowed to a suggestion.
     const tabSelect = useTabSelect({
         freeText: true,
@@ -315,26 +332,75 @@ export function CityAutocompleteField({
             if (reason === 'input' || reason === 'clear') onChange(next);
         },
     });
+
+    const countryIso2 = countryIso2OrDefault(countryValue);
+    const stateCode = findSubdivision(stateValue, countryIso2)?.subdivisionCode ?? '';
+    const search = useDebouncedValue((value ?? '').trim(), CITY_SEARCH_DEBOUNCE_MS);
+    // Only fetch while the list is open: a state's list needs no search, a country-wide one needs 2+ characters.
+    const enabled = mode !== 'view' && open && Boolean(countryIso2) && (Boolean(stateCode) || search.length >= 2);
+    const { data: suggestions = [], isFetching } = useQuery({
+        queryKey: ['lookups', 'cities', countryIso2, stateCode, search],
+        queryFn: ({ signal }) =>
+            cityService.search(
+                { country: countryIso2, state: stateCode || undefined, search: search || undefined, limit: CITY_SUGGESTION_LIMIT },
+                signal
+            ),
+        enabled,
+        staleTime: 60 * 60 * 1000,
+        placeholderData: keepPreviousData,
+    });
+    const options = enabled ? suggestions : [];
+
     if (mode === 'view') {
         return <ReadOnlyField label={label} value={value} hideWhenEmpty sx={{ mb: 2 }} />;
     }
 
-    const suggestions = CITY_SUGGESTIONS[countryIso2OrDefault(countryValue)] ?? [];
-
     return (
         <FormField name={name} label={label} required={required} hint={hint} size={size}>
-            <Autocomplete<string, false, false, true>
+            <Autocomplete<CitySuggestion, false, false, true>
                 {...tabSelect}
                 freeSolo
-                // Free text hides MUI's dropdown arrow; show it (as on Country) whenever there are suggestions.
-                forcePopupIcon={suggestions.length > 0}
-                options={suggestions}
+                // Free text hides MUI's dropdown arrow; show it (as on Country) when a state's list can be opened.
+                forcePopupIcon={Boolean(stateCode)}
+                open={open}
+                onOpen={() => setOpen(true)}
+                onClose={(event, reason) => {
+                    tabSelect.onClose(event, reason);
+                    setOpen(false);
+                }}
+                options={options}
+                loading={isFetching}
                 value={value || null}
                 inputValue={value ?? ''}
-                onChange={(_, next) => onChange(next ?? '')}
-                filterOptions={(opts, state) =>
-                    state.inputValue ? opts.filter((o) => matchesSearch(o, state.inputValue)) : opts
-                }
+                getOptionLabel={(option) => (typeof option === 'string' ? option : option.cityName)}
+                getOptionKey={(option) => (typeof option === 'string' ? option : `${option.subdivisionCode}|${option.cityName}`)}
+                isOptionEqualToValue={(option, v) => option.cityName === (typeof v === 'string' ? v : v.cityName)}
+                onChange={(_, next) => {
+                    if (next && typeof next !== 'string') {
+                        onChange(next.cityName);
+                        if (!stateValue?.trim() && onStateSuggested) {
+                            const state = subdivisionName(countryIso2, next.subdivisionCode);
+                            if (state) onStateSuggested(state);
+                        }
+                        return;
+                    }
+                    onChange(next ?? '');
+                }}
+                // The server already filtered and ranked the list.
+                filterOptions={(opts) => opts}
+                renderOption={(props, option) => {
+                    const { key, ...rest } = props as React.HTMLAttributes<HTMLLIElement> & { key: string };
+                    // Without a state filter the same name can exist in several states: show which one.
+                    const state = stateCode ? '' : subdivisionName(countryIso2, option.subdivisionCode);
+                    return (
+                        <Box component="li" key={key} {...rest} sx={{ display: 'flex', justifyContent: 'space-between', gap: 1 }}>
+                            <Typography sx={{ fontSize: '0.84rem' }}>{option.cityName}</Typography>
+                            {state && (
+                                <Typography sx={{ fontSize: '0.72rem', color: 'var(--mui-palette-text-muted)' }}>{state}</Typography>
+                            )}
+                        </Box>
+                    );
+                }}
                 disabled={disabled}
                 size="small"
                 renderInput={(params) => (

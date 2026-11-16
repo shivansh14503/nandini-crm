@@ -195,6 +195,7 @@ export function RhfAddressSection<T extends FieldValues>({
                     <RhfCityField<T>
                         name={billingFields.city}
                         countryFieldName={billingFields.country}
+                        stateFieldName={billingFields.state}
                         required={required}
                         disabled={disabled}
                     />
@@ -245,6 +246,7 @@ export function RhfAddressSection<T extends FieldValues>({
                     <RhfCityField<T>
                         name={shippingFields.city}
                         countryFieldName={shippingFields.country}
+                        stateFieldName={shippingFields.state}
                         disabled={shippingLocked}
                     />
                     <RhfPinCodeField<T>

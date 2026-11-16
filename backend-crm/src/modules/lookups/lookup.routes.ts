@@ -16,6 +16,7 @@ import { lookupService, taxIdHoldersQuerySchema } from './lookup.service.js';
  *   GET /partner-companies                            → PartnerCompany[]
  *   GET /partner-contacts    ?partnerCompany          → PartnerCompanyContact[]
  *   GET /address-master      ?country=IN              → { countries, subdivisions }
+ *   GET /cities              ?country=IN&state=IN-DL&search&limit → CityLookupDto[] (searches not cached)
  *   GET /form-configs        ?includeInactive         → { categories, fieldsByModule, moduleTabs }
  *   GET /tax-id-holders      ?owner&gstNo&panNumber&excludeId → TaxIdHolder[] (live, never cached)
  */
@@ -34,6 +35,7 @@ router.get('/nature-of-calls', handler(() => lookupService.natureOfCalls()));
 router.get('/partner-companies', handler(() => lookupService.partnerCompanies()));
 router.get('/partner-contacts', handler((q) => lookupService.partnerContacts(q)));
 router.get('/address-master', handler((q) => lookupService.addressMaster(q)));
+router.get('/cities', handler((q) => lookupService.cities(q)));
 router.get('/form-configs', handler((q) => formConfigService.getConfigs(q)));
 // Not cached: a form asks "is this GSTIN / PAN taken?" right after typing it and needs the live answer.
 router.get(

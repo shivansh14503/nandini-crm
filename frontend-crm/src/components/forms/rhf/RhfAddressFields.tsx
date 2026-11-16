@@ -113,11 +113,23 @@ export function RhfStateRegionField<T extends FieldValues>({
 export interface RhfCityFieldProps<T extends FieldValues> extends RhfAddressFieldBaseProps<T> {
     /** Country field used to offer city suggestions (manual entry is always allowed). */
     countryFieldName?: Path<T>;
+    /** State field: narrows suggestions to its cities, and is filled in when a city is picked while it's empty. */
+    stateFieldName?: Path<T>;
 }
 
-export function RhfCityField<T extends FieldValues>({ name, countryFieldName, fieldSize, ...props }: RhfCityFieldProps<T>) {
+export function RhfCityField<T extends FieldValues>({
+    name,
+    countryFieldName,
+    stateFieldName,
+    fieldSize,
+    ...props
+}: RhfCityFieldProps<T>) {
     const { field, fieldState } = useController<T>({ name });
+    const { control, setValue } = useFormContext<T>();
     const country = useWatchedCountry<T>(countryFieldName, name);
+    // useWatch must always be called; watch the own field when no state field is configured.
+    const watchedState = useWatch({ control, name: (stateFieldName ?? name) as Path<T> });
+    const state = stateFieldName && typeof watchedState === 'string' ? watchedState : undefined;
 
     return (
         <CityAutocompleteField
@@ -127,6 +139,12 @@ export function RhfCityField<T extends FieldValues>({ name, countryFieldName, fi
             value={typeof field.value === 'string' ? field.value : ''}
             onChange={(v) => field.onChange(v)}
             countryValue={country}
+            stateValue={state}
+            onStateSuggested={
+                stateFieldName
+                    ? (stateName) => setValue(stateFieldName, stateName as never, { shouldDirty: true, shouldValidate: true })
+                    : undefined
+            }
             error={fieldState.error?.message}
         />
     );

@@ -22,7 +22,8 @@
     "prisma:validate": "prisma validate",
     "db:migrate": "prisma migrate dev",
     "db:deploy": "prisma migrate deploy",
-    "sync:pdf-document": "tsx scripts/syncPdfDocument.ts"
+    "sync:pdf-document": "tsx scripts/syncPdfDocument.ts",
+    "build:city-master": "tsx scripts/buildCityMaster.ts"
   },
   "dependencies": {
     "@fontsource/noto-sans": "^5.3.0",

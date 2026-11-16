@@ -113,6 +113,8 @@ export function AddressTab({ form, set, handleCopyAddressToggle }: AddressTabPro
                     value={form[k.city] || ''}
                     onChange={(v) => set(k.city, v)}
                     countryValue={country}
+                    stateValue={form[k.state] || ''}
+                    onStateSuggested={(v) => set(k.state, v)}
                     required={isBilling}
                     disabled={locked}
                 />
