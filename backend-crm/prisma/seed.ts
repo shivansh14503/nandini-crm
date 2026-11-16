@@ -161,7 +161,8 @@ async function seedAddressMaster(): Promise<void> {
         subdivisionsByCode.set(code, {
             subdivisionCode: code,
             countryIso2,
-            subdivisionName: String(row.subdivision_name).trim(),
+            // ā → a like the frontend's address master ('Haryana', not 'Haryāna'); other accents stay.
+            subdivisionName: String(row.subdivision_name).trim().replace(/ā/g, 'a').replace(/Ā/g, 'A'),
             subdivisionType: String(row.subdivision_type).trim(),
         });
     }
