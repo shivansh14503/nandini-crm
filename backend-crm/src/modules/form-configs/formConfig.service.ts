@@ -5,14 +5,12 @@ import { CACHE_KEYS, cacheService } from '../../services/cache.service.js';
 import type { AuthUser } from '../../types/user.types.js';
 import { HttpError } from '../../utils/httpError.js';
 import { runInTransaction } from '../shared/transactions.js';
+import { apiNameOf, assertApiNameAllowed, lockModuleFields, previewApiName, type ApiNameCheck } from './builtInApiNames.js';
 import {
-    assertFieldKeyAvailable,
     countRecordsWithKey,
     describeMigration,
     migrateFieldKey,
-    nextPreviousKeys,
     parsePreviousKeys,
-    serializePreviousKeys,
 } from './fieldKeyRename.js';
 import {
     APP_REQUIRED_CATEGORY_KEYS,
@@ -35,6 +33,7 @@ import {
     updateCategorySchema,
     updateFieldSchema,
     updateOptionSchema,
+    apiNameCheckSchema,
 } from './formConfig.validator.js';
 
 export { isFieldTombstoned };
@@ -78,8 +77,14 @@ export interface DropdownCategoryDto {
 export interface FormFieldDefinitionDto {
     id: string;
     module: string;
+    /**
+     * Built-in fields: the column the field maps to (what forms and code read). Custom fields: their API name
+     * (`cf_…`), the key their values are stored under.
+     */
     fieldKey: string;
-    /** Custom fields: API names the field had before being renamed (still accepted on writes), oldest first. */
+    /** The name integrations, imports and admins know the field by: an admin-chosen name for a built-in field, else `fieldKey`. */
+    apiName: string;
+    /** API names the field had before being renamed (still accepted on writes), oldest first. */
     previousFieldKeys: string[];
     label: string;
     fieldType: string;
@@ -197,7 +202,8 @@ const toFieldDto = (f: FormFieldDefinition, categoryKeys: Map<string, string>): 
     id: f.id,
     module: f.module,
     fieldKey: f.fieldKey,
-    previousFieldKeys: f.isSystem ? [] : parsePreviousKeys(f.previousFieldKeysJson),
+    apiName: apiNameOf(f),
+    previousFieldKeys: parsePreviousKeys(f.previousFieldKeysJson),
     label: f.label,
     fieldType: f.fieldType,
     tabKey: f.tabKey,
@@ -840,7 +846,10 @@ export const formConfigService = {
             });
             const sortOrder = 2_000_000_000; // temporary; placeField puts it at the end of its section
             // An API name the admin chose, else one derived from the label.
-            if (input.fieldKey) await assertFieldKeyAvailable(tx, input.module, input.fieldKey);
+            if (input.fieldKey) {
+                await lockModuleFields(tx, input.module);
+                await assertApiNameAllowed(tx, input.module, undefined, input.fieldKey, 'fieldKey');
+            }
             const fieldKey = input.fieldKey ?? (await customFieldKey(tx, input.module, input.label));
 
             const created = await tx.formFieldDefinition.create({
@@ -939,15 +948,29 @@ export const formConfigService = {
                 }
             }
 
-            // API name: a custom field's may be renamed, moving everything stored under the old one; a built-in
-            // field's is the column it maps to, so it is fixed.
+            // API name: a custom field's is its storage key, so a rename moves everything stored under the old one. A
+            // built-in field's column is fixed; its API name is a name of the admin's choosing (builtInApiNames.ts).
             const renameKey = input.fieldKey !== undefined && input.fieldKey !== before.fieldKey ? input.fieldKey : null;
             let migrationNote: string | undefined;
             if (renameKey) {
-                if (before.isSystem) reject('fieldKey', `${before.label} is a built-in field; its API name can't be changed.`);
-                await assertFieldKeyAvailable(tx, before.module, renameKey, before.id);
+                if (before.isSystem) reject('fieldKey', `${before.label} is a built-in field: change its API name (apiName), not its column.`);
+                await lockModuleFields(tx, before.module);
+                await assertApiNameAllowed(tx, before.module, before.id, renameKey, 'fieldKey');
                 migrationNote = describeMigration(await migrateFieldKey(tx, before.module, before.fieldKey, renameKey));
                 keyRenamedIn = before.module;
+            }
+            const currentApiName = before.apiName ?? before.fieldKey;
+            let apiNameData: { apiName: string | null; previousFieldKeysJson: string | null } | undefined;
+            if (input.apiName !== undefined && input.apiName !== currentApiName) {
+                if (!before.isSystem) reject('apiName', `${before.label} is a custom field: rename its API name (fieldKey) instead.`);
+                await lockModuleFields(tx, before.module);
+                await assertApiNameAllowed(tx, before.module, before.id, input.apiName, 'apiName');
+                // The old name is forgotten (TEMP-DEV-RENAME); the column name always works.
+                apiNameData = { apiName: input.apiName === before.fieldKey ? null : input.apiName, previousFieldKeysJson: null };
+                migrationNote =
+                    currentApiName === before.fieldKey
+                        ? `Column '${before.fieldKey}' unchanged and still accepted; no data moved.`
+                        : `Column '${before.fieldKey}' unchanged; '${currentApiName}' is no longer accepted; no data moved.`;
             }
 
             const after = await tx.formFieldDefinition.update({
@@ -956,11 +979,11 @@ export const formConfigService = {
                     ...(renameKey
                         ? {
                               fieldKey: renameKey,
-                              previousFieldKeysJson: serializePreviousKeys(
-                                  nextPreviousKeys(parsePreviousKeys(before.previousFieldKeysJson), before.fieldKey, renameKey),
-                              ),
+                              // The old name is forgotten (TEMP-DEV-RENAME).
+                              previousFieldKeysJson: null,
                           }
                         : {}),
+                    ...(apiNameData ?? {}),
                     ...(input.label !== undefined ? { label: input.label } : {}),
                     ...(input.fieldType !== undefined ? { fieldType: input.fieldType } : {}),
                     ...(input.tabKey !== undefined ? { tabKey: input.tabKey } : {}),
@@ -994,8 +1017,10 @@ export const formConfigService = {
             }
 
             const changes: Record<string, unknown> = diffRecords(before, after);
-            // The alias list is bookkeeping; the fieldKey diff already says what changed.
+            // The alias list is bookkeeping; the fieldKey / apiName diff already says what changed.
             delete changes.previousFieldKeysJson;
+            // A built-in field's API name reads as the name it is known by (null = its column name).
+            if (changes.apiName) changes.apiName = { from: currentApiName, to: after.apiName ?? after.fieldKey };
             if (migrationNote) changes.reason = migrationNote;
 
             // A dropdown list named after this field and used by it alone (e.g. a custom "Lead Type" field's list)
@@ -1077,6 +1102,12 @@ export const formConfigService = {
         });
         await invalidate();
         return { id: fieldId };
+    },
+
+    /** What saving an API name would do (clashes, aliases, data moved), without saving it. */
+    async checkApiName(body: unknown): Promise<ApiNameCheck> {
+        const input = apiNameCheckSchema.parse(body);
+        return previewApiName(prisma, input.module, input.fieldId, input.name);
     },
 
     async getField(fieldId: string): Promise<FormFieldDefinitionDto> {

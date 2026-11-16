@@ -14,6 +14,6 @@ import { productController } from './product.controller.js';
  */
 const router = Router();
 router.use(authenticate);
-registerCrudRoutes(router, productController);
+registerCrudRoutes(router, productController, 'products');
 
 export default router;

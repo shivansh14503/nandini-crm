@@ -141,9 +141,17 @@ export interface DropdownCategoryDto {
 export interface FormFieldDefinitionDto {
     id: string;
     module: CrmModuleKey;
-    /** RHF name for built-in fields; `cf_…` key inside `customFields` for custom fields. */
+    /**
+     * RHF name for built-in fields (the column they map to, which never changes); `cf_…` key inside `customFields`
+     * for custom fields. Code keeps reading fields by this key.
+     */
     fieldKey: string;
-    /** Custom fields: API names the field had before being renamed (still accepted on writes), oldest first. */
+    /**
+     * The name the field is known by outside the app (integrations, imports, the form builder): an admin-chosen name
+     * for a built-in field, else `fieldKey`. Read it with `apiNameOf`.
+     */
+    apiName?: string;
+    /** API names the field had before being renamed (still accepted on writes), oldest first. */
     previousFieldKeys?: string[];
     label: string;
     fieldType: FieldType;
@@ -256,6 +264,8 @@ export interface UpdateFieldPayload {
     label?: string;
     /** Custom fields only: renames the API name; the API moves stored values, filters and PDF paths with it. */
     fieldKey?: string;
+    /** Built-in fields only: the API name writes and imports may use in place of the column name (nothing moves). */
+    apiName?: string;
     /** Custom select / multi-select fields only: switches between the two. */
     fieldType?: 'select' | 'multiselect';
     /** Custom fields only. */
@@ -274,15 +284,42 @@ export interface UpdateFieldPayload {
     dropdownCategoryKey?: string | null;
 }
 
-/** Same rule as the API: `cf_` + lowercase letters, digits and underscores, starting with a letter, ≤ 80 chars. */
-export const CUSTOM_FIELD_KEY_PATTERN = /^cf_[a-z][a-z0-9_]*$/;
-export const CUSTOM_FIELD_KEY_MAX = 80;
+/**
+ * TEMP-DEV-RENAME: while the app is being built, any field's API name is free to change (custom fields don't need
+ * `cf_`). Same rule as the API (fieldKeyRename.ts): letters, digits and underscores, starting with a letter, ≤ 80.
+ */
+export const API_NAME_PATTERN = /^[A-Za-z][A-Za-z0-9_]*$/;
+export const API_NAME_MAX = 80;
 
-/** Problem with an API name's shape, or null. */
-export function customFieldKeyError(key: string): string | null {
-    if (key.length > CUSTOM_FIELD_KEY_MAX) return `The API name can't exceed ${CUSTOM_FIELD_KEY_MAX} characters.`;
-    if (!CUSTOM_FIELD_KEY_PATTERN.test(key)) return 'Use lowercase letters, digits and underscores after cf_, starting with a letter.';
+/** Problem with an API name's shape (any field), or null. */
+export function apiNameShapeError(name: string): string | null {
+    if (!name) return 'Enter an API name.';
+    if (name.length > API_NAME_MAX) return `The API name can't exceed ${API_NAME_MAX} characters.`;
+    if (!API_NAME_PATTERN.test(name)) return 'Use letters, digits and underscores, starting with a letter.';
     return null;
+}
+export const customFieldKeyError = apiNameShapeError;
+export const builtInApiNameError = apiNameShapeError;
+export const BUILT_IN_API_NAME_MAX = API_NAME_MAX;
+
+/** The name a field is known by: a built-in field's admin-chosen API name, else its key. */
+export const apiNameOf = (field: Pick<FormFieldDefinitionDto, 'fieldKey' | 'apiName'>) => field.apiName || field.fieldKey;
+
+/**
+ * The other field of the module already answering to `name` (its key or API name, exact case), if any: the one clash
+ * the API refuses. A built-in field may always take back its own column name.
+ */
+export function apiNameOwner(fields: readonly FormFieldDefinitionDto[], name: string, self?: FormFieldDefinitionDto): FormFieldDefinitionDto | undefined {
+    if (self?.isSystem && name === self.fieldKey) return undefined;
+    return fields.find((f) => f.id !== self?.id && (f.fieldKey === name || apiNameOf(f) === name));
+}
+
+/** What saving an API name would do (POST /form-configs/api-name-check). */
+export interface ApiNameCheck {
+    /** Blocks the change. */
+    error: string | null;
+    /** Allowed, but worth knowing (the old name stops working, data moved, a look-alike name…). */
+    warnings: string[];
 }
 
 /** `Compliance & Legal` → `compliance_legal`: key of an admin-created tab (the API accepts ^[a-z][a-z0-9_]{1,39}$). */

@@ -26,6 +26,8 @@ export const FORM_CONFIG_ADMIN_ROLES = ['Admin', 'Administrator', 'Super Admin']
  *   DELETE /options/:optionId                         permanent delete; blocked for system options (archive = PATCH isActive:false)
  *   POST   /fields                                    custom field (key auto-prefixed cf_)
  *   PATCH  /fields/:fieldId                           (core-locked: can't hide / un-require; built-in: fixed tab, any section of it)
+ *                                                     { apiName } renames a built-in field's API name; { fieldKey } a custom field's
+ *   POST   /api-name-check                            { module, fieldId?, name } → { error, warnings } (nothing saved)
  *   DELETE /fields/:fieldId                           permanent delete of a custom field; blocked for built-in fields
  *   PUT    /modules/:module/fields/reorder            { fieldIds }
  *   PATCH  /modules/:module/sections/:sectionKey      { sectionLabel }
@@ -53,6 +55,7 @@ router.patch('/options/:optionId', admin, validateRequest({ params: optionIdPara
 router.delete('/options/:optionId', admin, validateRequest({ params: optionIdParamSchema }), formConfigController.deleteOption);
 
 router.post('/fields', admin, formConfigController.createField);
+router.post('/api-name-check', admin, formConfigController.checkApiName);
 router.patch('/fields/:fieldId', admin, validateRequest({ params: fieldIdParamSchema }), formConfigController.updateField);
 router.delete('/fields/:fieldId', admin, validateRequest({ params: fieldIdParamSchema }), formConfigController.deleteField);
 router.put('/modules/:module/fields/reorder', admin, validateRequest({ params: moduleParamSchema }), formConfigController.reorderFields);

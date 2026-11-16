@@ -6,21 +6,21 @@ import { lockRecords, type LockedEntity } from '../shared/transactions.js';
 import type { CrmModuleKey } from './formConfig.defaults.js';
 
 /**
- * A custom field's API name (`fieldKey`, e.g. `cf_po_number`) is the key its values are stored under in each
- * record's `customDataJson`, and the name saved table filters and PDF templates refer to it by. An admin may rename
- * it (built-in fields' keys are column names and stay fixed): `migrateFieldKey` then moves everything stored under
- * the old name in the same transaction, and the old name is kept as an alias of the field (`previousFieldKeysJson`)
- * so writes still using it (a form opened before the rename, an import file, an integration) land in the field.
+ * A custom field's API name (`fieldKey`, e.g. `cf_po_number` or `poNumber`) is the key its values are stored under in
+ * each record's `customDataJson`, and the name saved table filters and PDF templates refer to it by. An admin may
+ * rename it (built-in fields' keys are column names and stay fixed; see builtInApiNames.ts): `migrateFieldKey` then
+ * moves everything stored under the old name in the same transaction. The old name is forgotten.
+ *
+ * TEMP-DEV-RENAME: while the app is being built any plain identifier is allowed (the `cf_` prefix is optional).
  */
 
-export const CUSTOM_FIELD_KEY_PATTERN = /^cf_[a-z][a-z0-9_]*$/;
+/** Letters, digits and underscores, starting with a letter: safe as a JSON key, filter id, PDF path and SQL pattern. */
+export const CUSTOM_FIELD_KEY_PATTERN = /^[A-Za-z][A-Za-z0-9_]*$/;
 export const CUSTOM_FIELD_KEY_MAX = 80;
-export const CUSTOM_FIELD_KEY_MESSAGE = 'Use cf_ followed by lowercase letters, digits and underscores, starting with a letter.';
-/** Aliases kept per field (oldest dropped first), so the column stays bounded. */
-const MAX_PREVIOUS_KEYS = 20;
+export const CUSTOM_FIELD_KEY_MESSAGE = 'Use letters, digits and underscores, starting with a letter.';
 
 /** Table holding each module's records (and its `customDataJson`) and the record lock it uses. */
-const MODULE_TABLES: Record<CrmModuleKey, { table: string; lock: LockedEntity }> = {
+export const MODULE_TABLES: Record<CrmModuleKey, { table: string; lock: LockedEntity }> = {
     leads: { table: 'Lead', lock: 'lead' },
     opportunities: { table: 'Opportunity', lock: 'opportunity' },
     quotations: { table: 'Quotation', lock: 'quotation' },
@@ -46,17 +46,9 @@ export function parsePreviousKeys(json: string | null | undefined): string[] {
     }
 }
 
-/** The alias list after renaming `from` → `to`: `from` appended (newest last), `to` no longer an alias. */
-export function nextPreviousKeys(previous: string[], from: string, to: string): string[] {
-    const list = previous.filter((k) => k !== from && k !== to);
-    list.push(from);
-    return list.slice(-MAX_PREVIOUS_KEYS);
-}
-
-export const serializePreviousKeys = (keys: string[]) => (keys.length ? JSON.stringify(keys) : null);
-
-/** Problem with a requested API name, or null when its shape is valid. */
+/** Problem with a requested API name, or null when its shape is valid (any field, built-in or custom). */
 export function fieldKeyFormatError(key: string): string | null {
+    if (!key) return 'Enter an API name.';
     if (key.length > CUSTOM_FIELD_KEY_MAX) return `The API name can't exceed ${CUSTOM_FIELD_KEY_MAX} characters.`;
     if (!CUSTOM_FIELD_KEY_PATTERN.test(key)) return CUSTOM_FIELD_KEY_MESSAGE;
     return null;
@@ -163,27 +155,6 @@ export async function countRecordsWithKey(tx: TransactionClient, module: CrmModu
     return (await rowsMentioning(tx, module, key)).filter((row) => customDataHasKey(row.customDataJson, key)).length;
 }
 
-/**
- * Rejects an API name another field of the module uses, or one records still hold values under (left by a deleted
- * field: reusing it would show those values in the new field). `selfId` is the field being renamed.
- */
-export async function assertFieldKeyAvailable(tx: TransactionClient, module: CrmModuleKey, key: string, selfId?: string): Promise<void> {
-    const reject = (message: string) => {
-        throw HttpError.conflict(message, [{ message, path: ['fieldKey'] }]);
-    };
-    const formatError = fieldKeyFormatError(key);
-    if (formatError) throw HttpError.badRequest(formatError, [{ message: formatError, path: ['fieldKey'] }]);
-    const owner = await tx.formFieldDefinition.findFirst({ where: { module, fieldKey: key }, select: { id: true, label: true } });
-    if (owner && owner.id !== selfId) reject(`The API name '${key}' is already used by '${owner.label}'.`);
-    // A field taking back one of its own earlier names: values under it were moved when it was renamed away.
-    const self = selfId ? await tx.formFieldDefinition.findUnique({ where: { id: selfId }, select: { previousFieldKeysJson: true } }) : null;
-    if (self && parsePreviousKeys(self.previousFieldKeysJson).includes(key)) return;
-    const leftovers = await countRecordsWithKey(tx, module, key);
-    if (leftovers > 0) {
-        reject(`The API name '${key}' still holds values from a deleted field on ${leftovers} record${leftovers === 1 ? '' : 's'}; choose another name.`);
-    }
-}
-
 export interface FieldKeyMigration {
     records: number;
     filters: number;
@@ -244,7 +215,7 @@ export async function migrateFieldKey(tx: TransactionClient, module: CrmModuleKe
         }
     }
 
-    // `to` now belongs to this field: no other field of the module may keep it as an alias.
+    // `to` now belongs to this field: no other field may keep it as an alias (left from before renames became final).
     const aliased = await tx.formFieldDefinition.findMany({
         where: { module, previousFieldKeysJson: { contains: `"${to}"` } },
         select: { id: true, previousFieldKeysJson: true },
@@ -252,7 +223,7 @@ export async function migrateFieldKey(tx: TransactionClient, module: CrmModuleKe
     for (const row of aliased) {
         const keys = parsePreviousKeys(row.previousFieldKeysJson);
         if (!keys.includes(to)) continue;
-        await tx.formFieldDefinition.update({ where: { id: row.id }, data: { previousFieldKeysJson: serializePreviousKeys(keys.filter((k) => k !== to)) } });
+        await tx.formFieldDefinition.update({ where: { id: row.id }, data: { previousFieldKeysJson: keys.length > 1 ? JSON.stringify(keys.filter((k) => k !== to)) : null } });
     }
 
     return { records, filters, pdfTemplates, pdfSavedItems };

@@ -1,3 +1,5 @@
+import { getFormConfigs } from '@/services/masterData.store';
+import { apiNameOf } from '@/types/formConfig.types';
 import type { ColumnMapping, ImportEntityConfig, ImportEntityType, MappedRow, ParsedFile } from './types';
 
 export const IMPORT_CONFIGS: Record<ImportEntityType, ImportEntityConfig> = {
@@ -121,7 +123,21 @@ export const IMPORT_CONFIGS: Record<ImportEntityType, ImportEntityConfig> = {
 
 const normalize = (s: string) => s.toLowerCase().replace(/[\s_\-./]+/g, ' ').trim();
 
-/** Pre-selects a file header for each entity field using exact label/key matches, then aliases. */
+/**
+ * API names an admin gave the entity's built-in fields (and their earlier ones), by template key: a file exported
+ * from an integration names its columns that way.
+ */
+function apiNamesByKey(entity: ImportEntityType): Map<string, string[]> {
+    const names = new Map<string, string[]>();
+    for (const field of getFormConfigs()?.fieldsByModule[entity] ?? []) {
+        if (!field.isSystem || field.isDeleted) continue;
+        const known = [apiNameOf(field), ...(field.previousFieldKeys ?? [])].filter((n) => n !== field.fieldKey);
+        if (known.length) names.set(field.fieldKey, known);
+    }
+    return names;
+}
+
+/** Pre-selects a file header for each entity field using exact label / key / API name matches, then aliases. */
 export function autoMapColumns(entity: ImportEntityType, headers: string[]): ColumnMapping {
     const mapping: ColumnMapping = {};
     const used = new Set<string>();
@@ -140,7 +156,8 @@ export function autoMapColumns(entity: ImportEntityType, headers: string[]): Col
         mapping[f.key] = '';
     });
     // Exact label/key matches take priority over aliases so e.g. "Name" never steals "Organization Name".
-    fields.forEach((f) => claim(f.key, [normalize(f.label), normalize(f.key)]));
+    const apiNames = apiNamesByKey(entity);
+    fields.forEach((f) => claim(f.key, [normalize(f.label), normalize(f.key), ...(apiNames.get(f.key) ?? []).map(normalize)]));
     fields.forEach((f) => {
         if (!mapping[f.key]) claim(f.key, f.aliases.map(normalize));
     });

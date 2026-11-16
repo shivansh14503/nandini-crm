@@ -23,6 +23,6 @@ router.use(authenticate);
 // Registered before the CRUD routes so `/check-unique` isn't captured by `GET /:id` and `/bulk-status` by `PATCH /:id`.
 router.get('/check-unique', organizationController.checkUnique);
 router.patch('/bulk-status', validateRequest({ body: bulkStatusSchema }), organizationController.updateStatusBulk);
-registerCrudRoutes(router, organizationController);
+registerCrudRoutes(router, organizationController, 'organizations');
 
 export default router;

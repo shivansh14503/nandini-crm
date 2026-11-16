@@ -313,11 +313,14 @@ function applyOp(s: FormConfigsPayload, op: DraftOp): void {
             if (!field) return;
             const p = op.payload;
             const before = { tabKey: field.tabKey, sectionKey: field.sectionKey, label: field.label };
+            // Mirrors the API: a rename is final, the old name is forgotten (TEMP-DEV-RENAME).
             if (p.fieldKey !== undefined && p.fieldKey !== field.fieldKey) {
-                // Mirrors the API: the old API name stays an alias of the field.
-                const previous = (field.previousFieldKeys ?? []).filter((k) => k !== field.fieldKey && k !== p.fieldKey);
-                field.previousFieldKeys = [...previous, field.fieldKey];
+                field.previousFieldKeys = [];
                 field.fieldKey = p.fieldKey;
+            }
+            if (p.apiName !== undefined && p.apiName !== (field.apiName || field.fieldKey)) {
+                field.previousFieldKeys = [];
+                field.apiName = p.apiName;
             }
             if (p.label !== undefined) field.label = p.label;
             if (p.fieldType !== undefined) field.fieldType = p.fieldType;

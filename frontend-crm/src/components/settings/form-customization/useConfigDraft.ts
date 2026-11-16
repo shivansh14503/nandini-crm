@@ -5,7 +5,10 @@ import { useQueryClient } from '@tanstack/react-query';
 import { formConfigService } from '@/services/formConfig.service';
 import {
     CRM_MODULE_LABELS,
-    customFieldKeyError,
+    apiNameOf,
+    apiNameOwner,
+    apiNameShapeError,
+    type FormFieldDefinitionDto,
     type CreateCategoryPayload,
     type CreateFieldPayload,
     type CreateOptionPayload,
@@ -93,14 +96,15 @@ const fail = (message: string): never => {
 const moduleLabel = (m: string) => CRM_MODULE_LABELS[m as CrmModuleKey] ?? m;
 
 /**
- * Same checks the API makes on a requested API name, as far as the draft can tell: its shape, and no other field of
- * the module holding it. (Values a deleted field left under it are only known to the API, which refuses on save.)
+ * Same checks the API makes on a requested API name (custom key or built-in API name), as far as the draft can tell:
+ * its shape, and no other field of the module answering to it. (Record properties a built-in name may not take are
+ * only known to the API, which refuses them on save.)
  */
-function assertKeyFree(s: FormConfigsPayload, module: CrmModuleKey, key: string, selfId?: string): void {
-    const shape = customFieldKeyError(key);
+function assertNameFree(s: FormConfigsPayload, module: CrmModuleKey, name: string, self?: FormFieldDefinitionDto): void {
+    const shape = apiNameShapeError(name);
     if (shape) fail(shape);
-    const owner = (s.fieldsByModule[module] ?? []).find((f) => f.fieldKey === key && f.id !== selfId);
-    if (owner) fail(`The API name '${key}' is already used by '${owner.label}'.`);
+    const owner = apiNameOwner(s.fieldsByModule[module] ?? [], name, self);
+    if (owner) fail(`'${name}' is already the API name of '${owner.label}'.`);
 }
 
 /** Fields of a tab that are not deleted (archived ones included). */
@@ -416,7 +420,7 @@ export function useConfigDraft(base: FormConfigsPayload | undefined, refetch: ()
             createField(payload) {
                 const s = current();
                 const taken = new Set((s.fieldsByModule[payload.module] ?? []).map((f) => f.fieldKey));
-                if (payload.fieldKey) assertKeyFree(s, payload.module, payload.fieldKey);
+                if (payload.fieldKey) assertNameFree(s, payload.module, payload.fieldKey);
                 const fieldKey = payload.fieldKey ?? uniqueKey(customFieldKeyFor(payload.label), (k) => taken.has(k));
                 const newOptions = payload.dropdownCategoryKey ? [] : [...new Set(payload.newOptions ?? [])];
                 const categoryKey = newOptions.length ? uniqueKey(categoryKeyFor(payload.label), (k) => Boolean(findCategoryByKey(s, k))) : undefined;
@@ -448,7 +452,16 @@ export function useConfigDraft(base: FormConfigsPayload | undefined, refetch: ()
                         delete payload.fieldKey;
                     } else {
                         if (field.isSystem) fail(`${field.label} is a built-in field; its API name can't be changed.`);
-                        assertKeyFree(s, field.module, payload.fieldKey, field.id);
+                        assertNameFree(s, field.module, payload.fieldKey, field);
+                    }
+                }
+                if (payload.apiName !== undefined) {
+                    if (payload.apiName === apiNameOf(field)) {
+                        payload = { ...payload };
+                        delete payload.apiName;
+                    } else {
+                        if (!field.isSystem) fail(`${field.label} is a custom field: rename its API name instead.`);
+                        assertNameFree(s, field.module, payload.apiName, field);
                     }
                 }
                 if (field.isCoreLocked && payload.isRequired === false) fail(`${field.label} is a core field and must stay required.`);

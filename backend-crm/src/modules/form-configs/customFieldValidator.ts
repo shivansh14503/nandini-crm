@@ -1,6 +1,7 @@
 import { StatusCodes } from 'http-status-codes';
 import { HttpError, type ApiFieldError } from '../../utils/httpError.js';
 import { businessNow } from '../../validators/notInPast.js';
+import { buildBuiltInNameMap, type BuiltInNameMap } from './builtInApiNames.js';
 import type { CrmModuleKey } from './formConfig.defaults.js';
 // Type-only: the service (and with it the Prisma client and env checks) is loaded on first use, so the pure checks
 // below import cleanly in unit tests.
@@ -37,6 +38,11 @@ export interface ModuleFieldConfig {
      * opened before the rename, an import file, an integration) is stored under the current one.
      */
     keyAliases?: ReadonlyMap<string, string>;
+    /**
+     * Built-in fields' admin-chosen API names (and earlier ones) → their column names. Record routes translate a
+     * payload with them before validating it (see builtInApiNames.ts).
+     */
+    builtInNames?: BuiltInNameMap;
 }
 
 export interface PayloadCheckOptions {
@@ -78,7 +84,7 @@ export function buildModuleFieldConfig(configs: FormConfigsPayload, module: CrmM
         if (f.isSystem) continue;
         for (const old of f.previousFieldKeys ?? []) if (!liveKeys.has(old)) keyAliases.set(old, f.fieldKey);
     }
-    return { module, fields, activeOptions, keyAliases };
+    return { module, fields, activeOptions, keyAliases, builtInNames: buildBuiltInNameMap(fields) };
 }
 
 /**
@@ -317,7 +323,7 @@ export function checkModulePayload(
     const sanitized: Record<string, unknown> = {};
     for (const [key, value] of Object.entries(input)) {
         const field = customDefs.get(key);
-        if (!field || !key.startsWith(CUSTOM_FIELD_PREFIX)) continue;
+        if (!field) continue;
         sanitized[key] = field.isActive ? normalizeValue(field, value) : value;
     }
     return sanitized;
