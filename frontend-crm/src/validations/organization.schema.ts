@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { FIELD_MAX_LENGTH as L } from '../config/fieldLimits';
+import { isGstRegistrationType } from '../config/constants';
 import {
     requiredString,
     optionalString,
@@ -103,12 +104,13 @@ export const organizationFormSchema = z
         refinePostalCodeForCountry(ctx, 'billingPostalCode', data.billingPostalCode, data.billingCountry);
         refinePostalCodeForCountry(ctx, 'shippingPostalCode', data.shippingPostalCode, data.shippingCountry);
 
-        if (data.registrationType === 'Registered') {
+        // GSTIN is only collected (and then required) for 'Registered' / SEZ organizations.
+        if (isGstRegistrationType(data.registrationType)) {
             const gst = (data.gstNo || data.gstNumber)?.trim();
             if (!gst || gst.length < 1) {
                 ctx.addIssue({
                     code: z.ZodIssueCode.custom,
-                    message: 'GST Number is required for registered organizations.',
+                    message: `GST Number is required when Registration Type is ${data.registrationType}.`,
                     path: ['gstNo'],
                 });
             } else if (!GST_REGEX.test(gst.toUpperCase())) {

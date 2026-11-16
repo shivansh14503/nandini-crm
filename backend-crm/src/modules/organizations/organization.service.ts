@@ -20,6 +20,7 @@ import {
 } from '../../utils/organizationName.js';
 import { parsePagination } from '../../utils/pagination.js';
 import { assertTaxIdsUnique } from '../shared/taxIdentifiers.js';
+import { isGstRegistrationType } from '../shared/registrationType.js';
 import { asPayload, checkModulePayload, loadModuleFieldConfig, validateModulePayload } from '../form-configs/customFieldValidator.js';
 import { assertAssigneeValid, assertRecordAccess, buildAccessScopeWhere } from '../shared/accessControl.js';
 import { emailsInclude, normalizeEmails, replaceEmails } from '../shared/entityEmails.js';
@@ -351,7 +352,7 @@ function toOrganizationData(
 }
 
 /** Unregistered organizations carry no GSTIN (the form clears it too). */
-const gstFor = (input: OrganizationWriteInput): string | null => (input.registrationType === 'Registered' ? (input.gstNo ?? null) : null);
+const gstFor = (input: OrganizationWriteInput): string | null => (isGstRegistrationType(input.registrationType) ? (input.gstNo ?? null) : null);
 
 /**
  * Inserts an organization (code, uniqueness, parent link, emails, audit) inside the caller's transaction.

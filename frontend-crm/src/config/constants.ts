@@ -88,6 +88,15 @@ export const REGISTRATION_TYPES: string[] = [
     'Special Economic Zone (SEZ)',
 ];
 
+/**
+ * Registration types that carry a GSTIN: 'Registered' and 'Special Economic Zone (SEZ)'. The GST Number field
+ * is shown (and required) only for these on the lead and organization forms; every other type stores none.
+ */
+export const isGstRegistrationType = (registrationType?: string | null): boolean => {
+    const value = (registrationType ?? '').trim().toLowerCase();
+    return value === 'registered' || value === 'sez' || value.includes('(sez)') || value === 'special economic zone';
+};
+
 export const ACCOUNT_TYPES: string[] = [
     'Current Account',
     'Savings Account',

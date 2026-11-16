@@ -22,6 +22,7 @@ import {
     textWithDefault,
 } from '../../validators/common.js';
 import { corporateEmailListSchema } from '../shared/entityEmails.js';
+import { isGstRegistrationType } from '../shared/registrationType.js';
 
 /** LEAD_STATUSES from frontend-crm/src/types/lead.types.ts. */
 export const LEAD_STATUSES = [
@@ -97,12 +98,12 @@ function refineLeadPostalCodes(
     }
 }
 
-/** A 'Registered' lead must carry a valid GSTIN (other registration types store none). */
+/** A 'Registered' / SEZ lead must carry a valid GSTIN (other registration types store none). */
 function refineLeadGst(lead: { registrationType?: string; gstNo?: string }, ctx: z.RefinementCtx): void {
-    if (lead.registrationType !== 'Registered') return;
+    if (!isGstRegistrationType(lead.registrationType)) return;
     const gst = lead.gstNo?.trim();
     if (!gst) {
-        ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'GST Number is required when Registration Type is Registered.', path: ['gstNo'] });
+        ctx.addIssue({ code: z.ZodIssueCode.custom, message: `GST Number is required when Registration Type is ${lead.registrationType}.`, path: ['gstNo'] });
     } else if (!GST_REGEX.test(gst.toUpperCase())) {
         ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Please enter a valid 15-character GSTIN (e.g. 07AAAAA0000A1Z5).', path: ['gstNo'] });
     }

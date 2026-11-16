@@ -21,6 +21,7 @@ import {
     RhfEmailList,
     RhfDateTimeField,
 } from '@/components/forms';
+import { isGstRegistrationType } from '@/config/constants';
 import {
     LEAD_SOURCES,
     PRODUCT_CATEGORIES,
@@ -91,9 +92,9 @@ export function LeadOverviewSection({ leadId }: { leadId?: string } = {}) {
         if (tradeNameFollows) setValue('tradeName', val, { shouldValidate: true, shouldDirty: true });
     };
 
-    // GSTIN only applies to 'Registered' leads: clear it whenever another type (or none) is chosen.
+    // GSTIN only applies to 'Registered' / SEZ leads: clear it whenever another type (or none) is chosen.
     const registrationType = useWatch({ control, name: 'registrationType' }) ?? '';
-    const isRegistered = registrationType === 'Registered';
+    const isRegistered = isGstRegistrationType(registrationType);
     React.useEffect(() => {
         if (!isRegistered && getValues('gstNo')) {
             setValue('gstNo', '', { shouldValidate: true });
@@ -178,7 +179,7 @@ export function LeadOverviewSection({ leadId }: { leadId?: string } = {}) {
                         />
                     </FormField>
                     <RhfSelect<LeadFormData> name="registrationType" label="Registration Type" options={LEAD_REGISTRATION_TYPES} placeholder="Select Type" />
-                    {/* GSTIN only exists for registered businesses, so the field only appears for 'Registered'. */}
+                    {/* GSTIN only exists for registered businesses, so the field only appears for 'Registered' / SEZ. */}
                     {isRegistered && (
                         <RhfUppercaseField<LeadFormData>
                             name="gstNo"

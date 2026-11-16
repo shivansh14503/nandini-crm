@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { FIELD_MAX_LENGTH as L } from '../config/fieldLimits';
+import { isGstRegistrationType } from '../config/constants';
 import {
     requiredString,
     optionalString,
@@ -72,13 +73,13 @@ export const leadFormSchema = z.object({
     refinePostalCodeForCountry(ctx, 'primaryPostalCode', data.primaryPostalCode, data.primaryCountry);
     refinePostalCodeForCountry(ctx, 'otherPostalCode', data.otherPostalCode, data.otherCountry);
 
-    // GSTIN is only collected (and then required) for 'Registered' leads; matches organization.schema.ts.
-    if (data.registrationType === 'Registered') {
+    // GSTIN is only collected (and then required) for 'Registered' / SEZ leads; matches organization.schema.ts.
+    if (isGstRegistrationType(data.registrationType)) {
         const gst = data.gstNo?.trim();
         if (!gst) {
             ctx.addIssue({
                 code: z.ZodIssueCode.custom,
-                message: 'GST Number is required when Registration Type is Registered.',
+                message: `GST Number is required when Registration Type is ${data.registrationType}.`,
                 path: ['gstNo'],
             });
         } else if (!GST_REGEX.test(gst.toUpperCase())) {

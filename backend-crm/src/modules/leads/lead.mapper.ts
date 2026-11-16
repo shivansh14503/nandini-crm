@@ -1,6 +1,7 @@
 import type { EntityEmail, Lead, Prisma } from '../../generated/prisma/client.js';
 import { fromDateOnly, fromOptionalDateOnly, nullable, parseCustomFields, parseStringArray, serializeCustomFields, stringifyStringArray, text, toDateOnly, toIso, toIsoOrUndefined } from '../../utils/mappers.js';
 import { toEmailDtos, type CorporateEmailDto } from '../shared/entityEmails.js';
+import { isGstRegistrationType } from '../shared/registrationType.js';
 import type { LeadInput } from './lead.validator.js';
 
 export type LeadRow = Lead & { emailAddresses?: EntityEmail[] };
@@ -149,7 +150,7 @@ export function toLeadData(input: LeadInput): Omit<Prisma.LeadUncheckedCreateInp
         followupType: input.followupType ?? 'Call',
         addDescription: nullable(input.addDescription),
         registrationType: nullable(input.registrationType),
-        gstNo: input.registrationType === 'Registered' ? nullable(input.gstNo?.toUpperCase()) : null,
+        gstNo: isGstRegistrationType(input.registrationType) ? nullable(input.gstNo?.toUpperCase()) : null,
         turnover: nullable(input.turnover),
         assignedTo: input.assignedTo,
         otherPhone: input.otherPhone ?? null,

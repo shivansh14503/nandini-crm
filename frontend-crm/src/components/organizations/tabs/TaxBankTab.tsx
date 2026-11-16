@@ -22,7 +22,7 @@ import {
     RhfSelect,
     RhfUppercaseField,
 } from '@/components/forms';
-import { ACCOUNT_TYPES, REGISTRATION_TYPES } from '@/config/constants';
+import { ACCOUNT_TYPES, REGISTRATION_TYPES, isGstRegistrationType } from '@/config/constants';
 import type { OrganizationFormData } from '@/types/organization.types';
 
 export interface TaxBankTabProps {
@@ -40,8 +40,8 @@ function TaxBankTabInner({ form, set }: TaxBankTabProps) {
         if (set && registrationType) {
             set('registrationType', registrationType);
         }
-        // Only 'Registered' has a GSTIN (the API drops it for every other type), so the field hides and clears.
-        if (registrationType && registrationType !== 'Registered') {
+        // Only 'Registered' / SEZ carry a GSTIN (the API drops it for every other type), so the field hides and clears.
+        if (registrationType && !isGstRegistrationType(registrationType)) {
             setValue('gstNo', '', { shouldValidate: true });
             if (set) {
                 set('gstNo', '');
@@ -76,11 +76,11 @@ function TaxBankTabInner({ form, set }: TaxBankTabProps) {
                         placeholder="Select Registration Type"
                     />
 
-                    {registrationType === 'Registered' && (
+                    {isGstRegistrationType(registrationType) && (
                         <RhfUppercaseField<OrganizationFormData>
                             name="gstNo"
                             label="GST Number"
-                            required={registrationType === 'Registered'}
+                            required
                             hint="15-character GSTIN"
                             placeholder="e.g. 06AFZFS3757G1Z9"
                             maxLength={FIELD_MAX_LENGTH.gstin}

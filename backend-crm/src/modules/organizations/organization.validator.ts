@@ -20,6 +20,7 @@ import {
     textWithDefault,
 } from '../../validators/common.js';
 import { corporateEmailListSchema } from '../shared/entityEmails.js';
+import { isGstRegistrationType } from '../shared/registrationType.js';
 
 export const ACCOUNT_STATUSES = ['Active', 'Inactive'] as const;
 const MAX_PARTNER_COMPANIES = 100;
@@ -159,8 +160,8 @@ export const organizationInputSchema = z.preprocess(
     normalizeAliases,
     organizationFields.superRefine((org, ctx) => {
         refinePostalCodes(org, ctx);
-        if (org.registrationType === 'Registered' && !org.gstNo) {
-            ctx.addIssue({ code: 'custom', path: ['gstNo'], message: 'GST Number is required for registered organizations.' });
+        if (isGstRegistrationType(org.registrationType) && !org.gstNo) {
+            ctx.addIssue({ code: 'custom', path: ['gstNo'], message: `GST Number is required when Registration Type is ${org.registrationType}.` });
         }
     }),
 );
