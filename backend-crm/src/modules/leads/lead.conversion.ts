@@ -45,15 +45,12 @@ const CONVERT_OPPORTUNITY_PATHS: Record<string, string> = {
     addDescription: 'opportunityDescription',
 };
 
-const UNREGISTERED_TYPES = new Set(['unregistered', 'consumer']);
 const NEW_OPPORTUNITY_STAGE = 'Qualification';
 const NEW_OPPORTUNITY_COMMISSION = 'Nil / Direct (0%)';
 
-/** The lead's GST registration bucket ('Composition Scheme' etc. are registered under GST). */
-function registrationTypeFor(lead: LeadRow): 'Registered' | 'Unregistered' | undefined {
-    const value = lead.registrationType?.trim().toLowerCase();
-    if (!value) return undefined;
-    return UNREGISTERED_TYPES.has(value) ? 'Unregistered' : 'Registered';
+/** Leads and organizations share one Registration Type dropdown (shared_registration_type): carried over as-is. */
+function registrationTypeFor(lead: LeadRow): string | undefined {
+    return lead.registrationType?.trim() || undefined;
 }
 
 /** Port of `toOrganizationPayload`; also keeps the organization owner the form collects. */

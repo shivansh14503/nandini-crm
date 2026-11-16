@@ -37,7 +37,7 @@ export const organizationFormSchema = z
         // Classification and billing address are required by the form configuration (admin-relaxable,
         // docs/field-locking-policy.md), which OrganizationForm applies on top of this schema.
         natureOfBusiness: optionalString,
-        // Admin-customizable (org_account_status / org_registration_type).
+        // Admin-customizable (org_account_status / shared_registration_type, the lead form's list).
         accountStatus: configurableOption('Account Status', 'Active'),
         inactivityReason: optionalString,
         typeOfEntity: optionalString,

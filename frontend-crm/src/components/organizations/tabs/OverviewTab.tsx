@@ -651,7 +651,7 @@ function FallbackOverviewProvider({
             description: defaultValues?.description || '',
             accountVerified: defaultValues?.accountVerified || false,
             provideSupport: defaultValues?.provideSupport || 'Yes',
-            registrationType: (defaultValues?.registrationType as 'Registered' | 'Unregistered') || 'Registered',
+            registrationType: defaultValues?.registrationType || 'Registered',
             gstNo: defaultValues?.gstNo || defaultValues?.gstNumber || '',
             ...defaultValues,
         },

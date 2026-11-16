@@ -66,3 +66,26 @@ export async function assertTaxIdsUnique(
     }
     if (errors.length > 0) throw HttpError.conflict(errors.map((e) => e.message).join(' '), errors);
 }
+
+export interface TaxIdHolder {
+    field: TaxIdField;
+    value: string;
+    /** e.g. `organization "Acme Pvt Ltd"`. */
+    holder: string;
+    message: string;
+}
+
+/**
+ * Read-only version of `assertTaxIdsUnique` for the forms' live check: which of these GSTIN / PAN values another
+ * record of `owner` already holds. No locks; the save still runs the authoritative check.
+ */
+export async function findTaxIdHolders(tx: TransactionClient, owner: TaxIdOwner, ids: TaxIds, excludeId?: string): Promise<TaxIdHolder[]> {
+    const holders: TaxIdHolder[] = [];
+    for (const field of ['gstNo', 'panNumber'] as const) {
+        const value = ids[field]?.trim().toUpperCase() || '';
+        if (!value) continue;
+        const holder = await findHolder(tx, owner, field, value, excludeId);
+        if (holder) holders.push({ field, value, holder, message: `${LABEL[field]} ${value} is already registered to ${holder}.` });
+    }
+    return holders;
+}

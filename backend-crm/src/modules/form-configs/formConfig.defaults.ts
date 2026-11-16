@@ -184,6 +184,16 @@ export const DEFAULT_CATEGORIES: DefaultCategory[] = [
         description: 'How the next follow-up happens (Leads, Opportunities).',
         options: ['Call', 'Meeting', 'Demo / Presentation', 'Email', 'WhatsApp', 'Site Visit'],
     },
+    {
+        key: 'shared_registration_type',
+        label: 'Registration Type',
+        module: 'shared',
+        description: "GST registration of a lead or organization (Leads, Organizations). 'Registered' requires a GSTIN.",
+        options: withSystem(
+            ['Registered', 'Unregistered', 'Composition Scheme', 'Consumer', 'Overseas / Export', 'Special Economic Zone (SEZ)'],
+            ['Registered', 'Unregistered'],
+        ),
+    },
 
     // ── Leads ──
     {
@@ -231,12 +241,6 @@ export const DEFAULT_CATEGORIES: DefaultCategory[] = [
             'Administration',
             'Other',
         ],
-    },
-    {
-        key: 'lead_registration_type',
-        label: 'Lead Registration Type',
-        module: 'leads',
-        options: ['Registered', 'Unregistered', 'Composition Scheme', 'Consumer', 'Overseas / Export', 'Special Economic Zone (SEZ)'],
     },
     {
         key: 'lead_turnover',
@@ -346,14 +350,8 @@ export const DEFAULT_CATEGORIES: DefaultCategory[] = [
         module: 'organizations',
         options: ['Less than 20', '21 To 50', '51 To 100', '101 To 250', '251 To 500', '501 To 1000', '1001 & Above'],
     },
-    // Organizations' Lead Source (sourceOfLead) shares the lead form's 'shared_lead_source' dropdown.
-    {
-        key: 'org_registration_type',
-        label: 'GST Registration Type',
-        module: 'organizations',
-        description: "'Registered' organizations must have a GSTIN.",
-        options: withSystem(['Registered', 'Unregistered'], ['Registered', 'Unregistered']),
-    },
+    // Organizations' Lead Source (sourceOfLead) and Registration Type share the lead form's dropdowns
+    // ('shared_lead_source', 'shared_registration_type').
     {
         key: 'org_account_type',
         label: 'Bank Account Type',
@@ -554,7 +552,6 @@ export const DEFAULT_SELECTED_OPTIONS: Readonly<Record<string, readonly string[]
     lead_department: ['Executive Management'],
     contact_communication_type: ['Call', 'Email'],
     org_account_status: ['Active'],
-    org_registration_type: ['Registered'],
     opportunity_type: ['New Business'],
     opportunity_sales_stage: ['Qualification'],
     opportunity_commission: ['Standard (10%)'],
@@ -650,7 +647,7 @@ const RAW_DEFAULT_FIELDS: DefaultField[] = [
         t('organizationName', 'Organization Name'),
         t('tradeName', 'Trade Name'),
         t('mailingName', 'Mailing Name'),
-        sel('registrationType', 'Registration Type', 'lead_registration_type'),
+        sel('registrationType', 'Registration Type', 'shared_registration_type'),
         t('gstNo', 'GST Number', { type: 'uppercase', lock: true }),
         sel('turnover', 'Turnover', 'lead_turnover'),
         sel('noOfEmployee', 'No of Employee', 'lead_employee_range'),
@@ -715,7 +712,7 @@ const RAW_DEFAULT_FIELDS: DefaultField[] = [
     ...section('organizations', 'address', 'Billing Address', addressFields('billing', 'soft')),
     ...section('organizations', 'address', 'Shipping Address', addressFields('shipping', 'optional')),
     ...section('organizations', 'tax_bank', 'Tax Identification & Compliance', [
-        sel('registrationType', 'Registration Type', 'org_registration_type', { req: true }),
+        sel('registrationType', 'Registration Type', 'shared_registration_type', { req: true }),
         t('gstNo', 'GST Number', { type: 'uppercase', lock: true }),
         t('panNumber', 'PAN Number', { type: 'uppercase' }),
         t('tanNumber', 'TAN Number', { type: 'uppercase' }),

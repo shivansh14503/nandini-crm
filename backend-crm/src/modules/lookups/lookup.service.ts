@@ -19,7 +19,15 @@ export const lookupQuerySchema = z.object({
     limit: z.coerce.number().int().min(1).max(200).catch(50).default(50),
 });
 
-const withSearch = <T>(search: string | undefined, or: T[]) => (search ? { OR: or } : {});
+/** Live GSTIN / PAN duplicate check for the forms (see `findTaxIdHolders`). */
+export const taxIdHoldersQuerySchema = z.object({
+    owner: z.enum(['organization', 'partnerCompany', 'lead']),
+    gstNo: z.string().trim().max(15).optional(),
+    panNumber: z.string().trim().max(10).optional(),
+    excludeId: z.string().trim().max(64).optional(),
+});
+
+const withSearch =<T>(search: string | undefined, or: T[]) => (search ? { OR: or } : {});
 
 // ── Users (CrmUser) ──────────────────────────────────────────────────────────
 

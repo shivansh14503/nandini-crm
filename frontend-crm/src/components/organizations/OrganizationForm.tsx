@@ -34,6 +34,7 @@ import { DynamicModuleCustomFields } from '@/components/forms/DynamicModuleCusto
 import { getFormConfigs } from '@/services/masterData.store';
 import { validateConfiguredFields } from '@/utils/formConfig';
 import { useDropdownDefaults, withDropdownDefaults } from '@/components/forms/rhf/useDropdownDefaults';
+import { useTaxIdDuplicateCheck } from '@/components/forms/rhf/useTaxIdDuplicateCheck';
 import { withDefaultAssignee } from '@/components/forms/rhf/useRhfForm';
 
 // ─── Single Source of Truth for Organization Form Tabs ──────────────────────────
@@ -222,6 +223,8 @@ export default function OrganizationForm({
         defaultValues: startValues,
         mode: 'onTouched',
     });
+    // GSTIN / PAN another organization already uses are flagged as soon as they're fully typed.
+    useTaxIdDuplicateCheck(methods, { owner: 'organization', excludeId: organizationId, enabled: mode !== 'view' });
     // Configuration loaded (or changed) after the form opened: untouched dropdowns follow, in the mirror too.
     useDropdownDefaults(methods, 'organizations', {
         enabled: mode === 'create',

@@ -11,7 +11,7 @@ import { type BreadcrumbItem } from '../common/AppBreadcrumbs';
 import { AppToast } from '../common/AppToast';
 import { CommonFormLayout } from '../common/CommonFormLayout';
 import { type FormTabDefinition } from '../common/Drawer';
-import { useRhfForm } from '../forms/rhf';
+import { useRhfForm, useTaxIdDuplicateCheck } from '../forms/rhf';
 import { ROUTES } from '@/config/constants';
 import { leadFormSchema } from '../../validations';
 import type { LeadFormData } from '@/types/lead.types';
@@ -123,6 +123,8 @@ export default function LeadForm({
         dropdownDefaults: { enabled: mode === 'create', keep: initialData },
         assigneeField: 'assignedTo',
     });
+    // Leads carry a GSTIN only (no PAN); flag one another open lead uses as soon as it's fully typed.
+    useTaxIdDuplicateCheck(methods, { owner: 'lead', excludeId: leadId, fields: ['gstNo'], enabled: mode !== 'view' });
     const { reset, watch, formState } = methods;
     const { isDirty, isSubmitting } = formState;
     const leadName = watch('name');

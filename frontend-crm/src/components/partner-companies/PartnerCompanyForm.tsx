@@ -26,6 +26,7 @@ import {
     RhfUppercaseField,
     SectionLabel,
     useRhfForm,
+    useTaxIdDuplicateCheck,
 } from '@/components/forms';
 import { ROUTES } from '@/config/constants';
 import { ApiClientError, partnerCompanyService } from '@/services';
@@ -143,6 +144,8 @@ export default function PartnerCompanyForm({
         dropdownDefaults: { enabled: mode === 'create', keep: initialData },
         assigneeField: 'assignedTo',
     });
+    // GSTIN / PAN another partner company already uses are flagged as soon as they're fully typed.
+    useTaxIdDuplicateCheck(methods, { owner: 'partnerCompany', excludeId: partnerCompanyId, enabled: mode !== 'view' });
     const { reset, control, formState, handleSubmit, setError } = methods;
     const { isDirty, isSubmitting } = formState;
     const watchedValues = useWatch({ control }) as PartnerCompanyFormData;

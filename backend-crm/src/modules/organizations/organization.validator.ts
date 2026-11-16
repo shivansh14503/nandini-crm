@@ -31,17 +31,18 @@ const partnerCompanyEntry = z
     .pipe(z.string().max(L.organizationName, { message: `Partner company names cannot exceed ${L.organizationName} characters.` }));
 
 /**
- * Legacy GST registration types (older records, imports) and their bucket. Anything else passes through
- * unchanged, since admins can add their own registration types (org_registration_type).
+ * Legacy spellings of GST registration types (older records, imports) and the shared dropdown value they mean.
+ * Anything else passes through unchanged, since admins can add their own registration types
+ * (shared_registration_type, the list the lead form uses too).
  */
 const LEGACY_REGISTRATION_TYPES = new Map([
     ['unregistered', 'Unregistered'],
-    ['consumer', 'Unregistered'],
     ['registered', 'Registered'],
     ['regular', 'Registered'],
-    ['composition', 'Registered'],
-    ['composition scheme', 'Registered'],
-    ['sez', 'Registered'],
+    ['consumer', 'Consumer'],
+    ['composition', 'Composition Scheme'],
+    ['composition scheme', 'Composition Scheme'],
+    ['sez', 'Special Economic Zone (SEZ)'],
 ]);
 
 function normalizeRegistrationType(value: unknown): unknown {
@@ -51,7 +52,7 @@ function normalizeRegistrationType(value: unknown): unknown {
 
 /**
  * Accepts legacy aliases before validation: `gstNumber` → `gstNo`, `billingStreet` → `billingAddress`, and
- * legacy registration types → Registered / Unregistered.
+ * legacy registration type spellings → the shared dropdown's values.
  */
 function normalizeAliases(value: unknown): unknown {
     if (!value || typeof value !== 'object' || Array.isArray(value)) return value;
@@ -76,7 +77,7 @@ const organizationFields = z.object({
     mailingName: optionalText('Mailing Name', L.organizationName),
     tradeName: optionalText('Trade Name', L.organizationName),
     natureOfBusiness: optionalText('Nature of Business', L.option),
-    // Admin-customizable (org_account_status / org_registration_type); the system options keep their meaning.
+    // Admin-customizable (org_account_status / shared_registration_type); the system options keep their meaning.
     accountStatus: textWithDefault('Account Status', 20, 'Active'),
     inactivityReason: optionalText('Inactivity Reason', 500),
     typeOfEntity: optionalText('Type of Entity', L.option),

@@ -22,7 +22,7 @@ import {
     RhfSelect,
     RhfUppercaseField,
 } from '@/components/forms';
-import { ACCOUNT_TYPES } from '@/config/constants';
+import { ACCOUNT_TYPES, REGISTRATION_TYPES } from '@/config/constants';
 import type { OrganizationFormData } from '@/types/organization.types';
 
 export interface TaxBankTabProps {
@@ -32,7 +32,7 @@ export interface TaxBankTabProps {
 
 function TaxBankTabInner({ form, set }: TaxBankTabProps) {
     const { control, setValue } = useFormContext<OrganizationFormData>();
-    const registrationType = (useWatch({ control, name: 'registrationType' }) ?? form?.registrationType ?? 'Registered') as 'Registered' | 'Unregistered';
+    const registrationType = useWatch({ control, name: 'registrationType' }) ?? form?.registrationType ?? '';
     const gstNo = useWatch({ control, name: 'gstNo' }) ?? form?.gstNo ?? form?.gstNumber ?? '';
 
     // Synchronize registrationType changes
@@ -40,7 +40,8 @@ function TaxBankTabInner({ form, set }: TaxBankTabProps) {
         if (set && registrationType) {
             set('registrationType', registrationType);
         }
-        if (registrationType === 'Unregistered') {
+        // Only 'Registered' has a GSTIN (the API drops it for every other type), so the field hides and clears.
+        if (registrationType && registrationType !== 'Registered') {
             setValue('gstNo', '', { shouldValidate: true });
             if (set) {
                 set('gstNo', '');
@@ -70,7 +71,7 @@ function TaxBankTabInner({ form, set }: TaxBankTabProps) {
                     <RhfSelect<OrganizationFormData>
                         name="registrationType"
                         label="Registration Type"
-                        options={['Registered', 'Unregistered']}
+                        options={REGISTRATION_TYPES}
                         required
                         placeholder="Select Registration Type"
                     />
@@ -213,7 +214,7 @@ function FallbackTaxBankProvider({
 }) {
     const methods = useForm<OrganizationFormData>({
         defaultValues: {
-            registrationType: (defaultValues?.registrationType as 'Registered' | 'Unregistered') || 'Registered',
+            registrationType: defaultValues?.registrationType || 'Registered',
             gstNo: defaultValues?.gstNo || defaultValues?.gstNumber || '',
             ...defaultValues,
         },
