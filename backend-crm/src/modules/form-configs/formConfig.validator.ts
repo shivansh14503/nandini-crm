@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { booleanQuery } from '../../validators/common.js';
 import { CATEGORY_MODULES, CRM_MODULES, CUSTOM_FIELD_TYPES, FIELD_SIZES } from './formConfig.defaults.js';
+import { BUILT_IN_API_NAME_MAX } from './builtInApiNames.js';
 import { CUSTOM_FIELD_KEY_MAX, CUSTOM_FIELD_KEY_MESSAGE, CUSTOM_FIELD_KEY_PATTERN } from './fieldKeyRename.js';
 
 /**
@@ -104,11 +105,10 @@ export const TAB_KEY_PATTERN = /^[a-z][a-z0-9_]{1,39}$/;
 const tabKey = z.string().trim().max(40).regex(TAB_KEY_PATTERN, { message: KEY_MESSAGE });
 /** Display name of a custom tab (ignored on built-in tabs, whose names are fixed). */
 const tabLabel = optionalTrimmed(120);
-/** A custom field's API name (`cf_…`): the key its values are stored under. */
+/** A custom field's API name: the key its values are stored under (TEMP-DEV-RENAME: `cf_` optional, any case). */
 const customFieldKey = z
     .string()
     .trim()
-    .toLowerCase()
     .max(CUSTOM_FIELD_KEY_MAX, { message: `The API name can't exceed ${CUSTOM_FIELD_KEY_MAX} characters.` })
     .regex(CUSTOM_FIELD_KEY_PATTERN, { message: CUSTOM_FIELD_KEY_MESSAGE });
 
@@ -156,6 +156,16 @@ export const updateFieldSchema = z
         label: label('Label', 120).optional(),
         /** Custom fields only: renames the API name, moving stored values, filters and PDF paths with it. */
         fieldKey: customFieldKey.optional(),
+        /**
+         * Built-in fields only: the API name writes and imports may use in place of the column name (the column
+         * name itself restores the default). Clashes are checked by the service (builtInApiNames.ts).
+         */
+        apiName: z
+            .string()
+            .trim()
+            .min(1, { message: 'Enter an API name.' })
+            .max(BUILT_IN_API_NAME_MAX, { message: `The API name can't exceed ${BUILT_IN_API_NAME_MAX} characters.` })
+            .optional(),
         /** Select / multi-select fields only: switches between the two. */
         fieldType: z.enum(['select', 'multiselect']).optional(),
         /** Any field may move to another tab. */
@@ -180,6 +190,13 @@ export const updateFieldSchema = z
         validationRules: z.record(z.string(), z.unknown()).nullable().optional(),
     })
     .refine((body) => Object.keys(body).length > 0, { message: 'Nothing to update.' });
+
+/** POST /api-name-check: what saving `name` as the API name of a field (`fieldId`; omitted = a new custom field) would do. */
+export const apiNameCheckSchema = z.object({
+    module: moduleSchema,
+    fieldId: z.string().trim().min(1).max(50).optional(),
+    name: z.string().trim().max(200),
+});
 
 export const reorderFieldsSchema = z.object({
     fieldIds: z.array(z.string().trim().min(1).max(50)).min(1).max(1000),

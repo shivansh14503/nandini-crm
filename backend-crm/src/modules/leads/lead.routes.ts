@@ -23,6 +23,6 @@ router.use(authenticate);
 // Before the CRUD routes so `/check-duplicates` isn't captured by `/:id`.
 router.get('/check-duplicates', leadController.checkDuplicates);
 router.post('/:id/convert', validateRequest({ params: idParamSchema }), leadController.convert);
-registerCrudRoutes(router, leadController);
+registerCrudRoutes(router, leadController, 'leads');
 
 export default router;

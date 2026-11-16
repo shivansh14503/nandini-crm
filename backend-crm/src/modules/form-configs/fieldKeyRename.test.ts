@@ -5,22 +5,19 @@ import {
     describeMigration,
     fieldKeyFormatError,
     filterFingerprint,
-    nextPreviousKeys,
     parsePreviousKeys,
     renameCustomDataKey,
     renameFilterCriteria,
     renamePdfFieldPaths,
-    serializePreviousKeys,
 } from './fieldKeyRename.js';
 
 describe('fieldKeyFormatError', () => {
-    it('accepts cf_ + snake_case', () => {
-        assert.equal(fieldKeyFormatError('cf_po_number'), null);
-        assert.equal(fieldKeyFormatError('cf_a1'), null);
+    it('accepts any plain identifier, with or without cf_', () => {
+        for (const key of ['cf_po_number', 'cf_a1', 'po_number', 'PONumber', 'cf_PO']) assert.equal(fieldKeyFormatError(key), null, key);
     });
     it('rejects other shapes', () => {
-        for (const key of ['po_number', 'cf_', 'cf_1abc', 'cf_PO', 'cf_po-number', 'cf_po number']) assert.ok(fieldKeyFormatError(key), key);
-        assert.ok(fieldKeyFormatError(`cf_${'a'.repeat(80)}`));
+        for (const key of ['', '1abc', '_po', 'po-number', 'po number', 'pö']) assert.ok(fieldKeyFormatError(key), key);
+        assert.ok(fieldKeyFormatError('a'.repeat(81)));
     });
 });
 
@@ -29,20 +26,6 @@ describe('previous keys', () => {
         assert.deepEqual(parsePreviousKeys(null), []);
         assert.deepEqual(parsePreviousKeys('not json'), []);
         assert.deepEqual(parsePreviousKeys('["cf_a", 3]'), ['cf_a']);
-    });
-    it('appends the old key, drops the new one, and dedupes', () => {
-        assert.deepEqual(nextPreviousKeys(['cf_a', 'cf_b'], 'cf_c', 'cf_a'), ['cf_b', 'cf_c']);
-        assert.deepEqual(nextPreviousKeys(['cf_x'], 'cf_x', 'cf_y'), ['cf_x']);
-    });
-    it('caps the list at the 20 newest', () => {
-        const many = Array.from({ length: 25 }, (_, i) => `cf_k${i}`);
-        const next = nextPreviousKeys(many, 'cf_new_old', 'cf_now');
-        assert.equal(next.length, 20);
-        assert.equal(next.at(-1), 'cf_new_old');
-    });
-    it('serializes an empty list as null', () => {
-        assert.equal(serializePreviousKeys([]), null);
-        assert.equal(serializePreviousKeys(['cf_a']), '["cf_a"]');
     });
 });
 

@@ -8,6 +8,7 @@ function field(overrides: Partial<FormFieldDefinitionDto> & Pick<FormFieldDefini
     return {
         id: overrides.fieldKey,
         module: 'contacts',
+        apiName: overrides.fieldKey,
         previousFieldKeys: [],
         label: overrides.fieldKey,
         fieldType: 'text',
@@ -283,5 +284,12 @@ describe('checkModulePayload: renamed API names (aliases)', () => {
 
     it('satisfies a required field sent under its old name', () => {
         assert.deepEqual(checkModulePayload(config, {}, { cf_old_required: 'y' }), { cf_required: 'y' });
+    });
+});
+
+describe('checkModulePayload: custom fields named without cf_', () => {
+    it('keeps their values', () => {
+        const config = configWith([field({ fieldKey: 'poNumber', label: 'PO Number' }), field({ fieldKey: 'region_code', label: 'Region Code' })]);
+        assert.deepEqual(checkModulePayload(config, {}, { poNumber: 'PO-1', region_code: 'N1', stray: 'x' }), { poNumber: 'PO-1', region_code: 'N1' });
     });
 });

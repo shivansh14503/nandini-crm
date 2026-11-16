@@ -1,5 +1,6 @@
 import type { ApiResponse } from '../types/api.types';
 import type {
+    ApiNameCheck,
     CreateCategoryPayload,
     CreateFieldPayload,
     CreateOptionPayload,
@@ -59,6 +60,11 @@ export const formConfigService = {
     createField: (payload: CreateFieldPayload) => mutate(apiClient.post<ApiResponse<FormFieldDefinitionDto>>(`${BASE}/fields`, payload)),
     updateField: (fieldId: string, payload: UpdateFieldPayload) =>
         mutate(apiClient.patch<ApiResponse<FormFieldDefinitionDto>>(`${BASE}/fields/${enc(fieldId)}`, payload)),
+    /** What saving `name` as a field's API name would do (`fieldId` omitted: a new custom field). Saves nothing. */
+    async checkApiName(module: CrmModuleKey, fieldId: string | undefined, name: string): Promise<ApiNameCheck> {
+        const res = await apiClient.post<ApiResponse<ApiNameCheck>>(`${BASE}/api-name-check`, { module, ...(fieldId ? { fieldId } : {}), name });
+        return res.data;
+    },
     /** Permanent delete: a custom field's row is removed, a built-in field becomes a hidden tombstone. */
     deleteField:(fieldId: string) => mutate(apiClient.delete<ApiResponse<{ id: string }>>(`${BASE}/fields/${enc(fieldId)}`)),
     reorderFields: (module: CrmModuleKey, fieldIds: string[]) =>
