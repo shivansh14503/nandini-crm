@@ -84,7 +84,7 @@ export function RhfTextField<T extends FieldValues>({
             /(mobile|phone)/i.test(label));
 
     // Exact-name match: a substring test would uppercase fields like "Principal Company" (com-pan-y).
-    const isUppercase = uppercase ?? (isTaxIdentifierField(name) || isTaxIdentifierField(label));
+    const isUppercase = uppercase ?? (isTaxIdentifierField(name) || isTaxIdentifierField(label) || /organizationName$/.test(name));
 
     const isEmail =
         lowercase ??

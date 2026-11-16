@@ -12,9 +12,11 @@ import {
     optionalPhone,
     optionalPostalCode,
     optionalText,
+    optionalUpperText,
     phone,
     refinePostalCodeForCountry,
     requiredText,
+    requiredUpperText,
     stringList,
     textWithDefault,
 } from '../../validators/common.js';
@@ -56,7 +58,7 @@ const leadFields = z.object({
     assignedTo: requiredText('Assigned Representative', L.username),
 
     otherPhone: optionalPhone('Other Phone'),
-    organizationName: optionalText('Organization Name', L.organizationName),
+    organizationName: optionalUpperText('Organization Name', L.organizationName),
     department: optionalText('Department', L.option),
     leadType: optionalText('Lead Type', L.option),
     // Admin-customizable (lead_status); 'New' / 'Converted' are system options and keep their meaning.
@@ -124,7 +126,7 @@ export type LeadInput = z.infer<typeof leadInputSchema>;
 export const convertLeadSchema = z.object({
     // Organization
     existingOrganizationId: optionalText('Organization', 50),
-    organizationName: requiredText('Organization Name', L.organizationName),
+    organizationName: requiredUpperText('Organization Name', L.organizationName),
     mailingName: optionalText('Mailing Name', L.organizationName),
     natureOfBusiness: optionalText('Nature of Business', L.option),
     typeOfEntity: optionalText('Type of Entity', L.option),

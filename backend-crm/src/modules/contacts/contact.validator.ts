@@ -9,6 +9,7 @@ import {
     optionalText,
     phone,
     requiredText,
+    requiredUpperText,
 } from '../../validators/common.js';
 import { corporateEmailListSchema } from '../shared/entityEmails.js';
 
@@ -17,7 +18,7 @@ const MAX_COMMUNICATION_TYPES = 10;
 /** `ContactFormData` rules from frontend-crm/src/validations/contact.schema.ts. */
 export const contactInputSchema = z.object({
     name: requiredText('Contact Name', L.personName),
-    organizationName: requiredText('Organization Name', L.organizationName),
+    organizationName: requiredUpperText('Organization Name', L.organizationName),
     organizationId: optionalText('Organization', 50),
     mobile: phone('Mobile'),
     officePhone: optionalPhone('Office Phone'),

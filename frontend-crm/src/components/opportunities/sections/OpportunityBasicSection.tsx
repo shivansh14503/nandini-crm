@@ -28,6 +28,7 @@ import {
 } from '@/components/forms';
 import { UserLookupModal } from '@/components/common/lookup';
 import { TimeSlotSelect } from '@/components/forms/TimeSlotSelect';
+import { upperCase, useUndoSafeSanitizer } from '@/components/forms/undoSafeInput';
 import { MultiAutocompleteInput, MultiSelectChips } from '@/components/forms/rhf/RhfMultiAutocomplete';
 import { localToday } from '@/utils/pastDates';
 import type { OpportunityFormData } from '@/types/opportunity.types';
@@ -62,6 +63,8 @@ const calendarAdornment = {
 export function OpportunityBasicSection({ form, setField }: OpportunityBasicSectionProps) {
     const getOptions = useDropdownOptionsGetter();
     const [userLookupOpen, setUserLookupOpen] = useState(false);
+    // Organization names are stored uppercase.
+    const orgNameInputRef = useUndoSafeSanitizer(upperCase);
 
     return (
         <Box sx={{ p: { xs: 2.5, md: 3.5 } }}>
@@ -81,7 +84,8 @@ export function OpportunityBasicSection({ form, setField }: OpportunityBasicSect
                         size="small"
                         placeholder="Enter legal / trading organization name"
                         value={form.organizationName}
-                        onChange={(e) => setField('organizationName', e.target.value)}
+                        inputRef={orgNameInputRef}
+                        onChange={(e) => setField('organizationName', e.target.value.toUpperCase())}
                         sx={fieldSx}
                         slotProps={{ htmlInput: { maxLength: FIELD_MAX_LENGTH.organizationName } }}
                     />

@@ -20,6 +20,7 @@ import WarningAmberRoundedIcon from '@mui/icons-material/WarningAmberRounded';
 import { fieldSx, FIELD_MAX_LENGTH } from '@/components/forms';
 import { ROUTES } from '@/config/constants';
 import { isDuplicateMatchKind } from '@/utils/organizationName';
+import { upperCase, useUndoSafeSanitizer } from '@/components/forms/undoSafeInput';
 import type { OrganizationNameSuggestion, OrganizationSuggestionRecord } from './useOrganizationNameCheck';
 
 export interface OrganizationNameAutocompleteProps {
@@ -102,6 +103,8 @@ export function OrganizationNameAutocomplete({
     const [focused, setFocused] = React.useState(false);
     const [dismissed, setDismissed] = React.useState(false);
     const [activeIndex, setActiveIndex] = React.useState(-1);
+    // Organization names are stored uppercase.
+    const sanitizerRef = useUndoSafeSanitizer(upperCase);
 
     const listId = `org-name-suggestions-${organizationId ?? 'new'}`;
     const trimmed = value.trim();
@@ -148,8 +151,9 @@ export function OrganizationNameAutocomplete({
                     value={value}
                     disabled={disabled}
                     autoFocus={autoFocus}
+                    inputRef={sanitizerRef}
                     onChange={(e) => {
-                        onChange(e.target.value);
+                        onChange(e.target.value.toUpperCase());
                         setDismissed(false);
                         setActiveIndex(-1);
                     }}

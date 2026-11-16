@@ -10,6 +10,7 @@ import {
     optionalPhone,
     optionalPostalCode,
     optionalText,
+    optionalUpperText,
     refinePostalCodeForCountry,
     requiredDate,
     requiredText,
@@ -69,7 +70,7 @@ export const quotationInputSchema = z.preprocess(
             lumpSumDiscount: z.coerce.number({ error: 'Lump Sum Discount must be a number.' }).min(0, { message: 'Lump Sum Discount cannot be negative.' }).default(0),
 
             // Customer & address
-            organizationName: optionalText('Organization', L.organizationName),
+            organizationName: optionalUpperText('Organization', L.organizationName),
             organizationId: optionalText('Organization', 50),
             contactName: requiredText('Contact Name', L.personName),
             contactId: optionalText('Contact', 50),

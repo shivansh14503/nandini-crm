@@ -12,6 +12,7 @@ import {
     optionalText,
     phone,
     requiredText,
+    requiredUpperText,
     stringList,
 } from '../../validators/common.js';
 import { lineItemListSchema } from '../shared/lineItems.js';
@@ -28,7 +29,7 @@ export const opportunityInputSchema = z.object({
     productCategory: stringList('Product Category', 30, L.option).default([]),
     contactName: requiredText('Contact Person', L.personName),
     contactId: optionalText('Contact', 50),
-    organizationName: requiredText('Organization Name', L.organizationName),
+    organizationName: requiredUpperText('Organization Name', L.organizationName),
     organizationId: optionalText('Organization', 50),
     contactNumber: phone('Contact Number'),
     emailAddress: optionalEmail,

@@ -15,6 +15,7 @@ import { fieldSx } from './FormField';
 import { fieldSizeSx, type FieldSize } from './fieldSizing';
 import { compareOrganizationNames } from '@/utils/organizationName';
 import { useTabSelect } from './useTabSelect';
+import { upperCase, useUndoSafeSanitizer } from './undoSafeInput';
 
 export interface LookupFieldProps {
     value: string;
@@ -39,6 +40,8 @@ export interface LookupFieldProps {
      * names that are the same / similar legal name ("abc private limited" still shows "ABC Pvt Ltd").
      */
     matchMode?: 'substring' | 'organization';
+    /** Uppercases typed / pasted text (organization names are stored uppercase). */
+    uppercase?: boolean;
 }
 
 const MAX_VISIBLE_OPTIONS = 50;
@@ -86,14 +89,16 @@ export function LookupField({
     lookupTooltip = 'Select from Directory',
     fieldSize,
     matchMode = 'substring',
+    uppercase = false,
 }: LookupFieldProps) {
     const handleLookup = onLookupClick ?? onSelectClick;
+    const sanitizerRef = useUndoSafeSanitizer(uppercase ? upperCase : undefined);
     // Typed names are allowed: Tab keeps the typed text unless the user arrowed to a suggestion.
     const tabSelect = useTabSelect({
         freeText: true,
         // Only user edits propagate; 'reset' (MUI echoing `value` back) would otherwise fight a picked option.
         onInputChange: (_, newInputValue, reason) => {
-            if (reason === 'input' || reason === 'clear') onChange(newInputValue);
+            if (reason === 'input' || reason === 'clear') onChange(uppercase ? newInputValue.toUpperCase() : newInputValue);
         },
     });
 
@@ -130,6 +135,7 @@ export function LookupField({
                         size="small"
                         placeholder={placeholder}
                         required={required}
+                        inputRef={sanitizerRef}
                     />
                 )}
             />

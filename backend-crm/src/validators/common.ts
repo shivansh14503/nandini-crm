@@ -37,6 +37,9 @@ export const optionalText = (field: string, max: number) =>
         z.string().trim().max(max, maxMessage(field, max)).optional(),
     );
 
+/** Required text stored uppercase (organization names). */
+export const requiredUpperText = (field: string, max: number) => requiredText(field, max).transform((value) => value.toUpperCase());
+
 /** "Add Description": optional (the form configuration decides), but at least 3 characters when given. */
 export const optionalDescription = (field: string) =>
     optionalText(field, L.longText).refine((value) => value === undefined || value.length >= 3, {

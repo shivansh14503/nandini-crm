@@ -66,6 +66,8 @@ export function RhfLookup<T extends FieldValues, K extends LookupKind = LookupKi
     const value = (field.value as string) ?? '';
 
     const kind: K | null = lookupType === 'custom' ? null : lookupType;
+    // Organization names are stored uppercase.
+    const uppercase = kind === 'organization' || /organizationName$/.test(name);
     // The form keeps the username (API contract); the input and read-only view show the full name.
     const storesUsername = kind === 'user' && userValueField === 'username';
     const displayValue = storesUsername ? formatCrmUserDisplay(value) : value;
@@ -135,6 +137,7 @@ export function RhfLookup<T extends FieldValues, K extends LookupKind = LookupKi
             <LookupField
                 value={displayValue}
                 onChange={handleChange}
+                uppercase={uppercase}
                 options={suggestions}
                 placeholder={placeholder ?? ''}
                 required={required}

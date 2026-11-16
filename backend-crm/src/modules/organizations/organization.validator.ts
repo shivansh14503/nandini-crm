@@ -16,6 +16,7 @@ import {
     optionalUpperText,
     refinePostalCodeForCountry,
     requiredText,
+    requiredUpperText,
     textWithDefault,
 } from '../../validators/common.js';
 import { corporateEmailListSchema } from '../shared/entityEmails.js';
@@ -71,7 +72,7 @@ function normalizeAliases(value: unknown): unknown {
  */
 const organizationFields = z.object({
     // Overview
-    organizationName: requiredText('Organization Name', L.organizationName),
+    organizationName: requiredUpperText('Organization Name', L.organizationName),
     mailingName: optionalText('Mailing Name', L.organizationName),
     tradeName: optionalText('Trade Name', L.organizationName),
     natureOfBusiness: optionalText('Nature of Business', L.option),

@@ -10,6 +10,7 @@ import {
     optionalPhone,
     optionalText,
     requiredText,
+    requiredUpperText,
     requiredWallClock,
     textWithDefault,
 } from '../../validators/common.js';
@@ -26,7 +27,7 @@ export const SUPPORT_MODES = ['Offsite Support', 'Onsite Support', 'Remote Suppo
 export const ticketInputSchema = z.object({
     amcFlag: z.boolean().default(false),
     ticketSubject: optionalText('Ticket Subject', L.title),
-    organizationName: requiredText('Organization Name', L.organizationName),
+    organizationName: requiredUpperText('Organization Name', L.organizationName),
     contactPersonName: requiredText('Contact Person Name', L.personName),
     contactNumber: optionalPhone('Contact Number'),
     // Option lists below are admin-customizable (ticket_* dropdown categories); system options keep their meaning.
