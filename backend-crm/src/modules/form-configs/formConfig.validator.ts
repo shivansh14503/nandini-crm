@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { booleanQuery } from '../../validators/common.js';
 import { CATEGORY_MODULES, CRM_MODULES, CUSTOM_FIELD_TYPES, FIELD_SIZES } from './formConfig.defaults.js';
+import { CUSTOM_FIELD_KEY_MAX, CUSTOM_FIELD_KEY_MESSAGE, CUSTOM_FIELD_KEY_PATTERN } from './fieldKeyRename.js';
 
 /**
  * Request schemas for /api/form-configs. Rules that depend on the stored row (system options can't be archived
@@ -103,11 +104,20 @@ export const TAB_KEY_PATTERN = /^[a-z][a-z0-9_]{1,39}$/;
 const tabKey = z.string().trim().max(40).regex(TAB_KEY_PATTERN, { message: KEY_MESSAGE });
 /** Display name of a custom tab (ignored on built-in tabs, whose names are fixed). */
 const tabLabel = optionalTrimmed(120);
+/** A custom field's API name (`cf_…`): the key its values are stored under. */
+const customFieldKey = z
+    .string()
+    .trim()
+    .toLowerCase()
+    .max(CUSTOM_FIELD_KEY_MAX, { message: `The API name can't exceed ${CUSTOM_FIELD_KEY_MAX} characters.` })
+    .regex(CUSTOM_FIELD_KEY_PATTERN, { message: CUSTOM_FIELD_KEY_MESSAGE });
 
 export const createFieldSchema = z
     .object({
         module: moduleSchema,
         label: label('Label', 120),
+        /** API name; omitted → derived from the label. */
+        fieldKey: customFieldKey.optional(),
         fieldType: z.enum(CUSTOM_FIELD_TYPES, { error: `fieldType must be one of: ${CUSTOM_FIELD_TYPES.join(', ')}.` }),
         tabKey,
         tabLabel,
@@ -144,6 +154,8 @@ export const createFieldSchema = z
 export const updateFieldSchema = z
     .object({
         label: label('Label', 120).optional(),
+        /** Custom fields only: renames the API name, moving stored values, filters and PDF paths with it. */
+        fieldKey: customFieldKey.optional(),
         /** Select / multi-select fields only: switches between the two. */
         fieldType: z.enum(['select', 'multiselect']).optional(),
         /** Any field may move to another tab. */

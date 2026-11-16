@@ -143,6 +143,8 @@ export interface FormFieldDefinitionDto {
     module: CrmModuleKey;
     /** RHF name for built-in fields; `cf_…` key inside `customFields` for custom fields. */
     fieldKey: string;
+    /** Custom fields: API names the field had before being renamed (still accepted on writes), oldest first. */
+    previousFieldKeys?: string[];
     label: string;
     fieldType: FieldType;
     tabKey: string;
@@ -231,6 +233,8 @@ export interface UpdateOptionPayload {
 export interface CreateFieldPayload {
     module: CrmModuleKey;
     label: string;
+    /** API name (`cf_…`); omitted → the API derives it from the label. */
+    fieldKey?: string;
     fieldType: CustomFieldType;
     tabKey: string;
     /** Name of the tab when it is an admin-created one (ignored on built-in tabs). */
@@ -250,6 +254,8 @@ export interface CreateFieldPayload {
 
 export interface UpdateFieldPayload {
     label?: string;
+    /** Custom fields only: renames the API name; the API moves stored values, filters and PDF paths with it. */
+    fieldKey?: string;
     /** Custom select / multi-select fields only: switches between the two. */
     fieldType?: 'select' | 'multiselect';
     /** Custom fields only. */
@@ -266,6 +272,17 @@ export interface UpdateFieldPayload {
     isVisibleInDrawer?: boolean;
     isActive?: boolean;
     dropdownCategoryKey?: string | null;
+}
+
+/** Same rule as the API: `cf_` + lowercase letters, digits and underscores, starting with a letter, ≤ 80 chars. */
+export const CUSTOM_FIELD_KEY_PATTERN = /^cf_[a-z][a-z0-9_]*$/;
+export const CUSTOM_FIELD_KEY_MAX = 80;
+
+/** Problem with an API name's shape, or null. */
+export function customFieldKeyError(key: string): string | null {
+    if (key.length > CUSTOM_FIELD_KEY_MAX) return `The API name can't exceed ${CUSTOM_FIELD_KEY_MAX} characters.`;
+    if (!CUSTOM_FIELD_KEY_PATTERN.test(key)) return 'Use lowercase letters, digits and underscores after cf_, starting with a letter.';
+    return null;
 }
 
 /** `Compliance & Legal` → `compliance_legal`: key of an admin-created tab (the API accepts ^[a-z][a-z0-9_]{1,39}$). */
