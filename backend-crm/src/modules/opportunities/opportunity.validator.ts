@@ -11,6 +11,7 @@ import {
     optionalEmail,
     optionalText,
     phone,
+    requiredPersonName,
     requiredText,
     requiredUpperText,
     stringList,
@@ -27,7 +28,7 @@ export const QUOTE_SALES_STAGE = 'Proposal/Price Quote';
 export const opportunityInputSchema = z.object({
     opportunityName: optionalText('Opportunity Name', L.organizationName),
     productCategory: stringList('Product Category', 30, L.option).default([]),
-    contactName: requiredText('Contact Person', L.personName),
+    contactName: requiredPersonName('Contact Person', L.personName),
     contactId: optionalText('Contact', 50),
     organizationName: requiredUpperText('Organization Name', L.organizationName),
     organizationId: optionalText('Organization', 50),

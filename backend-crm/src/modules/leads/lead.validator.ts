@@ -15,6 +15,7 @@ import {
     optionalUpperText,
     phone,
     refinePostalCodeForCountry,
+    requiredPersonName,
     requiredText,
     requiredUpperText,
     stringList,
@@ -42,7 +43,7 @@ export const CONVERTED_STATUS = 'Converted';
  * (`validateModulePayload`).
  */
 const leadFields = z.object({
-    name: requiredText('Lead Name', L.personName),
+    name: requiredPersonName('Lead Name', L.personName),
     mobile: optionalPhone('Mobile'),
     emailAddresses: corporateEmailListSchema.default([]),
     mailingName: optionalText('Mailing Name', L.organizationName),
@@ -138,7 +139,7 @@ export const convertLeadSchema = z.object({
 
     // Contact
     existingContactId: optionalText('Contact', 50),
-    contactName: requiredText('Contact Name', L.personName),
+    contactName: requiredPersonName('Contact Name', L.personName),
     contactMobile: phone('Mobile'),
     contactPhone3: optionalPhone('Phone 3'),
     contactEmails: corporateEmailListSchema.refine((emails) => emails.some((row) => row.email), {

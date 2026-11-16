@@ -1,5 +1,6 @@
 'use client';
 
+import { formatPersonName } from '@/utils/personName';
 import React, { useMemo, useState } from 'react';
 import { FormHelperText } from '@mui/material';
 import { useController, type FieldPath, type FieldValues } from 'react-hook-form';
@@ -68,6 +69,8 @@ export function RhfLookup<T extends FieldValues, K extends LookupKind = LookupKi
     const kind: K | null = lookupType === 'custom' ? null : lookupType;
     // Organization names are stored uppercase.
     const uppercase = kind === 'organization' || /organizationName$/.test(name);
+    // Contact person names are name-cased (CA kept uppercase).
+    const personName = kind === 'contact' || /contact(Person)?Name$/.test(name);
     // The form keeps the username (API contract); the input and read-only view show the full name.
     const storesUsername = kind === 'user' && userValueField === 'username';
     const displayValue = storesUsername ? formatCrmUserDisplay(value) : value;
@@ -138,6 +141,7 @@ export function RhfLookup<T extends FieldValues, K extends LookupKind = LookupKi
                 value={displayValue}
                 onChange={handleChange}
                 uppercase={uppercase}
+                formatValue={personName ? formatPersonName : undefined}
                 options={suggestions}
                 placeholder={placeholder ?? ''}
                 required={required}

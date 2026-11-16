@@ -29,6 +29,7 @@ import {
 import { UserLookupModal } from '@/components/common/lookup';
 import { TimeSlotSelect } from '@/components/forms/TimeSlotSelect';
 import { upperCase, useUndoSafeSanitizer } from '@/components/forms/undoSafeInput';
+import { formatPersonName } from '@/utils/personName';
 import { MultiAutocompleteInput, MultiSelectChips } from '@/components/forms/rhf/RhfMultiAutocomplete';
 import { localToday } from '@/utils/pastDates';
 import type { OpportunityFormData } from '@/types/opportunity.types';
@@ -95,6 +96,7 @@ export function OpportunityBasicSection({ form, setField }: OpportunityBasicSect
                     <LookupField
                         value={form.contactName}
                         onChange={(val) => setField('contactName', val)}
+                        formatValue={formatPersonName}
                         placeholder="Type or select contact..."
                         options={[
                             'Vikram Singhania',

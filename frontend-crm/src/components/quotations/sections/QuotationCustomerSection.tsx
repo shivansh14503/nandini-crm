@@ -34,6 +34,7 @@ export function QuotationCustomerSection() {
             <RhfTextField<QuotationFormData>
                 name="contactName"
                 label="Contact Person"
+                personName
                 required
                 placeholder="e.g. Rajesh Kumar"
             />

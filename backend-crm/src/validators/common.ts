@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { isValidPhoneNumber } from 'libphonenumber-js';
 import { FIELD_MAX_LENGTH as L } from '../config/fieldLimits.js';
+import { formatPersonName } from '../utils/personName.js';
 
 /**
  * Zod primitives ported from frontend-crm/src/validations/common.ts so the API enforces exactly what the forms
@@ -39,6 +40,9 @@ export const optionalText = (field: string, max: number) =>
 
 /** Required text stored uppercase (organization names). */
 export const requiredUpperText = (field: string, max: number) => requiredText(field, max).transform((value) => value.toUpperCase());
+
+/** Required person name, stored name-cased with titles like CA kept uppercase (see formatPersonName). */
+export const requiredPersonName = (field: string, max: number) => requiredText(field, max).transform(formatPersonName);
 
 /** "Add Description": optional (the form configuration decides), but at least 3 characters when given. */
 export const optionalDescription = (field: string) =>

@@ -87,7 +87,7 @@ export function ConvertContactSection() {
             </FormField>
 
             <FormGrid columns={3}>
-                <RhfTextField<F> name="contactName" label="Name" required placeholder="Contact person name" />
+                <RhfTextField<F> name="contactName" label="Name" required personName placeholder="Contact person name" />
                 <RhfPhoneField<F> name="contactMobile" label="Mobile" required />
                 <RhfPhoneField<F> name="contactPhone3" label="Phone 3" placeholder="Alternate phone number" />
 

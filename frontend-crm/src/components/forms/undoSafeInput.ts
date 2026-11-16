@@ -68,3 +68,14 @@ export const digitsOnly: TextSanitizer = (text) => text.replace(/\D/g, '');
 export const upperCase: TextSanitizer = (text) => text.toUpperCase();
 /** Emails: lowercase, no whitespace. */
 export const emailText: TextSanitizer = (text) => text.toLowerCase().replace(/\s/g, '');
+
+/**
+ * Rewrites an input's whole value (e.g. re-casing a name) and puts the caret back where it was. Only for rewrites
+ * that keep the length, like changing case.
+ */
+export function rewriteValueKeepingCaret(el: HTMLInputElement | HTMLTextAreaElement, value: string): void {
+    if (el.value === value) return;
+    const { selectionStart, selectionEnd } = el;
+    el.value = value;
+    if (selectionStart !== null && selectionEnd !== null && document.activeElement === el) el.setSelectionRange(selectionStart, selectionEnd);
+}

@@ -13,6 +13,7 @@ import {
     optionalUpperText,
     refinePostalCodeForCountry,
     requiredDate,
+    requiredPersonName,
     requiredText,
     textWithDefault,
 } from '../../validators/common.js';
@@ -72,7 +73,7 @@ export const quotationInputSchema = z.preprocess(
             // Customer & address
             organizationName: optionalUpperText('Organization', L.organizationName),
             organizationId: optionalText('Organization', 50),
-            contactName: requiredText('Contact Name', L.personName),
+            contactName: requiredPersonName('Contact Name', L.personName),
             contactId: optionalText('Contact', 50),
             contactMobile: optionalPhone('Contact Mobile'),
             mailingName: optionalText('Mailing Name', L.organizationName),

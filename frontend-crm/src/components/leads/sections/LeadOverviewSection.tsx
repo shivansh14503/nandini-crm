@@ -111,7 +111,7 @@ export function LeadOverviewSection({ leadId }: { leadId?: string } = {}) {
             <Box>
                 <SectionLabel label="CONTACT PERSON" sx={groupLabelSx} />
                 <FormGrid columns={3}>
-                    <RhfTextField<LeadFormData> name="name" label="Name" required hint="Contact person name" placeholder="Enter contact person name" />
+                    <RhfTextField<LeadFormData> name="name" label="Name" required personName hint="Contact person name" placeholder="Enter contact person name" />
                     <RhfPhoneField<LeadFormData> name="mobile" label="Mobile" required hint="Primary number" notice={mobileNotice} />
                     <RhfPhoneField<LeadFormData> name="otherPhone" label="Other Phone" hint="Landline / alternate" placeholder="e.g. 0114567890" />
                     <RhfSelect<LeadFormData> name="designation" label="Designation" options={LEAD_DESIGNATIONS} placeholder="Select Designation" />

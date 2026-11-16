@@ -15,7 +15,7 @@ import { fieldSx } from './FormField';
 import { fieldSizeSx, type FieldSize } from './fieldSizing';
 import { compareOrganizationNames } from '@/utils/organizationName';
 import { useTabSelect } from './useTabSelect';
-import { upperCase, useUndoSafeSanitizer } from './undoSafeInput';
+import { rewriteValueKeepingCaret, upperCase, useUndoSafeSanitizer } from './undoSafeInput';
 
 export interface LookupFieldProps {
     value: string;
@@ -42,6 +42,8 @@ export interface LookupFieldProps {
     matchMode?: 'substring' | 'organization';
     /** Uppercases typed / pasted text (organization names are stored uppercase). */
     uppercase?: boolean;
+    /** Re-formats the whole typed value, e.g. name-casing a person's name (must keep the length). */
+    formatValue?: (value: string) => string;
 }
 
 const MAX_VISIBLE_OPTIONS = 50;
@@ -90,6 +92,7 @@ export function LookupField({
     fieldSize,
     matchMode = 'substring',
     uppercase = false,
+    formatValue,
 }: LookupFieldProps) {
     const handleLookup = onLookupClick ?? onSelectClick;
     const sanitizerRef = useUndoSafeSanitizer(uppercase ? upperCase : undefined);
@@ -97,8 +100,14 @@ export function LookupField({
     const tabSelect = useTabSelect({
         freeText: true,
         // Only user edits propagate; 'reset' (MUI echoing `value` back) would otherwise fight a picked option.
-        onInputChange: (_, newInputValue, reason) => {
-            if (reason === 'input' || reason === 'clear') onChange(uppercase ? newInputValue.toUpperCase() : newInputValue);
+        onInputChange: (event, newInputValue, reason) => {
+            if (reason !== 'input' && reason !== 'clear') return;
+            let next = uppercase ? newInputValue.toUpperCase() : newInputValue;
+            if (formatValue) {
+                next = formatValue(next);
+                if (event?.target instanceof HTMLInputElement) rewriteValueKeepingCaret(event.target, next);
+            }
+            onChange(next);
         },
     });
 

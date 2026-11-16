@@ -15,7 +15,8 @@ import {
     type FieldType,
 } from '../fieldSizing';
 import { localNow, localToday } from '@/utils/pastDates';
-import { digitsOnly, emailText, setInputValueIfChanged, upperCase, useUndoSafeSanitizer } from '../undoSafeInput';
+import { digitsOnly, emailText, rewriteValueKeepingCaret, setInputValueIfChanged, upperCase, useUndoSafeSanitizer } from '../undoSafeInput';
+import { formatPersonName } from '@/utils/personName';
 
 /** Native date / time pickers: fixed-length display value plus the picker icon. */
 const PICKER_FIT: Record<string, FieldContentFit> = {
@@ -35,6 +36,8 @@ export interface RhfTextFieldProps<T extends FieldValues>
     hint?: React.ReactNode;
     numericOnly?: boolean;
     uppercase?: boolean;
+    /** Person name: each word capitalized, titles like CA kept uppercase (see formatPersonName). */
+    personName?: boolean;
     lowercase?: boolean;
     maxLength?: number;
     min?: number | string;
@@ -59,6 +62,7 @@ export function RhfTextField<T extends FieldValues>({
     hint,
     numericOnly,
     uppercase,
+    personName,
     lowercase,
     maxLength,
     min,
@@ -114,6 +118,10 @@ export function RhfTextField<T extends FieldValues>({
         e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
     ) => {
         let val = e.target.value;
+        if (personName) {
+            val = formatPersonName(val);
+            rewriteValueKeepingCaret(e.target, val);
+        }
         if (isNumeric) {
             val = val.replace(/\D/g, '');
             if (resolvedMaxLength) {

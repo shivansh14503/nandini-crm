@@ -20,7 +20,7 @@ export function ContactBasicInfoSection() {
 
     return (
         <FormGrid columns={3}>
-            <RhfTextField<ContactFormData> name="name" label="Name" required placeholder="e.g. Rajesh Kumar" />
+            <RhfTextField<ContactFormData> name="name" label="Name" required personName placeholder="e.g. Rajesh Kumar" />
             <RhfPhoneField<ContactFormData> name="mobile" label="Mobile" required hint="Primary mobile" placeholder="e.g. 9876543210" />
             <RhfPhoneField<ContactFormData> name="officePhone" label="Office Phone" placeholder="e.g. 0112345678" />
 
