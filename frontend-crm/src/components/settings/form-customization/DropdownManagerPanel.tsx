@@ -78,14 +78,17 @@ export function categoriesForModule(configs: FormConfigsPayload, module: CrmModu
 /** Left sidebar + option editor for the selected module's dropdowns. */
 export function DropdownManagerPanel({ module, configs, canEdit, notify }: DropdownManagerPanelProps) {
     const categories = useMemo(() => categoriesForModule(configs, module), [configs, module]);
-    const [selectedKey, setSelectedKey] = useState<string | undefined>(categories[0]?.key);
+    // Selected by key, and by id as well: renaming an admin-created dropdown renames its key when saved.
+    const [selection, setSelection] = useState<{ key?: string; id?: string }>({ key: categories[0]?.key, id: categories[0]?.id });
+    const setSelectedKey = (key: string) => setSelection({ key, id: categories.find((c) => c.key === key)?.id });
     const [search, setSearch] = useState('');
     const [createOpen, setCreateOpen] = useState(false);
     const [deleteTarget, setDeleteTarget] = useState<DropdownCategoryDto | null>(null);
     const draft = useConfigDraftActions();
 
     // Falls back to the first dropdown when the module changes (or the selected one is gone).
-    const activeKey = categories.some((c) => c.key === selectedKey) ? selectedKey : categories[0]?.key;
+    const activeKey =
+        categories.find((c) => c.key === selection.key)?.key ?? categories.find((c) => c.id === selection.id)?.key ?? categories[0]?.key;
     const visible = categories.filter((c) => !search.trim() || c.label.toLowerCase().includes(search.trim().toLowerCase()));
     const selected = categories.find((c) => c.key === activeKey);
 
