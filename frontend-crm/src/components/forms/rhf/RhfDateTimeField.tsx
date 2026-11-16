@@ -8,8 +8,18 @@ import { FormField, fieldSx } from '../FormField';
 import { useFormMode } from '@/context/FormModeContext';
 import { ReadOnlyField } from '../ReadOnlyField';
 import type { FieldSize } from '../fieldSizing';
-import { TimeSlotSelect } from '../TimeSlotSelect';
+import { TimePicker } from '../TimePicker';
 import { localNow, localToday } from '@/utils/pastDates';
+
+const pad = (n: number) => String(n).padStart(2, '0');
+
+/** Time filled in when only a date is picked: 09:00, or (today) the next quarter hour from now. */
+function defaultTimeFor(day: string): string {
+    const now = localNow();
+    if (day !== now.slice(0, 10)) return '09:00';
+    const mins = Math.min(23 * 60 + 45, Math.ceil((Number(now.slice(11, 13)) * 60 + Number(now.slice(14, 16)) + 1) / 15) * 15);
+    return `${pad(Math.floor(mins / 60))}:${pad(mins % 60)}`;
+}
 
 export interface RhfDateTimeFieldProps<T extends FieldValues> {
     dateName: FieldPath<T>;
@@ -18,8 +28,8 @@ export interface RhfDateTimeFieldProps<T extends FieldValues> {
     required?: boolean;
     hint?: React.ReactNode;
     /**
-     * Single `datetime-local` input bound to `dateName` (value `YYYY-MM-DDTHH:mm`) instead of a
-     * separate date + free-text time pair. `timeName` is ignored.
+     * Date + time pickers bound to the single `dateName` value (`YYYY-MM-DDTHH:mm`) instead of a
+     * separate date + time pair. `timeName` is ignored.
      */
     combined?: boolean;
     /** Width token; defaults to `sm` for a date alone and `md` for date + time. */
@@ -57,22 +67,41 @@ export function RhfDateTimeField<T extends FieldValues>({
                     : raw;
             return <ReadOnlyField label={label} value={text} hideWhenEmpty sx={{ mb: 2 }} />;
         }
+        // Date + time pickers side by side, both writing the one `YYYY-MM-DDTHH:mm` value.
+        const datePart = /^\d{4}-\d{2}-\d{2}/.test(raw) ? raw.slice(0, 10) : '';
+        const timePart = /^\d{2}:\d{2}$/.test(raw.slice(11, 16)) ? raw.slice(11, 16) : '';
+        const setDate = (d: string) => date.field.onChange(d ? `${d}T${timePart || defaultTimeFor(d)}` : '');
+        const setTime = (t: string) => date.field.onChange(t ? `${datePart || localToday()}T${t}` : datePart);
         return (
             <FormField name={dateName} label={label} required={required} hint={hint} size={size}>
-                <TextField
-                    {...date.field}
-                    value={raw}
-                    type="datetime-local"
-                    fullWidth
-                    size="small"
-                    error={Boolean(date.fieldState.error)}
-                    slotProps={{
-                        ...adornment(<CalendarTodayOutlinedIcon sx={{ fontSize: 16, color: 'var(--mui-palette-text-secondary)' }} />),
-                        // Past dates and times are greyed out in the picker.
-                        htmlInput: { min: localNow() },
-                    }}
-                    sx={fieldSx}
-                />
+                <Box sx={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr', gap: 1.5 }}>
+                    <TextField
+                        name={date.field.name}
+                        inputRef={date.field.ref}
+                        onBlur={date.field.onBlur}
+                        value={datePart}
+                        onChange={(e) => setDate(e.target.value)}
+                        type="date"
+                        fullWidth
+                        size="small"
+                        error={Boolean(date.fieldState.error)}
+                        slotProps={{
+                            ...adornment(<CalendarTodayOutlinedIcon sx={{ fontSize: 16, color: 'var(--mui-palette-text-secondary)' }} />),
+                            // Past days are greyed out in the picker (the form also rejects a past date-time).
+                            htmlInput: { min: localToday(), 'aria-label': `${label} date` },
+                        }}
+                        sx={fieldSx}
+                    />
+                    <TimePicker
+                        value={timePart}
+                        valueFormat="24h"
+                        onChange={setTime}
+                        onBlur={date.field.onBlur}
+                        date={datePart}
+                        error={Boolean(date.fieldState.error)}
+                        ariaLabel={`${label} time`}
+                    />
+                </Box>
                 {error && <FormHelperText error>{error}</FormHelperText>}
             </FormField>
         );
@@ -106,7 +135,7 @@ export function RhfDateTimeField<T extends FieldValues>({
                     sx={fieldSx}
                 />
                 {timeName && (
-                    <TimeSlotSelect
+                    <TimePicker
                         name={time.field.name}
                         value={typeof time.field.value === 'string' ? time.field.value : ''}
                         onChange={time.field.onChange}

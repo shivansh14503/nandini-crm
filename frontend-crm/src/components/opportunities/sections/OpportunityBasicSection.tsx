@@ -27,7 +27,7 @@ import {
     RhfEmailField,
 } from '@/components/forms';
 import { UserLookupModal } from '@/components/common/lookup';
-import { TimeSlotSelect } from '@/components/forms/TimeSlotSelect';
+import { TimePicker } from '@/components/forms/TimePicker';
 import { upperCase, useUndoSafeSanitizer } from '@/components/forms/undoSafeInput';
 import { formatPersonName } from '@/utils/personName';
 import { MultiAutocompleteInput, MultiSelectChips } from '@/components/forms/rhf/RhfMultiAutocomplete';
@@ -212,7 +212,7 @@ export function OpportunityBasicSection({ form, setField }: OpportunityBasicSect
                             slotProps={{ ...calendarAdornment, htmlInput: { min: localToday() } }}
                             sx={fieldSx}
                         />
-                        <TimeSlotSelect
+                        <TimePicker
                             value={form.nextFollowupTime || ''}
                             onChange={(value) => setField('nextFollowupTime', value)}
                             date={form.nextFollowupDate}
