@@ -17,7 +17,7 @@ export type NatureOfPartner = (typeof NATURE_OF_PARTNER_OPTIONS)[number];
 
 /** Values edited by the Partner Company form (Company Information, Address Information, Statutory). */
 export interface PartnerCompanyFormData {
-    /** Admin-defined custom field values, keyed by FormFieldDefinition.fieldKey (cf_…). */
+    /** Admin-defined custom field values, keyed by FormFieldDefinition.fieldKey. */
     customFields?: Record<string, unknown>;
 
     // Company information

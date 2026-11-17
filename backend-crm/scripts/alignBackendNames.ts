@@ -1,5 +1,6 @@
 import { prisma, type TransactionClient } from '../src/config/prisma.js';
 import { auditService } from '../src/services/audit.service.js';
+import { HttpError } from '../src/utils/httpError.js';
 import { CACHE_KEYS, cacheService, type CachedEntity } from '../src/services/cache.service.js';
 import { lockModuleFields, describeMigration, migrateFieldKey } from '../src/modules/form-configs/fieldKeyRename.js';
 import { CRM_MODULES, type CrmModuleKey } from '../src/modules/form-configs/formConfig.defaults.js';
@@ -10,8 +11,8 @@ import { categoryKeyForLabel, changeOptionValue, customFieldKey } from '../src/m
  *
  *  - dropdown options:          stored value := label (records, saved filters and field defaults follow);
  *                               a system option (whose value the code relies on) gets its label set to its value
- *  - admin-created dropdowns:   key := custom_<name>
- *  - custom fields:             key := cf_<label> (record values, saved filters and PDF template paths follow)
+ *  - builder-added dropdowns:   key := <name> in snake_case
+ *  - builder-added fields:      key := <label> in snake_case (record values, saved filters and PDF template paths follow)
  *
  * Built-in fields and dropdowns keep the column / key the code is written against.
  *
@@ -19,6 +20,8 @@ import { categoryKeyForLabel, changeOptionValue, customFieldKey } from '../src/m
  *   npm run align:backend-names -- --apply makes the changes
  *
  * Safe to re-run: a name that already matches is left alone. Every change is audited as made by ACTOR.
+ * Names that would clash (two fields, dropdowns or options ending up with the same name) are never numbered or
+ * guessed: they are listed for an admin to rename one of them in the UI, and left as they are.
  */
 
 const ACTOR = 'system:align-backend-names';
@@ -28,8 +31,13 @@ class DryRun extends Error {}
 
 interface Report {
     lines: string[];
+    /** Names that clash: left unchanged until an admin renames one of them. */
+    clashes: string[];
     modules: Set<CrmModuleKey>;
 }
+
+/** The clash message of a name the API refuses (HttpError 409), or null for any other error. */
+const clashOf = (err: unknown) => (err instanceof HttpError && err.statusCode === 409 ? err.message : null);
 
 const meta = (m: Record<string, string | undefined>) => ({ _meta: { module: 'shared', ...m, actorRole: 'System' } });
 
@@ -59,7 +67,9 @@ async function alignOptions(tx: TransactionClient, report: Report): Promise<void
         const finalNames = category.options.map((o) => (o.isSystem ? o.value : o.label).toLowerCase());
         const duplicates = finalNames.filter((n, i) => finalNames.indexOf(n) !== i);
         if (duplicates.length > 0) {
-            throw new Error(`${category.key}: options would share the name(s) ${[...new Set(duplicates)].join(', ')}; rename them in the UI first.`);
+            const names = [...new Set(duplicates)].map((d) => `"${d}"`).join(', ');
+            report.clashes.push(`dropdown "${category.label}": more than one option is named ${names}`);
+            continue;
         }
 
         // Pass 1: park every renamed option on a temporary value, so a value another option is about to take is free.
@@ -88,11 +98,19 @@ async function alignOptions(tx: TransactionClient, report: Report): Promise<void
     }
 }
 
-/** Admin-created dropdowns whose key isn't custom_<name>. */
+/** Builder-added dropdowns whose key isn't their name in snake_case. */
 async function alignCategoryKeys(tx: TransactionClient, report: Report): Promise<void> {
     const categories = await tx.dropdownCategory.findMany({ where: { deletedAt: null, isSystem: false } });
     for (const category of categories) {
-        const key = await categoryKeyForLabel(tx, category, category.label);
+        let key: string;
+        try {
+            key = await categoryKeyForLabel(tx, category, category.label);
+        } catch (err) {
+            const clash = clashOf(err);
+            if (!clash) throw err;
+            report.clashes.push(`dropdown: ${clash}`);
+            continue;
+        }
         if (key === category.key) continue;
         await tx.dropdownCategory.update({ where: { id: category.id }, data: { key } });
         await auditService.record(tx, {
@@ -106,14 +124,22 @@ async function alignCategoryKeys(tx: TransactionClient, report: Report): Promise
     }
 }
 
-/** Custom fields whose key isn't cf_<label>. */
+/** Builder-added fields whose key isn't their label in snake_case. */
 async function alignCustomFieldKeys(tx: TransactionClient, report: Report): Promise<void> {
     const fields = await tx.formFieldDefinition.findMany({ where: { isSystem: false }, orderBy: { createdAt: 'asc' } });
     for (const field of fields) {
         const module = field.module as CrmModuleKey;
         if (!(CRM_MODULES as readonly string[]).includes(module)) continue;
         await lockModuleFields(tx, module);
-        const key = await customFieldKey(tx, module, field.label, field);
+        let key: string;
+        try {
+            key = await customFieldKey(tx, module, field.label, field);
+        } catch (err) {
+            const clash = clashOf(err);
+            if (!clash) throw err;
+            report.clashes.push(`field (${module}): ${clash}`);
+            continue;
+        }
         if (key === field.fieldKey) continue;
         const note = describeMigration(await migrateFieldKey(tx, module, field.fieldKey, key));
         await tx.formFieldDefinition.update({ where: { id: field.id }, data: { fieldKey: key } });
@@ -130,7 +156,7 @@ async function alignCustomFieldKeys(tx: TransactionClient, report: Report): Prom
 }
 
 async function main(): Promise<void> {
-    const report: Report = { lines: [], modules: new Set() };
+    const report: Report = { lines: [], clashes: [], modules: new Set() };
     try {
         await prisma.$transaction(
             async (tx) => {
@@ -145,7 +171,18 @@ async function main(): Promise<void> {
         if (!(err instanceof DryRun)) throw err;
     }
 
-    console.log(report.lines.length > 0 ? report.lines.join('\n') : 'Every backend name already matches its UI name.');
+    console.log(
+        report.lines.length > 0
+            ? report.lines.join('\n')
+            : report.clashes.length > 0
+              ? 'Nothing to rename apart from the clashes below.'
+              : 'Every backend name already matches its UI name.',
+    );
+    if (report.clashes.length > 0) {
+        const list = report.clashes.map((c) => `  - ${c}`).join('\n');
+        console.log(`\nClashes (left unchanged; rename one of each in the UI, then run this again):\n${list}`);
+        process.exitCode = 2;
+    }
     if (!apply) {
         if (report.lines.length > 0) console.log(`\nDry run: nothing was saved. Re-run with --apply to make these ${report.lines.length} change(s).`);
         return;

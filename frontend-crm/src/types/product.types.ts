@@ -39,7 +39,7 @@ export type TaxRate =
     | '28%';
 
 export interface ProductFormData {
-    /** Admin-defined custom field values, keyed by FormFieldDefinition.fieldKey (cf_…). */
+    /** Admin-defined custom field values, keyed by FormFieldDefinition.fieldKey. */
     customFields?: Record<string, unknown>;
 
     productName: string;

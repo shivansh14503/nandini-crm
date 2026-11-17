@@ -5,8 +5,8 @@ import { CACHE_KEYS, cacheService } from '../../services/cache.service.js';
 import type { AuthUser } from '../../types/user.types.js';
 import { HttpError } from '../../utils/httpError.js';
 import { runInTransaction } from '../shared/transactions.js';
-import { customCategoryKeyBase, customFieldKeyBase, keyMatchesBase, uniqueDerivedKey } from './derivedKeys.js';
-import { countRecordsWithKey, describeMigration, lockModuleFields, migrateFieldKey } from './fieldKeyRename.js';
+import { dropdownKeyFromLabel, fieldKeyFromLabel } from './derivedKeys.js';
+import { countRecordsWithKey, describeMigration, lockModuleFields, migrateFieldKey, moduleColumnNames } from './fieldKeyRename.js';
 import { describeOptionMigration, migrateOptionValue } from './optionValueRename.js';
 import {
     APP_REQUIRED_CATEGORY_KEYS,
@@ -73,7 +73,7 @@ export interface FormFieldDefinitionDto {
     module: string;
     /**
      * Built-in fields: the column the field maps to (what forms and code read). Custom fields: the key their values
-     * are stored under, derived from the label (`cf_…`, see derivedKeys.ts) and following it.
+     * are stored under, derived from the label (snake_case, see derivedKeys.ts) and following it.
      */
     fieldKey: string;
     label: string;
@@ -322,10 +322,25 @@ async function findField(tx: TransactionClient, id: string): Promise<FormFieldDe
     return field;
 }
 
+/** "partner-companies" → "Partner Companies", for messages. */
+const moduleName = (module: string) =>
+    module
+        .split('-')
+        .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+        .join(' ');
+
+/** A name the admin chose can't be used because its key is taken: says by what, so they can pick another name. */
+function nameClash(label: string, what: string): HttpError {
+    const message = `"${label}" clashes with ${what}. Choose a different name for one of them.`;
+    return HttpError.conflict(message, [{ message, path: ['label'] }]);
+}
+
 /**
- * The key a custom field labelled `label` has (`cf_` + snake_case, see derivedKeys.ts), unique within the module.
- * `self` (a field being renamed) keeps its key when that already matches the label. Keys records still hold values
- * under (left by a deleted field) are skipped, so a field never takes over another field's old data.
+ * The key a field added in the form builder has: its label in snake_case (see derivedKeys.ts). `self` (a field
+ * being renamed) keeps its key when the label still gives it. A name is refused, saying what it clashes with, when
+ * its key is another field's of the module, a built-in field's or record column's (it would be mistaken for one in
+ * filters and imports), or one records still hold a deleted field's values under (the field would take over that
+ * old data). Case is ignored, as SQL Server compares keys.
  */
 export async function customFieldKey(
     tx: TransactionClient,
@@ -333,30 +348,44 @@ export async function customFieldKey(
     label: string,
     self?: { id: string; fieldKey: string },
 ): Promise<string> {
-    const base = customFieldKeyBase(label);
-    if (self && keyMatchesBase(self.fieldKey, base)) return self.fieldKey;
-    return uniqueDerivedKey(
-        base,
-        async (fieldKey) =>
-            (await tx.formFieldDefinition.count({ where: { module, fieldKey, ...(self ? { id: { not: self.id } } : {}) } })) > 0 ||
-            (await countRecordsWithKey(tx, module, fieldKey)) > 0,
-    );
+    const key = fieldKeyFromLabel(label);
+    if (self && self.fieldKey.toLowerCase() === key) return self.fieldKey;
+    const other = await tx.formFieldDefinition.findFirst({
+        where: { module, fieldKey: key, ...(self ? { id: { not: self.id } } : {}) },
+        select: { label: true, isSystem: true, validationRulesJson: true },
+    });
+    if (other) {
+        const kind = other.isSystem ? (isFieldTombstoned(other.validationRulesJson) ? 'the deleted built-in field' : 'the built-in field') : 'the field';
+        throw nameClash(label, `${kind} "${other.label}" on ${moduleName(module)}`);
+    }
+    const builtIn = DEFAULT_FIELDS.find((f) => f.module === module && f.fieldKey.toLowerCase() === key);
+    if (builtIn) throw nameClash(label, `the built-in field "${builtIn.label}" on ${moduleName(module)}`);
+    if ((await moduleColumnNames(tx, module)).has(key)) throw nameClash(label, `a built-in property of ${moduleName(module)} records`);
+    if ((await countRecordsWithKey(tx, module, key)) > 0) {
+        throw nameClash(label, `values a deleted field of that name left on ${moduleName(module)} records`);
+    }
+    return key;
 }
 
 /**
- * The key a dropdown named `label` has. An admin-created dropdown's key follows its name (`custom_` + snake_case,
- * unique; it keeps its key when that already matches). Nothing stores the key itself: fields link to the dropdown
- * by id, so a new key moves nothing. Built-in dropdowns keep their key: the app's code and start-up seeding look
- * them up by it.
+ * The key a dropdown named `label` has. A dropdown added in the form builder takes its name in snake_case (it keeps
+ * its key when the name still gives it); a name whose key another dropdown has is refused, saying which. Nothing
+ * stores the key itself: fields link to the dropdown by id, so a new key moves nothing. Built-in dropdowns keep their
+ * key: the app's code and start-up seeding look them up by it.
  */
 export async function categoryKeyForLabel(tx: TransactionClient, category: { id?: string; key?: string; isSystem: boolean }, label: string): Promise<string> {
     if (category.isSystem && category.key) return category.key;
-    const base = customCategoryKeyBase(label);
-    if (category.key && keyMatchesBase(category.key, base)) return category.key;
-    return uniqueDerivedKey(
-        base,
-        async (candidate) => (await tx.dropdownCategory.count({ where: { key: candidate, ...(category.id ? { id: { not: category.id } } : {}) } })) > 0,
-    );
+    const key = dropdownKeyFromLabel(label);
+    if (category.key && category.key.toLowerCase() === key) return category.key;
+    const other = await tx.dropdownCategory.findFirst({
+        where: { key, ...(category.id ? { id: { not: category.id } } : {}) },
+        select: { label: true, isSystem: true, deletedAt: true },
+    });
+    if (other) {
+        const kind = other.deletedAt ? 'the deleted built-in dropdown' : other.isSystem ? 'the built-in dropdown' : 'the dropdown';
+        throw nameClash(label, `${kind} "${other.label}"`);
+    }
+    return key;
 }
 
 async function createCategoryWithOptions(
@@ -953,7 +982,7 @@ export const formConfigService = {
                 }
             }
 
-            // A custom field's key follows its label ("PO Number" → cf_po_number): renaming the field moves every
+            // A custom field's key follows its label ("PO Number" → po_number): renaming the field moves every
             // record's value, saved filters and PDF template paths to the new key. A built-in field keeps its column.
             let renameKey: string | null = null;
             let migrationNote: string | undefined;

@@ -11,7 +11,7 @@ import type { FormConfigsPayload, FormFieldDefinitionDto } from './formConfig.se
  * frontend applies in `validateConfiguredFields` (frontend-crm/src/utils/formConfig.ts) also hold for API clients,
  * stale tabs and imports:
  *
- *  • `isRequired` on active, visible fields: custom fields (`customFields.cf_*`) and built-in fields an admin made
+ *  • `isRequired` on active, visible fields: custom fields (`customFields.*`) and built-in fields an admin made
  *    mandatory. Checkboxes must be checked. Hidden and archived fields are never required, matching the form.
  *  • Custom field formats per `fieldType` (same patterns as the frontend), and `validationRules`
  *    (`min`, `max`, `minLength`, `maxLength`, `pattern`) where an admin set them.
@@ -20,10 +20,9 @@ import type { FormConfigsPayload, FormFieldDefinitionDto } from './formConfig.se
  *  • `customFields` keys that aren't a custom field of the module are dropped. Values of archived custom fields
  *    are kept untouched (the configuration keeps archived fields so stored values still render).
  *
- * Errors use the form's RHF paths (`['customFields', 'cf_region']`, `['designation']`) so the field is highlighted.
+ * Errors use the form's RHF paths (`['customFields', 'region']`, `['designation']`) so the field is highlighted.
  */
 
-export const CUSTOM_FIELD_PREFIX = 'cf_';
 const CUSTOM_FIELDS_KEY = 'customFields';
 
 export interface ModuleFieldConfig {
@@ -290,7 +289,7 @@ export function checkModulePayload(
     const sanitized: Record<string, unknown> = {};
     for (const [key, value] of Object.entries(input)) {
         const field = customDefs.get(key);
-        if (!field || !key.startsWith(CUSTOM_FIELD_PREFIX)) continue;
+        if (!field) continue;
         sanitized[key] = field.isActive ? normalizeValue(field, value) : value;
     }
     return sanitized;

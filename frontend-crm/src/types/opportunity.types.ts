@@ -15,7 +15,7 @@ export interface OpportunityLineItem {
 }
 
 export interface OpportunityFormData {
-    /** Admin-defined custom field values, keyed by FormFieldDefinition.fieldKey (cf_…). */
+    /** Admin-defined custom field values, keyed by FormFieldDefinition.fieldKey. */
     customFields?: Record<string, unknown>;
 
     opportunityName?: string;

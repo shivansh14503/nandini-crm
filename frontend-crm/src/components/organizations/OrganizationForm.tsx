@@ -477,7 +477,7 @@ export default function OrganizationForm({
             if (err instanceof ApiClientError) {
                 // 409 / 400 responses name the offending fields: mark them inline and take the user to the first one.
                 const fieldErrors = (err.details?.errors ?? []).filter((e) => e.path?.[0]);
-                // Nested paths (e.g. ['customFields', 'cf_region']) join into the RHF name of that input.
+                // Nested paths (e.g. ['customFields', 'region']) join into the RHF name of that input.
                 fieldErrors.forEach((fieldErr) => {
                     methods.setError(fieldErr.path.join('.') as Path<OrganizationFormData>, { type: 'server', message: fieldErr.message });
                 });

@@ -142,7 +142,7 @@ export interface FormFieldDefinitionDto {
     id: string;
     module: CrmModuleKey;
     /**
-     * RHF name for built-in fields (the column they map to, which never changes); `cf_…` key inside `customFields`
+     * RHF name for built-in fields (the column they map to, which never changes); snake_case key inside `customFields`
      * for custom fields, derived from the label by the API (and following it). Internal: never shown to users.
      */
     fieldKey: string;
@@ -234,7 +234,7 @@ export interface UpdateOptionPayload {
 
 export interface CreateFieldPayload {
     module: CrmModuleKey;
-    /** The API derives the field's key from it (`cf_…`). */
+    /** The API derives the field's key from it (snake_case). */
     label: string;
     fieldType: CustomFieldType;
     tabKey: string;
