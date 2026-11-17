@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { Box, Chip, Typography } from '@mui/material';
 import GroupOutlinedIcon from '@mui/icons-material/GroupOutlined';
 import LocalFireDepartmentOutlinedIcon from '@mui/icons-material/LocalFireDepartmentOutlined';
-import FiberNewOutlinedIcon from '@mui/icons-material/FiberNewOutlined';
+import PersonAddAltOutlinedIcon from '@mui/icons-material/PersonAddAltOutlined';
 import TodayOutlinedIcon from '@mui/icons-material/TodayOutlined';
 import AccountCircleOutlinedIcon from '@mui/icons-material/AccountCircleOutlined';
 import PersonOutlinedIcon from '@mui/icons-material/PersonOutlined';
@@ -139,7 +139,7 @@ export function LeadsMasterView() {
         for (const lead of tabLeads) counts[getLeadStatusBucket(lead.status)] += 1;
         return [
             { id: 'all', label: 'All Leads', count: tabLeads.length, tone: 'brand', icon: <GroupOutlinedIcon />, hint: 'Every status' },
-            { id: 'new', label: 'New', count: counts.new, tone: 'brand', icon: <FiberNewOutlinedIcon />, hint: 'Not contacted yet' },
+            { id: 'new', label: 'New', count: counts.new, tone: 'brand', icon: <PersonAddAltOutlinedIcon />, hint: 'Not contacted yet' },
             {
                 id: 'in_process',
                 label: 'In Process',
