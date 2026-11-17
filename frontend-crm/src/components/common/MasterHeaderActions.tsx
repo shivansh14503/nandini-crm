@@ -26,7 +26,12 @@ export const outlinedHeaderButtonSx = {
     borderRadius: '8px',
     height: 36,
     px: 1.8,
-    '&:hover': { borderColor: 'var(--mui-palette-border-strong)', backgroundColor: 'var(--mui-palette-background-subtle)' },
+    transition: 'all 0.15s ease',
+    '&:hover': {
+        borderColor: 'var(--crm-blue-300)',
+        backgroundColor: 'var(--mui-palette-primary-soft)',
+        color: 'var(--crm-text-blue-700)',
+    },
 } as const;
 
 /** Standard right-aligned header action row shared by the entity master views. */

@@ -28,7 +28,10 @@ export const primaryButtonSx = {
     borderRadius: '8px',
     boxShadow: 'none',
     background: 'linear-gradient(135deg, var(--crm-fill-blue-700) 0%, var(--crm-fill-blue-600) 100%)',
-    '&:hover': { boxShadow: '0 2px 6px rgb(var(--crm-accent-rgb) / 0.25)' },
+    '&:hover': {
+        background: 'linear-gradient(135deg, var(--crm-fill-blue-800) 0%, var(--crm-fill-blue-700) 100%)',
+        boxShadow: '0 2px 6px rgb(var(--crm-accent-rgb) / 0.25)',
+    },
 } as const;
 
 export const secondaryButtonSx = {
@@ -38,7 +41,11 @@ export const secondaryButtonSx = {
     borderRadius: '8px',
     color: 'var(--crm-slate-700)',
     borderColor: 'var(--mui-palette-border-strong)',
-    '&:hover': { borderColor: 'var(--crm-slate-400)', backgroundColor: 'var(--mui-palette-background-subtle)' },
+    '&:hover': {
+        borderColor: 'var(--crm-blue-300)',
+        backgroundColor: 'var(--mui-palette-primary-soft)',
+        color: 'var(--crm-text-blue-700)',
+    },
 } as const;
 
 export const inputSx = {
@@ -116,7 +123,10 @@ export function PillTabs<K extends string>({
                             fontWeight: active ? 700 : 500,
                             fontSize: '0.82rem',
                             outline: 'none',
-                            '&:hover': { backgroundColor: active ? 'var(--mui-palette-background-paper)' : 'var(--mui-palette-background-hover)', color: active ? 'var(--crm-blue-900)' : 'var(--mui-palette-text-primary)' },
+                            '&:hover': {
+                                backgroundColor: active ? 'var(--mui-palette-background-paper)' : 'var(--mui-palette-primary-soft)',
+                                color: active ? 'var(--crm-blue-900)' : 'var(--crm-text-blue-700)',
+                            },
                             '&:focus-visible': { boxShadow: '0 0 0 2px var(--crm-blue-200)' },
                             ...(onDeleteTab ? { pr: 0.75, '&:hover .pill-tab-delete, &:focus-within .pill-tab-delete': { opacity: 1 } } : {}),
                         }}

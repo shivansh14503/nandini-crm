@@ -180,7 +180,8 @@ export function CommonRecordDetailView({
                                         fontWeight: 700,
                                         cursor: 'default',
                                         color: statusColor,
-                                        backgroundColor: `${statusColor}1a`,
+                                        backgroundColor: `color-mix(in srgb, ${statusColor} 14%, transparent)`,
+                                        border: `1px solid color-mix(in srgb, ${statusColor} 28%, transparent)`,
                                     }}
                                 />
                             )}
@@ -207,6 +208,11 @@ export function CommonRecordDetailView({
                             borderColor: 'var(--mui-palette-border-main)',
                             color: 'var(--crm-slate-700)',
                             height: 36,
+                            '&:hover': {
+                                borderColor: 'var(--crm-blue-300)',
+                                backgroundColor: 'var(--mui-palette-primary-soft)',
+                                color: 'var(--crm-text-blue-700)',
+                            },
                         }}
                     >
                         {backLabel}
@@ -226,6 +232,9 @@ export function CommonRecordDetailView({
                                         height: 36,
                                         boxShadow: 'none',
                                         background: 'linear-gradient(135deg, var(--crm-fill-blue-700) 0%, var(--crm-fill-blue-600) 100%)',
+                                        '&:hover': {
+                                            background: 'linear-gradient(135deg, var(--crm-fill-blue-800) 0%, var(--crm-fill-blue-700) 100%)',
+                                        },
                                     }}
                                 >
                                     {editLabel}

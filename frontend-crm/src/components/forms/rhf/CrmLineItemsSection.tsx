@@ -304,7 +304,7 @@ export function CrmLineItemsEditor({ value, onChange, error }: CrmLineItemsEdito
                                 startIcon={<AddIcon />}
                                 onClick={handleAddLineItem}
                                 sx={{
-                                    backgroundColor: 'var(--crm-fill-blue-900)',
+                                    backgroundColor: 'var(--crm-fill-blue-600)',
                                     color: '#ffffff',
                                     textTransform: 'none',
                                     fontWeight: 700,
@@ -517,10 +517,10 @@ export function CrmLineItemsEditor({ value, onChange, error }: CrmLineItemsEdito
                                                     sx={{
                                                         width: 32,
                                                         height: 32,
-                                                        backgroundColor: 'var(--crm-fill-blue-900)',
+                                                        backgroundColor: 'var(--crm-fill-blue-600)',
                                                         color: '#ffffff',
                                                         borderRadius: '4px',
-                                                        '&:hover': { backgroundColor: '#b91c1c' },
+                                                        '&:hover': { backgroundColor: 'var(--mui-palette-error-main)' },
                                                     }}
                                                 >
                                                     <ClearIcon sx={{ fontSize: 16 }} />
@@ -588,7 +588,7 @@ export function CrmLineItemsEditor({ value, onChange, error }: CrmLineItemsEdito
                     startIcon={<AddIcon />}
                     onClick={handleAddLineItem}
                     sx={{
-                        backgroundColor: 'var(--crm-fill-blue-900)',
+                        backgroundColor: 'var(--crm-fill-blue-600)',
                         color: '#ffffff',
                         textTransform: 'uppercase',
                         fontWeight: 700,

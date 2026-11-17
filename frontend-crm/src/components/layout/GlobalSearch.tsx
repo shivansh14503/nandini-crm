@@ -124,10 +124,13 @@ export function GlobalSearch() {
                         py: 0.5,
                         width: 220,
                         transition: 'all 0.2s ease',
+                        '&:hover': {
+                            borderColor: 'var(--crm-blue-300)',
+                        },
                         '&:focus-within': {
                             backgroundColor: 'var(--mui-palette-background-paper)',
-                            borderColor: 'var(--crm-blue-300)',
-                            boxShadow: '0 0 0 3px rgba(147,197,253,0.3)',
+                            borderColor: 'var(--mui-palette-primary-main)',
+                            boxShadow: '0 0 0 3px rgb(var(--crm-accent-rgb) / 0.22)',
                             width: 300,
                         },
                     }}

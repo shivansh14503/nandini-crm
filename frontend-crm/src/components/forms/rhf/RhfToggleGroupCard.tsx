@@ -74,7 +74,8 @@ function ToggleCell<T extends FieldValues>({
                         fontWeight: 700,
                         cursor: 'default',
                         color: checked ? 'var(--mui-palette-success-main)' : 'var(--mui-palette-text-secondary)',
-                        backgroundColor: checked ? '#16a34a1a' : '#64748b1a',
+                        backgroundColor: checked ? 'var(--mui-palette-success-soft)' : 'var(--mui-palette-background-hover)',
+                        border: `1px solid ${checked ? 'var(--mui-palette-success-softBorder)' : 'var(--mui-palette-border-main)'}`,
                     }}
                 />
             ) : (

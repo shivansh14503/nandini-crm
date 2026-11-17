@@ -279,7 +279,10 @@ function UserMenu({ user, onLogout }: { user: { username: string; role: string }
                     border: open ? '1px solid var(--mui-palette-primary-softBorder)' : '1px solid transparent',
                     backgroundColor: open ? 'var(--mui-palette-primary-soft)' : 'transparent',
                     transition: 'all 0.15s ease',
-                    '&:hover': { backgroundColor: 'var(--crm-gray-100)' },
+                    '&:hover': {
+                        backgroundColor: 'var(--mui-palette-primary-soft)',
+                        borderColor: 'var(--mui-palette-primary-softBorder)',
+                    },
                 }}
             >
                 <Avatar
@@ -436,9 +439,14 @@ function NotificationBell() {
                     borderRadius: '8px',
                     border: open ? '1px solid var(--mui-palette-primary-softBorder)' : '1px solid transparent',
                     backgroundColor: open ? 'var(--mui-palette-primary-soft)' : 'transparent',
+                    color: open ? 'var(--mui-palette-primary-main)' : 'var(--crm-gray-500)',
                     cursor: 'pointer',
                     transition: 'all 0.15s ease',
-                    '&:hover': { backgroundColor: 'var(--crm-gray-100)' },
+                    '&:hover': {
+                        backgroundColor: 'var(--mui-palette-primary-soft)',
+                        borderColor: 'var(--mui-palette-primary-softBorder)',
+                        color: 'var(--mui-palette-primary-main)',
+                    },
                 }}
             >
                 <Badge
@@ -454,7 +462,7 @@ function NotificationBell() {
                         },
                     }}
                 >
-                    <NotificationsIcon sx={{ fontSize: 20, color: 'var(--crm-gray-500)' }} />
+                    <NotificationsIcon sx={{ fontSize: 20, color: 'inherit' }} />
                 </Badge>
             </Box>
 
@@ -645,10 +653,14 @@ function CreateButton() {
                                                     px: 2,
                                                     py: 0.9,
                                                     gap: 1.5,
-                                                    '&:hover': { backgroundColor: 'var(--mui-palette-primary-soft)', color: 'var(--mui-palette-primary-main)' },
+                                                    '&:hover': {
+                                                        backgroundColor: 'var(--mui-palette-primary-soft)',
+                                                        color: 'var(--mui-palette-primary-main)',
+                                                        '& .MuiSvgIcon-root': { color: 'var(--mui-palette-primary-main)' },
+                                                    },
                                                 }}
                                             >
-                                                <AddIcon sx={{ fontSize: 14, color: 'var(--crm-gray-400)' }} />
+                                                <AddIcon sx={{ fontSize: 14, color: 'var(--crm-gray-400)', transition: 'color 0.15s ease' }} />
                                                 {item.label}
                                             </MenuItem>
                                         ))}

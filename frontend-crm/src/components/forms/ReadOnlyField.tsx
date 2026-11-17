@@ -69,7 +69,8 @@ export function ReadOnlyField({
                                 fontSize: '0.76rem',
                                 fontWeight: 700,
                                 color: badgeColor,
-                                backgroundColor: `${badgeColor}1a`,
+                                backgroundColor: `color-mix(in srgb, ${badgeColor} 14%, transparent)`,
+                                border: `1px solid color-mix(in srgb, ${badgeColor} 28%, transparent)`,
                                 cursor: 'default',
                             }}
                         />

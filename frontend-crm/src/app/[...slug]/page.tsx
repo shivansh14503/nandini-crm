@@ -114,6 +114,10 @@ function DynamicCrmPageContent() {
                                     fontSize: '0.82rem',
                                     color: 'var(--crm-text-blue-700)',
                                     borderColor: 'var(--mui-palette-border-strong)',
+                                    '&:hover': {
+                                        borderColor: 'var(--crm-blue-300)',
+                                        backgroundColor: 'var(--mui-palette-primary-soft)',
+                                    },
                                 }}
                             >
                                 Organizations
@@ -131,6 +135,10 @@ function DynamicCrmPageContent() {
                                     fontSize: '0.82rem',
                                     color: 'var(--crm-text-blue-700)',
                                     borderColor: 'var(--mui-palette-border-strong)',
+                                    '&:hover': {
+                                        borderColor: 'var(--crm-blue-300)',
+                                        backgroundColor: 'var(--mui-palette-primary-soft)',
+                                    },
                                 }}
                             >
                                 Contacts
@@ -148,6 +156,9 @@ function DynamicCrmPageContent() {
                                     fontWeight: 700,
                                     fontSize: '0.82rem',
                                     px: 2,
+                                    '&:hover': {
+                                        background: 'linear-gradient(135deg, var(--crm-fill-blue-800) 0%, var(--crm-fill-blue-700) 100%)',
+                                    },
                                 }}
                             >
                                 Return to Dashboard

@@ -103,6 +103,11 @@ export function DataTablePagination({
                             minWidth: 44,
                             height: 28,
                             py: 0,
+                            '&:hover': {
+                                borderColor: 'var(--crm-blue-300)',
+                                backgroundColor: 'var(--mui-palette-primary-soft)',
+                                color: 'var(--crm-text-blue-700)',
+                            },
                         }}
                     >
                         First
@@ -120,6 +125,11 @@ export function DataTablePagination({
                             minWidth: 44,
                             height: 28,
                             py: 0,
+                            '&:hover': {
+                                borderColor: 'var(--crm-blue-300)',
+                                backgroundColor: 'var(--mui-palette-primary-soft)',
+                                color: 'var(--crm-text-blue-700)',
+                            },
                         }}
                     >
                         Prev
@@ -141,6 +151,11 @@ export function DataTablePagination({
                                 color: currentPage1Based === pageNum ? 'var(--crm-text-blue-700)' : 'var(--mui-palette-text-secondary)',
                                 border: currentPage1Based === pageNum ? '1px solid var(--crm-blue-300)' : '1px solid var(--mui-palette-border-main)',
                                 borderRadius: '6px',
+                                '&:hover': {
+                                    borderColor: 'var(--crm-blue-300)',
+                                    backgroundColor: 'var(--mui-palette-primary-soft)',
+                                    color: 'var(--crm-text-blue-700)',
+                                },
                             }}
                         >
                             {pageNum}
@@ -162,6 +177,11 @@ export function DataTablePagination({
                                     color: 'var(--mui-palette-text-secondary)',
                                     border: '1px solid var(--mui-palette-border-main)',
                                     borderRadius: '6px',
+                                    '&:hover': {
+                                        borderColor: 'var(--crm-blue-300)',
+                                        backgroundColor: 'var(--mui-palette-primary-soft)',
+                                        color: 'var(--crm-text-blue-700)',
+                                    },
                                 }}
                             >
                                 457
@@ -182,6 +202,11 @@ export function DataTablePagination({
                             minWidth: 44,
                             height: 28,
                             py: 0,
+                            '&:hover': {
+                                borderColor: 'var(--crm-blue-300)',
+                                backgroundColor: 'var(--mui-palette-primary-soft)',
+                                color: 'var(--crm-text-blue-700)',
+                            },
                         }}
                     >
                         Next
@@ -199,6 +224,11 @@ export function DataTablePagination({
                             minWidth: 44,
                             height: 28,
                             py: 0,
+                            '&:hover': {
+                                borderColor: 'var(--crm-blue-300)',
+                                backgroundColor: 'var(--mui-palette-primary-soft)',
+                                color: 'var(--crm-text-blue-700)',
+                            },
                         }}
                     >
                         Last
@@ -261,6 +291,12 @@ export function DataTablePagination({
                             border: '1px solid var(--mui-palette-border-main)',
                             borderRadius: '6px',
                             p: 0.4,
+                            color: 'var(--mui-palette-text-secondary)',
+                            '&:hover': {
+                                borderColor: 'var(--crm-blue-300)',
+                                backgroundColor: 'var(--mui-palette-primary-soft)',
+                                color: 'var(--crm-text-blue-700)',
+                            },
                             '&:disabled': { opacity: 0.4 },
                         }}
                     >
@@ -279,6 +315,12 @@ export function DataTablePagination({
                             border: '1px solid var(--mui-palette-border-main)',
                             borderRadius: '6px',
                             p: 0.4,
+                            color: 'var(--mui-palette-text-secondary)',
+                            '&:hover': {
+                                borderColor: 'var(--crm-blue-300)',
+                                backgroundColor: 'var(--mui-palette-primary-soft)',
+                                color: 'var(--crm-text-blue-700)',
+                            },
                             '&:disabled': { opacity: 0.4 },
                         }}
                     >

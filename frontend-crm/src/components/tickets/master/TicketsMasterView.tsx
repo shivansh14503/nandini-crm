@@ -219,7 +219,7 @@ export function TicketsMasterView() {
                 minWidth: 220,
                 render: (t) => (
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 0 }}>
-                        <ConfirmationNumberOutlinedIcon sx={{ fontSize: 16, color: 'var(--crm-violet-600)', flexShrink: 0 }} />
+                        <ConfirmationNumberOutlinedIcon sx={{ fontSize: 16, color: 'var(--crm-text-blue-600)', flexShrink: 0 }} />
                         <Typography noWrap sx={{ fontSize: '0.8rem', color: 'var(--mui-palette-text-primary)', fontWeight: 600, maxWidth: 280 }}>
                             {t.ticketSubject || t.problemReported || '-'}
                         </Typography>

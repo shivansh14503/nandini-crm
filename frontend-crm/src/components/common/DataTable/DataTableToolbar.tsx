@@ -151,7 +151,11 @@ export function DataTableToolbar({
                                     height: 32,
                                     px: 1.5,
                                     backgroundColor: 'var(--mui-palette-background-paper)',
-                                    '&:hover': { borderColor: 'var(--mui-palette-border-strong)', backgroundColor: 'var(--mui-palette-background-subtle)' },
+                                    '&:hover': {
+                                        borderColor: 'var(--crm-blue-300)',
+                                        backgroundColor: 'var(--mui-palette-primary-soft)',
+                                        color: 'var(--crm-text-blue-700)',
+                                    },
                                 }}
                             >
                                 BULK ACTION
@@ -196,6 +200,12 @@ export function DataTableToolbar({
                                     height: 32,
                                     color: filterCount ? 'var(--crm-text-blue-600)' : 'var(--mui-palette-text-secondary)',
                                     backgroundColor: filterCount ? 'var(--mui-palette-primary-soft)' : undefined,
+                                    transition: 'all 0.15s ease',
+                                    '&:hover': {
+                                        borderColor: 'var(--crm-blue-300)',
+                                        backgroundColor: 'var(--mui-palette-primary-soft)',
+                                        color: 'var(--crm-text-blue-700)',
+                                    },
                                 }}
                             >
                                 <Badge
@@ -215,7 +225,19 @@ export function DataTableToolbar({
                                 size="small"
                                 aria-label="Modify Columns"
                                 onClick={(e) => onColumnClick(e.currentTarget)}
-                                sx={{ border: '1px solid var(--mui-palette-border-main)', borderRadius: '6px', width: 32, height: 32, color: 'var(--mui-palette-text-secondary)' }}
+                                sx={{
+                                    border: '1px solid var(--mui-palette-border-main)',
+                                    borderRadius: '6px',
+                                    width: 32,
+                                    height: 32,
+                                    color: 'var(--mui-palette-text-secondary)',
+                                    transition: 'all 0.15s ease',
+                                    '&:hover': {
+                                        borderColor: 'var(--crm-blue-300)',
+                                        backgroundColor: 'var(--mui-palette-primary-soft)',
+                                        color: 'var(--crm-text-blue-700)',
+                                    },
+                                }}
                             >
                                 <ViewColumnIcon sx={{ fontSize: 16 }} />
                             </IconButton>
@@ -280,7 +302,19 @@ export function DataTableToolbar({
                                 size="small"
                                 disabled={currentPage === 1}
                                 onClick={() => onPageChange(Math.max(1, currentPage - 1))}
-                                sx={{ border: '1px solid var(--mui-palette-border-main)', borderRadius: '4px', width: 26, height: 26 }}
+                                sx={{
+                                    border: '1px solid var(--mui-palette-border-main)',
+                                    borderRadius: '4px',
+                                    width: 26,
+                                    height: 26,
+                                    fontSize: '0.76rem',
+                                    color: 'var(--mui-palette-text-secondary)',
+                                    '&:hover': {
+                                        borderColor: 'var(--crm-blue-300)',
+                                        backgroundColor: 'var(--mui-palette-primary-soft)',
+                                        color: 'var(--crm-text-blue-700)',
+                                    },
+                                }}
                             >
                                 &lt;
                             </IconButton>
@@ -305,7 +339,19 @@ export function DataTableToolbar({
                                 size="small"
                                 disabled={currentPage >= totalPages}
                                 onClick={() => onPageChange(Math.min(totalPages, currentPage + 1))}
-                                sx={{ border: '1px solid var(--mui-palette-border-main)', borderRadius: '4px', width: 26, height: 26 }}
+                                sx={{
+                                    border: '1px solid var(--mui-palette-border-main)',
+                                    borderRadius: '4px',
+                                    width: 26,
+                                    height: 26,
+                                    fontSize: '0.76rem',
+                                    color: 'var(--mui-palette-text-secondary)',
+                                    '&:hover': {
+                                        borderColor: 'var(--crm-blue-300)',
+                                        backgroundColor: 'var(--mui-palette-primary-soft)',
+                                        color: 'var(--crm-text-blue-700)',
+                                    },
+                                }}
                             >
                                 &gt;
                             </IconButton>
@@ -313,7 +359,19 @@ export function DataTableToolbar({
                                 size="small"
                                 disabled={currentPage >= totalPages}
                                 onClick={() => onPageChange(totalPages)}
-                                sx={{ border: '1px solid var(--mui-palette-border-main)', borderRadius: '4px', width: 26, height: 26 }}
+                                sx={{
+                                    border: '1px solid var(--mui-palette-border-main)',
+                                    borderRadius: '4px',
+                                    width: 26,
+                                    height: 26,
+                                    fontSize: '0.76rem',
+                                    color: 'var(--mui-palette-text-secondary)',
+                                    '&:hover': {
+                                        borderColor: 'var(--crm-blue-300)',
+                                        backgroundColor: 'var(--mui-palette-primary-soft)',
+                                        color: 'var(--crm-text-blue-700)',
+                                    },
+                                }}
                             >
                                 &gt;&gt;
                             </IconButton>

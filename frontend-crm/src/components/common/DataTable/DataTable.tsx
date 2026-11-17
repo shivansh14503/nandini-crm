@@ -421,7 +421,7 @@ export function DataTable<T>({
                                         userSelect: 'none',
                                         whiteSpace: 'nowrap',
                                         transition: 'color 0.15s ease',
-                                        '&:hover': isSortable ? { color: 'var(--mui-palette-text-primary)' } : {},
+                                        '&:hover': isSortable ? { color: 'var(--crm-text-blue-600)' } : {},
                                     }}
                                 >
                                     <Box

@@ -178,7 +178,7 @@
   --crm-fill-blue-800: #1E40AF;
   --crm-fill-blue-900: #1E3A8A;
 
-  /* Accent-colored text: blue in light, plain white in dark (green stays for fills, borders, hover). */
+  /* Accent-colored text: brand blue in light, high-contrast brand green in dark. */
   --crm-text-blue-400: #60A5FA;
   --crm-text-blue-500: #3B82F6;
   --crm-text-blue-600: #2563EB;
@@ -291,16 +291,16 @@
   --crm-sky-700: #7DD3FC;
   --crm-sky-800: #BAE6FD;
   --crm-sky-900: #BAE6FD;
-  --crm-blue-50: #213133;
-  --crm-blue-100: #293E36;
-  --crm-blue-200: #39573C;
-  --crm-blue-300: #628659;
-  --crm-blue-400: #95CC75;
+  --crm-blue-50: #162620;
+  --crm-blue-100: #1E352B;
+  --crm-blue-200: #2B4C3B;
+  --crm-blue-300: #3E6E52;
+  --crm-blue-400: #68B347;
   --crm-blue-500: #7ABD54;
   --crm-blue-600: #7ABD54;
-  --crm-blue-700: #95CC75;
-  --crm-blue-800: #B2DB98;
-  --crm-blue-900: #CDE9BB;
+  --crm-blue-700: #8FD16A;
+  --crm-blue-800: #A8DF89;
+  --crm-blue-900: #C5EDAE;
   --crm-indigo-50: #1E2745;
   --crm-indigo-100: #252C55;
   --crm-indigo-200: #313874;
@@ -353,19 +353,19 @@
   --crm-rose-900: #FECDD3;
 
   /* Brand green fills: deep enough for white text. */
-  --crm-fill-blue-500: #64A841;
-  --crm-fill-blue-600: #579638;
-  --crm-fill-blue-700: #4A8430;
-  --crm-fill-blue-800: #3F7229;
-  --crm-fill-blue-900: #345E22;
+  --crm-fill-blue-500: #5E9E3D;
+  --crm-fill-blue-600: #4F8A31;
+  --crm-fill-blue-700: #417526;
+  --crm-fill-blue-800: #35611E;
+  --crm-fill-blue-900: #2A4E17;
 
-  /* Accent text is white in dark mode. */
-  --crm-text-blue-400: #FFFFFF;
-  --crm-text-blue-500: #FFFFFF;
-  --crm-text-blue-600: #FFFFFF;
-  --crm-text-blue-700: #FFFFFF;
-  --crm-text-blue-800: #FFFFFF;
-  --crm-text-blue-900: #FFFFFF;
+  /* Accent text in dark mode uses readable brand green shades (matching light mode blue). */
+  --crm-text-blue-400: #8FD16A;
+  --crm-text-blue-500: #7ABD54;
+  --crm-text-blue-600: #7ABD54;
+  --crm-text-blue-700: #8FD16A;
+  --crm-text-blue-800: #A8DF89;
+  --crm-text-blue-900: #C5EDAE;
 
-  --crm-accent-rgb: 87 150 56;
+  --crm-accent-rgb: 122 189 84;
 }

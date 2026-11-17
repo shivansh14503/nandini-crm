@@ -154,11 +154,12 @@ export function QuickCreateDrawer({ open, onClose, onSave }: QuickCreateDrawerPr
                 },
             }}
         >
-            {/* ── Dark Header matching screenshot ────────────────────────────── */}
+            {/* ── Theme-Aware Header ───────────────────────────────────────── */}
             <Box
                 sx={{
-                    backgroundColor: '#0f172a',
-                    color: '#fff',
+                    backgroundColor: 'var(--mui-palette-background-subtle)',
+                    borderBottom: '1px solid var(--mui-palette-border-main)',
+                    color: 'var(--crm-slate-900)',
                     px: 3,
                     py: 2.2,
                     display: 'flex',
@@ -169,23 +170,24 @@ export function QuickCreateDrawer({ open, onClose, onSave }: QuickCreateDrawerPr
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
                     <Box
                         sx={{
-                            width: 32,
-                            height: 32,
+                            width: 34,
+                            height: 34,
                             borderRadius: '8px',
-                            backgroundColor: 'var(--crm-fill-blue-900)',
+                            backgroundColor: 'var(--mui-palette-primary-soft)',
+                            border: '1px solid var(--mui-palette-primary-softBorder)',
                             display: 'flex',
                             alignItems: 'center',
                             justifyContent: 'center',
-                            color: 'var(--crm-text-blue-400)',
+                            color: 'var(--crm-text-blue-600)',
                         }}
                     >
                         <AddIcon fontSize="small" />
                     </Box>
                     <Box>
-                        <Typography variant="subtitle1" sx={{ fontWeight: 700, fontSize: '0.98rem', color: '#fff' }}>
+                        <Typography variant="subtitle1" sx={{ fontWeight: 700, fontSize: '0.98rem', color: 'var(--crm-slate-900)' }}>
                             Quick Create Organization
                         </Typography>
-                        <Typography variant="caption" sx={{ color: 'var(--mui-palette-text-muted)', fontSize: '0.74rem' }}>
+                        <Typography variant="caption" sx={{ color: 'var(--mui-palette-text-secondary)', fontSize: '0.74rem' }}>
                             Add an account directly to the master directory
                         </Typography>
                     </Box>
@@ -193,7 +195,16 @@ export function QuickCreateDrawer({ open, onClose, onSave }: QuickCreateDrawerPr
                 <IconButton
                     size="small"
                     onClick={onClose}
-                    sx={{ color: 'var(--mui-palette-text-muted)', '&:hover': { color: '#fff' } }}
+                    sx={{
+                        color: 'var(--mui-palette-text-secondary)',
+                        border: '1px solid var(--mui-palette-border-main)',
+                        borderRadius: '8px',
+                        '&:hover': {
+                            color: 'var(--mui-palette-error-main)',
+                            backgroundColor: 'var(--mui-palette-error-soft)',
+                            borderColor: 'var(--mui-palette-error-softBorder)',
+                        },
+                    }}
                 >
                     <CloseIcon fontSize="small" />
                 </IconButton>

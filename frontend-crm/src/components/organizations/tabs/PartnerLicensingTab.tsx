@@ -138,26 +138,33 @@ export function PartnerLicensingTab({ form, set }: PartnerLicensingTabProps) {
             >
                 <Table size="small">
                     <TableHead>
-                        <TableRow sx={{ backgroundColor: 'var(--mui-palette-info-main)' }}>
+                        <TableRow
+                            sx={{
+                                backgroundColor: 'var(--mui-palette-background-subtle)',
+                                borderBottom: '1px solid var(--mui-palette-border-main)',
+                            }}
+                        >
                             <TableCell
                                 sx={{
-                                    color: '#fff',
+                                    color: 'var(--crm-slate-600)',
                                     fontWeight: 700,
                                     fontSize: '0.78rem',
                                     py: 1.2,
                                     width: 70,
                                     letterSpacing: '0.04em',
+                                    textTransform: 'uppercase',
                                 }}
                             >
                                 SR
                             </TableCell>
                             <TableCell
                                 sx={{
-                                    color: '#fff',
+                                    color: 'var(--crm-slate-600)',
                                     fontWeight: 700,
                                     fontSize: '0.78rem',
                                     py: 1.2,
                                     letterSpacing: '0.04em',
+                                    textTransform: 'uppercase',
                                 }}
                             >
                                 Partner Company
@@ -165,11 +172,13 @@ export function PartnerLicensingTab({ form, set }: PartnerLicensingTabProps) {
                             <TableCell
                                 align="right"
                                 sx={{
-                                    color: '#fff',
+                                    color: 'var(--crm-slate-600)',
                                     fontWeight: 700,
                                     fontSize: '0.78rem',
                                     py: 1.2,
                                     width: 80,
+                                    letterSpacing: '0.04em',
+                                    textTransform: 'uppercase',
                                 }}
                             >
                                 Action
@@ -241,8 +250,9 @@ export function PartnerLicensingTab({ form, set }: PartnerLicensingTabProps) {
                                                 sx={{
                                                     height: 20,
                                                     fontSize: '0.68rem',
-                                                    backgroundColor: 'var(--crm-indigo-100)',
-                                                    color: 'var(--crm-indigo-700)',
+                                                    backgroundColor: 'var(--mui-palette-primary-soft)',
+                                                    color: 'var(--crm-text-blue-700)',
+                                                    border: '1px solid var(--mui-palette-primary-softBorder)',
                                                     fontWeight: 600,
                                                 }}
                                             />
