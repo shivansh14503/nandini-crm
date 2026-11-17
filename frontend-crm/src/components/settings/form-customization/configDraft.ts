@@ -66,8 +66,15 @@ export function uniqueKey(base: string, taken: (key: string) => boolean, max = 8
     return candidate;
 }
 
-export const categoryKeyFor = (label: string) => `custom_${sectionKeyFromLabel(label) || 'list'}`;
-export const customFieldKeyFor = (label: string) => `cf_${sectionKeyFromLabel(label).replace(/^(\d)/, 'f_$1') || 'field'}`;
+/** snake_case of a label, starting with a letter; same rule as the API (derivedKeys.ts). */
+const keyFromLabel = (label: string, fallback: string) => {
+    const slug = sectionKeyFromLabel(label);
+    return !slug ? fallback : /^[a-z]/.test(slug) ? slug : `${fallback}_${slug}`;
+};
+/** Key the API gives a dropdown added in the builder (the draft refers to it by this until saved). */
+export const categoryKeyFor = (label: string) => keyFromLabel(label, 'list');
+/** Key the API gives a field added in the builder (the draft refers to it by this until saved). */
+export const customFieldKeyFor = (label: string) => keyFromLabel(label, 'field');
 
 // ── Lookups over a (mutable) configuration ──────────────────────────────────
 

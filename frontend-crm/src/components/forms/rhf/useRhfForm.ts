@@ -139,7 +139,7 @@ export function useRhfForm<T extends FieldValues>({
     return { methods, toast, showToast, closeToast, createSubmitHandler };
 }
 
-/** Sets `message` at a dotted RHF path (`customFields.cf_region`) unless that path already has an error. */
+/** Sets `message` at a dotted RHF path (`customFields.region`) unless that path already has an error. */
 function setNestedError(errors: Record<string, unknown>, path: string, message: string): void {
     const keys = path.split('.');
     let node = errors;

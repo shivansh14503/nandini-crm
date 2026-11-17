@@ -6,7 +6,7 @@ import { lockRecords, type LockedEntity } from '../shared/transactions.js';
 import type { CrmModuleKey } from './formConfig.defaults.js';
 
 /**
- * A custom field's key (`fieldKey`, e.g. `cf_po_number`) is the key its values are stored under in each record's
+ * A custom field's key (`fieldKey`, e.g. `po_number`) is the key its values are stored under in each record's
  * `customDataJson`, and the name saved table filters and PDF templates refer to it by. It follows the field's label
  * (derivedKeys.ts; built-in fields' keys are column names and stay fixed): when the label changes, `migrateFieldKey`
  * moves everything stored under the old key in the same transaction.
@@ -108,14 +108,14 @@ export function filterFingerprint(json: string): string {
 
 /** A PDF template / saved block document with field paths `custom.<from>` renamed (null when it has none). */
 export function renamePdfFieldPaths(json: string, from: string, to: string): string | null {
-    // Paths are JSON string values (`"path":"custom.cf_x"`); keys only hold [a-z0-9_], so the match is exact.
+    // Paths are JSON string values (`"path":"custom.po_number"`); keys only hold [a-z0-9_], so the match is exact.
     const pattern = new RegExp(`"custom\\.${from}"`, 'g');
     return pattern.test(json) ? json.replace(pattern, `"custom.${to}"`) : null;
 }
 
 // ── Database work ────────────────────────────────────────────────────────────
 
-/** `cf_x` → a LIKE pattern matching `"cf_x"` (underscores escaped; keys hold only [a-z0-9_]). */
+/** `po_number` → a LIKE pattern matching `"po_number"` (underscores escaped; keys hold only [a-z0-9_]). */
 const likeQuotedKey = (key: string) => `%"${key.replace(/_/g, '[_]')}"%`;
 
 async function rowsMentioning(tx: TransactionClient, module: CrmModuleKey, key: string): Promise<{ id: string; customDataJson: string | null }[]> {
@@ -131,6 +131,14 @@ async function rowsMentioning(tx: TransactionClient, module: CrmModuleKey, key: 
  */
 export async function lockModuleFields(tx: TransactionClient, module: CrmModuleKey): Promise<void> {
     await tx.$queryRaw(Prisma.sql`SELECT [id] FROM [dbo].[FormFieldDefinition] WITH (UPDLOCK, HOLDLOCK) WHERE [module] = ${module}`);
+}
+
+/** Column names of the module's record table, lowercased (a field key must not look like one). */
+export async function moduleColumnNames(tx: TransactionClient, module: CrmModuleKey): Promise<Set<string>> {
+    const rows = await tx.$queryRaw<{ name: string }[]>(
+        Prisma.sql`SELECT [COLUMN_NAME] AS [name] FROM INFORMATION_SCHEMA.COLUMNS WHERE [TABLE_SCHEMA] = 'dbo' AND [TABLE_NAME] = ${MODULE_TABLES[module].table}`,
+    );
+    return new Set([...rows.map((r) => r.name.toLowerCase()), 'customfields']);
 }
 
 /** Number of the module's records (deleted ones included) holding a value under `key`. */

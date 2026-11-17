@@ -258,7 +258,7 @@ describe('configuredRequiredIssues (fields another form collects, e.g. Convert L
 });
 
 describe('checkModulePayload: custom field keys', () => {
-    it('keeps values of configured cf_ fields and drops anything else', () => {
+    it('keeps values of configured fields and drops anything else', () => {
         const config = configWith([field({ fieldKey: 'cf_po_number', label: 'PO Number' })]);
         assert.deepEqual(checkModulePayload(config, {}, { cf_po_number: 'PO-1', poNumber: 'x', stray: 'y' }), { cf_po_number: 'PO-1' });
     });

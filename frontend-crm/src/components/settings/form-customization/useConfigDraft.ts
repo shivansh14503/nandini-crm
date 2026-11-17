@@ -91,6 +91,28 @@ const fail = (message: string): never => {
 
 const moduleLabel = (m: string) => CRM_MODULE_LABELS[m as CrmModuleKey] ?? m;
 
+const clash = (label: string, what: string): never => fail(`"${label}" clashes with ${what}. Choose a different name for one of them.`);
+
+/**
+ * The key a field added in the builder gets from `label` (same rule as the API: no prefix, no numbering). A name
+ * whose key another field of the module has is refused, saying which, so the admin picks the names. (Record columns
+ * only the API knows: it refuses those on save.)
+ */
+function fieldKeyFor(s: FormConfigsPayload, module: CrmModuleKey, label: string, selfId?: string): string {
+    const key = customFieldKeyFor(label);
+    const other = (s.fieldsByModule[module] ?? []).find((f) => f.id !== selfId && f.fieldKey.toLowerCase() === key);
+    if (other) clash(label, `${other.isSystem ? 'the built-in field' : 'the field'} "${other.label}" on ${moduleLabel(module)}`);
+    return key;
+}
+
+/** The key a dropdown added in the builder gets from `label`; refused (saying which) when another dropdown has it. */
+function dropdownKeyFor(s: FormConfigsPayload, label: string, selfKey?: string): string {
+    const key = categoryKeyFor(label);
+    const other = s.categories.find((c) => c.key !== selfKey && c.key.toLowerCase() === key);
+    if (other) clash(label, `${other.isSystem ? 'the built-in dropdown' : 'the dropdown'} "${other.label}"`);
+    return key;
+}
+
 /** Fields of a tab that are not deleted (archived ones included). */
 const liveFieldsOn = (s: FormConfigsPayload, module: CrmModuleKey, tabKey: string) =>
     (s.fieldsByModule[module] ?? []).filter((f) => f.tabKey === tabKey && !f.isDeleted);
@@ -301,8 +323,7 @@ export function useConfigDraft(base: FormConfigsPayload | undefined, refetch: ()
         // The key follows the label (the API derives it the same way when the field is saved).
         let fieldKey = created.fieldKey;
         if (payload.label !== undefined && payload.label !== created.payload.label) {
-            const taken = new Set((current().fieldsByModule[created.payload.module] ?? []).filter((f) => f.id !== fieldId).map((f) => f.fieldKey));
-            fieldKey = uniqueKey(customFieldKeyFor(payload.label), (k) => taken.has(k));
+            fieldKey = fieldKeyFor(current(), created.payload.module, payload.label, fieldId);
         }
         if (payload.label !== undefined) next.label = payload.label;
         if (payload.fieldType !== undefined) next.fieldType = payload.fieldType;
@@ -323,8 +344,7 @@ export function useConfigDraft(base: FormConfigsPayload | undefined, refetch: ()
     const actions = useMemo<ConfigDraftActions>(
         () => ({
             createCategory(payload) {
-                const s = current();
-                const key = uniqueKey(categoryKeyFor(payload.label), (k) => Boolean(findCategoryByKey(s, k)));
+                const key = dropdownKeyFor(current(), payload.label);
                 const options = [...new Set(payload.options ?? [])];
                 push({
                     kind: 'createCategory',
@@ -400,11 +420,11 @@ export function useConfigDraft(base: FormConfigsPayload | undefined, refetch: ()
 
             createField(payload) {
                 const s = current();
-                const taken = new Set((s.fieldsByModule[payload.module] ?? []).map((f) => f.fieldKey));
-                // Predicts the key the API derives from the label (the draft refers to the field by it until saved).
-                const fieldKey = uniqueKey(customFieldKeyFor(payload.label), (k) => taken.has(k));
+                // The key the API derives from the label (the draft refers to the field by it until saved).
+                const fieldKey = fieldKeyFor(s, payload.module, payload.label);
                 const newOptions = payload.dropdownCategoryKey ? [] : [...new Set(payload.newOptions ?? [])];
-                const categoryKey = newOptions.length ? uniqueKey(categoryKeyFor(payload.label), (k) => Boolean(findCategoryByKey(s, k))) : undefined;
+                // A dropdown created with the field takes the field's name.
+                const categoryKey = newOptions.length ? dropdownKeyFor(s, payload.label) : undefined;
                 const id = newTempId('field');
                 // Custom tabs are stored through their fields: each one carries the tab's name.
                 const tabLabel = payload.tabLabel ?? tabLabelOf(s, payload.module, payload.tabKey);
@@ -430,6 +450,10 @@ export function useConfigDraft(base: FormConfigsPayload | undefined, refetch: ()
                 if (field.isCoreLocked && payload.isRequired === false) fail(`${field.label} is a core field and must stay required.`);
                 if (field.isCoreLocked && payload.isVisibleInForm === false) fail(`${field.label} is a core field and cannot be hidden.`);
                 if (field.isCoreLocked && payload.isActive === false) fail(`${field.label} is a core field and cannot be archived.`);
+                // A renamed builder-added field takes a key from its new label: refused when another field has it.
+                if (!field.isSystem && payload.label !== undefined && payload.label !== field.label) {
+                    fieldKeyFor(s, field.module, payload.label, field.id);
+                }
                 if (payload.fieldType !== undefined && payload.fieldType !== field.fieldType) {
                     if (field.isSystem) fail(`${field.label} is a built-in field; its type can't be changed.`);
                     if (field.fieldType !== 'select' && field.fieldType !== 'multiselect') fail('Only select / multi-select fields can switch between the two.');
@@ -482,8 +506,11 @@ export function useConfigDraft(base: FormConfigsPayload | undefined, refetch: ()
             },
 
             updateCategory(categoryKey, payload) {
-                if (!findCategoryByKey(current(), categoryKey)) fail('Dropdown not found.');
+                const s = current();
+                const category = findCategoryByKey(s, categoryKey) ?? fail('Dropdown not found.');
                 if (payload.label !== undefined && !payload.label.trim()) fail('Dropdown name is required.');
+                // A renamed builder-added dropdown takes a key from its new name: refused when another dropdown has it.
+                if (payload.label !== undefined && !category.isSystem) dropdownKeyFor(s, payload.label, categoryKey);
                 stageCategoryUpdate(categoryKey, payload);
             },
 

@@ -84,7 +84,7 @@ export async function ensureFormConfigsSeeded(): Promise<void> {
         // Insert and placement succeed or fail together, so a failed start-up retries both next time.
         await prisma.$transaction(
             async (tx) => {
-                // A custom field could only clash on (module, fieldKey) if it lacked the cf_ prefix, which the API prevents.
+                // Fields added in the builder never take a built-in field's key (the API reserves them), so no clash on (module, fieldKey).
                 await tx.formFieldDefinition.createMany({
                     data: toInsert.map((f) => ({
                 module: f.module,

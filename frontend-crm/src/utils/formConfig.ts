@@ -167,7 +167,7 @@ export function validateCustomValue(field: FormFieldDefinitionDto, value: unknow
 }
 
 export interface ConfigValidationIssue {
-    /** RHF path, e.g. `customFields.cf_region` or `designation`. */
+    /** RHF path, e.g. `customFields.region` or `designation`. */
     path: string;
     message: string;
 }

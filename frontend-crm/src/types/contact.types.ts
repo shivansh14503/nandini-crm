@@ -1,7 +1,7 @@
 import type { CorporateEmail } from './organization.types';
 
 export interface ContactFormData {
-    /** Admin-defined custom field values, keyed by FormFieldDefinition.fieldKey (cf_…). */
+    /** Admin-defined custom field values, keyed by FormFieldDefinition.fieldKey. */
     customFields?: Record<string, unknown>;
 
     name: string;

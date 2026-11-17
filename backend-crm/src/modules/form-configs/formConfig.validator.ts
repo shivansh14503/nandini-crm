@@ -50,7 +50,7 @@ export const formConfigQuerySchema = z.object({ includeInactive: booleanQuery })
 // ── Dropdown categories ──────────────────────────────────────────────────────
 
 export const createCategorySchema = z.object({
-    /** The dropdown's key is derived from it (`custom_` + snake_case) and follows renames. */
+    /** The dropdown's key is derived from it (snake_case) and follows renames. */
     label: label('Label', 120),
     module: z.enum(CATEGORY_MODULES).default('shared'),
     description: optionalTrimmed(300),

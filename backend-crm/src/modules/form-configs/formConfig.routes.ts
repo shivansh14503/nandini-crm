@@ -24,7 +24,7 @@ export const FORM_CONFIG_ADMIN_ROLES = ['Admin', 'Administrator', 'Super Admin']
  *   PUT    /categories/:categoryKey/options/reorder   { optionIds }
  *   PATCH  /options/:optionId                         { label?, meta?, isActive?, isDefault? }  (a rename renames the stored value; records and filters follow; system options: no rename / archive)
  *   DELETE /options/:optionId                         permanent delete; blocked for system options (archive = PATCH isActive:false)
- *   POST   /fields                                    custom field (key derived from the label: cf_<label>)
+ *   POST   /fields                                    field added in the builder (key = its label in snake_case, e.g. po_number)
  *   PATCH  /fields/:fieldId                           (core-locked: can't hide / un-require; a custom field's key follows its label)
  *   DELETE /fields/:fieldId                           permanent delete of a custom field; blocked for built-in fields
  *   PUT    /modules/:module/fields/reorder            { fieldIds }

@@ -103,7 +103,7 @@ export interface CorporateEmail {
 }
 
 export interface OrganizationFormData {
-    /** Admin-defined custom field values, keyed by FormFieldDefinition.fieldKey (cf_…). */
+    /** Admin-defined custom field values, keyed by FormFieldDefinition.fieldKey. */
     customFields?: Record<string, unknown>;
 
     organizationName: string;
