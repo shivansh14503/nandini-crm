@@ -11,6 +11,15 @@ const DRAG_THRESHOLD = 5;
 /** Pixels per animation frame while an arrow button is held. */
 const HOLD_SPEED = 14;
 
+/** Nearest vertically scrollable ancestor, else the document's scrolling element. */
+function findScrollParent(el: HTMLElement): HTMLElement | null {
+    for (let node = el.parentElement; node && node !== document.body; node = node.parentElement) {
+        const { overflowY } = getComputedStyle(node);
+        if ((overflowY === 'auto' || overflowY === 'scroll') && node.scrollHeight > node.clientHeight) return node;
+    }
+    return (document.scrollingElement as HTMLElement | null) ?? document.documentElement;
+}
+
 export interface TableScrollState {
     /** Ref for the scrolling container. */
     setContainer: (el: HTMLDivElement | null) => void;
@@ -56,6 +65,29 @@ export function useTableScroll(): TableScrollState {
             observer.disconnect();
         };
     }, [el, update]);
+
+    // Wheel hand-off: once the table is at its top / bottom, keep scrolling the page. Browsers "latch" a wheel
+    // gesture to the element it started in, so without this the page only moves after the cursor leaves the table.
+    useEffect(() => {
+        if (!el) return;
+        const onWheel = (e: WheelEvent) => {
+            if (e.ctrlKey || e.shiftKey || Math.abs(e.deltaY) <= Math.abs(e.deltaX)) return;
+            const dy = e.deltaY * (e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? el.clientHeight : 1);
+            const atTop = el.scrollTop <= 0;
+            const atBottom = el.scrollTop + el.clientHeight >= el.scrollHeight - 1;
+            if ((dy < 0 && !atTop) || (dy > 0 && !atBottom)) return; // the table still scrolls itself
+
+            const page = findScrollParent(el);
+            if (!page) return;
+            const pageCanMove =
+                dy < 0 ? page.scrollTop > 0 : page.scrollTop + page.clientHeight < page.scrollHeight - 1;
+            if (!pageCanMove) return;
+            e.preventDefault();
+            page.scrollBy({ top: dy, behavior: 'instant' as ScrollBehavior });
+        };
+        el.addEventListener('wheel', onWheel, { passive: false });
+        return () => el.removeEventListener('wheel', onWheel);
+    }, [el]);
 
     const stopHold = useCallback(() => {
         if (holdFrame.current !== null) cancelAnimationFrame(holdFrame.current);
