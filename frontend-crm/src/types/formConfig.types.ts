@@ -131,6 +131,8 @@ export interface DropdownCategoryDto {
     isSystem: boolean;
     /** CRM screens read it directly by key (lead conversion, quick create, quotations). */
     appRequired: boolean;
+    /** Its options are fixed (the API only accepts these values, e.g. Yes / No): no options can be added. */
+    fixedOptions: boolean;
     /** Why it can't be deleted, or null when an admin may delete it (built-in or not). */
     lockReason: string | null;
     options: DropdownOptionDto[];

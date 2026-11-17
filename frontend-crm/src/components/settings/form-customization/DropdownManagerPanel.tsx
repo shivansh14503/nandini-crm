@@ -20,11 +20,13 @@ import {
 } from '@mui/material';
 import AddRoundedIcon from '@mui/icons-material/AddRounded';
 import LockOutlinedIcon from '@mui/icons-material/LockOutlined';
+import LocationCityOutlinedIcon from '@mui/icons-material/LocationCityOutlined';
 import ListAltOutlinedIcon from '@mui/icons-material/ListAltOutlined';
 import SearchRoundedIcon from '@mui/icons-material/SearchRounded';
 import DeleteOutlineOutlinedIcon from '@mui/icons-material/DeleteOutlineOutlined';
 import EditOutlinedIcon from '@mui/icons-material/EditOutlined';
 import { DefaultBookmarkOffIcon, DefaultBookmarkOnIcon } from './defaultOptionIcons';
+import { CityManagerPanel } from './CityManagerPanel';
 import { EditCategoryDialog } from './EditCategoryDialog';
 import { useConfigDraftActions, useHasUnsavedChanges } from './useConfigDraft';
 import { CRM_MODULE_LABELS, type CrmModuleKey, type DropdownCategoryDto, type DropdownOptionDto, type FormConfigsPayload } from '@/types/formConfig.types';
@@ -64,6 +66,9 @@ export interface DropdownManagerPanelProps {
 
 const moduleLabel = (m: string) => CRM_MODULE_LABELS[m as CrmModuleKey] ?? m;
 
+/** Forms with an address block: their Dropdowns list also offers the city list (Address Cities). */
+const ADDRESS_MODULES: readonly CrmModuleKey[] = ['leads', 'quotations', 'organizations', 'partner-companies'];
+
 /**
  * Dropdowns listed under a module: those a field of the module uses, plus not-yet-placed ones that are this
  * module's or shared. A dropdown whose only field on this form was deleted therefore leaves this list while
@@ -80,7 +85,13 @@ export function DropdownManagerPanel({ module, configs, canEdit, notify }: Dropd
     const categories = useMemo(() => categoriesForModule(configs, module), [configs, module]);
     // Selected by key, and by id as well: renaming an admin-created dropdown renames its key when saved.
     const [selection, setSelection] = useState<{ key?: string; id?: string }>({ key: categories[0]?.key, id: categories[0]?.id });
-    const setSelectedKey = (key: string) => setSelection({ key, id: categories.find((c) => c.key === key)?.id });
+    const setSelectedKey = (key: string) => {
+        setCitiesSelected(false);
+        setSelection({ key, id: categories.find((c) => c.key === key)?.id });
+    };
+    const hasAddress = ADDRESS_MODULES.includes(module);
+    const [citiesSelected, setCitiesSelected] = useState(false);
+    const showCities = hasAddress && citiesSelected;
     const [search, setSearch] = useState('');
     const [createOpen, setCreateOpen] = useState(false);
     const [deleteTarget, setDeleteTarget] = useState<DropdownCategoryDto | null>(null);
@@ -124,9 +135,42 @@ export function DropdownManagerPanel({ module, configs, canEdit, notify }: Dropd
                     />
                 </Box>
                 <Box sx={{ maxHeight: { md: 560 }, overflowY: 'auto', p: 0.75 }}>
+                    {hasAddress && (
+                        <Box
+                            role="button"
+                            tabIndex={0}
+                            onClick={() => setCitiesSelected(true)}
+                            onKeyDown={(e) => e.key === 'Enter' && setCitiesSelected(true)}
+                            sx={{
+                                px: 1.25,
+                                py: 1,
+                                mb: 0.75,
+                                borderRadius: '8px',
+                                cursor: 'pointer',
+                                border: `1px solid ${showCities ? 'var(--mui-palette-primary-softBorder)' : 'var(--mui-palette-border-light)'}`,
+                                backgroundColor: showCities ? 'var(--mui-palette-primary-soft)' : 'transparent',
+                                '&:hover': { backgroundColor: showCities ? 'var(--mui-palette-primary-soft)' : 'var(--mui-palette-background-subtle)' },
+                                outline: 'none',
+                                '&:focus-visible': { boxShadow: '0 0 0 2px var(--crm-blue-200)' },
+                            }}
+                        >
+                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+                                <LocationCityOutlinedIcon sx={{ fontSize: 17, color: showCities ? 'var(--crm-text-blue-600)' : 'var(--mui-palette-text-muted)' }} />
+                                <Typography
+                                    sx={{ fontSize: '0.84rem', fontWeight: showCities ? 700 : 600, color: showCities ? 'var(--crm-text-blue-900)' : 'var(--mui-palette-text-primary)' }}
+                                    noWrap
+                                >
+                                    Address Cities
+                                </Typography>
+                            </Box>
+                            <Typography sx={{ fontSize: '0.72rem', color: 'var(--mui-palette-text-secondary)', mt: 0.25 }}>
+                                City dropdown of every address form
+                            </Typography>
+                        </Box>
+                    )}
                     {visible.length === 0 && <EmptyState title="No dropdowns found" />}
                     {visible.map((c) => {
-                        const active = c.key === activeKey;
+                        const active = !showCities && c.key === activeKey;
                         const activeCount = c.options.filter((o) => o.isActive).length;
                         // A module-owned dropdown placed on another module's form becomes shared between them.
                         const modules = new Set<string>(c.usedBy.map((u) => u.module));
@@ -176,7 +220,9 @@ export function DropdownManagerPanel({ module, configs, canEdit, notify }: Dropd
             </Box>
 
             {/* ── Option editor ── */}
-            {selected ? (
+            {showCities ? (
+                <CityManagerPanel canEdit={canEdit} notify={notify} />
+            ) : selected ? (
                 <CategoryEditor
                     key={selected.key}
                     category={selected}
@@ -412,7 +458,15 @@ function CategoryEditor({
                 </Box>
             </Box>
 
-            {canEdit && (
+            {canEdit && category.fixedOptions && (
+                <Box sx={{ px: 2, py: 1.25, borderBottom: '1px solid var(--mui-palette-border-light)', display: 'flex', gap: 1, alignItems: 'center' }}>
+                    <LockOutlinedIcon sx={{ fontSize: 16, color: 'var(--mui-palette-text-muted)' }} />
+                    <Typography sx={{ fontSize: '0.78rem', color: 'var(--mui-palette-text-secondary)' }}>
+                        Fixed options: records only accept these values. You can reorder them and choose the default.
+                    </Typography>
+                </Box>
+            )}
+            {canEdit && !category.fixedOptions && (
                 <Box sx={{ p: 2, borderBottom: '1px solid var(--mui-palette-border-light)', display: 'flex', gap: 1, alignItems: 'center' }}>
                     <TextField
                         size="small"

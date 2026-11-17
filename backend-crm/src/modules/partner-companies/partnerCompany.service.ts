@@ -12,6 +12,7 @@ import { asPayload, checkModulePayload, loadModuleFieldConfig, validateModulePay
 import { acquireLocks, lockRecords, runInTransaction, softDeleteData, type BulkDeleteResult } from '../shared/transactions.js';
 import { assertTaxIdsUnique } from '../shared/taxIdentifiers.js';
 import { toPartnerCompanyData, toPartnerCompanyDto, type PartnerCompanyDto } from './partnerCompany.mapper.js';
+import { resolveAddressPlaces } from '../cities/cityAddresses.js';
 import {
     PARTNER_COMPANY_SORT_FIELDS,
     partnerCompanyInputSchema,
@@ -60,7 +61,7 @@ export async function createPartnerCompanyRecord(tx: TransactionClient, input: P
     const emails = normalizeEmails(input.emailAddresses);
     const row = await tx.partnerCompany.create({
         data: {
-            ...toPartnerCompanyData(input, emails, nullable(input.assignedTo)),
+            ...(await resolveAddressPlaces(tx, 'partnerCompany', toPartnerCompanyData(input, emails, nullable(input.assignedTo)))),
             createdBy: user.username,
         },
     });
@@ -138,7 +139,7 @@ export const partnerCompanyService = {
             const row = await tx.partnerCompany.update({
                 where: { id },
                 data: {
-                    ...toPartnerCompanyData(input, normalizeEmails(input.emailAddresses), nullable(input.assignedTo)),
+                    ...(await resolveAddressPlaces(tx, 'partnerCompany', toPartnerCompanyData(input, normalizeEmails(input.emailAddresses), nullable(input.assignedTo)))),
                     updatedBy: user.username,
                 },
             });

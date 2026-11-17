@@ -130,6 +130,8 @@ model Organization {
   // Billing address (billingStreet mirrors billingAddress for older records)
   billingAddress    String? @db.NVarChar(250)
   billingStreet     String? @db.NVarChar(250)
+  /// City master row picked in the form; `billingCity` is its name, written through when an admin renames it.
+  billingCityId     Int?
   billingCity       String? @db.NVarChar(80)
   billingState      String? @db.NVarChar(80)
   billingPostalCode String? @db.NVarChar(12)
@@ -139,6 +141,7 @@ model Organization {
   // Shipping address
   shippingAddress        String? @db.NVarChar(250)
   shippingStreet         String? @db.NVarChar(250)
+  shippingCityId         Int?
   shippingCity           String? @db.NVarChar(80)
   shippingState          String? @db.NVarChar(80)
   shippingPostalCode     String? @db.NVarChar(12)
@@ -183,7 +186,11 @@ model Organization {
   quotations         Quotation[]
   tickets            Ticket[]
   convertedLeads     Lead[]         @relation("LeadConvertedOrganization")
+  billingCityRef     City?          @relation("OrganizationBillingCity", fields: [billingCityId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  shippingCityRef    City?          @relation("OrganizationShippingCity", fields: [shippingCityId], references: [id], onDelete: NoAction, onUpdate: NoAction)
 
+  @@index([billingCityId])
+  @@index([shippingCityId])
   @@index([organizationName])
   @@index([accountStatus])
   @@index([assignedUser])
@@ -303,6 +310,8 @@ model Lead {
 
   // Primary address
   primaryAddress    String? @db.NVarChar(250)
+  /// City master row; `primaryCity` is its name (written through on rename). Same for `otherCityId`.
+  primaryCityId     Int?
   primaryCity       String? @db.NVarChar(80)
   primaryState      String? @db.NVarChar(80)
   primaryPostalCode String? @db.NVarChar(12)
@@ -311,6 +320,7 @@ model Lead {
 
   // Other address
   otherAddress        String? @db.NVarChar(250)
+  otherCityId         Int?
   otherCity           String? @db.NVarChar(80)
   otherState          String? @db.NVarChar(80)
   otherPostalCode     String? @db.NVarChar(12)
@@ -339,7 +349,11 @@ model Lead {
   convertedOrganization Organization? @relation("LeadConvertedOrganization", fields: [convertedOrganizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   convertedContact      Contact?      @relation("LeadConvertedContact", fields: [convertedContactId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   convertedOpportunity  Opportunity?  @relation("LeadConvertedOpportunity", fields: [convertedOpportunityId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  primaryCityRef        City?         @relation("LeadPrimaryCity", fields: [primaryCityId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  otherCityRef          City?         @relation("LeadOtherCity", fields: [otherCityId], references: [id], onDelete: NoAction, onUpdate: NoAction)
 
+  @@index([primaryCityId])
+  @@index([otherCityId])
   @@index([status])
   @@index([assignedTo])
   @@index([mobile])
@@ -531,12 +545,15 @@ model Quotation {
   contactEmail     String? @db.NVarChar(120)
 
   billingAddress    String @db.NVarChar(250)
+  /// City master row; `billingCity` is its name (written through on rename). Same for `shippingCityId`.
+  billingCityId     Int?
   billingCity       String @db.NVarChar(80)
   billingState      String @db.NVarChar(80)
   billingPostalCode String @db.NVarChar(12)
   billingCountry    String @db.NVarChar(80)
 
   shippingAddress        String? @db.NVarChar(250)
+  shippingCityId         Int?
   shippingCity           String? @db.NVarChar(80)
   shippingState          String? @db.NVarChar(80)
   shippingPostalCode     String? @db.NVarChar(12)
@@ -560,11 +577,15 @@ model Quotation {
   isDeleted Boolean   @default(false)
   deletedAt DateTime?
 
-  opportunity  Opportunity?        @relation(fields: [opportunityId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  organization Organization?       @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  contact      Contact?            @relation(fields: [contactId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  lineItems    QuotationLineItem[]
+  opportunity     Opportunity?        @relation(fields: [opportunityId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  organization    Organization?       @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  contact         Contact?            @relation(fields: [contactId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  lineItems       QuotationLineItem[]
+  billingCityRef  City?               @relation("QuotationBillingCity", fields: [billingCityId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  shippingCityRef City?               @relation("QuotationShippingCity", fields: [shippingCityId], references: [id], onDelete: NoAction, onUpdate: NoAction)
 
+  @@index([billingCityId])
+  @@index([shippingCityId])
   @@index([opportunityId])
   @@index([organizationId])
   @@index([quoteStage])
@@ -707,6 +728,8 @@ model PartnerCompany {
   // Billing address (`city` / `billingCountry` above double as billing city / country)
   billingAddress    String? @db.NVarChar(250)
   billingStreet     String? @db.NVarChar(250)
+  /// City master row; `billingCity` (and `city`) is its name, written through on rename. Same for `shippingCityId`.
+  billingCityId     Int?
   billingCity       String? @db.NVarChar(80)
   billingState      String? @db.NVarChar(80)
   billingPostalCode String? @db.NVarChar(12)
@@ -714,6 +737,7 @@ model PartnerCompany {
   // Shipping address
   shippingAddress        String? @db.NVarChar(250)
   shippingStreet         String? @db.NVarChar(250)
+  shippingCityId         Int?
   shippingCity           String? @db.NVarChar(80)
   shippingState          String? @db.NVarChar(80)
   shippingPostalCode     String? @db.NVarChar(12)
@@ -736,8 +760,12 @@ model PartnerCompany {
   isDeleted Boolean   @default(false)
   deletedAt DateTime?
 
-  contacts PartnerCompanyContact[]
+  contacts        PartnerCompanyContact[]
+  billingCityRef  City?                   @relation("PartnerCompanyBillingCity", fields: [billingCityId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  shippingCityRef City?                   @relation("PartnerCompanyShippingCity", fields: [shippingCityId], references: [id], onDelete: NoAction, onUpdate: NoAction)
 
+  @@index([billingCityId])
+  @@index([shippingCityId])
   @@index([isDeleted, createdAt])
 }
 
@@ -783,10 +811,16 @@ model Subdivision {
   @@index([countryIso2])
 }
 
-/// City suggestions for address forms (seeded from seed-data/cities.csv.gz, built by scripts/buildCityMaster.ts).
-/// A lookup only: addresses keep the city as free text, so nothing references this table.
+/// The cities address forms offer (seeded from seed-data/cities.csv.gz, built by scripts/buildCityMaster.ts; admins
+/// add, rename and remove them). Addresses must pick one: they store its id plus a copy of its name.
 model City {
   id              Int     @id @default(autoincrement())
+  /// `country|subdivision|searchName` of the city-master row this came from; null for admin-added cities. Kept
+  /// through renames, so the seed only adds cities it hasn't loaded before and never re-adds a renamed one.
+  seedKey         String? @db.NVarChar(200)
+  /// Removed by an admin. Only seeded cities are kept hidden (so a reseed doesn't bring them back); admin-added ones
+  /// are deleted outright.
+  isHidden        Boolean @default(false)
   countryIso2     String  @db.NVarChar(2)
   /// ISO 3166-2 code; null when the source state couldn't be matched to a subdivision.
   subdivisionCode String? @db.NVarChar(10)
@@ -796,10 +830,20 @@ model City {
   /// Upstream population estimate (null when unknown); bigger cities are suggested first.
   population      Int?
 
-  country     Country     @relation(fields: [countryIso2], references: [iso2Code], onDelete: Cascade, onUpdate: NoAction)
+  country     Country      @relation(fields: [countryIso2], references: [iso2Code], onDelete: Cascade, onUpdate: NoAction)
   // NoAction: SQL Server rejects a second cascade path (Country → Subdivision → City); the seed deletes cities first.
   subdivision Subdivision? @relation(fields: [subdivisionCode], references: [subdivisionCode], onDelete: NoAction, onUpdate: NoAction)
 
+  organizationBillingAddresses    Organization[]   @relation("OrganizationBillingCity")
+  organizationShippingAddresses   Organization[]   @relation("OrganizationShippingCity")
+  leadPrimaryAddresses            Lead[]           @relation("LeadPrimaryCity")
+  leadOtherAddresses              Lead[]           @relation("LeadOtherCity")
+  quotationBillingAddresses       Quotation[]      @relation("QuotationBillingCity")
+  quotationShippingAddresses      Quotation[]      @relation("QuotationShippingCity")
+  partnerCompanyBillingAddresses  PartnerCompany[] @relation("PartnerCompanyBillingCity")
+  partnerCompanyShippingAddresses PartnerCompany[] @relation("PartnerCompanyShippingCity")
+
+  @@index([seedKey])
   @@index([countryIso2, searchName])
   @@index([subdivisionCode, searchName])
 }

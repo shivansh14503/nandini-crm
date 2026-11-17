@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { FormGrid, FormGridItem, RhfCheckbox, RhfChipGroup, RhfLookup, RhfSelect } from '@/components/forms';
+import { FormGrid, RhfCheckbox, RhfChipGroup, RhfLookup, RhfSelect } from '@/components/forms';
 import {
     CONTACT_DESIGNATIONS,
     CONTACT_DEPARTMENTS,
@@ -19,11 +19,8 @@ export function ContactAssignmentSection() {
             <RhfSelect<ContactFormData> name="designation" label="Designation" options={CONTACT_DESIGNATIONS} placeholder="Select Designation" />
             <RhfSelect<ContactFormData> name="department" label="Department" options={CONTACT_DEPARTMENTS} placeholder="Select Department" />
             <RhfLookup<ContactFormData> name="assignedTo" label="Assigned to" lookupType="user" required placeholder="Select assigned sales rep" />
-
             <RhfChipGroup<ContactFormData> name="communicationType" label="Communication Type" hint="Select preferred channels" options={COMMUNICATION_TYPES} />
-            <FormGridItem span="full">
-                <RhfCheckbox<ContactFormData> name="doNotCall" label="Do Not Call (DND)" />
-            </FormGridItem>
+            <RhfCheckbox<ContactFormData> name="doNotCall" label="Do Not Call (DND)" alignWithInputs />
         </FormGrid>
     );
 }

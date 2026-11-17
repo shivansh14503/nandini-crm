@@ -5,8 +5,10 @@
  *   • admin user (SEED_ADMIN_USERNAME / SEED_ADMIN_PASSWORD; a random password is generated and printed once
  *     when none is given); an existing admin's password is never changed
  *   • Nature of Call and partner masters (prisma/seed-data/masters.ts)
- *   • ISO 3166 address master (prisma/seed-data/CRM_Address_Master.xlsx), refreshed when the workbook changes
- *   • city master (prisma/seed-data/cities.csv.gz, built by `npm run build:city-master`), refreshed when it changes
+ *   • ISO 3166 address master (prisma/seed-data/CRM_Address_Master.xlsx): new countries / states added, names refreshed
+ *   • city master (prisma/seed-data/cities.csv.gz, built by `npm run build:city-master`): only cities not loaded
+ *     before are added; admin renames and removals are kept
+ *   • address city links: records whose city has no City id yet are linked to it (see linkAddressCities)
  *
  * Demo data (skipped in production unless SEED_DEMO_DATA=true; only into an empty CRM):
  *   • directory users, products, organizations, contacts, leads, opportunities, quotations and tickets from
@@ -34,13 +36,15 @@ import { createProductRecord } from '../src/modules/products/product.service.js'
 import { productInputSchema } from '../src/modules/products/product.validator.js';
 import { createQuotationRecord } from '../src/modules/quotations/quotation.service.js';
 import { quotationInputSchema } from '../src/modules/quotations/quotation.validator.js';
+import { linkAddressCities } from '../src/modules/cities/cityAddresses.js';
 import { runInTransaction } from '../src/modules/shared/transactions.js';
 import { createTicketRecord } from '../src/modules/tickets/ticket.service.js';
 import { ticketInputSchema } from '../src/modules/tickets/ticket.validator.js';
 import { hashPassword } from '../src/modules/auth/auth.service.js';
 import { cacheService } from '../src/services/cache.service.js';
 import type { AuthUser } from '../src/types/user.types.js';
-import { normalizePlaceName, parseCsvRecords, parsePopulation } from '../src/utils/cityMaster.js';
+import type { Prisma } from '../src/generated/prisma/client.js';
+import { cityMasterSeedKey, normalizePlaceName, parseCsvRecords, parsePopulation } from '../src/utils/cityMaster.js';
 import { parseStringArray, stringifyStringArray } from '../src/utils/mappers.js';
 import {
     NATURE_OF_CALLS,
@@ -168,70 +172,100 @@ async function seedAddressMaster(): Promise<void> {
     }
     const subdivisions = [...subdivisionsByCode.values()];
 
-    const [countryCount, subdivisionCount] = await Promise.all([prisma.country.count(), prisma.subdivision.count()]);
-    if (countryCount === countries.length && subdivisionCount === subdivisions.length && process.env.SEED_REFRESH_ADDRESS_MASTER !== 'true') {
-        log(`address master up to date (${countryCount} countries, ${subdivisionCount} subdivisions)`);
+    // Add-only (names refreshed): cities, and through them addresses, reference these rows, so none is ever deleted.
+    const [existingCountries, existingSubdivisions] = await Promise.all([
+        prisma.country.findMany({ select: { iso2Code: true, countryName: true } }),
+        prisma.subdivision.findMany({ select: { subdivisionCode: true, subdivisionName: true } }),
+    ]);
+    const countryNames = new Map(existingCountries.map((c) => [c.iso2Code, c.countryName]));
+    const subdivisionNames = new Map(existingSubdivisions.map((s) => [s.subdivisionCode, s.subdivisionName]));
+    const newCountries = countries.filter((c) => !countryNames.has(c.iso2Code));
+    const newSubdivisions = subdivisions.filter((s) => !subdivisionNames.has(s.subdivisionCode));
+    const renamedCountries = countries.filter((c) => countryNames.has(c.iso2Code) && countryNames.get(c.iso2Code) !== c.countryName);
+    const renamedSubdivisions = subdivisions.filter(
+        (s) => subdivisionNames.has(s.subdivisionCode) && subdivisionNames.get(s.subdivisionCode) !== s.subdivisionName,
+    );
+    if (newCountries.length + newSubdivisions.length + renamedCountries.length + renamedSubdivisions.length === 0) {
+        log(`address master up to date (${existingCountries.length} countries, ${existingSubdivisions.length} subdivisions)`);
         return;
     }
 
-    // Only City references these tables (addresses store ISO2 codes), so a full reload is safe; seedCityMaster
-    // reloads the cities right after.
     await prisma.$transaction(
         async (tx) => {
-            await tx.city.deleteMany();
-            await tx.subdivision.deleteMany();
-            await tx.country.deleteMany();
-            await tx.country.createMany({ data: countries });
-            for (let i = 0; i < subdivisions.length; i += INSERT_CHUNK) {
-                await tx.subdivision.createMany({ data: subdivisions.slice(i, i + INSERT_CHUNK) });
+            if (newCountries.length > 0) await tx.country.createMany({ data: newCountries });
+            for (let i = 0; i < newSubdivisions.length; i += INSERT_CHUNK) {
+                await tx.subdivision.createMany({ data: newSubdivisions.slice(i, i + INSERT_CHUNK) });
+            }
+            for (const c of renamedCountries) await tx.country.update({ where: { iso2Code: c.iso2Code }, data: { countryName: c.countryName } });
+            for (const s of renamedSubdivisions) {
+                await tx.subdivision.update({ where: { subdivisionCode: s.subdivisionCode }, data: { subdivisionName: s.subdivisionName } });
             }
         },
         { timeout: 120_000 },
     );
-    log(`address master loaded: ${countries.length} countries, ${subdivisions.length} subdivisions`);
+    log(
+        `address master: added ${newCountries.length} countries and ${newSubdivisions.length} subdivisions, ` +
+            `renamed ${renamedCountries.length + renamedSubdivisions.length}`,
+    );
 }
 
-/** SQL Server allows 2,100 parameters per statement; cities have 5 columns. */
-const CITY_INSERT_CHUNK = 400;
+/** SQL Server allows 2,100 parameters per statement; cities have 6 columns. */
+const CITY_INSERT_CHUNK = 300;
 
-/** Loads the city master; reloads only when the database doesn't match the file. Run after seedAddressMaster. */
+/**
+ * Adds the city-master rows the database hasn't loaded yet, matched by `seedKey`. Never deletes, renames or
+ * re-shows a city: addresses reference them, and admins rename and remove cities (a removed seeded city stays as a
+ * hidden row so it isn't added again). Run after seedAddressMaster.
+ */
 async function seedCityMaster(): Promise<void> {
     if (!fs.existsSync(CITY_MASTER)) {
         log(`city master skipped: ${CITY_MASTER} not found (build it with npm run build:city-master)`);
         return;
     }
-    const [countryCodes, subdivisionCodes] = await Promise.all([
+    const [countryCodes, subdivisionCodes, loadedKeys] = await Promise.all([
         prisma.country.findMany({ select: { iso2Code: true } }).then((rows) => new Set(rows.map((r) => r.iso2Code))),
         prisma.subdivision.findMany({ select: { subdivisionCode: true } }).then((rows) => new Set(rows.map((r) => r.subdivisionCode))),
+        prisma.city
+            .findMany({ where: { seedKey: { not: null } }, select: { seedKey: true } })
+            .then((rows) => new Set(rows.map((r) => r.seedKey as string))),
     ]);
-    const cities = parseCsvRecords(gunzipSync(fs.readFileSync(CITY_MASTER)).toString('utf8'))
-        .filter((row) => countryCodes.has(row.country_iso2) && row.city_name)
-        .map((row) => ({
-            countryIso2: row.country_iso2,
-            // A code the address workbook no longer has: keep the city, findable by country.
-            subdivisionCode: subdivisionCodes.has(row.subdivision_code) ? row.subdivision_code : null,
-            cityName: row.city_name,
-            searchName: normalizePlaceName(row.city_name).slice(0, 150),
-            population: parsePopulation(row.population),
-        }));
 
-    const cityCount = await prisma.city.count();
-    if (cityCount === cities.length && process.env.SEED_REFRESH_ADDRESS_MASTER !== 'true') {
-        log(`city master up to date (${cityCount} cities)`);
+    const seen = new Set<string>();
+    const missing: Prisma.CityCreateManyInput[] = [];
+    for (const row of parseCsvRecords(gunzipSync(fs.readFileSync(CITY_MASTER)).toString('utf8'))) {
+        if (!countryCodes.has(row.country_iso2) || !row.city_name) continue;
+        // A code the address workbook doesn't have: keep the city, findable by country.
+        const subdivisionCode = subdivisionCodes.has(row.subdivision_code) ? row.subdivision_code : null;
+        const searchName = normalizePlaceName(row.city_name).slice(0, 150);
+        const seedKey = cityMasterSeedKey(row.country_iso2, subdivisionCode, searchName);
+        // The same name twice in one state would be two identical dropdown entries: keep the first (biggest).
+        if (seen.has(seedKey)) continue;
+        seen.add(seedKey);
+        if (loadedKeys.has(seedKey)) continue;
+        missing.push({
+            seedKey,
+            countryIso2: row.country_iso2,
+            subdivisionCode,
+            cityName: row.city_name,
+            searchName,
+            population: parsePopulation(row.population),
+        });
+    }
+    if (missing.length === 0) {
+        log(`city master up to date (${loadedKeys.size} seeded cities)`);
         return;
     }
 
     // One transaction so the API never serves a half-loaded list.
     await prisma.$transaction(
         async (tx) => {
-            await tx.city.deleteMany();
-            for (let i = 0; i < cities.length; i += CITY_INSERT_CHUNK) {
-                await tx.city.createMany({ data: cities.slice(i, i + CITY_INSERT_CHUNK) });
+            for (let i = 0; i < missing.length; i += CITY_INSERT_CHUNK) {
+                await tx.city.createMany({ data: missing.slice(i, i + CITY_INSERT_CHUNK) });
             }
         },
         { timeout: 600_000, maxWait: 10_000 },
     );
-    log(`city master loaded: ${cities.length} cities`);
+    log(`city master: added ${missing.length} cities`);
 }
 
 // ── Demo data ────────────────────────────────────────────────────────────────
@@ -427,6 +461,9 @@ async function main(): Promise<void> {
     await seedCityMaster();
     await seedDemoData(admin);
     await syncOrganizationProductCompanies();
+    // Partner masters are written straight to the table, and older databases have city names without ids.
+    const cityLinks = await linkAddressCities();
+    log(`address cities: linked ${cityLinks.linked}, ${cityLinks.unmatched} not in the city list (left as they are)`);
     await invalidateCaches();
     log('done');
 }

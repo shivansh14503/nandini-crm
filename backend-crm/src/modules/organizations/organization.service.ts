@@ -29,6 +29,7 @@ import { codeSearchPrefix, gstSearchPrefix } from '../shared/searchTerms.js';
 import type { PrefetchedLookups } from '../shared/prefetch.js';
 import { acquireLocks, lockRecords, runInTransaction, softDeleteData, type BulkDeleteResult } from '../shared/transactions.js';
 import { toOrganizationDto, type OrganizationDto, type OrganizationRow } from './organization.mapper.js';
+import { resolveAddressPlaces } from '../cities/cityAddresses.js';
 import {
     ORGANIZATION_SORT_FIELDS,
     bulkStatusSchema,
@@ -371,11 +372,11 @@ export async function createOrganizationRecord(
         (await assertAssigneeValid(tx, input.assignedUser, { path: 'assignedUser', activeUsernames: lookups.activeUsernames })) ?? user.username;
     const row = await tx.organization.create({
         data: {
-            ...toOrganizationData(input, {
+            ...(await resolveAddressPlaces(tx, 'organization', toOrganizationData(input, {
                 parentOrganizationId: await resolveParentId(tx, input.memberOfParentCorp),
                 verification: resolveVerification(input, user),
                 assignedUser,
-            }),
+            }))),
             accountCode,
             createdBy: user.username,
         },
@@ -561,11 +562,11 @@ export const organizationService = {
             await tx.organization.update({
                 where: { id },
                 data: {
-                    ...toOrganizationData(input, {
+                    ...(await resolveAddressPlaces(tx, 'organization', toOrganizationData(input, {
                         parentOrganizationId: await resolveParentId(tx, input.memberOfParentCorp, id),
                         verification: resolveVerification(input, user, existing),
                         assignedUser: await assertAssigneeValid(tx, input.assignedUser, { previous: existing.assignedUser, path: 'assignedUser' }),
-                    }),
+                    }))),
                     updatedBy: user.username,
                 },
             });

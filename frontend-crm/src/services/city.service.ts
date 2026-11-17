@@ -1,8 +1,9 @@
 import type { ApiResponse } from '../types/api.types';
 import { apiClient } from './apiClient';
 
-/** One city suggestion (`GET /api/lookups/cities`). */
+/** One city of the list address forms pick from (`GET /api/lookups/cities`). */
 export interface CitySuggestion {
+    id: number;
     cityName: string;
     /** ISO 3166-2 code of the city's state ('' when unknown). */
     subdivisionCode: string;

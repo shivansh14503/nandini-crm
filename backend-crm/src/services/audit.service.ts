@@ -19,7 +19,8 @@ export type AuditEntityType =
     | 'PdfTemplate'
     | 'PdfAsset'
     | 'PdfSavedItem'
-    | 'DocumentSeries';
+    | 'DocumentSeries'
+    | 'City';
 
 export type AuditAction =
     | 'CREATE'

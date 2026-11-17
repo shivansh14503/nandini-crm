@@ -103,8 +103,9 @@ export const citiesQuerySchema = z.object({
 /** Biggest cities first (SQL Server sorts NULL populations last in DESC), then alphabetically. */
 const BY_SIZE_THEN_NAME: Prisma.CityOrderByWithRelationInput[] = [{ population: 'desc' }, { searchName: 'asc' }];
 
-/** One city suggestion for the address forms. */
+/** One city of the list address forms pick from. */
 export interface CityLookupDto {
+    id: number;
     cityName: string;
     /** ISO 3166-2 code of the city's state ('' when unknown), so a pick can fill in an empty state. */
     subdivisionCode: string;
@@ -309,7 +310,7 @@ export const lookupService = {
     },
 
     /**
-     * City suggestions for a country (and optionally a state), diacritic/case-insensitive: names starting with the
+     * The cities address forms offer for a country (and optionally a state), diacritic/case-insensitive: names starting with the
      * search come first, then names containing it, each biggest first. Without a search, a state's biggest cities
      * (cached); a country-wide list without a search is empty.
      */
@@ -318,10 +319,11 @@ export const lookupService = {
         const term = normalizePlaceName(search);
         if (!term && !state) return [];
 
-        const scope: Prisma.CityWhereInput = state ? { subdivisionCode: state } : { countryIso2: country };
-        const select = { cityName: true, subdivisionCode: true } as const;
-        const toDto = (rows: { cityName: string; subdivisionCode: string | null }[]) =>
-            rows.map((c) => ({ cityName: c.cityName, subdivisionCode: c.subdivisionCode ?? '' }));
+        // Cities an admin removed stay in the table (hidden) but are never offered.
+        const scope: Prisma.CityWhereInput = { isHidden: false, ...(state ? { subdivisionCode: state } : { countryIso2: country }) };
+        const select = { id: true, cityName: true, subdivisionCode: true } as const;
+        const toDto = (rows: { id: number; cityName: string; subdivisionCode: string | null }[]) =>
+            rows.map((c) => ({ id: c.id, cityName: c.cityName, subdivisionCode: c.subdivisionCode ?? '' }));
 
         if (!term) {
             return cacheService.getOrSet(`${CACHE_KEYS.addressMaster}:cities:${state}:${limit}`, ADDRESS_MASTER_TTL_SECONDS, async () =>

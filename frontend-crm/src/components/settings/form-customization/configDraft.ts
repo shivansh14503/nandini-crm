@@ -102,6 +102,7 @@ function newCategory(key: string, label: string, module: DropdownCategoryDto['mo
         description,
         isSystem: false,
         appRequired: false,
+        fixedOptions: false,
         lockReason: null,
         usedBy: [],
         options: values.map((value, i) => ({

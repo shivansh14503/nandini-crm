@@ -144,7 +144,7 @@ export function DynamicFormField({ field, required, applyDefault = true }: Dynam
                 );
             }
             case 'checkbox':
-                return <RhfCheckbox name={name} label={common.required ? `${field.label} *` : field.label} />;
+                return <RhfCheckbox name={name} label={common.required ? `${field.label} *` : field.label} alignWithInputs />;
             case 'uppercase':
                 return <RhfUppercaseField {...common} placeholder={placeholder} fieldSize={fieldSize} maxLength={50} />;
             case 'pincode':

@@ -17,6 +17,7 @@ import { assertNotInPast, type PastCheck } from '../../validators/notInPast.js';
 import { codeSearchPrefix } from '../shared/searchTerms.js';
 import { lockRecords, runInTransaction, softDeleteData, type BulkDeleteResult } from '../shared/transactions.js';
 import { toQuotationData, toQuotationDto, type QuotationDto, type QuotationLinks } from './quotation.mapper.js';
+import { resolveAddressPlaces } from '../cities/cityAddresses.js';
 import {
     QUOTATION_ALIAS_PAIRS,
     QUOTATION_SORT_FIELDS,
@@ -119,7 +120,7 @@ export async function createQuotationRecord(
     const assignedTo = (await assertAssigneeValid(tx, input.assignedTo)) ?? user.username;
     const links = await resolveLinks(tx, input);
     const row = await tx.quotation.create({
-        data: { ...toQuotationData({ ...input, assignedTo }, links, computed.totals), quotationCode, createdBy: user.username },
+        data: { ...(await resolveAddressPlaces(tx, 'quotation', toQuotationData({ ...input, assignedTo }, links, computed.totals))), quotationCode, createdBy: user.username },
     });
     await replaceLineItems(tx, row.id, input, computed);
     const opportunityAdvanced = links.opportunityId ? await advanceOpportunityStage(tx, links.opportunityId, user) : false;
@@ -208,7 +209,7 @@ export const quotationService = {
             const assignedTo = (await assertAssigneeValid(tx, input.assignedTo, { previous: existing.assignedTo })) ?? existing.assignedTo;
             await tx.quotation.update({
                 where: { id },
-                data: { ...toQuotationData({ ...input, assignedTo }, links, computed.totals), updatedBy: user.username },
+                data: { ...(await resolveAddressPlaces(tx, 'quotation', toQuotationData({ ...input, assignedTo }, links, computed.totals))), updatedBy: user.username },
             });
             if ('lineItems' in patch) await replaceLineItems(tx, id, input, computed);
 

@@ -119,6 +119,18 @@ export async function ensureFormConfigsSeeded(): Promise<void> {
         changed += toInsert.length;
     }
 
+    // Built-in fields that a release gave a default dropdown (e.g. Left Job): link the existing rows to it. Admins
+    // can't change a built-in field's list, so an unlinked one only ever predates its list; a list the admin
+    // deleted is not live and stays unlinked.
+    for (const def of DEFAULT_FIELDS) {
+        const row = fieldsByKey.get(`${def.module}:${def.fieldKey}`);
+        if (!row || row.dropdownCategoryId || !def.dropdownCategoryKey) continue;
+        const categoryId = liveCategoryId(def.dropdownCategoryKey);
+        if (!categoryId) continue;
+        await prisma.formFieldDefinition.update({ where: { id: row.id }, data: { dropdownCategoryId: categoryId } });
+        changed++;
+    }
+
     for (const def of DEFAULT_FIELDS) {
         const row = fieldsByKey.get(`${def.module}:${def.fieldKey}`);
         if (!row) continue;

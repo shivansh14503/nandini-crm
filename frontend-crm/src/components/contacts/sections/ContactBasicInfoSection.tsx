@@ -2,7 +2,7 @@
 
 import React, { useMemo } from 'react';
 import { useFormContext } from 'react-hook-form';
-import { FormGrid, FormGridItem, RhfTextField, RhfPhoneField, RhfLookup, RhfCheckbox, RhfSelect } from '@/components/forms';
+import { FormGrid, RhfTextField, RhfPhoneField, RhfLookup, RhfCheckbox, RhfSelect } from '@/components/forms';
 import { useOrganizations } from '@/hooks/queries';
 import type { ContactFormData } from '@/types/contact.types';
 import type { ExtendedOrganization } from '@/types/organization.types';
@@ -24,25 +24,20 @@ export function ContactBasicInfoSection({ mobileNotice }: { mobileNotice?: React
             <RhfTextField<ContactFormData> name="name" label="Name" required personName placeholder="e.g. Rajesh Kumar" />
             <RhfPhoneField<ContactFormData> name="mobile" label="Mobile" required hint="Primary mobile" placeholder="e.g. 9876543210" notice={mobileNotice} />
             <RhfPhoneField<ContactFormData> name="officePhone" label="Office Phone" placeholder="e.g. 0112345678" />
-
-            <FormGridItem span={2}>
-                <RhfLookup<ContactFormData>
-                    name="organizationName"
-                    label="Organization Name"
-                    required
-                    hint="Parent company / account"
-                    options={organizationNames}
-                    placeholder="Search or select organization..."
-                    lookupType="organization"
-                    onSelectRecord={(org) => setValue('organizationId', org.id, { shouldDirty: true })}
-                    onClearRecord={() => setValue('organizationId', '', { shouldDirty: true })}
-                />
-            </FormGridItem>
+            {/* Every field is a plain cell (as on the lead form), so the form builder's order and Width apply to all. */}
+            <RhfLookup<ContactFormData>
+                name="organizationName"
+                label="Organization Name"
+                required
+                hint="Parent company / account"
+                options={organizationNames}
+                placeholder="Search or select organization..."
+                lookupType="organization"
+                onSelectRecord={(org) => setValue('organizationId', org.id, { shouldDirty: true })}
+                onClearRecord={() => setValue('organizationId', '', { shouldDirty: true })}
+            />
             <RhfSelect<ContactFormData> name="leftJob" label="Left Job" options={['No', 'Yes']} placeholder="Select" />
-
-            <FormGridItem span="full">
-                <RhfCheckbox<ContactFormData> name="isPrimaryContact" label="Is Primary Contact" />
-            </FormGridItem>
+            <RhfCheckbox<ContactFormData> name="isPrimaryContact" label="Is Primary Contact" alignWithInputs />
         </FormGrid>
     );
 }

@@ -18,6 +18,14 @@ export function normalizePlaceName(text?: string | null): string {
         .trim();
 }
 
+/**
+ * Stable key of a city-master row: `City.seedKey`. It survives an admin renaming the city, so the seed recognises
+ * the row and never adds the old name back.
+ */
+export function cityMasterSeedKey(countryIso2: string, subdivisionCode: string | null, searchName: string): string {
+    return `${countryIso2}|${subdivisionCode ?? ''}|${searchName}`;
+}
+
 /** RFC 4180 CSV → rows of strings (quoted fields, doubled quotes, CRLF/LF, newlines inside quotes). */
 export function parseCsv(text: string): string[][] {
     const rows: string[][] = [];

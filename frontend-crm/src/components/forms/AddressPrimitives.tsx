@@ -21,7 +21,6 @@ import { useUndoSafeSanitizer } from './undoSafeInput';
 import {
     COUNTRY_OPTIONS,
     DEFAULT_COUNTRY_CODE,
-    STATE_NOT_LISTED,
     findSubdivision,
     getCountryByCode,
     getCountryNameByCode,
@@ -194,8 +193,9 @@ export interface StateRegionFieldProps extends BaseFieldProps {
 }
 
 /**
- * Country-filtered, searchable state/region field. Accepts free text for regions missing from ISO 3166-2;
- * picking 'Not listed' clears the field so the user can type the region manually.
+ * Country-filtered, searchable state / region dropdown. Only the selected country's states can be picked (the
+ * server rejects anything else); a country without states has none, so the field stays empty and disabled. A stored
+ * value that isn't in the list (older records) still shows, flagged, until the user picks a listed state.
  */
 export function StateRegionField({
     name,
@@ -211,73 +211,59 @@ export function StateRegionField({
     size = 'md',
 }: StateRegionFieldProps) {
     const { mode } = useFormMode();
-    const [manualEntry, setManualEntry] = React.useState(false);
-    const options = getStateOptionLabelsForCountry(countryIso2OrDefault(countryValue));
-    const hasSubdivisions = options.length > 1;
-    // A list field with a "Not listed" escape: Tab picks the highlighted state, never "Not listed" (then the
-    // typed text stays). Once the user chose to type a region manually, Tab never picks.
-    const tabSelect = useTabSelect({
-        freeText: manualEntry || !hasSubdivisions,
-        skipLabels: STATE_TAB_SKIP,
-        onInputChange: (_, next, reason) => {
-            if (reason === 'input' || reason === 'clear') onChange(next);
-        },
-    });
+    const tabSelect = useTabSelect();
+    const countryIso2 = countryIso2OrDefault(countryValue);
+    const options = getStateOptionLabelsForCountry(countryIso2);
+    const hasSubdivisions = options.length > 0;
     const resolvedPlaceholder = useConfiguredPlaceholder(
         name,
-        placeholder ?? (manualEntry || !hasSubdivisions ? 'Type state / province / region' : 'Search or select state / region'),
+        placeholder ?? (hasSubdivisions ? 'Search or select state / region' : 'No states for this country')
     );
     if (mode === 'view') {
         return <ReadOnlyField label={label} value={value} hideWhenEmpty sx={{ mb: 2 }} />;
     }
 
+    // The stored value as the list spells it ('haryana' → 'Haryana', 'Orissa' → 'Odisha').
+    const listed = findSubdivision(value, countryIso2)?.subdivisionName;
+    const stored = (value ?? '').trim();
+    const unlisted = Boolean(stored) && !listed;
+    const selected = listed ?? (stored || null);
+    // MUI needs the value among the options: an unlisted one is shown first, disabled.
+    const allOptions = unlisted && selected ? [selected, ...options] : options;
+
     return (
         <FormField name={name} label={label} required={required} hint={hint} size={size}>
-            <Autocomplete<string, false, false, true>
+            <Autocomplete<string, false, false, false>
                 {...tabSelect}
-                freeSolo
-                // Free text hides MUI's dropdown arrow; show it (as on Country) whenever there's a list to open.
-                forcePopupIcon={hasSubdivisions}
-                options={options}
-                value={value || null}
-                inputValue={value ?? ''}
-                onChange={(_, next) => {
-                    if (next === STATE_NOT_LISTED) {
-                        setManualEntry(true);
-                        onChange('');
-                        return;
-                    }
-                    onChange(next ?? '');
-                }}
-                // Diacritic-insensitive search ('karnten' finds 'Kärnten'); 'Not listed' always stays available.
-                filterOptions={(opts, state) =>
-                    state.inputValue
-                        ? [...opts.filter((o) => o !== STATE_NOT_LISTED && matchesSearch(o, state.inputValue)), STATE_NOT_LISTED]
-                        : opts
-                }
-                disabled={disabled}
+                options={allOptions}
+                value={selected}
+                onChange={(_, next) => onChange(next ?? '')}
+                getOptionDisabled={(option) => unlisted && option === selected}
+                // Diacritic-insensitive search ('karnten' finds 'Kärnten').
+                filterOptions={(opts, state) => (state.inputValue ? opts.filter((o) => matchesSearch(o, state.inputValue)) : opts)}
+                noOptionsText="No matching state"
+                disabled={disabled || !hasSubdivisions}
                 size="small"
                 renderInput={(params) => (
                     <TextField
                         {...params}
                         placeholder={resolvedPlaceholder}
-                        error={Boolean(error)}
+                        error={Boolean(error) || unlisted}
                         sx={fieldSx}
                         slotProps={withMaxLength(params.slotProps)}
                     />
                 )}
             />
-            <ErrorText error={error} />
+            <ErrorText error={error ?? (unlisted ? 'Not in the state list: pick a state' : undefined)} />
         </FormField>
     );
 }
 
-const STATE_TAB_SKIP = [STATE_NOT_LISTED] as const;
-
 // ── City ──────────────────────────────────────────────────────────────────────
 
 const CITY_SEARCH_DEBOUNCE_MS = 250;
-const CITY_SUGGESTION_LIMIT = 20;
+/** A state's list is shown whole up to this many (biggest first); typing narrows it. */
+const CITY_OPTION_LIMIT = 50;
 
 function useDebouncedValue<V>(value: V, delayMs: number): V {
     const [debounced, setDebounced] = React.useState(value);
@@ -291,21 +277,24 @@ function useDebouncedValue<V>(value: V, delayMs: number): V {
 const subdivisionName = (iso2: string, code: string) =>
     code ? (getSubdivisionsByCountry(iso2).find((s) => s.subdivisionCode === code)?.subdivisionName ?? '') : '';
 
+/** The stored city as an option, so the field shows it before (or without) the list loading. */
+const storedCity = (cityName: string): CitySuggestion => ({ id: 0, cityName, subdivisionCode: '' });
+
 export interface CityAutocompleteFieldProps extends BaseFieldProps {
     value: string;
     onChange: (value: string) => void;
-    /** Country (ISO2 or name) whose cities are suggested; any city can still be typed. */
+    /** Country (ISO2 or name) whose cities are offered. */
     countryValue?: string;
-    /** Selected state (name or ISO 3166-2 code); narrows suggestions to its cities. */
+    /** Selected state (name or ISO 3166-2 code); narrows the list to its cities. */
     stateValue?: string;
-    /** Called with the state's name when the user picks a suggestion while the state is still empty. */
+    /** Called with the state's name when the user picks a city while the state is still empty. */
     onStateSuggested?: (stateName: string) => void;
 }
 
 /**
- * Free-text city input with server-side suggestions from the city master (`/api/lookups/cities`), narrowed by the
- * selected state. Suggestions only (Address_Field_Design: "Allow manual entry; do not require a global city
- * master"): whatever is typed is kept.
+ * City dropdown backed by the city master (`/api/lookups/cities`), narrowed by the selected state. Typing only
+ * searches: the value is always a city picked from the list (admins maintain the list under Form Customization →
+ * Dropdowns → Address Cities), and the server rejects anything else.
  */
 export function CityAutocompleteField({
     name,
@@ -317,51 +306,77 @@ export function CityAutocompleteField({
     onStateSuggested,
     required,
     disabled,
-    placeholder: codedPlaceholder = 'Enter city',
+    placeholder: codedPlaceholder,
     hint,
     error,
     size = 'md',
 }: CityAutocompleteFieldProps) {
     const { mode } = useFormMode();
-    const placeholder = useConfiguredPlaceholder(name, codedPlaceholder);
     const [open, setOpen] = React.useState(false);
-    // Any city can be typed: Tab keeps the typed text unless the user arrowed to a suggestion.
+    // What's typed in the box, for the stored value it was typed against: when the value changes (a pick, or from
+    // outside: copy address, country change, reset) the box shows the new value again.
+    const [typedText, setTypedText] = React.useState<{ forValue: string; text: string } | null>(null);
+    const inputValue = typedText && typedText.forValue === (value ?? '') ? typedText.text : (value ?? '');
     const tabSelect = useTabSelect({
-        freeText: true,
         onInputChange: (_, next, reason) => {
-            if (reason === 'input' || reason === 'clear') onChange(next);
+            // Typing only searches. MUI's 'reset' (a pick, or leaving the field) drops the typed text, so the box
+            // shows the stored city again.
+            if (reason === 'reset') setTypedText(null);
+            else setTypedText({ forValue: value ?? '', text: next });
+            if (reason === 'clear') onChange('');
         },
     });
 
     const countryIso2 = countryIso2OrDefault(countryValue);
     const stateCode = findSubdivision(stateValue, countryIso2)?.subdivisionCode ?? '';
-    const search = useDebouncedValue((value ?? '').trim(), CITY_SEARCH_DEBOUNCE_MS);
+
+    // A city belongs to its state: switching to another state clears it. Not when the state was empty (picking a
+    // city fills the state in) or when city and state changed together (copying another address).
+    const previous = React.useRef({ stateCode, value });
+    React.useEffect(() => {
+        const before = previous.current;
+        previous.current = { stateCode, value };
+        if (mode !== 'view' && before.stateCode && stateCode !== before.stateCode && value && value === before.value) onChange('');
+    }, [stateCode, value, mode, onChange]);
+    const typed = inputValue.trim() !== (value ?? '').trim() ? inputValue.trim() : '';
+    const search = useDebouncedValue(typed, CITY_SEARCH_DEBOUNCE_MS);
     // Only fetch while the list is open: a state's list needs no search, a country-wide one needs 2+ characters.
     const enabled = mode !== 'view' && open && Boolean(countryIso2) && (Boolean(stateCode) || search.length >= 2);
-    const { data: suggestions = [], isFetching } = useQuery({
+    const { data: cities = [], isFetching } = useQuery({
         queryKey: ['lookups', 'cities', countryIso2, stateCode, search],
         queryFn: ({ signal }) =>
             cityService.search(
-                { country: countryIso2, state: stateCode || undefined, search: search || undefined, limit: CITY_SUGGESTION_LIMIT },
+                { country: countryIso2, state: stateCode || undefined, search: search || undefined, limit: CITY_OPTION_LIMIT },
                 signal
             ),
         enabled,
-        staleTime: 60 * 60 * 1000,
+        staleTime: 5 * 60 * 1000,
         placeholderData: keepPreviousData,
     });
-    const options = enabled ? suggestions : [];
+    // One object per stored value: MUI treats a new value object as a change and would reset the typed search.
+    const selected = React.useMemo(() => (value ? storedCity(value) : null), [value]);
+    const listed = !selected || cities.some((c) => c.cityName === selected.cityName);
+    // MUI needs the value among the options: a stored city missing from the list (an older record) is shown
+    // first, disabled, so it can't be picked again.
+    let options: CitySuggestion[] = selected ? [selected] : [];
+    if (enabled) options = selected && !listed && !search ? [selected, ...cities] : cities;
+    const isUnlisted = (option: CitySuggestion) => option.id === 0 && enabled && !isFetching && !listed;
+    const placeholder = useConfiguredPlaceholder(name, codedPlaceholder ?? (stateCode ? 'Select city' : 'Search city'));
 
     if (mode === 'view') {
         return <ReadOnlyField label={label} value={value} hideWhenEmpty sx={{ mb: 2 }} />;
     }
 
+    const where = stateCode ? subdivisionName(countryIso2, stateCode) : getCountryNameByCode(countryIso2);
+    let noOptionsText = `No cities listed for ${where} yet. Ask an admin to add them.`;
+    if (!countryIso2) noOptionsText = 'Select a country first';
+    else if (!stateCode && search.length < 2) noOptionsText = 'Select a state, or type 2+ letters to search';
+    else if (search) noOptionsText = `No city "${search}" in ${where}. Ask an admin to add it.`;
+
     return (
         <FormField name={name} label={label} required={required} hint={hint} size={size}>
-            <Autocomplete<CitySuggestion, false, false, true>
+            <Autocomplete<CitySuggestion, false, false, false>
                 {...tabSelect}
-                freeSolo
-                // Free text hides MUI's dropdown arrow; show it (as on Country) when a state's list can be opened.
-                forcePopupIcon={Boolean(stateCode)}
                 open={open}
                 onOpen={() => setOpen(true)}
                 onClose={(event, reason) => {
@@ -370,28 +385,35 @@ export function CityAutocompleteField({
                 }}
                 options={options}
                 loading={isFetching}
-                value={value || null}
-                inputValue={value ?? ''}
-                getOptionLabel={(option) => (typeof option === 'string' ? option : option.cityName)}
-                getOptionKey={(option) => (typeof option === 'string' ? option : `${option.subdivisionCode}|${option.cityName}`)}
-                isOptionEqualToValue={(option, v) => option.cityName === (typeof v === 'string' ? v : v.cityName)}
+                value={selected}
+                inputValue={inputValue}
+                getOptionLabel={(option) => option.cityName}
+                getOptionKey={(option) => `${option.id}|${option.cityName}`}
+                isOptionEqualToValue={(option, v) => option.cityName === v.cityName}
+                getOptionDisabled={isUnlisted}
                 onChange={(_, next) => {
-                    if (next && typeof next !== 'string') {
-                        onChange(next.cityName);
-                        if (!stateValue?.trim() && onStateSuggested) {
-                            const state = subdivisionName(countryIso2, next.subdivisionCode);
-                            if (state) onStateSuggested(state);
-                        }
+                    if (!next) {
+                        onChange('');
                         return;
                     }
-                    onChange(next ?? '');
+                    onChange(next.cityName);
+                    if (!stateValue?.trim() && onStateSuggested) {
+                        const state = subdivisionName(countryIso2, next.subdivisionCode);
+                        if (state) onStateSuggested(state);
+                    }
                 }}
                 // The server already filtered and ranked the list.
                 filterOptions={(opts) => opts}
+                noOptionsText={noOptionsText}
+                loadingText="Loading cities…"
                 renderOption={(props, option) => {
                     const { key, ...rest } = props as React.HTMLAttributes<HTMLLIElement> & { key: string };
                     // Without a state filter the same name can exist in several states: show which one.
-                    const state = stateCode ? '' : subdivisionName(countryIso2, option.subdivisionCode);
+                    const state = isUnlisted(option)
+                        ? 'Not in the city list — pick another'
+                        : stateCode
+                          ? ''
+                          : subdivisionName(countryIso2, option.subdivisionCode);
                     return (
                         <Box component="li" key={key} {...rest} sx={{ display: 'flex', justifyContent: 'space-between', gap: 1 }}>
                             <Typography sx={{ fontSize: '0.84rem' }}>{option.cityName}</Typography>

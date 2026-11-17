@@ -27,8 +27,6 @@ export interface StateRegionMasterItem {
 
 export const DEFAULT_COUNTRY_CODE = 'IN';
 export const DEFAULT_COUNTRY_NAME = 'India';
-/** Appended to every state list so users can fall back to manual entry (Address_Field_Design: state_region). */
-export const STATE_NOT_LISTED = 'Not listed';
 
 // ── Generated data ────────────────────────────────────────────────────────────
 
@@ -5580,13 +5578,13 @@ export function getSubdivisionsByCountry(countryCodeOrName?: string | null): rea
 }
 
 /**
- * Dropdown labels for the state/region field of the given country, with STATE_NOT_LISTED last.
- * Empty when no country is selected.
+ * Dropdown labels for the state/region field of the given country (the only values it accepts).
+ * Empty when no country is selected or the country has no states.
  */
 export function getStateOptionLabelsForCountry(countryCodeOrName?: string | null): string[] {
     if (!resolveCountryIso2(countryCodeOrName)) return [];
     const names = [...new Set(getSubdivisionsByCountry(countryCodeOrName).map((s) => s.subdivisionName))];
-    return [...names, STATE_NOT_LISTED];
+    return names;
 }
 
 // Pre-ISO / colloquial Indian names still found in older records.
@@ -5632,6 +5630,6 @@ export function findSubdivision(
  */
 export function normalizeLegacyStateName(stateInput?: string | null, countryCodeOrName?: string | null): string {
     const raw = (stateInput ?? '').trim();
-    if (!raw || raw === STATE_NOT_LISTED) return raw;
+    if (!raw) return raw;
     return findSubdivision(raw, countryCodeOrName)?.subdivisionName ?? raw;
 }

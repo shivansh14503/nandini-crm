@@ -21,6 +21,7 @@ import { fieldSx, FIELD_MAX_LENGTH } from '@/components/forms';
 import { ROUTES } from '@/config/constants';
 import { isDuplicateMatchKind } from '@/utils/organizationName';
 import { upperCase, useUndoSafeSanitizer } from '@/components/forms/undoSafeInput';
+import { useConfiguredPlaceholder, useCurrentFieldName } from '@/context/FormConfigContext';
 import type { OrganizationNameSuggestion, OrganizationSuggestionRecord } from './useOrganizationNameCheck';
 
 export interface OrganizationNameAutocompleteProps {
@@ -90,7 +91,7 @@ export function OrganizationNameAutocomplete({
     organizationId,
     disabled = false,
     readOnly = false,
-    placeholder = 'e.g. Mohit Traders Pvt Ltd',
+    placeholder: codedPlaceholder = 'e.g. Mohit Traders Pvt Ltd',
     error = false,
     helperText,
     checking = false,
@@ -105,6 +106,8 @@ export function OrganizationNameAutocomplete({
     const [activeIndex, setActiveIndex] = React.useState(-1);
     // Organization names are stored uppercase.
     const sanitizerRef = useUndoSafeSanitizer(upperCase);
+    // The placeholder an admin set in the form builder wins over the coded one (the surrounding FormField names the field).
+    const placeholder = useConfiguredPlaceholder(useCurrentFieldName(), codedPlaceholder);
 
     const listId = `org-name-suggestions-${organizationId ?? 'new'}`;
     const trimmed = value.trim();

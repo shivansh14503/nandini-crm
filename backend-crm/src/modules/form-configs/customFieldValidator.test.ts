@@ -43,6 +43,7 @@ const regionCategory: DropdownCategoryDto = {
     description: '',
     isSystem: false,
     appRequired: false,
+    fixedOptions: false,
     lockReason: null,
     usedBy: [],
     options: [

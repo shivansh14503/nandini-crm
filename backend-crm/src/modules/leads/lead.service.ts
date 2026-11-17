@@ -17,6 +17,7 @@ import { codeSearchPrefix, phoneSearch, phoneVariants, phoneWhere } from '../sha
 import { lockRecords, runInTransaction, softDeleteData, type BulkDeleteResult } from '../shared/transactions.js';
 import { assertTaxIdsUnique } from '../shared/taxIdentifiers.js';
 import { toLeadData, toLeadDto, type LeadDto } from './lead.mapper.js';
+import { resolveAddressPlaces } from '../cities/cityAddresses.js';
 import {
     checkLeadDuplicatesQuerySchema,
     CONVERTED_STATUS,
@@ -79,7 +80,7 @@ export async function createLeadRecord(tx: TransactionClient, input: LeadInput, 
     await assertTaxIdsUnique(tx, 'lead', { gstNo: input.gstNo });
     const leadCode = await generateEntityCode(tx, 'LD');
     const assignedTo = (await assertAssigneeValid(tx, input.assignedTo, { activeUsernames: lookups.activeUsernames })) ?? user.username;
-    const row = await tx.lead.create({ data: { ...toLeadData({ ...input, assignedTo }), leadCode, createdBy: user.username } });
+    const row = await tx.lead.create({ data: { ...(await resolveAddressPlaces(tx, 'lead', toLeadData({ ...input, assignedTo }))), leadCode, createdBy: user.username } });
     await replaceEmails(tx, { leadId: row.id }, normalizeEmails(input.emailAddresses));
 
     const dto = toLeadDto(await loadLead(tx, row.id));
@@ -161,7 +162,7 @@ export const leadService = {
             await assertTaxIdsUnique(tx, 'lead', { gstNo: input.gstNo }, { excludeId: id, previous: { gstNo: existing.gstNo } });
             const assignedTo = (await assertAssigneeValid(tx, input.assignedTo, { previous: existing.assignedTo })) ?? existing.assignedTo;
 
-            await tx.lead.update({ where: { id }, data: { ...toLeadData({ ...input, assignedTo }), updatedBy: user.username } });
+            await tx.lead.update({ where: { id }, data: { ...(await resolveAddressPlaces(tx, 'lead', toLeadData({ ...input, assignedTo }))), updatedBy: user.username } });
             if ('emailAddresses' in patch) {
                 await replaceEmails(tx, { leadId: id }, normalizeEmails(input.emailAddresses));
             }

@@ -12,6 +12,7 @@ import {
     APP_REQUIRED_CATEGORY_KEYS,
     CRM_MODULES,
     DEFAULT_FIELDS,
+    FIXED_OPTION_CATEGORY_KEYS,
     isFieldTombstoned,
     MODULE_TABS,
     sectionKeyFromLabel,
@@ -61,6 +62,8 @@ export interface DropdownCategoryDto {
     isSystem: boolean;
     /** CRM screens read it directly by key (see APP_REQUIRED_CATEGORY_KEYS). */
     appRequired: boolean;
+    /** Its options are fixed (the API validates the values against them): no options can be added. */
+    fixedOptions: boolean;
     /** Why it can't be deleted, or null when an admin may delete it (built-in or not). */
     lockReason: string | null;
     options: DropdownOptionDto[];
@@ -558,6 +561,7 @@ export const formConfigService = {
                     description: c.description ?? '',
                     isSystem: c.isSystem,
                     appRequired: APP_REQUIRED_CATEGORY_KEYS.has(c.key),
+                    fixedOptions: FIXED_OPTION_CATEGORY_KEYS.has(c.key),
                     lockReason: categoryLockReason(
                         c.key,
                         c.options,
@@ -716,6 +720,11 @@ export const formConfigService = {
         const input = createOptionSchema.parse(body);
         const option = await runInTransaction(async (tx) => {
             const category = await findCategory(tx, categoryKey);
+            if (FIXED_OPTION_CATEGORY_KEYS.has(category.key)) {
+                throw HttpError.badRequest(`${category.label} has fixed options; new ones can't be added.`, [
+                    { message: 'This dropdown has fixed options.', path: ['value'] },
+                ]);
+            }
             const existing = await tx.dropdownOption.findUnique({ where: { categoryId_value: { categoryId: category.id, value: input.value } } });
             if (existing?.isActive) {
                 throw HttpError.conflict(`'${input.value}' is already an option of ${category.label}.`, [

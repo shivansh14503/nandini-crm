@@ -5,8 +5,9 @@
  * (the frontend keeps them as fallbacks while the configuration loads). Field definitions mirror the fields the
  * hand-built forms render; `fieldKey` is the React Hook Form name, so overrides apply to the matching control.
  *
- * Yes/No toggles (leftJob, provideSupport, contractCreate, addDocument, …) are deliberately absent: they stay
- * fixed boolean controls.
+ * Yes / No dropdowns (Left Job, Contract Create, Add Document) have built-in lists like every other dropdown, but
+ * with fixed options (FIXED_OPTION_CATEGORY_KEYS): the API only accepts those values. The organization's Provide
+ * Support switch stays a fixed toggle.
  */
 
 /** In Sales navbar order (leads → opportunities → quotations → organizations → contacts), then the other forms. */
@@ -131,6 +132,14 @@ export const APP_REQUIRED_CATEGORY_KEYS: ReadonlySet<string> = new Set([
     'quote_payment_terms',
 ]);
 
+/**
+ * Built-in dropdowns whose options are fixed: the records' API validates the value against exactly these options
+ * (Yes / No fields). Admins can reorder them, rename how they read and pick the default, but not add options.
+ */
+export const FIXED_OPTION_CATEGORY_KEYS: ReadonlySet<string> = new Set(['shared_left_job', 'product_contract_create', 'opportunity_add_document']);
+
+const yesNo = (first: 'No' | 'Yes'): DefaultOption[] => withSystem(first === 'No' ? ['No', 'Yes'] : ['Yes', 'No'], ['Yes', 'No']);
+
 export const DEFAULT_CATEGORIES: DefaultCategory[] = [
     // ── Shared ──
     {
@@ -193,6 +202,13 @@ export const DEFAULT_CATEGORIES: DefaultCategory[] = [
             ['Registered', 'Unregistered', 'Composition Scheme', 'Consumer', 'Overseas / Export', 'Special Economic Zone (SEZ)'],
             ['Registered', 'Unregistered'],
         ),
+    },
+    {
+        key: 'shared_left_job',
+        label: 'Left Job',
+        module: 'shared',
+        description: 'Whether the contact has left the organization (Contacts, Tickets). Fixed options: No / Yes.',
+        options: yesNo('No'),
     },
 
     // ── Leads ──
@@ -362,7 +378,7 @@ export const DEFAULT_CATEGORIES: DefaultCategory[] = [
     // ── Contacts ──
     {
         key: 'contact_designation',
-        label: 'Contact Designation',
+        label: 'Designation',
         module: 'contacts',
         options: [
             'Managing Director / MD',
@@ -385,7 +401,7 @@ export const DEFAULT_CATEGORIES: DefaultCategory[] = [
     },
     {
         key: 'contact_department',
-        label: 'Contact Department',
+        label: 'Department',
         module: 'contacts',
         options: [
             'Executive Management',
@@ -427,6 +443,7 @@ export const DEFAULT_CATEGORIES: DefaultCategory[] = [
         module: 'opportunities',
         options: ['Standard (10%)', 'Executive (15%)', 'Partner Split (20%)', 'Direct (5%)', 'Nil / Direct (0%)'],
     },
+    { key: 'opportunity_add_document', label: 'Add Document', module: 'opportunities', description: 'Fixed options: No / Yes.', options: yesNo('No') },
 
     // ── Quotations ──
     {
@@ -500,6 +517,7 @@ export const DEFAULT_CATEGORIES: DefaultCategory[] = [
     },
 
     // ── Products ──
+    { key: 'product_contract_create', label: 'Contract Create', module: 'products', description: 'Fixed options: Yes / No.', options: yesNo('Yes') },
     { key: 'product_type', label: 'Product Type', module: 'products', options: ['Product', 'Service', 'Bundle', 'Subscription', 'License', 'Other'] },
     { key: 'product_tax_type', label: 'Tax Type', module: 'products', options: ['GST', 'IGST', 'None'] },
     { key: 'product_tax_rate', label: 'Tax Rate', module: 'products', options: ['0%', '5%', '12%', '18%', '28%'] },
@@ -551,6 +569,9 @@ export const DEFAULT_SELECTED_OPTIONS: Readonly<Record<string, readonly string[]
     lead_type: ['Hot'],
     lead_department: ['Executive Management'],
     contact_communication_type: ['Call', 'Email'],
+    shared_left_job: ['No'],
+    product_contract_create: ['No'],
+    opportunity_add_document: ['No'],
     org_account_status: ['Active'],
     opportunity_type: ['New Business'],
     opportunity_sales_stage: ['Qualification'],
@@ -675,6 +696,8 @@ const RAW_DEFAULT_FIELDS: DefaultField[] = [
         t('mobile', 'Mobile', { type: 'phone', req: true }),
         t('officePhone', 'Office Phone', { type: 'phone' }),
         t('organizationName', 'Organization Name', { type: 'lookup', req: true }),
+        sel('leftJob', 'Left Job', 'shared_left_job'),
+        t('isPrimaryContact', 'Is Primary Contact', { type: 'checkbox' }),
     ]),
     ...section('contacts', 'overview', 'Alternate Communication Channels', [
         t('phone3', 'Phone 3', { type: 'phone' }),
@@ -687,6 +710,7 @@ const RAW_DEFAULT_FIELDS: DefaultField[] = [
         sel('department', 'Department', 'contact_department'),
         t('assignedTo', 'Assigned to', { type: 'lookup', req: true }),
         { key: 'communicationType', label: 'Communication Type', type: 'multiselect', cat: 'contact_communication_type' },
+        t('doNotCall', 'Do Not Call (DND)', { type: 'checkbox' }),
     ]),
     ...section('contacts', 'overview', 'Notes', [t('description', 'Add Description', { type: 'textarea' })]),
 
@@ -732,6 +756,7 @@ const RAW_DEFAULT_FIELDS: DefaultField[] = [
     ...section('opportunities', 'basic', 'Primary Opportunity Details', [
         t('organizationName', 'Organization name', { type: 'lookup', req: true }),
         t('contactName', 'Contact', { type: 'lookup', req: true }),
+        t('contactNumber', 'Contact Number', { type: 'phone', req: true }),
         t('emailAddress', 'Email Address', { type: 'email' }),
         t('referredBy', 'Referred By', { type: 'lookup' }),
         t('leadGivenBy', 'Lead Given By', { type: 'lookup', soft: true }),
@@ -750,7 +775,10 @@ const RAW_DEFAULT_FIELDS: DefaultField[] = [
         t('invoiceNo', 'Invoice No'),
         t('invoiceDate', 'Invoice Date', { type: 'date' }),
     ]),
-    ...section('opportunities', 'basic', 'Commission & Documentation', [sel('commission', 'Commission', 'opportunity_commission', { soft: true })]),
+    ...section('opportunities', 'basic', 'Commission & Documentation', [
+        sel('commission', 'Commission', 'opportunity_commission', { soft: true }),
+        sel('addDocument', 'Add Document', 'opportunity_add_document'),
+    ]),
 
     // ── Quotations ──
     ...section('quotations', 'overview', 'OVERVIEW', [
@@ -798,6 +826,7 @@ const RAW_DEFAULT_FIELDS: DefaultField[] = [
         sel('taxType', 'Tax Type', 'product_tax_type'),
         sel('taxRate', 'Tax Rate', 'product_tax_rate'),
         t('discount', 'Discount (%)', { type: 'percentage' }),
+        sel('contractCreate', 'Contract Create', 'product_contract_create'),
     ]),
     ...section('products', 'overview', 'Description & Terms', [
         t('description', 'Description', { type: 'textarea' }),
@@ -811,6 +840,7 @@ const RAW_DEFAULT_FIELDS: DefaultField[] = [
         t('contactPersonName', 'Contact Person Name', { type: 'lookup', req: true }),
         t('contactNumber', 'Contact Number', { type: 'phone' }),
         t('contactEmail', 'Contact Email', { type: 'email' }),
+        sel('leftJob', 'Left Job', 'shared_left_job'),
         t('natureOfCall', 'Nature Of Call', { type: 'lookup', soft: true }),
     ]),
     ...section('tickets', 'overview', 'Classification & SLA', [

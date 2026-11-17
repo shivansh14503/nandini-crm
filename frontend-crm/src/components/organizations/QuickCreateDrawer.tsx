@@ -318,7 +318,7 @@ export function QuickCreateDrawer({ open, onClose, onSave }: QuickCreateDrawerPr
                             />
                         </FormField>
 
-                        {/* Same city control as the full address forms: suggestions + dropdown arrow, free text allowed. */}
+                        {/* Same city dropdown as the full address forms: picked from the city list. */}
                         <CityAutocompleteField
                             name="billingCity"
                             label="City"
