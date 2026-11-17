@@ -15,6 +15,6 @@ import { opportunityController } from './opportunity.controller.js';
  */
 const router = Router();
 router.use(authenticate);
-registerCrudRoutes(router, opportunityController, 'opportunities');
+registerCrudRoutes(router, opportunityController);
 
 export default router;

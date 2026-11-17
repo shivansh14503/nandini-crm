@@ -4,8 +4,6 @@ import type { AuthUser } from '../../types/user.types.js';
 import { sendCreated, sendPaginated, sendSuccess, type PaginatedResult } from '../../utils/apiResponse.js';
 import { requireUser } from '../../utils/requestContext.js';
 import { bulkIdsSchema, idParamSchema, patchBodySchema } from '../../validators/common.js';
-import { acceptBuiltInApiNames } from '../form-configs/builtInApiNames.js';
-import type { CrmModuleKey } from '../form-configs/formConfig.defaults.js';
 import type { BulkDeleteResult } from './transactions.js';
 
 /** What every entity service exposes; the frontend's `createCrudService` relies on exactly these endpoints. */
@@ -58,20 +56,18 @@ export type CrudController = ReturnType<typeof createCrudController>;
 
 /**
  * Registers the standard CRUD endpoints. Call it after any custom routes (e.g. `PATCH /bulk-status`) so
- * those paths aren't captured by `/:id`. Creates and updates accept built-in fields under the API names an admin
- * gave them in `module`'s form configuration (see builtInApiNames.ts).
+ * those paths aren't captured by `/:id`.
  */
-export function registerCrudRoutes(router: Router, controller: CrudController, module: CrmModuleKey): Router {
+export function registerCrudRoutes(router: Router, controller: CrudController): Router {
     const withId = validateRequest({ params: idParamSchema });
     const withPatch = validateRequest({ params: idParamSchema, body: patchBodySchema });
-    const apiNames = acceptBuiltInApiNames(module);
 
     router.get('/', controller.list);
-    router.post('/', apiNames, controller.create);
+    router.post('/', controller.create);
     router.post('/bulk-delete', validateRequest({ body: bulkIdsSchema }), controller.bulkRemove);
     router.get('/:id', withId, controller.getById);
-    router.put('/:id', withPatch, apiNames, controller.update);
-    router.patch('/:id', withPatch, apiNames, controller.update);
+    router.put('/:id', withPatch, controller.update);
+    router.patch('/:id', withPatch, controller.update);
     router.delete('/:id', withId, controller.remove);
     return router;
 }

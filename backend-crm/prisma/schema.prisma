@@ -891,12 +891,6 @@ model FormFieldDefinition {
   isVisibleInDrawer   Boolean  @default(true)
   dropdownCategoryId  String?  @db.NVarChar(50)
   validationRulesJson String?  @db.NVarChar(Max)
-  /// Built-in fields only: the API name an admin gave the field (null = `fieldKey`, the column it maps to). Record
-  /// writes accept it in place of the column name (see builtInApiNames.ts); the column itself never changes.
-  apiName             String?  @db.NVarChar(80)
-  /// JSON array of the API names the field had before an admin renamed it, newest last: `cf_…` keys of a custom
-  /// field, earlier `apiName`s of a built-in one. Writes still sending an old name land in the field.
-  previousFieldKeysJson String? @db.NVarChar(2000)
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
 

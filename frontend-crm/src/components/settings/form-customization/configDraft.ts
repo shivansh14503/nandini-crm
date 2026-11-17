@@ -228,7 +228,7 @@ function applyOp(s: FormConfigsPayload, op: DraftOp): void {
                 id: op.id,
                 categoryId: category.id,
                 value: op.payload.value,
-                label: op.payload.label ?? op.payload.value,
+                label: op.payload.value,
                 meta: op.payload.meta ?? null,
                 sortOrder: max + 10,
                 isActive: true,
@@ -241,16 +241,18 @@ function applyOp(s: FormConfigsPayload, op: DraftOp): void {
             const found = findOptionById(s, op.optionId);
             if (!found) return;
             const { category, option } = found;
-            if (op.payload.value !== undefined && op.payload.value !== option.value) {
-                // Fields defaulting to the old value follow it (the API does the same).
+            // An option's name is its stored value: a rename renames both, and fields defaulting to the old value
+            // follow it (the API does the same). System options can't be renamed.
+            const next = op.payload.label;
+            if (next !== undefined && !option.isSystem && next !== option.value) {
                 for (const field of allFields(s)) {
                     if (field.dropdownCategoryKey === category.key) {
-                        field.defaultValue = renameDefaultValue(field.defaultValue, field.fieldType, option.value, op.payload.value);
+                        field.defaultValue = renameDefaultValue(field.defaultValue, field.fieldType, option.value, next);
                     }
                 }
-                option.value = op.payload.value;
+                option.value = next;
+                option.label = next;
             }
-            if (op.payload.label !== undefined) option.label = op.payload.label;
             if (op.payload.meta !== undefined) option.meta = op.payload.meta;
             if (op.payload.isActive !== undefined) option.isActive = op.payload.isActive;
             if (op.payload.isDefault !== undefined) option.isDefault = op.payload.isDefault;
@@ -278,8 +280,7 @@ function applyOp(s: FormConfigsPayload, op: DraftOp): void {
             const field: FormFieldDefinitionDto = {
                 id: op.id,
                 module: p.module,
-                fieldKey: p.fieldKey ?? op.fieldKey,
-                previousFieldKeys: [],
+                fieldKey: op.fieldKey,
                 label: p.label,
                 fieldType: p.fieldType,
                 tabKey: p.tabKey,
@@ -313,15 +314,6 @@ function applyOp(s: FormConfigsPayload, op: DraftOp): void {
             if (!field) return;
             const p = op.payload;
             const before = { tabKey: field.tabKey, sectionKey: field.sectionKey, label: field.label };
-            // Mirrors the API: a rename is final, the old name is forgotten (TEMP-DEV-RENAME).
-            if (p.fieldKey !== undefined && p.fieldKey !== field.fieldKey) {
-                field.previousFieldKeys = [];
-                field.fieldKey = p.fieldKey;
-            }
-            if (p.apiName !== undefined && p.apiName !== (field.apiName || field.fieldKey)) {
-                field.previousFieldKeys = [];
-                field.apiName = p.apiName;
-            }
             if (p.label !== undefined) field.label = p.label;
             if (p.fieldType !== undefined) field.fieldType = p.fieldType;
             if (p.tabKey !== undefined) field.tabKey = p.tabKey;
