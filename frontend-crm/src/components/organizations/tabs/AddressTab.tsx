@@ -1,7 +1,9 @@
 'use client';
 
 import React from 'react';
-import { Box, Typography, TextField, FormControlLabel, Checkbox } from '@mui/material';
+import { Box, Typography, FormControlLabel, Checkbox } from '@mui/material';
+// Raw text inputs show the admin-configured placeholder of the FormField they sit in.
+import { ConfiguredTextField as TextField } from '@/components/forms/ConfiguredTextField';
 
 // Icons
 import PlaceOutlinedIcon from '@mui/icons-material/PlaceOutlined';

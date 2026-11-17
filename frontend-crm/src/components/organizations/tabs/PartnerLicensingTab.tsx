@@ -4,7 +4,6 @@ import React, { useState } from 'react';
 import {
     Box,
     Typography,
-    TextField,
     Button,
     IconButton,
     InputAdornment,
@@ -17,6 +16,8 @@ import {
     Paper,
     Chip,
 } from '@mui/material';
+// Raw text inputs show the admin-configured placeholder of the FormField they sit in.
+import { ConfiguredTextField as TextField } from '@/components/forms/ConfiguredTextField';
 
 // Icons
 import AddIcon from '@mui/icons-material/Add';

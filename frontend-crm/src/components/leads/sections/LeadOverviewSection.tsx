@@ -1,7 +1,9 @@
 'use client';
 
 import React from 'react';
-import { Box, InputAdornment, TextField } from '@mui/material';
+import { Box, InputAdornment } from '@mui/material';
+// Raw text inputs show the admin-configured placeholder of the FormField they sit in.
+import { ConfiguredTextField as TextField } from '@/components/forms/ConfiguredTextField';
 import LockOutlinedIcon from '@mui/icons-material/LockOutlined';
 import { useController, useFormContext, useWatch } from 'react-hook-form';
 

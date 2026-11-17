@@ -3,8 +3,9 @@
 import React from 'react';
 import {
     Box,
-    TextField,
 } from '@mui/material';
+// Raw text inputs show the admin-configured placeholder of the FormField they sit in.
+import { ConfiguredTextField as TextField } from '@/components/forms/ConfiguredTextField';
 
 // Icons
 import AccountBalanceOutlinedIcon from '@mui/icons-material/AccountBalanceOutlined';
