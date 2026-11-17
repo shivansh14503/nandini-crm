@@ -40,7 +40,7 @@ export function EntityDetailDrawer({
     subtitle,
     avatarText,
     avatarIcon,
-    avatarBg = 'linear-gradient(135deg, #0284c7 0%, #0369a1 100%)',
+    avatarBg = 'linear-gradient(135deg, var(--crm-fill-blue-700) 0%, var(--crm-fill-blue-600) 100%)',
     verified = true,
     loading = false,
     badges = [],
@@ -127,7 +127,11 @@ export function EntityDetailDrawer({
         px: 1.8,
         borderRadius: '8px',
         transition: 'all 0.15s ease',
-        '&:hover': { borderColor: 'var(--crm-slate-400)', backgroundColor: 'var(--mui-palette-background-subtle)' },
+        '&:hover': {
+            borderColor: 'var(--crm-blue-300)',
+            backgroundColor: 'var(--mui-palette-primary-soft)',
+            color: 'var(--crm-text-blue-700)',
+        },
         ...secondaryAction?.sx,
     } as const;
 
@@ -203,7 +207,7 @@ export function EntityDetailDrawer({
                             zIndex: 1410,
                             width: 24,
                             height: 56,
-                            backgroundColor: 'var(--mui-palette-primary-main)',
+                            backgroundColor: 'var(--crm-fill-blue-600)',
                             color: '#ffffff',
                             borderRadius: '8px 0 0 8px',
                             display: 'flex',
@@ -214,7 +218,7 @@ export function EntityDetailDrawer({
                             transition: 'right 0.25s cubic-bezier(0.4, 0, 0.2, 1), background-color 0.15s ease',
                             pointerEvents: 'auto',
                             '&:hover': {
-                                backgroundColor: '#1e293b',
+                                backgroundColor: 'var(--crm-fill-blue-700)',
                             },
                         }}
                     >
@@ -276,7 +280,7 @@ export function EntityDetailDrawer({
                                 fontSize: '1.05rem',
                                 letterSpacing: '0.02em',
                                 flexShrink: 0,
-                                boxShadow: '0 4px 14px rgba(2, 132, 199, 0.25)',
+                                boxShadow: '0 4px 14px rgb(var(--crm-accent-rgb) / 0.28)',
                             }}
                         >
                             {avatarIcon || displayAvatar}

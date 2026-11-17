@@ -304,7 +304,8 @@ export function OrganizationNameAutocomplete({
                                                     fontSize: '0.66rem',
                                                     fontWeight: 700,
                                                     color: same ? 'var(--crm-amber-700)' : 'var(--crm-text-blue-800)',
-                                                    backgroundColor: same ? 'var(--crm-amber-100)' : 'var(--crm-indigo-100)',
+                                                    backgroundColor: same ? 'var(--crm-amber-100)' : 'var(--mui-palette-primary-soft)',
+                                                    border: `1px solid ${same ? 'var(--crm-amber-200)' : 'var(--mui-palette-primary-softBorder)'}`,
                                                 }}
                                             />
                                             {suggestion.matchedField === 'tradeName' && record.tradeName && (

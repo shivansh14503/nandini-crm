@@ -521,24 +521,24 @@ export function RelatedRecordsTableView({
                 overflow: 'hidden',
             }}
         >
-            {/* ── Legacy Dark Slate Header Banner (42px) ───────────────────── */}
+            {/* ── Theme-Aware Header Banner (42px) ───────────────────── */}
             <Box
                 sx={{
                     height: 42,
                     minHeight: 42,
                     px: 2,
-                    backgroundColor: '#475569', // stays dark in both themes (white text)
-                    color: '#ffffff',
+                    backgroundColor: 'var(--mui-palette-background-subtle)',
+                    color: 'var(--crm-slate-900)',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'space-between',
                     gap: 1.5,
                     flexShrink: 0,
-                    borderBottom: '1px solid var(--crm-slate-700)',
+                    borderBottom: '1px solid var(--mui-palette-border-main)',
                 }}
             >
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 0 }}>
-                    <Box sx={{ display: 'flex', alignItems: 'center', color: 'var(--crm-slate-200)' }}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', color: 'var(--crm-text-blue-600)' }}>
                         {getModuleIcon(moduleKey)}
                     </Box>
                     <Typography
@@ -548,7 +548,7 @@ export function RelatedRecordsTableView({
                             fontWeight: 800,
                             letterSpacing: '0.06em',
                             textTransform: 'uppercase',
-                            color: '#ffffff',
+                            color: 'var(--crm-slate-900)',
                         }}
                     >
                         {moduleTitle}
@@ -561,8 +561,9 @@ export function RelatedRecordsTableView({
                             minWidth: 24,
                             fontSize: '0.68rem',
                             fontWeight: 700,
-                            backgroundColor: 'rgba(255, 255, 255, 0.18)',
-                            color: '#ffffff',
+                            backgroundColor: 'var(--mui-palette-primary-soft)',
+                            color: 'var(--crm-text-blue-700)',
+                            border: '1px solid var(--mui-palette-primary-softBorder)',
                             borderRadius: '6px',
                             '& .MuiChip-label': { px: 0.75 },
                         }}
@@ -573,7 +574,7 @@ export function RelatedRecordsTableView({
                             sx={{
                                 fontSize: '0.72rem',
                                 fontWeight: 500,
-                                color: 'var(--crm-slate-300)',
+                                color: 'var(--mui-palette-text-secondary)',
                                 ml: 0.5,
                                 display: { xs: 'none', lg: 'inline' },
                             }}
@@ -588,26 +589,31 @@ export function RelatedRecordsTableView({
                         sx={{
                             display: 'flex',
                             alignItems: 'center',
-                            backgroundColor: 'rgba(15, 23, 42, 0.28)',
-                            border: '1px solid rgba(255, 255, 255, 0.18)',
+                            backgroundColor: 'var(--mui-palette-background-paper)',
+                            border: '1px solid var(--mui-palette-border-main)',
                             borderRadius: '6px',
                             px: 1,
                             height: 26,
                             width: { xs: 130, md: 190 },
+                            transition: 'border-color 0.15s ease, box-shadow 0.15s ease',
+                            '&:focus-within': {
+                                borderColor: 'var(--mui-palette-primary-main)',
+                                boxShadow: '0 0 0 2px rgb(var(--crm-accent-rgb) / 0.18)',
+                            },
                         }}
                     >
-                        <SearchIcon sx={{ fontSize: 14, color: 'var(--crm-slate-300)', mr: 0.6 }} />
+                        <SearchIcon sx={{ fontSize: 14, color: 'var(--mui-palette-text-muted)', mr: 0.6 }} />
                         <InputBase
                             value={searchQuery}
                             onChange={(e) => setSearchQuery(e.target.value)}
                             placeholder={`Filter ${moduleTitle.toLowerCase()}...`}
                             sx={{
                                 fontSize: '0.73rem',
-                                color: '#ffffff',
+                                color: 'var(--mui-palette-text-primary)',
                                 width: '100%',
                                 '& input::placeholder': {
-                                    color: 'var(--crm-slate-300)',
-                                    opacity: 0.85,
+                                    color: 'var(--mui-palette-text-muted)',
+                                    opacity: 1,
                                 },
                             }}
                         />
@@ -621,13 +627,13 @@ export function RelatedRecordsTableView({
                                 onClick={onClose}
                                 aria-label="Close related view"
                                 sx={{
-                                    color: 'var(--crm-slate-300)',
+                                    color: 'var(--mui-palette-text-secondary)',
                                     p: 0.6,
                                     borderRadius: '6px',
                                     flexShrink: 0,
                                     '&:hover': {
-                                        backgroundColor: 'rgba(255, 255, 255, 0.12)',
-                                        color: '#ffffff',
+                                        backgroundColor: 'var(--mui-palette-error-soft)',
+                                        color: 'var(--mui-palette-error-main)',
                                     },
                                 }}
                             >

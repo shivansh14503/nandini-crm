@@ -95,7 +95,11 @@ function ChannelActionButton({ label, href, icon, color, external }: ChannelActi
                     border: '1px solid var(--mui-palette-border-main)',
                     borderRadius: '8px',
                     transition: 'all 0.15s ease',
-                    '&:hover': { color, borderColor: color, backgroundColor: `${color}0f` },
+                    '&:hover': {
+                        color,
+                        borderColor: color,
+                        backgroundColor: `color-mix(in srgb, ${color} 12%, transparent)`,
+                    },
                 }}
             >
                 {icon}
@@ -428,14 +432,14 @@ export function ContactDetailDrawer({
                                             width: 34,
                                             height: 34,
                                             borderRadius: '50%',
-                                            background: 'linear-gradient(135deg, #6366f1 0%, #4f46e5 100%)',
+                                            background: 'linear-gradient(135deg, var(--crm-fill-blue-600) 0%, var(--crm-fill-blue-700) 100%)',
                                             color: '#ffffff',
                                             display: 'flex',
                                             alignItems: 'center',
                                             justifyContent: 'center',
                                             fontSize: '0.78rem',
                                             fontWeight: 700,
-                                            boxShadow: '0 2px 8px rgba(79, 70, 229, 0.25)',
+                                            boxShadow: '0 2px 8px rgb(var(--crm-accent-rgb) / 0.25)',
                                         }}
                                     >
                                         {getInitials(assignedDisplayName)}

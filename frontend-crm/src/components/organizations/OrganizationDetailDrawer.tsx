@@ -222,7 +222,7 @@ export function OrganizationDetailDrawer({
             hideBackdrop={hideBackdrop}
             title={org.organizationName}
             subtitle={`${org.tradeName || org.organizationName} • ${location}`}
-            avatarBg="linear-gradient(135deg, #0284c7 0%, #0369a1 100%)"
+            avatarBg="linear-gradient(135deg, var(--crm-fill-blue-700) 0%, var(--crm-fill-blue-600) 100%)"
             verified={Boolean(org.accountVerified)}
             badges={badges}
             headerActions={{
@@ -283,14 +283,14 @@ export function OrganizationDetailDrawer({
                                             width: 34,
                                             height: 34,
                                             borderRadius: '50%',
-                                            background: 'linear-gradient(135deg, #6366f1 0%, #4f46e5 100%)',
+                                            background: 'linear-gradient(135deg, var(--crm-fill-blue-600) 0%, var(--crm-fill-blue-700) 100%)',
                                             color: '#ffffff',
                                             display: 'flex',
                                             alignItems: 'center',
                                             justifyContent: 'center',
                                             fontSize: '0.78rem',
                                             fontWeight: 700,
-                                            boxShadow: '0 2px 8px rgba(79, 70, 229, 0.25)',
+                                            boxShadow: '0 2px 8px rgb(var(--crm-accent-rgb) / 0.25)',
                                         }}
                                     >
                                         {getInitials(assignedDisplayName)}

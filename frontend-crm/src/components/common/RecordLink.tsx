@@ -33,7 +33,17 @@ export function RecordLink({ href, onOpen, children, sx }: RecordLinkProps) {
             component={Link}
             href={href}
             onClick={handleClick}
-            sx={[{ textDecoration: 'none' }, ...(Array.isArray(sx) ? sx : [sx])]}
+            sx={[
+                {
+                    textDecoration: 'none',
+                    transition: 'color 0.15s ease',
+                    '&:hover': {
+                        color: 'var(--crm-text-blue-600)',
+                        textDecoration: 'underline',
+                    },
+                },
+                ...(Array.isArray(sx) ? sx : [sx]),
+            ]}
         >
             {children}
         </Typography>

@@ -119,15 +119,16 @@ export const theme = createTheme({
         },
         dark: {
             palette: {
-                // Brand green from the company logo (#7ABD54); `main` is a shade deeper so white
-                // button text stays readable. Matches --crm-fill-blue-600 / --crm-blue-* in color-scale.css.
+                // Brand green from the company logo (#7ABD54); high-contrast for text, icons,
+                // outlines, switches, and focus states on dark surfaces. Solid buttons use
+                // --crm-fill-blue-* so white button labels stay crisp.
                 primary: {
-                    main: '#579638',
-                    light: '#7ABD54',
-                    dark: '#4A8430',
+                    main: '#7ABD54',
+                    light: '#95CC75',
+                    dark: '#579638',
                     contrastText: '#FFFFFF',
-                    soft: '#213133',
-                    softBorder: '#39573C',
+                    soft: '#162620',
+                    softBorder: '#2B4C3B',
                 },
                 secondary: {
                     main: '#94A3B8',
@@ -209,13 +210,72 @@ export const theme = createTheme({
         MuiPaper: { styleOverrides: { root: { backgroundImage: 'none' } } },
         MuiButton: {
             styleOverrides: {
-                root: {
+                root: ({ theme }) => ({
                     borderRadius: 10,
                     boxShadow: 'none',
+                    transition: 'background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease',
                     '&:hover': {
                         boxShadow: 'none',
                     },
+                    '&.MuiButton-containedPrimary': {
+                        color: '#FFFFFF',
+                        backgroundColor: 'var(--crm-fill-blue-600)',
+                        '&:hover': {
+                            backgroundColor: 'var(--crm-fill-blue-700)',
+                        },
+                    },
+                    '&.MuiButton-outlinedPrimary': {
+                        borderColor: theme.vars.palette.primary.softBorder,
+                        color: 'var(--crm-text-blue-700)',
+                        '&:hover': {
+                            borderColor: theme.vars.palette.primary.main,
+                            backgroundColor: theme.vars.palette.primary.soft,
+                        },
+                    },
+                }),
+            },
+        },
+        MuiCheckbox: {
+            styleOverrides: {
+                root: ({ theme }) => ({
+                    color: theme.vars.palette.text.muted,
+                    '&.Mui-checked': {
+                        color: theme.vars.palette.primary.main,
+                    },
+                }),
+            },
+        },
+        MuiRadio: {
+            styleOverrides: {
+                root: ({ theme }) => ({
+                    color: theme.vars.palette.text.muted,
+                    '&.Mui-checked': {
+                        color: theme.vars.palette.primary.main,
+                    },
+                }),
+            },
+        },
+        MuiSwitch: {
+            styleOverrides: {
+                switchBase: {
+                    '&.Mui-checked': {
+                        color: '#FFFFFF',
+                        '& + .MuiSwitch-track': {
+                            backgroundColor: 'var(--crm-fill-blue-600)',
+                            opacity: 1,
+                        },
+                    },
                 },
+            },
+        },
+        MuiTab: {
+            styleOverrides: {
+                root: ({ theme }) => ({
+                    transition: 'color 0.15s ease, background-color 0.15s ease',
+                    '&:hover:not(.Mui-selected)': {
+                        color: theme.vars.palette.primary.main,
+                    },
+                }),
             },
         },
         MuiCard: {

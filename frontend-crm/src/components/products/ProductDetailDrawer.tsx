@@ -73,7 +73,7 @@ export function ProductDetailDrawer({
             onClose={onClose}
             title={p.productName}
             subtitle={`${p.category || 'General Equipment'} • ${p.manufacturer || 'OEM Partner'}`}
-            avatarBg="linear-gradient(135deg, #0284c7 0%, #0369a1 100%)"
+            avatarBg="linear-gradient(135deg, var(--crm-fill-blue-700) 0%, var(--crm-fill-blue-600) 100%)"
             verified={true}
             badges={[
                 {

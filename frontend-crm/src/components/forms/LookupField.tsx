@@ -70,9 +70,10 @@ const actionButtonSx = {
     width: 34,
     height: 34,
     borderRadius: '6px',
-    backgroundColor: 'var(--crm-fill-blue-900)',
+    backgroundColor: 'var(--crm-fill-blue-600)',
     color: '#fff',
     flexShrink: 0,
+    transition: 'background-color 0.15s ease',
     '&:hover': { backgroundColor: 'var(--crm-fill-blue-700)' },
     '&.Mui-disabled': { backgroundColor: 'var(--crm-slate-200)', color: 'var(--mui-palette-text-muted)' },
 } as const;

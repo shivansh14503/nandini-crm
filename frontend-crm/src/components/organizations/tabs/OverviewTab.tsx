@@ -256,7 +256,8 @@ function OverviewTabInner({
                                     fontWeight: 700,
                                     cursor: 'default',
                                     color: form.accountVerified ? 'var(--mui-palette-success-main)' : 'var(--mui-palette-text-secondary)',
-                                    backgroundColor: form.accountVerified ? '#16a34a1a' : '#64748b1a',
+                                    backgroundColor: form.accountVerified ? 'var(--mui-palette-success-soft)' : 'var(--mui-palette-background-hover)',
+                                    border: `1px solid ${form.accountVerified ? 'var(--mui-palette-success-softBorder)' : 'var(--mui-palette-border-main)'}`,
                                 }}
                             />
                         ) : (
@@ -329,7 +330,8 @@ function OverviewTabInner({
                                     fontWeight: 700,
                                     cursor: 'default',
                                     color: form.provideSupport === 'Yes' ? 'var(--mui-palette-success-main)' : 'var(--mui-palette-text-secondary)',
-                                    backgroundColor: form.provideSupport === 'Yes' ? '#16a34a1a' : '#64748b1a',
+                                    backgroundColor: form.provideSupport === 'Yes' ? 'var(--mui-palette-success-soft)' : 'var(--mui-palette-background-hover)',
+                                    border: `1px solid ${form.provideSupport === 'Yes' ? 'var(--mui-palette-success-softBorder)' : 'var(--mui-palette-border-main)'}`,
                                 }}
                             />
                         ) : (

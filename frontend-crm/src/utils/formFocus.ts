@@ -32,11 +32,23 @@ function resolveFocusTarget(el: HTMLElement): HTMLElement {
     return el.querySelector<HTMLElement>(FOCUSABLE) ?? el;
 }
 
-const BLUE = '37, 99, 235';
+const DEFAULT_ACCENT_RGB = '37, 99, 235';
 const activeGlows = new WeakMap<Element, Animation[]>();
 
+function getThemeAccentTokens(): { rgbComma: string; primaryMain: string; primaryDark: string } {
+    if (typeof document === 'undefined') {
+        return { rgbComma: DEFAULT_ACCENT_RGB, primaryMain: '#2563eb', primaryDark: '#1d4ed8' };
+    }
+    const styles = getComputedStyle(document.documentElement);
+    const rawRgb = styles.getPropertyValue('--crm-accent-rgb').trim();
+    const rgbComma = rawRgb ? rawRgb.split(/\s+/).join(', ') : DEFAULT_ACCENT_RGB;
+    const primaryMain = styles.getPropertyValue('--mui-palette-primary-main').trim() || '#2563eb';
+    const primaryDark = styles.getPropertyValue('--crm-fill-blue-700').trim() || '#1d4ed8';
+    return { rgbComma, primaryMain, primaryDark };
+}
+
 /**
- * Plays a blue attention pulse on the field's visual container.
+ * Plays a brand-accent attention pulse on the field's visual container (blue in light mode, green in dark mode).
  * Uses the Web Animations API rather than a CSS class: React/MUI rewrite the element's className
  * when the field gains focus (Mui-focused), which would wipe a manually added class instantly.
  */
@@ -50,6 +62,7 @@ function glowField(target: HTMLElement): void {
 
     activeGlows.get(visual)?.forEach((a) => a.cancel());
 
+    const { rgbComma: ACCENT, primaryMain, primaryDark } = getThemeAccentTokens();
     const reduceMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
     const timing: KeyframeAnimationOptions = {
         duration: reduceMotion ? 1200 : 1800,
@@ -59,26 +72,26 @@ function glowField(target: HTMLElement): void {
     };
 
     const ring: Keyframe[] = reduceMotion
-        ? [{ boxShadow: `0 0 0 4px rgba(${BLUE}, 0.35)` }, { boxShadow: `0 0 0 0 rgba(${BLUE}, 0)` }]
+        ? [{ boxShadow: `0 0 0 4px rgba(${ACCENT}, 0.35)` }, { boxShadow: `0 0 0 0 rgba(${ACCENT}, 0)` }]
         : [
-              { boxShadow: `0 0 0 0 rgba(${BLUE}, 0.75), 0 0 0 rgba(${BLUE}, 0)`, backgroundColor: `rgba(${BLUE}, 0.10)`, transform: 'scale(1)', offset: 0 },
-              { boxShadow: `0 0 0 7px rgba(${BLUE}, 0.30), 0 0 22px rgba(${BLUE}, 0.55)`, backgroundColor: `rgba(${BLUE}, 0.08)`, transform: 'scale(1.012)', offset: 0.18 },
-              { boxShadow: `0 0 0 2px rgba(${BLUE}, 0.20), 0 0 8px rgba(${BLUE}, 0.20)`, backgroundColor: `rgba(${BLUE}, 0.05)`, transform: 'scale(1)', offset: 0.38 },
-              { boxShadow: `0 0 0 9px rgba(${BLUE}, 0.26), 0 0 26px rgba(${BLUE}, 0.5)`, backgroundColor: `rgba(${BLUE}, 0.07)`, transform: 'scale(1.01)', offset: 0.58 },
-              { boxShadow: `0 0 0 0 rgba(${BLUE}, 0), 0 0 0 rgba(${BLUE}, 0)`, backgroundColor: `rgba(${BLUE}, 0)`, transform: 'scale(1)', offset: 1 },
+              { boxShadow: `0 0 0 0 rgba(${ACCENT}, 0.75), 0 0 0 rgba(${ACCENT}, 0)`, backgroundColor: `rgba(${ACCENT}, 0.10)`, transform: 'scale(1)', offset: 0 },
+              { boxShadow: `0 0 0 7px rgba(${ACCENT}, 0.30), 0 0 22px rgba(${ACCENT}, 0.55)`, backgroundColor: `rgba(${ACCENT}, 0.08)`, transform: 'scale(1.012)', offset: 0.18 },
+              { boxShadow: `0 0 0 2px rgba(${ACCENT}, 0.20), 0 0 8px rgba(${ACCENT}, 0.20)`, backgroundColor: `rgba(${ACCENT}, 0.05)`, transform: 'scale(1)', offset: 0.38 },
+              { boxShadow: `0 0 0 9px rgba(${ACCENT}, 0.26), 0 0 26px rgba(${ACCENT}, 0.5)`, backgroundColor: `rgba(${ACCENT}, 0.07)`, transform: 'scale(1.01)', offset: 0.58 },
+              { boxShadow: `0 0 0 0 rgba(${ACCENT}, 0), 0 0 0 rgba(${ACCENT}, 0)`, backgroundColor: `rgba(${ACCENT}, 0)`, transform: 'scale(1)', offset: 1 },
           ];
 
     const animations: Animation[] = [visual.animate(ring, timing)];
 
-    // Keep the outline crisp blue while the glow is visible.
+    // Keep the outline crisp accent-colored while the glow is visible.
     const outline = visual.querySelector<HTMLElement>('fieldset');
     if (outline) {
         animations.push(
             outline.animate(
                 [
-                    { borderColor: '#2563eb', borderWidth: '2px', offset: 0 },
-                    { borderColor: '#1d4ed8', borderWidth: '2px', offset: 0.6 },
-                    { borderColor: '#2563eb', borderWidth: '1.5px', offset: 1 },
+                    { borderColor: primaryMain, borderWidth: '2px', offset: 0 },
+                    { borderColor: primaryDark, borderWidth: '2px', offset: 0.6 },
+                    { borderColor: primaryMain, borderWidth: '1.5px', offset: 1 },
                 ],
                 timing
             )

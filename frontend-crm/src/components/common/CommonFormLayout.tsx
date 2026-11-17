@@ -315,8 +315,8 @@ export function CommonFormLayout({
                                         fontWeight: isActive ? 700 : 500,
                                         fontSize: '0.84rem',
                                         '&:hover': {
-                                            backgroundColor: isActive ? 'var(--mui-palette-background-paper)' : 'var(--mui-palette-background-hover)',
-                                            color: isActive ? 'var(--crm-blue-900)' : 'var(--mui-palette-text-primary)',
+                                            backgroundColor: isActive ? 'var(--mui-palette-background-paper)' : 'var(--mui-palette-primary-soft)',
+                                            color: isActive ? 'var(--crm-blue-900)' : 'var(--crm-text-blue-700)',
                                         },
                                     }}
                                 >
