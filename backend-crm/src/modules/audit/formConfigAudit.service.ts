@@ -65,8 +65,6 @@ const moduleLabel = (module: string | undefined) => (module ? (MODULE_LABELS[mod
 
 /** Admin-facing names of form field / dropdown properties. */
 const PROP_LABELS: Record<string, string> = {
-    fieldKey: 'API Name',
-    apiName: 'API Name',
     isRequired: 'Required',
     isVisibleInForm: 'Visible on Form',
     isVisibleInDrawer: 'Visible in Drawer',
@@ -77,7 +75,6 @@ const PROP_LABELS: Record<string, string> = {
     dropdown: 'Linked Dropdown',
     dropdownCategoryId: 'Linked Dropdown',
     dropdownLabel: 'Dropdown Name',
-    dropdownKey: 'Dropdown Key',
     tabKey: 'Tab',
     tabLabel: 'Tab Name',
     sectionKey: 'Section',
@@ -97,8 +94,16 @@ function propValue(prop: string, value: unknown): string {
     return displayValue(value);
 }
 
+/**
+ * Internal names admins never see: a field's key / API name, a dropdown's key, an option's stored value (which
+ * follows its name). Changes to them are not listed; what moved with them still shows as the entry's note.
+ */
+const INTERNAL_PROPS = new Set(['fieldKey', 'apiName', 'previousFieldKeysJson', 'dropdownKey', 'key', 'value']);
+
 const diffsOf = (changes: Changes) =>
-    Object.entries(changes).filter((entry): entry is [string, { from: unknown; to: unknown }] => isDiff(entry[1]));
+    Object.entries(changes).filter(
+        (entry): entry is [string, { from: unknown; to: unknown }] => !INTERNAL_PROPS.has(entry[0]) && isDiff(entry[1]),
+    );
 
 const plural = (count: number, word: string) => `${count} ${word}${count === 1 ? '' : 's'}`;
 
@@ -281,12 +286,21 @@ function optionRevisions(row: ParsedRow, ctx: AuditContext, base: Base): AuditRe
                 to: isDefault ? 'Default' : 'Not default',
             };
         }
-        if (prop === 'label' || prop === 'value') {
-            return { ...base, tag: 'Updated', title: `Option updated in${where}`, from: propValue(prop, diff.from), to: propValue(prop, diff.to), note: `${propLabel(prop)} changed` };
+        if (prop === 'label') {
+            // A rename says how many records moved with it (an option's stored value follows its name).
+            const moved = str(c.reason);
+            return {
+                ...base,
+                tag: 'Updated',
+                title: `Option renamed in${where}`,
+                from: propValue(prop, diff.from),
+                to: propValue(prop, diff.to),
+                note: moved ? `Name changed. ${moved}` : 'Name changed',
+            };
         }
         return { ...base, tag: 'Updated', title: `Option "${label}" — ${propLabel(prop)} updated in${where}`, from: propValue(prop, diff.from), to: propValue(prop, diff.to) };
     });
-    return items.length ? items : [{ ...base, tag: 'Updated', title: `Option "${label}" updated in${where}` }];
+    return items.length ? items : [{ ...base, tag: 'Updated', title: `Option "${label}" updated in${where}`, note: str(c.reason) }];
 }
 
 function fieldRevisions(row: ParsedRow, ctx: AuditContext, base: Base): AuditRevisionItem[] {
@@ -296,9 +310,9 @@ function fieldRevisions(row: ParsedRow, ctx: AuditContext, base: Base): AuditRev
     const note = str(c.reason);
     switch (row.action) {
         case 'CREATE':
-            return [{ ...base, tag: 'Created', title: `Custom field "${label}" (${str(c.fieldType) ?? 'field'}) added to ${module}`, to: ctx.fieldKey ?? str(c.fieldKey) }];
+            return [{ ...base, tag: 'Created', title: `Custom field "${label}" (${str(c.fieldType) ?? 'field'}) added to ${module}` }];
         case 'DELETE':
-            return [{ ...base, tag: 'Deleted', title: `Custom field "${label}" deleted from ${module}`, from: ctx.fieldKey ?? str(c.fieldKey), note }];
+            return [{ ...base, tag: 'Deleted', title: `Custom field "${label}" deleted from ${module}`, note }];
         default: {
             if (typeof c.reordered === 'number') {
                 return [{ ...base, tag: 'Reordered', title: `Fields reordered on ${module}`, note: plural(c.reordered, 'field') }];

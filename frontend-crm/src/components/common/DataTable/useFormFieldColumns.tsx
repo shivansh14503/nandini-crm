@@ -25,11 +25,7 @@ function readFieldValue(row: unknown, field: FormFieldDefinitionDto): unknown {
     const record = (row ?? {}) as Record<string, unknown>;
     if (field.isSystem) return record[field.fieldKey];
     const custom = record[CUSTOM_FIELDS_KEY] as Record<string, unknown> | undefined;
-    if (!custom) return undefined;
-    if (custom[field.fieldKey] !== undefined) return custom[field.fieldKey];
-    // A row loaded before the field's API name was renamed still holds its value under the old name.
-    const old = [...(field.previousFieldKeys ?? [])].reverse().find((key) => custom[key] !== undefined);
-    return old ? custom[old] : undefined;
+    return custom?.[field.fieldKey];
 }
 
 /** Display text for any form field value in a table cell ('' when empty). */
@@ -106,7 +102,6 @@ export function useFormFieldColumns<T>(
                 return {
                     id: field.isSystem ? field.fieldKey : `${CUSTOM_FIELDS_KEY}.${field.fieldKey}`,
                     fieldKey: field.fieldKey,
-                    aliasIds: field.isSystem ? undefined : field.previousFieldKeys?.map((key) => `${CUSTOM_FIELDS_KEY}.${key}`),
                     label: (labels.get(field.fieldKey) ?? field.label).toUpperCase(),
                     group: tabLabel(field),
                     groupOrder: formOrder.get(field.fieldKey),

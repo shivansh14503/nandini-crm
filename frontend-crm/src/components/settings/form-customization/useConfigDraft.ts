@@ -5,10 +5,6 @@ import { useQueryClient } from '@tanstack/react-query';
 import { formConfigService } from '@/services/formConfig.service';
 import {
     CRM_MODULE_LABELS,
-    apiNameOf,
-    apiNameOwner,
-    apiNameShapeError,
-    type FormFieldDefinitionDto,
     type CreateCategoryPayload,
     type CreateFieldPayload,
     type CreateOptionPayload,
@@ -94,18 +90,6 @@ const fail = (message: string): never => {
 };
 
 const moduleLabel = (m: string) => CRM_MODULE_LABELS[m as CrmModuleKey] ?? m;
-
-/**
- * Same checks the API makes on a requested API name (custom key or built-in API name), as far as the draft can tell:
- * its shape, and no other field of the module answering to it. (Record properties a built-in name may not take are
- * only known to the API, which refuses them on save.)
- */
-function assertNameFree(s: FormConfigsPayload, module: CrmModuleKey, name: string, self?: FormFieldDefinitionDto): void {
-    const shape = apiNameShapeError(name);
-    if (shape) fail(shape);
-    const owner = apiNameOwner(s.fieldsByModule[module] ?? [], name, self);
-    if (owner) fail(`'${name}' is already the API name of '${owner.label}'.`);
-}
 
 /** Fields of a tab that are not deleted (archived ones included). */
 const liveFieldsOn = (s: FormConfigsPayload, module: CrmModuleKey, tabKey: string) =>
@@ -248,21 +232,20 @@ export function useConfigDraft(base: FormConfigsPayload | undefined, refetch: ()
 
     /**
      * Folds edits of an option created in this draft into the op creating it: its addOption op, or the option list
-     * of a dropdown new in this draft (createCategory / a field's inline `newOptions`, where the value doubles as
-     * the label). Staged field defaults using the old value follow a rename. Returns what can't be folded
-     * (archiving / restoring, or a distinct label / meta for an inline option), or null when nothing is left.
+     * of a dropdown new in this draft (createCategory / a field's inline `newOptions`). An option's name is its
+     * value, so a rename renames both, and staged field defaults using the old value follow it. Returns what can't be
+     * folded (archiving / restoring, or meta for an inline option), or null when nothing is left.
      */
     const foldIntoDraftOption = (category: DropdownCategoryDto, option: DropdownOptionDto, payload: UpdateOptionPayload): UpdateOptionPayload | null => {
         const s = current();
         // Status and default can't be sent when creating an option: they stay an update, saved right after it.
         const { isActive, isDefault, ...edit } = payload;
-        const value = edit.value ?? option.value;
+        const value = edit.label ?? option.value;
         const renamed = value !== option.value;
         const viaAddOption = opsRef.current.some((op) => op.kind === 'addOption' && op.id === option.id);
         const leftover: UpdateOptionPayload = {
             ...(isActive !== undefined ? { isActive } : {}),
             ...(isDefault !== undefined ? { isDefault } : {}),
-            ...(!viaAddOption && edit.label !== undefined && edit.label !== value ? { label: edit.label } : {}),
             ...(!viaAddOption && edit.meta !== undefined ? { meta: edit.meta } : {}),
         };
         const renameDefault = <T extends string | null | undefined>(defaultValue: T, fieldType: string | undefined, key: string | null | undefined) =>
@@ -273,8 +256,8 @@ export function useConfigDraft(base: FormConfigsPayload | undefined, refetch: ()
                 switch (op.kind) {
                     case 'addOption': {
                         if (op.id !== option.id) return op;
-                        const p = { ...op.payload, value, ...(edit.label !== undefined ? { label: edit.label } : {}), ...(edit.meta !== undefined ? { meta: edit.meta } : {}) };
-                        return { ...op, payload: p, summary: `${category.label}: added '${p.label ?? p.value}'` };
+                        const p = { ...op.payload, value, ...(edit.meta !== undefined ? { meta: edit.meta } : {}) };
+                        return { ...op, payload: p, summary: `${category.label}: added '${p.value}'` };
                     }
                     case 'createCategory':
                         return renamed ? withRenamedDraftOption(op, option.id, value) : op;
@@ -315,12 +298,9 @@ export function useConfigDraft(base: FormConfigsPayload | undefined, refetch: ()
         if (payload.dropdownCategoryKey !== undefined && created.categoryKey) leftover.dropdownCategoryKey = payload.dropdownCategoryKey;
 
         const next: CreateFieldPayload = { ...created.payload };
-        // API name: one the admin typed is kept; otherwise it follows the label while the field is unsaved.
+        // The key follows the label (the API derives it the same way when the field is saved).
         let fieldKey = created.fieldKey;
-        if (payload.fieldKey !== undefined) {
-            next.fieldKey = payload.fieldKey;
-            fieldKey = payload.fieldKey;
-        } else if (payload.label !== undefined && payload.label !== created.payload.label && !created.payload.fieldKey) {
+        if (payload.label !== undefined && payload.label !== created.payload.label) {
             const taken = new Set((current().fieldsByModule[created.payload.module] ?? []).filter((f) => f.id !== fieldId).map((f) => f.fieldKey));
             fieldKey = uniqueKey(customFieldKeyFor(payload.label), (k) => taken.has(k));
         }
@@ -372,14 +352,15 @@ export function useConfigDraft(base: FormConfigsPayload | undefined, refetch: ()
             updateOption(optionId, input) {
                 const s = current();
                 const { category, option } = findOptionById(s, optionId) ?? fail('Option not found.');
-                let payload: UpdateOptionPayload = input.value !== undefined ? { ...input, value: input.value.trim() } : input;
+                let payload: UpdateOptionPayload = input.label !== undefined ? { ...input, label: input.label.trim() } : input;
                 if (option.isSystem && payload.isActive === false) fail(`'${option.label}' drives CRM logic and cannot be archived.`);
-                if (option.isSystem && payload.value !== undefined && payload.value !== option.value) fail(`'${option.label}' drives CRM logic; its value cannot change.`);
-                if (payload.value !== undefined) {
-                    const value = payload.value;
-                    if (!value) fail('Option name is required.');
-                    const duplicate = category.options.find((o) => o.id !== optionId && o.value.toLowerCase() === value.toLowerCase());
-                    if (duplicate) fail(`'${value}' is already in ${category.label}.`);
+                if (option.isSystem && payload.label !== undefined && payload.label !== option.label) fail(`'${option.label}' drives CRM logic and cannot be renamed.`);
+                if (payload.label !== undefined) {
+                    // An option's name is also its stored value: unique per dropdown, ignoring case (as the API checks).
+                    const name = payload.label;
+                    if (!name) fail('Option name is required.');
+                    const duplicate = category.options.find((o) => o.id !== optionId && o.value.toLowerCase() === name.toLowerCase());
+                    if (duplicate) fail(`'${name}' is already in ${category.label}.`);
                 }
                 const created = opsRef.current.find((op) => op.kind === 'addOption' && op.id === optionId);
                 if (created && payload.isActive === false) {
@@ -397,7 +378,7 @@ export function useConfigDraft(base: FormConfigsPayload | undefined, refetch: ()
                     commit([...opsRef.current.slice(0, -1), { ...last, payload: { ...last.payload, ...payload } }]);
                     return;
                 }
-                const renamedTo = payload.value ?? payload.label;
+                const renamedTo = payload.label;
                 const what =
                     payload.isActive === false
                         ? `archived '${option.label}'`
@@ -420,8 +401,8 @@ export function useConfigDraft(base: FormConfigsPayload | undefined, refetch: ()
             createField(payload) {
                 const s = current();
                 const taken = new Set((s.fieldsByModule[payload.module] ?? []).map((f) => f.fieldKey));
-                if (payload.fieldKey) assertNameFree(s, payload.module, payload.fieldKey);
-                const fieldKey = payload.fieldKey ?? uniqueKey(customFieldKeyFor(payload.label), (k) => taken.has(k));
+                // Predicts the key the API derives from the label (the draft refers to the field by it until saved).
+                const fieldKey = uniqueKey(customFieldKeyFor(payload.label), (k) => taken.has(k));
                 const newOptions = payload.dropdownCategoryKey ? [] : [...new Set(payload.newOptions ?? [])];
                 const categoryKey = newOptions.length ? uniqueKey(categoryKeyFor(payload.label), (k) => Boolean(findCategoryByKey(s, k))) : undefined;
                 const id = newTempId('field');
@@ -446,24 +427,6 @@ export function useConfigDraft(base: FormConfigsPayload | undefined, refetch: ()
                 const movedTab = input.tabKey !== undefined && input.tabKey !== field.tabKey;
                 const tabLabel = movedTab && input.tabLabel === undefined ? tabLabelOf(s, field.module, input.tabKey!) : undefined;
                 let payload = tabLabel ? { ...input, tabLabel } : input;
-                if (payload.fieldKey !== undefined) {
-                    if (payload.fieldKey === field.fieldKey) {
-                        payload = { ...payload };
-                        delete payload.fieldKey;
-                    } else {
-                        if (field.isSystem) fail(`${field.label} is a built-in field; its API name can't be changed.`);
-                        assertNameFree(s, field.module, payload.fieldKey, field);
-                    }
-                }
-                if (payload.apiName !== undefined) {
-                    if (payload.apiName === apiNameOf(field)) {
-                        payload = { ...payload };
-                        delete payload.apiName;
-                    } else {
-                        if (!field.isSystem) fail(`${field.label} is a custom field: rename its API name instead.`);
-                        assertNameFree(s, field.module, payload.apiName, field);
-                    }
-                }
                 if (field.isCoreLocked && payload.isRequired === false) fail(`${field.label} is a core field and must stay required.`);
                 if (field.isCoreLocked && payload.isVisibleInForm === false) fail(`${field.label} is a core field and cannot be hidden.`);
                 if (field.isCoreLocked && payload.isActive === false) fail(`${field.label} is a core field and cannot be archived.`);
@@ -629,8 +592,11 @@ export function useConfigDraft(base: FormConfigsPayload | undefined, refetch: ()
             }
             return result.saved;
         } finally {
-            // A renamed API name moved record values and saved filters on the server: reload every cached copy.
-            const renamedKey = pending.slice(0, result?.saved ?? 0).some((op) => op.kind === 'updateField' && op.payload.fieldKey !== undefined);
+            // Renaming a custom field or an option moves record values and saved filters on the server (the stored
+            // key / value follows the name): reload every cached copy.
+            const renamedKey = pending
+                .slice(0, result?.saved ?? 0)
+                .some((op) => (op.kind === 'updateField' || op.kind === 'updateOption') && op.payload.label !== undefined);
             if (renamedKey) void queryClient.invalidateQueries();
             // Whatever was saved is now part of `base`; anything left (after a failure) stays staged on top of it.
             await refetch().catch(() => undefined);

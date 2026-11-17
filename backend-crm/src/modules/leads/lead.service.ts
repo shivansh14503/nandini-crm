@@ -32,25 +32,27 @@ export const leadNotFound = () => HttpError.notFound('Lead not found');
 /** Columns `assertRecordAccess` reads. */
 const OWNER_SELECT = { assignedTo: true, createdBy: true } as const;
 
-export interface LeadMobileMatch {
-    exists: boolean;
-    entityType?: 'Lead' | 'Contact';
-    name?: string;
+/** A live lead / contact / organization that already has the mobile number or email, so the form can link to it. */
+export interface ExistingRecordMatch {
+    entityType: 'Lead' | 'Contact' | 'Organization';
+    id: string;
+    /** Lead / contact / account code. */
+    code: string;
+    name: string;
     organizationName?: string;
 }
 
-export interface LeadEmailMatch {
-    exists: true;
-    entityType: 'Lead' | 'Contact' | 'Organization';
-    name: string;
-}
-
 export interface LeadDuplicateCheck {
-    mobileMatch: LeadMobileMatch;
-    emailMatches: Record<string, LeadEmailMatch>;
+    /** Newest first; leads before contacts. */
+    mobileMatches: ExistingRecordMatch[];
+    /** Keyed by lowercased email. */
+    emailMatches: Record<string, ExistingRecordMatch[]>;
 }
 
 const MIN_MOBILE_DIGITS = 7;
+/** Matches reported per mobile number / email (the form lists each one). */
+const MAX_MATCHES = 5;
+const ENTITY_ORDER: Record<ExistingRecordMatch['entityType'], number> = { Lead: 0, Contact: 1, Organization: 2 };
 
 /** `Converted` is only ever set by POST /api/leads/:id/convert, and a converted lead stays converted. */
 export function assertStatusTransition(fromStatus: string | null, toStatus: string): void {
@@ -209,33 +211,46 @@ export const leadService = {
     },
 
     /**
-     * Read-only, informational lookup for the lead form: is this mobile number / are these emails already on a
-     * live lead, contact or organization? Never blocks a save.
+     * Read-only, informational lookup for the lead / contact forms: is this mobile number / are these emails already
+     * on a live lead, contact or organization? Returns each record's id so the form can link to it. Never blocks a save.
      */
     async checkDuplicates(query: unknown): Promise<LeadDuplicateCheck> {
-        const { mobile, emails, excludeId } = checkLeadDuplicatesQuerySchema.parse(query ?? {});
-        const result: LeadDuplicateCheck = { mobileMatch: { exists: false }, emailMatches: {} };
-        const excludeLead = excludeId ? { id: { not: excludeId } } : {};
+        const { mobile, emails, excludeId, excludeType = 'lead' } = checkLeadDuplicatesQuerySchema.parse(query ?? {});
+        const result: LeadDuplicateCheck = { mobileMatches: [], emailMatches: {} };
+        const notSelf = (type: typeof excludeType) => (excludeId && excludeType === type ? { id: { not: excludeId } } : {});
 
         if (mobile && mobile.replace(/\D/g, '').length >= MIN_MOBILE_DIGITS) {
             const variants = phoneVariants(mobile);
-            const lead = await prisma.lead.findFirst({
-                where: { isDeleted: false, ...excludeLead, OR: [{ mobile: { in: variants } }, { otherPhone: { in: variants } }] },
-                select: { name: true, organizationName: true },
-                orderBy: { createdAt: 'desc' },
-            });
-            if (lead) {
-                result.mobileMatch = { exists: true, entityType: 'Lead', name: lead.name, organizationName: lead.organizationName || undefined };
-            } else {
-                const contact = await prisma.contact.findFirst({
-                    where: { isDeleted: false, OR: [{ mobile: { in: variants } }, { officePhone: { in: variants } }] },
-                    select: { name: true, organizationName: true },
+            const [leads, contacts] = await Promise.all([
+                prisma.lead.findMany({
+                    where: { isDeleted: false, ...notSelf('lead'), OR: [{ mobile: { in: variants } }, { otherPhone: { in: variants } }] },
+                    select: { id: true, leadCode: true, name: true, organizationName: true },
                     orderBy: { createdAt: 'desc' },
-                });
-                if (contact) {
-                    result.mobileMatch = { exists: true, entityType: 'Contact', name: contact.name, organizationName: contact.organizationName || undefined };
-                }
-            }
+                    take: MAX_MATCHES,
+                }),
+                prisma.contact.findMany({
+                    where: { isDeleted: false, ...notSelf('contact'), OR: [{ mobile: { in: variants } }, { officePhone: { in: variants } }] },
+                    select: { id: true, contactCode: true, name: true, organizationName: true },
+                    orderBy: { createdAt: 'desc' },
+                    take: MAX_MATCHES,
+                }),
+            ]);
+            result.mobileMatches = [
+                ...leads.map((l): ExistingRecordMatch => ({
+                    entityType: 'Lead',
+                    id: l.id,
+                    code: l.leadCode,
+                    name: l.name,
+                    organizationName: l.organizationName || undefined,
+                })),
+                ...contacts.map((c): ExistingRecordMatch => ({
+                    entityType: 'Contact',
+                    id: c.id,
+                    code: c.contactCode,
+                    name: c.name,
+                    organizationName: c.organizationName || undefined,
+                })),
+            ].slice(0, MAX_MATCHES);
         }
 
         const normalizedEmails = [...new Set((emails ?? []).map((e) => e.trim().toLowerCase()).filter(Boolean))];
@@ -244,26 +259,41 @@ export const leadService = {
                 where: {
                     email: { in: normalizedEmails },
                     OR: [
-                        { lead: { isDeleted: false, ...excludeLead } },
-                        { contact: { isDeleted: false } },
-                        { organization: { isDeleted: false } },
+                        { lead: { isDeleted: false, ...notSelf('lead') } },
+                        { contact: { isDeleted: false, ...notSelf('contact') } },
+                        { organization: { isDeleted: false, ...notSelf('organization') } },
                     ],
                 },
                 select: {
                     email: true,
-                    lead: { select: { name: true } },
-                    contact: { select: { name: true } },
-                    organization: { select: { organizationName: true } },
+                    lead: { select: { id: true, leadCode: true, name: true, organizationName: true } },
+                    contact: { select: { id: true, contactCode: true, name: true, organizationName: true } },
+                    organization: { select: { id: true, accountCode: true, organizationName: true } },
                 },
             });
             for (const row of rows) {
                 const key = row.email.trim().toLowerCase();
-                if (result.emailMatches[key]) continue;
-                if (row.lead) result.emailMatches[key] = { exists: true, entityType: 'Lead', name: row.lead.name };
-                else if (row.contact) result.emailMatches[key] = { exists: true, entityType: 'Contact', name: row.contact.name };
-                else if (row.organization) {
-                    result.emailMatches[key] = { exists: true, entityType: 'Organization', name: row.organization.organizationName };
+                const list = (result.emailMatches[key] ??= []);
+                let match: ExistingRecordMatch | undefined;
+                if (row.lead) {
+                    match = { entityType: 'Lead', id: row.lead.id, code: row.lead.leadCode, name: row.lead.name, organizationName: row.lead.organizationName || undefined };
+                } else if (row.contact) {
+                    match = {
+                        entityType: 'Contact',
+                        id: row.contact.id,
+                        code: row.contact.contactCode,
+                        name: row.contact.name,
+                        organizationName: row.contact.organizationName || undefined,
+                    };
+                } else if (row.organization) {
+                    match = { entityType: 'Organization', id: row.organization.id, code: row.organization.accountCode, name: row.organization.organizationName };
                 }
+                // The same record can hold an address twice (different rows); list it once.
+                if (match && !list.some((m) => m.entityType === match.entityType && m.id === match.id)) list.push(match);
+            }
+            // Leads first, then contacts, then organizations.
+            for (const [key, list] of Object.entries(result.emailMatches)) {
+                result.emailMatches[key] = list.sort((a, b) => ENTITY_ORDER[a.entityType] - ENTITY_ORDER[b.entityType]).slice(0, MAX_MATCHES);
             }
         }
 

@@ -31,6 +31,8 @@ import {
 import { AppToast } from '@/components/common/AppToast';
 import { LEAD_FORM_TABS } from './LeadForm';
 import { DynamicDrawerCustomFields } from '@/components/common/Drawer/DynamicDrawerCustomFields';
+import { DoubleClickCopyText } from '@/components/common/useDoubleClickCopy';
+import { phoneForCopy } from '@/utils/phone';
 
 export interface LeadDetailDrawerProps {
     lead: Lead | null;
@@ -154,12 +156,16 @@ export function LeadDetailDrawer({
                             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 0.5 }}>
                                 <ApartmentIcon sx={{ fontSize: 18, color: 'var(--crm-text-blue-600)' }} />
                                 <Typography sx={{ fontSize: '0.98rem', fontWeight: 800, color: 'var(--crm-text-blue-700)' }}>
-                                    {l.organizationName || 'Individual Prospect / Non-Entity'}
+                                    {l.organizationName ? (
+                                        <DoubleClickCopyText>{l.organizationName}</DoubleClickCopyText>
+                                    ) : (
+                                        'Individual Prospect / Non-Entity'
+                                    )}
                                 </Typography>
                             </Box>
                             {l.mailingName && l.mailingName !== l.organizationName && (
                                 <Typography sx={{ fontSize: '0.75rem', color: 'var(--mui-palette-text-secondary)', mt: 0.3 }}>
-                                    Mailing Name: {l.mailingName}
+                                    Mailing Name: <DoubleClickCopyText>{l.mailingName}</DoubleClickCopyText>
                                 </Typography>
                             )}
                         </DrawerSectionCard>
@@ -256,7 +262,7 @@ export function LeadDetailDrawer({
                                     value={l.mobile}
                                     valueWeight={700}
                                     caption="Primary Mobile / WhatsApp"
-                                    copyValue={l.mobile}
+                                    copyValue={l.mobile ? phoneForCopy(l.mobile) : undefined}
                                     copyTitle="Copy Phone"
                                 />
 
@@ -268,7 +274,7 @@ export function LeadDetailDrawer({
                                             value={l.otherPhone}
                                             valueColor="var(--crm-slate-700)"
                                             caption="Other / Landline Phone"
-                                            copyValue={l.otherPhone}
+                                            copyValue={phoneForCopy(l.otherPhone)}
                                             copyTitle="Copy Phone"
                                         />
                                     </>
@@ -283,6 +289,8 @@ export function LeadDetailDrawer({
                                                 icon={<EmailOutlinedIcon sx={{ fontSize: 16, color: 'var(--crm-text-blue-600)' }} />}
                                                 value={em.email}
                                                 caption={em.isPrimary ? 'Primary Official Email' : 'Alternate Email'}
+                                                copyValue={em.email}
+                                                copyTitle="Copy Email"
                                                 badgeLabel={em.isPrimary ? 'PRIMARY' : undefined}
                                             />
                                         ))}

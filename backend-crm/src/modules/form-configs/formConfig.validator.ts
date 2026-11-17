@@ -1,8 +1,6 @@
 import { z } from 'zod';
 import { booleanQuery } from '../../validators/common.js';
 import { CATEGORY_MODULES, CRM_MODULES, CUSTOM_FIELD_TYPES, FIELD_SIZES } from './formConfig.defaults.js';
-import { BUILT_IN_API_NAME_MAX } from './builtInApiNames.js';
-import { CUSTOM_FIELD_KEY_MAX, CUSTOM_FIELD_KEY_MESSAGE, CUSTOM_FIELD_KEY_PATTERN } from './fieldKeyRename.js';
 
 /**
  * Request schemas for /api/form-configs. Rules that depend on the stored row (system options can't be archived
@@ -10,7 +8,6 @@ import { CUSTOM_FIELD_KEY_MAX, CUSTOM_FIELD_KEY_MESSAGE, CUSTOM_FIELD_KEY_PATTER
  * are enforced in formConfig.service.ts, where the row is known.
  */
 
-const KEY_PATTERN = /^[a-z][a-z0-9_]*$/;
 const KEY_MESSAGE = 'Use lowercase letters, digits and underscores, starting with a letter.';
 
 /** Blank / null → undefined, otherwise trimmed and bounded. */
@@ -53,8 +50,7 @@ export const formConfigQuerySchema = z.object({ includeInactive: booleanQuery })
 // ── Dropdown categories ──────────────────────────────────────────────────────
 
 export const createCategorySchema = z.object({
-    /** Optional: derived from the label (prefixed `custom_`) when omitted. */
-    key: z.string().trim().toLowerCase().max(80).regex(KEY_PATTERN, { message: KEY_MESSAGE }).optional(),
+    /** The dropdown's key is derived from it (`custom_` + snake_case) and follows renames. */
     label: label('Label', 120),
     module: z.enum(CATEGORY_MODULES).default('shared'),
     description: optionalTrimmed(300),
@@ -64,6 +60,7 @@ export const createCategorySchema = z.object({
 
 export const updateCategorySchema = z
     .object({
+        /** An admin-created dropdown's key follows it; a built-in dropdown keeps its key. */
         label: label('Label', 120).optional(),
         description: clearableText(300),
         /** Owning module, or 'shared' (lists it under every module's Dropdowns). */
@@ -74,17 +71,15 @@ export const updateCategorySchema = z
 // ── Dropdown options ─────────────────────────────────────────────────────────
 
 export const createOptionSchema = z.object({
-    value: label('Option value', 200),
-    /** Display label; defaults to the value. */
-    label: optionalTrimmed(200),
+    /** The option's name: shown in forms and stored on records (an option's value is its label). */
+    value: label('Option', 200),
     meta: metaSchema,
 });
 
 export const updateOptionSchema = z
     .object({
-        /** Blocked for system options. */
-        value: label('Option value', 200).optional(),
-        label: label('Option label', 200).optional(),
+        /** Renames the option; its stored value follows (records too). Blocked for system options. */
+        label: label('Option', 200).optional(),
         meta: metaSchema,
         /** false archives the option (blocked for system options); true restores it. */
         isActive: z.boolean().optional(),
@@ -105,19 +100,12 @@ export const TAB_KEY_PATTERN = /^[a-z][a-z0-9_]{1,39}$/;
 const tabKey = z.string().trim().max(40).regex(TAB_KEY_PATTERN, { message: KEY_MESSAGE });
 /** Display name of a custom tab (ignored on built-in tabs, whose names are fixed). */
 const tabLabel = optionalTrimmed(120);
-/** A custom field's API name: the key its values are stored under (TEMP-DEV-RENAME: `cf_` optional, any case). */
-const customFieldKey = z
-    .string()
-    .trim()
-    .max(CUSTOM_FIELD_KEY_MAX, { message: `The API name can't exceed ${CUSTOM_FIELD_KEY_MAX} characters.` })
-    .regex(CUSTOM_FIELD_KEY_PATTERN, { message: CUSTOM_FIELD_KEY_MESSAGE });
 
 export const createFieldSchema = z
     .object({
         module: moduleSchema,
+        /** The field's key is derived from it (derivedKeys.ts). */
         label: label('Label', 120),
-        /** API name; omitted → derived from the label. */
-        fieldKey: customFieldKey.optional(),
         fieldType: z.enum(CUSTOM_FIELD_TYPES, { error: `fieldType must be one of: ${CUSTOM_FIELD_TYPES.join(', ')}.` }),
         tabKey,
         tabLabel,
@@ -153,19 +141,8 @@ export const createFieldSchema = z
 
 export const updateFieldSchema = z
     .object({
+        /** A custom field's key follows it, moving stored values, filters and PDF paths with it. */
         label: label('Label', 120).optional(),
-        /** Custom fields only: renames the API name, moving stored values, filters and PDF paths with it. */
-        fieldKey: customFieldKey.optional(),
-        /**
-         * Built-in fields only: the API name writes and imports may use in place of the column name (the column
-         * name itself restores the default). Clashes are checked by the service (builtInApiNames.ts).
-         */
-        apiName: z
-            .string()
-            .trim()
-            .min(1, { message: 'Enter an API name.' })
-            .max(BUILT_IN_API_NAME_MAX, { message: `The API name can't exceed ${BUILT_IN_API_NAME_MAX} characters.` })
-            .optional(),
         /** Select / multi-select fields only: switches between the two. */
         fieldType: z.enum(['select', 'multiselect']).optional(),
         /** Any field may move to another tab. */
@@ -190,13 +167,6 @@ export const updateFieldSchema = z
         validationRules: z.record(z.string(), z.unknown()).nullable().optional(),
     })
     .refine((body) => Object.keys(body).length > 0, { message: 'Nothing to update.' });
-
-/** POST /api-name-check: what saving `name` as the API name of a field (`fieldId`; omitted = a new custom field) would do. */
-export const apiNameCheckSchema = z.object({
-    module: moduleSchema,
-    fieldId: z.string().trim().min(1).max(50).optional(),
-    name: z.string().trim().max(200),
-});
 
 export const reorderFieldsSchema = z.object({
     fieldIds: z.array(z.string().trim().min(1).max(50)).min(1).max(1000),

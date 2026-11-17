@@ -462,16 +462,13 @@ function CategoryEditor({
                 {rows.map((option) => {
                     return (
                         <OptionRow
-                            // Remounts with the saved label after a rename.
+                            // Remounts with the saved name after a rename.
                             key={`${option.id}:${option.label}`}
                             option={option}
                             canEdit={canEdit}
                             busy={busy}
-                            // Forms store an option's value, so a regular option's value follows its new name; a system
-                            // option's value drives CRM logic and stays fixed (only its label changes).
-                            onRename={(next) =>
-                                run(() => draft.updateOption(option.id, option.isSystem ? { label: next } : { value: next, label: next }))
-                            }
+                            // An option's name is also the value records store, so a rename renames both (records follow).
+                            onRename={(next) => run(() => draft.updateOption(option.id, { label: next }))}
                             onToggleActive={(isActive) => run(() => draft.updateOption(option.id, { isActive }))}
                             onToggleDefault={(isDefault) => setDefault(option, isDefault)}
                             onDelete={() => run(() => draft.deleteOption(option.id))}
@@ -502,10 +499,10 @@ function OptionRow({
     option: DropdownOptionDto;
     canEdit: boolean;
     busy: boolean;
-    onRename: (label: string) => Promise<void>;
-    onToggleActive: (isActive: boolean) => Promise<void>;
-    onToggleDefault: (isDefault: boolean) => Promise<void>;
-    onDelete: () => Promise<void>;
+    onRename: (label: string) => Promise<unknown>;
+    onToggleActive: (isActive: boolean) => Promise<unknown>;
+    onToggleDefault: (isDefault: boolean) => Promise<unknown>;
+    onDelete: () => Promise<unknown>;
     dragProps: RowDragProps;
     dragSx: Record<string, unknown>;
 }) {
@@ -518,11 +515,12 @@ function OptionRow({
             setLabel(option.label);
             return;
         }
-        // Only an actual edit is staged: merely focusing a legacy option whose value differs from its label must not
-        // silently re-key it (records storing the old value would stop resolving). Any real edit syncs both.
+        // Only an actual edit is staged: merely focusing an option must not rename it.
         if (next === option.label) return;
         void onRename(next);
     };
+    // A system option's name is what the CRM's logic matches records against, so it can't be renamed.
+    const canRename = canEdit && !option.isSystem;
 
     return (
         <Box
@@ -545,7 +543,7 @@ function OptionRow({
                 <DragHandle disabled={!option.isActive || busy} />
             )}
             <Box sx={{ minWidth: 0 }}>
-                {canEdit ? (
+                {canRename ? (
                     <TextField
                         size="small"
                         fullWidth
@@ -558,15 +556,10 @@ function OptionRow({
                             if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
                             if (e.key === 'Escape') setLabel(option.label);
                         }}
-                        slotProps={{ input: { disableUnderline: false, sx: { fontSize: '0.85rem', fontWeight: 600, color: 'var(--mui-palette-text-primary)' } }, htmlInput: { maxLength: 200, 'aria-label': `Label for ${option.value}` } }}
+                        slotProps={{ input: { disableUnderline: false, sx: { fontSize: '0.85rem', fontWeight: 600, color: 'var(--mui-palette-text-primary)' } }, htmlInput: { maxLength: 200, 'aria-label': `Name of ${option.label}` } }}
                     />
                 ) : (
                     <Typography sx={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--mui-palette-text-primary)' }}>{option.label}</Typography>
-                )}
-                {option.isSystem && option.label !== option.value && (
-                    <Typography sx={{ fontSize: '0.7rem', color: 'var(--mui-palette-text-muted)', mt: 0.25 }}>
-                        Stored value: <span style={{ fontFamily: 'monospace' }}>{option.value}</span>
-                    </Typography>
                 )}
             </Box>
             <Box sx={{ display: 'flex', gap: 0.5, alignItems: 'center' }}>
@@ -581,7 +574,7 @@ function OptionRow({
                     </Badge>
                 )}
                 {option.isSystem && (
-                    <Badge tone="locked" icon={<LockOutlinedIcon sx={{ fontSize: 11 }} />} title="Drives CRM business logic: can be relabelled and reordered, but not archived or renamed.">
+                    <Badge tone="locked" icon={<LockOutlinedIcon sx={{ fontSize: 11 }} />} title="Drives CRM business logic: can be reordered or set as the default, but not renamed, archived or deleted.">
                         Locked
                     </Badge>
                 )}

@@ -6,18 +6,11 @@ import { lockRecords, type LockedEntity } from '../shared/transactions.js';
 import type { CrmModuleKey } from './formConfig.defaults.js';
 
 /**
- * A custom field's API name (`fieldKey`, e.g. `cf_po_number` or `poNumber`) is the key its values are stored under in
- * each record's `customDataJson`, and the name saved table filters and PDF templates refer to it by. An admin may
- * rename it (built-in fields' keys are column names and stay fixed; see builtInApiNames.ts): `migrateFieldKey` then
- * moves everything stored under the old name in the same transaction. The old name is forgotten.
- *
- * TEMP-DEV-RENAME: while the app is being built any plain identifier is allowed (the `cf_` prefix is optional).
+ * A custom field's key (`fieldKey`, e.g. `cf_po_number`) is the key its values are stored under in each record's
+ * `customDataJson`, and the name saved table filters and PDF templates refer to it by. It follows the field's label
+ * (derivedKeys.ts; built-in fields' keys are column names and stay fixed): when the label changes, `migrateFieldKey`
+ * moves everything stored under the old key in the same transaction.
  */
-
-/** Letters, digits and underscores, starting with a letter: safe as a JSON key, filter id, PDF path and SQL pattern. */
-export const CUSTOM_FIELD_KEY_PATTERN = /^[A-Za-z][A-Za-z0-9_]*$/;
-export const CUSTOM_FIELD_KEY_MAX = 80;
-export const CUSTOM_FIELD_KEY_MESSAGE = 'Use letters, digits and underscores, starting with a letter.';
 
 /** Table holding each module's records (and its `customDataJson`) and the record lock it uses. */
 export const MODULE_TABLES: Record<CrmModuleKey, { table: string; lock: LockedEntity }> = {
@@ -35,24 +28,6 @@ export const MODULE_TABLES: Record<CrmModuleKey, { table: string; lock: LockedEn
 const PDF_MODULE_OF: Partial<Record<CrmModuleKey, string>> = { quotations: 'QUOTATION' };
 
 // ── Pure helpers (unit-tested) ───────────────────────────────────────────────
-
-export function parsePreviousKeys(json: string | null | undefined): string[] {
-    if (!json) return [];
-    try {
-        const parsed: unknown = JSON.parse(json);
-        return Array.isArray(parsed) ? parsed.filter((k): k is string => typeof k === 'string') : [];
-    } catch {
-        return [];
-    }
-}
-
-/** Problem with a requested API name, or null when its shape is valid (any field, built-in or custom). */
-export function fieldKeyFormatError(key: string): string | null {
-    if (!key) return 'Enter an API name.';
-    if (key.length > CUSTOM_FIELD_KEY_MAX) return `The API name can't exceed ${CUSTOM_FIELD_KEY_MAX} characters.`;
-    if (!CUSTOM_FIELD_KEY_PATTERN.test(key)) return CUSTOM_FIELD_KEY_MESSAGE;
-    return null;
-}
 
 /**
  * A record's custom data with the value under `from` moved to `to` (null when the record has no `from` value,
@@ -150,6 +125,14 @@ async function rowsMentioning(tx: TransactionClient, module: CrmModuleKey, key: 
     );
 }
 
+/**
+ * Locks a module's field definitions until the transaction ends, so two requests deriving a field key at once
+ * (creating or renaming custom fields) can't both pick the same free key.
+ */
+export async function lockModuleFields(tx: TransactionClient, module: CrmModuleKey): Promise<void> {
+    await tx.$queryRaw(Prisma.sql`SELECT [id] FROM [dbo].[FormFieldDefinition] WITH (UPDLOCK, HOLDLOCK) WHERE [module] = ${module}`);
+}
+
 /** Number of the module's records (deleted ones included) holding a value under `key`. */
 export async function countRecordsWithKey(tx: TransactionClient, module: CrmModuleKey, key: string): Promise<number> {
     return (await rowsMentioning(tx, module, key)).filter((row) => customDataHasKey(row.customDataJson, key)).length;
@@ -215,17 +198,6 @@ export async function migrateFieldKey(tx: TransactionClient, module: CrmModuleKe
         }
     }
 
-    // `to` now belongs to this field: no other field may keep it as an alias (left from before renames became final).
-    const aliased = await tx.formFieldDefinition.findMany({
-        where: { module, previousFieldKeysJson: { contains: `"${to}"` } },
-        select: { id: true, previousFieldKeysJson: true },
-    });
-    for (const row of aliased) {
-        const keys = parsePreviousKeys(row.previousFieldKeysJson);
-        if (!keys.includes(to)) continue;
-        await tx.formFieldDefinition.update({ where: { id: row.id }, data: { previousFieldKeysJson: keys.length > 1 ? JSON.stringify(keys.filter((k) => k !== to)) : null } });
-    }
-
     return { records, filters, pdfTemplates, pdfSavedItems };
 }
 
@@ -235,5 +207,5 @@ export function describeMigration(m: FieldKeyMigration): string {
     if (m.filters) parts.push(part(m.filters, 'saved filter'));
     if (m.pdfTemplates) parts.push(part(m.pdfTemplates, 'PDF template'));
     if (m.pdfSavedItems) parts.push(part(m.pdfSavedItems, 'saved PDF block'));
-    return `Values moved to the new API name on ${parts.join(', ')}.`;
+    return `Values carried over to the renamed field on ${parts.join(', ')}.`;
 }

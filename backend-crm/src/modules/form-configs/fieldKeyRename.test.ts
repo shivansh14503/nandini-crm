@@ -3,31 +3,11 @@ import { describe, it } from 'node:test';
 import {
     customDataHasKey,
     describeMigration,
-    fieldKeyFormatError,
     filterFingerprint,
-    parsePreviousKeys,
     renameCustomDataKey,
     renameFilterCriteria,
     renamePdfFieldPaths,
 } from './fieldKeyRename.js';
-
-describe('fieldKeyFormatError', () => {
-    it('accepts any plain identifier, with or without cf_', () => {
-        for (const key of ['cf_po_number', 'cf_a1', 'po_number', 'PONumber', 'cf_PO']) assert.equal(fieldKeyFormatError(key), null, key);
-    });
-    it('rejects other shapes', () => {
-        for (const key of ['', '1abc', '_po', 'po-number', 'po number', 'pö']) assert.ok(fieldKeyFormatError(key), key);
-        assert.ok(fieldKeyFormatError('a'.repeat(81)));
-    });
-});
-
-describe('previous keys', () => {
-    it('parses defensively', () => {
-        assert.deepEqual(parsePreviousKeys(null), []);
-        assert.deepEqual(parsePreviousKeys('not json'), []);
-        assert.deepEqual(parsePreviousKeys('["cf_a", 3]'), ['cf_a']);
-    });
-});
 
 describe('renameCustomDataKey', () => {
     it('moves the value and keeps other keys', () => {
@@ -74,6 +54,6 @@ describe('renamePdfFieldPaths', () => {
 
 describe('describeMigration', () => {
     it('lists what moved', () => {
-        assert.equal(describeMigration({ records: 1, filters: 2, pdfTemplates: 0, pdfSavedItems: 0 }), 'Values moved to the new API name on 1 record, 2 saved filters.');
+        assert.equal(describeMigration({ records: 1, filters: 2, pdfTemplates: 0, pdfSavedItems: 0 }), 'Values carried over to the renamed field on 1 record, 2 saved filters.');
     });
 });

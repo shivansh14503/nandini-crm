@@ -4,6 +4,7 @@ import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Box } from '@mui/material';
 import { useAuth } from '@/context/AuthContext';
+import { useFreshOnReturn } from '@/hooks/useFreshOnReturn';
 import { ROUTES } from '@/config/constants';
 import { Navbar } from '@/components/layout/Navbar';
 import { LoadingScreen } from '@/components/common/LoadingScreen';
@@ -13,6 +14,8 @@ import { OrganizationsMasterView } from '@/components/organizations/Organization
 export default function OrganizationsPage() {
     const router = useRouter();
     const { user, loading, error, clearError, isAuthenticated } = useAuth();
+    // Back from a record page (or any other page) shows the plain list, not the drawer left open before.
+    const viewKey = useFreshOnReturn();
 
     useEffect(() => {
         if (!loading && !isAuthenticated) {
@@ -27,7 +30,7 @@ export default function OrganizationsPage() {
         <Box sx={{ minHeight: '100vh', backgroundColor: 'var(--mui-palette-background-subtle)', display: 'flex', flexDirection: 'column' }}>
             <Navbar />
             <ErrorAlert error={error} onClose={clearError} />
-            <OrganizationsMasterView />
+            <OrganizationsMasterView key={viewKey} />
         </Box>
     );
 }

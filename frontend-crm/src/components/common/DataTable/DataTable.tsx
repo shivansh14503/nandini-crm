@@ -18,6 +18,7 @@ import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import type { DataTableProps, DataTableColumn } from './types';
 import { DataTableEmptyState } from './DataTableEmptyState';
+import { useDoubleClickCopy } from '../useDoubleClickCopy';
 import { TableRowActions } from './TableRowActions';
 import { useTableScroll } from './useTableScroll';
 import { useFrozenColumns } from './useFrozenColumns';
@@ -27,6 +28,13 @@ import { useFrozenColumns } from './useFrozenColumns';
  * this cap long text would just widen the column; with it, longer text wraps onto the next line.
  */
 const CELL_MAX_WIDTH = 320;
+
+/**
+ * How long a single click on a row waits before opening it, so a double-click (which selects and copies a
+ * cell's value instead) can cancel it. Shorter than the OS double-click interval to keep rows feeling instant,
+ * so a slow double-click may open the row.
+ */
+const ROW_CLICK_DELAY_MS = 200;
 
 /**
  * Cell text wraps within the column width, never cut off: full text is always visible. Applies inside custom
@@ -146,6 +154,17 @@ export function DataTable<T>({
     stickyHeader = true,
 }: DataTableProps<T>) {
     const { setContainer, canScrollLeft, canScrollRight, isPanning, onPointerDown, startHold, stopHold } = useTableScroll();
+
+    // A single click opens the row only once it's clear no second click follows (a double-click selects a value).
+    const pendingRowClick = React.useRef<number | null>(null);
+    const cancelPendingRowClick = () => {
+        if (pendingRowClick.current !== null) window.clearTimeout(pendingRowClick.current);
+        pendingRowClick.current = null;
+    };
+    React.useEffect(() => cancelPendingRowClick, []);
+
+    // Double-clicking a cell selects and copies its value (e.g. a GST number). Only a cell event: drag-to-pan is unaffected.
+    const { onDoubleClick: copyCell, toast: copyToast } = useDoubleClickCopy();
 
     // Action presence check (view is now triggered by clicking the row)
     const hasActions = Boolean(renderActions || onEditRow || getEditHref || onDeleteRow);
@@ -460,7 +479,19 @@ export function DataTable<T>({
                                 key={rowId}
                                 hover
                                 selected={isSelected || isActive}
-                                onClick={handleRowClick ? () => handleRowClick(row) : undefined}
+                                onClick={
+                                    handleRowClick
+                                        ? (e) => {
+                                              cancelPendingRowClick();
+                                              // Second click of a double-click: the cell selects its value instead.
+                                              if (e.detail > 1) return;
+                                              pendingRowClick.current = window.setTimeout(() => {
+                                                  pendingRowClick.current = null;
+                                                  handleRowClick(row);
+                                              }, ROW_CLICK_DELAY_MS);
+                                          }
+                                        : undefined
+                                }
                                 sx={{
                                     // Explicit so frozen cells (background: inherit) cover what scrolls beneath them.
                                     backgroundColor: 'var(--mui-palette-background-paper)',
@@ -540,6 +571,7 @@ export function DataTable<T>({
                                         <TableCell
                                             key={col.id}
                                             align={col.align || 'left'}
+                                            onDoubleClick={copyCell}
                                             sx={{
                                                 ...frozenSx(columnSlot(columnIndex), false),
                                                 py: 1.2,
@@ -578,6 +610,7 @@ export function DataTable<T>({
                 </TableBody>
             </Table>
         </TableContainer>
+        {copyToast}
         </Box>
     );
 }

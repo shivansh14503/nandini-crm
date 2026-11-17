@@ -31,7 +31,6 @@ import { useConfigDraftActions, useHasUnsavedChanges } from './useConfigDraft';
 import {
     CRM_MODULE_LABELS,
     FIELD_TYPE_LABELS,
-    apiNameOf,
     tabKeyFromLabel,
     type ConfigFieldSize,
     type ConfiguredSection,
@@ -756,11 +755,6 @@ function FieldRow({
                         </Badge>
                     )}
                 </Box>
-                <Typography sx={{ fontSize: '0.7rem', color: 'var(--mui-palette-text-muted)', fontFamily: 'monospace' }} noWrap>
-                    {apiNameOf(field)}
-                    {field.isSystem && apiNameOf(field) !== field.fieldKey ? ` (column ${field.fieldKey})` : ''}
-                    {field.dropdownCategoryKey ? ` · ${field.dropdownCategoryKey}` : ''}
-                </Typography>
             </Box>
 
             <Box>

@@ -1,7 +1,6 @@
 import { StatusCodes } from 'http-status-codes';
 import { HttpError, type ApiFieldError } from '../../utils/httpError.js';
 import { businessNow } from '../../validators/notInPast.js';
-import { buildBuiltInNameMap, type BuiltInNameMap } from './builtInApiNames.js';
 import type { CrmModuleKey } from './formConfig.defaults.js';
 // Type-only: the service (and with it the Prisma client and env checks) is loaded on first use, so the pure checks
 // below import cleanly in unit tests.
@@ -33,16 +32,6 @@ export interface ModuleFieldConfig {
     fields: readonly FormFieldDefinitionDto[];
     /** Active option values by dropdown category id. */
     activeOptions: ReadonlyMap<string, ReadonlySet<string>>;
-    /**
-     * Earlier API names of renamed custom fields → their current key. A write still using an old name (a form
-     * opened before the rename, an import file, an integration) is stored under the current one.
-     */
-    keyAliases?: ReadonlyMap<string, string>;
-    /**
-     * Built-in fields' admin-chosen API names (and earlier ones) → their column names. Record routes translate a
-     * payload with them before validating it (see builtInApiNames.ts).
-     */
-    builtInNames?: BuiltInNameMap;
 }
 
 export interface PayloadCheckOptions {
@@ -77,29 +66,7 @@ export function buildModuleFieldConfig(configs: FormConfigsPayload, module: CrmM
     for (const category of configs.categories) {
         activeOptions.set(category.id, new Set(category.options.filter((o) => o.isActive).map((o) => o.value)));
     }
-    // A key a live field holds is never an alias (the field owning it now wins).
-    const liveKeys = new Set(fields.map((f) => f.fieldKey));
-    const keyAliases = new Map<string, string>();
-    for (const f of fields) {
-        if (f.isSystem) continue;
-        for (const old of f.previousFieldKeys ?? []) if (!liveKeys.has(old)) keyAliases.set(old, f.fieldKey);
-    }
-    return { module, fields, activeOptions, keyAliases, builtInNames: buildBuiltInNameMap(fields) };
-}
-
-/**
- * The custom field bag with values sent under an earlier API name moved to the field's current key. A value under
- * the current key wins over one under an old name.
- */
-export function resolveKeyAliases(customFields: Record<string, unknown>, aliases: ReadonlyMap<string, string> | undefined): Record<string, unknown> {
-    if (!aliases || aliases.size === 0 || !Object.keys(customFields).some((k) => aliases.has(k))) return customFields;
-    const resolved: Record<string, unknown> = {};
-    for (const [key, value] of Object.entries(customFields)) if (!aliases.has(key)) resolved[key] = value;
-    for (const [key, value] of Object.entries(customFields)) {
-        const current = aliases.get(key);
-        if (current && !Object.hasOwn(resolved, current)) resolved[current] = value;
-    }
-    return resolved;
+    return { module, fields, activeOptions };
 }
 
 /**
@@ -279,7 +246,7 @@ export function checkModulePayload(
 ): Record<string, unknown> {
     const { submittedKeys, previousCustomFields, allowPastDates } = options;
     const today = (options.now ?? businessNow()).slice(0, 10);
-    const input = resolveKeyAliases(customFields ?? {}, config.keyAliases);
+    const input = customFields ?? {};
     const issues: ApiFieldError[] = [];
     const customDefs = new Map<string, FormFieldDefinitionDto>();
 
@@ -323,7 +290,7 @@ export function checkModulePayload(
     const sanitized: Record<string, unknown> = {};
     for (const [key, value] of Object.entries(input)) {
         const field = customDefs.get(key);
-        if (!field) continue;
+        if (!field || !key.startsWith(CUSTOM_FIELD_PREFIX)) continue;
         sanitized[key] = field.isActive ? normalizeValue(field, value) : value;
     }
     return sanitized;

@@ -1,7 +1,8 @@
 'use client';
 
 import React, { useMemo, useState } from 'react';
-import { Alert, Box } from '@mui/material';
+import { Alert, Box, Link } from '@mui/material';
+import { ROUTES } from '@/config/constants';
 import { useFormContext, useWatch } from 'react-hook-form';
 
 import {
@@ -114,7 +115,17 @@ export function ConvertContactSection() {
 
             {duplicate && (
                 <Alert severity="warning" sx={{ mt: 2 }}>
-                    This Number Already Exists! Existing contact “{duplicate.name}” will be linked instead of creating a duplicate.
+                    This Number Already Exists! Existing contact “
+                    <Link
+                        href={ROUTES.CONTACT_DETAIL(duplicate.id)}
+                        target="_blank"
+                        rel="noopener"
+                        title="View contact (new tab)"
+                        sx={{ fontWeight: 700, color: 'inherit', textDecorationColor: 'currentColor' }}
+                    >
+                        {duplicate.name}
+                    </Link>
+                    ” will be linked instead of creating a duplicate.
                 </Alert>
             )}
         </>

@@ -20,6 +20,8 @@ import {
     RhfMultiAutocomplete,
     RhfEmailList,
     RhfDateTimeField,
+    ExistingRecordMatches,
+    useExistingRecordCheck,
 } from '@/components/forms';
 import { isGstRegistrationType } from '@/config/constants';
 import {
@@ -38,7 +40,6 @@ import {
 import { useDropdownOptionsGetter } from '@/hooks/queries/useFormConfigs';
 import { OrganizationNameAutocomplete } from '@/components/organizations/OrganizationNameAutocomplete';
 import { useOrganizationNameCheck } from '@/components/organizations/useOrganizationNameCheck';
-import { useLeadExistingCheck } from '../useLeadExistingCheck';
 import { useFormMode } from '@/context/FormModeContext';
 import { upperCase, useUndoSafeSanitizer } from '@/components/forms/undoSafeInput';
 
@@ -50,19 +51,23 @@ export function LeadOverviewSection({ leadId }: { leadId?: string } = {}) {
     const { control, setValue, getValues, getFieldState } = useFormContext<LeadFormData>();
     const { mode } = useFormMode();
 
-    // Informational only: tells the user the mobile / email is already in the CRM; never blocks the save.
+    // Informational only: lists (and links to) the records that already use the mobile / email; never blocks the save.
     const mobile = useWatch({ control, name: 'mobile' });
     const emailAddresses = useWatch({ control, name: 'emailAddresses' });
-    const { mobileMatch, emailMatches } = useLeadExistingCheck({ mobile, emailAddresses, leadId, enabled: mode !== 'view' });
-    const mobileNotice = mobileMatch
-        ? `Already exists in CRM (${mobileMatch.entityType}: ${mobileMatch.name}${mobileMatch.organizationName ? `, ${mobileMatch.organizationName}` : ''})`
-        : undefined;
+    const { mobileMatches, emailMatches } = useExistingRecordCheck({
+        mobile,
+        emailAddresses,
+        excludeId: leadId,
+        owner: 'lead',
+        enabled: mode !== 'view',
+    });
+    const mobileNotice = mobileMatches.length > 0 ? <ExistingRecordMatches matches={mobileMatches} title="Mobile already in CRM" /> : undefined;
     const emailNotices = React.useMemo(
         () =>
             Object.fromEntries(
-                Object.entries(emailMatches).map(([email, match]) => [
+                Object.entries(emailMatches).map(([email, matches]) => [
                     email,
-                    `"${email}" already exists in CRM (${match.entityType}: ${match.name})`,
+                    <ExistingRecordMatches key={email} matches={matches} title="Email already in CRM" />,
                 ])
             ),
         [emailMatches]

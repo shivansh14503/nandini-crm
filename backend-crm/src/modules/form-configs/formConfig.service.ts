@@ -5,13 +5,9 @@ import { CACHE_KEYS, cacheService } from '../../services/cache.service.js';
 import type { AuthUser } from '../../types/user.types.js';
 import { HttpError } from '../../utils/httpError.js';
 import { runInTransaction } from '../shared/transactions.js';
-import { apiNameOf, assertApiNameAllowed, lockModuleFields, previewApiName, type ApiNameCheck } from './builtInApiNames.js';
-import {
-    countRecordsWithKey,
-    describeMigration,
-    migrateFieldKey,
-    parsePreviousKeys,
-} from './fieldKeyRename.js';
+import { customCategoryKeyBase, customFieldKeyBase, keyMatchesBase, uniqueDerivedKey } from './derivedKeys.js';
+import { countRecordsWithKey, describeMigration, lockModuleFields, migrateFieldKey } from './fieldKeyRename.js';
+import { describeOptionMigration, migrateOptionValue } from './optionValueRename.js';
 import {
     APP_REQUIRED_CATEGORY_KEYS,
     CRM_MODULES,
@@ -33,14 +29,12 @@ import {
     updateCategorySchema,
     updateFieldSchema,
     updateOptionSchema,
-    apiNameCheckSchema,
 } from './formConfig.validator.js';
 
 export { isFieldTombstoned };
 
 const CONFIG_TTL_SECONDS = 60 * 60;
 const configCacheKey = (includeInactive: boolean) => CACHE_KEYS.lookups(`form-configs:${includeInactive ? 'all' : 'active'}`);
-const CUSTOM_PREFIX = 'cf_';
 const CHOICE_TYPES = new Set(['select', 'multiselect']);
 
 // ── DTOs (frontend-crm/src/types/formConfig.types.ts) ────────────────────────
@@ -78,14 +72,10 @@ export interface FormFieldDefinitionDto {
     id: string;
     module: string;
     /**
-     * Built-in fields: the column the field maps to (what forms and code read). Custom fields: their API name
-     * (`cf_…`), the key their values are stored under.
+     * Built-in fields: the column the field maps to (what forms and code read). Custom fields: the key their values
+     * are stored under, derived from the label (`cf_…`, see derivedKeys.ts) and following it.
      */
     fieldKey: string;
-    /** The name integrations, imports and admins know the field by: an admin-chosen name for a built-in field, else `fieldKey`. */
-    apiName: string;
-    /** API names the field had before being renamed (still accepted on writes), oldest first. */
-    previousFieldKeys: string[];
     label: string;
     fieldType: string;
     tabKey: string;
@@ -158,15 +148,15 @@ function isBuiltInTabDeleted(
     return !moduleRows.some((r) => r.tabKey === tabKey && !isFieldTombstoned(r.validationRulesJson));
 }
 
-/**
- * A field's stored default with option value `from` renamed to `to`: a select default is the value itself,
- * a multi-select default a comma-separated list of values. Mirrored by the builder's draft (configDraft.ts).
- */
 /** A built-in address Country field (`primaryCountry`, `billingCountry`, …): picks from the fixed ISO country list. */
 function isBuiltInCountryField(field: { isSystem: boolean; fieldKey: string; dropdownCategoryId: string | null }): boolean {
     return field.isSystem && !field.dropdownCategoryId && /Country$/.test(field.fieldKey);
 }
 
+/**
+ * A field's stored default with option value `from` renamed to `to`: a select default is the value itself,
+ * a multi-select default a comma-separated list of values. Mirrored by the builder's draft (configDraft.ts).
+ */
 function renameDefaultValue(defaultValue: string | null, fieldType: string, from: string, to: string): string | null {
     if (defaultValue === null || from === to) return defaultValue;
     if (fieldType === 'multiselect') {
@@ -174,6 +164,34 @@ function renameDefaultValue(defaultValue: string | null, fieldType: string, from
         return parts.includes(from) ? parts.map((v) => (v === from ? to : v)).join(', ') : defaultValue;
     }
     return defaultValue.trim() === from ? to : defaultValue;
+}
+
+/**
+ * Gives `option` the stored value `nextValue`, in the caller's transaction: the defaults of the fields using its
+ * dropdown, and every record and table filter storing the old value, follow. Returns a note on what moved (for the
+ * audit trail), or undefined when the value is unchanged. Values are unique per dropdown (case-insensitive under
+ * the database's default collation).
+ */
+export async function changeOptionValue(tx: TransactionClient, option: DropdownOption, nextValue: string): Promise<string | undefined> {
+    if (nextValue === option.value) return undefined;
+    const clash = await tx.dropdownOption.findFirst({
+        where: { categoryId: option.categoryId, value: nextValue, id: { not: option.id } },
+        select: { id: true },
+    });
+    if (clash) {
+        throw HttpError.conflict(`Option '${nextValue}' already exists in this dropdown.`, [{ message: 'Duplicate option', path: ['label'] }]);
+    }
+    const linkedFields = await tx.formFieldDefinition.findMany({
+        where: { dropdownCategoryId: option.categoryId },
+        select: { id: true, module: true, fieldKey: true, fieldType: true, isSystem: true, defaultValue: true },
+    });
+    for (const field of linkedFields) {
+        const defaultValue = renameDefaultValue(field.defaultValue, field.fieldType, option.value, nextValue);
+        if (defaultValue !== field.defaultValue) await tx.formFieldDefinition.update({ where: { id: field.id }, data: { defaultValue } });
+    }
+    const note = describeOptionMigration(await migrateOptionValue(tx, linkedFields, option.value, nextValue));
+    await tx.dropdownOption.update({ where: { id: option.id }, data: { value: nextValue } });
+    return note;
 }
 
 function parseJsonObject(json: string | null): Record<string, unknown> | null {
@@ -202,8 +220,6 @@ const toFieldDto = (f: FormFieldDefinition, categoryKeys: Map<string, string>): 
     id: f.id,
     module: f.module,
     fieldKey: f.fieldKey,
-    apiName: apiNameOf(f),
-    previousFieldKeys: parsePreviousKeys(f.previousFieldKeysJson),
     label: f.label,
     fieldType: f.fieldType,
     tabKey: f.tabKey,
@@ -306,60 +322,50 @@ async function findField(tx: TransactionClient, id: string): Promise<FormFieldDe
     return field;
 }
 
-/** Keeps a generated key unique by appending _2, _3, … */
-async function uniqueKey(base: string, exists: (key: string) => Promise<boolean>, max: number): Promise<string> {
-    const root = base.slice(0, max - 4) || 'item';
-    let candidate = root;
-    for (let n = 2; await exists(candidate); n++) candidate = `${root}_${n}`;
-    return candidate;
-}
-
 /**
- * `cf_` + a snake_case key from the label, unique within the module. Keys records still hold values under (left by
- * a deleted field) are skipped, so a new field never shows another field's old data.
+ * The key a custom field labelled `label` has (`cf_` + snake_case, see derivedKeys.ts), unique within the module.
+ * `self` (a field being renamed) keeps its key when that already matches the label. Keys records still hold values
+ * under (left by a deleted field) are skipped, so a field never takes over another field's old data.
  */
-async function customFieldKey(tx: TransactionClient, module: CrmModuleKey, label: string): Promise<string> {
-    const slug = sectionKeyFromLabel(label).replace(/^(\d)/, 'f_$1') || 'field';
-    return uniqueKey(
-        `${CUSTOM_PREFIX}${slug}`,
+export async function customFieldKey(
+    tx: TransactionClient,
+    module: CrmModuleKey,
+    label: string,
+    self?: { id: string; fieldKey: string },
+): Promise<string> {
+    const base = customFieldKeyBase(label);
+    if (self && keyMatchesBase(self.fieldKey, base)) return self.fieldKey;
+    return uniqueDerivedKey(
+        base,
         async (fieldKey) =>
-            (await tx.formFieldDefinition.count({ where: { module, fieldKey } })) > 0 || (await countRecordsWithKey(tx, module, fieldKey)) > 0,
-        80,
+            (await tx.formFieldDefinition.count({ where: { module, fieldKey, ...(self ? { id: { not: self.id } } : {}) } })) > 0 ||
+            (await countRecordsWithKey(tx, module, fieldKey)) > 0,
     );
 }
 
-/** The key an admin-created dropdown gets from its name: `custom_` + snake_case (e.g. "Lead Rating" → custom_lead_rating). */
-const customCategoryKeyBase = (label: string) => `custom_${sectionKeyFromLabel(label) || 'list'}`;
-
 /**
- * The key a dropdown should have once named `label`. An admin-created dropdown's key follows its name (unique; it
- * keeps its own key when that already matches). Nothing stores the key itself: fields link to the dropdown by id, so
- * renaming it moves nothing. Built-in dropdowns keep their key: the app's code and start-up seeding look them up by it.
+ * The key a dropdown named `label` has. An admin-created dropdown's key follows its name (`custom_` + snake_case,
+ * unique; it keeps its key when that already matches). Nothing stores the key itself: fields link to the dropdown
+ * by id, so a new key moves nothing. Built-in dropdowns keep their key: the app's code and start-up seeding look
+ * them up by it.
  */
-async function categoryKeyForLabel(tx: TransactionClient, category: { key: string; isSystem: boolean }, label: string): Promise<string> {
-    if (category.isSystem) return category.key;
-    return uniqueKey(
-        customCategoryKeyBase(label),
-        async (candidate) => candidate !== category.key && (await tx.dropdownCategory.count({ where: { key: candidate } })) > 0,
-        80,
+export async function categoryKeyForLabel(tx: TransactionClient, category: { id?: string; key?: string; isSystem: boolean }, label: string): Promise<string> {
+    if (category.isSystem && category.key) return category.key;
+    const base = customCategoryKeyBase(label);
+    if (category.key && keyMatchesBase(category.key, base)) return category.key;
+    return uniqueDerivedKey(
+        base,
+        async (candidate) => (await tx.dropdownCategory.count({ where: { key: candidate, ...(category.id ? { id: { not: category.id } } : {}) } })) > 0,
     );
 }
 
 async function createCategoryWithOptions(
     tx: TransactionClient,
-    input: { key?: string; label: string; module: string; description?: string; options: string[] },
+    input: { label: string; module: string; description?: string; options: string[] },
     user: AuthUser,
 ): Promise<DropdownCategory> {
-    const key =
-        input.key ??
-        (await uniqueKey(
-            customCategoryKeyBase(input.label),
-            async (candidate) => (await tx.dropdownCategory.count({ where: { key: candidate } })) > 0,
-            80,
-        ));
-    if (input.key && (await tx.dropdownCategory.count({ where: { key } })) > 0) {
-        throw HttpError.conflict(`A dropdown category with key '${key}' already exists.`, [{ message: 'Key already in use.', path: ['key'] }]);
-    }
+    // The key comes from the name (admins never choose one).
+    const key = await categoryKeyForLabel(tx, { isSystem: false }, input.label);
     const category = await tx.dropdownCategory.create({
         data: { key, label: input.label, module: input.module, description: input.description ?? null, isSystem: false },
     });
@@ -691,13 +697,14 @@ export const formConfigService = {
             const saved = existing
                 ? await tx.dropdownOption.update({
                       where: { id: existing.id },
-                      data: { isActive: true, label: input.label ?? existing.label, ...(input.meta !== undefined ? { metaJson: input.meta ? JSON.stringify(input.meta) : null } : {}) },
+                      // Restored under its stored value, which is also its name.
+                      data: { isActive: true, label: existing.value, ...(input.meta !== undefined ? { metaJson: input.meta ? JSON.stringify(input.meta) : null } : {}) },
                   })
                 : await tx.dropdownOption.create({
                       data: {
                           categoryId: category.id,
                           value: input.value,
-                          label: input.label ?? input.value,
+                          label: input.value,
                           metaJson: input.meta ? JSON.stringify(input.meta) : null,
                           sortOrder: (last._max.sortOrder ?? 0) + 10,
                       },
@@ -724,58 +731,36 @@ export const formConfigService = {
         const input = updateOptionSchema.parse(body);
         const option = await runInTransaction(async (tx) => {
             const before = await findOption(tx, optionId);
+            const renamed = input.label !== undefined && input.label !== before.label;
             if (before.isSystem) {
-                if (input.value !== undefined && input.value !== before.value) {
+                // The app's code compares records against a system option's value (e.g. lead 'Converted'), and an
+                // option's name and value are one, so a system option can't be renamed either.
+                if (renamed) {
                     throw HttpError.badRequest('System options cannot be renamed.', [
-                        { message: `'${before.value}' drives CRM business logic; change its label instead.`, path: ['value'] },
+                        { message: `'${before.label}' drives CRM business logic, so its name is fixed.`, path: ['label'] },
                     ]);
                 }
                 if (input.isActive === false) {
                     throw HttpError.badRequest('System options cannot be archived.', [
-                        { message: `'${before.value}' drives CRM business logic and must stay available.`, path: ['isActive'] },
+                        { message: `'${before.label}' drives CRM business logic and must stay available.`, path: ['isActive'] },
                     ]);
                 }
             }
-            // Forms store an option's value, so a regular option's value and label are one name: renaming either
-            // renames both (this also heals legacy options whose two had drifted apart). A system option's value is
-            // fixed (checked above); only its label changes.
-            const nextValue = before.isSystem ? before.value : (input.value ?? input.label ?? before.value);
-            const nextLabel = before.isSystem ? (input.label ?? before.label) : (input.label ?? input.value ?? before.label);
-            if (nextValue !== before.value) {
-                // Same rule as addOption: unique per dropdown (case-insensitive under the database's default collation).
-                const clash = await tx.dropdownOption.findFirst({
-                    where: { categoryId: before.categoryId, value: nextValue, id: { not: before.id } },
-                    select: { id: true },
-                });
-                if (clash) {
-                    throw HttpError.conflict(`Option '${nextValue}' already exists in this dropdown.`, [
-                        { message: 'Duplicate option value', path: ['value'] },
-                    ]);
-                }
-                // Fields defaulting to the old value follow the rename (a multi-select default is a comma-separated list).
-                const linkedFields = await tx.formFieldDefinition.findMany({
-                    where: { dropdownCategoryId: before.categoryId, defaultValue: { not: null } },
-                    select: { id: true, fieldType: true, defaultValue: true },
-                });
-                for (const field of linkedFields) {
-                    const defaultValue = renameDefaultValue(field.defaultValue, field.fieldType, before.value, nextValue);
-                    if (defaultValue !== field.defaultValue) {
-                        await tx.formFieldDefinition.update({ where: { id: field.id }, data: { defaultValue } });
-                    }
-                }
-            }
+            // An option's stored value is its name: renaming it renames the value, and records follow.
+            let migrationNote: string | undefined;
+            if (renamed) migrationNote = await changeOptionValue(tx, before, input.label!);
             const after = await tx.dropdownOption.update({
                 where: { id: before.id },
                 data: {
-                    ...(nextValue !== before.value ? { value: nextValue } : {}),
-                    ...(nextLabel !== before.label ? { label: nextLabel } : {}),
+                    ...(renamed ? { label: input.label } : {}),
                     ...(input.isActive !== undefined ? { isActive: input.isActive } : {}),
                     ...(input.meta !== undefined ? { metaJson: input.meta ? JSON.stringify(input.meta) : null } : {}),
                     // An archived option can't be offered, so it can't stay the default either.
                     ...(input.isActive === false ? { isDefault: false } : input.isDefault !== undefined ? { isDefault: input.isDefault } : {}),
                 },
             });
-            const changes = diffRecords(before, after);
+            const changes: Record<string, unknown> = diffRecords(before, after);
+            if (migrationNote) changes.reason = migrationNote;
             if (Object.keys(changes).length > 0) {
                 await auditService.record(tx, {
                     entityType: 'DropdownOption',
@@ -867,12 +852,10 @@ export const formConfigService = {
                 select: { sectionLabel: true },
             });
             const sortOrder = 2_000_000_000; // temporary; placeField puts it at the end of its section
-            // An API name the admin chose, else one derived from the label.
-            if (input.fieldKey) {
-                await lockModuleFields(tx, input.module);
-                await assertApiNameAllowed(tx, input.module, undefined, input.fieldKey, 'fieldKey');
-            }
-            const fieldKey = input.fieldKey ?? (await customFieldKey(tx, input.module, input.label));
+            // The key comes from the label (admins never choose one). The module's fields are locked so two fields
+            // created at once can't take the same key.
+            await lockModuleFields(tx, input.module);
+            const fieldKey = await customFieldKey(tx, input.module, input.label);
 
             const created = await tx.formFieldDefinition.create({
                 data: {
@@ -970,42 +953,24 @@ export const formConfigService = {
                 }
             }
 
-            // API name: a custom field's is its storage key, so a rename moves everything stored under the old one. A
-            // built-in field's column is fixed; its API name is a name of the admin's choosing (builtInApiNames.ts).
-            const renameKey = input.fieldKey !== undefined && input.fieldKey !== before.fieldKey ? input.fieldKey : null;
+            // A custom field's key follows its label ("PO Number" → cf_po_number): renaming the field moves every
+            // record's value, saved filters and PDF template paths to the new key. A built-in field keeps its column.
+            let renameKey: string | null = null;
             let migrationNote: string | undefined;
-            if (renameKey) {
-                if (before.isSystem) reject('fieldKey', `${before.label} is a built-in field: change its API name (apiName), not its column.`);
+            if (!before.isSystem && input.label !== undefined && input.label !== before.label) {
                 await lockModuleFields(tx, before.module);
-                await assertApiNameAllowed(tx, before.module, before.id, renameKey, 'fieldKey');
-                migrationNote = describeMigration(await migrateFieldKey(tx, before.module, before.fieldKey, renameKey));
-                keyRenamedIn = before.module;
-            }
-            const currentApiName = before.apiName ?? before.fieldKey;
-            let apiNameData: { apiName: string | null; previousFieldKeysJson: string | null } | undefined;
-            if (input.apiName !== undefined && input.apiName !== currentApiName) {
-                if (!before.isSystem) reject('apiName', `${before.label} is a custom field: rename its API name (fieldKey) instead.`);
-                await lockModuleFields(tx, before.module);
-                await assertApiNameAllowed(tx, before.module, before.id, input.apiName, 'apiName');
-                // The old name is forgotten (TEMP-DEV-RENAME); the column name always works.
-                apiNameData = { apiName: input.apiName === before.fieldKey ? null : input.apiName, previousFieldKeysJson: null };
-                migrationNote =
-                    currentApiName === before.fieldKey
-                        ? `Column '${before.fieldKey}' unchanged and still accepted; no data moved.`
-                        : `Column '${before.fieldKey}' unchanged; '${currentApiName}' is no longer accepted; no data moved.`;
+                const next = await customFieldKey(tx, before.module, input.label, before);
+                if (next !== before.fieldKey) {
+                    renameKey = next;
+                    migrationNote = describeMigration(await migrateFieldKey(tx, before.module, before.fieldKey, next));
+                    keyRenamedIn = before.module;
+                }
             }
 
             const after = await tx.formFieldDefinition.update({
                 where: { id: before.id },
                 data: {
-                    ...(renameKey
-                        ? {
-                              fieldKey: renameKey,
-                              // The old name is forgotten (TEMP-DEV-RENAME).
-                              previousFieldKeysJson: null,
-                          }
-                        : {}),
-                    ...(apiNameData ?? {}),
+                    ...(renameKey ? { fieldKey: renameKey } : {}),
                     ...(input.label !== undefined ? { label: input.label } : {}),
                     ...(input.fieldType !== undefined ? { fieldType: input.fieldType } : {}),
                     ...(input.tabKey !== undefined ? { tabKey: input.tabKey } : {}),
@@ -1039,10 +1004,6 @@ export const formConfigService = {
             }
 
             const changes: Record<string, unknown> = diffRecords(before, after);
-            // The alias list is bookkeeping; the fieldKey / apiName diff already says what changed.
-            delete changes.previousFieldKeysJson;
-            // A built-in field's API name reads as the name it is known by (null = its column name).
-            if (changes.apiName) changes.apiName = { from: currentApiName, to: after.apiName ?? after.fieldKey };
             if (migrationNote) changes.reason = migrationNote;
 
             // A dropdown list named after this field and used by it alone (e.g. a custom "Lead Type" field's list)
@@ -1062,15 +1023,15 @@ export const formConfigService = {
                 }
             }
 
-            // Record the linked dropdown by key (readable in the timeline) rather than by row id.
+            // Record the linked dropdown by name (readable in the timeline) rather than by row id.
             if (changes.dropdownCategoryId) {
                 const ids = [before.dropdownCategoryId, after.dropdownCategoryId].filter((id): id is string => Boolean(id));
-                const keys = new Map(
-                    (await tx.dropdownCategory.findMany({ where: { id: { in: ids } }, select: { id: true, key: true } })).map((c) => [c.id, c.key]),
+                const names = new Map(
+                    (await tx.dropdownCategory.findMany({ where: { id: { in: ids } }, select: { id: true, label: true } })).map((c) => [c.id, c.label]),
                 );
-                const keyOf = (id: string | null) => (id ? (keys.get(id) ?? id) : null);
+                const nameOf = (id: string | null) => (id ? (names.get(id) ?? id) : null);
                 delete changes.dropdownCategoryId;
-                changes.dropdown = { from: keyOf(before.dropdownCategoryId), to: keyOf(after.dropdownCategoryId) };
+                changes.dropdown = { from: nameOf(before.dropdownCategoryId), to: nameOf(after.dropdownCategoryId) };
             }
             if (Object.keys(changes).length > 0) {
                 await auditService.record(tx, {
@@ -1129,12 +1090,6 @@ export const formConfigService = {
         });
         await invalidate();
         return { id: fieldId };
-    },
-
-    /** What saving an API name would do (clashes, aliases, data moved), without saving it. */
-    async checkApiName(body: unknown): Promise<ApiNameCheck> {
-        const input = apiNameCheckSchema.parse(body);
-        return previewApiName(prisma, input.module, input.fieldId, input.name);
     },
 
     async getField(fieldId: string): Promise<FormFieldDefinitionDto> {

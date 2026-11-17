@@ -11,7 +11,6 @@ import {
     DialogContent,
     DialogTitle,
     FormControlLabel,
-    InputAdornment,
     MenuItem,
     Radio,
     RadioGroup,
@@ -20,16 +19,9 @@ import {
     Typography,
 } from '@mui/material';
 import { useConfigDraftActions } from './useConfigDraft';
-import { customFieldKeyFor, isTempId, uniqueKey } from './configDraft';
-import { formConfigService } from '@/services/formConfig.service';
 import {
-    apiNameOf,
-    API_NAME_MAX,
-    apiNameOwner,
-    apiNameShapeError,
     CRM_MODULE_LABELS,
     CUSTOM_FIELD_TYPES,
-    type ApiNameCheck,
     FIELD_TYPE_LABELS,
     sectionKeyFromLabel,
     tabKeyFromLabel,
@@ -80,16 +72,9 @@ const SIZE_OPTIONS: { value: ConfigFieldSize | ''; label: string }[] = [
     { value: 'full', label: 'Full row' },
 ];
 const isChoice = (type: string) => type === 'select' || type === 'multiselect';
-/** What the admin types after `cf_`: lowercase, spaces / dashes as underscores, a pasted `cf_` dropped. */
-/** What the admin types as an API name (TEMP-DEV-RENAME: any field, any case, `cf_` optional): spaces / dashes as underscores. */
-const normalizeApiNameInput = (text: string) => text.trim().replace(/[\s-]+/g, '_');
 
 interface Draft {
     label: string;
-    /** API name of a custom field (its storage key). */
-    fieldKey: string;
-    /** API name of a built-in field (its column name unless an admin renamed it). */
-    apiName: string;
     fieldType: CustomFieldType;
     /** A tab key, or NEW_TAB (created with the field, named `newTabLabel`). */
     tabKey: string;
@@ -123,8 +108,6 @@ export function FieldEditorModal({ open, onClose, module, configs, field, defaul
 
     const initialDraft = (): Draft => ({
         label: field?.label ?? '',
-        fieldKey: field && !field.isSystem ? field.fieldKey : '',
-        apiName: field?.isSystem ? apiNameOf(field) : '',
         fieldType: (field?.fieldType as CustomFieldType) ?? 'text',
         tabKey: field?.tabKey ?? defaultTabKey ?? tabs[0]?.key ?? 'overview',
         newTabLabel: '',
@@ -190,72 +173,8 @@ export function FieldEditorModal({ open, onClose, module, configs, field, defaul
     const canSwitchChoice = !isCreate && !locked && !builtIn && isChoice(field!.fieldType);
     const typeOptions: readonly CustomFieldType[] = isCreate ? CUSTOM_FIELD_TYPES : canSwitchChoice ? ['select', 'multiselect'] : [fieldType as CustomFieldType];
 
-    // API name (custom fields): on a new field it follows the label until the admin edits it.
-    const [keyTouched, setKeyTouched] = useState(false);
-    const generatedKey = useMemo(() => {
-        if (!isCreate) return '';
-        const taken = new Set((configs.fieldsByModule[module] ?? []).map((f) => f.fieldKey));
-        return uniqueKey(customFieldKeyFor(draft.label.trim()), (k) => taken.has(k));
-    }, [isCreate, configs, module, draft.label]);
-    const requestedKey = isCreate && !keyTouched ? generatedKey : draft.fieldKey.trim();
-    /** An existing custom field's API name being renamed. */
-    const keyChanged = !isCreate && !builtIn && requestedKey !== field!.fieldKey;
-    /** The field is stored already, so a new API name moves data (a field new in this draft has none yet). */
-    const savedField = Boolean(field && !isTempId(field.id));
-    const keyError = useMemo(() => {
-        if (builtIn || !(isCreate ? keyTouched : keyChanged)) return null;
-        const owner = apiNameOwner(configs.fieldsByModule[module] ?? [], requestedKey, field);
-        return apiNameShapeError(requestedKey) ?? (owner ? `'${requestedKey}' is already the API name of '${owner.label}'.` : null);
-    }, [builtIn, isCreate, keyTouched, keyChanged, requestedKey, configs, module, field]);
-
-    // API name (built-in fields): a name of the admin's choosing; the column (fieldKey) never changes.
-    const requestedApiName = draft.apiName.trim();
-    const apiNameChanged = builtIn && requestedApiName !== apiNameOf(field!);
-    const apiNameError = useMemo(() => {
-        if (!apiNameChanged) return null;
-        const shape = apiNameShapeError(requestedApiName);
-        if (shape) return shape;
-        const owner = apiNameOwner(configs.fieldsByModule[module] ?? [], requestedApiName, field);
-        return owner ? `'${requestedApiName}' is already the API name of '${owner.label}'.` : null;
-    }, [apiNameChanged, requestedApiName, configs, module, field]);
-
-    // The API checks what the draft can't see (record properties, a deleted field's leftover data, how many
-    // records a rename moves, look-alike names) as the admin types.
-    const nameToCheck = builtIn
-        ? apiNameChanged && !apiNameError
-            ? requestedApiName
-            : null
-        : (isCreate ? keyTouched : keyChanged) && !keyError
-          ? requestedKey
-          : null;
-    /** The stored field the name is checked for (a field new in this draft is checked as a new one). */
-    const savedFieldId = field && !isTempId(field.id) ? field.id : undefined;
-    const [nameCheck, setNameCheck] = useState<{ name: string; result: ApiNameCheck } | null>(null);
-    useEffect(() => {
-        if (!nameToCheck) return;
-        let cancelled = false;
-        const timer = setTimeout(() => {
-            formConfigService
-                .checkApiName(module, savedFieldId, nameToCheck)
-                // The API checks again on save, so a failed preview only leaves the admin without its warnings.
-                .catch((): ApiNameCheck => ({ error: null, warnings: [] }))
-                .then((result) => {
-                    if (!cancelled) setNameCheck({ name: nameToCheck, result });
-                });
-        }, 350);
-        return () => {
-            cancelled = true;
-            clearTimeout(timer);
-        };
-    }, [nameToCheck, module, savedFieldId]);
-    const serverCheck = nameToCheck && nameCheck?.name === nameToCheck ? nameCheck.result : null;
-    const checkingName = Boolean(nameToCheck) && !serverCheck;
-    const nameError = (builtIn ? apiNameError : keyError) ?? serverCheck?.error ?? null;
-
     const validate = (): string | null => {
         if (!draft.label.trim()) return 'Label is required.';
-        if (nameError) return `API name: ${nameError}`;
-        if (checkingName) return 'Still checking the API name — try again in a moment.';
         if (draft.tabKey === NEW_TAB && !draft.newTabLabel.trim()) return 'Enter a name for the new tab.';
         if (sectionChoice === NEW_SECTION && !draft.newSectionLabel.trim()) return 'Enter a name for the new section.';
         if (isCreate && choice) {
@@ -290,7 +209,6 @@ export function FieldEditorModal({ open, onClose, module, configs, field, defaul
                 const created = staged.createField({
                     module,
                     label: draft.label.trim(),
-                    ...(keyTouched ? { fieldKey: requestedKey } : {}),
                     fieldType: draft.fieldType,
                     tabKey,
                     sectionKey,
@@ -312,8 +230,6 @@ export function FieldEditorModal({ open, onClose, module, configs, field, defaul
             } else {
                 staged.updateField(field!.id, {
                     label: draft.label.trim(),
-                    ...(keyChanged ? { fieldKey: requestedKey } : {}),
-                    ...(apiNameChanged ? { apiName: requestedApiName } : {}),
                     ...(canSwitchChoice && draft.fieldType !== field!.fieldType ? { fieldType: draft.fieldType as 'select' | 'multiselect' } : {}),
                     tabKey,
                     sectionKey,
@@ -383,100 +299,6 @@ export function FieldEditorModal({ open, onClose, module, configs, field, defaul
                                 </MenuItem>
                             ))}
                         </TextField>
-                    </Box>
-
-                    <Box sx={{ gridColumn: '1 / -1' }}>
-                        {label('API Name')}
-                        {builtIn ? (
-                            <TextField
-                                size="small"
-                                fullWidth
-                                value={draft.apiName}
-                                onChange={(e) => set('apiName', normalizeApiNameInput(e.target.value))}
-                                error={Boolean(nameError)}
-                                sx={inputSx}
-                                helperText={
-                                    nameError ??
-                                    (checkingName ? (
-                                        'Checking…'
-                                    ) : (
-                                        <>
-                                            Stored in column <b style={{ fontFamily: 'monospace' }}>{field!.fieldKey}</b>, which never changes. Record
-                                            writes and imports accept this name; the column name always works too.
-                                        </>
-                                    ))
-                                }
-                                slotProps={{
-                                    input: {
-                                        endAdornment:
-                                            requestedApiName !== field!.fieldKey ? (
-                                                <InputAdornment position="end">
-                                                    <Button
-                                                        size="small"
-                                                        onClick={() => set('apiName', field!.fieldKey)}
-                                                        sx={{ minWidth: 0, fontSize: '0.72rem', textTransform: 'none' }}
-                                                    >
-                                                        Use column name
-                                                    </Button>
-                                                </InputAdornment>
-                                            ) : undefined,
-                                    },
-                                    htmlInput: { maxLength: API_NAME_MAX, 'aria-label': 'API name', spellCheck: false, style: { fontFamily: 'monospace' } },
-                                }}
-                            />
-                        ) : (
-                            <TextField
-                                size="small"
-                                fullWidth
-                                value={requestedKey}
-                                onChange={(e) => {
-                                    setKeyTouched(true);
-                                    set('fieldKey', normalizeApiNameInput(e.target.value));
-                                }}
-                                error={Boolean(nameError)}
-                                sx={inputSx}
-                                helperText={
-                                    nameError ??
-                                    (checkingName
-                                        ? 'Checking…'
-                                        : isCreate && !keyTouched
-                                        ? 'Generated from the label. Records store this field’s values under this name.'
-                                        : !savedField
-                                          ? 'Not saved yet: follows the label until you edit it here.'
-                                          : 'The name records, filters, imports and PDF templates use for this field.')
-                                }
-                                slotProps={{
-                                    htmlInput: { maxLength: API_NAME_MAX, 'aria-label': 'API name', spellCheck: false, style: { fontFamily: 'monospace' } },
-                                }}
-                            />
-                        )}
-                        {keyChanged && savedField && !nameError && (
-                            <Alert severity="warning" sx={{ mt: 1, borderRadius: '8px', fontSize: '0.8rem' }}>
-                                Renaming <b>{field!.fieldKey}</b> to <b>{requestedKey}</b>: when you save, every record&apos;s value, saved
-                                table filters and PDF templates using this field move to the new name, and the old name is forgotten.
-                                <ApiNameWarnings warnings={serverCheck?.warnings} />
-                            </Alert>
-                        )}
-                        {!keyChanged && !apiNameChanged && serverCheck && serverCheck.warnings.length > 0 && !nameError && (
-                            <Alert severity="warning" sx={{ mt: 1, borderRadius: '8px', fontSize: '0.8rem' }}>
-                                <ApiNameWarnings warnings={serverCheck.warnings} />
-                            </Alert>
-                        )}
-                        {apiNameChanged && !nameError && (
-                            <Alert severity={serverCheck?.warnings.length ? 'warning' : 'info'} sx={{ mt: 1, borderRadius: '8px', fontSize: '0.8rem' }}>
-                                {requestedApiName === field!.fieldKey ? (
-                                    <>
-                                        Restoring the column name <b>{field!.fieldKey}</b> as this field&apos;s API name.
-                                    </>
-                                ) : (
-                                    <>
-                                        <b>{field!.label}</b> will be known as <b>{requestedApiName}</b> in API writes, import mapping and the form
-                                        builder. No data moves: values stay in <b>{field!.fieldKey}</b>, and the app&apos;s own screens are unaffected.
-                                    </>
-                                )}
-                                <ApiNameWarnings warnings={serverCheck?.warnings} />
-                            </Alert>
-                        )}
                     </Box>
 
                     <Box>
@@ -684,17 +506,5 @@ export function FieldEditorModal({ open, onClose, module, configs, field, defaul
                 </Button>
             </DialogActions>
         </Dialog>
-    );
-}
-
-/** The API's notes on a requested API name, as a list under the rename notice. */
-function ApiNameWarnings({ warnings }: { warnings?: string[] }) {
-    if (!warnings || warnings.length === 0) return null;
-    return (
-        <Box component="ul" sx={{ m: 0, mt: 0.75, pl: 2.25 }}>
-            {warnings.map((w) => (
-                <li key={w}>{w}</li>
-            ))}
-        </Box>
     );
 }

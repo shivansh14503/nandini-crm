@@ -8,6 +8,8 @@ export * from './StyledSelect';
 export * from './SectionLabel';
 export * from './EmailRow';
 export * from './FieldNotice';
+export * from './ExistingRecordMatches';
+export * from './useExistingRecordCheck';
 export * from './ReadOnlyField';
 export * from './AddressPrimitives';
 export * from './rhf';

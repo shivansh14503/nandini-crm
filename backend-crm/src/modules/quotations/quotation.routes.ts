@@ -20,6 +20,6 @@ const router = Router();
 router.use(authenticate);
 // Before registerCrudRoutes so `/:id` doesn't swallow `/:id/pdf`.
 registerRecordPdfRoute(router, 'QUOTATION');
-registerCrudRoutes(router, quotationController, 'quotations');
+registerCrudRoutes(router, quotationController);
 
 export default router;

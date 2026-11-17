@@ -91,22 +91,6 @@ function parsePrefs(raw: string): VisibilityPrefs | null {
     }
 }
 
-/**
- * Prefs with ids saved under a column's earlier id (`aliasIds`: a custom field whose API name was renamed) read as
- * its current id, so a renamed field keeps the user's visibility, pin and position. Ids a live column has win.
- */
-function resolveAliases<T>(prefs: VisibilityPrefs, columns: DataTableColumn<T>[] | undefined): VisibilityPrefs {
-    const live = new Set((columns ?? []).map((c) => c.id));
-    const aliases = new Map<string, string>();
-    for (const column of columns ?? []) for (const alias of column.aliasIds ?? []) if (!live.has(alias)) aliases.set(alias, column.id);
-    if (aliases.size === 0) return prefs;
-    const map = (ids: string[]) => {
-        const mapped = ids.map((id) => aliases.get(id) ?? id);
-        return mapped.filter((id, i) => mapped.indexOf(id) === i);
-    };
-    return { hidden: map(prefs.hidden), shown: map(prefs.shown), pinned: map(prefs.pinned), order: map(prefs.order) };
-}
-
 export interface ColumnVisibility<T> {
     /** Every column (shown or not) in the user's order. */
     orderedColumns: DataTableColumn<T>[];
@@ -144,8 +128,8 @@ export function useColumnVisibility<T>(
     );
 
     const prefs = useMemo<VisibilityPrefs>(
-        () => resolveAliases((tableId ? parsePrefs(storedRaw) : localPrefs) ?? EMPTY_PREFS, columns),
-        [tableId, storedRaw, localPrefs, columns]
+        () => (tableId ? parsePrefs(storedRaw) : localPrefs) ?? EMPTY_PREFS,
+        [tableId, storedRaw, localPrefs]
     );
     // In the user's order: everything below (visibility, display, the column manager) follows it.
     const allColumns = useMemo(() => orderColumns(columns ?? [], prefs.order), [columns, prefs.order]);

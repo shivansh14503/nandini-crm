@@ -38,6 +38,7 @@ import { findCrmUser } from '@/services/masterData.store';
 import { mailtoHref,smsHref, telHref, whatsappHref } from '@/utils/contactLinks';
 import { CONTACT_FORM_TABS } from './ContactForm';
 import { DynamicDrawerCustomFields } from '@/components/common/Drawer/DynamicDrawerCustomFields';
+import { phoneForCopy } from '@/utils/phone';
 
 export interface ContactDetailDrawerProps {
     contact: Contact | null;
@@ -110,9 +111,11 @@ interface ChannelRowProps {
     tag?: string;
     actions: ChannelAction[];
     copyTitle: string;
+    /** Text the copy button copies, when it differs from `value` (phones copy with their country code). */
+    copyText?: string;
 }
 
-function ChannelRow({ icon, value, caption, tag, actions, copyTitle }: ChannelRowProps) {
+function ChannelRow({ icon, value, caption, tag, actions, copyTitle, copyText }: ChannelRowProps) {
     return (
         <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1.5, py: 1 }}>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.25, minWidth: 0 }}>
@@ -149,7 +152,7 @@ function ChannelRow({ icon, value, caption, tag, actions, copyTitle }: ChannelRo
                 {actions.filter((a) => a.href).map((a) => (
                     <ChannelActionButton key={a.label} {...a} />
                 ))}
-                <DrawerCopyButton text={value} title={copyTitle} iconColor="var(--mui-palette-text-secondary)" />
+                <DrawerCopyButton text={copyText ?? value} title={copyTitle} iconColor="var(--mui-palette-text-secondary)" />
             </Box>
         </Box>
     );
@@ -328,6 +331,7 @@ export function ContactDetailDrawer({
                                         value={c.mobile}
                                         caption="Mobile"
                                         copyTitle="Copy mobile"
+                                        copyText={phoneForCopy(c.mobile)}
                                         actions={[
                                             callAction(c.mobile),
                                             {
@@ -352,6 +356,7 @@ export function ContactDetailDrawer({
                                         value={c.officePhone}
                                         caption="Office Phone"
                                         copyTitle="Copy office phone"
+                                        copyText={phoneForCopy(c.officePhone)}
                                         actions={[callAction(c.officePhone)]}
                                     />
                                 )}
@@ -362,6 +367,7 @@ export function ContactDetailDrawer({
                                         value={value}
                                         caption={label}
                                         copyTitle={`Copy ${label.toLowerCase()}`}
+                                        copyText={phoneForCopy(value)}
                                         actions={[callAction(value)]}
                                     />
                                 ))}

@@ -29,6 +29,7 @@ import { type EntityDetailDrawerProps, type DrawerTabItem, buildDrawerTabs } fro
 import { AuditTrailTimeline } from './AuditTrailTimeline';
 import { useDrawerStack } from './DrawerStackContext';
 import { RecordAuditFooter } from './RecordAuditFooter';
+import { DoubleClickCopyText } from '../useDoubleClickCopy';
 
 const CHANGES_TAB_ID = 'changes-tab';
 
@@ -292,7 +293,7 @@ export function EntityDetailDrawer({
                                         lineHeight: 1.25,
                                     }}
                                 >
-                                    {title}
+                                    <DoubleClickCopyText>{title}</DoubleClickCopyText>
                                 </Typography>
                                 {verified && <VerifiedIcon sx={{ fontSize: 18, color: 'var(--crm-text-blue-600)', flexShrink: 0 }} />}
                             </Box>

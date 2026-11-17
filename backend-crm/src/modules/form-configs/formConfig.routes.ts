@@ -17,17 +17,15 @@ export const FORM_CONFIG_ADMIN_ROLES = ['Admin', 'Administrator', 'Super Admin']
  * /api/form-configs
  *   GET    /                                          ?includeInactive  → FormConfigsPayload (any signed-in user)
  *   ── Admin only ──
- *   POST   /categories                                { key?, label, module, description?, options? }
- *   PATCH  /categories/:categoryKey                   { label?, description? }
+ *   POST   /categories                                { label, module, description?, options? }  (key derived from the label)
+ *   PATCH  /categories/:categoryKey                   { label?, description?, module? }  (an admin-created dropdown's key follows its label)
  *   DELETE /categories/:categoryKey                   hard delete (admin-created only; removes its options + linked custom fields)
- *   POST   /categories/:categoryKey/options           { value, label?, meta? }   (re-adding an archived value restores it)
+ *   POST   /categories/:categoryKey/options           { value, meta? }   (the option's name is its value; re-adding an archived one restores it)
  *   PUT    /categories/:categoryKey/options/reorder   { optionIds }
- *   PATCH  /options/:optionId                         { value?, label?, meta?, isActive? }  (system options: no rename / archive)
+ *   PATCH  /options/:optionId                         { label?, meta?, isActive?, isDefault? }  (a rename renames the stored value; records and filters follow; system options: no rename / archive)
  *   DELETE /options/:optionId                         permanent delete; blocked for system options (archive = PATCH isActive:false)
- *   POST   /fields                                    custom field (key auto-prefixed cf_)
- *   PATCH  /fields/:fieldId                           (core-locked: can't hide / un-require; built-in: fixed tab, any section of it)
- *                                                     { apiName } renames a built-in field's API name; { fieldKey } a custom field's
- *   POST   /api-name-check                            { module, fieldId?, name } → { error, warnings } (nothing saved)
+ *   POST   /fields                                    custom field (key derived from the label: cf_<label>)
+ *   PATCH  /fields/:fieldId                           (core-locked: can't hide / un-require; a custom field's key follows its label)
  *   DELETE /fields/:fieldId                           permanent delete of a custom field; blocked for built-in fields
  *   PUT    /modules/:module/fields/reorder            { fieldIds }
  *   PATCH  /modules/:module/sections/:sectionKey      { sectionLabel }
@@ -55,7 +53,6 @@ router.patch('/options/:optionId', admin, validateRequest({ params: optionIdPara
 router.delete('/options/:optionId', admin, validateRequest({ params: optionIdParamSchema }), formConfigController.deleteOption);
 
 router.post('/fields', admin, formConfigController.createField);
-router.post('/api-name-check', admin, formConfigController.checkApiName);
 router.patch('/fields/:fieldId', admin, validateRequest({ params: fieldIdParamSchema }), formConfigController.updateField);
 router.delete('/fields/:fieldId', admin, validateRequest({ params: fieldIdParamSchema }), formConfigController.deleteField);
 router.put('/modules/:module/fields/reorder', admin, validateRequest({ params: moduleParamSchema }), formConfigController.reorderFields);

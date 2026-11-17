@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
     Box,
@@ -17,9 +17,10 @@ import {
     Visibility as VisibilityIcon,
     VisibilityOff as VisibilityOffIcon,
 } from '@mui/icons-material';
-import { useAuth } from '../../context/AuthContext';
+import { useAuth, SESSION_EXPIRED_KEY } from '../../context/AuthContext';
 import { ROUTES } from '@/config/constants';
 import { ErrorAlert } from '../common/ErrorAlert';
+import { AppToast } from '../common/AppToast';
 import { FIELD_MAX_LENGTH } from '../forms/fieldSizing';
 
 const PASSWORD_MAX_LENGTH = 128;
@@ -33,6 +34,19 @@ export function LoginForm() {
     const [showPassword, setShowPassword] = useState(false);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const [sessionExpired, setSessionExpired] = useState(false);
+
+    // Set by AuthContext when a previously signed-in user's session check fails on reload.
+    useEffect(() => {
+        try {
+            if (window.sessionStorage.getItem(SESSION_EXPIRED_KEY)) {
+                window.sessionStorage.removeItem(SESSION_EXPIRED_KEY);
+                setSessionExpired(true);
+            }
+        } catch {
+            // Storage unavailable: skip the notice.
+        }
+    }, []);
 
     const handleTogglePassword = () => {
         setShowPassword((prev) => !prev);
@@ -66,6 +80,13 @@ export function LoginForm() {
 
     return (
         <Box component="form" onSubmit={handleSubmit} noValidate>
+            <AppToast
+                open={sessionExpired}
+                message="Your session has expired. Please log in again."
+                severity="warning"
+                autoHideDuration={8000}
+                onClose={() => setSessionExpired(false)}
+            />
             <ErrorAlert id="login-error-alert" error={error} onClose={() => setError(null)} />
 
             {/* Username Input */}

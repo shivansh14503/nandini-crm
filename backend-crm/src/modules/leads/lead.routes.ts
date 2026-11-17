@@ -9,7 +9,7 @@ import { leadController } from './lead.controller.js';
  * /api/leads
  *   GET    /             ?page&limit&search&sortBy&sortOrder&status&excludeStatus&leadType&leadSource
  *                         &organizationName&assignedTo&mine&nextFollowupDate&createdWithinDays
- *   GET    /check-duplicates ?mobile&emails&excludeId  (informational; never blocks a save)
+ *   GET    /check-duplicates ?mobile&emails&excludeId&excludeType  (informational; never blocks a save)
  *   GET    /:id
  *   POST   /
  *   PUT    /:id          (partial; PATCH is an alias; status can't be set to/from Converted here)
@@ -23,6 +23,6 @@ router.use(authenticate);
 // Before the CRUD routes so `/check-duplicates` isn't captured by `/:id`.
 router.get('/check-duplicates', leadController.checkDuplicates);
 router.post('/:id/convert', validateRequest({ params: idParamSchema }), leadController.convert);
-registerCrudRoutes(router, leadController, 'leads');
+registerCrudRoutes(router, leadController);
 
 export default router;

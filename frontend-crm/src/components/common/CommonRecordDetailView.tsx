@@ -10,6 +10,7 @@ import { FormModeProvider } from '@/context/FormModeContext';
 import { FormHeader } from '../forms/FormHeader';
 import type { BreadcrumbItem } from './AppBreadcrumbs';
 import { RecordAuditFooter, type RecordAuditStamp } from './Drawer/RecordAuditFooter';
+import { useDoubleClickCopy } from './useDoubleClickCopy';
 
 export interface RecordDetailTab {
     id: string;
@@ -25,6 +26,8 @@ export interface CommonRecordDetailViewProps {
     breadcrumbItems?: BreadcrumbItem[];
     /** Identity hero */
     title: string;
+    /** Document number (e.g. NIPL/L/26-27/0007), shown beside the title; double-click copies it. */
+    code?: string;
     subtitle?: string;
     /** Icon shown in the square avatar; initials of `title` are used when omitted. */
     avatarIcon?: React.ReactNode;
@@ -38,6 +41,8 @@ export interface CommonRecordDetailViewProps {
     editDisabledTooltip?: string;
     backHref: string;
     backLabel?: string;
+    /** Extra hero actions shown before Back (e.g. the PDF menu). */
+    actions?: React.ReactNode;
     /** Tabs and content (the same tab panels used by the edit form). */
     tabs?: RecordDetailTab[];
     activeTab?: string;
@@ -65,6 +70,7 @@ const initialsOf = (text: string) =>
 export function CommonRecordDetailView({
     breadcrumbItems,
     title,
+    code,
     subtitle,
     avatarIcon,
     verified,
@@ -76,6 +82,7 @@ export function CommonRecordDetailView({
     editDisabledTooltip,
     backHref,
     backLabel = 'Back to List',
+    actions,
     tabs,
     activeTab,
     onTabChange,
@@ -88,6 +95,7 @@ export function CommonRecordDetailView({
     // Created At / Last Modified stamps belong to the overview tab only (the first tab when none is named 'overview').
     const overviewTabId = tabs?.find((t) => t.id === 'overview')?.id ?? tabs?.[0]?.id;
     const showAudit = Boolean(audit) && (!overviewTabId || (activeTab ?? tabs?.[0]?.id) === overviewTabId);
+    const copyCode = useDoubleClickCopy();
 
     return (
         <Box sx={{ width: '100%', pb: 10 }}>
@@ -134,6 +142,29 @@ export function CommonRecordDetailView({
                             >
                                 {title || '—'}
                             </Typography>
+                            {code && (
+                                <Tooltip title="Double-click to copy">
+                                    <Box
+                                        component="span"
+                                        onDoubleClick={copyCode.onDoubleClick}
+                                        sx={{
+                                            fontFamily: 'monospace',
+                                            fontSize: '0.82rem',
+                                            fontWeight: 700,
+                                            lineHeight: 1.6,
+                                            px: 1,
+                                            borderRadius: '6px',
+                                            color: 'var(--crm-text-blue-700)',
+                                            backgroundColor: 'var(--mui-palette-primary-soft)',
+                                            border: '1px solid var(--mui-palette-primary-softBorder)',
+                                            cursor: 'text',
+                                            whiteSpace: 'nowrap',
+                                        }}
+                                    >
+                                        {code}
+                                    </Box>
+                                </Tooltip>
+                            )}
                             {verified && (
                                 <Tooltip title="Verified">
                                     <VerifiedIcon sx={{ fontSize: 20, color: 'var(--mui-palette-success-main)' }} />
@@ -163,6 +194,7 @@ export function CommonRecordDetailView({
                 </Box>
 
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.25, flexWrap: 'wrap' }}>
+                    {actions}
                     <Button
                         component={Link}
                         href={backHref}
@@ -277,6 +309,7 @@ export function CommonRecordDetailView({
             </Paper>
 
             {toast}
+            {copyCode.toast}
         </Box>
     );
 }

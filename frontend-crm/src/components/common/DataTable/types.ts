@@ -21,8 +21,6 @@ export interface DataTableColumn<T> {
      * column manager from adding a second column for the same field.
      */
     fieldKey?: string;
-    /** Earlier ids of this column (a custom field whose API name was renamed): saved preferences under them still apply. */
-    aliasIds?: string[];
     /** Column manager heading for columns generated from form fields (the form section label). */
     group?: string;
     /** Place within the column manager: form tab first, then the field's position in the form. */

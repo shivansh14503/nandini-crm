@@ -49,6 +49,27 @@ export function splitPhone(value: unknown, defaultIso2: string = DEFAULT_PHONE_C
     return { country: india, national: digits };
 }
 
+/**
+ * Reads a pasted phone number that carries its country code (e.g. '+91 98112 34567' copied from a list or
+ * drawer, '0091…', '91 98112 34567', '098112 34567') or is a complete Indian number ('98112 34567').
+ * Returns its country + national digits, or null when the text isn't a recognisable full number (then the
+ * paste is left to the input's normal digit filtering).
+ */
+export function parsePastedPhone(text: string, current: PhoneCountry): SplitPhone | null {
+    const trimmed = (text ?? '').trim();
+    const digits = trimmed.replace(/\D/g, '');
+    if (!digits) return null;
+    if (trimmed.startsWith('+')) return splitPhone(`+${digits}`, current.iso2);
+    if (digits.startsWith('00')) return splitPhone(`+${digits.slice(2)}`, current.iso2);
+    if (current.iso2 === 'IN') {
+        const india = current;
+        if (digits.length === 12 && digits.startsWith('91')) return { country: india, national: digits.slice(2) };
+        if (digits.length === 11 && digits.startsWith('0')) return { country: india, national: digits.slice(1) };
+        if (digits.length === 10) return { country: india, national: digits };
+    }
+    return null;
+}
+
 /** Combines country + national digits into E.164; '' when there are no digits. */
 export function joinPhone(country: PhoneCountry, national: string): string {
     const digits = national.replace(/\D/g, '');
@@ -67,6 +88,12 @@ export function formatPhoneDisplay(value: unknown): string {
     formatter.input(`${country.dialCode}${national}`);
     return formatter.getNumber()?.formatInternational() ?? `${country.dialCode} ${national}`;
 }
+/**
+ * Phone text for copy buttons: always with its country code ('+91 98112 34567'), including legacy numbers
+ * stored without one, so it pastes back into a phone field (or WhatsApp) complete.
+ */
+export const phoneForCopy = (value: string): string => formatPhoneDisplay(value) || value;
+
 /**
  * Normalizes any phone input to E.164 for validation/submit: separators dropped, '+'/'00' kept as the
  * international prefix, legacy national numbers (10 digits, 91+10, 0+10) treated as India (+91).

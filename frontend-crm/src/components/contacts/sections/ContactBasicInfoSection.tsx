@@ -12,8 +12,9 @@ const NO_ORGANIZATIONS: ExtendedOrganization[] = [];
 /**
  * Basic contact identity & organization association, plus primary-contact and left-job status.
  * Must be rendered inside a `FormProvider<ContactFormData>`.
+ * `mobileNotice`: the records already using the mobile number (see `ExistingRecordMatches`).
  */
-export function ContactBasicInfoSection() {
+export function ContactBasicInfoSection({ mobileNotice }: { mobileNotice?: React.ReactNode } = {}) {
     const { setValue } = useFormContext<ContactFormData>();
     const { data: organizations = NO_ORGANIZATIONS } = useOrganizations();
     const organizationNames = useMemo(() => organizations.map((o) => o.organizationName), [organizations]);
@@ -21,7 +22,7 @@ export function ContactBasicInfoSection() {
     return (
         <FormGrid columns={3}>
             <RhfTextField<ContactFormData> name="name" label="Name" required personName placeholder="e.g. Rajesh Kumar" />
-            <RhfPhoneField<ContactFormData> name="mobile" label="Mobile" required hint="Primary mobile" placeholder="e.g. 9876543210" />
+            <RhfPhoneField<ContactFormData> name="mobile" label="Mobile" required hint="Primary mobile" placeholder="e.g. 9876543210" notice={mobileNotice} />
             <RhfPhoneField<ContactFormData> name="officePhone" label="Office Phone" placeholder="e.g. 0112345678" />
 
             <FormGridItem span={2}>

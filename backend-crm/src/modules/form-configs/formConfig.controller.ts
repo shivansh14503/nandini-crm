@@ -42,9 +42,6 @@ export const formConfigController = {
     async updateField(req: Request, res: Response): Promise<void> {
         sendSuccess(res, await formConfigService.updateField(param(req, 'fieldId'), req.body, requireUser(req)), 'Field updated');
     },
-    async checkApiName(req: Request, res: Response): Promise<void> {
-        sendSuccess(res, await formConfigService.checkApiName(req.body));
-    },
     async deleteField(req: Request, res: Response): Promise<void> {
         sendSuccess(res, await formConfigService.deleteField(param(req, 'fieldId'), requireUser(req)), 'Custom field deleted');
     },
