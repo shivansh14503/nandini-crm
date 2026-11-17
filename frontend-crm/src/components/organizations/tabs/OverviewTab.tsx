@@ -4,7 +4,6 @@ import React from 'react';
 import {
     Box,
     Typography,
-    TextField,
     Chip,
     Switch,
     FormControl,
@@ -12,6 +11,8 @@ import {
     MenuItem,
     InputAdornment,
 } from '@mui/material';
+// Raw text inputs show the admin-configured placeholder of the FormField they sit in.
+import { ConfiguredTextField as TextField } from '@/components/forms/ConfiguredTextField';
 import { OrganizationNameAutocomplete } from '../OrganizationNameAutocomplete';
 import { useOrganizationNameCheck } from '../useOrganizationNameCheck';
 import { CommonActionModal } from '@/components/common/CommonActionModal';

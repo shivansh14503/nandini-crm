@@ -3,10 +3,11 @@
 import React, { useState } from 'react';
 import {
     Box,
-    TextField,
     InputAdornment,
     Divider,
 } from '@mui/material';
+// Raw text inputs show the admin-configured placeholder of the FormField they sit in.
+import { ConfiguredTextField as TextField } from '@/components/forms/ConfiguredTextField';
 import ArticleOutlinedIcon from '@mui/icons-material/ArticleOutlined';
 import CalendarTodayOutlinedIcon from '@mui/icons-material/CalendarTodayOutlined';
 import ReceiptLongOutlinedIcon from '@mui/icons-material/ReceiptLongOutlined';
