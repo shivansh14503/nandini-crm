@@ -20,7 +20,7 @@ import {
     type PhoneCountry,
 } from '@/data/countryPhoneCodes';
 import { getPreferredCountry, setPreferredCountry, subscribePreferredCountry } from '@/utils/phoneCountryStore';
-import { formatPhoneDisplay, joinPhone, maxNationalDigits, splitPhone } from '@/utils/phone';
+import { formatPhoneDisplay, joinPhone, maxNationalDigits, parsePastedPhone, splitPhone } from '@/utils/phone';
 
 export type RhfPhoneFieldProps<T extends FieldValues = FieldValues> = Omit<RhfTextFieldProps<T>, 'numericOnly'> & {
     /** ISO-2 country preselected for empty values and legacy numbers without a country code. Defaults to India. */
@@ -30,7 +30,10 @@ export type RhfPhoneFieldProps<T extends FieldValues = FieldValues> = Omit<RhfTe
      * Defaults to true only for the primary "mobile" field.
      */
     setsFormDefault?: boolean;
-    /** Informational (non-error) note shown below the input while there is no validation error. */
+    /**
+     * Informational (non-error) note shown below the input while there is no validation error. Text is wrapped in
+     * a `FieldNotice`; an element (e.g. `ExistingRecordMatches`) is shown as is.
+     */
     notice?: React.ReactNode;
 };
 
@@ -129,6 +132,29 @@ export function RhfPhoneField<T extends FieldValues>({
     // Digits only, filtered before insertion so Ctrl+Z keeps working; a "+…" international number passes through.
     const sanitizerRef = useUndoSafeSanitizer(phoneText);
 
+    // Pasting a full number ('+91 98112 34567' copied from a list or drawer, '91…', '0…', or 10 Indian digits)
+    // replaces the field: the country code goes to the picker and the national digits to the input. Left to the
+    // browser, the input's maxLength cut the formatted text short before it could be parsed, dropping digits.
+    const pasteFullNumberRef = React.useRef<(e: ClipboardEvent) => void>(() => {});
+    React.useLayoutEffect(() => {
+        pasteFullNumberRef.current = (e) => {
+            const parsed = parsePastedPhone(e.clipboardData?.getData('text/plain') ?? '', country);
+            if (!parsed) return; // not a full number: normal digit filtering applies
+            e.preventDefault();
+            e.stopImmediatePropagation(); // skip the sanitizer's own paste handling
+            setSelected(parsed.country);
+            setPickedByUser(true);
+            if (setsFormDefault) setPreferredCountry(control, parsed.country.iso2);
+            emit(joinPhone(parsed.country, parsed.national.slice(0, maxNationalDigits(parsed.country))));
+        };
+    });
+    const pasteRef = React.useCallback((el: HTMLInputElement | null) => {
+        if (!el) return;
+        const onPaste = (e: ClipboardEvent) => pasteFullNumberRef.current(e);
+        el.addEventListener('paste', onPaste);
+        return () => el.removeEventListener('paste', onPaste);
+    }, []);
+
     const handleNumberChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const raw = e.target.value;
         if (raw.trim().startsWith('+')) {
@@ -161,7 +187,13 @@ export function RhfPhoneField<T extends FieldValues>({
                 inputRef={(el: HTMLInputElement | null) => {
                     inputRef.current = el;
                     field.ref(el);
-                    return sanitizerRef(el);
+                    // Paste listener first, so a full-number paste is handled before the sanitizer sees it.
+                    const removePaste = pasteRef(el);
+                    const removeSanitizer = sanitizerRef(el);
+                    return () => {
+                        removePaste?.();
+                        removeSanitizer?.();
+                    };
                 }}
                 name={name}
                 value={national}
@@ -172,7 +204,7 @@ export function RhfPhoneField<T extends FieldValues>({
                 fullWidth
                 size="small"
                 error={Boolean(fieldState.error)}
-                helperText={fieldState.error?.message ?? (notice ? <FieldNotice>{notice}</FieldNotice> : undefined)}
+                helperText={fieldState.error?.message ?? (React.isValidElement(notice) ? notice : notice ? <FieldNotice>{notice}</FieldNotice> : undefined)}
                 sx={{ ...fieldSx, ...sx }}
                 slotProps={{
                     ...slotProps,

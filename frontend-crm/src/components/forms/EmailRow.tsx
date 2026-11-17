@@ -24,7 +24,10 @@ export interface EmailRowProps {
     onChange: (updated: CorporateEmail) => void;
     /** Omitted for a row that can't be removed (the list's last remaining address). */
     onRemove?: () => void;
-    /** Informational (non-error) note shown under the address, e.g. "Already exists in CRM". */
+    /**
+     * Informational (non-error) note shown under the address. Text is wrapped in a `FieldNotice`; an element
+     * (e.g. `ExistingRecordMatches`) is shown as is.
+     */
     notice?: React.ReactNode;
     /** Address input placeholder (form builder › Placeholder). */
     placeholder?: string;
@@ -78,7 +81,7 @@ export function EmailRow({ email, onChange, onRemove, notice, placeholder = 'e.g
             </Box>
             {notice && (
                 <Box sx={{ mt: -0.5, mb: 1 }}>
-                    <FieldNotice>{notice}</FieldNotice>
+                    {React.isValidElement(notice) ? notice : <FieldNotice>{notice}</FieldNotice>}
                 </Box>
             )}
             <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap', alignItems: 'center' }}>

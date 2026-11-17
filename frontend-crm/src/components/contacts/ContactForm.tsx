@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { FormProvider } from 'react-hook-form';
 import { Divider } from '@mui/material';
@@ -22,7 +22,7 @@ import { contactFormSchema } from '../../validations';
 import { CommonFormLayout } from '../common/CommonFormLayout';
 
 // Reusable Production-grade Form Primitives
-import { SectionLabel, useRhfForm } from '@/components/forms';
+import { ExistingRecordMatches, SectionLabel, useExistingRecordCheck, useRhfForm } from '@/components/forms';
 
 // Modular Contact Form Sections
 import {
@@ -97,6 +97,27 @@ export default function ContactForm({
     const { reset, watch, formState } = methods;
     const { isDirty, isSubmitting } = formState;
     const contactName = watch('name');
+    const [recordCode, setRecordCode] = useState('');
+
+    // Leads / contacts / organizations already using this mobile or these emails, listed as links under the fields.
+    const { mobileMatches, emailMatches } = useExistingRecordCheck({
+        mobile: watch('mobile'),
+        emailAddresses: watch('emailAddresses'),
+        excludeId: contactId,
+        owner: 'contact',
+        enabled: mode !== 'view',
+    });
+    const mobileNotice = mobileMatches.length > 0 ? <ExistingRecordMatches matches={mobileMatches} title="Mobile already in CRM" /> : undefined;
+    const emailNotices = useMemo(
+        () =>
+            Object.fromEntries(
+                Object.entries(emailMatches).map(([email, matches]) => [
+                    email,
+                    <ExistingRecordMatches key={email} matches={matches} title="Email already in CRM" />,
+                ])
+            ),
+        [emailMatches]
+    );
 
     const defaultBreadcrumbs: BreadcrumbItem[] = [
         { label: 'Sales' },
@@ -111,7 +132,10 @@ export default function ContactForm({
         contactService
             .getById(contactId)
             .then((found) => {
-                if (active && found) reset({ ...DEFAULT_FORM, ...found });
+                if (active && found) {
+                    reset({ ...DEFAULT_FORM, ...found });
+                    setRecordCode(found.contactCode ?? '');
+                }
             })
             .catch(() => {});
         return () => {
@@ -152,6 +176,7 @@ export default function ContactForm({
                     cancelLabel={mode === 'view' ? 'Back' : 'Cancel'}
                     recordView={{
                         title: contactName || '',
+                        code: recordCode,
                         editHref: contactId ? ROUTES.CONTACT_EDIT(contactId) : undefined,
                         editLabel: 'Edit Contact',
                         backHref: ROUTES.CONTACTS,
@@ -160,12 +185,12 @@ export default function ContactForm({
                     toast={<AppToast open={toast.open} message={toast.message} severity={toast.severity} onClose={closeToast} />}
                 >
                     <SectionLabel icon={<ContactPhoneOutlinedIcon sx={{ fontSize: 18 }} />} label="Contact Details & Association" />
-                    <ContactBasicInfoSection />
+                    <ContactBasicInfoSection mobileNotice={mobileNotice} />
 
                     <Divider sx={sectionDividerSx} />
 
                     <SectionLabel icon={<ContactPhoneOutlinedIcon sx={{ fontSize: 18 }} />} label="Alternate Communication Channels" />
-                    <ContactPhonesEmailsSection />
+                    <ContactPhonesEmailsSection emailNotices={emailNotices} />
 
                     <Divider sx={sectionDividerSx} />
 

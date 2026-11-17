@@ -17,6 +17,29 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
+// Remembers (per browser) that this user was signed in, so a failed session check on reload can be told apart
+// from a first visit and surfaced as "session expired" on the login page.
+const HAD_SESSION_KEY = 'crm.hadSession';
+export const SESSION_EXPIRED_KEY = 'crm.sessionExpired';
+
+function safeStorage(op: () => void) {
+    try {
+        op();
+    } catch {
+        // Storage can be blocked (private mode); the message is a nicety, never required.
+    }
+}
+
+const markSignedIn = () => safeStorage(() => window.localStorage.setItem(HAD_SESSION_KEY, '1'));
+const markSignedOut = () => safeStorage(() => window.localStorage.removeItem(HAD_SESSION_KEY));
+const markExpiredIfHadSession = () =>
+    safeStorage(() => {
+        if (window.localStorage.getItem(HAD_SESSION_KEY)) {
+            window.sessionStorage.setItem(SESSION_EXPIRED_KEY, '1');
+            window.localStorage.removeItem(HAD_SESSION_KEY);
+        }
+    });
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
     const [user, setUser] = useState<User | null>(null);
     const [loading, setLoading] = useState<boolean>(true);
@@ -31,8 +54,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             const res = await authService.getMe();
             setUser(res.user);
             setError(null);
+            markSignedIn();
         } catch {
             setUser(null);
+            markExpiredIfHadSession();
         } finally {
             setLoading(false);
         }
@@ -46,11 +71,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 if (active) {
                     setUser(res.user);
                     setError(null);
+                    markSignedIn();
                 }
             })
             .catch(() => {
                 if (active) {
                     setUser(null);
+                    markExpiredIfHadSession();
                 }
             })
             .finally(() => {
@@ -67,9 +94,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const res = await authService.login(credentials);
         setUser(res.user);
         setError(null);
+        markSignedIn();
     };
 
     const logout = async () => {
+        markSignedOut();
         try {
             await authService.logout();
         } finally {

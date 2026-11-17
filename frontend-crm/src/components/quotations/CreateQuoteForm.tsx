@@ -485,6 +485,18 @@ export function CreateQuoteForm({
                     cancelLabel={mode === 'view' ? 'Back' : 'Cancel'}
                     mode={mode}
                     headerExtra={mode === 'view' && quotationId ? <PdfActionsButton module="QUOTATION" recordId={quotationId} /> : undefined}
+                    recordView={{
+                        title: quotation?.organizationName || quotation?.quotationSubject || 'Quotation',
+                        code: quotation?.quotationCode,
+                        subtitle: quotation?.quotationSubject && quotation.organizationName ? quotation.quotationSubject : undefined,
+                        avatarIcon: <ReceiptLongOutlinedIcon sx={{ fontSize: 28 }} />,
+                        editHref: quotationId ? ROUTES.QUOTATION_EDIT(quotationId) : undefined,
+                        editLabel: 'Edit Quotation',
+                        backHref: ROUTES.QUOTATIONS,
+                        audit: quotation
+                            ? { createdAt: quotation.createdAt, createdBy: quotation.createdBy, updatedAt: quotation.updatedAt, updatedBy: quotation.updatedBy }
+                            : undefined,
+                    }}
                     disableContentPadding
                     toast={
                         <AppToast

@@ -238,6 +238,7 @@ export function CommonFormLayout({
     if (mode === 'view' && recordView) {
         return (
             <CommonRecordDetailView
+                actions={headerExtra}
                 {...recordView}
                 breadcrumbItems={breadcrumbItems}
                 tabs={effectiveTabs.length > 0 ? effectiveTabs : tabs}

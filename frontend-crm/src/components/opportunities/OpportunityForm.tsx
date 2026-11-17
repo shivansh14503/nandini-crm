@@ -117,6 +117,7 @@ export default function OpportunityForm({
     const router = useRouter();
     const [activeTab, setActiveTab] = useState<OpportunityTabKey>('basic');
     const [audit, setAudit] = useState<RecordAuditStamp>();
+    const [recordCode, setRecordCode] = useState('');
 
     const { methods, toast, showToast, closeToast, createSubmitHandler } =
         useRhfForm<OpportunityFormData>({
@@ -154,6 +155,7 @@ export default function OpportunityForm({
             .then((found) => {
                 if (active && found) {
                     reset(found);
+                    setRecordCode(found.opportunityCode ?? '');
                     setAudit({ createdAt: found.createdAt, createdBy: found.createdBy, updatedAt: found.updatedAt, updatedBy: found.updatedBy });
                 }
             })
@@ -218,6 +220,7 @@ export default function OpportunityForm({
                     cancelLabel={mode === 'view' ? 'Back' : 'Cancel'}
                     recordView={{
                         title: orgName || '',
+                        code: recordCode,
                         editHref: opportunityId ? ROUTES.OPPORTUNITY_EDIT(opportunityId) : undefined,
                         editLabel: 'Edit Opportunity',
                         backHref: ROUTES.OPPORTUNITIES,

@@ -34,6 +34,7 @@ import {
 } from '@/components/common/Drawer';
 import { QUOTATION_FORM_TABS } from './CreateQuoteForm';
 import { DynamicDrawerCustomFields } from '@/components/common/Drawer/DynamicDrawerCustomFields';
+import { DoubleClickCopyText } from '@/components/common/useDoubleClickCopy';
 import { PdfActionsButton } from '@/components/pdf/PdfActionsButton';
 
 export interface QuotationDetailDrawerProps {
@@ -420,7 +421,11 @@ export function QuotationDetailDrawer({
                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                             <BusinessOutlinedIcon sx={{ fontSize: 16, color: 'var(--crm-text-blue-600)' }} />
                             <Typography sx={{ fontSize: '0.9rem', fontWeight: 700, color: 'var(--crm-text-blue-900)' }}>
-                                {quotation.organizationName || 'Unspecified Organization'}
+                                {quotation.organizationName ? (
+                                    <DoubleClickCopyText>{quotation.organizationName}</DoubleClickCopyText>
+                                ) : (
+                                    'Unspecified Organization'
+                                )}
                             </Typography>
                         </Box>
                         {quotation.gstNo && (
@@ -430,7 +435,7 @@ export function QuotationDetailDrawer({
 
                     {quotation.mailingName && quotation.mailingName !== quotation.organizationName && (
                         <Typography sx={{ fontSize: '0.75rem', color: 'var(--mui-palette-text-secondary)' }}>
-                            Mailing Name: {quotation.mailingName}
+                            Mailing Name: <DoubleClickCopyText>{quotation.mailingName}</DoubleClickCopyText>
                         </Typography>
                     )}
 

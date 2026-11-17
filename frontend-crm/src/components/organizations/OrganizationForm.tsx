@@ -205,6 +205,7 @@ export default function OrganizationForm({
     );
     const [form, setForm] = useState<OrganizationFormData>(startValues);
     // Lock is based on the status as last saved, so deactivating mid-edit doesn't lock the user out of their own unsaved change.
+    const [recordCode, setRecordCode] = useState('');
     const [persistedStatus, setPersistedStatus] = useState(initialData?.accountStatus ?? 'Active');
     const [activeTab, setActiveTab] = useState<TabKey>(initialTab);
     const [audit, setAudit] = useState<{ createdAt?: string; createdBy?: string; updatedAt?: string; updatedBy?: string }>({});
@@ -289,6 +290,7 @@ export default function OrganizationForm({
                         updatedBy: found.updatedBy,
                     });
                     baselineRef.current = { ...DEFAULT_FORM, ...normalized };
+                    setRecordCode(found.accountCode ?? '');
                     setPersistedStatus(normalized.accountStatus);
                     setForm((prev) => ({ ...prev, ...normalized }));
                     methods.reset(normalized);
@@ -520,6 +522,7 @@ export default function OrganizationForm({
                     onSave={effectiveMode === 'view' ? () => router.push(ROUTES.ORGANIZATION_EDIT(organizationId!)) : () => handleSubmit(true)}
                     recordView={{
                         title: form.organizationName,
+                        code: recordCode,
                         subtitle: [form.tradeName, [form.billingCity, form.billingState].filter(Boolean).join(', ')]
                             .filter(Boolean)
                             .join(' • '),

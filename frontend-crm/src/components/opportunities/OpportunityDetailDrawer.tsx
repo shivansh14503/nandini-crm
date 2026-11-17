@@ -25,6 +25,8 @@ import { AppToast } from '@/components/common/AppToast';
 import { useOpportunity, useOrganization, useOrganizations, useQuotations } from '@/hooks/queries';
 import { OPPORTUNITY_FORM_TABS } from './OpportunityForm';
 import { DynamicDrawerCustomFields } from '@/components/common/Drawer/DynamicDrawerCustomFields';
+import { DoubleClickCopyText } from '@/components/common/useDoubleClickCopy';
+import { phoneForCopy } from '@/utils/phone';
 
 export interface OpportunityDetailDrawerProps {
     opportunity: Opportunity | null;
@@ -176,7 +178,7 @@ export function OpportunityDetailDrawer({
                             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 0.5 }}>
                                 <BusinessOutlinedIcon sx={{ fontSize: 18, color: 'var(--crm-text-blue-600)' }} />
                                 <Typography sx={{ fontSize: '0.98rem', fontWeight: 800, color: 'var(--mui-palette-text-primary)' }}>
-                                    {opp.organizationName}
+                                    <DoubleClickCopyText>{opp.organizationName}</DoubleClickCopyText>
                                 </Typography>
                             </Box>
                             <Typography sx={{ fontSize: '0.75rem', color: 'var(--mui-palette-text-secondary)', mt: 0.3 }}>
@@ -201,7 +203,7 @@ export function OpportunityDetailDrawer({
                                             {opp.contactNumber}
                                         </Typography>
                                     </Box>
-                                    <DrawerCopyButton text={opp.contactNumber} title="Copy Phone Number" iconColor="var(--mui-palette-text-muted)" />
+                                    <DrawerCopyButton text={phoneForCopy(opp.contactNumber)} title="Copy Phone Number" iconColor="var(--mui-palette-text-muted)" />
                                 </Box>
 
                                 {opp.emailAddress && (

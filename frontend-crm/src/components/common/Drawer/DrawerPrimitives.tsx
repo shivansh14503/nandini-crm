@@ -294,20 +294,25 @@ export function DrawerChannelRow({
                     )}
                 </Box>
             </Box>
-            {copyValue && <DrawerCopyButton text={copyValue} title={copyTitle} />}
-            {badgeLabel && (
-                <Chip
-                    label={badgeLabel}
-                    size="small"
-                    sx={{
-                        height: 18,
-                        fontSize: '0.62rem',
-                        fontWeight: 700,
-                        backgroundColor: badgeBg,
-                        color: badgeColor,
-                        border: badgeBorder ? `1px solid ${badgeBorder}` : undefined,
-                    }}
-                />
+            {/* Badge and copy button sit together on the right (copy last, at the edge), not spread across the row. */}
+            {(copyValue || badgeLabel) && (
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, flexShrink: 0 }}>
+                    {badgeLabel && (
+                        <Chip
+                            label={badgeLabel}
+                            size="small"
+                            sx={{
+                                height: 18,
+                                fontSize: '0.62rem',
+                                fontWeight: 700,
+                                backgroundColor: badgeBg,
+                                color: badgeColor,
+                                border: badgeBorder ? `1px solid ${badgeBorder}` : undefined,
+                            }}
+                        />
+                    )}
+                    {copyValue && <DrawerCopyButton text={copyValue} title={copyTitle} />}
+                </Box>
             )}
         </Box>
     );

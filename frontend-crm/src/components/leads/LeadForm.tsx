@@ -114,6 +114,7 @@ export default function LeadForm({
     const router = useRouter();
     const [activeTab, setActiveTab] = useState<LeadTabKey>('overview');
     const [audit, setAudit] = useState<RecordAuditStamp>();
+    const [recordCode, setRecordCode] = useState('');
 
     const { methods, toast, showToast, closeToast, createSubmitHandler } = useRhfForm<LeadFormData>({
         schema: leadFormSchema,
@@ -144,6 +145,7 @@ export default function LeadForm({
             .then((found) => {
                 if (active && found) {
                     reset(normalizeAddressFields(found, LEAD_ADDRESS_PAIRS));
+                    setRecordCode(found.leadCode ?? '');
                     setAudit({ createdAt: found.createdAt, createdBy: found.createdBy, updatedAt: found.updatedAt, updatedBy: found.updatedBy });
                 }
             })
@@ -202,6 +204,7 @@ export default function LeadForm({
                     cancelLabel={mode === 'view' ? 'Back' : 'Cancel'}
                     recordView={{
                         title: leadName || '',
+                        code: recordCode,
                         editHref: leadId ? ROUTES.LEAD_EDIT(leadId) : undefined,
                         editLabel: 'Edit Lead',
                         backHref: ROUTES.LEADS,

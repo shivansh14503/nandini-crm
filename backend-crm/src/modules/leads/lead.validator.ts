@@ -199,9 +199,12 @@ export const LEAD_SORT_FIELDS = [
     'assignedTo',
 ] as const;
 
-/** GET /api/leads/check-duplicates: informational "already in the CRM" lookup for the lead form. */
+/** GET /api/leads/check-duplicates: informational "already in the CRM" lookup for the lead / contact forms. */
 export const checkLeadDuplicatesQuerySchema = z.object({
     mobile: z.string().trim().max(30).optional(),
     emails: csvQuery,
+    /** The record being edited, so its own mobile / emails aren't reported. */
     excludeId: z.string().trim().max(64).optional(),
+    /** Which kind of record `excludeId` is (defaults to a lead). */
+    excludeType: z.enum(['lead', 'contact', 'organization']).optional(),
 });

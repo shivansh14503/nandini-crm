@@ -305,6 +305,7 @@ export default function TicketForm({ mode = 'create', initialData, ticketId, bre
                     cancelLabel={mode === 'view' ? 'Back' : 'Cancel'}
                     recordView={{
                         title: ticketSubject || ticketNumber || '',
+                        code: ticketNumber,
                         editHref: ticketId ? ROUTES.TICKET_EDIT(ticketId) : undefined,
                         editLabel: 'Edit Ticket',
                         backHref: ROUTES.TICKETS,

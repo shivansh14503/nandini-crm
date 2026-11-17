@@ -9,7 +9,7 @@ import { leadController } from './lead.controller.js';
  * /api/leads
  *   GET    /             ?page&limit&search&sortBy&sortOrder&status&excludeStatus&leadType&leadSource
  *                         &organizationName&assignedTo&mine&nextFollowupDate&createdWithinDays
- *   GET    /check-duplicates ?mobile&emails&excludeId  (informational; never blocks a save)
+ *   GET    /check-duplicates ?mobile&emails&excludeId&excludeType  (informational; never blocks a save)
  *   GET    /:id
  *   POST   /
  *   PUT    /:id          (partial; PATCH is an alias; status can't be set to/from Converted here)

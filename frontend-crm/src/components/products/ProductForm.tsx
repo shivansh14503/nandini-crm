@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { FormProvider } from 'react-hook-form';
 import { Divider } from '@mui/material';
@@ -120,6 +120,7 @@ export default function ProductForm({
     const { reset, watch, formState } = methods;
     const { isDirty, isSubmitting } = formState;
     const productName = watch('productName');
+    const [recordCode, setRecordCode] = useState('');
 
     const defaultBreadcrumbs: BreadcrumbItem[] = [
         { label: 'Inventory' },
@@ -143,6 +144,7 @@ export default function ProductForm({
             .then((found) => {
                 if (active && found) {
                     reset({ ...DEFAULT_FORM, ...found });
+                    setRecordCode(found.productCode ?? '');
                 }
             })
             .catch(() => {});
@@ -188,6 +190,7 @@ export default function ProductForm({
                     cancelLabel={mode === 'view' ? 'Back' : 'Cancel'}
                     recordView={{
                         title: productName || '',
+                        code: recordCode,
                         editHref: productId ? ROUTES.PRODUCT_EDIT(productId) : undefined,
                         editLabel: 'Edit Product',
                         backHref: ROUTES.PRODUCTS,

@@ -7,8 +7,9 @@ import type { ContactFormData } from '@/types/contact.types';
 /**
  * Alternate phone numbers (one row) and email addresses (below).
  * Must be rendered inside a `FormProvider<ContactFormData>`.
+ * `emailNotices`: per lowercased address, the records already using it (see `ExistingRecordMatches`).
  */
-export function ContactPhonesEmailsSection() {
+export function ContactPhonesEmailsSection({ emailNotices }: { emailNotices?: Record<string, React.ReactNode> } = {}) {
     return (
         <FormGrid columns={3}>
             <RhfPhoneField<ContactFormData> name="phone3" label="Phone 3" placeholder="Alternate direct number" />
@@ -16,7 +17,7 @@ export function ContactPhonesEmailsSection() {
             <RhfPhoneField<ContactFormData> name="phone5" label="Phone 5" placeholder="Additional mobile" />
 
             {/* Required by default; the form builder can relax it. */}
-            <RhfEmailList name="emailAddresses" />
+            <RhfEmailList name="emailAddresses" emailNotices={emailNotices} />
         </FormGrid>
     );
 }
