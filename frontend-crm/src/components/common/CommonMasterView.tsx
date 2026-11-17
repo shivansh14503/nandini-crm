@@ -39,6 +39,10 @@ export interface CommonMasterViewProps<T = unknown, TFilter extends string = str
      */
     breadcrumbItems?: BreadcrumbItem[];
     /**
+     * Optional summary row (e.g. `StatusSummaryCards`) rendered between the breadcrumbs and the filter pills.
+     */
+    summary?: React.ReactNode;
+    /**
      * Declarative filter pills configuration.
      */
     filterConfig?: DataTableFilterPillsProps<TFilter>;
@@ -213,6 +217,7 @@ function isPaginationConfig(
 export function CommonMasterView<T = unknown, TFilter extends string = string>({
     breadcrumbs,
     breadcrumbItems,
+    summary,
     filterConfig,
     filters,
     headerActions,
@@ -438,6 +443,8 @@ export function CommonMasterView<T = unknown, TFilter extends string = string>({
                 <Box sx={{ mb: 1.5, minWidth: 0 }}>
                     {breadcrumbs || <AppBreadcrumbs items={breadcrumbItems} />}
                 </Box>
+
+                {summary}
 
                 {/* ── Line 2: All Filters & Optional Header Actions ── */}
                 {(resolvedFilters || resolvedHeaderActions) && (

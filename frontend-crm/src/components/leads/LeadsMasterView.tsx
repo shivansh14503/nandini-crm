@@ -13,7 +13,11 @@ import PhoneOutlinedIcon from '@mui/icons-material/PhoneOutlined';
 import EmailOutlinedIcon from '@mui/icons-material/EmailOutlined';
 import ApartmentIcon from '@mui/icons-material/Apartment';
 import CalendarMonthOutlinedIcon from '@mui/icons-material/CalendarMonthOutlined';
+import AutorenewOutlinedIcon from '@mui/icons-material/AutorenewOutlined';
+import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutlineOutlined';
+import HighlightOffOutlinedIcon from '@mui/icons-material/HighlightOffOutlined';
 import { RecordLink } from '../common/RecordLink';
+import { StatusSummaryCards, type StatusSummaryItem } from '../common/StatusSummaryCards';
 import { CommonMasterView } from '../common/CommonMasterView';
 import { useTableFilter } from '../common/TableFilter';
 import { MasterHeaderActions } from '../common/MasterHeaderActions';
@@ -28,7 +32,7 @@ import { useAuth } from '@/context/AuthContext';
 import { useRelatedModulesForEntity } from '@/config/relatedModules.config';
 import type { Lead } from '@/types/lead.types';
 import { useLeads, useBulkDeleteLeads, useDropdownOptionLabel } from '@/hooks/queries';
-import type { LeadFilterTab } from './master';
+import { getLeadStatusBucket, type LeadFilterTab, type LeadStatusBucket } from './master';
 import { LeadDetailDrawer } from './LeadDetailDrawer';
 import { formatDateTime } from '@/utils/date';
 import { formatPhoneDisplay } from '@/utils/phone';
@@ -47,6 +51,7 @@ export function LeadsMasterView() {
     const { data: leads = NO_RECORDS, refetch } = useLeads();
     const bulkDeleteMutation = useBulkDeleteLeads();
     const [activeTab, setActiveTab] = useState<LeadFilterTab>('all');
+    const [statusBucket, setStatusBucket] = useState<LeadStatusBucket>('all');
     const [searchQuery, setSearchQuery] = useState('');
     const [selectedIds, setSelectedIds] = useState<string[]>([]);
     const [page, setPage] = useState(0);
@@ -88,15 +93,10 @@ export function LeadsMasterView() {
 
     const [importOpen, setImportOpen] = useState(false);
 
-    // ── Filter Tabs Configuration ─────────────────────────────────────────────
+    // ── Quick View Pills ──────────────────────────────────────────────────────
+    // Status (All / New / ...) lives on the summary cards; the pills are non-status views and toggle off on re-click.
     const filterItems: DataTableFilterItem<LeadFilterTab>[] = useMemo(() => {
         return [
-            {
-                id: 'all',
-                label: 'All Leads',
-                icon: <GroupOutlinedIcon sx={{ fontSize: 16 }} />,
-                count: baseLeads.length,
-            },
             {
                 id: 'hot',
                 label: 'Hot Leads',
@@ -105,12 +105,6 @@ export function LeadsMasterView() {
                 activeColor: 'var(--mui-palette-error-main)',
                 activeBgColor: 'var(--mui-palette-error-soft)',
                 activeBadgeBgColor: 'var(--crm-red-100)',
-            },
-            {
-                id: 'new',
-                label: 'New Enquiries',
-                icon: <FiberNewOutlinedIcon sx={{ fontSize: 16 }} />,
-                count: baseLeads.filter((l) => l.status === 'New').length,
             },
             {
                 id: 'followup_today',
@@ -129,12 +123,39 @@ export function LeadsMasterView() {
     }, [baseLeads, todayStr, currentUsername]);
 
     // ── Filter Logic ──────────────────────────────────────────────────────────
-    const filteredLeads = useMemo(() => {
+    /** Leads in the active pill view: the status cards count these, so "My Leads" shows my pipeline. */
+    const tabLeads = useMemo(() => {
         return baseLeads.filter((lead) => {
             if (activeTab === 'hot' && lead.leadType !== 'Hot') return false;
-            if (activeTab === 'new' && lead.status !== 'New') return false;
             if (activeTab === 'followup_today' && lead.nextFollowupDate !== todayStr) return false;
             if (activeTab === 'my_leads' && (!currentUsername || !(lead.assignedTo || '').includes(currentUsername))) return false;
+            return true;
+        });
+    }, [baseLeads, activeTab, todayStr, currentUsername]);
+
+    // ── Status Summary Cards ──────────────────────────────────────────────────
+    const statusSummaryItems: StatusSummaryItem<LeadStatusBucket>[] = useMemo(() => {
+        const counts = { new: 0, in_process: 0, converted: 0, lost: 0 };
+        for (const lead of tabLeads) counts[getLeadStatusBucket(lead.status)] += 1;
+        return [
+            { id: 'all', label: 'All Leads', count: tabLeads.length, tone: 'brand', icon: <GroupOutlinedIcon />, hint: 'Every status' },
+            { id: 'new', label: 'New', count: counts.new, tone: 'brand', icon: <FiberNewOutlinedIcon />, hint: 'Not contacted yet' },
+            {
+                id: 'in_process',
+                label: 'In Process',
+                count: counts.in_process,
+                tone: 'warning',
+                icon: <AutorenewOutlinedIcon />,
+                hint: 'Contacted to Negotiation',
+            },
+            { id: 'converted', label: 'Converted', count: counts.converted, tone: 'success', icon: <CheckCircleOutlineIcon />, hint: 'Won' },
+            { id: 'lost', label: 'Lost', count: counts.lost, tone: 'error', icon: <HighlightOffOutlinedIcon />, hint: 'Unqualified / Lost' },
+        ];
+    }, [tabLeads]);
+
+    const filteredLeads = useMemo(() => {
+        return tabLeads.filter((lead) => {
+            if (statusBucket !== 'all' && getLeadStatusBucket(lead.status) !== statusBucket) return false;
 
             if (searchQuery.trim()) {
                 const q = searchQuery.toLowerCase().trim();
@@ -163,7 +184,7 @@ export function LeadsMasterView() {
 
             return true;
         });
-    }, [baseLeads, activeTab, searchQuery, todayStr, currentUsername, leadSourceLabel]);
+    }, [tabLeads, statusBucket, searchQuery, leadSourceLabel]);
 
     // ── Sort Logic ────────────────────────────────────────────────────────────
     const sortedLeads = useMemo(() => {
@@ -508,11 +529,21 @@ export function LeadsMasterView() {
                 { label: 'Sales' },
                 { label: 'Leads' },
             ]}
+            summary={
+                <StatusSummaryCards<LeadStatusBucket>
+                    items={statusSummaryItems}
+                    activeId={statusBucket}
+                    onChange={(bucket) => {
+                        setStatusBucket(bucket);
+                        setPage(0);
+                    }}
+                />
+            }
             filterConfig={{
                 filters: filterItems,
                 activeFilter: activeTab,
                 onFilterChange: (tab) => {
-                    setActiveTab(tab);
+                    setActiveTab((prev) => (prev === tab ? 'all' : tab));
                     setPage(0);
                 },
             }}
