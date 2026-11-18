@@ -4,6 +4,13 @@ This monorepo contains:
 - `frontend-crm`: Next.js 16 (App Router) + React 19 + MUI v9 (`@mui/material` with CSS variables enabled) + Tailwind CSS v4
 - `backend-crm`: Express 5 + Prisma + SQL Server
 
+## Architecture docs (keep them current)
+
+`docs/` holds the living design docs: `system-design.md`, `database-design.md`, `api-plan.md`, `build-plan.md`.
+Update the matching doc in the same change as the code: schema/migrations → database design; routes, params,
+responses, error codes → API plan; Redis, queues, auth, env vars, deployment → system design; roadmap items →
+build plan. See `docs/build-plan.md` Part 3.
+
 Whenever creating or modifying UI components in `frontend-crm`, **you must strictly follow the Dual-Brand Color Theme System** documented below so Light Mode and Dark Mode remain 100% consistent, readable, and production-grade.
 
 ---
