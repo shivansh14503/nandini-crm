@@ -1,6 +1,7 @@
 import type { TransactionClient } from '../../config/prisma.js';
 import { HttpError } from '../../utils/httpError.js';
 import { CONVERTED_STATUS } from '../leads/lead.validator.js';
+import { shownNumberModules } from '../document-series/documentSeries.service.js';
 import { acquireLocks } from './transactions.js';
 
 /**
@@ -37,7 +38,8 @@ async function findHolder(tx: TransactionClient, owner: TaxIdOwner, field: TaxId
                 where: { gstNo: value, isDeleted: false, status: { not: CONVERTED_STATUS }, ...notSelf },
                 select: { leadCode: true, name: true, organizationName: true },
             });
-            return row ? `lead ${row.leadCode} (${row.organizationName || row.name})` : null;
+            if (!row) return null;
+            return (await shownNumberModules(tx)).has('lead') ? `lead ${row.leadCode} (${row.organizationName || row.name})` : `lead "${row.organizationName || row.name}"`;
         }
     }
 }

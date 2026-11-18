@@ -1,6 +1,7 @@
 import { prisma, type TransactionClient } from '../../config/prisma.js';
 import { ENV } from '../../config/env.js';
 import { auditService, diffRecords } from '../../services/audit.service.js';
+import { CACHE_KEYS, cacheService } from '../../services/cache.service.js';
 import type { AuthUser } from '../../types/user.types.js';
 import { HttpError } from '../../utils/httpError.js';
 import { runInTransaction } from '../shared/transactions.js';
@@ -232,7 +233,22 @@ async function buildConfigDto(db: Db, now = new Date()): Promise<DocumentSeriesC
     };
 }
 
+/**
+ * Modules whose record numbers the app may show: those an admin has added a series for. Modules without one still
+ * get numbers (original numbering), but those stay in the backend and are never displayed.
+ */
+export async function shownNumberModules(db: Db = prisma): Promise<Set<SeriesModule>> {
+    const rows = await db.documentSeries.findMany({ select: { module: true } });
+    return new Set(rows.map((row) => row.module).filter(isSeriesModule));
+}
+
 export const documentSeriesService = {
+    /** Modules whose numbers may be displayed (any signed-in user). */
+    async getShownModules(): Promise<{ modules: SeriesModule[] }> {
+        const shown = await shownNumberModules();
+        return { modules: SERIES_MODULES.filter((m) => shown.has(m)) };
+    },
+
     getConfig(): Promise<DocumentSeriesConfigDto> {
         return buildConfigDto(prisma);
     },
@@ -241,7 +257,7 @@ export const documentSeriesService = {
     async saveConfig(body: unknown, user: AuthUser): Promise<DocumentSeriesConfigDto> {
         const input = saveDocumentSeriesSchema.parse(body);
 
-        return runInTransaction(async (tx) => {
+        const saved = await runInTransaction(async (tx) => {
             const before = await loadConfig(tx);
             const settings: SeriesSettings = {
                 companyPrefix: input.companyPrefix,
@@ -272,5 +288,8 @@ export const documentSeriesService = {
             }
             return buildConfigDto(tx);
         });
+        // Which modules show their numbers may have changed; cached search results carry numbers.
+        await cacheService.invalidatePattern(`${CACHE_KEYS.search('')}*`);
+        return saved;
     },
 };

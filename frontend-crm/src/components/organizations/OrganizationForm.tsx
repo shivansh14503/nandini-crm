@@ -36,6 +36,7 @@ import { validateConfiguredFields } from '@/utils/formConfig';
 import { useDropdownDefaults, withDropdownDefaults } from '@/components/forms/rhf/useDropdownDefaults';
 import { useTaxIdDuplicateCheck } from '@/components/forms/rhf/useTaxIdDuplicateCheck';
 import { withDefaultAssignee } from '@/components/forms/rhf/useRhfForm';
+import { useShowRecordNumber } from '@/hooks/queries/useDocumentSeries';
 
 // ─── Single Source of Truth for Organization Form Tabs ──────────────────────────
 export const ORGANIZATION_FORM_TABS: (FormTabDefinition & { id: TabKey })[] = [
@@ -206,6 +207,7 @@ export default function OrganizationForm({
     const [form, setForm] = useState<OrganizationFormData>(startValues);
     // Lock is based on the status as last saved, so deactivating mid-edit doesn't lock the user out of their own unsaved change.
     const [recordCode, setRecordCode] = useState('');
+    const showNumber = useShowRecordNumber();
     const [persistedStatus, setPersistedStatus] = useState(initialData?.accountStatus ?? 'Active');
     const [activeTab, setActiveTab] = useState<TabKey>(initialTab);
     const [audit, setAudit] = useState<{ createdAt?: string; createdBy?: string; updatedAt?: string; updatedBy?: string }>({});
@@ -522,7 +524,7 @@ export default function OrganizationForm({
                     onSave={effectiveMode === 'view' ? () => router.push(ROUTES.ORGANIZATION_EDIT(organizationId!)) : () => handleSubmit(true)}
                     recordView={{
                         title: form.organizationName,
-                        code: recordCode,
+                        code: showNumber('organization') ? recordCode : undefined,
                         subtitle: [form.tradeName, [form.billingCity, form.billingState].filter(Boolean).join(', ')]
                             .filter(Boolean)
                             .join(' • '),

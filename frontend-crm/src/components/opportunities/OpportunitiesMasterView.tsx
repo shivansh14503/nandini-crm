@@ -26,6 +26,7 @@ import { useAuth } from '@/context/AuthContext';
 import { useRelatedModulesForEntity } from '@/config/relatedModules.config';
 import type { Opportunity } from '@/types/opportunity.types';
 import { useOpportunities, useBulkDeleteOpportunities, useQuotations, useDropdownOptionLabel } from '@/hooks/queries';
+import { useShowRecordNumber } from '@/hooks/queries/useDocumentSeries';
 import type { Quotation } from '@/types/quotation.types';
 import { formatDateTime } from '@/utils/date';
 import type { OpportunityFilterTab, OpportunitySortField } from './master';
@@ -163,6 +164,7 @@ export function OpportunitiesMasterView() {
     }, [opportunities, currentUsername]);
 
     // ── Filter Logic ──────────────────────────────────────────────────────────
+    const showNumber = useShowRecordNumber();
     const filteredOpportunities = useMemo(() => {
         return opportunities.filter((opp) => {
             if (activeTab === 'open' && ['Closed Won', 'Closed Lost'].includes(opp.salesStage)) {
@@ -187,7 +189,7 @@ export function OpportunitiesMasterView() {
             if (searchQuery.trim()) {
                 const q = searchQuery.toLowerCase().trim();
                 const inOrg = opp.organizationName.toLowerCase().includes(q);
-                const inCode = opp.opportunityCode.toLowerCase().includes(q);
+                const inCode = showNumber('opportunity') && opp.opportunityCode.toLowerCase().includes(q);
                 const inContact = opp.contactName.toLowerCase().includes(q);
                 const inPhone = opp.contactNumber.includes(q);
                 const inEmail = (opp.emailAddress || '').toLowerCase().includes(q);
@@ -215,7 +217,7 @@ export function OpportunitiesMasterView() {
 
             return true;
         });
-    }, [opportunities, activeTab, searchQuery, currentUsername, leadSourceLabel]);
+    }, [opportunities, activeTab, searchQuery, currentUsername, leadSourceLabel, showNumber]);
 
     // ── Sort Logic ────────────────────────────────────────────────────────────
     const sortedOpportunities = useMemo(() => {
@@ -316,13 +318,17 @@ export function OpportunitiesMasterView() {
                 minWidth: 120,
                 render: (o) => <YesNo value={(quotesByOpp.get(o.id)?.length ?? 0) > 0} />,
             },
-            documentNumberColumn<Opportunity>({
-                id: 'opportunityCode',
-                label: 'OPP NUMBER',
-                getNumber: (o) => o.opportunityCode,
-                getHref: (o) => ROUTES.OPPORTUNITY_DETAIL(o.id),
-                onOpen: (o) => setDrawerOppId(o.id),
-            }),
+            ...(showNumber('opportunity')
+                ? [
+                      documentNumberColumn<Opportunity>({
+                          id: 'opportunityCode',
+                          label: 'OPP NUMBER',
+                          getNumber: (o) => o.opportunityCode,
+                          getHref: (o) => ROUTES.OPPORTUNITY_DETAIL(o.id),
+                          onOpen: (o) => setDrawerOppId(o.id),
+                      }),
+                  ]
+                : []),
             {
                 id: 'opportunityName',
                 label: 'NAME',
@@ -342,7 +348,7 @@ export function OpportunitiesMasterView() {
                                 '&:hover': { textDecoration: 'underline' },
                             }}
                         >
-                            {o.opportunityName || o.organizationName || o.opportunityCode}
+                            {o.opportunityName || o.organizationName || (showNumber('opportunity') ? o.opportunityCode : '')}
                         </RecordLink>
                     </Box>
                 ),
@@ -539,7 +545,7 @@ export function OpportunitiesMasterView() {
                 render: (o) => <Typography sx={plainCellSx}>{formatDateTime(o.createdAt) || '-'}</Typography>,
             },
         ],
-        [todayStr, quotesByOpp]
+        [todayStr, quotesByOpp, showNumber]
     );
 
     const relatedModules = useRelatedModulesForEntity('opportunity', selectedDrawerOpp, setActiveRelatedModule);
@@ -647,7 +653,7 @@ export function OpportunitiesMasterView() {
                     moduleId={effectiveRelatedModule || ''}
                     moduleTitle={activeModuleMeta?.label || 'Related Records'}
                     parentRecordId={selectedDrawerOpp?.id}
-                    parentEntityTitle={selectedDrawerOpp?.opportunityCode || selectedDrawerOpp?.organizationName || ''}
+                    parentEntityTitle={(showNumber('opportunity') ? selectedDrawerOpp?.opportunityCode : '') || selectedDrawerOpp?.organizationName || ''}
                     entityData={selectedDrawerOpp}
                     entityType="opportunity"
                     leftOffset={isLeftSidebarCollapsed ? 72 : 260}
@@ -669,7 +675,7 @@ export function OpportunitiesMasterView() {
                     <RelatedSecondaryDrawer
                         entity={secondaryDrawerEntity}
                         moduleLabel={activeModuleMeta?.label}
-                        parentTitle={selectedDrawerOpp?.opportunityCode || selectedDrawerOpp?.organizationName}
+                        parentTitle={(showNumber('opportunity') ? selectedDrawerOpp?.opportunityCode : '') || selectedDrawerOpp?.organizationName}
                         onClose={() => setSecondaryDrawerEntity(null)}
                     />
                 ) : null

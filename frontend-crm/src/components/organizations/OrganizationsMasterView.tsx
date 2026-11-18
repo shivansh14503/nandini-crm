@@ -28,7 +28,7 @@ import {
     DrawerSectionCard,
     DrawerMetricGrid,
 } from '../common/Drawer';
-import type { DataTableColumn, DataTableFilterItem } from '../common/DataTable';
+import { documentNumberColumn, type DataTableColumn, type DataTableFilterItem } from '../common/DataTable';
 import { organizationService } from '@/services';
 import { useOrganizations, useBulkDeleteOrganizations } from '@/hooks/queries';
 import type { ExtendedOrganization } from '@/types/organization.types';
@@ -47,6 +47,8 @@ import { TicketDetailDrawer } from '../tickets/TicketDetailDrawer';
 import type { Ticket } from '@/types/ticket.types';
 import type { FilterTab, SortField } from './master';
 import { formatDateTime } from '@/utils/date';
+import { useShowRecordNumber } from '@/hooks/queries/useDocumentSeries';
+import { isShownField } from '@/utils/recordNumbers';
 
 const plainCellSx = { fontSize: '0.78rem', color: 'var(--crm-slate-700)' } as const;
 
@@ -73,6 +75,7 @@ const formatNatureLabel = (nature: string = '') => {
 /** Stable empty list while the first page loads (keeps memoized filters from recomputing). */
 const NO_RECORDS: ExtendedOrganization[] = [];
 export function OrganizationsMasterView() {
+    const showNumber = useShowRecordNumber();
     const router = useRouter();
     const { user } = useAuth();
     const isAdmin = user?.role?.toLowerCase() === 'admin';
@@ -201,13 +204,13 @@ export function OrganizationsMasterView() {
                 data.name ||
                 data.contractTitle ||
                 data.partnerName ||
-                data.ticketNumber ||
+                (showNumber('ticket') ? data.ticketNumber : '') ||
                 activeModuleMeta?.label ||
                 'Related Record'
         );
 
         const detailFields = Object.entries(data)
-            .filter(([key]) => key !== 'id')
+            .filter(([key]) => key !== 'id' && isShownField(key, showNumber))
             .map(([key, val]) => ({
                 label: key.replace(/([A-Z])/g, ' $1').replace(/^./, (s) => s.toUpperCase()),
                 value: String(val ?? '-'),
@@ -420,6 +423,21 @@ export function OrganizationsMasterView() {
     // ── Declarative Column Definitions ────────────────────────────────────────
     const columns: DataTableColumn<ExtendedOrganization>[] = useMemo(
         () => [
+            ...(showNumber('organization')
+                ? [
+                      {
+                          // Not one of the basic columns; switch it on from Modify Columns.
+                          ...documentNumberColumn<ExtendedOrganization>({
+                              id: 'accountCode',
+                              label: 'ORGANIZATION NO.',
+                              getNumber: (o) => o.accountCode,
+                              getHref: (o) => ROUTES.ORGANIZATION_DETAIL(o.id),
+                              onOpen: (o) => setDrawerOrgId(o.id),
+                          }),
+                          defaultHidden: true,
+                      },
+                  ]
+                : []),
             {
                 id: 'organizationName',
                 locked: true,
@@ -648,7 +666,7 @@ export function OrganizationsMasterView() {
                 render: (org) => <Typography sx={plainCellSx}>{formatDateTime(org.createdAt) || '-'}</Typography>,
             },
         ],
-        []
+        [showNumber]
     );
 
     const headerActions = (

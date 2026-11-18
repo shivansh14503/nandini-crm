@@ -8,6 +8,7 @@ import { normalizePlaceName } from '../../utils/cityMaster.js';
 import { HttpError } from '../../utils/httpError.js';
 import { acquireLocks, runInTransaction } from '../shared/transactions.js';
 import { getCountry, getSubdivision } from './addressPlaces.js';
+import { shownNumberModules } from '../document-series/documentSeries.service.js';
 import { CITY_ADDRESS_BLOCKS, CITY_OWNER_LABELS, CITY_OWNERS, cityOwnerDelegate, type CityOwner } from './cityAddresses.js';
 import { cityCreateSchema, cityDeleteSchema, cityListQuerySchema, cityRenameSchema } from './city.validator.js';
 
@@ -95,12 +96,15 @@ async function usageCounts(client: TransactionClient, cityIds: number[]): Promis
 
 async function cityUsage(client: TransactionClient, cityId: number): Promise<CityUsage> {
     const groups: CityUsageGroup[] = [];
+    const shown = await shownNumberModules(client);
     for (const owner of CITY_OWNERS) {
         const delegate = cityOwnerDelegate(client, owner);
         const where = { isDeleted: false, ...usesCity(owner, cityId) };
         const count = await delegate.count({ where });
         if (count === 0) continue;
-        const { code, name } = USAGE_SELECT[owner];
+        const { name } = USAGE_SELECT[owner];
+        // Numbers without an admin-added series stay in the backend.
+        const code = owner !== 'partnerCompany' && shown.has(owner) ? USAGE_SELECT[owner].code : undefined;
         const rows = await delegate.findMany({
             where,
             select: { id: true, [name]: true, ...(code ? { [code]: true } : {}) },

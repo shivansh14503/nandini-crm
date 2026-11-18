@@ -33,6 +33,7 @@ import { LEAD_FORM_TABS } from './LeadForm';
 import { DynamicDrawerCustomFields } from '@/components/common/Drawer/DynamicDrawerCustomFields';
 import { DoubleClickCopyText } from '@/components/common/useDoubleClickCopy';
 import { phoneForCopy } from '@/utils/phone';
+import { useShowRecordNumber } from '@/hooks/queries/useDocumentSeries';
 
 export interface LeadDetailDrawerProps {
     lead: Lead | null;
@@ -51,6 +52,7 @@ export function LeadDetailDrawer({
     onLeadUpdated,
     onShowToast,
 }: LeadDetailDrawerProps) {
+    const showNumber = useShowRecordNumber();
     const router = useRouter();
 
     const { data: freshLead } = useLead(open && lead?.id ? lead.id : undefined);
@@ -114,7 +116,7 @@ export function LeadDetailDrawer({
             open={open}
             onClose={onClose}
             title={l.name}
-            subtitle={`${l.leadCode} • ${l.organizationName || 'Prospect'}`}
+            subtitle={[showNumber('lead') ? l.leadCode : '', l.organizationName || 'Prospect'].filter(Boolean).join(' • ')}
             avatarIcon={<PersonOutlinedIcon sx={{ fontSize: 24, color: '#ffffff' }} />}
             avatarBg={
                 isHot

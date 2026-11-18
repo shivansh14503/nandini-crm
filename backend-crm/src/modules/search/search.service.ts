@@ -5,6 +5,8 @@ import type { Prisma } from '../../generated/prisma/client.js';
 import { CACHE_KEYS, cacheService } from '../../services/cache.service.js';
 import type { AuthUser } from '../../types/user.types.js';
 import { buildAccessScopeWhere, hasGlobalAccess } from '../shared/accessControl.js';
+import type { SeriesModule } from '../document-series/documentSeries.format.js';
+import { shownNumberModules } from '../document-series/documentSeries.service.js';
 import { detectEntityCode, gstSearchPrefix, phoneSearch, phoneWhere } from '../shared/searchTerms.js';
 
 /** Shapes from frontend-crm/src/services/globalSearch.service.ts. */
@@ -36,45 +38,57 @@ const empty = (): GlobalSearchResults => ({ organizations: [], contacts: [], lea
  * Search clauses per category. An entity code (`OPP-0042`) can only match its own entity, so the other categories
  * get `null` and their queries are skipped; codes and GSTINs use prefix matches, complete phone numbers equality.
  */
-function searchClauses(q: string) {
+function searchClauses(q: string, shown: Set<SeriesModule>) {
     // Phone numbers match with or without spaces, as in the frontend's normalize().
     const compact = q.replace(/\s+/g, '');
     const code = detectEntityCode(q);
     const phone = code ? null : phoneSearch(q);
     const gst = code || phone ? null : gstSearchPrefix(q);
-    /** For a code search: the clause when the code is this category's, else null (skip the query). */
-    const ownCode = <T>(prefix: string, clause: T): T[] | null => (code?.prefix === prefix ? [clause] : null);
+    /** For a code search: the clause when the code is this category's (and its numbers are shown), else null (skip the query). */
+    const ownCode = <T>(prefix: string, module: SeriesModule, clause: T): T[] | null =>
+        code?.prefix === prefix && shown.has(module) ? [clause] : null;
+    /** Numbers without an admin-added series stay hidden, so they are not searchable either. */
+    const byNumber = <T>(module: SeriesModule, clause: T): T[] => (shown.has(module) ? [clause] : []);
 
     const organizations: Prisma.OrganizationWhereInput[] | null = code
-        ? ownCode('ORG', { accountCode: { startsWith: code.code } })
+        ? ownCode('ORG', 'organization', { accountCode: { startsWith: code.code } })
         : gst
           ? [{ gstNo: { startsWith: gst } }]
           : [
                 { organizationName: { contains: q } },
-                { accountCode: { contains: q } },
+                ...byNumber('organization', { accountCode: { contains: q } }),
                 { tradeName: { contains: q } },
                 { sapCodeTallyId: { contains: q } },
                 { billingCity: { contains: q } },
             ];
     const contacts: Prisma.ContactWhereInput[] | null = code
-        ? ownCode('CON', { contactCode: { startsWith: code.code } })
+        ? ownCode('CON', 'contact', { contactCode: { startsWith: code.code } })
         : phone
           ? phoneWhere(phone, ['mobile', 'officePhone'] as const)
           : [
                 { name: { contains: q } },
-                { contactCode: { contains: q } },
+                ...byNumber('contact', { contactCode: { contains: q } }),
                 { mobile: { contains: compact } },
                 { officePhone: { contains: compact } },
                 { emailAddresses: { some: { email: { contains: q } } } },
             ];
     const leads: Prisma.LeadWhereInput[] | null = code
-        ? ownCode('LD', { leadCode: { startsWith: code.code } })
+        ? ownCode('LD', 'lead', { leadCode: { startsWith: code.code } })
         : phone
           ? phoneWhere(phone, ['mobile'] as const)
-          : [{ name: { contains: q } }, { organizationName: { contains: q } }, { leadCode: { contains: q } }, { mobile: { contains: compact } }];
+          : [
+                { name: { contains: q } },
+                { organizationName: { contains: q } },
+                ...byNumber('lead', { leadCode: { contains: q } }),
+                { mobile: { contains: compact } },
+            ];
     const opportunities: Prisma.OpportunityWhereInput[] | null = code
-        ? ownCode('OPP', { opportunityCode: { startsWith: code.code } })
-        : [{ opportunityName: { contains: q } }, { opportunityCode: { contains: q } }, { organizationName: { contains: q } }];
+        ? ownCode('OPP', 'opportunity', { opportunityCode: { startsWith: code.code } })
+        : [
+              { opportunityName: { contains: q } },
+              ...byNumber('opportunity', { opportunityCode: { contains: q } }),
+              { organizationName: { contains: q } },
+          ];
     return { organizations, contacts, leads, opportunities };
 }
 
@@ -82,7 +96,8 @@ const none = <T>(): Promise<T[]> => Promise.resolve([]);
 
 async function runSearch(q: string, limit: number, user: AuthUser): Promise<GlobalSearchResults> {
     const recent = { updatedAt: 'desc' } as const;
-    const clauses = searchClauses(q);
+    const shown = await shownNumberModules();
+    const clauses = searchClauses(q, shown);
 
     const [organizations, contacts, leads, opportunities] = await Promise.all([
         clauses.organizations ? prisma.organization.findMany({
@@ -148,14 +163,15 @@ async function runSearch(q: string, limit: number, user: AuthUser): Promise<Glob
             id: l.id,
             category: 'leads',
             title: l.name,
-            subtitle: joinParts(l.organizationName, l.leadCode),
+            subtitle: joinParts(l.organizationName, shown.has('lead') ? l.leadCode : ''),
             href: `/leads/${l.id}`,
         })),
         opportunities: opportunities.map((o) => ({
             id: o.id,
             category: 'opportunities',
-            title: o.opportunityCode,
-            subtitle: joinParts(o.opportunityName, o.organizationName),
+            ...(shown.has('opportunity')
+                ? { title: o.opportunityCode, subtitle: joinParts(o.opportunityName, o.organizationName) }
+                : { title: o.opportunityName || o.organizationName, subtitle: o.opportunityName ? o.organizationName : '' }),
             meta: o.salesStage,
             href: `/opportunities/${o.id}`,
         })),

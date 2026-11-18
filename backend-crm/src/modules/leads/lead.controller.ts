@@ -1,6 +1,7 @@
 import type { Request, Response } from 'express';
 import { sendSuccess } from '../../utils/apiResponse.js';
 import { requireUser } from '../../utils/requestContext.js';
+import { shownNumberModules } from '../document-series/documentSeries.service.js';
 import { createCrudController } from '../shared/crud.js';
 import { convertLead } from './lead.conversion.js';
 import { leadService } from './lead.service.js';
@@ -10,7 +11,8 @@ export const leadController = {
 
     async convert(req: Request, res: Response): Promise<void> {
         const result = await convertLead(String(req.params.id), req.body, requireUser(req));
-        sendSuccess(res, result, `Lead converted to opportunity ${result.opportunity.opportunityCode}`);
+        const shown = (await shownNumberModules()).has('opportunity');
+        sendSuccess(res, result, shown ? `Lead converted to opportunity ${result.opportunity.opportunityCode}` : 'Lead converted to opportunity');
     },
 
     async checkDuplicates(req: Request, res: Response): Promise<void> {

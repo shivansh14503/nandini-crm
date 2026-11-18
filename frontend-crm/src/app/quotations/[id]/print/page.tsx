@@ -11,10 +11,12 @@ import { useSelectedPdfTemplate } from '@/components/pdf/useSelectedPdfTemplate'
 import { usePdfTemplates } from '@/hooks/queries/usePdfTemplates';
 import { useQuotation } from '@/hooks/queries/useQuotations';
 import { pdfTemplateService } from '@/services/pdfTemplate.service';
+import { useShowRecordNumber } from '@/hooks/queries/useDocumentSeries';
 
 const MODULE = 'QUOTATION' as const;
 
 function QuotationPrintContent() {
+    const showNumber = useShowRecordNumber();
     const router = useRouter();
     const params = useParams();
     const searchParams = useSearchParams();
@@ -98,7 +100,7 @@ function QuotationPrintContent() {
     if (!user) return null;
 
     const quotation = quotationQuery.data;
-    const title = quotation ? `${quotation.quotationCode} · ${quotation.quotationTitle}` : 'Quotation PDF';
+    const title = quotation ? (showNumber('quotation') ? `${quotation.quotationCode} · ${quotation.quotationTitle}` : quotation.quotationTitle) : 'Quotation PDF';
     const subtitle = quotation ? [quotation.organizationName || quotation.contactName, selected?.name].filter(Boolean).join(' · ') : selected?.name;
 
     return (

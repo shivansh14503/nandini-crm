@@ -24,6 +24,7 @@ import { ROUTES } from '@/config/constants';
 import { useAuth } from '@/context/AuthContext';
 import { useRelatedModulesForEntity } from '@/config/relatedModules.config';
 import { useContacts, useBulkDeleteContacts, useOrganizations } from '@/hooks/queries';
+import { useShowRecordNumber } from '@/hooks/queries/useDocumentSeries';
 import { wasModified } from '../../common/Drawer/RecordAuditFooter';
 import { formatDateTime } from '@/utils/date';
 import { formatPhoneDisplay } from '@/utils/phone';
@@ -223,20 +224,26 @@ export function ContactsMasterView() {
         }
     };
 
+    const showNumber = useShowRecordNumber();
+
     // ── Declarative Column Definitions ──────────────────────────────────────
     const columns: DataTableColumn<Contact>[] = useMemo(
         () => [
-            {
-                // Not one of the basic columns; switch it on from Modify Columns.
-                ...documentNumberColumn<Contact>({
-                    id: 'contactCode',
-                    label: 'CONTACT NO.',
-                    getNumber: (c) => c.contactCode,
-                    getHref: (c) => ROUTES.CONTACT_DETAIL(c.id),
-                    onOpen: (c) => setDrawerContactId(c.id),
-                }),
-                defaultHidden: true,
-            },
+            ...(showNumber('contact')
+                ? [
+                      {
+                          // Not one of the basic columns; switch it on from Modify Columns.
+                          ...documentNumberColumn<Contact>({
+                              id: 'contactCode',
+                              label: 'CONTACT NO.',
+                              getNumber: (c) => c.contactCode,
+                              getHref: (c) => ROUTES.CONTACT_DETAIL(c.id),
+                              onOpen: (c) => setDrawerContactId(c.id),
+                          }),
+                          defaultHidden: true,
+                      },
+                  ]
+                : []),
             {
                 id: 'name',
                 label: 'NAME',
@@ -361,7 +368,7 @@ export function ContactsMasterView() {
                 render: (c) => <Typography sx={plainCellSx}>{formatDateTime(c.createdAt) || '-'}</Typography>,
             },
         ],
-        [locationOf]
+        [locationOf, showNumber]
     );
 
     const relatedModules = useRelatedModulesForEntity('contact', selectedDrawerContact, setActiveRelatedModule);

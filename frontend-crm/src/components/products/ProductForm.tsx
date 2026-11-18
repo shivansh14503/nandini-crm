@@ -31,6 +31,7 @@ import {
 } from '@/components/forms';
 import { FormConfigProvider } from '@/context/FormConfigContext';
 import { DynamicModuleCustomFields } from '@/components/forms/DynamicModuleCustomFields';
+import { useShowRecordNumber } from '@/hooks/queries/useDocumentSeries';
 
 // ─── Option Lists ──────────────────────────────────────────────────────────────
 const PRODUCT_CATEGORIES = [
@@ -121,6 +122,7 @@ export default function ProductForm({
     const { isDirty, isSubmitting } = formState;
     const productName = watch('productName');
     const [recordCode, setRecordCode] = useState('');
+    const showNumber = useShowRecordNumber();
 
     const defaultBreadcrumbs: BreadcrumbItem[] = [
         { label: 'Inventory' },
@@ -190,7 +192,7 @@ export default function ProductForm({
                     cancelLabel={mode === 'view' ? 'Back' : 'Cancel'}
                     recordView={{
                         title: productName || '',
-                        code: recordCode,
+                        code: showNumber('product') ? recordCode : undefined,
                         editHref: productId ? ROUTES.PRODUCT_EDIT(productId) : undefined,
                         editLabel: 'Edit Product',
                         backHref: ROUTES.PRODUCTS,

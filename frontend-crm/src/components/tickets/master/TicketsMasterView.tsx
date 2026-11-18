@@ -26,6 +26,7 @@ import {
     type Ticket,
 } from '@/types/ticket.types';
 import { useTickets, useBulkDeleteTickets } from '@/hooks/queries';
+import { useShowRecordNumber } from '@/hooks/queries/useDocumentSeries';
 import type { TicketFilterTab, TicketSortField } from './types';
 import { RelatedModulesSidebar, RelatedRecordsTableView } from '../../common/Drawer';
 import { RelatedSecondaryDrawer, type SecondaryDrawerEntity } from '../../common/RelatedSecondaryDrawer';
@@ -120,6 +121,8 @@ export function TicketsMasterView() {
         [currentUsername, now]
     );
 
+    const showNumber = useShowRecordNumber();
+
     // ── Filter Logic ──────────────────────────────────────────────────────────
     const filteredTickets = useMemo(() => {
         const q = searchQuery.toLowerCase().trim();
@@ -127,7 +130,7 @@ export function TicketsMasterView() {
             if (!matchesTab(t, activeTab)) return false;
             if (!q) return true;
             return [
-                t.ticketNumber,
+                showNumber('ticket') ? t.ticketNumber : '',
                 t.ticketSubject,
                 t.organizationName,
                 t.contactPersonName,
@@ -138,7 +141,7 @@ export function TicketsMasterView() {
                 assigneeName(t.assignedTo),
             ].some((v) => (v || '').toLowerCase().includes(q));
         });
-    }, [tickets, activeTab, searchQuery, matchesTab]);
+    }, [tickets, activeTab, searchQuery, matchesTab, showNumber]);
 
     // ── Sort Logic ────────────────────────────────────────────────────────────
     const sortedTickets = useMemo(() => {
@@ -204,14 +207,18 @@ export function TicketsMasterView() {
     // ── Declarative Column Definitions ────────────────────────────────────────
     const columns: DataTableColumn<Ticket>[] = useMemo(
         () => [
-            documentNumberColumn<Ticket>({
-                id: 'ticketNumber',
-                label: 'TICKET NO.',
-                locked: true,
-                getNumber: (t) => t.ticketNumber,
-                getHref: (t) => ROUTES.TICKET_DETAIL(t.id),
-                onOpen: (t) => setDrawerTicketId(t.id),
-            }),
+            ...(showNumber('ticket')
+                ? [
+                      documentNumberColumn<Ticket>({
+                          id: 'ticketNumber',
+                          label: 'TICKET NO.',
+                          locked: true,
+                          getNumber: (t) => t.ticketNumber,
+                          getHref: (t) => ROUTES.TICKET_DETAIL(t.id),
+                          onOpen: (t) => setDrawerTicketId(t.id),
+                      }),
+                  ]
+                : []),
             {
                 id: 'ticketSubject',
                 label: 'SUBJECT',
@@ -295,7 +302,7 @@ export function TicketsMasterView() {
                 render: (t) => <Typography sx={{ fontSize: '0.78rem', color: 'var(--crm-slate-600)' }}>{assigneeName(t.assignedTo) || '-'}</Typography>,
             },
         ],
-        [now]
+        [now, showNumber]
     );
 
     const relatedModules = useRelatedModulesForEntity('ticket', selectedDrawerTicket, setActiveRelatedModule);

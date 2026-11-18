@@ -33,6 +33,7 @@ import {
 } from './sections';
 import { FormConfigProvider } from '@/context/FormConfigContext';
 import { DynamicModuleCustomFields } from '@/components/forms/DynamicModuleCustomFields';
+import { useShowRecordNumber } from '@/hooks/queries/useDocumentSeries';
 
 // ─── Single Source of Truth for Contact Form Tabs ──────────────────────────────
 export const CONTACT_FORM_TABS: FormTabDefinition[] = [
@@ -98,6 +99,7 @@ export default function ContactForm({
     const { isDirty, isSubmitting } = formState;
     const contactName = watch('name');
     const [recordCode, setRecordCode] = useState('');
+    const showNumber = useShowRecordNumber();
 
     // Leads / contacts / organizations already using this mobile or these emails, listed as links under the fields.
     const { mobileMatches, emailMatches } = useExistingRecordCheck({
@@ -176,7 +178,7 @@ export default function ContactForm({
                     cancelLabel={mode === 'view' ? 'Back' : 'Cancel'}
                     recordView={{
                         title: contactName || '',
-                        code: recordCode,
+                        code: showNumber('contact') ? recordCode : undefined,
                         editHref: contactId ? ROUTES.CONTACT_EDIT(contactId) : undefined,
                         editLabel: 'Edit Contact',
                         backHref: ROUTES.CONTACTS,

@@ -24,6 +24,8 @@ import {
     DrawerSectionCard,
     DrawerMetricGrid,
 } from '@/components/common/Drawer';
+import { useShowRecordNumber } from '@/hooks/queries/useDocumentSeries';
+import { isShownField } from '@/utils/recordNumbers';
 
 export interface SecondaryDrawerEntity {
     type: string;
@@ -50,6 +52,7 @@ export function RelatedSecondaryDrawer({
     parentTitle = '',
     onClose,
 }: RelatedSecondaryDrawerProps) {
+    const showNumber = useShowRecordNumber();
     const router = useRouter();
 
     if (!entity) return null;
@@ -111,12 +114,12 @@ export function RelatedSecondaryDrawer({
                     data.name ||
                     data.contractTitle ||
                     data.partnerName ||
-                    data.ticketNumber ||
+                    (showNumber('ticket') ? data.ticketNumber : '') ||
                     moduleLabel
             );
 
             const detailFields = Object.entries(data)
-                .filter(([key]) => key !== 'id')
+                .filter(([key]) => key !== 'id' && isShownField(key, showNumber))
                 .map(([key, val]) => ({
                     label: key.replace(/([A-Z])/g, ' $1').replace(/^./, (s) => s.toUpperCase()),
                     value: String(val ?? '-'),

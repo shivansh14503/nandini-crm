@@ -7,6 +7,7 @@ import { quotationService } from '@/services/quotation.service';
 import { queryKeys } from '@/hooks/queries/queryKeys';
 import type { Quotation } from '@/types/quotation.types';
 import { inputSx } from '@/components/settings/form-customization/builderUi';
+import { useShowRecordNumber } from '@/hooks/queries/useDocumentSeries';
 
 export interface PickedRecord {
     id: string;
@@ -15,6 +16,7 @@ export interface PickedRecord {
 
 /** Server-side quotation search (code / title / customer), 10 results at a time. */
 export function QuotationPicker({ value, onChange }: { value: PickedRecord | null; onChange: (record: PickedRecord | null) => void }) {
+    const showNumber = useShowRecordNumber();
     const [input, setInput] = useState('');
     const [search, setSearch] = useState('');
 
@@ -32,7 +34,12 @@ export function QuotationPicker({ value, onChange }: { value: PickedRecord | nul
 
     const options: (Quotation | PickedRecord)[] = data?.data ?? [];
     const toPicked = (q: Quotation | PickedRecord): PickedRecord =>
-        'label' in q ? q : { id: q.id, label: `${q.quotationCode} · ${q.organizationName || q.contactName || q.quotationTitle}` };
+        'label' in q
+            ? q
+            : {
+                  id: q.id,
+                  label: [showNumber('quotation') ? q.quotationCode : q.quotationTitle, q.organizationName || q.contactName || q.quotationTitle].filter(Boolean).join(' · '),
+              };
 
     return (
         <Autocomplete<Quotation | PickedRecord>
@@ -52,8 +59,8 @@ export function QuotationPicker({ value, onChange }: { value: PickedRecord | nul
                 const q = 'label' in o ? null : o;
                 return (
                     <Box component="li" key={key} {...rest} sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start !important' }}>
-                        <Typography sx={{ fontSize: '0.82rem', fontWeight: 600, color: 'var(--crm-slate-900)' }}>{q ? q.quotationCode : toPicked(o).label}</Typography>
-                        {q && <Typography sx={{ fontSize: '0.72rem', color: 'var(--mui-palette-text-secondary)' }}>{[q.quotationTitle, q.organizationName || q.contactName].filter(Boolean).join(' · ')}</Typography>}
+                        <Typography sx={{ fontSize: '0.82rem', fontWeight: 600, color: 'var(--crm-slate-900)' }}>{q ? (showNumber('quotation') ? q.quotationCode : q.quotationTitle) : toPicked(o).label}</Typography>
+                        {q && <Typography sx={{ fontSize: '0.72rem', color: 'var(--mui-palette-text-secondary)' }}>{[showNumber('quotation') ? q.quotationTitle : '', q.organizationName || q.contactName].filter(Boolean).join(' · ')}</Typography>}
                     </Box>
                 );
             }}

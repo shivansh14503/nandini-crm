@@ -71,7 +71,7 @@ function AuditItem({ icon, label, at, by }: { icon: React.ReactNode; label: stri
     );
 }
 
-/** Created / Last Modified stamps, side by side as the footer of a record's overview tab (drawer and view page). */
+/** Created At / Last Modified stamps, side by side as the footer of a record's overview tab (drawer and view page). */
 export function RecordAuditFooter({ audit }: { audit: RecordAuditStamp }) {
     if (!audit.createdAt && !audit.updatedAt) return null;
     // Never edited since it was created: "Last Modified" stays blank.
@@ -92,7 +92,7 @@ export function RecordAuditFooter({ audit }: { audit: RecordAuditStamp }) {
         >
             <AuditItem
                 icon={<EventAvailableOutlinedIcon sx={{ fontSize: 14 }} />}
-                label="Created"
+                label="Created At"
                 at={formatDateTime(audit.createdAt)}
                 by={audit.createdBy}
             />

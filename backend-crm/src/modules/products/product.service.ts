@@ -9,6 +9,7 @@ import { HttpError } from '../../utils/httpError.js';
 import { daysAgo } from '../../utils/mappers.js';
 import { parsePagination } from '../../utils/pagination.js';
 import { asPayload, checkModulePayload, loadModuleFieldConfig, validateModulePayload } from '../form-configs/customFieldValidator.js';
+import { shownNumberModules } from '../document-series/documentSeries.service.js';
 import { codeSearchPrefix } from '../shared/searchTerms.js';
 import { acquireLocks, lockRecords, runInTransaction, softDeleteData, type BulkDeleteResult } from '../shared/transactions.js';
 import { toProductData, toProductDto, type ProductDto } from './product.mapper.js';
@@ -23,7 +24,10 @@ async function assertUniqueName(tx: TransactionClient, productName: string, excl
         where: { productName, isDeleted: false, ...(excludeId ? { NOT: { id: excludeId } } : {}) },
         select: { productCode: true },
     });
-    if (duplicate) throw HttpError.conflict(`A product named "${productName}" already exists (${duplicate.productCode}).`);
+    if (duplicate) {
+        const number = (await shownNumberModules(tx)).has('product') ? ` (${duplicate.productCode})` : '';
+        throw HttpError.conflict(`A product named "${productName}" already exists${number}.`);
+    }
 }
 
 /** Inserts a product inside the caller's transaction (used by `create`, import and the seed). */

@@ -9,6 +9,7 @@ import { HttpError } from '../../utils/httpError.js';
 import { daysAgo } from '../../utils/mappers.js';
 import { parsePagination } from '../../utils/pagination.js';
 import { asPayload, checkModulePayload, loadModuleFieldConfig, validateModulePayload } from '../form-configs/customFieldValidator.js';
+import { shownNumberModules } from '../document-series/documentSeries.service.js';
 import { assertAssigneeValid, assertRecordAccess, buildAccessScopeWhere } from '../shared/accessControl.js';
 import { emailsInclude, normalizeEmails, replaceEmails } from '../shared/entityEmails.js';
 import { invalidateSyncedCaches, propagateContactName, type NameSyncCounts } from '../shared/nameSync.js';
@@ -34,7 +35,8 @@ async function assertUniqueMobile(tx: TransactionClient, mobile: string, exclude
         select: { contactCode: true, name: true },
     });
     if (duplicate) {
-        throw HttpError.conflict(`A contact with mobile ${mobile} already exists (${duplicate.contactCode} · ${duplicate.name}).`);
+        const who = (await shownNumberModules(tx)).has('contact') ? `${duplicate.contactCode} · ${duplicate.name}` : duplicate.name;
+        throw HttpError.conflict(`A contact with mobile ${mobile} already exists (${who}).`);
     }
 }
 

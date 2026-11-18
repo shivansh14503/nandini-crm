@@ -23,6 +23,7 @@ import { ROUTES } from '@/config/constants';
 import { useRelatedModulesForEntity } from '@/config/relatedModules.config';
 import type { Quotation } from '@/types/quotation.types';
 import { useQuotations, useDeleteQuotation, useBulkDeleteQuotations } from '@/hooks/queries';
+import { useShowRecordNumber } from '@/hooks/queries/useDocumentSeries';
 import { QuotationDetailDrawer } from './QuotationDetailDrawer';
 import { wasModified } from '../common/Drawer/RecordAuditFooter';
 import { formatDateTime } from '@/utils/date';
@@ -108,7 +109,7 @@ export function QuotationsMasterView() {
 
     const handleDelete = async (id: string) => {
         const quote = quotations.find((q) => q.id === id);
-        const label = quote?.quotationCode ? `"${quote.quotationCode}"` : 'this quotation';
+        const label = showNumber('quotation') && quote?.quotationCode ? `"${quote.quotationCode}"` : 'this quotation';
         if (!window.confirm(`Are you sure you want to delete ${label}?`)) return;
 
         try {
@@ -188,6 +189,7 @@ export function QuotationsMasterView() {
     }, [quotations]);
 
     // ── Filtering Logic ───────────────────────────────────────────────────────
+    const showNumber = useShowRecordNumber();
     const filteredQuotations = useMemo(() => {
         let result = [...quotations];
 
@@ -205,12 +207,12 @@ export function QuotationsMasterView() {
             const q = searchQuery.toLowerCase().trim();
             result = result.filter(
                 (item) =>
-                    (item.quotationCode && item.quotationCode.toLowerCase().includes(q)) ||
+                    (showNumber('quotation') && item.quotationCode && item.quotationCode.toLowerCase().includes(q)) ||
                     (item.organizationName && item.organizationName.toLowerCase().includes(q)) ||
                     (item.contactName && item.contactName.toLowerCase().includes(q)) ||
                     (item.quotationTitle && item.quotationTitle.toLowerCase().includes(q)) ||
                     (item.quotationSubject && item.quotationSubject.toLowerCase().includes(q)) ||
-                    (item.opportunityCode && item.opportunityCode.toLowerCase().includes(q))
+                    (showNumber('opportunity') && item.opportunityCode && item.opportunityCode.toLowerCase().includes(q))
             );
         }
 
@@ -229,7 +231,7 @@ export function QuotationsMasterView() {
         });
 
         return result;
-    }, [quotations, activeTab, searchQuery, sortField, sortOrder]);
+    }, [quotations, activeTab, searchQuery, sortField, sortOrder, showNumber]);
 
     const paginatedQuotations = useMemo(() => {
         const start = page * rowsPerPage;
@@ -239,13 +241,17 @@ export function QuotationsMasterView() {
     // ── Columns ───────────────────────────────────────────────────────────────
     const columns: DataTableColumn<Quotation>[] = useMemo(
         () => [
-            documentNumberColumn<Quotation>({
-                id: 'quotationCode',
-                label: 'QUOTATION NUMBER',
-                getNumber: (row) => row.quotationCode,
-                getHref: (row) => ROUTES.QUOTATION_DETAIL(row.id),
-                onOpen: (row) => setDrawerQuotationId(row.id),
-            }),
+            ...(showNumber('quotation')
+                ? [
+                      documentNumberColumn<Quotation>({
+                          id: 'quotationCode',
+                          label: 'QUOTATION NUMBER',
+                          getNumber: (row) => row.quotationCode,
+                          getHref: (row) => ROUTES.QUOTATION_DETAIL(row.id),
+                          onOpen: (row) => setDrawerQuotationId(row.id),
+                      }),
+                  ]
+                : []),
             {
                 id: 'quotationTitle',
                 label: 'TITLE',
@@ -264,7 +270,7 @@ export function QuotationsMasterView() {
                 minWidth: 160,
                 render: (row) => (
                     <Typography sx={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--crm-text-blue-600)' }}>
-                        {row.opportunityName || row.opportunityCode || '-'}
+                        {row.opportunityName || (showNumber('opportunity') ? row.opportunityCode : '') || '-'}
                     </Typography>
                 ),
             },
@@ -367,7 +373,7 @@ export function QuotationsMasterView() {
                 render: (row) => <Typography sx={plainCellSx}>{formatDateTime(row.createdAt) || '-'}</Typography>,
             },
         ],
-        []
+        [showNumber]
     );
 
     const handleSort = (field: string) => {
@@ -486,7 +492,7 @@ export function QuotationsMasterView() {
                     moduleId={effectiveRelatedModule || ''}
                     moduleTitle={activeModuleMeta?.label || 'Related Records'}
                     parentRecordId={selectedDrawerQuotation?.id}
-                    parentEntityTitle={selectedDrawerQuotation?.quotationCode || selectedDrawerQuotation?.quotationSubject || ''}
+                    parentEntityTitle={(showNumber('quotation') ? selectedDrawerQuotation?.quotationCode : '') || selectedDrawerQuotation?.quotationSubject || ''}
                     entityData={selectedDrawerQuotation}
                     entityType="quotation"
                     leftOffset={isLeftSidebarCollapsed ? 72 : 260}
@@ -511,7 +517,7 @@ export function QuotationsMasterView() {
                     <RelatedSecondaryDrawer
                         entity={secondaryDrawerEntity}
                         moduleLabel={activeModuleMeta?.label}
-                        parentTitle={selectedDrawerQuotation?.quotationCode || selectedDrawerQuotation?.quotationSubject}
+                        parentTitle={(showNumber('quotation') ? selectedDrawerQuotation?.quotationCode : '') || selectedDrawerQuotation?.quotationSubject}
                         onClose={() => setSecondaryDrawerEntity(null)}
                     />
                 ) : null

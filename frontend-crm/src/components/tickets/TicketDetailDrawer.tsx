@@ -25,6 +25,7 @@ import {
 import { TICKET_FORM_TABS } from './TicketForm';
 import { TicketPriorityPill, TicketStatusPill, formatTicketDue } from './TicketBadges';
 import { DynamicDrawerCustomFields } from '@/components/common/Drawer/DynamicDrawerCustomFields';
+import { useShowRecordNumber } from '@/hooks/queries/useDocumentSeries';
 
 export interface TicketDetailDrawerProps {
     ticket: Ticket | null;
@@ -66,6 +67,7 @@ const flagChip = (label: string) => (
 );
 
 export function TicketDetailDrawer({ ticket, open, onClose, onEdit, hideBackdrop }: TicketDetailDrawerProps) {
+    const showNumber = useShowRecordNumber();
     const router = useRouter();
 
     const { data: freshTicket } = useTicket(open && ticket?.id ? ticket.id : undefined);
@@ -84,18 +86,18 @@ export function TicketDetailDrawer({ ticket, open, onClose, onEdit, hideBackdrop
             open={open}
             onClose={onClose}
             hideBackdrop={hideBackdrop}
-            title={t.ticketSubject || t.ticketNumber}
-            subtitle={`${t.ticketNumber} • ${t.organizationName}`}
+            title={t.ticketSubject || (showNumber('ticket') ? t.ticketNumber : 'Ticket')}
+            subtitle={[showNumber('ticket') ? t.ticketNumber : '', t.organizationName].filter(Boolean).join(' • ')}
             avatarIcon={<ConfirmationNumberOutlinedIcon />}
             avatarBg="linear-gradient(135deg, var(--crm-fill-blue-700) 0%, var(--crm-fill-blue-600) 100%)"
             badges={[
-                {
+                ...(showNumber('ticket') ? [{
                     label: t.ticketNumber,
                     isMonospace: true,
                     backgroundColor: 'var(--mui-palette-primary-soft)',
                     color: 'var(--crm-text-blue-700)',
                     borderColor: 'var(--mui-palette-primary-softBorder)',
-                },
+                }] : []),
                 {
                     label: t.natureOfCall || 'General',
                     backgroundColor: 'var(--mui-palette-background-subtle)',
@@ -234,11 +236,15 @@ export function TicketDetailDrawer({ ticket, open, onClose, onEdit, hideBackdrop
             includeChangesTab
             statusText={overdue ? `${t.ticketStatus} • Overdue` : t.ticketStatus}
             primaryAction={{ label: 'Edit Ticket', onClick: handleEdit }}
-            secondaryAction={{
-                label: 'Copy Ticket Number',
-                icon: <ContentCopyOutlinedIcon sx={{ fontSize: 16 }} />,
-                onClick: () => copyToClipboard(t.ticketNumber),
-            }}
+            secondaryAction={
+                showNumber('ticket')
+                    ? {
+                          label: 'Copy Ticket Number',
+                          icon: <ContentCopyOutlinedIcon sx={{ fontSize: 16 }} />,
+                          onClick: () => copyToClipboard(t.ticketNumber),
+                      }
+                    : undefined
+            }
         />
     );
 }

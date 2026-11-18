@@ -26,6 +26,7 @@ import {
 } from './sections';
 import { FormConfigProvider } from '@/context/FormConfigContext';
 import { DynamicModuleCustomFields } from '@/components/forms/DynamicModuleCustomFields';
+import { useShowRecordNumber } from '@/hooks/queries/useDocumentSeries';
 
 export type LeadTabKey = 'overview' | 'address';
 
@@ -115,6 +116,7 @@ export default function LeadForm({
     const [activeTab, setActiveTab] = useState<LeadTabKey>('overview');
     const [audit, setAudit] = useState<RecordAuditStamp>();
     const [recordCode, setRecordCode] = useState('');
+    const showNumber = useShowRecordNumber();
 
     const { methods, toast, showToast, closeToast, createSubmitHandler } = useRhfForm<LeadFormData>({
         schema: leadFormSchema,
@@ -204,7 +206,7 @@ export default function LeadForm({
                     cancelLabel={mode === 'view' ? 'Back' : 'Cancel'}
                     recordView={{
                         title: leadName || '',
-                        code: recordCode,
+                        code: showNumber('lead') ? recordCode : undefined,
                         editHref: leadId ? ROUTES.LEAD_EDIT(leadId) : undefined,
                         editLabel: 'Edit Lead',
                         backHref: ROUTES.LEADS,

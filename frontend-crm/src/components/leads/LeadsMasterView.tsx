@@ -32,6 +32,7 @@ import { useAuth } from '@/context/AuthContext';
 import { useRelatedModulesForEntity } from '@/config/relatedModules.config';
 import type { Lead } from '@/types/lead.types';
 import { useLeads, useBulkDeleteLeads, useDropdownOptionLabel } from '@/hooks/queries';
+import { useShowRecordNumber } from '@/hooks/queries/useDocumentSeries';
 import { getLeadStatusBucket, type LeadFilterTab, type LeadStatusBucket } from './master';
 import { LeadDetailDrawer } from './LeadDetailDrawer';
 import { formatDateTime } from '@/utils/date';
@@ -153,6 +154,7 @@ export function LeadsMasterView() {
         ];
     }, [tabLeads]);
 
+    const showNumber = useShowRecordNumber();
     const filteredLeads = useMemo(() => {
         return tabLeads.filter((lead) => {
             if (statusBucket !== 'all' && getLeadStatusBucket(lead.status) !== statusBucket) return false;
@@ -160,7 +162,7 @@ export function LeadsMasterView() {
             if (searchQuery.trim()) {
                 const q = searchQuery.toLowerCase().trim();
                 const inName = lead.name.toLowerCase().includes(q);
-                const inCode = lead.leadCode.toLowerCase().includes(q);
+                const inCode = showNumber('lead') && lead.leadCode.toLowerCase().includes(q);
                 const inOrg = (lead.organizationName || '').toLowerCase().includes(q);
                 const inPhone = (lead.mobile || '').includes(q) || (lead.otherPhone || '').includes(q);
                 const inEmail = (lead.emailAddresses || []).some((e) => e.email.toLowerCase().includes(q));
@@ -184,7 +186,7 @@ export function LeadsMasterView() {
 
             return true;
         });
-    }, [tabLeads, statusBucket, searchQuery, leadSourceLabel]);
+    }, [tabLeads, statusBucket, searchQuery, leadSourceLabel, showNumber]);
 
     // ── Sort Logic ────────────────────────────────────────────────────────────
     const sortedLeads = useMemo(() => {
@@ -244,13 +246,17 @@ export function LeadsMasterView() {
     // ── Declarative Column Definitions ────────────────────────────────────────
     const columns: DataTableColumn<Lead>[] = useMemo(
         () => [
-            documentNumberColumn<Lead>({
-                id: 'leadCode',
-                label: 'LEAD NUMBER',
-                getNumber: (l) => l.leadCode,
-                getHref: (l) => ROUTES.LEAD_DETAIL(l.id),
-                onOpen: (l) => setDrawerLeadId(l.id),
-            }),
+            ...(showNumber('lead')
+                ? [
+                      documentNumberColumn<Lead>({
+                          id: 'leadCode',
+                          label: 'LEAD NUMBER',
+                          getNumber: (l) => l.leadCode,
+                          getHref: (l) => ROUTES.LEAD_DETAIL(l.id),
+                          onOpen: (l) => setDrawerLeadId(l.id),
+                      }),
+                  ]
+                : []),
             {
                 id: 'name',
                 label: 'NAME',
@@ -507,7 +513,7 @@ export function LeadsMasterView() {
                 render: (l) => <Typography sx={plainCellSx}>{formatDateTime(l.createdAt) || '-'}</Typography>,
             },
         ],
-        [todayStr, leadSourceLabel]
+        [todayStr, leadSourceLabel, showNumber]
     );
 
     const relatedModules = useRelatedModulesForEntity('lead', selectedDrawerLead, setActiveRelatedModule);

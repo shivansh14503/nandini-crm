@@ -4,6 +4,7 @@ import { decimalToNumber, parseCustomFields, text } from '../../../utils/mappers
 import type { AuthUser } from '../../../types/user.types.js';
 import { assertRecordAccess } from '../../shared/accessControl.js';
 import { lineItemsInclude } from '../../shared/lineItems.js';
+import { shownNumberModules } from '../../document-series/documentSeries.service.js';
 import type { CustomFieldMeta } from '../fieldRegistry.js';
 import { amountInWords, formatCurrency, formatDate, formatDateTime, formatNumber, slugify } from '../format.js';
 import type { PdfAddress, PdfContext, PdfLineItem } from '../pdf.types.js';
@@ -188,7 +189,7 @@ const notFound = () => HttpError.notFound('Quotation not found');
 function fileBaseName(code: string, organizationName: string | null, contactName: string): string {
     const who = slugify(organizationName || contactName || '');
     const safeCode = code.replace(/[^A-Za-z0-9_-]+/g, '-');
-    return who ? `${safeCode}_${who}` : safeCode;
+    return [safeCode, who].filter(Boolean).join('_') || 'quotation';
 }
 
 async function loadRecordMeta(recordId: string, user: AuthUser): Promise<RecordMeta> {
@@ -207,11 +208,13 @@ async function loadRecordMeta(recordId: string, user: AuthUser): Promise<RecordM
     });
     if (!row) throw notFound();
     assertRecordAccess(user, row);
+    // Numbers without an admin-added series stay in the backend.
+    const code = (await shownNumberModules()).has('quotation') ? row.quotationCode : '';
     return {
         id: row.id,
         updatedAt: row.updatedAt,
-        fileBaseName: fileBaseName(row.quotationCode, row.organizationName, row.contactName),
-        title: `${row.quotationCode} · ${row.quotationTitle}`,
+        fileBaseName: fileBaseName(code, row.organizationName, row.contactName),
+        title: code ? `${code} · ${row.quotationTitle}` : row.quotationTitle,
     };
 }
 
@@ -225,16 +228,18 @@ async function loadSource(recordId: string): Promise<QuotationSource> {
         ? await prisma.user.findUnique({ where: { username: row.assignedTo }, select: { username: true, fullName: true, phone: true, email: true } })
         : null;
 
+    const shown = await shownNumberModules();
     return {
         id: row.id,
-        code: row.quotationCode,
+        // Numbers without an admin-added series stay in the backend (blank, so `hideIfEmpty` fields drop out).
+        code: shown.has('quotation') ? row.quotationCode : '',
         title: row.quotationTitle,
         subject: text(row.quotationSubject),
         date: row.quotationDate,
         validUntil: row.validUntil,
         stage: row.quoteStage,
         opportunityName: row.opportunityName,
-        opportunityCode: row.opportunity?.opportunityCode ?? '',
+        opportunityCode: shown.has('opportunity') ? (row.opportunity?.opportunityCode ?? '') : '',
         preparedFor: row.preparedFor,
         otherRef: text(row.otherRef),
         validationPeriod: text(row.validationPeriod),

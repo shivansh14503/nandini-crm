@@ -36,6 +36,7 @@ import { QUOTATION_FORM_TABS } from './CreateQuoteForm';
 import { DynamicDrawerCustomFields } from '@/components/common/Drawer/DynamicDrawerCustomFields';
 import { DoubleClickCopyText } from '@/components/common/useDoubleClickCopy';
 import { PdfActionsButton } from '@/components/pdf/PdfActionsButton';
+import { useShowRecordNumber } from '@/hooks/queries/useDocumentSeries';
 
 export interface QuotationDetailDrawerProps {
     quotation: Quotation | null;
@@ -59,6 +60,7 @@ export function QuotationDetailDrawer({
     onEdit,
     onShowToast,
 }: QuotationDetailDrawerProps) {
+    const showNumber = useShowRecordNumber();
     const router = useRouter();
 
     const { data: freshQuotation } = useQuotation(
@@ -122,7 +124,7 @@ export function QuotationDetailDrawer({
                     {quotation.quotationTitle || quotation.quotationSubject || 'Quotation Document'}
                 </Typography>
                 <Typography sx={{ fontSize: '0.75rem', color: 'var(--mui-palette-text-secondary)', mt: 0.3 }}>
-                    Quote Code: {quotation.quotationCode} • Prepared For: {quotation.preparedFor || 'Customer'}
+                    {showNumber('quotation') && <>Quote Code: {quotation.quotationCode} • </>}Prepared For: {quotation.preparedFor || 'Customer'}
                 </Typography>
             </Paper>
 
@@ -169,7 +171,7 @@ export function QuotationDetailDrawer({
                     <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                         <Typography sx={{ fontSize: '0.78rem', color: 'var(--mui-palette-text-secondary)' }}>Linked Opportunity:</Typography>
                         <Typography sx={{ fontSize: '0.84rem', fontWeight: 600, color: 'var(--crm-text-blue-600)' }}>
-                            {quotation.opportunityName || quotation.opportunityCode || '-'}
+                            {quotation.opportunityName || (showNumber('opportunity') ? quotation.opportunityCode : '') || '-'}
                         </Typography>
                     </Box>
                     <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -539,9 +541,9 @@ export function QuotationDetailDrawer({
         <EntityDetailDrawer
             open={open}
             onClose={onClose}
-            title={quotation.quotationCode}
-            subtitle={`${quotation.quotationTitle || quotation.quotationSubject || 'Quotation'} • ${quotation.organizationName}`}
-            avatarText={quotation.quotationCode.replace(/^QT-0*/i, 'QT-')}
+            title={showNumber('quotation') ? quotation.quotationCode : quotation.quotationTitle || quotation.quotationSubject || 'Quotation'}
+            subtitle={showNumber('quotation') ? `${quotation.quotationTitle || quotation.quotationSubject || 'Quotation'} • ${quotation.organizationName}` : quotation.organizationName}
+            avatarText={showNumber('quotation') ? quotation.quotationCode.replace(/^QT-0*/i, 'QT-') : undefined}
             avatarIcon={<RequestQuoteOutlinedIcon sx={{ fontSize: 24, color: '#ffffff' }} />}
             avatarBg="linear-gradient(135deg, var(--crm-fill-blue-700) 0%, var(--crm-fill-blue-600) 100%)"
             statusText={`Valid Until: ${quotation.validUntil || quotation.quoteDate || '-'}`}

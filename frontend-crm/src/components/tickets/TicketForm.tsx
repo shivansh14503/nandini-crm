@@ -49,6 +49,7 @@ import {
 } from '@/components/forms';
 import { FormConfigProvider } from '@/context/FormConfigContext';
 import { DynamicModuleCustomFields } from '@/components/forms/DynamicModuleCustomFields';
+import { useShowRecordNumber } from '@/hooks/queries/useDocumentSeries';
 
 type TicketTabKey = 'overview' | 'partner_company';
 
@@ -122,6 +123,7 @@ export default function TicketForm({ mode = 'create', initialData, ticketId, bre
     const router = useRouter();
     const [activeTab, setActiveTab] = useState<TicketTabKey>('overview');
     const [ticketNumber, setTicketNumber] = useState('');
+    const showNumber = useShowRecordNumber();
     const [audit, setAudit] = useState<RecordAuditStamp>();
 
     const { methods, toast, showToast, closeToast, createSubmitHandler } = useRhfForm<TicketFormData>({
@@ -161,7 +163,8 @@ export default function TicketForm({ mode = 'create', initialData, ticketId, bre
         return (inCompany.length > 0 ? inCompany : partnerContacts).map((c) => c.name);
     }, [partnerContacts, partnerCompany]);
 
-    const recordLabel = ticketNumber || ticketSubject || 'Ticket';
+    const shownTicketNumber = showNumber('ticket') ? ticketNumber : '';
+    const recordLabel = shownTicketNumber || ticketSubject || 'Ticket';
     const defaultBreadcrumbs: BreadcrumbItem[] = [
         { label: 'Support' },
         { label: 'Tickets', href: ROUTES.TICKETS },
@@ -267,7 +270,7 @@ export default function TicketForm({ mode = 'create', initialData, ticketId, bre
         try {
             if (mode === 'create') {
                 const created = await ticketService.create(values);
-                showToast(`Ticket ${created.ticketNumber} created successfully!`, 'success');
+                showToast(showNumber('ticket') ? `Ticket ${created.ticketNumber} created successfully!` : 'Ticket created successfully!', 'success');
             } else if (ticketId) {
                 await ticketService.update(ticketId, values);
                 showToast('Ticket updated successfully!', 'success');
@@ -304,8 +307,8 @@ export default function TicketForm({ mode = 'create', initialData, ticketId, bre
                     saveLabel={mode === 'view' ? 'Edit Ticket' : mode === 'edit' ? 'Update Ticket' : 'Save Ticket'}
                     cancelLabel={mode === 'view' ? 'Back' : 'Cancel'}
                     recordView={{
-                        title: ticketSubject || ticketNumber || '',
-                        code: ticketNumber,
+                        title: ticketSubject || shownTicketNumber || '',
+                        code: shownTicketNumber || undefined,
                         editHref: ticketId ? ROUTES.TICKET_EDIT(ticketId) : undefined,
                         editLabel: 'Edit Ticket',
                         backHref: ROUTES.TICKETS,

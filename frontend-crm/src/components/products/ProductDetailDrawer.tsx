@@ -25,6 +25,7 @@ import {
 } from '@/components/common/Drawer';
 import { PRODUCT_FORM_TABS } from './ProductForm';
 import { DynamicDrawerCustomFields } from '@/components/common/Drawer/DynamicDrawerCustomFields';
+import { useShowRecordNumber } from '@/hooks/queries/useDocumentSeries';
 
 export interface ProductDetailDrawerProps {
     product: Product | null;
@@ -39,6 +40,7 @@ export function ProductDetailDrawer({
     onClose,
     onEdit,
 }: ProductDetailDrawerProps) {
+    const showNumber = useShowRecordNumber();
     const router = useRouter();
 
     const { data: freshProduct } = useProduct(open && product?.id ? product.id : undefined);
@@ -76,13 +78,13 @@ export function ProductDetailDrawer({
             avatarBg="linear-gradient(135deg, var(--crm-fill-blue-700) 0%, var(--crm-fill-blue-600) 100%)"
             verified={true}
             badges={[
-                {
+                ...(showNumber('product') ? [{
                     label: `SKU: ${p.productCode}`,
                     isMonospace: true,
                     backgroundColor: 'var(--mui-palette-primary-soft)',
                     color: 'var(--crm-text-blue-700)',
                     borderColor: 'var(--mui-palette-primary-softBorder)',
-                },
+                }] : []),
                 {
                     label: `Tax: ${p.taxRate || '18%'} (${p.taxType || 'GST'})`,
                     backgroundColor: 'var(--mui-palette-background-subtle)',
@@ -107,6 +109,7 @@ export function ProductDetailDrawer({
                                         {p.productName}
                                     </Typography>
                                 </Box>
+                                {showNumber('product') && (
                                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
                                     <Chip
                                         label={p.productCode}
@@ -122,6 +125,7 @@ export function ProductDetailDrawer({
                                     />
                                     <DrawerCopyButton text={p.productCode} title="Copy SKU Code" iconColor="var(--mui-palette-text-muted)" />
                                 </Box>
+                                )}
                             </Box>
                         </DrawerSectionCard>
 
@@ -322,11 +326,15 @@ export function ProductDetailDrawer({
                 label: 'Edit Product',
                 onClick: handleEdit,
             }}
-            secondaryAction={{
-                label: 'Copy Product Code',
-                icon: <ContentCopyOutlinedIcon sx={{ fontSize: 16 }} />,
-                onClick: () => copyToClipboard(p.productCode),
-            }}
+            secondaryAction={
+                showNumber('product')
+                    ? {
+                          label: 'Copy Product Code',
+                          icon: <ContentCopyOutlinedIcon sx={{ fontSize: 16 }} />,
+                          onClick: () => copyToClipboard(p.productCode),
+                      }
+                    : undefined
+            }
         />
     );
 }

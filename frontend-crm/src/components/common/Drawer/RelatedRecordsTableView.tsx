@@ -35,6 +35,8 @@ import {
     type CrmEntityType,
 } from '@/config/relatedModules.config';
 import { useDropdownOptionLabel } from '@/hooks/queries/useFormConfigs';
+import { useShowRecordNumber } from '@/hooks/queries/useDocumentSeries';
+import { isShownField } from '@/utils/recordNumbers';
 
 export interface RelatedRecordsTableViewProps {
     open: boolean;
@@ -434,6 +436,7 @@ export function RelatedRecordsTableView({
     entityData,
     entityType = 'organization',
 }: RelatedRecordsTableViewProps) {
+    const showNumber = useShowRecordNumber();
     const [searchQuery, setSearchQuery] = useState('');
     const [sortField, setSortField] = useState<string>('');
     const [sortOrder, setSortOrder] = useState<SortOrder>('asc');
@@ -442,7 +445,14 @@ export function RelatedRecordsTableView({
     const moduleKey = useMemo(() => normalizeModuleKey(moduleId), [moduleId]);
 
     const leadSourceLabel = useDropdownOptionLabel('shared_lead_source');
-    const columns = useMemo(() => getColumnsForModule(moduleKey, leadSourceLabel), [moduleKey, leadSourceLabel]);
+    const columns = useMemo(
+        () =>
+            getColumnsForModule(moduleKey, leadSourceLabel).filter((c) =>
+                // Products list their number as `serialNumber`.
+                c.id === 'serialNumber' ? showNumber('product') : isShownField(c.id, showNumber)
+            ),
+        [moduleKey, leadSourceLabel, showNumber]
+    );
 
     const datasets = useRelatedDatasets(entityType, entityData, open);
 

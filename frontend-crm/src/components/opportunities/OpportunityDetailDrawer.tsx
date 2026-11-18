@@ -27,6 +27,7 @@ import { OPPORTUNITY_FORM_TABS } from './OpportunityForm';
 import { DynamicDrawerCustomFields } from '@/components/common/Drawer/DynamicDrawerCustomFields';
 import { DoubleClickCopyText } from '@/components/common/useDoubleClickCopy';
 import { phoneForCopy } from '@/utils/phone';
+import { useShowRecordNumber } from '@/hooks/queries/useDocumentSeries';
 
 export interface OpportunityDetailDrawerProps {
     opportunity: Opportunity | null;
@@ -43,6 +44,7 @@ export function OpportunityDetailDrawer({
     onEdit,
     onShowToast,
 }: OpportunityDetailDrawerProps) {
+    const showNumber = useShowRecordNumber();
     const router = useRouter();
 
     const { data: freshOpp } = useOpportunity(open && opportunity?.id ? opportunity.id : undefined);
@@ -142,7 +144,7 @@ export function OpportunityDetailDrawer({
             open={open}
             onClose={onClose}
             title={opp.organizationName}
-            subtitle={`${opp.opportunityCode} • ${opp.contactName}`}
+            subtitle={[showNumber('opportunity') ? opp.opportunityCode : '', opp.contactName].filter(Boolean).join(' • ')}
             avatarText={opp.organizationName.substring(0, 2).toUpperCase()}
             avatarBg="var(--crm-fill-blue-900)"
             badges={[
@@ -182,7 +184,7 @@ export function OpportunityDetailDrawer({
                                 </Typography>
                             </Box>
                             <Typography sx={{ fontSize: '0.75rem', color: 'var(--mui-palette-text-secondary)', mt: 0.3 }}>
-                                Deal Ref: {opp.opportunityCode} • Type: {opp.type}
+                                {showNumber('opportunity') && <>Deal Ref: {opp.opportunityCode} • </>}Type: {opp.type}
                             </Typography>
                         </DrawerSectionCard>
 

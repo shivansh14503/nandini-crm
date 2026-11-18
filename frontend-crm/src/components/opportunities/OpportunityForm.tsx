@@ -27,6 +27,7 @@ import {
 } from './sections';
 import { FormConfigProvider } from '@/context/FormConfigContext';
 import { DynamicModuleCustomFields } from '@/components/forms/DynamicModuleCustomFields';
+import { useShowRecordNumber } from '@/hooks/queries/useDocumentSeries';
 
 export type OpportunityTabKey = 'basic' | 'line_items';
 
@@ -118,6 +119,7 @@ export default function OpportunityForm({
     const [activeTab, setActiveTab] = useState<OpportunityTabKey>('basic');
     const [audit, setAudit] = useState<RecordAuditStamp>();
     const [recordCode, setRecordCode] = useState('');
+    const showNumber = useShowRecordNumber();
 
     const { methods, toast, showToast, closeToast, createSubmitHandler } =
         useRhfForm<OpportunityFormData>({
@@ -220,7 +222,7 @@ export default function OpportunityForm({
                     cancelLabel={mode === 'view' ? 'Back' : 'Cancel'}
                     recordView={{
                         title: orgName || '',
-                        code: recordCode,
+                        code: showNumber('opportunity') ? recordCode : undefined,
                         editHref: opportunityId ? ROUTES.OPPORTUNITY_EDIT(opportunityId) : undefined,
                         editLabel: 'Edit Opportunity',
                         backHref: ROUTES.OPPORTUNITIES,

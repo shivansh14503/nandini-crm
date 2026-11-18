@@ -21,6 +21,7 @@ import { ROUTES } from '@/config/constants';
 import { useRelatedModulesForEntity } from '@/config/relatedModules.config';
 import type { Product } from '@/types/product.types';
 import { useProducts, useBulkDeleteProducts } from '@/hooks/queries';
+import { useShowRecordNumber } from '@/hooks/queries/useDocumentSeries';
 import type { ProductFilterTab } from './types';
 import { ProductDetailDrawer } from '../ProductDetailDrawer';
 
@@ -78,6 +79,7 @@ export function ProductsMasterView() {
     const [importOpen, setImportOpen] = useState(false);
 
     // ── Filter Logic ──────────────────────────────────────────────────────────
+    const showNumber = useShowRecordNumber();
     const filteredProducts = useMemo(() => {
         const now = new Date().getTime();
         return products.filter((p) => {
@@ -96,12 +98,12 @@ export function ProductsMasterView() {
                     (p.category || '').toLowerCase().includes(q) ||
                     (p.manufacturer || '').toLowerCase().includes(q) ||
                     (p.hsnCode || '').toLowerCase().includes(q) ||
-                    p.productCode.toLowerCase().includes(q)
+                    (showNumber('product') && p.productCode.toLowerCase().includes(q))
                 );
             }
             return true;
         });
-    }, [products, activeTab, searchQuery]);
+    }, [products, activeTab, searchQuery, showNumber]);
 
     // ── Sort Logic ────────────────────────────────────────────────────────────
     const sortedProducts = useMemo(() => {
@@ -205,13 +207,17 @@ export function ProductsMasterView() {
     // ── Declarative Column Definitions ────────────────────────────────────────
     const columns: DataTableColumn<Product>[] = useMemo(
         () => [
-            documentNumberColumn<Product>({
-                id: 'productCode',
-                label: 'PRODUCT NO.',
-                getNumber: (p) => p.productCode,
-                getHref: (p) => ROUTES.PRODUCT_DETAIL(p.id),
-                onOpen: (p) => setDrawerProductId(p.id),
-            }),
+            ...(showNumber('product')
+                ? [
+                      documentNumberColumn<Product>({
+                          id: 'productCode',
+                          label: 'PRODUCT NO.',
+                          getNumber: (p) => p.productCode,
+                          getHref: (p) => ROUTES.PRODUCT_DETAIL(p.id),
+                          onOpen: (p) => setDrawerProductId(p.id),
+                      }),
+                  ]
+                : []),
             {
                 id: 'productName',
                 label: 'PRODUCT NAME',
@@ -318,7 +324,7 @@ export function ProductsMasterView() {
                 ),
             },
         ],
-        []
+        [showNumber]
     );
 
     const relatedModules = useRelatedModulesForEntity('product', selectedDrawerProduct, setActiveRelatedModule);

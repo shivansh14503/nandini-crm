@@ -9,6 +9,10 @@ import AssignmentIndOutlinedIcon from '@mui/icons-material/AssignmentIndOutlined
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import { ROUTES } from '@/config/constants';
 import type { ExistingRecordMatch } from '@/services/lead.service';
+import type { SeriesModule } from '@/types/documentSeries.types';
+import { useShowRecordNumber } from '@/hooks/queries/useDocumentSeries';
+
+const MATCH_MODULE: Record<ExistingRecordMatch['entityType'], SeriesModule> = { Lead: 'lead', Contact: 'contact', Organization: 'organization' };
 
 const ENTITY: Record<ExistingRecordMatch['entityType'], { href: (id: string) => string; Icon: typeof ApartmentIcon }> = {
     Lead: { href: ROUTES.LEAD_DETAIL, Icon: AssignmentIndOutlinedIcon },
@@ -28,6 +32,7 @@ export interface ExistingRecordMatchesProps {
  * name's "Already in CRM" list. Built from spans only, so it can sit inside a field's helper text.
  */
 export function ExistingRecordMatches({ matches, title = 'Already in CRM' }: ExistingRecordMatchesProps) {
+    const showNumber = useShowRecordNumber();
     if (matches.length === 0) return null;
     return (
         <Box
@@ -64,7 +69,8 @@ export function ExistingRecordMatches({ matches, title = 'Already in CRM' }: Exi
             <Box component="span" sx={{ display: 'block', py: 0.25 }}>
                 {matches.map((match) => {
                     const { href, Icon } = ENTITY[match.entityType];
-                    const details = [match.code, match.entityType !== 'Organization' ? match.organizationName : undefined]
+                    const showCode = showNumber(MATCH_MODULE[match.entityType]);
+                    const details = [showCode ? match.code : undefined, match.entityType !== 'Organization' ? match.organizationName : undefined]
                         .filter(Boolean)
                         .join(' • ');
                     return (

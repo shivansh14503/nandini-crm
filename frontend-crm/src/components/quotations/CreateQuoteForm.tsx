@@ -39,6 +39,7 @@ import { normalizeAddressFields } from '@/utils/address';
 import { FormConfigProvider } from '@/context/FormConfigContext';
 import { DynamicModuleCustomFields } from '@/components/forms/DynamicModuleCustomFields';
 import { PdfActionsButton } from '@/components/pdf/PdfActionsButton';
+import { useShowRecordNumber } from '@/hooks/queries/useDocumentSeries';
 
 export interface CreateQuoteFormProps {
     mode?: 'create' | 'edit' | 'view';
@@ -224,6 +225,7 @@ export function CreateQuoteForm({
     const username = useAuth().user?.username;
     const isEdit = mode !== 'create';
     const [quotation, setQuotation] = useState<Quotation | null>(null);
+    const showNumber = useShowRecordNumber();
     const [opportunity, setOpportunity] = useState<Opportunity | null>(null);
     const [loading, setLoading] = useState<boolean>(() =>
         mode !== 'create' ? Boolean(quotationId) : Boolean(opportunityId)
@@ -355,7 +357,7 @@ export function CreateQuoteForm({
               { label: 'Sales' },
               { label: 'Quotations', href: ROUTES.QUOTATIONS },
               {
-                  label: quotation?.quotationCode
+                  label: showNumber('quotation') && quotation?.quotationCode
                       ? `${mode === 'view' ? 'View' : 'Edit'}: ${quotation.quotationCode}`
                       : `${mode === 'view' ? 'View' : 'Edit'} Quotation`,
               },
@@ -364,7 +366,7 @@ export function CreateQuoteForm({
               { label: 'Sales' },
               { label: 'Opportunities', href: ROUTES.OPPORTUNITIES },
               {
-                  label: opportunity?.opportunityCode
+                  label: showNumber('opportunity') && opportunity?.opportunityCode
                       ? `Quote: ${opportunity.opportunityCode}`
                       : 'Create Quote',
               },
@@ -412,7 +414,7 @@ export function CreateQuoteForm({
             if (isEdit && quotationId) {
                 const updated = await quotationService.update(quotationId, values);
                 showToast(
-                    `Quotation "${updated?.quotationCode || quotation?.quotationCode || quotationId}" updated successfully!`,
+                    showNumber('quotation') ? `Quotation "${updated?.quotationCode || quotation?.quotationCode || quotationId}" updated successfully!` : 'Quotation updated successfully!',
                     'success'
                 );
                 reset(values);
@@ -425,7 +427,7 @@ export function CreateQuoteForm({
                     values
                 );
                 showToast(
-                    `Quotation "${result.quotationCode}" created successfully for ${result.organizationName}!`,
+                    showNumber('quotation') ? `Quotation "${result.quotationCode}" created successfully for ${result.organizationName}!` : `Quotation created successfully for ${result.organizationName}!`,
                     'success'
                 );
                 reset(values);
@@ -434,7 +436,7 @@ export function CreateQuoteForm({
                 }, 900);
             } else {
                 const created = await quotationService.create(values);
-                showToast(`Quotation "${created.quotationCode}" created successfully!`, 'success');
+                showToast(showNumber('quotation') ? `Quotation "${created.quotationCode}" created successfully!` : 'Quotation created successfully!', 'success');
                 reset(values);
                 setTimeout(() => {
                     router.push(ROUTES.QUOTATIONS);
@@ -487,7 +489,7 @@ export function CreateQuoteForm({
                     headerExtra={mode === 'view' && quotationId ? <PdfActionsButton module="QUOTATION" recordId={quotationId} /> : undefined}
                     recordView={{
                         title: quotation?.organizationName || quotation?.quotationSubject || 'Quotation',
-                        code: quotation?.quotationCode,
+                        code: showNumber('quotation') ? quotation?.quotationCode : undefined,
                         subtitle: quotation?.quotationSubject && quotation.organizationName ? quotation.quotationSubject : undefined,
                         avatarIcon: <ReceiptLongOutlinedIcon sx={{ fontSize: 28 }} />,
                         editHref: quotationId ? ROUTES.QUOTATION_EDIT(quotationId) : undefined,
