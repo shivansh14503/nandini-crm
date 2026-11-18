@@ -90,6 +90,16 @@ export async function createLeadRecord(tx: TransactionClient, input: LeadInput, 
 }
 
 export const leadService = {
+    /**
+     * List rows (the shape `list` returns) for the given ids, in no particular order and regardless of row-level
+     * access: global search shows every matching record to every user.
+     */
+    async listByIds(ids: string[]): Promise<LeadDto[]> {
+        if (ids.length === 0) return [];
+        const rows = await prisma.lead.findMany({ where: { id: { in: ids }, isDeleted: false }, include: leadInclude });
+        return rows.map(toLeadDto);
+    },
+
     async list(query: unknown, user: AuthUser): Promise<PaginatedResult<LeadDto>> {
         const page = parsePagination(query, LEAD_SORT_FIELDS);
         const filters = leadListQuerySchema.parse(query ?? {});

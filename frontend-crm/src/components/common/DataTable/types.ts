@@ -90,6 +90,8 @@ export interface DataTableToolbarProps {
     filterCount?: number;
     /** Receives the clicked button so the column manager popover can anchor to it. */
     onColumnClick?: (anchorEl: HTMLElement) => void;
+    /** Leaves out the search-within-table box (e.g. tables on the global search results page). */
+    hideSearch?: boolean;
 }
 
 export interface DataTablePaginationProps {

@@ -20,6 +20,7 @@ import EditOutlinedIcon from '@mui/icons-material/EditOutlined';
 import PublishedWithChangesIcon from '@mui/icons-material/PublishedWithChanges';
 
 import { ROUTES } from '@/config/constants';
+import { withListOrigin } from '@/utils/listOrigin';
 import type { Lead } from '@/types/lead.types';
 import { useLead, useDropdownOptionLabel } from '@/hooks/queries';
 import {
@@ -148,7 +149,7 @@ export function LeadDetailDrawer({
             ]}
             headerActions={{
                 onEdit: handleEdit,
-                onView: () => router.push(ROUTES.LEAD_DETAIL(l.id)),
+                onView: () => router.push(withListOrigin(ROUTES.LEAD_DETAIL(l.id))),
             }}
             formTabs={LEAD_FORM_TABS}
             tabContents={{

@@ -64,7 +64,7 @@ export function EntityDetailDrawer({
     isCollapsed: isCollapsedProp,
     onToggleCollapse: onToggleCollapseProp,
     showBookmark: showBookmarkProp,
-    persistent = false,
+    persistent: persistentProp,
 }: EntityDetailDrawerProps) {
     const [currentTab, setCurrentTab] = useState<number>(defaultTabIndex);
     const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -75,6 +75,8 @@ export function EntityDetailDrawer({
     const isCollapsed = isCollapsedProp ?? stack?.isCollapsed ?? internalCollapsed;
     const showBookmark = showBookmarkProp ?? stack?.showBookmark ?? true;
     const onCollapseReset = stack?.onCollapseReset;
+    const stackPersistent = Boolean(stack?.persistent);
+    const persistent = persistentProp ?? stackPersistent;
 
     // Opening the drawer (or switching records) expands it: local state resets during render, shared state below.
     const openKey = open ? title : null;
@@ -248,6 +250,8 @@ export function EntityDetailDrawer({
                     paper: {
                         sx: {
                             width,
+                            // Above the related modules sidebar (1300) and module table (1290), below the bookmark.
+                            ...(stackPersistent && { zIndex: 1310 }),
                             backgroundColor: 'var(--mui-palette-background-paper)',
                             borderLeft: '1px solid var(--mui-palette-border-main)',
                             boxShadow: isCollapsed ? 'none' : '-12px 0 40px rgba(15, 23, 42, 0.08)',

@@ -28,6 +28,7 @@ import { telHref } from '@/utils/contactLinks';
 import { downloadCsv, type CsvColumn } from '@/utils/csvExport';
 import { formatDateTime } from '@/utils/date';
 import { PartnerCompanyDetailDrawer } from './PartnerCompanyDetailDrawer';
+import { useSearchScope, useSearchScopedRows } from '../search/SearchScope';
 
 export type PartnerCompanyFilterTab = 'all' | 'mine' | 'recently_added';
 
@@ -75,7 +76,10 @@ export function PartnerCompaniesMasterView() {
     // Re-renders once the user directory loads, so "Assigned to" shows full names.
     useMasterData();
 
-    const { data: allPartners = NO_RECORDS, refetch } = usePartnerCompanies();
+    // On the global search results page the table shows the matched records (any owner) instead of this list.
+    const embeddedInSearch = Boolean(useSearchScope());
+    const { data: allPartnersLoaded = NO_RECORDS, refetch } = usePartnerCompanies(undefined, { enabled: !embeddedInSearch });
+    const allPartners = useSearchScopedRows(allPartnersLoaded);
     const bulkDeleteMutation = useBulkDeletePartnerCompanies();
     const [activeTab, setActiveTab] = useState<PartnerCompanyFilterTab>('all');
     const [searchQuery, setSearchQuery] = useState('');

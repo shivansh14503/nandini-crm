@@ -55,6 +55,7 @@ export function DataTableToolbar({
     onFilterClick,
     filterCount = 0,
     onColumnClick,
+    hideSearch = false,
 }: DataTableToolbarProps) {
     const [selectMenuAnchor, setSelectMenuAnchor] = useState<null | HTMLElement>(null);
     const [bulkMenuAnchor, setBulkMenuAnchor] = useState<null | HTMLElement>(null);
@@ -245,6 +246,7 @@ export function DataTableToolbar({
                     )}
 
                     {/* Search within table */}
+                    {!hideSearch && (
                     <TextField
                         size="small"
                         placeholder={searchPlaceholder}
@@ -279,6 +281,7 @@ export function DataTableToolbar({
                             },
                         }}
                     />
+                    )}
                 </Box>
 
                 {/* Right: Showing records & Mini Pager */}
@@ -396,6 +399,7 @@ export function DataTableToolbar({
             }}
         >
             {/* Search Input Box */}
+            {!hideSearch && (
             <Box
                 sx={{
                     display: 'flex',
@@ -426,6 +430,7 @@ export function DataTableToolbar({
                     }}
                 />
             </Box>
+            )}
 
             {/* Actions: Bulk selection or primary actions */}
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>

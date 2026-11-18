@@ -14,6 +14,7 @@ import TrendingUpIcon from '@mui/icons-material/TrendingUp';
 import GavelOutlinedIcon from '@mui/icons-material/GavelOutlined';
 
 import { ROUTES } from '@/config/constants';
+import { withListOrigin } from '@/utils/listOrigin';
 import type { Product } from '@/types/product.types';
 import { useProduct } from '@/hooks/queries';
 import {
@@ -94,7 +95,7 @@ export function ProductDetailDrawer({
             ]}
             headerActions={{
                 onEdit: handleEdit,
-                onView: () => router.push(ROUTES.PRODUCT_DETAIL(p.id)),
+                onView: () => router.push(withListOrigin(ROUTES.PRODUCT_DETAIL(p.id))),
             }}
             formTabs={PRODUCT_FORM_TABS}
             tabContents={{

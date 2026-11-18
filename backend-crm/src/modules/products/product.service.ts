@@ -42,6 +42,16 @@ export async function createProductRecord(tx: TransactionClient, input: ProductI
 }
 
 export const productService = {
+    /**
+     * List rows (the shape `list` returns) for the given ids, in no particular order and regardless of row-level
+     * access: global search shows every matching record to every user.
+     */
+    async listByIds(ids: string[]): Promise<ProductDto[]> {
+        if (ids.length === 0) return [];
+        const rows = await prisma.product.findMany({ where: { id: { in: ids }, isDeleted: false } });
+        return rows.map(toProductDto);
+    },
+
     async list(query: unknown): Promise<PaginatedResult<ProductDto>> {
         const page = parsePagination(query, PRODUCT_SORT_FIELDS);
         const filters = productListQuerySchema.parse(query ?? {});

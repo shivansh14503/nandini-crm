@@ -24,12 +24,9 @@ import { MasterHeaderActions } from '../common/MasterHeaderActions';
 import { buildExtendedSearchConfig } from '../common/buildExtendedSearchConfig';
 import { AppToast } from '../common/AppToast';
 import { DataImportModal } from '../common/import';
-import { RelatedModulesSidebar, RelatedRecordsTableView } from '../common/Drawer';
-import { RelatedSecondaryDrawer, type SecondaryDrawerEntity } from '../common/RelatedSecondaryDrawer';
 import { documentNumberColumn, type DataTableColumn, type DataTableFilterItem } from '../common/DataTable';
 import { ROUTES } from '@/config/constants';
 import { useAuth } from '@/context/AuthContext';
-import { useRelatedModulesForEntity } from '@/config/relatedModules.config';
 import type { Lead } from '@/types/lead.types';
 import { useLeads, useBulkDeleteLeads, useDropdownOptionLabel } from '@/hooks/queries';
 import { useShowRecordNumber } from '@/hooks/queries/useDocumentSeries';
@@ -37,6 +34,7 @@ import { getLeadStatusBucket, type LeadFilterTab, type LeadStatusBucket } from '
 import { LeadDetailDrawer } from './LeadDetailDrawer';
 import { formatDateTime } from '@/utils/date';
 import { formatPhoneDisplay } from '@/utils/phone';
+import { useSearchScope, useSearchScopedRows } from '../search/SearchScope';
 
 const plainCellSx = { fontSize: '0.78rem', color: 'var(--crm-slate-700)' } as const;
 
@@ -49,7 +47,10 @@ export function LeadsMasterView() {
     const currentUsername = user?.username || '';
     const leadSourceLabel = useDropdownOptionLabel('shared_lead_source');
 
-    const { data: leads = NO_RECORDS, refetch } = useLeads();
+    // On the global search results page the table shows the matched records (any owner) instead of this list.
+    const embeddedInSearch = Boolean(useSearchScope());
+    const { data: leadsLoaded = NO_RECORDS, refetch } = useLeads(undefined, { enabled: !embeddedInSearch });
+    const leads = useSearchScopedRows(leadsLoaded);
     const bulkDeleteMutation = useBulkDeleteLeads();
     const [activeTab, setActiveTab] = useState<LeadFilterTab>('all');
     const [statusBucket, setStatusBucket] = useState<LeadStatusBucket>('all');
@@ -77,9 +78,6 @@ export function LeadsMasterView() {
         () => (drawerLeadId ? leads.find((l) => l.id === drawerLeadId) ?? null : null),
         [leads, drawerLeadId]
     );
-    const [activeRelatedModule, setActiveRelatedModule] = useState<string | null>(null);
-    const [secondaryDrawerEntity, setSecondaryDrawerEntity] = useState<SecondaryDrawerEntity | null>(null);
-    const [isLeftSidebarCollapsed, setIsLeftSidebarCollapsed] = useState<boolean>(false);
     const [toast, setToast] = useState<{
         open: boolean;
         message: string;
@@ -516,18 +514,8 @@ export function LeadsMasterView() {
         [todayStr, leadSourceLabel, showNumber]
     );
 
-    const relatedModules = useRelatedModulesForEntity('lead', selectedDrawerLead, setActiveRelatedModule);
-
-    // Falls back to the first module until the user explicitly picks one.
-    const effectiveRelatedModule = activeRelatedModule ?? relatedModules[0]?.id ?? null;
-    const activeModuleMeta = relatedModules.find((m) => m.id === effectiveRelatedModule);
-
-    // Dismisses the three-panel view and returns to the clean master table.
-    const closeThreePanelView = useCallback(() => {
-        setSecondaryDrawerEntity(null);
-        setDrawerLeadId(null);
-        setActiveRelatedModule(null);
-    }, []);
+    // Row clicks only open the drawer; its eye button leads on to the detail page with the related modules.
+    const closeDrawer = useCallback(() => setDrawerLeadId(null), []);
 
     return (
         <CommonMasterView<Lead, LeadFilterTab>
@@ -618,51 +606,16 @@ export function LeadsMasterView() {
                     setPage(0);
                 },
             }}
-            relatedSidebar={
-                <RelatedModulesSidebar
-                    open={Boolean(selectedDrawerLead)}
-                    modules={relatedModules}
-                    activeModuleId={effectiveRelatedModule ?? undefined}
-                    onModuleSelect={(moduleId) => setActiveRelatedModule(moduleId)}
-                    collapsed={isLeftSidebarCollapsed}
-                    onToggleCollapse={setIsLeftSidebarCollapsed}
-                />
-            }
-            relatedRecordsTable={
-                <RelatedRecordsTableView
-                    open={Boolean(selectedDrawerLead && effectiveRelatedModule)}
-                    moduleId={effectiveRelatedModule || ''}
-                    moduleTitle={activeModuleMeta?.label || 'Related Records'}
-                    parentRecordId={selectedDrawerLead?.id}
-                    parentEntityTitle={selectedDrawerLead?.name || ''}
-                    entityData={selectedDrawerLead}
-                    entityType="lead"
-                    leftOffset={isLeftSidebarCollapsed ? 72 : 260}
-                    rightOffset={580}
-                    onClose={closeThreePanelView}
-                    onRowClick={(row, modId) => setSecondaryDrawerEntity({ type: modId, data: row })}
-                />
-            }
             drawer={
                 <LeadDetailDrawer
                     lead={selectedDrawerLead}
                     open={Boolean(selectedDrawerLead)}
-                    onClose={closeThreePanelView}
+                    onClose={closeDrawer}
                     onEdit={(id) => router.push(ROUTES.LEAD_EDIT(id))}
                     onShowToast={(message, severity = 'success') => {
                         setToast({ open: true, message, severity });
                     }}
                 />
-            }
-            secondaryDrawer={
-                secondaryDrawerEntity ? (
-                    <RelatedSecondaryDrawer
-                        entity={secondaryDrawerEntity}
-                        moduleLabel={activeModuleMeta?.label}
-                        parentTitle={selectedDrawerLead?.name}
-                        onClose={() => setSecondaryDrawerEntity(null)}
-                    />
-                ) : null
             }
             isDrawerOpen={Boolean(selectedDrawerLead)}
             toast={

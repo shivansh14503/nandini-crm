@@ -12,6 +12,7 @@ import HandshakeOutlinedIcon from '@mui/icons-material/HandshakeOutlined';
 import ContentCopyOutlinedIcon from '@mui/icons-material/ContentCopyOutlined';
 
 import { ROUTES } from '@/config/constants';
+import { withListOrigin } from '@/utils/listOrigin';
 import { isTicketOverdue, type Ticket } from '@/types/ticket.types';
 import { useTicket } from '@/hooks/queries';
 import { findCrmUser } from '@/services/masterData.store';
@@ -109,7 +110,7 @@ export function TicketDetailDrawer({ ticket, open, onClose, onEdit, hideBackdrop
             ]}
             headerActions={{
                 onEdit: handleEdit,
-                onView: () => router.push(ROUTES.TICKET_DETAIL(t.id)),
+                onView: () => router.push(withListOrigin(ROUTES.TICKET_DETAIL(t.id))),
             }}
             formTabs={TICKET_FORM_TABS}
             tabContents={{

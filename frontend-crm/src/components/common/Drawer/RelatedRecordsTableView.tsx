@@ -47,6 +47,8 @@ export interface RelatedRecordsTableViewProps {
     rightOffset: number; // width of right drawer (~540px - 580px)
     isRightDrawerCollapsed?: boolean;
     onClose?: () => void;
+    /** Tooltip of the close button. */
+    closeTooltip?: string;
     onRowClick: (row: Record<string, unknown>, moduleId: string) => void;
     parentRecordId?: string;
     entityData?: unknown;
@@ -431,6 +433,7 @@ export function RelatedRecordsTableView({
     rightOffset,
     isRightDrawerCollapsed = false,
     onClose,
+    closeTooltip = 'Close',
     onRowClick,
     parentRecordId,
     entityData,
@@ -629,9 +632,8 @@ export function RelatedRecordsTableView({
                         />
                     </Box>
 
-                    {/* Show Close [X] button ONLY when the right drawer is collapsed */}
-                    {isRightDrawerCollapsed && onClose && (
-                        <Tooltip title="Close Related View & Return to Table">
+                    {onClose && (
+                        <Tooltip title={closeTooltip}>
                             <IconButton
                                 size="small"
                                 onClick={onClose}

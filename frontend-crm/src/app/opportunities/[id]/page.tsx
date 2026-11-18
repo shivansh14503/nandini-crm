@@ -8,12 +8,19 @@ import { ROUTES } from '@/config/constants';
 import { Navbar } from '@/components/layout/Navbar';
 import { LoadingScreen } from '@/components/common/LoadingScreen';
 import OpportunityForm from '@/components/opportunities/OpportunityForm';
+import { RecordWorkspace } from '@/components/common/RecordWorkspace';
+import { useOpportunity } from '@/hooks/queries';
+import { useShowRecordNumber } from '@/hooks/queries/useDocumentSeries';
 
 function OpportunityDetailContent() {
     const router = useRouter();
     const params = useParams();
     const id = (params?.id as string) || '';
     const { user, loading, isAuthenticated } = useAuth();
+    // The record itself feeds the related modules sidebar.
+    const { data: record } = useOpportunity(id);
+    const showNumber = useShowRecordNumber();
+    const recordTitle = (showNumber('opportunity') ? record?.opportunityCode : '') || record?.organizationName || '';
 
     useEffect(() => {
         if (!loading && !isAuthenticated) {
@@ -26,11 +33,13 @@ function OpportunityDetailContent() {
 
     return (
         <Box sx={{ minHeight: '100vh', backgroundColor: 'var(--mui-palette-background-subtle)' }}>
-            <Navbar />
+            <RecordWorkspace entityType="opportunity" entity={record} title={recordTitle} listHref={ROUTES.OPPORTUNITIES}>
+                <Navbar />
 
-            <Container maxWidth="xl" sx={{ pt: 2.5, pb: 1 }}>
-                <OpportunityForm mode="view" opportunityId={id} />
-            </Container>
+                <Container maxWidth="xl" sx={{ pt: 2.5, pb: 1 }}>
+                    <OpportunityForm mode="view" opportunityId={id} />
+                </Container>
+            </RecordWorkspace>
         </Box>
     );
 }

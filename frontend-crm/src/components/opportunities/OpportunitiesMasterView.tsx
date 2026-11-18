@@ -18,12 +18,9 @@ import { MasterHeaderActions } from '../common/MasterHeaderActions';
 import { buildExtendedSearchConfig } from '../common/buildExtendedSearchConfig';
 import { AppToast } from '../common/AppToast';
 import { DataImportModal } from '../common/import';
-import { RelatedModulesSidebar, RelatedRecordsTableView } from '../common/Drawer';
-import { RelatedSecondaryDrawer, type SecondaryDrawerEntity } from '../common/RelatedSecondaryDrawer';
 import { documentNumberColumn, type DataTableColumn, type DataTableFilterItem } from '../common/DataTable';
 import { ROUTES } from '@/config/constants';
 import { useAuth } from '@/context/AuthContext';
-import { useRelatedModulesForEntity } from '@/config/relatedModules.config';
 import type { Opportunity } from '@/types/opportunity.types';
 import { useOpportunities, useBulkDeleteOpportunities, useQuotations, useDropdownOptionLabel } from '@/hooks/queries';
 import { useShowRecordNumber } from '@/hooks/queries/useDocumentSeries';
@@ -31,6 +28,7 @@ import type { Quotation } from '@/types/quotation.types';
 import { formatDateTime } from '@/utils/date';
 import type { OpportunityFilterTab, OpportunitySortField } from './master';
 import { OpportunityDetailDrawer } from './OpportunityDetailDrawer';
+import { useSearchScope, useSearchScopedRows } from '../search/SearchScope';
 
 const formatCurrency = (val: number) =>
     new Intl.NumberFormat('en-IN', {
@@ -60,7 +58,10 @@ export function OpportunitiesMasterView() {
     const currentUsername = user?.username || '';
     const leadSourceLabel = useDropdownOptionLabel('shared_lead_source');
 
-    const { data: allOpportunities = NO_RECORDS, refetch } = useOpportunities();
+    // On the global search results page the table shows the matched records (any owner) instead of this list.
+    const embeddedInSearch = Boolean(useSearchScope());
+    const { data: allOpportunitiesLoaded = NO_RECORDS, refetch } = useOpportunities(undefined, { enabled: !embeddedInSearch });
+    const allOpportunities = useSearchScopedRows(allOpportunitiesLoaded);
     const bulkDeleteMutation = useBulkDeleteOpportunities();
     const [activeTab, setActiveTab] = useState<OpportunityFilterTab>('all');
     const [searchQuery, setSearchQuery] = useState('');
@@ -86,9 +87,6 @@ export function OpportunitiesMasterView() {
         () => (drawerOppId ? opportunities.find((o) => o.id === drawerOppId) ?? null : null),
         [opportunities, drawerOppId]
     );
-    const [activeRelatedModule, setActiveRelatedModule] = useState<string | null>(null);
-    const [secondaryDrawerEntity, setSecondaryDrawerEntity] = useState<SecondaryDrawerEntity | null>(null);
-    const [isLeftSidebarCollapsed, setIsLeftSidebarCollapsed] = useState<boolean>(false);
     const [importOpen, setImportOpen] = useState(false);
     const [toast, setToast] = useState<{
         open: boolean;
@@ -282,7 +280,7 @@ export function OpportunitiesMasterView() {
             try {
                 await bulkDeleteMutation.mutateAsync(selectedIds);
                 if (drawerOppId && selectedIds.includes(drawerOppId)) {
-                    closeThreePanelView();
+                    closeDrawer();
                 }
                 setSelectedIds([]);
                 setToast({
@@ -548,18 +546,8 @@ export function OpportunitiesMasterView() {
         [todayStr, quotesByOpp, showNumber]
     );
 
-    const relatedModules = useRelatedModulesForEntity('opportunity', selectedDrawerOpp, setActiveRelatedModule);
-
-    // Falls back to the first module until the user explicitly picks one.
-    const effectiveRelatedModule = activeRelatedModule ?? relatedModules[0]?.id ?? null;
-    const activeModuleMeta = relatedModules.find((m) => m.id === effectiveRelatedModule);
-
-    // Dismisses the three-panel view and returns to the clean master table.
-    const closeThreePanelView = useCallback(() => {
-        setSecondaryDrawerEntity(null);
-        setDrawerOppId(null);
-        setActiveRelatedModule(null);
-    }, []);
+    // Row clicks only open the drawer; its eye button leads on to the detail page with the related modules.
+    const closeDrawer = useCallback(() => setDrawerOppId(null), []);
 
     return (
         <CommonMasterView<Opportunity, OpportunityFilterTab>
@@ -637,48 +625,13 @@ export function OpportunitiesMasterView() {
                 },
                 hideWhenEmpty: true,
             }}
-            relatedSidebar={
-                <RelatedModulesSidebar
-                    open={Boolean(selectedDrawerOpp)}
-                    modules={relatedModules}
-                    activeModuleId={effectiveRelatedModule ?? undefined}
-                    onModuleSelect={(moduleId) => setActiveRelatedModule(moduleId)}
-                    collapsed={isLeftSidebarCollapsed}
-                    onToggleCollapse={setIsLeftSidebarCollapsed}
-                />
-            }
-            relatedRecordsTable={
-                <RelatedRecordsTableView
-                    open={Boolean(selectedDrawerOpp && effectiveRelatedModule)}
-                    moduleId={effectiveRelatedModule || ''}
-                    moduleTitle={activeModuleMeta?.label || 'Related Records'}
-                    parentRecordId={selectedDrawerOpp?.id}
-                    parentEntityTitle={(showNumber('opportunity') ? selectedDrawerOpp?.opportunityCode : '') || selectedDrawerOpp?.organizationName || ''}
-                    entityData={selectedDrawerOpp}
-                    entityType="opportunity"
-                    leftOffset={isLeftSidebarCollapsed ? 72 : 260}
-                    rightOffset={580}
-                    onClose={closeThreePanelView}
-                    onRowClick={(row, modId) => setSecondaryDrawerEntity({ type: modId, data: row })}
-                />
-            }
             drawer={
                 <OpportunityDetailDrawer
                     opportunity={selectedDrawerOpp}
                     open={Boolean(selectedDrawerOpp)}
-                    onClose={closeThreePanelView}
+                    onClose={closeDrawer}
                     onEdit={handleEdit}
                 />
-            }
-            secondaryDrawer={
-                secondaryDrawerEntity ? (
-                    <RelatedSecondaryDrawer
-                        entity={secondaryDrawerEntity}
-                        moduleLabel={activeModuleMeta?.label}
-                        parentTitle={(showNumber('opportunity') ? selectedDrawerOpp?.opportunityCode : '') || selectedDrawerOpp?.organizationName}
-                        onClose={() => setSecondaryDrawerEntity(null)}
-                    />
-                ) : null
             }
             isDrawerOpen={Boolean(selectedDrawerOpp)}
             toast={

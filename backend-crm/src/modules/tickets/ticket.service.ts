@@ -99,6 +99,16 @@ export async function createTicketRecord(tx: TransactionClient, input: TicketInp
 }
 
 export const ticketService = {
+    /**
+     * List rows (the shape `list` returns) for the given ids, in no particular order and regardless of row-level
+     * access: global search shows every matching record to every user.
+     */
+    async listByIds(ids: string[]): Promise<TicketDto[]> {
+        if (ids.length === 0) return [];
+        const rows = await prisma.ticket.findMany({ where: { id: { in: ids }, isDeleted: false } });
+        return rows.map(toTicketDto);
+    },
+
     async list(query: unknown, user: AuthUser): Promise<PaginatedResult<TicketDto>> {
         const page = parsePagination(query, TICKET_SORT_FIELDS);
         const filters = ticketListQuerySchema.parse(query ?? {});

@@ -28,11 +28,9 @@ import {
 import { useTickets, useBulkDeleteTickets } from '@/hooks/queries';
 import { useShowRecordNumber } from '@/hooks/queries/useDocumentSeries';
 import type { TicketFilterTab, TicketSortField } from './types';
-import { RelatedModulesSidebar, RelatedRecordsTableView } from '../../common/Drawer';
-import { RelatedSecondaryDrawer, type SecondaryDrawerEntity } from '../../common/RelatedSecondaryDrawer';
-import { useRelatedModulesForEntity } from '@/config/relatedModules.config';
 import { TicketDetailDrawer } from '../TicketDetailDrawer';
 import { TicketPriorityPill, TicketStatusPill, formatTicketDue } from '../TicketBadges';
+import { useSearchScope, useSearchScopedRows } from '../../search/SearchScope';
 
 const RECENTLY_ADDED_DAYS = 7;
 const DAY_MS = 86400000;
@@ -67,7 +65,10 @@ export function TicketsMasterView() {
     const { user } = useAuth();
     const currentUsername = user?.username || '';
 
-    const { data: allTickets = NO_RECORDS, dataUpdatedAt: now, refetch } = useTickets();
+    // On the global search results page the table shows the matched records (any owner) instead of this list.
+    const embeddedInSearch = Boolean(useSearchScope());
+    const { data: allTicketsLoaded = NO_RECORDS, dataUpdatedAt: now, refetch } = useTickets(undefined, { enabled: !embeddedInSearch });
+    const allTickets = useSearchScopedRows(allTicketsLoaded);
     const bulkDeleteMutation = useBulkDeleteTickets();
     const [activeTab, setActiveTab] = useState<TicketFilterTab>('all');
     const [searchQuery, setSearchQuery] = useState('');
@@ -93,9 +94,6 @@ export function TicketsMasterView() {
         () => (drawerTicketId ? tickets.find((t) => t.id === drawerTicketId) ?? null : null),
         [tickets, drawerTicketId]
     );
-    const [activeRelatedModule, setActiveRelatedModule] = useState<string | null>(null);
-    const [secondaryDrawerEntity, setSecondaryDrawerEntity] = useState<SecondaryDrawerEntity | null>(null);
-    const [isLeftSidebarCollapsed, setIsLeftSidebarCollapsed] = useState<boolean>(false);
     const [importOpen, setImportOpen] = useState(false);
     const [toast, setToast] = useState<{ open: boolean; message: string; severity: 'success' | 'info' | 'error' }>({
         open: false,
@@ -305,18 +303,8 @@ export function TicketsMasterView() {
         [now, showNumber]
     );
 
-    const relatedModules = useRelatedModulesForEntity('ticket', selectedDrawerTicket, setActiveRelatedModule);
-
-    // Falls back to the first module until the user explicitly picks one.
-    const effectiveRelatedModule = activeRelatedModule ?? relatedModules[0]?.id ?? null;
-    const activeModuleMeta = relatedModules.find((m) => m.id === effectiveRelatedModule);
-
-    // Dismisses the three-panel view and returns to the clean master table.
-    const closeThreePanelView = useCallback(() => {
-        setSecondaryDrawerEntity(null);
-        setDrawerTicketId(null);
-        setActiveRelatedModule(null);
-    }, []);
+    // Row clicks only open the drawer; its eye button leads on to the detail page with the related modules.
+    const closeDrawer = useCallback(() => setDrawerTicketId(null), []);
 
     return (
         <CommonMasterView<Ticket, TicketFilterTab>
@@ -392,47 +380,12 @@ export function TicketsMasterView() {
                     setPage(0);
                 },
             }}
-            relatedSidebar={
-                <RelatedModulesSidebar
-                    open={Boolean(selectedDrawerTicket)}
-                    modules={relatedModules}
-                    activeModuleId={effectiveRelatedModule ?? undefined}
-                    onModuleSelect={(moduleId) => setActiveRelatedModule(moduleId)}
-                    collapsed={isLeftSidebarCollapsed}
-                    onToggleCollapse={setIsLeftSidebarCollapsed}
-                />
-            }
-            relatedRecordsTable={
-                <RelatedRecordsTableView
-                    open={Boolean(selectedDrawerTicket && effectiveRelatedModule)}
-                    moduleId={effectiveRelatedModule || ''}
-                    moduleTitle={activeModuleMeta?.label || 'Related Records'}
-                    parentRecordId={selectedDrawerTicket?.id}
-                    parentEntityTitle={selectedDrawerTicket?.ticketSubject || ''}
-                    entityData={selectedDrawerTicket}
-                    entityType="ticket"
-                    leftOffset={isLeftSidebarCollapsed ? 72 : 260}
-                    rightOffset={580}
-                    onClose={closeThreePanelView}
-                    onRowClick={(row, modId) => setSecondaryDrawerEntity({ type: modId, data: row })}
-                />
-            }
             drawer={
                 <TicketDetailDrawer
                     ticket={selectedDrawerTicket}
                     open={Boolean(selectedDrawerTicket)}
-                    onClose={closeThreePanelView}
+                    onClose={closeDrawer}
                 />
-            }
-            secondaryDrawer={
-                secondaryDrawerEntity ? (
-                    <RelatedSecondaryDrawer
-                        entity={secondaryDrawerEntity}
-                        moduleLabel={activeModuleMeta?.label}
-                        parentTitle={selectedDrawerTicket?.ticketSubject}
-                        onClose={() => setSecondaryDrawerEntity(null)}
-                    />
-                ) : null
             }
             isDrawerOpen={Boolean(selectedDrawerTicket)}
             toast={

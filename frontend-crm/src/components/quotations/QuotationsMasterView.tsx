@@ -16,17 +16,15 @@ import { useTableFilter } from '../common/TableFilter';
 import { MasterHeaderActions } from '../common/MasterHeaderActions';
 import { buildExtendedSearchConfig } from '../common/buildExtendedSearchConfig';
 import { AppToast } from '../common/AppToast';
-import { RelatedModulesSidebar, RelatedRecordsTableView } from '../common/Drawer';
-import { RelatedSecondaryDrawer, type SecondaryDrawerEntity } from '../common/RelatedSecondaryDrawer';
 import { documentNumberColumn, type DataTableColumn, type DataTableFilterItem } from '../common/DataTable';
 import { ROUTES } from '@/config/constants';
-import { useRelatedModulesForEntity } from '@/config/relatedModules.config';
 import type { Quotation } from '@/types/quotation.types';
 import { useQuotations, useDeleteQuotation, useBulkDeleteQuotations } from '@/hooks/queries';
 import { useShowRecordNumber } from '@/hooks/queries/useDocumentSeries';
 import { QuotationDetailDrawer } from './QuotationDetailDrawer';
 import { wasModified } from '../common/Drawer/RecordAuditFooter';
 import { formatDateTime } from '@/utils/date';
+import { useSearchScope, useSearchScopedRows } from '../search/SearchScope';
 
 export type QuotationFilterTab = 'all' | 'draft' | 'sent' | 'accepted' | 'rejected';
 /** Any column's field key: the table sorts on `row[sortField]`, including columns added from the form. */
@@ -61,7 +59,10 @@ const NO_RECORDS: Quotation[] = [];
 export function QuotationsMasterView() {
     const router = useRouter();
 
-    const { data: allQuotations = NO_RECORDS, refetch } = useQuotations();
+    // On the global search results page the table shows the matched records (any owner) instead of this list.
+    const embeddedInSearch = Boolean(useSearchScope());
+    const { data: allQuotationsLoaded = NO_RECORDS, refetch } = useQuotations(undefined, { enabled: !embeddedInSearch });
+    const allQuotations = useSearchScopedRows(allQuotationsLoaded);
     const deleteMutation = useDeleteQuotation();
     const bulkDeleteMutation = useBulkDeleteQuotations();
     const [activeTab, setActiveTab] = useState<QuotationFilterTab>('all');
@@ -88,9 +89,6 @@ export function QuotationsMasterView() {
         () => (drawerQuotationId ? quotations.find((q) => q.id === drawerQuotationId) ?? null : null),
         [quotations, drawerQuotationId]
     );
-    const [activeRelatedModule, setActiveRelatedModule] = useState<string | null>(null);
-    const [secondaryDrawerEntity, setSecondaryDrawerEntity] = useState<SecondaryDrawerEntity | null>(null);
-    const [isLeftSidebarCollapsed, setIsLeftSidebarCollapsed] = useState<boolean>(false);
     const [toast, setToast] = useState<{
         open: boolean;
         message: string;
@@ -101,11 +99,8 @@ export function QuotationsMasterView() {
         severity: 'success',
     });
 
-    const closeThreePanelView = useCallback(() => {
-        setSecondaryDrawerEntity(null);
-        setDrawerQuotationId(null);
-        setActiveRelatedModule(null);
-    }, []);
+    // Row clicks only open the drawer; its eye button leads on to the detail page with the related modules.
+    const closeDrawer = useCallback(() => setDrawerQuotationId(null), []);
 
     const handleDelete = async (id: string) => {
         const quote = quotations.find((q) => q.id === id);
@@ -115,7 +110,7 @@ export function QuotationsMasterView() {
         try {
             await deleteMutation.mutateAsync(id);
             if (drawerQuotationId === id) {
-                closeThreePanelView();
+                closeDrawer();
             }
             setToast({
                 open: true,
@@ -135,7 +130,7 @@ export function QuotationsMasterView() {
         try {
             await bulkDeleteMutation.mutateAsync(selectedIds);
             if (drawerQuotationId && selectedIds.includes(drawerQuotationId)) {
-                closeThreePanelView();
+                closeDrawer();
             }
             setSelectedIds([]);
             setToast({
@@ -382,12 +377,6 @@ export function QuotationsMasterView() {
         setSortField(field as QuotationSortField);
     };
 
-    const relatedModules = useRelatedModulesForEntity('quotation', selectedDrawerQuotation, setActiveRelatedModule);
-
-    // Falls back to the first module until the user explicitly picks one.
-    const effectiveRelatedModule = activeRelatedModule ?? relatedModules[0]?.id ?? null;
-    const activeModuleMeta = relatedModules.find((m) => m.id === effectiveRelatedModule);
-
     return (
         <CommonMasterView<Quotation, QuotationFilterTab>
             breadcrumbItems={[
@@ -476,51 +465,16 @@ export function QuotationsMasterView() {
                     setPage(0);
                 },
             }}
-            relatedSidebar={
-                <RelatedModulesSidebar
-                    open={Boolean(selectedDrawerQuotation)}
-                    modules={relatedModules}
-                    activeModuleId={effectiveRelatedModule ?? undefined}
-                    onModuleSelect={(moduleId) => setActiveRelatedModule(moduleId)}
-                    collapsed={isLeftSidebarCollapsed}
-                    onToggleCollapse={setIsLeftSidebarCollapsed}
-                />
-            }
-            relatedRecordsTable={
-                <RelatedRecordsTableView
-                    open={Boolean(selectedDrawerQuotation && effectiveRelatedModule)}
-                    moduleId={effectiveRelatedModule || ''}
-                    moduleTitle={activeModuleMeta?.label || 'Related Records'}
-                    parentRecordId={selectedDrawerQuotation?.id}
-                    parentEntityTitle={(showNumber('quotation') ? selectedDrawerQuotation?.quotationCode : '') || selectedDrawerQuotation?.quotationSubject || ''}
-                    entityData={selectedDrawerQuotation}
-                    entityType="quotation"
-                    leftOffset={isLeftSidebarCollapsed ? 72 : 260}
-                    rightOffset={580}
-                    onClose={closeThreePanelView}
-                    onRowClick={(row, modId) => setSecondaryDrawerEntity({ type: modId, data: row })}
-                />
-            }
             drawer={
                 <QuotationDetailDrawer
                     quotation={selectedDrawerQuotation}
                     open={Boolean(selectedDrawerQuotation)}
-                    onClose={closeThreePanelView}
+                    onClose={closeDrawer}
                     onEdit={(id) => router.push(ROUTES.QUOTATION_EDIT(id))}
                     onShowToast={(message, severity = 'success') => {
                         setToast({ open: true, message, severity });
                     }}
                 />
-            }
-            secondaryDrawer={
-                secondaryDrawerEntity ? (
-                    <RelatedSecondaryDrawer
-                        entity={secondaryDrawerEntity}
-                        moduleLabel={activeModuleMeta?.label}
-                        parentTitle={(showNumber('quotation') ? selectedDrawerQuotation?.quotationCode : '') || selectedDrawerQuotation?.quotationSubject}
-                        onClose={() => setSecondaryDrawerEntity(null)}
-                    />
-                ) : null
             }
             isDrawerOpen={Boolean(selectedDrawerQuotation)}
             toast={

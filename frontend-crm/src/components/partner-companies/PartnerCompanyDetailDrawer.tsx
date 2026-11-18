@@ -14,6 +14,7 @@ import PhoneOutlinedIcon from '@mui/icons-material/PhoneOutlined';
 import CategoryOutlinedIcon from '@mui/icons-material/CategoryOutlined';
 
 import { ROUTES } from '@/config/constants';
+import { withListOrigin } from '@/utils/listOrigin';
 import { usePartnerCompany } from '@/hooks/queries';
 import { EntityDetailDrawer, DrawerSectionCard, DrawerFieldGrid, type DrawerBadgeItem } from '@/components/common/Drawer';
 import { ReadOnlyField } from '@/components/forms/ReadOnlyField';
@@ -103,7 +104,7 @@ export function PartnerCompanyDetailDrawer({ partnerCompany, open, onClose }: Pa
             avatarBg="linear-gradient(135deg, var(--crm-fill-blue-600) 0%, var(--crm-fill-blue-700) 100%)"
             verified={false}
             badges={badges}
-            headerActions={{ onEdit: handleEdit, onView: () => router.push(ROUTES.PARTNER_COMPANY_DETAIL(p.id)) }}
+            headerActions={{ onEdit: handleEdit, onView: () => router.push(withListOrigin(ROUTES.PARTNER_COMPANY_DETAIL(p.id))) }}
             formTabs={PARTNER_COMPANY_FORM_TABS}
             tabContents={{
                 company_info: (

@@ -73,6 +73,16 @@ export async function createPartnerCompanyRecord(tx: TransactionClient, input: P
 // ── Service ──────────────────────────────────────────────────────────────────
 
 export const partnerCompanyService = {
+    /**
+     * List rows (the shape `list` returns) for the given ids, in no particular order and regardless of row-level
+     * access: global search shows every matching record to every user.
+     */
+    async listByIds(ids: string[]): Promise<PartnerCompanyDto[]> {
+        if (ids.length === 0) return [];
+        const rows = await prisma.partnerCompany.findMany({ where: { id: { in: ids }, isDeleted: false } });
+        return rows.map(toPartnerCompanyDto);
+    },
+
     async list(query: unknown, user: AuthUser): Promise<PaginatedResult<PartnerCompanyDto>> {
         const page = parsePagination(query, PARTNER_COMPANY_SORT_FIELDS);
         const filters = partnerCompanyListQuerySchema.parse(query ?? {});

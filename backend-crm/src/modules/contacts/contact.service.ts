@@ -121,6 +121,16 @@ export async function findLiveContact(tx: TransactionClient, mobile: string, id?
 // ── Service ──────────────────────────────────────────────────────────────────
 
 export const contactService = {
+    /**
+     * List rows (the shape `list` returns) for the given ids, in no particular order and regardless of row-level
+     * access: global search shows every matching record to every user.
+     */
+    async listByIds(ids: string[]): Promise<ContactDto[]> {
+        if (ids.length === 0) return [];
+        const rows = await prisma.contact.findMany({ where: { id: { in: ids }, isDeleted: false }, include });
+        return rows.map(toContactDto);
+    },
+
     async list(query: unknown, user: AuthUser): Promise<PaginatedResult<ContactDto>> {
         const page = parsePagination(query, CONTACT_SORT_FIELDS);
         const filters = contactListQuerySchema.parse(query ?? {});

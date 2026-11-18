@@ -15,6 +15,7 @@ import RequestQuoteOutlinedIcon from '@mui/icons-material/RequestQuoteOutlined';
 import CheckCircleOutlinedIcon from '@mui/icons-material/CheckCircleOutlined';
 
 import { ROUTES } from '@/config/constants';
+import { withListOrigin } from '@/utils/listOrigin';
 import type { Opportunity } from '@/types/opportunity.types';
 import {
     EntityDetailDrawer,
@@ -169,7 +170,7 @@ export function OpportunityDetailDrawer({
             ]}
             headerActions={{
                 onEdit: handleEdit,
-                onView: () => router.push(ROUTES.OPPORTUNITY_DETAIL(opp.id)),
+                onView: () => router.push(withListOrigin(ROUTES.OPPORTUNITY_DETAIL(opp.id))),
             }}
             formTabs={OPPORTUNITY_FORM_TABS}
             tabContents={{

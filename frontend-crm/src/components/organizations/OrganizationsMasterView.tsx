@@ -13,7 +13,6 @@ import PersonOutlinedIcon from '@mui/icons-material/PersonOutlined';
 import ApartmentIcon from '@mui/icons-material/Apartment';
 
 import { ROUTES } from '@/config/constants';
-import { useRelatedModulesForEntity } from '@/config/relatedModules.config';
 import { RecordLink } from '../common/RecordLink';
 import { useAuth } from '@/context/AuthContext';
 import { CommonMasterView } from '../common/CommonMasterView';
@@ -21,34 +20,15 @@ import { useTableFilter } from '../common/TableFilter';
 import { AppToast } from '../common/AppToast';
 import { MasterHeaderActions, outlinedHeaderButtonSx } from '../common/MasterHeaderActions';
 import { DataImportModal } from '../common/import';
-import {
-    RelatedModulesSidebar,
-    RelatedRecordsTableView,
-    EntityDetailDrawer,
-    DrawerSectionCard,
-    DrawerMetricGrid,
-} from '../common/Drawer';
 import { documentNumberColumn, type DataTableColumn, type DataTableFilterItem } from '../common/DataTable';
 import { organizationService } from '@/services';
 import { useOrganizations, useBulkDeleteOrganizations } from '@/hooks/queries';
 import type { ExtendedOrganization } from '@/types/organization.types';
-import type { Contact } from '@/types/contact.types';
-import type { Lead } from '@/types/lead.types';
-import type { Opportunity } from '@/types/opportunity.types';
-import type { Quotation } from '@/types/quotation.types';
-import type { Product } from '@/types/product.types';
 import { OrganizationDetailDrawer } from './OrganizationDetailDrawer';
-import { ContactDetailDrawer } from '../contacts/ContactDetailDrawer';
-import { LeadDetailDrawer } from '../leads/LeadDetailDrawer';
-import { OpportunityDetailDrawer } from '../opportunities/OpportunityDetailDrawer';
-import { QuotationDetailDrawer } from '../quotations/QuotationDetailDrawer';
-import { ProductDetailDrawer } from '../products/ProductDetailDrawer';
-import { TicketDetailDrawer } from '../tickets/TicketDetailDrawer';
-import type { Ticket } from '@/types/ticket.types';
 import type { FilterTab, SortField } from './master';
 import { formatDateTime } from '@/utils/date';
 import { useShowRecordNumber } from '@/hooks/queries/useDocumentSeries';
-import { isShownField } from '@/utils/recordNumbers';
+import { useSearchScope, useSearchScopedRows } from '../search/SearchScope';
 
 const plainCellSx = { fontSize: '0.78rem', color: 'var(--crm-slate-700)' } as const;
 
@@ -81,7 +61,10 @@ export function OrganizationsMasterView() {
     const isAdmin = user?.role?.toLowerCase() === 'admin';
 
     // ── State ─────────────────────────────────────────────────────────────────
-    const { data: allOrganizations = NO_RECORDS, refetch } = useOrganizations();
+    // On the global search results page the table shows the matched records (any owner) instead of this list.
+    const embeddedInSearch = Boolean(useSearchScope());
+    const { data: allOrganizationsLoaded = NO_RECORDS, refetch } = useOrganizations(undefined, { enabled: !embeddedInSearch });
+    const allOrganizations = useSearchScopedRows(allOrganizationsLoaded);
     const bulkDeleteMutation = useBulkDeleteOrganizations();
     const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
     const [activeTab, setActiveTab] = useState<FilterTab>('all');
@@ -102,142 +85,21 @@ export function OrganizationsMasterView() {
     /** Records left by the Filter dialog: tabs, counts, search and bulk actions work on these. */
     const organizations = tableFilter.filteredRows;
 
-    // Detail View Side Drawer & Three-Panel LIFO Stack State
+    // Detail View Side Drawer
     // Tracked by id so the drawer always shows the cached copy and closes if the organization is deleted.
     const [drawerOrgId, setDrawerOrgId] = useState<string | null>(null);
     const selectedDrawerOrg = useMemo(
         () => (drawerOrgId ? organizations.find((o) => o.id === drawerOrgId) ?? null : null),
         [organizations, drawerOrgId]
     );
-    const [activeRelatedModule, setActiveRelatedModule] = useState<string>('contacts');
-    const [secondaryDrawerEntity, setSecondaryDrawerEntity] = useState<{
-        type: string;
-        data: Record<string, unknown>;
-    } | null>(null);
-    const [isLeftSidebarCollapsed, setIsLeftSidebarCollapsed] = useState<boolean>(false);
     const [toast, setToast] = useState<{ open: boolean; message: string; severity: 'success' | 'info' | 'error' }>({
         open: false,
         message: '',
         severity: 'success',
     });
 
-    const closeThreePanelView = useCallback(() => {
-        // Dismiss the three-panel view and return to the normal master table.
-        // CommonMasterView resets its shared drawer-collapse state when isDrawerOpen becomes false.
-        setSecondaryDrawerEntity(null);
-        setDrawerOrgId(null);
-        setActiveRelatedModule('contacts');
-    }, []);
-
-    const relatedModules = useRelatedModulesForEntity('organization', selectedDrawerOrg, setActiveRelatedModule);
-
-    const activeModuleMeta = useMemo(
-        () => relatedModules.find((m) => m.id === activeRelatedModule) || relatedModules[0],
-        [relatedModules, activeRelatedModule]
-    );
-
-    const renderSecondaryDrawer = () => {
-        if (!secondaryDrawerEntity) return null;
-        const { type, data } = secondaryDrawerEntity;
-        const closeSecondary = () => setSecondaryDrawerEntity(null);
-
-        if (type === 'contacts') {
-            return (
-                <ContactDetailDrawer
-                    contact={data as unknown as Contact}
-                    open
-                    onClose={closeSecondary}
-                />
-            );
-        }
-        if (type === 'leads') {
-            return (
-                <LeadDetailDrawer
-                    lead={data as unknown as Lead}
-                    open
-                    onClose={closeSecondary}
-                    onEdit={(id) => router.push(ROUTES.LEAD_EDIT(id))}
-                />
-            );
-        }
-        if (type === 'opportunities') {
-            return (
-                <OpportunityDetailDrawer
-                    opportunity={data as unknown as Opportunity}
-                    open
-                    onClose={closeSecondary}
-                    onEdit={(id) => router.push(ROUTES.OPPORTUNITY_EDIT(id))}
-                />
-            );
-        }
-        if (type === 'quotations') {
-            return (
-                <QuotationDetailDrawer
-                    quotation={data as unknown as Quotation}
-                    open
-                    onClose={closeSecondary}
-                    onEdit={(id) => router.push(ROUTES.QUOTATION_EDIT(id))}
-                />
-            );
-        }
-        if (type === 'tickets') {
-            return (
-                <TicketDetailDrawer
-                    ticket={data as unknown as Ticket}
-                    open
-                    onClose={closeSecondary}
-                />
-            );
-        }
-        if (type === 'products') {
-            return (
-                <ProductDetailDrawer
-                    product={data as unknown as Product}
-                    open
-                    onClose={closeSecondary}
-                />
-            );
-        }
-
-        const recordTitle = String(
-            data.subject ||
-                data.name ||
-                data.contractTitle ||
-                data.partnerName ||
-                (showNumber('ticket') ? data.ticketNumber : '') ||
-                activeModuleMeta?.label ||
-                'Related Record'
-        );
-
-        const detailFields = Object.entries(data)
-            .filter(([key]) => key !== 'id' && isShownField(key, showNumber))
-            .map(([key, val]) => ({
-                label: key.replace(/([A-Z])/g, ' $1').replace(/^./, (s) => s.toUpperCase()),
-                value: String(val ?? '-'),
-            }));
-
-        return (
-            <EntityDetailDrawer
-                open
-                onClose={closeSecondary}
-                title={recordTitle}
-                subtitle={`${activeModuleMeta?.label || 'Module'} • ${selectedDrawerOrg?.organizationName || ''}`}
-                statusText="Linked Record Verified"
-                tabs={[
-                    {
-                        id: 'overview',
-                        label: 'Overview',
-                        icon: <ApartmentIcon sx={{ fontSize: 16 }} />,
-                        content: (
-                            <DrawerSectionCard title={`${activeModuleMeta?.label || 'Record'} Details`}>
-                                <DrawerMetricGrid items={detailFields} />
-                            </DrawerSectionCard>
-                        ),
-                    },
-                ]}
-            />
-        );
-    };
+    // Row clicks only open the drawer; its eye button leads on to the detail page with the related modules.
+    const closeDrawer = useCallback(() => setDrawerOrgId(null), []);
 
     const [importOpen, setImportOpen] = useState(false);
 
@@ -362,7 +224,7 @@ export function OrganizationsMasterView() {
             try {
                 await bulkDeleteMutation.mutateAsync(Array.from(selectedIds));
                 if (drawerOrgId && selectedIds.has(drawerOrgId)) {
-                    closeThreePanelView();
+                    closeDrawer();
                 }
                 setSelectedIds(new Set());
                 setToast({ open: true, message: `${count} organizations deleted.`, severity: 'success' });
@@ -784,44 +646,14 @@ export function OrganizationsMasterView() {
                     setCurrentPage(1);
                 },
             }}
-            relatedSidebar={
-                <RelatedModulesSidebar
-                    open={Boolean(selectedDrawerOrg)}
-                    logoSrc="/images/NIPL-Updated-Logo-Large.png"
-                    modules={relatedModules}
-                    activeModuleId={activeRelatedModule}
-                    onModuleSelect={(moduleId) => setActiveRelatedModule(moduleId)}
-                    collapsed={isLeftSidebarCollapsed}
-                    onToggleCollapse={setIsLeftSidebarCollapsed}
-                />
-            }
-            relatedRecordsTable={
-                <RelatedRecordsTableView
-                    open={Boolean(selectedDrawerOrg)}
-                    moduleId={activeRelatedModule}
-                    moduleTitle={activeModuleMeta?.label || 'Related Records'}
-                    parentEntityTitle={selectedDrawerOrg?.organizationName || ''}
-                    parentRecordId={selectedDrawerOrg?.id}
-                    entityData={selectedDrawerOrg}
-                    entityType="organization"
-                    leftOffset={isLeftSidebarCollapsed ? 72 : 260}
-                    rightOffset={580}
-                    onClose={closeThreePanelView}
-                    onRowClick={(clickedRow, modId) =>
-                        setSecondaryDrawerEntity({ type: modId, data: clickedRow })
-                    }
-                />
-            }
             drawer={
                 <OrganizationDetailDrawer
                     organization={selectedDrawerOrg}
                     open={Boolean(selectedDrawerOrg)}
-                    hideBackdrop={true}
-                    onClose={closeThreePanelView}
+                    onClose={closeDrawer}
                     onEdit={(id) => router.push(ROUTES.ORGANIZATION_EDIT(id))}
                 />
             }
-            secondaryDrawer={renderSecondaryDrawer()}
             isDrawerOpen={Boolean(selectedDrawerOrg)}
             toast={
                 <AppToast

@@ -25,6 +25,7 @@ import NotesOutlinedIcon from '@mui/icons-material/NotesOutlined';
 import EditOutlinedIcon from '@mui/icons-material/EditOutlined';
 
 import { ROUTES } from '@/config/constants';
+import { withListOrigin } from '@/utils/listOrigin';
 import type { Quotation } from '@/types/quotation.types';
 import { useQuotation } from '@/hooks/queries';
 import {
@@ -565,7 +566,7 @@ export function QuotationDetailDrawer({
             ]}
             headerActions={{
                 onEdit: handleEdit,
-                onView: () => router.push(ROUTES.QUOTATION_DETAIL(quotation.id)),
+                onView: () => router.push(withListOrigin(ROUTES.QUOTATION_DETAIL(quotation.id))),
                 custom: <PdfActionsButton module="QUOTATION" recordId={quotation.id} variant="icon" />,
             }}
             primaryAction={{

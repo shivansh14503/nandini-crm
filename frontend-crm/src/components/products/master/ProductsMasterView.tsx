@@ -14,16 +14,14 @@ import { MasterHeaderActions } from '../../common/MasterHeaderActions';
 import { buildExtendedSearchConfig } from '../../common/buildExtendedSearchConfig';
 import { AppToast } from '../../common/AppToast';
 import { DataImportModal } from '../../common/import';
-import { RelatedModulesSidebar, RelatedRecordsTableView } from '../../common/Drawer';
-import { RelatedSecondaryDrawer, type SecondaryDrawerEntity } from '../../common/RelatedSecondaryDrawer';
 import { documentNumberColumn, type DataTableColumn, type DataTableFilterItem } from '../../common/DataTable';
 import { ROUTES } from '@/config/constants';
-import { useRelatedModulesForEntity } from '@/config/relatedModules.config';
 import type { Product } from '@/types/product.types';
 import { useProducts, useBulkDeleteProducts } from '@/hooks/queries';
 import { useShowRecordNumber } from '@/hooks/queries/useDocumentSeries';
 import type { ProductFilterTab } from './types';
 import { ProductDetailDrawer } from '../ProductDetailDrawer';
+import { useSearchScope, useSearchScopedRows } from '../../search/SearchScope';
 
 const RECENTLY_ADDED_DAYS = 7;
 
@@ -41,7 +39,10 @@ const NO_RECORDS: Product[] = [];
 export function ProductsMasterView() {
     const router = useRouter();
 
-    const { data: allProducts = NO_RECORDS, refetch } = useProducts();
+    // On the global search results page the table shows the matched records (any owner) instead of this list.
+    const embeddedInSearch = Boolean(useSearchScope());
+    const { data: allProductsLoaded = NO_RECORDS, refetch } = useProducts(undefined, { enabled: !embeddedInSearch });
+    const allProducts = useSearchScopedRows(allProductsLoaded);
     const bulkDeleteMutation = useBulkDeleteProducts();
     const [activeTab, setActiveTab] = useState<ProductFilterTab>('all');
     const [searchQuery, setSearchQuery] = useState('');
@@ -67,9 +68,6 @@ export function ProductsMasterView() {
         () => (drawerProductId ? products.find((p) => p.id === drawerProductId) ?? null : null),
         [products, drawerProductId]
     );
-    const [activeRelatedModule, setActiveRelatedModule] = useState<string | null>(null);
-    const [secondaryDrawerEntity, setSecondaryDrawerEntity] = useState<SecondaryDrawerEntity | null>(null);
-    const [isLeftSidebarCollapsed, setIsLeftSidebarCollapsed] = useState<boolean>(false);
     const [toast, setToast] = useState<{ open: boolean; message: string; severity: 'success' | 'info' | 'error' }>({
         open: false,
         message: '',
@@ -145,11 +143,8 @@ export function ProductsMasterView() {
         );
     };
 
-    const closeThreePanelView = useCallback(() => {
-        setSecondaryDrawerEntity(null);
-        setDrawerProductId(null);
-        setActiveRelatedModule(null);
-    }, []);
+    // Row clicks only open the drawer; its eye button leads on to the detail page with the related modules.
+    const closeDrawer = useCallback(() => setDrawerProductId(null), []);
 
     const handleBulkDelete = async () => {
         const count = selectedIds.length;
@@ -158,7 +153,7 @@ export function ProductsMasterView() {
         try {
             await bulkDeleteMutation.mutateAsync(selectedIds);
             if (drawerProductId && selectedIds.includes(drawerProductId)) {
-                closeThreePanelView();
+                closeDrawer();
             }
             setSelectedIds([]);
             setToast({ open: true, message: `${count} product(s) deleted.`, severity: 'success' });
@@ -327,12 +322,6 @@ export function ProductsMasterView() {
         [showNumber]
     );
 
-    const relatedModules = useRelatedModulesForEntity('product', selectedDrawerProduct, setActiveRelatedModule);
-
-    // Falls back to the first module until the user explicitly picks one.
-    const effectiveRelatedModule = activeRelatedModule ?? relatedModules[0]?.id ?? null;
-    const activeModuleMeta = relatedModules.find((m) => m.id === effectiveRelatedModule);
-
     return (
         <CommonMasterView<Product, ProductFilterTab>
             filterConfig={{
@@ -407,47 +396,12 @@ export function ProductsMasterView() {
                     setPage(0);
                 },
             }}
-            relatedSidebar={
-                <RelatedModulesSidebar
-                    open={Boolean(selectedDrawerProduct)}
-                    modules={relatedModules}
-                    activeModuleId={effectiveRelatedModule ?? undefined}
-                    onModuleSelect={(moduleId) => setActiveRelatedModule(moduleId)}
-                    collapsed={isLeftSidebarCollapsed}
-                    onToggleCollapse={setIsLeftSidebarCollapsed}
-                />
-            }
-            relatedRecordsTable={
-                <RelatedRecordsTableView
-                    open={Boolean(selectedDrawerProduct && effectiveRelatedModule)}
-                    moduleId={effectiveRelatedModule || ''}
-                    moduleTitle={activeModuleMeta?.label || 'Related Records'}
-                    parentRecordId={selectedDrawerProduct?.id}
-                    parentEntityTitle={selectedDrawerProduct?.productName || ''}
-                    entityData={selectedDrawerProduct}
-                    entityType="product"
-                    leftOffset={isLeftSidebarCollapsed ? 72 : 260}
-                    rightOffset={580}
-                    onClose={closeThreePanelView}
-                    onRowClick={(row, modId) => setSecondaryDrawerEntity({ type: modId, data: row })}
-                />
-            }
             drawer={
                 <ProductDetailDrawer
                     product={selectedDrawerProduct}
                     open={Boolean(selectedDrawerProduct)}
-                    onClose={closeThreePanelView}
+                    onClose={closeDrawer}
                 />
-            }
-            secondaryDrawer={
-                secondaryDrawerEntity ? (
-                    <RelatedSecondaryDrawer
-                        entity={secondaryDrawerEntity}
-                        moduleLabel={activeModuleMeta?.label}
-                        parentTitle={selectedDrawerProduct?.productName}
-                        onClose={() => setSecondaryDrawerEntity(null)}
-                    />
-                ) : null
             }
             isDrawerOpen={Boolean(selectedDrawerProduct)}
             toast={

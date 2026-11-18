@@ -84,7 +84,8 @@ function ScrollArrow({
             sx={{
                 position: 'absolute',
                 top: '50%',
-                [direction < 0 ? 'left' : 'right']: 6 + offset,
+                // The right arrow clears the table's 10px vertical scrollbar.
+                [direction < 0 ? 'left' : 'right']: (direction < 0 ? 6 : 18) + offset,
                 transform: 'translateY(-50%)',
                 zIndex: 4,
                 width: 30,

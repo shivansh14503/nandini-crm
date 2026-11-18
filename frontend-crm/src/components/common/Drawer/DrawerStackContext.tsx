@@ -11,6 +11,11 @@ export interface DrawerStackContextValue {
     onCollapseReset: () => void;
     /** Only the topmost drawer in the stack renders the single shared bookmark tab. */
     showBookmark: boolean;
+    /**
+     * Drawers in this stack are non-modal (no backdrop or focus trap) and sit above the related-records panels,
+     * so the module table beside them stays usable.
+     */
+    persistent?: boolean;
 }
 
 export const DrawerStackContext = createContext<DrawerStackContextValue | null>(null);

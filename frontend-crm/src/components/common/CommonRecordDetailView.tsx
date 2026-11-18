@@ -11,6 +11,7 @@ import { FormHeader } from '../forms/FormHeader';
 import type { BreadcrumbItem } from './AppBreadcrumbs';
 import { RecordAuditFooter, type RecordAuditStamp } from './Drawer/RecordAuditFooter';
 import { useDoubleClickCopy } from './useDoubleClickCopy';
+import { isSearchOrigin, useListOrigin } from '@/utils/listOrigin';
 
 export interface RecordDetailTab {
     id: string;
@@ -96,6 +97,10 @@ export function CommonRecordDetailView({
     const overviewTabId = tabs?.find((t) => t.id === 'overview')?.id ?? tabs?.[0]?.id;
     const showAudit = Boolean(audit) && (!overviewTabId || (activeTab ?? tabs?.[0]?.id) === overviewTabId);
     const copyCode = useDoubleClickCopy();
+    // Back goes to the list the user started browsing from (carried as `?from=`), else this record's own list.
+    const backTo = useListOrigin(backHref);
+    // Opened from the global search results: no "Back to List" (the user came from a search, not a list).
+    const showBack = !isSearchOrigin(backTo);
 
     return (
         <Box sx={{ width: '100%', pb: 10 }}>
@@ -196,9 +201,10 @@ export function CommonRecordDetailView({
 
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.25, flexWrap: 'wrap' }}>
                     {actions}
+                    {showBack && (
                     <Button
                         component={Link}
-                        href={backHref}
+                        href={backTo}
                         variant="outlined"
                         startIcon={<ArrowBackIcon sx={{ fontSize: 16 }} />}
                         sx={{
@@ -217,6 +223,7 @@ export function CommonRecordDetailView({
                     >
                         {backLabel}
                     </Button>
+                    )}
                     {editHref && (
                         <Tooltip title={editDisabled ? editDisabledTooltip ?? '' : ''}>
                             <span>

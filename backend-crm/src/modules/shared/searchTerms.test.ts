@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import type { TransactionClient } from '../../config/prisma.js';
 import { findOrganizationByName, prefetchOrganizationsByName } from './prefetch.js';
-import { codeSearchPrefix, detectEntityCode, gstSearchPrefix, phoneSearch, phoneVariants, phoneWhere } from './searchTerms.js';
+import { codeSearchPrefix, detectEntityCode, gstSearchPrefix, panSearch, phoneSearch, phoneVariants, phoneWhere } from './searchTerms.js';
 
 describe('entity code search', () => {
     it('recognizes every generated code prefix, case-insensitively', () => {
@@ -57,6 +57,16 @@ describe('GSTIN search', () => {
 
     it('ignores names, codes and too-short text', () => {
         for (const term of ['27AAAC', 'Reliance', 'ORG-0001', '27AAACR5055K1Z5X']) assert.equal(gstSearchPrefix(term), null, term);
+    });
+});
+
+describe('PAN search', () => {
+    it('recognizes a complete PAN, case-insensitively', () => {
+        assert.equal(panSearch(' aaacr5055k '), 'AAACR5055K');
+    });
+
+    it('ignores partial PANs, GSTINs and names', () => {
+        for (const term of ['AAACR', 'AAACR5055', '27AAACR5055K1Z5', 'Reliance12']) assert.equal(panSearch(term), null, term);
     });
 });
 

@@ -75,3 +75,15 @@ export function gstSearchPrefix(term: string): string | null {
     const trimmed = term.trim();
     return GSTIN_PREFIX.test(trimmed) ? trimmed.toUpperCase() : null;
 }
+
+/** A complete PAN: 5 letters, 4 digits, 1 letter (`AAACR1234A`). */
+const PAN = /^[A-Z]{5}\d{4}[A-Z]$/i;
+
+/**
+ * The search text, uppercased, when it is a complete PAN; else null. A GSTIN embeds its holder's PAN at
+ * positions 3-12, so callers also match GSTIN columns that contain it.
+ */
+export function panSearch(term: string): string | null {
+    const trimmed = term.trim();
+    return PAN.test(trimmed) ? trimmed.toUpperCase() : null;
+}

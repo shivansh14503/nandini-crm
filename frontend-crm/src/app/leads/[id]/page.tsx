@@ -8,12 +8,17 @@ import { ROUTES } from '@/config/constants';
 import { Navbar } from '@/components/layout/Navbar';
 import { LoadingScreen } from '@/components/common/LoadingScreen';
 import LeadForm from '@/components/leads/LeadForm';
+import { RecordWorkspace } from '@/components/common/RecordWorkspace';
+import { useLead } from '@/hooks/queries';
 
 function LeadDetailContent() {
     const router = useRouter();
     const params = useParams();
     const id = (params?.id as string) || '';
     const { user, loading, isAuthenticated } = useAuth();
+    // The record itself feeds the related modules sidebar.
+    const { data: record } = useLead(id);
+    const recordTitle = record?.name ?? '';
 
     useEffect(() => {
         if (!loading && !isAuthenticated) {
@@ -26,11 +31,13 @@ function LeadDetailContent() {
 
     return (
         <Box sx={{ minHeight: '100vh', backgroundColor: 'var(--mui-palette-background-subtle)' }}>
-            <Navbar />
+            <RecordWorkspace entityType="lead" entity={record} title={recordTitle} listHref={ROUTES.LEADS}>
+                <Navbar />
 
-            <Container maxWidth="xl" sx={{ pt: 2.5, pb: 1 }}>
-                <LeadForm mode="view" leadId={id} />
-            </Container>
+                <Container maxWidth="xl" sx={{ pt: 2.5, pb: 1 }}>
+                    <LeadForm mode="view" leadId={id} />
+                </Container>
+            </RecordWorkspace>
         </Box>
     );
 }

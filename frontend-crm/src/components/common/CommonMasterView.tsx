@@ -23,6 +23,7 @@ import {
 } from './DataTable';
 import type { CrmModuleKey } from '@/types/formConfig.types';
 import { ActiveFilterChips, TableFilterModal, type FilterSortOption, type TableFilterController } from './TableFilter';
+import { useSearchScope } from '../search/SearchScope';
 
 export interface MasterViewHeaderActionsContext {
     /** Opens the shared column visibility popover anchored to the given element. */
@@ -187,6 +188,9 @@ export interface CommonMasterViewProps<T = unknown, TFilter extends string = str
     paperSx?: SxProps<Theme>;
 }
 
+/** Desktop width of the record drawer (EntityDetailDrawer's default `md` width). */
+const DRAWER_WIDTH = 580;
+
 /** 'NEXT FOLLOWUP DATE' → 'Next Followup Date'. */
 function titleCaseHeader(label: string): string {
     if (label !== label.toUpperCase()) return label;
@@ -307,9 +311,12 @@ export function CommonMasterView<T = unknown, TFilter extends string = string>({
             isCollapsed: isRightDrawerCollapsed,
             onToggleCollapse: toggleRightDrawerCollapsed,
             onCollapseReset: resetRightDrawerCollapsed,
-            showBookmark: !hasSecondaryDrawer,
+            // No collapse tab on list pages: the drawer sits beside the table and closes with its ✕.
+            showBookmark: false,
+            // Non-modal: the table stays scrollable and clickable, so another row can be opened in the drawer.
+            persistent: true,
         }),
-        [isRightDrawerCollapsed, toggleRightDrawerCollapsed, resetRightDrawerCollapsed, hasSecondaryDrawer]
+        [isRightDrawerCollapsed, toggleRightDrawerCollapsed, resetRightDrawerCollapsed]
     );
 
     const topDrawerStackValue = React.useMemo<DrawerStackContextValue>(
@@ -321,6 +328,14 @@ export function CommonMasterView<T = unknown, TFilter extends string = string>({
         }),
         [isRightDrawerCollapsed, toggleRightDrawerCollapsed, resetRightDrawerCollapsed]
     );
+
+    // Embedded in the global search results page: just the table card (see SearchScope).
+    const searchScope = useSearchScope();
+    const embedded = Boolean(searchScope);
+    const drawerClose = React.isValidElement<{ onClose?: () => void }>(drawer) ? drawer.props.onClose : undefined;
+    React.useEffect(() => {
+        if (searchScope && isDrawerOpen && drawerClose) searchScope.claimDrawer(tableId ?? '', drawerClose);
+    }, [searchScope, isDrawerOpen, drawerClose, tableId]);
 
     const resolvedFormModule = formModule === undefined ? (isCrmModuleKey(tableId) ? tableId : undefined) : (formModule ?? undefined);
     const allColumns = useFormFieldColumns<T>(columns, resolvedFormModule);
@@ -349,12 +364,18 @@ export function CommonMasterView<T = unknown, TFilter extends string = string>({
     const resolvedToolbar =
         toolbar ??
         (searchConfig ? (
-            <DataTableToolbar
-                {...searchConfig}
-                onFilterClick={searchConfig.onFilterClick ?? tableFilter?.open}
-                filterCount={searchConfig.filterCount ?? tableFilter?.activeCount}
-                onColumnClick={searchConfig.onColumnClick ?? (columns ? openColumnManager : undefined)}
-            />
+            embedded ? (
+                // Search results tables: selection and Bulk Action only (no search box, filter, column manager or
+                // top pager; the pagination bar below the table stays).
+                <DataTableToolbar {...searchConfig} hideSearch onFilterClick={undefined} onColumnClick={undefined} onPageChange={undefined} />
+            ) : (
+                <DataTableToolbar
+                    {...searchConfig}
+                    onFilterClick={searchConfig.onFilterClick ?? tableFilter?.open}
+                    filterCount={searchConfig.filterCount ?? tableFilter?.activeCount}
+                    onColumnClick={searchConfig.onColumnClick ?? (columns ? openColumnManager : undefined)}
+                />
+            )
         ) : null);
 
     // "Order by" offers the sortable columns (built-in and form-field ones), by their header text.
@@ -417,8 +438,8 @@ export function CommonMasterView<T = unknown, TFilter extends string = string>({
                 flex: 1,
                 display: 'flex',
                 flexDirection: 'column',
-                minHeight: 'calc(100vh - 64px)',
-                backgroundColor: 'var(--mui-palette-background-subtle)',
+                minHeight: embedded ? 0 : 'calc(100vh - 64px)',
+                backgroundColor: embedded ? 'transparent' : 'var(--mui-palette-background-subtle)',
                 width: '100%',
                 minWidth: 0,
                 ...sx,
@@ -427,9 +448,14 @@ export function CommonMasterView<T = unknown, TFilter extends string = string>({
             {/* ── Main Page Content ────────────────────────────────────────── */}
             <Box
                 sx={{
-                    px: { xs: 2, md: 3 },
-                    pt: 2,
-                    pb: 2,
+                    pl: embedded ? 0 : { xs: 2, md: 3 },
+                    // On wide screens the open drawer sits beside the table instead of covering its right side.
+                    pr: embedded
+                        ? { xs: 0, lg: isDrawerOpen && !isRightDrawerCollapsed ? `${DRAWER_WIDTH}px` : 0 }
+                        : { xs: 2, md: 3, lg: isDrawerOpen && !isRightDrawerCollapsed ? `${DRAWER_WIDTH + 24}px` : 3 },
+                    transition: 'padding-right 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
+                    pt: embedded ? 0 : 2,
+                    pb: embedded ? 0 : 2,
                     flex: 1,
                     display: 'flex',
                     flexDirection: 'column',
@@ -440,14 +466,16 @@ export function CommonMasterView<T = unknown, TFilter extends string = string>({
                 }}
             >
                 {/* ── Line 1: Route-Aware Breadcrumbs ── */}
-                <Box sx={{ mb: 1.5, minWidth: 0 }}>
-                    {breadcrumbs || <AppBreadcrumbs items={breadcrumbItems} />}
-                </Box>
+                {!embedded && (
+                    <Box sx={{ mb: 1.5, minWidth: 0 }}>
+                        {breadcrumbs || <AppBreadcrumbs items={breadcrumbItems} />}
+                    </Box>
+                )}
 
-                {summary}
+                {!embedded && summary}
 
                 {/* ── Line 2: All Filters & Optional Header Actions ── */}
-                {(resolvedFilters || resolvedHeaderActions) && (
+                {!embedded && (resolvedFilters || resolvedHeaderActions) && (
                     <Box
                         sx={{
                             display: 'flex',
@@ -481,13 +509,11 @@ export function CommonMasterView<T = unknown, TFilter extends string = string>({
                         backgroundColor: 'var(--mui-palette-background-paper)',
                         display: 'flex',
                         flexDirection: 'column',
-                        flex: 1,
+                        flex: embedded ? 'none' : 1,
                         overflow: 'hidden',
                         minWidth: 0,
                         width: '100%',
                         boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
-                        filter: isDrawerOpen && !isRightDrawerCollapsed ? 'blur(1.5px)' : 'none',
-                        transition: 'filter 0.2s ease-in-out',
                         ...paperSx,
                     }}
                 >
@@ -605,7 +631,7 @@ export function CommonMasterView<T = unknown, TFilter extends string = string>({
             </DrawerStackContext.Provider>
 
             {/* ── Enterprise CRM Global Footer ─────────────────────────────── */}
-            {!hideFooter && (footer || <EnterpriseFooter />)}
+            {!hideFooter && !embedded && (footer || <EnterpriseFooter />)}
 
             {/* ── Toast Notifications ──────────────────────────────────────── */}
             {toast}

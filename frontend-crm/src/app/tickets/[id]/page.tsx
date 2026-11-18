@@ -8,12 +8,17 @@ import { ROUTES } from '@/config/constants';
 import { Navbar } from '@/components/layout/Navbar';
 import { LoadingScreen } from '@/components/common/LoadingScreen';
 import TicketForm from '@/components/tickets/TicketForm';
+import { RecordWorkspace } from '@/components/common/RecordWorkspace';
+import { useTicket } from '@/hooks/queries';
 
 function TicketDetailContent() {
     const router = useRouter();
     const params = useParams();
     const id = (params?.id as string) || '';
     const { user, loading, isAuthenticated } = useAuth();
+    // The record itself feeds the related modules sidebar.
+    const { data: record } = useTicket(id);
+    const recordTitle = record?.ticketSubject ?? '';
 
     useEffect(() => {
         if (!loading && !isAuthenticated) {
@@ -26,10 +31,12 @@ function TicketDetailContent() {
 
     return (
         <Box sx={{ minHeight: '100vh', backgroundColor: 'var(--mui-palette-background-subtle)' }}>
-            <Navbar />
-            <Container maxWidth="xl" sx={{ pt: 2.5, pb: 1 }}>
-                <TicketForm mode="view" ticketId={id} />
-            </Container>
+            <RecordWorkspace entityType="ticket" entity={record} title={recordTitle} listHref={ROUTES.TICKETS}>
+                <Navbar />
+                <Container maxWidth="xl" sx={{ pt: 2.5, pb: 1 }}>
+                    <TicketForm mode="view" ticketId={id} />
+                </Container>
+            </RecordWorkspace>
         </Box>
     );
 }

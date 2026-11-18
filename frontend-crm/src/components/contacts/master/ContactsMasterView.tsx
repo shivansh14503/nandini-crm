@@ -17,12 +17,9 @@ import { MasterHeaderActions } from '../../common/MasterHeaderActions';
 import { buildExtendedSearchConfig } from '../../common/buildExtendedSearchConfig';
 import { AppToast } from '../../common/AppToast';
 import { DataImportModal } from '../../common/import';
-import { RelatedModulesSidebar, RelatedRecordsTableView } from '../../common/Drawer';
-import { RelatedSecondaryDrawer, type SecondaryDrawerEntity } from '../../common/RelatedSecondaryDrawer';
 import { documentNumberColumn, type DataTableColumn, type DataTableFilterItem } from '../../common/DataTable';
 import { ROUTES } from '@/config/constants';
 import { useAuth } from '@/context/AuthContext';
-import { useRelatedModulesForEntity } from '@/config/relatedModules.config';
 import { useContacts, useBulkDeleteContacts, useOrganizations } from '@/hooks/queries';
 import { useShowRecordNumber } from '@/hooks/queries/useDocumentSeries';
 import { wasModified } from '../../common/Drawer/RecordAuditFooter';
@@ -32,6 +29,7 @@ import type { ExtendedOrganization } from '@/types/organization.types';
 import type { Contact } from '@/types/contact.types';
 import type { ContactFilterTab } from './types';
 import { ContactDetailDrawer } from '../ContactDetailDrawer';
+import { useSearchScope, useSearchScopedRows } from '../../search/SearchScope';
 
 
 /** Stable empty list while the first page loads (keeps memoized filters from recomputing). */
@@ -43,7 +41,10 @@ export function ContactsMasterView() {
     const { user } = useAuth();
     const currentUsername = user?.username || '';
 
-    const { data: allContacts = NO_RECORDS, refetch } = useContacts();
+    // On the global search results page the table shows the matched records (any owner) instead of this list.
+    const embeddedInSearch = Boolean(useSearchScope());
+    const { data: allContactsLoaded = NO_RECORDS, refetch } = useContacts(undefined, { enabled: !embeddedInSearch });
+    const allContacts = useSearchScopedRows(allContactsLoaded);
     const bulkDeleteMutation = useBulkDeleteContacts();
     const [activeTab, setActiveTab] = useState<ContactFilterTab>('all');
     const [searchQuery, setSearchQuery] = useState('');
@@ -80,9 +81,6 @@ export function ContactsMasterView() {
         () => (drawerContactId ? contacts.find((c) => c.id === drawerContactId) ?? null : null),
         [contacts, drawerContactId]
     );
-    const [activeRelatedModule, setActiveRelatedModule] = useState<string | null>(null);
-    const [secondaryDrawerEntity, setSecondaryDrawerEntity] = useState<SecondaryDrawerEntity | null>(null);
-    const [isLeftSidebarCollapsed, setIsLeftSidebarCollapsed] = useState<boolean>(false);
     const [toast, setToast] = useState<{
         open: boolean;
         message: string;
@@ -371,18 +369,8 @@ export function ContactsMasterView() {
         [locationOf, showNumber]
     );
 
-    const relatedModules = useRelatedModulesForEntity('contact', selectedDrawerContact, setActiveRelatedModule);
-
-    // Falls back to the first module until the user explicitly picks one.
-    const effectiveRelatedModule = activeRelatedModule ?? relatedModules[0]?.id ?? null;
-    const activeModuleMeta = relatedModules.find((m) => m.id === effectiveRelatedModule);
-
-    // Dismisses the three-panel view and returns to the clean master table.
-    const closeThreePanelView = useCallback(() => {
-        setSecondaryDrawerEntity(null);
-        setDrawerContactId(null);
-        setActiveRelatedModule(null);
-    }, []);
+    // Row clicks only open the drawer; its eye button leads on to the detail page with the related modules.
+    const closeDrawer = useCallback(() => setDrawerContactId(null), []);
 
     return (
         <CommonMasterView<Contact, ContactFilterTab>
@@ -459,47 +447,12 @@ export function ContactsMasterView() {
                 },
                 hideWhenEmpty: true,
             }}
-            relatedSidebar={
-                <RelatedModulesSidebar
-                    open={Boolean(selectedDrawerContact)}
-                    modules={relatedModules}
-                    activeModuleId={effectiveRelatedModule ?? undefined}
-                    onModuleSelect={(moduleId) => setActiveRelatedModule(moduleId)}
-                    collapsed={isLeftSidebarCollapsed}
-                    onToggleCollapse={setIsLeftSidebarCollapsed}
-                />
-            }
-            relatedRecordsTable={
-                <RelatedRecordsTableView
-                    open={Boolean(selectedDrawerContact && effectiveRelatedModule)}
-                    moduleId={effectiveRelatedModule || ''}
-                    moduleTitle={activeModuleMeta?.label || 'Related Records'}
-                    parentRecordId={selectedDrawerContact?.id}
-                    parentEntityTitle={selectedDrawerContact?.name || ''}
-                    entityData={selectedDrawerContact}
-                    entityType="contact"
-                    leftOffset={isLeftSidebarCollapsed ? 72 : 260}
-                    rightOffset={580}
-                    onClose={closeThreePanelView}
-                    onRowClick={(row, modId) => setSecondaryDrawerEntity({ type: modId, data: row })}
-                />
-            }
             drawer={
                 <ContactDetailDrawer
                     contact={selectedDrawerContact}
                     open={Boolean(selectedDrawerContact)}
-                    onClose={closeThreePanelView}
+                    onClose={closeDrawer}
                 />
-            }
-            secondaryDrawer={
-                secondaryDrawerEntity ? (
-                    <RelatedSecondaryDrawer
-                        entity={secondaryDrawerEntity}
-                        moduleLabel={activeModuleMeta?.label}
-                        parentTitle={selectedDrawerContact?.name}
-                        onClose={() => setSecondaryDrawerEntity(null)}
-                    />
-                ) : null
             }
             isDrawerOpen={Boolean(selectedDrawerContact)}
             toast={

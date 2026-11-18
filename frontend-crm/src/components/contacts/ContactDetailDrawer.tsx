@@ -20,6 +20,7 @@ import CheckCircleOutlinedIcon from '@mui/icons-material/CheckCircleOutlined';
 import LogoutOutlinedIcon from '@mui/icons-material/LogoutOutlined';
 
 import { ROUTES } from '@/config/constants';
+import { withListOrigin } from '@/utils/listOrigin';
 import type { Contact } from '@/types/contact.types';
 import { useContact, useOrganizations } from '@/hooks/queries';
 import {
@@ -199,7 +200,7 @@ export function ContactDetailDrawer({
             badges={badges}
             headerActions={{
                 onEdit: handleEdit,
-                onView: () => router.push(ROUTES.CONTACT_DETAIL(c.id)),
+                onView: () => router.push(withListOrigin(ROUTES.CONTACT_DETAIL(c.id))),
             }}
             formTabs={CONTACT_FORM_TABS}
             tabContents={{

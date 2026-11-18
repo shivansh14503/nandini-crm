@@ -764,7 +764,7 @@ export function Navbar() {
                 {/* ── RIGHT: Search + Create + User menu ── */}
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
 
-                    {/* Global search (Organizations, Contacts, Leads, Opportunities) */}
+                    {/* Global search (every module; Enter opens /search) */}
                     <GlobalSearch />
 
                     {/* Create button */}

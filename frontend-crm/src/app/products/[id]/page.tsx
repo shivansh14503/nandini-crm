@@ -8,12 +8,17 @@ import { ROUTES } from '@/config/constants';
 import { Navbar } from '@/components/layout/Navbar';
 import { LoadingScreen } from '@/components/common/LoadingScreen';
 import ProductForm from '@/components/products/ProductForm';
+import { RecordWorkspace } from '@/components/common/RecordWorkspace';
+import { useProduct } from '@/hooks/queries';
 
 function ProductDetailContent() {
     const router = useRouter();
     const params = useParams();
     const id = (params?.id as string) || '';
     const { user, loading, isAuthenticated } = useAuth();
+    // The record itself feeds the related modules sidebar.
+    const { data: record } = useProduct(id);
+    const recordTitle = record?.productName ?? '';
 
     useEffect(() => {
         if (!loading && !isAuthenticated) {
@@ -26,10 +31,12 @@ function ProductDetailContent() {
 
     return (
         <Box sx={{ minHeight: '100vh', backgroundColor: 'var(--mui-palette-background-subtle)' }}>
-            <Navbar />
-            <Container maxWidth="xl" sx={{ pt: 2.5, pb: 1 }}>
-                <ProductForm mode="view" productId={id} />
-            </Container>
+            <RecordWorkspace entityType="product" entity={record} title={recordTitle} listHref={ROUTES.PRODUCTS}>
+                <Navbar />
+                <Container maxWidth="xl" sx={{ pt: 2.5, pb: 1 }}>
+                    <ProductForm mode="view" productId={id} />
+                </Container>
+            </RecordWorkspace>
         </Box>
     );
 }

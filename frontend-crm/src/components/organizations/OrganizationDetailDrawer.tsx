@@ -17,6 +17,7 @@ import PersonOutlineIcon from '@mui/icons-material/PersonOutlined';
 import NotesOutlinedIcon from '@mui/icons-material/NotesOutlined';
 
 import { ROUTES } from '@/config/constants';
+import { withListOrigin } from '@/utils/listOrigin';
 import type { ExtendedOrganization } from '@/types/organization.types';
 import { useOrganization } from '@/hooks/queries';
 import {
@@ -227,7 +228,7 @@ export function OrganizationDetailDrawer({
             badges={badges}
             headerActions={{
                 onEdit: handleEdit,
-                onView: () => router.push(ROUTES.ORGANIZATION_DETAIL(org.id)),
+                onView: () => router.push(withListOrigin(ROUTES.ORGANIZATION_DETAIL(org.id))),
             }}
             formTabs={ORGANIZATION_FORM_TABS}
             tabContents={{

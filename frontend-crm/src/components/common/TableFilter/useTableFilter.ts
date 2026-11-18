@@ -7,6 +7,7 @@ import type { CrmModuleKey } from '@/types/formConfig.types';
 import { activeConditionCount, applyCriteria, cleanCriteria } from './applyFilter';
 import { useTableFilterFields, type ModuleFilterFields } from './filterFields';
 import type { FilterCriteria, FilterSort, TableFilterLists } from './types';
+import { useSearchScope } from '../../search/SearchScope';
 
 const EMPTY_LISTS: TableFilterLists = { recent: [], saved: [] };
 const listKey = (module: CrmModuleKey) => ['table-filters', module] as const;
@@ -73,6 +74,8 @@ export interface TableFilterController<T = unknown> {
  */
 export function useTableFilter<T>({ module, rows, onSortChange, onChange }: UseTableFilterOptions<T>): TableFilterController<T> {
     const fields = useTableFilterFields(module);
+    // In the global search results the list starts unfiltered and leaves the list page's applied filter alone.
+    const embedded = Boolean(useSearchScope());
     const queryClient = useQueryClient();
     const [criteria, setCriteriaState] = useState<FilterCriteria | null>(null);
     const [isOpen, setIsOpen] = useState(false);
@@ -86,6 +89,7 @@ export function useTableFilter<T>({ module, rows, onSortChange, onChange }: UseT
 
     // Restore after mount (sessionStorage isn't available during server rendering).
     useEffect(() => {
+        if (embedded) return;
         const restored = readSession(module);
         if (restored) {
             // Syncing from sessionStorage, which can't be read during server rendering (would mismatch hydration).
@@ -93,15 +97,15 @@ export function useTableFilter<T>({ module, rows, onSortChange, onChange }: UseT
             setCriteriaState(restored);
             if (restored.sort) onSortRef.current?.(restored.sort);
         }
-    }, [module]);
+    }, [module, embedded]);
 
     const setCriteria = useCallback(
         (next: FilterCriteria | null) => {
             setCriteriaState(next);
-            writeSession(module, next);
+            if (!embedded) writeSession(module, next);
             onChangeRef.current?.();
         },
-        [module]
+        [module, embedded]
     );
 
     const listsQuery = useQuery({
