@@ -1,4 +1,4 @@
-import { AsYouType, isValidPhoneNumber, parsePhoneNumberFromString, type CountryCode } from 'libphonenumber-js';
+import { isValidPhoneNumber, parsePhoneNumberFromString } from 'libphonenumber-js';
 import { DEFAULT_PHONE_COUNTRY_ISO2, PHONE_COUNTRIES, getPhoneCountry, type PhoneCountry } from '@/data/countryPhoneCodes';
 
 /** ITU-T E.164: `+`, non-zero first digit, 7-15 digits total. */
@@ -79,17 +79,15 @@ export function joinPhone(country: PhoneCountry, national: string): string {
 /** Max national digits that can still form a valid E.164 number (15 total minus the dial code). */
 export const maxNationalDigits = (country: PhoneCountry): number => 15 - (country.dialCode.length - 1);
 
-/** Human-readable international form, e.g. '+91 98112 34567'. Falls back to the raw value. */
+/** Display form: country code, then the national digits with no spaces, e.g. '+91 9811234567'. */
 export function formatPhoneDisplay(value: unknown): string {
     if (typeof value !== 'string' || !value.trim()) return '';
     const { country, national } = splitPhone(value);
     if (!national) return '';
-    const formatter = new AsYouType(country.iso2 as CountryCode);
-    formatter.input(`${country.dialCode}${national}`);
-    return formatter.getNumber()?.formatInternational() ?? `${country.dialCode} ${national}`;
+    return `${country.dialCode} ${national}`;
 }
 /**
- * Phone text for copy buttons: always with its country code ('+91 98112 34567'), including legacy numbers
+ * Phone text for copy buttons: always with its country code ('+91 9811234567'), including legacy numbers
  * stored without one, so it pastes back into a phone field (or WhatsApp) complete.
  */
 export const phoneForCopy = (value: string): string => formatPhoneDisplay(value) || value;

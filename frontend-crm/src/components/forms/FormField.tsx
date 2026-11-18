@@ -3,6 +3,7 @@ import { Box, Typography, type SxProps, type Theme } from '@mui/material';
 import { useFormMode } from '@/context/FormModeContext';
 import { FieldNameProvider, useFieldOverride } from '@/context/FormConfigContext';
 import { ReadOnlyField } from './ReadOnlyField';
+import { EmailActions, PhoneActions } from '../common/ContactActions';
 import { getCountryNameByCode } from '@/data/addressMaster';
 import {
     COMPACT_FIT_PX,
@@ -33,6 +34,8 @@ export const fieldSx = {
 export interface FormFieldProps {
     /** Explicit read-only content for view mode (use when the control's value can't be inferred, e.g. chip groups). */
     viewValue?: React.ReactNode;
+    /** Buttons shown beside the value in view mode (call / email / copy …). */
+    viewActions?: React.ReactNode;
     /** Form field key; exposed as `data-field` so validation can scroll to and focus the control. */
     name?: string;
     label: string;
@@ -105,6 +108,14 @@ function viewPresentation(name: string | undefined, value: string | undefined) {
         return { copyable, badge: true, badgeColor: 'var(--crm-text-blue-700)' };
     }
     return { copyable, badge: false, badgeColor: undefined };
+}
+
+/** Email / phone text fields get send-email or call / SMS / WhatsApp buttons (plus copy) in view mode. */
+function channelActions(name: string | undefined, value: string | undefined): React.ReactNode {
+    if (!name || !value) return undefined;
+    if (/email/i.test(name) && value.includes('@')) return <EmailActions email={value} />;
+    if (/(phone|mobile|contactnumber)\d*$/i.test(name) && /\d{6,}/.test(value.replace(/\D/g, ''))) return <PhoneActions phone={value} />;
+    return undefined;
 }
 
 /** Smallest space kept between the label and a hint; with less room the hint is hidden. */
@@ -214,7 +225,7 @@ function fitFromName(name: string | undefined): FieldContentFit | undefined {
     return chars ? { chars, wide: isTaxIdentifierField(name) } : undefined;
 }
 
-export function FormField({ name, viewValue, label: baseLabel, required: baseRequired, hint: baseHint, size: baseSize, fit, children, sx }: FormFieldProps) {
+export function FormField({ name, viewValue, viewActions, label: baseLabel, required: baseRequired, hint: baseHint, size: baseSize, fit, children, sx }: FormFieldProps) {
     const { mode } = useFormMode();
     const isAuto = useFieldAutoSize(name);
     // Admin overrides for this built-in field (inside a FormConfigProvider); undefined keeps the coded props.
@@ -227,7 +238,7 @@ export function FormField({ name, viewValue, label: baseLabel, required: baseReq
 
     if (mode === 'view') {
         if (viewValue !== undefined) {
-            return <ReadOnlyField label={label} value={viewValue} hideWhenEmpty sx={{ mb: 2, ...sx }} />;
+            return <ReadOnlyField label={label} value={viewValue} actions={viewActions} hideWhenEmpty sx={{ mb: 2, ...sx }} />;
         }
         const extracted = extractViewValue(children);
         const found = extracted.found;
@@ -239,7 +250,8 @@ export function FormField({ name, viewValue, label: baseLabel, required: baseReq
                   ? override.optionLabels[extracted.value]
                   : extracted.value;
         if (found) {
-            return <ReadOnlyField label={label} value={value} hideWhenEmpty {...viewPresentation(name, value)} sx={{ mb: 2, ...sx }} />;
+            const actions = viewActions ?? channelActions(name, value);
+            return <ReadOnlyField label={label} value={value} hideWhenEmpty {...viewPresentation(name, value)} actions={actions} sx={{ mb: 2, ...sx }} />;
         }
     }
     const resolvedSize = resolveFieldSize(name, undefined, size);

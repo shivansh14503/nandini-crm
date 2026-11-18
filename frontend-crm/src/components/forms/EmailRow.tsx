@@ -14,9 +14,17 @@ import {
 import DeleteIcon from '@mui/icons-material/Delete';
 import { fieldSx } from './FormField';
 import { FieldNotice } from './FieldNotice';
+import {
+    EmailCheckAdornment,
+    EmailCheckHint,
+    EmailVerificationBadge,
+    hasEmailWarning,
+    isEmailUndeliverable,
+    useEmailCheck,
+} from './EmailVerification';
 import { FIELD_MAX_LENGTH } from './fieldSizing';
 import { useFormMode } from '@/context/FormModeContext';
-import { DrawerCopyButton } from '../common/Drawer/DrawerPrimitives';
+import { EmailActions } from '../common/ContactActions';
 import type { CorporateEmail } from '@/types/organization.types';
 
 export interface EmailRowProps {
@@ -31,15 +39,24 @@ export interface EmailRowProps {
     notice?: React.ReactNode;
     /** Address input placeholder (form builder › Placeholder). */
     placeholder?: string;
+    /** Validation error of this row's address (schema format check, or the server rejecting the address). */
+    error?: string;
 }
 
-export function EmailRow({ email, onChange, onRemove, notice, placeholder = 'e.g. contact@domain.com' }: EmailRowProps) {
+export function EmailRow({ email, onChange, onRemove, notice, placeholder = 'e.g. contact@domain.com', error }: EmailRowProps) {
     const { mode } = useFormMode();
+    const { state: checkState, check } = useEmailCheck(mode === 'view' ? '' : email.email);
+    // The form's own error wins; otherwise an address the check found undeliverable shows as a field error too.
+    const errorText = error ?? (isEmailUndeliverable(checkState) ? checkState.result.message ?? undefined : undefined);
+    // A new address drops the saved result; the server verifies it again after save.
+    const setAddress = (value: string) =>
+        onChange({ ...email, email: value, verificationStatus: null, verificationReason: null, verifiedAt: null });
     if (mode === 'view') {
         return (
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap', py: 0.75 }}>
                 <Typography sx={{ fontSize: '0.88rem', fontWeight: 600, color: 'var(--crm-slate-900)' }}>{email.email || '—'}</Typography>
-                {email.email && <DrawerCopyButton text={email.email} title="Copy email" />}
+                <EmailActions email={email.email} />
+                <EmailVerificationBadge email={email} />
                 {email.isPrimary && <Chip label="Primary" size="small" sx={{ height: 20, fontSize: '0.68rem', fontWeight: 700, color: 'var(--crm-text-blue-700)', backgroundColor: 'var(--mui-palette-primary-soft)' }} />}
                 {email.isOptedOut && <Chip label="Opted Out (DND)" size="small" sx={{ height: 20, fontSize: '0.68rem', fontWeight: 700, color: 'var(--crm-amber-700)', backgroundColor: 'var(--crm-amber-100)' }} />}
                 {email.isInvalidBounce && <Chip label="Invalid Bounce" size="small" sx={{ height: 20, fontSize: '0.68rem', fontWeight: 700, color: 'var(--crm-red-700)', backgroundColor: 'var(--crm-red-100)' }} />}
@@ -63,10 +80,17 @@ export function EmailRow({ email, onChange, onRemove, notice, placeholder = 'e.g
                     type="email"
                     value={email.email}
                     placeholder={placeholder}
-                    onChange={(e) => onChange({ ...email, email: e.target.value.toLowerCase().trim() })}
-                    slotProps={{ htmlInput: { maxLength: FIELD_MAX_LENGTH.email } }}
+                    onChange={(e) => setAddress(e.target.value.toLowerCase().trim())}
+                    onBlur={check}
+                    error={Boolean(errorText)}
+                    helperText={errorText}
+                    slotProps={{
+                        input: { endAdornment: errorText ? undefined : <EmailCheckAdornment state={checkState} /> },
+                        htmlInput: { maxLength: FIELD_MAX_LENGTH.email },
+                    }}
                     sx={fieldSx}
                 />
+                <EmailVerificationBadge email={email} />
                 {onRemove && (
                     <Tooltip title="Remove email">
                         <IconButton
@@ -79,6 +103,11 @@ export function EmailRow({ email, onChange, onRemove, notice, placeholder = 'e.g
                     </Tooltip>
                 )}
             </Box>
+            {!errorText && hasEmailWarning(checkState) && (
+                <Box sx={{ mt: -0.5, mb: 1 }}>
+                    <EmailCheckHint state={checkState} onApplySuggestion={setAddress} />
+                </Box>
+            )}
             {notice && (
                 <Box sx={{ mt: -0.5, mb: 1 }}>
                     {React.isValidElement(notice) ? notice : <FieldNotice>{notice}</FieldNotice>}

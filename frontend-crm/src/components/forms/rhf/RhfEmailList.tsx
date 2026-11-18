@@ -75,6 +75,9 @@ export function RhfEmailList({
     const errorMessage =
         (fieldState.error as { root?: { message?: string } } | undefined)?.root?.message ??
         fieldState.error?.message;
+    // Per-row errors (format from the schema, "can't receive email" from the server) sit on `<name>.<i>.email`.
+    const rowErrors = fieldState.error as unknown as ({ email?: { message?: string } } | undefined)[] | undefined;
+    const rowError = (index: number) => (Array.isArray(rowErrors) ? rowErrors[index]?.email?.message : undefined);
 
     const isView = useFormMode().mode === 'view';
 
@@ -160,6 +163,7 @@ export function RhfEmailList({
                     email={row}
                     onChange={(updated) => handleChange(index, updated)}
                     onRemove={canRemove ? () => handleRemove(index) : undefined}
+                    error={rowError(index)}
                     notice={emailNotices?.[(row.email ?? '').trim().toLowerCase()]}
                     placeholder={placeholder}
                 />

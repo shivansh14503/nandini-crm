@@ -12,6 +12,7 @@ import { asPayload, checkModulePayload, loadModuleFieldConfig, validateModulePay
 import { shownNumberModules } from '../document-series/documentSeries.service.js';
 import { assertAssigneeValid, assertRecordAccess, buildAccessScopeWhere } from '../shared/accessControl.js';
 import { emailsInclude, normalizeEmails, replaceEmails } from '../shared/entityEmails.js';
+import { assertEmailsDeliverable, queueEmailVerification } from '../email-verification/emailVerification.service.js';
 import { invalidateSyncedCaches, propagateContactName, type NameSyncCounts } from '../shared/nameSync.js';
 import { findOrganizationByName, type PrefetchedLookups } from '../shared/prefetch.js';
 import { codeSearchPrefix, phoneSearch, phoneWhere } from '../shared/searchTerms.js';
@@ -163,14 +164,17 @@ export const contactService = {
     async create(body: unknown, user: AuthUser): Promise<ContactDto> {
         const input = contactInputSchema.parse(body);
         input.customFields = await validateModulePayload('contacts', asPayload(body), input.customFields);
+        await assertEmailsDeliverable(input.emailAddresses, 'emailAddresses');
 
         const created = await runInTransaction((tx) => createContactRecord(tx, input, user));
         await cacheService.invalidateEntityCaches('contacts');
+        queueEmailVerification({ contactId: created.id });
         return created;
     },
 
     async update(id: string, patch: Record<string, unknown>, user: AuthUser): Promise<ContactDto> {
         const fieldConfig = await loadModuleFieldConfig('contacts');
+        if ('emailAddresses' in patch) await assertEmailsDeliverable(patch.emailAddresses, 'emailAddresses', { contactId: id });
         let synced: NameSyncCounts | undefined;
         const updated = await runInTransaction(async (tx) => {
             synced = undefined;
@@ -211,6 +215,7 @@ export const contactService = {
         });
 
         await Promise.all([cacheService.invalidateEntityCaches('contacts'), invalidateSyncedCaches(synced)]);
+        if ('emailAddresses' in patch) queueEmailVerification({ contactId: id });
         return updated;
     },
 

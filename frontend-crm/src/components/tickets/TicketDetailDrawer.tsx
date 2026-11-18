@@ -16,6 +16,8 @@ import { isTicketOverdue, type Ticket } from '@/types/ticket.types';
 import { useTicket } from '@/hooks/queries';
 import { findCrmUser } from '@/services/masterData.store';
 import { ReadOnlyField } from '@/components/forms/ReadOnlyField';
+import { EmailActions, PhoneActions } from '@/components/common/ContactActions';
+import { formatPhoneDisplay } from '@/utils/phone';
 import {
     EntityDetailDrawer,
     DrawerSectionCard,
@@ -171,8 +173,12 @@ export function TicketDetailDrawer({ ticket, open, onClose, onEdit, hideBackdrop
                             <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 1.5 }}>
                                 <ReadOnlyField label="Organization" value={t.organizationName} />
                                 <ReadOnlyField label="Contact Person" value={t.contactPersonName} />
-                                <ReadOnlyField label="Contact Number" value={t.contactNumber} />
-                                <ReadOnlyField label="Contact Email" value={t.contactEmail} />
+                                <ReadOnlyField
+                                    label="Contact Number"
+                                    value={t.contactNumber ? formatPhoneDisplay(t.contactNumber) || t.contactNumber : undefined}
+                                    actions={<PhoneActions phone={t.contactNumber} />}
+                                />
+                                <ReadOnlyField label="Contact Email" value={t.contactEmail} actions={<EmailActions email={t.contactEmail} />} />
                                 <ReadOnlyField label="Left Job" value={t.leftJob} />
                             </Box>
                             <Box sx={{ mt: 1.5 }}>

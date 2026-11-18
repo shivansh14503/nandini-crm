@@ -19,6 +19,7 @@ import { leadInclude, leadNotFound } from './lead.service.js';
 import type { LeadRow } from './lead.mapper.js';
 import { CONVERTED_STATUS, convertLeadSchema, type ConvertLeadInput } from './lead.validator.js';
 import { assertNotInPast, nextFollowupCheck } from '../../validators/notInPast.js';
+import { queueEmailVerification } from '../email-verification/emailVerification.service.js';
 
 /** `LeadConversionResult` from frontend-crm/src/services/leadConversion.service.ts. */
 export interface LeadConversionResult {
@@ -214,5 +215,7 @@ export async function convertLead(leadId: string, body: unknown, user: AuthUser)
         ...(result.organizationCreated ? [cacheService.invalidateEntityCaches('organizations')] : []),
         ...(result.contactCreated ? [cacheService.invalidateEntityCaches('contacts')] : []),
     ]);
+    if (result.organizationCreated) queueEmailVerification({ organizationId: result.organization.id });
+    if (result.contactCreated) queueEmailVerification({ contactId: result.contact.id });
     return result;
 }

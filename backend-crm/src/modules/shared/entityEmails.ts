@@ -10,6 +10,10 @@ export interface CorporateEmailDto {
     isPrimary: boolean;
     isOptedOut: boolean;
     isInvalidBounce: boolean;
+    /** Automatic check result (`valid` | `risky` | `invalid`); null = not checked yet or undecided. Read-only. */
+    verificationStatus: string | null;
+    verificationReason: string | null;
+    verifiedAt: string | null;
 }
 
 const MAX_EMAILS_PER_RECORD = 20;
@@ -62,17 +66,28 @@ export function toEmailDtos(rows: readonly EntityEmail[] | undefined): Corporate
             isPrimary: row.isPrimary,
             isOptedOut: row.isOptedOut,
             isInvalidBounce: row.isInvalidBounce,
+            verificationStatus: row.verificationStatus,
+            verificationReason: row.verificationReason,
+            verifiedAt: row.verifiedAt?.toISOString() ?? null,
         }));
 }
 
 export type EmailOwner = { organizationId: string } | { contactId: string } | { leadId: string };
 
-/** Replaces an owner's email list (delete + insert) inside the caller's transaction. */
+/**
+ * Replaces an owner's email list (delete + insert) inside the caller's transaction. Addresses that were already
+ * on the record keep their verification result; new ones start unchecked (see `queueEmailVerification`).
+ */
 export async function replaceEmails(tx: TransactionClient, owner: EmailOwner, emails: readonly NormalizedEmail[]): Promise<void> {
+    const previous = await tx.entityEmail.findMany({
+        where: owner,
+        select: { email: true, verificationStatus: true, verificationReason: true, verifiedAt: true },
+    });
+    const verificationByEmail = new Map(previous.map(({ email, ...verification }) => [email, verification]));
     await tx.entityEmail.deleteMany({ where: owner });
     if (emails.length === 0) return;
     await tx.entityEmail.createMany({
-        data: emails.map((row, index) => ({ ...row, ...owner, sortOrder: index })),
+        data: emails.map((row, index) => ({ ...row, ...verificationByEmail.get(row.email), ...owner, sortOrder: index })),
     });
 }
 

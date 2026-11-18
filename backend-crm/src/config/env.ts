@@ -53,6 +53,16 @@ const envSchema = z
             .enum(['true', 'false'])
             .default('false')
             .transform((value) => value === 'true'),
+
+        /** Check saved lead / contact / organization emails in the background (syntax, typos, disposable, DNS). */
+        EMAIL_VERIFICATION_ENABLED: z
+            .enum(['true', 'false'])
+            .default('true')
+            .transform((value) => value === 'true'),
+        /** QuickEmailVerification API key: adds the mailbox-exists check. Without it only the free checks run. */
+        QUICKEMAILVERIFICATION_API_KEY: z.string().trim().min(1).optional(),
+        /** Re-verify an address after this many days. */
+        EMAIL_VERIFICATION_RECHECK_DAYS: z.coerce.number().int().min(1).max(3650).default(90),
     })
     .superRefine((env, ctx) => {
         if (env.NODE_ENV === 'production' && (!env.JWT_SECRET || env.JWT_SECRET.length < 32)) {
@@ -98,6 +108,11 @@ export const ENV = {
         CACHE_TTL_SECONDS: env.PDF_CACHE_TTL_SECONDS,
         PUPPETEER_EXECUTABLE_PATH: env.PUPPETEER_EXECUTABLE_PATH,
         CHROMIUM_NO_SANDBOX: env.PDF_CHROMIUM_NO_SANDBOX,
+    },
+    EMAIL_VERIFICATION: {
+        ENABLED: env.EMAIL_VERIFICATION_ENABLED,
+        QEV_API_KEY: env.QUICKEMAILVERIFICATION_API_KEY,
+        RECHECK_DAYS: env.EMAIL_VERIFICATION_RECHECK_DAYS,
     },
     COOKIE: {
         NAME: 'token',

@@ -83,6 +83,10 @@ function parseEmails(row: PartnerCompany): CorporateEmailDto[] {
         isPrimary: Boolean(item.isPrimary),
         isOptedOut: Boolean(item.isOptedOut),
         isInvalidBounce: Boolean(item.isInvalidBounce),
+        // Partner companies store emails as JSON and aren't auto-verified.
+        verificationStatus: null,
+        verificationReason: null,
+        verifiedAt: null,
     }));
 }
 

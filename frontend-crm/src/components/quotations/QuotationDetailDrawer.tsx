@@ -37,6 +37,8 @@ import { DynamicDrawerCustomFields } from '@/components/common/Drawer/DynamicDra
 import { DoubleClickCopyText } from '@/components/common/useDoubleClickCopy';
 import { PdfActionsButton } from '@/components/pdf/PdfActionsButton';
 import { useShowRecordNumber } from '@/hooks/queries/useDocumentSeries';
+import { EmailActions, PhoneActions } from '@/components/common/ContactActions';
+import { formatPhoneDisplay } from '@/utils/phone';
 
 export interface QuotationDetailDrawerProps {
     quotation: Quotation | null;
@@ -462,14 +464,12 @@ export function QuotationDetailDrawer({
                             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                                 <PhoneOutlinedIcon sx={{ fontSize: 16, color: 'var(--mui-palette-text-secondary)' }} />
                                 <Typography sx={{ fontSize: '0.8rem', color: 'var(--crm-slate-700)' }}>
-                                    {quotation.contactMobile || quotation.contactNumber}
+                                    {formatPhoneDisplay(quotation.contactMobile || quotation.contactNumber) ||
+                                        quotation.contactMobile ||
+                                        quotation.contactNumber}
                                 </Typography>
                             </Box>
-                            <DrawerCopyButton
-                                text={quotation.contactMobile || quotation.contactNumber || ''}
-                                title="Copy Phone Number"
-                                iconColor="var(--mui-palette-text-muted)"
-                            />
+                            <PhoneActions phone={quotation.contactMobile || quotation.contactNumber} />
                         </Box>
                     )}
 
@@ -481,11 +481,7 @@ export function QuotationDetailDrawer({
                                     {quotation.contactEmail || quotation.emailAddress}
                                 </Typography>
                             </Box>
-                            <DrawerCopyButton
-                                text={quotation.contactEmail || quotation.emailAddress || ''}
-                                title="Copy Email Address"
-                                iconColor="var(--mui-palette-text-muted)"
-                            />
+                            <EmailActions email={quotation.contactEmail || quotation.emailAddress} />
                         </Box>
                     )}
                 </Box>

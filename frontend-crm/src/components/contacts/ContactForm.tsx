@@ -2,7 +2,8 @@
 
 import React, { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { FormProvider } from 'react-hook-form';
+import { FormProvider, type Path } from 'react-hook-form';
+import { ApiClientError } from '@/services/apiClient';
 import { Divider } from '@mui/material';
 
 // Icons
@@ -14,6 +15,7 @@ import TuneOutlinedIcon from '@mui/icons-material/TuneOutlined';
 import { type BreadcrumbItem } from '../common/AppBreadcrumbs';
 import { AppToast } from '../common/AppToast';
 import { type FormTabDefinition } from '../common/Drawer';
+import type { RecordAuditStamp } from '../common/Drawer/RecordAuditFooter';
 import { ROUTES } from '@/config/constants';
 import type { ContactFormData } from '@/types/contact.types';
 import { contactService } from '@/services';
@@ -98,6 +100,7 @@ export default function ContactForm({
     const { reset, watch, formState } = methods;
     const { isDirty, isSubmitting } = formState;
     const contactName = watch('name');
+    const [audit, setAudit] = useState<RecordAuditStamp>();
     const [recordCode, setRecordCode] = useState('');
     const showNumber = useShowRecordNumber();
 
@@ -137,6 +140,7 @@ export default function ContactForm({
                 if (active && found) {
                     reset({ ...DEFAULT_FORM, ...found });
                     setRecordCode(found.contactCode ?? '');
+                    setAudit({ createdAt: found.createdAt, createdBy: found.createdBy, updatedAt: found.updatedAt, updatedBy: found.updatedBy });
                 }
             })
             .catch(() => {});
@@ -155,7 +159,16 @@ export default function ContactForm({
             reset(values);
             setTimeout(() => router.push(ROUTES.CONTACTS), 700);
         } catch (err: unknown) {
-            showToast(err instanceof Error ? err.message : 'Failed to save contact.', 'error');
+            let message = err instanceof Error ? err.message : 'Failed to save contact.';
+            if (err instanceof ApiClientError) {
+                // 400 / 409 responses name the offending fields (e.g. an email that can't receive mail): mark them inline.
+                const fieldErrors = (err.details?.errors ?? []).filter((e) => e.path?.[0]);
+                fieldErrors.forEach((fieldErr) => {
+                    methods.setError(fieldErr.path.join('.') as Path<ContactFormData>, { type: 'server', message: fieldErr.message });
+                });
+                if (fieldErrors.length > 0) message = fieldErrors[0].message || message;
+            }
+            showToast(message, 'error');
         }
     });
 
@@ -182,6 +195,7 @@ export default function ContactForm({
                         editHref: contactId ? ROUTES.CONTACT_EDIT(contactId) : undefined,
                         editLabel: 'Edit Contact',
                         backHref: ROUTES.CONTACTS,
+                        audit,
                     }}
                     mode={mode}
                     toast={<AppToast open={toast.open} message={toast.message} severity={toast.severity} onClose={closeToast} />}

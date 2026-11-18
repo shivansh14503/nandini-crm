@@ -15,6 +15,8 @@ export interface ReadOnlyFieldProps {
     /** Main colour of the badge (text); the background is a light tint of it. */
     badgeColor?: string;
     hint?: React.ReactNode;
+    /** Buttons shown beside the value (e.g. call / email); shown instead of the plain copy button. */
+    actions?: React.ReactNode;
     /** Render nothing at all when there is no value (record views only show filled-in data). */
     hideWhenEmpty?: boolean;
     sx?: SxProps<Theme>;
@@ -32,6 +34,7 @@ export function ReadOnlyField({
     badge,
     badgeColor = 'var(--crm-slate-600)',
     hint,
+    actions,
     hideWhenEmpty,
     sx,
 }: ReadOnlyFieldProps) {
@@ -89,7 +92,7 @@ export function ReadOnlyField({
                             {value}
                         </Typography>
                     )}
-                    {copyable && textToCopy && <DrawerCopyButton text={textToCopy} title={`Copy ${label}`} />}
+                    {actions ?? (copyable && textToCopy && <DrawerCopyButton text={textToCopy} title={`Copy ${label}`} />)}
                 </Box>
             )}
 

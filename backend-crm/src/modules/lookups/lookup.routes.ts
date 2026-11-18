@@ -5,6 +5,9 @@ import { prisma } from '../../config/prisma.js';
 import { formConfigService } from '../form-configs/formConfig.service.js';
 import { findTaxIdHolders } from '../shared/taxIdentifiers.js';
 import { lookupService, taxIdHoldersQuerySchema } from './lookup.service.js';
+import { z } from 'zod';
+import { checkEmailForForm } from '../email-verification/emailVerification.service.js';
+import { createRateLimiter } from '../../middlewares/rateLimiter.js';
 
 /**
  * /api/lookups (all cached in Redis)
@@ -19,6 +22,7 @@ import { lookupService, taxIdHoldersQuerySchema } from './lookup.service.js';
  *   GET /cities              ?country=IN&state=IN-DL&search&limit → CityLookupDto[] (searches not cached)
  *   GET /form-configs        ?includeInactive         → { categories, fieldsByModule, moduleTabs }
  *   GET /tax-id-holders      ?owner&gstNo&panNumber&excludeId → TaxIdHolder[] (live, never cached)
+ *   GET /email-check         ?email                   → EmailCheckResult (free checks + cached mailbox check; rate limited)
  */
 const router = Router();
 router.use(authenticate);
@@ -44,6 +48,21 @@ router.get(
         const { owner, gstNo, panNumber, excludeId } = taxIdHoldersQuerySchema.parse(q ?? {});
         return findTaxIdHolders(prisma, owner, { gstNo, panNumber }, excludeId);
     })
+);
+// Run when a form's email field loses focus: free checks, then the mailbox check (cached per address, so each
+// distinct address costs at most one provider credit). Limited per user so a stuck form can't drain the quota.
+const emailCheckQuerySchema = z.object({ email: z.string().trim().min(1).max(254) });
+const emailCheckLimiter = createRateLimiter({
+    keyPrefix: 'ratelimit:email-check',
+    max: 60,
+    windowSeconds: 10 * 60,
+    keyGenerator: (req: Request) => (req.user ? `user:${req.user.id}` : `ip:${req.ip ?? 'unknown'}`),
+    message: 'Too many email checks. Please wait a few minutes.',
+});
+router.get(
+    '/email-check',
+    emailCheckLimiter,
+    handler((q) => checkEmailForForm(emailCheckQuerySchema.parse(q ?? {}).email))
 );
 
 export default router;

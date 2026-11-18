@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { Box, Typography, Chip, IconButton, Tooltip } from '@mui/material';
+import { Box, Typography, Chip } from '@mui/material';
 
 // Icons
 import PhoneOutlinedIcon from '@mui/icons-material/PhoneOutlined';
@@ -16,10 +16,6 @@ import ContactPhoneOutlinedIcon from '@mui/icons-material/ContactPhoneOutlined';
 import TuneOutlinedIcon from '@mui/icons-material/TuneOutlined';
 import PersonOutlinedIcon from '@mui/icons-material/PersonOutlined';
 import NotesOutlinedIcon from '@mui/icons-material/NotesOutlined';
-import CallOutlinedIcon from '@mui/icons-material/CallOutlined';
-import WhatsAppIcon from '@mui/icons-material/WhatsApp';
-import SmsOutlinedIcon from '@mui/icons-material/SmsOutlined';
-import MailOutlineIcon from '@mui/icons-material/MailOutlineOutlined';
 import CheckCircleOutlinedIcon from '@mui/icons-material/CheckCircleOutlined';
 import LogoutOutlinedIcon from '@mui/icons-material/LogoutOutlined';
 
@@ -29,16 +25,16 @@ import { useContact, useOrganizations } from '@/hooks/queries';
 import {
     EntityDetailDrawer,
     DrawerSectionCard,
-    DrawerCopyButton,
     DrawerFieldGrid,
     type DrawerBadgeItem,
 } from '@/components/common/Drawer';
 import { ReadOnlyField } from '@/components/forms/ReadOnlyField';
 import { findCrmUser } from '@/services/masterData.store';
-import { mailtoHref,smsHref, telHref, whatsappHref } from '@/utils/contactLinks';
+import { telHref } from '@/utils/contactLinks';
 import { CONTACT_FORM_TABS } from './ContactForm';
 import { DynamicDrawerCustomFields } from '@/components/common/Drawer/DynamicDrawerCustomFields';
-import { phoneForCopy } from '@/utils/phone';
+import { EmailActions, PhoneActions } from '@/components/common/ContactActions';
+import { formatPhoneDisplay } from '@/utils/phone';
 
 export interface ContactDetailDrawerProps {
     contact: Contact | null;
@@ -69,57 +65,16 @@ const getInitials = (name: string) => {
     return ((parts[0]?.[0] ?? '') + (parts.length > 1 ? parts[parts.length - 1][0] : '')).toUpperCase();
 };
 
-interface ChannelAction {
-    label: string;
-    href: string;
-    icon: React.ReactElement;
-    /** Hover accent colour. */
-    color: string;
-    external?: boolean;
-}
-
-/** Icon button rendered as a real link (tel:, sms:, mailto:, wa.me). */
-function ChannelActionButton({ label, href, icon, color, external }: ChannelAction) {
-    return (
-        <Tooltip title={label}>
-            <IconButton
-                component="a"
-                href={href}
-                aria-label={label}
-                size="small"
-                {...(external && { target: '_blank', rel: 'noopener noreferrer' })}
-                sx={{
-                    width: 28,
-                    height: 28,
-                    color: 'var(--mui-palette-text-secondary)',
-                    border: '1px solid var(--mui-palette-border-main)',
-                    borderRadius: '8px',
-                    transition: 'all 0.15s ease',
-                    '&:hover': {
-                        color,
-                        borderColor: color,
-                        backgroundColor: `color-mix(in srgb, ${color} 12%, transparent)`,
-                    },
-                }}
-            >
-                {icon}
-            </IconButton>
-        </Tooltip>
-    );
-}
-
 interface ChannelRowProps {
     icon: React.ReactElement;
     value: string;
     caption: string;
     tag?: string;
-    actions: ChannelAction[];
-    copyTitle: string;
-    /** Text the copy button copies, when it differs from `value` (phones copy with their country code). */
-    copyText?: string;
+    /** Call / SMS / WhatsApp / email / copy buttons. */
+    actions: React.ReactNode;
 }
 
-function ChannelRow({ icon, value, caption, tag, actions, copyTitle, copyText }: ChannelRowProps) {
+function ChannelRow({ icon, value, caption, tag, actions }: ChannelRowProps) {
     return (
         <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1.5, py: 1 }}>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.25, minWidth: 0 }}>
@@ -152,22 +107,10 @@ function ChannelRow({ icon, value, caption, tag, actions, copyTitle, copyText }:
                     <Typography sx={{ fontSize: '0.7rem', color: 'var(--mui-palette-text-secondary)' }}>{caption}</Typography>
                 </Box>
             </Box>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, flexShrink: 0 }}>
-                {actions.filter((a) => a.href).map((a) => (
-                    <ChannelActionButton key={a.label} {...a} />
-                ))}
-                <DrawerCopyButton text={copyText ?? value} title={copyTitle} iconColor="var(--mui-palette-text-secondary)" />
-            </Box>
+            {actions}
         </Box>
     );
 }
-
-const callAction = (phone: string): ChannelAction => ({
-    label: 'Call',
-    href: telHref(phone),
-    icon: <CallOutlinedIcon sx={{ fontSize: 15 }} />,
-    color: 'var(--crm-text-blue-600)',
-});
 
 export function ContactDetailDrawer({
     contact,
@@ -332,47 +275,26 @@ export function ContactDetailDrawer({
                                 {c.mobile && (
                                     <ChannelRow
                                         icon={<SmartphoneOutlinedIcon sx={{ fontSize: 18 }} />}
-                                        value={c.mobile}
+                                        value={formatPhoneDisplay(c.mobile) || c.mobile}
                                         caption="Mobile"
-                                        copyTitle="Copy mobile"
-                                        copyText={phoneForCopy(c.mobile)}
-                                        actions={[
-                                            callAction(c.mobile),
-                                            {
-                                                label: 'WhatsApp',
-                                                href: whatsappHref(c.mobile),
-                                                icon: <WhatsAppIcon sx={{ fontSize: 15 }} />,
-                                                color: 'var(--mui-palette-success-main)',
-                                                external: true,
-                                            },
-                                            {
-                                                label: 'Send SMS',
-                                                href: smsHref(c.mobile),
-                                                icon: <SmsOutlinedIcon sx={{ fontSize: 15 }} />,
-                                                color: 'var(--crm-violet-600)',
-                                            },
-                                        ]}
+                                        actions={<PhoneActions phone={c.mobile} copyTitle="Copy mobile" />}
                                     />
                                 )}
                                 {c.officePhone && (
                                     <ChannelRow
                                         icon={<PhoneOutlinedIcon sx={{ fontSize: 18 }} />}
-                                        value={c.officePhone}
+                                        value={formatPhoneDisplay(c.officePhone) || c.officePhone}
                                         caption="Office Phone"
-                                        copyTitle="Copy office phone"
-                                        copyText={phoneForCopy(c.officePhone)}
-                                        actions={[callAction(c.officePhone)]}
+                                        actions={<PhoneActions phone={c.officePhone} copyTitle="Copy office phone" />}
                                     />
                                 )}
                                 {extraPhones.map(([label, value]) => (
                                     <ChannelRow
                                         key={label}
                                         icon={<PhoneOutlinedIcon sx={{ fontSize: 18 }} />}
-                                        value={value}
+                                        value={formatPhoneDisplay(value) || value}
                                         caption={label}
-                                        copyTitle={`Copy ${label.toLowerCase()}`}
-                                        copyText={phoneForCopy(value)}
-                                        actions={[callAction(value)]}
+                                        actions={<PhoneActions phone={value} copyTitle={`Copy ${label.toLowerCase()}`} />}
                                     />
                                 ))}
                                 {emails.map((em) => (
@@ -382,15 +304,7 @@ export function ContactDetailDrawer({
                                         value={em.email}
                                         caption="Email"
                                         tag={em.isPrimary ? 'PRIMARY' : undefined}
-                                        copyTitle="Copy email"
-                                        actions={[
-                                            {
-                                                label: 'Send email',
-                                                href: mailtoHref(em.email),
-                                                icon: <MailOutlineIcon sx={{ fontSize: 15 }} />,
-                                                color: 'var(--crm-text-blue-600)',
-                                            },
-                                        ]}
+                                        actions={<EmailActions email={em.email} />}
                                     />
                                 ))}
                             </Box>

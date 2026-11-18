@@ -19,14 +19,14 @@ import type { Opportunity } from '@/types/opportunity.types';
 import {
     EntityDetailDrawer,
     DrawerSectionCard,
-    DrawerCopyButton,
 } from '@/components/common/Drawer';
 import { AppToast } from '@/components/common/AppToast';
 import { useOpportunity, useOrganization, useOrganizations, useQuotations } from '@/hooks/queries';
 import { OPPORTUNITY_FORM_TABS } from './OpportunityForm';
 import { DynamicDrawerCustomFields } from '@/components/common/Drawer/DynamicDrawerCustomFields';
 import { DoubleClickCopyText } from '@/components/common/useDoubleClickCopy';
-import { phoneForCopy } from '@/utils/phone';
+import { formatPhoneDisplay } from '@/utils/phone';
+import { EmailActions, PhoneActions } from '@/components/common/ContactActions';
 import { useShowRecordNumber } from '@/hooks/queries/useDocumentSeries';
 
 export interface OpportunityDetailDrawerProps {
@@ -202,10 +202,10 @@ export function OpportunityDetailDrawer({
                                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                                         <PhoneOutlinedIcon sx={{ fontSize: 16, color: 'var(--mui-palette-text-secondary)' }} />
                                         <Typography sx={{ fontSize: '0.82rem', color: 'var(--mui-palette-text-primary)' }}>
-                                            {opp.contactNumber}
+                                            {formatPhoneDisplay(opp.contactNumber) || opp.contactNumber}
                                         </Typography>
                                     </Box>
-                                    <DrawerCopyButton text={phoneForCopy(opp.contactNumber)} title="Copy Phone Number" iconColor="var(--mui-palette-text-muted)" />
+                                    <PhoneActions phone={opp.contactNumber} />
                                 </Box>
 
                                 {opp.emailAddress && (
@@ -216,7 +216,7 @@ export function OpportunityDetailDrawer({
                                                 {opp.emailAddress}
                                             </Typography>
                                         </Box>
-                                        <DrawerCopyButton text={opp.emailAddress} title="Copy Email" iconColor="var(--mui-palette-text-muted)" />
+                                        <EmailActions email={opp.emailAddress} />
                                     </Box>
                                 )}
                             </Box>

@@ -264,6 +264,8 @@ export interface DrawerChannelRowProps {
     badgeBorder?: string;
     valueWeight?: number;
     valueColor?: string;
+    /** Action buttons (call / email / copy …) shown at the right edge; replaces the plain copy button. */
+    actions?: React.ReactNode;
 }
 
 export function DrawerChannelRow({
@@ -278,6 +280,7 @@ export function DrawerChannelRow({
     badgeBorder,
     valueWeight = 600,
     valueColor = 'var(--crm-slate-900)',
+    actions,
 }: DrawerChannelRowProps) {
     return (
         <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
@@ -295,7 +298,7 @@ export function DrawerChannelRow({
                 </Box>
             </Box>
             {/* Badge and copy button sit together on the right (copy last, at the edge), not spread across the row. */}
-            {(copyValue || badgeLabel) && (
+            {(copyValue || badgeLabel || actions) && (
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, flexShrink: 0 }}>
                     {badgeLabel && (
                         <Chip
@@ -311,7 +314,7 @@ export function DrawerChannelRow({
                             }}
                         />
                     )}
-                    {copyValue && <DrawerCopyButton text={copyValue} title={copyTitle} />}
+                    {actions ?? (copyValue && <DrawerCopyButton text={copyValue} title={copyTitle} />)}
                 </Box>
             )}
         </Box>

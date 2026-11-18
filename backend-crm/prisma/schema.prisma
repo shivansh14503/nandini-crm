@@ -210,6 +210,13 @@ model EntityEmail {
   isInvalidBounce Boolean @default(false)
   sortOrder       Int     @default(0)
 
+  /// Automatic check result: valid | risky | invalid; null = not checked yet or undecided.
+  verificationStatus String?   @db.NVarChar(20)
+  /// Why, e.g. domain_not_found, disposable, typo, accept_all, rejected_email, domain_ok.
+  verificationReason String?   @db.NVarChar(60)
+  /// When the check ran; null = never checked.
+  verifiedAt         DateTime?
+
   organizationId String? @db.NVarChar(50)
   contactId      String? @db.NVarChar(50)
   leadId         String? @db.NVarChar(50)

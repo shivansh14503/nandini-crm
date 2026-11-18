@@ -7,6 +7,7 @@ import { useFormConfigs } from '@/hooks/queries/useFormConfigs';
 import type { CrmModuleKey } from '@/types/formConfig.types';
 import { findCategory, formatCustomValue, groupSections, isEmptyValue, moduleFields, optionLabelMap } from '@/utils/formConfig';
 import { DrawerFieldGrid, DrawerSectionCard } from './DrawerPrimitives';
+import { EmailActions, PhoneActions } from '../ContactActions';
 
 export interface DynamicDrawerCustomFieldsProps {
     module: CrmModuleKey;
@@ -45,12 +46,21 @@ export function DynamicDrawerCustomFields({ module, record }: DynamicDrawerCusto
                         {section.fields.map((field) => {
                             const labels = optionLabelMap(findCategory(configs, field.dropdownCategoryKey));
                             const isLong = field.fieldType === 'textarea' || field.fieldType === 'multiselect';
+                            const raw = values[field.fieldKey];
+                            const rawText = typeof raw === 'string' ? raw : '';
                             return (
                                 <ReadOnlyField
                                     key={field.id}
                                     label={field.label}
-                                    value={formatCustomValue(field, values[field.fieldKey], labels)}
-                                    copyable={field.fieldType === 'phone' || field.fieldType === 'email' || field.fieldType === 'uppercase'}
+                                    value={formatCustomValue(field, raw, labels)}
+                                    copyable={field.fieldType === 'uppercase'}
+                                    actions={
+                                        field.fieldType === 'phone' && rawText ? (
+                                            <PhoneActions phone={rawText} />
+                                        ) : field.fieldType === 'email' && rawText ? (
+                                            <EmailActions email={rawText} />
+                                        ) : undefined
+                                    }
                                     sx={isLong ? { gridColumn: '1 / -1' } : undefined}
                                 />
                             );

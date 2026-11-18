@@ -11,6 +11,7 @@ import { parsePagination } from '../../utils/pagination.js';
 import { asPayload, checkModulePayload, loadModuleFieldConfig, validateModulePayload } from '../form-configs/customFieldValidator.js';
 import { assertAssigneeValid, assertRecordAccess, buildAccessScopeWhere } from '../shared/accessControl.js';
 import { emailsInclude, normalizeEmails, replaceEmails } from '../shared/entityEmails.js';
+import { assertEmailsDeliverable, queueEmailVerification } from '../email-verification/emailVerification.service.js';
 import type { PrefetchedLookups } from '../shared/prefetch.js';
 import { assertNotInPast, nextFollowupCheck } from '../../validators/notInPast.js';
 import { codeSearchPrefix, phoneSearch, phoneVariants, phoneWhere } from '../shared/searchTerms.js';
@@ -138,14 +139,17 @@ export const leadService = {
         input.customFields = await validateModulePayload('leads', asPayload(body), input.customFields);
         assertStatusTransition(null, input.status);
         assertNotInPast([nextFollowupCheck(input)]);
+        await assertEmailsDeliverable(input.emailAddresses, 'emailAddresses');
 
         const created = await runInTransaction((tx) => createLeadRecord(tx, input, user));
         await cacheService.invalidateEntityCaches('leads');
+        queueEmailVerification({ leadId: created.id });
         return created;
     },
 
     async update(id: string, patch: Record<string, unknown>, user: AuthUser): Promise<LeadDto> {
         const fieldConfig = await loadModuleFieldConfig('leads');
+        if ('emailAddresses' in patch) await assertEmailsDeliverable(patch.emailAddresses, 'emailAddresses', { leadId: id });
         const updated = await runInTransaction(async (tx) => {
             await lockRecords(tx, 'lead', [id]);
             const existing = await loadLead(tx, id);
@@ -176,6 +180,7 @@ export const leadService = {
         });
 
         await cacheService.invalidateEntityCaches('leads');
+        if ('emailAddresses' in patch) queueEmailVerification({ leadId: id });
         return updated;
     },
 

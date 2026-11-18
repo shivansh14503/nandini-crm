@@ -21,6 +21,8 @@ import { findCrmUser } from '@/services/masterData.store';
 import type { ExtendedPartnerCompany } from '@/types/partner.types';
 import { formatAddressLine } from '@/utils/address';
 import { mailtoHref, telHref } from '@/utils/contactLinks';
+import { formatPhoneDisplay } from '@/utils/phone';
+import { EmailActions, PhoneActions } from '@/components/common/ContactActions';
 import { PARTNER_COMPANY_FORM_TABS } from './PartnerCompanyForm';
 import { DynamicDrawerCustomFields } from '@/components/common/Drawer/DynamicDrawerCustomFields';
 
@@ -135,9 +137,8 @@ export function PartnerCompanyDetailDrawer({ partnerCompany, open, onClose }: Pa
                             <DrawerFieldGrid sx={{ mt: 0 }}>
                                 <ReadOnlyField
                                     label="Office Phone"
-                                    value={p.phone ? <Box component="a" href={telHref(p.phone)} sx={linkSx}>{p.phone}</Box> : undefined}
-                                    copyable
-                                    copyText={p.phone}
+                                    value={p.phone ? <Box component="a" href={telHref(p.phone)} sx={linkSx}>{formatPhoneDisplay(p.phone) || p.phone}</Box> : undefined}
+                                    actions={<PhoneActions phone={p.phone} />}
                                     sx={fullRow}
                                 />
                                 {emails.map((em) => (
@@ -145,6 +146,7 @@ export function PartnerCompanyDetailDrawer({ partnerCompany, open, onClose }: Pa
                                         key={em.id || em.email}
                                         label={em.isPrimary ? 'Email (Primary)' : 'Email'}
                                         value={<Box component="a" href={mailtoHref(em.email)} sx={linkSx}>{em.email}</Box>}
+                                        actions={<EmailActions email={em.email} />}
                                         sx={fullRow}
                                     />
                                 ))}

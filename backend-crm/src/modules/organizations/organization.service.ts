@@ -24,6 +24,7 @@ import { isGstRegistrationType } from '../shared/registrationType.js';
 import { asPayload, checkModulePayload, loadModuleFieldConfig, validateModulePayload } from '../form-configs/customFieldValidator.js';
 import { assertAssigneeValid, assertRecordAccess, buildAccessScopeWhere } from '../shared/accessControl.js';
 import { emailsInclude, normalizeEmails, replaceEmails } from '../shared/entityEmails.js';
+import { assertEmailsDeliverable, queueEmailVerification } from '../email-verification/emailVerification.service.js';
 import { invalidateSyncedCaches, propagateOrganizationName, type NameSyncCounts } from '../shared/nameSync.js';
 import { codeSearchPrefix, gstSearchPrefix } from '../shared/searchTerms.js';
 import type { PrefetchedLookups } from '../shared/prefetch.js';
@@ -525,14 +526,17 @@ export const organizationService = {
     async create(body: unknown, user: AuthUser): Promise<OrganizationDto> {
         const input = organizationInputSchema.parse(body);
         input.customFields = await validateModulePayload('organizations', asPayload(body), input.customFields);
+        await assertEmailsDeliverable(input.corporateEmails, 'corporateEmails');
 
         const created = await runInTransaction((tx) => createOrganizationRecord(tx, input, user));
         await cacheService.invalidateEntityCaches('organizations');
+        queueEmailVerification({ organizationId: created.id });
         return created;
     },
 
     async update(id: string, patch: Record<string, unknown>, user: AuthUser): Promise<OrganizationDto> {
         const fieldConfig = await loadModuleFieldConfig('organizations');
+        if ('corporateEmails' in patch) await assertEmailsDeliverable(patch.corporateEmails, 'corporateEmails', { organizationId: id });
         const flagsFor = await viewerFlags(user);
         let synced: NameSyncCounts | undefined;
 
@@ -588,6 +592,7 @@ export const organizationService = {
         });
 
         await Promise.all([cacheService.invalidateEntityCaches('organizations'), invalidateSyncedCaches(synced)]);
+        if ('corporateEmails' in patch) queueEmailVerification({ organizationId: id });
         return updated;
     },
 

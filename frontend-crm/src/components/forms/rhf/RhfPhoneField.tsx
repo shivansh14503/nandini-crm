@@ -20,6 +20,7 @@ import {
     type PhoneCountry,
 } from '@/data/countryPhoneCodes';
 import { getPreferredCountry, setPreferredCountry, subscribePreferredCountry } from '@/utils/phoneCountryStore';
+import { PhoneActions } from '@/components/common/ContactActions';
 import { formatPhoneDisplay, joinPhone, maxNationalDigits, parsePastedPhone, splitPhone } from '@/utils/phone';
 
 export type RhfPhoneFieldProps<T extends FieldValues = FieldValues> = Omit<RhfTextFieldProps<T>, 'numericOnly'> & {
@@ -180,6 +181,7 @@ export function RhfPhoneField<T extends FieldValues>({
             // Auto width: the longest national number plus the 90px country picker beside it.
             fit={{ chars: maxNationalDigits(country), wide: true, chromePx: 98 }}
             viewValue={formatPhoneDisplay(value) || undefined}
+            viewActions={<PhoneActions phone={value} />}
         >
             <TextField
                 {...rest}

@@ -100,6 +100,10 @@ export interface CorporateEmail {
     isPrimary: boolean;
     isOptedOut: boolean;
     isInvalidBounce: boolean;
+    /** Set by the server's automatic check after save (read-only): `valid` | `risky` | `invalid`; null = not checked. */
+    verificationStatus?: 'valid' | 'risky' | 'invalid' | null;
+    verificationReason?: string | null;
+    verifiedAt?: string | null;
 }
 
 export interface OrganizationFormData {
