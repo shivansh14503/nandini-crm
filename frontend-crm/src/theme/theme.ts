@@ -47,6 +47,15 @@ declare module '@mui/material/styles' {
     }
 }
 
+/** Autofilled inputs keep the field's own surface and text color (see MuiOutlinedInput below). */
+const autofillReset = {
+    '&:-webkit-autofill': {
+        WebkitBoxShadow: 'none',
+        WebkitTextFillColor: 'var(--mui-palette-text-primary)',
+        caretColor: 'var(--mui-palette-text-primary)',
+    },
+};
+
 export const theme = createTheme({
     cssVariables: {
         colorSchemeSelector: 'class',
@@ -208,6 +217,10 @@ export const theme = createTheme({
         // Soft/softBorder dark values are opaque blends on paper (same as --crm-*-50 / -200 in color-scale.css).
         // MUI lightens Paper in dark mode with a white overlay per elevation; we use flat surfaces instead.
         MuiPaper: { styleOverrides: { root: { backgroundImage: 'none' } } },
+        // MUI paints autofilled inputs with an inset blue shadow (#266798) in dark mode. Drop it so
+        // the field keeps its own surface; globals.css holds back the browser's native autofill tint.
+        MuiOutlinedInput: { styleOverrides: { input: autofillReset } },
+        MuiFilledInput: { styleOverrides: { input: autofillReset } },
         MuiButton: {
             styleOverrides: {
                 root: ({ theme }) => ({

@@ -95,3 +95,18 @@ body {
 .MuiTableContainer-root::-webkit-scrollbar-thumb:hover {
   background-color: var(--scrollbar-thumb-hover);
 }
+
+/* ── Browser Autofill ─────────────────────────────────────────────────────── */
+/* Browsers paint autofilled inputs with their own (blue/yellow) background and
+   text color, which can't be overridden directly. Delaying the transition
+   indefinitely keeps the input transparent so the field's normal surface and
+   text color show through, in both light and dark mode. */
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus,
+input:-webkit-autofill:active,
+input:autofill {
+  -webkit-text-fill-color: var(--mui-palette-text-primary, currentColor);
+  caret-color: var(--mui-palette-text-primary, currentColor);
+  transition: background-color 9999999s ease-in-out 0s, color 9999999s ease-in-out 0s;
+}

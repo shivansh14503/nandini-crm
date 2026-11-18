@@ -7,8 +7,8 @@ import { useFormContext, useWatch } from 'react-hook-form';
 import {
     FIELD_MAX_LENGTH,
     FormGrid,
+    LockedField,
     SectionLabel,
-    RhfTextField,
     RhfLookup,
     RhfAddressSection,
     RhfPhoneField,
@@ -26,7 +26,7 @@ const NO_ORGANIZATIONS: ExtendedOrganization[] = [];
 const NO_CONTACTS: Contact[] = [];
 
 export function QuotationAddressSection() {
-    const { control, setValue } = useFormContext<QuotationFormData>();
+    const { control, setValue, getValues, getFieldState } = useFormContext<QuotationFormData>();
 
     const organizationName = useWatch({ control, name: 'organizationName' });
     const contactName = useWatch({ control, name: 'contactName' });
@@ -40,7 +40,15 @@ export function QuotationAddressSection() {
     const orgOptions = useMemo(() => organizations.map((o) => o.organizationName), [organizations]);
     const contactOptions = useMemo(() => contacts.map((c) => c.name), [contacts]);
 
-    // ── When Organization changes, auto-fill mailingName, gstNo & addresses ─────
+    // ── Mailing name always equals the organization name (shown locked below) ─────
+    // Dirty only when the user changed the organization, so opening an older quotation whose saved
+    // mailing name differs doesn't flag the form as edited.
+    useEffect(() => {
+        if ((getValues('mailingName') ?? '') === (organizationName ?? '')) return;
+        setValue('mailingName', organizationName ?? '', { shouldDirty: getFieldState('organizationName').isDirty });
+    }, [organizationName, getValues, getFieldState, setValue]);
+
+    // ── When Organization changes, auto-fill gstNo & addresses ─────
     useEffect(() => {
         if (!organizationName || organizationName === prevOrgRef.current) return;
         prevOrgRef.current = organizationName;
@@ -53,7 +61,6 @@ export function QuotationAddressSection() {
 
         if (org) {
             const opts = { shouldDirty: true, shouldValidate: true } as const;
-            if (org.mailingName) setValue('mailingName', org.mailingName, opts);
             if (org.gstNumber || org.gstNo) setValue('gstNo', org.gstNumber || org.gstNo || '', opts);
 
             // Country is set before state so the state field validates against the right country.
@@ -108,11 +115,11 @@ export function QuotationAddressSection() {
                     placeholder="Search or enter Organization..."
                     hint="Linked client organization"
                 />
-                <RhfTextField<QuotationFormData>
+                <LockedField
                     name="mailingName"
                     label="Mailing Name"
-                    placeholder="Official organization legal name"
-                    hint="As on billing documents"
+                    value={organizationName ?? ''}
+                    hint="As on billing documents • follows Organization"
                 />
                 <RhfUppercaseField<QuotationFormData>
                     name="gstNo"

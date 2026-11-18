@@ -1,14 +1,14 @@
 'use client';
 
 import React from 'react';
-import { Box, InputAdornment } from '@mui/material';
+import { Box } from '@mui/material';
 // Raw text inputs show the admin-configured placeholder of the FormField they sit in.
 import { ConfiguredTextField as TextField } from '@/components/forms/ConfiguredTextField';
-import LockOutlinedIcon from '@mui/icons-material/LockOutlined';
 import { useController, useFormContext, useWatch } from 'react-hook-form';
 
 import {
     FormField,
+    LockedField,
     fieldSx,
     FormGrid,
     FormGridItem,
@@ -165,26 +165,7 @@ export function LeadOverviewSection({ leadId }: { leadId?: string } = {}) {
                         />
                     </FormField>
                     {/* Mailing Name (always equals Organization Name) */}
-                    <FormField name="mailingName" label="Mailing Name" hint="Follows Organization Name">
-                        <TextField
-                            fullWidth
-                            size="small"
-                            value={organizationName}
-                            placeholder="Same as organization name"
-                            // Layered on fieldSx (not spread over it) so the input keeps the standard size and font.
-                            sx={[fieldSx, { '& .MuiOutlinedInput-root': { backgroundColor: 'var(--mui-palette-background-subtle)', color: 'var(--crm-slate-600)' } }]}
-                            slotProps={{
-                                htmlInput: { readOnly: true, tabIndex: -1, 'aria-readonly': true },
-                                input: {
-                                    endAdornment: (
-                                        <InputAdornment position="end">
-                                            <LockOutlinedIcon sx={{ fontSize: 16, color: 'var(--mui-palette-text-muted)' }} />
-                                        </InputAdornment>
-                                    ),
-                                },
-                            }}
-                        />
-                    </FormField>
+                    <LockedField name="mailingName" label="Mailing Name" hint="Follows Organization Name" value={organizationName} placeholder="Same as organization name" />
                     <RhfSelect<LeadFormData> name="registrationType" label="Registration Type" options={LEAD_REGISTRATION_TYPES} placeholder="Select Type" />
                     {/* GSTIN only exists for registered businesses, so the field only appears for 'Registered' / SEZ. */}
                     {isRegistered && (

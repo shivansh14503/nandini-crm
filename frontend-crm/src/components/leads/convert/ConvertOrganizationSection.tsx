@@ -4,7 +4,7 @@ import React, { useEffect, useMemo } from 'react';
 import { Alert } from '@mui/material';
 import { useFormContext, useWatch } from 'react-hook-form';
 
-import { FormGrid, RhfLookup, RhfSelect, RhfTextField } from '@/components/forms';
+import { FormGrid, LockedField, RhfLookup, RhfSelect, RhfTextField } from '@/components/forms';
 import {
     NATURE_OF_BUSINESS,
     ENTITY_TYPES,
@@ -34,6 +34,11 @@ export function ConvertOrganizationSection() {
         [organizationName, organizations]
     );
 
+    // Mailing name always equals the organization name (shown locked below).
+    useEffect(() => {
+        if ((getValues('mailingName') ?? '') !== (organizationName ?? '')) setValue('mailingName', organizationName ?? '');
+    }, [organizationName, getValues, setValue]);
+
     // Link to (and prefill from) an existing organization when the typed name matches one.
     useEffect(() => {
         const opts = { shouldValidate: true } as const;
@@ -42,7 +47,6 @@ export function ConvertOrganizationSection() {
             return;
         }
         setValue('existingOrganizationId', existing.id);
-        setValue('mailingName', existing.mailingName ?? '', opts);
         setValue('natureOfBusiness', existing.natureOfBusiness || '', opts);
         setValue('typeOfEntity', existing.typeOfEntity || '', opts);
         setValue('customerType', existing.customerType || '', opts);
@@ -71,7 +75,7 @@ export function ConvertOrganizationSection() {
                     placeholder="Search or enter organization..."
                     lookupType="organization"
                 />
-                <RhfTextField<F> name="mailingName" label="Mailing Name" placeholder="Official mailing name" />
+                <LockedField name="mailingName" label="Mailing Name" hint="Follows Organization Name" value={organizationName ?? ''} />
                 <RhfTextField<F> name="memberOf" label="Member of" placeholder="Parent corporation" />
 
                 <RhfSelect<F> name="natureOfBusiness" label="Nature of Business" required options={getOptions('org_nature_of_business', NATURE_OF_BUSINESS)} placeholder="Select Nature of Business" />

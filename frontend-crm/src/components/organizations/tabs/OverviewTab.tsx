@@ -19,7 +19,6 @@ import { CommonActionModal } from '@/components/common/CommonActionModal';
 
 // Icons
 import SwapHorizIcon from '@mui/icons-material/SwapHoriz';
-import LockOutlinedIcon from '@mui/icons-material/LockOutlined';
 
 import { useFormContext, useWatch, FormProvider, useForm } from 'react-hook-form';
 import { useFormMode } from '@/context/FormModeContext';
@@ -29,6 +28,7 @@ import { formatDateTime } from '@/utils/date';
 
 import {
     FormField,
+    LockedField,
     FormGrid,
     StyledSelect,
     fieldSx,
@@ -412,25 +412,7 @@ function OverviewTabInner({
                 </FormField>
 
                 {/* Mailing Name (always equals Organization Name) */}
-                <FormField name="mailingName" label="Mailing Name" hint="Printed on tax invoices • follows Organization Name">
-                    <TextField
-                        fullWidth
-                        size="small"
-                        value={organizationName}
-                        // Layered on fieldSx (not spread over it) so the input keeps the standard size and font.
-                        sx={[fieldSx, { '& .MuiOutlinedInput-root': { backgroundColor: 'var(--mui-palette-background-subtle)', color: 'var(--crm-slate-600)' } }]}
-                        slotProps={{
-                            htmlInput: { readOnly: true, tabIndex: -1, 'aria-readonly': true },
-                            input: {
-                                endAdornment: (
-                                    <InputAdornment position="end">
-                                        <LockOutlinedIcon sx={{ fontSize: 16, color: 'var(--mui-palette-text-muted)' }} />
-                                    </InputAdornment>
-                                ),
-                            },
-                        }}
-                    />
-                </FormField>
+                <LockedField name="mailingName" label="Mailing Name" hint="Printed on tax invoices • follows Organization Name" value={organizationName} />
 
                 {/* ── Classification ── */}
                 <RhfSelect<OrganizationFormData>

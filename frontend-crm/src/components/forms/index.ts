@@ -11,6 +11,7 @@ export * from './FieldNotice';
 export * from './ExistingRecordMatches';
 export * from './useExistingRecordCheck';
 export * from './ReadOnlyField';
+export * from './LockedField';
 export * from './AddressPrimitives';
 export * from './rhf';
 export * from '../common/AppToast';
