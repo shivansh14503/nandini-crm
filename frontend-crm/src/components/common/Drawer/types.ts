@@ -3,6 +3,9 @@ import type { SxProps, Theme } from '@mui/material';
 import type { AuditEntityType } from '@/hooks/queries/useAuditLogs';
 import type { RecordAuditStamp } from './RecordAuditFooter';
 
+/** DOM attribute marking elements (e.g. table field cells and table scroll controls) whose clicks do not dismiss a persistent detail drawer. */
+export const DRAWER_KEEP_OPEN_ATTR = 'data-drawer-keep-open';
+
 export interface DrawerTabItem {
     id: string;
     label: string;
@@ -100,6 +103,11 @@ export interface EntityDetailDrawerProps {
      * while it is mounted. For page-level drawers kept open (collapsed to the bookmark) for the life of a page.
      */
     persistent?: boolean;
+    /**
+     * When `persistent` is true, clicking outside the drawer (and outside elements marked with `data-drawer-keep-open`)
+     * calls `onClose`. Defaults to `true` for persistent drawers.
+     */
+    closeOnOutsideClick?: boolean;
 }
 
 /**

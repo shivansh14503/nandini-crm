@@ -22,6 +22,9 @@ import { useDoubleClickCopy } from '../useDoubleClickCopy';
 import { TableRowActions } from './TableRowActions';
 import { useTableScroll } from './useTableScroll';
 import { useFrozenColumns } from './useFrozenColumns';
+import { DRAWER_KEEP_OPEN_ATTR } from '../Drawer/types';
+
+const DRAWER_KEEP_OPEN_PROPS = { [DRAWER_KEEP_OPEN_ATTR]: 'true' } as const;
 
 /**
  * Widest a cell gets (unless its column sets `width`). The table sizes columns to their content, so without
@@ -69,6 +72,7 @@ function ScrollArrow({
     const Icon = direction < 0 ? ChevronLeftIcon : ChevronRightIcon;
     return (
         <Box
+            {...DRAWER_KEEP_OPEN_PROPS}
             role="button"
             aria-label={direction < 0 ? 'Scroll table left' : 'Scroll table right'}
             tabIndex={-1}
@@ -571,6 +575,7 @@ export function DataTable<T>({
                                     return (
                                         <TableCell
                                             key={col.id}
+                                            {...DRAWER_KEEP_OPEN_PROPS}
                                             align={col.align || 'left'}
                                             onDoubleClick={copyCell}
                                             sx={{
