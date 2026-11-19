@@ -1,0 +1,252 @@
+# Nandini CRM — API Plan
+
+> **Status:** living document. Lists every endpoint of `backend-crm` as of 2026-11-18 plus the planned ones.
+> When you add, change or remove a route, update this file in the same change (the route files'
+> header comments are the per-module source of truth; keep them in step too).
+> Related: [System design](system-design.md) · [Database design](database-design.md) · [Build plan](build-plan.md)
+
+---
+
+## 1. Conventions
+
+| Topic | Rule |
+| --- | --- |
+| Base URL | `http(s)://<host>:8008/api` (frontend: `NEXT_PUBLIC_API_URL` or page host + `NEXT_PUBLIC_API_PORT`) |
+| Format | JSON in and out. PDFs and images are binary |
+| Auth | httpOnly cookie `token` (JWT) set by login; `Authorization: Bearer <jwt>` also accepted. All routes except `/auth/login`, `/auth/logout` and `/health` require it |
+| Roles | 🔐 = admin only (`Admin`, `Administrator`, `Super Admin`). Data on core entities is row-scoped for non-global roles (see [system design §3.6](system-design.md#36-security-model)) |
+| Body limits | 1 MB default; `/import` 10 MB; `/pdf-templates`, `/pdf-assets`, `/pdf-saved-items` 2 MB |
+| Validation | Zod; unknown sort fields fall back to the default instead of erroring |
+| IDs | UUID strings (users: integer) |
+| Deletes | Soft deletes for business records (`isDeleted`), hard deletes only for personal / config data where noted |
+| Updates | `PUT /:id` takes a **partial** record merged onto the stored one; `PATCH /:id` is an alias |
+| Time zone | Wall-clock inputs (ticket due dates) and audit display times use `BUSINESS_TIMEZONE` (default `Asia/Kolkata`) |
+
+### 1.1 Response envelopes
+
+```jsonc
+// Single item / mutation
+{ "success": true, "data": { … }, "message": "Lead updated successfully" }
+
+// Paginated list
+{ "success": true, "data": [ … ], "total": 412, "page": 1, "limit": 25 }
+
+// Error (any status ≥ 400)
+{ "status": "error", "code": "VALIDATION_ERROR", "message": "GST No is required.",
+  "errors": [ { "message": "GST No is required.", "path": ["gstNo"] } ] }
+```
+
+### 1.2 List query parameters (all CRUD lists)
+
+| Param | Default | Notes |
+| --- | --- | --- |
+| `page` | 1 | |
+| `limit` | 25 | max 100 |
+| `search` | – | ≤ 100 chars; entity codes, phone numbers and GSTINs are detected and matched by prefix / equality |
+| `sortBy` | `createdAt` | whitelisted per module (`createdAt`, `updatedAt`, code, name, …) |
+| `sortOrder` | `desc` | `asc` / `desc` |
+| `mine` | – | only records assigned to the caller |
+| `createdWithinDays` | – | created in the last N days |
+
+Plus module filters listed below. Multi-value filters accept repeated params or comma lists.
+
+### 1.3 Standard CRUD block
+
+Modules marked **CRUD** expose (`modules/shared/crud.ts` → `registerCrudRoutes`):
+
+| Method | Path | Result |
+| --- | --- | --- |
+| GET | `/` | paginated list |
+| GET | `/:id` | one record (404 when missing or deleted, 403 outside the caller's scope) |
+| POST | `/` | 201 created record |
+| PUT / PATCH | `/:id` | updated record |
+| DELETE | `/:id` | `{ id }` (soft delete) |
+| POST | `/bulk-delete` | body `{ ids }` → `{ deleted, ids, notFound }` |
+
+## 2. Endpoint catalogue
+
+### 2.1 System & auth
+
+| Method | Path | Auth | Description |
+| --- | --- | --- | --- |
+| GET | `/health` | – | `{ status: 'ok', redis: 'connected' \| 'unavailable' }` |
+| POST | `/auth/login` | – | `{ username, password }` → `{ status: 'ok', message, user }` + sets cookie. 429 after `LOGIN_RATE_LIMIT_MAX` failures per IP per window |
+| POST | `/auth/logout` | – | Revokes the Redis session (if tracked), clears cookie → `{ status: 'ok', message }` |
+| GET | `/auth/me` | ✔ | `{ status: 'ok', user: { id, username, role } }` |
+
+The auth endpoints use the older `{ status: 'ok', … }` envelope rather than `{ success, data }`; the frontend's
+`auth.service.ts` expects it.
+
+### 2.2 Sales & customer records
+
+| Base | Type | Extra endpoints | List filters |
+| --- | --- | --- | --- |
+| `/leads` | CRUD | `GET /check-duplicates?mobile&emails&excludeId&excludeType` — informational matches in leads/contacts/organizations · `POST /:id/convert` — atomic conversion → `{ organization, contact, opportunity, organizationCreated, contactCreated }` | `status`, `excludeStatus`, `leadType`, `leadSource`, `organizationName`, `assignedTo`, `nextFollowupDate` |
+| `/opportunities` | CRUD | – (line-item totals computed server-side; line items replaced only when sent) | `salesStage`, `excludeSalesStage`, `organizationId`, `contactId`, `productId`, `assignedTo`, `minGrandTotal`, `nextFollowupDate` |
+| `/quotations` | CRUD | `GET /:id/pdf?templateId&disposition=inline\|attachment` → `application/pdf` (30/min/user, Redis-cached). Creating a quotation advances the linked opportunity's stage | `status`, `quoteStage`, `opportunityId`, `organizationId`, `contactId`, `productId`, `assignedTo` |
+| `/organizations` | CRUD | `GET /check-unique?organizationName&gstNo&excludeId` → `{ exists, field?, accountCode?, message? }` · `PATCH /bulk-status` `{ ids, status: 'Active'\|'Inactive', inactivityReason? }`. `GET /:id` records a "recently viewed" entry | `accountStatus`, `customerType`, `natureOfBusiness`, `assignedUser`, `parentOrganizationId`, `recent` |
+| `/contacts` | CRUD | – | `organizationId`, `assignedTo`, `isPrimaryContact` |
+
+### 2.3 Support, catalogue and partners
+
+| Base | Type | Notes | List filters |
+| --- | --- | --- | --- |
+| `/tickets` | CRUD | Nature of Call must exist in the master | `ticketStatus`, `excludeStatus`, `ticketPriority`, `supportType`, `supportMode`, `organizationId`, `contactId`, `assignedTo`, `overdue` |
+| `/products` | CRUD | Not row-scoped | `category`, `type`, `isActive` |
+| `/partner-companies` | CRUD | Company name globally unique | `natureOfPartner`, `assignedTo` |
+
+### 2.4 Search, lookups and audit
+
+| Method | Path | Cache | Description |
+| --- | --- | --- | --- |
+| GET | `/search?q&limit=5` | 30 s, per access scope | `{ organizations, contacts, leads, opportunities }`, each `[{ id, category, title, subtitle, meta?, href }]` |
+| GET | `/lookups/users?includeInactive` | 5 min | User pickers |
+| GET | `/lookups/organizations?search&limit` | 5 min (no search) | Compact organization list |
+| GET | `/lookups/contacts?search&limit&organizationId` | 5 min (no search/filter) | |
+| GET | `/lookups/products?search&limit&category` | 5 min (no search/filter) | Active products |
+| GET | `/lookups/nature-of-calls` | 1 h | |
+| GET | `/lookups/partner-companies` | 1 h | |
+| GET | `/lookups/partner-contacts?partnerCompany` | 1 h | |
+| GET | `/lookups/address-master?country=IN` | 24 h | `{ countries, subdivisions }` |
+| GET | `/lookups/cities?country&state&search&limit` | 24 h (no search) | City picker |
+| GET | `/lookups/form-configs?includeInactive` | 1 h | Same payload as `GET /form-configs` |
+| GET | `/lookups/tax-id-holders?owner&gstNo&panNumber&excludeId` | never | "Is this GSTIN / PAN already used?" |
+| GET | `/audit-logs/:entityType/:entityId?limit=100` | – | `{ entries, revisions }` newest first. `entityType` ∈ organizations, contacts, leads, opportunities, quotations, products, tickets, partner-companies, users, form-configs (`entityId` = module key, `shared` or `all`) |
+
+### 2.5 Personal state
+
+| Method | Path | Description |
+| --- | --- | --- |
+| GET | `/table-filters?module=leads` | `{ recent (max 10), saved }` for the caller |
+| POST | `/table-filters/recent` | `{ module, criteria }` — record an applied filter |
+| POST | `/table-filters/saved` | `{ module, name, criteria }` — same name overwrites |
+| DELETE | `/table-filters/:id` | Hard delete one of the caller's filters |
+
+### 2.6 Bulk import
+
+| Method | Path | Description |
+| --- | --- | --- |
+| POST | `/import/:entity` | `entity` ∈ organizations, contacts, products, leads, opportunities, tickets, partner-companies. Body `{ rows: [{ rowNumber, values }], fileName? }`, 1–5,000 rows, cells ≤ 5,000 chars. **202** `{ status: 'queued', importId, total }` or, without Redis and ≤ 500 rows, **200** `{ status: 'completed', importId, result }` |
+| GET | `/import/jobs/:importId` | Owner only: `{ state, progress, total, result?: { created, failed: [{ rowNumber, errors }] }, failedReason? }` |
+
+### 2.7 Administration 🔐
+
+**Form & dropdown customisation** — `/form-configs` (`GET /` is open to every signed-in user)
+
+| Method | Path | Description |
+| --- | --- | --- |
+| GET | `/` | `{ categories, fieldsByModule, moduleTabs }` (`?includeInactive`) |
+| POST | `/categories` | `{ label, module, description?, options? }`; key derived from label |
+| PATCH | `/categories/:categoryKey` | `{ label?, description?, module? }` |
+| DELETE | `/categories/:categoryKey` | Hard delete (admin-created only; removes options + linked custom fields) |
+| POST | `/categories/:categoryKey/options` | `{ value, meta? }`; re-adding an archived value restores it |
+| PUT | `/categories/:categoryKey/options/reorder` | `{ optionIds }` |
+| PATCH | `/options/:optionId` | `{ label?, meta?, isActive?, isDefault? }`; a rename rewrites stored values in records and filters |
+| DELETE | `/options/:optionId` | Permanent; blocked for system options |
+| POST | `/fields` | Add a custom field (key = label in snake_case) |
+| PATCH | `/fields/:fieldId` | Update; core-locked fields can't be hidden or made optional |
+| DELETE | `/fields/:fieldId` | Permanent; custom fields only |
+| PUT | `/modules/:module/fields/reorder` | `{ fieldIds }` |
+| PATCH | `/modules/:module/sections/:sectionKey` | `{ sectionLabel }` |
+
+**Document series** — `/document-series`
+
+| Method | Path | Description |
+| --- | --- | --- |
+| GET | `/shown-modules` | Any user: `{ modules }` whose numbers the UI shows |
+| GET | `/` 🔐 | Settings, every module's rule, current FY, each module's next number |
+| PUT | `/` 🔐 | `{ companyPrefix, separator, fyStartMonth, fyFormat, series: [...] }` |
+
+**Cities** — `/cities` 🔐
+
+| Method | Path | Description |
+| --- | --- | --- |
+| GET | `/?country&state&search&page&limit` | Paginated admin list |
+| GET | `/:id/usage` | Live records using the city |
+| POST | `/` | `{ countryIso2, subdivisionCode?, cityName }` |
+| PATCH | `/:id` | `{ cityName }` — written through to every record using it |
+| DELETE | `/:id` | `{ action?: 'move' \| 'clear', targetCityId? }`; `409 CITY_IN_USE` when records use it and no action given |
+
+**PDF templates** — `/pdf-templates`, `/pdf-assets`, `/pdf-saved-items`
+
+| Method | Path | Auth | Description |
+| --- | --- | --- | --- |
+| GET | `/pdf-templates?module=QUOTATION&includeInactive` | ✔ | List without documents |
+| GET | `/pdf-templates/fields?module=QUOTATION` | ✔ | Printable field registry + line-item columns |
+| GET | `/pdf-templates/context?module&recordId?` | 🔐 | Record (or sample) context for the builder canvas |
+| POST | `/pdf-templates/preview` | 🔐 | `{ module, document, recordId? }` → PDF of an unsaved document (20/min/user) |
+| GET | `/pdf-templates/:id` | 🔐 | Full template |
+| POST | `/pdf-templates` | 🔐 | Create |
+| PUT | `/pdf-templates/:id` | 🔐 | `{ version, … }`; `409 VERSION_CONFLICT` when stale; system templates: `isActive`/`isDefault` only |
+| POST | `/pdf-templates/:id/duplicate` | 🔐 | `{ name? }` |
+| POST | `/pdf-templates/:id/set-default` | 🔐 | |
+| PATCH | `/pdf-templates/:id/active` | 🔐 | `{ isActive }`; the default can't be deactivated |
+| DELETE | `/pdf-templates/:id` | 🔐 | Soft delete (not system / default) |
+| POST | `/pdf-assets` | 🔐 | `{ fileName, mimeType, data (base64), key? }`, PNG/JPEG/WebP ≤ 1 MB |
+| GET | `/pdf-assets/:key` | ✔ | The image (long private cache) |
+| DELETE | `/pdf-assets/:key` | 🔐 | Blocked while a template uses it |
+| GET | `/pdf-saved-items?module=QUOTATION` | 🔐 | Builder library, newest first |
+| POST | `/pdf-saved-items` | 🔐 | `{ module, name, content: { kind: 'section'\|'block', … } }` |
+| DELETE | `/pdf-saved-items/:id` | 🔐 | Soft delete |
+
+## 3. Rate limits
+
+| Key | Limit | Scope | On exceed |
+| --- | --- | --- | --- |
+| Failed logins | `LOGIN_RATE_LIMIT_MAX` (10) per `LOGIN_RATE_LIMIT_WINDOW_SECONDS` (900 s) | IP | 429 `RATE_LIMITED` + `Retry-After` |
+| Record PDF | 30 / 60 s | user | 429 |
+| Template preview | 20 / 60 s | user | 429 |
+
+Limited responses carry `RateLimit-Limit`, `RateLimit-Remaining`, `RateLimit-Reset`. All limits fail open when Redis is down.
+
+## 4. Error codes
+
+| HTTP | `code` | When |
+| --- | --- | --- |
+| 400 | `VALIDATION_ERROR` | Zod failure; `errors[].path` points at the form field |
+| 400 | `INVALID_JSON`, `BAD_REQUEST`, `VALUE_TOO_LONG` | Malformed body / oversized value |
+| 401 | (none) / `INVALID_CREDENTIALS` | Missing, invalid, expired or revoked session; wrong password |
+| 403 | `ACCOUNT_INACTIVE` / (none) | Deactivated user; role or row-level access denied |
+| 404 | `NOT_FOUND` | Missing or soft-deleted record; unknown route |
+| 409 | `DUPLICATE_RECORD` | Unique violation (organization name, codes, partner name …) |
+| 409 | `WRITE_CONFLICT` | Concurrent write after retries were exhausted |
+| 409 | `RELATED_RECORD_CONSTRAINT` | FK violation |
+| 409 | `VERSION_CONFLICT` | Stale PDF template version |
+| 409 | `CITY_IN_USE` | Deleting a city still used by records |
+| 413 | – | Body over its limit |
+| 429 | `RATE_LIMITED` | See §3 |
+| 503 | `SERVER_BUSY` | Lock timeout / DB couldn't start a transaction (`Retry-After: 2`) |
+| 503 | `IMPORT_QUEUE_UNAVAILABLE` | Large import or status poll without Redis |
+| 503 | `PDF_RENDERER_UNAVAILABLE`, `SHUTTING_DOWN` | Chromium can't start; server stopping |
+| 500 | – | Unhandled; message hidden in production |
+
+## 5. Frontend integration
+
+- `frontend-crm/src/services/<entity>.service.ts` builds each client with `createCrudService('/<endpoint>')`, which
+  gives `list`, `getAll` (walks pages of 100, capped at 10,000 rows), `getById`, `create`, `update`, `delete`,
+  `deleteBulk`. Every write calls `notifyCrmUpdate(endpoint)` for cross-tab cache invalidation.
+- React Query hooks in `hooks/queries/` wrap those services; query keys in `queryKeys.ts`.
+- DTO types live in `frontend-crm/src/types/*.types.ts`; the backend mappers must return exactly those shapes.
+
+## 6. Adding an endpoint — checklist
+
+1. Zod schema in `<module>.validator.ts` (mirror the frontend schema in `frontend-crm/src/validations`).
+2. Service function: use `runInTransaction`; lock existing records with `lockRecords`; check scope with
+   `assertRecordAccess`; write `auditService.record(tx, …)` in the same transaction; call
+   `cacheService.invalidateEntityCaches` after commit.
+3. Route: `authenticate` (router-level), `requireRole(...FORM_CONFIG_ADMIN_ROLES)` for admin features,
+   `validateRequest({ params, query, body })`. Register custom paths **before** `registerCrudRoutes` so `/:id` doesn't
+   capture them.
+4. Frontend service method + React Query hook + `notifyCrmUpdate` on writes.
+5. Update the route file's header comment and this document.
+
+## 7. Planned / missing endpoints
+
+| Endpoint | Purpose | Notes |
+| --- | --- | --- |
+| `/users` (CRUD, 🔐) | Create, edit, deactivate users; reset password | `ROUTES.ADMIN_USERS` already reserved in the frontend. Deactivation and password change must call `sessionService.revokeAll(userId)` and invalidate `cache:lookups:users*` |
+| `POST /auth/change-password` | Self-service password change | Revoke other sessions |
+| `GET /dashboard/*` | KPI aggregates (pipeline value by stage, follow-ups due, open tickets, conversion rate) | Use the reserved `cache:dashboard:*` namespace, already invalidated on every entity write |
+| `GET /opportunities/:id/pdf` etc. | PDFs for other modules | Follow the README "Adding a module" steps |
+| Export (`GET /<entity>/export`) | CSV/XLSX export of a filtered list | Stream; respect row-level scope |
+| Activity / follow-up log | Calls, meetings, notes against a record | New tables; would also feed the dashboard |
