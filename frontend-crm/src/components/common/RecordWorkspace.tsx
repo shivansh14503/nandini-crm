@@ -93,6 +93,7 @@ export function RecordWorkspace({ entityType, entity, title, listHref, children 
                     leftOffset={sidebarWidth}
                     rightOffset={drawerEntity ? DRAWER_WIDTH : 0}
                     isRightDrawerCollapsed={drawerCollapsed}
+                    activeRowId={drawerEntity ? String(drawerEntity.data.id ?? '') : null}
                     onClose={() => router.push(listOrigin)}
                     closeTooltip="Close & return to list"
                     onRowClick={(row, moduleKey) => setDrawerEntity({ type: moduleKey, data: row })}

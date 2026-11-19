@@ -317,10 +317,13 @@ export function CommonMasterView<T = unknown, TFilter extends string = string>({
             isCollapsed: isRightDrawerCollapsed,
             onToggleCollapse: toggleRightDrawerCollapsed,
             onCollapseReset: resetRightDrawerCollapsed,
-            // No collapse tab on list pages: the drawer sits beside the table and closes with its ✕.
+            // No collapse tab on list pages: the drawer sits beside the table and closes with its ✕ or an outside click.
             showBookmark: false,
-            // Non-modal: the table stays scrollable and clickable, so another row can be opened in the drawer.
+            // Non-modal: the table fields stay scrollable and clickable to switch rows, while clicking elsewhere closes the drawer.
             persistent: true,
+            // List pages close on outside click through useCloseOnOutsideClick below (it knows about stacked
+            // secondary drawers / related tables), so the drawer's own outside-click handler stays off here.
+            closeOnOutsideClick: false,
         }),
         [isRightDrawerCollapsed, toggleRightDrawerCollapsed, resetRightDrawerCollapsed]
     );

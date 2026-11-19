@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
     Drawer,
     Box,
@@ -25,7 +25,7 @@ import HistoryOutlinedIcon from '@mui/icons-material/HistoryOutlined';
 import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 
-import { type EntityDetailDrawerProps, type DrawerTabItem, buildDrawerTabs } from './types';
+import { type EntityDetailDrawerProps, type DrawerTabItem, buildDrawerTabs, DRAWER_KEEP_OPEN_ATTR } from './types';
 import { AuditTrailTimeline } from './AuditTrailTimeline';
 import { useDrawerStack } from './DrawerStackContext';
 import { RecordAuditFooter } from './RecordAuditFooter';
@@ -33,6 +33,48 @@ import { DoubleClickCopyText } from '../useDoubleClickCopy';
 import { getModuleColor } from '@/theme/moduleColors';
 
 const CHANGES_TAB_ID = 'changes-tab';
+const KEEP_OPEN_SELECTOR = `[${DRAWER_KEEP_OPEN_ATTR}]`;
+const FLOATING_OVERLAY_SELECTOR = '.MuiModal-root, .MuiPopper-root, .MuiSnackbar-root';
+
+function isScrollbarClick(e: MouseEvent | PointerEvent): boolean {
+    // Keyboard-triggered synthetic clicks (e.g. Enter/Space on a focused button) have detail 0 and (0, 0) coords.
+    if (e.detail === 0 && e.clientX === 0 && e.clientY === 0) return false;
+    // Browser viewport scrollbars sit outside documentElement.clientWidth / clientHeight.
+    if (e.clientX >= document.documentElement.clientWidth || e.clientY >= document.documentElement.clientHeight) {
+        return true;
+    }
+    const target = e.target;
+    if (!(target instanceof HTMLElement)) return false;
+
+    const rect = target.getBoundingClientRect();
+    const style = window.getComputedStyle(target);
+
+    if (style.overflowY === 'auto' || style.overflowY === 'scroll') {
+        const borderRight = parseFloat(style.borderRightWidth) || 0;
+        const vScrollbar = target.offsetWidth - target.clientWidth - target.clientLeft - borderRight;
+        if (
+            vScrollbar > 0 &&
+            e.clientX >= rect.left + target.clientLeft + target.clientWidth &&
+            e.clientX <= rect.right - borderRight
+        ) {
+            return true;
+        }
+    }
+
+    if (style.overflowX === 'auto' || style.overflowX === 'scroll') {
+        const borderBottom = parseFloat(style.borderBottomWidth) || 0;
+        const hScrollbar = target.offsetHeight - target.clientHeight - target.clientTop - borderBottom;
+        if (
+            hScrollbar > 0 &&
+            e.clientY >= rect.top + target.clientTop + target.clientHeight &&
+            e.clientY <= rect.bottom - borderBottom
+        ) {
+            return true;
+        }
+    }
+
+    return false;
+}
 
 export function EntityDetailDrawer({
     open,
@@ -67,12 +109,20 @@ export function EntityDetailDrawer({
     showBookmark: showBookmarkProp,
     persistent: persistentProp,
     module,
+    closeOnOutsideClick: closeOnOutsideClickProp,
 }: EntityDetailDrawerProps) {
     const moduleColor = module ? getModuleColor(module) : undefined;
     const [currentTab, setCurrentTab] = useState<number>(defaultTabIndex);
     const [toastMessage, setToastMessage] = useState<string | null>(null);
     const [internalCollapsed, setInternalCollapsed] = useState<boolean>(false);
+    const drawerRef = useRef<HTMLDivElement | null>(null);
+    const bookmarkRef = useRef<HTMLDivElement | null>(null);
+    const onCloseRef = useRef(onClose);
     const stack = useDrawerStack();
+
+    useEffect(() => {
+        onCloseRef.current = onClose;
+    }, [onClose]);
 
     // Precedence: explicit props > shared stack context > internal standalone state
     const isCollapsed = isCollapsedProp ?? stack?.isCollapsed ?? internalCollapsed;
@@ -80,6 +130,7 @@ export function EntityDetailDrawer({
     const onCollapseReset = stack?.onCollapseReset;
     const stackPersistent = Boolean(stack?.persistent);
     const persistent = persistentProp ?? stackPersistent;
+    const shouldCloseOnOutsideClick = persistent && (closeOnOutsideClickProp ?? stack?.closeOnOutsideClick ?? true);
 
     // Opening the drawer (or switching records) expands it: local state resets during render, shared state below.
     const openKey = open ? title : null;
@@ -95,6 +146,52 @@ export function EntityDetailDrawer({
             onCollapseChange?.(false);
         }
     }, [open, title, onCollapseChange, onCollapseReset]);
+
+    useEffect(() => {
+        if (!open || isCollapsed || !shouldCloseOnOutsideClick) return;
+
+        let pointerDownExempt = false;
+
+        const isExemptEvent = (e: MouseEvent | PointerEvent): boolean => {
+            if (isScrollbarClick(e)) return true;
+            const node = e.target instanceof Node ? e.target : null;
+            if (!node) return false;
+            if (drawerRef.current?.contains(node) || bookmarkRef.current?.contains(node)) return true;
+            const element = node instanceof Element ? node : node.parentElement;
+            if (!element) return false;
+            if (element.closest(KEEP_OPEN_SELECTOR)) return true;
+            if (element.closest(FLOATING_OVERLAY_SELECTOR)) return true;
+            return false;
+        };
+
+        const handlePointerDown = (e: PointerEvent) => {
+            if (e.button !== 0) return;
+            pointerDownExempt = isExemptEvent(e);
+        };
+
+        const handleClick = (e: MouseEvent) => {
+            const startedExempt = pointerDownExempt;
+            pointerDownExempt = false;
+            if (e.button !== 0) return;
+            if (startedExempt || isExemptEvent(e)) return;
+            onCloseRef.current();
+        };
+
+        const resetPointerState = () => {
+            pointerDownExempt = false;
+        };
+
+        document.addEventListener('pointerdown', handlePointerDown, true);
+        document.addEventListener('click', handleClick, true);
+        document.addEventListener('pointercancel', resetPointerState, true);
+        document.addEventListener('keydown', resetPointerState, true);
+        return () => {
+            document.removeEventListener('pointerdown', handlePointerDown, true);
+            document.removeEventListener('click', handleClick, true);
+            document.removeEventListener('pointercancel', resetPointerState, true);
+            document.removeEventListener('keydown', resetPointerState, true);
+        };
+    }, [open, isCollapsed, shouldCloseOnOutsideClick]);
 
     const handleToggleCollapse = () => {
         if (onToggleCollapseProp) {
@@ -201,6 +298,7 @@ export function EntityDetailDrawer({
             {open && showBookmark && (
                 <Tooltip title={isCollapsed ? 'Expand Details' : 'Collapse Details'} placement="left" arrow>
                     <Box
+                        ref={bookmarkRef}
                         onClick={handleToggleCollapse}
                         role="button"
                         aria-label={isCollapsed ? 'Expand Details' : 'Collapse Details'}
@@ -236,6 +334,7 @@ export function EntityDetailDrawer({
                 </Tooltip>
             )}
             <Drawer
+                ref={drawerRef}
                 anchor="right"
                 variant={persistent ? 'persistent' : 'temporary'}
                 open={open}

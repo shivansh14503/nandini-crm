@@ -16,6 +16,8 @@ export interface DrawerStackContextValue {
      * so the module table beside them stays usable.
      */
     persistent?: boolean;
+    /** Whether clicking outside an expanded persistent drawer in this stack dismisses it. */
+    closeOnOutsideClick?: boolean;
 }
 
 export const DrawerStackContext = createContext<DrawerStackContextValue | null>(null);

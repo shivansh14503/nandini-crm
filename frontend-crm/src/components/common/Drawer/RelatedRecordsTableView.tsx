@@ -53,6 +53,7 @@ export interface RelatedRecordsTableViewProps {
     /** Tooltip of the close button. */
     closeTooltip?: string;
     onRowClick: (row: Record<string, unknown>, moduleId: string) => void;
+    activeRowId?: string | null;
     parentRecordId?: string;
     entityData?: unknown;
     entityType?: CrmEntityType;
@@ -483,6 +484,7 @@ export function RelatedRecordsTableView({
     onClose,
     closeTooltip = 'Close',
     onRowClick,
+    activeRowId: activeRowIdProp,
     parentRecordId,
     entityData,
     entityType = 'organization',
@@ -491,7 +493,8 @@ export function RelatedRecordsTableView({
     const [searchQuery, setSearchQuery] = useState('');
     const [sortField, setSortField] = useState<string>('');
     const [sortOrder, setSortOrder] = useState<SortOrder>('asc');
-    const [activeRowId, setActiveRowId] = useState<string | null>(null);
+    const [internalActiveRowId, setInternalActiveRowId] = useState<string | null>(null);
+    const activeRowId = activeRowIdProp !== undefined ? activeRowIdProp : internalActiveRowId;
 
     const moduleKey = useMemo(() => normalizeModuleKey(moduleId), [moduleId]);
     const tintModule = moduleKeyFrom(moduleKey);
@@ -727,7 +730,7 @@ export function RelatedRecordsTableView({
                     activeRowId={activeRowId}
                     getRowHref={(row) => relatedRecordHref(moduleKey, row)}
                     onRowClick={(row) => {
-                        setActiveRowId(String(row.id ?? ''));
+                        setInternalActiveRowId(String(row.id ?? ''));
                         onRowClick(row, moduleKey);
                     }}
                     emptyTitle={`No ${moduleTitle.toLowerCase()} records found`}
