@@ -30,6 +30,7 @@ import { AuditTrailTimeline } from './AuditTrailTimeline';
 import { useDrawerStack } from './DrawerStackContext';
 import { RecordAuditFooter } from './RecordAuditFooter';
 import { DoubleClickCopyText } from '../useDoubleClickCopy';
+import { getModuleColor } from '@/theme/moduleColors';
 
 const CHANGES_TAB_ID = 'changes-tab';
 
@@ -65,7 +66,9 @@ export function EntityDetailDrawer({
     onToggleCollapse: onToggleCollapseProp,
     showBookmark: showBookmarkProp,
     persistent: persistentProp,
+    module,
 }: EntityDetailDrawerProps) {
+    const moduleColor = module ? getModuleColor(module) : undefined;
     const [currentTab, setCurrentTab] = useState<number>(defaultTabIndex);
     const [toastMessage, setToastMessage] = useState<string | null>(null);
     const [internalCollapsed, setInternalCollapsed] = useState<boolean>(false);
@@ -266,7 +269,19 @@ export function EntityDetailDrawer({
                 }}
             >
             {/* ── Top Header Section ────────────────────────────────────────────── */}
-            <Box sx={{ p: 2.5, pb: 2, borderBottom: '1px solid var(--mui-palette-border-light)', backgroundColor: 'var(--mui-palette-background-paper)' }}>
+            <Box
+                sx={{
+                    p: 2.5,
+                    pb: 2,
+                    borderBottom: '1px solid var(--mui-palette-border-light)',
+                    backgroundColor: 'var(--mui-palette-background-paper)',
+                    // Module identity: a colored top edge fading into a faint tint.
+                    ...(moduleColor && {
+                        borderTop: `3px solid ${moduleColor.main}`,
+                        background: `linear-gradient(180deg, ${moduleColor.soft} 0%, var(--mui-palette-background-paper) 100%)`,
+                    }),
+                }}
+            >
                 <Box sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 1.5 }}>
                     {/* Identity Banner */}
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, minWidth: 0 }}>

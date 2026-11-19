@@ -219,6 +219,7 @@ export function OrganizationDetailDrawer({
     return (
         <EntityDetailDrawer
             open={open}
+            module="organizations"
             onClose={onClose}
             hideBackdrop={hideBackdrop}
             title={org.organizationName}

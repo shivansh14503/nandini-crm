@@ -102,6 +102,8 @@ export function PdfTemplatesListView() {
             label: 'Default',
             align: 'center',
             minWidth: 130,
+            // Holds the "make default" button.
+            interactive: true,
             render: (t) =>
                 t.isDefault ? (
                     <Tooltip title={`Used when users click Print / PDF on a ${PDF_MODULE_LABELS[t.module].toLowerCase()}`}>
@@ -233,6 +235,7 @@ export function PdfTemplatesListView() {
                     renderActions={renderActions}
                     actionsWidth={190}
                     onRowClick={(t) => router.push(ROUTES.PDF_TEMPLATE_EDIT(t.id))}
+                    getRowHref={(t) => ROUTES.PDF_TEMPLATE_EDIT(t.id)}
                     emptyTitle={query.isLoading ? 'Loading templates…' : 'No PDF templates'}
                     emptyDescription={query.isLoading ? undefined : 'Create a template, or restart the API to restore the built-in ones.'}
                     minHeight={260}

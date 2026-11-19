@@ -122,6 +122,14 @@ The auth endpoints use the older `{ status: 'ok', … }` envelope rather than `{
 | POST | `/table-filters/saved` | `{ module, name, criteria }` — same name overwrites |
 | DELETE | `/table-filters/:id` | Hard delete one of the caller's filters |
 
+### 2.5a Scorecards (list-screen summary cards)
+
+| Method | Path | Description |
+| --- | --- | --- |
+| GET | `/scorecards` | `{ [module]: { module, fieldKey, currencyFieldKey, options: [{ value, color, hidden? }], listViewColor, detailViewColor, updatedBy, updatedAt } }` for configured modules (any signed-in user) |
+| PUT | `/scorecards/:module` | Admin only. `{ fieldKey, currencyFieldKey?, options, listViewColor, detailViewColor }`. **400** when `fieldKey` isn't an active `select` field of the module, `currencyFieldKey` isn't an active `amount` / `number` field, an option isn't in the field's dropdown, or a color isn't `#RRGGBB` |
+| DELETE | `/scorecards/:module` | Admin only. Back to the screen's built-in cards |
+
 ### 2.6 Bulk import
 
 | Method | Path | Description |

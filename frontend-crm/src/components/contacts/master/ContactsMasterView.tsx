@@ -295,9 +295,15 @@ export function ContactsMasterView() {
                 render: (c) => (
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.8 }}>
                         <ApartmentIcon sx={{ fontSize: 14, color: 'var(--mui-palette-text-secondary)' }} />
-                        <Typography sx={{ fontSize: '0.8rem', color: 'var(--crm-slate-700)', fontWeight: 500 }}>
-                            {c.organizationName || '-'}
-                        </Typography>
+                        {c.organizationId && c.organizationName ? (
+                            <RecordLink href={ROUTES.ORGANIZATION_DETAIL(c.organizationId)} sx={{ fontSize: '0.8rem', fontWeight: 500 }}>
+                                {c.organizationName}
+                            </RecordLink>
+                        ) : (
+                            <Typography sx={{ fontSize: '0.8rem', color: 'var(--crm-slate-700)', fontWeight: 500 }}>
+                                {c.organizationName || '-'}
+                            </Typography>
+                        )}
                     </Box>
                 ),
             },
@@ -427,6 +433,7 @@ export function ContactsMasterView() {
             onSort={handleSort}
             onView={(c) => router.push(ROUTES.CONTACT_DETAIL(c.id))}
             getEditHref={(c) => ROUTES.CONTACT_EDIT(c.id)}
+            getRowHref={(c) => ROUTES.CONTACT_DETAIL(c.id)}
             onRowClick={(c) => setDrawerContactId(c.id)}
             activeRowId={selectedDrawerContact?.id}
             viewTooltip="View Contact"

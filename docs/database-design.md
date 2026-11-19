@@ -29,7 +29,7 @@
 | Numbering | `DocumentSeriesSettings`, `DocumentSeries`, `SequenceCounter` |
 | Customisation | `DropdownCategory`, `DropdownOption`, `FormFieldDefinition` |
 | PDF | `PdfTemplate`, `PdfAsset`, `PdfSavedItem` |
-| Audit & UI state | `AuditLog`, `TableFilter` |
+| Audit & UI state | `AuditLog`, `TableFilter`, `ModuleScorecard` |
 
 ## 2. Design conventions
 
@@ -293,6 +293,15 @@ retention job yet).
 Per-user list filters: `username`, `module`, `kind` (`recent` — last 10 kept — or `saved`), `name` (saved only),
 `criteriaJson`, `fingerprint` (hash of normalised criteria, so re-applying bumps the existing recent entry),
 `createdAt`, `lastUsedAt`. Hard-deleted (personal UI state). Index `(username, module, kind)`.
+
+### 4.18 `ModuleScorecard`
+
+Admin settings of a list screen's summary cards, one row per module (PK `module`; no row = the screen's built-in
+cards). `fieldKey` (a single-choice `select` form field: one card per option), `currencyFieldKey` (optional
+`amount` / `number` field totalled per card), `optionsJson` (`[{ value, color: "#RRGGBB", hidden? }]` in card
+order; values must be options of the field's dropdown), `listViewColor` / `detailViewColor` (colors also mark the
+field in the list column / record drawer), `updatedBy`, timestamps. Hard-deleted on "Reset to default". Counting
+runs in the browser over the loaded list.
 
 ## 5. Index strategy
 

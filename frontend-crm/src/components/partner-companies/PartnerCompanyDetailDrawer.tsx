@@ -97,6 +97,7 @@ export function PartnerCompanyDetailDrawer({ partnerCompany, open, onClose }: Pa
     return (
         <EntityDetailDrawer
             open={open}
+            module="partnerCompanies"
             onClose={onClose}
             title={p.companyName}
             subtitle={[p.billingCity, p.principalCompany && `Principal: ${p.principalCompany}`].filter(Boolean).join(' • ') || 'Partner Company'}

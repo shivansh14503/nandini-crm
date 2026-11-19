@@ -37,6 +37,44 @@ const CELL_MAX_WIDTH = 320;
 const ROW_CLICK_DELAY_MS = 200;
 
 /**
+ * Rows whose record has a page get a hidden link filling each data cell, beneath the cell's content, so a right-click
+ * anywhere on the row shows the browser's own link menu (Open link in new tab…) and middle / Ctrl / Shift clicks are
+ * the browser's. The cell's content lets the pointer through to it; links in the content (RecordLink) opt back in
+ * with their own `pointer-events: auto`, and columns holding other controls are marked `interactive` instead.
+ *
+ * No descendant selector re-enables pointer events here: one (e.g. `'& a, & button': { pointerEvents: 'auto' }`)
+ * froze the whole page in Chromium / Brave once the rows rendered.
+ */
+const rowLinkContentSx = {
+    position: 'relative',
+    zIndex: 1,
+    pointerEvents: 'none',
+} as const;
+
+function RowLink({ href }: { href: string }) {
+    return (
+        <Box
+            component="a"
+            href={href}
+            data-row-link=""
+            tabIndex={-1}
+            aria-hidden
+            draggable={false}
+            onClick={(e: React.MouseEvent<HTMLAnchorElement>) => {
+                if (e.button !== 0 || e.ctrlKey || e.metaKey || e.shiftKey || e.altKey) {
+                    // New tab / window: the browser opens the href; the row mustn't also open its drawer.
+                    e.stopPropagation();
+                    return;
+                }
+                // A plain click keeps the row's own behaviour (e.g. opening the drawer).
+                e.preventDefault();
+            }}
+            sx={{ position: 'absolute', inset: 0, zIndex: 0, cursor: 'inherit' }}
+        />
+    );
+}
+
+/**
  * Cell text wraps within the column width, never cut off: full text is always visible. Applies inside custom
  * cell renders too (overrides `noWrap`). Very long unbroken values (emails, URLs) break rather than overflow.
  * Chip labels stay whole; a row of chips wraps onto the next line instead.
@@ -144,6 +182,7 @@ export function DataTable<T>({
     actionsAlign = 'center',
     actionsHeaderLabel = 'ACTIONS',
     onRowClick,
+    getRowHref,
     activeRowId,
     emptyState,
     emptyIcon,
@@ -288,8 +327,8 @@ export function DataTable<T>({
             ref={slot >= 0 ? registerHeaderCell(slot) : undefined}
             sx={{
                 ...headerSx(slot),
-                backgroundColor: 'var(--mui-palette-background-subtle)',
-                borderBottom: '1px solid var(--mui-palette-border-main)',
+                backgroundColor: 'var(--crm-table-header-bg, var(--mui-palette-background-subtle))',
+                borderBottom: '1px solid var(--crm-table-header-border, var(--mui-palette-border-main))',
                 color: 'var(--mui-palette-text-secondary)',
                 fontWeight: 700,
                 fontSize: '0.74rem',
@@ -360,7 +399,7 @@ export function DataTable<T>({
             >
                 {/* ── Table Header ───────────────────────────────────────────── */}
                 <TableHead>
-                    <TableRow sx={{ backgroundColor: 'var(--mui-palette-background-subtle)' }}>
+                    <TableRow sx={{ backgroundColor: 'var(--crm-table-header-bg, var(--mui-palette-background-subtle))' }}>
                         {/* Checkbox Column */}
                         {selectable && (
                             <TableCell
@@ -368,8 +407,8 @@ export function DataTable<T>({
                                 ref={checkboxSlot >= 0 ? registerHeaderCell(checkboxSlot) : undefined}
                                 sx={{
                                     ...headerSx(checkboxSlot),
-                                    backgroundColor: 'var(--mui-palette-background-subtle)',
-                                    borderBottom: '1px solid var(--mui-palette-border-main)',
+                                    backgroundColor: 'var(--crm-table-header-bg, var(--mui-palette-background-subtle))',
+                                    borderBottom: '1px solid var(--crm-table-header-border, var(--mui-palette-border-main))',
                                     width: 40,
                                     pl: 1.5,
                                 }}
@@ -409,8 +448,8 @@ export function DataTable<T>({
                                     }
                                     sx={{
                                         ...headerSx(slot),
-                                        backgroundColor: 'var(--mui-palette-background-subtle)',
-                                        borderBottom: '1px solid var(--mui-palette-border-main)',
+                                        backgroundColor: 'var(--crm-table-header-bg, var(--mui-palette-background-subtle))',
+                                        borderBottom: '1px solid var(--crm-table-header-border, var(--mui-palette-border-main))',
                                         color: isSorted ? 'var(--crm-text-blue-900)' : 'var(--mui-palette-text-secondary)',
                                         fontWeight: 700,
                                         fontSize: '0.74rem',
@@ -474,6 +513,7 @@ export function DataTable<T>({
                         const rowId = keyExtractor(row, index);
                         const isSelected = isRowSelected(rowId);
                         const isActive = Boolean(activeRowId && activeRowId === rowId);
+                        const rowHref = getRowHref?.(row);
 
                         return (
                             <TableRow
@@ -481,9 +521,18 @@ export function DataTable<T>({
                                 hover
                                 selected={isSelected || isActive}
                                 onClick={
-                                    handleRowClick
+                                    handleRowClick || getRowHref
                                         ? (e) => {
                                               cancelPendingRowClick();
+                                              // Ctrl / Cmd + click anywhere on the row opens the record's page in a new tab.
+                                              if (e.ctrlKey || e.metaKey) {
+                                                  const href = getRowHref?.(row);
+                                                  if (href) {
+                                                      window.open(href, '_blank', 'noopener');
+                                                      return;
+                                                  }
+                                              }
+                                              if (!handleRowClick) return;
                                               // Second click of a double-click: the cell selects its value instead.
                                               if (e.detail > 1) return;
                                               pendingRowClick.current = window.setTimeout(() => {
@@ -495,12 +544,12 @@ export function DataTable<T>({
                                 }
                                 sx={{
                                     // Explicit so frozen cells (background: inherit) cover what scrolls beneath them.
-                                    backgroundColor: 'var(--mui-palette-background-paper)',
-                                    cursor: handleRowClick ? 'pointer' : 'default',
+                                    backgroundColor: 'var(--crm-table-row-bg, var(--mui-palette-background-paper))',
+                                    cursor: handleRowClick || getRowHref ? 'pointer' : 'default',
                                     transition: 'background-color 0.12s ease',
                                     // Opaque, and as specific as MUI's own `hover` rule (a translucent action.hover): frozen
                                     // cells inherit the row colour, so a translucent one let scrolled cells show through them.
-                                    '&:hover, &.MuiTableRow-hover:hover': { backgroundColor: 'var(--mui-palette-background-subtle)' },
+                                    '&:hover, &.MuiTableRow-hover:hover': { backgroundColor: 'var(--crm-table-row-hover-bg, var(--mui-palette-background-subtle))' },
                                     ...(isActive && {
                                         backgroundColor: 'var(--mui-palette-primary-soft) !important',
                                         boxShadow: 'inset 3px 0 0 var(--mui-palette-primary-main)',
@@ -568,12 +617,15 @@ export function DataTable<T>({
                                         cellContent = (row as Record<string, React.ReactNode>)[col.id];
                                     }
 
+                                    const cellRowHref = col.interactive ? undefined : rowHref;
                                     return (
                                         <TableCell
                                             key={col.id}
                                             align={col.align || 'left'}
                                             onDoubleClick={copyCell}
                                             sx={{
+                                                // Anchors the row link; frozen cells' sticky position (below) does too.
+                                                ...(cellRowHref && { position: 'relative' as const }),
                                                 ...frozenSx(columnSlot(columnIndex), false),
                                                 py: 1.2,
                                                 fontSize: '0.8rem',
@@ -581,8 +633,15 @@ export function DataTable<T>({
                                                 borderBottom: '1px solid var(--mui-palette-border-light)',
                                             }}
                                         >
+                                            {cellRowHref && <RowLink href={cellRowHref} />}
                                             {/* max-width on a <td> is ignored by auto table layout: cap an inner box instead. */}
-                                            <Box sx={{ ...wrappingCellSx, maxWidth: col.width ?? CELL_MAX_WIDTH }}>
+                                            <Box
+                                                sx={{
+                                                    ...wrappingCellSx,
+                                                    maxWidth: col.width ?? CELL_MAX_WIDTH,
+                                                    ...(cellRowHref && rowLinkContentSx),
+                                                }}
+                                            >
                                                 {cellContent}
                                             </Box>
                                         </TableCell>

@@ -369,3 +369,90 @@
 
   --crm-accent-rgb: 122 189 84;
 }
+
+/*
+ * Module identity colors: one hue per CRM module, used as a light tint (search results, nav, drawer headers).
+ * Not for buttons, hovers, focus rings or links: those stay on the brand accent (--crm-*-blue-*).
+ * Hues avoid blue (light brand), green (dark brand / success), red (error) and amber (warning).
+ * Per module: -main (icons, strips), -text (text on -soft), -soft (tinted surface), -border (tinted border).
+ * Read them through getModuleColor() in src/theme/moduleColors.ts.
+ */
+:root,
+.light {
+  /* leads: Orange */
+  --crm-module-leads-main: #EA580C;
+  --crm-module-leads-text: #C2410C;
+  --crm-module-leads-soft: #FFF7ED;
+  --crm-module-leads-border: #FED7AA;
+  /* opportunities: Violet */
+  --crm-module-opportunities-main: #7C3AED;
+  --crm-module-opportunities-text: #6D28D9;
+  --crm-module-opportunities-soft: #F5F3FF;
+  --crm-module-opportunities-border: #DDD6FE;
+  /* quotations: Teal */
+  --crm-module-quotations-main: #0D9488;
+  --crm-module-quotations-text: #0F766E;
+  --crm-module-quotations-soft: #F0FDFA;
+  --crm-module-quotations-border: #99F6E4;
+  /* organizations: Indigo */
+  --crm-module-organizations-main: #4F46E5;
+  --crm-module-organizations-text: #4338CA;
+  --crm-module-organizations-soft: #EEF2FF;
+  --crm-module-organizations-border: #C7D2FE;
+  /* contacts: Pink */
+  --crm-module-contacts-main: #DB2777;
+  --crm-module-contacts-text: #BE185D;
+  --crm-module-contacts-soft: #FDF2F8;
+  --crm-module-contacts-border: #FBCFE8;
+  /* tickets: Cyan */
+  --crm-module-tickets-main: #0891B2;
+  --crm-module-tickets-text: #0E7490;
+  --crm-module-tickets-soft: #ECFEFF;
+  --crm-module-tickets-border: #A5F3FC;
+  /* products: Gold */
+  --crm-module-products-main: #CA8A04;
+  --crm-module-products-text: #A16207;
+  --crm-module-products-soft: #FEFCE8;
+  --crm-module-products-border: #FEF08A;
+  /* partner-companies: Fuchsia */
+  --crm-module-partner-companies-main: #C026D3;
+  --crm-module-partner-companies-text: #A21CAF;
+  --crm-module-partner-companies-soft: #FDF4FF;
+  --crm-module-partner-companies-border: #F5D0FE;
+}
+
+.dark {
+  /* Tints are mixed onto the dark paper (#151E2E) so they stay opaque and subtle. */
+  --crm-module-leads-main: #FB923C;
+  --crm-module-leads-text: #FDBA74;
+  --crm-module-leads-soft: color-mix(in srgb, #EA580C 16%, #151E2E);
+  --crm-module-leads-border: color-mix(in srgb, #EA580C 42%, #151E2E);
+  --crm-module-opportunities-main: #A78BFA;
+  --crm-module-opportunities-text: #C4B5FD;
+  --crm-module-opportunities-soft: color-mix(in srgb, #7C3AED 16%, #151E2E);
+  --crm-module-opportunities-border: color-mix(in srgb, #7C3AED 42%, #151E2E);
+  --crm-module-quotations-main: #2DD4BF;
+  --crm-module-quotations-text: #5EEAD4;
+  --crm-module-quotations-soft: color-mix(in srgb, #0D9488 16%, #151E2E);
+  --crm-module-quotations-border: color-mix(in srgb, #0D9488 42%, #151E2E);
+  --crm-module-organizations-main: #818CF8;
+  --crm-module-organizations-text: #A5B4FC;
+  --crm-module-organizations-soft: color-mix(in srgb, #4F46E5 16%, #151E2E);
+  --crm-module-organizations-border: color-mix(in srgb, #4F46E5 42%, #151E2E);
+  --crm-module-contacts-main: #F472B6;
+  --crm-module-contacts-text: #F9A8D4;
+  --crm-module-contacts-soft: color-mix(in srgb, #DB2777 16%, #151E2E);
+  --crm-module-contacts-border: color-mix(in srgb, #DB2777 42%, #151E2E);
+  --crm-module-tickets-main: #22D3EE;
+  --crm-module-tickets-text: #67E8F9;
+  --crm-module-tickets-soft: color-mix(in srgb, #0891B2 16%, #151E2E);
+  --crm-module-tickets-border: color-mix(in srgb, #0891B2 42%, #151E2E);
+  --crm-module-products-main: #FACC15;
+  --crm-module-products-text: #FDE047;
+  --crm-module-products-soft: color-mix(in srgb, #CA8A04 16%, #151E2E);
+  --crm-module-products-border: color-mix(in srgb, #CA8A04 42%, #151E2E);
+  --crm-module-partner-companies-main: #E879F9;
+  --crm-module-partner-companies-text: #F0ABFC;
+  --crm-module-partner-companies-soft: color-mix(in srgb, #C026D3 16%, #151E2E);
+  --crm-module-partner-companies-border: color-mix(in srgb, #C026D3 42%, #151E2E);
+}

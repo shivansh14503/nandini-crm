@@ -359,9 +359,15 @@ export function OpportunitiesMasterView() {
                 render: (o) => (
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.8 }}>
                         <ApartmentIcon sx={{ fontSize: 15, color: 'var(--mui-palette-text-secondary)', flexShrink: 0 }} />
-                        <Typography sx={{ fontSize: '0.8rem', color: 'var(--mui-palette-text-primary)', fontWeight: 600 }}>
-                            {o.organizationName || '-'}
-                        </Typography>
+                        {o.organizationId && o.organizationName ? (
+                            <RecordLink href={ROUTES.ORGANIZATION_DETAIL(o.organizationId)} sx={{ fontSize: '0.8rem', fontWeight: 600 }}>
+                                {o.organizationName}
+                            </RecordLink>
+                        ) : (
+                            <Typography sx={{ fontSize: '0.8rem', color: 'var(--mui-palette-text-primary)', fontWeight: 600 }}>
+                                {o.organizationName || '-'}
+                            </Typography>
+                        )}
                     </Box>
                 ),
             },
@@ -604,6 +610,7 @@ export function OpportunitiesMasterView() {
             onSort={(f) => handleSort(f as OpportunitySortField)}
             onView={(o) => setDrawerOppId(o.id)}
             getEditHref={(o) => ROUTES.OPPORTUNITY_EDIT(o.id)}
+            getRowHref={(opp) => ROUTES.OPPORTUNITY_DETAIL(opp.id)}
             onRowClick={(opp) => setDrawerOppId(opp.id)}
             activeRowId={selectedDrawerOpp?.id}
             viewTooltip="View Deal Details"

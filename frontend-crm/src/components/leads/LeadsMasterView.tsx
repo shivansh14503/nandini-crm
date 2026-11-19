@@ -35,6 +35,7 @@ import { LeadDetailDrawer } from './LeadDetailDrawer';
 import { formatDateTime } from '@/utils/date';
 import { formatPhoneDisplay } from '@/utils/phone';
 import { useSearchScope, useSearchScopedRows } from '../search/SearchScope';
+import { useModuleScorecard } from '../common/scorecard/useModuleScorecard';
 
 const plainCellSx = { fontSize: '0.78rem', color: 'var(--crm-slate-700)' } as const;
 
@@ -132,7 +133,21 @@ export function LeadsMasterView() {
         });
     }, [baseLeads, activeTab, todayStr, currentUsername]);
 
-    // ── Status Summary Cards ──────────────────────────────────────────────────
+    // ── Scorecard ─────────────────────────────────────────────────────────────
+    // An admin-configured scorecard (pencil on "All Leads") replaces the built-in status buckets below.
+    const goToFirstPage = useCallback(() => setPage(0), []);
+    const showSavedToast = useCallback((message: string) => setToast({ open: true, message, severity: 'success' }), []);
+    const leadsIcon = useMemo(() => <GroupOutlinedIcon />, []);
+    const scorecard = useModuleScorecard<Lead>({
+        module: 'leads',
+        rows: tabLeads,
+        allLabel: 'All Leads',
+        allIcon: leadsIcon,
+        onActiveChange: goToFirstPage,
+        onSaved: showSavedToast,
+    });
+
+    // ── Status Summary Cards (built-in, until a scorecard is configured) ───────
     const statusSummaryItems: StatusSummaryItem<LeadStatusBucket>[] = useMemo(() => {
         const counts = { new: 0, in_process: 0, converted: 0, lost: 0 };
         for (const lead of tabLeads) counts[getLeadStatusBucket(lead.status)] += 1;
@@ -153,9 +168,12 @@ export function LeadsMasterView() {
     }, [tabLeads]);
 
     const showNumber = useShowRecordNumber();
+    const { configured: scorecardConfigured, matches: matchesScorecard } = scorecard;
     const filteredLeads = useMemo(() => {
         return tabLeads.filter((lead) => {
-            if (statusBucket !== 'all' && getLeadStatusBucket(lead.status) !== statusBucket) return false;
+            if (scorecardConfigured) {
+                if (!matchesScorecard(lead)) return false;
+            } else if (statusBucket !== 'all' && getLeadStatusBucket(lead.status) !== statusBucket) return false;
 
             if (searchQuery.trim()) {
                 const q = searchQuery.toLowerCase().trim();
@@ -184,7 +202,7 @@ export function LeadsMasterView() {
 
             return true;
         });
-    }, [tabLeads, statusBucket, searchQuery, leadSourceLabel, showNumber]);
+    }, [tabLeads, statusBucket, searchQuery, leadSourceLabel, showNumber, scorecardConfigured, matchesScorecard]);
 
     // ── Sort Logic ────────────────────────────────────────────────────────────
     const sortedLeads = useMemo(() => {
@@ -524,14 +542,24 @@ export function LeadsMasterView() {
                 { label: 'Leads' },
             ]}
             summary={
-                <StatusSummaryCards<LeadStatusBucket>
-                    items={statusSummaryItems}
-                    activeId={statusBucket}
-                    onChange={(bucket) => {
-                        setStatusBucket(bucket);
-                        setPage(0);
-                    }}
-                />
+                scorecard.configured ? (
+                    <StatusSummaryCards<string>
+                        items={scorecard.items}
+                        activeId={scorecard.activeId}
+                        onChange={scorecard.setActiveId}
+                        onEdit={scorecard.onEdit}
+                    />
+                ) : (
+                    <StatusSummaryCards<LeadStatusBucket>
+                        items={statusSummaryItems}
+                        activeId={statusBucket}
+                        onChange={(bucket) => {
+                            setStatusBucket(bucket);
+                            setPage(0);
+                        }}
+                        onEdit={scorecard.onEdit}
+                    />
+                )
             }
             filterConfig={{
                 filters: filterItems,
@@ -586,6 +614,7 @@ export function LeadsMasterView() {
             onSort={handleSort}
             onView={(l) => setDrawerLeadId(l.id)}
             getEditHref={(l) => ROUTES.LEAD_EDIT(l.id)}
+            getRowHref={(lead) => ROUTES.LEAD_DETAIL(lead.id)}
             onRowClick={(lead) => setDrawerLeadId(lead.id)}
             activeRowId={selectedDrawerLead?.id}
             viewTooltip="View Lead Details"
@@ -627,6 +656,7 @@ export function LeadsMasterView() {
                 />
             }
         >
+            {scorecard.dialog}
             <DataImportModal
                 open={importOpen}
                 entity="leads"

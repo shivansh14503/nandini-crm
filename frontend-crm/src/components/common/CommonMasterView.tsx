@@ -24,6 +24,9 @@ import {
 import type { CrmModuleKey } from '@/types/formConfig.types';
 import { ActiveFilterChips, TableFilterModal, type FilterSortOption, type TableFilterController } from './TableFilter';
 import { useSearchScope } from '../search/SearchScope';
+import { moduleKeyFrom, moduleTableTintVars } from '@/theme/moduleColors';
+import { useScorecardColumns } from './scorecard/scorecardDisplay';
+import { useCloseOnOutsideClick } from './Drawer/useCloseOnOutsideClick';
 
 export interface MasterViewHeaderActionsContext {
     /** Opens the shared column visibility popover anchored to the given element. */
@@ -113,6 +116,8 @@ export interface CommonMasterViewProps<T = unknown, TFilter extends string = str
     getEditHref?: (row: T) => string;
     onDelete?: (row: T) => void;
     onRowClick?: (row: T) => void;
+    /** Ctrl / Cmd + click on a row opens this URL in a new tab. */
+    getRowHref?: (row: T) => string | undefined;
     activeRowId?: string | null;
     viewTooltip?: string;
     editTooltip?: string;
@@ -248,6 +253,7 @@ export function CommonMasterView<T = unknown, TFilter extends string = string>({
     getEditHref,
     onDelete,
     onRowClick,
+    getRowHref,
     activeRowId,
     viewTooltip,
     editTooltip,
@@ -333,12 +339,16 @@ export function CommonMasterView<T = unknown, TFilter extends string = string>({
     const searchScope = useSearchScope();
     const embedded = Boolean(searchScope);
     const drawerClose = React.isValidElement<{ onClose?: () => void }>(drawer) ? drawer.props.onClose : undefined;
+    // A click elsewhere on the page (not on a table row or inside the drawer) closes the record drawer. Not while a
+    // second drawer or the related-records table is stacked on it: those have their own close flow.
+    useCloseOnOutsideClick(isDrawerOpen && !hasSecondaryDrawer && !relatedRecordsTable, drawerClose);
     React.useEffect(() => {
         if (searchScope && isDrawerOpen && drawerClose) searchScope.claimDrawer(tableId ?? '', drawerClose);
     }, [searchScope, isDrawerOpen, drawerClose, tableId]);
 
     const resolvedFormModule = formModule === undefined ? (isCrmModuleKey(tableId) ? tableId : undefined) : (formModule ?? undefined);
-    const allColumns = useFormFieldColumns<T>(columns, resolvedFormModule);
+    // Form-field columns, then the scorecard colors on its field's column (when the admin enabled them).
+    const allColumns = useScorecardColumns<T>(useFormFieldColumns<T>(columns, resolvedFormModule), resolvedFormModule);
     const {
         orderedColumns,
         visibleColumnIds,
@@ -387,6 +397,7 @@ export function CommonMasterView<T = unknown, TFilter extends string = string>({
             .filter((o) => (seen.has(o.field) ? false : (seen.add(o.field), true)));
     }, [allColumns]);
 
+    const tableModule = moduleKeyFrom(tableId);
     const resolvedTable =
         table ??
         (columns && data ? (
@@ -409,6 +420,7 @@ export function CommonMasterView<T = unknown, TFilter extends string = string>({
                 getEditHref={getEditHref}
                 onDeleteRow={onDelete}
                 onRowClick={onRowClick}
+                getRowHref={getRowHref}
                 activeRowId={activeRowId}
                 viewTooltip={viewTooltip}
                 editTooltip={editTooltip}
@@ -546,7 +558,8 @@ export function CommonMasterView<T = unknown, TFilter extends string = string>({
                     )}
 
                     {/* Table View */}
-                    {resolvedTable}
+                    {/* Module tint on the table header and rows (read by DataTable); display: contents keeps the layout. */}
+                    <Box sx={{ display: 'contents', ...(tableModule && moduleTableTintVars(tableModule)) }}>{resolvedTable}</Box>
                     {children}
 
                     {/* Pagination Bar */}

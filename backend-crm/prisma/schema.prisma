@@ -1033,3 +1033,22 @@ model TableFilter {
 
   @@index([username, module, kind])
 }
+
+/// Scorecard of a module's list screen (the summary cards above the table): the dropdown field the cards count by,
+/// an optional amount field each card totals, a colour per option value, and whether those colours also mark the
+/// field in the list column / record view. One row per module (no row = the screen's built-in cards); admins edit.
+model ModuleScorecard {
+  /// CrmModuleKey, e.g. leads.
+  module           String   @id @db.NVarChar(40)
+  /// Form field key of a single-choice dropdown field of the module (built-in or custom).
+  fieldKey         String   @db.NVarChar(80)
+  /// Form field key of an amount / number field summed per card; null = counts only.
+  currencyFieldKey String?  @db.NVarChar(80)
+  /// JSON [{ value, color: "#RRGGBB", hidden? }] in card order (option values of the field's dropdown).
+  optionsJson      String   @db.NVarChar(Max)
+  listViewColor    Boolean  @default(false)
+  detailViewColor  Boolean  @default(false)
+  updatedBy        String?  @db.NVarChar(50)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+}

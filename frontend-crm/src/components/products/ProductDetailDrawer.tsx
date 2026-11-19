@@ -73,6 +73,7 @@ export function ProductDetailDrawer({
     return (
         <EntityDetailDrawer
             open={open}
+            module="products"
             onClose={onClose}
             title={p.productName}
             subtitle={`${p.category || 'General Equipment'} • ${p.manufacturer || 'OEM Partner'}`}

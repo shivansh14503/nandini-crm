@@ -15,7 +15,7 @@ import {
 } from '@/services/globalSearch.service';
 import { useGlobalSearch } from '@/hooks/queries/useGlobalSearch';
 import { guardNavigation } from '@/hooks/useFormDraftGuard';
-import { SEARCH_CATEGORY_META, SearchMatchChip, SearchMetaTag } from '@/components/search/searchCategories';
+import { ModuleIconTile, SEARCH_CATEGORY_META, SearchMatchChip, SearchMetaTag } from '@/components/search/searchCategories';
 
 /** Suggestions load once typing pauses this long (a superseded request is cancelled, see useGlobalSearch). */
 const DEBOUNCE_MS = 250;
@@ -318,13 +318,35 @@ export function GlobalSearch() {
                             </Typography>
                         ) : (
                             GLOBAL_SEARCH_CATEGORIES.filter((c) => results[c].length > 0).map((category) => {
-                                const { label, Icon } = SEARCH_CATEGORY_META[category];
+                                const { label, Icon, color } = SEARCH_CATEGORY_META[category];
                                 const moreHref = searchPageHref(typed, category);
                                 return (
-                                    <Box key={category} sx={{ pt: 0.75 }}>
-                                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, px: 1.75, py: 0.5, color: 'var(--mui-palette-text-secondary)' }}>
-                                            <Icon sx={{ fontSize: 15 }} />
-                                            <Typography sx={{ flex: 1, fontSize: '0.7rem', fontWeight: 700, letterSpacing: '0.05em', textTransform: 'uppercase' }}>
+                                    <Box
+                                        key={category}
+                                        sx={{
+                                            // Each module's group sits on a faint panel of its identity color.
+                                            mx: 0.75,
+                                            mt: 0.75,
+                                            pt: 0.5,
+                                            pb: 0.25,
+                                            borderRadius: '8px',
+                                            overflow: 'hidden',
+                                            backgroundColor: `color-mix(in srgb, ${color.soft} 75%, var(--mui-palette-background-paper))`,
+                                            border: `1px solid color-mix(in srgb, ${color.border} 60%, transparent)`,
+                                        }}
+                                    >
+                                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, px: 1.75, py: 0.5 }}>
+                                            <Icon sx={{ fontSize: 15, color: color.main }} />
+                                            <Typography
+                                                sx={{
+                                                    flex: 1,
+                                                    fontSize: '0.7rem',
+                                                    fontWeight: 700,
+                                                    letterSpacing: '0.05em',
+                                                    textTransform: 'uppercase',
+                                                    color: color.text,
+                                                }}
+                                            >
                                                 {label}
                                             </Typography>
                                             <Box
@@ -370,11 +392,11 @@ export function GlobalSearch() {
                                                         py: 0.8,
                                                         textDecoration: 'none',
                                                         backgroundColor: active ? 'var(--mui-palette-primary-soft)' : 'transparent',
+                                                        // Module-colored edge marks the highlighted row.
+                                                        boxShadow: active ? `inset 3px 0 0 ${color.main}` : 'none',
                                                     }}
                                                 >
-                                                    <Box sx={{ color: active ? 'var(--crm-text-blue-600)' : 'var(--mui-palette-text-muted)', display: 'flex' }}>
-                                                        <Icon sx={{ fontSize: 16 }} />
-                                                    </Box>
+                                                    <ModuleIconTile category={category} />
                                                     <Box sx={{ minWidth: 0, flex: 1 }}>
                                                         <Typography noWrap sx={{ fontSize: '0.84rem', fontWeight: 600, color: 'var(--crm-slate-900)' }}>
                                                             {result.title}

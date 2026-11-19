@@ -4,7 +4,8 @@ import { useCallback, useEffect, useRef, useState, type PointerEvent as ReactPoi
 
 /** Elements that keep their own mouse behaviour (a drag started on them never pans the table). */
 const INTERACTIVE_SELECTOR =
-    'a, button, input, textarea, select, label, [role="button"], [role="checkbox"], [contenteditable="true"], .MuiCheckbox-root';
+    // The row's hidden full-cell link (DataTable) isn't a control: dragging on it still pans.
+    'a:not([data-row-link]), button, input, textarea, select, label, [role="button"], [role="checkbox"], [contenteditable="true"], .MuiCheckbox-root';
 
 /** Pixels the pointer must travel before a left-button press becomes a pan (below it, it stays a click). */
 const DRAG_THRESHOLD = 5;

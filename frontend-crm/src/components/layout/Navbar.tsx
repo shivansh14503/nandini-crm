@@ -26,6 +26,7 @@ import PersonIcon from '@mui/icons-material/Person';
 import AddIcon from '@mui/icons-material/Add';
 import NotificationsIcon from '@mui/icons-material/Notifications';
 import AdminPanelSettingsOutlinedIcon from '@mui/icons-material/AdminPanelSettingsOutlined';
+import { getModuleColor, moduleForPath } from '@/theme/moduleColors';
 import Badge from '@mui/material/Badge';
 import { useAuth } from '../../context/AuthContext';
 import { GlobalSearch } from './GlobalSearch';
@@ -160,6 +161,7 @@ function useDropdown() {
 /* ─── Hover/click-dropdown pill ─────────────────────────── */
 function NavPill({ item }: { item: { label: string; icon?: React.ReactNode; items: readonly { label: string; href: string }[] } }) {
     const { open, close, menuId, setAnchorEl, anchorEl, hoverProps, triggerProps, handleClickAway } = useDropdown();
+    const hasModuleItems = item.items.some((sub) => moduleForPath(sub.href));
 
     return (
         <Box {...hoverProps} sx={{ position: 'relative' }}>
@@ -236,9 +238,11 @@ function NavPill({ item }: { item: { label: string; icon?: React.ReactNode; item
                                                 color: 'var(--crm-gray-700)',
                                                 px: 2,
                                                 py: 0.9,
+                                                gap: 1.25,
                                                 '&:hover': { backgroundColor: 'var(--mui-palette-primary-soft)', color: 'var(--mui-palette-primary-main)' },
                                             }}
                                         >
+                                            {hasModuleItems && <ModuleDot href={sub.href} />}
                                             {sub.label}
                                         </MenuItem>
                                     ))}
@@ -251,6 +255,29 @@ function NavPill({ item }: { item: { label: string; icon?: React.ReactNode; item
         </Box>
     );
 }
+
+/** Small dot in the module's identity color; non-module items get an empty slot so labels stay aligned. */
+function ModuleDot({ href }: { href: string }) {
+    const moduleKey = moduleForPath(href);
+    return (
+        <Box
+            component="span"
+            aria-hidden
+            sx={{
+                width: 7,
+                height: 7,
+                borderRadius: '50%',
+                flexShrink: 0,
+                backgroundColor: moduleKey ? getModuleColor(moduleKey).main : 'transparent',
+            }}
+        />
+    );
+}
+
+const createIconColor = (href: string) => {
+    const moduleKey = moduleForPath(href);
+    return moduleKey ? getModuleColor(moduleKey).main : 'var(--crm-gray-400)';
+};
 
 /* ─── User avatar dropdown ──────────────────────────────── */
 function UserMenu({ user, onLogout }: { user: { username: string; role: string }; onLogout: () => void }) {
@@ -660,7 +687,7 @@ function CreateButton() {
                                                     },
                                                 }}
                                             >
-                                                <AddIcon sx={{ fontSize: 14, color: 'var(--crm-gray-400)', transition: 'color 0.15s ease' }} />
+                                                <AddIcon sx={{ fontSize: 14, color: createIconColor(item.href), transition: 'color 0.15s ease' }} />
                                                 {item.label}
                                             </MenuItem>
                                         ))}

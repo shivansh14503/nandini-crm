@@ -143,6 +143,7 @@ export function OpportunityDetailDrawer({
         <>
             <EntityDetailDrawer
             open={open}
+            module="opportunities"
             onClose={onClose}
             title={opp.organizationName}
             subtitle={[showNumber('opportunity') ? opp.opportunityCode : '', opp.contactName].filter(Boolean).join(' • ')}

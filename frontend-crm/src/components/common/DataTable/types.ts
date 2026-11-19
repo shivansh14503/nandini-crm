@@ -30,6 +30,11 @@ export interface DataTableColumn<T> {
      * column list); not meant to be set in column definitions.
      */
     pinned?: boolean;
+    /**
+     * The cell holds its own controls (buttons, a tel: link…): it gets no row link, so those stay clickable and the
+     * browser's menu over them is theirs. Record links (RecordLink) don't need this.
+     */
+    interactive?: boolean;
 }
 
 export interface DataTableFilterItem<TFilter extends string = string> {
@@ -144,6 +149,8 @@ export interface DataTableProps<T> {
 
     // Row interaction
     onRowClick?: (row: T) => void;
+    /** The record's full-page URL: Ctrl / Cmd + click anywhere on the row opens it in a new tab. */
+    getRowHref?: (row: T) => string | undefined;
     activeRowId?: string | null;
 
     // Empty state customization

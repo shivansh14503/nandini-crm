@@ -29,6 +29,8 @@ import HandshakeOutlinedIcon from '@mui/icons-material/HandshakeOutlined';
 import AdminPanelSettingsOutlinedIcon from '@mui/icons-material/AdminPanelSettingsOutlined';
 
 import { DataTable, type DataTableColumn, type SortOrder } from '../DataTable';
+import { RecordLink } from '../RecordLink';
+import { ROUTES } from '@/config/constants';
 import {
     resolveRelatedRecordsForModule,
     useRelatedDatasets,
@@ -36,6 +38,7 @@ import {
 } from '@/config/relatedModules.config';
 import { useDropdownOptionLabel } from '@/hooks/queries/useFormConfigs';
 import { useShowRecordNumber } from '@/hooks/queries/useDocumentSeries';
+import { moduleKeyFrom, moduleTableTintVars } from '@/theme/moduleColors';
 import { isShownField } from '@/utils/recordNumbers';
 
 export interface RelatedRecordsTableViewProps {
@@ -56,6 +59,30 @@ export interface RelatedRecordsTableViewProps {
 }
 
 type RelatedRow = Record<string, unknown>;
+
+/** The related record's full page, for modules whose rows are real records (others have no page to open). */
+function relatedRecordHref(moduleKey: string, row: RelatedRow): string | undefined {
+    const id = row.id ? String(row.id) : '';
+    switch (moduleKey) {
+        case 'leads':
+            return id ? ROUTES.LEAD_DETAIL(id) : undefined;
+        case 'opportunities':
+            return id ? ROUTES.OPPORTUNITY_DETAIL(id) : undefined;
+        case 'quotations':
+            return id ? ROUTES.QUOTATION_DETAIL(id) : undefined;
+        case 'organizations':
+            return id ? ROUTES.ORGANIZATION_DETAIL(id) : undefined;
+        case 'contacts':
+            return id ? ROUTES.CONTACT_DETAIL(id) : undefined;
+        case 'tickets':
+            return id ? ROUTES.TICKET_DETAIL(id) : undefined;
+        case 'products':
+            // Line-item rows carry their own id; the catalogue product is `productId`.
+            return row.productId ? ROUTES.PRODUCT_DETAIL(String(row.productId)) : undefined;
+        default:
+            return undefined;
+    }
+}
 
 const formatCurrency = (val: unknown): string => {
     const num = Number(val);
@@ -111,7 +138,27 @@ function getModuleIcon(moduleKey: string): React.ReactNode {
     }
 }
 
-function renderPrimaryCell(value: unknown, mono = false): React.ReactNode {
+function renderPrimaryCell(value: unknown, mono = false, href?: string): React.ReactNode {
+    // A real link when the record has a page: a plain click still bubbles to the row (secondary drawer),
+    // while Ctrl / middle / right click open the page in a new tab.
+    if (href && value) {
+        return (
+            <RecordLink
+                href={href}
+                sx={{
+                    display: 'block',
+                    fontSize: '0.78rem',
+                    fontWeight: 700,
+                    fontFamily: mono ? 'monospace' : 'inherit',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap',
+                }}
+            >
+                {String(value)}
+            </RecordLink>
+        );
+    }
     return (
         <Typography
             noWrap
@@ -185,10 +232,11 @@ function renderStatusPill(status: unknown): React.ReactNode {
 }
 
 function getColumnsForModule(moduleKey: string, leadSourceLabel: (value: string) => string): DataTableColumn<RelatedRow>[] {
+    const primary = (row: RelatedRow, value: unknown, mono = false) => renderPrimaryCell(value, mono, relatedRecordHref(moduleKey, row));
     switch (moduleKey) {
         case 'activities':
             return [
-                { id: 'subject', label: 'Subject', minWidth: 200, sortable: true, render: (r) => renderPrimaryCell(r.subject) },
+                { id: 'subject', label: 'Subject', minWidth: 200, sortable: true, render: (r) => primary(r, r.subject) },
                 { id: 'status', label: 'Status', minWidth: 120, sortable: true, render: (r) => renderStatusPill(r.status) },
                 { id: 'contact', label: 'Contact', minWidth: 150, sortable: true, accessor: 'contact' },
                 { id: 'startDate', label: 'Start Date', minWidth: 130, sortable: true, accessor: 'startDate' },
@@ -197,7 +245,7 @@ function getColumnsForModule(moduleKey: string, leadSourceLabel: (value: string)
 
         case 'tickets':
             return [
-                { id: 'ticketNumber', label: 'Ticket Number', minWidth: 140, sortable: true, render: (r) => renderPrimaryCell(r.ticketNumber, true) },
+                { id: 'ticketNumber', label: 'Ticket Number', minWidth: 140, sortable: true, render: (r) => primary(r, r.ticketNumber, true) },
                 { id: 'subject', label: 'Subject', minWidth: 210, sortable: true, accessor: 'subject' },
                 { id: 'status', label: 'Status', minWidth: 120, sortable: true, render: (r) => renderStatusPill(r.status) },
                 { id: 'priority', label: 'Priority', minWidth: 110, sortable: true, accessor: 'priority' },
@@ -209,7 +257,7 @@ function getColumnsForModule(moduleKey: string, leadSourceLabel: (value: string)
 
         case 'contacts':
             return [
-                { id: 'name', label: 'Name', minWidth: 180, sortable: true, render: (r) => renderPrimaryCell(r.name) },
+                { id: 'name', label: 'Name', minWidth: 180, sortable: true, render: (r) => primary(r, r.name) },
                 { id: 'organizationName', label: 'Organization', minWidth: 190, sortable: true, accessor: 'organizationName' },
                 {
                     id: 'mobile',
@@ -240,7 +288,7 @@ function getColumnsForModule(moduleKey: string, leadSourceLabel: (value: string)
 
         case 'contracts':
             return [
-                { id: 'contractNumber', label: 'Contract Number', minWidth: 150, sortable: true, render: (r) => renderPrimaryCell(r.contractNumber, true) },
+                { id: 'contractNumber', label: 'Contract Number', minWidth: 150, sortable: true, render: (r) => primary(r, r.contractNumber, true) },
                 { id: 'contractTitle', label: 'Contract Title', minWidth: 200, sortable: true, accessor: 'contractTitle' },
                 { id: 'organizationName', label: 'Organization Name', minWidth: 190, sortable: true, accessor: 'organizationName' },
                 { id: 'contractManager', label: 'Contract Manager', minWidth: 150, sortable: true, accessor: 'contractManager' },
@@ -253,7 +301,7 @@ function getColumnsForModule(moduleKey: string, leadSourceLabel: (value: string)
 
         case 'history':
             return [
-                { id: 'subject', label: 'Subject', minWidth: 210, sortable: true, render: (r) => renderPrimaryCell(r.subject) },
+                { id: 'subject', label: 'Subject', minWidth: 210, sortable: true, render: (r) => primary(r, r.subject) },
                 { id: 'status', label: 'Status', minWidth: 120, sortable: true, render: (r) => renderStatusPill(r.status) },
                 { id: 'contact', label: 'Contact', minWidth: 150, sortable: true, accessor: 'contact' },
                 { id: 'dateModified', label: 'Date Modified', minWidth: 140, sortable: true, accessor: 'dateModified' },
@@ -264,8 +312,8 @@ function getColumnsForModule(moduleKey: string, leadSourceLabel: (value: string)
 
         case 'leads':
             return [
-                { id: 'leadCode', label: 'Lead Number', minWidth: 140, sortable: true, render: (r) => renderPrimaryCell(r.leadCode || r.leadNumber, true) },
-                { id: 'name', label: 'Name', minWidth: 170, sortable: true, render: (r) => renderPrimaryCell(r.name) },
+                { id: 'leadCode', label: 'Lead Number', minWidth: 140, sortable: true, render: (r) => primary(r, r.leadCode || r.leadNumber, true) },
+                { id: 'name', label: 'Name', minWidth: 170, sortable: true, render: (r) => primary(r, r.name) },
                 { id: 'organizationName', label: 'Organization Name', minWidth: 190, sortable: true, accessor: 'organizationName' },
                 { id: 'status', label: 'Status', minWidth: 130, sortable: true, render: (r) => renderStatusPill(r.status) },
                 { id: 'leadSource', label: 'Lead Source', minWidth: 140, sortable: true, render: (r) => leadSourceLabel(String(r.leadSource ?? '')) },
@@ -294,7 +342,7 @@ function getColumnsForModule(moduleKey: string, leadSourceLabel: (value: string)
 
         case 'organizations':
             return [
-                { id: 'organizationName', label: 'Organization Name', minWidth: 210, sortable: true, render: (r) => renderPrimaryCell(r.organizationName) },
+                { id: 'organizationName', label: 'Organization Name', minWidth: 210, sortable: true, render: (r) => primary(r, r.organizationName) },
                 { id: 'natureOfBusiness', label: 'Nature of Business', minWidth: 170, sortable: true, accessor: 'natureOfBusiness' },
                 { id: 'customerType', label: 'Customer Type', minWidth: 140, sortable: true, accessor: 'customerType' },
                 { id: 'accountStatus', label: 'Status', minWidth: 120, sortable: true, render: (r) => renderStatusPill(r.accountStatus) },
@@ -304,14 +352,14 @@ function getColumnsForModule(moduleKey: string, leadSourceLabel: (value: string)
 
         case 'partner_contacts':
             return [
-                { id: 'name', label: 'Name', minWidth: 180, sortable: true, render: (r) => renderPrimaryCell(r.name) },
+                { id: 'name', label: 'Name', minWidth: 180, sortable: true, render: (r) => primary(r, r.name) },
                 { id: 'email', label: 'Email', minWidth: 200, sortable: true, accessor: 'email' },
                 { id: 'phone', label: 'Phone', minWidth: 150, sortable: true, accessor: 'phone' },
             ];
 
         case 'opportunities':
             return [
-                { id: 'opportunityCode', label: 'Opp Number', minWidth: 150, sortable: true, render: (r) => renderPrimaryCell(r.opportunityCode || r.oppNumber, true) },
+                { id: 'opportunityCode', label: 'Opp Number', minWidth: 150, sortable: true, render: (r) => primary(r, r.opportunityCode || r.oppNumber, true) },
                 { id: 'organizationName', label: 'Organization Name', minWidth: 190, sortable: true, accessor: 'organizationName' },
                 {
                     id: 'productCategory',
@@ -336,7 +384,7 @@ function getColumnsForModule(moduleKey: string, leadSourceLabel: (value: string)
 
         case 'member_organizations':
             return [
-                { id: 'name', label: 'Name', minWidth: 200, sortable: true, render: (r) => renderPrimaryCell(r.name) },
+                { id: 'name', label: 'Name', minWidth: 200, sortable: true, render: (r) => primary(r, r.name) },
                 { id: 'city', label: 'City', minWidth: 140, sortable: true, accessor: 'city' },
                 {
                     id: 'billingCountry',
@@ -350,7 +398,7 @@ function getColumnsForModule(moduleKey: string, leadSourceLabel: (value: string)
 
         case 'documents':
             return [
-                { id: 'name', label: 'Name', minWidth: 190, sortable: true, render: (r) => renderPrimaryCell(r.name) },
+                { id: 'name', label: 'Name', minWidth: 190, sortable: true, render: (r) => primary(r, r.name) },
                 { id: 'file', label: 'File', minWidth: 180, sortable: true, accessor: 'file' },
                 { id: 'documentType', label: 'Document Type', minWidth: 140, sortable: true, accessor: 'documentType' },
                 { id: 'category', label: 'Category', minWidth: 140, sortable: true, accessor: 'category' },
@@ -360,7 +408,7 @@ function getColumnsForModule(moduleKey: string, leadSourceLabel: (value: string)
 
         case 'products':
             return [
-                { id: 'productName', label: 'Product Name', minWidth: 210, sortable: true, render: (r) => renderPrimaryCell(r.productName) },
+                { id: 'productName', label: 'Product Name', minWidth: 210, sortable: true, render: (r) => primary(r, r.productName) },
                 { id: 'serialNumber', label: 'Product Code', minWidth: 150, sortable: true, render: (r) => String(r.serialNumber || r.productCode || '-') },
                 { id: 'status', label: 'Status', minWidth: 120, sortable: true, render: (r) => renderStatusPill(r.status || 'Active') },
                 { id: 'category', label: 'Category', minWidth: 140, sortable: true, render: (r) => String(r.category || '-') },
@@ -384,7 +432,7 @@ function getColumnsForModule(moduleKey: string, leadSourceLabel: (value: string)
 
         case 'quotations':
             return [
-                { id: 'quotationCode', label: 'Quotation Number', minWidth: 150, sortable: true, render: (r) => renderPrimaryCell(r.quotationCode, true) },
+                { id: 'quotationCode', label: 'Quotation Number', minWidth: 150, sortable: true, render: (r) => primary(r, r.quotationCode, true) },
                 {
                     id: 'quotationTitle',
                     label: 'Quotation Title',
@@ -403,7 +451,7 @@ function getColumnsForModule(moduleKey: string, leadSourceLabel: (value: string)
 
         case 'partner_company':
             return [
-                { id: 'partnerName', label: 'Partner Name', minWidth: 200, sortable: true, render: (r) => renderPrimaryCell(r.partnerName) },
+                { id: 'partnerName', label: 'Partner Name', minWidth: 200, sortable: true, render: (r) => primary(r, r.partnerName) },
                 { id: 'industry', label: 'Industry', minWidth: 160, sortable: true, accessor: 'industry' },
                 { id: 'officePhone', label: 'Office Phone', minWidth: 150, sortable: true, accessor: 'officePhone' },
                 { id: 'assignedTo', label: 'Assigned to', minWidth: 140, sortable: true, accessor: 'assignedTo' },
@@ -411,13 +459,13 @@ function getColumnsForModule(moduleKey: string, leadSourceLabel: (value: string)
 
         case 'security_groups':
             return [
-                { id: 'name', label: 'Name', minWidth: 200, sortable: true, render: (r) => renderPrimaryCell(r.name) },
+                { id: 'name', label: 'Name', minWidth: 200, sortable: true, render: (r) => primary(r, r.name) },
                 { id: 'description', label: 'Description', minWidth: 280, sortable: true, accessor: 'description' },
             ];
 
         default:
             return [
-                { id: 'subject', label: 'Subject', minWidth: 200, sortable: true, render: (r) => renderPrimaryCell(r.subject || r.name) },
+                { id: 'subject', label: 'Subject', minWidth: 200, sortable: true, render: (r) => primary(r, r.subject || r.name) },
                 { id: 'status', label: 'Status', minWidth: 120, sortable: true, render: (r) => renderStatusPill(r.status) },
                 { id: 'assignedUser', label: 'Assigned User', minWidth: 140, sortable: true, accessor: 'assignedUser' },
             ];
@@ -446,6 +494,7 @@ export function RelatedRecordsTableView({
     const [activeRowId, setActiveRowId] = useState<string | null>(null);
 
     const moduleKey = useMemo(() => normalizeModuleKey(moduleId), [moduleId]);
+    const tintModule = moduleKeyFrom(moduleKey);
 
     const leadSourceLabel = useDropdownOptionLabel('shared_lead_source');
     const columns = useMemo(
@@ -664,6 +713,8 @@ export function RelatedRecordsTableView({
                     backgroundColor: 'var(--mui-palette-background-paper)',
                     display: 'flex',
                     flexDirection: 'column',
+                    // Module tint on the table header and rows (read by DataTable).
+                    ...(tintModule && moduleTableTintVars(tintModule)),
                 }}
             >
                 <DataTable<RelatedRow>
@@ -674,6 +725,7 @@ export function RelatedRecordsTableView({
                     sortOrder={sortOrder}
                     onSort={handleSort}
                     activeRowId={activeRowId}
+                    getRowHref={(row) => relatedRecordHref(moduleKey, row)}
                     onRowClick={(row) => {
                         setActiveRowId(String(row.id ?? ''));
                         onRowClick(row, moduleKey);

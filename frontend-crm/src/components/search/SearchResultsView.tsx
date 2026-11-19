@@ -27,7 +27,7 @@ import {
     searchPageHref,
     type GlobalSearchCategory,
 } from '@/services/globalSearch.service';
-import { SEARCH_CATEGORY_META } from './searchCategories';
+import { ModuleIconTile, SEARCH_CATEGORY_META } from './searchCategories';
 import { SearchScopeProvider, useDrawerClaim, type SearchScopeValue } from './SearchScope';
 
 /** Matching ids per module come back capped at this many (backend MAX_IDS_PER_MODULE). */
@@ -110,12 +110,12 @@ export function SearchResultsView() {
                         ) : (
                             <Box sx={{ display: 'grid', gap: 3, minWidth: 0 }}>
                                 {shown.map((category) => {
-                                    const { label, Icon } = SEARCH_CATEGORY_META[category];
+                                    const { label, color } = SEARCH_CATEGORY_META[category];
                                     const total = totals[category];
                                     return (
                                         <Box component="section" key={category} aria-label={label} sx={{ minWidth: 0 }}>
                                             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
-                                                <Icon sx={{ fontSize: 18, color: 'var(--crm-text-blue-600)' }} />
+                                                <ModuleIconTile category={category} size={30} />
                                                 <Typography component="h2" sx={{ fontSize: '0.95rem', fontWeight: 700, color: 'var(--crm-slate-900)' }}>
                                                     {label}
                                                 </Typography>
@@ -124,9 +124,9 @@ export function SearchResultsView() {
                                                     sx={{
                                                         fontSize: '0.72rem',
                                                         fontWeight: 700,
-                                                        color: 'var(--crm-text-blue-700)',
-                                                        backgroundColor: 'var(--mui-palette-primary-soft)',
-                                                        border: '1px solid var(--mui-palette-primary-softBorder)',
+                                                        color: color.text,
+                                                        backgroundColor: color.soft,
+                                                        border: `1px solid ${color.border}`,
                                                         borderRadius: '999px',
                                                         px: 0.9,
                                                         lineHeight: 1.6,
@@ -267,7 +267,7 @@ function SearchBox({ initial, module }: { initial: string; module?: GlobalSearch
 }
 
 function ModuleTabs({ q, active, totals }: { q: string; active?: GlobalSearchCategory; totals?: Record<GlobalSearchCategory, number> }) {
-    const tabs: { key: string; label: string; href: string; count?: number; selected: boolean }[] = [
+    const tabs: { key: string; label: string; href: string; count?: number; selected: boolean; dot?: string }[] = [
         {
             key: 'all',
             label: 'All',
@@ -281,6 +281,7 @@ function ModuleTabs({ q, active, totals }: { q: string; active?: GlobalSearchCat
             href: searchPageHref(q, c),
             count: totals?.[c],
             selected: active === c,
+            dot: SEARCH_CATEGORY_META[c].color.main,
         })),
     ];
 
@@ -314,6 +315,13 @@ function ModuleTabs({ q, active, totals }: { q: string; active?: GlobalSearchCat
                             '&:hover': tab.selected ? {} : { backgroundColor: 'var(--mui-palette-primary-soft)', color: 'var(--crm-text-blue-700)' },
                         }}
                     >
+                        {tab.dot && (
+                            <Box
+                                component="span"
+                                aria-hidden
+                                sx={{ width: 8, height: 8, borderRadius: '50%', backgroundColor: tab.dot, opacity: empty ? 0.45 : 1, flexShrink: 0 }}
+                            />
+                        )}
                         {tab.label}
                         {tab.count !== undefined && (
                             <Box

@@ -14,6 +14,7 @@ import { MasterHeaderActions } from '../../common/MasterHeaderActions';
 import { buildExtendedSearchConfig } from '../../common/buildExtendedSearchConfig';
 import { AppToast } from '../../common/AppToast';
 import { DataImportModal } from '../../common/import';
+import { RecordLink } from '../../common/RecordLink';
 import { documentNumberColumn, type DataTableColumn, type DataTableFilterItem } from '../../common/DataTable';
 import { ROUTES } from '@/config/constants';
 import { useAuth } from '@/context/AuthContext';
@@ -225,9 +226,13 @@ export function TicketsMasterView() {
                 render: (t) => (
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 0 }}>
                         <ConfirmationNumberOutlinedIcon sx={{ fontSize: 16, color: 'var(--crm-text-blue-600)', flexShrink: 0 }} />
-                        <Typography noWrap sx={{ fontSize: '0.8rem', color: 'var(--mui-palette-text-primary)', fontWeight: 600, maxWidth: 280 }}>
+                        <RecordLink
+                            href={ROUTES.TICKET_DETAIL(t.id)}
+                            onOpen={() => setDrawerTicketId(t.id)}
+                            sx={{ fontSize: '0.8rem', fontWeight: 700, maxWidth: 280, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                        >
                             {t.ticketSubject || t.problemReported || '-'}
-                        </Typography>
+                        </RecordLink>
                     </Box>
                 ),
             },
@@ -236,11 +241,19 @@ export function TicketsMasterView() {
                 label: 'ORGANIZATION',
                 sortable: true,
                 minWidth: 200,
-                render: (t) => (
-                    <Typography noWrap sx={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--crm-slate-700)', maxWidth: 240 }}>
-                        {t.organizationName || '-'}
-                    </Typography>
-                ),
+                render: (t) =>
+                    t.organizationId && t.organizationName ? (
+                        <RecordLink
+                            href={ROUTES.ORGANIZATION_DETAIL(t.organizationId)}
+                            sx={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, maxWidth: 240, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                        >
+                            {t.organizationName}
+                        </RecordLink>
+                    ) : (
+                        <Typography noWrap sx={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--crm-slate-700)', maxWidth: 240 }}>
+                            {t.organizationName || '-'}
+                        </Typography>
+                    ),
             },
             {
                 id: 'contactPersonName',
@@ -249,7 +262,13 @@ export function TicketsMasterView() {
                 minWidth: 150,
                 render: (t) => (
                     <Box>
-                        <Typography sx={{ fontSize: '0.8rem', color: 'var(--crm-slate-700)', lineHeight: 1.3 }}>{t.contactPersonName || '-'}</Typography>
+                        {t.contactId && t.contactPersonName ? (
+                            <RecordLink href={ROUTES.CONTACT_DETAIL(t.contactId)} sx={{ display: 'block', fontSize: '0.8rem', lineHeight: 1.3 }}>
+                                {t.contactPersonName}
+                            </RecordLink>
+                        ) : (
+                            <Typography sx={{ fontSize: '0.8rem', color: 'var(--crm-slate-700)', lineHeight: 1.3 }}>{t.contactPersonName || '-'}</Typography>
+                        )}
                         {t.contactNumber && <Typography sx={{ fontSize: '0.72rem', color: 'var(--mui-palette-text-muted)' }}>{t.contactNumber}</Typography>}
                     </Box>
                 ),
@@ -361,6 +380,7 @@ export function TicketsMasterView() {
             onSort={handleSort}
             onView={(t) => router.push(ROUTES.TICKET_DETAIL(t.id))}
             getEditHref={(t) => ROUTES.TICKET_EDIT(t.id)}
+            getRowHref={(t) => ROUTES.TICKET_DETAIL(t.id)}
             onRowClick={(t) => setDrawerTicketId(t.id)}
             activeRowId={selectedDrawerTicket?.id}
             viewTooltip="View Ticket"

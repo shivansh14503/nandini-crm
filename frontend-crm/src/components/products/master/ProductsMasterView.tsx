@@ -377,6 +377,7 @@ export function ProductsMasterView() {
             onSort={handleSort}
             onView={(p) => router.push(ROUTES.PRODUCT_DETAIL(p.id))}
             getEditHref={(p) => ROUTES.PRODUCT_EDIT(p.id)}
+            getRowHref={(product) => ROUTES.PRODUCT_DETAIL(product.id)}
             onRowClick={(product) => setDrawerProductId(product.id)}
             activeRowId={selectedDrawerProduct?.id}
             viewTooltip="View Product"

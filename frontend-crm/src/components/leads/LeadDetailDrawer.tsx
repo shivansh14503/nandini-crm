@@ -35,6 +35,7 @@ import { DynamicDrawerCustomFields } from '@/components/common/Drawer/DynamicDra
 import { DoubleClickCopyText } from '@/components/common/useDoubleClickCopy';
 import { EmailActions, PhoneActions } from '@/components/common/ContactActions';
 import { formatPhoneDisplay } from '@/utils/phone';
+import { useScorecardBadge } from '../common/scorecard/scorecardDisplay';
 import { useShowRecordNumber } from '@/hooks/queries/useDocumentSeries';
 
 export interface LeadDetailDrawerProps {
@@ -76,6 +77,9 @@ export function LeadDetailDrawer({
         severity: 'error',
     });
 
+    // Scorecard color of the lead's value (when the admin enabled "Detail View Column Color").
+    const scorecardBadge = useScorecardBadge('leads', freshLead ?? lead);
+
     const l = freshLead ?? lead;
     if (!l) return null;
 
@@ -116,6 +120,7 @@ export function LeadDetailDrawer({
         <>
             <EntityDetailDrawer
             open={open}
+            module="leads"
             onClose={onClose}
             title={l.name}
             subtitle={[showNumber('lead') ? l.leadCode : '', l.organizationName || 'Prospect'].filter(Boolean).join(' • ')}
@@ -134,12 +139,15 @@ export function LeadDetailDrawer({
                     backgroundColor: isHot ? 'var(--crm-red-100)' : isWarm ? 'var(--crm-amber-100)' : 'var(--mui-palette-primary-soft)',
                     borderColor: isHot ? 'var(--crm-red-300)' : isWarm ? 'var(--mui-palette-warning-softBorder)' : 'var(--mui-palette-primary-softBorder)',
                 },
-                {
-                    label: l.status,
-                    color: 'var(--crm-emerald-700)',
-                    backgroundColor: 'var(--mui-palette-success-soft)',
-                    borderColor: 'var(--mui-palette-success-softBorder)',
-                },
+                scorecardBadge?.fieldKey === 'status'
+                    ? scorecardBadge
+                    : {
+                          label: l.status,
+                          color: 'var(--crm-emerald-700)',
+                          backgroundColor: 'var(--mui-palette-success-soft)',
+                          borderColor: 'var(--mui-palette-success-softBorder)',
+                      },
+                ...(scorecardBadge && scorecardBadge.fieldKey !== 'status' ? [scorecardBadge] : []),
                 {
                     label: l.assignedTo || 'Unassigned',
                     color: 'var(--crm-slate-600)',

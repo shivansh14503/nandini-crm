@@ -87,6 +87,7 @@ export function TicketDetailDrawer({ ticket, open, onClose, onEdit, hideBackdrop
     return (
         <EntityDetailDrawer
             open={open}
+            module="tickets"
             onClose={onClose}
             hideBackdrop={hideBackdrop}
             title={t.ticketSubject || (showNumber('ticket') ? t.ticketNumber : 'Ticket')}

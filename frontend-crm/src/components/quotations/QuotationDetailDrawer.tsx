@@ -537,6 +537,7 @@ export function QuotationDetailDrawer({
     return (
         <EntityDetailDrawer
             open={open}
+            module="quotations"
             onClose={onClose}
             title={showNumber('quotation') ? quotation.quotationCode : quotation.quotationTitle || quotation.quotationSubject || 'Quotation'}
             subtitle={showNumber('quotation') ? `${quotation.quotationTitle || quotation.quotationSubject || 'Quotation'} • ${quotation.organizationName}` : quotation.organizationName}

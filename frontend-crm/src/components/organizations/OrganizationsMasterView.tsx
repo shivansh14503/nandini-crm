@@ -624,6 +624,7 @@ export function OrganizationsMasterView() {
                     setToast({ open: true, message: 'This organization is inactive. Only an Admin can edit it.', severity: 'info' });
                 }
             }}
+            getRowHref={(org) => ROUTES.ORGANIZATION_DETAIL(org.id)}
             onRowClick={(org) => setDrawerOrgId(org.id)}
             activeRowId={selectedDrawerOrg?.id}
             viewTooltip="View Details"

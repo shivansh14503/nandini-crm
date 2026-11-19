@@ -1,7 +1,8 @@
 'use client';
 
 import React from 'react';
-import { Box, ButtonBase, Typography } from '@mui/material';
+import { Box, ButtonBase, IconButton, Tooltip, Typography } from '@mui/material';
+import EditOutlinedIcon from '@mui/icons-material/EditOutlined';
 
 /** Colour family of a card; each maps to theme tokens so light (blue) / dark (green) stay consistent. */
 export type StatusSummaryTone = 'brand' | 'warning' | 'success' | 'error' | 'neutral';
@@ -12,6 +13,8 @@ export interface StatusSummaryItem<TId extends string = string> {
     count: number;
     icon?: React.ReactNode;
     tone?: StatusSummaryTone;
+    /** Any CSS color (e.g. an admin-picked scorecard color); overrides `tone`. */
+    color?: string;
     /** Short hint under the count, e.g. which statuses the card covers. */
     hint?: string;
 }
@@ -24,6 +27,8 @@ export interface StatusSummaryCardsProps<TId extends string = string> {
     total?: number;
     /** Id of the card that means "no status filter"; clicking the active card returns to it. */
     allId?: TId;
+    /** Shows a pencil on the "All" card that opens the scorecard settings (admins). */
+    onEdit?: () => void;
 }
 
 /** Theme colour per tone: `-main` tokens already switch for dark mode (brand = blue / green). */
@@ -52,6 +57,7 @@ export function StatusSummaryCards<TId extends string = string>({
     onChange,
     total,
     allId,
+    onEdit,
 }: StatusSummaryCardsProps<TId>) {
     const base = total ?? items[0]?.count ?? 0;
     const resetId = allId ?? items[0]?.id;
@@ -68,7 +74,11 @@ export function StatusSummaryCards<TId extends string = string>({
                 // Phones: one swipeable row. Wider screens: equal columns.
                 gridAutoFlow: { xs: 'column', md: 'row' },
                 gridAutoColumns: { xs: 'minmax(170px, 1fr)', md: 'unset' },
-                gridTemplateColumns: { xs: 'none', md: `repeat(${items.length}, minmax(0, 1fr))` },
+                // Up to 6 cards share one row; more wrap onto further rows.
+                gridTemplateColumns: {
+                    xs: 'none',
+                    md: items.length > 6 ? 'repeat(auto-fill, minmax(190px, 1fr))' : `repeat(${items.length}, minmax(0, 1fr))`,
+                },
                 overflowX: { xs: 'auto', md: 'visible' },
                 // Room for the hover lift and focus ring inside the scroll container.
                 pt: 0.5,
@@ -77,14 +87,14 @@ export function StatusSummaryCards<TId extends string = string>({
             }}
         >
             {items.map((item) => {
-                const c = TONE_COLOR[item.tone ?? 'brand'];
+                const c = item.color ?? TONE_COLOR[item.tone ?? 'brand'];
                 const isActive = item.id === activeId;
                 const isAll = item.id === resetId;
                 const share = base > 0 ? (item.count / base) * 100 : 0;
 
                 return (
+                    <Box key={item.id} sx={{ position: 'relative', display: 'flex', minWidth: 0 }}>
                     <ButtonBase
-                        key={item.id}
                         aria-pressed={isActive}
                         onClick={() => onChange(isActive && resetId !== undefined ? resetId : item.id)}
                         sx={{
@@ -113,6 +123,8 @@ export function StatusSummaryCards<TId extends string = string>({
                             },
                             '&:active': { transform: 'translateY(0)' },
                             '&.Mui-focusVisible': { boxShadow: `0 0 0 3px ${mix(c, 30)}` },
+                            flex: 1,
+                            minWidth: 0,
                         }}
                     >
                         {/* Large faded icon in the corner */}
@@ -168,6 +180,8 @@ export function StatusSummaryCards<TId extends string = string>({
                             >
                                 {item.label}
                             </Typography>
+                            {/* Room for the edit pencil, which sits over this corner. */}
+                            {isAll && onEdit && <Box sx={{ width: 26, flexShrink: 0 }} />}
                             {!isAll && (
                                 <Box
                                     component="span"
@@ -241,6 +255,34 @@ export function StatusSummaryCards<TId extends string = string>({
                             />
                         </Box>
                     </ButtonBase>
+                    {isAll && onEdit && (
+                        <Tooltip title="Edit scorecard">
+                            <IconButton
+                                size="small"
+                                aria-label="Edit scorecard"
+                                onClick={onEdit}
+                                sx={{
+                                    position: 'absolute',
+                                    top: 10,
+                                    right: 10,
+                                    width: 28,
+                                    height: 28,
+                                    border: '1px solid var(--mui-palette-border-main)',
+                                    color: 'var(--mui-palette-text-secondary)',
+                                    backgroundColor: 'var(--mui-palette-background-paper)',
+                                    transition: 'all 0.15s ease',
+                                    '&:hover': {
+                                        borderColor: 'var(--crm-blue-300)',
+                                        backgroundColor: 'var(--mui-palette-primary-soft)',
+                                        color: 'var(--crm-text-blue-700)',
+                                    },
+                                }}
+                            >
+                                <EditOutlinedIcon sx={{ fontSize: 15 }} />
+                            </IconButton>
+                        </Tooltip>
+                    )}
+                    </Box>
                 );
             })}
         </Box>

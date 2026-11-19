@@ -131,3 +131,19 @@ To keep hover behavior identical across the application (turning Blue in Light M
 4. **NEVER set `background: 'linear-gradient(...)'` on a `<Button>` without an explicit `'&:hover': { background: 'linear-gradient(...)' }`**. Because `background` is a CSS shorthand, it overrides MUI's default `backgroundColor` hover state, causing the button not to change color at all on hover.
 5. **NEVER remove `.light` from `color-scale.css`**: The PDF Template Builder canvas (`src/components/pdf/builder/canvas/Canvas.tsx`) intentionally wraps printable paper previews in `className="light"` so A4 document previews remain on white paper even when the app is in Dark Mode.
 
+---
+
+## 5. Module Identity Colors
+
+Each CRM module has one identity hue, used only as a **light tint** to tell modules apart (global search results, nav menu dots, Quick Create icons, record drawer header strip). Tokens live in `color-scale.css` as `--crm-module-<key>-main|text|soft|border` with separate `.light` / `.dark` values; read them through `getModuleColor()` / `moduleForPath()` in `src/theme/moduleColors.ts`.
+
+| Module | Hue | Module | Hue |
+| :--- | :--- | :--- | :--- |
+| Leads | Orange | Contacts | Pink |
+| Opportunities | Violet | Tickets | Cyan |
+| Quotations | Teal | Products | Gold |
+| Organizations | Indigo | Partner Companies | Fuchsia |
+
+- Never use module colors for buttons, hover states, focus rings, checkboxes or links; those stay on the brand accent.
+- `-main` for icons, dots and strips; `-soft` + `-border` for tinted tiles/badges with `-text` on top.
+- Pass `module="<key>"` to `<EntityDetailDrawer>` to tint its header.

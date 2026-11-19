@@ -228,6 +228,8 @@ export function PartnerCompaniesMasterView() {
                 label: 'PHONE',
                 sortable: true,
                 minWidth: 150,
+                // A tel: link of its own.
+                interactive: true,
                 render: (p) =>
                     p.phone ? (
                         <Box
@@ -349,6 +351,7 @@ export function PartnerCompaniesMasterView() {
             onSort={handleSort}
             onView={(p) => router.push(ROUTES.PARTNER_COMPANY_DETAIL(p.id))}
             getEditHref={(p) => ROUTES.PARTNER_COMPANY_EDIT(p.id)}
+            getRowHref={(p) => ROUTES.PARTNER_COMPANY_DETAIL(p.id)}
             onRowClick={(p) => setDrawerId(p.id)}
             activeRowId={drawerRecord?.id}
             viewTooltip="View Partner Company"

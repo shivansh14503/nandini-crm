@@ -192,6 +192,7 @@ export function ContactDetailDrawer({
     return (
         <EntityDetailDrawer
             open={open}
+            module="contacts"
             onClose={onClose}
             title={c.name}
             subtitle={`${c.designation ? `${c.designation} • ` : ''}${c.organizationName || 'Independent Contact'}`}

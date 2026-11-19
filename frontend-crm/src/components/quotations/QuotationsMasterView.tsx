@@ -24,6 +24,7 @@ import { useShowRecordNumber } from '@/hooks/queries/useDocumentSeries';
 import { QuotationDetailDrawer } from './QuotationDetailDrawer';
 import { wasModified } from '../common/Drawer/RecordAuditFooter';
 import { formatDateTime } from '@/utils/date';
+import { RecordLink } from '../common/RecordLink';
 import { useSearchScope, useSearchScopedRows } from '../search/SearchScope';
 
 export type QuotationFilterTab = 'all' | 'draft' | 'sent' | 'accepted' | 'rejected';
@@ -253,9 +254,13 @@ export function QuotationsMasterView() {
                 sortable: true,
                 minWidth: 200,
                 render: (row) => (
-                    <Typography sx={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--mui-palette-text-primary)' }}>
+                    <RecordLink
+                        href={ROUTES.QUOTATION_DETAIL(row.id)}
+                        onOpen={() => setDrawerQuotationId(row.id)}
+                        sx={{ fontSize: '0.8rem', fontWeight: 700 }}
+                    >
                         {row.quotationTitle || row.quotationSubject || '-'}
-                    </Typography>
+                    </RecordLink>
                 ),
             },
             {
@@ -263,11 +268,17 @@ export function QuotationsMasterView() {
                 label: 'OPPORTUNITY',
                 sortable: true,
                 minWidth: 160,
-                render: (row) => (
-                    <Typography sx={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--crm-text-blue-600)' }}>
-                        {row.opportunityName || (showNumber('opportunity') ? row.opportunityCode : '') || '-'}
-                    </Typography>
-                ),
+                render: (row) => {
+                    const label = row.opportunityName || (showNumber('opportunity') ? row.opportunityCode : '') || '-';
+                    // A plain click keeps opening this quotation's drawer; Ctrl / middle / right click open the opportunity.
+                    return row.opportunityId && label !== '-' ? (
+                        <RecordLink href={ROUTES.OPPORTUNITY_DETAIL(row.opportunityId)} sx={{ fontSize: '0.8rem', fontWeight: 600 }}>
+                            {label}
+                        </RecordLink>
+                    ) : (
+                        <Typography sx={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--crm-text-blue-600)' }}>{label}</Typography>
+                    );
+                },
             },
             {
                 // Derived: the quotation was edited after it was first saved.
@@ -316,7 +327,13 @@ export function QuotationsMasterView() {
                 render: (row) => (
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.8 }}>
                         <PersonOutlinedIcon sx={{ fontSize: 15, color: 'var(--mui-palette-text-muted)' }} />
-                        <Typography sx={{ fontSize: '0.8rem', color: 'var(--crm-slate-600)' }}>{row.contactName || '-'}</Typography>
+                        {row.contactId && row.contactName ? (
+                            <RecordLink href={ROUTES.CONTACT_DETAIL(row.contactId)} sx={{ fontSize: '0.8rem' }}>
+                                {row.contactName}
+                            </RecordLink>
+                        ) : (
+                            <Typography sx={{ fontSize: '0.8rem', color: 'var(--crm-slate-600)' }}>{row.contactName || '-'}</Typography>
+                        )}
                     </Box>
                 ),
             },
@@ -328,9 +345,15 @@ export function QuotationsMasterView() {
                 render: (row) => (
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.8 }}>
                         <ApartmentIcon sx={{ fontSize: 15, color: 'var(--mui-palette-text-secondary)' }} />
-                        <Typography sx={{ fontSize: '0.8rem', fontWeight: 500, color: 'var(--crm-slate-700)' }}>
-                            {row.organizationName || '-'}
-                        </Typography>
+                        {row.organizationId && row.organizationName ? (
+                            <RecordLink href={ROUTES.ORGANIZATION_DETAIL(row.organizationId)} sx={{ fontSize: '0.8rem', fontWeight: 500 }}>
+                                {row.organizationName}
+                            </RecordLink>
+                        ) : (
+                            <Typography sx={{ fontSize: '0.8rem', fontWeight: 500, color: 'var(--crm-slate-700)' }}>
+                                {row.organizationName || '-'}
+                            </Typography>
+                        )}
                     </Box>
                 ),
             },
@@ -445,6 +468,7 @@ export function QuotationsMasterView() {
             onView={(quote) => setDrawerQuotationId(quote.id)}
             getEditHref={(quote) => ROUTES.QUOTATION_EDIT(quote.id)}
             onDelete={(quote) => handleDelete(quote.id)}
+            getRowHref={(quote) => ROUTES.QUOTATION_DETAIL(quote.id)}
             onRowClick={(quote) => setDrawerQuotationId(quote.id)}
             activeRowId={selectedDrawerQuotation?.id}
             viewTooltip="View Quotation Details"

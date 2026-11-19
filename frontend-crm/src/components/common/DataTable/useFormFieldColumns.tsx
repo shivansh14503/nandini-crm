@@ -21,7 +21,7 @@ export const isCrmModuleKey = (value: string | undefined): value is CrmModuleKey
     Boolean(value && (CRM_MODULE_KEYS as readonly string[]).includes(value));
 
 /** Raw value of a form field on a record: built-in fields by key, custom fields under `customFields`. */
-function readFieldValue(row: unknown, field: FormFieldDefinitionDto): unknown {
+export function readFieldValue(row: unknown, field: FormFieldDefinitionDto): unknown {
     const record = (row ?? {}) as Record<string, unknown>;
     if (field.isSystem) return record[field.fieldKey];
     const custom = record[CUSTOM_FIELDS_KEY] as Record<string, unknown> | undefined;

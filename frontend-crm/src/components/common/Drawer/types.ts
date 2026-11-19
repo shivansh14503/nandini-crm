@@ -1,3 +1,4 @@
+import type { ModuleKey } from '@/theme/moduleColors';
 import React from 'react';
 import type { SxProps, Theme } from '@mui/material';
 import type { AuditEntityType } from '@/hooks/queries/useAuditLogs';
@@ -55,6 +56,8 @@ export interface DrawerActionButtonProps {
 }
 
 export interface EntityDetailDrawerProps {
+    /** CRM module of the record: tints the header with that module's identity color. */
+    module?: ModuleKey;
     open: boolean;
     onClose: () => void;
     title: string;
