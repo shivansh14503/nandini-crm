@@ -32,12 +32,16 @@ export function ThemeModeToggle() {
                     height: 36,
                     flexShrink: 0,
                     borderRadius: '8px',
-                    border: '1px solid transparent',
-                    backgroundColor: 'transparent',
+                    border: '1px solid var(--mui-palette-border-main)',
+                    backgroundColor: 'var(--mui-palette-background-paper)',
                     color: 'text.secondary',
                     cursor: 'pointer',
                     transition: 'all 0.15s ease',
-                    '&:hover': { backgroundColor: 'background.hover', color: 'text.primary' },
+                    '&:hover': {
+                        borderColor: 'var(--crm-blue-300)',
+                        backgroundColor: 'var(--mui-palette-primary-soft)',
+                        color: 'var(--crm-text-blue-700)',
+                    },
                     '&:focus-visible': { outline: '2px solid', outlineColor: 'primary.main', outlineOffset: 1 },
                 }}
             >

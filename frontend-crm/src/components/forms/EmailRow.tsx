@@ -48,9 +48,20 @@ export function EmailRow({ email, onChange, onRemove, notice, placeholder = 'e.g
     const { state: checkState, check } = useEmailCheck(mode === 'view' ? '' : email.email);
     // The form's own error wins; otherwise an address the check found undeliverable shows as a field error too.
     const errorText = error ?? (isEmailUndeliverable(checkState) ? checkState.result.message ?? undefined : undefined);
-    // A new address drops the saved result; the server verifies it again after save.
+    // A new address drops the saved result and the "can't receive email" block; it is checked again on blur.
     const setAddress = (value: string) =>
-        onChange({ ...email, email: value, verificationStatus: null, verificationReason: null, verifiedAt: null });
+        onChange({ ...email, email: value, verificationStatus: null, verificationReason: null, verifiedAt: null, undeliverableMessage: null });
+    // Once the check says the address can't receive email, mark the row so the form refuses to save it (with a
+    // toast) instead of sending it to the server to be checked and rejected again.
+    const undeliverableMessage = isEmailUndeliverable(checkState)
+        ? checkState.result.message ?? 'This email address can’t receive email.'
+        : null;
+    React.useEffect(() => {
+        // Guarded, so the new `onChange` identity of each render doesn't loop.
+        if (undeliverableMessage && email.undeliverableMessage !== undeliverableMessage) {
+            onChange({ ...email, undeliverableMessage });
+        }
+    }, [undeliverableMessage, email, onChange]);
     if (mode === 'view') {
         return (
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap', py: 0.75 }}>

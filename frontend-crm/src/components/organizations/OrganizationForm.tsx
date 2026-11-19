@@ -12,6 +12,7 @@ import AccountBalanceOutlinedIcon from '@mui/icons-material/AccountBalanceOutlin
 
 import { type BreadcrumbItem } from '../common/AppBreadcrumbs';
 import { AppToast } from '../common/AppToast';
+import { setSaveFlash } from '@/utils/saveFlash';
 import { CommonFormLayout } from '../common/CommonFormLayout';
 import { type FormTabDefinition } from '../common/Drawer';
 import { organizationService } from '@/services';
@@ -267,6 +268,8 @@ export default function OrganizationForm({
     }, [activeTab]);
 
     // Populate data when editing
+    // True until the saved record arrives (view / edit), so the form shows skeleton fields, not empty ones.
+    const [recordLoading, setRecordLoading] = useState(Boolean(organizationId));
     useEffect(() => {
         if (!organizationId) return;
         let active = true;
@@ -298,7 +301,10 @@ export default function OrganizationForm({
                     methods.reset(normalized);
                 }
             })
-            .catch(() => {});
+            .catch(() => {})
+            .finally(() => {
+                if (active) setRecordLoading(false);
+            });
         return () => {
             active = false;
         };
@@ -453,12 +459,13 @@ export default function OrganizationForm({
         setSubmitting(true);
         try {
             if (mode === 'create') {
-                await organizationService.create(currentData as OrganizationFormData);
+                const created = await organizationService.create(currentData as OrganizationFormData);
                 setIsDirty(false);
-                setToast({ open: true, message: 'Organization created successfully!', severity: 'success' });
                 if (redirectAfter) {
-                    setTimeout(() => router.push(ROUTES.ORGANIZATIONS), 800);
+                    setSaveFlash({ listPath: ROUTES.ORGANIZATIONS, message: 'Organization created successfully!', severity: 'success', recordId: created?.id });
+                    router.push(ROUTES.ORGANIZATIONS);
                 } else {
+                    setToast({ open: true, message: 'Organization created successfully!', severity: 'success' });
                     const fresh = withDefaultAssignee(
                         withDropdownDefaults(getFormConfigs(), 'organizations', DEFAULT_FORM),
                         'assignedUser',
@@ -471,8 +478,8 @@ export default function OrganizationForm({
             } else if (mode === 'edit' && organizationId) {
                 await organizationService.update(organizationId, currentData as OrganizationFormData);
                 setIsDirty(false);
-                setToast({ open: true, message: 'Organization updated successfully!', severity: 'success' });
-                setTimeout(() => router.push(ROUTES.ORGANIZATIONS), 800);
+                setSaveFlash({ listPath: ROUTES.ORGANIZATIONS, message: 'Organization updated successfully!', severity: 'success', recordId: organizationId });
+                router.push(ROUTES.ORGANIZATIONS);
             }
         } catch (err: unknown) {
             let message = err instanceof Error ? err.message : 'Something went wrong. Please try again.';
@@ -514,6 +521,7 @@ export default function OrganizationForm({
         <FormProvider {...methods}>
             <FormConfigProvider module="organizations">
                 <CommonFormLayout
+                    loading={recordLoading}
                     isDirty={isDirty}
                     onDiscard={handleGuardDiscard}
                     breadcrumbItems={breadcrumbItems || defaultBreadcrumbs}

@@ -77,7 +77,7 @@ export function LeadDetailDrawer({
         severity: 'error',
     });
 
-    // Scorecard color of the lead's value (when the admin enabled "Detail View Column Color").
+    // Scorecard color of the lead's value (when the admin enabled "Drawer View Column Color").
     const scorecardBadge = useScorecardBadge('leads', freshLead ?? lead);
 
     const l = freshLead ?? lead;

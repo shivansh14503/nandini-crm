@@ -39,8 +39,11 @@ const isTypingTarget = (target: EventTarget | null) =>
  * Navbar search across every module (record numbers, names, emails, phones, GSTIN, PAN, bank account).
  * Press '/' (or Ctrl/⌘+K) to focus. Typing shows suggestions; Enter opens the full results page, or the
  * suggestion picked with ↑/↓. Esc closes.
+ *
+ * `compact`: shown as a 36px icon button that expands leftwards into the full field (over the nav pills) on
+ * click or focus, used while a detail drawer is docked and the navbar is narrower.
  */
-export function GlobalSearch() {
+export function GlobalSearch({ compact = false }: { compact?: boolean }) {
     const router = useRouter();
     const inputRef = useRef<HTMLInputElement>(null);
     // Callback ref (stored in state) so the popper can anchor without reading a ref during render.
@@ -162,8 +165,11 @@ export function GlobalSearch() {
                     </IconButton>
                 </Tooltip>
 
+                {/* Compact: a fixed 36px slot; the field inside is absolutely placed so it can grow over the nav. */}
+                <Box sx={compact ? { display: { xs: 'none', md: 'block' }, position: 'relative', width: 36, height: 36 } : { display: 'contents' }}>
                 <Box
                     ref={setAnchorEl}
+                    onClick={compact ? () => inputRef.current?.focus() : undefined}
                     sx={{
                         display: { xs: 'none', md: 'flex' },
                         alignItems: 'center',
@@ -184,9 +190,39 @@ export function GlobalSearch() {
                             boxShadow: '0 0 0 3px rgb(var(--crm-accent-rgb) / 0.22)',
                             width: 300,
                         },
+                        ...(compact && {
+                            position: 'absolute',
+                            top: 0,
+                            right: 0,
+                            zIndex: 2,
+                            height: 36,
+                            width: 36,
+                            boxSizing: 'border-box',
+                            px: '9px',
+                            py: 0,
+                            overflow: 'hidden',
+                            cursor: 'pointer',
+                            borderRadius: '10px',
+                            backgroundColor: 'transparent',
+                            borderColor: 'var(--mui-palette-border-main)',
+                            color: 'var(--mui-palette-text-secondary)',
+                            '&:hover': {
+                                borderColor: 'var(--crm-blue-300)',
+                                backgroundColor: 'var(--mui-palette-primary-soft)',
+                                color: 'var(--crm-text-blue-700)',
+                            },
+                            '&:focus-within': {
+                                cursor: 'text',
+                                backgroundColor: 'var(--mui-palette-background-paper)',
+                                borderColor: 'var(--mui-palette-primary-main)',
+                                boxShadow: '0 0 0 3px rgb(var(--crm-accent-rgb) / 0.22)',
+                                color: 'var(--mui-palette-text-secondary)',
+                                width: 300,
+                            },
+                        }),
                     }}
                 >
-                    <SearchIcon sx={{ fontSize: 16, color: 'var(--crm-gray-400)', flexShrink: 0 }} />
+                    <SearchIcon sx={{ fontSize: compact ? 18 : 16, color: compact ? 'inherit' : 'var(--crm-gray-400)', flexShrink: 0 }} />
                     <InputBase
                         inputRef={inputRef}
                         value={query}
@@ -219,7 +255,7 @@ export function GlobalSearch() {
                     />
                     {isFetching && !tooShort ? (
                         <CircularProgress size={12} thickness={5} sx={{ color: 'var(--mui-palette-text-muted)', flexShrink: 0 }} />
-                    ) : (
+                    ) : compact ? null : (
                         <Typography
                             sx={{
                                 fontSize: '0.65rem',
@@ -235,6 +271,7 @@ export function GlobalSearch() {
                             /
                         </Typography>
                     )}
+                </Box>
                 </Box>
 
                 <Popper

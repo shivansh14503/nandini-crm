@@ -11,13 +11,22 @@ import {
     customFieldsSchema,
 } from './common';
 
-export const corporateEmailSchema = z.object({
-    id: z.string(),
-    email: zodEmailOptional,
-    isPrimary: z.boolean().default(false),
-    isOptedOut: z.boolean().default(false),
-    isInvalidBounce: z.boolean().default(false),
-});
+export const corporateEmailSchema = z
+    .object({
+        id: z.string(),
+        email: zodEmailOptional,
+        isPrimary: z.boolean().default(false),
+        isOptedOut: z.boolean().default(false),
+        isInvalidBounce: z.boolean().default(false),
+        /** Client-only: set when the field check found the address can't receive email (see EmailRow). */
+        undeliverableMessage: z.string().nullish(),
+    })
+    // The check already said "invalid": block the save here instead of sending it to be rejected again.
+    .superRefine((row, ctx) => {
+        if (row.undeliverableMessage && row.email) {
+            ctx.addIssue({ code: 'custom', path: ['email'], message: row.undeliverableMessage });
+        }
+    });
 
 export const contactFormSchema = z.object({
     name: requiredText('Contact Name', L.personName),

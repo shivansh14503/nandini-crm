@@ -3,11 +3,13 @@
 import { useEffect } from 'react';
 
 /**
- * Clicks that never close the drawer: inside a drawer, a table row (it opens that row in the drawer instead), or a
- * portalled layer the drawer opened (menus, dialogs, popovers, tooltips, toasts).
+ * Clicks that never close the drawer: inside a drawer, the navbar (search, create, theme, notifications sit beside a
+ * docked drawer), a table row (it opens that row in the drawer instead), or a portalled layer the drawer opened
+ * (menus, dialogs, popovers, tooltips, toasts).
  */
 const KEEP_OPEN_SELECTOR = [
     '.MuiDrawer-paper',
+    '.MuiAppBar-root',
     'tbody tr',
     '.MuiPopover-root',
     '.MuiMenu-root',

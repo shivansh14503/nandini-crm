@@ -19,13 +19,13 @@ export interface ScorecardConfig {
     options: ScorecardOption[];
     /** The field's list column shows the option colors. */
     listViewColor: boolean;
-    /** The record view (drawer header) shows the option colors. */
-    detailViewColor: boolean;
+    /** The record drawer header shows the option colors. */
+    drawerViewColor: boolean;
     updatedBy: string | null;
     updatedAt: string;
 }
 
 export type SaveScorecardPayload = Pick<
     ScorecardConfig,
-    'fieldKey' | 'currencyFieldKey' | 'options' | 'listViewColor' | 'detailViewColor'
+    'fieldKey' | 'currencyFieldKey' | 'options' | 'listViewColor' | 'drawerViewColor'
 >;

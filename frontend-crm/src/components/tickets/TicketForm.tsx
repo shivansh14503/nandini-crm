@@ -10,7 +10,8 @@ import HandshakeOutlinedIcon from '@mui/icons-material/HandshakeOutlined';
 
 import { type BreadcrumbItem } from '../common/AppBreadcrumbs';
 import { type FormTabDefinition } from '../common/Drawer';
-import { ROUTES } from '@/config/constants';
+import { ROUTES } from '@/config/constants';
+import { setSaveFlash } from '@/utils/saveFlash';
 import { ticketFormSchema } from '@/validations';
 import {
     NATURE_PRIORITY_TO_TICKET_PRIORITY,
@@ -176,6 +177,8 @@ export default function TicketForm({ mode = 'create', initialData, ticketId, bre
         },
     ];
 
+    // True until the saved record arrives (view / edit), so the form shows skeleton fields, not empty ones.
+    const [recordLoading, setRecordLoading] = useState(Boolean(ticketId));
     useEffect(() => {
         if (!ticketId) return;
         let active = true;
@@ -188,7 +191,10 @@ export default function TicketForm({ mode = 'create', initialData, ticketId, bre
                     reset({ ...DEFAULT_TICKET_FORM, ...found });
                 }
             })
-            .catch(() => {});
+            .catch(() => {})
+            .finally(() => {
+                if (active) setRecordLoading(false);
+            });
         return () => {
             active = false;
         };
@@ -268,15 +274,19 @@ export default function TicketForm({ mode = 'create', initialData, ticketId, bre
 
     const submit = createSubmitHandler(async (values) => {
         try {
+            let saved: { id: string } | undefined;
+            let message = '';
             if (mode === 'create') {
                 const created = await ticketService.create(values);
-                showToast(showNumber('ticket') ? `Ticket ${created.ticketNumber} created successfully!` : 'Ticket created successfully!', 'success');
+                saved = created;
+                message = showNumber('ticket') ? `Ticket ${created.ticketNumber} created successfully!` : 'Ticket created successfully!';
             } else if (ticketId) {
-                await ticketService.update(ticketId, values);
-                showToast('Ticket updated successfully!', 'success');
+                saved = await ticketService.update(ticketId, values);
+                message = 'Ticket updated successfully!';
             }
             reset(values);
-            setTimeout(() => router.push(ROUTES.TICKETS), 800);
+            if (message) setSaveFlash({ listPath: ROUTES.TICKETS, message, severity: 'success', recordId: saved?.id ?? ticketId });
+            router.push(ROUTES.TICKETS);
         } catch (err: unknown) {
             showToast(err instanceof Error ? err.message : 'Failed to save ticket.', 'error');
         }
@@ -296,6 +306,7 @@ export default function TicketForm({ mode = 'create', initialData, ticketId, bre
         <FormProvider {...methods}>
             <FormConfigProvider module="tickets">
                 <CommonFormLayout
+                    loading={recordLoading}
                     isDirty={isDirty}
                     breadcrumbItems={breadcrumbItems || defaultBreadcrumbs}
                     tabs={TICKET_FORM_TABS}

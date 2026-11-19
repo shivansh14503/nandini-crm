@@ -14,6 +14,7 @@ import TuneOutlinedIcon from '@mui/icons-material/TuneOutlined';
 
 import { type BreadcrumbItem } from '../common/AppBreadcrumbs';
 import { AppToast } from '../common/AppToast';
+import { setSaveFlash } from '@/utils/saveFlash';
 import { type FormTabDefinition } from '../common/Drawer';
 import type { RecordAuditStamp } from '../common/Drawer/RecordAuditFooter';
 import { ROUTES } from '@/config/constants';
@@ -131,6 +132,8 @@ export default function ContactForm({
     ];
 
     // Populate data when editing
+    // True until the saved record arrives (view / edit), so the form shows skeleton fields, not empty ones.
+    const [recordLoading, setRecordLoading] = useState(Boolean(contactId));
     useEffect(() => {
         if (!contactId) return;
         let active = true;
@@ -143,7 +146,10 @@ export default function ContactForm({
                     setAudit({ createdAt: found.createdAt, createdBy: found.createdBy, updatedAt: found.updatedAt, updatedBy: found.updatedBy });
                 }
             })
-            .catch(() => {});
+            .catch(() => {})
+            .finally(() => {
+                if (active) setRecordLoading(false);
+            });
         return () => {
             active = false;
         };
@@ -154,10 +160,15 @@ export default function ContactForm({
             // With an id this is an edit: update (API mode reports a missing record as an error instead of
             // silently creating a duplicate). Only the mock store returns null for an unknown id.
             const updated = contactId ? await contactService.update(contactId, values) : null;
-            if (!updated) await contactService.create(values);
-            showToast(`Contact "${values.name}" saved successfully!`, 'success');
+            const saved = updated ?? (await contactService.create(values));
             reset(values);
-            setTimeout(() => router.push(ROUTES.CONTACTS), 700);
+            setSaveFlash({
+                listPath: ROUTES.CONTACTS,
+                message: `Contact "${values.name}" ${updated ? 'updated' : 'created'} successfully!`,
+                severity: 'success',
+                recordId: saved?.id,
+            });
+            router.push(ROUTES.CONTACTS);
         } catch (err: unknown) {
             let message = err instanceof Error ? err.message : 'Failed to save contact.';
             if (err instanceof ApiClientError) {
@@ -180,6 +191,7 @@ export default function ContactForm({
         <FormProvider {...methods}>
             <FormConfigProvider module="contacts">
                 <CommonFormLayout
+                    loading={recordLoading}
                     isDirty={isDirty}
                     breadcrumbItems={breadcrumbItems || defaultBreadcrumbs}
                     tabs={CONTACT_FORM_TABS}

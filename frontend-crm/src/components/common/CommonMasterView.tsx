@@ -135,6 +135,8 @@ export interface CommonMasterViewProps<T = unknown, TFilter extends string = str
     emptyActionLabel?: string;
     onEmptyAction?: () => void;
     minHeight?: number | string;
+    /** First load still running: the table shows skeleton rows instead of the empty state. */
+    loading?: boolean;
     /**
      * Custom table component (overrides declarative `DataTable` if provided).
      */
@@ -268,6 +270,7 @@ export function CommonMasterView<T = unknown, TFilter extends string = string>({
     emptyActionLabel,
     onEmptyAction,
     minHeight = 280,
+    loading,
     table,
     pagination,
     relatedSidebar,
@@ -435,6 +438,7 @@ export function CommonMasterView<T = unknown, TFilter extends string = string>({
                 emptyActionLabel={emptyActionLabel}
                 onEmptyAction={onEmptyAction}
                 minHeight={minHeight}
+                loading={loading}
             />
         ) : null);
 
@@ -461,7 +465,8 @@ export function CommonMasterView<T = unknown, TFilter extends string = string>({
             <Box
                 sx={{
                     pl: embedded ? 0 : { xs: 2, md: 3 },
-                    // On wide screens the open drawer sits beside the table instead of covering its right side.
+                    // On wide screens the open drawer sits beside the table instead of covering its right side:
+                    // drawer (580) + its 12px inset + a 12px gap, the same gaps the floating navbar keeps.
                     pr: embedded
                         ? { xs: 0, lg: isDrawerOpen && !isRightDrawerCollapsed ? `${DRAWER_WIDTH}px` : 0 }
                         : { xs: 2, md: 3, lg: isDrawerOpen && !isRightDrawerCollapsed ? `${DRAWER_WIDTH + 24}px` : 3 },
@@ -625,7 +630,7 @@ export function CommonMasterView<T = unknown, TFilter extends string = string>({
                       isRightDrawerCollapsed,
                       rightOffset: isRightDrawerCollapsed
                           ? 0
-                          : (relatedRecordsTable.props.rightOffset ?? 580),
+                          : (relatedRecordsTable.props.rightOffset ?? DRAWER_WIDTH + 24), // floating drawer + 12px inset + 12px gap
                   })
                 : relatedRecordsTable}
 

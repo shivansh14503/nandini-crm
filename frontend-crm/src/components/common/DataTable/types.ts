@@ -164,4 +164,6 @@ export interface DataTableProps<T> {
     // Container styling
     minHeight?: number | string;
     stickyHeader?: boolean;
+    /** First load still running: shows skeleton rows under the real header instead of the empty state. */
+    loading?: boolean;
 }

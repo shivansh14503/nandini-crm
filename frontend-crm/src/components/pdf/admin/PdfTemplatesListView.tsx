@@ -236,9 +236,10 @@ export function PdfTemplatesListView() {
                     actionsWidth={190}
                     onRowClick={(t) => router.push(ROUTES.PDF_TEMPLATE_EDIT(t.id))}
                     getRowHref={(t) => ROUTES.PDF_TEMPLATE_EDIT(t.id)}
-                    emptyTitle={query.isLoading ? 'Loading templates…' : 'No PDF templates'}
-                    emptyDescription={query.isLoading ? undefined : 'Create a template, or restart the API to restore the built-in ones.'}
+                    emptyTitle="No PDF templates"
+                    emptyDescription="Create a template, or restart the API to restore the built-in ones."
                     minHeight={260}
+                    loading={query.isLoading}
                 />
             </Box>
 

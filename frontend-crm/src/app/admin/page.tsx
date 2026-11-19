@@ -9,6 +9,7 @@ import TuneOutlinedIcon from '@mui/icons-material/TuneOutlined';
 import PictureAsPdfOutlinedIcon from '@mui/icons-material/PictureAsPdfOutlined';
 import AccountTreeOutlinedIcon from '@mui/icons-material/AccountTreeOutlined';
 import FormatListNumberedOutlinedIcon from '@mui/icons-material/FormatListNumberedOutlined';
+import MarkEmailReadOutlinedIcon from '@mui/icons-material/MarkEmailReadOutlined';
 import ManageAccountsOutlinedIcon from '@mui/icons-material/ManageAccountsOutlined';
 import SecurityOutlinedIcon from '@mui/icons-material/SecurityOutlined';
 import ArrowForwardRoundedIcon from '@mui/icons-material/ArrowForwardRounded';
@@ -67,6 +68,16 @@ const ADMIN_MODULES: AdminModule[] = [
         href: ROUTES.DOCUMENT_SERIES,
         badge: BADGES.available,
         highlights: ['Company prefix', 'Financial year', 'Suffix', 'Numbering'],
+    },
+    {
+        key: 'email-validation',
+        title: 'Email Validation',
+        description:
+            'See every saved email address with its check result, re-check the ones you pick in bulk, and decide what happens to risky or invalid addresses.',
+        icon: <MarkEmailReadOutlinedIcon />,
+        href: ROUTES.EMAIL_VALIDATION,
+        badge: BADGES.available,
+        highlights: ['Bulk check', 'Risky / invalid', 'Mark bounced', 'History'],
     },
     {
         key: 'roles',

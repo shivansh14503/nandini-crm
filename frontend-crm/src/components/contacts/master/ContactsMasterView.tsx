@@ -16,6 +16,7 @@ import { useTableFilter } from '../../common/TableFilter';
 import { MasterHeaderActions } from '../../common/MasterHeaderActions';
 import { buildExtendedSearchConfig } from '../../common/buildExtendedSearchConfig';
 import { AppToast } from '../../common/AppToast';
+import { useSaveFlash } from '@/utils/saveFlash';
 import { DataImportModal } from '../../common/import';
 import { documentNumberColumn, type DataTableColumn, type DataTableFilterItem } from '../../common/DataTable';
 import { ROUTES } from '@/config/constants';
@@ -43,7 +44,9 @@ export function ContactsMasterView() {
 
     // On the global search results page the table shows the matched records (any owner) instead of this list.
     const embeddedInSearch = Boolean(useSearchScope());
-    const { data: allContactsLoaded = NO_RECORDS, refetch } = useContacts(undefined, { enabled: !embeddedInSearch });
+    const { data: allContactsLoaded = NO_RECORDS, refetch, isPending: listPending } = useContacts(undefined, { enabled: !embeddedInSearch });
+    // A disabled query stays "pending" forever, so only count it when this screen loads its own list.
+    const listLoading = !embeddedInSearch && listPending;
     const allContacts = useSearchScopedRows(allContactsLoaded);
     const bulkDeleteMutation = useBulkDeleteContacts();
     const [activeTab, setActiveTab] = useState<ContactFilterTab>('all');
@@ -89,6 +92,12 @@ export function ContactsMasterView() {
         open: false,
         message: '',
         severity: 'success',
+    });
+
+    // Back from the create / edit form: show its "saved" toast here and open the saved record in the drawer.
+    useSaveFlash(ROUTES.CONTACTS, (flash) => {
+        setToast({ open: true, message: flash.message, severity: flash.severity ?? 'success' });
+        if (flash.recordId) setDrawerContactId(flash.recordId);
     });
 
     const [importOpen, setImportOpen] = useState(false);
@@ -380,6 +389,7 @@ export function ContactsMasterView() {
 
     return (
         <CommonMasterView<Contact, ContactFilterTab>
+            loading={listLoading}
             filterConfig={{
                 filters: filterItems,
                 activeFilter: activeTab,

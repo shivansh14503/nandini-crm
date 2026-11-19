@@ -3,7 +3,6 @@ import { logger } from '../../config/logger.js';
 import { prisma } from '../../config/prisma.js';
 import type { Prisma } from '../../generated/prisma/client.js';
 import type { EmailOwner } from '../shared/entityEmails.js';
-import { isRedisReady, redis } from '../../config/redis.js';
 import { HttpError } from '../../utils/httpError.js';
 import { runLocalChecks, type EmailCheckResult, type EmailVerificationStatus } from './localChecks.js';
 import { verifyWithProvider, type ProviderResult } from './provider.js';
@@ -16,55 +15,71 @@ export interface StoredVerification {
     verifiedAt: Date | null;
 }
 
-const DAY_SECONDS = 24 * 60 * 60;
+// ── Known addresses ──────────────────────────────────────────────────────────────
+// The database is the record of checked addresses: once an address is saved on any lead / contact / organization
+// with a result, that result is final and the provider is never asked about it again from a form or a save. Only
+// an admin's bulk check (emailValidation.admin.service.ts) asks again. Invalid addresses are never saved (the
+// form and the save both block them), so they are never "known".
 
-/**
- * How long a provider answer is reused, so re-typing or saving an address doesn't spend another credit. Shorter
- * the more harm a stale answer does: "valid" going stale is harmless (30 days is the industry norm, ~2% of
- * addresses die per month); "risky" is only a warning; "invalid" blocks the save, so a wrong one must clear fast.
- */
-const PROVIDER_CACHE_TTL_SECONDS: Record<EmailVerificationStatus, number> = {
-    valid: 30 * DAY_SECONDS,
-    risky: 7 * DAY_SECONDS,
-    invalid: DAY_SECONDS,
-};
-
-const providerCacheKey = (email: string) => `cache:email-verify:${email}`;
-
-async function readCachedProviderResult(email: string): Promise<ProviderResult | undefined> {
-    if (!isRedisReady()) return undefined;
-    try {
-        const cached = await redis.get(providerCacheKey(email));
-        const parsed = cached ? (JSON.parse(cached) as ProviderResult) : undefined;
-        return parsed?.status ? parsed : undefined;
-    } catch (err) {
-        logger.warn({ err: (err as Error).message }, 'Email verification cache read failed');
-        return undefined;
-    }
-}
-
-function cacheProviderResult(email: string, result: ProviderResult): void {
-    // Undecided answers are never cached: the next check really retries.
-    if (!result.status || !isRedisReady()) return;
-    redis.set(providerCacheKey(email), JSON.stringify(result), 'EX', PROVIDER_CACHE_TTL_SECONDS[result.status]).catch((err: Error) => {
-        logger.warn({ err: err.message }, 'Email verification cache write failed');
+/** Stored result of an address saved on any record, or `undefined` when no record has a decided result for it. */
+export async function findKnownVerification(email: string): Promise<StoredVerification | undefined> {
+    const row = await prisma.entityEmail.findFirst({
+        where: { email, verificationStatus: { not: null } },
+        orderBy: { verifiedAt: 'desc' },
+        select: { verificationStatus: true, verificationReason: true, verifiedAt: true },
     });
+    if (!row) return undefined;
+    return { verificationStatus: row.verificationStatus as EmailVerificationStatus, verificationReason: row.verificationReason, verifiedAt: row.verifiedAt };
 }
 
-/** Provider answer for an address, cached in Redis per address for a time that depends on the answer. */
-async function verifyWithProviderCached(email: string): Promise<ProviderResult | undefined> {
-    const cached = await readCachedProviderResult(email);
-    if (cached) return cached;
+// ── Recent provider answers (in memory) ──────────────────────────────────────────
+// One new address is looked at up to three times in a few minutes: when the user leaves the field, on save, and by
+// the background check that writes the result onto the saved row. This short in-process memory makes those one
+// provider credit. It is not a cache of results (the database is): it forgets after 30 minutes or on restart.
+
+const RECENT_ANSWER_TTL_MS = 30 * 60 * 1000;
+const MAX_RECENT_ANSWERS = 5_000;
+const recentAnswers = new Map<string, { result: ProviderResult; expiresAt: number }>();
+
+function rememberAnswer(email: string, result: ProviderResult): void {
+    if (!result.status) return; // Undecided answers aren't kept: the next check really retries.
+    recentAnswers.delete(email);
+    recentAnswers.set(email, { result, expiresAt: Date.now() + RECENT_ANSWER_TTL_MS });
+    if (recentAnswers.size > MAX_RECENT_ANSWERS) recentAnswers.delete(recentAnswers.keys().next().value as string);
+}
+
+function recentAnswer(email: string): ProviderResult | undefined {
+    const entry = recentAnswers.get(email);
+    if (!entry) return undefined;
+    if (entry.expiresAt > Date.now()) return entry.result;
+    recentAnswers.delete(email);
+    return undefined;
+}
+
+/** Provider answer for an address, reusing one from the last few minutes (see above). */
+async function askProvider(email: string): Promise<ProviderResult | undefined> {
+    const recent = recentAnswer(email);
+    if (recent) return recent;
+    return askProviderFresh(email);
+}
+
+/** Always calls the provider (admin bulk check); the answer is remembered for the save / background check. */
+export async function askProviderFresh(email: string): Promise<ProviderResult | undefined> {
     const result = await verifyWithProvider(email);
-    if (result) cacheProviderResult(email, result);
+    if (result) rememberAnswer(email, result);
     return result;
 }
 
+// ── Checks ───────────────────────────────────────────────────────────────────────
+
 /**
- * Full check of one address: the free local checks first, then (only if they pass) the paid provider.
- * Returns `undefined` when nothing could be decided right now and the address should be retried on the next save.
+ * Full check of one address for the background job: an earlier result for the address on any record, else the
+ * free local checks, then (only if they pass) the paid provider. `undefined` = nothing could be decided right now.
  */
 export async function verifyEmail(email: string, now = new Date()): Promise<StoredVerification | undefined> {
+    const known = await findKnownVerification(email);
+    if (known) return known;
+
     const local = await runLocalChecks(email);
     if (local.status) return { verificationStatus: local.status, verificationReason: local.reason, verifiedAt: now };
 
@@ -72,20 +87,18 @@ export async function verifyEmail(email: string, now = new Date()): Promise<Stor
         // Local-only mode: the domain is fine, the mailbox is unchecked. Re-run the cheap checks after a day.
         return { verificationStatus: null, verificationReason: 'domain_ok', verifiedAt: now };
     }
-    const provider = await verifyWithProviderCached(local.email);
+    const provider = await askProvider(local.email);
     if (!provider) return undefined;
     return { verificationStatus: provider.status, verificationReason: provider.reason, verifiedAt: now };
 }
 
-/** Form wording for the provider's answer (null message = nothing to warn about). */
-function providerMessage(provider: ProviderResult): string | null {
-    if (provider.status === 'invalid') {
-        return provider.reason === 'rejected_email'
-            ? 'This mailbox doesn’t exist.'
-            : 'This address can’t receive email.';
+/** Form wording for a mailbox-level result (null message = nothing to warn about). */
+function providerMessage(status: EmailVerificationStatus | null, reason: string | null): string | null {
+    if (status === 'invalid') {
+        return reason === 'rejected_email' ? 'This mailbox doesn’t exist.' : 'This address can’t receive email.';
     }
-    if (provider.status === 'risky') {
-        return provider.reason === 'accept_all'
+    if (status === 'risky') {
+        return reason === 'accept_all'
             ? 'This domain accepts any address, so the mailbox can’t be confirmed.'
             : 'This mailbox couldn’t be confirmed.';
     }
@@ -93,15 +106,28 @@ function providerMessage(provider: ProviderResult): string | null {
 }
 
 /**
- * The check a form runs when the user leaves an email field: free checks, then the mailbox check (cached, so each
- * distinct address costs at most one provider credit). `status: 'valid'` only when the mailbox was confirmed.
+ * The check a form runs when the user leaves an email field, and the save runs for addresses new to the record:
+ * an address already saved on any record keeps its stored result (no provider call); otherwise the free checks,
+ * then the mailbox check. `status: 'valid'` only when the mailbox was confirmed.
  */
-export async function checkEmailForForm(email: string): Promise<EmailCheckResult> {
+export async function checkEmailForForm(rawEmail: string): Promise<EmailCheckResult> {
+    const email = rawEmail.trim().toLowerCase();
+    const known = await findKnownVerification(email);
+    if (known?.verificationStatus) {
+        return {
+            email,
+            status: known.verificationStatus,
+            reason: known.verificationReason,
+            message: providerMessage(known.verificationStatus, known.verificationReason),
+            suggestion: null,
+        };
+    }
+
     const local = await runLocalChecks(email);
     if (local.status || !ENV.EMAIL_VERIFICATION.QEV_API_KEY) return local;
-    const provider = await verifyWithProviderCached(local.email);
+    const provider = await askProvider(local.email);
     if (!provider?.status) return local;
-    return { ...local, status: provider.status, reason: provider.reason, message: providerMessage(provider) };
+    return { ...local, status: provider.status, reason: provider.reason, message: providerMessage(provider.status, provider.reason) };
 }
 
 /**
@@ -109,7 +135,7 @@ export async function checkEmailForForm(email: string): Promise<EmailCheckResult
  * the mailbox doesn't exist), naming each row as `<field>.<index>.email` so the form marks it inline. Addresses
  * already on the record are never re-judged here, so old data doesn't block unrelated edits. Doubtful (risky)
  * addresses and checks that fail or time out are allowed through: only a definite "undeliverable" blocks.
- * Runs outside the save transaction; provider answers are cached, so an address checked on blur costs nothing.
+ * The form blocks a save itself once the field check said "invalid", so this normally finds nothing new.
  */
 export async function assertEmailsDeliverable(rows: unknown, field: string, owner?: EmailOwner): Promise<void> {
     if (!ENV.EMAIL_VERIFICATION.ENABLED || !Array.isArray(rows) || rows.length === 0) return;
@@ -137,16 +163,14 @@ export async function assertEmailsDeliverable(rows: unknown, field: string, owne
     }
 }
 
-/** Rows of an owner whose verification is missing or due: never checked, undecided for a day, or older than the recheck period. */
+/**
+ * Rows of an owner still without a result: never checked, or undecided (provider unsure, or local-only mode) for
+ * a day. Decided results are final; there is no periodic re-check (admins re-check in Settings › Email Validation).
+ */
 function dueWhere(owner: EmailOwner, now: Date): Prisma.EntityEmailWhereInput {
-    const recheckBefore = new Date(now.getTime() - ENV.EMAIL_VERIFICATION.RECHECK_DAYS * DAY_MS);
     return {
         ...owner,
-        OR: [
-            { verifiedAt: null },
-            { verificationStatus: null, verifiedAt: { lt: new Date(now.getTime() - DAY_MS) } },
-            { verifiedAt: { lt: recheckBefore } },
-        ],
+        OR: [{ verifiedAt: null }, { verificationStatus: null, verifiedAt: { lt: new Date(now.getTime() - DAY_MS) } }],
     };
 }
 

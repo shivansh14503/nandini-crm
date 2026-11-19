@@ -1,7 +1,8 @@
 import React from 'react';
 import { Box, Typography, type SxProps, type Theme } from '@mui/material';
 import { useFormMode } from '@/context/FormModeContext';
-import { FieldNameProvider, useFieldOverride } from '@/context/FormConfigContext';
+import { FieldNameProvider, useFieldOverride, useFormConfigModule } from '@/context/FormConfigContext';
+import { useStatusPillColor } from '../common/scorecard/useStatusPillColor';
 import { ReadOnlyField } from './ReadOnlyField';
 import { EmailActions, PhoneActions } from '../common/ContactActions';
 import { getCountryNameByCode } from '@/data/addressMaster';
@@ -230,6 +231,8 @@ export function FormField({ name, viewValue, viewActions, label: baseLabel, requ
     const isAuto = useFieldAutoSize(name);
     // Admin overrides for this built-in field (inside a FormConfigProvider); undefined keeps the coded props.
     const override = useFieldOverride(name, { label: baseLabel, required: baseRequired, hint: baseHint, fieldSize: baseSize });
+    const statusValue = mode === 'view' && name === 'status' ? extractViewValue(children).value : undefined;
+    const statusColor = useStatusPillColor(useFormConfigModule(), name, statusValue);
     if (override?.hidden) return null;
     const label = override?.label ?? baseLabel;
     const required = override?.required ?? baseRequired;
@@ -251,7 +254,9 @@ export function FormField({ name, viewValue, viewActions, label: baseLabel, requ
                   : extracted.value;
         if (found) {
             const actions = viewActions ?? channelActions(name, value);
-            return <ReadOnlyField label={label} value={value} hideWhenEmpty {...viewPresentation(name, value)} actions={actions} sx={{ mb: 2, ...sx }} />;
+            // Status always reads as a colored pill (scorecard color when set, else by meaning).
+            const presentation = name === 'status' && value ? { badge: true, badgeColor: statusColor } : viewPresentation(name, value);
+            return <ReadOnlyField label={label} value={value} hideWhenEmpty {...presentation} actions={actions} sx={{ mb: 2, ...sx }} />;
         }
     }
     const resolvedSize = resolveFieldSize(name, undefined, size);

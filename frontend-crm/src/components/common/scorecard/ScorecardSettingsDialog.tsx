@@ -46,7 +46,7 @@ interface Draft {
     currencyFieldKey: string;
     options: DraftOption[];
     listViewColor: boolean;
-    detailViewColor: boolean;
+    drawerViewColor: boolean;
 }
 
 /** The field's options in admin order (archived ones only when the saved scorecard still colors them). */
@@ -85,7 +85,7 @@ function initialDraft(configs: FormConfigsPayload | null, module: CrmModuleKey, 
         currencyFieldKey: (savedField && config?.currencyFieldKey) || '',
         options: fieldKey ? optionsFor(configs, module, fieldKey, saved) : [],
         listViewColor: config?.listViewColor ?? true,
-        detailViewColor: config?.detailViewColor ?? true,
+        drawerViewColor: config?.drawerViewColor ?? true,
     };
 }
 
@@ -170,7 +170,7 @@ function ScorecardSettingsBody({ module, onClose, onSaved }: ScorecardSettingsDi
                 currencyFieldKey: draft.currencyFieldKey || null,
                 options: draft.options.map(({ value, color, hidden }) => ({ value, color, ...(hidden ? { hidden } : {}) })),
                 listViewColor: draft.listViewColor,
-                detailViewColor: draft.detailViewColor,
+                drawerViewColor: draft.drawerViewColor,
             });
             onSaved?.('Scorecard saved.');
             onClose();
@@ -368,11 +368,11 @@ function ScorecardSettingsBody({ module, onClose, onSaved }: ScorecardSettingsDi
                                 onChange={(checked) => setDraft((prev) => ({ ...prev, listViewColor: checked }))}
                             />
                             <OptionToggle
-                                label="Enable Detail View Column Color"
+                                label="Enable Drawer View Column Color"
                                 description="The record's drawer shows the value in its color."
-                                checked={draft.detailViewColor}
+                                checked={draft.drawerViewColor}
                                 disabled={busy}
-                                onChange={(checked) => setDraft((prev) => ({ ...prev, detailViewColor: checked }))}
+                                onChange={(checked) => setDraft((prev) => ({ ...prev, drawerViewColor: checked }))}
                             />
                         </Box>
                     </Box>

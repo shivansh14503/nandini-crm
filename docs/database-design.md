@@ -30,6 +30,7 @@
 | Customisation | `DropdownCategory`, `DropdownOption`, `FormFieldDefinition` |
 | PDF | `PdfTemplate`, `PdfAsset`, `PdfSavedItem` |
 | Audit & UI state | `AuditLog`, `TableFilter`, `ModuleScorecard` |
+| Email checks | `EmailValidationRun` |
 
 ## 2. Design conventions
 
@@ -216,7 +217,11 @@ Products are not row-scoped (everyone sees all). Indexes: `productName`, `catego
 ### 4.9 `EntityEmail` (shared child table)
 
 One table holds emails for three parents. Exactly one of `organizationId`, `contactId`, `leadId` is set per row; each
-FK cascades on delete. Columns: `email`, `isPrimary`, `isOptedOut`, `isInvalidBounce`, `sortOrder`.
+FK cascades on delete. Columns: `email`, `isPrimary`, `isOptedOut`, `isInvalidBounce`, `sortOrder`, and the
+automatic check result `verificationStatus` (`valid` | `risky` | `invalid`; null = not checked / undecided),
+`verificationReason`, `verifiedAt`. The database is the record of checked addresses: a decided result is final
+(no periodic re-check), and an address saved on any record counts as checked everywhere — `replaceEmails` copies an
+existing result onto a new row with the same address. Only an admin bulk check (`EmailValidationRun`) changes it.
 Returned as `corporateEmails` (organizations) or `emailAddresses` (contacts, leads). Writes replace the full set
 (`replaceEmails`). Indexes on each FK and on `email` (duplicate checks).
 
@@ -299,9 +304,21 @@ Per-user list filters: `username`, `module`, `kind` (`recent` — last 10 kept �
 Admin settings of a list screen's summary cards, one row per module (PK `module`; no row = the screen's built-in
 cards). `fieldKey` (a single-choice `select` form field: one card per option), `currencyFieldKey` (optional
 `amount` / `number` field totalled per card), `optionsJson` (`[{ value, color: "#RRGGBB", hidden? }]` in card
-order; values must be options of the field's dropdown), `listViewColor` / `detailViewColor` (colors also mark the
-field in the list column / record drawer), `updatedBy`, timestamps. Hard-deleted on "Reset to default". Counting
+order; values must be options of the field's dropdown), `listViewColor` / `drawerViewColor` (colors also mark the
+field in the list column / record drawer; a record's Status always shows as a colored pill on its detail page, in the scorecard color when the scorecard counts by Status), `updatedBy`, timestamps. Hard-deleted on "Reset to default". Counting
 runs in the browser over the loaded list.
+
+### 4.19 `EmailValidationRun`
+
+One admin bulk email check (Settings › Email Validation). `status` (`queued` | `running` | `completed` |
+`cancelled` | `stopped` — provider out of credits / server error), `emailsJson` (lowercased addresses in check
+order), `total`, `processed` (index of the next address, so a restart resumes), `validCount` / `riskyCount` /
+`invalidCount` / `undecidedCount`, `message` (why it stopped), `startedBy` (username), `createdAt`,
+`finishedAt`. `mode` (`single` = one provider call per address; `list` = the provider's List API, for runs of at
+least `EMAIL_VERIFICATION_LIST_API_MIN` addresses) and, for list runs, `phase` (`local_checks` | `uploading` |
+`provider_running` | `provider_waiting` | `importing`), `providerEmailsJson` (addresses that passed the free checks
+and were sent), `providerJobId`, `providerProgress` (0–100), `lastPolledAt`. Each result is written onto every `EntityEmail` row with that address. Kept as history (never
+deleted). Index `createdAt`.
 
 ## 5. Index strategy
 

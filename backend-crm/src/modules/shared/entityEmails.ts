@@ -76,14 +76,24 @@ export type EmailOwner = { organizationId: string } | { contactId: string } | { 
 
 /**
  * Replaces an owner's email list (delete + insert) inside the caller's transaction. Addresses that were already
- * on the record keep their verification result; new ones start unchecked (see `queueEmailVerification`).
+ * on the record keep their verification result; an address already checked on another record takes that result
+ * (an address in the database counts as checked); the rest start unchecked (see `queueEmailVerification`).
  */
 export async function replaceEmails(tx: TransactionClient, owner: EmailOwner, emails: readonly NormalizedEmail[]): Promise<void> {
-    const previous = await tx.entityEmail.findMany({
-        where: owner,
-        select: { email: true, verificationStatus: true, verificationReason: true, verifiedAt: true },
-    });
+    const select = { email: true, verificationStatus: true, verificationReason: true, verifiedAt: true } as const;
+    const previous = await tx.entityEmail.findMany({ where: owner, select });
     const verificationByEmail = new Map(previous.map(({ email, ...verification }) => [email, verification]));
+    const unknown = emails.map((row) => row.email).filter((email) => !verificationByEmail.has(email));
+    if (unknown.length > 0) {
+        const known = await tx.entityEmail.findMany({
+            where: { email: { in: unknown }, verificationStatus: { not: null } },
+            orderBy: { verifiedAt: 'desc' },
+            select,
+        });
+        for (const { email, ...verification } of known) {
+            if (!verificationByEmail.has(email)) verificationByEmail.set(email, verification);
+        }
+    }
     await tx.entityEmail.deleteMany({ where: owner });
     if (emails.length === 0) return;
     await tx.entityEmail.createMany({

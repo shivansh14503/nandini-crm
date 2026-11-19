@@ -17,6 +17,7 @@ import { useTableFilter } from '../common/TableFilter';
 import { MasterHeaderActions } from '../common/MasterHeaderActions';
 import { buildExtendedSearchConfig } from '../common/buildExtendedSearchConfig';
 import { AppToast } from '../common/AppToast';
+import { useSaveFlash } from '@/utils/saveFlash';
 import { DataImportModal } from '../common/import';
 import { documentNumberColumn, type DataTableColumn, type DataTableFilterItem } from '../common/DataTable';
 import { ROUTES } from '@/config/constants';
@@ -60,7 +61,9 @@ export function OpportunitiesMasterView() {
 
     // On the global search results page the table shows the matched records (any owner) instead of this list.
     const embeddedInSearch = Boolean(useSearchScope());
-    const { data: allOpportunitiesLoaded = NO_RECORDS, refetch } = useOpportunities(undefined, { enabled: !embeddedInSearch });
+    const { data: allOpportunitiesLoaded = NO_RECORDS, refetch, isPending: listPending } = useOpportunities(undefined, { enabled: !embeddedInSearch });
+    // A disabled query stays "pending" forever, so only count it when this screen loads its own list.
+    const listLoading = !embeddedInSearch && listPending;
     const allOpportunities = useSearchScopedRows(allOpportunitiesLoaded);
     const bulkDeleteMutation = useBulkDeleteOpportunities();
     const [activeTab, setActiveTab] = useState<OpportunityFilterTab>('all');
@@ -96,6 +99,12 @@ export function OpportunitiesMasterView() {
         open: false,
         message: '',
         severity: 'success',
+    });
+
+    // Back from the create / edit form: show its "saved" toast here and open the saved record in the drawer.
+    useSaveFlash(ROUTES.OPPORTUNITIES, (flash) => {
+        setToast({ open: true, message: flash.message, severity: flash.severity ?? 'success' });
+        if (flash.recordId) setDrawerOppId(flash.recordId);
     });
 
     // Quotations per deal, for the Quote Created / Quote Sent columns.
@@ -557,6 +566,7 @@ export function OpportunitiesMasterView() {
 
     return (
         <CommonMasterView<Opportunity, OpportunityFilterTab>
+            loading={listLoading}
             filterConfig={{
                 filters: filterItems,
                 activeFilter: activeTab,

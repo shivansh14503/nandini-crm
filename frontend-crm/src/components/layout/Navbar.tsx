@@ -19,6 +19,8 @@ import {
     Typography,
     Avatar,
 } from '@mui/material';
+import { glassSurfaceSx, GLASS_SHADOW, GLASS_RADIUS, FLOAT_INSET, NAVBAR_HEIGHT } from '@/theme/glass';
+import { useRightPanelWidth } from './rightPanelStore';
 import HomeIcon from '@mui/icons-material/Home';
 import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown';
 import LogoutIcon from '@mui/icons-material/Logout';
@@ -184,7 +186,7 @@ function NavPill({ item }: { item: { label: string; icon?: React.ReactNode; item
                     fontWeight: 500,
                     fontSize: '0.8rem',
                     textTransform: 'none',
-                    borderRadius: '6px',
+                    borderRadius: '8px',
                     px: 1.5,
                     py: 0.6,
                     backgroundColor: open ? 'var(--mui-palette-primary-soft)' : 'transparent',
@@ -280,7 +282,15 @@ const createIconColor = (href: string) => {
 };
 
 /* ─── User avatar dropdown ──────────────────────────────── */
-function UserMenu({ user, onLogout }: { user: { username: string; role: string }; onLogout: () => void }) {
+function UserMenu({
+    user,
+    onLogout,
+    compact = false,
+}: {
+    user: { username: string; role: string };
+    onLogout: () => void;
+    compact?: boolean;
+}) {
     const { open, close, menuId, setAnchorEl, anchorEl, hoverProps, triggerProps, handleClickAway } = useDropdown();
 
     const initials = user.username.slice(0, 2).toUpperCase();
@@ -293,12 +303,13 @@ function UserMenu({ user, onLogout }: { user: { username: string; role: string }
                 ref={setAnchorEl}
                 id="user-menu-btn"
                 {...triggerProps}
+                aria-label={compact ? `Account: ${user.username}` : undefined}
                 sx={{
                     display: 'flex',
                     alignItems: 'center',
                     gap: 1,
-                    px: 1.2,
-                    py: 0.5,
+                    px: compact ? 0.25 : 1.2,
+                    py: compact ? 0.25 : 0.5,
                     font: 'inherit',
                     textAlign: 'left',
                     cursor: 'pointer',
@@ -323,22 +334,26 @@ function UserMenu({ user, onLogout }: { user: { username: string; role: string }
                 >
                     {initials}
                 </Avatar>
-                <Box sx={{ display: { xs: 'none', md: 'block' } }}>
-                    <Typography sx={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--crm-gray-900)', lineHeight: 1.2 }}>
-                        {user.username}
-                    </Typography>
-                    <Typography sx={{ fontSize: '0.7rem', color: 'var(--crm-gray-500)', lineHeight: 1.2 }}>
-                        {user.role}
-                    </Typography>
-                </Box>
-                <KeyboardArrowDownIcon
-                    sx={{
-                        fontSize: 16,
-                        color: 'var(--crm-gray-400)',
-                        transition: 'transform 0.2s',
-                        transform: open ? 'rotate(180deg)' : 'rotate(0deg)',
-                    }}
-                />
+                {!compact && (
+                    <>
+                        <Box sx={{ display: { xs: 'none', md: 'block' } }}>
+                            <Typography sx={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--crm-gray-900)', lineHeight: 1.2 }}>
+                                {user.username}
+                            </Typography>
+                            <Typography sx={{ fontSize: '0.7rem', color: 'var(--crm-gray-500)', lineHeight: 1.2 }}>
+                                {user.role}
+                            </Typography>
+                        </Box>
+                        <KeyboardArrowDownIcon
+                            sx={{
+                                fontSize: 16,
+                                color: 'var(--crm-gray-400)',
+                                transition: 'transform 0.2s',
+                                transform: open ? 'rotate(180deg)' : 'rotate(0deg)',
+                            }}
+                        />
+                    </>
+                )}
             </Box>
 
             <Popper
@@ -594,7 +609,7 @@ const CREATE_ITEMS = [
     { label: 'Activity', href: '/dashboard' },
 ];
 
-function CreateButton() {
+function CreateButton({ compact = false }: { compact?: boolean }) {
     const { open, close, menuId, setAnchorEl, anchorEl, hoverProps, triggerProps, handleClickAway } = useDropdown();
 
     return (
@@ -604,17 +619,21 @@ function CreateButton() {
                 id="create-btn"
                 {...triggerProps}
                 size="small"
-                startIcon={<AddIcon sx={{ fontSize: '16px !important' }} />}
+                aria-label={compact ? 'Create' : undefined}
+                startIcon={compact ? undefined : <AddIcon sx={{ fontSize: '16px !important' }} />}
                 endIcon={
-                    <KeyboardArrowDownIcon
-                        sx={{
-                            fontSize: '16px !important',
-                            transition: 'transform 0.2s',
-                            transform: open ? 'rotate(180deg)' : 'rotate(0deg)',
-                        }}
-                    />
+                    compact ? undefined : (
+                        <KeyboardArrowDownIcon
+                            sx={{
+                                fontSize: '16px !important',
+                                transition: 'transform 0.2s',
+                                transform: open ? 'rotate(180deg)' : 'rotate(0deg)',
+                            }}
+                        />
+                    )
                 }
                 sx={{
+                    ...(compact && { minWidth: 0, width: 36, height: 36, p: 0 }),
                     background: open
                         ? 'linear-gradient(135deg, var(--crm-fill-blue-700), var(--crm-fill-blue-600))'
                         : 'linear-gradient(135deg, var(--crm-fill-blue-600), var(--crm-fill-blue-500))',
@@ -622,9 +641,8 @@ function CreateButton() {
                     fontWeight: 600,
                     fontSize: '0.8rem',
                     textTransform: 'none',
-                    borderRadius: '8px',
-                    px: 1.8,
-                    py: 0.6,
+                    borderRadius: compact ? '10px' : '8px',
+                    ...(!compact && { px: 1.8, py: 0.6 }),
                     boxShadow: '0 2px 8px rgb(var(--crm-accent-rgb) / 0.35)',
                     whiteSpace: 'nowrap',
                     '&:hover': {
@@ -634,7 +652,7 @@ function CreateButton() {
                     transition: 'all 0.15s ease',
                 }}
             >
-                Create
+                {compact ? <AddIcon sx={{ fontSize: 20 }} /> : 'Create'}
             </Button>
 
             <Popper
@@ -706,6 +724,9 @@ function CreateButton() {
 export function Navbar() {
     const router = useRouter();
     const { user, logout } = useAuth();
+    // A docked detail drawer: end the bar 12px short of it and switch the right-side controls to icons.
+    const panelWidth = useRightPanelWidth();
+    const compact = panelWidth > 0;
 
     const handleLogout = async () => {
         try {
@@ -717,20 +738,34 @@ export function Navbar() {
 
     return (
         <AppBar
-            // Sticky (not fixed) so it stays at the top while scrolling without pages needing a top offset.
+            // Floating glass bar: sticky with an inset, so page content scrolls beneath the frosted surface.
             position="sticky"
             elevation={0}
             sx={{
-                top: 0,
-                backgroundColor: 'var(--mui-palette-background-paper)',
-                borderBottom: '1px solid var(--crm-gray-200)',
+                ...glassSurfaceSx,
+                top: FLOAT_INSET,
+                mt: `${FLOAT_INSET}px`,
+                ml: `${FLOAT_INSET}px`,
+                mr: `${compact ? panelWidth + FLOAT_INSET * 2 : FLOAT_INSET}px`,
+                width: 'auto',
+                color: 'inherit',
+                borderRadius: GLASS_RADIUS,
+                boxShadow: GLASS_SHADOW,
                 zIndex: 1200,
+                transition: 'margin-right 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
             }}
         >
-            <Toolbar sx={{ justifyContent: 'space-between', minHeight: '56px !important', px: { xs: 2, md: 3 } }}>
+            <Toolbar
+                sx={{
+                    justifyContent: 'space-between',
+                    minHeight: `${NAVBAR_HEIGHT}px !important`,
+                    pl: { xs: 1.5, md: 1.75 },
+                    pr: { xs: 1.5, md: 2 },
+                }}
+            >
 
                 {/* ── LEFT: Logo + Nav pills ── */}
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: { xs: 1, md: 2 } }}>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: compact ? 1 : { xs: 1, md: 2 }, minWidth: 0 }}>
                     {/* Logo — clicks → dashboard */}
                     <Box
                         component={Link}
@@ -742,7 +777,7 @@ export function Navbar() {
                             gap: 1.2,
                             cursor: 'pointer',
                             flexShrink: 0,
-                            mr: { xs: 1, md: 2 },
+                            mr: compact ? 0.5 : { xs: 1, md: 2 },
                             transition: 'opacity 0.15s',
                             '&:hover': { opacity: 0.82 },
                         }}
@@ -754,7 +789,8 @@ export function Navbar() {
                             height={32}
                             style={{ width: '32px', height: '32px', objectFit: 'contain', borderRadius: '6px' }}
                         />
-                        <Box>
+                        {/* Compact bar: the name only stays on extra-wide screens, where there is room for it. */}
+                        <Box sx={{ display: compact ? { xs: 'none', xl: 'block' } : 'block' }}>
                             <Typography
                                 sx={{
                                     fontSize: '0.85rem',
@@ -788,14 +824,14 @@ export function Navbar() {
                     </Box>
                 </Box>
 
-                {/* ── RIGHT: Search + Create + User menu ── */}
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+                {/* ── RIGHT: Search + Create + User menu (icon-only while a drawer is docked) ── */}
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: compact ? 0.75 : 1.5, flexShrink: 0 }}>
 
                     {/* Global search (every module; Enter opens /search) */}
-                    <GlobalSearch />
+                    <GlobalSearch compact={compact} />
 
                     {/* Create button */}
-                    <CreateButton />
+                    <CreateButton compact={compact} />
 
                     {/* Light / dark / system */}
                     <ThemeModeToggle />
@@ -814,7 +850,7 @@ export function Navbar() {
                     />
 
                     {/* User menu */}
-                    {user && <UserMenu user={user} onLogout={handleLogout} />}
+                    {user && <UserMenu user={user} onLogout={handleLogout} compact={compact} />}
                 </Box>
             </Toolbar>
         </AppBar>

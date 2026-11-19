@@ -17,12 +17,13 @@ import AutorenewOutlinedIcon from '@mui/icons-material/AutorenewOutlined';
 import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutlineOutlined';
 import HighlightOffOutlinedIcon from '@mui/icons-material/HighlightOffOutlined';
 import { RecordLink } from '../common/RecordLink';
-import { StatusSummaryCards, type StatusSummaryItem } from '../common/StatusSummaryCards';
+import { StatusSummaryCards, StatusSummaryCardsSkeleton, type StatusSummaryItem } from '../common/StatusSummaryCards';
 import { CommonMasterView } from '../common/CommonMasterView';
 import { useTableFilter } from '../common/TableFilter';
 import { MasterHeaderActions } from '../common/MasterHeaderActions';
 import { buildExtendedSearchConfig } from '../common/buildExtendedSearchConfig';
 import { AppToast } from '../common/AppToast';
+import { useSaveFlash } from '@/utils/saveFlash';
 import { DataImportModal } from '../common/import';
 import { documentNumberColumn, type DataTableColumn, type DataTableFilterItem } from '../common/DataTable';
 import { ROUTES } from '@/config/constants';
@@ -50,7 +51,9 @@ export function LeadsMasterView() {
 
     // On the global search results page the table shows the matched records (any owner) instead of this list.
     const embeddedInSearch = Boolean(useSearchScope());
-    const { data: leadsLoaded = NO_RECORDS, refetch } = useLeads(undefined, { enabled: !embeddedInSearch });
+    const { data: leadsLoaded = NO_RECORDS, refetch, isPending: leadsPending } = useLeads(undefined, { enabled: !embeddedInSearch });
+    // A disabled query stays "pending" forever, so only count it when this screen actually loads its own list.
+    const leadsLoading = !embeddedInSearch && leadsPending;
     const leads = useSearchScopedRows(leadsLoaded);
     const bulkDeleteMutation = useBulkDeleteLeads();
     const [activeTab, setActiveTab] = useState<LeadFilterTab>('all');
@@ -87,6 +90,12 @@ export function LeadsMasterView() {
         open: false,
         message: '',
         severity: 'success',
+    });
+
+    // Back from the create / edit form: show its "saved" toast here and open the saved record in the drawer.
+    useSaveFlash(ROUTES.LEADS, (flash) => {
+        setToast({ open: true, message: flash.message, severity: flash.severity ?? 'success' });
+        if (flash.recordId) setDrawerLeadId(flash.recordId);
     });
 
     const todayStr = useMemo(() => new Date().toISOString().split('T')[0], []);
@@ -541,8 +550,11 @@ export function LeadsMasterView() {
                 { label: 'Sales' },
                 { label: 'Leads' },
             ]}
+            loading={leadsLoading}
             summary={
-                scorecard.configured ? (
+                leadsLoading || scorecard.loading ? (
+                    <StatusSummaryCardsSkeleton count={scorecard.configured ? scorecard.items.length : statusSummaryItems.length} />
+                ) : scorecard.configured ? (
                     <StatusSummaryCards<string>
                         items={scorecard.items}
                         activeId={scorecard.activeId}

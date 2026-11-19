@@ -22,7 +22,7 @@ import { createRateLimiter } from '../../middlewares/rateLimiter.js';
  *   GET /cities              ?country=IN&state=IN-DL&search&limit → CityLookupDto[] (searches not cached)
  *   GET /form-configs        ?includeInactive         → { categories, fieldsByModule, moduleTabs }
  *   GET /tax-id-holders      ?owner&gstNo&panNumber&excludeId → TaxIdHolder[] (live, never cached)
- *   GET /email-check         ?email                   → EmailCheckResult (free checks + cached mailbox check; rate limited)
+ *   GET /email-check         ?email                   → EmailCheckResult (stored result of an address already saved on any record, else free checks + mailbox check; rate limited)
  */
 const router = Router();
 router.use(authenticate);
@@ -49,8 +49,8 @@ router.get(
         return findTaxIdHolders(prisma, owner, { gstNo, panNumber }, excludeId);
     })
 );
-// Run when a form's email field loses focus: free checks, then the mailbox check (cached per address, so each
-// distinct address costs at most one provider credit). Limited per user so a stuck form can't drain the quota.
+// Run when a form's email field loses focus: an address already saved on any record returns its stored result;
+// otherwise free checks, then the mailbox check. Limited per user so a stuck form can't drain the quota.
 const emailCheckQuerySchema = z.object({ email: z.string().trim().min(1).max(254) });
 const emailCheckLimiter = createRateLimiter({
     keyPrefix: 'ratelimit:email-check',

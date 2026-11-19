@@ -18,6 +18,7 @@ import { useAuth } from '@/context/AuthContext';
 import { CommonMasterView } from '../common/CommonMasterView';
 import { useTableFilter } from '../common/TableFilter';
 import { AppToast } from '../common/AppToast';
+import { useSaveFlash } from '@/utils/saveFlash';
 import { MasterHeaderActions, outlinedHeaderButtonSx } from '../common/MasterHeaderActions';
 import { DataImportModal } from '../common/import';
 import { documentNumberColumn, type DataTableColumn, type DataTableFilterItem } from '../common/DataTable';
@@ -63,7 +64,9 @@ export function OrganizationsMasterView() {
     // ── State ─────────────────────────────────────────────────────────────────
     // On the global search results page the table shows the matched records (any owner) instead of this list.
     const embeddedInSearch = Boolean(useSearchScope());
-    const { data: allOrganizationsLoaded = NO_RECORDS, refetch } = useOrganizations(undefined, { enabled: !embeddedInSearch });
+    const { data: allOrganizationsLoaded = NO_RECORDS, refetch, isPending: listPending } = useOrganizations(undefined, { enabled: !embeddedInSearch });
+    // A disabled query stays "pending" forever, so only count it when this screen loads its own list.
+    const listLoading = !embeddedInSearch && listPending;
     const allOrganizations = useSearchScopedRows(allOrganizationsLoaded);
     const bulkDeleteMutation = useBulkDeleteOrganizations();
     const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -96,6 +99,12 @@ export function OrganizationsMasterView() {
         open: false,
         message: '',
         severity: 'success',
+    });
+
+    // Back from the create / edit form: show its "saved" toast here and open the saved record in the drawer.
+    useSaveFlash(ROUTES.ORGANIZATIONS, (flash) => {
+        setToast({ open: true, message: flash.message, severity: flash.severity ?? 'success' });
+        if (flash.recordId) setDrawerOrgId(flash.recordId);
     });
 
     // Row clicks only open the drawer; its eye button leads on to the detail page with the related modules.
@@ -559,6 +568,7 @@ export function OrganizationsMasterView() {
 
     return (
         <CommonMasterView<ExtendedOrganization, FilterTab>
+            loading={listLoading}
             filterConfig={{
                 filters: filterItems,
                 activeFilter: activeTab,

@@ -13,6 +13,7 @@ import { useCodedDefaultsRecorder } from '@/context/CodedFieldDefaultsContext';
 import { useFormContext, type FieldValues, type UseFormReturn } from 'react-hook-form';
 import { useFormDraftGuard } from '@/hooks/useFormDraftGuard';
 import { UnsavedChangesModal } from './UnsavedChangesModal';
+import { FormSectionsSkeleton } from './skeletons';
 
 /** Tab id used when a form without tabs gets admin-created tabs: it stands for the form's own fields. */
 const FORM_FIELDS_TAB_ID = '__form_fields__';
@@ -123,6 +124,8 @@ export interface CommonFormLayoutProps {
      * Custom sx styling for the form content box inside Paper.
      */
     contentSx?: SxProps<Theme>;
+    /** The record being viewed / edited is still loading: skeleton fields instead of empty ones. */
+    loading?: boolean;
 }
 
 /**
@@ -165,6 +168,7 @@ export function CommonFormLayout({
     saveDisabledTooltip,
     isDirty,
     onDiscard,
+    loading = false,
 }: CommonFormLayoutProps) {
     // ── Unsaved changes guard ──
     // useFormContext() is null outside a FormProvider (typed as non-null by react-hook-form).
@@ -247,6 +251,7 @@ export function CommonFormLayout({
                 banner={banner}
                 toast={toast}
                 padContent={!disableContentPadding}
+                loading={loading}
             >
                 {content(!disableContentPadding)}
             </CommonRecordDetailView>
@@ -401,7 +406,9 @@ export function CommonFormLayout({
                         inert={mode === 'view'}
                         style={{ border: 'none', padding: 0, margin: 0, minWidth: 0 }}
                     >
-                        {content(!disableContentPadding)}
+                        {/* Panels stay mounted (hidden) while the record loads, so the form is ready when it lands. */}
+                        {loading && <FormSectionsSkeleton sx={disableContentPadding ? undefined : { p: 0 }} />}
+                        <div style={{ display: loading ? 'none' : 'contents' }}>{content(!disableContentPadding)}</div>
                     </fieldset>
                     </FormModeProvider>
                 </Box>

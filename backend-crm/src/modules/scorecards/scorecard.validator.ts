@@ -26,7 +26,7 @@ export const saveScorecardSchema = z.object({
         'Each option can appear only once.'
     ),
     listViewColor: z.boolean(),
-    detailViewColor: z.boolean(),
+    drawerViewColor: z.boolean(),
 });
 
 export type SaveScorecardInput = z.infer<typeof saveScorecardSchema>;

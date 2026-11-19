@@ -104,6 +104,11 @@ export interface CorporateEmail {
     verificationStatus?: 'valid' | 'risky' | 'invalid' | null;
     verificationReason?: string | null;
     verifiedAt?: string | null;
+    /**
+     * Client-only (never sent as part of the record): the field check found this address can't receive email.
+     * The form schemas refuse to save while it is set; editing the address clears it.
+     */
+    undeliverableMessage?: string | null;
 }
 
 export interface OrganizationFormData {

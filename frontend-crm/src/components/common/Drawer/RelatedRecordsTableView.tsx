@@ -38,6 +38,7 @@ import {
 } from '@/config/relatedModules.config';
 import { useDropdownOptionLabel } from '@/hooks/queries/useFormConfigs';
 import { useShowRecordNumber } from '@/hooks/queries/useDocumentSeries';
+import { glassSurfaceSx, GLASS_SHADOW, GLASS_RADIUS, FLOAT_INSET, NAVBAR_HEIGHT } from '@/theme/glass';
 import { moduleKeyFrom, moduleTableTintVars } from '@/theme/moduleColors';
 import { isShownField } from '@/utils/recordNumbers';
 
@@ -46,7 +47,7 @@ export interface RelatedRecordsTableViewProps {
     moduleId: string;
     moduleTitle: string;
     parentEntityTitle: string;
-    leftOffset: number; // dynamically adjusts based on sidebar collapsed state (72px or 260px)
+    leftOffset: number; // left edge (px): just past the floating related-modules dock (rail or pinned) + a 12px gap
     rightOffset: number; // width of right drawer (~540px - 580px)
     isRightDrawerCollapsed?: boolean;
     onClose?: () => void;
@@ -561,25 +562,26 @@ export function RelatedRecordsTableView({
         }
     };
 
-    // A collapsed drawer slides fully off-screen, so the table reaches the viewport edge (the bookmark tab floats above it).
-    const effectiveRightOffset = isRightDrawerCollapsed ? 0 : rightOffset;
+    // A collapsed drawer slides fully off-screen, so the table keeps only the standard inset from the viewport edge.
+    const effectiveRightOffset = Math.max(FLOAT_INSET, isRightDrawerCollapsed ? 0 : rightOffset);
 
     return (
         <Box
             component="section"
             sx={{
+                // Floating glass panel below the navbar, keeping the same 12px gaps to the navbar, dock and drawer.
+                ...glassSurfaceSx,
                 position: 'fixed',
-                top: 0,
-                bottom: 0,
+                top: FLOAT_INSET + NAVBAR_HEIGHT + FLOAT_INSET,
+                bottom: FLOAT_INSET,
                 left: leftOffset,
                 right: effectiveRightOffset,
-                zIndex: 1290, // Tucks nicely underneath both side panels
-                backgroundColor: 'var(--mui-palette-background-paper)',
-                borderRight: '1px solid var(--mui-palette-border-strong)', // Adds a clean edge
+                zIndex: 1290, // Tucks underneath both side panels
+                borderRadius: GLASS_RADIUS,
+                boxShadow: GLASS_SHADOW,
                 display: 'flex',
                 flexDirection: 'column',
-                transition: 'left 0.25s cubic-bezier(0.4, 0, 0.2, 1), right 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
-                boxShadow: 'none', // Remove heavy shadow, let the right drawer cast its shadow over this
+                transition: 'left 0.22s cubic-bezier(0.2, 0, 0, 1), right 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
                 overflow: 'hidden',
             }}
         >
@@ -589,7 +591,7 @@ export function RelatedRecordsTableView({
                     height: 42,
                     minHeight: 42,
                     px: 2,
-                    backgroundColor: 'var(--mui-palette-background-subtle)',
+                    backgroundColor: 'color-mix(in srgb, var(--mui-palette-background-subtle) 70%, transparent)',
                     color: 'var(--crm-slate-900)',
                     display: 'flex',
                     alignItems: 'center',

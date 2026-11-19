@@ -11,42 +11,44 @@ const pad = (n: number) => String(n).padStart(2, '0');
 /** How the value is stored: `12h` → `04:15 PM` (follow-up times), `24h` → `16:15` (the `datetime-local` time part). */
 export type TimeValueFormat = '12h' | '24h';
 
-interface Parts {
-    h12: number;
-    m: number;
-    pm: boolean;
-}
-
-const toParts = (mins: number): Parts => ({ h12: Math.floor(mins / 60) % 12 || 12, m: mins % 60, pm: mins >= 720 });
-const fromParts = ({ h12, m, pm }: Parts) => ((h12 % 12) + (pm ? 12 : 0)) * 60 + m;
-
 /** Minutes since midnight → `04:15 PM`. */
 export function formatTime12(mins: number): string {
-    const { h12, m, pm } = toParts(mins);
-    return `${pad(h12)}:${pad(m)} ${pm ? 'PM' : 'AM'}`;
+    const h = Math.floor(mins / 60);
+    return `${pad(h % 12 || 12)}:${pad(mins % 60)} ${h < 12 ? 'AM' : 'PM'}`;
 }
 
 /** Minutes since midnight → `16:15`. */
 export const formatTime24 = (mins: number) => `${pad(Math.floor(mins / 60))}:${pad(mins % 60)}`;
+
+/** Minutes since midnight → the short 12-hour hint shown beside 24-hour times (`4:15 PM`). */
+const hint12 = (mins: number) => {
+    const h = Math.floor(mins / 60);
+    return `${h % 12 || 12}:${pad(mins % 60)} ${h < 12 ? 'AM' : 'PM'}`;
+};
+
+/** Hour → `4 PM`, the label under each 24-hour hour in the picker. */
+const hourHint = (h: number) => `${h % 12 || 12} ${h < 12 ? 'AM' : 'PM'}`;
 
 const formatValue = (mins: number, format: TimeValueFormat) => (format === '24h' ? formatTime24(mins) : formatTime12(mins));
 
 /** Where the columns sit when the field is empty: the start of the working day. */
 const DEFAULT_MINUTES = 9 * 60;
 
-const HOURS = Array.from({ length: 12 }, (_, i) => i + 1);
+const HOURS = Array.from({ length: 24 }, (_, i) => i);
 const MINUTES = Array.from({ length: 60 }, (_, i) => i);
-const PERIODS = [false, true]; // pm flag: AM, PM
 
-type Column = 0 | 1 | 2;
-const COLUMN_LABELS = ['Hours', 'Minutes', 'AM/PM'] as const;
+type Column = 0 | 1;
+const COLUMN_LABELS = ['Hours', 'Minutes'] as const;
+/** Share of the panel width each column takes (the panel matches the field's width), with a floor so narrow fields stay usable. */
+const COLUMN_FLEX = [3, 2] as const;
+const COLUMN_MIN_WIDTHS = [84, 52] as const;
 const ITEM_HEIGHT = 32;
 const VISIBLE_ROWS = 7;
 
 export interface TimePickerProps {
     value: string;
     onChange: (value: string) => void;
-    /** Stored format of `value` / `onChange`; the field always shows `hh:mm AM/PM`. Defaults to `12h`. */
+    /** Stored format of `value` / `onChange`; the field always shows `HH:mm` (24-hour) with a 12-hour hint. Defaults to `12h`. */
     valueFormat?: TimeValueFormat;
     /** The date the time belongs to (`YYYY-MM-DD`): on today, times that have passed are greyed out. */
     date?: string | null;
@@ -59,8 +61,10 @@ export interface TimePickerProps {
 }
 
 /**
- * Time-of-day picker: a `hh:mm AM/PM` text field that opens three scrollable columns (hours, minutes, AM/PM).
- * Clicking an item updates the value at once. Typing a time (`4:15 pm`, `16:15`) is accepted on blur / Enter.
+ * Time-of-day picker: a 24-hour `HH:mm` text field that opens two scrollable columns (hours 00–23, minutes).
+ * Each hour carries its 12-hour reading (`16 · 4 PM`) and the field shows the picked time in 12-hour form too,
+ * so nobody has to convert in their head. Clicking an item updates the value at once. Typing a time
+ * (`16:15`, `4:15 pm`) is accepted on blur / Enter.
  * Keyboard: ↓ (or Alt+↓) opens and focuses the columns, ↑/↓ move, ←/→ or Tab switch columns, Enter/Space picks,
  * Escape closes. A stored value that has already passed stays as it is, so older records keep it.
  */
@@ -73,44 +77,46 @@ export function TimePicker({
     ariaLabel = 'Time',
     onBlur,
     name,
-    placeholder = 'hh:mm AM',
+    placeholder = 'HH:mm',
     disabled,
 }: TimePickerProps) {
     const current = useMemo(() => parseTimeOfDay(value), [value]);
-    const display = current === null ? value ?? '' : formatTime12(current);
+    const display = current === null ? value ?? '' : formatTime24(current);
 
     const [open, setOpen] = useState(false);
-    const [text, setText] = useState(display);
-    const [editing, setEditing] = useState(false);
+    // What the user is typing; the field shows the formatted value whenever they aren't.
+    const [draft, setDraft] = useState<string | null>(null);
+    const editing = draft !== null;
+    const text = draft ?? display;
     const [focus, setFocus] = useState<{ col: Column; index: number } | null>(null);
-    const anchorRef = useRef<HTMLDivElement>(null);
+    const [anchorEl, setAnchorEl] = useState<HTMLDivElement | null>(null);
     const inputRef = useRef<HTMLInputElement>(null);
     const columnRefs = useRef<(HTMLDivElement | null)[]>([]);
 
-    useEffect(() => {
-        if (!editing) setText(display);
-    }, [display, editing]);
+    // 12-hour reading of whatever is in the field right now (typed text included).
+    const typedMinutes = editing ? parseTimeOfDay(text) : current;
+    const fieldHint = typedMinutes === null ? null : hint12(typedMinutes);
 
-    // Earliest allowed time today (null on other days).
+    // Earliest allowed time today (null on other days). No date yet counts as today: that's where the time lands.
     const now = localNow();
-    const minMinutes = date && date.slice(0, 10) === now.slice(0, 10) ? Number(now.slice(11, 13)) * 60 + Number(now.slice(14, 16)) : null;
+    const day = (date ?? '').slice(0, 10) || now.slice(0, 10);
+    const minMinutes = day === now.slice(0, 10) ? Number(now.slice(11, 13)) * 60 + Number(now.slice(14, 16)) : null;
 
-    // Parts the columns work from: the value, or a sensible starting point when empty.
-    const base = toParts(current ?? Math.max(DEFAULT_MINUTES, minMinutes ?? 0));
+    // Hour / minute the columns work from: the value, or a sensible starting point when empty.
+    const baseMinutes = current ?? Math.max(DEFAULT_MINUTES, minMinutes ?? 0);
+    const base = { h: Math.floor(baseMinutes / 60), m: baseMinutes % 60 };
     const selected = current === null ? null : base;
 
     const isPast = (mins: number) => minMinutes !== null && mins < minMinutes;
     const disabledAt = (col: Column, index: number): boolean => {
         if (minMinutes === null) return false;
-        if (col === 0) return isPast(fromParts({ ...base, h12: HOURS[index], m: 59 }));
-        if (col === 1) return isPast(fromParts({ ...base, m: MINUTES[index] }));
-        return isPast(fromParts({ h12: 11, m: 59, pm: PERIODS[index] }));
+        if (col === 0) return isPast(HOURS[index] * 60 + 59);
+        return isPast(base.h * 60 + MINUTES[index]);
     };
 
-    const columns: { items: string[]; selectedIndex: number | null; baseIndex: number }[] = [
-        { items: HOURS.map(pad), selectedIndex: selected ? selected.h12 - 1 : null, baseIndex: base.h12 - 1 },
-        { items: MINUTES.map(pad), selectedIndex: selected ? selected.m : null, baseIndex: base.m },
-        { items: ['AM', 'PM'], selectedIndex: selected ? Number(selected.pm) : null, baseIndex: Number(base.pm) },
+    const columns: { count: number; selectedIndex: number | null; baseIndex: number }[] = [
+        { count: HOURS.length, selectedIndex: selected ? selected.h : null, baseIndex: base.h },
+        { count: MINUTES.length, selectedIndex: selected ? selected.m : null, baseIndex: base.m },
     ];
 
     const commit = (mins: number) => {
@@ -121,11 +127,7 @@ export function TimePicker({
 
     const pick = (col: Column, index: number) => {
         if (disabledAt(col, index)) return;
-        const parts = { ...base };
-        if (col === 0) parts.h12 = HOURS[index];
-        else if (col === 1) parts.m = MINUTES[index];
-        else parts.pm = PERIODS[index];
-        commit(fromParts(parts));
+        commit(col === 0 ? HOURS[index] * 60 + base.m : base.h * 60 + MINUTES[index]);
     };
 
     const scrollColumns = useCallback(
@@ -143,8 +145,7 @@ export function TimePicker({
     );
 
     const focusItem = (col: Column, index: number) => {
-        const items = columns[col].items;
-        const i = Math.min(Math.max(index, 0), items.length - 1);
+        const i = Math.min(Math.max(index, 0), columns[col].count - 1);
         setFocus({ col, index: i });
         const el = columnRefs.current[col]?.querySelector<HTMLElement>(`[data-index="${i}"]`);
         el?.focus({ preventScroll: true });
@@ -178,17 +179,27 @@ export function TimePicker({
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [current]);
 
+    // Moving the date to today can leave the picked time behind us: push it to the next quarter hour.
+    // Only on a date change, so a record that loads with an old time keeps it.
+    const prevDay = useRef(day);
+    useEffect(() => {
+        if (prevDay.current === day) return;
+        prevDay.current = day;
+        if (current !== null && minMinutes !== null && current < minMinutes) {
+            commit(Math.min(23 * 60 + 59, Math.ceil(minMinutes / 15) * 15));
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [day]);
+
     const applyTyped = () => {
-        setEditing(false);
+        setDraft(null);
         const trimmed = text.trim();
         if (!trimmed) {
             if (value) onChange('');
             return;
         }
         const mins = parseTimeOfDay(trimmed);
-        if (mins === null) setText(display);
-        else if (mins !== current) commit(mins);
-        else setText(display);
+        if (mins !== null && mins !== current) commit(mins);
     };
 
     const onInputKeyDown = (e: React.KeyboardEvent) => {
@@ -222,15 +233,15 @@ export function TimePicker({
             case 'Home':
                 return move(() => focusItem(col, 0));
             case 'End':
-                return move(() => focusItem(col, columns[col].items.length - 1));
+                return move(() => focusItem(col, columns[col].count - 1));
             case 'ArrowRight':
-                return move(() => focusColumn(Math.min(col + 1, 2) as Column));
+                return move(() => focusColumn(1));
             case 'ArrowLeft':
-                return move(() => focusColumn(Math.max(col - 1, 0) as Column));
+                return move(() => focusColumn(0));
             case 'Tab': {
                 const next = col + (e.shiftKey ? -1 : 1);
                 // Tabbing past either end leaves the panel and returns to the field.
-                return move(() => (next < 0 || next > 2 ? close(true) : focusColumn(next as Column)));
+                return move(() => (next < 0 || next > 1 ? close(true) : focusColumn(next as Column)));
             }
             case ' ':
                 return move(() => pick(col, index));
@@ -248,7 +259,7 @@ export function TimePicker({
 
     return (
         <ClickAwayListener onClickAway={() => open && close()}>
-            <Box ref={anchorRef} sx={{ width: '100%' }}>
+            <Box ref={setAnchorEl} sx={{ width: '100%' }}>
                 <TextField
                     name={name}
                     inputRef={inputRef}
@@ -259,10 +270,7 @@ export function TimePicker({
                     error={error}
                     disabled={disabled}
                     autoComplete="off"
-                    onChange={(e) => {
-                        setEditing(true);
-                        setText(e.target.value);
-                    }}
+                    onChange={(e) => setDraft(e.target.value)}
                     onClick={() => !open && openPanel()}
                     onKeyDown={onInputKeyDown}
                     onBlur={() => {
@@ -271,7 +279,7 @@ export function TimePicker({
                     }}
                     slotProps={{
                         htmlInput: {
-                            'aria-label': ariaLabel,
+                            'aria-label': fieldHint ? `${ariaLabel}, ${fieldHint}` : ariaLabel,
                             'aria-haspopup': 'listbox',
                             'aria-expanded': open,
                             inputMode: 'text',
@@ -285,13 +293,46 @@ export function TimePicker({
                                     />
                                 </InputAdornment>
                             ),
+                            endAdornment: fieldHint ? (
+                                <InputAdornment position="end" sx={{ ml: 0.75, height: 'auto', maxHeight: 'none', alignSelf: 'center' }}>
+                                    <Box
+                                        component="span"
+                                        aria-hidden
+                                        sx={{
+                                            display: 'inline-flex',
+                                            alignItems: 'center',
+                                            height: 20,
+                                            px: 1,
+                                            borderRadius: '999px',
+                                            fontSize: '0.7rem',
+                                            fontWeight: 600,
+                                            lineHeight: 1,
+                                            whiteSpace: 'nowrap',
+                                            color: 'var(--crm-text-blue-700)',
+                                            backgroundColor: 'var(--mui-palette-primary-soft)',
+                                            border: '1px solid var(--mui-palette-primary-softBorder)',
+                                        }}
+                                    >
+                                        {fieldHint}
+                                    </Box>
+                                </InputAdornment>
+                            ) : undefined,
                         },
                     }}
-                    sx={fieldSx}
+                    sx={{
+                        ...fieldSx,
+                        '& .MuiOutlinedInput-root': {
+                            ...fieldSx['& .MuiOutlinedInput-root'],
+                            alignItems: 'center',
+                            pr: '6px',
+                        },
+                        '& .MuiInputAdornment-positionStart': { mr: 0.75, '& svg': { display: 'block' } },
+                        '& .MuiOutlinedInput-input': { minWidth: 0, fontVariantNumeric: 'tabular-nums', textOverflow: 'ellipsis' },
+                    }}
                 />
                 <Popper
                     open={open}
-                    anchorEl={anchorRef.current}
+                    anchorEl={anchorEl}
                     placement="bottom-start"
                     sx={{ zIndex: (t) => t.zIndex.modal + 1 }}
                     modifiers={[{ name: 'offset', options: { offset: [0, 4] } }]}
@@ -306,7 +347,9 @@ export function TimePicker({
                             display: 'flex',
                             gap: 0.5,
                             p: 0.5,
-                            border: '1px solid var(--mui-palette-divider)',
+                            width: anchorEl?.offsetWidth,
+                            boxSizing: 'border-box',
+                            border: '1px solid var(--mui-palette-border-main)',
                             borderRadius: '4px',
                             bgcolor: 'var(--mui-palette-background-paper)',
                         }}
@@ -322,7 +365,8 @@ export function TimePicker({
                                     role="listbox"
                                     aria-label={COLUMN_LABELS[col]}
                                     sx={{
-                                        width: 56,
+                                        flex: `${COLUMN_FLEX[col]} 1 0`,
+                                        minWidth: COLUMN_MIN_WIDTHS[col],
                                         maxHeight: ITEM_HEIGHT * VISIBLE_ROWS,
                                         overflowY: 'auto',
                                         overscrollBehavior: 'contain',
@@ -330,17 +374,19 @@ export function TimePicker({
                                         '&::-webkit-scrollbar': { display: 'none' },
                                     }}
                                 >
-                                    {c.items.map((label, index) => {
+                                    {Array.from({ length: c.count }, (_, index) => {
                                         const isSelected = c.selectedIndex === index;
                                         const isFocused = focus?.col === col && focus.index === index;
                                         const isDisabled = disabledAt(col, index) && !isSelected;
+                                        const hourHintText = col === 0 ? hourHint(HOURS[index]) : null;
                                         return (
                                             <Box
-                                                key={label}
+                                                key={index}
                                                 data-index={index}
                                                 role="option"
                                                 aria-selected={isSelected}
                                                 aria-disabled={isDisabled || undefined}
+                                                aria-label={hourHintText ? `${pad(HOURS[index])}, ${hourHintText}` : undefined}
                                                 tabIndex={isFocused || (!focus && isSelected) ? 0 : -1}
                                                 onClick={() => {
                                                     setFocus({ col, index });
@@ -352,6 +398,7 @@ export function TimePicker({
                                                     display: 'flex',
                                                     alignItems: 'center',
                                                     justifyContent: 'center',
+                                                    gap: 1,
                                                     boxSizing: 'border-box',
                                                     borderRadius: '4px',
                                                     fontSize: '0.85rem',
@@ -359,17 +406,29 @@ export function TimePicker({
                                                     userSelect: 'none',
                                                     outline: 'none',
                                                     color: isDisabled ? 'var(--mui-palette-text-disabled)' : 'var(--mui-palette-text-primary)',
+                                                    '& .time-hint': {
+                                                        fontSize: '0.68rem',
+                                                        color: isDisabled ? 'var(--mui-palette-text-disabled)' : 'var(--mui-palette-text-muted)',
+                                                    },
                                                     ...(isSelected && {
-                                                        bgcolor: 'var(--mui-palette-primary-main)',
-                                                        color: 'var(--mui-palette-primary-contrastText)',
+                                                        bgcolor: 'var(--crm-fill-blue-600)',
+                                                        color: '#ffffff',
                                                         fontWeight: 700,
+                                                        '& .time-hint': { fontSize: '0.68rem', fontWeight: 500, color: 'rgb(255 255 255 / 0.85)' },
                                                     }),
                                                     ...(!isSelected &&
-                                                        !isDisabled && { '&:hover': { bgcolor: 'var(--mui-palette-action-hover)' } }),
-                                                    ...(isFocused && { boxShadow: 'inset 0 0 0 2px var(--mui-palette-text-primary)' }),
+                                                        !isDisabled && {
+                                                            '&:hover': {
+                                                                bgcolor: 'var(--mui-palette-primary-soft)',
+                                                                color: 'var(--crm-text-blue-700)',
+                                                                '& .time-hint': { color: 'var(--crm-text-blue-600)' },
+                                                            },
+                                                        }),
+                                                    ...(isFocused && { boxShadow: 'inset 0 0 0 2px rgb(var(--crm-accent-rgb) / 0.6)' }),
                                                 }}
                                             >
-                                                {label}
+                                                <span>{pad(col === 0 ? HOURS[index] : MINUTES[index])}</span>
+                                                {hourHintText && <span className="time-hint">{hourHintText}</span>}
                                             </Box>
                                         );
                                     })}

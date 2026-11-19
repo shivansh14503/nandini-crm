@@ -16,6 +16,7 @@ import { useTableFilter } from '../common/TableFilter';
 import { MasterHeaderActions } from '../common/MasterHeaderActions';
 import { buildExtendedSearchConfig } from '../common/buildExtendedSearchConfig';
 import { AppToast } from '../common/AppToast';
+import { useSaveFlash } from '@/utils/saveFlash';
 import { documentNumberColumn, type DataTableColumn, type DataTableFilterItem } from '../common/DataTable';
 import { ROUTES } from '@/config/constants';
 import type { Quotation } from '@/types/quotation.types';
@@ -62,7 +63,9 @@ export function QuotationsMasterView() {
 
     // On the global search results page the table shows the matched records (any owner) instead of this list.
     const embeddedInSearch = Boolean(useSearchScope());
-    const { data: allQuotationsLoaded = NO_RECORDS, refetch } = useQuotations(undefined, { enabled: !embeddedInSearch });
+    const { data: allQuotationsLoaded = NO_RECORDS, refetch, isPending: listPending } = useQuotations(undefined, { enabled: !embeddedInSearch });
+    // A disabled query stays "pending" forever, so only count it when this screen loads its own list.
+    const listLoading = !embeddedInSearch && listPending;
     const allQuotations = useSearchScopedRows(allQuotationsLoaded);
     const deleteMutation = useDeleteQuotation();
     const bulkDeleteMutation = useBulkDeleteQuotations();
@@ -98,6 +101,12 @@ export function QuotationsMasterView() {
         open: false,
         message: '',
         severity: 'success',
+    });
+
+    // Back from the create / edit form: show its "saved" toast here and open the saved record in the drawer.
+    useSaveFlash(ROUTES.QUOTATIONS, (flash) => {
+        setToast({ open: true, message: flash.message, severity: flash.severity ?? 'success' });
+        if (flash.recordId) setDrawerQuotationId(flash.recordId);
     });
 
     // Row clicks only open the drawer; its eye button leads on to the detail page with the related modules.
@@ -402,6 +411,7 @@ export function QuotationsMasterView() {
 
     return (
         <CommonMasterView<Quotation, QuotationFilterTab>
+            loading={listLoading}
             breadcrumbItems={[
                 { label: 'Sales' },
                 { label: 'Quotations' },

@@ -8,7 +8,7 @@ import { emailVerificationService, type EmailCheckResult } from '@/services/emai
 import type { CorporateEmail } from '@/types/organization.types';
 
 /** Plain-language explanation of a stored verification reason (server and provider codes). */
-const REASON_TEXT: Record<string, string> = {
+export const REASON_TEXT: Record<string, string> = {
     syntax: 'The address is not in a valid format.',
     typo: 'The domain looks like a typo of a common email provider.',
     disposable: 'This is a disposable (temporary) email provider.',
@@ -24,6 +24,10 @@ const REASON_TEXT: Record<string, string> = {
     timeout: 'The mail server did not answer in time.',
     unavailable_smtp: 'The mail server was unavailable.',
     unexpected_error: 'The check could not be completed.',
+    admin_accepted: 'An administrator accepted this address.',
+    not_safe_to_send: 'The mailbox exists, but the provider does not consider it safe to send to (e.g. catch-all or disposable).',
+    temporarily_blocked: 'The mail server temporarily refused the check (greylisting).',
+    exceeded_storage: 'The mailbox is full.',
 };
 
 const STATUS_STYLE = {

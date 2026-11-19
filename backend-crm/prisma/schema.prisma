@@ -1036,7 +1036,7 @@ model TableFilter {
 
 /// Scorecard of a module's list screen (the summary cards above the table): the dropdown field the cards count by,
 /// an optional amount field each card totals, a colour per option value, and whether those colours also mark the
-/// field in the list column / record view. One row per module (no row = the screen's built-in cards); admins edit.
+/// field in the list column / record drawer. One row per module (no row = the screen's built-in cards); admins edit.
 model ModuleScorecard {
   /// CrmModuleKey, e.g. leads.
   module           String   @id @db.NVarChar(40)
@@ -1047,8 +1047,46 @@ model ModuleScorecard {
   /// JSON [{ value, color: "#RRGGBB", hidden? }] in card order (option values of the field's dropdown).
   optionsJson      String   @db.NVarChar(Max)
   listViewColor    Boolean  @default(false)
-  detailViewColor  Boolean  @default(false)
+  /// Colors also mark the field in the record drawer.
+  drawerViewColor  Boolean  @default(false)
   updatedBy        String?  @db.NVarChar(50)
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
+}
+
+/// One admin bulk email check (Settings › Email Validation): the addresses picked, checked one at a time in the
+/// API process. Each address costs at most one provider credit; the results are written onto every EntityEmail
+/// row with that address. Unfinished runs resume when the API starts.
+model EmailValidationRun {
+  id                 String    @id @default(uuid()) @db.NVarChar(50)
+  /// queued | running | completed | cancelled | stopped (provider out of credits / unreachable)
+  status             String    @db.NVarChar(20)
+  /// string[] of lowercased addresses as JSON, in the order they are checked.
+  emailsJson         String    @db.NVarChar(Max)
+  total              Int
+  /// How many of `emailsJson` are done (the next one to check is at this index).
+  processed          Int       @default(0)
+  validCount         Int       @default(0)
+  riskyCount         Int       @default(0)
+  invalidCount       Int       @default(0)
+  /// Provider couldn't decide; the address keeps its previous result.
+  undecidedCount     Int       @default(0)
+  /// Why a run stopped early, shown to the admin.
+  message            String?   @db.NVarChar(500)
+  /// single = one provider call per address (small runs); list = the provider's List API (one CSV upload, polled).
+  mode               String    @default("single") @db.NVarChar(10)
+  /// list mode: local_checks | uploading | provider_running | provider_waiting (not enough credits) | importing
+  phase              String?   @db.NVarChar(30)
+  /// list mode: addresses that passed the free checks and go to the provider, as a JSON string[].
+  providerEmailsJson String?   @db.NVarChar(Max)
+  /// list mode: the provider's job id (status polling, report download, delete).
+  providerJobId      String?   @db.NVarChar(64)
+  /// list mode: the provider's progress, 0–100.
+  providerProgress   Int?
+  lastPolledAt       DateTime?
+  startedBy          String    @db.NVarChar(50)
+  createdAt          DateTime  @default(now())
+  finishedAt         DateTime?
+
+  @@index([createdAt])
 }

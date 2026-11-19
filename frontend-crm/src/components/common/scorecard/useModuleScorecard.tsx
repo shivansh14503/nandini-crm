@@ -1,14 +1,14 @@
 'use client';
 
 import React, { useCallback, useMemo, useState } from 'react';
-import LabelOutlinedIcon from '@mui/icons-material/LabelOutlined';
 import { useAuth } from '@/context/AuthContext';
-import { useFormConfigs } from '@/hooks/queries/useFormConfigs';
-import { useScorecard } from '@/hooks/queries/useScorecards';
+import { useFormConfigs, useFormConfigsQuery } from '@/hooks/queries/useFormConfigs';
+import { useScorecard, useScorecards } from '@/hooks/queries/useScorecards';
 import type { CrmModuleKey } from '@/types/formConfig.types';
 import { isAdminRole } from '@/utils/adminRoles';
 import type { StatusSummaryItem } from '../StatusSummaryCards';
 import { ScorecardSettingsDialog } from './ScorecardSettingsDialog';
+import { scorecardOptionLooks } from './scorecardIcons';
 import { formatScorecardAmount, resolveScorecard, type ResolvedScorecard } from './scorecardUtils';
 
 /** Id of the "All" card. */
@@ -28,6 +28,8 @@ export interface UseModuleScorecardOptions<T> {
 }
 
 export interface ModuleScorecardState<T> {
+    /** Still working out whether a scorecard applies: show a skeleton rather than either set of cards. */
+    loading: boolean;
     /** An admin-configured scorecard is in effect; when false the screen keeps its built-in cards. */
     configured: boolean;
     scorecard: ResolvedScorecard | null;
@@ -60,6 +62,11 @@ export function useModuleScorecard<T>({
     const configs = useFormConfigs();
     const config = useScorecard(module);
     const scorecard = useMemo(() => resolveScorecard(config, configs, module), [config, configs, module]);
+    // Until both the saved scorecard and the form (for the field's options) are in, we can't tell which cards
+    // to draw; screens show a skeleton instead of flashing their built-in cards first.
+    const scorecardsPending = useScorecards().isPending;
+    const formConfigsPending = useFormConfigsQuery().isPending;
+    const loading = scorecardsPending || (Boolean(config) && !scorecard && formConfigsPending);
     const [activeIdState, setActiveIdState] = useState<string>(SCORECARD_ALL_ID);
     const [dialogOpen, setDialogOpen] = useState(false);
 
@@ -81,6 +88,7 @@ export function useModuleScorecard<T>({
             grandTotal += amount;
         }
         const withAmount = Boolean(scorecard.currencyField);
+        const looks = scorecardOptionLooks(visibleOptions.map((option) => scorecard.labelOf(option.value)));
         return [
             {
                 id: SCORECARD_ALL_ID,
@@ -90,13 +98,13 @@ export function useModuleScorecard<T>({
                 icon: allIcon,
                 hint: withAmount ? formatScorecardAmount(grandTotal) : `By ${scorecard.field.label}`,
             },
-            ...visibleOptions.map((option) => ({
+            ...visibleOptions.map((option, index) => ({
                 id: option.value,
                 label: scorecard.labelOf(option.value),
                 count: counts.get(option.value) ?? 0,
                 color: option.color,
-                icon: <LabelOutlinedIcon />,
-                hint: withAmount ? formatScorecardAmount(totals.get(option.value) ?? 0) : undefined,
+                icon: looks[index].icon,
+                hint: withAmount ? formatScorecardAmount(totals.get(option.value) ?? 0) : looks[index].hint,
             })),
         ];
     }, [scorecard, rows, visibleOptions, allLabel, allIcon]);
@@ -121,5 +129,5 @@ export function useModuleScorecard<T>({
         <ScorecardSettingsDialog open={dialogOpen} module={module} onClose={() => setDialogOpen(false)} onSaved={onSaved} />
     ) : null;
 
-    return { configured: Boolean(scorecard), scorecard, items, activeId, setActiveId, matches, onEdit, dialog };
+    return { loading, configured: Boolean(scorecard), scorecard, items, activeId, setActiveId, matches, onEdit, dialog };
 }

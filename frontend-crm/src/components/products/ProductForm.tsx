@@ -10,7 +10,8 @@ import DescriptionOutlinedIcon from '@mui/icons-material/DescriptionOutlined';
 
 import { type BreadcrumbItem } from '../common/AppBreadcrumbs';
 import { type FormTabDefinition } from '../common/Drawer';
-import { ROUTES } from '@/config/constants';
+import { ROUTES } from '@/config/constants';
+import { setSaveFlash } from '@/utils/saveFlash';
 import { productFormSchema } from '@/validations';
 import type { ProductFormData } from '@/types/product.types';
 import { productService } from '@/services';
@@ -138,6 +139,8 @@ export default function ProductForm({
     ];
 
     // Populate data when editing
+    // True until the saved record arrives (view / edit), so the form shows skeleton fields, not empty ones.
+    const [recordLoading, setRecordLoading] = useState(Boolean(productId));
     useEffect(() => {
         if (!productId) return;
         let active = true;
@@ -149,7 +152,10 @@ export default function ProductForm({
                     setRecordCode(found.productCode ?? '');
                 }
             })
-            .catch(() => {});
+            .catch(() => {})
+            .finally(() => {
+                if (active) setRecordLoading(false);
+            });
         return () => {
             active = false;
         };
@@ -157,17 +163,18 @@ export default function ProductForm({
 
     const handleSave = createSubmitHandler(async (values) => {
         try {
+            let saved: { id: string } | undefined;
+            let message = '';
             if (mode === 'create') {
-                await productService.create(values);
-                showToast('Product created successfully!', 'success');
+                saved = await productService.create(values);
+                message = 'Product created successfully!';
             } else if (productId) {
-                await productService.update(productId, values);
-                showToast('Product updated successfully!', 'success');
+                saved = await productService.update(productId, values);
+                message = 'Product updated successfully!';
             }
             reset(values);
-            setTimeout(() => {
-                router.push(ROUTES.PRODUCTS);
-            }, 800);
+            if (message) setSaveFlash({ listPath: ROUTES.PRODUCTS, message, severity: 'success', recordId: saved?.id ?? productId });
+            router.push(ROUTES.PRODUCTS);
         } catch (err: unknown) {
             showToast(err instanceof Error ? err.message : 'Failed to save product.', 'error');
         }
@@ -181,6 +188,7 @@ export default function ProductForm({
         <FormProvider {...methods}>
             <FormConfigProvider module="products">
                 <CommonFormLayout
+                    loading={recordLoading}
                     isDirty={isDirty}
                     breadcrumbItems={breadcrumbItems || defaultBreadcrumbs}
                     tabs={PRODUCT_FORM_TABS}

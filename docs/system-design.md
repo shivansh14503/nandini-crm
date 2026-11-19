@@ -117,8 +117,9 @@ Order of global middleware (`src/app.ts`): `helmet` → `cors` (credentials, LAN
 3. Start the optional DB keep-alive ping (`DB_KEEPALIVE_INTERVAL_MS`).
 4. Seed missing form-field / dropdown defaults (`seedFormConfigsSafely`), never overwriting admin edits.
 5. Seed built-in PDF templates (Classic, Modern, Compact).
-6. Start BullMQ workers if `RUN_WORKERS=true`.
-7. `listen(PORT)`.
+6. Resume bulk email checks a restart interrupted (`resumeEmailValidationRuns`).
+7. Start BullMQ workers if `RUN_WORKERS=true`.
+8. `listen(PORT)`.
 
 On `SIGINT`/`SIGTERM`: stop accepting connections → stop keep-alive → let workers finish in-flight jobs → close queues,
 Chromium, Prisma and Redis in parallel → exit. A 10 s hard timeout guarantees the process ends.
@@ -313,6 +314,7 @@ flowchart LR
 | **Audit trail / revisions** | Every create/update/delete stores a field-level diff in `AuditLog`; `GET /api/audit-logs/:entityType/:entityId` turns it into a revision timeline. |
 | **Global search** | One query per category (organizations, contacts, leads, opportunities), access-scoped, with smart detection of entity codes, phone numbers and GSTIN prefixes. |
 | **Table filters** | Each user's recent (last 10) and saved filters per module are stored in `TableFilter`. |
+| **Email verification** | Free checks (syntax, typo of a common provider, disposable domain, DNS — the domain lookup is cached in Redis for a day) then QuickEmailVerification for the mailbox. **The database is the record of checked addresses**: an address saved on any lead / contact / organization with a result is never sent to the provider again from a form or a save, and there is no periodic re-check. Invalid addresses are never stored: the form refuses to save once its on-blur check said "invalid" (toast, no second call), and the save check rejects them server-side. No Redis cache of results; a 30-minute in-process memory of recent provider answers makes the on-blur check, the save check and the post-save background check of one new address cost one credit (lost on restart or across API instances, costing at most one extra credit). Admins re-check addresses in bulk under Settings › Email Validation; an `EmailValidationRun` is processed in the API process (one run at a time, cancellable, resumed at startup). Small runs call the single-address API per address and stop when the provider runs out of credits. Runs of at least `EMAIL_VERIFICATION_LIST_API_MIN` (default 1,000, the provider's own cut-off) use its **List API**: the free checks run first (8 at a time, failures decided for free), the rest are uploaded as one CSV (`POST /v1/bulk-verify`; credits for the whole list are taken at upload, "unknown" results refunded), the job is polled (`GET /v1/bulk-verify/status/{id}`, every 2 / 5 / 15 min by list size; no callback URL, so the API needn't be reachable from the internet; status `ready` = waiting for credits), then the safe-to-send / valid / invalid reports are downloaded and written onto the records (safe to send = valid, valid only = risky, invalid = invalid, unknown = undecided; reasons from the full report when its columns are recognised) and the job is deleted at the provider. Env: `EMAIL_VERIFICATION_ENABLED`, `QUICKEMAILVERIFICATION_API_KEY`, `EMAIL_VERIFICATION_LIST_API_MIN`. |
 | **Lead conversion** | `POST /api/leads/:id/convert` creates or links an Organization and Contact, creates an Opportunity and marks the lead `Converted` in one serializable transaction. |
 
 ## 8. Frontend design

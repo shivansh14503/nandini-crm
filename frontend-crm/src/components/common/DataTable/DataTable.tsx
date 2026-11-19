@@ -4,6 +4,7 @@ import React from 'react';
 import {
     Box,
     Checkbox,
+    Skeleton,
     Table,
     TableBody,
     TableCell,
@@ -28,6 +29,9 @@ import { useFrozenColumns } from './useFrozenColumns';
  * this cap long text would just widen the column; with it, longer text wraps onto the next line.
  */
 const CELL_MAX_WIDTH = 320;
+
+/** Placeholder rows shown while `loading`. */
+const LOADING_ROWS = 8;
 
 /**
  * How long a single click on a row waits before opening it, so a double-click (which selects and copies a
@@ -192,6 +196,7 @@ export function DataTable<T>({
     onEmptyAction,
     minHeight = 280,
     stickyHeader = true,
+    loading = false,
 }: DataTableProps<T>) {
     const { setContainer, canScrollLeft, canScrollRight, isPanning, onPointerDown, startHold, stopHold } = useTableScroll();
 
@@ -265,8 +270,8 @@ export function DataTable<T>({
             : !computedAllSelected &&
               data.some((item, idx) => isRowSelected(keyExtractor(item, idx)));
 
-    // Empty state fallback
-    if (data.length === 0) {
+    // Empty state fallback (not while the first load is still running: the skeleton rows show instead)
+    if (data.length === 0 && !loading) {
         if (emptyState) {
             return <>{emptyState}</>;
         }
@@ -509,7 +514,29 @@ export function DataTable<T>({
 
                 {/* ── Table Body ───────────────────────────────────────────── */}
                 <TableBody>
-                    {data.map((row: T, index: number) => {
+                    {loading &&
+                        Array.from({ length: LOADING_ROWS }, (_, rowIndex) => (
+                            <TableRow key={`skeleton-${rowIndex}`}>
+                                {Array.from(
+                                    { length: columns.length + (selectable ? 1 : 0) + (hasActions ? 1 : 0) },
+                                    (_, cellIndex) => (
+                                        <TableCell
+                                            key={cellIndex}
+                                            sx={{ py: 2, px: 1.5, borderBottom: '1px solid var(--mui-palette-border-light)' }}
+                                        >
+                                            <Skeleton
+                                                variant="rounded"
+                                                height={12}
+                                                // Varied widths so the rows read as text, not a grid of bars.
+                                                width={cellIndex === 0 && selectable ? 16 : `${55 + ((rowIndex * 7 + cellIndex * 13) % 40)}%`}
+                                                sx={{ bgcolor: 'var(--mui-palette-background-hover)', minWidth: 16 }}
+                                            />
+                                        </TableCell>
+                                    )
+                                )}
+                            </TableRow>
+                        ))}
+                    {!loading && data.map((row: T, index: number) => {
                         const rowId = keyExtractor(row, index);
                         const isSelected = isRowSelected(rowId);
                         const isActive = Boolean(activeRowId && activeRowId === rowId);

@@ -74,7 +74,7 @@ export function RhfDateTimeField<T extends FieldValues>({
         const setTime = (t: string) => date.field.onChange(t ? `${datePart || localToday()}T${t}` : datePart);
         return (
             <FormField name={dateName} label={label} required={required} hint={hint} size={size}>
-                <Box sx={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr', gap: 1.5 }}>
+                <Box sx={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: 1.5 }}>
                     <TextField
                         name={date.field.name}
                         inputRef={date.field.ref}
@@ -119,7 +119,7 @@ export function RhfDateTimeField<T extends FieldValues>({
 
     return (
         <FormField name={dateName} label={label} required={required} hint={hint} size={size}>
-            <Box sx={{ display: 'grid', gridTemplateColumns: timeName ? '1.4fr 1fr' : '1fr', gap: 1.5 }}>
+            <Box sx={{ display: 'grid', gridTemplateColumns: timeName ? '1.2fr 1fr' : '1fr', gap: 1.5 }}>
                 <TextField
                     {...date.field}
                     value={date.field.value ?? ''}

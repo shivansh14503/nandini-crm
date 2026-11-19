@@ -24,6 +24,8 @@ import auditRouter from './modules/audit/audit.routes.js';
 import importRouter from './modules/imports/import.routes.js';
 import formConfigRouter from './modules/form-configs/formConfig.routes.js';
 import documentSeriesRouter from './modules/document-series/documentSeries.routes.js';
+import emailValidationRouter from './modules/email-verification/emailValidation.routes.js';
+import { resumeEmailValidationRuns } from './modules/email-verification/emailValidation.admin.service.js';
 import tableFilterRouter from './modules/table-filters/tableFilter.routes.js';
 import scorecardRouter from './modules/scorecards/scorecard.routes.js';
 import { seedFormConfigsSafely } from './modules/form-configs/formConfig.seed.js';
@@ -99,6 +101,7 @@ app.use('/api/cities', cityRouter);
 app.use('/api/audit-logs', auditRouter);
 app.use('/api/form-configs', formConfigRouter);
 app.use('/api/document-series', documentSeriesRouter);
+app.use('/api/email-validation', emailValidationRouter);
 app.use('/api/table-filters', tableFilterRouter);
 app.use('/api/scorecards', scorecardRouter);
 
@@ -118,6 +121,8 @@ async function start(): Promise<Server> {
     await seedFormConfigsSafely();
     // Built-in PDF templates (Classic / Modern / Compact); admin-created templates are never touched.
     await seedPdfTemplatesSafely();
+    // Bulk email checks a restart interrupted (Settings › Email Validation) carry on.
+    resumeEmailValidationRuns();
     if (ENV.RUN_WORKERS) startWorkers();
     return app.listen(ENV.PORT, () => logger.info(`API listening on port ${ENV.PORT}`));
 }

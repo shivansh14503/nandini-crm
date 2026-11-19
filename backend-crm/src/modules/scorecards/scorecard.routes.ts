@@ -9,7 +9,7 @@ import { scorecardService } from './scorecard.service.js';
  * /api/scorecards   (the summary cards above each module's list screen)
  *   GET    /           { [module]: ScorecardDto } for every configured module (any signed-in user)
  *   ── Admin only ──
- *   PUT    /:module    { fieldKey, currencyFieldKey?, options: [{ value, color, hidden? }], listViewColor, detailViewColor }
+ *   PUT    /:module    { fieldKey, currencyFieldKey?, options: [{ value, color, hidden? }], listViewColor, drawerViewColor }
  *   DELETE /:module    back to the screen's built-in cards
  */
 const router = Router();

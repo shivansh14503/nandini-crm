@@ -54,7 +54,7 @@ export function useScorecardColumns<T>(columns: DataTableColumn<T>[] | undefined
 }
 
 /**
- * With "Enable Detail View Column Color" on: a drawer badge for the record's scorecard value in its color
+ * With "Enable Drawer View Column Color" on: a drawer badge for the record's scorecard value in its color
  * (null otherwise). `fieldKey` lets the drawer swap out its own badge for the same field.
  */
 export function useScorecardBadge(
@@ -65,7 +65,7 @@ export function useScorecardBadge(
     const config = useScorecard(module);
 
     return useMemo(() => {
-        const scorecard = config?.detailViewColor ? resolveScorecard(config, configs, module) : null;
+        const scorecard = config?.drawerViewColor ? resolveScorecard(config, configs, module) : null;
         if (!scorecard || !record) return null;
         const value = scorecard.valueOf(record);
         const color = value ? scorecard.colorOf(value) : undefined;

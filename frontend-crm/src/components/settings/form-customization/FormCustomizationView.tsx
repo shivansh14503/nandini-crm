@@ -11,6 +11,7 @@ import PublicOutlinedIcon from '@mui/icons-material/PublicOutlined';
 import { useQueryClient } from '@tanstack/react-query';
 import { AppBreadcrumbsBar } from '@/components/common/AppBreadcrumbsBar';
 import { AppToast } from '@/components/common/AppToast';
+import { FormFieldsSkeleton } from '@/components/common/skeletons';
 import { EntityDetailDrawer } from '@/components/common/Drawer';
 import { AuditTrailTimeline } from '@/components/common/Drawer/AuditTrailTimeline';
 import { ROUTES } from '@/config/constants';
@@ -237,8 +238,8 @@ export function FormCustomizationView() {
             )}
 
             {isLoading && (
-                <Box sx={{ ...surfaceSx, py: 8, display: 'flex', justifyContent: 'center' }}>
-                    <CircularProgress size={28} />
+                <Box role="status" aria-label="Loading form settings" sx={{ ...surfaceSx, p: { xs: 2, md: 3 } }}>
+                    <FormFieldsSkeleton fields={12} />
                 </Box>
             )}
 

@@ -12,6 +12,7 @@ import AccountBalanceOutlinedIcon from '@mui/icons-material/AccountBalanceOutlin
 
 import { type BreadcrumbItem } from '../common/AppBreadcrumbs';
 import { AppToast } from '../common/AppToast';
+import { setSaveFlash } from '@/utils/saveFlash';
 import { CommonFormLayout } from '../common/CommonFormLayout';
 import { type FormTabDefinition } from '../common/Drawer';
 import {
@@ -166,6 +167,8 @@ export default function PartnerCompanyForm({
     ];
 
     // Load the saved record when editing / viewing.
+    // True until the saved record arrives (view / edit), so the form shows skeleton fields, not empty ones.
+    const [recordLoading, setRecordLoading] = useState(Boolean(partnerCompanyId));
     useEffect(() => {
         if (!partnerCompanyId) return;
         let active = true;
@@ -176,7 +179,10 @@ export default function PartnerCompanyForm({
                 // Also becomes the values "Discard & Leave" resets to.
                 reset(toFormValues(found));
             })
-            .catch(() => {});
+            .catch(() => {})
+            .finally(() => {
+                if (active) setRecordLoading(false);
+            });
         return () => {
             active = false;
         };
@@ -212,15 +218,18 @@ export default function PartnerCompanyForm({
 
     const handleValid = async (values: PartnerCompanyFormData) => {
         try {
-            if (mode === 'edit' && partnerCompanyId) {
-                await partnerCompanyService.update(partnerCompanyId, values);
-                showToast(`Partner company "${values.companyName}" updated successfully!`, 'success');
-            } else {
-                await partnerCompanyService.create(values);
-                showToast(`Partner company "${values.companyName}" created successfully!`, 'success');
-            }
+            const editing = mode === 'edit' && Boolean(partnerCompanyId);
+            const saved = editing
+                ? await partnerCompanyService.update(partnerCompanyId!, values)
+                : await partnerCompanyService.create(values);
             reset(values);
-            setTimeout(() => router.push(ROUTES.PARTNER_COMPANIES), 800);
+            setSaveFlash({
+                listPath: ROUTES.PARTNER_COMPANIES,
+                message: `Partner company "${values.companyName}" ${editing ? 'updated' : 'created'} successfully!`,
+                severity: 'success',
+                recordId: saved?.id ?? partnerCompanyId,
+            });
+            router.push(ROUTES.PARTNER_COMPANIES);
         } catch (err: unknown) {
             let message = err instanceof Error ? err.message : 'Failed to save partner company.';
             if (err instanceof ApiClientError) {
@@ -249,6 +258,7 @@ export default function PartnerCompanyForm({
         <FormProvider {...methods}>
             <FormConfigProvider module="partner-companies">
                 <CommonFormLayout
+                    loading={recordLoading}
                     isDirty={isDirty}
                     onDiscard={() => setActiveTab('company_info')}
                     breadcrumbItems={breadcrumbItems || defaultBreadcrumbs}

@@ -4,7 +4,7 @@ import { NO_PAST_DATES } from '@/utils/pastDates';
 import React, { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { FormProvider } from 'react-hook-form';
-import { Box, CircularProgress, Divider, Typography } from '@mui/material';
+import { Box, Divider } from '@mui/material';
 
 // Icons
 import PersonOutlineOutlinedIcon from '@mui/icons-material/PersonOutlineOutlined';
@@ -14,7 +14,9 @@ import TransformOutlinedIcon from '@mui/icons-material/TransformOutlined';
 
 import { type BreadcrumbItem } from '../common/AppBreadcrumbs';
 import { AppToast } from '../common/AppToast';
+import { setSaveFlash } from '@/utils/saveFlash';
 import { CommonFormLayout } from '../common/CommonFormLayout';
+import { BreadcrumbsSkeleton, FormCardSkeleton } from '../common/skeletons';
 import { SectionLabel, useRhfForm } from '@/components/forms';
 import { ROUTES } from '@/config/constants';
 import type { Lead } from '@/types/lead.types';
@@ -154,9 +156,9 @@ export function ConvertLeadForm({ leadId, breadcrumbItems }: ConvertLeadFormProp
                 ? `Created contact "${result.contact.name}".`
                 : `Linked existing contact "${result.contact.name}".`;
 
-            showToast(`Lead converted successfully! ${orgNote} ${contactNote}`, 'success');
             reset(values);
-            setTimeout(() => router.push(ROUTES.LEADS), 1000);
+            setSaveFlash({ listPath: ROUTES.LEADS, message: `Lead converted successfully! ${orgNote} ${contactNote}`, severity: 'success', recordId: leadId });
+            router.push(ROUTES.LEADS);
         } catch (err: unknown) {
             showToast(err instanceof Error ? err.message : 'Failed to convert lead.', 'error');
         }
@@ -168,11 +170,9 @@ export function ConvertLeadForm({ leadId, breadcrumbItems }: ConvertLeadFormProp
 
     if (loading) {
         return (
-            <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', py: 12 }}>
-                <CircularProgress size={36} sx={{ color: 'var(--crm-text-blue-600)' }} />
-                <Typography sx={{ ml: 2, color: 'var(--mui-palette-text-secondary)', fontSize: '0.9rem' }}>
-                    Loading lead data...
-                </Typography>
+            <Box role="status" aria-label="Loading lead data">
+                <BreadcrumbsSkeleton />
+                <FormCardSkeleton />
             </Box>
         );
     }

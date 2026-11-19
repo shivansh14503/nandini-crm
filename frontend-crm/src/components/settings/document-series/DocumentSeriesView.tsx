@@ -6,7 +6,6 @@ import {
     Box,
     Button,
     Checkbox,
-    CircularProgress,
     Dialog,
     DialogActions,
     DialogContent,
@@ -30,6 +29,7 @@ import DeleteOutlineRoundedIcon from '@mui/icons-material/DeleteOutlineRounded';
 import FormatListNumberedOutlinedIcon from '@mui/icons-material/FormatListNumberedOutlined';
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 import { AppToast } from '@/components/common/AppToast';
+import { TableSkeleton } from '@/components/common/skeletons';
 import { errorMessage, inputSx, panelHeaderSx, primaryButtonSx, secondaryButtonSx, surfaceSx } from '@/components/settings/form-customization/builderUi';
 import { useDocumentSeries, useSaveDocumentSeries } from '@/hooks/queries/useDocumentSeries';
 import {
@@ -222,9 +222,7 @@ export function DocumentSeriesView() {
 
     if (query.isLoading || (!draft && !query.isError)) {
         return (
-            <Box sx={{ ...surfaceSx, py: 8, display: 'flex', justifyContent: 'center' }}>
-                <CircularProgress size={28} />
-            </Box>
+            <TableSkeleton rows={6} columns={5} toolbar={false} />
         );
     }
     if (query.isError || !draft || !query.data || !fy) {

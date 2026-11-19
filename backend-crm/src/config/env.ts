@@ -61,8 +61,11 @@ const envSchema = z
             .transform((value) => value === 'true'),
         /** QuickEmailVerification API key: adds the mailbox-exists check. Without it only the free checks run. */
         QUICKEMAILVERIFICATION_API_KEY: z.string().trim().min(1).optional(),
-        /** Re-verify an address after this many days. */
-        EMAIL_VERIFICATION_RECHECK_DAYS: z.coerce.number().int().min(1).max(3650).default(90),
+        /**
+         * Admin bulk checks of at least this many addresses use the provider's List API (one CSV upload, polled);
+         * smaller ones call the single-address API per address (the provider recommends that up to 1,000).
+         */
+        EMAIL_VERIFICATION_LIST_API_MIN: z.coerce.number().int().min(1).max(1_000_000).default(1_000),
     })
     .superRefine((env, ctx) => {
         if (env.NODE_ENV === 'production' && (!env.JWT_SECRET || env.JWT_SECRET.length < 32)) {
@@ -112,7 +115,7 @@ export const ENV = {
     EMAIL_VERIFICATION: {
         ENABLED: env.EMAIL_VERIFICATION_ENABLED,
         QEV_API_KEY: env.QUICKEMAILVERIFICATION_API_KEY,
-        RECHECK_DAYS: env.EMAIL_VERIFICATION_RECHECK_DAYS,
+        LIST_API_MIN: env.EMAIL_VERIFICATION_LIST_API_MIN,
     },
     COOKIE: {
         NAME: 'token',

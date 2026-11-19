@@ -54,6 +54,7 @@ export const ROUTES = {
     ADMIN: '/admin',
     FORM_CUSTOMIZATION: '/admin/form-customization',
     DOCUMENT_SERIES: '/admin/document-series',
+    EMAIL_VALIDATION: '/admin/email-validation',
     PDF_TEMPLATES: '/admin/pdf-templates',
     PDF_TEMPLATE_NEW: '/admin/pdf-templates/new',
     PDF_TEMPLATE_EDIT: (id: string) => `/admin/pdf-templates/${id}`,

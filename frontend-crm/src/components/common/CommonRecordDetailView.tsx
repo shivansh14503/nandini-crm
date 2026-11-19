@@ -11,6 +11,7 @@ import { FormHeader } from '../forms/FormHeader';
 import type { BreadcrumbItem } from './AppBreadcrumbs';
 import { RecordAuditFooter, type RecordAuditStamp } from './Drawer/RecordAuditFooter';
 import { useDoubleClickCopy } from './useDoubleClickCopy';
+import { FormSectionsSkeleton, RecordHeaderSkeleton } from './skeletons';
 import { isSearchOrigin, useListOrigin } from '@/utils/listOrigin';
 
 export interface RecordDetailTab {
@@ -54,6 +55,8 @@ export interface CommonRecordDetailViewProps {
     toast?: React.ReactNode;
     /** Pads the content area; off for entities whose tab panels already pad themselves. */
     padContent?: boolean;
+    /** Record still loading: skeleton hero and fields instead of an empty "—" record. */
+    loading?: boolean;
 }
 
 const initialsOf = (text: string) =>
@@ -92,6 +95,7 @@ export function CommonRecordDetailView({
     audit,
     toast,
     padContent = false,
+    loading = false,
 }: CommonRecordDetailViewProps) {
     // Created At / Last Modified stamps belong to the overview tab only (the first tab when none is named 'overview').
     const overviewTabId = tabs?.find((t) => t.id === 'overview')?.id ?? tabs?.[0]?.id;
@@ -124,6 +128,9 @@ export function CommonRecordDetailView({
                     boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
                 }}
             >
+                {loading ? (
+                    <RecordHeaderSkeleton sx={{ flex: 1, minWidth: 0, '& > :last-child': { display: 'none' } }} />
+                ) : (
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, minWidth: 0 }}>
                     <Avatar
                         variant="rounded"
@@ -198,6 +205,7 @@ export function CommonRecordDetailView({
                         )}
                     </Box>
                 </Box>
+                )}
 
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.25, flexWrap: 'wrap' }}>
                     {actions}
@@ -314,8 +322,10 @@ export function CommonRecordDetailView({
                             },
                         }}
                     >
-                        {children}
-                        {showAudit && audit && (
+                        {/* Panels stay mounted (hidden) while loading so they're ready the moment data lands. */}
+                        {loading && <FormSectionsSkeleton sx={padContent ? { p: 0 } : undefined} />}
+                        <Box sx={loading ? { display: 'none' } : { display: 'contents' }}>{children}</Box>
+                        {!loading && showAudit && audit && (
                             <Box sx={padContent ? undefined : { px: { xs: 2.5, md: 3.5 }, pb: 3 }}>
                                 <RecordAuditFooter audit={audit} />
                             </Box>

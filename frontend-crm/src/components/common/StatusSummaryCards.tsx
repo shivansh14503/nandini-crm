@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { Box, ButtonBase, IconButton, Tooltip, Typography } from '@mui/material';
+import { Box, ButtonBase, IconButton, Skeleton, Tooltip, Typography } from '@mui/material';
 import EditOutlinedIcon from '@mui/icons-material/EditOutlined';
 
 /** Colour family of a card; each maps to theme tokens so light (blue) / dark (green) stay consistent. */
@@ -47,6 +47,60 @@ const tint = (color: string, pct: number) => `linear-gradient(145deg, ${mix(colo
 const formatCount = (n: number) => n.toLocaleString('en-IN');
 const formatShare = (share: number) => (share > 0 && share < 0.1 ? '<0.1' : share.toFixed(1).replace(/\.0$/, ''));
 
+/** Same grid as the cards, so swapping the skeleton for real cards doesn't shift the page. */
+const gridSx = (count: number) =>
+    ({
+        display: 'grid',
+        gap: 1.75,
+        mb: 2,
+        minWidth: 0,
+        // Phones: one swipeable row. Wider screens: equal columns.
+        gridAutoFlow: { xs: 'column', md: 'row' },
+        gridAutoColumns: { xs: 'minmax(170px, 1fr)', md: 'unset' },
+        // Up to 6 cards share one row; more wrap onto further rows.
+        gridTemplateColumns: {
+            xs: 'none',
+            md: count > 6 ? 'repeat(auto-fill, minmax(190px, 1fr))' : `repeat(${count}, minmax(0, 1fr))`,
+        },
+        overflowX: { xs: 'auto', md: 'visible' },
+        // Room for the hover lift and focus ring inside the scroll container.
+        pt: 0.5,
+        pb: { xs: 1, md: 0.5 },
+        px: { xs: 0.25, md: 0 },
+    }) as const;
+
+const skeletonSx = { bgcolor: 'var(--mui-palette-background-hover)' } as const;
+
+/** Placeholder row of cards while the records / scorecard load. */
+export function StatusSummaryCardsSkeleton({ count = 5 }: { count?: number }) {
+    return (
+        <Box aria-busy="true" aria-label="Loading summary" sx={gridSx(count)}>
+            {Array.from({ length: count }, (_, i) => (
+                <Box
+                    key={i}
+                    sx={{
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: 1.25,
+                        p: 2,
+                        borderRadius: '14px',
+                        border: '1px solid var(--mui-palette-border-main)',
+                        backgroundColor: 'var(--mui-palette-background-paper)',
+                    }}
+                >
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.25 }}>
+                        <Skeleton variant="rounded" width={38} height={38} sx={{ ...skeletonSx, borderRadius: '11px', flexShrink: 0 }} />
+                        <Skeleton variant="rounded" height={12} width="45%" sx={skeletonSx} />
+                    </Box>
+                    <Skeleton variant="rounded" height={32} width={48} sx={skeletonSx} />
+                    <Skeleton variant="rounded" height={10} width="60%" sx={skeletonSx} />
+                    <Skeleton variant="rounded" height={6} sx={{ ...skeletonSx, mt: 'auto' }} />
+                </Box>
+            ))}
+        </Box>
+    );
+}
+
 /**
  * Status summary cards (KPI tiles) shown above a master list: one card per status bucket with its count and
  * share of the total. Clicking a card filters the list to that bucket; clicking the active card clears it.
@@ -66,25 +120,7 @@ export function StatusSummaryCards<TId extends string = string>({
         <Box
             role="group"
             aria-label="Status summary"
-            sx={{
-                display: 'grid',
-                gap: 1.75,
-                mb: 2,
-                minWidth: 0,
-                // Phones: one swipeable row. Wider screens: equal columns.
-                gridAutoFlow: { xs: 'column', md: 'row' },
-                gridAutoColumns: { xs: 'minmax(170px, 1fr)', md: 'unset' },
-                // Up to 6 cards share one row; more wrap onto further rows.
-                gridTemplateColumns: {
-                    xs: 'none',
-                    md: items.length > 6 ? 'repeat(auto-fill, minmax(190px, 1fr))' : `repeat(${items.length}, minmax(0, 1fr))`,
-                },
-                overflowX: { xs: 'auto', md: 'visible' },
-                // Room for the hover lift and focus ring inside the scroll container.
-                pt: 0.5,
-                pb: { xs: 1, md: 0.5 },
-                px: { xs: 0.25, md: 0 },
-            }}
+            sx={gridSx(items.length)}
         >
             {items.map((item) => {
                 const c = item.color ?? TONE_COLOR[item.tone ?? 'brand'];
@@ -103,6 +139,8 @@ export function StatusSummaryCards<TId extends string = string>({
                             display: 'flex',
                             flexDirection: 'column',
                             alignItems: 'stretch',
+                            // Cards without a hint are shorter than the row; keep their content at the top.
+                            justifyContent: 'flex-start',
                             textAlign: 'left',
                             gap: 1.25,
                             p: 2,
@@ -233,10 +271,11 @@ export function StatusSummaryCards<TId extends string = string>({
                             )}
                         </Box>
 
-                        {/* Share bar */}
+                        {/* Share bar (pinned to the bottom so bars line up across cards) */}
                         <Box
                             sx={{
                                 position: 'relative',
+                                mt: 'auto',
                                 height: 6,
                                 borderRadius: 3,
                                 overflow: 'hidden',

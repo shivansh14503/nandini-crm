@@ -16,6 +16,7 @@ import { useTableFilter } from '../common/TableFilter';
 import { MasterHeaderActions, outlinedHeaderButtonSx } from '../common/MasterHeaderActions';
 import { buildExtendedSearchConfig } from '../common/buildExtendedSearchConfig';
 import { AppToast } from '../common/AppToast';
+import { useSaveFlash } from '@/utils/saveFlash';
 import { DataImportModal } from '../common/import';
 import type { DataTableColumn, DataTableFilterItem } from '../common/DataTable';
 import { ROUTES } from '@/config/constants';
@@ -78,7 +79,9 @@ export function PartnerCompaniesMasterView() {
 
     // On the global search results page the table shows the matched records (any owner) instead of this list.
     const embeddedInSearch = Boolean(useSearchScope());
-    const { data: allPartnersLoaded = NO_RECORDS, refetch } = usePartnerCompanies(undefined, { enabled: !embeddedInSearch });
+    const { data: allPartnersLoaded = NO_RECORDS, refetch, isPending: listPending } = usePartnerCompanies(undefined, { enabled: !embeddedInSearch });
+    // A disabled query stays "pending" forever, so only count it when this screen loads its own list.
+    const listLoading = !embeddedInSearch && listPending;
     const allPartners = useSearchScopedRows(allPartnersLoaded);
     const bulkDeleteMutation = useBulkDeletePartnerCompanies();
     const [activeTab, setActiveTab] = useState<PartnerCompanyFilterTab>('all');
@@ -107,6 +110,12 @@ export function PartnerCompaniesMasterView() {
         open: false,
         message: '',
         severity: 'success',
+    });
+
+    // Back from the create / edit form: show its "saved" toast here and open the saved record in the drawer.
+    useSaveFlash(ROUTES.PARTNER_COMPANIES, (flash) => {
+        setToast({ open: true, message: flash.message, severity: flash.severity ?? 'success' });
+        if (flash.recordId) setDrawerId(flash.recordId);
     });
 
     // ── Filter tabs ──────────────────────────────────────────────────────────
@@ -287,6 +296,7 @@ export function PartnerCompaniesMasterView() {
 
     return (
         <CommonMasterView<ExtendedPartnerCompany, PartnerCompanyFilterTab>
+            loading={listLoading}
             breadcrumbItems={[{ label: 'All' }, { label: 'Partner Companies' }]}
             filterConfig={{
                 filters: filterItems,

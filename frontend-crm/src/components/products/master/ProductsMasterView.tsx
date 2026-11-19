@@ -13,6 +13,7 @@ import { useTableFilter } from '../../common/TableFilter';
 import { MasterHeaderActions } from '../../common/MasterHeaderActions';
 import { buildExtendedSearchConfig } from '../../common/buildExtendedSearchConfig';
 import { AppToast } from '../../common/AppToast';
+import { useSaveFlash } from '@/utils/saveFlash';
 import { DataImportModal } from '../../common/import';
 import { documentNumberColumn, type DataTableColumn, type DataTableFilterItem } from '../../common/DataTable';
 import { ROUTES } from '@/config/constants';
@@ -41,7 +42,9 @@ export function ProductsMasterView() {
 
     // On the global search results page the table shows the matched records (any owner) instead of this list.
     const embeddedInSearch = Boolean(useSearchScope());
-    const { data: allProductsLoaded = NO_RECORDS, refetch } = useProducts(undefined, { enabled: !embeddedInSearch });
+    const { data: allProductsLoaded = NO_RECORDS, refetch, isPending: listPending } = useProducts(undefined, { enabled: !embeddedInSearch });
+    // A disabled query stays "pending" forever, so only count it when this screen loads its own list.
+    const listLoading = !embeddedInSearch && listPending;
     const allProducts = useSearchScopedRows(allProductsLoaded);
     const bulkDeleteMutation = useBulkDeleteProducts();
     const [activeTab, setActiveTab] = useState<ProductFilterTab>('all');
@@ -72,6 +75,12 @@ export function ProductsMasterView() {
         open: false,
         message: '',
         severity: 'success',
+    });
+
+    // Back from the create / edit form: show its "saved" toast here and open the saved record in the drawer.
+    useSaveFlash(ROUTES.PRODUCTS, (flash) => {
+        setToast({ open: true, message: flash.message, severity: flash.severity ?? 'success' });
+        if (flash.recordId) setDrawerProductId(flash.recordId);
     });
 
     const [importOpen, setImportOpen] = useState(false);
@@ -324,6 +333,7 @@ export function ProductsMasterView() {
 
     return (
         <CommonMasterView<Product, ProductFilterTab>
+            loading={listLoading}
             filterConfig={{
                 filters: filterItems,
                 activeFilter: activeTab,

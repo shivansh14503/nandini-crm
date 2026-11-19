@@ -3,6 +3,8 @@
 import React, { useState, useEffect } from 'react';
 import {
     Drawer,
+    useMediaQuery,
+    useTheme,
     Box,
     Typography,
     IconButton,
@@ -12,7 +14,6 @@ import {
     Tab,
     Snackbar,
     Alert,
-    CircularProgress,
 } from '@mui/material';
 
 // Icons
@@ -27,10 +28,13 @@ import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 
 import { type EntityDetailDrawerProps, type DrawerTabItem, buildDrawerTabs } from './types';
 import { AuditTrailTimeline } from './AuditTrailTimeline';
+import { FormFieldsSkeleton } from '../skeletons';
 import { useDrawerStack } from './DrawerStackContext';
 import { RecordAuditFooter } from './RecordAuditFooter';
 import { DoubleClickCopyText } from '../useDoubleClickCopy';
 import { getModuleColor } from '@/theme/moduleColors';
+import { glassSurfaceSx, GLASS_SHADOW, GLASS_RADIUS, FLOAT_INSET } from '@/theme/glass';
+import { useRegisterRightPanel } from '@/components/layout/rightPanelStore';
 
 const CHANGES_TAB_ID = 'changes-tab';
 
@@ -113,14 +117,27 @@ export function EntityDetailDrawer({
     };
 
     const headerIconButtonSx = {
-        width: 30,
-        height: 30,
+        width: 34,
+        height: 34,
         color: 'var(--crm-slate-600)',
         border: '1px solid var(--mui-palette-border-main)',
         borderRadius: '8px',
         p: 0,
         transition: 'all 0.15s ease',
     } as const;
+
+    /** Header action tinted in its own color at rest (soft fill + border); hover deepens the tint. */
+    const tintedHeaderIconButtonSx = (tone: 'info' | 'success' | 'error', color = `var(--mui-palette-${tone}-main)`) => ({
+        ...headerIconButtonSx,
+        color,
+        backgroundColor: `var(--mui-palette-${tone}-soft)`,
+        borderColor: `var(--mui-palette-${tone}-softBorder)`,
+        '&:hover': {
+            color,
+            backgroundColor: `color-mix(in srgb, ${color} 20%, transparent)`,
+            borderColor: `color-mix(in srgb, ${color} 45%, transparent)`,
+        },
+    });
 
     const secondaryButtonSx = {
         fontSize: '0.82rem',
@@ -195,6 +212,15 @@ export function EntityDetailDrawer({
         typeof width === 'number' || typeof width === 'string'
             ? width
             : (width?.md ?? width?.sm ?? 580);
+    const drawerWidthCss = typeof resolvedDrawerWidth === 'number' ? `${resolvedDrawerWidth}px` : resolvedDrawerWidth;
+
+    // On wide screens the drawer docks beside the page: tell the floating navbar so it ends short of it.
+    const theme = useTheme();
+    const isWide = useMediaQuery(theme.breakpoints.up('lg'));
+    useRegisterRightPanel(
+        open && !isCollapsed && isWide,
+        typeof resolvedDrawerWidth === 'number' ? resolvedDrawerWidth : 580
+    );
 
     return (
         <>
@@ -207,7 +233,7 @@ export function EntityDetailDrawer({
                         sx={{
                             position: 'fixed',
                             top: '45%',
-                            right: isCollapsed ? 0 : resolvedDrawerWidth,
+                            right: isCollapsed ? 0 : `calc(${drawerWidthCss} + ${FLOAT_INSET}px)`,
                             transform: 'translateY(-50%)',
                             zIndex: 1410,
                             width: 24,
@@ -253,15 +279,24 @@ export function EntityDetailDrawer({
                     paper: {
                         sx: {
                             width,
+                            // Floating glass panel inset from the viewport edges, matching the navbar and dock.
+                            ...glassSurfaceSx,
+                            // Denser than the navbar's glass: this panel is mostly text read over a busy table.
+                            backgroundColor: 'color-mix(in srgb, var(--mui-palette-background-paper) 88%, transparent)',
+                            top: FLOAT_INSET,
+                            right: FLOAT_INSET,
+                            height: `calc(100% - ${FLOAT_INSET * 2}px)`,
+                            maxWidth: `calc(100% - ${FLOAT_INSET * 2}px)`,
+                            borderRadius: GLASS_RADIUS,
                             // Above the related modules sidebar (1300) and module table (1290), below the bookmark.
                             ...(stackPersistent && { zIndex: 1310 }),
-                            backgroundColor: 'var(--mui-palette-background-paper)',
-                            borderLeft: '1px solid var(--mui-palette-border-main)',
-                            boxShadow: isCollapsed ? 'none' : '-12px 0 40px rgba(15, 23, 42, 0.08)',
+                            boxShadow: isCollapsed ? 'none' : GLASS_SHADOW,
                             display: 'flex',
                             flexDirection: 'column',
                             overflow: 'hidden',
-                            transform: isCollapsed ? 'translateX(100%) !important' : 'translateX(0) !important',
+                            transform: isCollapsed
+                                ? `translateX(calc(100% + ${FLOAT_INSET * 2}px)) !important`
+                                : 'translateX(0) !important',
                             transition: 'transform 0.25s cubic-bezier(0.4, 0, 0.2, 1) !important',
                             visibility: 'visible !important',
                         },
@@ -274,11 +309,11 @@ export function EntityDetailDrawer({
                     p: 2.5,
                     pb: 2,
                     borderBottom: '1px solid var(--mui-palette-border-light)',
-                    backgroundColor: 'var(--mui-palette-background-paper)',
-                    // Module identity: a colored top edge fading into a faint tint.
+                    backgroundColor: 'transparent',
+                    // Module identity: a colored top edge fading into a faint tint (then the panel's glass).
                     ...(moduleColor && {
                         borderTop: `3px solid ${moduleColor.main}`,
-                        background: `linear-gradient(180deg, ${moduleColor.soft} 0%, var(--mui-palette-background-paper) 100%)`,
+                        background: `linear-gradient(180deg, ${moduleColor.soft} 0%, transparent 100%)`,
                     }),
                 }}
             >
@@ -335,9 +370,9 @@ export function EntityDetailDrawer({
                                 <IconButton
                                     size="small"
                                     onClick={headerActions.onSync}
-                                    sx={{ ...headerIconButtonSx, '&:hover': { color: 'var(--mui-palette-info-main)', backgroundColor: 'var(--mui-palette-info-soft)', borderColor: 'var(--mui-palette-info-softBorder)' } }}
+                                    sx={tintedHeaderIconButtonSx('info')}
                                 >
-                                    <SyncOutlinedIcon sx={{ fontSize: 16 }} />
+                                    <SyncOutlinedIcon sx={{ fontSize: 20 }} />
                                 </IconButton>
                             </Tooltip>
                         )}
@@ -347,9 +382,9 @@ export function EntityDetailDrawer({
                                 <IconButton
                                     size="small"
                                     onClick={headerActions.onView}
-                                    sx={{ ...headerIconButtonSx, '&:hover': { color: 'var(--crm-emerald-600)', backgroundColor: 'var(--mui-palette-success-soft)', borderColor: 'var(--mui-palette-success-softBorder)' } }}
+                                    sx={tintedHeaderIconButtonSx('success', 'var(--crm-emerald-600)')}
                                 >
-                                    <VisibilityOutlinedIcon sx={{ fontSize: 16 }} />
+                                    <VisibilityOutlinedIcon sx={{ fontSize: 20 }} />
                                 </IconButton>
                             </Tooltip>
                         )}
@@ -360,9 +395,9 @@ export function EntityDetailDrawer({
                             <IconButton
                                 size="small"
                                 onClick={onClose}
-                                sx={{ ...headerIconButtonSx, ml: 0.5, '&:hover': { color: 'var(--mui-palette-error-main)', backgroundColor: 'var(--mui-palette-error-soft)', borderColor: 'var(--mui-palette-error-softBorder)' } }}
+                                sx={{ ...tintedHeaderIconButtonSx('error'), ml: 0.5 }}
                             >
-                                <CloseIcon sx={{ fontSize: 16 }} />
+                                <CloseIcon sx={{ fontSize: 20 }} />
                             </IconButton>
                         </Tooltip>
                     </Box>
@@ -459,11 +494,9 @@ export function EntityDetailDrawer({
             </Box>
 
             {/* ── Scrollable Tab Content ───────────────────────────────────────── */}
-            <Box sx={{ flex: 1, overflowY: 'auto', p: 2.5, backgroundColor: 'var(--mui-palette-background-paper)' }}>
+            <Box sx={{ flex: 1, overflowY: 'auto', p: 2.5, backgroundColor: 'transparent' }}>
                 {loading ? (
-                    <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', py: 8 }}>
-                        <CircularProgress size={28} sx={{ color: 'var(--crm-text-blue-600)' }} />
-                    </Box>
+                    <FormFieldsSkeleton fields={10} columns={2} sx={{ pt: 0.5 }} />
                 ) : (
                     <>
                         {allTabs[activeTabIndex]?.content ?? children}
@@ -480,7 +513,7 @@ export function EntityDetailDrawer({
                     p: 2,
                     px: 2.5,
                     borderTop: '1px solid var(--mui-palette-border-light)',
-                    backgroundColor: 'var(--mui-palette-background-paper)',
+                    backgroundColor: 'transparent',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'space-between',

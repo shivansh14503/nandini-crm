@@ -13,6 +13,7 @@ import { useTableFilter } from '../../common/TableFilter';
 import { MasterHeaderActions } from '../../common/MasterHeaderActions';
 import { buildExtendedSearchConfig } from '../../common/buildExtendedSearchConfig';
 import { AppToast } from '../../common/AppToast';
+import { useSaveFlash } from '@/utils/saveFlash';
 import { DataImportModal } from '../../common/import';
 import { RecordLink } from '../../common/RecordLink';
 import { documentNumberColumn, type DataTableColumn, type DataTableFilterItem } from '../../common/DataTable';
@@ -68,7 +69,9 @@ export function TicketsMasterView() {
 
     // On the global search results page the table shows the matched records (any owner) instead of this list.
     const embeddedInSearch = Boolean(useSearchScope());
-    const { data: allTicketsLoaded = NO_RECORDS, dataUpdatedAt: now, refetch } = useTickets(undefined, { enabled: !embeddedInSearch });
+    const { data: allTicketsLoaded = NO_RECORDS, dataUpdatedAt: now, refetch, isPending: listPending } = useTickets(undefined, { enabled: !embeddedInSearch });
+    // A disabled query stays "pending" forever, so only count it when this screen loads its own list.
+    const listLoading = !embeddedInSearch && listPending;
     const allTickets = useSearchScopedRows(allTicketsLoaded);
     const bulkDeleteMutation = useBulkDeleteTickets();
     const [activeTab, setActiveTab] = useState<TicketFilterTab>('all');
@@ -100,6 +103,12 @@ export function TicketsMasterView() {
         open: false,
         message: '',
         severity: 'success',
+    });
+
+    // Back from the create / edit form: show its "saved" toast here and open the saved record in the drawer.
+    useSaveFlash(ROUTES.TICKETS, (flash) => {
+        setToast({ open: true, message: flash.message, severity: flash.severity ?? 'success' });
+        if (flash.recordId) setDrawerTicketId(flash.recordId);
     });
 
     const matchesTab = useCallback(
@@ -327,6 +336,7 @@ export function TicketsMasterView() {
 
     return (
         <CommonMasterView<Ticket, TicketFilterTab>
+            loading={listLoading}
             filterConfig={{
                 filters: filterItems,
                 activeFilter: activeTab,

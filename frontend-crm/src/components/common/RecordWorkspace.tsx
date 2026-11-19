@@ -1,15 +1,51 @@
 'use client';
 
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 'react';
 import { useRouter } from 'next/navigation';
 import { Box, useMediaQuery, useTheme } from '@mui/material';
-import { RelatedModulesSidebar, RelatedRecordsTableView, DrawerStackContext, type DrawerStackContextValue } from './Drawer';
+import {
+    RelatedModulesSidebar,
+    RelatedRecordsTableView,
+    DrawerStackContext,
+    DOCK,
+    dockContentOffset,
+    type DrawerStackContextValue,
+} from './Drawer';
 import { RelatedSecondaryDrawer, type SecondaryDrawerEntity } from './RelatedSecondaryDrawer';
 import { useRelatedModulesForEntity, type CrmEntityType } from '@/config/relatedModules.config';
 import { useListOrigin } from '@/utils/listOrigin';
 
-const SIDEBAR_WIDTH = 260;
-const SIDEBAR_COLLAPSED_WIDTH = 72;
+/** The dock's pinned choice, remembered per browser (localStorage; falls back to in-memory when unavailable). */
+const DOCK_PINNED_KEY = 'crm.recordDock.pinned';
+const dockPinnedListeners = new Set<() => void>();
+let dockPinnedMemory = false;
+
+function readDockPinned(): boolean {
+    try {
+        return window.localStorage.getItem(DOCK_PINNED_KEY) === '1';
+    } catch {
+        return dockPinnedMemory;
+    }
+}
+
+function writeDockPinned(next: boolean) {
+    dockPinnedMemory = next;
+    try {
+        window.localStorage.setItem(DOCK_PINNED_KEY, next ? '1' : '0');
+    } catch {
+        /* storage unavailable: memory only */
+    }
+    dockPinnedListeners.forEach((listener) => listener());
+}
+
+function subscribeDockPinned(listener: () => void) {
+    dockPinnedListeners.add(listener);
+    window.addEventListener('storage', listener);
+    return () => {
+        dockPinnedListeners.delete(listener);
+        window.removeEventListener('storage', listener);
+    };
+}
 /** Width of the record drawer on desktop (EntityDetailDrawer's default `md` width). */
 const DRAWER_WIDTH = 580;
 
@@ -36,10 +72,21 @@ export function RecordWorkspace({ entityType, entity, title, listHref, children 
     const theme = useTheme();
     const listOrigin = useListOrigin(listHref);
 
+    // Pinned docks push the page over; on small screens a pinned dock floats over the page instead.
     const isSmallScreen = useMediaQuery(theme.breakpoints.down('md'));
-    const [sidebarCollapsedChoice, setSidebarCollapsedChoice] = useState<boolean | null>(null);
-    const sidebarCollapsed = sidebarCollapsedChoice ?? isSmallScreen;
-    const sidebarWidth = sidebarCollapsed ? SIDEBAR_COLLAPSED_WIDTH : SIDEBAR_WIDTH;
+    const pinned = useSyncExternalStore(subscribeDockPinned, readDockPinned, () => false);
+    const togglePinned = useCallback(() => writeDockPinned(!readDockPinned()), []);
+    useEffect(() => {
+        const onKey = (e: KeyboardEvent) => {
+            if ((e.ctrlKey || e.metaKey) && e.key === '\\') {
+                e.preventDefault();
+                togglePinned();
+            }
+        };
+        window.addEventListener('keydown', onKey);
+        return () => window.removeEventListener('keydown', onKey);
+    }, [togglePinned]);
+    const sidebarWidth = dockContentOffset(pinned && !isSmallScreen);
 
     const [activeModuleId, setActiveModuleId] = useState<string | null>(null);
     const [drawerEntity, setDrawerEntity] = useState<SecondaryDrawerEntity | null>(null);
@@ -70,15 +117,27 @@ export function RecordWorkspace({ entityType, entity, title, listHref, children 
     return (
         <>
             <RelatedModulesSidebar
-                open
                 modules={modules}
                 activeModuleId={activeModuleId ?? undefined}
                 onModuleSelect={selectModule}
-                collapsed={sidebarCollapsed}
-                onToggleCollapse={setSidebarCollapsedChoice}
+                pinned={pinned}
+                onTogglePinned={togglePinned}
             />
 
-            <Box sx={{ pl: `${sidebarWidth}px`, transition: 'padding-left 0.2s ease', minWidth: 0 }}>{children}</Box>
+            {/* The navbar (<header>) keeps the full width; only the page below it makes room for the floating dock. */}
+            <Box
+                sx={{
+                    minWidth: 0,
+                    '& > :not(header)': {
+                        paddingLeft: `${sidebarWidth}px`,
+                        transition: 'padding-left 0.22s cubic-bezier(0.2, 0, 0, 1)',
+                        // A module table floats over the page: hide the detail view so the glass sits on a calm background.
+                        visibility: activeModuleId ? 'hidden' : 'visible',
+                    },
+                }}
+            >
+                {children}
+            </Box>
 
             {entity && activeModuleId && (
                 <RelatedRecordsTableView
@@ -91,7 +150,8 @@ export function RecordWorkspace({ entityType, entity, title, listHref, children 
                     entityData={entity}
                     entityType={entityType}
                     leftOffset={sidebarWidth}
-                    rightOffset={drawerEntity ? DRAWER_WIDTH : 0}
+                    // The drawer floats 12px in from the edge; leave the same 12px gap before it.
+                    rightOffset={drawerEntity ? DRAWER_WIDTH + DOCK.inset * 2 : 0}
                     isRightDrawerCollapsed={drawerCollapsed}
                     onClose={() => router.push(listOrigin)}
                     closeTooltip="Close & return to list"

@@ -4,7 +4,7 @@ import { NO_PAST_DATES } from '@/utils/pastDates';
 import React, { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { FormProvider, type FieldErrors } from 'react-hook-form';
-import { Box, CircularProgress, Typography, Alert } from '@mui/material';
+import { Box, Alert } from '@mui/material';
 
 // Icons
 import ArticleOutlinedIcon from '@mui/icons-material/ArticleOutlined';
@@ -13,7 +13,9 @@ import PlaceOutlinedIcon from '@mui/icons-material/PlaceOutlined';
 
 import { type BreadcrumbItem } from '../common/AppBreadcrumbs';
 import { AppToast } from '../common/AppToast';
+import { setSaveFlash } from '@/utils/saveFlash';
 import { CommonFormLayout } from '../common/CommonFormLayout';
+import { BreadcrumbsSkeleton, FormCardSkeleton, RecordDetailSkeleton } from '../common/skeletons';
 import { type FormTabDefinition } from '../common/Drawer';
 import { useRhfForm, withDefaultAssignee, withDropdownDefaults } from '@/components/forms';
 import { useAuth } from '@/context/AuthContext';
@@ -413,34 +415,41 @@ export function CreateQuoteForm({
         try {
             if (isEdit && quotationId) {
                 const updated = await quotationService.update(quotationId, values);
-                showToast(
-                    showNumber('quotation') ? `Quotation "${updated?.quotationCode || quotation?.quotationCode || quotationId}" updated successfully!` : 'Quotation updated successfully!',
-                    'success'
-                );
                 reset(values);
-                setTimeout(() => {
-                    router.push(ROUTES.QUOTATIONS);
-                }, 800);
+                setSaveFlash({
+                    listPath: ROUTES.QUOTATIONS,
+                    message: showNumber('quotation')
+                        ? `Quotation "${updated?.quotationCode || quotation?.quotationCode || quotationId}" updated successfully!`
+                        : 'Quotation updated successfully!',
+                    severity: 'success',
+                    recordId: updated?.id ?? quotationId,
+                });
+                router.push(ROUTES.QUOTATIONS);
             } else if (opportunityId) {
                 const result = await quotationService.createQuotationFromOpportunity(
                     opportunityId,
                     values
                 );
-                showToast(
-                    showNumber('quotation') ? `Quotation "${result.quotationCode}" created successfully for ${result.organizationName}!` : `Quotation created successfully for ${result.organizationName}!`,
-                    'success'
-                );
                 reset(values);
-                setTimeout(() => {
-                    router.push(ROUTES.QUOTATIONS);
-                }, 900);
+                setSaveFlash({
+                    listPath: ROUTES.QUOTATIONS,
+                    message: showNumber('quotation')
+                        ? `Quotation "${result.quotationCode}" created successfully for ${result.organizationName}!`
+                        : `Quotation created successfully for ${result.organizationName}!`,
+                    severity: 'success',
+                    recordId: result.id,
+                });
+                router.push(ROUTES.QUOTATIONS);
             } else {
                 const created = await quotationService.create(values);
-                showToast(showNumber('quotation') ? `Quotation "${created.quotationCode}" created successfully!` : 'Quotation created successfully!', 'success');
                 reset(values);
-                setTimeout(() => {
-                    router.push(ROUTES.QUOTATIONS);
-                }, 900);
+                setSaveFlash({
+                    listPath: ROUTES.QUOTATIONS,
+                    message: showNumber('quotation') ? `Quotation "${created.quotationCode}" created successfully!` : 'Quotation created successfully!',
+                    severity: 'success',
+                    recordId: created?.id,
+                });
+                router.push(ROUTES.QUOTATIONS);
             }
         } catch (err: unknown) {
             showToast(
@@ -462,11 +471,9 @@ export function CreateQuoteForm({
 
     if (loading) {
         return (
-            <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', py: 12 }}>
-                <CircularProgress size={36} sx={{ color: 'var(--crm-text-blue-600)' }} />
-                <Typography sx={{ ml: 2, color: 'var(--mui-palette-text-secondary)', fontSize: '0.9rem' }}>
-                    {isEdit ? 'Loading quotation details...' : 'Loading opportunity and commercial details...'}
-                </Typography>
+            <Box role="status" aria-label={isEdit ? 'Loading quotation details' : 'Loading opportunity and commercial details'}>
+                <BreadcrumbsSkeleton />
+                {mode === 'view' ? <RecordDetailSkeleton /> : <FormCardSkeleton />}
             </Box>
         );
     }

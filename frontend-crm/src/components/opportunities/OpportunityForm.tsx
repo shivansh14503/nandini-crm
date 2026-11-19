@@ -11,6 +11,7 @@ import ReceiptLongOutlinedIcon from '@mui/icons-material/ReceiptLongOutlined';
 
 import { type BreadcrumbItem } from '../common/AppBreadcrumbs';
 import { AppToast } from '../common/AppToast';
+import { setSaveFlash } from '@/utils/saveFlash';
 import { CommonFormLayout } from '../common/CommonFormLayout';
 import { type FormTabDefinition } from '../common/Drawer';
 import { useRhfForm } from '../forms/rhf';
@@ -149,6 +150,8 @@ export default function OpportunityForm({
     ];
 
     // Populate data when editing
+    // True until the saved record arrives (view / edit), so the form shows skeleton fields, not empty ones.
+    const [recordLoading, setRecordLoading] = useState(Boolean(opportunityId));
     useEffect(() => {
         if (!opportunityId) return;
         let active = true;
@@ -161,7 +164,10 @@ export default function OpportunityForm({
                     setAudit({ createdAt: found.createdAt, createdBy: found.createdBy, updatedAt: found.updatedAt, updatedBy: found.updatedBy });
                 }
             })
-            .catch(() => {});
+            .catch(() => {})
+            .finally(() => {
+                if (active) setRecordLoading(false);
+            });
         return () => {
             active = false;
         };
@@ -180,18 +186,19 @@ export default function OpportunityForm({
     // ── Submit Logic with Validation ──────────────────────────────────────────
     const handleSave = createSubmitHandler(async (values) => {
         try {
+            let saved: { id: string } | undefined;
+            let message = '';
             if (mode === 'create') {
-                await opportunityService.create(values);
-                showToast('Opportunity created successfully! Added to your sales pipeline.', 'success');
+                saved = await opportunityService.create(values);
+                message = 'Opportunity created successfully! Added to your sales pipeline.';
             } else if (mode === 'edit' && opportunityId) {
-                await opportunityService.update(opportunityId, values);
-                showToast('Opportunity details updated successfully!', 'success');
+                saved = await opportunityService.update(opportunityId, values);
+                message = 'Opportunity details updated successfully!';
             }
 
             reset(values);
-            setTimeout(() => {
-                router.push(ROUTES.OPPORTUNITIES);
-            }, 800);
+            if (message) setSaveFlash({ listPath: ROUTES.OPPORTUNITIES, message, severity: 'success', recordId: saved?.id ?? opportunityId });
+            router.push(ROUTES.OPPORTUNITIES);
         } catch (err: unknown) {
             showToast(
                 err instanceof Error ? err.message : 'An error occurred while saving the opportunity.',
@@ -210,6 +217,7 @@ export default function OpportunityForm({
         <FormProvider {...methods}>
             <FormConfigProvider module="opportunities">
                 <CommonFormLayout
+                    loading={recordLoading}
                     isDirty={isDirty}
                     breadcrumbItems={breadcrumbItems || defaultBreadcrumbs}
                     tabs={OPPORTUNITY_FORM_TABS}

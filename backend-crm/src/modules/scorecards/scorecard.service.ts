@@ -26,7 +26,7 @@ export interface ScorecardDto {
     currencyFieldKey: string | null;
     options: ScorecardOption[];
     listViewColor: boolean;
-    detailViewColor: boolean;
+    drawerViewColor: boolean;
     updatedBy: string | null;
     updatedAt: string;
 }
@@ -45,7 +45,7 @@ function toDto(row: ModuleScorecard): ScorecardDto {
         currencyFieldKey: row.currencyFieldKey,
         options,
         listViewColor: row.listViewColor,
-        detailViewColor: row.detailViewColor,
+        drawerViewColor: row.drawerViewColor,
         updatedBy: row.updatedBy,
         updatedAt: toIso(row.updatedAt),
     };
@@ -90,7 +90,7 @@ export const scorecardService = {
             currencyFieldKey: input.currencyFieldKey ?? null,
             optionsJson: JSON.stringify(input.options),
             listViewColor: input.listViewColor,
-            detailViewColor: input.detailViewColor,
+            drawerViewColor: input.drawerViewColor,
             updatedBy: user.username,
         };
         const row = await prisma.moduleScorecard.upsert({

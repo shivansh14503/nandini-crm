@@ -9,6 +9,7 @@ import PlaceOutlinedIcon from '@mui/icons-material/PlaceOutlined';
 
 import { type BreadcrumbItem } from '../common/AppBreadcrumbs';
 import { AppToast } from '../common/AppToast';
+import { setSaveFlash } from '@/utils/saveFlash';
 import { CommonFormLayout } from '../common/CommonFormLayout';
 import { type FormTabDefinition } from '../common/Drawer';
 import { useRhfForm, useTaxIdDuplicateCheck } from '../forms/rhf';
@@ -139,6 +140,8 @@ export default function LeadForm({
     ];
 
     // Populate data when editing
+    // True until the saved record arrives (view / edit), so the form shows skeleton fields, not empty ones.
+    const [recordLoading, setRecordLoading] = useState(Boolean(leadId));
     useEffect(() => {
         if (!leadId) return;
         let active = true;
@@ -151,7 +154,10 @@ export default function LeadForm({
                     setAudit({ createdAt: found.createdAt, createdBy: found.createdBy, updatedAt: found.updatedAt, updatedBy: found.updatedBy });
                 }
             })
-            .catch(() => {});
+            .catch(() => {})
+            .finally(() => {
+                if (active) setRecordLoading(false);
+            });
         return () => {
             active = false;
         };
@@ -159,15 +165,16 @@ export default function LeadForm({
 
     const handleSave = createSubmitHandler(async (values) => {
         try {
-            if (mode === 'edit' && leadId) {
-                await leadService.update(leadId, values);
-                showToast('Lead details updated successfully!', 'success');
-            } else {
-                await leadService.create(values);
-                showToast('Lead created successfully! Added to your sales pipeline.', 'success');
-            }
+            const editing = mode === 'edit' && Boolean(leadId);
+            const saved = editing ? await leadService.update(leadId!, values) : await leadService.create(values);
             reset(values);
-            setTimeout(() => router.push(ROUTES.LEADS), 800);
+            setSaveFlash({
+                listPath: ROUTES.LEADS,
+                message: editing ? 'Lead details updated successfully!' : 'Lead created successfully! Added to your sales pipeline.',
+                severity: 'success',
+                recordId: saved?.id ?? leadId,
+            });
+            router.push(ROUTES.LEADS);
         } catch (err: unknown) {
             let message = err instanceof Error ? err.message : 'An error occurred while saving the lead.';
             if (err instanceof ApiClientError) {
@@ -194,6 +201,7 @@ export default function LeadForm({
         <FormProvider {...methods}>
             <FormConfigProvider module="leads">
                 <CommonFormLayout
+                    loading={recordLoading}
                     isDirty={isDirty}
                     breadcrumbItems={breadcrumbItems || defaultBreadcrumbs}
                     tabs={LEAD_FORM_TABS}
@@ -210,8 +218,7 @@ export default function LeadForm({
                         editHref: leadId ? ROUTES.LEAD_EDIT(leadId) : undefined,
                         editLabel: 'Edit Lead',
                         backHref: ROUTES.LEADS,
-                        audit,
-                    }}
+                        audit,                    }}
                     mode={mode}
                     disableContentPadding
                     toast={<AppToast open={toast.open} message={toast.message} severity={toast.severity} onClose={closeToast} />}

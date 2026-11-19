@@ -203,7 +203,7 @@ export function OpportunityBasicSection({ form, setField }: OpportunityBasicSect
                 </FormField>
 
                 <FormField name="nextFollowupDate" label="Next Followup Date" required size="md" hint="Next touchpoint">
-                    <Box sx={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr', gap: 1.5 }}>
+                    <Box sx={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: 1.5 }}>
                         <TextField
                             fullWidth
                             size="small"

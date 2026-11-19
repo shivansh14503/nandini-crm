@@ -111,6 +111,7 @@ The auth endpoints use the older `{ status: 'ok', … }` envelope rather than `{
 | GET | `/lookups/cities?country&state&search&limit` | 24 h (no search) | City picker |
 | GET | `/lookups/form-configs?includeInactive` | 1 h | Same payload as `GET /form-configs` |
 | GET | `/lookups/tax-id-holders?owner&gstNo&panNumber&excludeId` | never | "Is this GSTIN / PAN already used?" |
+| GET | `/lookups/email-check?email` | never (DB is the record) | Form's on-blur check → `{ email, status, reason, message, suggestion }`. An address already saved on any record returns its stored result (no provider call); otherwise free checks, then the provider. Rate limited per user |
 | GET | `/audit-logs/:entityType/:entityId?limit=100` | – | `{ entries, revisions }` newest first. `entityType` ∈ organizations, contacts, leads, opportunities, quotations, products, tickets, partner-companies, users, form-configs (`entityId` = module key, `shared` or `all`) |
 
 ### 2.5 Personal state
@@ -126,8 +127,8 @@ The auth endpoints use the older `{ status: 'ok', … }` envelope rather than `{
 
 | Method | Path | Description |
 | --- | --- | --- |
-| GET | `/scorecards` | `{ [module]: { module, fieldKey, currencyFieldKey, options: [{ value, color, hidden? }], listViewColor, detailViewColor, updatedBy, updatedAt } }` for configured modules (any signed-in user) |
-| PUT | `/scorecards/:module` | Admin only. `{ fieldKey, currencyFieldKey?, options, listViewColor, detailViewColor }`. **400** when `fieldKey` isn't an active `select` field of the module, `currencyFieldKey` isn't an active `amount` / `number` field, an option isn't in the field's dropdown, or a color isn't `#RRGGBB` |
+| GET | `/scorecards` | `{ [module]: { module, fieldKey, currencyFieldKey, options: [{ value, color, hidden? }], listViewColor, drawerViewColor, updatedBy, updatedAt } }` for configured modules (any signed-in user) |
+| PUT | `/scorecards/:module` | Admin only. `{ fieldKey, currencyFieldKey?, options, listViewColor, drawerViewColor }`. **400** when `fieldKey` isn't an active `select` field of the module, `currencyFieldKey` isn't an active `amount` / `number` field, an option isn't in the field's dropdown, or a color isn't `#RRGGBB` |
 | DELETE | `/scorecards/:module` | Admin only. Back to the screen's built-in cards |
 
 ### 2.6 Bulk import
@@ -164,6 +165,18 @@ The auth endpoints use the older `{ status: 'ok', … }` envelope rather than `{
 | GET | `/shown-modules` | Any user: `{ modules }` whose numbers the UI shows |
 | GET | `/` 🔐 | Settings, every module's rule, current FY, each module's next number |
 | PUT | `/` 🔐 | `{ companyPrefix, separator, fyStartMonth, fyFormat, series: [...] }` |
+
+**Email validation** — `/email-validation` 🔐 (Settings › Email Validation)
+
+| Method | Path | Description |
+| --- | --- | --- |
+| GET | `/summary` | `{ counts: { total, unchecked, valid, risky, invalid }, enabled, providerConfigured, providerAvailable, maxRunSize, listApiMin, activeRun }` (distinct addresses of live records) |
+| GET | `/addresses?status&search&sort&page&pageSize` | `status` ∈ all, unchecked, valid, risky, invalid, attention (risky + invalid); `sort` ∈ oldest (never / longest unchecked first), newest, email; `pageSize` ≤ 100 → `{ items: [{ email, status, reason, lastCheckedAt, isBounced, records: { leads, contacts, organizations } }], total, page, pageSize }` |
+| GET | `/runs` | Last 10 bulk checks |
+| GET | `/runs/:id` | One bulk check (progress) |
+| POST | `/runs` | `{ emails }` (≤ 10,000) or `{ filter: { status, search, sort }, limit }` (≤ 50,000) → 202 queued run (`mode` = `list` when it has at least `EMAIL_VERIFICATION_LIST_API_MIN` addresses and a provider key is set, else `single`; list runs report `phase`, `providerProgress`, `providerTotal`). 409 while another check is active; 400 when none of the addresses are saved on a record |
+| POST | `/runs/:id/cancel` | Stops before the next address; results so far stay |
+| POST | `/actions` | `{ action: accept | markBounced | remove, emails }` → `{ affectedRecords }`. `accept` = status `valid` (reason `admin_accepted`); `markBounced` ticks "Invalid Bounce"; `remove` deletes the address from every record (next address becomes primary). `markBounced` / `remove` write an UPDATE to each record's audit log |
 
 **Cities** — `/cities` 🔐
 
