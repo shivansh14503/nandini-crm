@@ -38,6 +38,68 @@ import { useRegisterRightPanel } from '@/components/layout/rightPanelStore';
 
 const CHANGES_TAB_ID = 'changes-tab';
 
+interface ExpandingActionButtonProps {
+    label: React.ReactNode;
+    icon?: React.ReactNode;
+    tooltip?: React.ReactNode;
+    onClick?: () => void;
+    disabled?: boolean;
+    variant: 'text' | 'outlined' | 'contained';
+    sx?: object;
+}
+
+/** Round icon button that grows to its full width (icon + label) on hover or keyboard focus. */
+function ExpandingActionButton({ label, icon, tooltip, onClick, disabled, variant, sx }: ExpandingActionButtonProps) {
+    const button = (
+        <Box
+            component="span"
+            sx={{
+                display: 'inline-flex',
+                '&:hover .expand-label, &:focus-within .expand-label': { maxWidth: 240, ml: 1, opacity: 1 },
+                '&:hover .expand-btn, &:focus-within .expand-btn': { px: 2 },
+            }}
+        >
+            <Button
+                className="expand-btn"
+                variant={variant}
+                size="small"
+                aria-label={typeof label === 'string' ? label : undefined}
+                onClick={onClick}
+                disabled={disabled}
+                sx={{
+                    ...sx,
+                    minWidth: 44,
+                    height: 44,
+                    px: 0,
+                    borderRadius: '22px',
+                    whiteSpace: 'nowrap',
+                    overflow: 'hidden',
+                    boxShadow: '0 4px 14px rgb(0 0 0 / 0.16)',
+                    ...(variant === 'outlined' ? { backgroundColor: 'var(--mui-palette-background-paper)' } : {}),
+                    transition: 'all 0.2s ease',
+                    '& .MuiButton-startIcon': { m: 0, display: 'inline-flex' },
+                }}
+            >
+                {icon}
+                <Box
+                    component="span"
+                    className="expand-label"
+                    sx={{
+                        display: 'inline-block',
+                        maxWidth: 0,
+                        opacity: 0,
+                        overflow: 'hidden',
+                        transition: 'max-width 0.2s ease, margin 0.2s ease, opacity 0.15s ease',
+                    }}
+                >
+                    {label}
+                </Box>
+            </Button>
+        </Box>
+    );
+    return tooltip ? <Tooltip title={tooltip}>{button}</Tooltip> : button;
+}
+
 export function EntityDetailDrawer({
     open,
     onClose,
@@ -494,7 +556,7 @@ export function EntityDetailDrawer({
             </Box>
 
             {/* ── Scrollable Tab Content ───────────────────────────────────────── */}
-            <Box sx={{ flex: 1, overflowY: 'auto', p: 2.5, backgroundColor: 'transparent' }}>
+            <Box sx={{ flex: 1, overflowY: 'auto', p: 2.5, pb: 10, backgroundColor: 'transparent' }}>
                 {loading ? (
                     <FormFieldsSkeleton fields={10} columns={2} sx={{ pt: 0.5 }} />
                 ) : (
@@ -507,99 +569,48 @@ export function EntityDetailDrawer({
                 )}
             </Box>
 
-            {/* ── Sticky Drawer Footer ────────────────────────────────────────── */}
-            <Box
-                sx={{
-                    p: 2,
-                    px: 2.5,
-                    borderTop: '1px solid var(--mui-palette-border-light)',
-                    backgroundColor: 'transparent',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                }}
-            >
-                {/* Status Indicator */}
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                    <Box
-                        sx={{
-                            width: 8,
-                            height: 8,
-                            borderRadius: '50%',
-                            backgroundColor: '#10b981',
-                            boxShadow: '0 0 0 3px rgba(16, 185, 129, 0.2)',
-                        }}
-                    />
-                    <Typography sx={{ fontSize: '0.78rem', fontWeight: 600, color: 'var(--crm-slate-700)' }}>
-                        {statusText}
-                    </Typography>
-                </Box>
-
-                {/* Right Action Buttons */}
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            {/* ── Floating action buttons (round; expand to show label on hover) ── */}
+            {(footerActions || secondaryAction || primaryAction || headerActions?.onEdit) && (
+                <Box
+                    sx={{
+                        position: 'absolute',
+                        right: 20,
+                        bottom: 20,
+                        zIndex: 5,
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 1,
+                        pointerEvents: 'none',
+                        '& > *': { pointerEvents: 'auto' },
+                    }}
+                >
                     {footerActions}
 
                     {secondaryAction && (
-                        secondaryAction.tooltip ? (
-                            <Tooltip title={secondaryAction.tooltip}>
-                                <span>
-                                    <Button
-                                        variant={secondaryAction.variant || 'outlined'}
-                                        size="small"
-                                        startIcon={secondaryAction.icon}
-                                        onClick={secondaryAction.onClick}
-                                        disabled={secondaryAction.disabled}
-                                        sx={secondaryButtonSx}
-                                    >
-                                        {secondaryAction.label}
-                                    </Button>
-                                </span>
-                            </Tooltip>
-                        ) : (
-                            <Button
-                                variant={secondaryAction.variant || 'outlined'}
-                                size="small"
-                                startIcon={secondaryAction.icon}
-                                onClick={secondaryAction.onClick}
-                                disabled={secondaryAction.disabled}
-                                sx={secondaryButtonSx}
-                            >
-                                {secondaryAction.label}
-                            </Button>
-                        )
+                        <ExpandingActionButton
+                            label={secondaryAction.label}
+                            icon={secondaryAction.icon}
+                            tooltip={secondaryAction.tooltip}
+                            onClick={secondaryAction.onClick}
+                            disabled={secondaryAction.disabled}
+                            variant={secondaryAction.variant || 'outlined'}
+                            sx={secondaryButtonSx}
+                        />
                     )}
 
                     {(primaryAction || headerActions?.onEdit) && (
-                        primaryAction?.tooltip ? (
-                            <Tooltip title={primaryAction.tooltip}>
-                                <span>
-                                    <Button
-                                        variant={primaryAction?.variant || 'contained'}
-                                        size="small"
-                                        startIcon={primaryAction?.icon || <EditOutlinedIcon sx={{ fontSize: 16 }} />}
-                                        onClick={primaryAction?.onClick || headerActions?.onEdit}
-                                        disabled={primaryAction?.disabled}
-                                        sx={primaryButtonSx}
-                                    >
-                                        {primaryAction?.label || 'Edit Details'}
-                                    </Button>
-                                </span>
-                            </Tooltip>
-                        ) : (
-                            <Button
-                                variant={primaryAction?.variant || 'contained'}
-                                size="small"
-                                startIcon={primaryAction?.icon || <EditOutlinedIcon sx={{ fontSize: 16 }} />}
-                                onClick={primaryAction?.onClick || headerActions?.onEdit}
-                                disabled={primaryAction?.disabled}
-                                sx={primaryButtonSx}
-                            >
-                                {primaryAction?.label || 'Edit Details'}
-                            </Button>
-                        )
+                        <ExpandingActionButton
+                            label={primaryAction?.label || 'Edit Details'}
+                            icon={primaryAction?.icon || <EditOutlinedIcon sx={{ fontSize: 18 }} />}
+                            tooltip={primaryAction?.tooltip}
+                            onClick={primaryAction?.onClick || headerActions?.onEdit}
+                            disabled={primaryAction?.disabled}
+                            variant={primaryAction?.variant || 'contained'}
+                            sx={primaryButtonSx}
+                        />
                     )}
                 </Box>
-            </Box>
+            )}
 
             {/* Notification Toast */}
             <Snackbar
