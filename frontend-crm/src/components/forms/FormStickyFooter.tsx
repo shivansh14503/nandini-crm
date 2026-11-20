@@ -46,7 +46,8 @@ export function FormStickyFooter({
         <Box
             sx={{
                 position: 'fixed',
-                right: { xs: 16, md: 28 },
+                // A page with a right-hand side panel (e.g. follow-up history) sets the variable to keep the actions clear of it.
+                right: { xs: 16, md: 'var(--crm-form-actions-right, 28px)' },
                 bottom: { xs: 16, md: 24 },
                 zIndex: 1200,
                 display: 'flex',

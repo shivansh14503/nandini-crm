@@ -2,7 +2,8 @@
 
 import { Suspense, useEffect } from 'react';
 import { useRouter, useParams } from 'next/navigation';
-import { Box, Container } from '@mui/material';
+import { Box } from '@mui/material';
+import { FollowUpHistoryLayout } from '@/components/common/FollowUpHistory/FollowUpHistoryLayout';
 import { useAuth } from '@/context/AuthContext';
 import { ROUTES } from '@/config/constants';
 import { Navbar } from '@/components/layout/Navbar';
@@ -28,9 +29,9 @@ function OpportunityEditContent() {
         <Box sx={{ minHeight: '100vh', backgroundColor: 'var(--mui-palette-background-subtle)' }}>
             <Navbar />
 
-            <Container maxWidth="xl" sx={{ pt: 2.5, pb: 1 }}>
+            <FollowUpHistoryLayout entityType="opportunities" recordId={id} recordLabel="Opportunity">
                 <OpportunityForm mode="edit" opportunityId={id} />
-            </Container>
+            </FollowUpHistoryLayout>
         </Box>
     );
 }

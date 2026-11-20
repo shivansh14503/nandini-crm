@@ -263,6 +263,36 @@ export function FieldEditorModal({ open, onClose, module, configs, field, defaul
                     {isCreate ? `Add Field — ${CRM_MODULE_LABELS[module]}` : `Edit Field — ${field!.label}`}
                 </Typography>
                 {locked && <Badge tone="locked">Locked</Badge>}
+                {field && (
+                    // Read-only backend key, for tracing a field in the API / database when debugging.
+                    <Box
+                        title="Backend key (read-only)"
+                        sx={{ ml: 'auto', display: 'inline-flex', alignItems: 'center', gap: 0.75, minWidth: 0, maxWidth: '100%' }}
+                    >
+                        <Typography component="span" sx={{ fontSize: '0.7rem', fontWeight: 600, color: 'var(--mui-palette-text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em', flexShrink: 0 }}>
+                            Key
+                        </Typography>
+                        <Typography
+                            component="code"
+                            sx={{
+                                fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace',
+                                fontSize: '0.75rem',
+                                color: 'var(--mui-palette-text-secondary)',
+                                backgroundColor: 'var(--mui-palette-background-subtle)',
+                                border: '1px solid var(--mui-palette-border-main)',
+                                borderRadius: '6px',
+                                px: 0.75,
+                                py: 0.25,
+                                userSelect: 'all',
+                                overflow: 'hidden',
+                                textOverflow: 'ellipsis',
+                                whiteSpace: 'nowrap',
+                            }}
+                        >
+                            {field.isSystem ? field.fieldKey : `customFields.${field.fieldKey}`}
+                        </Typography>
+                    </Box>
+                )}
             </DialogTitle>
             <DialogContent sx={{ pt: '20px !important' }}>
                 {error && (

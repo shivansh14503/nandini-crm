@@ -16,9 +16,20 @@ export type AuditEntityType =
     /** Form Customization admin trail: the id is a module key, `shared`, or `all`. */
     | 'form-configs';
 
+/** One stored audit row: `changes` is a `{ field: { from, to } }` diff for updates and a record snapshot on create. */
+export interface AuditEntry {
+    id: string;
+    action: string;
+    changedBy: string;
+    /** ISO timestamp. */
+    createdAt: string;
+    changes: unknown;
+}
+
 interface EntityAuditLog {
     entityType: string;
     entityId: string;
+    entries: AuditEntry[];
     revisions: AuditRevisionItem[];
 }
 
@@ -27,15 +38,25 @@ export const auditLogKeys = {
     entity: (entityType: AuditEntityType, entityId: string) => ['auditLogs', entityType, entityId] as const,
 };
 
-/** Revision trail of one record (newest first), shown in the detail drawer's Changes tab. */
-export function useEntityAuditLogs(entityType: AuditEntityType, entityId: string | undefined) {
-    return useQuery({
+/** One cached request per record; the hooks below each pick the part they need. */
+function auditLogQuery(entityType: AuditEntityType, entityId: string | undefined) {
+    return {
         queryKey: auditLogKeys.entity(entityType, entityId ?? ''),
         queryFn: async () => {
             const res = await apiClient.get<ApiResponse<EntityAuditLog>>(`/api/audit-logs/${entityType}/${encodeURIComponent(entityId!)}`);
-            return res.data.revisions;
+            return res.data;
         },
         enabled: Boolean(entityId),
         staleTime: 15 * 1000,
-    });
+    };
+}
+
+/** Revision trail of one record (newest first), shown in the detail drawer's Changes tab. */
+export function useEntityAuditLogs(entityType: AuditEntityType, entityId: string | undefined) {
+    return useQuery({ ...auditLogQuery(entityType, entityId), select: (data: EntityAuditLog) => data.revisions });
+}
+
+/** Raw audit rows of one record (newest first), e.g. to rebuild its follow-up history. */
+export function useEntityAuditEntries(entityType: AuditEntityType, entityId: string | undefined) {
+    return useQuery({ ...auditLogQuery(entityType, entityId), select: (data: EntityAuditLog) => data.entries });
 }

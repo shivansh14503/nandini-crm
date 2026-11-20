@@ -145,7 +145,8 @@ export interface FormFieldDefinitionDto {
     module: CrmModuleKey;
     /**
      * RHF name for built-in fields (the column they map to, which never changes); snake_case key inside `customFields`
-     * for custom fields, derived from the label by the API (and following it). Internal: never shown to users.
+     * for custom fields, derived from the label by the API (and following it). Internal: shown read-only only to
+     * admins in the form builder's field editor (for debugging), never on forms.
      */
     fieldKey: string;
     label: string;

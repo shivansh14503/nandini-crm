@@ -2,7 +2,8 @@
 
 import { Suspense, useEffect } from 'react';
 import { useRouter, useParams } from 'next/navigation';
-import { Box, Container } from '@mui/material';
+import { Box } from '@mui/material';
+import { FollowUpHistoryLayout } from '@/components/common/FollowUpHistory/FollowUpHistoryLayout';
 import { useAuth } from '@/context/AuthContext';
 import { ROUTES } from '@/config/constants';
 import { Navbar } from '@/components/layout/Navbar';
@@ -28,9 +29,9 @@ function LeadEditContent() {
         <Box sx={{ minHeight: '100vh', backgroundColor: 'var(--mui-palette-background-subtle)' }}>
             <Navbar />
 
-            <Container maxWidth="xl" sx={{ pt: 2.5, pb: 1 }}>
+            <FollowUpHistoryLayout entityType="leads" recordId={id} recordLabel="Lead">
                 <LeadForm mode="edit" leadId={id} />
-            </Container>
+            </FollowUpHistoryLayout>
         </Box>
     );
 }
