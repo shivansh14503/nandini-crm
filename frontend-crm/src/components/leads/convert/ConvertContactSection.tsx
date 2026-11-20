@@ -17,6 +17,8 @@ import {
     RhfTextField,
     RhfPhoneField,
 } from '@/components/forms';
+import { LOOKUP_FIELD_SIZE } from '@/components/forms/fieldSizing';
+import { RecordLookupModal } from '@/components/common/lookup';
 import { FormConfigProvider } from '@/context/FormConfigContext';
 import { FormModeProvider } from '@/context/FormModeContext';
 import { matchExistingContact } from '@/services';
@@ -28,7 +30,8 @@ import {
     CONTACT_DESIGNATIONS,
 } from '@/types/contact.types';
 import { CONVERT_FIELD_NAMES, type ConvertLeadFormValues } from '@/validations';
-import { useDropdownOptionsGetter } from '@/hooks/queries/useFormConfigs';
+import { useDropdownOptionsGetter, useFormConfigs } from '@/hooks/queries/useFormConfigs';
+import { extraValuesFrom } from '@/utils/convertLeadFields';
 
 type F = ConvertLeadFormValues;
 
@@ -58,10 +61,12 @@ const contactLabel = (c: Contact) => `${c.name} (${c.mobile})`;
  */
 export function ConvertContactSection() {
     const getOptions = useDropdownOptionsGetter();
+    const configs = useFormConfigs();
     const { setValue, control, formState } = useFormContext<F>();
     const mobile = useWatch({ control, name: 'contactMobile' });
     const existingContactId = useWatch({ control, name: 'existingContactId' });
     const [typed, setTyped] = useState('');
+    const [pickerOpen, setPickerOpen] = useState(false);
 
     // Label → contact lookup for the "select existing" picker.
     const { data: contacts = NO_CONTACTS } = useContacts();
@@ -87,6 +92,8 @@ export function ConvertContactSection() {
         setValue('doNotCall', contact.doNotCall, opts);
         setValue('contactDescription', contact.addDescription ?? '', opts);
         setValue('contactAssignedTo', contact.assignedTo, opts);
+        // The other fields an admin put on Convert Lead show the contact's own values.
+        setValue('extraFields.contacts', extraValuesFrom(configs, 'contacts', contact as unknown as Record<string, unknown>), opts);
     };
 
     /** Selection cleared: back to creating a contact from the lead's details. */
@@ -94,6 +101,7 @@ export function ConvertContactSection() {
         const defaults = (formState.defaultValues ?? {}) as Partial<F>;
         setValue('existingContactId', '');
         for (const field of CONTACT_FIELDS) setValue(field, defaults[field] as never, { shouldDirty: true });
+        setValue('extraFields.contacts', defaults.extraFields?.contacts ?? {}, { shouldDirty: true });
     };
 
     const handleSelect = (label: string) => {
@@ -111,12 +119,24 @@ export function ConvertContactSection() {
 
     return (
         <>
-            <FormField label="Select Existing Contact" size="lg" hint="Optional — leave blank to create new">
+            {/* Same picker as every other contact field: type-ahead plus the [ > ] Contact Search popup. */}
+            <FormField label="Select Existing Contact" size={LOOKUP_FIELD_SIZE} fit={null} hint="Optional — leave blank to create new">
                 <LookupField
                     value={selectedContact ? contactLabel(selectedContact) : typed}
                     onChange={handleSelect}
                     options={[...contactsByLabel.keys()]}
                     placeholder="Search existing contacts by name or mobile..."
+                    onLookupClick={() => setPickerOpen(true)}
+                    lookupTooltip="Select from Contacts"
+                />
+                <RecordLookupModal<'contact'>
+                    kind="contact"
+                    open={pickerOpen}
+                    onClose={() => setPickerOpen(false)}
+                    // The popup's row carries extra columns; link the contact record itself (one just created in
+                    // another tab may not be in this list yet, so fall back to the row).
+                    onSelect={(record) => selectContact(contacts.find((c) => c.id === record.id) ?? record)}
+                    selectedValue={selectedContact?.name}
                 />
             </FormField>
 

@@ -154,7 +154,8 @@ export function FormConfigProvider({ module, fieldNames, borrowed = false, child
         const systemFields = allModuleFieldsIncludingDeleted(configs, module)
             .filter((f) => f.isSystem)
             // A borrowing form has no sections to move fields between: every field counts as sitting where it is.
-            .map((f) => (borrowed ? { ...f, defaultSectionKey: null, defaultTabKey: null } : f));
+            // Convert Lead (the borrowing form) shows the fields an admin put on it, whatever the module's form shows.
+            .map((f) => (borrowed ? { ...f, defaultSectionKey: null, defaultTabKey: null, isVisibleInForm: f.isVisibleInConvert } : f));
         return {
             module,
             configs,

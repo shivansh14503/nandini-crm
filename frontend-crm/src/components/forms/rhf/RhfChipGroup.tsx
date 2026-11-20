@@ -21,8 +21,8 @@ export interface RhfChipGroupProps<T extends FieldValues> {
 
 /**
  * React Hook Form bound multi-select chip group (string[] field). Inside a FormConfigProvider the options come
- * from the admin-configured dropdown. Saved values that are no longer offered (archived options) still render,
- * flagged as archived, so they stay visible and can be deselected.
+ * from the admin-configured dropdown. Saved values that are no longer offered (removed options) still render,
+ * flagged as removed, so they stay visible and can be deselected.
  */
 export function RhfChipGroup<T extends FieldValues>({
     name,
@@ -39,8 +39,8 @@ export function RhfChipGroup<T extends FieldValues>({
     const options = override?.options ?? baseOptions;
     const optionLabels = override?.optionLabels ?? baseOptionLabels;
     const display = (v: string) => optionLabels?.[v] ?? v;
-    const archived = selected.filter((v) => !options.includes(v));
-    const allOptions = [...options, ...archived];
+    const removed = selected.filter((v) => !options.includes(v));
+    const allOptions = [...options, ...removed];
 
     const { mode } = useFormMode();
     if (override?.hidden) return null;
@@ -78,11 +78,11 @@ export function RhfChipGroup<T extends FieldValues>({
             <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.8 }}>
                 {allOptions.map((option) => {
                     const active = selected.includes(option);
-                    const isArchived = archived.includes(option);
+                    const isRemoved = removed.includes(option);
                     const chip = (
                         <Chip
                             key={option}
-                            label={isArchived ? `${display(option)} (archived)` : display(option)}
+                            label={isRemoved ? `${display(option)} (removed)` : display(option)}
                             size="small"
                             onClick={() => toggle(option)}
                             icon={active ? <CheckIcon sx={{ fontSize: '14px !important' }} /> : undefined}
@@ -90,13 +90,13 @@ export function RhfChipGroup<T extends FieldValues>({
                                 fontSize: '0.74rem',
                                 fontWeight: 600,
                                 cursor: 'pointer',
-                                backgroundColor: isArchived ? 'var(--crm-amber-100)' : active ? 'var(--crm-green-100)' : 'var(--mui-palette-background-hover)',
-                                color: isArchived ? 'var(--crm-amber-700)' : active ? 'var(--crm-green-800)' : 'var(--crm-slate-600)',
-                                border: `1px ${isArchived ? 'dashed' : 'solid'} ${isArchived ? 'var(--mui-palette-warning-softBorder)' : active ? 'var(--crm-green-300)' : 'var(--mui-palette-border-main)'}`,
+                                backgroundColor: isRemoved ? 'var(--crm-amber-100)' : active ? 'var(--crm-green-100)' : 'var(--mui-palette-background-hover)',
+                                color: isRemoved ? 'var(--crm-amber-700)' : active ? 'var(--crm-green-800)' : 'var(--crm-slate-600)',
+                                border: `1px ${isRemoved ? 'dashed' : 'solid'} ${isRemoved ? 'var(--mui-palette-warning-softBorder)' : active ? 'var(--crm-green-300)' : 'var(--mui-palette-border-main)'}`,
                             }}
                         />
                     );
-                    return isArchived ? (
+                    return isRemoved ? (
                         <Tooltip key={option} title="No longer offered for new records. Click to remove it from this record." arrow>
                             {chip}
                         </Tooltip>

@@ -26,8 +26,6 @@ export function FollowUpHistoryLayout({ children, ...panel }: FollowUpHistoryPan
                 display: { lg: 'flex' },
                 alignItems: 'stretch',
                 gap: `${FLOAT_INSET}px`,
-                // The form's floating Save / Cancel actions sit at the form's bottom-right, not over the panel.
-                '--crm-form-actions-right': { lg: `${FLOAT_INSET + FOLLOW_UP_PANEL_WIDTH + FLOAT_INSET + 16}px` },
             }}
         >
             <Box sx={{ flex: 1, minWidth: 0 }}>{children}</Box>

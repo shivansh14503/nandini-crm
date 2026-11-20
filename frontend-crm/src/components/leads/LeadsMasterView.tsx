@@ -457,12 +457,12 @@ export function LeadsMasterView() {
             },
             {
                 // Leads keep no remarks log: "Add Description" is the action-items note updated on each follow-up.
-                id: 'followUpRemarks',
+                id: 'remarks',
                 label: 'LATEST REMARKS',
                 sortable: true,
                 minWidth: 220,
                 width: 280,
-                render: (l) => <Typography sx={plainCellSx}>{l.followUpRemarks || '-'}</Typography>,
+                render: (l) => <Typography sx={plainCellSx}>{l.remarks || '-'}</Typography>,
             },
             {
                 id: 'nextFollowupDate',

@@ -8,6 +8,7 @@ import { ENV } from './config/env.js';
 import { logger } from './config/logger.js';
 import { connectDatabase, prisma, startDatabaseKeepAlive, stopDatabaseKeepAlive } from './config/prisma.js';
 import { connectRedis, isRedisReady, redis } from './config/redis.js';
+import { cacheService } from './services/cache.service.js';
 import authRouter from './modules/auth/auth.routes.js';
 import productRouter from './modules/products/product.routes.js';
 import organizationRouter from './modules/organizations/organization.routes.js';
@@ -114,6 +115,10 @@ async function start(): Promise<Server> {
     if (ENV.USING_DEV_JWT_SECRET) {
         logger.warn('JWT_SECRET is not set; using an insecure development secret');
     }
+    // Cached form configuration, lookups, search and dashboards can predate a migration (renamed field keys,
+    // labels): drop them once Redis is up so a restart always serves what the database now holds. Only the
+    // `cache:*` namespace; sessions and rate limits stay.
+    redis.once('ready', () => void cacheService.invalidatePattern('cache:*'));
     connectRedis();
     await connectDatabase();
     startDatabaseKeepAlive();

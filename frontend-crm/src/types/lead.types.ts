@@ -16,7 +16,7 @@ export interface LeadFormData {
     followupType: string;
     /** What the customer said on the last follow-up (shared_customer_response); picked on every edit. */
     customerResponse?: string;
-    followUpRemarks: string;
+    remarks: string;
     registrationType?: string;
     gstNumber?: string;
     turnover?: string;

@@ -110,7 +110,7 @@ export function buildQuotationDefaultsFromOpportunity(
         quoteStage: 'Draft',
         quotationDate: today,
         validUntil: validityDate,
-        remarks: opportunity.followUpRemarks || '',
+        remarks: opportunity.remarks || '',
         termsAndCondition: 'Standard Terms & Conditions',
         termsAndConditionDescription: TERMS_TEMPLATE_DESCRIPTIONS['Standard Terms & Conditions'],
         assignedTo: opportunity.assignedTo || '',
@@ -163,7 +163,7 @@ export function buildQuotationDefaultsFromOpportunity(
         status: 'Draft',
         quoteDate: today,
         quotationSubject: quoteTitle,
-        notes: opportunity.followUpRemarks || '',
+        notes: opportunity.remarks || '',
         termsAndConditions: TERMS_TEMPLATE_DESCRIPTIONS['Standard Terms & Conditions'],
     };
 }

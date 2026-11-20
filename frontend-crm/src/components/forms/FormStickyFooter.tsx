@@ -1,11 +1,10 @@
 'use client';
 
 import React from 'react';
-import { Box, CircularProgress } from '@mui/material';
+import { Box, Button, CircularProgress, Tooltip } from '@mui/material';
 import EditOutlinedIcon from '@mui/icons-material/EditOutlined';
 import SaveOutlinedIcon from '@mui/icons-material/SaveOutlined';
 import CloseIcon from '@mui/icons-material/Close';
-import { FloatingActionButton } from '@/components/common/FloatingActionButton';
 
 export interface FormStickyFooterProps {
     onCancel: () => void;
@@ -21,13 +20,13 @@ export interface FormStickyFooterProps {
     saveDisabledTooltip?: string;
     /** Disables the secondary (cancel) action. */
     cancelDisabled?: boolean;
-    /** Optional status shown in a floating chip beside the actions. */
+    /** Optional status shown at the left of the bar. */
     status?: React.ReactNode;
 }
 
 /**
- * Floating form actions (Cancel + primary Save) pinned to the bottom-right of the viewport,
- * matching the record drawer's floating buttons. No footer bar.
+ * Form actions (Cancel + primary Save) right-aligned under the form, in the page flow with no bar behind them:
+ * they scroll with the form and show once you reach the bottom, never covering a side panel.
  */
 export function FormStickyFooter({
     onCancel,
@@ -42,87 +41,93 @@ export function FormStickyFooter({
     status,
 }: FormStickyFooterProps) {
     const isView = mode === 'view';
+    const saveButton = (
+        <Button
+            variant="contained"
+            size="small"
+            startIcon={
+                isView ? (
+                    <EditOutlinedIcon sx={{ fontSize: 18 }} />
+                ) : submitting ? (
+                    <CircularProgress size={16} color="inherit" />
+                ) : (
+                    <SaveOutlinedIcon sx={{ fontSize: 18 }} />
+                )
+            }
+            onClick={onSave}
+            disabled={submitting || saveDisabled}
+            sx={{
+                height: 36,
+                px: 2,
+                fontSize: '0.82rem',
+                fontWeight: 700,
+                whiteSpace: 'nowrap',
+                color: '#ffffff',
+                background: 'linear-gradient(135deg, var(--crm-fill-blue-700) 0%, var(--crm-fill-blue-600) 100%)',
+                boxShadow: '0 4px 14px rgb(var(--crm-accent-rgb) / 0.28)',
+                '&:hover': {
+                    background: 'linear-gradient(135deg, var(--crm-fill-blue-800) 0%, var(--crm-fill-blue-700) 100%)',
+                    boxShadow: '0 4px 14px rgb(var(--crm-accent-rgb) / 0.28)',
+                },
+                // The gradient shorthand would otherwise hide MUI's disabled fill.
+                '&.Mui-disabled': {
+                    background: 'var(--mui-palette-background-hover)',
+                    color: 'var(--mui-palette-text-muted)',
+                    boxShadow: 'none',
+                },
+            }}
+        >
+            {saveLabel}
+        </Button>
+    );
+
     return (
         <Box
+            role="toolbar"
+            aria-label="Form actions"
             sx={{
-                position: 'fixed',
-                // A page with a right-hand side panel (e.g. follow-up history) sets the variable to keep the actions clear of it.
-                right: { xs: 16, md: 'var(--crm-form-actions-right, 28px)' },
-                bottom: { xs: 16, md: 24 },
-                zIndex: 1200,
+                mt: 2,
                 display: 'flex',
                 alignItems: 'center',
                 gap: 1,
-                pointerEvents: 'none',
-                '& > *': { pointerEvents: 'auto' },
             }}
         >
-            {status && (
-                <Box
+            {status && <Box sx={{ display: 'flex', alignItems: 'center', minWidth: 0 }}>{status}</Box>}
+
+            <Box sx={{ ml: 'auto', display: 'flex', alignItems: 'center', gap: 1 }}>
+                <Button
+                    variant="outlined"
+                    size="small"
+                    startIcon={<CloseIcon sx={{ fontSize: 18 }} />}
+                    onClick={onCancel}
+                    disabled={submitting || cancelDisabled}
                     sx={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        height: 38,
-                        px: 1.75,
-                        borderRadius: 'var(--crm-radius-button)',
+                        height: 36,
+                        px: 2,
+                        fontSize: '0.82rem',
+                        fontWeight: 600,
+                        whiteSpace: 'nowrap',
+                        color: 'var(--mui-palette-error-main)',
+                        borderColor: 'var(--mui-palette-error-softBorder)',
                         backgroundColor: 'var(--mui-palette-background-paper)',
-                        border: '1px solid var(--mui-palette-border-main)',
-                        boxShadow: '0 4px 14px rgb(0 0 0 / 0.16)',
+                        '&:hover': {
+                            color: 'var(--mui-palette-error-main)',
+                            backgroundColor: 'var(--mui-palette-error-soft)',
+                            borderColor: 'var(--mui-palette-error-main)',
+                        },
                     }}
                 >
-                    {status}
-                </Box>
-            )}
+                    {cancelLabel}
+                </Button>
 
-            <FloatingActionButton
-                variant="outlined"
-                label={cancelLabel}
-                icon={<CloseIcon sx={{ fontSize: 18 }} />}
-                onClick={onCancel}
-                disabled={submitting || cancelDisabled}
-                sx={{
-                    fontSize: '0.82rem',
-                    fontWeight: 600,
-                    color: 'var(--mui-palette-error-main)',
-                    borderColor: 'var(--mui-palette-error-softBorder)',
-                    '&:hover': {
-                        color: 'var(--mui-palette-error-main)',
-                        backgroundColor: 'var(--mui-palette-error-soft)',
-                        borderColor: 'var(--mui-palette-error-main)',
-                    },
-                }}
-            />
-
-            <FloatingActionButton
-                variant="contained"
-                label={saveLabel}
-                tooltip={saveDisabled ? saveDisabledTooltip : undefined}
-                icon={
-                    isView ? (
-                        <EditOutlinedIcon sx={{ fontSize: 18 }} />
-                    ) : submitting ? (
-                        <CircularProgress size={16} color="inherit" />
-                    ) : (
-                        <SaveOutlinedIcon sx={{ fontSize: 18 }} />
-                    )
-                }
-                onClick={onSave}
-                disabled={submitting || saveDisabled}
-                sx={{
-                    fontSize: '0.82rem',
-                    fontWeight: 700,
-                    color: '#ffffff',
-                    background: 'linear-gradient(135deg, var(--crm-fill-blue-700) 0%, var(--crm-fill-blue-600) 100%)',
-                    '&:hover': {
-                        background: 'linear-gradient(135deg, var(--crm-fill-blue-800) 0%, var(--crm-fill-blue-700) 100%)',
-                    },
-                    // The gradient shorthand would otherwise hide MUI's disabled fill.
-                    '&.Mui-disabled': {
-                        background: 'var(--mui-palette-background-hover)',
-                        color: 'var(--mui-palette-text-muted)',
-                    },
-                }}
-            />
+                {saveDisabled && saveDisabledTooltip ? (
+                    <Tooltip title={saveDisabledTooltip}>
+                        <span>{saveButton}</span>
+                    </Tooltip>
+                ) : (
+                    saveButton
+                )}
+            </Box>
         </Box>
     );
 }

@@ -25,7 +25,7 @@ export interface StyledSelectProps {
 /**
  * Shared dropdown. Inside a module form's FormConfigProvider it takes the admin-configured options of the
  * field it sits in (via the enclosing FormField's name). A saved value that is no longer offered (an option an
- * admin archived) is still listed, flagged "Archived", so historical records keep showing and saving it.
+ * admin removed) is still listed, flagged "Removed", so historical records keep showing and saving it.
  */
 export function StyledSelect({
     label,
@@ -53,8 +53,8 @@ export function StyledSelect({
         return <ReadOnlyField label={label ?? ''} value={value ? display(value) : value} hideWhenEmpty />;
     }
 
-    const isArchivedValue = Boolean(value) && !options.includes(value);
-    const listed = isArchivedValue ? [...options, value] : options;
+    const isRemovedValue = Boolean(value) && !options.includes(value);
+    const listed = isRemovedValue ? [...options, value] : options;
     const isOptionDisabled = (o: string) => Boolean(disabledOptions?.includes(o));
     const menuOptions = disabledOptions?.length
         ? [...listed.filter((o) => !isOptionDisabled(o)), ...listed.filter(isOptionDisabled)]
@@ -96,12 +96,12 @@ export function StyledSelect({
                     <em>{placeholderText}</em>
                 </MenuItem>
                 {menuOptions.map((o) => {
-                    const archived = isArchivedValue && o === value;
+                    const removed = isRemovedValue && o === value;
                     return (
                         <MenuItem key={o} value={o} disabled={isOptionDisabled(o)} sx={{ fontSize: '0.85rem' }}>
                             <Box component="span" sx={{ display: 'flex', alignItems: 'center', gap: 1, width: '100%' }}>
                                 <span>{display(o)}</span>
-                                {archived && (
+                                {removed && (
                                     <Box
                                         component="span"
                                         sx={{
@@ -118,7 +118,7 @@ export function StyledSelect({
                                             py: 0.1,
                                         }}
                                     >
-                                        Archived
+                                        Removed
                                     </Box>
                                 )}
                             </Box>

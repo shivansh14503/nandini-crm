@@ -29,9 +29,8 @@ import {
     convertLeadFormSchema,
     type ConvertLeadFormValues,
 } from '@/validations';
-import { CONVERT_CONFIGURED_FIELDS } from '@/validations/convertLead.schema';
 import { getFormConfigs } from '@/services/masterData.store';
-import { validateBorrowedFields } from '@/utils/formConfig';
+import { convertRequiredIssues } from '@/utils/convertLeadFields';
 import {
     ConvertContactSection,
     ConvertOpportunitySection,
@@ -89,6 +88,7 @@ const EMPTY_DEFAULTS: ConvertLeadFormValues = {
     opportunityLeadSource: 'Website Enquiry',
     opportunityAssignedTo: '',
     copyActivitiesTo: [],
+    extraFields: { contacts: {}, organizations: {}, opportunities: {} },
 };
 
 export function ConvertLeadForm({ leadId, breadcrumbItems }: ConvertLeadFormProps) {
@@ -101,18 +101,10 @@ export function ConvertLeadForm({ leadId, breadcrumbItems }: ConvertLeadFormProp
             schema: convertLeadFormSchema,
             noPastDates: NO_PAST_DATES.followup,
             defaultValues: EMPTY_DEFAULTS,
-            // Fields an admin made required on the contact / organization / opportunity forms are required here too.
-            // An existing contact or organization is linked as-is, so only a new one must meet its form's rules.
-            extraRules: (values) =>
-                validateBorrowedFields(
-                    getFormConfigs(),
-                    CONVERT_CONFIGURED_FIELDS.filter(
-                        (f) =>
-                            !(f.module === 'organizations' && values.existingOrganizationId) &&
-                            !(f.module === 'contacts' && values.existingContactId),
-                    ),
-                    values,
-                ),
+            // Fields an admin made required on the contact / organization / opportunity forms are required here too
+            // (those shown on Convert Lead). An existing contact or organization is linked as-is, so only a new one
+            // must meet its form's rules.
+            extraRules: (values) => convertRequiredIssues(getFormConfigs(), values),
         });
 
     const { reset, formState } = methods;

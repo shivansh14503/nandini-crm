@@ -27,6 +27,7 @@ function field(overrides: Partial<FormFieldDefinitionDto> & Pick<FormFieldDefini
         isActive: true,
         isVisibleInForm: true,
         isVisibleInDrawer: true,
+        isVisibleInConvert: false,
         dropdownCategoryId: null,
         dropdownCategoryKey: null,
         validationRules: null,

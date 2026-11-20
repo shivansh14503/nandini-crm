@@ -28,7 +28,7 @@ export interface OpportunityDto {
     nextFollowupTime: string;
     followupType: string;
     customerResponse: string;
-    followUpRemarks: string;
+    remarks: string;
     description: string;
     assignedTo: string;
     tallySerialNo: string;
@@ -75,7 +75,7 @@ export function toOpportunityDto(row: OpportunityRow): OpportunityDto {
         nextFollowupTime: text(row.nextFollowupTime),
         followupType: text(row.followupType),
         customerResponse: text(row.customerResponse),
-        followUpRemarks: text(row.followUpRemarks),
+        remarks: text(row.remarks),
         description: text(row.description),
         assignedTo: row.assignedTo,
         tallySerialNo: text(row.tallySerialNo),
@@ -125,7 +125,7 @@ export function toOpportunityData(
         nextFollowupTime: nullable(input.nextFollowupTime),
         followupType: input.followupType ?? 'Call',
         customerResponse: nullable(input.customerResponse),
-        followUpRemarks: nullable(input.followUpRemarks),
+        remarks: nullable(input.remarks),
         description: nullable(input.description),
         assignedTo: input.assignedTo,
         tallySerialNo: nullable(input.tallySerialNo),

@@ -19,6 +19,7 @@ import {
     MAX_PINNED_COLUMNS,
     useFormFieldColumns,
     isCrmModuleKey,
+    TablePageScrollContext,
 } from './DataTable';
 import type { CrmModuleKey } from '@/types/formConfig.types';
 import { ActiveFilterChips, TableFilterModal, type FilterSortOption, type TableFilterController } from './TableFilter';
@@ -443,10 +444,9 @@ export function CommonMasterView<T = unknown, TFilter extends string = string>({
                 flex: 1,
                 display: 'flex',
                 flexDirection: 'column',
-                minHeight: 0,
-                // List pages sit in a window-height wrapper and take the space left below the navbar: the page
-                // never scrolls, only the table.
-                ...(embedded ? {} : { overflow: 'hidden' }),
+                // List pages fill at least the space below the navbar and grow with their rows: the whole page
+                // scrolls (the table is part of it, with no scrollbar of its own).
+                ...(embedded ? { minHeight: 0 } : {}),
                 backgroundColor: embedded ? 'transparent' : 'var(--mui-palette-background-subtle)',
                 width: '100%',
                 minWidth: 0,
@@ -468,11 +468,9 @@ export function CommonMasterView<T = unknown, TFilter extends string = string>({
                     flex: 1,
                     display: 'flex',
                     flexDirection: 'column',
-                    minHeight: 0,
+                    ...(embedded ? { minHeight: 0 } : {}),
                     minWidth: 0,
                     width: '100%',
-                    // Fallback for very short windows, where the cards and a minimum-height table can't all fit.
-                    ...(embedded ? {} : { overflowY: 'auto' }),
                     ...contentSx,
                 }}
             >
@@ -524,8 +522,7 @@ export function CommonMasterView<T = unknown, TFilter extends string = string>({
                         overflow: 'hidden',
                         minWidth: 0,
                         width: '100%',
-                        // The card's flex height bounds the table, so it fills the space left instead of a fixed cap.
-                        ...(embedded ? {} : { minHeight: 0, '& .MuiTableContainer-root': { maxHeight: 'none' } }),
+                        // The card stretches to the bottom of the window and grows with the table (page scroll).
                         boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
                         ...paperSx,
                     }}
@@ -560,7 +557,9 @@ export function CommonMasterView<T = unknown, TFilter extends string = string>({
 
                     {/* Table View */}
                     {/* Module tint on the table header and rows (read by DataTable); display: contents keeps the layout. */}
-                    <Box sx={{ display: 'contents', ...(tableModule && moduleTableTintVars(tableModule)) }}>{resolvedTable}</Box>
+                    <Box sx={{ display: 'contents', ...(tableModule && moduleTableTintVars(tableModule)) }}>
+                        <TablePageScrollContext.Provider value={!embedded}>{resolvedTable}</TablePageScrollContext.Provider>
+                    </Box>
                     {children}
 
                     {/* Pagination Bar */}

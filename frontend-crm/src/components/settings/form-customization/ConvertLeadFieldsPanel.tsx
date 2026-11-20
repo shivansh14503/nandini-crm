@@ -5,9 +5,10 @@ import { Box, Typography } from '@mui/material';
 import { CONVERT_FIELD_NAMES, type ConvertModule } from '@/validations/convertLead.schema';
 import type { FormConfigsPayload, FormFieldDefinitionDto, UpdateFieldPayload } from '@/types/formConfig.types';
 import { moduleFields } from '@/utils/formConfig';
+import { convertShownFields } from '@/utils/convertLeadFields';
 import { DragHandle, EmptyState, errorMessage, panelHeaderSx, surfaceSx } from './builderUi';
-import { FieldEditorModal } from './FieldEditorModal';
-import { FieldRow, GRID_COLUMNS } from './FormFieldsBuilderPanel';
+import { CONVERT_GRID_COLUMNS, FieldRow } from './FormFieldsBuilderPanel';
+import { fieldPlaces } from './fieldPlaces';
 import { useConfigDraftActions } from './useConfigDraft';
 import { useDragReorder } from './useDragReorder';
 
@@ -18,8 +19,12 @@ export const CONVERT_RECORDS: readonly { module: ConvertModule; label: string }[
     { module: 'opportunities', label: 'Opportunity' },
 ];
 
-/** Built-in `fieldKey`s of `module` that the Convert Lead form collects. */
-export const convertFieldKeys = (module: ConvertModule): ReadonlySet<string> => new Set(Object.keys(CONVERT_FIELD_NAMES[module]));
+/**
+ * `fieldKey`s of `module` that the Convert Lead form shows (Form Builder › Convert Lead). Without `configs`, the
+ * fields Convert Lead has its own inputs for.
+ */
+export const convertFieldKeys = (module: ConvertModule, configs?: FormConfigsPayload | null): ReadonlySet<string> =>
+    configs ? new Set(convertShownFields(configs, module).map((f) => f.fieldKey)) : new Set(Object.keys(CONVERT_FIELD_NAMES[module]));
 
 /** Whether a module is one of the records the Convert Lead form collects. */
 export const isConvertModule = (module: string | null): module is ConvertModule => CONVERT_RECORDS.some((r) => r.module === module);
@@ -41,21 +46,17 @@ export interface ConvertLeadFieldsPanelProps {
 }
 
 /**
- * The fields the Convert Lead form collects for one of its records, in the order the form shows them. They are the
- * record's own built-in fields: toggles, width, label and order edited here are the same settings the Contact /
- * Organization / Opportunity form uses, and vice versa. Tabs, sections and custom fields don't apply to Convert Lead
- * (it has one grid per record and doesn't collect custom fields), so they aren't listed.
+ * Every field of one of Convert Lead's records (built-in and custom), in the record's form order. The Convert switch
+ * picks what Convert Lead shows, independently of the record's own form. Label, required, width and order are the
+ * record's own settings, shared with its form.
  */
 export function ConvertLeadFieldsPanel({ module, configs, canEdit, notify }: ConvertLeadFieldsPanelProps) {
     const draft = useConfigDraftActions();
-    const [editing, setEditing] = useState<FormFieldDefinitionDto | null>(null);
     const [busy, setBusy] = useState(false);
 
     const allFields = useMemo(() => moduleFields(configs, module), [configs, module]);
-    const rows = useMemo(() => {
-        const keys = convertFieldKeys(module);
-        return allFields.filter((f) => f.isSystem && keys.has(f.fieldKey));
-    }, [allFields, module]);
+    const rows = useMemo(() => allFields.filter((f) => f.isActive), [allFields]);
+    const shownCount = useMemo(() => convertShownFields(configs, module).length, [configs, module]);
     const recordLabel = CONVERT_RECORDS.find((r) => r.module === module)?.label ?? module;
 
     const run = async (action: () => unknown) => {
@@ -90,8 +91,11 @@ export function ConvertLeadFieldsPanel({ module, configs, canEdit, notify }: Con
         <Box sx={{ ...surfaceSx, overflow: 'hidden' }}>
             <Box sx={{ ...panelHeaderSx, backgroundColor: CONVERT_TINT.soft }}>
                 <Typography sx={{ fontSize: '0.8rem', color: 'var(--crm-slate-700)' }}>
-                    <strong>{rows.length} {recordLabel} field{rows.length === 1 ? '' : 's'}</strong> are collected when a lead is converted. They
-                    are the {recordLabel} form&apos;s own fields: a change here also applies to the {recordLabel} form, and the other way round.
+                    <strong>
+                        {shownCount} of {rows.length} {recordLabel} field{rows.length === 1 ? '' : 's'}
+                    </strong>{' '}
+                    are shown when a lead is converted. Turn a field&apos;s <strong>Convert</strong> switch on or off to choose; this doesn&apos;t change the{' '}
+                    {recordLabel} form. Required, width and order are the {recordLabel} form&apos;s own settings, shared with it.
                 </Typography>
             </Box>
 
@@ -100,7 +104,7 @@ export function ConvertLeadFieldsPanel({ module, configs, canEdit, notify }: Con
                     <Box
                         sx={{
                             display: 'grid',
-                            gridTemplateColumns: GRID_COLUMNS,
+                            gridTemplateColumns: CONVERT_GRID_COLUMNS,
                             gap: 1.5,
                             alignItems: 'center',
                             px: 2,
@@ -114,13 +118,11 @@ export function ConvertLeadFieldsPanel({ module, configs, canEdit, notify }: Con
                         <span>Type</span>
                         <span>Width</span>
                         <span>Required</span>
-                        <span>Form</span>
-                        <span>Drawer</span>
-                        <span />
+                        <span>Convert</span>
                     </Box>
 
                     {rows.length === 0 && (
-                        <EmptyState title="No fields to show" description={`None of the ${recordLabel} fields that Convert Lead collects are available.`} />
+                        <EmptyState title="No fields to show" description={`The ${recordLabel} form has no fields.`} />
                     )}
 
                     <Box sx={{ position: 'relative' }}>
@@ -130,10 +132,9 @@ export function ConvertLeadFieldsPanel({ module, configs, canEdit, notify }: Con
                                 field={field}
                                 canEdit={canEdit}
                                 busy={busy}
-                                onEdit={() => setEditing(field)}
                                 onPatch={(body) => patch(field, body)}
-                                onDelete={() => undefined}
-                                allowDelete={false}
+                                convert
+                                places={fieldPlaces(configs, field, { includeConvert: false })}
                                 dragProps={getRowDragProps(field, field.isActive)}
                                 dragSx={getRowDragSx(field)}
                             />
@@ -145,23 +146,11 @@ export function ConvertLeadFieldsPanel({ module, configs, canEdit, notify }: Con
             <Box sx={{ px: 2, py: 1.5, borderTop: '1px solid var(--mui-palette-border-main)', backgroundColor: 'var(--mui-palette-background-subtle)', display: 'flex', alignItems: 'center', gap: 1 }}>
                 <DragHandle disabled title="Drag a field by its grip to reorder it" />
                 <Typography sx={{ fontSize: '0.74rem', color: 'var(--mui-palette-text-secondary)' }}>
-                    Drag a field by its grip to change the order Convert Lead shows it in. A required field must be filled in on a new {recordLabel.toLowerCase()};
-                    an existing one that is linked is not checked. Fields are deleted, and tabs, sections and custom fields managed, on the {recordLabel} form itself.
+                    Drag a field by its grip to change the order Convert Lead shows it in. A required field that is shown must be filled in on a new{' '}
+                    {recordLabel.toLowerCase()}; an existing one that is linked is not checked. A required field left off Convert Lead is not asked for. Fields are
+                    added and deleted, and tabs and sections managed, on the {recordLabel} form itself.
                 </Typography>
             </Box>
-
-            {editing && (
-                <FieldEditorModal
-                    key={editing.id}
-                    open
-                    onClose={() => setEditing(null)}
-                    module={module}
-                    configs={configs}
-                    field={editing}
-                    defaultTabKey={editing.tabKey}
-                    notify={notify}
-                />
-            )}
         </Box>
     );
 }

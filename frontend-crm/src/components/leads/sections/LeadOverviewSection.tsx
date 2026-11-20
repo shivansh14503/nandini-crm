@@ -243,7 +243,7 @@ export function LeadOverviewSection({ leadId, notify, onDecisionPendingChange }:
             {/* ── Notes: full width ── */}
             <FormGrid columns={1}>
                 <FormGridItem>
-                    <RhfTextField<LeadFormData> name="followUpRemarks" label="Follow Up Remarks" required hint="Action items / requirement brief" multiline minRows={3} maxRows={5} placeholder="Enter specific followup requirement, client demand, or notes..." />
+                    <RhfTextField<LeadFormData> name="remarks" label="Remarks" required hint="Action items / requirement brief" multiline minRows={3} maxRows={5} placeholder="Enter specific followup requirement, client demand, or notes..." />
                 </FormGridItem>
             </FormGrid>
         </Box>

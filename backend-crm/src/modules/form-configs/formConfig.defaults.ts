@@ -702,7 +702,7 @@ const RAW_DEFAULT_FIELDS: DefaultField[] = [
         { key: 'productCategory', label: 'Product Category', type: 'multiselect', cat: 'shared_product_category', soft: true },
     ]),
     ...section('leads', 'overview', 'NOTES', [
-        t('followUpRemarks', 'Follow Up Remarks', { type: 'textarea', soft: true }),
+        t('remarks', 'Remarks', { type: 'textarea', soft: true }),
     ]),
     ...section('leads', 'address', 'PRIMARY ADDRESS', addressFields('primary', 'optional')),
     ...section('leads', 'address', 'OTHER ADDRESS', addressFields('other', 'optional')),
@@ -785,7 +785,7 @@ const RAW_DEFAULT_FIELDS: DefaultField[] = [
         t('nextFollowupDate', 'Next Followup Date', { type: 'datetime', soft: true }),
         t('assignedTo', 'Assigned to', { type: 'lookup', req: true }),
         { key: 'productCategory', label: 'Product Category', type: 'multiselect', cat: 'shared_product_category', soft: true },
-        t('followUpRemarks', 'Follow Up Remarks', { type: 'textarea', soft: true }),
+        t('remarks', 'Remarks', { type: 'textarea', soft: true }),
     ]),
     ...section('opportunities', 'basic', 'Billing Details', [
         t('tallySerialNo', 'Tally Serial No'),
@@ -921,6 +921,79 @@ export const DEFAULT_FIELDS: DefaultField[] = (() => {
         return { ...field, sortOrder: next };
     });
 })();
+
+/** The records a lead conversion creates: their fields can be shown on the Convert Lead form. */
+export const CONVERT_MODULES = ['contacts', 'organizations', 'opportunities'] as const;
+export type ConvertModuleKey = (typeof CONVERT_MODULES)[number];
+export const isConvertModule = (module: string): module is ConvertModuleKey => (CONVERT_MODULES as readonly string[]).includes(module);
+
+/**
+ * Built-in fields the Convert Lead form has its own inputs for (fieldKey → the convert form's field name). They are
+ * shown there by default. Mirrors CONVERT_FIELD_NAMES in frontend-crm/src/validations/convertLead.schema.ts.
+ */
+export const CONVERT_FIELD_NAMES: Readonly<Record<ConvertModuleKey, Readonly<Record<string, string>>>> = {
+    contacts: {
+        name: 'contactName',
+        mobile: 'contactMobile',
+        phone3: 'contactPhone3',
+        organizationName: 'organizationName',
+        emailAddress: 'contactEmails',
+        isPrimaryContact: 'isPrimaryContact',
+        designation: 'designation',
+        department: 'department',
+        communicationType: 'communicationType',
+        doNotCall: 'doNotCall',
+        addDescription: 'contactDescription',
+        assignedTo: 'contactAssignedTo',
+    },
+    organizations: {
+        organizationName: 'organizationName',
+        mailingName: 'mailingName',
+        natureOfBusiness: 'natureOfBusiness',
+        typeOfEntity: 'typeOfEntity',
+        customerType: 'customerType',
+        leadSource: 'leadSource',
+        memberOf: 'memberOf',
+        addDescriptionAndScope: 'organizationDescription',
+        assignedTo: 'organizationAssignedTo',
+    },
+    opportunities: {
+        productCategory: 'productCategory',
+        organizationName: 'organizationName',
+        referredBy: 'referredBy',
+        type: 'opportunityType',
+        leadSource: 'opportunityLeadSource',
+        nextFollowupDate: 'nextFollowupDate',
+        followupType: 'followupType',
+        remarks: 'opportunityDescription',
+        assignedTo: 'opportunityAssignedTo',
+    },
+};
+
+/** Built-in fields the conversion fills in itself (from the lead or the linked records), so they can't be shown there. */
+const CONVERT_FILLED_FIELDS: Readonly<Record<ConvertModuleKey, ReadonlySet<string>>> = {
+    contacts: new Set(),
+    organizations: new Set(['partnerCompany']),
+    opportunities: new Set(['contact', 'contactNumber', 'contactEmail', 'leadGivenBy']),
+};
+
+/**
+ * Why a field of a conversion record can't be shown on the Convert Lead form, or null when it can. Fields with their
+ * own Convert Lead input always can; any other field needs a control the form can draw from its configuration alone
+ * (pickers and dropdowns without a list need their record's own form). Mirrors convertFieldUnavailableReason in
+ * frontend-crm/src/validations/convertLead.schema.ts.
+ */
+export function convertFieldUnavailableReason(
+    module: ConvertModuleKey,
+    field: { fieldKey: string; fieldType: string; isSystem: boolean; dropdownCategoryKey?: string | null; dropdownCategoryId?: string | null },
+): string | null {
+    if (field.isSystem && field.fieldKey in CONVERT_FIELD_NAMES[module]) return null;
+    if (field.isSystem && CONVERT_FILLED_FIELDS[module].has(field.fieldKey)) return 'Filled in by the conversion';
+    if (field.fieldType === 'lookup' || field.fieldType === 'datetime') return 'Picker fields can only be set on their own form';
+    const hasList = Boolean(field.dropdownCategoryKey ?? field.dropdownCategoryId);
+    if ((field.fieldType === 'select' || field.fieldType === 'multiselect') && !hasList) return 'Needs its own form (no dropdown list)';
+    return null;
+}
 
 /**
  * True when a built-in field row was deleted by an admin: the row stays as a tombstone

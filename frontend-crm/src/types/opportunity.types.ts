@@ -51,7 +51,7 @@ export interface OpportunityFormData {
     customerResponse?: string;
 
     // Basic Details - Row 8
-    followUpRemarks: string;
+    remarks: string;
     description?: string;
 
     // Basic Details - Row 9

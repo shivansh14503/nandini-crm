@@ -301,7 +301,7 @@ model Lead {
   followupType        String?   @db.NVarChar(30)
   /// Latest follow-up outcome (shared_customer_response dropdown), picked on every edit.
   customerResponse    String?   @db.NVarChar(100)
-  followUpRemarks     String?   @db.NVarChar(2000)
+  remarks     String?   @db.NVarChar(2000)
   registrationType    String?   @db.NVarChar(30)
   gstNumber           String?   @db.NVarChar(15)
   turnover            String?   @db.NVarChar(30)
@@ -438,7 +438,7 @@ model Opportunity {
   followupType        String?   @db.NVarChar(30)
   /// Latest follow-up outcome (shared_customer_response dropdown), picked on every edit.
   customerResponse    String?   @db.NVarChar(100)
-  followUpRemarks     String?   @db.NVarChar(2000)
+  remarks     String?   @db.NVarChar(2000)
   description         String?   @db.NVarChar(2000)
   assignedTo          String    @db.NVarChar(50)
 
@@ -897,8 +897,8 @@ model DropdownCategory {
   fields  FormFieldDefinition[]
 }
 
-/// One option of a DropdownCategory. Options are archived (isActive = false), never deleted, so stored values keep rendering.
-/// System options drive backend logic (e.g. lead 'Converted') and cannot be archived or have their value changed.
+/// One option of a DropdownCategory. Deleting removes the row; records that stored its value keep the raw text.
+/// System options drive backend logic (e.g. lead 'Converted') and cannot be deleted or have their value changed.
 model DropdownOption {
   id         String   @id @default(uuid()) @db.NVarChar(50)
   categoryId String   @db.NVarChar(50)
@@ -944,6 +944,8 @@ model FormFieldDefinition {
   isActive            Boolean  @default(true)
   isVisibleInForm     Boolean  @default(true)
   isVisibleInDrawer   Boolean  @default(true)
+  /// Contacts / organizations / opportunities: shown on the Convert Lead form (independent of isVisibleInForm).
+  isVisibleInConvert  Boolean  @default(false)
   dropdownCategoryId  String?  @db.NVarChar(50)
   validationRulesJson String?  @db.NVarChar(Max)
   createdAt           DateTime @default(now())

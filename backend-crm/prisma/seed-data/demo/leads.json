@@ -42,7 +42,7 @@
         "createdAt": "2026-10-28T05:42:59.765Z",
         "updatedAt": "2026-10-30T01:42:59.765Z",
         "createdBy": "mittal.sharma",
-        "followUpRemarks": "Customer urgently requested an online live demonstration of Biz Analyst mobile dashboard and automated CredFlow payment reminders linked to multi-user TallyPrime.",
+        "remarks": "Customer urgently requested an online live demonstration of Biz Analyst mobile dashboard and automated CredFlow payment reminders linked to multi-user TallyPrime.",
         "emailAddress": [
             {
                 "id": "eml-101",
@@ -102,7 +102,7 @@
         "createdAt": "2026-10-26T05:42:59.765Z",
         "updatedAt": "2026-10-29T21:42:59.765Z",
         "createdBy": "mittal.sharma",
-        "followUpRemarks": "Commercial proposal sent for 35 TB Acronis Cyber Protect Cloud with immutable ransomware backup for warehousing ERP.",
+        "remarks": "Commercial proposal sent for 35 TB Acronis Cyber Protect Cloud with immutable ransomware backup for warehousing ERP.",
         "emailAddress": [
             {
                 "id": "eml-201",
@@ -155,7 +155,7 @@
         "createdAt": "2026-10-25T05:42:59.765Z",
         "updatedAt": "2026-10-29T05:42:59.765Z",
         "createdBy": "bhanu.pratap",
-        "followUpRemarks": "Scheduled Connect 2T barcode scanning & e-invoicing workflow demonstration for spare parts wholesale inventory.",
+        "remarks": "Scheduled Connect 2T barcode scanning & e-invoicing workflow demonstration for spare parts wholesale inventory.",
         "emailAddress": [
             {
                 "id": "eml-301",
@@ -208,7 +208,7 @@
         "createdAt": "2026-10-27T05:42:59.765Z",
         "updatedAt": "2026-10-29T05:42:59.765Z",
         "createdBy": "neha.gupta",
-        "followUpRemarks": "Initial discovery call completed regarding receivables aging automation with CredFlow and customized B-Softwares MIS connector.",
+        "remarks": "Initial discovery call completed regarding receivables aging automation with CredFlow and customized B-Softwares MIS connector.",
         "emailAddress": [
             {
                 "id": "eml-401",
@@ -261,7 +261,7 @@
         "createdAt": "2026-10-29T05:42:59.765Z",
         "updatedAt": "2026-10-30T03:42:59.765Z",
         "createdBy": "mittal.sharma",
-        "followUpRemarks": "Expressed interest in renewing expired TSS for 3 licenses and upgrading to latest TallyPrime 4.1 with Connected GST.",
+        "remarks": "Expressed interest in renewing expired TSS for 3 licenses and upgrading to latest TallyPrime 4.1 with Connected GST.",
         "emailAddress": [
             {
                 "id": "eml-501",
@@ -315,7 +315,7 @@
         "createdAt": "2026-10-24T05:42:59.765Z",
         "updatedAt": "2026-10-30T04:42:59.765Z",
         "createdBy": "mittal.sharma",
-        "followUpRemarks": "Final negotiation on Tally Server 9 enterprise license + 20 user Biz Analyst annual subscription with installation.",
+        "remarks": "Final negotiation on Tally Server 9 enterprise license + 20 user Biz Analyst annual subscription with installation.",
         "emailAddress": [
             {
                 "id": "eml-601",
@@ -368,7 +368,7 @@
         "createdAt": "2026-10-23T05:42:59.765Z",
         "updatedAt": "2026-10-28T05:42:59.765Z",
         "createdBy": "amit.verma",
-        "followUpRemarks": "Security compliance review completed for clinical diagnostic data protection. Awaiting tender document release.",
+        "remarks": "Security compliance review completed for clinical diagnostic data protection. Awaiting tender document release.",
         "emailAddress": [
             {
                 "id": "eml-701",
@@ -421,7 +421,7 @@
         "createdAt": "2026-10-30T00:42:59.765Z",
         "updatedAt": "2026-10-30T04:42:59.765Z",
         "createdBy": "mittal.sharma",
-        "followUpRemarks": "Inquired about mobile tally reporting for site engineers to track material purchase orders directly on mobile app.",
+        "remarks": "Inquired about mobile tally reporting for site engineers to track material purchase orders directly on mobile app.",
         "emailAddress": [
             {
                 "id": "eml-801",
@@ -473,7 +473,7 @@
         "createdAt": "2026-10-30T05:42:59.765Z",
         "updatedAt": "2026-10-30T05:42:59.765Z",
         "createdBy": "mittal.sharma",
-        "followUpRemarks": "Inquired about individual license for Biz Analyst without organization affiliation.",
+        "remarks": "Inquired about individual license for Biz Analyst without organization affiliation.",
         "emailAddress": [
             {
                 "id": "eml-901",

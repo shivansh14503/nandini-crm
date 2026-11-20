@@ -45,10 +45,10 @@ export function FormLivePreviewPanel({ module, configs, unsavedCount = 0, unsave
     }, [module, methods]);
 
     const sections = useMemo(() => {
-        const shown = moduleFields(configs, module).filter((f) => f.isActive && f.isVisibleInForm);
-        if (!onlyFieldKeys) return groupSections(shown, tabKey);
-        // Convert Lead lays a record out like its own form: one grid per section, in the configured order.
-        return groupSections(shown.filter((f) => f.isSystem && onlyFieldKeys.has(f.fieldKey)));
+        // Convert Lead lays a record out like its own form (one grid per section, in the configured order), showing
+        // the fields picked for it, whatever the record's own form shows.
+        if (onlyFieldKeys) return groupSections(moduleFields(configs, module).filter((f) => f.isActive && onlyFieldKeys.has(f.fieldKey)));
+        return groupSections(moduleFields(configs, module).filter((f) => f.isActive && f.isVisibleInForm), tabKey);
     }, [configs, module, tabKey, onlyFieldKeys]);
 
     return (

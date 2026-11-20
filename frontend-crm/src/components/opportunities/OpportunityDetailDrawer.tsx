@@ -267,9 +267,9 @@ export function OpportunityDetailDrawer({
 
                         {/* Scope & Descriptions */}
                         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
-                            <DrawerSectionCard title="ACTION BRIEF / FOLLOW UP REMARKS">
+                            <DrawerSectionCard title="ACTION BRIEF / REMARKS">
                                 <Typography sx={{ fontSize: '0.82rem', color: 'var(--crm-slate-700)', lineHeight: 1.5 }}>
-                                    {opp.followUpRemarks}
+                                    {opp.remarks}
                                 </Typography>
                             </DrawerSectionCard>
 

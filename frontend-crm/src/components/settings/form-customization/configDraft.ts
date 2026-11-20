@@ -262,10 +262,7 @@ function applyOp(s: FormConfigsPayload, op: DraftOp): void {
                 option.label = next;
             }
             if (op.payload.meta !== undefined) option.meta = op.payload.meta;
-            if (op.payload.isActive !== undefined) option.isActive = op.payload.isActive;
             if (op.payload.isDefault !== undefined) option.isDefault = op.payload.isDefault;
-            // Same rule as the API: an archived option can't stay the default.
-            if (op.payload.isActive === false) option.isDefault = false;
             return;
         }
         case 'reorderOptions': {
@@ -307,6 +304,7 @@ function applyOp(s: FormConfigsPayload, op: DraftOp): void {
                 isActive: true,
                 isVisibleInForm: p.isVisibleInForm ?? true,
                 isVisibleInDrawer: p.isVisibleInDrawer ?? true,
+                isVisibleInConvert: false,
                 dropdownCategoryId: null,
                 dropdownCategoryKey: null,
                 validationRules: null,
@@ -336,7 +334,7 @@ function applyOp(s: FormConfigsPayload, op: DraftOp): void {
             if (p.isRequired !== undefined) field.isRequired = p.isRequired;
             if (p.isVisibleInForm !== undefined) field.isVisibleInForm = p.isVisibleInForm;
             if (p.isVisibleInDrawer !== undefined) field.isVisibleInDrawer = p.isVisibleInDrawer;
-            if (p.isActive !== undefined) field.isActive = p.isActive;
+            if (p.isVisibleInConvert !== undefined) field.isVisibleInConvert = p.isVisibleInConvert;
             if (p.dropdownCategoryKey !== undefined) setCategoryLink(s, field, p.dropdownCategoryKey);
             if (field.label !== before.label) renameOwnDropdown(s, field, before.label);
             if (field.tabKey !== before.tabKey || field.sectionKey !== before.sectionKey) {
@@ -407,6 +405,7 @@ function applyOp(s: FormConfigsPayload, op: DraftOp): void {
                     isActive: false,
                     isVisibleInForm: false,
                     isVisibleInDrawer: false,
+                    isVisibleInConvert: false,
                     isRequired: false,
                     dropdownCategoryKey: null,
                     dropdownCategoryId: null,

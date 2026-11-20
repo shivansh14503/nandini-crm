@@ -175,6 +175,8 @@ export interface FormFieldDefinitionDto {
     isActive: boolean;
     isVisibleInForm: boolean;
     isVisibleInDrawer: boolean;
+    /** Contacts / organizations / opportunities: shown on the Convert Lead form (independent of isVisibleInForm). */
+    isVisibleInConvert: boolean;
     dropdownCategoryId: string | null;
     dropdownCategoryKey: string | null;
     validationRules: Record<string, unknown> | null;
@@ -231,7 +233,6 @@ export interface UpdateOptionPayload {
     /** Renames the option; the stored value (and records storing it) follow. Refused for system options. */
     label?: string;
     meta?: Record<string, unknown> | null;
-    isActive?: boolean;
     isDefault?: boolean;
 }
 
@@ -273,7 +274,8 @@ export interface UpdateFieldPayload {
     isRequired?: boolean;
     isVisibleInForm?: boolean;
     isVisibleInDrawer?: boolean;
-    isActive?: boolean;
+    /** Shown on Convert Lead (contacts / organizations / opportunities). */
+    isVisibleInConvert?: boolean;
     dropdownCategoryKey?: string | null;
 }
 

@@ -8,6 +8,7 @@ import {
     Box,
     Typography,
     IconButton,
+    Button,
     Tooltip,
     Tabs,
     Tab,
@@ -34,9 +35,34 @@ import { DoubleClickCopyText } from '../useDoubleClickCopy';
 import { getModuleColor } from '@/theme/moduleColors';
 import { glassSurfaceSx, GLASS_SHADOW, GLASS_RADIUS, FLOAT_INSET } from '@/theme/glass';
 import { useRegisterRightPanel } from '@/components/layout/rightPanelStore';
-import { FloatingActionButton } from '../FloatingActionButton';
 
 const CHANGES_TAB_ID = 'changes-tab';
+
+interface FooterButtonProps {
+    label: React.ReactNode;
+    icon?: React.ReactNode;
+    tooltip?: React.ReactNode;
+    onClick?: () => void;
+    disabled?: boolean;
+    variant: 'text' | 'outlined' | 'contained';
+    sx?: object;
+}
+
+/** A footer action; wrapped in a span when it has a tooltip so the tooltip still shows while it is disabled. */
+function FooterButton({ label, icon, tooltip, onClick, disabled, variant, sx }: FooterButtonProps) {
+    const button = (
+        <Button variant={variant} size="small" startIcon={icon} onClick={onClick} disabled={disabled} sx={sx}>
+            {label}
+        </Button>
+    );
+    return tooltip ? (
+        <Tooltip title={tooltip}>
+            <span>{button}</span>
+        </Tooltip>
+    ) : (
+        button
+    );
+}
 
 export function EntityDetailDrawer({
     open,
@@ -495,7 +521,7 @@ export function EntityDetailDrawer({
             </Box>
 
             {/* ── Scrollable Tab Content ───────────────────────────────────────── */}
-            <Box sx={{ flex: 1, overflowY: 'auto', p: 2.5, pb: 10, backgroundColor: 'transparent' }}>
+            <Box sx={{ flex: 1, overflowY: 'auto', p: 2.5, backgroundColor: 'transparent' }}>
                 {loading ? (
                     <FormFieldsSkeleton fields={10} columns={2} sx={{ pt: 0.5 }} />
                 ) : (
@@ -508,25 +534,42 @@ export function EntityDetailDrawer({
                 )}
             </Box>
 
-            {/* ── Floating action buttons (pill; icon + label always visible) ── */}
-            {(footerActions || secondaryAction || primaryAction || headerActions?.onEdit) && (
-                <Box
-                    sx={{
-                        position: 'absolute',
-                        right: 20,
-                        bottom: 20,
-                        zIndex: 5,
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: 1,
-                        pointerEvents: 'none',
-                        '& > *': { pointerEvents: 'auto' },
-                    }}
-                >
+            {/* ── Sticky Drawer Footer ────────────────────────────────────────── */}
+            <Box
+                sx={{
+                    p: 2,
+                    px: 2.5,
+                    borderTop: '1px solid var(--mui-palette-border-light)',
+                    backgroundColor: 'transparent',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    gap: 1.5,
+                }}
+            >
+                {/* Status Indicator */}
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 0 }}>
+                    <Box
+                        sx={{
+                            width: 8,
+                            height: 8,
+                            flexShrink: 0,
+                            borderRadius: '50%',
+                            backgroundColor: 'var(--mui-palette-success-main)',
+                            boxShadow: '0 0 0 3px color-mix(in srgb, var(--mui-palette-success-main) 20%, transparent)',
+                        }}
+                    />
+                    <Typography noWrap sx={{ fontSize: '0.78rem', fontWeight: 600, color: 'var(--crm-slate-700)' }}>
+                        {statusText}
+                    </Typography>
+                </Box>
+
+                {/* Right Action Buttons */}
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexShrink: 0 }}>
                     {footerActions}
 
                     {secondaryAction && (
-                        <FloatingActionButton
+                        <FooterButton
                             label={secondaryAction.label}
                             icon={secondaryAction.icon}
                             tooltip={secondaryAction.tooltip}
@@ -538,9 +581,9 @@ export function EntityDetailDrawer({
                     )}
 
                     {(primaryAction || headerActions?.onEdit) && (
-                        <FloatingActionButton
+                        <FooterButton
                             label={primaryAction?.label || 'Edit Details'}
-                            icon={primaryAction?.icon || <EditOutlinedIcon sx={{ fontSize: 18 }} />}
+                            icon={primaryAction?.icon || <EditOutlinedIcon sx={{ fontSize: 16 }} />}
                             tooltip={primaryAction?.tooltip}
                             onClick={primaryAction?.onClick || headerActions?.onEdit}
                             disabled={primaryAction?.disabled}
@@ -549,7 +592,7 @@ export function EntityDetailDrawer({
                         />
                     )}
                 </Box>
-            )}
+            </Box>
 
             {/* Notification Toast */}
             <Snackbar

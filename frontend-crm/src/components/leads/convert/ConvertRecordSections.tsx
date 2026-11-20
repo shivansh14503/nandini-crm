@@ -2,30 +2,27 @@
 
 import React from 'react';
 import { Box, Typography } from '@mui/material';
-import { FormGrid } from '@/components/forms';
+import { DynamicFormField, FormGrid } from '@/components/forms';
 import { useFormConfigs } from '@/hooks/queries/useFormConfigs';
-import { groupSections, moduleFields } from '@/utils/formConfig';
-import type { FormConfigsPayload } from '@/types/formConfig.types';
-import { CONVERT_FIELD_NAMES, type ConvertModule } from '@/validations/convertLead.schema';
+import { groupSections } from '@/utils/formConfig';
+import { convertFieldName, convertShownFields, isConvertInput } from '@/utils/convertLeadFields';
+import type { FormConfigsPayload, FormFieldDefinitionDto } from '@/types/formConfig.types';
+import type { ConvertModule } from '@/validations/convertLead.schema';
 
 export interface ConvertSection {
     sectionKey: string;
     sectionLabel: string;
-    /** Module `fieldKey`s in the section, in the configured order. */
-    fieldKeys: string[];
+    /** The section's fields Convert Lead shows, in the configured order. */
+    fields: FormFieldDefinitionDto[];
 }
 
 /**
  * The sections a record's Convert Lead fields fall into, as the record's own form shows them: the module's sections
- * and field order from the Form Builder, keeping only the fields Convert Lead collects that are shown on the form.
+ * and field order from the Form Builder, keeping the fields an admin put on Convert Lead (built-in and custom).
  * The Convert Lead form and the Form Builder's Convert Lead preview both lay out from this, so they match.
  */
 export function convertSections(configs: FormConfigsPayload | null, module: ConvertModule): ConvertSection[] {
-    const keys = new Set(Object.keys(CONVERT_FIELD_NAMES[module]));
-    const fields = configs
-        ? moduleFields(configs, module).filter((f) => f.isSystem && keys.has(f.fieldKey) && f.isActive && f.isVisibleInForm)
-        : [];
-    return groupSections(fields).map((s) => ({ sectionKey: s.sectionKey, sectionLabel: s.sectionLabel, fieldKeys: s.fields.map((f) => f.fieldKey) }));
+    return groupSections(convertShownFields(configs, module)).map((s) => ({ sectionKey: s.sectionKey, sectionLabel: s.sectionLabel, fields: s.fields }));
 }
 
 const sectionHeadingSx = {
@@ -39,7 +36,7 @@ const sectionHeadingSx = {
 
 export interface ConvertRecordSectionsProps {
     module: ConvertModule;
-    /** The input of each field the section collects, by the module's `fieldKey`. */
+    /** Convert Lead's own input of each field it has one for, by the module's `fieldKey`. Other fields are drawn from their configuration. */
     fields: Readonly<Record<string, React.ReactNode>>;
     /** Conversion-only inputs (no field on the module's form): added after the record's own fields. */
     extra?: React.ReactNode;
@@ -53,10 +50,17 @@ export interface ConvertRecordSectionsProps {
 export function ConvertRecordSections({ module, fields, extra }: ConvertRecordSectionsProps) {
     const configs = useFormConfigs();
     const sections = convertSections(configs, module);
-    // Before the configuration loads (or if it lists none of them), every field shows in one grid.
-    const placed = new Set(sections.flatMap((s) => s.fieldKeys));
-    const unplaced = Object.keys(fields).filter((key) => !placed.has(key) && !configs);
-    const groups: ConvertSection[] = unplaced.length > 0 ? [{ sectionKey: 'all', sectionLabel: '', fieldKeys: unplaced }] : sections;
+    // Before the configuration loads, Convert Lead's own inputs show in one grid.
+    const groups: { sectionKey: string; sectionLabel: string; nodes: [string, React.ReactNode][] }[] = configs
+        ? sections.map((s) => ({
+              sectionKey: s.sectionKey,
+              sectionLabel: s.sectionLabel,
+              nodes: s.fields.map((f): [string, React.ReactNode] => [
+                  f.fieldKey,
+                  isConvertInput(module, f) ? fields[f.fieldKey] : <DynamicFormField field={f} name={convertFieldName(module, f)} />,
+              ]),
+          }))
+        : [{ sectionKey: 'all', sectionLabel: '', nodes: Object.entries(fields) }];
 
     return (
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5 }}>
@@ -64,8 +68,8 @@ export function ConvertRecordSections({ module, fields, extra }: ConvertRecordSe
                 <Box key={section.sectionKey}>
                     {groups.length > 1 && section.sectionLabel && <Typography sx={sectionHeadingSx}>{section.sectionLabel}</Typography>}
                     <FormGrid columns={3}>
-                        {section.fieldKeys.map((key) => (
-                            <React.Fragment key={key}>{fields[key]}</React.Fragment>
+                        {section.nodes.map(([key, node]) => (
+                            <React.Fragment key={key}>{node}</React.Fragment>
                         ))}
                         {index === groups.length - 1 && extra}
                     </FormGrid>

@@ -56,14 +56,14 @@ export const getModuleColor = (key: ModuleKey): ModuleColor => MODULE_COLORS[key
 /** Module for a table / module id in any spelling ('partner-companies', 'partner_companies', 'quotes', …). */
 export const moduleKeyFrom = (id: string | undefined): ModuleKey | undefined => {
     if (!id) return undefined;
-    const compact = id.trim().toLowerCase().replace(/[-_s]/g, '');
+    const compact = id.trim().toLowerCase().replace(/[-_\s]/g, '');
     if (compact === 'quotes') return 'quotations';
     return (Object.keys(CSS_NAME) as ModuleKey[]).find((key) => key.toLowerCase() === compact);
 };
 
 /**
  * CSS variables that tint a DataTable rendered inside this element (DataTable reads them, falling back to its
- * neutral colors). Spread into the wrapper's `sx`: header in the module tint, rows in a fainter wash.
+ * neutral colors). Spread into the wrapper's `sx`: only the header takes the module tint; rows stay on the plain surface.
  */
 export const moduleTableTintVars = (key: ModuleKey) => {
     // Mixed from -main onto the paper (both opaque, so frozen columns still cover what scrolls under them).
@@ -72,8 +72,6 @@ export const moduleTableTintVars = (key: ModuleKey) => {
     return {
         '--crm-table-header-bg': mix(12),
         '--crm-table-header-border': mix(30),
-        '--crm-table-row-bg': mix(4),
-        '--crm-table-row-hover-bg': mix(9),
     } as const;
 };
 

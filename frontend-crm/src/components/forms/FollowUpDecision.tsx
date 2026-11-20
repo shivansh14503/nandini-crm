@@ -77,6 +77,13 @@ export function useFollowUpDecision({ enabled, notify, onPendingChange }: UseFol
     };
     const askForNewDate = () => {
         setSlot({ date: '', time: '' });
+        // A half-typed date (`12-mm-yyyy`) already reports '' as its value, so React leaves the input alone and
+        // the typed parts stay on screen. Clear the native input itself.
+        document
+            .querySelectorAll<HTMLInputElement>('[data-field="nextFollowupDate"] input[type="date"], input[type="date"][name="nextFollowupDate"]')
+            .forEach((input) => {
+                input.value = '';
+            });
         setGlowRequested(true);
         window.setTimeout(() => focusFormField('nextFollowupDate'), 0);
     };

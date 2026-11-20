@@ -19,7 +19,7 @@ export interface FollowUpEvent {
     retained?: boolean;
 }
 
-const FOLLOW_UP_FIELDS = ['nextFollowupDate', 'nextFollowupTime', 'customerResponse', 'followUpRemarks'] as const;
+const FOLLOW_UP_FIELDS = ['nextFollowupDate', 'nextFollowupTime', 'customerResponse', 'remarks'] as const;
 type FollowUpField = (typeof FOLLOW_UP_FIELDS)[number];
 type FollowUpState = Record<FollowUpField, string>;
 
@@ -56,7 +56,7 @@ export function formatEventTime(iso: string): string {
  * `from` values, so the history stays right even when older rows are past the audit endpoint's limit.
  */
 export function buildFollowUpEvents(entries: AuditEntry[]): FollowUpEvent[] {
-    const state: FollowUpState = { nextFollowupDate: '', nextFollowupTime: '', customerResponse: '', followUpRemarks: '' };
+    const state: FollowUpState = { nextFollowupDate: '', nextFollowupTime: '', customerResponse: '', remarks: '' };
     const events: FollowUpEvent[] = [];
 
     for (const entry of [...entries].reverse()) {
@@ -69,7 +69,7 @@ export function buildFollowUpEvents(entries: AuditEntry[]): FollowUpEvent[] {
                 ...base,
                 kind: 'created',
                 response: state.customerResponse || undefined,
-                remarks: state.followUpRemarks || undefined,
+                remarks: state.remarks || undefined,
                 next: formatSlot(state.nextFollowupDate, state.nextFollowupTime),
             });
             continue;
@@ -95,8 +95,9 @@ export function buildFollowUpEvents(entries: AuditEntry[]): FollowUpEvent[] {
         events.push({
             ...base,
             kind: 'followUp',
-            response: touched.includes('customerResponse') ? state.customerResponse || undefined : undefined,
-            remarks: touched.includes('followUpRemarks') ? state.followUpRemarks || undefined : undefined,
+            // The values in effect after this follow-up, picked again or not.
+            response: state.customerResponse || undefined,
+            remarks: state.remarks || undefined,
             previous,
             next,
             retained: previous !== '' && previous === next,

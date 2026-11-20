@@ -29,6 +29,8 @@ export interface DynamicFormFieldProps {
     required?: boolean;
     /** Applies `field.defaultValue` to an empty value in create mode (default true). */
     applyDefault?: boolean;
+    /** The form's name for the field, when it isn't the usual one (e.g. Convert Lead's `extraFields.contacts.<key>`). */
+    name?: string;
 }
 
 /** Default width per control type when the admin hasn't picked one. */
@@ -51,11 +53,11 @@ const TYPE_SIZE: Partial<Record<FormFieldDefinitionDto['fieldType'], FieldSize>>
  * `customFields.<fieldKey>`; built-in fields (used by the admin live preview) bind to `<fieldKey>`.
  * Must be rendered inside a `FormProvider`.
  */
-export function DynamicFormField({ field, required, applyDefault = true }: DynamicFormFieldProps) {
+export function DynamicFormField({ field, required, applyDefault = true, name: nameOverride }: DynamicFormFieldProps) {
     const configs = useFormConfigs();
     const { mode } = useFormMode();
     const { getValues, setValue } = useFormContext<FieldValues>();
-    const name = fieldFormName(field);
+    const name = nameOverride ?? fieldFormName(field);
     // Form builder Live Preview: a built-in field without overrides shows the texts its hand-built form codes.
     const coded = useCodedFieldDefaults(field.isSystem ? field.fieldKey : undefined);
     const category = findCategory(configs, field.dropdownCategoryKey);

@@ -220,7 +220,7 @@ export function LeadDetailDrawer({
                                 )}
                             </Box>
 
-                            {l.followUpRemarks && (
+                            {l.remarks && (
                                 <Box
                                     sx={{
                                         mt: 1,
@@ -231,7 +231,7 @@ export function LeadDetailDrawer({
                                     }}
                                 >
                                     <Typography sx={{ fontSize: '0.74rem', color: 'var(--crm-orange-800)', fontWeight: 500, lineHeight: 1.4 }}>
-                                        &quot;{l.followUpRemarks}&quot;
+                                        &quot;{l.remarks}&quot;
                                     </Typography>
                                 </Box>
                             )}

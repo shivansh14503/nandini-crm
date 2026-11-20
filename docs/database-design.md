@@ -43,7 +43,7 @@ These rules come from SQL Server's constraints and apply across the schema:
    issued by the document-series engine. Unique constraints cover deleted rows too, so a code is never reused.
 3. **Soft delete:** core entities, `PartnerCompany`, `PdfTemplate` and `PdfSavedItem` have `isDeleted` + `deletedAt`.
    Rows are never physically deleted by the app, so foreign keys never block a "delete". `DropdownCategory` uses
-   `deletedAt` as a tombstone; `DropdownOption` and `NatureOfCall` use `isActive` (archive).
+   `deletedAt` as a tombstone; `NatureOfCall` uses `isActive`; `DropdownOption.isActive` is always true (archiving was removed, migration `20261120180000_remove_archive`).
 4. **No cascade cycles:** SQL Server rejects multiple cascade paths (error 1785). Every cross-entity foreign key is
    `ON DELETE NO ACTION / ON UPDATE NO ACTION`. Only owned children cascade from their single parent.
 5. **No scalar arrays:** string lists are stored as JSON in `NVARCHAR(MAX)` columns suffixed `Json`
@@ -158,7 +158,7 @@ Indexes: `organizationId`, `mobile`, `name`, `assignedTo`, `(isDeleted, createdA
 | Group | Columns |
 | --- | --- |
 | Identity | `id`, `leadCode` (UNIQUE), `name`, `mobile`, `otherPhone`, `mailingName`, `tradeName`, `organizationName`, `designation`, `department` |
-| Qualification | `leadSource`, `leadType`, `status` (default `New`), `productCategoryJson`, `followupType`, `customerResponse` (latest follow-up outcome, `shared_customer_response`; required on every edit by the form), `nextFollowupDate` (DATE), `nextFollowupTime`, `registrationType`, `gstNumber`, `turnover`, `noOfEmployee`, `referredBy`, `assignedTo`, `followUpRemarks`, `description` |
+| Qualification | `leadSource`, `leadType`, `status` (default `New`), `productCategoryJson`, `followupType`, `customerResponse` (latest follow-up outcome, `shared_customer_response`; required on every edit by the form), `nextFollowupDate` (DATE), `nextFollowupTime`, `registrationType`, `gstNumber`, `turnover`, `noOfEmployee`, `referredBy`, `assignedTo`, `remarks`, `description` |
 | Addresses | `primary*` (with `primaryCityId` → `City`), `other*` (with `otherCityId`), `copyAddressFromLeft` |
 | Conversion | `convertedAt`, `convertedBy`, `convertedOrganizationId`, `convertedContactId`, `convertedOpportunityId` (FKs) — set only by the convert endpoint |
 | Other | `customDataJson`, audit/soft-delete columns |
@@ -171,7 +171,7 @@ Indexes: `status`, `assignedTo`, `mobile`, `nextFollowupDate`, `primaryCityId`, 
 
 `Opportunity`: `opportunityCode` (UNIQUE), `opportunityName`, `productCategoryJson`, `contact`/`contactId`,
 `organizationName`/`organizationId`, `contactNumber`, `contactEmail`, `referredBy`, `type`, `salesStage`, `leadSource`,
-`leadGivenBy`, `nextFollowupDate`/`Time`, `followupType`, `customerResponse` (as on leads), `followUpRemarks`, `description`, `assignedTo`,
+`leadGivenBy`, `nextFollowupDate`/`Time`, `followupType`, `customerResponse` (as on leads), `remarks`, `description`, `assignedTo`,
 billing (`tallySerialNo`, `invoiceNo`, `invoiceDate`), `commission`, `addDocument`, totals (`currency`, `groupName`,
 `lumpSumDiscount`, `totalAmount`, `totalDiscount`, `subtotal`, `totalTax`, `grandTotal` — recomputed and verified
 server-side), `customDataJson`, audit/soft-delete.
@@ -271,8 +271,8 @@ codes already in use (e.g. imported) are skipped.
 | Table | Purpose | Key rules |
 | --- | --- | --- |
 | `DropdownCategory` | A named option list, e.g. `lead_status`. `module` = owning module or `shared` | `key` UNIQUE; `isSystem` for built-ins; `deletedAt` tombstone so startup seeding doesn't recreate a deleted built-in |
-| `DropdownOption` | One option (cascades from category) | UNIQUE `(categoryId, value)`; archived via `isActive`, never deleted, so stored values still render; `isSystem` options (e.g. lead `Converted`) can't be archived or renamed; `isDefault` pre-selects; `metaJson` for extras |
-| `FormFieldDefinition` | One field of one module's form | UNIQUE `(module, fieldKey)`; tab/section placement, order, size, placeholder, hint, default; `isRequired`, `isCoreLocked`, `isSystem`, `isActive`, `isVisibleInForm`, `isVisibleInDrawer`; `dropdownCategoryId`; `validationRulesJson` (`min`, `max`, `minLength`, `maxLength`, `pattern`). Custom fields have keys prefixed `cf_` |
+| `DropdownOption` | One option (cascades from category) | UNIQUE `(categoryId, value)`; deleting removes the row (records keep the raw value, shown tagged "Removed"); `isSystem` options (e.g. lead `Converted`) can't be deleted or renamed; `isDefault` pre-selects; `metaJson` for extras |
+| `FormFieldDefinition` | One field of one module's form | UNIQUE `(module, fieldKey)`; tab/section placement, order, size, placeholder, hint, default; `isRequired`, `isCoreLocked`, `isSystem`, `isActive`, `isVisibleInForm`, `isVisibleInDrawer`, `isVisibleInConvert` (contacts / organizations / opportunities: shown on the Convert Lead form, set apart from the record's own form); `dropdownCategoryId`; `validationRulesJson` (`min`, `max`, `minLength`, `maxLength`, `pattern`). Custom fields have keys prefixed `cf_` |
 
 Index: `(module, isActive, sortOrder)` on fields; `(categoryId, isActive, sortOrder)` on options.
 Per the project's rules, deletes in the form builder are permanent (no reset/restore).

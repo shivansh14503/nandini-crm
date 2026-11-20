@@ -13,7 +13,7 @@ import { ReadOnlyField } from '../ReadOnlyField';
 import { useTabSelect } from '../useTabSelect';
 
 const chipSx = { fontSize: '0.74rem', fontWeight: 600, height: 24, color: 'var(--crm-text-blue-700)', backgroundColor: 'var(--mui-palette-primary-soft)' } as const;
-const archivedChipSx = { ...chipSx, color: 'var(--crm-amber-700)', backgroundColor: 'var(--crm-amber-100)', border: '1px dashed var(--mui-palette-warning-softBorder)' } as const;
+const removedChipSx = { ...chipSx, color: 'var(--crm-amber-700)', backgroundColor: 'var(--crm-amber-100)', border: '1px dashed var(--mui-palette-warning-softBorder)' } as const;
 
 /** Read-only chips of a multi-select value (view mode). */
 export function MultiSelectChips({ values, optionLabels }: { values: readonly string[]; optionLabels?: Record<string, string> }) {
@@ -30,7 +30,7 @@ export interface MultiAutocompleteInputProps {
     value: readonly string[];
     onChange: (value: string[]) => void;
     onBlur?: () => void;
-    /** Options currently offered. Saved values missing from it are shown as archived chips (removable, not offered). */
+    /** Options currently offered. Saved values missing from it are shown as removed chips (removable, not offered). */
     options: readonly string[];
     /** Display labels for values whose label differs from the stored value. */
     optionLabels?: Record<string, string>;
@@ -54,8 +54,8 @@ export function MultiAutocompleteInput({
     inputRef,
 }: MultiAutocompleteInputProps) {
     const display = (v: string) => optionLabels?.[v] ?? v;
-    const isArchived = (v: string) => !options.includes(v);
-    // Archived values must be options too, or MUI can't render them as selected.
+    const isRemoved = (v: string) => !options.includes(v);
+    // Removed values must be options too, or MUI can't render them as selected.
     const allOptions = [...options, ...value.filter((v) => !options.includes(v))];
     // Tab after typing adds the highlighted option and stays here for the next one; Tab on an empty input moves on.
     const tabSelect = useTabSelect({ stayAfterPick: true });
@@ -70,10 +70,10 @@ export function MultiAutocompleteInput({
             onChange={(_, next) => onChange(next)}
             onBlur={onBlur}
             getOptionLabel={display}
-            // Archived values stay selectable for removal (as chips) but are never offered in the list.
+            // Removed values stay selectable for removal (as chips) but are never offered in the list.
             filterOptions={(opts, state) => {
                 const q = state.inputValue.trim().toLowerCase();
-                return opts.filter((o) => !isArchived(o) && (!q || display(o).toLowerCase().includes(q)));
+                return opts.filter((o) => !isRemoved(o) && (!q || display(o).toLowerCase().includes(q)));
             }}
             size="small"
             renderOption={(props, option, { selected: isSelected }) => {
@@ -96,17 +96,17 @@ export function MultiAutocompleteInput({
             renderValue={(values, getItemProps) =>
                 values.map((option, index) => {
                     const { key, ...itemProps } = getItemProps({ index });
-                    const archived = isArchived(option);
+                    const removed = isRemoved(option);
                     const chip = (
                         <Chip
                             key={key}
                             {...itemProps}
                             size="small"
-                            label={archived ? `${display(option)} (archived)` : display(option)}
-                            sx={archived ? archivedChipSx : chipSx}
+                            label={removed ? `${display(option)} (removed)` : display(option)}
+                            sx={removed ? removedChipSx : chipSx}
                         />
                     );
-                    return archived ? (
+                    return removed ? (
                         <Tooltip key={key} title="No longer offered for new records. Remove it with ×." arrow>
                             {chip}
                         </Tooltip>

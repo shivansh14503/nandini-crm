@@ -68,7 +68,7 @@ export interface ImportResult {
 
 const PROGRESS_EVERY_ROWS = 20;
 /** Lead fields the template doesn't offer but the record requires; documented defaults, applied only when blank. */
-const LEAD_IMPORT_DEFAULTS = { leadSource: 'Other', leadType: 'Cold', followUpRemarks: 'Imported via bulk import', followupType: 'Call' } as const;
+const LEAD_IMPORT_DEFAULTS = { leadSource: 'Other', leadType: 'Cold', remarks: 'Imported via bulk import', followupType: 'Call' } as const;
 
 /** Opportunity fields the template doesn't offer (or left blank) but the record requires. */
 const OPPORTUNITY_IMPORT_DEFAULTS = {
@@ -77,7 +77,7 @@ const OPPORTUNITY_IMPORT_DEFAULTS = {
     salesStage: 'Qualification',
     leadSource: 'Other',
     followupType: 'Call',
-    followUpRemarks: 'Imported via bulk import',
+    remarks: 'Imported via bulk import',
     // Same "no commission" option lead conversion uses for new opportunities.
     commission: 'Nil / Direct (0%)',
 } as const;
@@ -209,7 +209,7 @@ const rowBuilders: Record<ImportEntity, (v: Record<string, string>, user: AuthUs
             status,
             primaryCity: v.primaryCity,
             primaryState: v.primaryState,
-            followUpRemarks: v.followUpRemarks && v.followUpRemarks.length >= 3 ? v.followUpRemarks : LEAD_IMPORT_DEFAULTS.followUpRemarks,
+            remarks: v.remarks && v.remarks.length >= 3 ? v.remarks : LEAD_IMPORT_DEFAULTS.remarks,
             followupType: LEAD_IMPORT_DEFAULTS.followupType,
             nextFollowupDate: businessToday(),
             assignedTo: user.username,
@@ -232,7 +232,7 @@ const rowBuilders: Record<ImportEntity, (v: Record<string, string>, user: AuthUs
             leadGivenBy: v.leadGivenBy || user.username,
             nextFollowupDate: businessToday(),
             followupType: OPPORTUNITY_IMPORT_DEFAULTS.followupType,
-            followUpRemarks: v.followUpRemarks && v.followUpRemarks.length >= 3 ? v.followUpRemarks : OPPORTUNITY_IMPORT_DEFAULTS.followUpRemarks,
+            remarks: v.remarks && v.remarks.length >= 3 ? v.remarks : OPPORTUNITY_IMPORT_DEFAULTS.remarks,
             commission: OPPORTUNITY_IMPORT_DEFAULTS.commission,
             assignedTo: user.username,
         };

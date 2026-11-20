@@ -73,6 +73,8 @@ export function useTableScroll(): TableScrollState {
         if (!el) return;
         const onWheel = (e: WheelEvent) => {
             if (e.ctrlKey || e.shiftKey || Math.abs(e.deltaY) <= Math.abs(e.deltaX)) return;
+            // A table that doesn't scroll vertically (page-scrolled lists) leaves the wheel to the browser.
+            if (el.scrollHeight <= el.clientHeight + 1) return;
             const dy = e.deltaY * (e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? el.clientHeight : 1);
             const atTop = el.scrollTop <= 0;
             const atBottom = el.scrollTop + el.clientHeight >= el.scrollHeight - 1;

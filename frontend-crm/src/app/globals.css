@@ -126,3 +126,9 @@ input:autofill {
   caret-color: var(--mui-palette-text-primary, currentColor);
   transition: background-color 9999999s ease-in-out 0s, color 9999999s ease-in-out 0s;
 }
+
+/* The native calendar button of date / date-time fields is clickable: show the hand cursor on it. */
+input[type="date"]::-webkit-calendar-picker-indicator,
+input[type="datetime-local"]::-webkit-calendar-picker-indicator {
+  cursor: pointer;
+}

@@ -18,7 +18,8 @@ import { matchExistingOrganization } from '@/services';
 import { useOrganizations } from '@/hooks/queries';
 import type { ExtendedOrganization } from '@/types/organization.types';
 import { CONVERT_FIELD_NAMES, type ConvertLeadFormValues } from '@/validations';
-import { useDropdownOptionsGetter } from '@/hooks/queries/useFormConfigs';
+import { useDropdownOptionsGetter, useFormConfigs } from '@/hooks/queries/useFormConfigs';
+import { extraValuesFrom } from '@/utils/convertLeadFields';
 
 const NO_ORGANIZATIONS: ExtendedOrganization[] = [];
 
@@ -42,6 +43,7 @@ const ORGANIZATION_FIELDS = [
  */
 export function ConvertOrganizationSection() {
     const getOptions = useDropdownOptionsGetter();
+    const configs = useFormConfigs();
     const { control, setValue, getValues, formState } = useFormContext<F>();
     const organizationName = useWatch({ control, name: 'organizationName' });
 
@@ -69,6 +71,7 @@ export function ConvertOrganizationSection() {
                 wasLinked.current = false;
                 const defaults = (defaultValues ?? {}) as Partial<F>;
                 for (const field of ORGANIZATION_FIELDS) setValue(field, defaults[field] as never, { shouldDirty: true });
+                setValue('extraFields.organizations', defaults.extraFields?.organizations ?? {}, { shouldDirty: true });
             }
             return;
         }
@@ -82,7 +85,9 @@ export function ConvertOrganizationSection() {
         setValue('memberOf', existing.memberOf ?? '', opts);
         setValue('organizationDescription', existing.addDescriptionAndScope ?? '', opts);
         if (existing.assignedTo) setValue('organizationAssignedTo', existing.assignedTo, opts);
-    }, [existing, defaultValues, setValue, getValues]);
+        // The other fields an admin put on Convert Lead show the organization's own values.
+        setValue('extraFields.organizations', extraValuesFrom(configs, 'organizations', existing as unknown as Record<string, unknown>), opts);
+    }, [existing, defaultValues, setValue, getValues, configs]);
 
     return (
         <>

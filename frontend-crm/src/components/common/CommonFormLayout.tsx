@@ -185,6 +185,8 @@ export function CommonFormLayout({
         },
     });
     const handleCancel = () => (mode === 'view' ? onCancel() : confirmDiscard(onCancel));
+    // An edit with nothing changed has nothing to update: the save action stays disabled until the form is dirty.
+    const nothingToUpdate = mode === 'edit' && !formDirty;
 
     // ── Admin-created (custom) tabs ──
     // Inside a FormConfigProvider, custom tabs of the module that hold visible fields are added after the form's
@@ -259,7 +261,7 @@ export function CommonFormLayout({
     }
 
     return (
-        <Box sx={{ width: '100%', pb: 10, ...sx }}>
+        <Box sx={{ width: '100%', pb: 1.5, ...sx }}>
             {/* ── Line 1: Route-Aware Breadcrumbs ── */}
             <FormHeader
                 breadcrumbs={breadcrumbs}
@@ -423,8 +425,8 @@ export function CommonFormLayout({
                     saveLabel={saveLabel}
                     cancelLabel={cancelLabel}
                     mode={mode}
-                    saveDisabled={saveDisabled}
-                    saveDisabledTooltip={saveDisabledTooltip}
+                    saveDisabled={saveDisabled || nothingToUpdate}
+                    saveDisabledTooltip={saveDisabled ? saveDisabledTooltip : nothingToUpdate ? 'No changes to update' : undefined}
                 />
             )}
 

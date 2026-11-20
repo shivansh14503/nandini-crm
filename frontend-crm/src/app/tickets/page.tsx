@@ -27,7 +27,7 @@ export default function TicketsPage() {
     if (!user) return null;
 
     return (
-        <Box sx={{ height: '100dvh', overflow: 'hidden', backgroundColor: 'var(--mui-palette-background-subtle)', display: 'flex', flexDirection: 'column' }}>
+        <Box sx={{ minHeight: '100dvh', backgroundColor: 'var(--mui-palette-background-subtle)', display: 'flex', flexDirection: 'column' }}>
             <Navbar />
             <ErrorAlert error={error} onClose={clearError} />
             <TicketsMasterView key={viewKey} />

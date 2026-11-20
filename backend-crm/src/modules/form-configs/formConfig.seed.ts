@@ -2,13 +2,13 @@ import { prisma } from '../../config/prisma.js';
 import type { TransactionClient } from '../../config/prisma.js';
 import { logger } from '../../config/logger.js';
 import { CACHE_KEYS, cacheService } from '../../services/cache.service.js';
-import { DEFAULT_CATEGORIES, DEFAULT_FIELDS, DEFAULT_SELECTED_OPTIONS, isFieldTombstoned, sectionKeyFromLabel, type DefaultOption } from './formConfig.defaults.js';
+import { CONVERT_FIELD_NAMES, DEFAULT_CATEGORIES, DEFAULT_FIELDS, DEFAULT_SELECTED_OPTIONS, isConvertModule, isFieldTombstoned, sectionKeyFromLabel, type DefaultOption } from './formConfig.defaults.js';
 
 const toOption = (option: string | DefaultOption): DefaultOption => (typeof option === 'string' ? { value: option } : option);
 
 /**
  * Inserts any default dropdown category / option / built-in field that is missing, without touching what an
- * admin has customized (labels, order, archived options, visibility, …). Safe to run on every start-up.
+ * admin has customized (labels, order, options, visibility, …). Safe to run on every start-up.
  *
  * Integrity rules are re-asserted on existing rows, because the API depends on them:
  *  • default system options stay system + active (e.g. lead 'Converted');
@@ -100,6 +100,8 @@ export async function ensureFormConfigsSeeded(): Promise<void> {
                 isSystem: true,
                 isActive: true,
                 isVisibleInDrawer: true,
+                // The fields Convert Lead has its own inputs for start on it.
+                isVisibleInConvert: isConvertModule(f.module) && f.fieldKey in CONVERT_FIELD_NAMES[f.module],
                 dropdownCategoryId: liveCategoryId(f.dropdownCategoryKey),
                 // A new built-in field whose default dropdown an admin deleted starts hidden (no options to offer).
                 isVisibleInForm: !f.dropdownCategoryKey || Boolean(liveCategoryId(f.dropdownCategoryKey)),
@@ -134,7 +136,7 @@ export async function ensureFormConfigsSeeded(): Promise<void> {
     for (const def of DEFAULT_FIELDS) {
         const row = fieldsByKey.get(`${def.module}:${def.fieldKey}`);
         if (!row) continue;
-        // Non-locked built-in fields may be archived or deleted (tombstoned) by an admin: leave those as they are.
+        // Non-locked built-in fields may be deleted (tombstoned) by an admin: leave those as they are.
         // Only core-locked fields are forced back to active / visible / required.
         if (!def.isCoreLocked && isFieldTombstoned(row.validationRulesJson)) continue;
         const needsLockFix =

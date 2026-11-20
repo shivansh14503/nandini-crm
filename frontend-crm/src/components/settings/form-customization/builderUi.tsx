@@ -214,13 +214,12 @@ function PillTabDeleteButton({ label, active, disabledReason, onDelete }: { labe
     );
 }
 
-export type BadgeTone = 'system' | 'custom' | 'active' | 'archived' | 'locked' | 'shared' | 'neutral' | 'unsaved';
+export type BadgeTone = 'system' | 'custom' | 'active' | 'locked' | 'shared' | 'neutral' | 'unsaved';
 
 const BADGE_TONES: Record<BadgeTone, { bg: string; color: string; border: string }> = {
     system: { bg: 'var(--mui-palette-background-hover)', color: 'var(--crm-slate-600)', border: 'var(--mui-palette-border-main)' },
     custom: { bg: 'var(--mui-palette-primary-soft)', color: 'var(--crm-text-blue-700)', border: 'var(--mui-palette-primary-softBorder)' },
     active: { bg: 'var(--crm-green-100)', color: 'var(--crm-green-800)', border: 'var(--crm-green-300)' },
-    archived: { bg: 'var(--mui-palette-background-subtle)', color: 'var(--mui-palette-text-muted)', border: 'var(--mui-palette-border-main)' },
     locked: { bg: 'var(--crm-amber-100)', color: 'var(--crm-amber-700)', border: 'var(--mui-palette-warning-softBorder)' },
     shared: { bg: 'var(--crm-violet-50)', color: 'var(--crm-violet-700)', border: 'var(--crm-violet-200)' },
     neutral: { bg: 'var(--mui-palette-background-paper)', color: 'var(--crm-slate-600)', border: 'var(--mui-palette-border-strong)' },

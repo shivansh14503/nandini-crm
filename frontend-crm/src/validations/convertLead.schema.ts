@@ -53,11 +53,19 @@ export const convertLeadFormSchema = z.object({
     nextFollowupDate: opportunity.nextFollowupDate,
     nextFollowupTime: opportunity.nextFollowupTime,
     followupType: opportunity.followupType,
-    opportunityDescription: opportunity.followUpRemarks,
+    opportunityDescription: opportunity.remarks,
     opportunityLeadSource: opportunity.leadSource,
     opportunityAssignedTo: opportunity.assignedTo,
     // Conversion only.
     copyActivitiesTo: z.array(z.string()),
+
+    // Other fields an admin put on Convert Lead (Form Builder › Convert Lead), per record by `fieldKey`. Their
+    // "required" rule is checked from the configuration (convertRequiredIssues); the API checks the rest.
+    extraFields: z.object({
+        contacts: z.record(z.string(), z.unknown()),
+        organizations: z.record(z.string(), z.unknown()),
+        opportunities: z.record(z.string(), z.unknown()),
+    }),
 });
 
 export type ConvertLeadFormValues = z.infer<typeof convertLeadFormSchema>;
@@ -104,23 +112,14 @@ export const CONVERT_FIELD_NAMES = {
         leadSource: 'opportunityLeadSource',
         nextFollowupDate: 'nextFollowupDate',
         followupType: 'followupType',
-        followUpRemarks: 'opportunityDescription',
+        remarks: 'opportunityDescription',
         assignedTo: 'opportunityAssignedTo',
     },
 } as const satisfies Record<ConvertModule, Record<string, keyof ConvertLeadFormValues>>;
 
 /**
- * Built-in fields whose "required" setting isn't checked here: names the conversion fills in itself (organization
- * name / mailing name) and checkboxes (an unticked box isn't an empty answer). Everything else is required exactly
- * as on its own form.
+ * Built-in fields whose "required" setting isn't checked on Convert Lead: names the conversion fills in itself
+ * (organization name / mailing name) and checkboxes (an unticked box isn't an empty answer). Everything else is
+ * required exactly as on its own form (see convertRequiredIssues in utils/convertLeadFields.ts).
  */
-const NOT_CHECKED_FOR_REQUIRED = new Set(['organizationName', 'mailingName', 'isPrimaryContact', 'doNotCall']);
-
-/** Built-in fields whose admin "required" rule the Convert Lead form enforces: module, fieldKey and form field name. */
-export const CONVERT_CONFIGURED_FIELDS: readonly { module: ConvertModule; fieldKey: string; name: keyof ConvertLeadFormValues }[] = (
-    Object.entries(CONVERT_FIELD_NAMES) as [ConvertModule, Record<string, keyof ConvertLeadFormValues>][]
-).flatMap(([module, names]) =>
-    Object.entries(names)
-        .filter(([fieldKey]) => !NOT_CHECKED_FOR_REQUIRED.has(fieldKey))
-        .map(([fieldKey, name]) => ({ module, fieldKey, name })),
-);
+export const NOT_CHECKED_FOR_REQUIRED: ReadonlySet<string> = new Set(['organizationName', 'mailingName', 'isPrimaryContact', 'doNotCall']);

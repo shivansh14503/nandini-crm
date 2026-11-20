@@ -56,7 +56,12 @@ export function FollowUpHistoryPanel({ entityType, recordId, recordLabel }: Foll
                     flexShrink: 0,
                     px: 2.25,
                     py: 1.75,
-                    borderBottom: '1px solid var(--mui-palette-border-light)',
+                    // Same height as that tab bar, so the two bottom borders line up.
+                    minHeight: 54,
+                    boxSizing: 'border-box',
+                    // Same band as the form's tab bar beside it (CommonFormLayout).
+                    backgroundColor: 'var(--mui-palette-background-subtle)',
+                    borderBottom: '1px solid var(--mui-palette-border-main)',
                 }}
             >
                 <Typography component="h2" sx={{ fontSize: '0.95rem', fontWeight: 700, color: 'var(--crm-slate-900)' }}>
@@ -99,17 +104,12 @@ export function FollowUpHistoryPanel({ entityType, recordId, recordLabel }: Foll
 }
 
 function TimelineItem({ event, recordLabel, latest, last }: { event: FollowUpEvent; recordLabel: string; latest: boolean; last: boolean }) {
-    const title =
+    const fallbackTitle =
         event.kind === 'created' ? `${recordLabel} created` : event.kind === 'converted' ? `${recordLabel} converted` : 'Follow-up recorded';
-
-    let slot: React.ReactNode = null;
-    if (event.kind === 'created') {
-        slot = event.next ? <>First follow-up scheduled for <Strong>{event.next}</Strong>.</> : 'No follow-up scheduled.';
-    } else if (event.kind === 'followUp') {
-        if (event.retained) slot = <>Next: <Strong>{event.next}</Strong> (kept)</>;
-        else if (event.previous) slot = <>Previous: {event.previous} → Next: <Strong>{event.next || 'none'}</Strong></>;
-        else slot = <>Next: <Strong>{event.next || 'none'}</Strong></>;
-    }
+    // The customer response is the title; creation is still marked on the timestamp line.
+    const title = event.kind === 'converted' ? fallbackTitle : event.response || fallbackTitle;
+    const markCreated = event.kind === 'created' && Boolean(event.response);
+    const showSlot = event.kind !== 'converted';
 
     return (
         <Box component="li" sx={{ position: 'relative', pl: 2.5, pb: last ? 0 : 2.25 }}>
@@ -133,23 +133,35 @@ function TimelineItem({ event, recordLabel, latest, last }: { event: FollowUpEve
 
             <Typography sx={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--crm-slate-900)', lineHeight: 1.4 }}>{title}</Typography>
 
-            {event.response && (
-                <Box
-                    component="span"
-                    sx={{
-                        display: 'inline-block',
-                        mt: 0.6,
-                        px: 0.9,
-                        py: 0.15,
-                        borderRadius: '6px',
-                        fontSize: '0.68rem',
-                        fontWeight: 700,
-                        color: 'var(--crm-text-blue-700)',
-                        backgroundColor: 'var(--mui-palette-primary-soft)',
-                        border: '1px solid var(--mui-palette-primary-softBorder)',
-                    }}
-                >
-                    {event.response}
+            {showSlot && (
+                <Box sx={{ mt: 0.6, display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 0.75 }}>
+                    {event.next ? (
+                        <Box
+                            component="span"
+                            sx={{
+                                display: 'inline-block',
+                                px: 1,
+                                py: 0.2,
+                                borderRadius: '999px',
+                                fontSize: '0.7rem',
+                                fontWeight: 600,
+                                color: 'var(--crm-text-blue-700)',
+                                backgroundColor: 'var(--mui-palette-primary-soft)',
+                                border: '1px solid var(--mui-palette-primary-softBorder)',
+                            }}
+                        >
+                            {event.next}
+                        </Box>
+                    ) : (
+                        <Typography component="span" sx={{ fontSize: '0.74rem', color: 'var(--mui-palette-text-muted)' }}>
+                            No follow-up scheduled
+                        </Typography>
+                    )}
+                    {event.retained && (
+                        <Typography component="span" sx={{ fontSize: '0.72rem', color: 'var(--mui-palette-text-secondary)' }}>
+                            (kept)
+                        </Typography>
+                    )}
                 </Box>
             )}
 
@@ -159,21 +171,10 @@ function TimelineItem({ event, recordLabel, latest, last }: { event: FollowUpEve
                 </Typography>
             )}
 
-            {slot && (
-                <Typography sx={{ mt: 0.6, fontSize: '0.74rem', color: 'var(--mui-palette-text-secondary)', lineHeight: 1.5 }}>{slot}</Typography>
-            )}
-
             <Typography sx={{ mt: 0.75, fontSize: '0.68rem', color: 'var(--mui-palette-text-muted)' }}>
+                {markCreated && `${recordLabel} created · `}
                 {formatEventTime(event.at)} · {event.author}
             </Typography>
-        </Box>
-    );
-}
-
-function Strong({ children }: { children: React.ReactNode }) {
-    return (
-        <Box component="span" sx={{ fontWeight: 600, color: 'var(--crm-slate-900)' }}>
-            {children}
         </Box>
     );
 }

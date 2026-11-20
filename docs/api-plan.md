@@ -81,7 +81,7 @@ The auth endpoints use the older `{ status: 'ok', … }` envelope rather than `{
 
 | Base | Type | Extra endpoints | List filters |
 | --- | --- | --- | --- |
-| `/leads` | CRUD | `GET /check-duplicates?mobile&emails&excludeId&excludeType` — informational matches in leads/contacts/organizations · `POST /:id/convert` — atomic conversion → `{ organization, contact, opportunity, organizationCreated, contactCreated }`; fields the admin made required on the Contact / Organization / Opportunity forms are required here too (`400` with the form field name in `errors[].path`), except for a contact or organization that already exists and is linked as it is | `status`, `excludeStatus`, `leadType`, `leadSource`, `organizationName`, `assignedTo`, `nextFollowupDate` |
+| `/leads` | CRUD | `GET /check-duplicates?mobile&emails&excludeId&excludeType` — informational matches in leads/contacts/organizations · `POST /:id/convert` — atomic conversion → `{ organization, contact, opportunity, organizationCreated, contactCreated }`; body also takes `extraFields: { contacts, organizations, opportunities }` (fieldKey → value) for the other fields an admin shows on Convert Lead (`isVisibleInConvert`; custom fields included, saved on the new records). Every field shown there is checked by its record's form rules (`400` with the convert form's field name, or `extraFields.<module>.<fieldKey>`, in `errors[].path`), except for a contact or organization that already exists and is linked as it is | `status`, `excludeStatus`, `leadType`, `leadSource`, `organizationName`, `assignedTo`, `nextFollowupDate` |
 | `/opportunities` | CRUD | – (line-item totals computed server-side; line items replaced only when sent) | `salesStage`, `excludeSalesStage`, `organizationId`, `contactId`, `productId`, `assignedTo`, `minGrandTotal`, `nextFollowupDate` |
 | `/quotations` | CRUD | `GET /:id/pdf?templateId&disposition=inline\|attachment` → `application/pdf` (30/min/user, Redis-cached). Creating a quotation advances the linked opportunity's stage | `status`, `quoteStage`, `opportunityId`, `organizationId`, `contactId`, `productId`, `assignedTo` |
 | `/organizations` | CRUD | `GET /check-unique?organizationName&gstNumber&excludeId` → `{ exists, field?, accountCode?, message? }` · `PATCH /bulk-status` `{ ids, status: 'Active'\|'Inactive', inactivityReason? }`. `GET /:id` records a "recently viewed" entry | `accountStatus`, `customerType`, `natureOfBusiness`, `assignedTo`, `parentOrganizationId`, `recent` |
@@ -148,12 +148,12 @@ The auth endpoints use the older `{ status: 'ok', … }` envelope rather than `{
 | POST | `/categories` | `{ label, module, description?, options? }`; key derived from label |
 | PATCH | `/categories/:categoryKey` | `{ label?, description?, module? }` |
 | DELETE | `/categories/:categoryKey` | Hard delete (admin-created only; removes options + linked custom fields) |
-| POST | `/categories/:categoryKey/options` | `{ value, meta? }`; re-adding an archived value restores it |
+| POST | `/categories/:categoryKey/options` | `{ value, meta? }`; an existing value is a 409 |
 | PUT | `/categories/:categoryKey/options/reorder` | `{ optionIds }` |
-| PATCH | `/options/:optionId` | `{ label?, meta?, isActive?, isDefault? }`; a rename rewrites stored values in records and filters |
+| PATCH | `/options/:optionId` | `{ label?, meta?, isDefault? }`; a rename rewrites stored values in records and filters |
 | DELETE | `/options/:optionId` | Permanent; blocked for system options |
 | POST | `/fields` | Add a custom field (key = label in snake_case) |
-| PATCH | `/fields/:fieldId` | Update; core-locked fields can't be hidden or made optional |
+| PATCH | `/fields/:fieldId` | Update; core-locked fields can't be hidden or made optional. `isVisibleInConvert` (contacts / organizations / opportunities): refused for fields Convert Lead can't draw (pickers, the ones the conversion fills) and, off, for core fields it has inputs for |
 | DELETE | `/fields/:fieldId` | Permanent; custom fields only |
 | PUT | `/modules/:module/fields/reorder` | `{ fieldIds }` |
 | PATCH | `/modules/:module/sections/:sectionKey` | `{ sectionLabel }` |

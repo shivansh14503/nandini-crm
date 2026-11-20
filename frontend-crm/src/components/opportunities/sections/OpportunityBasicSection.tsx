@@ -3,14 +3,12 @@
 import React, { useState } from 'react';
 import {
     Box,
-    InputAdornment,
     Divider,
     FormHelperText,
 } from '@mui/material';
 // Raw text inputs show the admin-configured placeholder of the FormField they sit in.
 import { ConfiguredTextField as TextField } from '@/components/forms/ConfiguredTextField';
 import ArticleOutlinedIcon from '@mui/icons-material/ArticleOutlined';
-import CalendarTodayOutlinedIcon from '@mui/icons-material/CalendarTodayOutlined';
 import ReceiptLongOutlinedIcon from '@mui/icons-material/ReceiptLongOutlined';
 import MonetizationOnOutlinedIcon from '@mui/icons-material/MonetizationOnOutlined';
 
@@ -29,7 +27,7 @@ import {
     RhfEmailField,
 } from '@/components/forms';
 import { UserLookupModal } from '@/components/common/lookup';
-import { TimePicker } from '@/components/forms/TimePicker';
+import { DATE_TIME_COLUMNS, TimePicker } from '@/components/forms/TimePicker';
 import { upperCase, useUndoSafeSanitizer } from '@/components/forms/undoSafeInput';
 import { formatPersonName } from '@/utils/personName';
 import { MultiAutocompleteInput, MultiSelectChips } from '@/components/forms/rhf/RhfMultiAutocomplete';
@@ -59,16 +57,6 @@ export interface OpportunityBasicSectionProps {
     /** Told while the user still owes the next follow-up decision; the form refuses to save until it's made. */
     onDecisionPendingChange?: (pending: boolean) => void;
 }
-
-const calendarAdornment = {
-    input: {
-        startAdornment: (
-            <InputAdornment position="start">
-                <CalendarTodayOutlinedIcon sx={{ fontSize: 16, color: 'var(--mui-palette-text-secondary)' }} />
-            </InputAdornment>
-        ),
-    },
-};
 
 export function OpportunityBasicSection({ form, setField, notify, onDecisionPendingChange }: OpportunityBasicSectionProps) {
     const getOptions = useDropdownOptionsGetter();
@@ -243,14 +231,14 @@ export function OpportunityBasicSection({ form, setField, notify, onDecisionPend
 
                 <FieldGlow active={followUpGlow}>
                 <FormField name="nextFollowupDate" label="Next Followup Date" required size="md" hint="Next touchpoint">
-                    <Box sx={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: 1.5 }}>
+                    <Box sx={{ display: 'grid', gridTemplateColumns: DATE_TIME_COLUMNS, gap: 1 }}>
                         <TextField
                             fullWidth
                             size="small"
                             type="date"
                             value={form.nextFollowupDate}
                             onChange={(e) => setField('nextFollowupDate', e.target.value)}
-                            slotProps={{ ...calendarAdornment, htmlInput: { min: localToday() } }}
+                            slotProps={{ htmlInput: { min: localToday() } }}
                             sx={fieldSx}
                         />
                         <TimePicker
@@ -312,7 +300,7 @@ export function OpportunityBasicSection({ form, setField, notify, onDecisionPend
             {/* ── Notes: full width ── */}
             <FormGrid columns={1} sx={{ mt: 2.5 }}>
                 <FormGridItem>
-                    <FormField name="followUpRemarks" label="Follow Up Remarks" required size="full" hint="Stage summary & action items">
+                    <FormField name="remarks" label="Remarks" required size="full" hint="Stage summary & action items">
                         <TextField
                             fullWidth
                             size="small"
@@ -320,8 +308,8 @@ export function OpportunityBasicSection({ form, setField, notify, onDecisionPend
                             minRows={4}
                             maxRows={8}
                             placeholder="Provide current milestone details or immediate actions..."
-                            value={form.followUpRemarks}
-                            onChange={(e) => setField('followUpRemarks', e.target.value)}
+                            value={form.remarks}
+                            onChange={(e) => setField('remarks', e.target.value)}
                             sx={fieldSx}
                             slotProps={{ htmlInput: { maxLength: FIELD_MAX_LENGTH.longText } }}
                         />
@@ -370,7 +358,7 @@ export function OpportunityBasicSection({ form, setField, notify, onDecisionPend
                         type="date"
                         value={form.invoiceDate || ''}
                         onChange={(e) => setField('invoiceDate', e.target.value)}
-                        slotProps={{ ...calendarAdornment, htmlInput: { min: localToday() } }}
+                        slotProps={{ htmlInput: { min: localToday() } }}
                         sx={fieldSx}
                     />
                 </FormField>

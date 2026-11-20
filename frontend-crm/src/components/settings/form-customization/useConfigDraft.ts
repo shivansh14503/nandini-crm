@@ -256,17 +256,16 @@ export function useConfigDraft(base: FormConfigsPayload | undefined, refetch: ()
      * Folds edits of an option created in this draft into the op creating it: its addOption op, or the option list
      * of a dropdown new in this draft (createCategory / a field's inline `newOptions`). An option's name is its
      * value, so a rename renames both, and staged field defaults using the old value follow it. Returns what can't be
-     * folded (archiving / restoring, or meta for an inline option), or null when nothing is left.
+     * folded (the default flag, or meta for an inline option), or null when nothing is left.
      */
     const foldIntoDraftOption = (category: DropdownCategoryDto, option: DropdownOptionDto, payload: UpdateOptionPayload): UpdateOptionPayload | null => {
         const s = current();
-        // Status and default can't be sent when creating an option: they stay an update, saved right after it.
-        const { isActive, isDefault, ...edit } = payload;
+        // The default flag can't be sent when creating an option: it stays an update, saved right after it.
+        const { isDefault, ...edit } = payload;
         const value = edit.label ?? option.value;
         const renamed = value !== option.value;
         const viaAddOption = opsRef.current.some((op) => op.kind === 'addOption' && op.id === option.id);
         const leftover: UpdateOptionPayload = {
-            ...(isActive !== undefined ? { isActive } : {}),
             ...(isDefault !== undefined ? { isDefault } : {}),
             ...(!viaAddOption && edit.meta !== undefined ? { meta: edit.meta } : {}),
         };
@@ -360,12 +359,7 @@ export function useConfigDraft(base: FormConfigsPayload | undefined, refetch: ()
                 const s = current();
                 const category = findCategoryByKey(s, categoryKey) ?? fail('Dropdown not found.');
                 const existing = category.options.find((o) => o.value.toLowerCase() === payload.value.toLowerCase());
-                if (existing?.isActive) fail(`'${payload.value}' is already in ${category.label}.`);
-                if (existing) {
-                    // Re-adding an archived value restores it (as the API does).
-                    actions.updateOption(existing.id, { isActive: true });
-                    return;
-                }
+                if (existing) fail(`'${payload.value}' is already in ${category.label}.`);
                 push({ kind: 'addOption', id: newTempId('opt'), categoryKey, payload, summary: `${category.label}: added '${payload.value}'` });
             },
 
@@ -373,7 +367,6 @@ export function useConfigDraft(base: FormConfigsPayload | undefined, refetch: ()
                 const s = current();
                 const { category, option } = findOptionById(s, optionId) ?? fail('Option not found.');
                 let payload: UpdateOptionPayload = input.label !== undefined ? { ...input, label: input.label.trim() } : input;
-                if (option.isSystem && payload.isActive === false) fail(`'${option.label}' drives CRM logic and cannot be archived.`);
                 if (option.isSystem && payload.label !== undefined && payload.label !== option.label) fail(`'${option.label}' drives CRM logic and cannot be renamed.`);
                 if (payload.label !== undefined) {
                     // An option's name is also its stored value: unique per dropdown, ignoring case (as the API checks).
@@ -381,11 +374,6 @@ export function useConfigDraft(base: FormConfigsPayload | undefined, refetch: ()
                     if (!name) fail('Option name is required.');
                     const duplicate = category.options.find((o) => o.id !== optionId && o.value.toLowerCase() === name.toLowerCase());
                     if (duplicate) fail(`'${name}' is already in ${category.label}.`);
-                }
-                const created = opsRef.current.find((op) => op.kind === 'addOption' && op.id === optionId);
-                if (created && payload.isActive === false) {
-                    dropTemp(optionId);
-                    return;
                 }
                 // An option new in this draft: its edits go into the op creating it, so it is saved once, already renamed.
                 if (isTempId(optionId)) {
@@ -400,15 +388,11 @@ export function useConfigDraft(base: FormConfigsPayload | undefined, refetch: ()
                 }
                 const renamedTo = payload.label;
                 const what =
-                    payload.isActive === false
-                        ? `archived '${option.label}'`
-                        : payload.isActive
-                          ? `restored '${option.label}'`
-                          : renamedTo !== undefined && renamedTo !== option.label
-                            ? `renamed '${option.label}' to '${renamedTo}'`
-                            : payload.isDefault !== undefined
-                              ? `${payload.isDefault ? 'set' : 'removed'} '${option.label}' as default`
-                              : `updated '${option.label}'`;
+                    renamedTo !== undefined && renamedTo !== option.label
+                        ? `renamed '${option.label}' to '${renamedTo}'`
+                        : payload.isDefault !== undefined
+                          ? `${payload.isDefault ? 'set' : 'removed'} '${option.label}' as default`
+                          : `updated '${option.label}'`;
                 push({ kind: 'updateOption', optionId, payload, summary: `${category.label}: ${what}` });
             },
 
@@ -449,7 +433,6 @@ export function useConfigDraft(base: FormConfigsPayload | undefined, refetch: ()
                 let payload = tabLabel ? { ...input, tabLabel } : input;
                 if (field.isCoreLocked && payload.isRequired === false) fail(`${field.label} is a core field and must stay required.`);
                 if (field.isCoreLocked && payload.isVisibleInForm === false) fail(`${field.label} is a core field and cannot be hidden.`);
-                if (field.isCoreLocked && payload.isActive === false) fail(`${field.label} is a core field and cannot be archived.`);
                 // A renamed builder-added field takes a key from its new label: refused when another field has it.
                 if (!field.isSystem && payload.label !== undefined && payload.label !== field.label) {
                     fieldKeyFor(s, field.module, payload.label, field.id);
@@ -461,15 +444,9 @@ export function useConfigDraft(base: FormConfigsPayload | undefined, refetch: ()
                 if (field.isSystem && payload.dropdownCategoryKey !== undefined && payload.dropdownCategoryKey !== field.dropdownCategoryKey) {
                     fail(`${field.label} is a built-in field; its dropdown list can't be changed. Edit the list's options instead.`);
                 }
-                if (isTempId(fieldId) && payload.isActive === false) {
-                    dropTempField(fieldId);
-                    return;
-                }
-                // A field new in this draft: its edits go into the op creating it (isActive: true is a no-op there).
+                // A field new in this draft: its edits go into the op creating it.
                 if (isTempId(fieldId)) {
-                    const rest = { ...payload };
-                    delete rest.isActive;
-                    const leftover = foldIntoDraftField(fieldId, rest);
+                    const leftover = foldIntoDraftField(fieldId, payload);
                     if (!leftover) return;
                     payload = leftover;
                 }
@@ -478,8 +455,7 @@ export function useConfigDraft(base: FormConfigsPayload | undefined, refetch: ()
                     commit([...opsRef.current.slice(0, -1), { ...last, payload: { ...last.payload, ...payload } }]);
                     return;
                 }
-                const what = payload.isActive === false ? 'archived' : payload.isActive ? 'restored' : 'updated';
-                push({ kind: 'updateField', fieldId, payload, summary: `${moduleLabel(field.module)}: ${what} '${field.label}'` });
+                push({ kind: 'updateField', fieldId, payload, summary: `${moduleLabel(field.module)}: updated '${field.label}'` });
             },
 
             reorderFields(module, fieldIds) {

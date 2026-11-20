@@ -302,7 +302,7 @@ export function FieldEditorModal({ open, onClose, module, configs, field, defaul
                 )}
                 {locked && (
                     <Alert severity="info" sx={{ mb: 2, borderRadius: '8px', fontSize: '0.8rem' }}>
-                        This field is locked: it always stays required and visible, and cannot be archived or deleted.
+                        This field is locked: it always stays required and visible, and cannot be deleted.
                     </Alert>
                 )}
 

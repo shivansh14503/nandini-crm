@@ -33,7 +33,7 @@ export const leadFormSchema = z.object({
     productCategory: z.array(z.string()).default([]),
     followupType: optionalString.default('Call'),
     customerResponse: optionalString,
-    followUpRemarks: optionalDescription('Follow Up Remarks', L.longText),
+    remarks: optionalDescription('Remarks', L.longText),
     registrationType: optionalString,
     gstNumber: zodGstOptional,
     turnover: optionalString,

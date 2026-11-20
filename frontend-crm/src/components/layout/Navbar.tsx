@@ -762,6 +762,8 @@ export function Navbar() {
             // Floating glass bar: sticky with an inset, so page content scrolls beneath the frosted surface.
             position="sticky"
             elevation={0}
+            // Page-scrolled tables dock their header against this bar's bottom edge (usePageScrollHeader).
+            data-crm-navbar=""
             sx={{
                 ...glassSurfaceSx,
                 top: FLOAT_INSET,

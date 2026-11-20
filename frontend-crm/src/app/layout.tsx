@@ -6,6 +6,7 @@ import { QueryProvider } from "@/context/QueryProvider";
 import { AuthProvider } from "@/context/AuthContext";
 import { CrmDataBootstrap } from "@/components/common/CrmDataBootstrap";
 import { EnterTogglesCheckboxes } from "@/components/common/EnterTogglesCheckboxes";
+import { DateInputGuard } from "@/components/common/DateInputGuard";
 import { APP_CONFIG } from "@/config/constants";
 import InitColorSchemeScript from "@mui/material/InitColorSchemeScript";
 import { COLOR_SCHEME_DEFAULT_MODE, COLOR_SCHEME_STORAGE_KEY } from "@/theme/colorScheme";
@@ -44,6 +45,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             <AuthProvider>
               <CrmDataBootstrap />
               <EnterTogglesCheckboxes />
+              <DateInputGuard />
               {children}
             </AuthProvider>
           </QueryProvider>

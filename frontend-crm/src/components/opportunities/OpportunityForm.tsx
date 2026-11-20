@@ -69,7 +69,7 @@ const DEFAULT_OPPORTUNITY_FORM: OpportunityFormData = {
     nextFollowupTime: '',
     followupType: 'Call',
     customerResponse: '',
-    followUpRemarks: '',
+    remarks: '',
     description: '',
     assignedTo: '',
 
@@ -168,7 +168,7 @@ export default function OpportunityForm({
             .then((found) => {
                 if (active && found) {
                     // Every edit records a fresh customer response, so the edit form starts without one.
-                    reset(mode === 'edit' ? { ...found, customerResponse: '' } : found);
+                    reset(mode === 'edit' ? { ...found, customerResponse: '', remarks: '' } : found);
                     setRecordCode(found.opportunityCode ?? '');
                     setAudit({ createdAt: found.createdAt, createdBy: found.createdBy, updatedAt: found.updatedAt, updatedBy: found.updatedBy });
                 }

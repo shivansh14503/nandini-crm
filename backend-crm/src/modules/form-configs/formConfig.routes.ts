@@ -20,10 +20,10 @@ export const FORM_CONFIG_ADMIN_ROLES = ['Admin', 'Administrator', 'Super Admin']
  *   POST   /categories                                { label, module, description?, options? }  (key derived from the label)
  *   PATCH  /categories/:categoryKey                   { label?, description?, module? }  (an admin-created dropdown's key follows its label)
  *   DELETE /categories/:categoryKey                   hard delete (admin-created only; removes its options + linked custom fields)
- *   POST   /categories/:categoryKey/options           { value, meta? }   (the option's name is its value; re-adding an archived one restores it)
+ *   POST   /categories/:categoryKey/options           { value, meta? }   (the option's name is its value)
  *   PUT    /categories/:categoryKey/options/reorder   { optionIds }
- *   PATCH  /options/:optionId                         { label?, meta?, isActive?, isDefault? }  (a rename renames the stored value; records and filters follow; system options: no rename / archive)
- *   DELETE /options/:optionId                         permanent delete; blocked for system options (archive = PATCH isActive:false)
+ *   PATCH  /options/:optionId                         { label?, meta?, isDefault? }  (a rename renames the stored value; records and filters follow; system options: no rename)
+ *   DELETE /options/:optionId                         permanent delete; blocked for system options
  *   POST   /fields                                    field added in the builder (key = its label in snake_case, e.g. po_number)
  *   PATCH  /fields/:fieldId                           (core-locked: can't hide / un-require; a custom field's key follows its label)
  *   DELETE /fields/:fieldId                           permanent delete of a custom field; blocked for built-in fields

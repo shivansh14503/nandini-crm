@@ -47,7 +47,6 @@ import {
     Badge,
     ConfirmDeleteDialog,
     EmptyState,
-    LabeledSwitch,
     DragHandle,
     dangerColor,
     errorMessage,
@@ -79,7 +78,7 @@ const ADDRESS_MODULES: readonly CrmModuleKey[] = ['leads', 'quotations', 'organi
  * Convert Lead form collects (what Convert Lead shows for that record).
  */
 export function categoriesForModule(configs: FormConfigsPayload, module: CrmModuleKey, convert = false): DropdownCategoryDto[] {
-    const convertKeys = convert && isConvertModule(module) ? convertFieldKeys(module) : null;
+    const convertKeys = convert && isConvertModule(module) ? convertFieldKeys(module, configs) : null;
     return configs.categories
         .filter((c) =>
             convertKeys
@@ -334,7 +333,7 @@ function DeleteCategoryDialog({
         .filter((f) => f.dropdownCategoryKey === category.key);
     const builtIn = linked.filter((f) => f.isSystem);
     const custom = linked.filter((f) => !f.isSystem);
-    const describe = (f: (typeof linked)[number]) => `${moduleLabel(f.module)} › ${f.label}${f.isActive ? '' : ' (archived)'}`;
+    const describe = (f: (typeof linked)[number]) => `${moduleLabel(f.module)} › ${f.label}`;
 
     return (
         <ConfirmDeleteDialog
@@ -401,14 +400,12 @@ function CategoryEditor({
 }) {
     const [newOption, setNewOption] = useState('');
     const [busy, setBusy] = useState(false);
-    const [showArchived, setShowArchived] = useState(false);
     const [placeOpen, setPlaceOpen] = useState(false);
     const [editOpen, setEditOpen] = useState(false);
     const draft = useConfigDraftActions();
 
     const sorted = [...category.options].sort((a, b) => a.sortOrder - b.sortOrder);
     const active = sorted.filter((o) => o.isActive);
-    const archived = sorted.filter((o) => !o.isActive);
     const defaults = active.filter((o) => o.isDefault);
     // Several defaults only make sense when every field using the dropdown is a multi-select; otherwise picking
     // a default replaces the previous one.
@@ -434,7 +431,7 @@ function CategoryEditor({
     } = useDragReorder({
         items: active,
         canDrag: canEdit && !busy,
-        onReorder: (ids) => void run(() => draft.reorderOptions(category.key, [...ids, ...archived.map((o) => o.id)])),
+        onReorder: (ids) => void run(() => draft.reorderOptions(category.key, ids)),
     });
 
     /** Stages a change in the draft (saved with "Save Changes"). */
@@ -460,7 +457,7 @@ function CategoryEditor({
         setNewOption('');
     };
 
-    const rows = showArchived ? [...orderedActive, ...archived] : orderedActive;
+    const rows = orderedActive;
     const usedOn = dropdownForms(category);
 
     return (
@@ -549,7 +546,7 @@ function CategoryEditor({
             <Box sx={{ px: 2, py: 1, display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid var(--mui-palette-border-light)' }}>
                 <Box sx={{ minWidth: 0 }}>
                     <Typography sx={{ fontSize: '0.74rem', color: 'var(--mui-palette-text-secondary)' }}>
-                        {active.length} active{archived.length > 0 ? ` • ${archived.length} archived` : ''}
+                        {active.length} {active.length === 1 ? 'option' : 'options'}
                     </Typography>
                     <Typography sx={{ fontSize: '0.72rem', color: 'var(--mui-palette-text-secondary)', mt: 0.25 }}>
                         {defaults.length > 0
@@ -558,13 +555,6 @@ function CategoryEditor({
                         {canEdit && (allowsSeveralDefaults ? ' Click the bookmark to add or remove defaults.' : ' Click the bookmark to set or remove the default.')}
                     </Typography>
                 </Box>
-                {archived.length > 0 && (
-                    <FormControlLabel
-                        sx={{ m: 0 }}
-                        control={<Switch size="small" checked={showArchived} onChange={(e) => setShowArchived(e.target.checked)} />}
-                        label={<Typography sx={{ fontSize: '0.76rem', color: 'var(--crm-slate-600)' }}>Show archived</Typography>}
-                    />
-                )}
             </Box>
 
             <Box sx={{ position: 'relative' }}>
@@ -579,10 +569,9 @@ function CategoryEditor({
                             busy={busy}
                             // An option's name is also the value records store, so a rename renames both (records follow).
                             onRename={(next) => run(() => draft.updateOption(option.id, { label: next }))}
-                            onToggleActive={(isActive) => run(() => draft.updateOption(option.id, { isActive }))}
                             onToggleDefault={(isDefault) => setDefault(option, isDefault)}
                             onDelete={() => run(() => draft.deleteOption(option.id))}
-                            dragProps={getRowDragProps(option, option.isActive)}
+                            dragProps={getRowDragProps(option, true)}
                             dragSx={getRowDragSx(option)}
                         />
                     );
@@ -600,7 +589,6 @@ function OptionRow({
     canEdit,
     busy,
     onRename,
-    onToggleActive,
     onToggleDefault,
     onDelete,
     dragProps,
@@ -610,7 +598,6 @@ function OptionRow({
     canEdit: boolean;
     busy: boolean;
     onRename: (label: string) => Promise<unknown>;
-    onToggleActive: (isActive: boolean) => Promise<unknown>;
     onToggleDefault: (isDefault: boolean) => Promise<unknown>;
     onDelete: () => Promise<unknown>;
     dragProps: RowDragProps;
@@ -637,20 +624,19 @@ function OptionRow({
             {...(canEdit ? dragProps : {})}
             sx={{
                 display: 'grid',
-                gridTemplateColumns: canEdit ? '28px minmax(0, 1fr) auto auto auto auto' : 'minmax(0, 1fr) auto',
+                gridTemplateColumns: canEdit ? '28px minmax(0, 1fr) auto auto auto' : 'minmax(0, 1fr) auto',
                 alignItems: 'center',
                 gap: 1.25,
                 px: 2,
                 py: 0.9,
                 borderBottom: '1px solid var(--mui-palette-border-light)',
-                backgroundColor: option.isActive ? 'var(--mui-palette-background-paper)' : 'var(--mui-palette-background-subtle)',
-                opacity: option.isActive ? 1 : 0.75,
+                backgroundColor: 'var(--mui-palette-background-paper)',
                 transition: 'background-color 0.12s, box-shadow 0.12s',
                 ...dragSx,
             }}
         >
             {canEdit && (
-                <DragHandle disabled={!option.isActive || busy} />
+                <DragHandle disabled={busy} />
             )}
             <Box sx={{ minWidth: 0 }}>
                 {canRename ? (
@@ -678,26 +664,23 @@ function OptionRow({
                         Unsaved
                     </Badge>
                 )}
-                {option.isDefault && option.isActive && (
+                {option.isDefault && (
                     <Badge tone="custom" title="Pre-selected when a new record is created">
                         Default
                     </Badge>
                 )}
                 {option.isSystem && (
-                    <Badge tone="locked" icon={<LockOutlinedIcon sx={{ fontSize: 11 }} />} title="Drives CRM business logic: can be reordered or set as the default, but not renamed, archived or deleted.">
+                    <Badge tone="locked" icon={<LockOutlinedIcon sx={{ fontSize: 11 }} />} title="Drives CRM business logic: can be reordered or set as the default, but not renamed or deleted.">
                         Locked
                     </Badge>
                 )}
-                <Badge tone={option.isActive ? 'active' : 'archived'}>{option.isActive ? 'Active' : 'Archived'}</Badge>
             </Box>
             {canEdit && (
                 <Tooltip
                     title={
-                        !option.isActive
-                            ? 'Restore the option to make it the default'
-                            : option.isDefault
-                              ? 'Remove as default (new records show the placeholder)'
-                              : 'Set as default (pre-selected on new records)'
+                        option.isDefault
+                            ? 'Remove as default (new records show the placeholder)'
+                            : 'Set as default (pre-selected on new records)'
                     }
                     arrow
                 >
@@ -705,11 +688,11 @@ function OptionRow({
                         <IconButton
                             size="small"
                             aria-label={option.isDefault ? `Remove ${option.label} as default` : `Set ${option.label} as default`}
-                            aria-pressed={option.isDefault && option.isActive}
-                            disabled={!option.isActive || busy}
+                            aria-pressed={option.isDefault}
+                            disabled={busy}
                             onClick={() => void onToggleDefault(!option.isDefault)}
                         >
-                            {option.isDefault && option.isActive ? (
+                            {option.isDefault ? (
                                 <DefaultBookmarkOnIcon sx={{ fontSize: 19, color: busy ? undefined : 'var(--crm-amber-500)' }} />
                             ) : (
                                 <DefaultBookmarkOffIcon sx={{ fontSize: 19 }} />
@@ -719,19 +702,7 @@ function OptionRow({
                 </Tooltip>
             )}
             {canEdit && (
-                <Tooltip title={option.isSystem ? 'Locked options cannot be archived' : option.isActive ? 'Archive (existing records keep this value)' : 'Restore'} arrow>
-                    <span>
-                        <LabeledSwitch
-                            label={`${option.label} active`}
-                            checked={option.isActive}
-                            disabled={option.isSystem || busy}
-                            onChange={(checked) => void onToggleActive(checked)}
-                        />
-                    </span>
-                </Tooltip>
-            )}
-            {canEdit && (
-                <Tooltip title={option.isSystem ? 'Locked options cannot be deleted' : 'Delete permanently (archive instead to keep it for existing records)'} arrow>
+                <Tooltip title={option.isSystem ? 'Locked options cannot be deleted' : 'Delete permanently (existing records keep the value, shown as Removed)'} arrow>
                     <span>
                         <IconButton size="small" aria-label={`Delete ${option.label}`} disabled={option.isSystem || busy} onClick={() => void onDelete()}>
                             <DeleteOutlineOutlinedIcon sx={{ fontSize: 17, color: option.isSystem || busy ? undefined : dangerColor }} />

@@ -535,12 +535,12 @@ export function OpportunitiesMasterView() {
             },
             {
                 // No remarks log on deals: "Add Description" is the note updated on each follow-up (as on leads).
-                id: 'followUpRemarks',
+                id: 'remarks',
                 label: 'LATEST REMARKS',
                 sortable: false,
                 minWidth: 220,
                 width: 280,
-                render: (o) => <Typography sx={plainCellSx}>{o.followUpRemarks || '-'}</Typography>,
+                render: (o) => <Typography sx={plainCellSx}>{o.remarks || '-'}</Typography>,
             },
             {
                 // Derived: a linked quotation has moved past Draft.

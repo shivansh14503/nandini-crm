@@ -1,14 +1,13 @@
 'use client';
 
 import React from 'react';
-import { Box, FormHelperText, InputAdornment, TextField } from '@mui/material';
-import CalendarTodayOutlinedIcon from '@mui/icons-material/CalendarTodayOutlined';
+import { Box, FormHelperText, TextField } from '@mui/material';
 import { useController, type FieldPath, type FieldValues } from 'react-hook-form';
 import { FormField, fieldSx } from '../FormField';
 import { useFormMode } from '@/context/FormModeContext';
 import { ReadOnlyField } from '../ReadOnlyField';
 import type { FieldSize } from '../fieldSizing';
-import { TimePicker } from '../TimePicker';
+import { DATE_TIME_COLUMNS, TimePicker } from '../TimePicker';
 import { localNow, localToday } from '@/utils/pastDates';
 
 const pad = (n: number) => String(n).padStart(2, '0');
@@ -35,10 +34,6 @@ export interface RhfDateTimeFieldProps<T extends FieldValues> {
     /** Width token; defaults to `sm` for a date alone and `md` for date + time. */
     fieldSize?: FieldSize;
 }
-
-const adornment = (icon: React.ReactNode) => ({
-    input: { startAdornment: <InputAdornment position="start">{icon}</InputAdornment> },
-});
 
 /** Paired date + optional time input bound to two RHF fields. */
 export function RhfDateTimeField<T extends FieldValues>({
@@ -74,7 +69,7 @@ export function RhfDateTimeField<T extends FieldValues>({
         const setTime = (t: string) => date.field.onChange(t ? `${datePart || localToday()}T${t}` : datePart);
         return (
             <FormField name={dateName} label={label} required={required} hint={hint} size={size}>
-                <Box sx={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: 1.5 }}>
+                <Box sx={{ display: 'grid', gridTemplateColumns: DATE_TIME_COLUMNS, gap: 1 }}>
                     <TextField
                         name={date.field.name}
                         inputRef={date.field.ref}
@@ -86,7 +81,6 @@ export function RhfDateTimeField<T extends FieldValues>({
                         size="small"
                         error={Boolean(date.fieldState.error)}
                         slotProps={{
-                            ...adornment(<CalendarTodayOutlinedIcon sx={{ fontSize: 16, color: 'var(--mui-palette-text-secondary)' }} />),
                             // Past days are greyed out in the picker (the form also rejects a past date-time).
                             htmlInput: { min: localToday(), 'aria-label': `${label} date` },
                         }}
@@ -119,7 +113,7 @@ export function RhfDateTimeField<T extends FieldValues>({
 
     return (
         <FormField name={dateName} label={label} required={required} hint={hint} size={size}>
-            <Box sx={{ display: 'grid', gridTemplateColumns: timeName ? '1.2fr 1fr' : '1fr', gap: 1.5 }}>
+            <Box sx={{ display: 'grid', gridTemplateColumns: timeName ? DATE_TIME_COLUMNS : '1fr', gap: 1 }}>
                 <TextField
                     {...date.field}
                     value={date.field.value ?? ''}
@@ -128,7 +122,6 @@ export function RhfDateTimeField<T extends FieldValues>({
                     size="small"
                     error={Boolean(date.fieldState.error)}
                     slotProps={{
-                        ...adornment(<CalendarTodayOutlinedIcon sx={{ fontSize: 16, color: 'var(--mui-palette-text-secondary)' }} />),
                         // Past days are greyed out in the picker (the form also rejects a typed past date).
                         htmlInput: { min: localToday() },
                     }}

@@ -38,7 +38,7 @@ import {
 
 interface DraftOption extends ScorecardOption {
     label: string;
-    archived: boolean;
+    removed: boolean;
 }
 
 interface Draft {
@@ -49,7 +49,7 @@ interface Draft {
     drawerViewColor: boolean;
 }
 
-/** The field's options in admin order (archived ones only when the saved scorecard still colors them). */
+/** The field's options in admin order (removed ones only when the saved scorecard still colors them). */
 function optionsFor(
     configs: FormConfigsPayload | null,
     module: CrmModuleKey,
@@ -69,7 +69,7 @@ function optionsFor(
                 label: o.label || o.value,
                 color: prev?.color ?? suggestColor(o.label || o.value, index),
                 hidden: prev?.hidden ?? false,
-                archived: !o.isActive,
+                removed: !o.isActive,
             };
         });
 }
@@ -298,9 +298,9 @@ function ScorecardSettingsBody({ module, onClose, onSaved }: ScorecardSettingsDi
                                                     {option.label}
                                                 </Box>
                                             </Box>
-                                            {option.archived && (
+                                            {option.removed && (
                                                 <Typography component="span" sx={{ ml: 1, fontSize: '0.68rem', color: 'var(--mui-palette-text-muted)' }}>
-                                                    archived
+                                                    removed
                                                 </Typography>
                                             )}
                                         </Box>

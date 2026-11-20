@@ -11,6 +11,9 @@ const pad = (n: number) => String(n).padStart(2, '0');
 /** How the value is stored: `12h` → `04:15 PM` (follow-up times), `24h` → `16:15` (the `datetime-local` time part). */
 export type TimeValueFormat = '12h' | '24h';
 
+/** Grid columns of a date field beside a TimePicker: the time keeps room for `HH:mm` plus its 12-hour hint. */
+export const DATE_TIME_COLUMNS = 'minmax(124px, 1fr) minmax(152px, 1fr)';
+
 /** Minutes since midnight → `04:15 PM`. */
 export function formatTime12(mins: number): string {
     const h = Math.floor(mins / 60);
@@ -28,6 +31,63 @@ const hint12 = (mins: number) => {
 
 /** Hour → `4 PM`, the label under each 24-hour hour in the picker. */
 const hourHint = (h: number) => `${h % 12 || 12} ${h < 12 ? 'AM' : 'PM'}`;
+
+/**
+ * Reads a time that is still being typed (`1`, `16`, `16:3`, `1630`, `4:15 p`) so the columns can follow it:
+ * the hour, and the minute once one has been started (`16:3` → 30, the start of what is being typed).
+ */
+function parsePartialTime(text: string): { h: number; m: number | null } | null {
+    const match = /^\s*(\d{1,2})(?:\s*[:.]?\s*(\d{1,2}))?\s*(?:([AaPp])[Mm]?)?\s*$/.exec(text);
+    if (!match) return null;
+    let h = Number(match[1]);
+    const meridiem = match[3]?.toUpperCase();
+    if (meridiem) {
+        if (h < 1 || h > 12) return null;
+        h = (h % 12) + (meridiem === 'P' ? 12 : 0);
+    } else if (h > 23) {
+        return null;
+    }
+    let m: number | null = null;
+    if (match[2] !== undefined) {
+        const n = Number(match[2]);
+        // One minute digit is the tens being typed (`3` → 30), unless it can't be (`7` → 07).
+        m = match[2].length === 1 ? (n <= 5 ? n * 10 : n) : n;
+        if (m > 59) m = null;
+    }
+    return { h, m };
+}
+
+/**
+ * Moves typing from hours to minutes on its own, like the date field's segments: a complete hour gets its `:`
+ * (`16` → `16:`, `5` → `05:`), and a minute digit that can't start a two-digit minute is padded (`16:7` → `16:07`).
+ * Only while adding characters, so Backspace isn't fought.
+ */
+function autoAdvance(next: string, prev: string): string {
+    if (next.length <= prev.length) return next;
+    const v = next.replace(/::+/g, ':');
+    if (/^[3-9]$/.test(v)) return `0${v}:`;
+    if (/^\d:$/.test(v)) return `0${v}`;
+    if (/^([01]\d|2[0-3])$/.test(v)) return `${v}:`;
+    const m = /^(\d{2}):([6-9])$/.exec(v);
+    if (m) return `${m[1]}:0${m[2]}`;
+    return v;
+}
+
+/** Whether `text` is a valid 24-hour time or the start of one (`1`, `18`, `18:`, `18:4`, `18:45`). */
+const VALID_TIME_PREFIX = /^(?:[0-2]?|[01]\d|2[0-3])$|^(?:[01]\d|2[0-3]):(?:[0-5]\d?)?$/;
+
+/**
+ * The text the field takes after an edit, or `null` to refuse it so an invalid time can't be typed.
+ * Adding characters must keep a valid (partial) `HH:mm`; a pasted time in another form (`4:15 pm`) is
+ * converted to `HH:mm`. Deleting is always allowed.
+ */
+function acceptTyped(next: string, prev: string, atEnd: boolean): string | null {
+    if (next.length <= prev.length) return next;
+    const v = atEnd ? autoAdvance(next, prev) : next;
+    if (VALID_TIME_PREFIX.test(v)) return v;
+    const pasted = parseTimeOfDay(next);
+    return pasted === null ? null : formatTime24(pasted);
+}
 
 const formatValue = (mins: number, format: TimeValueFormat) => (format === '24h' ? formatTime24(mins) : formatTime12(mins));
 
@@ -102,10 +162,14 @@ export function TimePicker({
     const day = (date ?? '').slice(0, 10) || now.slice(0, 10);
     const minMinutes = day === now.slice(0, 10) ? Number(now.slice(11, 13)) * 60 + Number(now.slice(14, 16)) : null;
 
-    // Hour / minute the columns work from: the value, or a sensible starting point when empty.
-    const baseMinutes = current ?? Math.max(DEFAULT_MINUTES, minMinutes ?? 0);
+    // While typing, the columns follow what's typed so far (nothing is saved until blur / Enter).
+    const typed = editing ? parsePartialTime(text) : null;
+    const fallbackMinutes = current ?? Math.max(DEFAULT_MINUTES, minMinutes ?? 0);
+
+    // Hour / minute the columns work from: the typed time, the value, or a sensible starting point when empty.
+    const baseMinutes = typed ? typed.h * 60 + (typed.m ?? fallbackMinutes % 60) : fallbackMinutes;
     const base = { h: Math.floor(baseMinutes / 60), m: baseMinutes % 60 };
-    const selected = current === null ? null : base;
+    const selected = current === null && !typed ? null : base;
 
     const isPast = (mins: number) => minMinutes !== null && mins < minMinutes;
     const disabledAt = (col: Column, index: number): boolean => {
@@ -130,19 +194,21 @@ export function TimePicker({
         commit(col === 0 ? HOURS[index] * 60 + base.m : base.h * 60 + MINUTES[index]);
     };
 
-    const scrollColumns = useCallback(
-        (behavior: ScrollBehavior = 'auto') => {
-            columns.forEach((c, col) => {
-                const el = columnRefs.current[col];
-                if (!el) return;
-                const index = c.selectedIndex ?? c.baseIndex;
-                // Put the chosen item near the top with a row of context above it.
-                el.scrollTo({ top: Math.max(0, (index - 1) * ITEM_HEIGHT), behavior });
-            });
-        },
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-        [current, minMinutes],
-    );
+    // Latest columns, so a scroll queued before the panel mounts still uses what's current then.
+    const columnsRef = useRef(columns);
+    useEffect(() => {
+        columnsRef.current = columns;
+    });
+
+    const scrollColumns = useCallback((behavior: ScrollBehavior = 'auto') => {
+        columnsRef.current.forEach((c, col) => {
+            const el = columnRefs.current[col];
+            if (!el) return;
+            const index = c.selectedIndex ?? c.baseIndex;
+            // Put the chosen item near the top with a row of context above it.
+            el.scrollTo({ top: Math.max(0, (index - 1) * ITEM_HEIGHT), behavior });
+        });
+    }, []);
 
     const focusItem = (col: Column, index: number) => {
         const i = Math.min(Math.max(index, 0), columns[col].count - 1);
@@ -173,11 +239,11 @@ export function TimePicker({
         if (refocusInput) inputRef.current?.focus();
     };
 
-    // Keep the chosen items in view while the value changes with the panel open.
+    // Keep the chosen items in view while the value changes, or a time is typed, with the panel open.
     useEffect(() => {
         if (open && !focus) scrollColumns('smooth');
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [current]);
+    }, [baseMinutes]);
 
     // Moving the date to today can leave the picked time behind us: push it to the next quarter hour.
     // Only on a date change, so a record that loads with an old time keeps it.
@@ -198,7 +264,9 @@ export function TimePicker({
             if (value) onChange('');
             return;
         }
-        const mins = parseTimeOfDay(trimmed);
+        // A time left unfinished is completed the way the columns show it (`18:` → 18:00, `18:4` → 18:40).
+        const partial = parsePartialTime(trimmed);
+        const mins = parseTimeOfDay(trimmed) ?? (partial ? partial.h * 60 + (partial.m ?? 0) : null);
         if (mins !== null && mins !== current) commit(mins);
     };
 
@@ -270,7 +338,14 @@ export function TimePicker({
                     error={error}
                     disabled={disabled}
                     autoComplete="off"
-                    onChange={(e) => setDraft(e.target.value)}
+                    onChange={(e) => {
+                        const input = e.target as HTMLInputElement;
+                        const accepted = acceptTyped(input.value, text, input.selectionStart === input.value.length);
+                        if (accepted === null) return;
+                        setDraft(accepted);
+                        // Typing shows the columns so they can follow the time being typed.
+                        if (!open) openPanel();
+                    }}
                     onClick={() => !open && openPanel()}
                     onKeyDown={onInputKeyDown}
                     onBlur={() => {
@@ -282,7 +357,8 @@ export function TimePicker({
                             'aria-label': fieldHint ? `${ariaLabel}, ${fieldHint}` : ariaLabel,
                             'aria-haspopup': 'listbox',
                             'aria-expanded': open,
-                            inputMode: 'text',
+                            inputMode: 'numeric',
+                            maxLength: 8,
                         },
                         input: {
                             startAdornment: (

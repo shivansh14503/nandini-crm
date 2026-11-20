@@ -72,7 +72,7 @@ const DEFAULT_FORM: LeadFormData = {
     productCategory: ['Biz Analyst'],
     followupType: 'Call',
     customerResponse: '',
-    followUpRemarks: '',
+    remarks: '',
     registrationType: '',
     gstNumber: '',
     turnover: '',
@@ -159,7 +159,7 @@ export default function LeadForm({
                 if (active && found) {
                     const loaded = normalizeAddressFields(found, LEAD_ADDRESS_PAIRS);
                     // Every edit records a fresh customer response, so the edit form starts without one.
-                    reset(mode === 'edit' ? { ...loaded, customerResponse: '' } : loaded);
+                    reset(mode === 'edit' ? { ...loaded, customerResponse: '', remarks: '' } : loaded);
                     setRecordCode(found.leadCode ?? '');
                     setAudit({ createdAt: found.createdAt, createdBy: found.createdBy, updatedAt: found.updatedAt, updatedBy: found.updatedBy });
                 }

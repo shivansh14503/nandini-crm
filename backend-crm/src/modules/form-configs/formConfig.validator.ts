@@ -3,8 +3,8 @@ import { booleanQuery } from '../../validators/common.js';
 import { CATEGORY_MODULES, CRM_MODULES, CUSTOM_FIELD_TYPES, FIELD_SIZES } from './formConfig.defaults.js';
 
 /**
- * Request schemas for /api/form-configs. Rules that depend on the stored row (system options can't be archived
- * or renamed, core-locked fields can't be archived, hidden, made optional or deleted)
+ * Request schemas for /api/form-configs. Rules that depend on the stored row (system options can't be renamed or
+ * deleted, core-locked fields can't be hidden, made optional or deleted)
  * are enforced in formConfig.service.ts, where the row is known.
  */
 
@@ -81,8 +81,6 @@ export const updateOptionSchema = z
         /** Renames the option; its stored value follows (records too). Blocked for system options. */
         label: label('Option', 200).optional(),
         meta: metaSchema,
-        /** false archives the option (blocked for system options); true restores it. */
-        isActive: z.boolean().optional(),
         /** Pre-selected on new records; false leaves the field empty (its placeholder shows). */
         isDefault: z.boolean().optional(),
     })
@@ -160,8 +158,8 @@ export const updateFieldSchema = z
         /** Blocked (false) for core-locked fields. */
         isVisibleInForm: z.boolean().optional(),
         isVisibleInDrawer: z.boolean().optional(),
-        /** false archives the field (blocked for core-locked fields). */
-        isActive: z.boolean().optional(),
+        /** Contacts / organizations / opportunities: shown on Convert Lead. Core Convert Lead fields can't be hidden. */
+        isVisibleInConvert: z.boolean().optional(),
         /** null unlinks; select / multiselect fields only. */
         dropdownCategoryKey: z.string().trim().min(1).max(80).nullable().optional(),
         validationRules: z.record(z.string(), z.unknown()).nullable().optional(),

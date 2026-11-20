@@ -556,7 +556,7 @@ function FieldControl({
         case 'options': {
             const options = field.options ?? [];
             const selected = condition?.values ?? [];
-            // Values no longer offered (archived options) stay visible so they can be removed.
+            // Values no longer offered (deleted options) stay visible so they can be removed.
             const all = [...options, ...selected.filter((v) => !options.some((o) => o.value === v)).map((v) => ({ value: v, label: v }))];
             return (
                 <Autocomplete

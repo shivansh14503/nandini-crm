@@ -146,10 +146,7 @@ export function FormCustomizationView() {
     const convertCounts = useMemo(
         () =>
             Object.fromEntries(
-                CONVERT_RECORDS.map(({ module: m }) => {
-                    const keys = convertFieldKeys(m);
-                    return [m, configs?.fieldsByModule[m]?.filter((f) => f.isActive && f.isSystem && keys.has(f.fieldKey)).length ?? 0];
-                }),
+                CONVERT_RECORDS.map(({ module: m }) => [m, configs ? convertFieldKeys(m, configs).size : 0]),
             ) as Record<(typeof CONVERT_RECORDS)[number]['module'], number>,
         [configs],
     );
@@ -354,7 +351,7 @@ export function FormCustomizationView() {
                                                 module={module}
                                                 configs={configs}
                                                 unsavedCount={ops.length}
-                                                onlyFieldKeys={convertFieldKeys(module)}
+                                                onlyFieldKeys={convertFieldKeys(module, configs)}
                                                 gridLabel={CONVERT_RECORDS.find((r) => r.module === module)?.label}
                                             />
                                         )}

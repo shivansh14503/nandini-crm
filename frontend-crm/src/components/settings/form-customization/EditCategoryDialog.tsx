@@ -231,7 +231,7 @@ export function EditCategoryDialog({
                                         {fields && (
                                             <Typography sx={{ fontSize: '0.78rem', color: removing ? dangerColor : 'var(--mui-palette-text-secondary)' }}>
                                                 {removing ? 'Will be deleted: ' : 'Field: '}
-                                                {fields.map((f) => `${f.label}${f.isActive ? '' : ' (archived)'}`).join(', ')}
+                                                {fields.map((f) => f.label).join(', ')}
                                             </Typography>
                                         )}
                                         {!fields && placement && (

@@ -6,9 +6,9 @@ Status: **implemented** (2026-11-12). Defaults: `formConfig.defaults.ts` (`req` 
 
 | Tier | Meaning in the form builder | Who enforces "required" |
 |---|---|---|
-| 🔒 **Locked** | Can be relabelled, moved, resized. Can't be made optional, hidden, archived or deleted. | Hard-coded backend validator (+ DB `NOT NULL` where relevant) |
+| 🔒 **Locked** | Can be relabelled, moved, resized. Can't be made optional, hidden or deleted. | Hard-coded backend validator (+ DB `NOT NULL` where relevant) |
 | ⭐ **Default required** | Required out of the box, but an admin can make it optional or hide it. | Form config `isRequired` (server-side via `customFieldValidator.checkModulePayload`) |
-| ○ **Free** | Optional by default; admin can make it required, hide, archive. | Form config `isRequired` |
+| ○ **Free** | Optional by default; admin can make it required, hide or delete. | Form config `isRequired` |
 
 **Test for 🔒:** if an admin hid this field or made it optional, would anything *other than the form* break? A field is locked if it is any of:
 
@@ -140,8 +140,8 @@ Fields not listed are ○ Free today and stay ○ Free.
 1. **Defaults** (`formConfig.defaults.ts`): split `req` into `lock` (🔒, hard) and `req` (⭐, default `isRequired` only). The seed already re-syncs `isCoreLocked` on existing rows (`formConfig.seed.ts`).
 2. **Validators**: make every ⭐ field optional in its module validator (`lead.validator.ts`, `organization.validator.ts`, …) and let `checkModulePayload` enforce `isRequired` from the form config. This includes the lead-conversion schema (`lead.validator.ts` ~L120–156), which re-requires organization and opportunity fields.
 3. **Database**: these ⭐ fields are `NOT NULL` columns today and need a migration to become nullable:
-   - Lead: `mobile`, `leadSource`, `productCategoryJson`, `followUpRemarks`, `leadType`, `nextFollowupDate`
-   - Opportunity: `leadGivenBy`, `type`, `leadSource`, `nextFollowupDate`, `followUpRemarks`, `commission`, `productCategoryJson`
+   - Lead: `mobile`, `leadSource`, `productCategoryJson`, `remarks`, `leadType`, `nextFollowupDate`
+   - Opportunity: `leadGivenBy`, `type`, `leadSource`, `nextFollowupDate`, `remarks`, `commission`, `productCategoryJson`
    - Quotation: `validationPeriod`, `termsAndCondition`, `paymentTerms`
    - Ticket: `natureOfCall`, `ticketPriority`, `supportMode`
    - Partner company and organization billing columns are already nullable.

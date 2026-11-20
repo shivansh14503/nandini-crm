@@ -54,7 +54,7 @@ const leadFields = z.object({
     productCategory: stringList('Product Category', 30, L.option).default([]),
     followupType: optionalText('Followup Type', L.option),
     customerResponse: optionalText('Customer Response', L.option),
-    followUpRemarks: optionalDescription('Follow Up Remarks'),
+    remarks: optionalDescription('Remarks'),
     registrationType: optionalText('Registration Type', 30),
     gstNumber: optionalGst,
     turnover: optionalText('Turnover', 30),
@@ -126,6 +126,9 @@ export type LeadInput = z.infer<typeof leadInputSchema>;
  * opportunity fields an admin may relax are optional here; `convertLead` enforces them from the organization and
  * opportunity form configurations.
  */
+/** One record's extra Convert Lead values (fieldKey → value). */
+const extraFieldValues = z.record(z.string().max(80), z.unknown()).default({});
+
 export const convertLeadSchema = z.object({
     // Organization
     existingOrganizationId: optionalText('Organization', 50),
@@ -166,6 +169,19 @@ export const convertLeadSchema = z.object({
     opportunityLeadSource: optionalText('Lead Source', L.option),
     opportunityAssignedTo: requiredText('Opportunity Assigned to', L.username),
     copyActivitiesTo: stringList('Copy Activities to', 10, 30).default([]),
+
+    /**
+     * Values of the other fields an admin put on Convert Lead (Form Builder › Convert Lead), per record, keyed by the
+     * field's `fieldKey` (built-in and custom). `convertLead` keeps only fields shown there and checks them by the
+     * record's own form rules.
+     */
+    extraFields: z
+        .object({
+            contacts: extraFieldValues,
+            organizations: extraFieldValues,
+            opportunities: extraFieldValues,
+        })
+        .default({ contacts: {}, organizations: {}, opportunities: {} }),
 });
 
 export type ConvertLeadInput = z.infer<typeof convertLeadSchema>;

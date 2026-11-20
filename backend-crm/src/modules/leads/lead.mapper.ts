@@ -20,7 +20,7 @@ export interface LeadDto {
     productCategory: string[];
     followupType: string;
     customerResponse: string;
-    followUpRemarks: string;
+    remarks: string;
     registrationType: string;
     gstNumber: string;
     turnover: string;
@@ -76,7 +76,7 @@ export function toLeadDto(row: LeadRow): LeadDto {
         productCategory: parseStringArray(row.productCategoryJson),
         followupType: text(row.followupType),
         customerResponse: text(row.customerResponse),
-        followUpRemarks: text(row.followUpRemarks),
+        remarks: text(row.remarks),
         registrationType: text(row.registrationType),
         gstNumber: text(row.gstNumber),
         turnover: text(row.turnover),
@@ -151,7 +151,7 @@ export function toLeadData(input: LeadInput): Omit<Prisma.LeadUncheckedCreateInp
         productCategoryJson: stringifyStringArray(input.productCategory),
         followupType: input.followupType ?? 'Call',
         customerResponse: nullable(input.customerResponse),
-        followUpRemarks: nullable(input.followUpRemarks),
+        remarks: nullable(input.remarks),
         registrationType: nullable(input.registrationType),
         gstNumber: isGstRegistrationType(input.registrationType) ? nullable(input.gstNumber?.toUpperCase()) : null,
         turnover: nullable(input.turnover),

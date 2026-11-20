@@ -61,7 +61,7 @@ export const IMPORT_CONFIGS: Record<ImportEntityType, ImportEntityConfig> = {
             { key: 'status', label: 'Status', required: false, aliases: ['lead status', 'stage'], sample: ['New', 'Contacted'] },
             { key: 'primaryCity', label: 'City', required: false, aliases: ['city'], sample: ['Pune', 'Delhi'] },
             { key: 'primaryState', label: 'State', required: false, aliases: ['state'], sample: ['Maharashtra', 'Delhi'] },
-            { key: 'followUpRemarks', label: 'Follow Up Remarks', required: false, aliases: ['notes', 'remarks', 'description'], sample: ['Interested in TallyPrime', ''] },
+            { key: 'remarks', label: 'Remarks', required: false, aliases: ['notes', 'follow up remarks', 'description'], sample: ['Interested in TallyPrime', ''] },
         ],
     },
     opportunities: {
@@ -78,7 +78,7 @@ export const IMPORT_CONFIGS: Record<ImportEntityType, ImportEntityConfig> = {
             { key: 'salesStage', label: 'Sales Stage', required: false, aliases: ['stage', 'status', 'pipeline stage'], sample: ['Qualification', 'Proposal/Price Quote'] },
             { key: 'leadSource', label: 'Lead Source', required: false, aliases: ['source'], sample: ['Website Enquiry', 'Client Referral'] },
             { key: 'leadGivenBy', label: 'Lead Given By', required: false, aliases: ['given by', 'referred by'], sample: ['Direct', 'Partner Network'] },
-            { key: 'followUpRemarks', label: 'Follow Up Remarks', required: false, aliases: ['notes', 'remarks', 'requirement', 'add description'], sample: ['Requirement for 5 TallyPrime Silver licenses', 'Annual cloud renewal discussion'] },
+            { key: 'remarks', label: 'Remarks', required: false, aliases: ['notes', 'follow up remarks', 'requirement', 'add description'], sample: ['Requirement for 5 TallyPrime Silver licenses', 'Annual cloud renewal discussion'] },
         ],
     },
     tickets: {

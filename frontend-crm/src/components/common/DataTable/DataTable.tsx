@@ -23,6 +23,7 @@ import { useDoubleClickCopy } from '../useDoubleClickCopy';
 import { TableRowActions } from './TableRowActions';
 import { useTableScroll } from './useTableScroll';
 import { useFrozenColumns } from './useFrozenColumns';
+import { TablePageScrollContext, pageScrollHeadSx, usePageScrollHeader } from './usePageScrollHeader';
 
 /**
  * Widest a cell gets (unless its column sets `width`). The table sizes columns to their content, so without
@@ -125,7 +126,8 @@ function ScrollArrow({
             onLostPointerCapture={onStop}
             sx={{
                 position: 'absolute',
-                top: '50%',
+                // Page-scrolled tables keep the arrows in the on-screen part of the table (usePageScrollHeader).
+                top: 'var(--table-arrow-top, 50%)',
                 // The right arrow clears the table's 10px vertical scrollbar.
                 [direction < 0 ? 'left' : 'right']: (direction < 0 ? 6 : 18) + offset,
                 transform: 'translateY(-50%)',
@@ -199,6 +201,20 @@ export function DataTable<T>({
     loading = false,
 }: DataTableProps<T>) {
     const { setContainer, canScrollLeft, canScrollRight, isPanning, onPointerDown, startHold, stopHold } = useTableScroll();
+
+    // List pages scroll as a whole: no vertical scrollbar here, header docked under the navbar instead.
+    const pageScroll = React.useContext(TablePageScrollContext);
+    const wrapperRef = React.useRef<HTMLDivElement | null>(null);
+    const containerRef = React.useRef<HTMLDivElement | null>(null);
+    const headRef = React.useRef<HTMLTableSectionElement | null>(null);
+    const setContainerRef = React.useCallback(
+        (el: HTMLDivElement | null) => {
+            containerRef.current = el;
+            setContainer(el);
+        },
+        [setContainer]
+    );
+    usePageScrollHeader(pageScroll, { wrapper: wrapperRef, container: containerRef, head: headRef });
 
     // A single click opens the row only once it's clear no second click follows (a double-click selects a value).
     const pendingRowClick = React.useRef<number | null>(null);
@@ -351,25 +367,30 @@ export function DataTable<T>({
     );
 
     return (
-        <Box sx={{ position: 'relative', flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, minHeight: 0 }}>
+        <Box
+            ref={wrapperRef}
+            // Page scroll: grow with the rows (never squeezed into a scroll box of its own).
+            sx={{ position: 'relative', flex: pageScroll ? '1 0 auto' : 1, display: 'flex', flexDirection: 'column', minWidth: 0, minHeight: 0 }}
+        >
         <ScrollArrow direction={-1} visible={canScrollLeft} onStart={startHold} onStop={stopHold} offset={frozenWidth} />
         <ScrollArrow direction={1} visible={canScrollRight} onStart={startHold} onStop={stopHold} />
         <TableContainer
-            ref={setContainer}
+            ref={setContainerRef}
             onPointerDown={onPointerDown}
             // Middle (scroll-wheel) button pans the table; stop the browser's autoscroll cursor.
             onMouseDown={(e) => {
                 if (e.button === 1) e.preventDefault();
             }}
             sx={{
-                flex: 1,
+                flex: pageScroll ? '1 0 auto' : 1,
                 minHeight,
-                // Bounded so the horizontal scrollbar stays on screen instead of below the last row.
-                maxHeight: 'max(360px, calc(100vh - 270px))',
+                // In a page that scrolls as a whole the table only scrolls sideways; elsewhere it is bounded so
+                // the horizontal scrollbar stays on screen instead of below the last row.
+                maxHeight: pageScroll ? 'none' : 'max(360px, calc(100vh - 270px))',
                 width: '100%',
                 maxWidth: '100%',
                 overflowX: 'auto',
-                overflowY: 'auto',
+                overflowY: pageScroll ? 'hidden' : 'auto',
                 WebkitOverflowScrolling: 'touch',
                 cursor: isPanning ? 'grabbing' : undefined,
                 userSelect: isPanning ? 'none' : undefined,
@@ -403,7 +424,7 @@ export function DataTable<T>({
                 }}
             >
                 {/* ── Table Header ───────────────────────────────────────────── */}
-                <TableHead>
+                <TableHead ref={headRef} sx={pageScroll ? pageScrollHeadSx : undefined}>
                     <TableRow sx={{ backgroundColor: 'var(--crm-table-header-bg, var(--mui-palette-background-subtle))' }}>
                         {/* Checkbox Column */}
                         {selectable && (

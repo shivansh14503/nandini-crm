@@ -8,11 +8,9 @@ import {
     DialogActions,
     DialogContent,
     DialogTitle,
-    FormControlLabel,
     IconButton,
     MenuItem,
     Select,
-    Switch,
     TextField,
     Tooltip,
     Typography,
@@ -20,8 +18,6 @@ import {
 import AddRoundedIcon from '@mui/icons-material/AddRounded';
 import EditOutlinedIcon from '@mui/icons-material/EditOutlined';
 import LockOutlinedIcon from '@mui/icons-material/LockOutlined';
-import ArchiveOutlinedIcon from '@mui/icons-material/ArchiveOutlined';
-import UnarchiveOutlinedIcon from '@mui/icons-material/UnarchiveOutlined';
 import CheckRoundedIcon from '@mui/icons-material/CheckRounded';
 import CloseRoundedIcon from '@mui/icons-material/CloseRounded';
 import ViewQuiltOutlinedIcon from '@mui/icons-material/ViewQuiltOutlined';
@@ -57,7 +53,45 @@ import {
 } from './builderUi';
 import { FieldEditorModal } from './FieldEditorModal';
 import { useDragReorder, type GroupDragProps, type RowDragProps } from './useDragReorder';
-import { categoryAfterFieldRemoval } from './configDraft';
+import { categoryAfterFieldRemoval, isTempId } from './configDraft';
+import { convertFieldUnavailableReason, isLockedOnConvert } from '@/utils/convertLeadFields';
+import type { ConvertModule } from '@/validations/convertLead.schema';
+import ShareOutlinedIcon from '@mui/icons-material/ShareOutlined';
+import VisibilityOffOutlinedIcon from '@mui/icons-material/VisibilityOffOutlined';
+import { getModuleColor } from '@/theme/moduleColors';
+import { describePlace, fieldPlaces, type FieldPlace } from './fieldPlaces';
+
+const CONVERT_MODULE_KEYS: readonly string[] = ['contacts', 'organizations', 'opportunities'];
+const isConvertModule = (module: string): module is ConvertModule => CONVERT_MODULE_KEYS.includes(module);
+
+/**
+ * Convert Lead's own show / hide switch for a field (Form Builder › Convert Lead), separate from the field's form
+ * visibility. Off, with the reason, for fields Convert Lead can't show or must keep.
+ */
+function ConvertSwitch({
+    field,
+    module,
+    disabled,
+    onPatch,
+}: {
+    field: FormFieldDefinitionDto;
+    module: ConvertModule;
+    disabled: boolean;
+    onPatch: (body: UpdateFieldPayload) => Promise<void>;
+}) {
+    const unavailable = convertFieldUnavailableReason(module, field);
+    const locked = isLockedOnConvert(module, field);
+    const reason = unavailable ?? (locked ? 'Core field: always on Convert Lead' : isTempId(field.id) ? 'Save the new field first' : undefined);
+    return (
+        <LabeledSwitch
+            label={`${field.label} shown on Convert Lead`}
+            checked={!unavailable && (locked || field.isVisibleInConvert)}
+            disabled={disabled || Boolean(reason)}
+            disabledReason={reason}
+            onChange={(isVisibleInConvert) => void onPatch({ isVisibleInConvert })}
+        />
+    );
+}
 
 export interface FormFieldsBuilderPanelProps {
     module: CrmModuleKey;
@@ -70,6 +104,8 @@ export interface FormFieldsBuilderPanelProps {
 
 const SIZES: (ConfigFieldSize | '')[] = ['', 'xs', 'sm', 'md', 'lg', 'full'];
 export const GRID_COLUMNS = '28px minmax(180px, 1.6fr) 120px 92px 70px 70px 70px 104px';
+/** Convert Lead's rows: no Drawer column (it has no drawer of its own) and no edit / delete actions. */
+export const CONVERT_GRID_COLUMNS = '28px minmax(180px, 1.6fr) 120px 92px 70px 70px';
 
 /** Every field of a module grouped by tab and section, with inline toggles and the field editor. */
 export function FormFieldsBuilderPanel({ module, configs, canEdit, notify, unsavedTabs }: FormFieldsBuilderPanelProps) {
@@ -77,7 +113,6 @@ export function FormFieldsBuilderPanel({ module, configs, canEdit, notify, unsav
     const [selectedTab, setTabKey] = useState(tabs[0]?.key ?? 'overview');
     // Falls back to the first tab when the module changes.
     const tabKey = tabs.some((t) => t.key === selectedTab) ? selectedTab : (tabs[0]?.key ?? 'overview');
-    const [showArchived, setShowArchived] = useState(false);
     const [editor, setEditor] = useState<{ open: boolean; field?: FormFieldDefinitionDto; sectionKey?: string }>({ open: false });
     const [deleteTarget, setDeleteTarget] = useState<FormFieldDefinitionDto | null>(null);
     const [newTabOpen, setNewTabOpen] = useState(false);
@@ -86,10 +121,9 @@ export function FormFieldsBuilderPanel({ module, configs, canEdit, notify, unsav
 
     const allFields = useMemo(() => moduleFields(configs, module), [configs, module]);
     const sections = useMemo(
-        () => groupSections(allFields.filter((f) => f.isActive || showArchived), tabKey),
-        [allFields, showArchived, tabKey],
+        () => groupSections(allFields.filter((f) => f.isActive), tabKey),
+        [allFields, tabKey],
     );
-    const archivedCount = allFields.filter((f) => !f.isActive).length;
     const activeTab = tabs.find((t) => t.key === tabKey);
     const tabIsEmpty = !allFields.some((f) => f.tabKey === tabKey);
 
@@ -108,7 +142,7 @@ export function FormFieldsBuilderPanel({ module, configs, canEdit, notify, unsav
     const patch = (field: FormFieldDefinitionDto, body: UpdateFieldPayload) => run(() => draft.updateField(field.id, body));
 
     // ── Drag and drop across the sections of the tab ──
-    /** Every row shown on the tab, section by section (archived rows can't be dragged but slide aside). */
+    /** Every row shown on the tab, section by section (in display order). */
     const tabRows = useMemo(() => sections.flatMap((s) => s.fields), [sections]);
     const sectionKeys = useMemo(() => sections.map((s) => s.sectionKey), [sections]);
     const sectionOfField = useCallback((f: FormFieldDefinitionDto) => f.sectionKey, []);
@@ -215,13 +249,6 @@ export function FormFieldsBuilderPanel({ module, configs, canEdit, notify, unsav
                     )}
                 </Box>
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
-                    {archivedCount > 0 && (
-                        <FormControlLabel
-                            sx={{ m: 0, mr: 1 }}
-                            control={<Switch size="small" checked={showArchived} onChange={(e) => setShowArchived(e.target.checked)} />}
-                            label={<Typography sx={{ fontSize: '0.76rem', color: 'var(--crm-slate-600)' }}>Show archived ({archivedCount})</Typography>}
-                        />
-                    )}
                     {canEdit && (
                         <>
                             <Button variant="contained" size="small" startIcon={<AddRoundedIcon />} onClick={() => setEditor({ open: true })} sx={primaryButtonSx}>
@@ -306,6 +333,7 @@ export function FormFieldsBuilderPanel({ module, configs, canEdit, notify, unsav
                                 sectionBlockProps={sectionBlockProps}
                                 onSectionPointerDown={onSectionPointerDown}
                                 canDragSection={sections.length > 1}
+                                placesOf={(field) => fieldPlaces(configs, field)}
                             />
                         );
                     })}
@@ -361,7 +389,7 @@ export function FormFieldsBuilderPanel({ module, configs, canEdit, notify, unsav
             >
                 <Typography sx={{ fontSize: '0.85rem', color: 'var(--crm-slate-600)' }}>
                     The field is removed from the {CRM_MODULE_LABELS[module]} form and drawer for good. Values already stored on records are no
-                    longer shown. To hide it but keep it restorable, use Archive instead.
+                    longer shown. To keep it but take it off the form, turn off its form visibility instead.
                 </Typography>
                 {deleteTarget?.dropdownCategoryKey && (
                     <Typography sx={{ fontSize: '0.8rem', color: 'var(--mui-palette-text-secondary)' }}>{dropdownFateMessage(configs, module, deleteTarget)}</Typography>
@@ -531,6 +559,7 @@ function SectionBlock({
     sectionBlockProps,
     onSectionPointerDown,
     canDragSection,
+    placesOf,
 }: {
     module: CrmModuleKey;
     section: ConfiguredSection;
@@ -557,6 +586,8 @@ function SectionBlock({
     onSectionPointerDown: RowDragProps['onPointerDown'];
     /** False when this is the tab's only section. */
     canDragSection: boolean;
+    /** Other forms that have a field (shown under its label). */
+    placesOf: (field: FormFieldDefinitionDto) => FieldPlace[];
 }) {
     const canDeleteSection = lockedFields.length === 0;
     const sectionDragDisabled = !canEdit || busy || !canDragSection;
@@ -683,6 +714,7 @@ function SectionBlock({
                         onEdit={() => onEdit(field)}
                         onPatch={(body) => onPatch(field, body)}
                         onDelete={() => onDelete(field)}
+                        places={placesOf(field)}
                         dragProps={rowDragProps(field, field.isActive)}
                         dragSx={rowDragSx(field)}
                     />
@@ -694,6 +726,62 @@ function SectionBlock({
 
 // ── Field row ────────────────────────────────────────────────────────────────
 
+/** "Also on" line of a shared field: one chip per other form, tinted with that form's module colour. */
+function SharedPlaces({ places }: { places: FieldPlace[] }) {
+    return (
+        <Box sx={{ mt: 0.4, display: 'flex', alignItems: 'center', gap: 0.5, flexWrap: 'wrap' }}>
+            <Tooltip
+                arrow
+                title={
+                    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.25 }}>
+                        <span>Shared field: the same field is also on these forms. Its stored value is shared, but each form has its own label, placement and settings.</span>
+                        {places.map((p) => (
+                            <span key={p.key}>• {describePlace(p)}</span>
+                        ))}
+                    </Box>
+                }
+            >
+                <Box component="span" sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.35, color: 'var(--mui-palette-text-muted)', cursor: 'default' }}>
+                    <ShareOutlinedIcon sx={{ fontSize: 12 }} />
+                    <Typography component="span" sx={{ fontSize: '0.7rem', fontWeight: 600 }}>
+                        Also on
+                    </Typography>
+                </Box>
+            </Tooltip>
+            {places.map((p) => {
+                const color = getModuleColor(p.module === 'convert' ? 'leads' : p.module === 'partner-companies' ? 'partnerCompanies' : p.module);
+                return (
+                    <Tooltip key={p.key} title={describePlace(p)} arrow>
+                        <Box
+                            component="span"
+                            sx={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: 0.4,
+                                px: 0.6,
+                                borderRadius: '4px',
+                                fontSize: '0.68rem',
+                                fontWeight: 600,
+                                lineHeight: 1.6,
+                                whiteSpace: 'nowrap',
+                                color: color.text,
+                                backgroundColor: color.soft,
+                                border: `1px solid ${color.border}`,
+                                opacity: p.hidden ? 0.65 : 1,
+                                cursor: 'default',
+                            }}
+                        >
+                            <Box component="span" sx={{ width: 6, height: 6, borderRadius: '50%', backgroundColor: color.main, flexShrink: 0 }} />
+                            {p.name}
+                            {p.hidden && <VisibilityOffOutlinedIcon sx={{ fontSize: 11 }} />}
+                        </Box>
+                    </Tooltip>
+                );
+            })}
+        </Box>
+    );
+}
+
 export function FieldRow({
     field,
     canEdit,
@@ -704,17 +792,23 @@ export function FieldRow({
     dragProps,
     dragSx,
     allowDelete = true,
+    convert = false,
+    places,
 }: {
     field: FormFieldDefinitionDto;
+    /** Other forms that have the same field (see `fieldPlaces`), listed under its label. */
+    places?: FieldPlace[];
     canEdit: boolean;
     busy: boolean;
-    onEdit: () => void;
+    onEdit?: () => void;
     onPatch: (body: UpdateFieldPayload) => Promise<void>;
-    onDelete: () => void;
+    onDelete?: () => void;
     dragProps: RowDragProps;
     dragSx: Record<string, unknown>;
     /** False hides permanent deletion (a view that only borrows the module's fields leaves that to the module's own form). */
     allowDelete?: boolean;
+    /** Convert Lead's row: no Drawer toggle and no edit / delete actions (see `CONVERT_GRID_COLUMNS`). */
+    convert?: boolean;
 }) {
     const locked = field.isCoreLocked;
     const unsaved = useHasUnsavedChanges(field.id);
@@ -726,7 +820,7 @@ export function FieldRow({
             {...dragProps}
             sx={{
                 display: 'grid',
-                gridTemplateColumns: GRID_COLUMNS,
+                gridTemplateColumns: convert ? CONVERT_GRID_COLUMNS : GRID_COLUMNS,
                 gap: 1.5,
                 alignItems: 'center',
                 px: 2,
@@ -751,13 +845,13 @@ export function FieldRow({
                             Locked
                         </Badge>
                     )}
-                    {!field.isActive && <Badge tone="archived">Archived</Badge>}
                     {unsaved && (
                         <Badge tone="unsaved" title="Changed in this session: click Save Changes to apply it">
                             Unsaved
                         </Badge>
                     )}
                 </Box>
+                {places && places.length > 0 && <SharedPlaces places={places} />}
             </Box>
 
             <Box>
@@ -787,50 +881,46 @@ export function FieldRow({
                 disabledReason={locked ? lockReason : undefined}
                 onChange={(isRequired) => void onPatch({ isRequired })}
             />
-            <LabeledSwitch
-                label={`${field.label} visible in form`}
-                checked={field.isVisibleInForm}
-                disabled={disabled || locked}
-                disabledReason={locked ? lockReason : undefined}
-                onChange={(isVisibleInForm) => void onPatch({ isVisibleInForm })}
-            />
-            <LabeledSwitch
-                label={`${field.label} visible in drawer`}
-                checked={field.isVisibleInDrawer}
-                disabled={disabled}
-                onChange={(isVisibleInDrawer) => void onPatch({ isVisibleInDrawer })}
-            />
+            {convert && isConvertModule(field.module) ? (
+                <ConvertSwitch field={field} module={field.module} disabled={disabled} onPatch={onPatch} />
+            ) : (
+                <LabeledSwitch
+                    label={`${field.label} visible in form`}
+                    checked={field.isVisibleInForm}
+                    disabled={disabled || locked}
+                    disabledReason={locked ? lockReason : undefined}
+                    onChange={(isVisibleInForm) => void onPatch({ isVisibleInForm })}
+                />
+            )}
+            {!convert && (
+                <LabeledSwitch
+                    label={`${field.label} visible in drawer`}
+                    checked={field.isVisibleInDrawer}
+                    disabled={disabled}
+                    onChange={(isVisibleInDrawer) => void onPatch({ isVisibleInDrawer })}
+                />
+            )}
 
-            <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 0.25 }}>
-                {canEdit && field.isActive && (
-                    <Tooltip title="Edit field" arrow>
-                        <IconButton size="small" aria-label={`Edit ${field.label}`} onClick={onEdit} disabled={busy}>
-                            <EditOutlinedIcon sx={{ fontSize: 17, color: 'var(--crm-text-blue-600)' }} />
-                        </IconButton>
-                    </Tooltip>
-                )}
-                {canEdit && !locked && (
-                    <Tooltip title={field.isActive ? 'Archive (values on existing records are kept)' : 'Restore'} arrow>
-                        <IconButton
-                            size="small"
-                            aria-label={field.isActive ? `Archive ${field.label}` : `Restore ${field.label}`}
-                            disabled={busy}
-                            onClick={() => void onPatch({ isActive: !field.isActive })}
-                        >
-                            {field.isActive ? <ArchiveOutlinedIcon sx={{ fontSize: 17, color: 'var(--crm-amber-700)' }} /> : <UnarchiveOutlinedIcon sx={{ fontSize: 17, color: 'var(--mui-palette-success-main)' }} />}
-                        </IconButton>
-                    </Tooltip>
-                )}
-                {canEdit && !locked && allowDelete && (
-                    <Tooltip title="Delete permanently" arrow>
-                        <span>
-                            <IconButton size="small" aria-label={`Delete ${field.label}`} disabled={busy} onClick={onDelete}>
-                                <DeleteOutlineOutlinedIcon sx={{ fontSize: 17, color: busy ? undefined : dangerColor }} />
+            {!convert && (
+                <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 0.25 }}>
+                    {canEdit && field.isActive && onEdit && (
+                        <Tooltip title="Edit field" arrow>
+                            <IconButton size="small" aria-label={`Edit ${field.label}`} onClick={onEdit} disabled={busy}>
+                                <EditOutlinedIcon sx={{ fontSize: 17, color: 'var(--crm-text-blue-600)' }} />
                             </IconButton>
-                        </span>
-                    </Tooltip>
-                )}
-            </Box>
+                        </Tooltip>
+                    )}
+                    {canEdit && !locked && allowDelete && onDelete && (
+                        <Tooltip title="Delete permanently" arrow>
+                            <span>
+                                <IconButton size="small" aria-label={`Delete ${field.label}`} disabled={busy} onClick={onDelete}>
+                                    <DeleteOutlineOutlinedIcon sx={{ fontSize: 17, color: busy ? undefined : dangerColor }} />
+                                </IconButton>
+                            </span>
+                        </Tooltip>
+                    )}
+                </Box>
+            )}
         </Box>
     );
 }

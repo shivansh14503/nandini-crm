@@ -84,7 +84,7 @@
         "createdAt": "2026-10-25T05:42:59.773Z",
         "updatedAt": "2026-10-30T02:42:59.773Z",
         "createdBy": "mittal.sharma",
-        "followUpRemarks": "Submitted revised quote for 25 TallyPrime Gold user licenses + Biz Analyst enterprise plan + CredFlow auto-reconciliation.",
+        "remarks": "Submitted revised quote for 25 TallyPrime Gold user licenses + Biz Analyst enterprise plan + CredFlow auto-reconciliation.",
         "contact": "Vikram Malhotra",
         "contactEmail": "vikram.m@apexindustries.in"
     },
@@ -142,7 +142,7 @@
         "createdAt": "2026-10-22T05:42:59.773Z",
         "updatedAt": "2026-10-30T00:42:59.773Z",
         "createdBy": "mittal.sharma",
-        "followUpRemarks": "Final negotiation on 35TB cloud storage SLA and ransomware protection warranty terms.",
+        "remarks": "Final negotiation on 35TB cloud storage SLA and ransomware protection warranty terms.",
         "contact": "Pooja Agarwal",
         "contactEmail": "pooja.agarwal@sterlinglogistics.com"
     },
@@ -200,7 +200,7 @@
         "createdAt": "2026-10-18T05:42:59.773Z",
         "updatedAt": "2026-10-29T05:42:59.773Z",
         "createdBy": "mittal.sharma",
-        "followUpRemarks": "Deal closed won! Client issued purchase order for Tally Server 9 enterprise license. Installation scheduled for Friday.",
+        "remarks": "Deal closed won! Client issued purchase order for Tally Server 9 enterprise license. Installation scheduled for Friday.",
         "contact": "Deepak Singhania",
         "contactEmail": "deepak@singhaniaelectronics.com"
     },
@@ -258,7 +258,7 @@
         "createdAt": "2026-10-24T05:42:59.773Z",
         "updatedAt": "2026-10-28T05:42:59.773Z",
         "createdBy": "bhanu.pratap",
-        "followUpRemarks": "Demonstrated Connect 2T barcode scanning integrated into Tally sales order workflow. Customer requested quote for 4 scanning terminals.",
+        "remarks": "Demonstrated Connect 2T barcode scanning integrated into Tally sales order workflow. Customer requested quote for 4 scanning terminals.",
         "contact": "Harish Chandra",
         "contactEmail": "h.chandra@chandraauto.com"
     },
@@ -331,7 +331,7 @@
         "createdAt": "2026-10-26T05:42:59.773Z",
         "updatedAt": "2026-10-29T05:42:59.773Z",
         "createdBy": "neha.gupta",
-        "followUpRemarks": "Assessing requirement for customized B-Softwares multi-company consolidated balance sheet reporting with CredFlow debtor follow-up.",
+        "remarks": "Assessing requirement for customized B-Softwares multi-company consolidated balance sheet reporting with CredFlow debtor follow-up.",
         "contact": "Kavita Sundaram",
         "contactEmail": "kavita.s@velocishealth.io"
     },
@@ -389,7 +389,7 @@
         "createdAt": "2026-10-23T05:42:59.773Z",
         "updatedAt": "2026-10-28T05:42:59.773Z",
         "createdBy": "amit.verma",
-        "followUpRemarks": "Qualifying security requirements for 75 diagnostic clinical workstations and automated HIPAA compliant backups.",
+        "remarks": "Qualifying security requirements for 75 diagnostic clinical workstations and automated HIPAA compliant backups.",
         "contact": "Sunita Menon",
         "contactEmail": "sunita.menon@zenithbiotech.in"
     },
@@ -447,7 +447,7 @@
         "createdAt": "2026-10-27T05:42:59.773Z",
         "updatedAt": "2026-10-30T03:42:59.773Z",
         "createdBy": "mittal.sharma",
-        "followUpRemarks": "Renewal of 3 TallyPrime Silver TSS licenses + training on automated e-Way Bill and e-Invoice generation.",
+        "remarks": "Renewal of 3 TallyPrime Silver TSS licenses + training on automated e-Way Bill and e-Invoice generation.",
         "contact": "Rameshwar Dayal",
         "contactEmail": "rameshwardayal@dayalagro.in"
     },
@@ -505,7 +505,7 @@
         "createdAt": "2026-10-16T05:42:59.773Z",
         "updatedAt": "2026-10-28T05:42:59.773Z",
         "createdBy": "mittal.sharma",
-        "followUpRemarks": "Deal lost due to internal project postponement by client board of directors. To re-connect in next financial year.",
+        "remarks": "Deal lost due to internal project postponement by client board of directors. To re-connect in next financial year.",
         "contact": "Alok Nath Tiwari",
         "contactEmail": "alok.tiwari@tiwariinfra.com"
     }

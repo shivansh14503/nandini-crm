@@ -10,12 +10,16 @@ import { countRecordsWithKey, describeMigration, lockModuleFields, migrateFieldK
 import { describeOptionMigration, migrateOptionValue } from './optionValueRename.js';
 import {
     APP_REQUIRED_CATEGORY_KEYS,
+    CONVERT_FIELD_NAMES,
+    convertFieldUnavailableReason,
     CRM_MODULES,
     DEFAULT_FIELDS,
     FIXED_OPTION_CATEGORY_KEYS,
+    isConvertModule,
     isFieldTombstoned,
     MODULE_TABS,
     sectionKeyFromLabel,
+    type ConvertModuleKey,
     type CrmModuleKey,
 } from './formConfig.defaults.js';
 import {
@@ -101,6 +105,8 @@ export interface FormFieldDefinitionDto {
     isActive: boolean;
     isVisibleInForm: boolean;
     isVisibleInDrawer: boolean;
+    /** Shown on the Convert Lead form (contacts / organizations / opportunities only). */
+    isVisibleInConvert: boolean;
     dropdownCategoryId: string | null;
     dropdownCategoryKey: string | null;
     validationRules: Record<string, unknown> | null;
@@ -242,6 +248,7 @@ const toFieldDto = (f: FormFieldDefinition, categoryKeys: Map<string, string>): 
     isActive: f.isActive,
     isVisibleInForm: f.isVisibleInForm,
     isVisibleInDrawer: f.isVisibleInDrawer,
+    isVisibleInConvert: f.isVisibleInConvert,
     dropdownCategoryId: f.dropdownCategoryId,
     dropdownCategoryKey: f.dropdownCategoryId ? (categoryKeys.get(f.dropdownCategoryId) ?? null) : null,
     validationRules: parseJsonObject(f.validationRulesJson),
@@ -715,7 +722,7 @@ export const formConfigService = {
 
     // ── Options ──
 
-    /** Adds an option; re-adding an archived value restores it instead of failing. */
+    /** Adds an option. */
     async addOption(categoryKey: string, body: unknown, user: AuthUser): Promise<DropdownOptionDto> {
         const input = createOptionSchema.parse(body);
         const option = await runInTransaction(async (tx) => {
@@ -726,33 +733,27 @@ export const formConfigService = {
                 ]);
             }
             const existing = await tx.dropdownOption.findUnique({ where: { categoryId_value: { categoryId: category.id, value: input.value } } });
-            if (existing?.isActive) {
+            if (existing) {
                 throw HttpError.conflict(`'${input.value}' is already an option of ${category.label}.`, [
                     { message: 'This option already exists.', path: ['value'] },
                 ]);
             }
             const last = await tx.dropdownOption.aggregate({ where: { categoryId: category.id }, _max: { sortOrder: true } });
-            const saved = existing
-                ? await tx.dropdownOption.update({
-                      where: { id: existing.id },
-                      // Restored under its stored value, which is also its name.
-                      data: { isActive: true, label: existing.value, ...(input.meta !== undefined ? { metaJson: input.meta ? JSON.stringify(input.meta) : null } : {}) },
-                  })
-                : await tx.dropdownOption.create({
-                      data: {
-                          categoryId: category.id,
-                          value: input.value,
-                          label: input.value,
-                          metaJson: input.meta ? JSON.stringify(input.meta) : null,
-                          sortOrder: (last._max.sortOrder ?? 0) + 10,
-                      },
-                  });
+            const saved = await tx.dropdownOption.create({
+                data: {
+                    categoryId: category.id,
+                    value: input.value,
+                    label: input.value,
+                    metaJson: input.meta ? JSON.stringify(input.meta) : null,
+                    sortOrder: (last._max.sortOrder ?? 0) + 10,
+                },
+            });
             await auditService.record(tx, {
                 entityType: 'DropdownOption',
                 entityId: saved.id,
-                action: existing ? 'STATUS_CHANGE' : 'CREATE',
+                action: 'CREATE',
                 changedBy: user.username,
-                changes: withMeta({ category: category.key, value: saved.value, label: saved.label, ...(existing ? { restored: true } : {}) }, user, {
+                changes: withMeta({ category: category.key, value: saved.value, label: saved.label }, user, {
                     module: category.module,
                     categoryKey: category.key,
                     categoryLabel: category.label,
@@ -770,19 +771,12 @@ export const formConfigService = {
         const option = await runInTransaction(async (tx) => {
             const before = await findOption(tx, optionId);
             const renamed = input.label !== undefined && input.label !== before.label;
-            if (before.isSystem) {
-                // The app's code compares records against a system option's value (e.g. lead 'Converted'), and an
-                // option's name and value are one, so a system option can't be renamed either.
-                if (renamed) {
-                    throw HttpError.badRequest('System options cannot be renamed.', [
-                        { message: `'${before.label}' drives CRM business logic, so its name is fixed.`, path: ['label'] },
-                    ]);
-                }
-                if (input.isActive === false) {
-                    throw HttpError.badRequest('System options cannot be archived.', [
-                        { message: `'${before.label}' drives CRM business logic and must stay available.`, path: ['isActive'] },
-                    ]);
-                }
+            // The app's code compares records against a system option's value (e.g. lead 'Converted'), and an
+            // option's name and value are one, so a system option can't be renamed.
+            if (before.isSystem && renamed) {
+                throw HttpError.badRequest('System options cannot be renamed.', [
+                    { message: `'${before.label}' drives CRM business logic, so its name is fixed.`, path: ['label'] },
+                ]);
             }
             // An option's stored value is its name: renaming it renames the value, and records follow.
             let migrationNote: string | undefined;
@@ -791,10 +785,8 @@ export const formConfigService = {
                 where: { id: before.id },
                 data: {
                     ...(renamed ? { label: input.label } : {}),
-                    ...(input.isActive !== undefined ? { isActive: input.isActive } : {}),
                     ...(input.meta !== undefined ? { metaJson: input.meta ? JSON.stringify(input.meta) : null } : {}),
-                    // An archived option can't be offered, so it can't stay the default either.
-                    ...(input.isActive === false ? { isDefault: false } : input.isDefault !== undefined ? { isDefault: input.isDefault } : {}),
+                    ...(input.isDefault !== undefined ? { isDefault: input.isDefault } : {}),
                 },
             });
             const changes: Record<string, unknown> = diffRecords(before, after);
@@ -803,7 +795,7 @@ export const formConfigService = {
                 await auditService.record(tx, {
                     entityType: 'DropdownOption',
                     entityId: before.id,
-                    action: input.isActive !== undefined && input.isActive !== before.isActive ? 'STATUS_CHANGE' : 'UPDATE',
+                    action: 'UPDATE',
                     changedBy: user.username,
                     changes: withMeta(changes, user, await optionAuditMeta(tx, after)),
                 });
@@ -815,8 +807,8 @@ export const formConfigService = {
     },
 
     /**
-     * Permanent delete. Records that stored this value keep the raw text (they no longer resolve to a label);
-     * archive (`PATCH isActive:false`) instead when that matters. Blocked for system options.
+     * Permanent delete. Records that stored this value keep the raw text (forms show it tagged "Removed").
+     * Blocked for system options.
      */
     async deleteOption(optionId: string, user: AuthUser): Promise<{ id: string }> {
         await runInTransaction(async (tx) => {
@@ -951,9 +943,18 @@ export const formConfigService = {
             if (isFieldTombstoned(before.validationRulesJson)) throw HttpError.notFound('Form field not found');
             // Only core-locked fields are protected; every other field (built-in or custom) is freely editable.
             if (before.isCoreLocked) {
-                if (input.isActive === false) reject('isActive', `${before.label} is a core field and cannot be archived.`);
                 if (input.isRequired === false && before.isRequired) reject('isRequired', `${before.label} is a core field and must stay required.`);
                 if (input.isVisibleInForm === false) reject('isVisibleInForm', `${before.label} is a core field and cannot be hidden.`);
+            }
+            if (input.isVisibleInConvert !== undefined) {
+                if (!isConvertModule(before.module)) reject('isVisibleInConvert', 'Only contact, organization and opportunity fields can be shown on Convert Lead.');
+                const convertModule = before.module as ConvertModuleKey;
+                if (input.isVisibleInConvert) {
+                    const reason = convertFieldUnavailableReason(convertModule, { ...before, dropdownCategoryKey: undefined });
+                    if (reason) reject('isVisibleInConvert', `${before.label} can't be shown on Convert Lead: ${reason.toLowerCase()}.`);
+                } else if (before.isCoreLocked && before.fieldKey in CONVERT_FIELD_NAMES[convertModule]) {
+                    reject('isVisibleInConvert', `${before.label} is a core field and must stay on Convert Lead.`);
+                }
             }
             if (input.tabKey !== undefined) assertTab(before.module, input.tabKey);
             const nextTabKey = input.tabKey ?? before.tabKey;
@@ -1022,7 +1023,7 @@ export const formConfigService = {
                     ...(input.isRequired !== undefined ? { isRequired: input.isRequired } : {}),
                     ...(input.isVisibleInForm !== undefined ? { isVisibleInForm: input.isVisibleInForm } : {}),
                     ...(input.isVisibleInDrawer !== undefined ? { isVisibleInDrawer: input.isVisibleInDrawer } : {}),
-                    ...(input.isActive !== undefined ? { isActive: input.isActive } : {}),
+                    ...(input.isVisibleInConvert !== undefined ? { isVisibleInConvert: input.isVisibleInConvert } : {}),
                     ...(dropdownCategoryId !== undefined ? { dropdownCategoryId } : {}),
                     ...(input.validationRules !== undefined
                         ? { validationRulesJson: input.validationRules ? JSON.stringify(input.validationRules) : null }
@@ -1075,7 +1076,7 @@ export const formConfigService = {
                 await auditService.record(tx, {
                     entityType: 'FormField',
                     entityId: before.id,
-                    action: input.isActive !== undefined && input.isActive !== before.isActive ? 'STATUS_CHANGE' : 'UPDATE',
+                    action: 'UPDATE',
                     changedBy: user.username,
                     changes: withMeta(changes, user, { module: after.module, fieldKey: after.fieldKey, fieldLabel: after.label }),
                 });
@@ -1105,6 +1106,7 @@ export const formConfigService = {
                         isActive: false,
                         isVisibleInForm: false,
                         isVisibleInDrawer: false,
+                        isVisibleInConvert: false,
                         isRequired: false,
                         dropdownCategoryId: null,
                         validationRulesJson: JSON.stringify({ _deleted: true }),

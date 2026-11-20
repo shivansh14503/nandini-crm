@@ -43,7 +43,7 @@ export const opportunityInputSchema = z.object({
     nextFollowupTime: optionalText('Next Followup Time', 20),
     followupType: optionalText('Followup Type', L.option),
     customerResponse: optionalText('Customer Response', L.option),
-    followUpRemarks: optionalDescription('Follow Up Remarks'),
+    remarks: optionalDescription('Remarks'),
     description: optionalText('Description', L.longText),
     assignedTo: requiredText('Assigned Representative', L.username),
 

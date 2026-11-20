@@ -57,10 +57,10 @@ export function ConvertOpportunitySection() {
                             placeholder="Search and select products..."
                         />
                     ),
-                    followUpRemarks: (
+                    remarks: (
                         <RhfTextField<F>
                             name="opportunityDescription"
-                            label="Follow Up Remarks"
+                            label="Remarks"
                             required
                             hint="Stage summary & action items"
                             multiline

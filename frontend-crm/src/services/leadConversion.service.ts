@@ -117,10 +117,25 @@ export function buildConvertLeadDefaults(lead: Lead): ConvertLeadFormValues {
         nextFollowupDate: lead.nextFollowupDate,
         nextFollowupTime: lead.nextFollowupTime ?? '',
         followupType: lead.followupType ?? '',
-        opportunityDescription: lead.followUpRemarks ?? '',
+        opportunityDescription: lead.remarks ?? '',
         opportunityLeadSource: lead.leadSource ?? '',
         opportunityAssignedTo: lead.assignedTo,
         copyActivitiesTo: [],
+        // Other fields an admin may put on Convert Lead start from what the conversion would carry over from the lead.
+        extraFields: {
+            contacts: {},
+            organizations: {
+                tradeName: lead.tradeName && lead.tradeName !== lead.organizationName ? lead.tradeName : '',
+                billingAddress: lead.primaryAddress ?? '',
+                billingCity: lead.primaryCity ?? '',
+                billingState: lead.primaryState ?? '',
+                billingPostalCode: lead.primaryPostalCode ?? '',
+                billingCountry: lead.primaryCountry ?? '',
+                registrationType: lead.registrationType ?? '',
+                gstNumber: lead.gstNumber ?? '',
+            },
+            opportunities: {},
+        },
     });
 }
 
