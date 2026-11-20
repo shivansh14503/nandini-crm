@@ -33,7 +33,7 @@
 
 // Error (any status ≥ 400)
 { "status": "error", "code": "VALIDATION_ERROR", "message": "GST No is required.",
-  "errors": [ { "message": "GST No is required.", "path": ["gstNo"] } ] }
+  "errors": [ { "message": "GST Number is required.", "path": ["gstNumber"] } ] }
 ```
 
 ### 1.2 List query parameters (all CRUD lists)
@@ -84,7 +84,7 @@ The auth endpoints use the older `{ status: 'ok', … }` envelope rather than `{
 | `/leads` | CRUD | `GET /check-duplicates?mobile&emails&excludeId&excludeType` — informational matches in leads/contacts/organizations · `POST /:id/convert` — atomic conversion → `{ organization, contact, opportunity, organizationCreated, contactCreated }`; fields the admin made required on the Contact / Organization / Opportunity forms are required here too (`400` with the form field name in `errors[].path`), except for a contact or organization that already exists and is linked as it is | `status`, `excludeStatus`, `leadType`, `leadSource`, `organizationName`, `assignedTo`, `nextFollowupDate` |
 | `/opportunities` | CRUD | – (line-item totals computed server-side; line items replaced only when sent) | `salesStage`, `excludeSalesStage`, `organizationId`, `contactId`, `productId`, `assignedTo`, `minGrandTotal`, `nextFollowupDate` |
 | `/quotations` | CRUD | `GET /:id/pdf?templateId&disposition=inline\|attachment` → `application/pdf` (30/min/user, Redis-cached). Creating a quotation advances the linked opportunity's stage | `status`, `quoteStage`, `opportunityId`, `organizationId`, `contactId`, `productId`, `assignedTo` |
-| `/organizations` | CRUD | `GET /check-unique?organizationName&gstNo&excludeId` → `{ exists, field?, accountCode?, message? }` · `PATCH /bulk-status` `{ ids, status: 'Active'\|'Inactive', inactivityReason? }`. `GET /:id` records a "recently viewed" entry | `accountStatus`, `customerType`, `natureOfBusiness`, `assignedUser`, `parentOrganizationId`, `recent` |
+| `/organizations` | CRUD | `GET /check-unique?organizationName&gstNumber&excludeId` → `{ exists, field?, accountCode?, message? }` · `PATCH /bulk-status` `{ ids, status: 'Active'\|'Inactive', inactivityReason? }`. `GET /:id` records a "recently viewed" entry | `accountStatus`, `customerType`, `natureOfBusiness`, `assignedTo`, `parentOrganizationId`, `recent` |
 | `/contacts` | CRUD | – | `organizationId`, `assignedTo`, `isPrimaryContact` |
 
 ### 2.3 Support, catalogue and partners
@@ -110,7 +110,7 @@ The auth endpoints use the older `{ status: 'ok', … }` envelope rather than `{
 | GET | `/lookups/address-master?country=IN` | 24 h | `{ countries, subdivisions }` |
 | GET | `/lookups/cities?country&state&search&limit` | 24 h (no search) | City picker |
 | GET | `/lookups/form-configs?includeInactive` | 1 h | Same payload as `GET /form-configs` |
-| GET | `/lookups/tax-id-holders?owner&gstNo&panNumber&excludeId` | never | "Is this GSTIN / PAN already used?" |
+| GET | `/lookups/tax-id-holders?owner&gstNumber&panNumber&excludeId` | never | "Is this GSTIN / PAN already used?" |
 | GET | `/lookups/email-check?email` | never (DB is the record) | Form's on-blur check → `{ email, status, reason, message, suggestion }`. An address already saved on any record returns its stored result (no provider call); otherwise free checks, then the provider. Rate limited per user |
 | GET | `/audit-logs/:entityType/:entityId?limit=100` | – | `{ entries, revisions }` newest first. `entityType` ∈ organizations, contacts, leads, opportunities, quotations, products, tickets, partner-companies, users, form-configs (`entityId` = module key, `shared` or `all`) |
 

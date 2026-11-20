@@ -59,7 +59,7 @@ const USAGE_SELECT: Record<CityOwner, { code?: string; name: string }> = {
     organization: { code: 'accountCode', name: 'organizationName' },
     lead: { code: 'leadCode', name: 'name' },
     quotation: { code: 'quotationCode', name: 'quotationTitle' },
-    partnerCompany: { name: 'companyName' },
+    partnerCompany: { name: 'partnerName' },
 };
 
 const toDto = (row: CityRow, usageCount = 0): AdminCityDto => ({

@@ -117,8 +117,8 @@ export function DynamicFormField({ field, required, applyDefault = true }: Dynam
             case 'phone':
                 return <RhfPhoneField {...common} placeholder={placeholder} fieldSize={fieldSize} setsFormDefault={false} />;
             case 'email':
-                // Built-in email lists (lead / contact / partner `emailAddresses`) hold several addresses.
-                return field.isSystem && field.fieldKey === 'emailAddresses' ? (
+                // Built-in email lists (lead / contact / partner `emailAddress`) hold several addresses.
+                return field.isSystem && field.fieldKey === 'emailAddress' ? (
                     <RhfEmailList
                         name={name}
                         label={field.label}

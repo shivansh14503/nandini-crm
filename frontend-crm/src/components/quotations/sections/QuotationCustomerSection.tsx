@@ -32,8 +32,8 @@ export function QuotationCustomerSection() {
                 hint="Associated account"
             />
             <RhfTextField<QuotationFormData>
-                name="contactName"
-                label="Contact Person"
+                name="contact"
+                label="Contact"
                 personName
                 required
                 placeholder="e.g. Rajesh Kumar"
@@ -44,7 +44,7 @@ export function QuotationCustomerSection() {
                 placeholder="e.g. 9876543210"
             />
             <RhfEmailField<QuotationFormData>
-                name="emailAddress"
+                name="contactEmail"
                 label="Contact Email"
                 placeholder="rajesh@example.com"
             />

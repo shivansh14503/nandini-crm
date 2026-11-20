@@ -176,7 +176,7 @@ SQL Server is the only source of truth; Redis only ever holds derived or disposa
 | --- | --- |
 | Admin features | `requireRole('Admin', 'Administrator', 'Super Admin')` — form customisation, document series, cities, PDF template management |
 | Global data roles | Admin, Director – Operations, Regional Sales Head, Sales Manager, System Administrator, Accounts Manager see **all** records |
-| Everyone else | Row-level scope: only records where they are the owner (`assignedTo`, or `assignedUser` on organizations) **or** the creator (`createdBy`). Lists add this as a Prisma `where`; single-record reads/writes call `assertRecordAccess` (403) |
+| Everyone else | Row-level scope: only records where they are the owner (`assignedTo`) **or** the creator (`createdBy`). Lists add this as a Prisma `where`; single-record reads/writes call `assertRecordAccess` (403) |
 
 Role names are compared case-insensitively and with any dash style.
 
@@ -196,7 +196,7 @@ Role names are compared case-insensitively and with any dash style.
 All errors use one envelope, produced by `middlewares/errorHandler.ts`:
 
 ```json
-{ "status": "error", "code": "VALIDATION_ERROR", "message": "…", "errors": [{ "message": "…", "path": ["gstNo"] }] }
+{ "status": "error", "code": "VALIDATION_ERROR", "message": "…", "errors": [{ "message": "…", "path": ["gstNumber"] }] }
 ```
 
 `errors[].path` matches react-hook-form field paths, so the frontend highlights the exact field. See the

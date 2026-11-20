@@ -20,7 +20,7 @@ export interface SimilarOrganizationMatch {
     billingCity: string | null;
     billingState: string | null;
     accountStatus: string;
-    gstNo: string | null;
+    gstNumber: string | null;
     matchKind: OrgNameMatchKind;
     /** Whether the legal name or the trade name matched (older servers omit it: legal name). */
     matchedField?: OrgNameMatchField;
@@ -29,8 +29,8 @@ export interface SimilarOrganizationMatch {
 export interface OrganizationUniqueCheck {
     exists: boolean;
     /** How the duplicate was found: same name (exact), same legal name written differently (canonical), or GSTIN. */
-    matchKind?: 'exact' | 'canonical' | 'gstNo';
-    field?: 'organizationName' | 'gstNo';
+    matchKind?: 'exact' | 'canonical' | 'gstNumber';
+    field?: 'organizationName' | 'gstNumber';
     id?: string;
     accountCode?: string;
     organizationName?: string;
@@ -46,7 +46,7 @@ export const organizationService = {
     ...baseOrganizationService,
     /** Read-only duplicate check against live organizations; `excludeId` skips the record being edited. */
     checkUnique: async (
-        params: { organizationName?: string; gstNo?: string; excludeId?: string },
+        params: { organizationName?: string; gstNumber?: string; excludeId?: string },
         signal?: AbortSignal
     ): Promise<OrganizationUniqueCheck> => {
         const res = await apiClient.get<ApiResponse<OrganizationUniqueCheck>>(`${baseOrganizationService.endpoint}/check-unique`, {

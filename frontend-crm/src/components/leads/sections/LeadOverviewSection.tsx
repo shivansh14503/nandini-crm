@@ -44,23 +44,37 @@ import { OrganizationNameAutocomplete } from '@/components/organizations/Organiz
 import { useOrganizationNameCheck } from '@/components/organizations/useOrganizationNameCheck';
 import { useFormMode } from '@/context/FormModeContext';
 import { upperCase, useUndoSafeSanitizer } from '@/components/forms/undoSafeInput';
+import { CUSTOMER_RESPONSE_CATEGORY, CUSTOMER_RESPONSES, FieldGlow, useFollowUpDecision } from '@/components/forms/FollowUpDecision';
 
 const groupLabelSx = { mb: 2 } as const;
 /** Set only by the Convert Lead flow, never picked by hand. */
 const CONVERT_ONLY_STATUSES = ['Converted'];
 
+export interface LeadOverviewSectionProps {
+    leadId?: string;
+    /** Top-right toast of the form (e.g. "previous follow-up has expired"). */
+    notify?: (message: string, severity?: 'success' | 'error' | 'info' | 'warning') => void;
+    /** Told while the user still owes the next follow-up decision; the form refuses to save until it's made. */
+    onDecisionPendingChange?: (pending: boolean) => void;
+}
+
 /** Overview tab of the Lead form. Must be rendered inside a `FormProvider<LeadFormData>`. */
-export function LeadOverviewSection({ leadId }: { leadId?: string } = {}) {
+export function LeadOverviewSection({ leadId, notify, onDecisionPendingChange }: LeadOverviewSectionProps = {}) {
     const getOptions = useDropdownOptionsGetter();
     const { control, setValue, getValues, getFieldState } = useFormContext<LeadFormData>();
     const { mode } = useFormMode();
+    const isEdit = mode === 'edit';
+
+    // Customer Response → keep or reschedule the next follow-up (see FollowUpDecision).
+    const { setAnchor: setResponseAnchor, onResponseChange, glow: followUpGlow, popper: followUpPopper } = useFollowUpDecision({ enabled: isEdit, notify, onPendingChange: onDecisionPendingChange });
+    const customerResponseOptions = getOptions(CUSTOMER_RESPONSE_CATEGORY, CUSTOMER_RESPONSES);
 
     // Informational only: lists (and links to) the records that already use the mobile / email; never blocks the save.
     const mobile = useWatch({ control, name: 'mobile' });
-    const emailAddresses = useWatch({ control, name: 'emailAddresses' });
+    const emailAddress = useWatch({ control, name: 'emailAddress' });
     const { mobileMatches, emailMatches } = useExistingRecordCheck({
         mobile,
-        emailAddresses,
+        emailAddress,
         excludeId: leadId,
         owner: 'lead',
         enabled: mode !== 'view',
@@ -105,8 +119,8 @@ export function LeadOverviewSection({ leadId }: { leadId?: string } = {}) {
     const registrationType = useWatch({ control, name: 'registrationType' }) ?? '';
     const isRegistered = isGstRegistrationType(registrationType);
     React.useEffect(() => {
-        if (!isRegistered && getValues('gstNo')) {
-            setValue('gstNo', '', { shouldValidate: true });
+        if (!isRegistered && getValues('gstNumber')) {
+            setValue('gstNumber', '', { shouldValidate: true });
         }
     }, [isRegistered, getValues, setValue]);
 
@@ -129,7 +143,7 @@ export function LeadOverviewSection({ leadId }: { leadId?: string } = {}) {
                     <RhfPhoneField<LeadFormData> name="otherPhone" label="Other Phone" hint="Landline / alternate" placeholder="e.g. 0114567890" />
                     <RhfSelect<LeadFormData> name="designation" label="Designation" options={LEAD_DESIGNATIONS} placeholder="Select Designation" />
                     <RhfSelect<LeadFormData> name="department" label="Department" options={LEAD_DEPARTMENTS} placeholder="Select Department" />
-                    <RhfEmailList name="emailAddresses" emailNotices={emailNotices} />
+                    <RhfEmailList name="emailAddress" emailNotices={emailNotices} />
                 </FormGrid>
             </Box>
 
@@ -172,7 +186,7 @@ export function LeadOverviewSection({ leadId }: { leadId?: string } = {}) {
                     {/* GSTIN only exists for registered businesses, so the field only appears for 'Registered' / SEZ. */}
                     {isRegistered && (
                         <RhfUppercaseField<LeadFormData>
-                            name="gstNo"
+                            name="gstNumber"
                             label="GST Number"
                             required
                             hint="15-character GSTIN"
@@ -201,19 +215,35 @@ export function LeadOverviewSection({ leadId }: { leadId?: string } = {}) {
                         placeholder="Search or select contact..."
                     />
                     <RhfSelect<LeadFormData> name="followupType" label="Followup Type" hint="Default: Call" options={FOLLOWUP_TYPES} placeholder="Select Type" />
-                    <RhfDateTimeField<LeadFormData> dateName="nextFollowupDate" timeName="nextFollowupTime" label="Next Followup Date" required hint="Date & time" />
+                    {/* Asked on every edit (a new lead has no follow-up to report on yet).
+                        Starts its own row so it sits beside the Next Followup Date / Assigned to it decides. */}
+                    {mode !== 'create' && (
+                        <Box ref={setResponseAnchor} sx={{ minWidth: 0, gridColumnStart: 1, '&& > *': { mb: 0 } }}>
+                            <RhfSelect<LeadFormData>
+                                name="customerResponse"
+                                label="Customer Response"
+                                required={isEdit}
+                                hint="From the last follow-up"
+                                options={customerResponseOptions}
+                                placeholder="Select customer response"
+                                onValueChange={onResponseChange}
+                            />
+                        </Box>
+                    )}
+                    <FieldGlow active={followUpGlow}>
+                        <RhfDateTimeField<LeadFormData> dateName="nextFollowupDate" timeName="nextFollowupTime" label="Next Followup Date" required hint="Date & time" />
+                    </FieldGlow>
                     <RhfLookup<LeadFormData> name="assignedTo" label="Assigned to" lookupType="user" required placeholder="Select Representative" />
                     <RhfMultiAutocomplete<LeadFormData> name="productCategory" label="Product Category" required options={PRODUCT_CATEGORIES} placeholder="Search and select products..." />
                 </FormGrid>
             </Box>
 
-            {/* ── Notes: two textareas side by side ── */}
-            <FormGrid columns={2}>
+            {followUpPopper}
+
+            {/* ── Notes: full width ── */}
+            <FormGrid columns={1}>
                 <FormGridItem>
-                    <RhfTextField<LeadFormData> name="addDescription" label="Follow Up Remarks" required hint="Action items / requirement brief" multiline minRows={3} maxRows={5} placeholder="Enter specific followup requirement, client demand, or notes..." />
-                </FormGridItem>
-                <FormGridItem>
-                    <RhfTextField<LeadFormData> name="description" label="Description" hint="General background notes" multiline minRows={3} maxRows={5} placeholder="Enter background context, client setup, or meeting minutes..." />
+                    <RhfTextField<LeadFormData> name="followUpRemarks" label="Follow Up Remarks" required hint="Action items / requirement brief" multiline minRows={3} maxRows={5} placeholder="Enter specific followup requirement, client demand, or notes..." />
                 </FormGridItem>
             </FormGrid>
         </Box>

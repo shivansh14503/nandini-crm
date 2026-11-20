@@ -39,11 +39,11 @@ const CONVERT_CONTACT_PATHS: Record<string, string> = {
     name: 'contactName',
     mobile: 'contactMobile',
     phone3: 'contactPhone3',
-    emailAddresses: 'contactEmails',
+    emailAddress: 'contactEmails',
     designation: 'designation',
     department: 'department',
     communicationType: 'communicationType',
-    description: 'contactDescription',
+    addDescription: 'contactDescription',
     assignedTo: 'contactAssignedTo',
 };
 
@@ -51,10 +51,10 @@ const CONVERT_ORGANIZATION_PATHS: Record<string, string> = {
     natureOfBusiness: 'natureOfBusiness',
     typeOfEntity: 'typeOfEntity',
     customerType: 'customerType',
-    sourceOfLead: 'sourceOfLead',
-    memberOfParentCorp: 'memberOf',
-    description: 'organizationDescription',
-    assignedUser: 'organizationAssignedTo',
+    leadSource: 'leadSource',
+    memberOf: 'memberOf',
+    addDescriptionAndScope: 'organizationDescription',
+    assignedTo: 'organizationAssignedTo',
 };
 
 const CONVERT_OPPORTUNITY_PATHS: Record<string, string> = {
@@ -64,7 +64,7 @@ const CONVERT_OPPORTUNITY_PATHS: Record<string, string> = {
     referredBy: 'referredBy',
     nextFollowupDate: 'nextFollowupDate',
     followupType: 'followupType',
-    addDescription: 'opportunityDescription',
+    followUpRemarks: 'opportunityDescription',
     assignedTo: 'opportunityAssignedTo',
 };
 
@@ -87,19 +87,19 @@ function organizationPayload(values: ConvertLeadInput, lead: LeadRow) {
         accountStatus: 'Active',
         typeOfEntity: values.typeOfEntity,
         customerType: values.customerType,
-        sourceOfLead: values.sourceOfLead,
-        memberOfParentCorp: values.memberOf,
-        description: values.organizationDescription,
+        leadSource: values.leadSource,
+        memberOf: values.memberOf,
+        addDescriptionAndScope: values.organizationDescription,
         accountVerified: false,
         provideSupport: 'No',
-        assignedUser: values.organizationAssignedTo,
+        assignedTo: values.organizationAssignedTo,
         billingAddress: lead.primaryAddress,
         billingCity: lead.primaryCity,
         billingState: lead.primaryState,
         billingPostalCode: lead.primaryPostalCode,
         billingCountry: lead.primaryCountry,
         registrationType: registrationTypeFor(lead),
-        gstNo: lead.gstNo ?? undefined,
+        gstNumber: lead.gstNumber ?? undefined,
         partnerCompanies: [],
     };
 }
@@ -112,7 +112,7 @@ function contactPayload(values: ConvertLeadInput, organization: Pick<Organizatio
         organizationId: organization.id,
         mobile: values.contactMobile,
         phone3: values.contactPhone3,
-        emailAddresses: values.contactEmails,
+        emailAddress: values.contactEmails,
         assignedTo: values.contactAssignedTo,
         isPrimaryContact: values.isPrimaryContact,
         designation: values.designation,
@@ -120,7 +120,7 @@ function contactPayload(values: ConvertLeadInput, organization: Pick<Organizatio
         leftJob: 'No',
         communicationType: values.communicationType,
         doNotCall: values.doNotCall,
-        description: values.contactDescription,
+        addDescription: values.contactDescription,
     };
 }
 
@@ -134,12 +134,12 @@ function opportunityPayload(values: ConvertLeadInput, lead: LeadRow, organizatio
     const description = values.opportunityDescription;
     return {
         productCategory: values.productCategory,
-        contactName: contact?.name,
+        contact: contact?.name,
         contactId: contact?.id,
         organizationName: organization?.organizationName,
         organizationId: organization?.id,
         contactNumber: contact?.mobile,
-        emailAddress: primaryEmail,
+        contactEmail: primaryEmail,
         referredBy: values.referredBy,
         type: values.opportunityType,
         salesStage: NEW_OPPORTUNITY_STAGE,
@@ -148,7 +148,7 @@ function opportunityPayload(values: ConvertLeadInput, lead: LeadRow, organizatio
         nextFollowupDate: values.nextFollowupDate,
         nextFollowupTime: values.nextFollowupTime,
         followupType: values.followupType,
-        addDescription: description && description.length >= 3 ? description : (lead.addDescription ?? undefined),
+        followUpRemarks: description && description.length >= 3 ? description : (lead.followUpRemarks ?? undefined),
         description,
         assignedTo: values.opportunityAssignedTo,
         commission: NEW_OPPORTUNITY_COMMISSION,
@@ -195,7 +195,7 @@ export async function convertLead(leadId: string, body: unknown, user: AuthUser)
         throwFieldIssues([...contactIssues, ...organizationIssues, ...opportunityIssues]);
 
         const organization = existingOrganization
-            ? toOrganizationDto(existingOrganization, { isMyAccount: existingOrganization.assignedUser === user.username, isRecentlyViewed: false })
+            ? toOrganizationDto(existingOrganization, { isMyAccount: existingOrganization.assignedTo === user.username, isRecentlyViewed: false })
             : await createOrganizationRecord(tx, organizationConversionSchema.parse(organizationPayload(values, lead)), user);
 
         const contact = existingContact

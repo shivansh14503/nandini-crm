@@ -46,7 +46,7 @@ export const quotationFormSchema = z.object({
     termsAndConditionDescription: optionalText('Terms & Condition Description', L.longText),
     assignedTo: requiredString('Assigned Representative'),
 
-    opportunityName: requiredString('Opportunity Name'),
+    opportunity: requiredString('Opportunity'),
     company: requiredString('Company'),
     validationPeriod: optionalString,
     otherRef: optionalText('Other Ref.', L.shortText),
@@ -68,13 +68,13 @@ export const quotationFormSchema = z.object({
     grandTotal: zodAmount.default(0),
 
     // ── Tab 3: Address Information ────────────────────────────────
-    organizationName: optionalText('Organization', L.organizationName),
+    organizationName: optionalText('Organization Name', L.organizationName),
     organizationId: optionalString,
-    contactName: requiredText('Contact Name', L.personName),
+    contact: requiredText('Contact', L.personName),
     contactId: optionalString,
-    contactMobile: zodPhoneOptional,
+    contactNumber: zodPhoneOptional,
     mailingName: optionalText('Mailing Name', L.organizationName),
-    gstNo: zodGstOptional,
+    gstNumber: zodGstOptional,
     contactEmail: zodEmailOptional,
 
     billingAddress: requiredText('Street / Billing Address', L.address),
@@ -95,10 +95,7 @@ export const quotationFormSchema = z.object({
     opportunityCode: optionalString,
     status: optionalString,
     quoteDate: optionalString,
-    quotationSubject: optionalText('Quotation Subject', L.title),
-    contactNumber: zodPhoneOptional,
-    emailAddress: zodEmailOptional,
-    notes: optionalText('Internal Notes', L.longText),
+    quotationSubject: optionalText('Quotation Subject', L.title),    notes: optionalText('Internal Notes', L.longText),
     termsAndConditions: optionalText('Terms and Conditions', L.longText),
 
     /** Admin-defined custom field values (validated against the form configuration by useRhfForm). */

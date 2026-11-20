@@ -58,11 +58,10 @@ export interface FormFieldProps {
 }
 
 const COPYABLE_FIELDS = new Set([
-    'gstNo',
     'gstNumber',
     'panNumber',
-    'bankIfscCode',
-    'accountNumber',
+    'ifscCode',
+    'accountNo',
     'cinNo',
     'tanNumber',
     'msmeRegnNumber',

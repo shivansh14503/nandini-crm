@@ -20,7 +20,7 @@ import { acquireLocks, lockRecords, runInTransaction, softDeleteData, type BulkD
 import { toContactData, toContactDto, type ContactDto } from './contact.mapper.js';
 import { CONTACT_SORT_FIELDS, contactInputSchema, contactListQuerySchema, type ContactInput } from './contact.validator.js';
 
-const include = { emailAddresses: emailsInclude } as const;
+const include = { emailAddress: emailsInclude } as const;
 
 const notFound = () => HttpError.notFound('Contact not found');
 /** Columns `assertRecordAccess` reads. */
@@ -101,7 +101,7 @@ export async function createContactRecord(tx: TransactionClient, input: ContactI
     const row = await tx.contact.create({
         data: { ...toContactData({ ...input, assignedTo }, organization), contactCode, createdBy: user.username },
     });
-    await replaceEmails(tx, { contactId: row.id }, normalizeEmails(input.emailAddresses));
+    await replaceEmails(tx, { contactId: row.id }, normalizeEmails(input.emailAddress));
     if (input.isPrimaryContact) await demoteOtherPrimaries(tx, row.id, organization.id, user);
 
     const dto = toContactDto(await tx.contact.findUniqueOrThrow({ where: { id: row.id }, include }));
@@ -153,7 +153,7 @@ export const contactService = {
                 { mobile: { contains: page.search } },
                 { officePhone: { contains: page.search } },
                 { designation: { contains: page.search } },
-                { emailAddresses: { some: { email: { contains: page.search } } } },
+                { emailAddress: { some: { email: { contains: page.search } } } },
             ];
         }
 
@@ -174,7 +174,7 @@ export const contactService = {
     async create(body: unknown, user: AuthUser): Promise<ContactDto> {
         const input = contactInputSchema.parse(body);
         input.customFields = await validateModulePayload('contacts', asPayload(body), input.customFields);
-        await assertEmailsDeliverable(input.emailAddresses, 'emailAddresses');
+        await assertEmailsDeliverable(input.emailAddress, 'emailAddress');
 
         const created = await runInTransaction((tx) => createContactRecord(tx, input, user));
         await cacheService.invalidateEntityCaches('contacts');
@@ -184,7 +184,7 @@ export const contactService = {
 
     async update(id: string, patch: Record<string, unknown>, user: AuthUser): Promise<ContactDto> {
         const fieldConfig = await loadModuleFieldConfig('contacts');
-        if ('emailAddresses' in patch) await assertEmailsDeliverable(patch.emailAddresses, 'emailAddresses', { contactId: id });
+        if ('emailAddress' in patch) await assertEmailsDeliverable(patch.emailAddress, 'emailAddress', { contactId: id });
         let synced: NameSyncCounts | undefined;
         const updated = await runInTransaction(async (tx) => {
             synced = undefined;
@@ -208,8 +208,8 @@ export const contactService = {
             const assignedTo = (await assertAssigneeValid(tx, input.assignedTo, { previous: existing.assignedTo })) ?? existing.assignedTo;
 
             await tx.contact.update({ where: { id }, data: { ...toContactData({ ...input, assignedTo }, organization), updatedBy: user.username } });
-            if ('emailAddresses' in patch) {
-                await replaceEmails(tx, { contactId: id }, normalizeEmails(input.emailAddresses));
+            if ('emailAddress' in patch) {
+                await replaceEmails(tx, { contactId: id }, normalizeEmails(input.emailAddress));
             }
             if (input.isPrimaryContact) await demoteOtherPrimaries(tx, id, organization.id, user);
             // Opportunities, quotations and tickets show the contact's name; keep them in step.
@@ -225,7 +225,7 @@ export const contactService = {
         });
 
         await Promise.all([cacheService.invalidateEntityCaches('contacts'), invalidateSyncedCaches(synced)]);
-        if ('emailAddresses' in patch) queueEmailVerification({ contactId: id });
+        if ('emailAddress' in patch) queueEmailVerification({ contactId: id });
         return updated;
     },
 

@@ -115,7 +115,8 @@ export function PdfActionsButton({ module, recordId, variant = 'split', disabled
                         startIcon={busy ? busyIcon : <PictureAsPdfOutlinedIcon sx={{ fontSize: 16 }} />}
                         onClick={() => preview(templateId)}
                         aria-label={`Preview PDF${selected ? ` (${selected.name} template)` : ''}`}
-                        sx={{ ...baseSx, px: 2, borderRadius: '8px 0 0 8px' }}
+                        className="crm-split-start"
+                        sx={{ ...baseSx, px: 2 }}
                     >
                         Print / PDF
                     </Button>
@@ -127,7 +128,8 @@ export function PdfActionsButton({ module, recordId, variant = 'split', disabled
                         aria-haspopup="menu"
                         aria-expanded={open}
                         onClick={() => setOpen((o) => !o)}
-                        sx={{ ...baseSx, minWidth: 34, px: 0.5, borderRadius: '0 8px 8px 0', borderLeft: '1px solid rgba(255,255,255,0.35)' }}
+                        className="crm-split-end"
+                        sx={{ ...baseSx, minWidth: 34, px: 0.5, borderLeft: '1px solid rgba(255,255,255,0.35)' }}
                     >
                         <KeyboardArrowDownIcon sx={{ fontSize: 20 }} />
                     </Button>

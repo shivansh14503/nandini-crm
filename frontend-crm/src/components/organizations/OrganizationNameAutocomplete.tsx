@@ -260,7 +260,7 @@ export function OrganizationNameAutocomplete({
                             const active = index === highlighted;
                             const isActiveStatus = (record.accountStatus ?? 'Active') === 'Active';
                             const location = [record.billingCity, record.billingState].filter(Boolean).join(', ');
-                            const details = [location, record.gstNo ? `GST: ${record.gstNo}` : ''].filter(Boolean).join(' • ');
+                            const details = [location, record.gstNumber ? `GST: ${record.gstNumber}` : ''].filter(Boolean).join(' • ');
                             return (
                                 <Box
                                     key={record.id}

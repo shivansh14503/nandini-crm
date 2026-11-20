@@ -220,7 +220,7 @@ export function LeadDetailDrawer({
                                 )}
                             </Box>
 
-                            {l.addDescription && (
+                            {l.followUpRemarks && (
                                 <Box
                                     sx={{
                                         mt: 1,
@@ -231,7 +231,7 @@ export function LeadDetailDrawer({
                                     }}
                                 >
                                     <Typography sx={{ fontSize: '0.74rem', color: 'var(--crm-orange-800)', fontWeight: 500, lineHeight: 1.4 }}>
-                                        &quot;{l.addDescription}&quot;
+                                        &quot;{l.followUpRemarks}&quot;
                                     </Typography>
                                 </Box>
                             )}
@@ -290,10 +290,10 @@ export function LeadDetailDrawer({
                                     </>
                                 )}
 
-                                {l.emailAddresses && l.emailAddresses.length > 0 && (
+                                {l.emailAddress && l.emailAddress.length > 0 && (
                                     <>
                                         <Divider sx={{ borderColor: 'var(--mui-palette-border-light)' }} />
-                                        {l.emailAddresses.map((em, idx) => (
+                                        {l.emailAddress.map((em, idx) => (
                                             <DrawerChannelRow
                                                 key={idx}
                                                 icon={<EmailOutlinedIcon sx={{ fontSize: 16, color: 'var(--crm-text-blue-600)' }} />}

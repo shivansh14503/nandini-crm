@@ -11,7 +11,7 @@ import type { ContactFormData } from '@/types/contact.types';
 export function ContactPreferencesSection() {
     return (
         <RhfTextField<ContactFormData>
-            name="description"
+            name="addDescription"
             label="Add Description"
             multiline
             minRows={3}

@@ -47,7 +47,7 @@ export const PARTNER_COMPANY_FORM_TABS: (FormTabDefinition & { id: PartnerCompan
     { id: 'statutory', label: 'Statutory', icon: <ReceiptLongOutlinedIcon sx={{ fontSize: 18 }} /> },
 ];
 
-const STATUTORY_FIELDS = new Set(['gstNo', 'panNumber', 'cinNo', 'msmeRegnNumber', 'tanNumber']);
+const STATUTORY_FIELDS = new Set(['gstNumber', 'panNumber', 'cinNo', 'msmeRegnNumber', 'tanNumber']);
 
 /** Tab that renders a field, so validation can take the user to it. */
 function tabForField(field: string): PartnerCompanyTabKey {
@@ -57,20 +57,20 @@ function tabForField(field: string): PartnerCompanyTabKey {
 }
 
 const DEFAULT_FORM: PartnerCompanyFormData = {
-    companyName: '',
+    partnerName: '',
     natureOfPartner: '',
-    phone: '',
+    officePhone: '',
     website: '',
-    emailAddresses: [{ id: 'eml-1', email: '', isPrimary: true, isOptedOut: false, isInvalidBounce: false }],
+    emailAddress: [{ id: 'eml-1', email: '', isPrimary: true, isOptedOut: false, isInvalidBounce: false }],
     addDescription: '',
     description: '',
     assignedTo: '',
     principalCompany: '',
 
     bankName: '',
-    bankBranch: '',
-    accountNumber: '',
-    bankIfscCode: '',
+    branch: '',
+    accountNo: '',
+    ifscCode: '',
 
     billingAddress: '',
     billingStreet: '',
@@ -87,7 +87,7 @@ const DEFAULT_FORM: PartnerCompanyFormData = {
     shippingCountry: 'IN',
     copyAddressFromBilling: false,
 
-    gstNo: '',
+    gstNumber: '',
     panNumber: '',
     cinNo: '',
     msmeRegnNumber: '',
@@ -107,7 +107,7 @@ function toFormValues(record: Partial<PartnerCompanyFormData>): PartnerCompanyFo
         const value = record[key];
         if (value !== undefined && value !== null) (values as Record<string, unknown>)[key] = value;
     }
-    if (values.emailAddresses.length === 0) values.emailAddresses = DEFAULT_FORM.emailAddresses;
+    if (values.emailAddress.length === 0) values.emailAddress = DEFAULT_FORM.emailAddress;
     return normalizeAddressFields(values, ADDRESS_PAIRS);
 }
 
@@ -150,7 +150,7 @@ export default function PartnerCompanyForm({
     const { reset, control, formState, handleSubmit, setError } = methods;
     const { isDirty, isSubmitting } = formState;
     const watchedValues = useWatch({ control }) as PartnerCompanyFormData;
-    const companyName = watchedValues.companyName ?? '';
+    const partnerName = watchedValues.partnerName ?? '';
 
 
     const defaultBreadcrumbs: BreadcrumbItem[] = [
@@ -160,8 +160,8 @@ export default function PartnerCompanyForm({
             label:
                 mode === 'create'
                     ? 'Create Partner Company'
-                    : companyName
-                      ? `${mode === 'view' ? 'View' : 'Edit'}: ${companyName}`
+                    : partnerName
+                      ? `${mode === 'view' ? 'View' : 'Edit'}: ${partnerName}`
                       : `${mode === 'view' ? 'View' : 'Edit'} Partner Company`,
         },
     ];
@@ -225,7 +225,7 @@ export default function PartnerCompanyForm({
             reset(values);
             setSaveFlash({
                 listPath: ROUTES.PARTNER_COMPANIES,
-                message: `Partner company "${values.companyName}" ${editing ? 'updated' : 'created'} successfully!`,
+                message: `Partner company "${values.partnerName}" ${editing ? 'updated' : 'created'} successfully!`,
                 severity: 'success',
                 recordId: saved?.id ?? partnerCompanyId,
             });
@@ -271,7 +271,7 @@ export default function PartnerCompanyForm({
                     saveLabel={mode === 'view' ? 'Edit Partner Company' : mode === 'edit' ? 'Update Partner Company' : 'Save Partner Company'}
                     cancelLabel={mode === 'view' ? 'Back' : 'Cancel'}
                     recordView={{
-                        title: companyName,
+                        title: partnerName,
                         subtitle: [watchedValues.natureOfPartner, watchedValues.billingCity].filter(Boolean).join(' • '),
                         avatarIcon: <HandshakeOutlinedIcon sx={{ fontSize: 28 }} />,
                         editHref: partnerCompanyId ? ROUTES.PARTNER_COMPANY_EDIT(partnerCompanyId) : undefined,
@@ -287,7 +287,7 @@ export default function PartnerCompanyForm({
                         <SectionLabel icon={<HandshakeOutlinedIcon sx={{ fontSize: 18 }} />} label="Company Details" sx={{ mb: 2 }} />
                         <FormGrid columns={3}>
                             <RhfTextField<PartnerCompanyFormData>
-                                name="companyName"
+                                name="partnerName"
                                 label="Partner Name"
                                 required
                                 placeholder="e.g. Computer Care"
@@ -300,7 +300,7 @@ export default function PartnerCompanyForm({
                                 options={[...NATURE_OF_PARTNER_OPTIONS]}
                                 placeholder="Select Nature of Partner"
                             />
-                            <RhfPhoneField<PartnerCompanyFormData> name="phone" label="Office Phone" required placeholder="e.g. 9876543210" />
+                            <RhfPhoneField<PartnerCompanyFormData> name="officePhone" label="Office Phone" required placeholder="e.g. 9876543210" />
                             <RhfTextField<PartnerCompanyFormData> name="website" label="Website" placeholder="https://" maxLength={200} />
                             <RhfLookup<PartnerCompanyFormData>
                                 name="assignedTo"
@@ -314,7 +314,7 @@ export default function PartnerCompanyForm({
                                 lookupType="organization"
                                 placeholder="Search or select principal company..."
                             />
-                            <RhfEmailList name="emailAddresses" label="Email Address" required />
+                            <RhfEmailList name="emailAddress" label="Email Address" required />
                         </FormGrid>
                         <FormGrid columns={2}>
                             <RhfTextField<PartnerCompanyFormData>
@@ -342,16 +342,16 @@ export default function PartnerCompanyForm({
                         <SectionLabel icon={<AccountBalanceOutlinedIcon sx={{ fontSize: 18 }} />} label="BANK DETAILS" sx={{ mb: 2 }} />
                         <FormGrid columns={4}>
                             <RhfTextField<PartnerCompanyFormData> name="bankName" label="Bank Name" placeholder="e.g. HDFC Bank, SBI" maxLength={FIELD_MAX_LENGTH.personName} />
-                            <RhfTextField<PartnerCompanyFormData> name="bankBranch" label="Branch" placeholder="e.g. Connaught Place, New Delhi" maxLength={150} />
+                            <RhfTextField<PartnerCompanyFormData> name="branch" label="Branch" placeholder="e.g. Connaught Place, New Delhi" maxLength={150} />
                             <RhfTextField<PartnerCompanyFormData>
-                                name="accountNumber"
+                                name="accountNo"
                                 label="Account No"
                                 placeholder="e.g. 50200012345678"
                                 numericOnly
                                 maxLength={FIELD_MAX_LENGTH.bankAccount}
                             />
                             <RhfUppercaseField<PartnerCompanyFormData>
-                                name="bankIfscCode"
+                                name="ifscCode"
                                 label="IFSC Code"
                                 placeholder="e.g. HDFC0001234"
                                 maxLength={FIELD_MAX_LENGTH.ifsc}
@@ -377,7 +377,7 @@ export default function PartnerCompanyForm({
                             sx={{ mb: 2 }}
                         />
                         <FormGrid columns={3}>
-                            <RhfUppercaseField<PartnerCompanyFormData> name="gstNo" label="GST Number" placeholder="e.g. 06AFZFS3757G1Z9" maxLength={FIELD_MAX_LENGTH.gstin} />
+                            <RhfUppercaseField<PartnerCompanyFormData> name="gstNumber" label="GST Number" placeholder="e.g. 06AFZFS3757G1Z9" maxLength={FIELD_MAX_LENGTH.gstin} />
                             <RhfUppercaseField<PartnerCompanyFormData> name="panNumber" label="PAN Number" placeholder="e.g. ABCDE1234F" maxLength={FIELD_MAX_LENGTH.pan} />
                             <RhfUppercaseField<PartnerCompanyFormData> name="cinNo" label="CIN No" placeholder="e.g. U74999DL2020PTC123456" maxLength={FIELD_MAX_LENGTH.cin} />
                             <RhfUppercaseField<PartnerCompanyFormData>

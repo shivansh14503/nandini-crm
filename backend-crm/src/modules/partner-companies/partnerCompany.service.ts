@@ -29,18 +29,18 @@ const notFound = () => HttpError.notFound('Partner company not found');
  * constraint that also covers soft-deleted rows, so a deleted partner's name stays reserved; that case gets
  * its own message instead of a raw constraint error.
  */
-async function assertUniqueName(tx: TransactionClient, companyName: string, excludeId?: string): Promise<void> {
-    const name = companyName.trim();
+async function assertUniqueName(tx: TransactionClient, partnerName: string, excludeId?: string): Promise<void> {
+    const name = partnerName.trim();
     await acquireLocks(tx, [`partnerCompany:name:${name.toLowerCase()}`]);
     const duplicate = await tx.partnerCompany.findFirst({
-        where: { companyName: name, ...(excludeId ? { NOT: { id: excludeId } } : {}) },
+        where: { partnerName: name, ...(excludeId ? { NOT: { id: excludeId } } : {}) },
         select: { isDeleted: true },
     });
     if (!duplicate) return;
     const message = duplicate.isDeleted
         ? `A deleted partner company is still named "${name}". Choose a different name.`
         : `A partner company named "${name}" already exists.`;
-    throw HttpError.conflict(message, [{ message, path: ['companyName'] }]);
+    throw HttpError.conflict(message, [{ message, path: ['partnerName'] }]);
 }
 
 /** Lookup lists (`/api/lookups/partner-companies`, and partner contacts, which carry the company name) and search. */
@@ -56,9 +56,9 @@ export async function invalidatePartnerCaches(): Promise<void> {
  * invalidates the partner caches once its transaction has committed.
  */
 export async function createPartnerCompanyRecord(tx: TransactionClient, input: PartnerCompanyRecordInput, user: AuthUser): Promise<PartnerCompanyDto> {
-    await assertUniqueName(tx, input.companyName);
+    await assertUniqueName(tx, input.partnerName);
     await assertTaxIdsUnique(tx, 'partnerCompany', input);
-    const emails = normalizeEmails(input.emailAddresses);
+    const emails = normalizeEmails(input.emailAddress);
     const row = await tx.partnerCompany.create({
         data: {
             ...(await resolveAddressPlaces(tx, 'partnerCompany', toPartnerCompanyData(input, emails, nullable(input.assignedTo)))),
@@ -94,9 +94,9 @@ export const partnerCompanyService = {
         if (filters.createdWithinDays) where.createdAt = { gte: daysAgo(filters.createdWithinDays) };
         if (page.search) {
             where.OR = [
-                { companyName: { contains: page.search } },
+                { partnerName: { contains: page.search } },
                 { natureOfPartner: { contains: page.search } },
-                { phone: { contains: page.search } },
+                { officePhone: { contains: page.search } },
                 { email: { contains: page.search } },
                 { city: { contains: page.search } },
                 { principalCompany: { contains: page.search } },
@@ -134,8 +134,6 @@ export const partnerCompanyService = {
 
             const before = toPartnerCompanyDto(existing);
             const merged: Record<string, unknown> = { ...before, ...patch };
-            // `officePhone` is a read alias; a patch that only sends it still means the phone.
-            if ('officePhone' in patch && !('phone' in patch)) merged.phone = patch.officePhone;
             const input = partnerCompanyInputSchema.parse(merged);
             input.customFields = checkModulePayload(fieldConfig, merged, input.customFields, {
                 submittedKeys: new Set(Object.keys(patch)),
@@ -143,13 +141,13 @@ export const partnerCompanyService = {
             });
 
             // Strict comparison: a case-only rename is re-checked too (excluding this record).
-            if (input.companyName !== existing.companyName) await assertUniqueName(tx, input.companyName, id);
+            if (input.partnerName !== existing.partnerName) await assertUniqueName(tx, input.partnerName, id);
             await assertTaxIdsUnique(tx, 'partnerCompany', input, { excludeId: id, previous: existing });
 
             const row = await tx.partnerCompany.update({
                 where: { id },
                 data: {
-                    ...(await resolveAddressPlaces(tx, 'partnerCompany', toPartnerCompanyData(input, normalizeEmails(input.emailAddresses), nullable(input.assignedTo)))),
+                    ...(await resolveAddressPlaces(tx, 'partnerCompany', toPartnerCompanyData(input, normalizeEmails(input.emailAddress), nullable(input.assignedTo)))),
                     updatedBy: user.username,
                 },
             });

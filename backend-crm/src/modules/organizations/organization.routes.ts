@@ -8,8 +8,8 @@ import { bulkStatusSchema } from './organization.validator.js';
 /**
  * /api/organizations
  *   GET    /             ?page&limit&search&sortBy&sortOrder&accountStatus&customerType&natureOfBusiness
- *                         &assignedUser&parentOrganizationId&mine&recent&createdWithinDays
- *   GET    /check-unique ?organizationName&gstNo&excludeId  → { exists, field?, accountCode?, message? }
+ *                         &assignedTo&parentOrganizationId&mine&recent&createdWithinDays
+ *   GET    /check-unique ?organizationName&gstNumber&excludeId  → { exists, field?, accountCode?, message? }
  *   GET    /:id          (also records a "recently viewed" entry for the caller)
  *   POST   /
  *   PUT    /:id          (partial; PATCH is an alias)

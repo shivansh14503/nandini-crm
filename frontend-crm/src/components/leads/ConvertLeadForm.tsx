@@ -60,7 +60,7 @@ const EMPTY_DEFAULTS: ConvertLeadFormValues = {
     natureOfBusiness: '',
     typeOfEntity: '',
     customerType: '',
-    sourceOfLead: '',
+    leadSource: '',
     memberOf: '',
     organizationDescription: '',
     organizationAssignedTo: '',

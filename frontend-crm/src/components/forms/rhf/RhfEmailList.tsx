@@ -14,7 +14,7 @@ const DEFAULT_SIZE: FieldSize = 'lg';
 import type { CorporateEmail } from '@/types/organization.types';
 
 export interface RhfEmailListProps {
-    /** Name of the `CorporateEmail[]` field. Defaults to `emailAddresses`. */
+    /** Name of the `CorporateEmail[]` field. Defaults to `emailAddress`. */
     name?: string;
     label?: string;
     required?: boolean;
@@ -35,7 +35,7 @@ export interface RhfEmailListProps {
  * Guarantees exactly one primary address whenever at least one row exists.
  */
 export function RhfEmailList({
-    name = 'emailAddresses',
+    name = 'emailAddress',
     label: baseLabel = 'Email Address',
     required: baseRequired,
     hint: baseHint,

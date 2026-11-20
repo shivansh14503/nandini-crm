@@ -52,7 +52,7 @@ function normalizeRegistrationType(value: unknown): unknown {
 }
 
 /**
- * Accepts legacy aliases before validation: `gstNumber` → `gstNo`, `billingStreet` → `billingAddress`, and
+ * Accepts legacy aliases before validation: `gstNumber` → `gstNumber`, `billingStreet` → `billingAddress`, and
  * legacy registration type spellings → the shared dropdown's values.
  */
 function normalizeAliases(value: unknown): unknown {
@@ -60,7 +60,7 @@ function normalizeAliases(value: unknown): unknown {
     const input = value as Record<string, unknown>;
     return {
         ...input,
-        gstNo: input.gstNo || input.gstNumber || undefined,
+        gstNumber: input.gstNumber || input.gstNumber || undefined,
         billingAddress: input.billingAddress || input.billingStreet || undefined,
         shippingAddress: input.shippingAddress || input.shippingStreet || undefined,
         registrationType: normalizeRegistrationType(input.registrationType),
@@ -85,16 +85,16 @@ const organizationFields = z.object({
     customerType: optionalText('Customer Type', L.option),
     sapCodeTallyId: optionalText('SAP Code / Tally ID', L.shortCode),
     showroomBranchCode: optionalText('Showroom / Branch Code', L.shortCode),
-    sourceOfLead: optionalText('Lead Source', L.option),
-    memberOfParentCorp: optionalText('Parent Corporation', L.organizationName),
+    leadSource: optionalText('Lead Source', L.option),
+    memberOf: optionalText('Parent Corporation', L.organizationName),
     numberOfEmployees: optionalText('Number of Employees', 30),
     annualTurnover: optionalText('Annual Turnover', 30),
-    description: optionalText('Description', L.organizationDescription),
+    addDescriptionAndScope: optionalText('Description', L.organizationDescription),
     accountVerified: z.boolean().default(false),
     activeAmc: z.boolean().default(false),
     activeCloud: z.boolean().default(false),
     provideSupport: enumWithDefault('Provide Support', ['Yes', 'No'], 'Yes'),
-    assignedUser: optionalText('Assigned User', L.username),
+    assignedTo: optionalText('Assigned User', L.username),
     corporateEmails: corporateEmailListSchema.optional(),
 
     // Billing address
@@ -122,11 +122,11 @@ const organizationFields = z.object({
     msmeRegnNumber: optionalUpperText('MSME Regn. Number', L.msme),
     accountName: optionalText('Account Name', L.organizationName),
     bankName: optionalText('Bank Name', L.personName),
-    bankIfscCode: optionalIfsc,
-    gstNo: optionalGst,
+    ifscCode: optionalIfsc,
+    gstNumber: optionalGst,
     cinNo: optionalUpperText('CIN No', L.cin),
     tanNumber: optionalUpperText('TAN Number', L.tan),
-    accountNumber: optionalText('Account Number', L.bankAccount),
+    accountNo: optionalText('Account Number', L.bankAccount),
     typeOfAccount: optionalText('Type Of Account', 30),
     bankAddress: optionalText('Bank Address', L.address),
 
@@ -160,8 +160,8 @@ export const organizationInputSchema = z.preprocess(
     normalizeAliases,
     organizationFields.superRefine((org, ctx) => {
         refinePostalCodes(org, ctx);
-        if (isGstRegistrationType(org.registrationType) && !org.gstNo) {
-            ctx.addIssue({ code: 'custom', path: ['gstNo'], message: `GST Number is required when Registration Type is ${org.registrationType}.` });
+        if (isGstRegistrationType(org.registrationType) && !org.gstNumber) {
+            ctx.addIssue({ code: 'custom', path: ['gstNumber'], message: `GST Number is required when Registration Type is ${org.registrationType}.` });
         }
     }),
 );
@@ -190,7 +190,7 @@ export const organizationListQuerySchema = z.object({
     customerType: csvQuery,
     /** Substring match, e.g. `distributor` for the master view's Distributor tab. */
     natureOfBusiness: z.string().trim().max(L.option).optional(),
-    assignedUser: z.string().trim().max(L.username).optional(),
+    assignedTo: z.string().trim().max(L.username).optional(),
     parentOrganizationId: z.string().trim().max(50).optional(),
     /** Only organizations assigned to the signed-in user ("My Accounts"). */
     mine: booleanQuery,
@@ -203,7 +203,7 @@ export const organizationListQuerySchema = z.object({
 const blankToUndefined = (value: unknown) => (typeof value === 'string' && value.trim() === '' ? undefined : value);
 export const checkOrganizationUniqueQuerySchema = z.object({
     organizationName: z.preprocess(blankToUndefined, z.string().trim().max(L.organizationName).optional()),
-    gstNo: z.preprocess(blankToUndefined, z.string().trim().toUpperCase().max(30).optional()),
+    gstNumber: z.preprocess(blankToUndefined, z.string().trim().toUpperCase().max(30).optional()),
     excludeId: z.preprocess(blankToUndefined, z.string().trim().max(50).optional()),
 });
 
@@ -222,6 +222,6 @@ export const ORGANIZATION_SORT_FIELDS = [
     'accountStatus',
     'billingCity',
     'billingState',
-    'assignedUser',
-    'gstNo',
+    'assignedTo',
+    'gstNumber',
 ] as const;

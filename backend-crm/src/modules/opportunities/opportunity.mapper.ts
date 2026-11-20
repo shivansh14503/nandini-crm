@@ -13,12 +13,12 @@ export interface OpportunityDto {
     opportunityCode: string;
     opportunityName: string;
     productCategory: string[];
-    contactName: string;
+    contact: string;
     contactId?: string;
     organizationName: string;
     organizationId?: string;
     contactNumber: string;
-    emailAddress: string;
+    contactEmail: string;
     referredBy: string;
     type: string;
     salesStage: string;
@@ -27,7 +27,8 @@ export interface OpportunityDto {
     nextFollowupDate: string;
     nextFollowupTime: string;
     followupType: string;
-    addDescription: string;
+    customerResponse: string;
+    followUpRemarks: string;
     description: string;
     assignedTo: string;
     tallySerialNo: string;
@@ -59,12 +60,12 @@ export function toOpportunityDto(row: OpportunityRow): OpportunityDto {
         opportunityCode: row.opportunityCode,
         opportunityName: text(row.opportunityName),
         productCategory: parseStringArray(row.productCategoryJson),
-        contactName: row.contactName,
+        contact: row.contact,
         contactId: row.contactId ?? undefined,
         organizationName: row.organizationName,
         organizationId: row.organizationId ?? undefined,
         contactNumber: row.contactNumber,
-        emailAddress: text(row.emailAddress),
+        contactEmail: text(row.contactEmail),
         referredBy: text(row.referredBy),
         type: text(row.type),
         salesStage: row.salesStage,
@@ -73,7 +74,8 @@ export function toOpportunityDto(row: OpportunityRow): OpportunityDto {
         nextFollowupDate: toDateOnly(row.nextFollowupDate),
         nextFollowupTime: text(row.nextFollowupTime),
         followupType: text(row.followupType),
-        addDescription: text(row.addDescription),
+        customerResponse: text(row.customerResponse),
+        followUpRemarks: text(row.followUpRemarks),
         description: text(row.description),
         assignedTo: row.assignedTo,
         tallySerialNo: text(row.tallySerialNo),
@@ -108,12 +110,12 @@ export function toOpportunityData(
         customDataJson: serializeCustomFields(input.customFields),
         opportunityName: nullable(input.opportunityName),
         productCategoryJson: stringifyStringArray(input.productCategory),
-        contactName: links.contact.name,
+        contact: links.contact.name,
         contactId: links.contact.id,
         organizationName: links.organization.name,
         organizationId: links.organization.id,
         contactNumber: input.contactNumber,
-        emailAddress: input.emailAddress ?? null,
+        contactEmail: input.contactEmail ?? null,
         referredBy: nullable(input.referredBy),
         type: nullable(input.type),
         salesStage: input.salesStage,
@@ -122,7 +124,8 @@ export function toOpportunityData(
         nextFollowupDate: fromOptionalDateOnly(input.nextFollowupDate),
         nextFollowupTime: nullable(input.nextFollowupTime),
         followupType: input.followupType ?? 'Call',
-        addDescription: nullable(input.addDescription),
+        customerResponse: nullable(input.customerResponse),
+        followUpRemarks: nullable(input.followUpRemarks),
         description: nullable(input.description),
         assignedTo: input.assignedTo,
         tallySerialNo: nullable(input.tallySerialNo),

@@ -21,7 +21,7 @@ import { createRateLimiter } from '../../middlewares/rateLimiter.js';
  *   GET /address-master      ?country=IN              → { countries, subdivisions }
  *   GET /cities              ?country=IN&state=IN-DL&search&limit → CityLookupDto[] (searches not cached)
  *   GET /form-configs        ?includeInactive         → { categories, fieldsByModule, moduleTabs }
- *   GET /tax-id-holders      ?owner&gstNo&panNumber&excludeId → TaxIdHolder[] (live, never cached)
+ *   GET /tax-id-holders      ?owner&gstNumber&panNumber&excludeId → TaxIdHolder[] (live, never cached)
  *   GET /email-check         ?email                   → EmailCheckResult (stored result of an address already saved on any record, else free checks + mailbox check; rate limited)
  */
 const router = Router();
@@ -45,8 +45,8 @@ router.get('/form-configs', handler((q) => formConfigService.getConfigs(q)));
 router.get(
     '/tax-id-holders',
     handler((q) => {
-        const { owner, gstNo, panNumber, excludeId } = taxIdHoldersQuerySchema.parse(q ?? {});
-        return findTaxIdHolders(prisma, owner, { gstNo, panNumber }, excludeId);
+        const { owner, gstNumber, panNumber, excludeId } = taxIdHoldersQuerySchema.parse(q ?? {});
+        return findTaxIdHolders(prisma, owner, { gstNumber, panNumber }, excludeId);
     })
 );
 // Run when a form's email field loses focus: an address already saved on any record returns its stored result;

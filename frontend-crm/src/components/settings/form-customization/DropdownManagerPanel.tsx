@@ -26,6 +26,7 @@ import SearchRoundedIcon from '@mui/icons-material/SearchRounded';
 import DeleteOutlineOutlinedIcon from '@mui/icons-material/DeleteOutlineOutlined';
 import EditOutlinedIcon from '@mui/icons-material/EditOutlined';
 import { DefaultBookmarkOffIcon, DefaultBookmarkOnIcon } from './defaultOptionIcons';
+import { convertFieldKeys, isConvertModule } from './ConvertLeadFieldsPanel';
 import { CityManagerPanel } from './CityManagerPanel';
 import { EditCategoryDialog } from './EditCategoryDialog';
 import { useConfigDraftActions, useHasUnsavedChanges } from './useConfigDraft';
@@ -62,6 +63,8 @@ export interface DropdownManagerPanelProps {
     configs: FormConfigsPayload;
     canEdit: boolean;
     notify: (message: string, severity?: 'success' | 'error' | 'info' | 'warning') => void;
+    /** Configuring what the Convert Lead form shows for `module` (one of its records). */
+    convert?: boolean;
 }
 
 const moduleLabel = (m: string) => CRM_MODULE_LABELS[m as CrmModuleKey] ?? m;
@@ -72,24 +75,66 @@ const ADDRESS_MODULES: readonly CrmModuleKey[] = ['leads', 'quotations', 'organi
 /**
  * Dropdowns listed under a module: those a field of the module uses, plus not-yet-placed ones that are this
  * module's or shared. A dropdown whose only field on this form was deleted therefore leaves this list while
- * staying under the modules that still use it.
+ * staying under the modules that still use it. With `convert`, only the dropdowns of the module's fields that the
+ * Convert Lead form collects (what Convert Lead shows for that record).
  */
-export function categoriesForModule(configs: FormConfigsPayload, module: CrmModuleKey): DropdownCategoryDto[] {
+export function categoriesForModule(configs: FormConfigsPayload, module: CrmModuleKey, convert = false): DropdownCategoryDto[] {
+    const convertKeys = convert && isConvertModule(module) ? convertFieldKeys(module) : null;
     return configs.categories
-        .filter((c) => c.usedBy.some((u) => u.module === module) || (c.usedBy.length === 0 && (c.module === module || c.module === 'shared')))
+        .filter((c) =>
+            convertKeys
+                ? c.usedBy.some((u) => u.module === module && convertKeys.has(u.fieldKey))
+                : c.usedBy.some((u) => u.module === module) || (c.usedBy.length === 0 && (c.module === module || c.module === 'shared')),
+        )
         .sort((a, b) => (a.module === module ? 0 : 1) - (b.module === module ? 0 : 1) || a.label.localeCompare(b.label));
 }
 
+/** Key of the Convert Lead form among the forms a dropdown is used on (it isn't a module of its own). */
+const CONVERT_FORM = 'convert-lead';
+
+export interface DropdownForm {
+    key: string;
+    label: string;
+    /** Labels of the fields on that form that use the dropdown. */
+    fields: string[];
+}
+
+/**
+ * The forms a dropdown's options show on: every module whose fields use it, plus Convert Lead when one of those
+ * fields is one Convert Lead collects (it reuses the Contact / Organization / Opportunity fields). A module's own
+ * dropdown that no field uses yet counts for its module.
+ */
+export function dropdownForms(category: DropdownCategoryDto): DropdownForm[] {
+    const forms = new Map<string, DropdownForm>();
+    const add = (key: string, label: string, field?: string) => {
+        const form = forms.get(key) ?? { key, label, fields: [] };
+        if (field && !form.fields.includes(field)) form.fields.push(field);
+        forms.set(key, form);
+    };
+    for (const u of category.usedBy) {
+        add(u.module, moduleLabel(u.module), u.label);
+        if (isConvertModule(u.module) && convertFieldKeys(u.module).has(u.fieldKey)) add(CONVERT_FORM, 'Convert Lead', u.label);
+    }
+    if (category.module !== 'shared' && !forms.has(category.module)) add(category.module, moduleLabel(category.module));
+    return [...forms.values()];
+}
+
+/** "Contacts (Communication Type), Convert Lead (Communication Type)". */
+const describeForms = (forms: DropdownForm[]) => forms.map((f) => (f.fields.length ? `${f.label} (${f.fields.join(', ')})` : f.label)).join(', ');
+
 /** Left sidebar + option editor for the selected module's dropdowns. */
-export function DropdownManagerPanel({ module, configs, canEdit, notify }: DropdownManagerPanelProps) {
-    const categories = useMemo(() => categoriesForModule(configs, module), [configs, module]);
+export function DropdownManagerPanel({ module, configs, canEdit, notify, convert = false }: DropdownManagerPanelProps) {
+    const categories = useMemo(() => categoriesForModule(configs, module, convert), [configs, module, convert]);
+    // The form being configured, as `dropdownForms` names it.
+    const currentForm = convert ? CONVERT_FORM : module;
     // Selected by key, and by id as well: renaming an admin-created dropdown renames its key when saved.
     const [selection, setSelection] = useState<{ key?: string; id?: string }>({ key: categories[0]?.key, id: categories[0]?.id });
     const setSelectedKey = (key: string) => {
         setCitiesSelected(false);
         setSelection({ key, id: categories.find((c) => c.key === key)?.id });
     };
-    const hasAddress = ADDRESS_MODULES.includes(module);
+    // Convert Lead collects no address, so its records offer no city list.
+    const hasAddress = !convert && ADDRESS_MODULES.includes(module);
     const [citiesSelected, setCitiesSelected] = useState(false);
     const showCities = hasAddress && citiesSelected;
     const [search, setSearch] = useState('');
@@ -172,11 +217,10 @@ export function DropdownManagerPanel({ module, configs, canEdit, notify }: Dropd
                     {visible.map((c) => {
                         const active = !showCities && c.key === activeKey;
                         const activeCount = c.options.filter((o) => o.isActive).length;
-                        // A module-owned dropdown placed on another module's form becomes shared between them.
-                        const modules = new Set<string>(c.usedBy.map((u) => u.module));
-                        if (c.module !== 'shared') modules.add(c.module);
-                        const otherModules = [...modules].filter((m) => m !== module);
-                        const isShared = c.module === 'shared' || otherModules.length > 0;
+                        // Shared when its options also show on another form (Convert Lead counts as one).
+                        const forms = dropdownForms(c);
+                        const otherForms = forms.filter((f) => f.key !== currentForm);
+                        const isShared = c.module === 'shared' || otherForms.length > 0;
                         return (
                             <Box
                                 key={c.key}
@@ -207,9 +251,9 @@ export function DropdownManagerPanel({ module, configs, canEdit, notify }: Dropd
                                     <Box sx={{ mt: 0.5, display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
                                         <Badge
                                             tone="shared"
-                                            title={`Shared by: ${[...new Set(c.usedBy.map((u) => moduleLabel(u.module)))].join(', ') || 'not linked to a field yet'}`}
+                                            title={`Used on: ${describeForms(forms) || 'not linked to a field yet'}`}
                                         >
-                                            Shared{otherModules.length > 0 ? ` · ${otherModules.map(moduleLabel).join(', ')}` : ''}
+                                            Shared{otherForms.length > 0 ? ` · ${otherForms.map((f) => f.label).join(', ')}` : ''}
                                         </Badge>
                                     </Box>
                                 )}
@@ -417,6 +461,7 @@ function CategoryEditor({
     };
 
     const rows = showArchived ? [...orderedActive, ...archived] : orderedActive;
+    const usedOn = dropdownForms(category);
 
     return (
         <Box sx={{ ...surfaceSx, overflow: 'hidden' }}>
@@ -455,6 +500,17 @@ function CategoryEditor({
                             </Tooltip>
                         </Box>
                     )}
+                </Box>
+                {/* Every form whose field shows these options: a change here applies to all of them. */}
+                <Box sx={{ mt: 1, display: 'flex', alignItems: 'center', gap: 0.75, flexWrap: 'wrap' }}>
+                    <Typography sx={{ fontSize: '0.74rem', fontWeight: 600, color: 'var(--mui-palette-text-secondary)' }}>Used on:</Typography>
+                    {usedOn.length === 0 && <Typography sx={{ fontSize: '0.74rem', color: 'var(--mui-palette-text-muted)' }}>No form yet</Typography>}
+                    {usedOn.map((form) => (
+                        <Badge key={form.key} tone="shared" title={form.fields.length ? `Field: ${form.fields.join(', ')}` : 'Not placed on a field yet'}>
+                            {form.label}
+                            {form.fields.length ? ` · ${form.fields.join(', ')}` : ''}
+                        </Badge>
+                    ))}
                 </Box>
             </Box>
 

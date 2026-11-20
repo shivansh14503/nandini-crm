@@ -47,14 +47,14 @@ These rules come from SQL Server's constraints and apply across the schema:
 4. **No cascade cycles:** SQL Server rejects multiple cascade paths (error 1785). Every cross-entity foreign key is
    `ON DELETE NO ACTION / ON UPDATE NO ACTION`. Only owned children cascade from their single parent.
 5. **No scalar arrays:** string lists are stored as JSON in `NVARCHAR(MAX)` columns suffixed `Json`
-   (`productCategoryJson`, `communicationTypeJson`, `partnerCompaniesJson`, `emailAddressesJson`). Repeating
+   (`productCategoryJson`, `communicationTypeJson`, `partnerCompaniesJson`, `emailAddressJson`). Repeating
    objects with their own fields (emails, line items) are child tables.
 6. **Custom fields:** each customisable entity has `customDataJson` = `{ "cf_fieldKey": value }`, described by
    `FormFieldDefinition` rows.
 7. **Ownership & audit columns:** `createdBy` / `updatedBy` hold **usernames** (not FKs to `Users`), plus `createdAt`
-   / `updatedAt`. The owner is `assignedTo` (or `assignedUser` on `Organization`), also a username string.
+   / `updatedAt`. The owner is `assignedTo`, also a username string.
 8. **Denormalised display names:** child records keep the parent's name next to its id (`organizationName` +
-   `organizationId`, `contactName` + `contactId`, `billingCity` + `billingCityId`) so lists sort and search without
+   `organizationId`, `contact` + `contactId`, `billingCity` + `billingCityId`) so lists sort and search without
    joins. The app writes renames through to linked live rows in the same transaction.
 9. **Unicode:** all text is `NVARCHAR`. String defaults that contain non-ASCII (e.g. `₹` in `currency`) are **not** set
    as DB defaults, because Prisma emits them without the `N` prefix; the API always sets them.
@@ -74,11 +74,11 @@ erDiagram
     Organization ||--o{ Opportunity : has
     Organization ||--o{ Quotation : has
     Organization ||--o{ Ticket : has
-    Contact ||--o{ EntityEmail : emailAddresses
+    Contact ||--o{ EntityEmail : emailAddress
     Contact ||--o{ Opportunity : "contact for"
     Contact ||--o{ Quotation : "contact for"
     Contact ||--o{ Ticket : "raised by"
-    Lead ||--o{ EntityEmail : emailAddresses
+    Lead ||--o{ EntityEmail : emailAddress
     Lead }o--o| Organization : "converted to"
     Lead }o--o| Contact : "converted to"
     Lead }o--o| Opportunity : "converted to"
@@ -101,11 +101,11 @@ erDiagram
 
 Not drawn (no foreign keys, linked by convention):
 
-- `assignedTo` / `assignedUser` / `createdBy` / `updatedBy` / `changedBy` / `TableFilter.username` → `Users.Username`.
+- `assignedTo` / `createdBy` / `updatedBy` / `changedBy` / `TableFilter.username` → `Users.Username`.
 - `AuditLog.entityType + entityId` → any audited row (polymorphic).
 - `DocumentSeries.module` → module name; `SequenceCounter.prefix` → series key.
 - `PdfTemplate.documentJson` may reference `PdfAsset.key` (logo) — deletion of a referenced asset is blocked in code.
-- `Ticket.natureOfCall` → `NatureOfCall.name`; `Ticket.partnerCompany` → `PartnerCompany.companyName` (names, not ids).
+- `Ticket.natureOfCall` → `NatureOfCall.name`; `Ticket.partnerCompany` → `PartnerCompany.partnerName` (names, not ids).
 
 ## 4. Table reference
 
@@ -131,15 +131,15 @@ Indexes: `email`, `isActive`.
 | Group | Columns |
 | --- | --- |
 | Identity | `id`, `accountCode` (UNIQUE), `organizationName` (stored UPPERCASE), `mailingName`, `tradeName` |
-| Overview | `natureOfBusiness`, `accountStatus` (`Active`/`Inactive`), `inactivityReason`, `typeOfEntity`, `customerType`, `sapCodeTallyId`, `showroomBranchCode`, `sourceOfLead`, `memberOfParentCorp`, `parentOrganizationId` → `Organization`, `numberOfEmployees`, `annualTurnover`, `description`, `accountVerified`/`verifiedAt`/`verifiedBy`, `activeAmc`, `activeCloud`, `provideSupport`, `assignedUser` (owner) |
+| Overview | `natureOfBusiness`, `accountStatus` (`Active`/`Inactive`), `inactivityReason`, `typeOfEntity`, `customerType`, `sapCodeTallyId`, `showroomBranchCode`, `leadSource`, `memberOf`, `parentOrganizationId` → `Organization`, `numberOfEmployees`, `annualTurnover`, `addDescriptionAndScope`, `accountVerified`/`verifiedAt`/`verifiedBy`, `activeAmc`, `activeCloud`, `provideSupport`, `assignedTo` (owner) |
 | Billing address | `billingAddress`, `billingStreet`, `billingCityId` → `City`, `billingCity`, `billingState`, `billingPostalCode`, `billingCountry`, `billingLatitude` |
 | Shipping address | same set with `shipping*`, `shippingLongitude`, `copyAddressFromBilling` |
-| Tax & bank | `registrationType`, `panNumber`, `msmeRegnNumber`, `gstNo`, `cinNo`, `tanNumber`, `accountName`, `bankName`, `bankIfscCode`, `accountNumber`, `typeOfAccount`, `bankAddress` |
+| Tax & bank | `registrationType`, `panNumber`, `msmeRegnNumber`, `gstNumber`, `cinNo`, `tanNumber`, `accountName`, `bankName`, `ifscCode`, `accountNo`, `typeOfAccount`, `bankAddress` |
 | JSON | `partnerCompaniesJson` (string[]), `customDataJson` |
 | Audit | `createdBy`, `updatedBy`, `createdAt`, `updatedAt`, `isDeleted`, `deletedAt` |
 
-Indexes: `organizationName`, `accountStatus`, `assignedUser`, `gstNo`, `billingCityId`, `shippingCityId`,
-`(isDeleted, createdAt)`, `(isDeleted, accountStatus, assignedUser)`.
+Indexes: `organizationName`, `accountStatus`, `assignedTo`, `gstNumber`, `billingCityId`, `shippingCityId`,
+`(isDeleted, createdAt)`, `(isDeleted, accountStatus, assignedTo)`.
 **Filtered unique index** (raw SQL, not in `schema.prisma`): `Organization_organizationName_live_key` on
 `organizationName WHERE isDeleted = 0`. Re-check `prisma migrate diff` after future migrations so Prisma doesn't try
 to drop it.
@@ -148,7 +148,7 @@ to drop it.
 
 `id`, `contactCode` (UNIQUE), `name`, `organizationName` + `organizationId` → `Organization`, `mobile` (required),
 `officePhone`, `phone3`–`phone5`, `assignedTo`, `isPrimaryContact`, `designation`, `department`, `leftJob`,
-`communicationTypeJson` (string[]), `doNotCall`, `description`, `customDataJson`, audit/soft-delete columns.
+`communicationTypeJson` (string[]), `doNotCall`, `addDescription`, `customDataJson`, audit/soft-delete columns.
 Emails live in `EntityEmail`.
 
 Indexes: `organizationId`, `mobile`, `name`, `assignedTo`, `(isDeleted, createdAt)`, `(isDeleted, assignedTo, createdAt)`.
@@ -158,7 +158,7 @@ Indexes: `organizationId`, `mobile`, `name`, `assignedTo`, `(isDeleted, createdA
 | Group | Columns |
 | --- | --- |
 | Identity | `id`, `leadCode` (UNIQUE), `name`, `mobile`, `otherPhone`, `mailingName`, `tradeName`, `organizationName`, `designation`, `department` |
-| Qualification | `leadSource`, `leadType`, `status` (default `New`), `productCategoryJson`, `followupType`, `nextFollowupDate` (DATE), `nextFollowupTime`, `registrationType`, `gstNo`, `turnover`, `noOfEmployee`, `referredBy`, `assignedTo`, `addDescription`, `description` |
+| Qualification | `leadSource`, `leadType`, `status` (default `New`), `productCategoryJson`, `followupType`, `customerResponse` (latest follow-up outcome, `shared_customer_response`; required on every edit by the form), `nextFollowupDate` (DATE), `nextFollowupTime`, `registrationType`, `gstNumber`, `turnover`, `noOfEmployee`, `referredBy`, `assignedTo`, `followUpRemarks`, `description` |
 | Addresses | `primary*` (with `primaryCityId` → `City`), `other*` (with `otherCityId`), `copyAddressFromLeft` |
 | Conversion | `convertedAt`, `convertedBy`, `convertedOrganizationId`, `convertedContactId`, `convertedOpportunityId` (FKs) — set only by the convert endpoint |
 | Other | `customDataJson`, audit/soft-delete columns |
@@ -169,9 +169,9 @@ Indexes: `status`, `assignedTo`, `mobile`, `nextFollowupDate`, `primaryCityId`, 
 
 ### 4.5 `Opportunity` and `OpportunityLineItem`
 
-`Opportunity`: `opportunityCode` (UNIQUE), `opportunityName`, `productCategoryJson`, `contactName`/`contactId`,
-`organizationName`/`organizationId`, `contactNumber`, `emailAddress`, `referredBy`, `type`, `salesStage`, `leadSource`,
-`leadGivenBy`, `nextFollowupDate`/`Time`, `followupType`, `addDescription`, `description`, `assignedTo`,
+`Opportunity`: `opportunityCode` (UNIQUE), `opportunityName`, `productCategoryJson`, `contact`/`contactId`,
+`organizationName`/`organizationId`, `contactNumber`, `contactEmail`, `referredBy`, `type`, `salesStage`, `leadSource`,
+`leadGivenBy`, `nextFollowupDate`/`Time`, `followupType`, `customerResponse` (as on leads), `followUpRemarks`, `description`, `assignedTo`,
 billing (`tallySerialNo`, `invoiceNo`, `invoiceDate`), `commission`, `addDocument`, totals (`currency`, `groupName`,
 `lumpSumDiscount`, `totalAmount`, `totalDiscount`, `subtotal`, `totalTax`, `grandTotal` — recomputed and verified
 server-side), `customDataJson`, audit/soft-delete.
@@ -187,9 +187,9 @@ line items on `opportunityId`, `productId`.
 
 `Quotation`: `quotationCode` (UNIQUE), `quotationTitle`, `quoteStage` (default `Draft`), `quotationDate`,
 `validUntil`, `validationPeriod`, `remarks`, terms (`termsAndCondition`, `termsAndConditionDescription`),
-payment terms, `assignedTo`, `opportunityName` + `opportunityId` → `Opportunity`, `company`, `otherRef`,
-`preparedFor`, totals (same set as Opportunity), customer snapshot (`organizationName`/`Id`, `contactName`/`Id`,
-`contactMobile`, `contactEmail`, `mailingName`, `gstNo`), billing address (required) and shipping address (with city
+payment terms, `assignedTo`, `opportunity` + `opportunityId` → `Opportunity`, `company`, `otherRef`,
+`preparedFor`, totals (same set as Opportunity), customer snapshot (`organizationName`/`Id`, `contact`/`Id`,
+`contactNumber`, `contactEmail`, `mailingName`, `gstNumber`), billing address (required) and shipping address (with city
 FKs), legacy alias columns (`status`, `quotationSubject`, `notes`, `termsAndConditions`), `customDataJson`,
 audit/soft-delete.
 
@@ -199,7 +199,7 @@ Indexes: `opportunityId`, `organizationId`, `contactId`, `quoteStage`, `assigned
 
 ### 4.7 `Ticket` (support)
 
-`ticketNumber` (UNIQUE), `amcFlag`, `cloudFlag`, `ticketSubject`, `organizationName`/`Id`, `contactPersonName` +
+`ticketNumber` (UNIQUE), `amcFlag`, `cloudFlag`, `ticketSubject`, `organizationName`/`Id`, `contact` +
 `contactId`, `contactNumber`, `contactEmail`, `ticketPriority`, `source`, `supportType`, `supportMode`,
 `natureOfCall` (name from `NatureOfCall`), `ticketStatus` (default `New`), `dueDate` (DATETIME), `problemReported`,
 `problemObserved`, `resolution`, `reasonForEscalatedCalls`, `rca`, `addDescription`, `accountAddress`, `leftJob`,
@@ -222,13 +222,13 @@ automatic check result `verificationStatus` (`valid` | `risky` | `invalid`; null
 `verificationReason`, `verifiedAt`. The database is the record of checked addresses: a decided result is final
 (no periodic re-check), and an address saved on any record counts as checked everywhere — `replaceEmails` copies an
 existing result onto a new row with the same address. Only an admin bulk check (`EmailValidationRun`) changes it.
-Returned as `corporateEmails` (organizations) or `emailAddresses` (contacts, leads). Writes replace the full set
+Returned as `corporateEmails` (organizations) or `emailAddress` (contacts, leads). Writes replace the full set
 (`replaceEmails`). Indexes on each FK and on `email` (duplicate checks).
 
 ### 4.10 `PartnerCompany` and `PartnerCompanyContact`
 
-Channel / referral partners. `companyName` is **globally unique** (soft-deleted partners keep their name reserved,
-because seeds upsert by name). Holds overview, `emailAddressesJson` (array of `{ email, isPrimary, … }`), bank details,
+Channel / referral partners. `partnerName` is **globally unique** (soft-deleted partners keep their name reserved,
+because seeds upsert by name). Holds overview, `emailAddressJson` (array of `{ email, isPrimary, … }`), bank details (`branch`, `accountNo`, `ifscCode`), `officePhone`, `gstNumber`,
 billing/shipping addresses with city FKs, statutory IDs, `customDataJson`, soft delete. `email` and `city` mirror the
 primary email and billing city for the lookup projection.
 
@@ -324,11 +324,11 @@ deleted). Index `createdAt`.
 
 - **Scoped list composites** `(isDeleted, assignedTo, createdAt)` match the most common query: "live records I own or
   created, newest first" (`buildAccessScopeWhere` + default sort). Organizations use
-  `(isDeleted, accountStatus, assignedUser)`.
+  `(isDeleted, accountStatus, assignedTo)`.
 - **`(isDeleted, createdAt)`** serves global-role lists.
 - **FK columns** are indexed (SQL Server doesn't do it automatically), which also speeds up name write-through
   `UPDATE … WHERE organizationId = …` and `contactId = …`.
-- **Search columns** (`name`, `mobile`, `organizationName`, `gstNo`, `email`) have plain indexes; `contains` searches
+- **Search columns** (`name`, `mobile`, `organizationName`, `gstNumber`, `email`) have plain indexes; `contains` searches
   still scan, but code/phone/GSTIN searches are rewritten as prefix (`startsWith`) or equality matches that can seek.
 
 ## 6. Data lifecycle

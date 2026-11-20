@@ -67,7 +67,8 @@ export function CreateSplitButton({ newButtonLabel, onNewClick, onImportClick, d
                     disabled={disabled}
                     startIcon={<AddIcon sx={{ fontSize: 16 }} />}
                     onClick={onNewClick}
-                    sx={{ ...baseSx, px: 2, borderRadius: '8px 0 0 8px' }}
+                    className="crm-split-start"
+                    sx={{ ...baseSx, px: 2 }}
                 >
                     {newButtonLabel}
                 </Button>
@@ -79,11 +80,11 @@ export function CreateSplitButton({ newButtonLabel, onNewClick, onImportClick, d
                     aria-haspopup="menu"
                     aria-expanded={open}
                     onClick={() => setOpen((o) => !o)}
+                    className="crm-split-end"
                     sx={{
                         ...baseSx,
                         minWidth: 34,
                         px: 0.5,
-                        borderRadius: '0 8px 8px 0',
                         borderLeft: '1px solid rgba(255,255,255,0.35)',
                     }}
                 >

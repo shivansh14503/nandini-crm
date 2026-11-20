@@ -10,14 +10,14 @@ import { acquireLocks } from './transactions.js';
  * repeat (a lead for an existing customer carries that organization's GSTIN; quotations copy their customer's).
  */
 export type TaxIdOwner = 'organization' | 'partnerCompany' | 'lead';
-export type TaxIdField = 'gstNo' | 'panNumber';
+export type TaxIdField = 'gstNumber' | 'panNumber';
 
 export interface TaxIds {
-    gstNo?: string | null;
+    gstNumber?: string | null;
     panNumber?: string | null;
 }
 
-const LABEL: Record<TaxIdField, string> = { gstNo: 'GSTIN', panNumber: 'PAN' };
+const LABEL: Record<TaxIdField, string> = { gstNumber: 'GSTIN', panNumber: 'PAN' };
 
 /** The live record of `owner` (other than `excludeId`) already holding `value` in `field`, as a display name. */
 async function findHolder(tx: TransactionClient, owner: TaxIdOwner, field: TaxIdField, value: string, excludeId?: string): Promise<string | null> {
@@ -28,14 +28,14 @@ async function findHolder(tx: TransactionClient, owner: TaxIdOwner, field: TaxId
             return row ? `organization "${row.organizationName}"` : null;
         }
         case 'partnerCompany': {
-            const row = await tx.partnerCompany.findFirst({ where: { [field]: value, isDeleted: false, ...notSelf }, select: { companyName: true } });
-            return row ? `partner company "${row.companyName}"` : null;
+            const row = await tx.partnerCompany.findFirst({ where: { [field]: value, isDeleted: false, ...notSelf }, select: { partnerName: true } });
+            return row ? `partner company "${row.partnerName}"` : null;
         }
         case 'lead': {
             // Leads have no PAN; converted leads live on as their organization, which holds the GSTIN from then on.
-            if (field !== 'gstNo') return null;
+            if (field !== 'gstNumber') return null;
             const row = await tx.lead.findFirst({
-                where: { gstNo: value, isDeleted: false, status: { not: CONVERTED_STATUS }, ...notSelf },
+                where: { gstNumber: value, isDeleted: false, status: { not: CONVERTED_STATUS }, ...notSelf },
                 select: { leadCode: true, name: true, organizationName: true },
             });
             if (!row) return null;
@@ -56,7 +56,7 @@ export async function assertTaxIdsUnique(
     ids: TaxIds,
     { excludeId, previous }: { excludeId?: string; previous?: TaxIds } = {},
 ): Promise<void> {
-    const toCheck = (['gstNo', 'panNumber'] as const)
+    const toCheck = (['gstNumber', 'panNumber'] as const)
         .map((field) => ({ field, value: ids[field]?.trim().toUpperCase() || '' }))
         .filter(({ field, value }) => value && value !== (previous?.[field]?.trim().toUpperCase() || ''));
     if (toCheck.length === 0) return;
@@ -83,7 +83,7 @@ export interface TaxIdHolder {
  */
 export async function findTaxIdHolders(tx: TransactionClient, owner: TaxIdOwner, ids: TaxIds, excludeId?: string): Promise<TaxIdHolder[]> {
     const holders: TaxIdHolder[] = [];
-    for (const field of ['gstNo', 'panNumber'] as const) {
+    for (const field of ['gstNumber', 'panNumber'] as const) {
         const value = ids[field]?.trim().toUpperCase() || '';
         if (!value) continue;
         const holder = await findHolder(tx, owner, field, value, excludeId);

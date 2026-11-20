@@ -80,7 +80,7 @@ const OVERVIEW_FIELD_KEYS = [
     'termsAndCondition',
     'termsAndConditionDescription',
     'assignedTo',
-    'opportunityName',
+    'opportunity',
     'company',
     'validationPeriod',
     'otherRef',
@@ -104,11 +104,11 @@ const LINE_ITEMS_FIELD_KEYS = [
 const ADDRESS_FIELD_KEYS = [
     'organizationName',
     'organizationId',
-    'contactName',
+    'contact',
     'contactId',
-    'contactMobile',
+    'contactNumber',
     'mailingName',
-    'gstNo',
+    'gstNumber',
     'contactEmail',
     'billingAddress',
     'billingCity',
@@ -140,7 +140,7 @@ const EMPTY_DEFAULTS: QuotationFormData = {
     termsAndConditionDescription: '',
     assignedTo: '',
 
-    opportunityName: '',
+    opportunity: '',
     company: 'Nandini Infosystems',
     validationPeriod: '30 Days',
     otherRef: '',
@@ -162,11 +162,11 @@ const EMPTY_DEFAULTS: QuotationFormData = {
     // Tab 3: Address Information
     organizationName: '',
     organizationId: '',
-    contactName: '',
+    contact: '',
     contactId: '',
-    contactMobile: '',
+    contactNumber: '',
     mailingName: '',
-    gstNo: '',
+    gstNumber: '',
     contactEmail: '',
 
     billingAddress: '',
@@ -188,8 +188,6 @@ const EMPTY_DEFAULTS: QuotationFormData = {
     status: 'Draft',
     quoteDate: new Date().toISOString().split('T')[0],
     quotationSubject: '',
-    contactNumber: '',
-    emailAddress: '',
     notes: '',
     termsAndConditions: '',
 };
@@ -313,8 +311,8 @@ export function CreateQuoteForm({
                     found.contactId
                         ? contactService.getById(found.contactId)
                         : contactService
-                              .getAll({ search: found.contactName })
-                              .then((contacts) => contacts.find((c) => sameText(c.name, found.contactName))),
+                              .getAll({ search: found.contact })
+                              .then((contacts) => contacts.find((c) => sameText(c.name, found.contact))),
                 ]);
                 if (!active) return;
 

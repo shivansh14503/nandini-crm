@@ -8,14 +8,12 @@ const DEFAULT_COUNTRY = 'IN';
 /** `ExtendedPartnerCompany` from frontend-crm/src/types/partner.types.ts. */
 export interface PartnerCompanyDto {
     id: string;
-    companyName: string;
+    partnerName: string;
     natureOfPartner: string;
-    phone: string;
-    /** Alias of `phone` (the form labels it "Office Phone"). */
     officePhone: string;
-    /** Primary address of `emailAddresses`. */
+    /** Primary address of `emailAddress`. */
     email: string;
-    emailAddresses: CorporateEmailDto[];
+    emailAddress: CorporateEmailDto[];
     website: string;
     addDescription: string;
     description: string;
@@ -23,9 +21,9 @@ export interface PartnerCompanyDto {
     principalCompany: string;
 
     bankName: string;
-    bankBranch: string;
-    accountNumber: string;
-    bankIfscCode: string;
+    branch: string;
+    accountNo: string;
+    ifscCode: string;
 
     billingAddress: string;
     billingStreet: string;
@@ -44,7 +42,7 @@ export interface PartnerCompanyDto {
     shippingCountry: string;
     copyAddressFromBilling: boolean;
 
-    gstNo: string;
+    gstNumber: string;
     panNumber: string;
     cinNo: string;
     msmeRegnNumber: string;
@@ -62,9 +60,9 @@ export interface PartnerCompanyDto {
 /** Stored email list; rows created before the full form (seeds) only have the single `email` column. */
 function parseEmails(row: PartnerCompany): CorporateEmailDto[] {
     let stored: NormalizedEmail[] = [];
-    if (row.emailAddressesJson) {
+    if (row.emailAddressJson) {
         try {
-            const parsed: unknown = JSON.parse(row.emailAddressesJson);
+            const parsed: unknown = JSON.parse(row.emailAddressJson);
             if (Array.isArray(parsed)) {
                 stored = parsed.filter(
                     (item): item is NormalizedEmail => Boolean(item) && typeof (item as NormalizedEmail).email === 'string',
@@ -91,16 +89,15 @@ function parseEmails(row: PartnerCompany): CorporateEmailDto[] {
 }
 
 export function toPartnerCompanyDto(row: PartnerCompany): PartnerCompanyDto {
-    const emailAddresses = parseEmails(row);
+    const emailAddress = parseEmails(row);
     const billingCity = text(row.billingCity ?? row.city);
     return {
         id: row.id,
-        companyName: row.companyName,
+        partnerName: row.partnerName,
         natureOfPartner: text(row.natureOfPartner),
-        phone: text(row.phone),
-        officePhone: text(row.phone),
-        email: (emailAddresses.find((e) => e.isPrimary) ?? emailAddresses[0])?.email ?? '',
-        emailAddresses,
+        officePhone: text(row.officePhone),
+        email: (emailAddress.find((e) => e.isPrimary) ?? emailAddress[0])?.email ?? '',
+        emailAddress,
         website: text(row.website),
         addDescription: text(row.addDescription),
         description: text(row.description),
@@ -108,9 +105,9 @@ export function toPartnerCompanyDto(row: PartnerCompany): PartnerCompanyDto {
         principalCompany: text(row.principalCompany),
 
         bankName: text(row.bankName),
-        bankBranch: text(row.bankBranch),
-        accountNumber: text(row.accountNumber),
-        bankIfscCode: text(row.bankIfscCode),
+        branch: text(row.branch),
+        accountNo: text(row.accountNo),
+        ifscCode: text(row.ifscCode),
 
         billingAddress: text(row.billingAddress ?? row.billingStreet),
         billingStreet: text(row.billingStreet ?? row.billingAddress),
@@ -128,7 +125,7 @@ export function toPartnerCompanyDto(row: PartnerCompany): PartnerCompanyDto {
         shippingCountry: row.shippingCountry || DEFAULT_COUNTRY,
         copyAddressFromBilling: row.copyAddressFromBilling,
 
-        gstNo: text(row.gstNo),
+        gstNumber: text(row.gstNumber),
         panNumber: text(row.panNumber),
         cinNo: text(row.cinNo),
         msmeRegnNumber: text(row.msmeRegnNumber),
@@ -171,11 +168,11 @@ export function toPartnerCompanyData(
 
     return {
         customDataJson: serializeCustomFields(input.customFields),
-        companyName: input.companyName,
+        partnerName: input.partnerName,
         natureOfPartner: input.natureOfPartner,
-        phone: input.phone,
+        officePhone: input.officePhone,
         email: emails.find((e) => e.isPrimary)?.email ?? null,
-        emailAddressesJson: JSON.stringify(emails),
+        emailAddressJson: JSON.stringify(emails),
         website: nullable(input.website),
         addDescription: nullable(input.addDescription),
         description: nullable(input.description),
@@ -183,9 +180,9 @@ export function toPartnerCompanyData(
         principalCompany: nullable(input.principalCompany),
 
         bankName: nullable(input.bankName),
-        bankBranch: nullable(input.bankBranch),
-        accountNumber: nullable(input.accountNumber),
-        bankIfscCode: input.bankIfscCode ?? null,
+        branch: nullable(input.branch),
+        accountNo: nullable(input.accountNo),
+        ifscCode: input.ifscCode ?? null,
 
         billingAddress: billing.address,
         billingStreet: billing.address,
@@ -203,7 +200,7 @@ export function toPartnerCompanyData(
         shippingCountry: shipping.country,
         copyAddressFromBilling: input.copyAddressFromBilling,
 
-        gstNo: input.gstNo ?? null,
+        gstNumber: input.gstNumber ?? null,
         panNumber: input.panNumber ?? null,
         cinNo: input.cinNo ?? null,
         msmeRegnNumber: input.msmeRegnNumber ?? null,

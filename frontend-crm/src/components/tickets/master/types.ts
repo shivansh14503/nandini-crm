@@ -3,7 +3,7 @@ export type TicketFilterTab = 'all' | 'my' | 'open' | 'high_priority' | 'recentl
 export type TicketSortField =
     | 'ticketNumber'
     | 'organizationName'
-    | 'contactPersonName'
+    | 'contact'
     | 'ticketPriority'
     | 'ticketStatus'
     | 'natureOfCall'

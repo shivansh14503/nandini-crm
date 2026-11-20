@@ -5,7 +5,7 @@ import type { QuotationInput } from './quotation.validator.js';
 
 export type QuotationRow = Quotation & {
     lineItems?: QuotationLineItem[];
-    opportunity?: { opportunityCode: string } | null;
+    opportunityRecord?: { opportunityCode: string } | null;
 };
 
 const DEFAULT_CURRENCY = 'Indian Rupee: ₹';
@@ -23,7 +23,7 @@ export interface QuotationDto {
     termsAndCondition: string;
     termsAndConditionDescription: string;
     assignedTo: string;
-    opportunityName: string;
+    opportunity: string;
     company: string;
     validationPeriod: string;
     otherRef: string;
@@ -41,11 +41,11 @@ export interface QuotationDto {
     grandTotal: number;
     organizationName: string;
     organizationId?: string;
-    contactName: string;
+    contact: string;
     contactId?: string;
-    contactMobile: string;
+    contactNumber: string;
     mailingName: string;
-    gstNo: string;
+    gstNumber: string;
     contactEmail: string;
     billingAddress: string;
     billingCity: string;
@@ -63,8 +63,6 @@ export interface QuotationDto {
     status: string;
     quoteDate: string;
     quotationSubject: string;
-    contactNumber: string;
-    emailAddress: string;
     notes: string;
     termsAndConditions: string;
     createdAt: string;
@@ -89,7 +87,7 @@ export function toQuotationDto(row: QuotationRow): QuotationDto {
         termsAndCondition: text(row.termsAndCondition),
         termsAndConditionDescription: text(row.termsAndConditionDescription),
         assignedTo: row.assignedTo,
-        opportunityName: row.opportunityName,
+        opportunity: row.opportunity,
         company: row.company,
         validationPeriod: text(row.validationPeriod),
         otherRef: text(row.otherRef),
@@ -107,11 +105,11 @@ export function toQuotationDto(row: QuotationRow): QuotationDto {
         grandTotal: decimalToNumber(row.grandTotal),
         organizationName: text(row.organizationName),
         organizationId: row.organizationId ?? undefined,
-        contactName: row.contactName,
+        contact: row.contact,
         contactId: row.contactId ?? undefined,
-        contactMobile: text(row.contactMobile),
+        contactNumber: text(row.contactNumber),
         mailingName: text(row.mailingName),
-        gstNo: text(row.gstNo),
+        gstNumber: text(row.gstNumber),
         contactEmail: text(row.contactEmail),
         billingAddress: row.billingAddress,
         billingCity: row.billingCity,
@@ -125,13 +123,11 @@ export function toQuotationDto(row: QuotationRow): QuotationDto {
         shippingCountry: text(row.shippingCountry),
         copyAddressFromBilling: row.copyAddressFromBilling,
         opportunityId: row.opportunityId ?? undefined,
-        opportunityCode: row.opportunity?.opportunityCode ?? '',
+        opportunityCode: row.opportunityRecord?.opportunityCode ?? '',
         status: text(row.status),
         // Legacy aliases mirror the canonical columns.
         quoteDate: quotationDate,
         quotationSubject: text(row.quotationSubject),
-        contactNumber: text(row.contactMobile),
-        emailAddress: text(row.contactEmail),
         notes: text(row.notes),
         termsAndConditions: text(row.termsAndConditions),
         createdAt: toIso(row.createdAt),
@@ -181,7 +177,7 @@ export function toQuotationData(
         termsAndCondition: nullable(input.termsAndCondition),
         termsAndConditionDescription: nullable(input.termsAndConditionDescription),
         assignedTo: input.assignedTo,
-        opportunityName: input.opportunityName,
+        opportunity: input.opportunity,
         company: input.company,
         validationPeriod: nullable(input.validationPeriod),
         otherRef: nullable(input.otherRef),
@@ -194,11 +190,11 @@ export function toQuotationData(
         ...totals,
         organizationName: nullable(input.organizationName),
         organizationId: links.organizationId,
-        contactName: input.contactName,
+        contact: input.contact,
         contactId: links.contactId,
-        contactMobile: input.contactMobile ?? null,
+        contactNumber: input.contactNumber ?? null,
         mailingName: nullable(input.mailingName),
-        gstNo: input.gstNo ?? null,
+        gstNumber: input.gstNumber ?? null,
         contactEmail: input.contactEmail ?? null,
         billingAddress: billing.address,
         billingCity: billing.city,

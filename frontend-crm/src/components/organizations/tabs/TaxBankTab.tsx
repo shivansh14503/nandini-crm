@@ -34,7 +34,7 @@ export interface TaxBankTabProps {
 function TaxBankTabInner({ form, set }: TaxBankTabProps) {
     const { control, setValue } = useFormContext<OrganizationFormData>();
     const registrationType = useWatch({ control, name: 'registrationType' }) ?? form?.registrationType ?? '';
-    const gstNo = useWatch({ control, name: 'gstNo' }) ?? form?.gstNo ?? form?.gstNumber ?? '';
+    const gstNumber = useWatch({ control, name: 'gstNumber' }) ?? form?.gstNumber ?? '';
 
     // Synchronize registrationType changes
     React.useEffect(() => {
@@ -43,21 +43,19 @@ function TaxBankTabInner({ form, set }: TaxBankTabProps) {
         }
         // Only 'Registered' / SEZ carry a GSTIN (the API drops it for every other type), so the field hides and clears.
         if (registrationType && !isGstRegistrationType(registrationType)) {
-            setValue('gstNo', '', { shouldValidate: true });
+            setValue('gstNumber', '', { shouldValidate: true });
             if (set) {
-                set('gstNo', '');
                 set('gstNumber', '');
             }
         }
     }, [registrationType, setValue, set]);
 
-    // Synchronize gstNo changes with external set callback if provided
+    // Synchronize gstNumber changes with external set callback if provided
     React.useEffect(() => {
-        if (set && gstNo !== undefined) {
-            set('gstNo', gstNo);
-            set('gstNumber', gstNo);
+        if (set && gstNumber !== undefined) {
+            set('gstNumber', gstNumber);
         }
-    }, [gstNo, set]);
+    }, [gstNumber, set]);
 
     return (
         <Box sx={{ p: { xs: 2.5, md: 3.5 }, display: 'flex', flexDirection: 'column', gap: 3.5 }}>
@@ -79,7 +77,7 @@ function TaxBankTabInner({ form, set }: TaxBankTabProps) {
 
                     {isGstRegistrationType(registrationType) && (
                         <RhfUppercaseField<OrganizationFormData>
-                            name="gstNo"
+                            name="gstNumber"
                             label="GST Number"
                             required
                             hint="15-character GSTIN"
@@ -168,25 +166,25 @@ function TaxBankTabInner({ form, set }: TaxBankTabProps) {
                         />
                     </FormField>
 
-                    <FormField name="accountNumber" label="Account Number" size="md">
+                    <FormField name="accountNo" label="Account No" size="md">
                         <TextField
                             fullWidth
                             size="small"
                             placeholder="e.g. 50200012345678"
-                            value={form.accountNumber || ''}
-                            onChange={(e) => set('accountNumber', e.target.value)}
+                            value={form.accountNo || ''}
+                            onChange={(e) => set('accountNo', e.target.value)}
                             sx={fieldSx}
                             slotProps={{ htmlInput: { maxLength: FIELD_MAX_LENGTH.bankAccount, inputMode: 'numeric' } }}
                         />
                     </FormField>
 
                     <RhfUppercaseField<OrganizationFormData>
-                        name="bankIfscCode"
-                        label="Bank IFSC Code"
+                        name="ifscCode"
+                        label="IFSC Code"
                         hint="11-character code"
                         placeholder="e.g. HDFC0001234"
                         maxLength={FIELD_MAX_LENGTH.ifsc}
-                        onChange={(e) => set('bankIfscCode', e.target.value)}
+                        onChange={(e) => set('ifscCode', e.target.value)}
                     />
 
                     <FormField name="bankAddress" label="Bank Address" size="lg">
@@ -216,7 +214,7 @@ function FallbackTaxBankProvider({
     const methods = useForm<OrganizationFormData>({
         defaultValues: {
             registrationType: defaultValues?.registrationType || 'Registered',
-            gstNo: defaultValues?.gstNo || defaultValues?.gstNumber || '',
+            gstNumber: defaultValues?.gstNumber || '',
             ...defaultValues,
         },
     });

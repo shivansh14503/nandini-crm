@@ -62,7 +62,7 @@ export function PartnerCompanyDetailDrawer({ partnerCompany, open, onClose }: Pa
     if (!p) return null;
 
     const assignedName = findCrmUser(p.assignedTo)?.name || p.assignedTo;
-    const emails = (p.emailAddresses ?? []).filter((e) => e.email?.trim());
+    const emails = (p.emailAddress ?? []).filter((e) => e.email?.trim());
     const billingLine = formatAddressLine({
         street: p.billingAddress,
         city: p.billingCity,
@@ -77,8 +77,8 @@ export function PartnerCompanyDetailDrawer({ partnerCompany, open, onClose }: Pa
         postalCode: p.shippingPostalCode,
         country: p.shippingCountry,
     });
-    const hasBank = Boolean(p.bankName || p.bankBranch || p.accountNumber || p.bankIfscCode);
-    const hasStatutory = Boolean(p.gstNo || p.panNumber || p.cinNo || p.msmeRegnNumber || p.tanNumber);
+    const hasBank = Boolean(p.bankName || p.branch || p.accountNo || p.ifscCode);
+    const hasStatutory = Boolean(p.gstNumber || p.panNumber || p.cinNo || p.msmeRegnNumber || p.tanNumber);
 
     const handleEdit = () => router.push(ROUTES.PARTNER_COMPANY_EDIT(p.id));
 
@@ -99,7 +99,7 @@ export function PartnerCompanyDetailDrawer({ partnerCompany, open, onClose }: Pa
             open={open}
             module="partnerCompanies"
             onClose={onClose}
-            title={p.companyName}
+            title={p.partnerName}
             subtitle={[p.billingCity, p.principalCompany && `Principal: ${p.principalCompany}`].filter(Boolean).join(' • ') || 'Partner Company'}
             avatarIcon={<HandshakeOutlinedIcon sx={{ fontSize: 22 }} />}
             avatarBg="linear-gradient(135deg, var(--crm-fill-blue-600) 0%, var(--crm-fill-blue-700) 100%)"
@@ -112,7 +112,7 @@ export function PartnerCompanyDetailDrawer({ partnerCompany, open, onClose }: Pa
                     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
                         <DrawerSectionCard p={1.8} icon={sectionIcon(<HandshakeOutlinedIcon sx={{ fontSize: 15 }} />)} title="Company Details">
                             <DrawerFieldGrid sx={{ mt: 0 }}>
-                                <ReadOnlyField label="Partner Name" value={p.companyName} sx={fullRow} />
+                                <ReadOnlyField label="Partner Name" value={p.partnerName} sx={fullRow} />
                                 <ReadOnlyField label="Nature of Partner" value={p.natureOfPartner} badge badgeColor="var(--crm-text-blue-700)" />
                                 <ReadOnlyField label="Assigned to" value={assignedName} />
                                 <ReadOnlyField label="Principal Company" value={p.principalCompany} />
@@ -139,8 +139,8 @@ export function PartnerCompanyDetailDrawer({ partnerCompany, open, onClose }: Pa
                             <DrawerFieldGrid sx={{ mt: 0 }}>
                                 <ReadOnlyField
                                     label="Office Phone"
-                                    value={p.phone ? <Box component="a" href={telHref(p.phone)} sx={linkSx}>{formatPhoneDisplay(p.phone) || p.phone}</Box> : undefined}
-                                    actions={<PhoneActions phone={p.phone} />}
+                                    value={p.officePhone ? <Box component="a" href={telHref(p.officePhone)} sx={linkSx}>{formatPhoneDisplay(p.officePhone) || p.officePhone}</Box> : undefined}
+                                    actions={<PhoneActions phone={p.officePhone} />}
                                     sx={fullRow}
                                 />
                                 {emails.map((em) => (
@@ -162,9 +162,9 @@ export function PartnerCompanyDetailDrawer({ partnerCompany, open, onClose }: Pa
                             <DrawerSectionCard p={1.8} icon={sectionIcon(<AccountBalanceOutlinedIcon sx={{ fontSize: 15 }} />)} title="Bank Details">
                                 <DrawerFieldGrid sx={{ mt: 0 }}>
                                     <ReadOnlyField label="Bank Name" value={p.bankName} />
-                                    <ReadOnlyField label="Branch" value={p.bankBranch} />
-                                    <ReadOnlyField label="Account No" value={p.accountNumber} copyable />
-                                    <ReadOnlyField label="IFSC Code" value={p.bankIfscCode} copyable />
+                                    <ReadOnlyField label="Branch" value={p.branch} />
+                                    <ReadOnlyField label="Account No" value={p.accountNo} copyable />
+                                    <ReadOnlyField label="IFSC Code" value={p.ifscCode} copyable />
                                 </DrawerFieldGrid>
                             </DrawerSectionCard>
                         )}
@@ -198,7 +198,7 @@ export function PartnerCompanyDetailDrawer({ partnerCompany, open, onClose }: Pa
                     <DrawerSectionCard p={1.8} icon={sectionIcon(<ReceiptLongOutlinedIcon sx={{ fontSize: 15 }} />)} title="Statutory & Tax Identification">
                         {hasStatutory ? (
                             <DrawerFieldGrid sx={{ mt: 0 }}>
-                                <ReadOnlyField label="GST Number" value={p.gstNo} copyable />
+                                <ReadOnlyField label="GST Number" value={p.gstNumber} copyable />
                                 <ReadOnlyField label="PAN Number" value={p.panNumber} copyable />
                                 <ReadOnlyField label="CIN No" value={p.cinNo} copyable />
                                 <ReadOnlyField label="MSME Regn. Number" value={p.msmeRegnNumber} copyable />
@@ -216,12 +216,12 @@ export function PartnerCompanyDetailDrawer({ partnerCompany, open, onClose }: Pa
             statusText={p.natureOfPartner || 'Partner Company'}
             primaryAction={{ label: 'Edit Partner Company', onClick: handleEdit }}
             secondaryAction={
-                p.phone
+                p.officePhone
                     ? {
                           label: 'Call Office',
                           icon: <PhoneOutlinedIcon sx={{ fontSize: 16 }} />,
                           onClick: () => {
-                              window.location.href = telHref(p.phone);
+                              window.location.href = telHref(p.officePhone);
                           },
                       }
                     : undefined

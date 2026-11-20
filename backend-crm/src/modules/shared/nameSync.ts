@@ -32,9 +32,9 @@ export async function propagateOrganizationName(
 
 export async function propagateContactName(tx: TransactionClient, contactId: string, name: string, actor: AuthUser): Promise<NameSyncCounts> {
     const where = { contactId, isDeleted: false };
-    const opportunities = await tx.opportunity.updateMany({ where, data: { contactName: name, updatedBy: actor.username } });
-    const quotations = await tx.quotation.updateMany({ where, data: { contactName: name, updatedBy: actor.username } });
-    const tickets = await tx.ticket.updateMany({ where, data: { contactPersonName: name, updatedBy: actor.username } });
+    const opportunities = await tx.opportunity.updateMany({ where, data: { contact: name, updatedBy: actor.username } });
+    const quotations = await tx.quotation.updateMany({ where, data: { contact: name, updatedBy: actor.username } });
+    const tickets = await tx.ticket.updateMany({ where, data: { contact: name, updatedBy: actor.username } });
     return compact({ opportunities: opportunities.count, quotations: quotations.count, tickets: tickets.count });
 }
 

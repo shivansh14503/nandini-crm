@@ -10,7 +10,6 @@
     "termsAndCondition": "Standard Terms & Conditions",
     "termsAndConditionDescription": "1. Prices are subject to applicable GST taxes unless indicated otherwise.\n2. Payment terms as agreed upon quotation confirmation.\n3. Software license keys will be electronically delivered within 24-48 business hours after realization of payment.",
     "assignedTo": "mittal.sharma",
-    "opportunityName": "B-Softwares Enterprise Deal",
     "opportunityId": "opp-1001",
     "opportunityCode": "OPP-1001",
     "company": "Nandini Infosystems",
@@ -61,11 +60,8 @@
     "grandTotal": 140184,
     "organizationName": "Apex Industrial Solutions Pvt Ltd",
     "organizationId": "org-001",
-    "contactName": "Vikram Malhotra",
     "contactId": "con-1001",
-    "contactMobile": "+91 98112 45890",
     "mailingName": "Apex Industrial Solutions Pvt. Ltd.",
-    "gstNo": "07AAAAA0000A1Z5",
     "contactEmail": "vikram.m@apexindustries.in",
     "billingAddress": "Plot 45, Phase III, Okhla Industrial Area",
     "billingCity": "New Delhi",
@@ -82,11 +78,13 @@
     "quoteDate": "2026-10-18",
     "quotationSubject": "B-Softwares Enterprise Deal",
     "contactNumber": "+91 98112 45890",
-    "emailAddress": "vikram.m@apexindustries.in",
     "notes": "Price includes standard installation and 1 year TSS subscription renewal.",
     "termsAndConditions": "1. Prices are subject to applicable GST taxes unless indicated otherwise.\n2. Payment terms as agreed upon quotation confirmation.\n3. Software license keys will be electronically delivered within 24-48 business hours after realization of payment.",
     "createdAt": "2026-10-18T10:00:00Z",
     "updatedAt": "2026-10-18T10:00:00Z",
-    "createdBy": "mittal.sharma"
+    "createdBy": "mittal.sharma",
+    "opportunity": "B-Softwares Enterprise Deal",
+    "contact": "Vikram Malhotra",
+    "gstNumber": "07AAAAA0000A1Z5"
   }
 ]

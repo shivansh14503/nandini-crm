@@ -23,7 +23,7 @@ export const lookupQuerySchema = z.object({
 /** Live GSTIN / PAN duplicate check for the forms (see `findTaxIdHolders`). */
 export const taxIdHoldersQuerySchema = z.object({
     owner: z.enum(['organization', 'partnerCompany', 'lead']),
-    gstNo: z.string().trim().max(15).optional(),
+    gstNumber: z.string().trim().max(15).optional(),
     panNumber: z.string().trim().max(10).optional(),
     excludeId: z.string().trim().max(64).optional(),
 });
@@ -58,8 +58,8 @@ export interface OrganizationLookupDto {
     billingState: string;
     customerType: string;
     accountStatus: string;
-    gstNo: string;
-    assignedUser: string;
+    gstNumber: string;
+    assignedTo: string;
 }
 
 export interface ContactLookupDto {
@@ -142,7 +142,7 @@ export const lookupService = {
                     { organizationName: { contains: search } },
                     { accountCode: { contains: search } },
                     { tradeName: { contains: search } },
-                    { gstNo: { contains: search } },
+                    { gstNumber: { contains: search } },
                     { billingCity: { contains: search } },
                 ]),
             };
@@ -157,8 +157,8 @@ export const lookupService = {
                 billingState: o.billingState ?? '',
                 customerType: o.customerType ?? '',
                 accountStatus: o.accountStatus,
-                gstNo: o.gstNo ?? '',
-                assignedUser: o.assignedUser ?? '',
+                gstNumber: o.gstNumber ?? '',
+                assignedTo: o.assignedTo ?? '',
             }));
         };
         // Only the unfiltered list is cached; searches are cheap and too varied to be worth caching.
@@ -176,12 +176,12 @@ export const lookupService = {
                     { contactCode: { contains: search } },
                     { mobile: { contains: search } },
                     { organizationName: { contains: search } },
-                    { emailAddresses: { some: { email: { contains: search } } } },
+                    { emailAddress: { some: { email: { contains: search } } } },
                 ]),
             };
             const rows = await prisma.contact.findMany({
                 where,
-                include: { emailAddresses: { orderBy: { sortOrder: 'asc' } } },
+                include: { emailAddress: { orderBy: { sortOrder: 'asc' } } },
                 orderBy: { name: 'asc' },
                 take: limit,
             });
@@ -192,7 +192,7 @@ export const lookupService = {
                 organizationName: c.organizationName,
                 organizationId: c.organizationId ?? undefined,
                 mobile: c.mobile,
-                email: (c.emailAddresses.find((e) => e.isPrimary) ?? c.emailAddresses[0])?.email ?? '',
+                email: (c.emailAddress.find((e) => e.isPrimary) ?? c.emailAddress[0])?.email ?? '',
                 designation: c.designation ?? '',
                 assignedTo: c.assignedTo,
             }));
@@ -243,12 +243,12 @@ export const lookupService = {
     /** `PartnerCompany[]` (active). */
     async partnerCompanies() {
         return cacheService.getOrSet(CACHE_KEYS.lookups('partner-companies'), MASTER_TTL_SECONDS, async () => {
-            const rows = await prisma.partnerCompany.findMany({ where: { isActive: true, isDeleted: false }, orderBy: { companyName: 'asc' } });
+            const rows = await prisma.partnerCompany.findMany({ where: { isActive: true, isDeleted: false }, orderBy: { partnerName: 'asc' } });
             return rows.map((p) => ({
                 id: p.id,
-                companyName: p.companyName,
+                partnerName: p.partnerName,
                 natureOfPartner: p.natureOfPartner ?? '',
-                phone: p.phone ?? '',
+                officePhone: p.officePhone ?? '',
                 email: p.email ?? '',
                 city: p.city ?? '',
                 billingCountry: p.billingCountry ?? '',
@@ -264,14 +264,14 @@ export const lookupService = {
         const all = await cacheService.getOrSet(CACHE_KEYS.lookups('partner-contacts'), MASTER_TTL_SECONDS, async () => {
             const rows = await prisma.partnerCompanyContact.findMany({
                 where: { isActive: true, partnerCompany: { isActive: true, isDeleted: false } },
-                include: { partnerCompany: { select: { companyName: true } } },
+                include: { partnerCompany: { select: { partnerName: true } } },
                 orderBy: { name: 'asc' },
             });
             return rows.map((c) => ({
                 id: c.id,
                 name: c.name,
                 designation: c.designation ?? '',
-                partnerCompany: c.partnerCompany.companyName,
+                partnerCompany: c.partnerCompany.partnerName,
                 mobile: c.mobile ?? '',
                 officePhone: c.officePhone ?? undefined,
                 email: c.email ?? '',

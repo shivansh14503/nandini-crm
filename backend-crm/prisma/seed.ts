@@ -96,10 +96,10 @@ async function seedMasters(): Promise<void> {
         });
     }
     for (const company of [...PARTNER_COMPANIES, ...PRODUCT_COMPANIES]) {
-        await prisma.partnerCompany.upsert({ where: { companyName: company.companyName }, create: company, update: company });
+        await prisma.partnerCompany.upsert({ where: { partnerName: company.partnerName }, create: company, update: company });
     }
     for (const { partnerCompany, ...contact } of PARTNER_CONTACTS) {
-        const company = await prisma.partnerCompany.findUnique({ where: { companyName: partnerCompany }, select: { id: true } });
+        const company = await prisma.partnerCompany.findUnique({ where: { partnerName: partnerCompany }, select: { id: true } });
         if (!company) continue;
         const existing = await prisma.partnerCompanyContact.findFirst({ where: { partnerCompanyId: company.id, name: contact.name }, select: { id: true } });
         if (existing) await prisma.partnerCompanyContact.update({ where: { id: existing.id }, data: contact });
@@ -349,7 +349,7 @@ async function seedDemoRecords(admin: AuthUser): Promise<void> {
     // Parents first, so "Member of" links resolve.
     const organizations: Tally = { created: 0, skipped: [] };
     const orgMocks = (await loadMock('organizations')).sort(
-        (a, b) => Number(Boolean(a.memberOfParentCorp)) - Number(Boolean(b.memberOfParentCorp)),
+        (a, b) => Number(Boolean(a.memberOf)) - Number(Boolean(b.memberOf)),
     );
     for (const o of orgMocks) {
         const dto = await attempt(organizations, o.organizationName, () =>

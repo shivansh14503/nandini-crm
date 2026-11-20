@@ -31,7 +31,7 @@ export const LOOKUP_DISPLAY_VALUE: { [K in LookupKind]: (record: LookupRecordMap
     organization: (o) => o.organizationName,
     contact: (c) => c.name,
     natureOfCall: (n) => n.name,
-    partnerCompany: (p) => p.companyName,
+    partnerCompany: (p) => p.partnerName,
     partnerCompanyContact: (c) => c.name,
 };
 
@@ -69,7 +69,7 @@ export function findLookupRecord<K extends LookupKind>(
         case 'natureOfCall':
             return findByLabel(getNatureOfCalls(), (n) => n.name, value) as LookupRecordMap[K] | undefined;
         case 'partnerCompany':
-            return findByLabel(getPartnerCompanies(), (p) => p.companyName, value) as LookupRecordMap[K] | undefined;
+            return findByLabel(getPartnerCompanies(), (p) => p.partnerName, value) as LookupRecordMap[K] | undefined;
         case 'partnerCompanyContact':
             return findByLabel(getPartnerContacts(), (c) => c.name, value) as LookupRecordMap[K] | undefined;
     }

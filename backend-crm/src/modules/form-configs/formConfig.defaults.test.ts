@@ -34,7 +34,7 @@ describe('field locking policy', () => {
             ['opportunities', 'commission'],
             ['quotations', 'paymentTerms'],
             ['tickets', 'ticketPriority'],
-            ['partner-companies', 'phone'],
+            ['partner-companies', 'officePhone'],
         ]) {
             const f = byKey(module, key);
             assert.ok(f.isRequired && !f.isCoreLocked, `${module}:${key} is default-required and unlockable`);

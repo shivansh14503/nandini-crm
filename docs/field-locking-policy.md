@@ -14,7 +14,7 @@ Status: **implemented** (2026-11-12). Defaults: `formConfig.defaults.ts` (`req` 
 
 1. **Identity**: the record's display name (lists, drawers, search, lookups, PDFs) or its unique key.
 2. **Relation**: links to another module (conversion, lookups, cascading names).
-3. **Ownership**: drives access scoping (`buildAccessScopeWhere` uses `assignedTo` / `assignedUser`).
+3. **Ownership**: drives access scoping (`buildAccessScopeWhere` uses `assignedTo`).
 4. **Logic**: stages, numbering, dates the system reads, PDF data with no fallback.
 5. **Conditional**: the backend requires it in some cases (e.g. GST for registered types), so it must never be hidden.
 
@@ -140,8 +140,8 @@ Fields not listed are ○ Free today and stay ○ Free.
 1. **Defaults** (`formConfig.defaults.ts`): split `req` into `lock` (🔒, hard) and `req` (⭐, default `isRequired` only). The seed already re-syncs `isCoreLocked` on existing rows (`formConfig.seed.ts`).
 2. **Validators**: make every ⭐ field optional in its module validator (`lead.validator.ts`, `organization.validator.ts`, …) and let `checkModulePayload` enforce `isRequired` from the form config. This includes the lead-conversion schema (`lead.validator.ts` ~L120–156), which re-requires organization and opportunity fields.
 3. **Database**: these ⭐ fields are `NOT NULL` columns today and need a migration to become nullable:
-   - Lead: `mobile`, `leadSource`, `productCategoryJson`, `addDescription`, `leadType`, `nextFollowupDate`
-   - Opportunity: `leadGivenBy`, `type`, `leadSource`, `nextFollowupDate`, `addDescription`, `commission`, `productCategoryJson`
+   - Lead: `mobile`, `leadSource`, `productCategoryJson`, `followUpRemarks`, `leadType`, `nextFollowupDate`
+   - Opportunity: `leadGivenBy`, `type`, `leadSource`, `nextFollowupDate`, `followUpRemarks`, `commission`, `productCategoryJson`
    - Quotation: `validationPeriod`, `termsAndCondition`, `paymentTerms`
    - Ticket: `natureOfCall`, `ticketPriority`, `supportMode`
    - Partner company and organization billing columns are already nullable.

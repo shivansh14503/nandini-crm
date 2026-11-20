@@ -241,7 +241,7 @@ function getColumnsForModule(moduleKey: string, leadSourceLabel: (value: string)
                 { id: 'status', label: 'Status', minWidth: 120, sortable: true, render: (r) => renderStatusPill(r.status) },
                 { id: 'contact', label: 'Contact', minWidth: 150, sortable: true, accessor: 'contact' },
                 { id: 'startDate', label: 'Start Date', minWidth: 130, sortable: true, accessor: 'startDate' },
-                { id: 'assignedUser', label: 'Assigned User', minWidth: 140, sortable: true, accessor: 'assignedUser' },
+                { id: 'assignedTo', label: 'Assigned User', minWidth: 140, sortable: true, accessor: 'assignedTo' },
             ];
 
         case 'tickets':
@@ -253,7 +253,7 @@ function getColumnsForModule(moduleKey: string, leadSourceLabel: (value: string)
                 { id: 'supportType', label: 'Support Type', minWidth: 140, sortable: true, accessor: 'supportType' },
                 { id: 'supportMode', label: 'Support Mode', minWidth: 130, sortable: true, accessor: 'supportMode' },
                 { id: 'dateCreated', label: 'Date Created', minWidth: 130, sortable: true, accessor: 'dateCreated' },
-                { id: 'assignedUser', label: 'Assigned User', minWidth: 140, sortable: true, accessor: 'assignedUser' },
+                { id: 'assignedTo', label: 'Assigned User', minWidth: 140, sortable: true, accessor: 'assignedTo' },
             ];
 
         case 'contacts':
@@ -273,7 +273,7 @@ function getColumnsForModule(moduleKey: string, leadSourceLabel: (value: string)
                     minWidth: 190,
                     sortable: true,
                     render: (r) => {
-                        const emails = r.emailAddresses as Array<{ email?: string }> | undefined;
+                        const emails = r.emailAddress as Array<{ email?: string }> | undefined;
                         return String(r.email || emails?.[0]?.email || '-');
                     },
                 },
@@ -283,7 +283,7 @@ function getColumnsForModule(moduleKey: string, leadSourceLabel: (value: string)
                     label: 'Assigned User',
                     minWidth: 140,
                     sortable: true,
-                    render: (r) => String(r.assignedTo || r.assignedUser || '-'),
+                    render: (r) => String(r.assignedTo || '-'),
                 },
             ];
 
@@ -308,7 +308,7 @@ function getColumnsForModule(moduleKey: string, leadSourceLabel: (value: string)
                 { id: 'dateModified', label: 'Date Modified', minWidth: 140, sortable: true, accessor: 'dateModified' },
                 { id: 'dateCreated', label: 'Date Created', minWidth: 140, sortable: true, accessor: 'dateCreated' },
                 { id: 'dueDate', label: 'Due Date', minWidth: 130, sortable: true, accessor: 'dueDate' },
-                { id: 'assignedUser', label: 'Assigned User', minWidth: 140, sortable: true, accessor: 'assignedUser' },
+                { id: 'assignedTo', label: 'Assigned User', minWidth: 140, sortable: true, accessor: 'assignedTo' },
             ];
 
         case 'leads':
@@ -332,12 +332,12 @@ function getColumnsForModule(moduleKey: string, leadSourceLabel: (value: string)
                     minWidth: 180,
                     sortable: false,
                     render: (r) => {
-                        const emails = r.emailAddresses as Array<{ email?: string }> | undefined;
+                        const emails = r.emailAddress as Array<{ email?: string }> | undefined;
                         return String(r.email || emails?.[0]?.email || '-');
                     },
                 },
                 { id: 'mobile', label: 'Mobile', minWidth: 140, sortable: true, accessor: 'mobile' },
-                { id: 'assignedTo', label: 'Assigned User', minWidth: 140, sortable: true, render: (r) => String(r.assignedTo || r.assignedUser || '-') },
+                { id: 'assignedTo', label: 'Assigned User', minWidth: 140, sortable: true, render: (r) => String(r.assignedTo || '-') },
                 { id: 'createdAt', label: 'Date Created', minWidth: 130, sortable: true, render: (r) => String(r.createdAt || r.dateCreated || '-') },
             ];
 
@@ -379,7 +379,7 @@ function getColumnsForModule(moduleKey: string, leadSourceLabel: (value: string)
                     sortable: true,
                     render: (r) => formatCurrency(r.subTotal ?? r.grandTotal ?? 0),
                 },
-                { id: 'assignedTo', label: 'Assigned User', minWidth: 140, sortable: true, render: (r) => String(r.assignedTo || r.assignedUser || '-') },
+                { id: 'assignedTo', label: 'Assigned User', minWidth: 140, sortable: true, render: (r) => String(r.assignedTo || '-') },
                 { id: 'createdAt', label: 'Date Created', minWidth: 130, sortable: true, render: (r) => String(r.createdAt || r.dateCreated || '-') },
             ];
 
@@ -442,7 +442,7 @@ function getColumnsForModule(moduleKey: string, leadSourceLabel: (value: string)
                     render: (r) => String(r.quotationTitle || r.quotationSubject || 'Quotation'),
                 },
                 { id: 'quoteStage', label: 'Quote Stage', minWidth: 130, sortable: true, render: (r) => renderStatusPill(r.quoteStage || r.status) },
-                { id: 'contactName', label: 'Contact', minWidth: 160, sortable: true, accessor: 'contactName' },
+                { id: 'contact', label: 'Contact', minWidth: 160, sortable: true, accessor: 'contact' },
                 { id: 'organizationName', label: 'Organization', minWidth: 190, sortable: true, accessor: 'organizationName' },
                 { id: 'grandTotal', label: 'Grand Total', minWidth: 140, sortable: true, render: (r) => formatCurrency(r.grandTotal) },
                 { id: 'validUntil', label: 'Valid Until', minWidth: 130, sortable: true, accessor: 'validUntil' },
@@ -468,7 +468,7 @@ function getColumnsForModule(moduleKey: string, leadSourceLabel: (value: string)
             return [
                 { id: 'subject', label: 'Subject', minWidth: 200, sortable: true, render: (r) => primary(r, r.subject || r.name) },
                 { id: 'status', label: 'Status', minWidth: 120, sortable: true, render: (r) => renderStatusPill(r.status) },
-                { id: 'assignedUser', label: 'Assigned User', minWidth: 140, sortable: true, accessor: 'assignedUser' },
+                { id: 'assignedTo', label: 'Assigned User', minWidth: 140, sortable: true, accessor: 'assignedTo' },
             ];
     }
 }

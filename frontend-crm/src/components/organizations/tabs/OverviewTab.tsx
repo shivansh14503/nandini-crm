@@ -92,8 +92,8 @@ function OverviewTabInner({
     const currentAccountStatus = (useWatch({ control, name: 'accountStatus' }) ?? form?.accountStatus ?? 'Active') as AccountStatus;
     const isView = useFormMode().mode === 'view';
     const [pendingInactive, setPendingInactive] = React.useState(false);
-    const watchedParentCorp = useWatch({ control, name: 'memberOfParentCorp' });
-    const watchedAssignedUser = useWatch({ control, name: 'assignedUser' });
+    const watchedParentCorp = useWatch({ control, name: 'memberOf' });
+    const watchedAssignedUser = useWatch({ control, name: 'assignedTo' });
     const watchedNatureOfBusiness = useWatch({ control, name: 'natureOfBusiness' });
     const watchedTypeOfEntity = useWatch({ control, name: 'typeOfEntity' });
     const watchedCustomerType = useWatch({ control, name: 'customerType' });
@@ -119,10 +119,10 @@ function OverviewTabInner({
 
     // Mirror the lookup fields into the parent form state.
     React.useEffect(() => {
-        if (set && watchedParentCorp !== undefined && watchedParentCorp !== form?.memberOfParentCorp) {
-            set('memberOfParentCorp', watchedParentCorp);
+        if (set && watchedParentCorp !== undefined && watchedParentCorp !== form?.memberOf) {
+            set('memberOf', watchedParentCorp);
         }
-    }, [watchedParentCorp, set, form?.memberOfParentCorp]);
+    }, [watchedParentCorp, set, form?.memberOf]);
 
     // The lookup edits one partner; `partnerCompanies` (the API shape) keeps it first, followed by any other saved partners.
     const watchedPartnerCompany = useWatch({ control, name: 'partnerCompany' });
@@ -138,10 +138,10 @@ function OverviewTabInner({
     }, [watchedPartnerCompany, set, form?.partnerCompanies, form?.partnerCompany]);
 
     React.useEffect(() => {
-        if (set && watchedAssignedUser !== undefined && watchedAssignedUser !== form?.assignedUser) {
-            set('assignedUser', watchedAssignedUser);
+        if (set && watchedAssignedUser !== undefined && watchedAssignedUser !== form?.assignedTo) {
+            set('assignedTo', watchedAssignedUser);
         }
-    }, [watchedAssignedUser, set, form?.assignedUser]);
+    }, [watchedAssignedUser, set, form?.assignedTo]);
 
     // ── Live uniqueness check + suggestions (cached list for instant feedback, API as the authority) ──
     const trimmedName = organizationName.trim();
@@ -536,12 +536,12 @@ function OverviewTabInner({
                 </FormField>
 
                 {/* ── Business profile ── */}
-                <FormField name="sourceOfLead" label="Lead Source" size="md">
+                <FormField name="leadSource" label="Lead Source" size="md">
                     <StyledSelect
                         label="Lead Source"
                         placeholder="Select Lead Source"
-                        value={form.sourceOfLead}
-                        onChange={(v) => set('sourceOfLead', v as SourceOfLead)}
+                        value={form.leadSource}
+                        onChange={(v) => set('leadSource', v as SourceOfLead)}
                         options={LEAD_SOURCES}
                     />
                 </FormField>
@@ -568,7 +568,7 @@ function OverviewTabInner({
 
                 {/* ── Hierarchy & ownership ── */}
                 <RhfLookup<OrganizationFormData>
-                    name="memberOfParentCorp"
+                    name="memberOf"
                     label="Member of (Parent Corporation)"
                     lookupType="organization"
                     excludeValues={organizationName ? [organizationName] : undefined}
@@ -584,7 +584,7 @@ function OverviewTabInner({
 
                 {/* Assigned to (Account Executive) */}
                 <RhfLookup<OrganizationFormData>
-                    name="assignedUser"
+                    name="assignedTo"
                     label="Assigned to (Account Executive)"
                     lookupType="user"
                     required
@@ -593,10 +593,10 @@ function OverviewTabInner({
 
                 {/* Description (full row) */}
                 <FormField
-                    name="description"
+                    name="addDescriptionAndScope"
                     label="Add Description & Scope"
                     size="full"
-                    hint={`${form.description.length} / ${DESCRIPTION_MAX_LENGTH}`}
+                    hint={`${form.addDescriptionAndScope.length} / ${DESCRIPTION_MAX_LENGTH}`}
                 >
                     <TextField
                         fullWidth
@@ -605,8 +605,8 @@ function OverviewTabInner({
                         maxRows={8}
                         size="small"
                         placeholder="Describe the organization's scope, activities, and key details..."
-                        value={form.description}
-                        onChange={(e) => set('description', e.target.value.slice(0, DESCRIPTION_MAX_LENGTH))}
+                        value={form.addDescriptionAndScope}
+                        onChange={(e) => set('addDescriptionAndScope', e.target.value.slice(0, DESCRIPTION_MAX_LENGTH))}
                         sx={fieldSx}
                         slotProps={{ htmlInput: { maxLength: DESCRIPTION_MAX_LENGTH } }}
                     />
@@ -633,15 +633,15 @@ function FallbackOverviewProvider({
             customerType: defaultValues?.customerType || '',
             sapCodeTallyId: defaultValues?.sapCodeTallyId || '',
             showroomBranchCode: defaultValues?.showroomBranchCode || '',
-            sourceOfLead: defaultValues?.sourceOfLead || '',
-            memberOfParentCorp: defaultValues?.memberOfParentCorp || '',
+            leadSource: defaultValues?.leadSource || '',
+            memberOf: defaultValues?.memberOf || '',
             numberOfEmployees: defaultValues?.numberOfEmployees || '',
             annualTurnover: defaultValues?.annualTurnover || '',
-            description: defaultValues?.description || '',
+            addDescriptionAndScope: defaultValues?.addDescriptionAndScope || '',
             accountVerified: defaultValues?.accountVerified || false,
             provideSupport: defaultValues?.provideSupport || 'Yes',
             registrationType: defaultValues?.registrationType || 'Registered',
-            gstNo: defaultValues?.gstNo || defaultValues?.gstNumber || '',
+            gstNumber: defaultValues?.gstNumber || defaultValues?.gstNumber || '',
             ...defaultValues,
         },
     });

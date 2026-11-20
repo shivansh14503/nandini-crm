@@ -95,5 +95,5 @@ export const EMPLOYEE_COUNTS: NumberOfEmployees[] = [
     '1001 & Above',
 ];
 
-/** Organization Lead Source (sourceOfLead) uses the lead form's Lead Source list (dropdown `shared_lead_source`). */
+/** Organization Lead Source (leadSource) uses the lead form's Lead Source list (dropdown `shared_lead_source`). */
 export const LEAD_SOURCES: SourceOfLead[] = LEAD_FORM_LEAD_SOURCES;

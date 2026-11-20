@@ -21,12 +21,12 @@ export interface PartnerCompanyFormData {
     customFields?: Record<string, unknown>;
 
     // Company information
-    companyName: string;
+    partnerName: string;
     natureOfPartner: string;
-    /** Office phone (E.164). */
-    phone: string;
+    /** Office officePhone (E.164). */
+    officePhone: string;
     website: string;
-    emailAddresses: CorporateEmail[];
+    emailAddress: CorporateEmail[];
     addDescription: string;
     description: string;
     /** Username of the internal owner. */
@@ -35,9 +35,9 @@ export interface PartnerCompanyFormData {
 
     // Bank details
     bankName: string;
-    bankBranch: string;
-    accountNumber: string;
-    bankIfscCode: string;
+    branch: string;
+    accountNo: string;
+    ifscCode: string;
 
     // Billing address
     billingAddress: string;
@@ -57,7 +57,7 @@ export interface PartnerCompanyFormData {
     copyAddressFromBilling: boolean;
 
     // Statutory
-    gstNo: string;
+    gstNumber: string;
     panNumber: string;
     cinNo: string;
     msmeRegnNumber: string;
@@ -67,9 +67,7 @@ export interface PartnerCompanyFormData {
 /** A partner company as returned by `/api/partner-companies`. */
 export interface ExtendedPartnerCompany extends PartnerCompanyFormData {
     id: string;
-    /** Alias of `phone`. */
-    officePhone: string;
-    /** Primary address of `emailAddresses`. */
+    /** Primary address of `emailAddress`. */
     email: string;
     /** Alias of `billingCity`. */
     city: string;
@@ -83,9 +81,9 @@ export interface ExtendedPartnerCompany extends PartnerCompanyFormData {
 /** A channel / referral partner firm (e.g. a Tally partner) involved in support tickets. */
 export interface PartnerCompany {
     id: string;
-    companyName: string;
+    partnerName: string;
     natureOfPartner: string;
-    phone: string;
+    officePhone: string;
     email: string;
     city: string;
     billingCountry: string;
@@ -100,7 +98,7 @@ export interface PartnerCompanyContact {
     id: string;
     name: string;
     designation: string;
-    /** `companyName` of the partner this contact works for. */
+    /** `partnerName` of the partner this contact works for. */
     partnerCompany: string;
     mobile: string;
     officePhone?: string;

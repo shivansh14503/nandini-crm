@@ -10,9 +10,9 @@ export interface NatureOfCallSeed {
 }
 
 export interface PartnerCompanySeed {
-    companyName: string;
+    partnerName: string;
     natureOfPartner: string;
-    phone: string;
+    officePhone: string;
     email: string;
     city: string;
     billingCountry: string;
@@ -26,7 +26,7 @@ export interface PartnerCompanySeed {
 export interface PartnerContactSeed {
     name: string;
     designation: string;
-    /** companyName of the partner this contact works for. */
+    /** partnerName of the partner this contact works for. */
     partnerCompany: string;
     mobile: string;
     officePhone?: string;
@@ -179,36 +179,36 @@ export const NATURE_OF_CALLS: NatureOfCallSeed[] = [
 
 export const PARTNER_COMPANIES: PartnerCompanySeed[] = [
     {
-        companyName: 'Computer Care',
+        partnerName: 'Computer Care',
         natureOfPartner: 'TALLY-REFERRAL PARTNER',
-        phone: '8295058024',
+        officePhone: '8295058024',
         email: 'tdl.kamal@gmail.com',
         city: 'Karnal',
         billingCountry: 'India',
         assignedTo: 'vishal'
     },
     {
-        companyName: 'Tophra Infotech',
+        partnerName: 'Tophra Infotech',
         natureOfPartner: 'TALLY-REFERRAL PARTNER',
-        phone: '9764543111',
+        officePhone: '9764543111',
         email: 'sunny@tophrainfotech.com',
         city: 'Alwar',
         billingCountry: 'India',
         assignedTo: 'preeti.chawla'
     },
     {
-        companyName: 'Mittal Enterprises',
+        partnerName: 'Mittal Enterprises',
         natureOfPartner: 'TALLY-3STAR PARTNER',
-        phone: '9050300353',
+        officePhone: '9050300353',
         email: 'mittalenterprises38@gmail.com',
         city: 'Delhi',
         billingCountry: 'India',
         assignedTo: 'mittal.sharma'
     },
     {
-        companyName: 'Apex Tech Solutions',
+        partnerName: 'Apex Tech Solutions',
         natureOfPartner: 'TALLY-5STAR-SS',
-        phone: '9811223344',
+        officePhone: '9811223344',
         email: 'contact@apextech.in',
         city: 'Gurugram',
         billingCountry: 'India',
@@ -226,9 +226,9 @@ export const PRODUCT_COMPANY_NATURE = 'PRODUCT COMPANY';
  */
 export const PRODUCT_COMPANIES: PartnerCompanySeed[] = [
     {
-        companyName: 'Nexora Software Labs',
+        partnerName: 'Nexora Software Labs',
         natureOfPartner: PRODUCT_COMPANY_NATURE,
-        phone: '+919810011001',
+        officePhone: '+919810011001',
         email: 'partners@nexora-software.example',
         city: 'Bengaluru',
         billingCity: 'Bengaluru',
@@ -239,9 +239,9 @@ export const PRODUCT_COMPANIES: PartnerCompanySeed[] = [
         description: 'Accounting & ERP software publisher (dummy record).'
     },
     {
-        companyName: 'Quantix Cloud Systems',
+        partnerName: 'Quantix Cloud Systems',
         natureOfPartner: PRODUCT_COMPANY_NATURE,
-        phone: '+919810011002',
+        officePhone: '+919810011002',
         email: 'alliances@quantix-cloud.example',
         city: 'Pune',
         billingCity: 'Pune',
@@ -252,9 +252,9 @@ export const PRODUCT_COMPANIES: PartnerCompanySeed[] = [
         description: 'Cloud hosting & backup product vendor (dummy record).'
     },
     {
-        companyName: 'Veltrix Hardware Pvt Ltd',
+        partnerName: 'Veltrix Hardware Pvt Ltd',
         natureOfPartner: PRODUCT_COMPANY_NATURE,
-        phone: '+919810011003',
+        officePhone: '+919810011003',
         email: 'channel@veltrix-hw.example',
         city: 'Noida',
         billingCity: 'Noida',
@@ -265,9 +265,9 @@ export const PRODUCT_COMPANIES: PartnerCompanySeed[] = [
         description: 'Servers, desktops and peripherals OEM (dummy record).'
     },
     {
-        companyName: 'Orbis Networks India',
+        partnerName: 'Orbis Networks India',
         natureOfPartner: PRODUCT_COMPANY_NATURE,
-        phone: '+919810011004',
+        officePhone: '+919810011004',
         email: 'partners@orbis-networks.example',
         city: 'Hyderabad',
         billingCity: 'Hyderabad',
@@ -278,9 +278,9 @@ export const PRODUCT_COMPANIES: PartnerCompanySeed[] = [
         description: 'Switching, routing and Wi-Fi product company (dummy record).'
     },
     {
-        companyName: 'Sentrik Cybersecurity',
+        partnerName: 'Sentrik Cybersecurity',
         natureOfPartner: PRODUCT_COMPANY_NATURE,
-        phone: '+919810011005',
+        officePhone: '+919810011005',
         email: 'resellers@sentrik-security.example',
         city: 'Gurugram',
         billingCity: 'Gurugram',

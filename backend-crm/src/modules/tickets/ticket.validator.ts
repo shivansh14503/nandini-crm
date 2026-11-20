@@ -29,7 +29,7 @@ export const ticketInputSchema = z.object({
     amcFlag: z.boolean().default(false),
     ticketSubject: optionalText('Ticket Subject', L.title),
     organizationName: requiredUpperText('Organization Name', L.organizationName),
-    contactPersonName: requiredPersonName('Contact Person Name', L.personName),
+    contact: requiredPersonName('Contact', L.personName),
     contactNumber: optionalPhone('Contact Number'),
     // Option lists below are admin-customizable (ticket_* dropdown categories); system options keep their meaning.
     // Priority, Nature Of Call and Support Mode are admin-relaxable (the form configuration enforces them).

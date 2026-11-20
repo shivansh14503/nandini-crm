@@ -10,7 +10,7 @@ import HandshakeOutlinedIcon from '@mui/icons-material/HandshakeOutlined';
 
 import { type BreadcrumbItem } from '../common/AppBreadcrumbs';
 import { type FormTabDefinition } from '../common/Drawer';
-import { ROUTES } from '@/config/constants';
+import { ROUTES } from '@/config/constants';
 import { setSaveFlash } from '@/utils/saveFlash';
 import { ticketFormSchema } from '@/validations';
 import {
@@ -72,7 +72,7 @@ export const DEFAULT_TICKET_FORM: TicketFormData = {
     amcFlag: false,
     ticketSubject: '',
     organizationName: '',
-    contactPersonName: '',
+    contact: '',
     contactNumber: '',
     ticketPriority: 'Normal',
     source: 'Call',
@@ -107,7 +107,7 @@ const organizationAddress = (o: ExtendedOrganization) =>
         country: o.billingCountry,
     });
 
-const primaryEmail = (c: Contact) => (c.emailAddresses.find((e) => e.isPrimary) ?? c.emailAddresses[0])?.email ?? '';
+const primaryEmail = (c: Contact) => (c.emailAddress.find((e) => e.isPrimary) ?? c.emailAddress[0])?.email ?? '';
 
 export interface TicketFormProps {
     mode?: 'create' | 'edit' | 'view';
@@ -154,7 +154,7 @@ export default function TicketForm({ mode = 'create', initialData, ticketId, bre
     }, [contacts, organizationName]);
 
     const natureOfCallNames = useMemo(() => natureOfCalls.map((n) => n.name), [natureOfCalls]);
-    const partnerCompanyNames = useMemo(() => partnerCompanies.map((p) => p.companyName), [partnerCompanies]);
+    const partnerCompanyNames = useMemo(() => partnerCompanies.map((p) => p.partnerName), [partnerCompanies]);
     const partnerCompany = useWatch({ control, name: 'partnerCompany' });
 
     // Same narrowing for partner contacts: only the chosen partner's people, when it has any.
@@ -204,7 +204,7 @@ export default function TicketForm({ mode = 'create', initialData, ticketId, bre
     const sameName = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLowerCase();
 
     const clearContactFields = () => {
-        setValue('contactPersonName', '', { shouldDirty: true });
+        setValue('contact', '', { shouldDirty: true });
         setValue('contactNumber', '', touch);
         setValue('contactEmail', '', touch);
     };
@@ -214,7 +214,7 @@ export default function TicketForm({ mode = 'create', initialData, ticketId, bre
         // Always overwrite: switching organizations must replace the previous one's address.
         setValue('accountAddress', organizationAddress(org), touch);
         // A contact who belongs to a different organization no longer applies.
-        const currentContact = getValues('contactPersonName')?.trim();
+        const currentContact = getValues('contact')?.trim();
         if (currentContact) {
             const match = contacts.find((c) => sameName(c.name, currentContact));
             if (match && match.organizationName && !sameName(match.organizationName, org.organizationName)) {
@@ -263,7 +263,7 @@ export default function TicketForm({ mode = 'create', initialData, ticketId, bre
     const handlePartnerCompanyPicked = (partner: PartnerCompany) => {
         const contactName = getValues('partnerCompanyContact')?.trim();
         const contact = contactName ? partnerContacts.find((c) => sameName(c.name, contactName)) : undefined;
-        if (contact && !sameName(contact.partnerCompany, partner.companyName)) {
+        if (contact && !sameName(contact.partnerCompany, partner.partnerName)) {
             setValue('partnerCompanyContact', '', { shouldDirty: true });
         }
     };
@@ -353,8 +353,8 @@ export default function TicketForm({ mode = 'create', initialData, ticketId, bre
                                 placeholder="Search or select organization..."
                             />
                             <RhfLookup<TicketFormData, 'contact'>
-                                name="contactPersonName"
-                                label="Contact Person Name"
+                                name="contact"
+                                label="Contact"
                                 required
                                 options={contactNames}
                                 lookupType="contact"

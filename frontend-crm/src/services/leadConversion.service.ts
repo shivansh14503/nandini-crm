@@ -53,7 +53,7 @@ export function matchExistingContact(candidates: Contact[], mobile: string, id?:
 const LEAD_CARRIED_FIELDS: readonly (keyof ConvertLeadFormValues)[] = [
     'designation',
     'department',
-    'sourceOfLead',
+    'leadSource',
     'opportunityLeadSource',
     'productCategory',
     'followupType',
@@ -90,7 +90,7 @@ export function buildConvertLeadDefaults(lead: Lead): ConvertLeadFormValues {
         natureOfBusiness: '',
         typeOfEntity: '',
         customerType: '',
-        sourceOfLead: lead.leadSource ?? '',
+        leadSource: lead.leadSource ?? '',
         memberOf: '',
         organizationDescription: '',
         organizationAssignedTo: lead.assignedTo,
@@ -99,8 +99,8 @@ export function buildConvertLeadDefaults(lead: Lead): ConvertLeadFormValues {
         contactName: lead.name,
         contactMobile: lead.mobile,
         contactPhone3: lead.otherPhone ?? '',
-        contactEmails: lead.emailAddresses?.length
-            ? lead.emailAddresses
+        contactEmails: lead.emailAddress?.length
+            ? lead.emailAddress
             : [{ id: 'eml-1', email: '', isPrimary: true, isOptedOut: false, isInvalidBounce: false }],
         isPrimaryContact: true,
         designation: lead.designation ?? '',
@@ -117,7 +117,7 @@ export function buildConvertLeadDefaults(lead: Lead): ConvertLeadFormValues {
         nextFollowupDate: lead.nextFollowupDate,
         nextFollowupTime: lead.nextFollowupTime ?? '',
         followupType: lead.followupType ?? '',
-        opportunityDescription: lead.addDescription ?? '',
+        opportunityDescription: lead.followUpRemarks ?? '',
         opportunityLeadSource: lead.leadSource ?? '',
         opportunityAssignedTo: lead.assignedTo,
         copyActivitiesTo: [],

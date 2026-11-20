@@ -146,7 +146,7 @@ export function OpportunityDetailDrawer({
             module="opportunities"
             onClose={onClose}
             title={opp.organizationName}
-            subtitle={[showNumber('opportunity') ? opp.opportunityCode : '', opp.contactName].filter(Boolean).join(' • ')}
+            subtitle={[showNumber('opportunity') ? opp.opportunityCode : '', opp.contact].filter(Boolean).join(' • ')}
             avatarText={opp.organizationName.substring(0, 2).toUpperCase()}
             avatarBg="var(--crm-fill-blue-900)"
             badges={[
@@ -196,7 +196,7 @@ export function OpportunityDetailDrawer({
                                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                                     <PersonOutlinedIcon sx={{ fontSize: 16, color: 'var(--mui-palette-text-secondary)' }} />
                                     <Typography sx={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--mui-palette-text-primary)' }}>
-                                        {opp.contactName}
+                                        {opp.contact}
                                     </Typography>
                                 </Box>
 
@@ -210,15 +210,15 @@ export function OpportunityDetailDrawer({
                                     <PhoneActions phone={opp.contactNumber} />
                                 </Box>
 
-                                {opp.emailAddress && (
+                                {opp.contactEmail && (
                                     <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                                             <EmailOutlinedIcon sx={{ fontSize: 16, color: 'var(--mui-palette-text-secondary)' }} />
                                             <Typography sx={{ fontSize: '0.82rem', color: 'var(--mui-palette-text-primary)' }}>
-                                                {opp.emailAddress}
+                                                {opp.contactEmail}
                                             </Typography>
                                         </Box>
-                                        <EmailActions email={opp.emailAddress} />
+                                        <EmailActions email={opp.contactEmail} />
                                     </Box>
                                 )}
                             </Box>
@@ -269,7 +269,7 @@ export function OpportunityDetailDrawer({
                         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
                             <DrawerSectionCard title="ACTION BRIEF / FOLLOW UP REMARKS">
                                 <Typography sx={{ fontSize: '0.82rem', color: 'var(--crm-slate-700)', lineHeight: 1.5 }}>
-                                    {opp.addDescription}
+                                    {opp.followUpRemarks}
                                 </Typography>
                             </DrawerSectionCard>
 

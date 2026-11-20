@@ -187,7 +187,7 @@ export function ContactDetailDrawer({
         ] as const
     ).filter(([, value]) => Boolean(value?.trim()));
 
-    const emails = (c.emailAddresses ?? []).filter((em) => em.email?.trim());
+    const emails = (c.emailAddress ?? []).filter((em) => em.email?.trim());
 
     return (
         <EntityDetailDrawer
@@ -377,10 +377,10 @@ export function ContactDetailDrawer({
                         {/* Admin-defined custom fields */}
                         <DynamicDrawerCustomFields module="contacts" record={c} />
 
-                        {c.description && (
+                        {c.addDescription && (
                             <DrawerSectionCard p={1.8} icon={sectionIcon(<NotesOutlinedIcon sx={{ fontSize: 15 }} />)} title="Notes">
                                 <Typography sx={{ fontSize: '0.84rem', color: 'var(--crm-slate-700)', lineHeight: 1.55, whiteSpace: 'pre-wrap' }}>
-                                    {c.description}
+                                    {c.addDescription}
                                 </Typography>
                             </DrawerSectionCard>
                         )}

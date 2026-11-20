@@ -68,7 +68,7 @@ export interface ImportResult {
 
 const PROGRESS_EVERY_ROWS = 20;
 /** Lead fields the template doesn't offer but the record requires; documented defaults, applied only when blank. */
-const LEAD_IMPORT_DEFAULTS = { leadSource: 'Other', leadType: 'Cold', addDescription: 'Imported via bulk import', followupType: 'Call' } as const;
+const LEAD_IMPORT_DEFAULTS = { leadSource: 'Other', leadType: 'Cold', followUpRemarks: 'Imported via bulk import', followupType: 'Call' } as const;
 
 /** Opportunity fields the template doesn't offer (or left blank) but the record requires. */
 const OPPORTUNITY_IMPORT_DEFAULTS = {
@@ -77,7 +77,7 @@ const OPPORTUNITY_IMPORT_DEFAULTS = {
     salesStage: 'Qualification',
     leadSource: 'Other',
     followupType: 'Call',
-    addDescription: 'Imported via bulk import',
+    followUpRemarks: 'Imported via bulk import',
     // Same "no commission" option lead conversion uses for new opportunities.
     commission: 'Nil / Direct (0%)',
 } as const;
@@ -155,7 +155,7 @@ const rowBuilders: Record<ImportEntity, (v: Record<string, string>, user: AuthUs
             billingState: v.billingState,
             gstNumber: v.gstNumber,
             registrationType: v.gstNumber ? 'Registered' : 'Unregistered',
-            assignedUser: user.username,
+            assignedTo: user.username,
         };
         const input = organizationImportSchema.parse(raw);
         checkRow(ctx, raw);
@@ -167,11 +167,11 @@ const rowBuilders: Record<ImportEntity, (v: Record<string, string>, user: AuthUs
             organizationName: v.organizationName,
             mobile: v.mobile,
             officePhone: v.officePhone,
-            emailAddresses: emailList(v.email),
+            emailAddress: emailList(v.email),
             assignedTo: user.username,
             designation: v.designation,
             department: v.department,
-            description: v.description,
+            addDescription: v.addDescription,
             communicationType: [],
         };
         const input = contactInputSchema.parse(raw);
@@ -202,14 +202,14 @@ const rowBuilders: Record<ImportEntity, (v: Record<string, string>, user: AuthUs
         const raw = {
             name: v.name,
             mobile: v.mobile,
-            emailAddresses: emailList(v.email),
+            emailAddress: emailList(v.email),
             organizationName: v.organizationName,
             leadSource: v.leadSource || LEAD_IMPORT_DEFAULTS.leadSource,
             leadType: v.leadType || LEAD_IMPORT_DEFAULTS.leadType,
             status,
             primaryCity: v.primaryCity,
             primaryState: v.primaryState,
-            addDescription: v.addDescription && v.addDescription.length >= 3 ? v.addDescription : LEAD_IMPORT_DEFAULTS.addDescription,
+            followUpRemarks: v.followUpRemarks && v.followUpRemarks.length >= 3 ? v.followUpRemarks : LEAD_IMPORT_DEFAULTS.followUpRemarks,
             followupType: LEAD_IMPORT_DEFAULTS.followupType,
             nextFollowupDate: businessToday(),
             assignedTo: user.username,
@@ -222,9 +222,9 @@ const rowBuilders: Record<ImportEntity, (v: Record<string, string>, user: AuthUs
         const productCategory = splitList(v.productCategory);
         const raw = {
             organizationName: v.organizationName,
-            contactName: v.contactName,
+            contact: v.contact,
             contactNumber: v.contactNumber,
-            emailAddress: v.emailAddress,
+            contactEmail: v.contactEmail,
             productCategory: productCategory.length ? productCategory : [OPPORTUNITY_IMPORT_DEFAULTS.productCategory],
             type: v.type || OPPORTUNITY_IMPORT_DEFAULTS.type,
             salesStage: v.salesStage || OPPORTUNITY_IMPORT_DEFAULTS.salesStage,
@@ -232,7 +232,7 @@ const rowBuilders: Record<ImportEntity, (v: Record<string, string>, user: AuthUs
             leadGivenBy: v.leadGivenBy || user.username,
             nextFollowupDate: businessToday(),
             followupType: OPPORTUNITY_IMPORT_DEFAULTS.followupType,
-            addDescription: v.addDescription && v.addDescription.length >= 3 ? v.addDescription : OPPORTUNITY_IMPORT_DEFAULTS.addDescription,
+            followUpRemarks: v.followUpRemarks && v.followUpRemarks.length >= 3 ? v.followUpRemarks : OPPORTUNITY_IMPORT_DEFAULTS.followUpRemarks,
             commission: OPPORTUNITY_IMPORT_DEFAULTS.commission,
             assignedTo: user.username,
         };
@@ -245,7 +245,7 @@ const rowBuilders: Record<ImportEntity, (v: Record<string, string>, user: AuthUs
         const dueDate = new Date(wallClockNow(ENV.BUSINESS_TIMEZONE).getTime() + TICKET_IMPORT_DUE_IN_MS).toISOString().slice(0, 16);
         const raw = {
             organizationName: v.organizationName,
-            contactPersonName: v.contactPersonName,
+            contact: v.contact,
             contactNumber: v.contactNumber,
             contactEmail: v.contactEmail,
             ticketSubject: v.ticketSubject,
@@ -267,15 +267,15 @@ const rowBuilders: Record<ImportEntity, (v: Record<string, string>, user: AuthUs
     },
     'partner-companies': (v, user, ctx) => {
         const raw = {
-            companyName: v.companyName,
+            partnerName: v.partnerName,
             natureOfPartner: v.natureOfPartner || PARTNER_IMPORT_DEFAULT_NATURE,
-            phone: v.phone,
-            emailAddresses: emailList(v.email),
+            officePhone: v.officePhone,
+            emailAddress: emailList(v.email),
             billingAddress: v.billingStreet,
             billingCity: v.billingCity,
             billingState: v.billingState,
             billingPostalCode: v.billingPostalCode,
-            gstNo: v.gstNo,
+            gstNumber: v.gstNumber,
             principalCompany: v.principalCompany,
             assignedTo: user.username,
         };

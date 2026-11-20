@@ -17,7 +17,7 @@ export const ticketFormSchema = z.object({
     amcFlag: z.boolean().default(false),
     ticketSubject: optionalText('Ticket Subject', L.title),
     organizationName: requiredText('Organization Name', L.organizationName),
-    contactPersonName: requiredText('Contact Person Name', L.personName),
+    contact: requiredText('Contact', L.personName),
     contactNumber: zodPhoneOptional,
     // Priority / source / support type / status / mode options are admin-customizable (ticket_* dropdowns).
     // Priority, Nature Of Call and Support Mode are required by the form configuration (admin-relaxable).

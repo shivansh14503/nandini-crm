@@ -102,30 +102,30 @@ model Organization {
   accountCode String @unique @db.NVarChar(50)
 
   // Overview
-  organizationName     String    @db.NVarChar(200)
-  mailingName          String?   @db.NVarChar(200)
-  tradeName            String?   @db.NVarChar(200)
-  natureOfBusiness     String?   @db.NVarChar(100)
-  accountStatus        String    @default("Active") @db.NVarChar(20)
-  inactivityReason     String?   @db.NVarChar(500)
-  typeOfEntity         String?   @db.NVarChar(50)
-  customerType         String?   @db.NVarChar(50)
-  sapCodeTallyId       String?   @db.NVarChar(30)
-  showroomBranchCode   String?   @db.NVarChar(30)
-  sourceOfLead         String?   @db.NVarChar(50)
+  organizationName       String    @db.NVarChar(200)
+  mailingName            String?   @db.NVarChar(200)
+  tradeName              String?   @db.NVarChar(200)
+  natureOfBusiness       String?   @db.NVarChar(100)
+  accountStatus          String    @default("Active") @db.NVarChar(20)
+  inactivityReason       String?   @db.NVarChar(500)
+  typeOfEntity           String?   @db.NVarChar(50)
+  customerType           String?   @db.NVarChar(50)
+  sapCodeTallyId         String?   @db.NVarChar(30)
+  showroomBranchCode     String?   @db.NVarChar(30)
+  leadSource             String?   @db.NVarChar(50)
   /// Display name of the parent corporation (free text in the form); parentOrganizationId links it when known.
-  memberOfParentCorp   String?   @db.NVarChar(200)
-  parentOrganizationId String?   @db.NVarChar(50)
-  numberOfEmployees    String?   @db.NVarChar(30)
-  annualTurnover       String?   @db.NVarChar(30)
-  description          String?   @db.NVarChar(1000)
-  accountVerified      Boolean   @default(false)
-  verifiedAt           DateTime?
-  verifiedBy           String?   @db.NVarChar(50)
-  activeAmc            Boolean   @default(false)
-  activeCloud          Boolean   @default(false)
-  provideSupport       String    @default("Yes") @db.NVarChar(3)
-  assignedUser         String?   @db.NVarChar(50)
+  memberOf               String?   @db.NVarChar(200)
+  parentOrganizationId   String?   @db.NVarChar(50)
+  numberOfEmployees      String?   @db.NVarChar(30)
+  annualTurnover         String?   @db.NVarChar(30)
+  addDescriptionAndScope String?   @db.NVarChar(1000)
+  accountVerified        Boolean   @default(false)
+  verifiedAt             DateTime?
+  verifiedBy             String?   @db.NVarChar(50)
+  activeAmc              Boolean   @default(false)
+  activeCloud            Boolean   @default(false)
+  provideSupport         String    @default("Yes") @db.NVarChar(3)
+  assignedTo             String?   @db.NVarChar(50)
 
   // Billing address (billingStreet mirrors billingAddress for older records)
   billingAddress    String? @db.NVarChar(250)
@@ -155,12 +155,12 @@ model Organization {
   msmeRegnNumber   String? @db.NVarChar(19)
   accountName      String? @db.NVarChar(200)
   bankName         String? @db.NVarChar(100)
-  bankIfscCode     String? @db.NVarChar(11)
+  ifscCode         String? @db.NVarChar(11)
   /// Canonical GSTIN; the API also echoes it as the legacy `gstNumber` alias.
-  gstNo            String? @db.NVarChar(15)
+  gstNumber        String? @db.NVarChar(15)
   cinNo            String? @db.NVarChar(21)
   tanNumber        String? @db.NVarChar(10)
-  accountNumber    String? @db.NVarChar(18)
+  accountNo        String? @db.NVarChar(18)
   typeOfAccount    String? @db.NVarChar(30)
   bankAddress      String? @db.NVarChar(250)
 
@@ -193,11 +193,11 @@ model Organization {
   @@index([shippingCityId])
   @@index([organizationName])
   @@index([accountStatus])
-  @@index([assignedUser])
-  @@index([gstNo])
+  @@index([assignedTo])
+  @@index([gstNumber])
   @@index([isDeleted, createdAt])
   /// List filter (status, owner) under row-level access scoping.
-  @@index([isDeleted, accountStatus, assignedUser])
+  @@index([isDeleted, accountStatus, assignedTo])
 }
 
 /// Emails owned by exactly one Organization, Contact or Lead (one FK set per row).
@@ -255,7 +255,7 @@ model Contact {
   /// string[] as JSON (e.g. ["Call","Email"]).
   communicationTypeJson String? @db.NVarChar(Max)
   doNotCall             Boolean @default(false)
-  description           String? @db.NVarChar(2000)
+  addDescription        String? @db.NVarChar(2000)
 
   /// Admin-defined custom field values `{ [fieldKey]: value }` (see FormFieldDefinition) as JSON.
   customDataJson String? @db.NVarChar(Max)
@@ -268,7 +268,7 @@ model Contact {
   deletedAt DateTime?
 
   organization   Organization? @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  emailAddresses EntityEmail[]
+  emailAddress   EntityEmail[]
   opportunities  Opportunity[]
   quotations     Quotation[]
   tickets        Ticket[]
@@ -299,9 +299,11 @@ model Lead {
   /// string[] as JSON.
   productCategoryJson String?   @db.NVarChar(Max)
   followupType        String?   @db.NVarChar(30)
-  addDescription      String?   @db.NVarChar(2000)
+  /// Latest follow-up outcome (shared_customer_response dropdown), picked on every edit.
+  customerResponse    String?   @db.NVarChar(100)
+  followUpRemarks     String?   @db.NVarChar(2000)
   registrationType    String?   @db.NVarChar(30)
-  gstNo               String?   @db.NVarChar(15)
+  gstNumber           String?   @db.NVarChar(15)
   turnover            String?   @db.NVarChar(30)
   assignedTo          String    @db.NVarChar(50)
   otherPhone          String?   @db.NVarChar(20)
@@ -352,7 +354,7 @@ model Lead {
   isDeleted Boolean   @default(false)
   deletedAt DateTime?
 
-  emailAddresses        EntityEmail[]
+  emailAddress          EntityEmail[]
   convertedOrganization Organization? @relation("LeadConvertedOrganization", fields: [convertedOrganizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   convertedContact      Contact?      @relation("LeadConvertedContact", fields: [convertedContactId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   convertedOpportunity  Opportunity?  @relation("LeadConvertedOpportunity", fields: [convertedOpportunityId], references: [id], onDelete: NoAction, onUpdate: NoAction)
@@ -420,12 +422,12 @@ model Opportunity {
   opportunityName     String?   @db.NVarChar(200)
   /// string[] as JSON.
   productCategoryJson String?   @db.NVarChar(Max)
-  contactName         String    @db.NVarChar(100)
+  contact             String    @db.NVarChar(100)
   contactId           String?   @db.NVarChar(50)
   organizationName    String    @db.NVarChar(200)
   organizationId      String?   @db.NVarChar(50)
   contactNumber       String    @db.NVarChar(20)
-  emailAddress        String?   @db.NVarChar(120)
+  contactEmail        String?   @db.NVarChar(120)
   referredBy          String?   @db.NVarChar(200)
   type                String?   @db.NVarChar(50)
   salesStage          String    @db.NVarChar(50)
@@ -434,7 +436,9 @@ model Opportunity {
   nextFollowupDate    DateTime? @db.Date
   nextFollowupTime    String?   @db.NVarChar(20)
   followupType        String?   @db.NVarChar(30)
-  addDescription      String?   @db.NVarChar(2000)
+  /// Latest follow-up outcome (shared_customer_response dropdown), picked on every edit.
+  customerResponse    String?   @db.NVarChar(100)
+  followUpRemarks     String?   @db.NVarChar(2000)
   description         String?   @db.NVarChar(2000)
   assignedTo          String    @db.NVarChar(50)
 
@@ -468,7 +472,7 @@ model Opportunity {
   deletedAt DateTime?
 
   organization   Organization?         @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  contact        Contact?              @relation(fields: [contactId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  contactRecord  Contact?              @relation(fields: [contactId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   lineItems      OpportunityLineItem[]
   quotations     Quotation[]
   convertedLeads Lead[]                @relation("LeadConvertedOpportunity")
@@ -522,7 +526,7 @@ model Quotation {
   termsAndCondition            String?  @db.NVarChar(100)
   termsAndConditionDescription String?  @db.NVarChar(4000)
   assignedTo                   String   @db.NVarChar(50)
-  opportunityName              String   @db.NVarChar(200)
+  opportunity                  String   @db.NVarChar(200)
   company                      String   @db.NVarChar(100)
   validationPeriod             String?  @db.NVarChar(30)
   otherRef                     String?  @db.NVarChar(80)
@@ -544,11 +548,11 @@ model Quotation {
   // Customer & address
   organizationName String? @db.NVarChar(200)
   organizationId   String? @db.NVarChar(50)
-  contactName      String  @db.NVarChar(100)
+  contact          String  @db.NVarChar(100)
   contactId        String? @db.NVarChar(50)
-  contactMobile    String? @db.NVarChar(20)
+  contactNumber    String? @db.NVarChar(20)
   mailingName      String? @db.NVarChar(200)
-  gstNo            String? @db.NVarChar(15)
+  gstNumber        String? @db.NVarChar(15)
   contactEmail     String? @db.NVarChar(120)
 
   billingAddress    String @db.NVarChar(250)
@@ -584,12 +588,12 @@ model Quotation {
   isDeleted Boolean   @default(false)
   deletedAt DateTime?
 
-  opportunity     Opportunity?        @relation(fields: [opportunityId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  organization    Organization?       @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  contact         Contact?            @relation(fields: [contactId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  lineItems       QuotationLineItem[]
-  billingCityRef  City?               @relation("QuotationBillingCity", fields: [billingCityId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  shippingCityRef City?               @relation("QuotationShippingCity", fields: [shippingCityId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  opportunityRecord  Opportunity?        @relation(fields: [opportunityId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  organizationRecord Organization?       @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  contactRecord      Contact?            @relation(fields: [contactId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  lineItems          QuotationLineItem[]
+  billingCityRef     City?               @relation("QuotationBillingCity", fields: [billingCityId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  shippingCityRef    City?               @relation("QuotationShippingCity", fields: [shippingCityId], references: [id], onDelete: NoAction, onUpdate: NoAction)
 
   @@index([billingCityId])
   @@index([shippingCityId])
@@ -639,7 +643,7 @@ model Ticket {
   ticketSubject           String?  @db.NVarChar(200)
   organizationName        String   @db.NVarChar(200)
   organizationId          String?  @db.NVarChar(50)
-  contactPersonName       String   @db.NVarChar(100)
+  contact                 String   @db.NVarChar(100)
   contactId               String?  @db.NVarChar(50)
   contactNumber           String?  @db.NVarChar(20)
   contactEmail            String?  @db.NVarChar(120)
@@ -673,8 +677,8 @@ model Ticket {
   isDeleted Boolean   @default(false)
   deletedAt DateTime?
 
-  organization Organization? @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  contact      Contact?      @relation(fields: [contactId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  organization  Organization? @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  contactRecord Contact?      @relation(fields: [contactId], references: [id], onDelete: NoAction, onUpdate: NoAction)
 
   @@index([ticketStatus])
   @@index([ticketPriority])
@@ -707,9 +711,9 @@ model NatureOfCall {
 /// `email` (primary of `emailAddressesJson`) and `city` (= `billingCity`) are kept in sync for the lookup projection.
 model PartnerCompany {
   id              String   @id @default(uuid()) @db.NVarChar(50)
-  companyName     String   @unique @db.NVarChar(200)
+  partnerName     String   @unique @db.NVarChar(200)
   natureOfPartner String?  @db.NVarChar(100)
-  phone           String?  @db.NVarChar(20)
+  officePhone     String?  @db.NVarChar(20)
   email           String?  @db.NVarChar(120)
   city            String?  @db.NVarChar(80)
   billingCountry  String?  @db.NVarChar(80)
@@ -719,18 +723,18 @@ model PartnerCompany {
   updatedAt       DateTime @updatedAt
 
   // Overview
-  website            String? @db.NVarChar(200)
-  addDescription     String? @db.NVarChar(2000)
-  description        String? @db.NVarChar(2000)
-  principalCompany   String? @db.NVarChar(200)
+  website          String? @db.NVarChar(200)
+  addDescription   String? @db.NVarChar(2000)
+  description      String? @db.NVarChar(2000)
+  principalCompany String? @db.NVarChar(200)
   /// JSON `CorporateEmail[]` (without ids), primary first.
-  emailAddressesJson String? @db.NVarChar(Max)
+  emailAddressJson String? @db.NVarChar(Max)
 
   // Bank details
-  bankName      String? @db.NVarChar(100)
-  bankBranch    String? @db.NVarChar(150)
-  accountNumber String? @db.NVarChar(18)
-  bankIfscCode  String? @db.NVarChar(11)
+  bankName  String? @db.NVarChar(100)
+  branch    String? @db.NVarChar(150)
+  accountNo String? @db.NVarChar(18)
+  ifscCode  String? @db.NVarChar(11)
 
   // Billing address (`city` / `billingCountry` above double as billing city / country)
   billingAddress    String? @db.NVarChar(250)
@@ -752,7 +756,7 @@ model PartnerCompany {
   copyAddressFromBilling Boolean @default(false)
 
   // Statutory
-  gstNo          String? @db.NVarChar(15)
+  gstNumber      String? @db.NVarChar(15)
   panNumber      String? @db.NVarChar(10)
   cinNo          String? @db.NVarChar(21)
   msmeRegnNumber String? @db.NVarChar(19)

@@ -29,7 +29,7 @@ export function QuotationAddressSection() {
     const { control, setValue, getValues, getFieldState } = useFormContext<QuotationFormData>();
 
     const organizationName = useWatch({ control, name: 'organizationName' });
-    const contactName = useWatch({ control, name: 'contactName' });
+    const contactName = useWatch({ control, name: 'contact' });
 
     const prevOrgRef = useRef(organizationName);
     const prevContactRef = useRef(contactName);
@@ -61,7 +61,7 @@ export function QuotationAddressSection() {
 
         if (org) {
             const opts = { shouldDirty: true, shouldValidate: true } as const;
-            if (org.gstNumber || org.gstNo) setValue('gstNo', org.gstNumber || org.gstNo || '', opts);
+            if (org.gstNumber) setValue('gstNumber', org.gstNumber, opts);
 
             // Country is set before state so the state field validates against the right country.
             const billingCountry = normalizeCountryValue(org.billingCountry);
@@ -95,8 +95,8 @@ export function QuotationAddressSection() {
 
         if (contact) {
             const opts = { shouldDirty: true, shouldValidate: true } as const;
-            if (contact.mobile) setValue('contactMobile', contact.mobile, opts);
-            const email = contact.emailAddresses?.[0]?.email;
+            if (contact.mobile) setValue('contactNumber', contact.mobile, opts);
+            const email = contact.emailAddress?.[0]?.email;
             if (email) setValue('contactEmail', email, opts);
         }
     }, [contactName, contacts, setValue]);
@@ -110,7 +110,7 @@ export function QuotationAddressSection() {
                 {/* ── Account ── */}
                 <RhfLookup<QuotationFormData>
                     name="organizationName"
-                    label="Organization"
+                    label="Organization Name"
                     options={orgOptions}
                     placeholder="Search or enter Organization..."
                     hint="Linked client organization"
@@ -122,8 +122,8 @@ export function QuotationAddressSection() {
                     hint="As on billing documents • follows Organization"
                 />
                 <RhfUppercaseField<QuotationFormData>
-                    name="gstNo"
-                    label="GST NO"
+                    name="gstNumber"
+                    label="GST Number"
                     placeholder="e.g. 07AAAAA0000A1Z5"
                     maxLength={FIELD_MAX_LENGTH.gstin}
                     hint="Client GSTIN"
@@ -131,7 +131,7 @@ export function QuotationAddressSection() {
 
                 {/* ── Recipient ── */}
                 <RhfLookup<QuotationFormData>
-                    name="contactName"
+                    name="contact"
                     label="Contact"
                     required
                     options={contactOptions}
@@ -140,14 +140,14 @@ export function QuotationAddressSection() {
                     fieldSize="md"
                 />
                 <RhfPhoneField<QuotationFormData>
-                    name="contactMobile"
-                    label="Contact Mobile No"
+                    name="contactNumber"
+                    label="Contact Number"
                     placeholder="e.g. 9800000000"
                     hint="Direct phone / WhatsApp"
                 />
                 <RhfEmailField<QuotationFormData>
                     name="contactEmail"
-                    label="Contact Email Address"
+                    label="Contact Email"
                     placeholder="contact@company.com"
                     hint="Receives the quotation PDF"
                 />

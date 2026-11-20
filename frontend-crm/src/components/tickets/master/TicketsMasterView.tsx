@@ -141,7 +141,7 @@ export function TicketsMasterView() {
                 showNumber('ticket') ? t.ticketNumber : '',
                 t.ticketSubject,
                 t.organizationName,
-                t.contactPersonName,
+                t.contact,
                 t.contactNumber,
                 t.natureOfCall,
                 t.ticketStatus,
@@ -265,18 +265,18 @@ export function TicketsMasterView() {
                     ),
             },
             {
-                id: 'contactPersonName',
+                id: 'contact',
                 label: 'CONTACT',
                 sortable: true,
                 minWidth: 150,
                 render: (t) => (
                     <Box>
-                        {t.contactId && t.contactPersonName ? (
+                        {t.contactId && t.contact ? (
                             <RecordLink href={ROUTES.CONTACT_DETAIL(t.contactId)} sx={{ display: 'block', fontSize: '0.8rem', lineHeight: 1.3 }}>
-                                {t.contactPersonName}
+                                {t.contact}
                             </RecordLink>
                         ) : (
-                            <Typography sx={{ fontSize: '0.8rem', color: 'var(--crm-slate-700)', lineHeight: 1.3 }}>{t.contactPersonName || '-'}</Typography>
+                            <Typography sx={{ fontSize: '0.8rem', color: 'var(--crm-slate-700)', lineHeight: 1.3 }}>{t.contact || '-'}</Typography>
                         )}
                         {t.contactNumber && <Typography sx={{ fontSize: '0.72rem', color: 'var(--mui-palette-text-muted)' }}>{t.contactNumber}</Typography>}
                     </Box>

@@ -176,7 +176,17 @@ export function RelatedModulesSidebar({
                 </Tooltip>
             </Box>
 
-            <Box sx={{ flex: 1, minHeight: 0, overflowY: 'auto', overflowX: 'hidden' }}>
+            <Box
+                sx={{
+                    flex: 1,
+                    minHeight: 0,
+                    overflowY: 'auto',
+                    overflowX: 'hidden',
+                    scrollbarWidth: 'none',
+                    msOverflowStyle: 'none',
+                    '&::-webkit-scrollbar': { display: 'none' },
+                }}
+            >
                 <List disablePadding sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
                     {modules.map((item) => {
                         const isActive = item.id === activeModuleId;

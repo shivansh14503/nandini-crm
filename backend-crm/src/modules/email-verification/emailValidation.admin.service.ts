@@ -526,8 +526,8 @@ export const emailActionSchema = z.object({
 type OwnerKind = 'lead' | 'contact' | 'organization';
 
 const OWNER_INFO: Record<OwnerKind, { entityType: AuditEntityType; field: string }> = {
-    lead: { entityType: 'Lead', field: 'emailAddresses' },
-    contact: { entityType: 'Contact', field: 'emailAddresses' },
+    lead: { entityType: 'Lead', field: 'emailAddress' },
+    contact: { entityType: 'Contact', field: 'emailAddress' },
     organization: { entityType: 'Organization', field: 'corporateEmails' },
 };
 

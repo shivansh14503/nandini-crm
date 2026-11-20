@@ -2,8 +2,8 @@
 
 import React from 'react';
 
+import { ConvertRecordSections } from './ConvertRecordSections';
 import {
-    FormGrid,
     RhfChipGroup,
     RhfMultiAutocomplete,
     RhfDateTimeField,
@@ -31,23 +31,52 @@ export function ConvertOpportunitySection() {
     // The fields follow the Opportunity form's configuration (Form Builder).
     return (
         <FormConfigProvider module="opportunities" fieldNames={CONVERT_FIELD_NAMES.opportunities} borrowed>
-            <FormGrid columns={3}>
-                <RhfMultiAutocomplete<F> name="productCategory" label="Product Category" required options={getOptions('shared_product_category', PRODUCT_CATEGORIES)} placeholder="Search and select products..." />
-
-                <RhfTextField<F> name="organizationName" label="Organization Name" required disabled />
-                <RhfTextField<F> name="principalCompany" label="Principal Company" placeholder="Principal / OEM company" />
-                <RhfLookup<F> name="referredBy" label="Referred By" placeholder="Referring partner or employee" />
-
-                <RhfSelect<F> name="opportunityType" label="Type" required options={getOptions('opportunity_type', OPPORTUNITY_TYPES)} placeholder="Select Type" />
-                <RhfSelect<F> name="opportunityLeadSource" label="Lead Source" required options={getOptions('shared_lead_source', LEAD_SOURCES)} placeholder="Select Lead Source" />
-                <RhfLookup<F> name="opportunityAssignedTo" label="Assigned to" lookupType="user" required placeholder="Select representative" />
-
-                <RhfDateTimeField<F> dateName="nextFollowupDate" timeName="nextFollowupTime" label="Next Followup Date" required />
-                <RhfSelect<F> name="followupType" label="Followup Type" options={getOptions('shared_followup_type', FOLLOWUP_TYPES)} placeholder="Select Type" />
-
-                <RhfChipGroup<F> name="copyActivitiesTo" label="Copy Activities to" options={COPY_ACTIVITY_TARGETS} />
-                <RhfTextField<F> name="opportunityDescription" label="Description" multiline minRows={3} placeholder="Opportunity requirement brief..." />
-            </FormGrid>
+            {/* The Opportunity form's own fields, sections, order and widths (see ConvertRecordSections). */}
+            <ConvertRecordSections
+                module="opportunities"
+                fields={{
+                    organizationName: <RhfTextField<F> name="organizationName" label="Organization name" required disabled hint="Taken from the organization section above" />,
+                    referredBy: <RhfLookup<F> name="referredBy" label="Referred By" hint="Partner, agent, or client" placeholder="Referred by partner or person..." />,
+                    type: (
+                        <RhfSelect<F> name="opportunityType" label="Type" required hint="Nature of deal" options={getOptions('opportunity_type', OPPORTUNITY_TYPES)} placeholder="Select Opportunity Type" />
+                    ),
+                    leadSource: (
+                        <RhfSelect<F> name="opportunityLeadSource" label="Lead Source" required options={getOptions('shared_lead_source', LEAD_SOURCES)} placeholder="Select Lead Source" />
+                    ),
+                    followupType: (
+                        <RhfSelect<F> name="followupType" label="Followup Type" hint="Default: Call" options={getOptions('shared_followup_type', FOLLOWUP_TYPES)} placeholder="Select Type" />
+                    ),
+                    nextFollowupDate: <RhfDateTimeField<F> dateName="nextFollowupDate" timeName="nextFollowupTime" label="Next Followup Date" required hint="Next touchpoint" />,
+                    assignedTo: <RhfLookup<F> name="opportunityAssignedTo" label="Assigned to" lookupType="user" required hint="Account executive" placeholder="Assign to user..." />,
+                    productCategory: (
+                        <RhfMultiAutocomplete<F>
+                            name="productCategory"
+                            label="Product Category"
+                            required
+                            options={getOptions('shared_product_category', PRODUCT_CATEGORIES)}
+                            placeholder="Search and select products..."
+                        />
+                    ),
+                    followUpRemarks: (
+                        <RhfTextField<F>
+                            name="opportunityDescription"
+                            label="Follow Up Remarks"
+                            required
+                            hint="Stage summary & action items"
+                            multiline
+                            minRows={4}
+                            maxRows={8}
+                            placeholder="Provide current milestone details or immediate actions..."
+                        />
+                    ),
+                }}
+                extra={
+                    <>
+                        <RhfTextField<F> name="principalCompany" label="Principal Company" placeholder="Principal / OEM company" />
+                        <RhfChipGroup<F> name="copyActivitiesTo" label="Copy Activities to" options={COPY_ACTIVITY_TARGETS} />
+                    </>
+                }
+            />
         </FormConfigProvider>
     );
 }

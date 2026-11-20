@@ -10,7 +10,7 @@ export interface TicketDto {
     ticketSubject: string;
     organizationName: string;
     organizationId?: string;
-    contactPersonName: string;
+    contact: string;
     contactId?: string;
     contactNumber: string;
     ticketPriority: string;
@@ -51,7 +51,7 @@ export function toTicketDto(row: Ticket): TicketDto {
         ticketSubject: text(row.ticketSubject),
         organizationName: row.organizationName,
         organizationId: row.organizationId ?? undefined,
-        contactPersonName: row.contactPersonName,
+        contact: row.contact,
         contactId: row.contactId ?? undefined,
         contactNumber: text(row.contactNumber),
         ticketPriority: text(row.ticketPriority),
@@ -93,7 +93,7 @@ export function toTicketData(
         ticketSubject: nullable(input.ticketSubject),
         organizationName: input.organizationName,
         organizationId: resolved.organizationId,
-        contactPersonName: input.contactPersonName,
+        contact: input.contact,
         contactId: resolved.contactId,
         contactNumber: input.contactNumber ?? null,
         contactEmail: input.contactEmail ?? null,

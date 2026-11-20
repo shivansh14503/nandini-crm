@@ -244,9 +244,9 @@ const MODULES: Record<GlobalSearchCategory, (ctx: Context) => Promise<Found>> = 
         const clauses: Prisma.LeadWhereInput[] | null = t.code
             ? ownCode(ctx, 'LD', 'lead', { leadCode: { startsWith: t.code.code } })
             : t.gst
-              ? [{ gstNo: { startsWith: t.gst } }]
+              ? [{ gstNumber: { startsWith: t.gst } }]
               : t.pan
-                ? [{ gstNo: { contains: t.pan } }]
+                ? [{ gstNumber: { contains: t.pan } }]
                 : nonEmpty<Prisma.LeadWhereInput>([
                       ...(t.text
                           ? [
@@ -254,10 +254,10 @@ const MODULES: Record<GlobalSearchCategory, (ctx: Context) => Promise<Found>> = 
                                 { organizationName: { contains: t.q } },
                                 { tradeName: { contains: t.q } },
                                 { mailingName: { contains: t.q } },
-                                { emailAddresses: { some: { email: { contains: t.q } } } },
+                                { emailAddress: { some: { email: { contains: t.q } } } },
                             ]
                           : []),
-                      ...(t.text && t.token ? [{ gstNo: { contains: t.token } }] : []),
+                      ...(t.text && t.token ? [{ gstNumber: { contains: t.token } }] : []),
                       ...numbered(ctx, 'lead', { leadCode: { contains: t.q } }),
                       ...phoneClauses(t, ['mobile', 'otherPhone'] as const),
                   ]);
@@ -278,8 +278,8 @@ const MODULES: Record<GlobalSearchCategory, (ctx: Context) => Promise<Found>> = 
                         status: true,
                         mobile: true,
                         otherPhone: true,
-                        gstNo: true,
-                        emailAddresses: { select: { email: true }, orderBy: { sortOrder: 'asc' } },
+                        gstNumber: true,
+                        emailAddress: { select: { email: true }, orderBy: { sortOrder: 'asc' } },
                     },
                     orderBy: recent,
                     skip: ctx.skip,
@@ -298,10 +298,10 @@ const MODULES: Record<GlobalSearchCategory, (ctx: Context) => Promise<Found>> = 
                     match: findMatch(t, [l.name, subtitle], [
                         ['Trade name', l.tradeName],
                         ['Mailing name', l.mailingName],
-                        ...emailCandidates(l.emailAddresses),
+                        ...emailCandidates(l.emailAddress),
                         ['Mobile', l.mobile],
                         ['Other phone', l.otherPhone],
-                        ['GSTIN', l.gstNo],
+                        ['GSTIN', l.gstNumber],
                     ]),
                     href: `/leads/${l.id}`,
                 };
@@ -321,8 +321,8 @@ const MODULES: Record<GlobalSearchCategory, (ctx: Context) => Promise<Found>> = 
                         ? [
                               { opportunityName: { contains: t.q } },
                               { organizationName: { contains: t.q } },
-                              { contactName: { contains: t.q } },
-                              { emailAddress: { contains: t.q } },
+                              { contact: { contains: t.q } },
+                              { contactEmail: { contains: t.q } },
                           ]
                         : []),
                     ...numbered(ctx, 'opportunity', { opportunityCode: { contains: t.q } }),
@@ -340,9 +340,9 @@ const MODULES: Record<GlobalSearchCategory, (ctx: Context) => Promise<Found>> = 
                         opportunityCode: true,
                         opportunityName: true,
                         organizationName: true,
-                        contactName: true,
+                        contact: true,
                         contactNumber: true,
-                        emailAddress: true,
+                        contactEmail: true,
                         salesStage: true,
                     },
                     orderBy: recent,
@@ -362,9 +362,9 @@ const MODULES: Record<GlobalSearchCategory, (ctx: Context) => Promise<Found>> = 
                     subtitle,
                     meta: o.salesStage,
                     match: findMatch(t, [title, subtitle], [
-                        ['Contact', o.contactName],
+                        ['Contact', o.contact],
                         ['Phone', o.contactNumber],
-                        ['Email', o.emailAddress],
+                        ['Email', o.contactEmail],
                     ]),
                     href: `/opportunities/${o.id}`,
                 };
@@ -378,22 +378,22 @@ const MODULES: Record<GlobalSearchCategory, (ctx: Context) => Promise<Found>> = 
         const clauses: Prisma.QuotationWhereInput[] | null = t.code
             ? ownCode(ctx, 'QT', 'quotation', { quotationCode: { startsWith: t.code.code } })
             : t.gst
-              ? [{ gstNo: { startsWith: t.gst } }]
+              ? [{ gstNumber: { startsWith: t.gst } }]
               : t.pan
-                ? [{ gstNo: { contains: t.pan } }]
+                ? [{ gstNumber: { contains: t.pan } }]
                 : nonEmpty<Prisma.QuotationWhereInput>([
                       ...(t.text
                           ? [
                                 { quotationTitle: { contains: t.q } },
                                 { organizationName: { contains: t.q } },
-                                { contactName: { contains: t.q } },
+                                { contact: { contains: t.q } },
                                 { preparedFor: { contains: t.q } },
                                 { contactEmail: { contains: t.q } },
                             ]
                           : []),
-                      ...(t.text && t.token ? [{ gstNo: { contains: t.token } }] : []),
+                      ...(t.text && t.token ? [{ gstNumber: { contains: t.token } }] : []),
                       ...numbered(ctx, 'quotation', { quotationCode: { contains: t.q } }),
-                      ...phoneClauses(t, ['contactMobile'] as const),
+                      ...phoneClauses(t, ['contactNumber'] as const),
                   ]);
         const where = clauses && { isDeleted: false, OR: clauses };
         return collect(
@@ -407,11 +407,11 @@ const MODULES: Record<GlobalSearchCategory, (ctx: Context) => Promise<Found>> = 
                         quotationCode: true,
                         quotationTitle: true,
                         organizationName: true,
-                        contactName: true,
+                        contact: true,
                         preparedFor: true,
                         contactEmail: true,
-                        contactMobile: true,
-                        gstNo: true,
+                        contactNumber: true,
+                        gstNumber: true,
                         quoteStage: true,
                     },
                     orderBy: recent,
@@ -431,11 +431,11 @@ const MODULES: Record<GlobalSearchCategory, (ctx: Context) => Promise<Found>> = 
                     subtitle,
                     meta: q.quoteStage,
                     match: findMatch(t, [title, subtitle], [
-                        ['Contact', q.contactName],
+                        ['Contact', q.contact],
                         ['Prepared for', q.preparedFor],
                         ['Email', q.contactEmail],
-                        ['Mobile', q.contactMobile],
-                        ['GSTIN', q.gstNo],
+                        ['Mobile', q.contactNumber],
+                        ['GSTIN', q.gstNumber],
                     ]),
                     href: `/quotations/${q.id}`,
                 };
@@ -449,9 +449,9 @@ const MODULES: Record<GlobalSearchCategory, (ctx: Context) => Promise<Found>> = 
         const clauses: Prisma.OrganizationWhereInput[] | null = t.code
             ? ownCode(ctx, 'ORG', 'organization', { accountCode: { startsWith: t.code.code } })
             : t.gst
-              ? [{ gstNo: { startsWith: t.gst } }]
+              ? [{ gstNumber: { startsWith: t.gst } }]
               : t.pan
-                ? [{ panNumber: t.pan }, { gstNo: { contains: t.pan } }]
+                ? [{ panNumber: t.pan }, { gstNumber: { contains: t.pan } }]
                 : nonEmpty<Prisma.OrganizationWhereInput>([
                       ...(t.text
                           ? [
@@ -464,10 +464,10 @@ const MODULES: Record<GlobalSearchCategory, (ctx: Context) => Promise<Found>> = 
                             ]
                           : []),
                       ...(t.text && t.token
-                          ? [{ gstNo: { contains: t.token } }, { panNumber: { contains: t.token } }, { cinNo: { contains: t.token } }]
+                          ? [{ gstNumber: { contains: t.token } }, { panNumber: { contains: t.token } }, { cinNo: { contains: t.token } }]
                           : []),
                       ...numbered(ctx, 'organization', { accountCode: { contains: t.q } }),
-                      ...(t.digits ? [{ accountNumber: { contains: t.digits } }] : []),
+                      ...(t.digits ? [{ accountNo: { contains: t.digits } }] : []),
                   ]);
         const where = clauses && { isDeleted: false, OR: clauses };
         return collect(
@@ -485,10 +485,10 @@ const MODULES: Record<GlobalSearchCategory, (ctx: Context) => Promise<Found>> = 
                         billingCity: true,
                         accountStatus: true,
                         sapCodeTallyId: true,
-                        gstNo: true,
+                        gstNumber: true,
                         panNumber: true,
                         cinNo: true,
-                        accountNumber: true,
+                        accountNo: true,
                         corporateEmails: { select: { email: true }, orderBy: { sortOrder: 'asc' } },
                     },
                     orderBy: recent,
@@ -511,8 +511,8 @@ const MODULES: Record<GlobalSearchCategory, (ctx: Context) => Promise<Found>> = 
                     meta: o.accountStatus,
                     match: findMatch(t, [o.organizationName, subtitle], [
                         ['PAN', o.panNumber],
-                        ['GSTIN', o.gstNo],
-                        ['Bank A/c', o.accountNumber, maskAccount],
+                        ['GSTIN', o.gstNumber],
+                        ['Bank A/c', o.accountNo, maskAccount],
                         ['CIN', o.cinNo],
                         ...emailCandidates(o.corporateEmails),
                         ['Mailing name', o.mailingName],
@@ -537,7 +537,7 @@ const MODULES: Record<GlobalSearchCategory, (ctx: Context) => Promise<Found>> = 
                         ? [
                               { name: { contains: t.q } },
                               { organizationName: { contains: t.q } },
-                              { emailAddresses: { some: { email: { contains: t.q } } } },
+                              { emailAddress: { some: { email: { contains: t.q } } } },
                           ]
                         : []),
                     ...numbered(ctx, 'contact', { contactCode: { contains: t.q } }),
@@ -561,7 +561,7 @@ const MODULES: Record<GlobalSearchCategory, (ctx: Context) => Promise<Found>> = 
                         phone3: true,
                         phone4: true,
                         phone5: true,
-                        emailAddresses: { select: { email: true, isPrimary: true }, orderBy: { sortOrder: 'asc' } },
+                        emailAddress: { select: { email: true, isPrimary: true }, orderBy: { sortOrder: 'asc' } },
                     },
                     orderBy: recent,
                     skip: ctx.skip,
@@ -570,7 +570,7 @@ const MODULES: Record<GlobalSearchCategory, (ctx: Context) => Promise<Found>> = 
             (w) => prisma.contact.count({ where: w }),
             (w) => prisma.contact.findMany({ where: w, select: { id: true }, orderBy: recent, take: MAX_IDS_PER_MODULE }),
             (c) => {
-                const email = c.emailAddresses.find((e) => e.isPrimary)?.email ?? c.emailAddresses[0]?.email;
+                const email = c.emailAddress.find((e) => e.isPrimary)?.email ?? c.emailAddress[0]?.email;
                 const subtitle = joinParts(email, c.organizationName, shown ? c.contactCode : '');
                 return {
                     id: c.id,
@@ -584,7 +584,7 @@ const MODULES: Record<GlobalSearchCategory, (ctx: Context) => Promise<Found>> = 
                         ['Phone', c.phone3],
                         ['Phone', c.phone4],
                         ['Phone', c.phone5],
-                        ...emailCandidates(c.emailAddresses),
+                        ...emailCandidates(c.emailAddress),
                     ]),
                     href: `/contacts/${c.id}`,
                 };
@@ -604,7 +604,7 @@ const MODULES: Record<GlobalSearchCategory, (ctx: Context) => Promise<Found>> = 
                         ? [
                               { ticketSubject: { contains: t.q } },
                               { organizationName: { contains: t.q } },
-                              { contactPersonName: { contains: t.q } },
+                              { contact: { contains: t.q } },
                               { contactEmail: { contains: t.q } },
                           ]
                         : []),
@@ -623,7 +623,7 @@ const MODULES: Record<GlobalSearchCategory, (ctx: Context) => Promise<Found>> = 
                         ticketNumber: true,
                         ticketSubject: true,
                         organizationName: true,
-                        contactPersonName: true,
+                        contact: true,
                         contactNumber: true,
                         contactEmail: true,
                         ticketStatus: true,
@@ -645,7 +645,7 @@ const MODULES: Record<GlobalSearchCategory, (ctx: Context) => Promise<Found>> = 
                     subtitle,
                     meta: k.ticketStatus,
                     match: findMatch(t, [title, subtitle], [
-                        ['Contact', k.contactPersonName],
+                        ['Contact', k.contact],
                         ['Phone', k.contactNumber],
                         ['Email', k.contactEmail],
                     ]),
@@ -707,25 +707,25 @@ const MODULES: Record<GlobalSearchCategory, (ctx: Context) => Promise<Found>> = 
         const clauses: Prisma.PartnerCompanyWhereInput[] | null = t.code
             ? null
             : t.gst
-              ? [{ gstNo: { startsWith: t.gst } }]
+              ? [{ gstNumber: { startsWith: t.gst } }]
               : t.pan
-                ? [{ panNumber: t.pan }, { gstNo: { contains: t.pan } }]
+                ? [{ panNumber: t.pan }, { gstNumber: { contains: t.pan } }]
                 : nonEmpty<Prisma.PartnerCompanyWhereInput>([
                       ...(t.text
                           ? [
-                                { companyName: { contains: t.q } },
+                                { partnerName: { contains: t.q } },
                                 { principalCompany: { contains: t.q } },
                                 { email: { contains: t.q } },
-                                { emailAddressesJson: { contains: t.q } },
+                                { emailAddressJson: { contains: t.q } },
                                 { contacts: { some: { OR: [{ name: { contains: t.q } }, { email: { contains: t.q } }] } } },
                             ]
                           : []),
                       ...(t.text && t.token
-                          ? [{ gstNo: { contains: t.token } }, { panNumber: { contains: t.token } }, { cinNo: { contains: t.token } }]
+                          ? [{ gstNumber: { contains: t.token } }, { panNumber: { contains: t.token } }, { cinNo: { contains: t.token } }]
                           : []),
-                      ...phoneClauses(t, ['phone'] as const),
+                      ...phoneClauses(t, ['officePhone'] as const),
                       ...(contactPhones.length > 0 ? [{ contacts: { some: { OR: contactPhones } } }] : []),
-                      ...(t.digits ? [{ accountNumber: { contains: t.digits } }] : []),
+                      ...(t.digits ? [{ accountNo: { contains: t.digits } }] : []),
                   ]);
         const where = clauses && { isDeleted: false, OR: clauses };
         return collect(
@@ -736,18 +736,18 @@ const MODULES: Record<GlobalSearchCategory, (ctx: Context) => Promise<Found>> = 
                     where: w,
                     select: {
                         id: true,
-                        companyName: true,
+                        partnerName: true,
                         natureOfPartner: true,
                         city: true,
                         isActive: true,
                         principalCompany: true,
-                        phone: true,
+                        officePhone: true,
                         email: true,
-                        emailAddressesJson: true,
-                        gstNo: true,
+                        emailAddressJson: true,
+                        gstNumber: true,
                         panNumber: true,
                         cinNo: true,
-                        accountNumber: true,
+                        accountNo: true,
                         contacts: { select: { name: true, mobile: true, officePhone: true, email: true }, take: 20 },
                     },
                     orderBy: recent,
@@ -758,19 +758,19 @@ const MODULES: Record<GlobalSearchCategory, (ctx: Context) => Promise<Found>> = 
             (w) => prisma.partnerCompany.findMany({ where: w, select: { id: true }, orderBy: recent, take: MAX_IDS_PER_MODULE }),
             (p) => {
                 const subtitle = joinParts(p.natureOfPartner, p.city);
-                const emails = [...new Set([p.email, ...parseEmails(p.emailAddressesJson)].filter((e): e is string => Boolean(e)))];
+                const emails = [...new Set([p.email, ...parseEmails(p.emailAddressJson)].filter((e): e is string => Boolean(e)))];
                 return {
                     id: p.id,
                     category: 'partnerCompanies',
-                    title: p.companyName,
+                    title: p.partnerName,
                     subtitle,
                     meta: p.isActive ? undefined : 'Inactive',
-                    match: findMatch(t, [p.companyName, subtitle], [
+                    match: findMatch(t, [p.partnerName, subtitle], [
                         ['PAN', p.panNumber],
-                        ['GSTIN', p.gstNo],
-                        ['Bank A/c', p.accountNumber, maskAccount],
+                        ['GSTIN', p.gstNumber],
+                        ['Bank A/c', p.accountNo, maskAccount],
                         ['CIN', p.cinNo],
-                        ['Phone', p.phone],
+                        ['Phone', p.officePhone],
                         ...emails.map((e) => ['Email', e] as Candidate),
                         ['Principal company', p.principalCompany],
                         ...p.contacts.flatMap((c): Candidate[] => [

@@ -28,7 +28,7 @@ import {
     type LeadInput,
 } from './lead.validator.js';
 
-export const leadInclude = { emailAddresses: emailsInclude } as const;
+export const leadInclude = { emailAddress: emailsInclude } as const;
 
 export const leadNotFound = () => HttpError.notFound('Lead not found');
 /** Columns `assertRecordAccess` reads. */
@@ -78,11 +78,11 @@ async function loadLead(tx: TransactionClient | typeof prisma, id: string) {
 
 /** Inserts a lead inside the caller's transaction (used by `create`, import and the seed). */
 export async function createLeadRecord(tx: TransactionClient, input: LeadInput, user: AuthUser, lookups: PrefetchedLookups = {}): Promise<LeadDto> {
-    await assertTaxIdsUnique(tx, 'lead', { gstNo: input.gstNo });
+    await assertTaxIdsUnique(tx, 'lead', { gstNumber: input.gstNumber });
     const leadCode = await generateEntityCode(tx, 'LD');
     const assignedTo = (await assertAssigneeValid(tx, input.assignedTo, { activeUsernames: lookups.activeUsernames })) ?? user.username;
     const row = await tx.lead.create({ data: { ...(await resolveAddressPlaces(tx, 'lead', toLeadData({ ...input, assignedTo }))), leadCode, createdBy: user.username } });
-    await replaceEmails(tx, { leadId: row.id }, normalizeEmails(input.emailAddresses));
+    await replaceEmails(tx, { leadId: row.id }, normalizeEmails(input.emailAddress));
 
     const dto = toLeadDto(await loadLead(tx, row.id));
     await auditService.record(tx, { entityType: 'Lead', entityId: row.id, action: 'CREATE', changedBy: user.username, changes: dto });
@@ -127,7 +127,7 @@ export const leadService = {
                 { mobile: { contains: page.search } },
                 { otherPhone: { contains: page.search } },
                 { organizationName: { contains: page.search } },
-                { emailAddresses: { some: { email: { contains: page.search } } } },
+                { emailAddress: { some: { email: { contains: page.search } } } },
             ];
         }
 
@@ -149,7 +149,7 @@ export const leadService = {
         input.customFields = await validateModulePayload('leads', asPayload(body), input.customFields);
         assertStatusTransition(null, input.status);
         assertNotInPast([nextFollowupCheck(input)]);
-        await assertEmailsDeliverable(input.emailAddresses, 'emailAddresses');
+        await assertEmailsDeliverable(input.emailAddress, 'emailAddress');
 
         const created = await runInTransaction((tx) => createLeadRecord(tx, input, user));
         await cacheService.invalidateEntityCaches('leads');
@@ -159,7 +159,7 @@ export const leadService = {
 
     async update(id: string, patch: Record<string, unknown>, user: AuthUser): Promise<LeadDto> {
         const fieldConfig = await loadModuleFieldConfig('leads');
-        if ('emailAddresses' in patch) await assertEmailsDeliverable(patch.emailAddresses, 'emailAddresses', { leadId: id });
+        if ('emailAddress' in patch) await assertEmailsDeliverable(patch.emailAddress, 'emailAddress', { leadId: id });
         const updated = await runInTransaction(async (tx) => {
             await lockRecords(tx, 'lead', [id]);
             const existing = await loadLead(tx, id);
@@ -173,12 +173,12 @@ export const leadService = {
             });
             assertStatusTransition(existing.status, input.status);
             assertNotInPast([nextFollowupCheck(input, before)]);
-            await assertTaxIdsUnique(tx, 'lead', { gstNo: input.gstNo }, { excludeId: id, previous: { gstNo: existing.gstNo } });
+            await assertTaxIdsUnique(tx, 'lead', { gstNumber: input.gstNumber }, { excludeId: id, previous: { gstNumber: existing.gstNumber } });
             const assignedTo = (await assertAssigneeValid(tx, input.assignedTo, { previous: existing.assignedTo })) ?? existing.assignedTo;
 
             await tx.lead.update({ where: { id }, data: { ...(await resolveAddressPlaces(tx, 'lead', toLeadData({ ...input, assignedTo }))), updatedBy: user.username } });
-            if ('emailAddresses' in patch) {
-                await replaceEmails(tx, { leadId: id }, normalizeEmails(input.emailAddresses));
+            if ('emailAddress' in patch) {
+                await replaceEmails(tx, { leadId: id }, normalizeEmails(input.emailAddress));
             }
 
             const after = toLeadDto(await loadLead(tx, id));
@@ -190,7 +190,7 @@ export const leadService = {
         });
 
         await cacheService.invalidateEntityCaches('leads');
-        if ('emailAddresses' in patch) queueEmailVerification({ leadId: id });
+        if ('emailAddress' in patch) queueEmailVerification({ leadId: id });
         return updated;
     },
 

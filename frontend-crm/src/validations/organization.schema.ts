@@ -29,8 +29,8 @@ export const partnerCompanySchema = z.object({
     status: z.enum(['Active', 'Inactive']).default('Active'),
 });
 
-export const organizationFormSchema = z
-    .object({
+/** Field rules of the Organization form (Convert Lead reuses them for the organization it creates). */
+export const organizationFieldsSchema = z.object({
         // Basic Details
         organizationName: requiredText('Organization Name', L.organizationName),
         mailingName: optionalText('Mailing Name', L.organizationName),
@@ -45,11 +45,11 @@ export const organizationFormSchema = z
         customerType: optionalString,
         sapCodeTallyId: optionalText('SAP Code / Tally ID', L.shortCode),
         showroomBranchCode: optionalText('Showroom / Branch Code', L.shortCode),
-        sourceOfLead: optionalString,
-        memberOfParentCorp: optionalText('Parent Corporation', L.organizationName),
+        leadSource: optionalString,
+        memberOf: optionalText('Parent Corporation', L.organizationName),
         numberOfEmployees: optionalString,
         annualTurnover: optionalString,
-        description: optionalText('Description', L.organizationDescription),
+        addDescriptionAndScope: optionalText('Description', L.organizationDescription),
         accountVerified: z.boolean().default(false),
         verifiedAt: optionalString,
         verifiedBy: optionalString,
@@ -84,12 +84,11 @@ export const organizationFormSchema = z
         msmeRegnNumber: optionalText('MSME Regn. Number', L.msme),
         accountName: optionalText('Account Name', L.organizationName),
         bankName: optionalText('Bank Name', L.personName),
-        bankIfscCode: zodIfscOptional,
-        gstNo: zodGstOptional,
-        gstNumber: optionalString,
+        ifscCode: zodIfscOptional,
+        gstNumber: zodGstOptional,
         cinNo: optionalText('CIN No', L.cin),
         tanNumber: optionalText('TAN Number', L.tan),
-        accountNumber: optionalText('Account Number', L.bankAccount),
+        accountNo: optionalText('Account No', L.bankAccount),
         typeOfAccount: optionalString,
         bankAddress: optionalText('Bank Address', L.address),
 
@@ -99,25 +98,27 @@ export const organizationFormSchema = z
 
         /** Admin-defined custom field values (validated against the form configuration by useRhfForm). */
         customFields: customFieldsSchema,
-    })
+    });
+
+export const organizationFormSchema = organizationFieldsSchema
     .superRefine((data, ctx) => {
         refinePostalCodeForCountry(ctx, 'billingPostalCode', data.billingPostalCode, data.billingCountry);
         refinePostalCodeForCountry(ctx, 'shippingPostalCode', data.shippingPostalCode, data.shippingCountry);
 
         // GSTIN is only collected (and then required) for 'Registered' / SEZ organizations.
         if (isGstRegistrationType(data.registrationType)) {
-            const gst = (data.gstNo || data.gstNumber)?.trim();
+            const gst = (data.gstNumber || data.gstNumber)?.trim();
             if (!gst || gst.length < 1) {
                 ctx.addIssue({
                     code: z.ZodIssueCode.custom,
                     message: `GST Number is required when Registration Type is ${data.registrationType}.`,
-                    path: ['gstNo'],
+                    path: ['gstNumber'],
                 });
             } else if (!GST_REGEX.test(gst.toUpperCase())) {
                 ctx.addIssue({
                     code: z.ZodIssueCode.custom,
                     message: 'Please enter a valid 15-character GSTIN (e.g. 07AAAAA0000A1Z5).',
-                    path: ['gstNo'],
+                    path: ['gstNumber'],
                 });
             }
         }

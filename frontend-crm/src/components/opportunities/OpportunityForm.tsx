@@ -1,7 +1,8 @@
 'use client';
 
 import { NO_PAST_DATES } from '@/utils/pastDates';
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
+import { followUpEditIssues } from '../forms/FollowUpDecision';
 import { useRouter } from 'next/navigation';
 import { FormProvider } from 'react-hook-form';
 
@@ -55,10 +56,10 @@ export interface OpportunityFormProps {
 
 const DEFAULT_OPPORTUNITY_FORM: OpportunityFormData = {
     productCategory: ['Biz Analyst'],
-    contactName: '',
+    contact: '',
     organizationName: '',
     contactNumber: '',
-    emailAddress: '',
+    contactEmail: '',
     referredBy: '',
     type: 'New Business',
     salesStage: 'Qualification',
@@ -67,7 +68,8 @@ const DEFAULT_OPPORTUNITY_FORM: OpportunityFormData = {
     nextFollowupDate: '',
     nextFollowupTime: '',
     followupType: 'Call',
-    addDescription: '',
+    customerResponse: '',
+    followUpRemarks: '',
     description: '',
     assignedTo: '',
 
@@ -122,10 +124,16 @@ export default function OpportunityForm({
     const [recordCode, setRecordCode] = useState('');
     const showNumber = useShowRecordNumber();
 
+    // True while the "keep or reschedule the follow-up" popup awaits an answer (see OpportunityBasicSection).
+    const followUpDecisionPending = useRef(false);
+    const setFollowUpPending = useCallback((pending: boolean) => {
+        followUpDecisionPending.current = pending;
+    }, []);
     const { methods, toast, showToast, closeToast, createSubmitHandler } =
         useRhfForm<OpportunityFormData>({
             schema: opportunityFormSchema,
             noPastDates: NO_PAST_DATES.opportunity,
+            extraRules: mode === 'edit' ? (values) => followUpEditIssues(values, followUpDecisionPending.current) : undefined,
             module: 'opportunities',
             defaultValues: { ...DEFAULT_OPPORTUNITY_FORM, ...initialData },
             dropdownDefaults: { enabled: mode === 'create', keep: initialData },
@@ -159,7 +167,8 @@ export default function OpportunityForm({
             .getById(opportunityId)
             .then((found) => {
                 if (active && found) {
-                    reset(found);
+                    // Every edit records a fresh customer response, so the edit form starts without one.
+                    reset(mode === 'edit' ? { ...found, customerResponse: '' } : found);
                     setRecordCode(found.opportunityCode ?? '');
                     setAudit({ createdAt: found.createdAt, createdBy: found.createdBy, updatedAt: found.updatedAt, updatedBy: found.updatedBy });
                 }
@@ -171,7 +180,7 @@ export default function OpportunityForm({
         return () => {
             active = false;
         };
-    }, [opportunityId, reset]);
+    }, [opportunityId, reset, mode]);
 
     const setField = useCallback(
         <K extends keyof OpportunityFormData>(key: K, value: OpportunityFormData[K]) => {
@@ -248,7 +257,7 @@ export default function OpportunityForm({
                     }
                 >
                     <div hidden={activeTab !== 'basic'}>
-                        <OpportunityBasicSection form={formValues} setField={setField} />
+                        <OpportunityBasicSection form={formValues} setField={setField} notify={showToast} onDecisionPendingChange={setFollowUpPending} />
                         <DynamicModuleCustomFields module="opportunities" tabKey="basic" />
                     </div>
 

@@ -90,7 +90,7 @@ export function RhfLookup<T extends FieldValues, K extends LookupKind = LookupKi
         // User fields always suggest active users by full name; caller-supplied username lists are ignored.
         if (kind === 'user') return getAssignableUserNames();
         if (options) return options;
-        if (kind === 'partnerCompany') return getPartnerCompanies().map((p) => p.companyName);
+        if (kind === 'partnerCompany') return getPartnerCompanies().map((p) => p.partnerName);
         const names =
             kind === 'organization'
                 ? (organizations ?? []).map((o) => o.organizationName)

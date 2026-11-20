@@ -110,12 +110,12 @@ export function buildQuotationDefaultsFromOpportunity(
         quoteStage: 'Draft',
         quotationDate: today,
         validUntil: validityDate,
-        remarks: opportunity.addDescription || '',
+        remarks: opportunity.followUpRemarks || '',
         termsAndCondition: 'Standard Terms & Conditions',
         termsAndConditionDescription: TERMS_TEMPLATE_DESCRIPTIONS['Standard Terms & Conditions'],
         assignedTo: opportunity.assignedTo || '',
 
-        opportunityName: quoteTitle,
+        opportunity: quoteTitle,
         company: 'Nandini Infosystems',
         validationPeriod: '30 Days',
         otherRef: '',
@@ -137,12 +137,12 @@ export function buildQuotationDefaultsFromOpportunity(
         // Tab 3: Address Information
         organizationName: opportunity.organizationName,
         organizationId: opportunity.organizationId || organization?.id,
-        contactName: opportunity.contactName,
+        contact: opportunity.contact,
         contactId: opportunity.contactId || contact?.id,
-        contactMobile: opportunity.contactNumber || contact?.mobile || '',
+        contactNumber: opportunity.contactNumber || contact?.mobile || '',
         mailingName: organization?.mailingName || opportunity.organizationName,
-        gstNo: organization?.gstNumber || '',
-        contactEmail: opportunity.emailAddress || contact?.emailAddresses?.[0]?.email || '',
+        gstNumber: organization?.gstNumber || '',
+        contactEmail: opportunity.contactEmail || contact?.emailAddress?.[0]?.email || '',
 
         billingAddress: addr.billingStreet,
         billingCity: addr.billingCity,
@@ -163,9 +163,7 @@ export function buildQuotationDefaultsFromOpportunity(
         status: 'Draft',
         quoteDate: today,
         quotationSubject: quoteTitle,
-        contactNumber: opportunity.contactNumber || contact?.mobile || '',
-        emailAddress: opportunity.emailAddress || contact?.emailAddresses?.[0]?.email || '',
-        notes: opportunity.addDescription || '',
+        notes: opportunity.followUpRemarks || '',
         termsAndConditions: TERMS_TEMPLATE_DESCRIPTIONS['Standard Terms & Conditions'],
     };
 }

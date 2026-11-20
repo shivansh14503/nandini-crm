@@ -38,7 +38,7 @@ export function QuotationPicker({ value, onChange }: { value: PickedRecord | nul
             ? q
             : {
                   id: q.id,
-                  label: [showNumber('quotation') ? q.quotationCode : q.quotationTitle, q.organizationName || q.contactName || q.quotationTitle].filter(Boolean).join(' · '),
+                  label: [showNumber('quotation') ? q.quotationCode : q.quotationTitle, q.organizationName || q.contact || q.quotationTitle].filter(Boolean).join(' · '),
               };
 
     return (
@@ -60,7 +60,7 @@ export function QuotationPicker({ value, onChange }: { value: PickedRecord | nul
                 return (
                     <Box component="li" key={key} {...rest} sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start !important' }}>
                         <Typography sx={{ fontSize: '0.82rem', fontWeight: 600, color: 'var(--crm-slate-900)' }}>{q ? (showNumber('quotation') ? q.quotationCode : q.quotationTitle) : toPicked(o).label}</Typography>
-                        {q && <Typography sx={{ fontSize: '0.72rem', color: 'var(--mui-palette-text-secondary)' }}>{[showNumber('quotation') ? q.quotationTitle : '', q.organizationName || q.contactName].filter(Boolean).join(' · ')}</Typography>}
+                        {q && <Typography sx={{ fontSize: '0.72rem', color: 'var(--mui-palette-text-secondary)' }}>{[showNumber('quotation') ? q.quotationTitle : '', q.organizationName || q.contact].filter(Boolean).join(' · ')}</Typography>}
                     </Box>
                 );
             }}

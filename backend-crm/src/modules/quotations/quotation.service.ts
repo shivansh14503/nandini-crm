@@ -26,7 +26,7 @@ import {
     type QuotationInput,
 } from './quotation.validator.js';
 
-const include = { lineItems: lineItemsInclude, opportunity: { select: { opportunityCode: true } } } as const;
+const include = { lineItems: lineItemsInclude, opportunityRecord: { select: { opportunityCode: true } } } as const;
 
 /** Columns `assertRecordAccess` reads. */
 const OWNER_SELECT = { assignedTo: true, createdBy: true } as const;
@@ -44,7 +44,7 @@ async function resolveLinks(tx: TransactionClient, input: QuotationInput, previo
     const links: QuotationLinks = { opportunityId: null, organizationId: null, contactId: null };
     if (input.opportunityId) {
         const opportunity = await tx.opportunity.findUnique({ where: { id: input.opportunityId }, select: { id: true, isDeleted: true } });
-        assertReference(opportunity, input.opportunityId, previous?.opportunityId, 'opportunity', 'opportunityName');
+        assertReference(opportunity, input.opportunityId, previous?.opportunityId, 'opportunity', 'opportunity');
         links.opportunityId = opportunity.id;
     }
     if (input.organizationId) {
@@ -54,7 +54,7 @@ async function resolveLinks(tx: TransactionClient, input: QuotationInput, previo
     }
     if (input.contactId) {
         const contact = await tx.contact.findUnique({ where: { id: input.contactId }, select: { id: true, isDeleted: true } });
-        assertReference(contact, input.contactId, previous?.contactId, 'contact', 'contactName');
+        assertReference(contact, input.contactId, previous?.contactId, 'contact', 'contact');
         links.contactId = contact.id;
     }
     return links;
@@ -162,8 +162,8 @@ export const quotationService = {
                 { quotationCode: { contains: page.search } },
                 { quotationTitle: { contains: page.search } },
                 { organizationName: { contains: page.search } },
-                { contactName: { contains: page.search } },
-                { opportunityName: { contains: page.search } },
+                { contact: { contains: page.search } },
+                { opportunity: { contains: page.search } },
             ];
         }
 

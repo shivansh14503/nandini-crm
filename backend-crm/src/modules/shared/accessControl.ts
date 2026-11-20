@@ -18,8 +18,8 @@ export const GLOBAL_ACCESS_ROLES = [
     'Accounts Manager',
 ] as const;
 
-/** Column holding a record's owner: `assignedUser` on organizations, `assignedTo` everywhere else. */
-export type OwnerField = 'assignedTo' | 'assignedUser';
+/** Column holding a record's owner (`assignedTo` on every module). */
+export type OwnerField = 'assignedTo';
 
 const normalizeRole = (role: string) =>
     role
@@ -56,16 +56,16 @@ const sameUser = (a: string | null | undefined, b: string) => typeof a === 'stri
 /** True when `user` may read / change `record` (global role, assignee or creator). */
 export function canAccessRecord(
     user: AuthUser,
-    record: { assignedTo?: string | null; assignedUser?: string | null; createdBy?: string | null },
+    record: { assignedTo?: string | null; createdBy?: string | null },
 ): boolean {
     if (hasGlobalAccess(user)) return true;
-    return sameUser(record.assignedTo, user.username) || sameUser(record.assignedUser, user.username) || sameUser(record.createdBy, user.username);
+    return sameUser(record.assignedTo, user.username) || sameUser(record.createdBy, user.username);
 }
 
 /** Throws 403 unless `user` may read / change `record`. Call it after the not-found check. */
 export function assertRecordAccess(
     user: AuthUser,
-    record: { assignedTo?: string | null; assignedUser?: string | null; createdBy?: string | null },
+    record: { assignedTo?: string | null; createdBy?: string | null },
 ): void {
     if (!canAccessRecord(user, record)) {
         throw HttpError.forbidden('You do not have permission to access or modify this record.');

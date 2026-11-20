@@ -138,7 +138,10 @@ export function FormCustomizationView() {
         () => (configs && savedConfigs && module ? tabsTouchedBy(ops, savedConfigs, configs, module) : new Set<string>()),
         [ops, savedConfigs, configs, module],
     );
-    const dropdownCount = useMemo(() => (configs && module ? categoriesForModule(configs, module).length : 0), [configs, module]);
+    const dropdownCount = useMemo(
+        () => (configs && module ? categoriesForModule(configs, module, convert && isConvertModule(module)).length : 0),
+        [configs, module, convert],
+    );
     /** Active Convert Lead fields per record (what the Convert Lead form collects from each form). */
     const convertCounts = useMemo(
         () =>
@@ -344,7 +347,7 @@ export function FormCustomizationView() {
                                                 onChange={setModule}
                                             />
                                         </Box>
-                                        {view === 'dropdowns' && <DropdownManagerPanel module={module} configs={configs} canEdit={canEdit && !saving} notify={notify} />}
+                                        {view === 'dropdowns' && <DropdownManagerPanel module={module} configs={configs} canEdit={canEdit && !saving} notify={notify} convert />}
                                         {view === 'fields' && <ConvertLeadFieldsPanel module={module} configs={configs} canEdit={canEdit && !saving} notify={notify} />}
                                         {view === 'preview' && (
                                             <FormLivePreviewPanel

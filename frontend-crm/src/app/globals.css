@@ -5,6 +5,22 @@
 :root {
   --scrollbar-thumb: var(--mui-palette-border-strong, #cbd5e1);
   --scrollbar-thumb-hover: var(--mui-palette-text-muted, #94a3b8);
+  /* One corner radius for every button in the app (text, outlined, contained, toggle). */
+  --crm-radius-button: 8px;
+}
+
+/* Enforce the shared button radius over per-component sx overrides.
+   Grouped buttons keep MUI's squared inner corners; split buttons (crm-split-start / crm-split-end)
+   round only their outer corners so the two halves stay joined. */
+.MuiButton-root:not(.MuiButtonGroup-grouped):not(.crm-split-start):not(.crm-split-end),
+.MuiToggleButton-root:not(.MuiToggleButtonGroup-grouped) {
+  border-radius: var(--crm-radius-button) !important;
+}
+.MuiButton-root.crm-split-start {
+  border-radius: var(--crm-radius-button) 0 0 var(--crm-radius-button) !important;
+}
+.MuiButton-root.crm-split-end {
+  border-radius: 0 var(--crm-radius-button) var(--crm-radius-button) 0 !important;
 }
 
 *,

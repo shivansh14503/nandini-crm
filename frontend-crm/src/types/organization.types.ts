@@ -128,11 +128,11 @@ export interface OrganizationFormData {
     customerType: CustomerType | '';
     sapCodeTallyId: string;
     showroomBranchCode: string;
-    sourceOfLead: SourceOfLead | '';
-    memberOfParentCorp: string;
+    leadSource: SourceOfLead | '';
+    memberOf: string;
     numberOfEmployees: NumberOfEmployees | '';
     annualTurnover: AnnualTurnover | '';
-    description: string;
+    addDescriptionAndScope: string;
     accountVerified: boolean;
     /** ISO timestamp of when accountVerified was switched on. */
     verifiedAt?: string;
@@ -144,7 +144,7 @@ export interface OrganizationFormData {
     activeCloud?: boolean;
     provideSupport: 'Yes' | 'No';
     /** Username of the account executive who owns this organization. */
-    assignedUser?: string;
+    assignedTo?: string;
     /** @deprecated Emails are managed on Contacts; kept optional so older records still load. */
     corporateEmails?: CorporateEmail[];
 
@@ -173,12 +173,11 @@ export interface OrganizationFormData {
     msmeRegnNumber?: string;
     accountName?: string;
     bankName?: string;
-    bankIfscCode?: string;
-    gstNo?: string;
+    ifscCode?: string;
     gstNumber?: string;
     cinNo?: string;
     tanNumber?: string;
-    accountNumber?: string;
+    accountNo?: string;
     typeOfAccount?: string;
     bankAddress?: string;
 
@@ -198,7 +197,7 @@ export interface Organization extends OrganizationFormData {
 }
 
 export interface ExtendedOrganization extends Organization {
-    assignedUser?: string;
+    assignedTo?: string;
     isRecentlyViewed?: boolean;
     isMyAccount?: boolean;
 }

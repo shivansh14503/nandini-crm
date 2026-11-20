@@ -23,14 +23,14 @@ export interface OpportunityFormData {
     productCategory: string[];
 
     // Basic Details - Row 2
-    contactName: string;
+    contact: string;
     contactId?: string;
     organizationName: string;
     organizationId?: string;
 
     // Basic Details - Row 3
     contactNumber: string;
-    emailAddress?: string;
+    contactEmail?: string;
 
     // Basic Details - Row 4
     referredBy?: string;
@@ -47,9 +47,11 @@ export interface OpportunityFormData {
     nextFollowupDate: string;
     nextFollowupTime?: string;
     followupType: string;
+    /** What the customer said on the last follow-up (shared_customer_response); picked on every edit. */
+    customerResponse?: string;
 
     // Basic Details - Row 8
-    addDescription: string;
+    followUpRemarks: string;
     description?: string;
 
     // Basic Details - Row 9

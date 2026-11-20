@@ -101,7 +101,7 @@ function QuotationPrintContent() {
 
     const quotation = quotationQuery.data;
     const title = quotation ? (showNumber('quotation') ? `${quotation.quotationCode} · ${quotation.quotationTitle}` : quotation.quotationTitle) : 'Quotation PDF';
-    const subtitle = quotation ? [quotation.organizationName || quotation.contactName, selected?.name].filter(Boolean).join(' · ') : selected?.name;
+    const subtitle = quotation ? [quotation.organizationName || quotation.contact, selected?.name].filter(Boolean).join(' · ') : selected?.name;
 
     return (
         <PdfViewerPage

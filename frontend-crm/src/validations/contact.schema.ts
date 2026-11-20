@@ -36,7 +36,7 @@ export const contactFormSchema = z.object({
     phone3: zodPhoneOptional,
     phone4: zodPhoneOptional,
     phone5: zodPhoneOptional,
-    emailAddresses: z.array(corporateEmailSchema).superRefine((emails, ctx) => {
+    emailAddress: z.array(corporateEmailSchema).superRefine((emails, ctx) => {
         // If emails are present, ensure at least one has a non-empty address
         if (emails.length > 0) {
             const hasValidEmail = emails.some((e) => (e.email || '').trim().length > 0);
@@ -55,7 +55,7 @@ export const contactFormSchema = z.object({
     leftJob: z.enum(['No', 'Yes']).default('No'),
     communicationType: z.array(z.string()).default(['Call', 'Email']),
     doNotCall: z.boolean().default(false),
-    description: optionalText('Description', L.longText),
+    addDescription: optionalText('Add Description', L.longText),
 
     /** Admin-defined custom field values (validated against the form configuration by useRhfForm). */
     customFields: customFieldsSchema,

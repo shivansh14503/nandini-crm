@@ -49,7 +49,7 @@ const DEFAULT_QUICK_FORM = {
     billingStreet: '',
     billingCity: '',
     billingState: '',
-    assignedUser: '',
+    assignedTo: '',
     accountStatus: 'Active',
 };
 
@@ -105,11 +105,11 @@ export function QuickCreateDrawer({ open, onClose, onSave }: QuickCreateDrawerPr
             typeOfEntity: 'Private Limited',
             sapCodeTallyId: `TALLY-${formData.organizationName.slice(0, 3).toUpperCase()}-${Math.floor(10 + Math.random() * 90)}`,
             showroomBranchCode: 'DEL-HQ',
-            sourceOfLead: 'Direct Customer',
-            memberOfParentCorp: '',
+            leadSource: 'Direct Customer',
+            memberOf: '',
             numberOfEmployees: '21 To 50',
             annualTurnover: '5 crore to 10 crore',
-            description: 'Quick created enterprise account.',
+            addDescriptionAndScope: 'Quick created enterprise account.',
             accountVerified: true,
             provideSupport: 'Yes',
             billingStreet: formData.billingStreet,
@@ -120,7 +120,7 @@ export function QuickCreateDrawer({ open, onClose, onSave }: QuickCreateDrawerPr
             registrationType: 'Registered',
             gstNumber: formData.gstNumber.toUpperCase(),
             panNumber: formData.gstNumber ? formData.gstNumber.substring(2, 12).toUpperCase() : '',
-            assignedUser: formData.assignedUser,
+            assignedTo: formData.assignedTo,
             isRecentlyViewed: true,
             isMyAccount: true,
             createdAt: new Date().toISOString(),
@@ -338,12 +338,12 @@ export function QuickCreateDrawer({ open, onClose, onSave }: QuickCreateDrawerPr
                             countryValue={DEFAULT_COUNTRY_CODE}
                         />
 
-                        <FormField name="assignedUser" label="Assigned User" size="md">
+                        <FormField name="assignedTo" label="Assigned User" size="md">
                             <StyledSelect
                                 label="Assigned User"
                                 placeholder="Select User"
-                                value={formData.assignedUser}
-                                onChange={(v) => handleChange('assignedUser', v)}
+                                value={formData.assignedTo}
+                                onChange={(v) => handleChange('assignedTo', v)}
                                 options={['mittal.sharma (You)', 'rahul.verma', 'priya.singh', 'amit.patel', 'vikram.seth']}
                             />
                         </FormField>

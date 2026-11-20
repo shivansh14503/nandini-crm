@@ -19,7 +19,7 @@ export function OrganizationLookupModal({ open, onClose, onSelect, selectedValue
         const userOptions = users
             .map((u) => ({ value: u.username, label: u.name || u.username }))
             .sort((a, b) => a.label.localeCompare(b.label));
-        return ORGANIZATION_LOOKUP_PRESET.filterFields.map((f) => (f.key === 'assignedUser' ? { ...f, options: userOptions } : f));
+        return ORGANIZATION_LOOKUP_PRESET.filterFields.map((f) => (f.key === 'assignedTo' ? { ...f, options: userOptions } : f));
     }, [users]);
 
     const selectedId = organizations.find((o) => o.organizationName === selectedValue)?.id;

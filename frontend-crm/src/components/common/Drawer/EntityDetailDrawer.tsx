@@ -8,7 +8,6 @@ import {
     Box,
     Typography,
     IconButton,
-    Button,
     Tooltip,
     Tabs,
     Tab,
@@ -35,70 +34,9 @@ import { DoubleClickCopyText } from '../useDoubleClickCopy';
 import { getModuleColor } from '@/theme/moduleColors';
 import { glassSurfaceSx, GLASS_SHADOW, GLASS_RADIUS, FLOAT_INSET } from '@/theme/glass';
 import { useRegisterRightPanel } from '@/components/layout/rightPanelStore';
+import { FloatingActionButton } from '../FloatingActionButton';
 
 const CHANGES_TAB_ID = 'changes-tab';
-
-interface ExpandingActionButtonProps {
-    label: React.ReactNode;
-    icon?: React.ReactNode;
-    tooltip?: React.ReactNode;
-    onClick?: () => void;
-    disabled?: boolean;
-    variant: 'text' | 'outlined' | 'contained';
-    sx?: object;
-}
-
-/** Round icon button that grows to its full width (icon + label) on hover or keyboard focus. */
-function ExpandingActionButton({ label, icon, tooltip, onClick, disabled, variant, sx }: ExpandingActionButtonProps) {
-    const button = (
-        <Box
-            component="span"
-            sx={{
-                display: 'inline-flex',
-                '&:hover .expand-label, &:focus-within .expand-label': { maxWidth: 240, ml: 1, opacity: 1 },
-                '&:hover .expand-btn, &:focus-within .expand-btn': { px: 2 },
-            }}
-        >
-            <Button
-                className="expand-btn"
-                variant={variant}
-                size="small"
-                aria-label={typeof label === 'string' ? label : undefined}
-                onClick={onClick}
-                disabled={disabled}
-                sx={{
-                    ...sx,
-                    minWidth: 44,
-                    height: 44,
-                    px: 0,
-                    borderRadius: '22px',
-                    whiteSpace: 'nowrap',
-                    overflow: 'hidden',
-                    boxShadow: '0 4px 14px rgb(0 0 0 / 0.16)',
-                    ...(variant === 'outlined' ? { backgroundColor: 'var(--mui-palette-background-paper)' } : {}),
-                    transition: 'all 0.2s ease',
-                    '& .MuiButton-startIcon': { m: 0, display: 'inline-flex' },
-                }}
-            >
-                {icon}
-                <Box
-                    component="span"
-                    className="expand-label"
-                    sx={{
-                        display: 'inline-block',
-                        maxWidth: 0,
-                        opacity: 0,
-                        overflow: 'hidden',
-                        transition: 'max-width 0.2s ease, margin 0.2s ease, opacity 0.15s ease',
-                    }}
-                >
-                    {label}
-                </Box>
-            </Button>
-        </Box>
-    );
-    return tooltip ? <Tooltip title={tooltip}>{button}</Tooltip> : button;
-}
 
 export function EntityDetailDrawer({
     open,
@@ -205,16 +143,17 @@ export function EntityDetailDrawer({
         fontSize: '0.82rem',
         textTransform: 'none',
         fontWeight: 600,
-        color: 'var(--crm-slate-700)',
-        borderColor: 'var(--mui-palette-border-strong)',
+        color: 'var(--crm-text-blue-700)',
+        borderColor: 'var(--mui-palette-primary-softBorder)',
+        backgroundColor: 'var(--mui-palette-primary-soft)',
         height: 36,
         px: 1.8,
         borderRadius: '8px',
         transition: 'all 0.15s ease',
         '&:hover': {
             borderColor: 'var(--crm-blue-300)',
-            backgroundColor: 'var(--mui-palette-primary-soft)',
-            color: 'var(--crm-text-blue-700)',
+            backgroundColor: 'var(--crm-blue-100)',
+            color: 'var(--crm-text-blue-800)',
         },
         ...secondaryAction?.sx,
     } as const;
@@ -569,7 +508,7 @@ export function EntityDetailDrawer({
                 )}
             </Box>
 
-            {/* ── Floating action buttons (round; expand to show label on hover) ── */}
+            {/* ── Floating action buttons (pill; icon + label always visible) ── */}
             {(footerActions || secondaryAction || primaryAction || headerActions?.onEdit) && (
                 <Box
                     sx={{
@@ -587,7 +526,7 @@ export function EntityDetailDrawer({
                     {footerActions}
 
                     {secondaryAction && (
-                        <ExpandingActionButton
+                        <FloatingActionButton
                             label={secondaryAction.label}
                             icon={secondaryAction.icon}
                             tooltip={secondaryAction.tooltip}
@@ -599,7 +538,7 @@ export function EntityDetailDrawer({
                     )}
 
                     {(primaryAction || headerActions?.onEdit) && (
-                        <ExpandingActionButton
+                        <FloatingActionButton
                             label={primaryAction?.label || 'Edit Details'}
                             icon={primaryAction?.icon || <EditOutlinedIcon sx={{ fontSize: 18 }} />}
                             tooltip={primaryAction?.tooltip}

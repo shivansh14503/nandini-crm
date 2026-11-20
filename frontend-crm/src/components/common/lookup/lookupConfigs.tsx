@@ -139,14 +139,14 @@ export const ORGANIZATION_LOOKUP_PRESET: LookupPreset<ExtendedOrganization> = {
         { id: 'customerType', label: 'Customer Type', minWidth: 130, sortable: true },
         { id: 'natureOfBusiness', label: 'Nature of Business', minWidth: 200, sortable: true },
         { id: 'typeOfEntity', label: 'Type of Entity', minWidth: 150, sortable: true },
-        { id: 'assignedUser', label: 'User', minWidth: 140, sortable: true, getValue: (o) => userName(o.assignedUser) },
+        { id: 'assignedTo', label: 'User', minWidth: 140, sortable: true, getValue: (o) => userName(o.assignedTo) },
     ],
     filterFields: [
         { key: 'organizationName', label: 'Organization Name', type: 'text', width: 4, placeholder: 'Type organization name...' },
         { key: 'customerType', label: 'Customer Type', type: 'multiselect', width: 4, options: toOptions(CUSTOMER_TYPES) },
         { key: 'natureOfBusiness', label: 'Nature of Business', type: 'multiselect', width: 4, options: toOptions(NATURE_OF_BUSINESS) },
         // Options come from the user directory, which loads after import; OrganizationLookupModal fills them in.
-        { key: 'assignedUser', label: 'Assigned to', type: 'multiselect', width: 4, options: [] },
+        { key: 'assignedTo', label: 'Assigned to', type: 'multiselect', width: 4, options: [] },
         { key: 'typeOfEntity', label: 'Type of Entity', type: 'multiselect', width: 4, options: toOptions(ENTITY_TYPES) },
     ],
     searchPredicate: (o, f, q) => {
@@ -157,9 +157,9 @@ export const ORGANIZATION_LOOKUP_PRESET: LookupPreset<ExtendedOrganization> = {
         if (natures.length && !natures.includes(o.natureOfBusiness)) return false;
         const entities = splitMulti(f.typeOfEntity);
         if (entities.length && !entities.includes(o.typeOfEntity)) return false;
-        const users = splitMulti(f.assignedUser);
-        if (users.length && !users.includes(o.assignedUser ?? '')) return false;
-        if (q && !includesQuery(q, o.organizationName, o.customerType, o.natureOfBusiness, o.typeOfEntity, userName(o.assignedUser))) return false;
+        const users = splitMulti(f.assignedTo);
+        if (users.length && !users.includes(o.assignedTo ?? '')) return false;
+        if (q && !includesQuery(q, o.organizationName, o.customerType, o.natureOfBusiness, o.typeOfEntity, userName(o.assignedTo))) return false;
         return true;
     },
 };
@@ -246,7 +246,7 @@ export const CONTACT_LOOKUP_PRESET: LookupPreset<ContactLookupRow> = {
         if (!containsPhone(c.officePhone, f.officePhone)) return false;
         if (!containsText(c.organizationName, f.organizationName?.trim())) return false;
         const email = f.email?.trim();
-        if (email && !c.emailAddresses.some((e) => containsText(e.email, email))) return false;
+        if (email && !c.emailAddress.some((e) => containsText(e.email, email))) return false;
         const leftJob = splitMulti(f.leftJob);
         if (leftJob.length && !leftJob.includes(c.leftJob)) return false;
         const owners = splitMulti(f.assignedTo);
@@ -315,9 +315,9 @@ export const PARTNER_COMPANY_LOOKUP_PRESET: LookupPreset<PartnerCompany> = {
     showSearchBox: false,
     rowsPerPage: 10,
     columns: [
-        { id: 'companyName', label: 'Company Name', minWidth: 180, sortable: true, render: (p) => <PrimaryText>{p.companyName}</PrimaryText> },
+        { id: 'partnerName', label: 'Partner Name', minWidth: 180, sortable: true, render: (p) => <PrimaryText>{p.partnerName}</PrimaryText> },
         { id: 'natureOfPartner', label: 'Nature of Partner', minWidth: 170, sortable: true },
-        { id: 'phone', label: 'Phone', minWidth: 120, sortable: true },
+        { id: 'officePhone', label: 'Office Phone', minWidth: 120, sortable: true },
         { id: 'email', label: 'Email Address', minWidth: 200 },
         { id: 'city', label: 'City', minWidth: 110, sortable: true },
         {
@@ -331,7 +331,7 @@ export const PARTNER_COMPANY_LOOKUP_PRESET: LookupPreset<PartnerCompany> = {
         { id: 'createdAt', label: 'Date Created', minWidth: 140, sortable: true, getValue: (p) => (p.createdAt ? formatDateTime(p.createdAt) : '-') },
     ],
     filterFields: [
-        { key: 'companyName', label: 'Partner Name', type: 'text', width: 4, placeholder: 'Search partner name...' },
+        { key: 'partnerName', label: 'Partner Name', type: 'text', width: 4, placeholder: 'Search partner name...' },
         { key: 'phone', label: 'Any Phone', type: 'text', width: 4, placeholder: 'Search phone...' },
         { key: 'city', label: 'City', type: 'text', width: 4, placeholder: 'e.g. Delhi, Karnal...' },
         // Options depend on master data that loads after import; PartnerCompanyLookupModal fills them in.
@@ -339,8 +339,8 @@ export const PARTNER_COMPANY_LOOKUP_PRESET: LookupPreset<PartnerCompany> = {
         { key: 'assignedTo', label: 'Assigned to', type: 'multiselect', width: 6, options: [] },
     ],
     searchPredicate: (p, f) => {
-        if (!containsText(p.companyName, f.companyName?.trim())) return false;
-        if (!containsText(p.phone, f.phone?.trim())) return false;
+        if (!containsText(p.partnerName, f.partnerName?.trim())) return false;
+        if (!containsText(p.officePhone, f.phone?.trim())) return false;
         if (!containsText(p.city, f.city?.trim())) return false;
         const natures = splitMulti(f.natureOfPartner);
         if (natures.length && !natures.includes(p.natureOfPartner)) return false;

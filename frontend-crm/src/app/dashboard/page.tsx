@@ -30,7 +30,7 @@ export default function DashboardPage() {
     }
 
     return (
-        <Box sx={{ minHeight: '100vh', backgroundColor: 'background.default' }}>
+        <Box sx={{ minHeight: '100vh', backgroundColor: 'background.default', '--crm-page-bg': 'var(--mui-palette-background-default)' }}>
             <Navbar />
             <Container maxWidth="lg" sx={{ mt: 3, pb: 4 }}>
                 <ErrorAlert error={error} onClose={clearError} />

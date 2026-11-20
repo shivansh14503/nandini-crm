@@ -46,7 +46,7 @@ export interface TicketFormData {
     ticketSubject: string;
     organizationName: string;
     organizationId?: string;
-    contactPersonName: string;
+    contact: string;
     contactId?: string;
     contactNumber: string;
     ticketPriority: TicketPriority;

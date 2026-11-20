@@ -3,7 +3,7 @@ import { nullable, parseCustomFields, parseStringArray, serializeCustomFields, s
 import { toEmailDtos, type CorporateEmailDto } from '../shared/entityEmails.js';
 import type { ContactInput } from './contact.validator.js';
 
-export type ContactRow = Contact & { emailAddresses?: EntityEmail[] };
+export type ContactRow = Contact & { emailAddress?: EntityEmail[] };
 
 /** `Contact` from frontend-crm/src/types/contact.types.ts. */
 export interface ContactDto {
@@ -17,7 +17,7 @@ export interface ContactDto {
     phone3: string;
     phone4: string;
     phone5: string;
-    emailAddresses: CorporateEmailDto[];
+    emailAddress: CorporateEmailDto[];
     assignedTo: string;
     isPrimaryContact: boolean;
     designation: string;
@@ -25,7 +25,7 @@ export interface ContactDto {
     leftJob: 'No' | 'Yes';
     communicationType: string[];
     doNotCall: boolean;
-    description: string;
+    addDescription: string;
     createdAt: string;
     updatedAt: string;
     createdBy: string;
@@ -47,7 +47,7 @@ export function toContactDto(row: ContactRow): ContactDto {
         phone3: text(row.phone3),
         phone4: text(row.phone4),
         phone5: text(row.phone5),
-        emailAddresses: toEmailDtos(row.emailAddresses),
+        emailAddress: toEmailDtos(row.emailAddress),
         assignedTo: row.assignedTo,
         isPrimaryContact: row.isPrimaryContact,
         designation: text(row.designation),
@@ -55,7 +55,7 @@ export function toContactDto(row: ContactRow): ContactDto {
         leftJob: row.leftJob === 'Yes' ? 'Yes' : 'No',
         communicationType: parseStringArray(row.communicationTypeJson),
         doNotCall: row.doNotCall,
-        description: text(row.description),
+        addDescription: text(row.addDescription),
         createdAt: toIso(row.createdAt),
         updatedAt: toIso(row.updatedAt),
         createdBy: row.createdBy,
@@ -86,6 +86,6 @@ export function toContactData(
         leftJob: input.leftJob,
         communicationTypeJson: stringifyStringArray(input.communicationType),
         doNotCall: input.doNotCall,
-        description: nullable(input.description),
+        addDescription: nullable(input.addDescription),
     };
 }

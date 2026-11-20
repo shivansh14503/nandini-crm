@@ -62,7 +62,7 @@ const DEFAULT_FORM: ContactFormData = {
     phone3: '',
     phone4: '',
     phone5: '',
-    emailAddresses: [
+    emailAddress: [
         {
             id: 'email-1',
             email: '',
@@ -78,7 +78,7 @@ const DEFAULT_FORM: ContactFormData = {
     leftJob: 'No',
     communicationType: ['Call', 'Email'],
     doNotCall: false,
-    description: '',
+    addDescription: '',
 };
 
 const sectionDividerSx = { my: 3.5, borderColor: 'var(--mui-palette-border-light)' } as const;
@@ -108,7 +108,7 @@ export default function ContactForm({
     // Leads / contacts / organizations already using this mobile or these emails, listed as links under the fields.
     const { mobileMatches, emailMatches } = useExistingRecordCheck({
         mobile: watch('mobile'),
-        emailAddresses: watch('emailAddresses'),
+        emailAddress: watch('emailAddress'),
         excludeId: contactId,
         owner: 'contact',
         enabled: mode !== 'view',

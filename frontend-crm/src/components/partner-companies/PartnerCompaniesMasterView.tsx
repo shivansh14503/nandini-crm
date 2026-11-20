@@ -39,7 +39,7 @@ const WEEK_MS = 7 * 86400000;
 
 // Display values shared by the table cells, sorting, search and CSV export.
 const primaryEmail = (p: ExtendedPartnerCompany) =>
-    (p.emailAddresses?.find((e) => e.isPrimary) ?? p.emailAddresses?.[0])?.email || p.email || '';
+    (p.emailAddress?.find((e) => e.isPrimary) ?? p.emailAddress?.[0])?.email || p.email || '';
 const cityOf = (p: ExtendedPartnerCompany) => p.billingCity || p.city || '';
 const countryOf = (p: ExtendedPartnerCompany) => getCountryNameByCode(p.billingCountry) || p.billingCountry || '';
 const assigneeOf = (p: ExtendedPartnerCompany) => findCrmUser(p.assignedTo)?.name || p.assignedTo || '';
@@ -47,9 +47,9 @@ const isRecent = (p: ExtendedPartnerCompany) => Boolean(p.createdAt) && Date.now
 
 /** Sort key per column id; dates sort chronologically, everything else case-insensitively. */
 const SORT_VALUE: Record<string, (p: ExtendedPartnerCompany) => string | number> = {
-    companyName: (p) => p.companyName.toLowerCase(),
+    partnerName: (p) => p.partnerName.toLowerCase(),
     natureOfPartner: (p) => (p.natureOfPartner || '').toLowerCase(),
-    phone: (p) => p.phone || '',
+    officePhone: (p) => p.officePhone || '',
     email: (p) => primaryEmail(p).toLowerCase(),
     city: (p) => cityOf(p).toLowerCase(),
     billingCountry: (p) => countryOf(p).toLowerCase(),
@@ -58,9 +58,9 @@ const SORT_VALUE: Record<string, (p: ExtendedPartnerCompany) => string | number>
 };
 
 const CSV_COLUMNS: CsvColumn<ExtendedPartnerCompany>[] = [
-    { header: 'Company Name', value: (p) => p.companyName },
+    { header: 'Company Name', value: (p) => p.partnerName },
     { header: 'Nature of Partner', value: (p) => p.natureOfPartner },
-    { header: 'Phone', value: (p) => p.phone },
+    { header: 'Phone', value: (p) => p.officePhone },
     { header: 'Email Address', value: primaryEmail },
     { header: 'City', value: cityOf },
     { header: 'Billing Country', value: countryOf },
@@ -89,7 +89,7 @@ export function PartnerCompaniesMasterView() {
     const [selectedIds, setSelectedIds] = useState<string[]>([]);
     const [page, setPage] = useState(0);
     const [rowsPerPage, setRowsPerPage] = useState(10);
-    const [sortField, setSortField] = useState<string>('companyName');
+    const [sortField, setSortField] = useState<string>('partnerName');
     const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
     const tableFilter = useTableFilter<ExtendedPartnerCompany>({
         module: 'partner-companies',
@@ -142,7 +142,7 @@ export function PartnerCompaniesMasterView() {
         const q = searchQuery.trim().toLowerCase();
         if (q) {
             result = result.filter((p) =>
-                [p.companyName, p.natureOfPartner, p.phone, primaryEmail(p), cityOf(p), countryOf(p), assigneeOf(p), p.principalCompany].some((v) =>
+                [p.partnerName, p.natureOfPartner, p.officePhone, primaryEmail(p), cityOf(p), countryOf(p), assigneeOf(p), p.principalCompany].some((v) =>
                     (v || '').toLowerCase().includes(q)
                 )
             );
@@ -198,7 +198,7 @@ export function PartnerCompaniesMasterView() {
     const columns: DataTableColumn<ExtendedPartnerCompany>[] = useMemo(
         () => [
             {
-                id: 'companyName',
+                id: 'partnerName',
                 label: 'COMPANY NAME',
                 sortable: true,
                 locked: true,
@@ -211,7 +211,7 @@ export function PartnerCompaniesMasterView() {
                             onOpen={() => setDrawerId(p.id)}
                             sx={{ fontWeight: 700, color: 'var(--crm-blue-700)', fontSize: '0.82rem', cursor: 'pointer', '&:hover': { textDecoration: 'underline' } }}
                         >
-                            {p.companyName}
+                            {p.partnerName}
                         </RecordLink>
                     </Box>
                 ),
@@ -233,22 +233,22 @@ export function PartnerCompaniesMasterView() {
                     ),
             },
             {
-                id: 'phone',
+                id: 'officePhone',
                 label: 'PHONE',
                 sortable: true,
                 minWidth: 150,
                 // A tel: link of its own.
                 interactive: true,
                 render: (p) =>
-                    p.phone ? (
+                    p.officePhone ? (
                         <Box
                             component="a"
-                            href={telHref(p.phone)}
+                            href={telHref(p.officePhone)}
                             onClick={(e: React.MouseEvent) => e.stopPropagation()}
                             sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.6, ...cellTextSx, textDecoration: 'none', '&:hover': { color: 'var(--crm-blue-700)' } }}
                         >
                             <PhoneOutlinedIcon sx={{ fontSize: 14, color: 'var(--mui-palette-text-muted)' }} />
-                            {p.phone}
+                            {p.officePhone}
                         </Box>
                     ) : (
                         <Typography sx={cellTextSx}>-</Typography>

@@ -47,7 +47,7 @@ const include = { corporateEmails: emailsInclude } as const;
 
 const notFound = () => HttpError.notFound('Organization not found');
 /** Columns `assertRecordAccess` reads. */
-const OWNER_SELECT = { assignedUser: true, createdBy: true } as const;
+const OWNER_SELECT = { assignedTo: true, createdBy: true } as const;
 
 export interface SimilarOrganizationMatch {
     id: string;
@@ -57,7 +57,7 @@ export interface SimilarOrganizationMatch {
     billingCity: string | null;
     billingState: string | null;
     accountStatus: string;
-    gstNo: string | null;
+    gstNumber: string | null;
     matchKind: OrgNameMatchKind;
     /** Whether the legal name or the trade name matched. */
     matchedField: OrgNameMatchField;
@@ -65,8 +65,8 @@ export interface SimilarOrganizationMatch {
 
 export interface UniqueCheckResult {
     exists: boolean;
-    matchKind?: 'exact' | 'canonical' | 'gstNo';
-    field?: 'organizationName' | 'gstNo';
+    matchKind?: 'exact' | 'canonical' | 'gstNumber';
+    field?: 'organizationName' | 'gstNumber';
     id?: string;
     accountCode?: string;
     organizationName?: string;
@@ -91,7 +91,7 @@ const NAME_CANDIDATE_SELECT = {
     billingCity: true,
     billingState: true,
     accountStatus: true,
-    gstNo: true,
+    gstNumber: true,
 } as const satisfies Prisma.OrganizationSelect;
 type NameCandidate = Prisma.OrganizationGetPayload<{ select: typeof NAME_CANDIDATE_SELECT }>;
 
@@ -178,7 +178,7 @@ const toSimilarMatch = ({ record, matchKind, matchedField }: SimilarOrganization
     billingCity: record.billingCity,
     billingState: record.billingState,
     accountStatus: record.accountStatus,
-    gstNo: record.gstNo,
+    gstNumber: record.gstNumber,
     matchKind,
     matchedField,
 });
@@ -188,7 +188,7 @@ const toSimilarMatch = ({ record, matchKind, matchedField }: SimilarOrganization
 async function viewerFlags(user: AuthUser) {
     const recentIds = new Set(await recentViewsService.list(user.id, RECENT_ENTITY));
     return (row: OrganizationRow) => ({
-        isMyAccount: (row.assignedUser ?? row.createdBy) === user.username,
+        isMyAccount: (row.assignedTo ?? row.createdBy) === user.username,
         isRecentlyViewed: recentIds.has(row.id),
     });
 }
@@ -202,26 +202,26 @@ async function viewerFlags(user: AuthUser) {
 async function assertUnique(
     tx: TransactionClient,
     input: OrganizationWriteInput,
-    gstNo: string | null,
+    gstNumber: string | null,
     { excludeId, checkName = true, previousPan }: { excludeId?: string; checkName?: boolean; previousPan?: string | null } = {},
 ): Promise<void> {
     const normalizedName = input.organizationName.trim();
     const nameKey = canonicalizeOrgName(normalizedName) || normalizedName.toLowerCase();
-    await acquireLocks(tx, [checkName ? `organization:name:${nameKey}` : null, gstNo && `organization:gst:${gstNo}`]);
+    await acquireLocks(tx, [checkName ? `organization:name:${nameKey}` : null, gstNumber && `organization:gst:${gstNumber}`]);
     const notSelf = excludeId ? { NOT: { id: excludeId } } : {};
     const sameName = checkName ? await findSameNamedOrganization(tx, normalizedName, excludeId) : null;
     if (sameName) {
         const message = sameNameMessage(sameName);
         throw HttpError.conflict(message, [{ message, path: ['organizationName'] }]);
     }
-    if (gstNo) {
+    if (gstNumber) {
         const sameGst = await tx.organization.findFirst({
-            where: { gstNo, isDeleted: false, ...notSelf },
+            where: { gstNumber, isDeleted: false, ...notSelf },
             select: { accountCode: true, organizationName: true },
         });
         if (sameGst) {
-            const message = `GSTIN ${gstNo} is already registered to ${sameGst.organizationName}.`;
-            throw HttpError.conflict(message, [{ message, path: ['gstNo'] }]);
+            const message = `GSTIN ${gstNumber} is already registered to ${sameGst.organizationName}.`;
+            throw HttpError.conflict(message, [{ message, path: ['gstNumber'] }]);
         }
     }
     // PAN: unique among organizations too (an unchanged PAN on update isn't re-checked).
@@ -229,7 +229,7 @@ async function assertUnique(
 }
 
 /**
- * Links `memberOfParentCorp` (free text in the form) to the live organization with that exact name, if any.
+ * Links `memberOf` (free text in the form) to the live organization with that exact name, if any.
  * Rejects links that would make an organization its own ancestor.
  */
 async function resolveParentId(tx: TransactionClient, parentName: string | undefined, selfId?: string): Promise<string | null> {
@@ -244,7 +244,7 @@ async function resolveParentId(tx: TransactionClient, parentName: string | undef
     for (let depth = 0; cursor && depth < MAX_HIERARCHY_DEPTH; depth++) {
         if (cursor === selfId) {
             throw HttpError.badRequest('An organization cannot be a member of one of its own subsidiaries.', [
-                { message: 'This parent would create a circular hierarchy.', path: ['memberOfParentCorp'] },
+                { message: 'This parent would create a circular hierarchy.', path: ['memberOf'] },
             ]);
         }
         const node: { parentOrganizationId: string | null } | null = await tx.organization.findUnique({
@@ -272,7 +272,7 @@ function resolveVerification(input: OrganizationWriteInput, actor: AuthUser, exi
 
 function toOrganizationData(
     input: OrganizationWriteInput,
-    extras: { parentOrganizationId: string | null; verification: Verification; assignedUser: string | null },
+    extras: { parentOrganizationId: string | null; verification: Verification; assignedTo: string | null },
 ): Omit<Prisma.OrganizationUncheckedCreateInput, 'accountCode' | 'createdBy'> {
     const billing = {
         address: nullable(input.billingAddress),
@@ -305,19 +305,19 @@ function toOrganizationData(
         customerType: nullable(input.customerType),
         sapCodeTallyId: nullable(input.sapCodeTallyId),
         showroomBranchCode: nullable(input.showroomBranchCode),
-        sourceOfLead: nullable(input.sourceOfLead),
-        memberOfParentCorp: nullable(input.memberOfParentCorp),
+        leadSource: nullable(input.leadSource),
+        memberOf: nullable(input.memberOf),
         parentOrganizationId: extras.parentOrganizationId,
         numberOfEmployees: nullable(input.numberOfEmployees),
         annualTurnover: nullable(input.annualTurnover),
-        description: nullable(input.description),
+        addDescriptionAndScope: nullable(input.addDescriptionAndScope),
         accountVerified: input.accountVerified,
         verifiedAt: extras.verification.verifiedAt,
         verifiedBy: extras.verification.verifiedBy,
         activeAmc: input.activeAmc,
         activeCloud: input.activeCloud,
         provideSupport: input.provideSupport,
-        assignedUser: extras.assignedUser,
+        assignedTo: extras.assignedTo,
 
         billingAddress: billing.address,
         billingStreet: billing.address,
@@ -341,11 +341,11 @@ function toOrganizationData(
         msmeRegnNumber: input.msmeRegnNumber ?? null,
         accountName: nullable(input.accountName),
         bankName: nullable(input.bankName),
-        bankIfscCode: input.bankIfscCode ?? null,
-        gstNo: gstFor(input),
+        ifscCode: input.ifscCode ?? null,
+        gstNumber: gstFor(input),
         cinNo: input.cinNo ?? null,
         tanNumber: input.tanNumber ?? null,
-        accountNumber: nullable(input.accountNumber),
+        accountNo: nullable(input.accountNo),
         typeOfAccount: nullable(input.typeOfAccount),
         bankAddress: nullable(input.bankAddress),
 
@@ -354,7 +354,7 @@ function toOrganizationData(
 }
 
 /** Unregistered organizations carry no GSTIN (the form clears it too). */
-const gstFor = (input: OrganizationWriteInput): string | null => (isGstRegistrationType(input.registrationType) ? (input.gstNo ?? null) : null);
+const gstFor = (input: OrganizationWriteInput): string | null => (isGstRegistrationType(input.registrationType) ? (input.gstNumber ?? null) : null);
 
 /**
  * Inserts an organization (code, uniqueness, parent link, emails, audit) inside the caller's transaction.
@@ -369,14 +369,14 @@ export async function createOrganizationRecord(
     // Code first: its counter row lock queues concurrent creates before they take any other lock.
     const accountCode = await generateEntityCode(tx, 'ORG');
     await assertUnique(tx, input, gstFor(input));
-    const assignedUser =
-        (await assertAssigneeValid(tx, input.assignedUser, { path: 'assignedUser', activeUsernames: lookups.activeUsernames })) ?? user.username;
+    const assignedTo =
+        (await assertAssigneeValid(tx, input.assignedTo, { path: 'assignedTo', activeUsernames: lookups.activeUsernames })) ?? user.username;
     const row = await tx.organization.create({
         data: {
             ...(await resolveAddressPlaces(tx, 'organization', toOrganizationData(input, {
-                parentOrganizationId: await resolveParentId(tx, input.memberOfParentCorp),
+                parentOrganizationId: await resolveParentId(tx, input.memberOf),
                 verification: resolveVerification(input, user),
-                assignedUser,
+                assignedTo,
             }))),
             accountCode,
             createdBy: user.username,
@@ -385,7 +385,7 @@ export async function createOrganizationRecord(
     await replaceEmails(tx, { organizationId: row.id }, normalizeEmails(input.corporateEmails));
 
     const saved = await tx.organization.findUniqueOrThrow({ where: { id: row.id }, include });
-    const dto = toOrganizationDto(saved, { isMyAccount: saved.assignedUser === user.username, isRecentlyViewed: false });
+    const dto = toOrganizationDto(saved, { isMyAccount: saved.assignedTo === user.username, isRecentlyViewed: false });
     await auditService.record(tx, { entityType: 'Organization', entityId: row.id, action: 'CREATE', changedBy: user.username, changes: dto });
     return dto;
 }
@@ -412,7 +412,7 @@ export async function findLiveOrganization(tx: TransactionClient, name: string, 
 function mergePatch(before: OrganizationDto, patch: Record<string, unknown>): Record<string, unknown> {
     const merged: Record<string, unknown> = { ...before, ...patch };
     const aliasPairs: [canonical: string, alias: string][] = [
-        ['gstNo', 'gstNumber'],
+        ['gstNumber', 'gstNumber'],
         ['billingAddress', 'billingStreet'],
         ['shippingAddress', 'shippingStreet'],
     ];
@@ -438,17 +438,17 @@ export const organizationService = {
 
     async list(query: unknown, user: AuthUser): Promise<PaginatedResult<OrganizationDto>> {
         const normalizedQuery = { ...(query as Record<string, unknown>) };
-        if (normalizedQuery.sortBy === 'gstNumber') normalizedQuery.sortBy = 'gstNo';
+        if (normalizedQuery.sortBy === 'gstNumber') normalizedQuery.sortBy = 'gstNumber';
         const page = parsePagination(normalizedQuery, ORGANIZATION_SORT_FIELDS);
         const filters = organizationListQuerySchema.parse(normalizedQuery);
 
-        const where: Prisma.OrganizationWhereInput = { isDeleted: false, AND: [buildAccessScopeWhere(user, 'assignedUser')] };
+        const where: Prisma.OrganizationWhereInput = { isDeleted: false, AND: [buildAccessScopeWhere(user, 'assignedTo')] };
         if (filters.accountStatus) where.accountStatus = filters.accountStatus;
         if (filters.customerType?.length) where.customerType = { in: filters.customerType };
         if (filters.natureOfBusiness) where.natureOfBusiness = { contains: filters.natureOfBusiness };
-        if (filters.assignedUser) where.assignedUser = filters.assignedUser;
+        if (filters.assignedTo) where.assignedTo = filters.assignedTo;
         if (filters.parentOrganizationId) where.parentOrganizationId = filters.parentOrganizationId;
-        if (filters.mine) where.assignedUser = user.username;
+        if (filters.mine) where.assignedTo = user.username;
         if (filters.createdWithinDays) where.createdAt = { gte: daysAgo(filters.createdWithinDays) };
         if (filters.recent) where.id = { in: await recentViewsService.list(user.id, RECENT_ENTITY) };
         if (page.search) {
@@ -456,7 +456,7 @@ export const organizationService = {
             const code = codeSearchPrefix(page.search, 'ORG');
             const gst = code ? null : gstSearchPrefix(page.search);
             if (code) where.OR = [{ accountCode: { startsWith: code } }];
-            else if (gst) where.OR = [{ gstNo: { startsWith: gst } }];
+            else if (gst) where.OR = [{ gstNumber: { startsWith: gst } }];
             else where.OR = [
                 { organizationName: { contains: page.search } },
                 { accountCode: { contains: page.search } },
@@ -465,7 +465,7 @@ export const organizationService = {
                 { billingCity: { contains: page.search } },
                 { billingState: { contains: page.search } },
                 { billingAddress: { contains: page.search } },
-                { gstNo: { contains: page.search } },
+                { gstNumber: { contains: page.search } },
             ];
         }
 
@@ -489,7 +489,7 @@ export const organizationService = {
 
     /** GET /api/organizations/check-unique — read-only pre-check for the form; the write path still enforces uniqueness. */
     async checkUnique(query: unknown): Promise<UniqueCheckResult> {
-        const { organizationName, gstNo, excludeId } = checkOrganizationUniqueQuerySchema.parse(query);
+        const { organizationName, gstNumber, excludeId } = checkOrganizationUniqueQuerySchema.parse(query);
         const notSelf = excludeId ? { NOT: { id: excludeId } } : {};
 
         let suggestions: SimilarOrganizationMatch[] | undefined;
@@ -512,20 +512,20 @@ export const organizationService = {
                 };
             }
         }
-        if (gstNo) {
+        if (gstNumber) {
             const sameGst = await prisma.organization.findFirst({
-                where: { gstNo, isDeleted: false, ...notSelf },
+                where: { gstNumber, isDeleted: false, ...notSelf },
                 select: { id: true, accountCode: true, organizationName: true },
             });
             if (sameGst) {
                 return {
                     exists: true,
-                    matchKind: 'gstNo',
-                    field: 'gstNo',
+                    matchKind: 'gstNumber',
+                    field: 'gstNumber',
                     id: sameGst.id,
                     accountCode: sameGst.accountCode,
                     organizationName: sameGst.organizationName,
-                    message: `GSTIN ${gstNo} is already registered to ${sameGst.organizationName}.`,
+                    message: `GSTIN ${gstNumber} is already registered to ${sameGst.organizationName}.`,
                     suggestions,
                 };
             }
@@ -564,22 +564,22 @@ export const organizationService = {
                 submittedKeys: new Set(Object.keys(patch)),
                 previousCustomFields: before.customFields,
             });
-            const gstNo = gstFor(input);
+            const gstNumber = gstFor(input);
             // Strict comparison on purpose: a case-only rename counts as a change and is re-checked (excluding this record).
             const nameChanged = input.organizationName !== existing.organizationName;
-            if (nameChanged || gstNo !== existing.gstNo || (input.panNumber ?? null) !== (existing.panNumber ?? null)) {
+            if (nameChanged || gstNumber !== existing.gstNumber || (input.panNumber ?? null) !== (existing.panNumber ?? null)) {
                 // Only re-check the name when it changed: legacy rows may already have canonical twins, and a
                 // GSTIN-only edit shouldn't be blocked by them.
-                await assertUnique(tx, input, gstNo, { excludeId: id, checkName: nameChanged, previousPan: existing.panNumber });
+                await assertUnique(tx, input, gstNumber, { excludeId: id, checkName: nameChanged, previousPan: existing.panNumber });
             }
 
             await tx.organization.update({
                 where: { id },
                 data: {
                     ...(await resolveAddressPlaces(tx, 'organization', toOrganizationData(input, {
-                        parentOrganizationId: await resolveParentId(tx, input.memberOfParentCorp, id),
+                        parentOrganizationId: await resolveParentId(tx, input.memberOf, id),
                         verification: resolveVerification(input, user, existing),
-                        assignedUser: await assertAssigneeValid(tx, input.assignedUser, { previous: existing.assignedUser, path: 'assignedUser' }),
+                        assignedTo: await assertAssigneeValid(tx, input.assignedTo, { previous: existing.assignedTo, path: 'assignedTo' }),
                     }))),
                     updatedBy: user.username,
                 },

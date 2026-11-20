@@ -67,7 +67,7 @@ export function PartnerCompanyLookupModal({ open, onClose, onSelect, selectedVal
     }, [partnerCompanies, users]);
 
     const selected = selectedValue?.trim().toLowerCase();
-    const selectedId = selected ? partnerCompanies.find((p) => p.companyName.toLowerCase() === selected)?.id : undefined;
+    const selectedId = selected ? partnerCompanies.find((p) => p.partnerName.toLowerCase() === selected)?.id : undefined;
     return (
         <GenericLookupModal<PartnerCompany>
             open={open}

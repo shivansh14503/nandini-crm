@@ -197,9 +197,9 @@ export function OpportunitiesMasterView() {
                 const q = searchQuery.toLowerCase().trim();
                 const inOrg = opp.organizationName.toLowerCase().includes(q);
                 const inCode = showNumber('opportunity') && opp.opportunityCode.toLowerCase().includes(q);
-                const inContact = opp.contactName.toLowerCase().includes(q);
+                const inContact = opp.contact.toLowerCase().includes(q);
                 const inPhone = opp.contactNumber.includes(q);
-                const inEmail = (opp.emailAddress || '').toLowerCase().includes(q);
+                const inEmail = (opp.contactEmail || '').toLowerCase().includes(q);
                 const inStage = opp.salesStage.toLowerCase().includes(q);
                 const inType = opp.type.toLowerCase().includes(q);
                 const inSource = leadSourceLabel(opp.leadSource).toLowerCase().includes(q);
@@ -535,12 +535,12 @@ export function OpportunitiesMasterView() {
             },
             {
                 // No remarks log on deals: "Add Description" is the note updated on each follow-up (as on leads).
-                id: 'addDescription',
+                id: 'followUpRemarks',
                 label: 'LATEST REMARKS',
                 sortable: false,
                 minWidth: 220,
                 width: 280,
-                render: (o) => <Typography sx={plainCellSx}>{o.addDescription || '-'}</Typography>,
+                render: (o) => <Typography sx={plainCellSx}>{o.followUpRemarks || '-'}</Typography>,
             },
             {
                 // Derived: a linked quotation has moved past Draft.

@@ -224,7 +224,7 @@ export const theme = createTheme({
         MuiButton: {
             styleOverrides: {
                 root: ({ theme }) => ({
-                    borderRadius: 10,
+                    borderRadius: 'var(--crm-radius-button)',
                     boxShadow: 'none',
                     transition: 'background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease',
                     '&:hover': {

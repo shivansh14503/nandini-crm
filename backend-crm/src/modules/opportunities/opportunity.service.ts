@@ -62,17 +62,17 @@ async function resolveLinks(
     let contact: Link;
     if (input.contactId) {
         const found = await tx.contact.findUnique({ where: { id: input.contactId }, select: contactSelect });
-        assertReference(found, input.contactId, previous?.contactId, 'contact', 'contactName');
+        assertReference(found, input.contactId, previous?.contactId, 'contact', 'contact');
         contact = { id: found.id, name: found.name };
     } else if (organization.id) {
         const found = await tx.contact.findFirst({
-            where: { name: input.contactName, organizationId: organization.id, isDeleted: false },
+            where: { name: input.contact, organizationId: organization.id, isDeleted: false },
             select: contactSelect,
         });
-        contact = found ? { id: found.id, name: found.name } : { id: null, name: input.contactName };
+        contact = found ? { id: found.id, name: found.name } : { id: null, name: input.contact };
     } else {
         // Without an organization a contact name is too ambiguous to link.
-        contact = { id: null, name: input.contactName };
+        contact = { id: null, name: input.contact };
     }
 
     return { organization, contact };
@@ -156,7 +156,7 @@ export const opportunityService = {
                 { opportunityCode: { contains: page.search } },
                 { opportunityName: { contains: page.search } },
                 { organizationName: { contains: page.search } },
-                { contactName: { contains: page.search } },
+                { contact: { contains: page.search } },
                 { contactNumber: { contains: page.search } },
                 { salesStage: { contains: page.search } },
                 { leadSource: { contains: page.search } },
@@ -198,7 +198,7 @@ export const opportunityService = {
             const merged: Record<string, unknown> = { ...before, ...patch };
             // Retyping a name without picking a record means "re-link by name", not "keep the old id".
             if ('organizationName' in patch && !('organizationId' in patch)) delete merged.organizationId;
-            if ('contactName' in patch && !('contactId' in patch)) delete merged.contactId;
+            if ('contact' in patch && !('contactId' in patch)) delete merged.contactId;
             const input = opportunityInputSchema.parse(merged);
             input.customFields = checkModulePayload(fieldConfig, merged, input.customFields, {
                 submittedKeys: new Set(Object.keys(patch)),

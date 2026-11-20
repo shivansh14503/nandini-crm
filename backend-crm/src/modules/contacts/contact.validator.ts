@@ -26,7 +26,7 @@ export const contactInputSchema = z.object({
     phone3: optionalPhone('Phone 3'),
     phone4: optionalPhone('Phone 4'),
     phone5: optionalPhone('Phone 5'),
-    emailAddresses: corporateEmailListSchema.default([]).superRefine((emails, ctx) => {
+    emailAddress: corporateEmailListSchema.default([]).superRefine((emails, ctx) => {
         if (emails.length > 0 && !emails.some((row) => row.email)) {
             ctx.addIssue({ code: 'custom', message: 'Please provide at least one valid email address.' });
         }
@@ -41,7 +41,7 @@ export const contactInputSchema = z.object({
         .max(MAX_COMMUNICATION_TYPES, { message: `At most ${MAX_COMMUNICATION_TYPES} communication types are allowed.` })
         .default(['Call', 'Email']),
     doNotCall: z.boolean().default(false),
-    description: optionalText('Description', L.longText),
+    addDescription: optionalText('Add Description', L.longText),
     customFields: customFieldsSchema,
 });
 

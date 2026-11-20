@@ -27,11 +27,11 @@ const BANK_BRANCH_MAX = 150;
 const partnerCompanyFields = z
     .object({
         // Company information
-        companyName: requiredText('Partner Name', L.organizationName),
+        partnerName: requiredText('Partner Name', L.organizationName),
         natureOfPartner: optionalText('Nature of Partner', L.option),
-        phone: optionalPhone('Office Phone'),
+        officePhone: optionalPhone('Office Phone'),
         website: optionalText('Website', WEBSITE_MAX),
-        emailAddresses: corporateEmailListSchema.default([]).superRefine((emails, ctx) => {
+        emailAddress: corporateEmailListSchema.default([]).superRefine((emails, ctx) => {
             if (!emails.some((row) => row.email)) {
                 ctx.addIssue({ code: 'custom', message: 'Email Address is required.' });
             }
@@ -43,9 +43,9 @@ const partnerCompanyFields = z
 
         // Bank details
         bankName: optionalText('Bank Name', L.personName),
-        bankBranch: optionalText('Branch', BANK_BRANCH_MAX),
-        accountNumber: optionalText('Account No', L.bankAccount),
-        bankIfscCode: optionalIfsc,
+        branch: optionalText('Branch', BANK_BRANCH_MAX),
+        accountNo: optionalText('Account No', L.bankAccount),
+        ifscCode: optionalIfsc,
 
         // Billing address (same rules as the organization form, which uses the same address section)
         billingAddress: optionalText('Billing Street', L.address),
@@ -65,7 +65,7 @@ const partnerCompanyFields = z
         copyAddressFromBilling: z.boolean().default(false),
 
         // Statutory
-        gstNo: optionalGst,
+        gstNumber: optionalGst,
         panNumber: optionalPan,
         cinNo: optionalUpperText('CIN No', L.cin),
         msmeRegnNumber: optionalUpperText('MSME Regn. Number', L.msme),
@@ -106,9 +106,9 @@ export const partnerCompanyListQuerySchema = z.object({
 export const PARTNER_COMPANY_SORT_FIELDS = [
     'createdAt',
     'updatedAt',
-    'companyName',
+    'partnerName',
     'natureOfPartner',
-    'phone',
+    'officePhone',
     'email',
     'city',
     'billingCountry',

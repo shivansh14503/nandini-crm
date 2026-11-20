@@ -25,16 +25,17 @@ export const leadFormSchema = z.object({
     // Overview - Left Column
     name: requiredText('Lead Name', L.personName),
     mobile: zodPhoneOptional,
-    emailAddresses: z.array(corporateEmailSchema).optional().default([]),
+    emailAddress: z.array(corporateEmailSchema).optional().default([]),
     mailingName: optionalText('Mailing Name', L.organizationName),
     tradeName: optionalText('Trade Name', L.organizationName),
     designation: optionalString,
     leadSource: optionalString,
     productCategory: z.array(z.string()).default([]),
     followupType: optionalString.default('Call'),
-    addDescription: optionalDescription('Follow Up Remarks', L.longText),
+    customerResponse: optionalString,
+    followUpRemarks: optionalDescription('Follow Up Remarks', L.longText),
     registrationType: optionalString,
-    gstNo: zodGstOptional,
+    gstNumber: zodGstOptional,
     turnover: optionalString,
     assignedTo: requiredString('Assigned Representative'),
 
@@ -75,18 +76,18 @@ export const leadFormSchema = z.object({
 
     // GSTIN is only collected (and then required) for 'Registered' / SEZ leads; matches organization.schema.ts.
     if (isGstRegistrationType(data.registrationType)) {
-        const gst = data.gstNo?.trim();
+        const gst = data.gstNumber?.trim();
         if (!gst) {
             ctx.addIssue({
                 code: z.ZodIssueCode.custom,
                 message: `GST Number is required when Registration Type is ${data.registrationType}.`,
-                path: ['gstNo'],
+                path: ['gstNumber'],
             });
         } else if (!GST_REGEX.test(gst.toUpperCase())) {
             ctx.addIssue({
                 code: z.ZodIssueCode.custom,
                 message: 'Please enter a valid 15-character GSTIN (e.g. 07AAAAA0000A1Z5).',
-                path: ['gstNo'],
+                path: ['gstNumber'],
             });
         }
     }

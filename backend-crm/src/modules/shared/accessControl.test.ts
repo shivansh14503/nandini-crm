@@ -60,8 +60,8 @@ describe('buildAccessScopeWhere', () => {
         assert.deepEqual(buildAccessScopeWhere(user('Sales Executive'), 'assignedTo'), {
             OR: [{ assignedTo: 'palak' }, { createdBy: 'palak' }],
         });
-        assert.deepEqual(buildAccessScopeWhere(user('Sales Executive'), 'assignedUser'), {
-            OR: [{ assignedUser: 'palak' }, { createdBy: 'palak' }],
+        assert.deepEqual(buildAccessScopeWhere(user('Sales Executive'), 'assignedTo'), {
+            OR: [{ assignedTo: 'palak' }, { createdBy: 'palak' }],
         });
     });
 });
@@ -75,13 +75,13 @@ describe('assertRecordAccess', () => {
 
     it('lets a scoped user access records they own or created (case-insensitively)', () => {
         assert.doesNotThrow(() => assertRecordAccess(scoped, { assignedTo: 'PALAK', createdBy: 'admin' }));
-        assert.doesNotThrow(() => assertRecordAccess(scoped, { assignedUser: 'palak', createdBy: 'admin' }));
+        assert.doesNotThrow(() => assertRecordAccess(scoped, { assignedTo: 'palak', createdBy: 'admin' }));
         assert.doesNotThrow(() => assertRecordAccess(scoped, { assignedTo: 'nupur', createdBy: 'palak' }));
     });
 
     it('rejects a scoped user on records they neither own nor created', () => {
         assert.throws(() => assertRecordAccess(scoped, { assignedTo: 'nupur', createdBy: 'admin' }), isForbidden);
-        assert.throws(() => assertRecordAccess(scoped, { assignedUser: null, createdBy: null }), isForbidden);
+        assert.throws(() => assertRecordAccess(scoped, { assignedTo: null, createdBy: null }), isForbidden);
         assert.equal(canAccessRecord(scoped, {}), false);
     });
 
@@ -125,9 +125,9 @@ describe('assertAssigneeValid', () => {
             assert.deepEqual(err.errors?.[0]?.path, ['assignedTo']);
             return true;
         });
-        await assert.rejects(assertAssigneeValid(tx, 'sneha.rawat', { path: 'assignedUser' }), (err: unknown) => {
+        await assert.rejects(assertAssigneeValid(tx, 'sneha.rawat', { path: 'assignedTo' }), (err: unknown) => {
             assert.ok(err instanceof HttpError);
-            assert.deepEqual(err.errors?.[0]?.path, ['assignedUser']);
+            assert.deepEqual(err.errors?.[0]?.path, ['assignedTo']);
             return true;
         });
     });

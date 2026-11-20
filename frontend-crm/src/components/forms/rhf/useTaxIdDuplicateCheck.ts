@@ -5,7 +5,7 @@ import { useFormState, useWatch, type FieldValues, type Path, type UseFormReturn
 import { taxIdService, type TaxIdField, type TaxIdHolder, type TaxIdOwner } from '@/services/taxId.service';
 import { GST_REGEX, PAN_REGEX } from '@/validations/common';
 
-const COMPLETE: Record<TaxIdField, RegExp> = { gstNo: GST_REGEX, panNumber: PAN_REGEX };
+const COMPLETE: Record<TaxIdField, RegExp> = { gstNumber: GST_REGEX, panNumber: PAN_REGEX };
 const CHECK_DEBOUNCE_MS = 300;
 const DUPLICATE_ERROR = 'duplicate';
 
@@ -29,7 +29,7 @@ const normalize = (v: unknown) => (typeof v === 'string' ? v.trim().toUpperCase(
  */
 export function useTaxIdDuplicateCheck<T extends FieldValues>(
     methods: UseFormReturn<T>,
-    { owner, excludeId, fields = ['gstNo', 'panNumber'], enabled = true }: UseTaxIdDuplicateCheckOptions
+    { owner, excludeId, fields = ['gstNumber', 'panNumber'], enabled = true }: UseTaxIdDuplicateCheckOptions
 ): void {
     const { control, setError, clearErrors } = methods;
     const names = fields as unknown as Path<T>[];

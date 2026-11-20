@@ -27,8 +27,6 @@ const STATUS_VALUES = ['Draft', 'Sent', 'Accepted', 'Rejected', 'Negotiation', '
 /** Legacy aliases on `QuotationFormData`; the first key of each pair is stored. */
 export const QUOTATION_ALIAS_PAIRS: [canonical: string, alias: string][] = [
     ['quotationDate', 'quoteDate'],
-    ['contactMobile', 'contactNumber'],
-    ['contactEmail', 'emailAddress'],
 ];
 
 function normalizeAliases(value: unknown): unknown {
@@ -56,7 +54,7 @@ export const quotationInputSchema = z.preprocess(
             termsAndCondition: optionalText('Terms & Condition', L.option),
             termsAndConditionDescription: optionalText('Terms & Condition Description', L.longText),
             assignedTo: requiredText('Assigned Representative', L.username),
-            opportunityName: requiredText('Opportunity Name', L.organizationName),
+            opportunity: requiredText('Opportunity', L.organizationName),
             company: requiredText('Company', L.option),
             validationPeriod: optionalText('Validation Period', 30),
             otherRef: optionalText('Other Ref.', L.shortText),
@@ -73,11 +71,11 @@ export const quotationInputSchema = z.preprocess(
             // Customer & address
             organizationName: optionalUpperText('Organization', L.organizationName),
             organizationId: optionalText('Organization', 50),
-            contactName: requiredPersonName('Contact Name', L.personName),
+            contact: requiredPersonName('Contact', L.personName),
             contactId: optionalText('Contact', 50),
-            contactMobile: optionalPhone('Contact Mobile'),
+            contactNumber: optionalPhone('Contact Number'),
             mailingName: optionalText('Mailing Name', L.organizationName),
-            gstNo: optionalGst,
+            gstNumber: optionalGst,
             contactEmail: optionalEmail,
 
             billingAddress: requiredText('Street / Billing Address', L.address),

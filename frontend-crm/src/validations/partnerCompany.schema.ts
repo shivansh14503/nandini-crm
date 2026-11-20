@@ -25,11 +25,11 @@ const BANK_BRANCH_MAX = 150;
 export const partnerCompanyFormSchema = z
     .object({
         // Company information
-        companyName: requiredText('Partner Name', L.organizationName),
+        partnerName: requiredText('Partner Name', L.organizationName),
         natureOfPartner: optionalString,
-        phone: zodPhoneOptional,
+        officePhone: zodPhoneOptional,
         website: optionalText('Website', WEBSITE_MAX),
-        emailAddresses: z
+        emailAddress: z
             .array(corporateEmailSchema)
             .min(1, { message: 'At least one email address is required.' })
             .refine((list) => list.some((e) => (e.email || '').trim().length > 0), {
@@ -42,9 +42,9 @@ export const partnerCompanyFormSchema = z
 
         // Bank details
         bankName: optionalText('Bank Name', L.personName),
-        bankBranch: optionalText('Branch', BANK_BRANCH_MAX),
-        accountNumber: optionalText('Account No', L.bankAccount),
-        bankIfscCode: zodIfscOptional,
+        branch: optionalText('Branch', BANK_BRANCH_MAX),
+        accountNo: optionalText('Account No', L.bankAccount),
+        ifscCode: zodIfscOptional,
 
         // Billing address
         billingAddress: optionalText('Billing Street', L.address),
@@ -64,7 +64,7 @@ export const partnerCompanyFormSchema = z
         copyAddressFromBilling: z.boolean().default(false),
 
         // Statutory
-        gstNo: zodGstOptional,
+        gstNumber: zodGstOptional,
         panNumber: zodPanOptional,
         cinNo: optionalText('CIN No', L.cin),
         msmeRegnNumber: optionalText('MSME Regn. Number', L.msme),

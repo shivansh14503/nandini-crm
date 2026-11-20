@@ -190,7 +190,7 @@ export function LeadsMasterView() {
                 const inCode = showNumber('lead') && lead.leadCode.toLowerCase().includes(q);
                 const inOrg = (lead.organizationName || '').toLowerCase().includes(q);
                 const inPhone = (lead.mobile || '').includes(q) || (lead.otherPhone || '').includes(q);
-                const inEmail = (lead.emailAddresses || []).some((e) => e.email.toLowerCase().includes(q));
+                const inEmail = (lead.emailAddress || []).some((e) => e.email.toLowerCase().includes(q));
                 const inProduct = (lead.productCategory || []).some((p) => p.toLowerCase().includes(q));
                 const inStatus = lead.status.toLowerCase().includes(q);
                 const inSource = leadSourceLabel(lead.leadSource).toLowerCase().includes(q);
@@ -424,12 +424,12 @@ export function LeadsMasterView() {
             },
             {
                 // The lead's email list; the primary address (else the first) is shown.
-                id: 'emailAddresses',
+                id: 'emailAddress',
                 label: 'EMAIL',
                 sortable: false,
                 minWidth: 190,
                 render: (l) => {
-                    const email = (l.emailAddresses?.find((e) => e.isPrimary) ?? l.emailAddresses?.[0])?.email;
+                    const email = (l.emailAddress?.find((e) => e.isPrimary) ?? l.emailAddress?.[0])?.email;
                     return (
                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.6 }}>
                             {email && <EmailOutlinedIcon sx={{ fontSize: 14, color: 'var(--mui-palette-text-muted)' }} />}
@@ -457,12 +457,12 @@ export function LeadsMasterView() {
             },
             {
                 // Leads keep no remarks log: "Add Description" is the action-items note updated on each follow-up.
-                id: 'addDescription',
+                id: 'followUpRemarks',
                 label: 'LATEST REMARKS',
                 sortable: true,
                 minWidth: 220,
                 width: 280,
-                render: (l) => <Typography sx={plainCellSx}>{l.addDescription || '-'}</Typography>,
+                render: (l) => <Typography sx={plainCellSx}>{l.followUpRemarks || '-'}</Typography>,
             },
             {
                 id: 'nextFollowupDate',

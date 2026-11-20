@@ -721,6 +721,9 @@ function CreateButton({ compact = false }: { compact?: boolean }) {
 }
 
 /* ─── Main Navbar ───────────────────────────────────────── */
+// Inset gap + bar + a short fade tail below the bar.
+const SCROLL_BACKDROP_HEIGHT = FLOAT_INSET + NAVBAR_HEIGHT + 20;
+
 export function Navbar() {
     const router = useRouter();
     const { user, logout } = useAuth();
@@ -737,6 +740,24 @@ export function Navbar() {
     };
 
     return (
+        <>
+        {/* Scroll backdrop: page colour across the inset gap above the bar, fading out just below it,
+            so scrolled content never peeks out above the floating bar. Takes no layout space. */}
+        <Box
+            aria-hidden
+            sx={{
+                position: 'sticky',
+                top: 0,
+                height: SCROLL_BACKDROP_HEIGHT,
+                mb: `-${SCROLL_BACKDROP_HEIGHT}px`,
+                zIndex: 1199,
+                pointerEvents: 'none',
+                background: `linear-gradient(to bottom,
+                    var(--crm-page-bg, var(--mui-palette-background-subtle)) 0px,
+                    var(--crm-page-bg, var(--mui-palette-background-subtle)) ${FLOAT_INSET + NAVBAR_HEIGHT / 2}px,
+                    color-mix(in srgb, var(--crm-page-bg, var(--mui-palette-background-subtle)) 0%, transparent) 100%)`,
+            }}
+        />
         <AppBar
             // Floating glass bar: sticky with an inset, so page content scrolls beneath the frosted surface.
             position="sticky"
@@ -854,5 +875,6 @@ export function Navbar() {
                 </Box>
             </Toolbar>
         </AppBar>
+        </>
     );
 }

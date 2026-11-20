@@ -46,16 +46,17 @@ export const CONVERTED_STATUS = 'Converted';
 const leadFields = z.object({
     name: requiredPersonName('Lead Name', L.personName),
     mobile: optionalPhone('Mobile'),
-    emailAddresses: corporateEmailListSchema.default([]),
+    emailAddress: corporateEmailListSchema.default([]),
     mailingName: optionalText('Mailing Name', L.organizationName),
     tradeName: optionalUpperText('Trade Name', L.organizationName),
     designation: optionalText('Designation', L.option),
     leadSource: optionalText('Lead Source', L.option),
     productCategory: stringList('Product Category', 30, L.option).default([]),
     followupType: optionalText('Followup Type', L.option),
-    addDescription: optionalDescription('Follow Up Remarks'),
+    customerResponse: optionalText('Customer Response', L.option),
+    followUpRemarks: optionalDescription('Follow Up Remarks'),
     registrationType: optionalText('Registration Type', 30),
-    gstNo: optionalGst,
+    gstNumber: optionalGst,
     turnover: optionalText('Turnover', 30),
     assignedTo: requiredText('Assigned Representative', L.username),
 
@@ -99,13 +100,13 @@ function refineLeadPostalCodes(
 }
 
 /** A 'Registered' / SEZ lead must carry a valid GSTIN (other registration types store none). */
-function refineLeadGst(lead: { registrationType?: string; gstNo?: string }, ctx: z.RefinementCtx): void {
+function refineLeadGst(lead: { registrationType?: string; gstNumber?: string }, ctx: z.RefinementCtx): void {
     if (!isGstRegistrationType(lead.registrationType)) return;
-    const gst = lead.gstNo?.trim();
+    const gst = lead.gstNumber?.trim();
     if (!gst) {
-        ctx.addIssue({ code: z.ZodIssueCode.custom, message: `GST Number is required when Registration Type is ${lead.registrationType}.`, path: ['gstNo'] });
+        ctx.addIssue({ code: z.ZodIssueCode.custom, message: `GST Number is required when Registration Type is ${lead.registrationType}.`, path: ['gstNumber'] });
     } else if (!GST_REGEX.test(gst.toUpperCase())) {
-        ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Please enter a valid 15-character GSTIN (e.g. 07AAAAA0000A1Z5).', path: ['gstNo'] });
+        ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Please enter a valid 15-character GSTIN (e.g. 07AAAAA0000A1Z5).', path: ['gstNumber'] });
     }
 }
 
@@ -133,7 +134,7 @@ export const convertLeadSchema = z.object({
     natureOfBusiness: optionalText('Nature of Business', L.option),
     typeOfEntity: optionalText('Type of Entity', L.option),
     customerType: optionalText('Customer Type', L.option),
-    sourceOfLead: optionalText('Lead Source', L.option),
+    leadSource: optionalText('Lead Source', L.option),
     memberOf: optionalText('Member of', L.organizationName),
     organizationDescription: optionalText('Organization Description', L.longText),
     organizationAssignedTo: requiredText('Organization Assigned to', L.username),

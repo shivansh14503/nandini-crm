@@ -5,6 +5,7 @@ import {
     Box,
     InputAdornment,
     Divider,
+    FormHelperText,
 } from '@mui/material';
 // Raw text inputs show the admin-configured placeholder of the FormField they sit in.
 import { ConfiguredTextField as TextField } from '@/components/forms/ConfiguredTextField';
@@ -46,10 +47,17 @@ import {
     FOLLOWUP_TYPES,
 } from '@/types/lead.types';
 import { useDropdownOptionsGetter } from '@/hooks/queries/useFormConfigs';
+import { useFormState } from 'react-hook-form';
+import { useFormMode } from '@/context/FormModeContext';
+import { CUSTOMER_RESPONSE_CATEGORY, CUSTOMER_RESPONSES, FieldGlow, useFollowUpDecision } from '@/components/forms/FollowUpDecision';
 
 export interface OpportunityBasicSectionProps {
     form: OpportunityFormData;
     setField: <K extends keyof OpportunityFormData>(key: K, value: OpportunityFormData[K]) => void;
+    /** Top-right toast of the form (e.g. "previous follow-up has expired"). */
+    notify?: (message: string, severity?: 'success' | 'error' | 'info' | 'warning') => void;
+    /** Told while the user still owes the next follow-up decision; the form refuses to save until it's made. */
+    onDecisionPendingChange?: (pending: boolean) => void;
 }
 
 const calendarAdornment = {
@@ -62,8 +70,16 @@ const calendarAdornment = {
     },
 };
 
-export function OpportunityBasicSection({ form, setField }: OpportunityBasicSectionProps) {
+export function OpportunityBasicSection({ form, setField, notify, onDecisionPendingChange }: OpportunityBasicSectionProps) {
     const getOptions = useDropdownOptionsGetter();
+    const { mode } = useFormMode();
+    const isEdit = mode === 'edit';
+    // Customer Response → keep or reschedule the next follow-up (see FollowUpDecision).
+    const { setAnchor: setResponseAnchor, onResponseChange, glow: followUpGlow, popper: followUpPopper } = useFollowUpDecision({ enabled: isEdit, notify, onPendingChange: onDecisionPendingChange });
+    const customerResponseOptions = getOptions(CUSTOMER_RESPONSE_CATEGORY, CUSTOMER_RESPONSES);
+    const { errors } = useFormState<OpportunityFormData>();
+    const customerResponseError = errors.customerResponse?.message;
+    const followUpDateError = errors.nextFollowupDate?.message ?? errors.nextFollowupTime?.message;
     const [userLookupOpen, setUserLookupOpen] = useState(false);
     // Organization names are stored uppercase.
     const orgNameInputRef = useUndoSafeSanitizer(upperCase);
@@ -93,10 +109,10 @@ export function OpportunityBasicSection({ form, setField }: OpportunityBasicSect
                     />
                 </FormField>
 
-                <FormField name="contactName" label="Contact" required size={LOOKUP_FIELD_SIZE} fit={null} hint="Primary decision maker">
+                <FormField name="contact" label="Contact" required size={LOOKUP_FIELD_SIZE} fit={null} hint="Primary decision maker">
                     <LookupField
-                        value={form.contactName}
-                        onChange={(val) => setField('contactName', val)}
+                        value={form.contact}
+                        onChange={(val) => setField('contact', val)}
                         formatValue={formatPersonName}
                         placeholder="Type or select contact..."
                         options={[
@@ -123,11 +139,11 @@ export function OpportunityBasicSection({ form, setField }: OpportunityBasicSect
                 />
 
                 <RhfEmailField<OpportunityFormData>
-                    name="emailAddress"
-                    label="Email Address"
+                    name="contactEmail"
+                    label="Contact Email"
                     hint="Official contact email"
                     placeholder="corporate.contact@company.com"
-                    onChange={(e) => setField('emailAddress', e.target.value)}
+                    onChange={(e) => setField('contactEmail', e.target.value)}
                 />
 
                 <FormField name="referredBy" label="Referred By" size={LOOKUP_FIELD_SIZE} fit={null} hint="Partner, agent, or client">
@@ -202,6 +218,30 @@ export function OpportunityBasicSection({ form, setField }: OpportunityBasicSect
                     />
                 </FormField>
 
+                {/* Asked on every edit (a new opportunity has no follow-up to report on yet). */}
+                {mode !== 'create' && (
+                    <Box ref={setResponseAnchor} sx={{ minWidth: 0, '&& > *': { mb: 0 } }}>
+                        <FormField name="customerResponse" label="Customer Response" required={isEdit} size={resolveOptionsFieldSize(customerResponseOptions)} hint="From the last follow-up">
+                            <StyledSelect
+                                value={form.customerResponse || ''}
+                                onChange={(v) => {
+                                    const previous = form.customerResponse || '';
+                                    setField('customerResponse', v);
+                                    onResponseChange(v, previous);
+                                }}
+                                options={customerResponseOptions}
+                                placeholder="Select customer response"
+                            />
+                            {customerResponseError && (
+                                <FormHelperText error sx={{ mx: 1.75 }}>
+                                    {customerResponseError}
+                                </FormHelperText>
+                            )}
+                        </FormField>
+                    </Box>
+                )}
+
+                <FieldGlow active={followUpGlow}>
                 <FormField name="nextFollowupDate" label="Next Followup Date" required size="md" hint="Next touchpoint">
                     <Box sx={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: 1.5 }}>
                         <TextField
@@ -220,7 +260,9 @@ export function OpportunityBasicSection({ form, setField }: OpportunityBasicSect
                             ariaLabel="Next followup time"
                         />
                     </Box>
+                    {followUpDateError && <FormHelperText error>{followUpDateError}</FormHelperText>}
                 </FormField>
+                </FieldGlow>
 
                 <FormField name="assignedTo" label="Assigned to" required size={LOOKUP_FIELD_SIZE} fit={null} hint="Account executive">
                     <LookupField
@@ -245,6 +287,8 @@ export function OpportunityBasicSection({ form, setField }: OpportunityBasicSect
                     />
                 </FormField>
 
+                {followUpPopper}
+
                 {/* Product Category:* (Multi-select chips, full row) */}
                 <FormField
                     name="productCategory"
@@ -265,10 +309,10 @@ export function OpportunityBasicSection({ form, setField }: OpportunityBasicSect
                 </FormField>
             </FormGrid>
 
-            {/* ── Notes: two textareas side by side ── */}
-            <FormGrid columns={2} sx={{ mt: 2.5 }}>
+            {/* ── Notes: full width ── */}
+            <FormGrid columns={1} sx={{ mt: 2.5 }}>
                 <FormGridItem>
-                    <FormField name="addDescription" label="Follow Up Remarks" required size="full" hint="Stage summary & action items">
+                    <FormField name="followUpRemarks" label="Follow Up Remarks" required size="full" hint="Stage summary & action items">
                         <TextField
                             fullWidth
                             size="small"
@@ -276,24 +320,8 @@ export function OpportunityBasicSection({ form, setField }: OpportunityBasicSect
                             minRows={4}
                             maxRows={8}
                             placeholder="Provide current milestone details or immediate actions..."
-                            value={form.addDescription}
-                            onChange={(e) => setField('addDescription', e.target.value)}
-                            sx={fieldSx}
-                            slotProps={{ htmlInput: { maxLength: FIELD_MAX_LENGTH.longText } }}
-                        />
-                    </FormField>
-                </FormGridItem>
-                <FormGridItem>
-                    <FormField name="description" label="Description" size="full" hint="Background & scope">
-                        <TextField
-                            fullWidth
-                            size="small"
-                            multiline
-                            minRows={4}
-                            maxRows={8}
-                            placeholder="Enter background scope, requirements, current challenges, and business justification..."
-                            value={form.description || ''}
-                            onChange={(e) => setField('description', e.target.value)}
+                            value={form.followUpRemarks}
+                            onChange={(e) => setField('followUpRemarks', e.target.value)}
                             sx={fieldSx}
                             slotProps={{ htmlInput: { maxLength: FIELD_MAX_LENGTH.longText } }}
                         />

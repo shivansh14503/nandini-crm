@@ -1,53 +1,62 @@
 import { z } from 'zod';
 import { FIELD_MAX_LENGTH as L } from '../config/fieldLimits';
-import { requiredString, optionalString, requiredText, optionalText, zodPhone, zodPhoneOptional } from './common';
-import { corporateEmailSchema } from './contact.schema';
+import { requiredString, optionalString, optionalText } from './common';
+import { contactFormSchema } from './contact.schema';
+import { organizationFieldsSchema } from './organization.schema';
+import { opportunityFormSchema } from './opportunity.schema';
+
+const contact = contactFormSchema.shape;
+const organization = organizationFieldsSchema.shape;
+const opportunity = opportunityFormSchema.shape;
 
 /**
- * Combined schema for the Convert Lead form. A lead conversion produces up to three records
- * (Contact, Organization, Opportunity), so all three sections are validated together. Organization and
- * opportunity fields an admin may relax are optional here; ConvertLeadForm requires them per the organization and
- * opportunity form configurations (CONVERT_CONFIGURED_FIELDS).
+ * Combined schema for the Convert Lead form. A lead conversion produces up to three records (Contact, Organization,
+ * Opportunity), so all three sections are validated together. Every field the conversion shares with a module form
+ * uses that form's own rule (the same validator object), so the two can't drift apart. Fields an admin may relax are
+ * required per the module's form configuration (CONVERT_CONFIGURED_FIELDS, checked by ConvertLeadForm).
  */
 export const convertLeadFormSchema = z.object({
-    // ── Organization ───────────────────────────────────────────────────────────
+    // ── Organization (Organization form rules) ─────────────────────────────────
     existingOrganizationId: optionalString,
-    organizationName: requiredText('Organization Name', L.organizationName),
-    mailingName: optionalText('Mailing Name', L.organizationName),
-    natureOfBusiness: optionalString,
-    typeOfEntity: optionalString,
-    customerType: optionalString,
-    sourceOfLead: optionalString,
-    memberOf: optionalText('Member of', L.organizationName),
-    organizationDescription: optionalText('Organization Description', L.longText),
-    organizationAssignedTo: requiredString('Organization Assigned to'),
+    organizationName: organization.organizationName,
+    mailingName: organization.mailingName,
+    natureOfBusiness: organization.natureOfBusiness,
+    typeOfEntity: organization.typeOfEntity,
+    customerType: organization.customerType,
+    leadSource: organization.leadSource,
+    memberOf: organization.memberOf,
+    organizationDescription: organization.addDescriptionAndScope,
+    // Locked and required on organizations (the API requires an owner).
+    organizationAssignedTo: requiredString('Assigned Representative'),
 
-    // ── Contact ────────────────────────────────────────────────────────────────
+    // ── Contact (Contact form rules) ───────────────────────────────────────────
     existingContactId: optionalString,
-    contactName: requiredText('Contact Name', L.personName),
-    contactMobile: zodPhone,
-    contactPhone3: zodPhoneOptional,
+    contactName: contact.name,
+    contactMobile: contact.mobile,
+    contactPhone3: contact.phone3,
     // Required (or not) as the Contact form's configuration says, see CONVERT_CONFIGURED_FIELDS.
-    contactEmails: z.array(corporateEmailSchema),
-    isPrimaryContact: z.boolean(),
-    designation: optionalString,
-    department: optionalString,
-    communicationType: z.array(z.string()),
-    doNotCall: z.boolean(),
-    contactDescription: optionalText('Contact Description', L.longText),
-    contactAssignedTo: requiredString('Contact Assigned to'),
+    contactEmails: contact.emailAddress,
+    isPrimaryContact: contact.isPrimaryContact,
+    designation: contact.designation,
+    department: contact.department,
+    communicationType: contact.communicationType,
+    doNotCall: contact.doNotCall,
+    contactDescription: contact.addDescription,
+    contactAssignedTo: contact.assignedTo,
 
-    // ── Opportunity ────────────────────────────────────────────────────────────
-    productCategory: z.array(z.string()),
+    // ── Opportunity (Opportunity form rules) ───────────────────────────────────
+    productCategory: opportunity.productCategory,
+    // Conversion only (no Opportunity form field).
     principalCompany: optionalText('Principal Company', L.organizationName),
-    referredBy: optionalString,
-    opportunityType: optionalString,
-    nextFollowupDate: optionalString,
-    nextFollowupTime: optionalString,
-    followupType: optionalString,
-    opportunityDescription: optionalText('Opportunity Description', L.longText),
-    opportunityLeadSource: optionalString,
-    opportunityAssignedTo: requiredString('Opportunity Assigned to'),
+    referredBy: opportunity.referredBy,
+    opportunityType: opportunity.type,
+    nextFollowupDate: opportunity.nextFollowupDate,
+    nextFollowupTime: opportunity.nextFollowupTime,
+    followupType: opportunity.followupType,
+    opportunityDescription: opportunity.followUpRemarks,
+    opportunityLeadSource: opportunity.leadSource,
+    opportunityAssignedTo: opportunity.assignedTo,
+    // Conversion only.
     copyActivitiesTo: z.array(z.string()),
 });
 
@@ -67,13 +76,13 @@ export const CONVERT_FIELD_NAMES = {
         mobile: 'contactMobile',
         phone3: 'contactPhone3',
         organizationName: 'organizationName',
-        emailAddresses: 'contactEmails',
+        emailAddress: 'contactEmails',
         isPrimaryContact: 'isPrimaryContact',
         designation: 'designation',
         department: 'department',
         communicationType: 'communicationType',
         doNotCall: 'doNotCall',
-        description: 'contactDescription',
+        addDescription: 'contactDescription',
         assignedTo: 'contactAssignedTo',
     },
     organizations: {
@@ -82,10 +91,10 @@ export const CONVERT_FIELD_NAMES = {
         natureOfBusiness: 'natureOfBusiness',
         typeOfEntity: 'typeOfEntity',
         customerType: 'customerType',
-        sourceOfLead: 'sourceOfLead',
-        memberOfParentCorp: 'memberOf',
-        description: 'organizationDescription',
-        assignedUser: 'organizationAssignedTo',
+        leadSource: 'leadSource',
+        memberOf: 'memberOf',
+        addDescriptionAndScope: 'organizationDescription',
+        assignedTo: 'organizationAssignedTo',
     },
     opportunities: {
         productCategory: 'productCategory',
@@ -95,17 +104,17 @@ export const CONVERT_FIELD_NAMES = {
         leadSource: 'opportunityLeadSource',
         nextFollowupDate: 'nextFollowupDate',
         followupType: 'followupType',
-        addDescription: 'opportunityDescription',
+        followUpRemarks: 'opportunityDescription',
         assignedTo: 'opportunityAssignedTo',
     },
 } as const satisfies Record<ConvertModule, Record<string, keyof ConvertLeadFormValues>>;
 
 /**
  * Built-in fields whose "required" setting isn't checked here: names the conversion fills in itself (organization
- * name / mailing name), checkboxes (an unticked box isn't an empty answer), and Add Description, where the backend
- * falls back to the lead's description when the form leaves it empty.
+ * name / mailing name) and checkboxes (an unticked box isn't an empty answer). Everything else is required exactly
+ * as on its own form.
  */
-const NOT_CHECKED_FOR_REQUIRED = new Set(['organizationName', 'mailingName', 'isPrimaryContact', 'doNotCall', 'addDescription']);
+const NOT_CHECKED_FOR_REQUIRED = new Set(['organizationName', 'mailingName', 'isPrimaryContact', 'doNotCall']);
 
 /** Built-in fields whose admin "required" rule the Convert Lead form enforces: module, fieldKey and form field name. */
 export const CONVERT_CONFIGURED_FIELDS: readonly { module: ConvertModule; fieldKey: string; name: keyof ConvertLeadFormValues }[] = (

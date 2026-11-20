@@ -494,13 +494,13 @@ export function OrganizationsMasterView() {
                 ),
             },
             {
-                id: 'gstNo',
+                id: 'gstNumber',
                 label: 'GST NUMBER',
                 sortable: true,
                 minWidth: 150,
                 render: (org) => (
                     <Typography sx={{ fontSize: '0.78rem', color: 'var(--crm-slate-700)', fontFamily: 'monospace' }}>
-                        {org.gstNo || org.gstNumber || '-'}
+                        {org.gstNumber || org.gstNumber || '-'}
                     </Typography>
                 ),
             },
@@ -523,11 +523,11 @@ export function OrganizationsMasterView() {
                 ),
             },
             {
-                id: 'assignedUser',
+                id: 'assignedTo',
                 label: 'USER',
                 sortable: true,
                 minWidth: 130,
-                render: (org) => <Typography sx={plainCellSx}>{org.assignedUser || '-'}</Typography>,
+                render: (org) => <Typography sx={plainCellSx}>{org.assignedTo || '-'}</Typography>,
             },
             {
                 id: 'createdAt',

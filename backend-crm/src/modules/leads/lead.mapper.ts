@@ -4,7 +4,7 @@ import { toEmailDtos, type CorporateEmailDto } from '../shared/entityEmails.js';
 import { isGstRegistrationType } from '../shared/registrationType.js';
 import type { LeadInput } from './lead.validator.js';
 
-export type LeadRow = Lead & { emailAddresses?: EntityEmail[] };
+export type LeadRow = Lead & { emailAddress?: EntityEmail[] };
 
 /** `Lead` from frontend-crm/src/types/lead.types.ts, plus conversion links once converted. */
 export interface LeadDto {
@@ -12,16 +12,17 @@ export interface LeadDto {
     leadCode: string;
     name: string;
     mobile: string;
-    emailAddresses: CorporateEmailDto[];
+    emailAddress: CorporateEmailDto[];
     mailingName: string;
     tradeName: string;
     designation: string;
     leadSource: string;
     productCategory: string[];
     followupType: string;
-    addDescription: string;
+    customerResponse: string;
+    followUpRemarks: string;
     registrationType: string;
-    gstNo: string;
+    gstNumber: string;
     turnover: string;
     assignedTo: string;
     otherPhone: string;
@@ -67,16 +68,17 @@ export function toLeadDto(row: LeadRow): LeadDto {
         leadCode: row.leadCode,
         name: row.name,
         mobile: text(row.mobile),
-        emailAddresses: toEmailDtos(row.emailAddresses),
+        emailAddress: toEmailDtos(row.emailAddress),
         mailingName: text(row.mailingName),
         tradeName: text(row.tradeName),
         designation: text(row.designation),
         leadSource: text(row.leadSource),
         productCategory: parseStringArray(row.productCategoryJson),
         followupType: text(row.followupType),
-        addDescription: text(row.addDescription),
+        customerResponse: text(row.customerResponse),
+        followUpRemarks: text(row.followUpRemarks),
         registrationType: text(row.registrationType),
-        gstNo: text(row.gstNo),
+        gstNumber: text(row.gstNumber),
         turnover: text(row.turnover),
         assignedTo: row.assignedTo,
         otherPhone: text(row.otherPhone),
@@ -148,9 +150,10 @@ export function toLeadData(input: LeadInput): Omit<Prisma.LeadUncheckedCreateInp
         leadSource: nullable(input.leadSource),
         productCategoryJson: stringifyStringArray(input.productCategory),
         followupType: input.followupType ?? 'Call',
-        addDescription: nullable(input.addDescription),
+        customerResponse: nullable(input.customerResponse),
+        followUpRemarks: nullable(input.followUpRemarks),
         registrationType: nullable(input.registrationType),
-        gstNo: isGstRegistrationType(input.registrationType) ? nullable(input.gstNo?.toUpperCase()) : null,
+        gstNumber: isGstRegistrationType(input.registrationType) ? nullable(input.gstNumber?.toUpperCase()) : null,
         turnover: nullable(input.turnover),
         assignedTo: input.assignedTo,
         otherPhone: input.otherPhone ?? null,

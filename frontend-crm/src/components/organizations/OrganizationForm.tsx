@@ -77,18 +77,18 @@ const DEFAULT_FORM: OrganizationFormData = {
     customerType: '',
     sapCodeTallyId: '',
     showroomBranchCode: '',
-    sourceOfLead: '',
-    memberOfParentCorp: '',
+    leadSource: '',
+    memberOf: '',
     numberOfEmployees: '',
     annualTurnover: '',
-    description: '',
+    addDescriptionAndScope: '',
     accountVerified: false,
     provideSupport: 'Yes',
     verifiedAt: '',
     verifiedBy: '',
     activeAmc: false,
     activeCloud: false,
-    assignedUser: '',
+    assignedTo: '',
 
     // Billing Address
     billingAddress: '',
@@ -113,12 +113,11 @@ const DEFAULT_FORM: OrganizationFormData = {
     msmeRegnNumber: '',
     accountName: '',
     bankName: '',
-    bankIfscCode: '',
-    gstNo: '',
+    ifscCode: '',
     gstNumber: '',
     cinNo: '',
     tanNumber: '',
-    accountNumber: '',
+    accountNo: '',
     typeOfAccount: '',
     bankAddress: '',
 
@@ -140,11 +139,11 @@ const FIELD_TAB_MAP: Record<string, TabKey> = {
     customerType: 'overview',
     sapCodeTallyId: 'overview',
     showroomBranchCode: 'overview',
-    sourceOfLead: 'overview',
-    memberOfParentCorp: 'overview',
+    leadSource: 'overview',
+    memberOf: 'overview',
     numberOfEmployees: 'overview',
     annualTurnover: 'overview',
-    description: 'overview',
+    addDescriptionAndScope: 'overview',
     tradeName: 'overview',
     billingAddress: 'address',
     billingStreet: 'address',
@@ -162,12 +161,11 @@ const FIELD_TAB_MAP: Record<string, TabKey> = {
     msmeRegnNumber: 'tax_bank',
     accountName: 'tax_bank',
     bankName: 'tax_bank',
-    bankIfscCode: 'tax_bank',
-    gstNo: 'tax_bank',
+    ifscCode: 'tax_bank',
     gstNumber: 'tax_bank',
     cinNo: 'tax_bank',
     tanNumber: 'tax_bank',
-    accountNumber: 'tax_bank',
+    accountNo: 'tax_bank',
     typeOfAccount: 'tax_bank',
     bankAddress: 'tax_bank',
     partnerCompanies: 'overview',
@@ -200,7 +198,7 @@ export default function OrganizationForm({
         mode === 'create'
             ? withDefaultAssignee(
                   withDropdownDefaults(getFormConfigs(), 'organizations', { ...DEFAULT_FORM, ...initialData }, initialData),
-                  'assignedUser',
+                  'assignedTo',
                   user?.username,
               )
             : { ...DEFAULT_FORM, ...initialData },
@@ -282,7 +280,7 @@ export default function OrganizationForm({
                         accountStatus: found.accountStatus === 'Inactive' ? 'Inactive' : 'Active',
                         billingAddress: found.billingAddress || found.billingStreet || '',
                         shippingAddress: found.shippingAddress || found.shippingStreet || '',
-                        gstNo: found.gstNo || found.gstNumber || '',
+                        gstNumber: found.gstNumber || '',
                         // Mailing name always mirrors the organization name; older records may lack a trade name.
                         mailingName: found.organizationName,
                         tradeName: found.tradeName || found.organizationName,
@@ -373,10 +371,10 @@ export default function OrganizationForm({
         if (form.typeOfEntity) count++;
         if (form.customerType) count++;
         if (form.sapCodeTallyId.trim()) count++;
-        if (form.sourceOfLead) count++;
+        if (form.leadSource) count++;
         if (form.tradeName?.trim()) count++;
         if (form.annualTurnover) count++;
-        if (form.description.trim()) count++;
+        if (form.addDescriptionAndScope.trim()) count++;
         return Math.min(count, 10);
     }, [form]);
 
@@ -398,11 +396,11 @@ export default function OrganizationForm({
         if (!currentData.shippingStreet && currentData.shippingAddress) {
             currentData.shippingStreet = currentData.shippingAddress;
         }
-        if (!currentData.gstNo && currentData.gstNumber) {
-            currentData.gstNo = currentData.gstNumber;
+        if (!currentData.gstNumber && currentData.gstNumber) {
+            currentData.gstNumber = currentData.gstNumber;
         }
-        if (!currentData.gstNumber && currentData.gstNo) {
-            currentData.gstNumber = currentData.gstNo;
+        if (!currentData.gstNumber && currentData.gstNumber) {
+            currentData.gstNumber = currentData.gstNumber;
         }
 
         // The single Partner Company lookup owns the first entry; any further saved partners are kept behind it.
@@ -468,7 +466,7 @@ export default function OrganizationForm({
                     setToast({ open: true, message: 'Organization created successfully!', severity: 'success' });
                     const fresh = withDefaultAssignee(
                         withDropdownDefaults(getFormConfigs(), 'organizations', DEFAULT_FORM),
-                        'assignedUser',
+                        'assignedTo',
                         user?.username,
                     );
                     setForm(fresh);

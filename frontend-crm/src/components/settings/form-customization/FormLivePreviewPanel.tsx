@@ -20,8 +20,8 @@ export interface FormLivePreviewPanelProps {
     /** Tabs with unsaved changes (orange dot on their pill). */
     unsavedTabs?: Set<string>;
     /**
-     * Preview only these built-in fields, in one grid and without tabs: how Convert Lead shows the module's fields
-     * (it borrows them, so the module's tabs and sections don't apply).
+     * Preview only these built-in fields, without tabs: how Convert Lead shows the module's fields (in the module's
+     * own sections and order, as ConvertRecordSections lays them out).
      */
     onlyFieldKeys?: ReadonlySet<string>;
     /** Heading of the single grid shown with `onlyFieldKeys`. */
@@ -47,9 +47,9 @@ export function FormLivePreviewPanel({ module, configs, unsavedCount = 0, unsave
     const sections = useMemo(() => {
         const shown = moduleFields(configs, module).filter((f) => f.isActive && f.isVisibleInForm);
         if (!onlyFieldKeys) return groupSections(shown, tabKey);
-        const fields = shown.filter((f) => f.isSystem && onlyFieldKeys.has(f.fieldKey));
-        return fields.length > 0 ? [{ sectionKey: 'convert', sectionLabel: gridLabel ?? 'Fields', tabKey, fields }] : [];
-    }, [configs, module, tabKey, onlyFieldKeys, gridLabel]);
+        // Convert Lead lays a record out like its own form: one grid per section, in the configured order.
+        return groupSections(shown.filter((f) => f.isSystem && onlyFieldKeys.has(f.fieldKey)));
+    }, [configs, module, tabKey, onlyFieldKeys]);
 
     return (
         <Box sx={{ ...surfaceSx, overflow: 'hidden' }}>

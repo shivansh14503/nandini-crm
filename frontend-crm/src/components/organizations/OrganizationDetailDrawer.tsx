@@ -155,8 +155,8 @@ export function OrganizationDetailDrawer({
     const org = freshOrg ?? organization;
 
     if (!org) return null;
-    const assignedUser = findCrmUser(org.assignedUser);
-    const assignedDisplayName = assignedUser?.name || org.assignedUser || '';
+    const assignedTo = findCrmUser(org.assignedTo);
+    const assignedDisplayName = assignedTo?.name || org.assignedTo || '';
 
     const handleEdit = () => {
         if (onEdit) {
@@ -169,7 +169,7 @@ export function OrganizationDetailDrawer({
     const isActive = org.accountStatus !== 'Inactive';
     const location = [org.billingCity, org.billingState].filter(Boolean).join(', ') || 'Location Unspecified';
     const partnerCompany = org.partnerCompanies?.join(', ');
-    const gstin = org.gstNo || org.gstNumber || '';
+    const gstin = org.gstNumber || org.gstNumber || '';
 
     const badges: DrawerBadgeItem[] = [
         isActive
@@ -265,7 +265,7 @@ export function OrganizationDetailDrawer({
                                 <ReadOnlyField label="Nature of Business" value={org.natureOfBusiness} />
                                 <ReadOnlyField label="Type of Entity" value={org.typeOfEntity} />
                                 <ReadOnlyField label="Customer Type" value={org.customerType} />
-                                <ReadOnlyField label="Member Of" value={org.memberOfParentCorp} />
+                                <ReadOnlyField label="Member Of" value={org.memberOf} />
                                 <ReadOnlyField label="Partner Company" value={partnerCompany} sx={{ gridColumn: '1 / -1' }} />
                             </DrawerFieldGrid>
                         </DrawerSectionCard>
@@ -278,7 +278,7 @@ export function OrganizationDetailDrawer({
                         </DrawerSectionCard>
 
                         <DrawerSectionCard p={1.8} icon={sectionIcon(<PersonOutlineIcon sx={{ fontSize: 15 }} />)} title="Account Owner">
-                            {org.assignedUser ? (
+                            {org.assignedTo ? (
                                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.25 }}>
                                     <Box
                                         sx={{
@@ -302,7 +302,7 @@ export function OrganizationDetailDrawer({
                                             {assignedDisplayName}
                                         </Typography>
                                         <Typography sx={{ fontSize: '0.72rem', color: 'var(--mui-palette-text-secondary)' }}>
-                                            {assignedUser ? `${assignedUser.role} • ${assignedUser.department}` : 'Assigned user'}
+                                            {assignedTo ? `${assignedTo.role} • ${assignedTo.department}` : 'Assigned user'}
                                         </Typography>
                                     </Box>
                                 </Box>
@@ -314,10 +314,10 @@ export function OrganizationDetailDrawer({
                         {/* Admin-defined custom fields */}
                         <DynamicDrawerCustomFields module="organizations" record={org} />
 
-                        {org.description && (
+                        {org.addDescriptionAndScope && (
                             <DrawerSectionCard p={1.8} icon={sectionIcon(<NotesOutlinedIcon sx={{ fontSize: 15 }} />)} title="About">
                                 <Typography sx={{ fontSize: '0.84rem', color: 'var(--crm-slate-700)', lineHeight: 1.55, whiteSpace: 'pre-wrap' }}>
-                                    {org.description}
+                                    {org.addDescriptionAndScope}
                                 </Typography>
                             </DrawerSectionCard>
                         )}
@@ -360,12 +360,12 @@ export function OrganizationDetailDrawer({
                                 <ReadOnlyField label="Bank Name" value={org.bankName} />
                                 <ReadOnlyField label="Account Name" value={org.accountName} />
                                 <ReadOnlyField
-                                    label="Account Number"
+                                    label="Account No"
                                     value={
-                                        org.accountNumber ? (
+                                        org.accountNo ? (
                                             <Box component="span" sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5 }}>
                                                 <Box component="span" sx={{ fontFamily: 'monospace' }}>
-                                                    {showBankAccount ? org.accountNumber : maskAccountNumber(org.accountNumber)}
+                                                    {showBankAccount ? org.accountNo : maskAccountNumber(org.accountNo)}
                                                 </Box>
                                                 <Tooltip title={showBankAccount ? 'Hide account number' : 'Show account number'}>
                                                     <IconButton
@@ -385,9 +385,9 @@ export function OrganizationDetailDrawer({
                                         ) : undefined
                                     }
                                     copyable
-                                    copyText={org.accountNumber}
+                                    copyText={org.accountNo}
                                 />
-                                <ReadOnlyField label="IFSC Code" value={org.bankIfscCode} copyable />
+                                <ReadOnlyField label="IFSC Code" value={org.ifscCode} copyable />
                                 <ReadOnlyField label="Branch Address" value={org.bankAddress} sx={{ gridColumn: '1 / -1' }} />
                             </DrawerFieldGrid>
                         </DrawerSectionCard>

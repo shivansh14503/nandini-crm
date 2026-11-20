@@ -174,7 +174,7 @@ export function QuotationDetailDrawer({
                     <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                         <Typography sx={{ fontSize: '0.78rem', color: 'var(--mui-palette-text-secondary)' }}>Linked Opportunity:</Typography>
                         <Typography sx={{ fontSize: '0.84rem', fontWeight: 600, color: 'var(--crm-text-blue-600)' }}>
-                            {quotation.opportunityName || (showNumber('opportunity') ? quotation.opportunityCode : '') || '-'}
+                            {quotation.opportunity || (showNumber('opportunity') ? quotation.opportunityCode : '') || '-'}
                         </Typography>
                     </Box>
                     <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -433,8 +433,8 @@ export function QuotationDetailDrawer({
                                 )}
                             </Typography>
                         </Box>
-                        {quotation.gstNo && (
-                            <DrawerCopyButton text={quotation.gstNo} title="Copy GSTIN" iconColor="var(--mui-palette-text-muted)" />
+                        {quotation.gstNumber && (
+                            <DrawerCopyButton text={quotation.gstNumber} title="Copy GSTIN" iconColor="var(--mui-palette-text-muted)" />
                         )}
                     </Box>
 
@@ -444,9 +444,9 @@ export function QuotationDetailDrawer({
                         </Typography>
                     )}
 
-                    {quotation.gstNo && (
+                    {quotation.gstNumber && (
                         <Typography sx={{ fontSize: '0.75rem', color: 'var(--crm-slate-600)', fontWeight: 600 }}>
-                            GSTIN: {quotation.gstNo}
+                            GSTIN: {quotation.gstNumber}
                         </Typography>
                     )}
 
@@ -456,33 +456,33 @@ export function QuotationDetailDrawer({
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                         <PersonOutlinedIcon sx={{ fontSize: 16, color: 'var(--mui-palette-text-secondary)' }} />
                         <Typography sx={{ fontSize: '0.84rem', fontWeight: 600, color: 'var(--mui-palette-text-primary)' }}>
-                            {quotation.contactName}
+                            {quotation.contact}
                         </Typography>
                     </Box>
 
-                    {(quotation.contactMobile || quotation.contactNumber) && (
+                    {(quotation.contactNumber) && (
                         <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                                 <PhoneOutlinedIcon sx={{ fontSize: 16, color: 'var(--mui-palette-text-secondary)' }} />
                                 <Typography sx={{ fontSize: '0.8rem', color: 'var(--crm-slate-700)' }}>
-                                    {formatPhoneDisplay(quotation.contactMobile || quotation.contactNumber) ||
-                                        quotation.contactMobile ||
+                                    {formatPhoneDisplay(quotation.contactNumber) ||
+                                        quotation.contactNumber ||
                                         quotation.contactNumber}
                                 </Typography>
                             </Box>
-                            <PhoneActions phone={quotation.contactMobile || quotation.contactNumber} />
+                            <PhoneActions phone={quotation.contactNumber} />
                         </Box>
                     )}
 
-                    {(quotation.contactEmail || quotation.emailAddress) && (
+                    {(quotation.contactEmail) && (
                         <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                                 <EmailOutlinedIcon sx={{ fontSize: 16, color: 'var(--mui-palette-text-secondary)' }} />
                                 <Typography sx={{ fontSize: '0.8rem', color: 'var(--crm-slate-700)' }}>
-                                    {quotation.contactEmail || quotation.emailAddress}
+                                    {quotation.contactEmail}
                                 </Typography>
                             </Box>
-                            <EmailActions email={quotation.contactEmail || quotation.emailAddress} />
+                            <EmailActions email={quotation.contactEmail} />
                         </Box>
                     )}
                 </Box>

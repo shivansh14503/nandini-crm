@@ -6,7 +6,7 @@ import type { CorporateEmail } from '@/types/organization.types';
 
 export interface UseExistingRecordCheckOptions {
     mobile?: string;
-    emailAddresses?: CorporateEmail[];
+    emailAddress?: CorporateEmail[];
     /** The record being edited, so its own mobile / emails aren't reported. */
     excludeId?: string;
     /** Which kind of record `excludeId` is. */
@@ -33,7 +33,7 @@ const EMPTY: ExistingRecordCheck = { mobileMatches: NO_MOBILE_MATCHES, emailMatc
  */
 export function useExistingRecordCheck({
     mobile,
-    emailAddresses,
+    emailAddress,
     excludeId,
     owner,
     enabled = true,
@@ -42,10 +42,10 @@ export function useExistingRecordCheck({
     const checkMobile = trimmedMobile.replace(/\D/g, '').length >= MIN_MOBILE_DIGITS ? trimmedMobile : '';
     const emailsKey = React.useMemo(
         () =>
-            [...new Set((emailAddresses ?? []).map((e) => (e?.email ?? '').trim().toLowerCase()).filter((e) => e.includes('@')))]
+            [...new Set((emailAddress ?? []).map((e) => (e?.email ?? '').trim().toLowerCase()).filter((e) => e.includes('@')))]
                 .sort()
                 .join(','),
-        [emailAddresses]
+        [emailAddress]
     );
     const active = enabled && Boolean(checkMobile || emailsKey);
     const key = `${owner}\u0000${excludeId ?? ''}\u0000${checkMobile}\u0000${emailsKey}`;

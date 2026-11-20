@@ -156,7 +156,7 @@ export function ContactsMasterView() {
                 const name = c.name?.toLowerCase() || '';
                 const org = c.organizationName?.toLowerCase() || '';
                 const mobile = c.mobile || '';
-                const email = c.emailAddresses?.[0]?.email?.toLowerCase() || '';
+                const email = c.emailAddress?.[0]?.email?.toLowerCase() || '';
                 const designation = c.designation?.toLowerCase() || '';
                 return (
                     name.includes(q) ||
@@ -173,8 +173,8 @@ export function ContactsMasterView() {
                 let valA: string | number = String((a as unknown as Record<string, unknown>)[sortField] ?? '');
                 let valB: string | number = String((b as unknown as Record<string, unknown>)[sortField] ?? '');
                 if (sortField === 'email') {
-                    valA = a.emailAddresses?.[0]?.email ?? '';
-                    valB = b.emailAddresses?.[0]?.email ?? '';
+                    valA = a.emailAddress?.[0]?.email ?? '';
+                    valB = b.emailAddress?.[0]?.email ?? '';
                 }
                 valA = valA.toLowerCase();
                 valB = valB.toLowerCase();
@@ -339,12 +339,12 @@ export function ContactsMasterView() {
             },
             {
                 id: 'email',
-                fieldKey: 'emailAddresses',
+                fieldKey: 'emailAddress',
                 label: 'EMAIL',
                 sortable: false,
                 minWidth: 180,
                 render: (c) => {
-                    const email = (c.emailAddresses?.find((e) => e.isPrimary) ?? c.emailAddresses?.[0])?.email;
+                    const email = (c.emailAddress?.find((e) => e.isPrimary) ?? c.emailAddress?.[0])?.email;
                     return (
                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.6 }}>
                             <EmailOutlinedIcon sx={{ fontSize: 14, color: 'var(--mui-palette-text-muted)' }} />

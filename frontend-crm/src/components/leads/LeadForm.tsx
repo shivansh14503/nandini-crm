@@ -1,7 +1,8 @@
 'use client';
 
 import { NO_PAST_DATES } from '@/utils/pastDates';
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { followUpEditIssues } from '../forms/FollowUpDecision';
 import { useRouter } from 'next/navigation';
 import { FormProvider, type Path } from 'react-hook-form';
 import ArticleOutlinedIcon from '@mui/icons-material/ArticleOutlined';
@@ -55,7 +56,7 @@ export interface LeadFormProps {
 const DEFAULT_FORM: LeadFormData = {
     name: '',
     mobile: '',
-    emailAddresses: [
+    emailAddress: [
         {
             id: 'eml-1',
             email: '',
@@ -70,9 +71,10 @@ const DEFAULT_FORM: LeadFormData = {
     leadSource: 'Website Enquiry',
     productCategory: ['Biz Analyst'],
     followupType: 'Call',
-    addDescription: '',
+    customerResponse: '',
+    followUpRemarks: '',
     registrationType: '',
-    gstNo: '',
+    gstNumber: '',
     turnover: '',
     assignedTo: '',
 
@@ -119,16 +121,22 @@ export default function LeadForm({
     const [recordCode, setRecordCode] = useState('');
     const showNumber = useShowRecordNumber();
 
+    // True while the "keep or reschedule the follow-up" popup awaits an answer (see LeadOverviewSection).
+    const followUpDecisionPending = useRef(false);
+    const setFollowUpPending = useCallback((pending: boolean) => {
+        followUpDecisionPending.current = pending;
+    }, []);
     const { methods, toast, showToast, closeToast, createSubmitHandler } = useRhfForm<LeadFormData>({
         schema: leadFormSchema,
         noPastDates: NO_PAST_DATES.followup,
+        extraRules: mode === 'edit' ? (values) => followUpEditIssues(values, followUpDecisionPending.current) : undefined,
         module: 'leads',
         defaultValues: { ...DEFAULT_FORM, ...initialData },
         dropdownDefaults: { enabled: mode === 'create', keep: initialData },
         assigneeField: 'assignedTo',
     });
     // Leads carry a GSTIN only (no PAN); flag one another open lead uses as soon as it's fully typed.
-    useTaxIdDuplicateCheck(methods, { owner: 'lead', excludeId: leadId, fields: ['gstNo'], enabled: mode !== 'view' });
+    useTaxIdDuplicateCheck(methods, { owner: 'lead', excludeId: leadId, fields: ['gstNumber'], enabled: mode !== 'view' });
     const { reset, watch, formState } = methods;
     const { isDirty, isSubmitting } = formState;
     const leadName = watch('name');
@@ -149,7 +157,9 @@ export default function LeadForm({
             .getById(leadId)
             .then((found) => {
                 if (active && found) {
-                    reset(normalizeAddressFields(found, LEAD_ADDRESS_PAIRS));
+                    const loaded = normalizeAddressFields(found, LEAD_ADDRESS_PAIRS);
+                    // Every edit records a fresh customer response, so the edit form starts without one.
+                    reset(mode === 'edit' ? { ...loaded, customerResponse: '' } : loaded);
                     setRecordCode(found.leadCode ?? '');
                     setAudit({ createdAt: found.createdAt, createdBy: found.createdBy, updatedAt: found.updatedAt, updatedBy: found.updatedBy });
                 }
@@ -161,7 +171,7 @@ export default function LeadForm({
         return () => {
             active = false;
         };
-    }, [leadId, reset]);
+    }, [leadId, reset, mode]);
 
     const handleSave = createSubmitHandler(async (values) => {
         try {
@@ -225,7 +235,7 @@ export default function LeadForm({
                 >
                     {/* Keep both panels mounted so validation state of hidden tab is preserved */}
                     <div hidden={activeTab !== 'overview'}>
-                        <LeadOverviewSection leadId={leadId} />
+                        <LeadOverviewSection leadId={leadId} notify={showToast} onDecisionPendingChange={setFollowUpPending} />
                         <DynamicModuleCustomFields module="leads" tabKey="overview" />
                     </div>
                     <div hidden={activeTab !== 'address'}>

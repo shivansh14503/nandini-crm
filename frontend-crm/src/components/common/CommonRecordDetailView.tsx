@@ -107,7 +107,7 @@ export function CommonRecordDetailView({
     const showBack = !isSearchOrigin(backTo);
 
     return (
-        <Box sx={{ width: '100%', pb: 10 }}>
+        <Box sx={{ width: '100%', pb: 3 }}>
             <FormHeader breadcrumbItems={breadcrumbItems} />
 
             {banner}

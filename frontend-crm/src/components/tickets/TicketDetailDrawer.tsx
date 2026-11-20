@@ -174,7 +174,7 @@ export function TicketDetailDrawer({ ticket, open, onClose, onEdit, hideBackdrop
                         <DrawerSectionCard p={1.8} icon={sectionIcon(<ApartmentOutlinedIcon sx={{ fontSize: 15 }} />)} title="Client & Contact Information">
                             <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 1.5 }}>
                                 <ReadOnlyField label="Organization" value={t.organizationName} />
-                                <ReadOnlyField label="Contact Person" value={t.contactPersonName} />
+                                <ReadOnlyField label="Contact" value={t.contact} />
                                 <ReadOnlyField
                                     label="Contact Number"
                                     value={t.contactNumber ? formatPhoneDisplay(t.contactNumber) || t.contactNumber : undefined}

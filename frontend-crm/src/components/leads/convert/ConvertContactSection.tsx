@@ -5,10 +5,9 @@ import { Alert, Button, Link } from '@mui/material';
 import { ROUTES } from '@/config/constants';
 import { useFormContext, useWatch } from 'react-hook-form';
 
+import { ConvertRecordSections } from './ConvertRecordSections';
 import {
     FormField,
-    FormGrid,
-    FormGridItem,
     LookupField,
     RhfCheckbox,
     RhfChipGroup,
@@ -80,13 +79,13 @@ export function ConvertContactSection() {
         setValue('contactName', contact.name, opts);
         setValue('contactMobile', contact.mobile, opts);
         setValue('contactPhone3', contact.phone3 ?? '', opts);
-        setValue('contactEmails', contact.emailAddresses, opts);
+        setValue('contactEmails', contact.emailAddress, opts);
         setValue('designation', contact.designation ?? '', opts);
         setValue('department', contact.department ?? '', opts);
         setValue('communicationType', contact.communicationType ?? [], opts);
         setValue('isPrimaryContact', contact.isPrimaryContact, opts);
         setValue('doNotCall', contact.doNotCall, opts);
-        setValue('contactDescription', contact.description ?? '', opts);
+        setValue('contactDescription', contact.addDescription ?? '', opts);
         setValue('contactAssignedTo', contact.assignedTo, opts);
     };
 
@@ -128,29 +127,47 @@ export function ConvertContactSection() {
                 </Alert>
             )}
 
+            {/* The Contact form's own fields, sections, order and widths (see ConvertRecordSections). */}
             <FormConfigProvider module="contacts" fieldNames={CONVERT_FIELD_NAMES.contacts} borrowed>
                 <FormModeProvider mode={locked ? 'view' : 'create'}>
-                    <FormGrid columns={3}>
-                        <RhfTextField<F> name="contactName" label="Name" required personName placeholder="Contact person name" />
-                        <RhfPhoneField<F> name="contactMobile" label="Mobile" required />
-                        <RhfPhoneField<F> name="contactPhone3" label="Phone 3" placeholder="Alternate phone number" />
-
-                        <RhfSelect<F> name="designation" label="Designation" options={getOptions('contact_designation', CONTACT_DESIGNATIONS)} placeholder="Select Designation" />
-                        <RhfSelect<F> name="department" label="Department" options={getOptions('contact_department', CONTACT_DEPARTMENTS)} placeholder="Select Department" />
-                        <RhfLookup<F> name="contactAssignedTo" label="Assigned to" lookupType="user" required placeholder="Select representative" />
-
-                        <FormGridItem span={2}>
-                            <RhfTextField<F> name="organizationName" label="Organization Name" required disabled hint="Taken from the organization section below" />
-                        </FormGridItem>
-                        <RhfCheckbox<F> name="isPrimaryContact" label="Is Primary Contact" alignWithInputs />
-
-                        <FormGridItem span="full">
-                            <RhfEmailList name="contactEmails" />
-                        </FormGridItem>
-                        <RhfChipGroup<F> name="communicationType" label="Communication Type" options={getOptions('contact_communication_type', COMMUNICATION_TYPES)} />
-                        <RhfCheckbox<F> name="doNotCall" label="Do Not Call (DND)" alignWithInputs />
-                        <RhfTextField<F> name="contactDescription" label="Description" multiline minRows={3} placeholder="Notes about this contact..." />
-                    </FormGrid>
+                    <ConvertRecordSections
+                        module="contacts"
+                        fields={{
+                            name: <RhfTextField<F> name="contactName" label="Name" required personName placeholder="e.g. Rajesh Kumar" />,
+                            mobile: <RhfPhoneField<F> name="contactMobile" label="Mobile" required hint="Primary mobile" placeholder="e.g. 9876543210" />,
+                            organizationName: (
+                                <RhfTextField<F> name="organizationName" label="Organization Name" required disabled hint="Taken from the organization section below" />
+                            ),
+                            isPrimaryContact: <RhfCheckbox<F> name="isPrimaryContact" label="Is Primary Contact" alignWithInputs />,
+                            phone3: <RhfPhoneField<F> name="contactPhone3" label="Phone 3" placeholder="Alternate direct number" />,
+                            emailAddress: <RhfEmailList name="contactEmails" />,
+                            designation: (
+                                <RhfSelect<F> name="designation" label="Designation" options={getOptions('contact_designation', CONTACT_DESIGNATIONS)} placeholder="Select Designation" />
+                            ),
+                            department: (
+                                <RhfSelect<F> name="department" label="Department" options={getOptions('contact_department', CONTACT_DEPARTMENTS)} placeholder="Select Department" />
+                            ),
+                            assignedTo: <RhfLookup<F> name="contactAssignedTo" label="Assigned to" lookupType="user" required placeholder="Select assigned sales rep" />,
+                            communicationType: (
+                                <RhfChipGroup<F>
+                                    name="communicationType"
+                                    label="Communication Type"
+                                    hint="Select preferred channels"
+                                    options={getOptions('contact_communication_type', COMMUNICATION_TYPES)}
+                                />
+                            ),
+                            doNotCall: <RhfCheckbox<F> name="doNotCall" label="Do Not Call (DND)" alignWithInputs />,
+                            addDescription: (
+                                <RhfTextField<F>
+                                    name="contactDescription"
+                                    label="Add Description"
+                                    multiline
+                                    minRows={3}
+                                    placeholder="Enter additional contact details, background, notes, or special instructions..."
+                                />
+                            ),
+                        }}
+                    />
                 </FormModeProvider>
             </FormConfigProvider>
 

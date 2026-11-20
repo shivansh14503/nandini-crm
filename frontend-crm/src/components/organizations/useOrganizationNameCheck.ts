@@ -22,7 +22,7 @@ export interface OrganizationSuggestionRecord {
     billingCity?: string | null;
     billingState?: string | null;
     accountStatus?: string | null;
-    gstNo?: string | null;
+    gstNumber?: string | null;
 }
 
 export interface OrganizationNameSuggestion {
@@ -74,7 +74,7 @@ const fromOrganization = (o: ExtendedOrganization): OrganizationSuggestionRecord
     billingCity: o.billingCity || null,
     billingState: o.billingState || null,
     accountStatus: o.accountStatus || null,
-    gstNo: o.gstNo || o.gstNumber || null,
+    gstNumber: o.gstNumber || o.gstNumber || null,
 });
 
 // eslint-disable-next-line @typescript-eslint/no-unused-vars

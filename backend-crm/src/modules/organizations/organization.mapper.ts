@@ -24,19 +24,19 @@ export interface OrganizationDto extends OrganizationViewerFlags {
     customerType: string;
     sapCodeTallyId: string;
     showroomBranchCode: string;
-    sourceOfLead: string;
-    memberOfParentCorp: string;
+    leadSource: string;
+    memberOf: string;
     parentOrganizationId: string;
     numberOfEmployees: string;
     annualTurnover: string;
-    description: string;
+    addDescriptionAndScope: string;
     accountVerified: boolean;
     verifiedAt?: string;
     verifiedBy?: string;
     activeAmc: boolean;
     activeCloud: boolean;
     provideSupport: 'Yes' | 'No';
-    assignedUser: string;
+    assignedTo: string;
     corporateEmails: CorporateEmailDto[];
 
     billingAddress: string;
@@ -61,13 +61,11 @@ export interface OrganizationDto extends OrganizationViewerFlags {
     msmeRegnNumber: string;
     accountName: string;
     bankName: string;
-    bankIfscCode: string;
-    gstNo: string;
-    /** Legacy alias of `gstNo`. */
+    ifscCode: string;
     gstNumber: string;
     cinNo: string;
     tanNumber: string;
-    accountNumber: string;
+    accountNo: string;
     typeOfAccount: string;
     bankAddress: string;
 
@@ -99,19 +97,19 @@ export function toOrganizationDto(
         customerType: text(row.customerType),
         sapCodeTallyId: text(row.sapCodeTallyId),
         showroomBranchCode: text(row.showroomBranchCode),
-        sourceOfLead: text(row.sourceOfLead),
-        memberOfParentCorp: text(row.memberOfParentCorp),
+        leadSource: text(row.leadSource),
+        memberOf: text(row.memberOf),
         parentOrganizationId: text(row.parentOrganizationId),
         numberOfEmployees: text(row.numberOfEmployees),
         annualTurnover: text(row.annualTurnover),
-        description: text(row.description),
+        addDescriptionAndScope: text(row.addDescriptionAndScope),
         accountVerified: row.accountVerified,
         verifiedAt: toIsoOrUndefined(row.verifiedAt),
         verifiedBy: row.verifiedBy ?? undefined,
         activeAmc: row.activeAmc,
         activeCloud: row.activeCloud,
         provideSupport: row.provideSupport === 'No' ? 'No' : 'Yes',
-        assignedUser: text(row.assignedUser),
+        assignedTo: text(row.assignedTo),
         corporateEmails: toEmailDtos(row.corporateEmails),
 
         billingAddress: text(row.billingAddress),
@@ -136,12 +134,11 @@ export function toOrganizationDto(
         msmeRegnNumber: text(row.msmeRegnNumber),
         accountName: text(row.accountName),
         bankName: text(row.bankName),
-        bankIfscCode: text(row.bankIfscCode),
-        gstNo: text(row.gstNo),
-        gstNumber: text(row.gstNo),
+        ifscCode: text(row.ifscCode),
+        gstNumber: text(row.gstNumber),
         cinNo: text(row.cinNo),
         tanNumber: text(row.tanNumber),
-        accountNumber: text(row.accountNumber),
+        accountNo: text(row.accountNo),
         typeOfAccount: text(row.typeOfAccount),
         bankAddress: text(row.bankAddress),
 

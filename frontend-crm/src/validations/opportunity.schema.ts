@@ -36,12 +36,12 @@ export const opportunityLineItemSchema = z.object({
 export const opportunityFormSchema = z.object({
     // Basic Details
     productCategory: z.array(z.string()).default([]),
-    contactName: requiredText('Contact Person', L.personName),
+    contact: requiredText('Contact Person', L.personName),
     contactId: optionalString,
     organizationName: requiredText('Organization Name', L.organizationName),
     organizationId: optionalString,
     contactNumber: zodPhone,
-    emailAddress: zodEmailOptional,
+    contactEmail: zodEmailOptional,
     referredBy: optionalString,
     type: optionalString,
     salesStage: requiredString('Sales Stage'),
@@ -50,7 +50,8 @@ export const opportunityFormSchema = z.object({
     nextFollowupDate: optionalString,
     nextFollowupTime: optionalString,
     followupType: optionalString.default('Call'),
-    addDescription: optionalDescription('Follow Up Remarks', L.longText),
+    customerResponse: optionalString,
+    followUpRemarks: optionalDescription('Follow Up Remarks', L.longText),
     description: optionalText('Description', L.longText),
     assignedTo: requiredString('Assigned Representative'),
 

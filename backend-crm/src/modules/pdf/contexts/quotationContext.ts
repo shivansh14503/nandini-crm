@@ -221,7 +221,7 @@ async function loadRecordMeta(recordId: string, user: AuthUser): Promise<RecordM
 async function loadSource(recordId: string): Promise<QuotationSource> {
     const row = await prisma.quotation.findFirst({
         where: { id: recordId, isDeleted: false },
-        include: { lineItems: lineItemsInclude, opportunity: { select: { opportunityCode: true } } },
+        include: { lineItems: lineItemsInclude, opportunityRecord: { select: { opportunityCode: true } } },
     });
     if (!row) throw notFound();
     const user = row.assignedTo
@@ -238,8 +238,8 @@ async function loadSource(recordId: string): Promise<QuotationSource> {
         date: row.quotationDate,
         validUntil: row.validUntil,
         stage: row.quoteStage,
-        opportunityName: row.opportunityName,
-        opportunityCode: shown.has('opportunity') ? (row.opportunity?.opportunityCode ?? '') : '',
+        opportunityName: row.opportunity,
+        opportunityCode: shown.has('opportunity') ? (row.opportunityRecord?.opportunityCode ?? '') : '',
         preparedFor: row.preparedFor,
         otherRef: text(row.otherRef),
         validationPeriod: text(row.validationPeriod),
@@ -249,9 +249,9 @@ async function loadSource(recordId: string): Promise<QuotationSource> {
         remarks: text(row.remarks),
         organizationName: text(row.organizationName),
         mailingName: text(row.mailingName),
-        gstNo: text(row.gstNo),
-        contactName: row.contactName,
-        contactMobile: text(row.contactMobile),
+        gstNo: text(row.gstNumber),
+        contactName: row.contact,
+        contactMobile: text(row.contactNumber),
         contactEmail: text(row.contactEmail),
         billing: {
             street: row.billingAddress,

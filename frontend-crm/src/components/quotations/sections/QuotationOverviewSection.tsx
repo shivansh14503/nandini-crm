@@ -40,7 +40,7 @@ export function QuotationOverviewSection() {
     const termsAndCondition = useWatch({ control, name: 'termsAndCondition' });
     const paymentTerms = useWatch({ control, name: 'paymentTerms' });
     const organizationName = useWatch({ control, name: 'organizationName' });
-    const contactName = useWatch({ control, name: 'contactName' });
+    const contactName = useWatch({ control, name: 'contact' });
 
     // Track previous values so we only overwrite descriptions when user changes the dropdown selection
     const prevTermsRef = useRef(termsAndCondition);
@@ -119,7 +119,7 @@ export function QuotationOverviewSection() {
                     hint="Primary quote identifier"
                 />
                 <RhfTextField<QuotationFormData>
-                    name="opportunityName"
+                    name="opportunity"
                     label="Opportunity"
                     required
                     disabled

@@ -113,7 +113,7 @@ export interface QuotationFormData {
     termsAndConditionDescription?: string;
     assignedTo: string;
 
-    opportunityName: string;
+    opportunity: string;
     company: string;
     validationPeriod: string;
     otherRef?: string;
@@ -135,11 +135,11 @@ export interface QuotationFormData {
     // ── Tab 3: Address Information ────────────────────────────────
     organizationName?: string;
     organizationId?: string;
-    contactName: string;
+    contact: string;
     contactId?: string;
-    contactMobile?: string;
+    contactNumber?: string;
     mailingName?: string;
-    gstNo?: string;
+    gstNumber?: string;
     contactEmail?: string;
 
     billingAddress: string;
@@ -160,10 +160,7 @@ export interface QuotationFormData {
     opportunityCode?: string;
     status?: QuotationStatus | QuoteStage;
     quoteDate?: string;
-    quotationSubject?: string;
-    contactNumber?: string;
-    emailAddress?: string;
-    notes?: string;
+    quotationSubject?: string;    notes?: string;
     termsAndConditions?: string;
 }
 

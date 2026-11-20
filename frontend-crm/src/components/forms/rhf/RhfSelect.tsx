@@ -27,6 +27,8 @@ export interface RhfSelectProps<T extends FieldValues> {
     /** Width token; defaults to the width of the longest option (`xs` for Yes/No … capped at `md`). */
     fieldSize?: FieldSize;
     sx?: SxProps<Theme>;
+    /** Called after the user picks an option, with the new value and the one it replaced. */
+    onValueChange?: (next: string, previous: string) => void;
 }
 
 /** React Hook Form bound dropdown built on the shared {@link StyledSelect}. */
@@ -42,6 +44,7 @@ export function RhfSelect<T extends FieldValues>({
     disabled,
     fieldSize,
     sx,
+    onValueChange,
 }: RhfSelectProps<T>) {
     const { field, fieldState } = useController<T>({ name });
     const size = resolveFieldSize(name, 'select', fieldSize ?? resolveOptionsFieldSize(options));
@@ -58,7 +61,11 @@ export function RhfSelect<T extends FieldValues>({
         <FormField name={name} label={label} required={required} hint={hint} size={size} fit={fit} sx={sx}>
             <StyledSelect
                 value={(field.value as string) ?? ''}
-                onChange={field.onChange}
+                onChange={(next: string) => {
+                    const previous = (field.value as string) ?? '';
+                    field.onChange(next);
+                    onValueChange?.(next, previous);
+                }}
                 options={options}
                 optionLabels={optionLabels}
                 disabledOptions={disabledOptions}

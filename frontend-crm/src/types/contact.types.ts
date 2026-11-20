@@ -12,7 +12,7 @@ export interface ContactFormData {
     phone3: string;
     phone4: string;
     phone5: string;
-    emailAddresses: CorporateEmail[];
+    emailAddress: CorporateEmail[];
     assignedTo: string;
     isPrimaryContact: boolean;
     designation: string;
@@ -20,7 +20,7 @@ export interface ContactFormData {
     leftJob: 'No' | 'Yes';
     communicationType: string[]; // ['Call', 'Email', 'Meeting', 'WhatsApp']
     doNotCall: boolean;
-    description: string;
+    addDescription: string;
 }
 
 export interface Contact extends ContactFormData {

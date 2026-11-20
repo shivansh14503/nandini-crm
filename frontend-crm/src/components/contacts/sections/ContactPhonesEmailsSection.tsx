@@ -17,7 +17,7 @@ export function ContactPhonesEmailsSection({ emailNotices }: { emailNotices?: Re
             <RhfPhoneField<ContactFormData> name="phone5" label="Phone 5" placeholder="Additional mobile" />
 
             {/* Required by default; the form builder can relax it. */}
-            <RhfEmailList name="emailAddresses" emailNotices={emailNotices} />
+            <RhfEmailList name="emailAddress" emailNotices={emailNotices} />
         </FormGrid>
     );
 }

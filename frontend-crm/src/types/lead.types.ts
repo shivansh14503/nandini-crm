@@ -7,16 +7,18 @@ export interface LeadFormData {
     // Overview - Left Column
     name: string;
     mobile: string;
-    emailAddresses: CorporateEmail[];
+    emailAddress: CorporateEmail[];
     mailingName?: string;
     tradeName?: string;
     designation?: string;
     leadSource: string;
     productCategory: string[];
     followupType: string;
-    addDescription: string;
+    /** What the customer said on the last follow-up (shared_customer_response); picked on every edit. */
+    customerResponse?: string;
+    followUpRemarks: string;
     registrationType?: string;
-    gstNo?: string;
+    gstNumber?: string;
     turnover?: string;
     assignedTo: string;
 

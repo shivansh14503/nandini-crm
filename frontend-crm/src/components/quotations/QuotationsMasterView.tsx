@@ -214,7 +214,7 @@ export function QuotationsMasterView() {
                 (item) =>
                     (showNumber('quotation') && item.quotationCode && item.quotationCode.toLowerCase().includes(q)) ||
                     (item.organizationName && item.organizationName.toLowerCase().includes(q)) ||
-                    (item.contactName && item.contactName.toLowerCase().includes(q)) ||
+                    (item.contact && item.contact.toLowerCase().includes(q)) ||
                     (item.quotationTitle && item.quotationTitle.toLowerCase().includes(q)) ||
                     (item.quotationSubject && item.quotationSubject.toLowerCase().includes(q)) ||
                     (showNumber('opportunity') && item.opportunityCode && item.opportunityCode.toLowerCase().includes(q))
@@ -273,12 +273,12 @@ export function QuotationsMasterView() {
                 ),
             },
             {
-                id: 'opportunityName',
+                id: 'opportunity',
                 label: 'OPPORTUNITY',
                 sortable: true,
                 minWidth: 160,
                 render: (row) => {
-                    const label = row.opportunityName || (showNumber('opportunity') ? row.opportunityCode : '') || '-';
+                    const label = row.opportunity || (showNumber('opportunity') ? row.opportunityCode : '') || '-';
                     // A plain click keeps opening this quotation's drawer; Ctrl / middle / right click open the opportunity.
                     return row.opportunityId && label !== '-' ? (
                         <RecordLink href={ROUTES.OPPORTUNITY_DETAIL(row.opportunityId)} sx={{ fontSize: '0.8rem', fontWeight: 600 }}>
@@ -329,19 +329,19 @@ export function QuotationsMasterView() {
                 },
             },
             {
-                id: 'contactName',
+                id: 'contact',
                 label: 'CONTACT',
                 sortable: true,
                 minWidth: 150,
                 render: (row) => (
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.8 }}>
                         <PersonOutlinedIcon sx={{ fontSize: 15, color: 'var(--mui-palette-text-muted)' }} />
-                        {row.contactId && row.contactName ? (
+                        {row.contactId && row.contact ? (
                             <RecordLink href={ROUTES.CONTACT_DETAIL(row.contactId)} sx={{ fontSize: '0.8rem' }}>
-                                {row.contactName}
+                                {row.contact}
                             </RecordLink>
                         ) : (
-                            <Typography sx={{ fontSize: '0.8rem', color: 'var(--crm-slate-600)' }}>{row.contactName || '-'}</Typography>
+                            <Typography sx={{ fontSize: '0.8rem', color: 'var(--crm-slate-600)' }}>{row.contact || '-'}</Typography>
                         )}
                     </Box>
                 ),

@@ -67,7 +67,7 @@ async function resolveLinks(
     const organization = await findOrganizationByName(tx, input.organizationName, lookups);
     const contact = organization
         ? await tx.contact.findFirst({
-              where: { name: input.contactPersonName, organizationId: organization.id, isDeleted: false },
+              where: { name: input.contact, organizationId: organization.id, isDeleted: false },
               select: { id: true },
           })
         : null;
@@ -138,7 +138,7 @@ export const ticketService = {
                         { ticketNumber: { contains: page.search } },
                         { ticketSubject: { contains: page.search } },
                         { organizationName: { contains: page.search } },
-                        { contactPersonName: { contains: page.search } },
+                        { contact: { contains: page.search } },
                         { contactNumber: { contains: page.search } },
                         { natureOfCall: { contains: page.search } },
                     ],

@@ -125,7 +125,7 @@ function extractEntityContext(
 
     const contactId = String(obj.contactId || (isContact ? recordId : '')).trim();
     const contactName = String(
-        obj.contactName || obj.contactPersonName || (isContact ? obj.name || rawTitle : '')
+        obj.contact || (isContact ? obj.name || rawTitle : '')
     )
         .trim()
         .toLowerCase();
@@ -217,8 +217,8 @@ export function resolveRelatedRecordsForModule(
                         if (ctx.contactId && o.contactId === ctx.contactId) return true;
                         if (
                             ctx.contactName &&
-                            o.contactName &&
-                            o.contactName.trim().toLowerCase() === ctx.contactName
+                            o.contact &&
+                            o.contact.trim().toLowerCase() === ctx.contactName
                         ) {
                             return true;
                         }
@@ -264,8 +264,8 @@ export function resolveRelatedRecordsForModule(
                         if (ctx.recordId && q.contactId === ctx.recordId) return true;
                         if (
                             ctx.contactName &&
-                            q.contactName &&
-                            q.contactName.trim().toLowerCase() === ctx.contactName
+                            q.contact &&
+                            q.contact.trim().toLowerCase() === ctx.contactName
                         ) {
                             return true;
                         }
@@ -422,7 +422,7 @@ export function resolveRelatedRecordsForModule(
                     if (ctx.entityType === 'contact') {
                         return (
                             (ctx.contactId && t.contactId === ctx.contactId) ||
-                            sameText(t.contactPersonName, ctx.contactName)
+                            sameText(t.contact, ctx.contactName)
                         );
                     }
                     return (
@@ -436,7 +436,7 @@ export function resolveRelatedRecordsForModule(
                     status: t.ticketStatus,
                     priority: t.ticketPriority,
                     dateCreated: new Date(t.createdAt).toLocaleDateString('en-IN'),
-                    assignedUser: t.assignedTo,
+                    assignedTo: t.assignedTo,
                 }));
         }
 
@@ -451,7 +451,7 @@ export function resolveRelatedRecordsForModule(
                 dateModified: rev.time,
                 dateCreated: rev.time,
                 dueDate: '-',
-                assignedUser: rev.author,
+                assignedTo: rev.author,
             }));
         }
 

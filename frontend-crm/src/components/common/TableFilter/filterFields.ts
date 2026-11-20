@@ -26,7 +26,7 @@ export const DEFAULT_FILTER_KEYS: Record<CrmModuleKey, string[]> = {
     leads: ['nextFollowupDate', 'assignedTo', 'leadSource', 'leadType', 'status', 'productCategory', 'createdAt', 'createdBy', 'mobile', 'converted', 'ageDays', 'unmodifiedDays'],
     opportunities: ['nextFollowupDate', 'assignedTo', 'leadSource', 'type', 'salesStage', 'productCategory', 'organizationName', 'createdAt', 'createdBy', 'ageDays', 'unmodifiedDays'],
     quotations: ['quotationDate', 'validUntil', 'assignedTo', 'quoteStage', 'company', 'organizationName', 'createdAt', 'createdBy', 'ageDays', 'unmodifiedDays'],
-    organizations: ['assignedUser', 'accountStatus', 'customerType', 'typeOfEntity', 'natureOfBusiness', 'sourceOfLead', 'createdAt', 'createdBy', 'ageDays', 'unmodifiedDays'],
+    organizations: ['assignedTo', 'accountStatus', 'customerType', 'typeOfEntity', 'natureOfBusiness', 'leadSource', 'createdAt', 'createdBy', 'ageDays', 'unmodifiedDays'],
     contacts: ['assignedTo', 'organizationName', 'designation', 'department', 'mobile', 'createdAt', 'createdBy', 'ageDays', 'unmodifiedDays'],
     products: ['category', 'type', 'taxType', 'taxRate', 'createdAt', 'createdBy', 'ageDays', 'unmodifiedDays'],
     tickets: ['dueDate', 'assignedTo', 'ticketStatus', 'ticketPriority', 'source', 'supportType', 'supportMode', 'organizationName', 'createdAt', 'createdBy', 'ageDays', 'unmodifiedDays'],
@@ -34,7 +34,7 @@ export const DEFAULT_FILTER_KEYS: Record<CrmModuleKey, string[]> = {
 };
 
 /** Lookup fields that hold a CRM user. */
-const USER_FIELD_KEYS = new Set(['assignedTo', 'assignedUser', 'leadGivenBy', 'createdBy']);
+const USER_FIELD_KEYS = new Set(['assignedTo', 'leadGivenBy', 'createdBy']);
 
 const TEXT_TYPES = new Set(['text', 'textarea', 'email', 'uppercase', 'pincode', 'phone']);
 
