@@ -8,7 +8,7 @@ export default function EmailValidationPage() {
     return (
         <AdminPageShell
             loadingMessage="Loading email validation..."
-            breadcrumbs={[{ label: 'Administration', href: ROUTES.ADMIN }, { label: 'Email Validation' }]}
+            breadcrumbs={[{ label: 'Admin', href: ROUTES.ADMIN }, { label: 'Email Validation' }]}
             deniedMessage="Only administrators can manage email validation. Ask an Admin or Super Admin for access."
         >
             <EmailValidationView />

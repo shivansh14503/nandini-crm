@@ -2,12 +2,14 @@ import type { Lead } from '../types/lead.types';
 import type { ExtendedOrganization } from '../types/organization.types';
 import type { Contact } from '../types/contact.types';
 import type { Opportunity } from '../types/opportunity.types';
-import type { ConvertLeadFormValues } from '../validations/convertLead.schema';
+import { CONVERT_FIELD_NAMES, type ConvertLeadFormValues, type ConvertModule } from '../validations/convertLead.schema';
 import type { ApiResponse } from '../types/api.types';
 import { leadService } from './lead.service';
 import { notifyCrmUpdate } from './crmSync';
 import { apiClient } from './apiClient';
+import { getFormConfigs } from './masterData.store';
 import { canonicalizeOrgName } from '../utils/organizationName';
+import { builtInDropdownDefaults, isEmptyValue } from '../utils/formConfig';
 
 export interface LeadConversionResult {
     organization: ExtendedOrganization;
@@ -47,9 +49,41 @@ export function matchExistingContact(candidates: Contact[], mobile: string, id?:
     return target ? candidates.find((c) => digits(c.mobile) === target) : undefined;
 }
 
+/** Form fields that start from the lead's own value: it keeps them, the admin's dropdown defaults only fill gaps. */
+const LEAD_CARRIED_FIELDS: readonly (keyof ConvertLeadFormValues)[] = [
+    'designation',
+    'department',
+    'sourceOfLead',
+    'opportunityLeadSource',
+    'productCategory',
+    'followupType',
+];
+
+/**
+ * `values` with each built-in dropdown of the contact / organization / opportunity forms on the admin's default
+ * option (Form Builder › Dropdowns › ☆), as a new record of those forms starts. A dropdown without a default
+ * starts empty so its placeholder shows. Values the lead supplied are kept.
+ */
+export function withAdminDropdownDefaults(values: ConvertLeadFormValues): ConvertLeadFormValues {
+    const configs = getFormConfigs();
+    if (!configs) return values;
+    const result: Record<string, unknown> = { ...values };
+    const current = values as Record<string, unknown>;
+    for (const formModule of Object.keys(CONVERT_FIELD_NAMES) as ConvertModule[]) {
+        const names: Record<string, string> = CONVERT_FIELD_NAMES[formModule];
+        const base = Object.fromEntries(Object.entries(names).map(([fieldKey, name]) => [fieldKey, current[name]]));
+        for (const [fieldKey, value] of Object.entries(builtInDropdownDefaults(configs, formModule, base))) {
+            const name = names[fieldKey];
+            const carried = (LEAD_CARRIED_FIELDS as readonly string[]).includes(name) && !isEmptyValue(current[name]);
+            if (!carried) result[name] = value;
+        }
+    }
+    return result as ConvertLeadFormValues;
+}
+
 /** Maps a lead onto the initial values of the Convert Lead form. */
 export function buildConvertLeadDefaults(lead: Lead): ConvertLeadFormValues {
-    return {
+    return withAdminDropdownDefaults({
         existingOrganizationId: '',
         organizationName: lead.organizationName ?? '',
         mailingName: lead.mailingName ?? '',
@@ -87,7 +121,7 @@ export function buildConvertLeadDefaults(lead: Lead): ConvertLeadFormValues {
         opportunityLeadSource: lead.leadSource ?? '',
         opportunityAssignedTo: lead.assignedTo,
         copyActivitiesTo: [],
-    };
+    });
 }
 
 /**

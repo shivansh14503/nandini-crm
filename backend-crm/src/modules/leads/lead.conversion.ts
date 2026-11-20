@@ -30,20 +30,42 @@ export interface LeadConversionResult {
     contactCreated: boolean;
 }
 
-/** Organization built-in fields the Convert Lead form collects (fieldKey → convert form field). */
+/**
+ * Built-in fields of each module that the Convert Lead form collects (fieldKey → convert form field), with the
+ * admin's "required" setting for them enforced as in that module's own form. Mirrors CONVERT_FIELD_NAMES in
+ * frontend-crm/src/validations/convertLead.schema.ts (which also lists fields that are never "required" checked).
+ */
+const CONVERT_CONTACT_PATHS: Record<string, string> = {
+    name: 'contactName',
+    mobile: 'contactMobile',
+    phone3: 'contactPhone3',
+    emailAddresses: 'contactEmails',
+    designation: 'designation',
+    department: 'department',
+    communicationType: 'communicationType',
+    description: 'contactDescription',
+    assignedTo: 'contactAssignedTo',
+};
+
 const CONVERT_ORGANIZATION_PATHS: Record<string, string> = {
     natureOfBusiness: 'natureOfBusiness',
     typeOfEntity: 'typeOfEntity',
     customerType: 'customerType',
+    sourceOfLead: 'sourceOfLead',
+    memberOfParentCorp: 'memberOf',
+    description: 'organizationDescription',
+    assignedUser: 'organizationAssignedTo',
 };
 
-/** Opportunity built-in fields the Convert Lead form collects (fieldKey → convert form field). */
 const CONVERT_OPPORTUNITY_PATHS: Record<string, string> = {
     type: 'opportunityType',
     leadSource: 'opportunityLeadSource',
     productCategory: 'productCategory',
+    referredBy: 'referredBy',
     nextFollowupDate: 'nextFollowupDate',
+    followupType: 'followupType',
     addDescription: 'opportunityDescription',
+    assignedTo: 'opportunityAssignedTo',
 };
 
 const NEW_OPPORTUNITY_STAGE = 'Qualification';
@@ -83,7 +105,7 @@ function organizationPayload(values: ConvertLeadInput, lead: LeadRow) {
 }
 
 /** Port of `toContactPayload`. */
-function contactPayload(values: ConvertLeadInput, organization: OrganizationDto) {
+function contactPayload(values: ConvertLeadInput, organization: Pick<OrganizationDto, 'id' | 'organizationName'>) {
     return {
         name: values.contactName,
         organizationName: organization.organizationName,
@@ -146,7 +168,11 @@ export async function convertLead(leadId: string, body: unknown, user: AuthUser)
     // The new opportunity's follow-up is a fresh value, so it can't be in the past.
     assertNotInPast([nextFollowupCheck(values)]);
     // Loaded before the transaction (a cache miss queries through the shared client).
-    const [organizationConfig, opportunityConfig] = await Promise.all([loadModuleFieldConfig('organizations'), loadModuleFieldConfig('opportunities')]);
+    const [contactConfig, organizationConfig, opportunityConfig] = await Promise.all([
+        loadModuleFieldConfig('contacts'),
+        loadModuleFieldConfig('organizations'),
+        loadModuleFieldConfig('opportunities'),
+    ]);
 
     const result = await runSerializable(async (tx) => {
         await lockRecords(tx, 'lead', [leadId]);
@@ -156,18 +182,22 @@ export async function convertLead(leadId: string, body: unknown, user: AuthUser)
         if (lead.status === CONVERTED_STATUS) throw HttpError.conflict('This lead has already been converted.');
 
         const existingOrganization = await findLiveOrganization(tx, values.organizationName, values.existingOrganizationId);
-        // Fields the admin made required on the organization / opportunity forms, as the Convert Lead form names them.
-        const opportunityIssues = configuredRequiredIssues(opportunityConfig, opportunityPayload(values, lead, null, null), CONVERT_OPPORTUNITY_PATHS);
+        const existingContact = await findLiveContact(tx, values.contactMobile, values.existingContactId);
+        // Fields the admin made required on the contact / organization / opportunity forms, as the Convert Lead form
+        // names them. An existing contact or organization is linked as it is, so only new ones are held to its form.
+        const contactIssues = existingContact
+            ? []
+            : configuredRequiredIssues(contactConfig, contactPayload(values, { id: '', organizationName: values.organizationName }), CONVERT_CONTACT_PATHS);
         const organizationIssues = existingOrganization
             ? []
             : configuredRequiredIssues(organizationConfig, organizationPayload(values, lead), CONVERT_ORGANIZATION_PATHS);
-        throwFieldIssues([...organizationIssues, ...opportunityIssues]);
+        const opportunityIssues = configuredRequiredIssues(opportunityConfig, opportunityPayload(values, lead, null, null), CONVERT_OPPORTUNITY_PATHS);
+        throwFieldIssues([...contactIssues, ...organizationIssues, ...opportunityIssues]);
 
         const organization = existingOrganization
             ? toOrganizationDto(existingOrganization, { isMyAccount: existingOrganization.assignedUser === user.username, isRecentlyViewed: false })
             : await createOrganizationRecord(tx, organizationConversionSchema.parse(organizationPayload(values, lead)), user);
 
-        const existingContact = await findLiveContact(tx, values.contactMobile, values.existingContactId);
         const contact = existingContact
             ? toContactDto(existingContact)
             : await createContactRecord(tx, contactInputSchema.parse(contactPayload(values, organization)), user);

@@ -8,7 +8,6 @@ import SearchIcon from '@mui/icons-material/Search';
 import CloseIcon from '@mui/icons-material/Close';
 import SearchOffIcon from '@mui/icons-material/SearchOff';
 import { AppBreadcrumbs } from '@/components/common/AppBreadcrumbs';
-import { EnterpriseFooter } from '@/components/common/EnterpriseFooter';
 import { LeadsMasterView } from '@/components/leads';
 import { OpportunitiesMasterView } from '@/components/opportunities';
 import { QuotationsMasterView } from '@/components/quotations';
@@ -150,7 +149,6 @@ export function SearchResultsView() {
                     </>
                 )}
             </Box>
-            <EnterpriseFooter />
         </Box>
     );
 }

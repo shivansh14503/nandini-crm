@@ -14,6 +14,8 @@ export interface StyledSelectProps {
     options: string[];
     /** Display labels for values whose label differs from the stored value. */
     optionLabels?: Record<string, string>;
+    /** Values listed but not pickable (e.g. a status only a workflow may set); shown last in the menu. */
+    disabledOptions?: string[];
     required?: boolean;
     disabled?: boolean;
     /** Width cap for standalone use; omit inside a {@link FormField}, which sizes its children. */
@@ -32,6 +34,7 @@ export function StyledSelect({
     onChange,
     options: baseOptions,
     optionLabels: baseOptionLabels,
+    disabledOptions,
     required,
     disabled,
     fieldSize,
@@ -51,7 +54,11 @@ export function StyledSelect({
     }
 
     const isArchivedValue = Boolean(value) && !options.includes(value);
-    const menuOptions = isArchivedValue ? [...options, value] : options;
+    const listed = isArchivedValue ? [...options, value] : options;
+    const isOptionDisabled = (o: string) => Boolean(disabledOptions?.includes(o));
+    const menuOptions = disabledOptions?.length
+        ? [...listed.filter((o) => !isOptionDisabled(o)), ...listed.filter(isOptionDisabled)]
+        : listed;
 
     // An admin-cleared placeholder stays empty (no "Select …" fallback).
     const placeholderText = placeholder ?? '';
@@ -91,7 +98,7 @@ export function StyledSelect({
                 {menuOptions.map((o) => {
                     const archived = isArchivedValue && o === value;
                     return (
-                        <MenuItem key={o} value={o} sx={{ fontSize: '0.85rem' }}>
+                        <MenuItem key={o} value={o} disabled={isOptionDisabled(o)} sx={{ fontSize: '0.85rem' }}>
                             <Box component="span" sx={{ display: 'flex', alignItems: 'center', gap: 1, width: '100%' }}>
                                 <span>{display(o)}</span>
                                 {archived && (

@@ -15,9 +15,8 @@ function NewPdfTemplateContent() {
     return (
         <AdminPageShell
             loadingMessage="Loading editor..."
-            footer={false}
             maxWidth={false}
-            breadcrumbs={[{ label: 'Administration', href: ROUTES.ADMIN }, { label: 'PDF Templates', href: ROUTES.PDF_TEMPLATES }, { label: 'New template' }]}
+            breadcrumbs={[{ label: 'Admin', href: ROUTES.ADMIN }, { label: 'PDF Templates', href: ROUTES.PDF_TEMPLATES }, { label: 'New template' }]}
         >
             <PdfTemplateBuilder module={pdfModule} sourceTemplateId={searchParams.get('from')} />
         </AdminPageShell>

@@ -127,8 +127,8 @@ export function useAutoBreadcrumbs(customItems?: BreadcrumbItem[]): BreadcrumbIt
         const primarySegment = segments[0].toLowerCase();
         const moduleName = ROUTE_MODULE_MAP[primarySegment] || 'Sales';
 
-        // 1. Module Level (e.g. Sales, Support, Home)
-        items.push({ label: moduleName });
+        // 1. Module Level (e.g. Sales, Support, Home). Admin pages start at "Admin" itself.
+        if (primarySegment !== 'admin') items.push({ label: moduleName });
 
         // 2. Build cumulative breadcrumb trail
         let cumulativePath = '';

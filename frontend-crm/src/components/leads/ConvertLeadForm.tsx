@@ -101,11 +101,16 @@ export function ConvertLeadForm({ leadId, breadcrumbItems }: ConvertLeadFormProp
             schema: convertLeadFormSchema,
             noPastDates: NO_PAST_DATES.followup,
             defaultValues: EMPTY_DEFAULTS,
-            // An existing organization is linked as-is, so only a new one must meet the organization form's rules.
+            // Fields an admin made required on the contact / organization / opportunity forms are required here too.
+            // An existing contact or organization is linked as-is, so only a new one must meet its form's rules.
             extraRules: (values) =>
                 validateBorrowedFields(
                     getFormConfigs(),
-                    values.existingOrganizationId ? CONVERT_CONFIGURED_FIELDS.filter((f) => f.module !== 'organizations') : CONVERT_CONFIGURED_FIELDS,
+                    CONVERT_CONFIGURED_FIELDS.filter(
+                        (f) =>
+                            !(f.module === 'organizations' && values.existingOrganizationId) &&
+                            !(f.module === 'contacts' && values.existingContactId),
+                    ),
                     values,
                 ),
         });

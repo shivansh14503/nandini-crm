@@ -17,7 +17,6 @@ import { useAuth } from '@/context/AuthContext';
 import { ROUTES } from '@/config/constants';
 import { Navbar } from '@/components/layout/Navbar';
 import { AppBreadcrumbsBar } from '@/components/common/AppBreadcrumbsBar';
-import { EnterpriseFooter } from '@/components/common/EnterpriseFooter';
 import { LoadingScreen } from '@/components/common/LoadingScreen';
 import { ErrorAlert } from '@/components/common/ErrorAlert';
 
@@ -228,7 +227,7 @@ export default function AdminHubPage() {
             <ErrorAlert error={error} onClose={clearError} />
 
             <Container maxWidth="xl" sx={{ pt: 2, pb: 4, flex: 1 }}>
-                <AppBreadcrumbsBar items={[{ label: 'Administration' }, { label: 'Admin' }]} />
+                <AppBreadcrumbsBar items={[{ label: 'Admin' }]} />
 
                 <Box sx={{ mb: 2.5, p: { xs: 2, md: 3 }, borderRadius: '12px', border: '1px solid var(--mui-palette-border-main)', backgroundColor: 'var(--mui-palette-background-paper)', display: 'flex', alignItems: 'flex-start', gap: 1.5 }}>
                     <Box
@@ -270,8 +269,6 @@ export default function AdminHubPage() {
                     ))}
                 </Box>
             </Container>
-
-            <EnterpriseFooter />
         </Box>
     );
 }

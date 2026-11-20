@@ -3,7 +3,6 @@
 import React from 'react';
 import { Box, GlobalStyles, Paper, SxProps, Theme } from '@mui/material';
 import { AppBreadcrumbs, type BreadcrumbItem } from './AppBreadcrumbs';
-import { EnterpriseFooter } from './EnterpriseFooter';
 import { DrawerStackContext, type DrawerStackContextValue } from './Drawer/DrawerStackContext';
 import {
     ColumnVisibilityPopover,
@@ -170,14 +169,6 @@ export interface CommonMasterViewProps<T = unknown, TFilter extends string = str
      */
     toast?: React.ReactNode;
     /**
-     * Optional custom footer. If omitted and `hideFooter` is false, EnterpriseFooter is rendered.
-     */
-    footer?: React.ReactNode;
-    /**
-     * Set to true to hide the EnterpriseFooter.
-     */
-    hideFooter?: boolean;
-    /**
      * Children rendered inside the table paper card (useful if not passing `table` prop directly).
      */
     children?: React.ReactNode;
@@ -223,7 +214,7 @@ function isPaginationConfig(
  * 1. Line 1: Route-aware Breadcrumbs.
  * 2. Line 2: Filter pills (`filterConfig`) and optional right-aligned header actions.
  * 3. Line 3: Standard Paper table card housing Toolbar (`searchConfig`), `DataTable<T>`, and `DataTablePagination`.
- * 4. Outside: Detail drawer, standard Enterprise CRM Footer, and Toast notifications.
+ * 4. Outside: Detail drawer and Toast notifications.
  */
 export function CommonMasterView<T = unknown, TFilter extends string = string>({
     breadcrumbs,
@@ -279,8 +270,6 @@ export function CommonMasterView<T = unknown, TFilter extends string = string>({
     secondaryDrawer,
     isDrawerOpen = false,
     toast,
-    footer,
-    hideFooter = false,
     children,
     sx,
     contentSx,
@@ -454,7 +443,10 @@ export function CommonMasterView<T = unknown, TFilter extends string = string>({
                 flex: 1,
                 display: 'flex',
                 flexDirection: 'column',
-                minHeight: embedded ? 0 : 'calc(100vh - 64px)',
+                minHeight: 0,
+                // List pages sit in a window-height wrapper and take the space left below the navbar: the page
+                // never scrolls, only the table.
+                ...(embedded ? {} : { overflow: 'hidden' }),
                 backgroundColor: embedded ? 'transparent' : 'var(--mui-palette-background-subtle)',
                 width: '100%',
                 minWidth: 0,
@@ -479,6 +471,8 @@ export function CommonMasterView<T = unknown, TFilter extends string = string>({
                     minHeight: 0,
                     minWidth: 0,
                     width: '100%',
+                    // Fallback for very short windows, where the cards and a minimum-height table can't all fit.
+                    ...(embedded ? {} : { overflowY: 'auto' }),
                     ...contentSx,
                 }}
             >
@@ -530,6 +524,8 @@ export function CommonMasterView<T = unknown, TFilter extends string = string>({
                         overflow: 'hidden',
                         minWidth: 0,
                         width: '100%',
+                        // The card's flex height bounds the table, so it fills the space left instead of a fixed cap.
+                        ...(embedded ? {} : { minHeight: 0, '& .MuiTableContainer-root': { maxHeight: 'none' } }),
                         boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
                         ...paperSx,
                     }}
@@ -647,9 +643,6 @@ export function CommonMasterView<T = unknown, TFilter extends string = string>({
                     ? React.cloneElement(secondaryDrawer, { hideBackdrop: true })
                     : secondaryDrawer}
             </DrawerStackContext.Provider>
-
-            {/* ── Enterprise CRM Global Footer ─────────────────────────────── */}
-            {!hideFooter && !embedded && (footer || <EnterpriseFooter />)}
 
             {/* ── Toast Notifications ──────────────────────────────────────── */}
             {toast}

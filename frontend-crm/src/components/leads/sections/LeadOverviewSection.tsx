@@ -46,6 +46,8 @@ import { useFormMode } from '@/context/FormModeContext';
 import { upperCase, useUndoSafeSanitizer } from '@/components/forms/undoSafeInput';
 
 const groupLabelSx = { mb: 2 } as const;
+/** Set only by the Convert Lead flow, never picked by hand. */
+const CONVERT_ONLY_STATUSES = ['Converted'];
 
 /** Overview tab of the Lead form. Must be rendered inside a `FormProvider<LeadFormData>`. */
 export function LeadOverviewSection({ leadId }: { leadId?: string } = {}) {
@@ -189,7 +191,7 @@ export function LeadOverviewSection({ leadId }: { leadId?: string } = {}) {
                 <FormGrid columns={3}>
                     <RhfSelect<LeadFormData> name="leadSource" label="Lead Source" required options={leadSourceOptions} placeholder="Select Lead Source" />
                     <RhfSelect<LeadFormData> name="leadType" label="Lead Type" required hint="Urgency" options={LEAD_TYPES} />
-                    <RhfSelect<LeadFormData> name="status" label="Status" hint="Default: New" options={LEAD_STATUSES} placeholder="Select Status" />
+                    <RhfSelect<LeadFormData> name="status" label="Status" hint="Default: New" options={LEAD_STATUSES} disabledOptions={CONVERT_ONLY_STATUSES} placeholder="Select Status" />
                     {/* Picks from the CRM's contacts (Contact Search popup); a name can still be typed. */}
                     <RhfLookup<LeadFormData, 'contact'>
                         name="referredBy"
@@ -208,7 +210,7 @@ export function LeadOverviewSection({ leadId }: { leadId?: string } = {}) {
             {/* ── Notes: two textareas side by side ── */}
             <FormGrid columns={2}>
                 <FormGridItem>
-                    <RhfTextField<LeadFormData> name="addDescription" label="Add Description" required hint="Action items / requirement brief" multiline minRows={3} maxRows={5} placeholder="Enter specific followup requirement, client demand, or notes..." />
+                    <RhfTextField<LeadFormData> name="addDescription" label="Follow Up Remarks" required hint="Action items / requirement brief" multiline minRows={3} maxRows={5} placeholder="Enter specific followup requirement, client demand, or notes..." />
                 </FormGridItem>
                 <FormGridItem>
                     <RhfTextField<LeadFormData> name="description" label="Description" hint="General background notes" multiline minRows={3} maxRows={5} placeholder="Enter background context, client setup, or meeting minutes..." />

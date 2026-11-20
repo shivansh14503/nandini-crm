@@ -18,7 +18,6 @@ import DashboardOutlinedIcon from '@mui/icons-material/DashboardOutlined';
 import { useAuth } from '@/context/AuthContext';
 import { Navbar } from '@/components/layout/Navbar';
 import { AppBreadcrumbs } from '@/components/common/AppBreadcrumbs';
-import { EnterpriseFooter } from '@/components/common/EnterpriseFooter';
 import { LoadingScreen } from '@/components/common/LoadingScreen';
 import { ErrorAlert } from '@/components/common/ErrorAlert';
 import { ROUTES } from '@/config/constants';
@@ -168,8 +167,6 @@ function DynamicCrmPageContent() {
                 </Card>
             </Container>
 
-            {/* Global Enterprise Footer */}
-            <EnterpriseFooter />
         </Box>
     );
 }

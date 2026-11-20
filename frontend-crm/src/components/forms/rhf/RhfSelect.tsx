@@ -18,6 +18,8 @@ export interface RhfSelectProps<T extends FieldValues> {
     options: string[];
     /** Display labels for values whose label differs from the stored value. */
     optionLabels?: Record<string, string>;
+    /** Values listed but not pickable; shown last in the menu. */
+    disabledOptions?: string[];
     required?: boolean;
     hint?: React.ReactNode;
     placeholder?: string;
@@ -33,6 +35,7 @@ export function RhfSelect<T extends FieldValues>({
     label,
     options,
     optionLabels,
+    disabledOptions,
     required,
     hint,
     placeholder,
@@ -58,6 +61,7 @@ export function RhfSelect<T extends FieldValues>({
                 onChange={field.onChange}
                 options={options}
                 optionLabels={optionLabels}
+                disabledOptions={disabledOptions}
                 placeholder={placeholder && !(narrow && placeholder.length > fit.chars) ? placeholder : narrow ? SELECT_PROMPT : undefined}
                 disabled={disabled}
             />

@@ -50,7 +50,7 @@ export const opportunityFormSchema = z.object({
     nextFollowupDate: optionalString,
     nextFollowupTime: optionalString,
     followupType: optionalString.default('Call'),
-    addDescription: optionalDescription('Add Description', L.longText),
+    addDescription: optionalDescription('Follow Up Remarks', L.longText),
     description: optionalText('Description', L.longText),
     assignedTo: requiredString('Assigned Representative'),
 

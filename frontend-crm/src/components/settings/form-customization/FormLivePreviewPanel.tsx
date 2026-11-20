@@ -19,6 +19,13 @@ export interface FormLivePreviewPanelProps {
     unsavedCount?: number;
     /** Tabs with unsaved changes (orange dot on their pill). */
     unsavedTabs?: Set<string>;
+    /**
+     * Preview only these built-in fields, in one grid and without tabs: how Convert Lead shows the module's fields
+     * (it borrows them, so the module's tabs and sections don't apply).
+     */
+    onlyFieldKeys?: ReadonlySet<string>;
+    /** Heading of the single grid shown with `onlyFieldKeys`. */
+    gridLabel?: string;
 }
 
 /**
@@ -26,8 +33,8 @@ export interface FormLivePreviewPanelProps {
  * required flags, visibility, dropdown options, section names and custom fields, unsaved changes included.
  * Values typed here are never saved.
  */
-export function FormLivePreviewPanel({ module, configs, unsavedCount = 0, unsavedTabs }: FormLivePreviewPanelProps) {
-    const tabs = useMemo(() => configs.moduleTabs[module] ?? [], [configs, module]);
+export function FormLivePreviewPanel({ module, configs, unsavedCount = 0, unsavedTabs, onlyFieldKeys, gridLabel }: FormLivePreviewPanelProps) {
+    const tabs = useMemo(() => (onlyFieldKeys ? [] : (configs.moduleTabs[module] ?? [])), [configs, module, onlyFieldKeys]);
     const [selectedTab, setTabKey] = useState(tabs[0]?.key ?? 'overview');
     const tabKey = tabs.some((t) => t.key === selectedTab) ? selectedTab : (tabs[0]?.key ?? 'overview');
     const methods = useForm({ defaultValues: { customFields: {} } as Record<string, unknown>, mode: 'onTouched' });
@@ -37,21 +44,25 @@ export function FormLivePreviewPanel({ module, configs, unsavedCount = 0, unsave
         methods.reset({ customFields: {} });
     }, [module, methods]);
 
-    const sections = useMemo(
-        () => groupSections(moduleFields(configs, module).filter((f) => f.isActive && f.isVisibleInForm), tabKey),
-        [configs, module, tabKey],
-    );
+    const sections = useMemo(() => {
+        const shown = moduleFields(configs, module).filter((f) => f.isActive && f.isVisibleInForm);
+        if (!onlyFieldKeys) return groupSections(shown, tabKey);
+        const fields = shown.filter((f) => f.isSystem && onlyFieldKeys.has(f.fieldKey));
+        return fields.length > 0 ? [{ sectionKey: 'convert', sectionLabel: gridLabel ?? 'Fields', tabKey, fields }] : [];
+    }, [configs, module, tabKey, onlyFieldKeys, gridLabel]);
 
     return (
         <Box sx={{ ...surfaceSx, overflow: 'hidden' }}>
             <Box sx={{ ...panelHeaderSx, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1.5, flexWrap: 'wrap' }}>
-                <PillTabs
-                    items={tabs.map((t) => ({ key: t.key, label: t.label, hasUnsaved: unsavedTabs?.has(t.key) ?? false }))}
-                    value={tabKey}
-                    onChange={setTabKey}
-                />
+                {!onlyFieldKeys && (
+                    <PillTabs
+                        items={tabs.map((t) => ({ key: t.key, label: t.label, hasUnsaved: unsavedTabs?.has(t.key) ?? false }))}
+                        value={tabKey}
+                        onChange={setTabKey}
+                    />
+                )}
                 <Typography sx={{ fontSize: '0.74rem', color: 'var(--mui-palette-text-secondary)', display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                    <VisibilityOutlinedIcon sx={{ fontSize: 15 }} /> Preview of the {CRM_MODULE_LABELS[module]} form
+                    <VisibilityOutlinedIcon sx={{ fontSize: 15 }} /> Preview of the {onlyFieldKeys ? `Convert Lead ${gridLabel ?? ''} fields` : `${CRM_MODULE_LABELS[module]} form`}
                     {unsavedCount > 0 ? ` — includes ${unsavedCount} unsaved change${unsavedCount === 1 ? '' : 's'}` : ''}
                 </Typography>
             </Box>

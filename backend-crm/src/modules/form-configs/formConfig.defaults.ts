@@ -684,7 +684,7 @@ const RAW_DEFAULT_FIELDS: DefaultField[] = [
         { key: 'productCategory', label: 'Product Category', type: 'multiselect', cat: 'shared_product_category', soft: true },
     ]),
     ...section('leads', 'overview', 'NOTES', [
-        t('addDescription', 'Add Description', { type: 'textarea', soft: true }),
+        t('addDescription', 'Follow Up Remarks', { type: 'textarea', soft: true }),
         t('description', 'Description', { type: 'textarea' }),
     ]),
     ...section('leads', 'address', 'PRIMARY ADDRESS', addressFields('primary', 'optional')),
@@ -767,7 +767,7 @@ const RAW_DEFAULT_FIELDS: DefaultField[] = [
         t('nextFollowupDate', 'Next Followup Date', { type: 'datetime', soft: true }),
         t('assignedTo', 'Assigned to', { type: 'lookup', req: true }),
         { key: 'productCategory', label: 'Product Category', type: 'multiselect', cat: 'shared_product_category', soft: true },
-        t('addDescription', 'Add Description', { type: 'textarea', soft: true }),
+        t('addDescription', 'Follow Up Remarks', { type: 'textarea', soft: true }),
         t('description', 'Description', { type: 'textarea' }),
     ]),
     ...section('opportunities', 'basic', 'Billing Details', [

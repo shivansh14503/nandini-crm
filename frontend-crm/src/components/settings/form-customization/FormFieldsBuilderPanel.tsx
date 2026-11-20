@@ -69,7 +69,7 @@ export interface FormFieldsBuilderPanelProps {
 }
 
 const SIZES: (ConfigFieldSize | '')[] = ['', 'xs', 'sm', 'md', 'lg', 'full'];
-const GRID_COLUMNS = '28px minmax(180px, 1.6fr) 120px 92px 70px 70px 70px 104px';
+export const GRID_COLUMNS = '28px minmax(180px, 1.6fr) 120px 92px 70px 70px 70px 104px';
 
 /** Every field of a module grouped by tab and section, with inline toggles and the field editor. */
 export function FormFieldsBuilderPanel({ module, configs, canEdit, notify, unsavedTabs }: FormFieldsBuilderPanelProps) {
@@ -694,7 +694,7 @@ function SectionBlock({
 
 // ── Field row ────────────────────────────────────────────────────────────────
 
-function FieldRow({
+export function FieldRow({
     field,
     canEdit,
     busy,
@@ -703,6 +703,7 @@ function FieldRow({
     onDelete,
     dragProps,
     dragSx,
+    allowDelete = true,
 }: {
     field: FormFieldDefinitionDto;
     canEdit: boolean;
@@ -712,6 +713,8 @@ function FieldRow({
     onDelete: () => void;
     dragProps: RowDragProps;
     dragSx: Record<string, unknown>;
+    /** False hides permanent deletion (a view that only borrows the module's fields leaves that to the module's own form). */
+    allowDelete?: boolean;
 }) {
     const locked = field.isCoreLocked;
     const unsaved = useHasUnsavedChanges(field.id);
@@ -818,7 +821,7 @@ function FieldRow({
                         </IconButton>
                     </Tooltip>
                 )}
-                {canEdit && !locked && (
+                {canEdit && !locked && allowDelete && (
                     <Tooltip title="Delete permanently" arrow>
                         <span>
                             <IconButton size="small" aria-label={`Delete ${field.label}`} disabled={busy} onClick={onDelete}>

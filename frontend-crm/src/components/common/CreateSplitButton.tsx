@@ -1,7 +1,7 @@
 'use client';
 
-import React, { useState } from 'react';
-import { Box, Button, ListItemIcon, ListItemText, Menu, MenuItem } from '@mui/material';
+import React, { useEffect, useRef, useState } from 'react';
+import { Box, Button, ListItemIcon, ListItemText, Menu, MenuItem, type PopoverActions } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
 import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown';
 import FileUploadOutlinedIcon from '@mui/icons-material/FileUploadOutlined';
@@ -33,6 +33,25 @@ const menuItemSx = { fontSize: '0.84rem', fontWeight: 500, color: 'var(--crm-sla
 export function CreateSplitButton({ newButtonLabel, onNewClick, onImportClick, disabled }: CreateSplitButtonProps) {
     const [anchorEl, setAnchorEl] = useState<HTMLDivElement | null>(null);
     const [open, setOpen] = useState(false);
+    const popoverActions = useRef<PopoverActions>(null);
+
+    // MUI positions the menu once on open. Opening it can close a side drawer (outside click),
+    // which shifts the button while the menu stays put, so follow the button while open.
+    useEffect(() => {
+        if (!open || !anchorEl) return;
+        let frame = 0;
+        let last = anchorEl.getBoundingClientRect();
+        const track = () => {
+            const rect = anchorEl.getBoundingClientRect();
+            if (rect.left !== last.left || rect.top !== last.top || rect.width !== last.width) {
+                last = rect;
+                popoverActions.current?.updatePosition();
+            }
+            frame = requestAnimationFrame(track);
+        };
+        frame = requestAnimationFrame(track);
+        return () => cancelAnimationFrame(frame);
+    }, [open, anchorEl]);
 
     const run = (fn: () => void) => () => {
         setOpen(false);
@@ -41,7 +60,7 @@ export function CreateSplitButton({ newButtonLabel, onNewClick, onImportClick, d
 
     return (
         <>
-            <Box ref={setAnchorEl}sx={{ display: 'inline-flex' }}>
+            <Box ref={setAnchorEl} sx={{ display: 'inline-flex' }}>
                 <Button
                     variant="contained"
                     size="small"
@@ -73,6 +92,7 @@ export function CreateSplitButton({ newButtonLabel, onNewClick, onImportClick, d
             </Box>
             <Menu
                 anchorEl={anchorEl}
+                action={popoverActions}
                 open={open}
                 onClose={() => setOpen(false)}
                 anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}

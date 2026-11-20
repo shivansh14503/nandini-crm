@@ -268,7 +268,7 @@ export function OpportunityBasicSection({ form, setField }: OpportunityBasicSect
             {/* ── Notes: two textareas side by side ── */}
             <FormGrid columns={2} sx={{ mt: 2.5 }}>
                 <FormGridItem>
-                    <FormField name="addDescription" label="Add Description" required size="full" hint="Stage summary & action items">
+                    <FormField name="addDescription" label="Follow Up Remarks" required size="full" hint="Stage summary & action items">
                         <TextField
                             fullWidth
                             size="small"

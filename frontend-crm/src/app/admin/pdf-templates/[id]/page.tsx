@@ -13,9 +13,8 @@ function EditPdfTemplateContent() {
     return (
         <AdminPageShell
             loadingMessage="Loading template..."
-            footer={false}
             maxWidth={false}
-            breadcrumbs={[{ label: 'Administration', href: ROUTES.ADMIN }, { label: 'PDF Templates', href: ROUTES.PDF_TEMPLATES }, { label: 'Edit template' }]}
+            breadcrumbs={[{ label: 'Admin', href: ROUTES.ADMIN }, { label: 'PDF Templates', href: ROUTES.PDF_TEMPLATES }, { label: 'Edit template' }]}
         >
             <PdfTemplateBuilder templateId={id} />
         </AdminPageShell>

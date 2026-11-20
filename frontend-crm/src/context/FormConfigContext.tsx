@@ -123,7 +123,24 @@ function deletedSections(systemFields: FormFieldDefinitionDto[], live: FormField
 
 const FormConfigContext = createContext<FormConfigContextValue | null>(null);
 
-export function FormConfigProvider({ module, children }: { module: CrmModuleKey; children: React.ReactNode }) {
+export interface FormConfigProviderProps {
+    module: CrmModuleKey;
+    /**
+     * For a form that collects another module's built-in fields under its own names (Convert Lead builds a contact,
+     * an organization and an opportunity): module `fieldKey` → this form's field name. Fields not listed keep their key.
+     */
+    fieldNames?: Readonly<Record<string, string>>;
+    /**
+     * The form only borrows the module's built-in fields (Convert Lead): labels, required, hidden, placeholders,
+     * widths, dropdown options and order apply, but the module's own tabs, sections and custom fields don't. Custom
+     * fields aren't collected there, sections the admin moved fields between don't exist, and one grid shows every
+     * field however the module's form splits them.
+     */
+    borrowed?: boolean;
+    children: React.ReactNode;
+}
+
+export function FormConfigProvider({ module, fieldNames, borrowed = false, children }: FormConfigProviderProps) {
     const configs = useFormConfigs();
     const [movedFields] = useState(createMovedFieldStore);
     const [sectionClaims, setSectionClaims] = useState<Record<string, string[]>>({});
@@ -134,19 +151,22 @@ export function FormConfigProvider({ module, children }: { module: CrmModuleKey;
     const value = useMemo<FormConfigContextValue>(() => {
         const live = moduleFields(configs, module);
         // Deleted built-in fields stay in systemFields so their hand-built inputs resolve to hidden (useFieldOverride).
-        const systemFields = allModuleFieldsIncludingDeleted(configs, module).filter((f) => f.isSystem);
+        const systemFields = allModuleFieldsIncludingDeleted(configs, module)
+            .filter((f) => f.isSystem)
+            // A borrowing form has no sections to move fields between: every field counts as sitting where it is.
+            .map((f) => (borrowed ? { ...f, defaultSectionKey: null, defaultTabKey: null } : f));
         return {
             module,
             configs,
-            systemFields: new Map(systemFields.map((f) => [f.fieldKey, f])),
+            systemFields: new Map(systemFields.map((f) => [fieldNames?.[f.fieldKey] ?? f.fieldKey, f])),
             sectionLabels: new Map(live.filter((f) => f.isSystem).map((f) => [f.sectionKey, f.sectionLabel])),
-            deletedSectionKeys: deletedSections(systemFields, live),
-            customFields: live.filter((f) => !f.isSystem),
+            deletedSectionKeys: borrowed ? new Set<string>() : deletedSections(systemFields, live),
+            customFields: borrowed ? [] : live.filter((f) => !f.isSystem),
             sectionClaims,
             claimSection,
             movedFields,
         };
-    }, [configs, module, sectionClaims, claimSection, movedFields]);
+    }, [configs, module, fieldNames, borrowed, sectionClaims, claimSection, movedFields]);
     return <FormConfigContext.Provider value={value}>{children}</FormConfigContext.Provider>;
 }
 

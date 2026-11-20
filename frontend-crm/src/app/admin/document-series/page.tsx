@@ -8,7 +8,7 @@ export default function DocumentSeriesPage() {
     return (
         <AdminPageShell
             loadingMessage="Loading document series..."
-            breadcrumbs={[{ label: 'Administration', href: ROUTES.ADMIN }, { label: 'Document Series' }]}
+            breadcrumbs={[{ label: 'Admin', href: ROUTES.ADMIN }, { label: 'Document Series' }]}
             deniedMessage="Only administrators can manage document series. Ask an Admin or Super Admin for access."
         >
             <DocumentSeriesView />

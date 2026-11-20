@@ -14,7 +14,9 @@ import RequestQuoteOutlinedIcon from '@mui/icons-material/RequestQuoteOutlined';
 import ConfirmationNumberOutlinedIcon from '@mui/icons-material/ConfirmationNumberOutlined';
 import CategoryOutlinedIcon from '@mui/icons-material/CategoryOutlined';
 import HandshakeOutlinedIcon from '@mui/icons-material/HandshakeOutlined';
+import TransformOutlinedIcon from '@mui/icons-material/TransformOutlined';
 import { CRM_MODULE_GROUPS, type CrmModuleGroupKey, type CrmModuleKey } from '@/types/formConfig.types';
+import { CONVERT_TINT } from './ConvertLeadFieldsPanel';
 
 const ICON_SX = { fontSize: 17 } as const;
 
@@ -36,8 +38,25 @@ export const MODULE_ICONS: Record<CrmModuleKey, React.ReactNode> = {
     'partner-companies': <HandshakeOutlinedIcon sx={ICON_SX} />,
 };
 
+export const CONVERT_ICON = <TransformOutlinedIcon sx={ICON_SX} />;
+
+/** Selector id of the Convert Lead entry (not a module of its own: it composes the contact, organization and opportunity forms). */
+const CONVERT_ID = 'convert-lead';
+type EntryId = CrmModuleKey | typeof CONVERT_ID;
+interface Entry {
+    id: EntryId;
+    label: string;
+}
+
+/** The forms of a group in navbar order; Convert Lead follows Leads, as a lead is converted into the other forms. */
+const entriesOf = (group: (typeof CRM_MODULE_GROUPS)[number]): Entry[] =>
+    group.modules.flatMap((m): Entry[] => {
+        const entry: Entry = { id: m.key, label: m.label };
+        return m.key === 'leads' ? [entry, { id: CONVERT_ID, label: 'Convert Lead' }] : [entry];
+    });
+
 /** Every form in navbar order: the arrow keys walk this list across groups. */
-const ORDER: CrmModuleKey[] = CRM_MODULE_GROUPS.flatMap((g) => g.modules.map((m) => m.key));
+const ORDER: EntryId[] = CRM_MODULE_GROUPS.flatMap((g) => entriesOf(g).map((e) => e.id));
 
 /**
  * The forms grouped like the top navbar (Sales, Support, Inventory, All). Each form shows its icon, its number
@@ -50,23 +69,28 @@ export function ModuleHierarchySelector({
     onChange,
     fieldCounts,
     unsaved,
+    convert,
 }: {
-    /** The open form, or null while none has been picked yet. */
+    /** The open form, or null while none has been picked yet. While Convert Lead is open, the record it shows. */
     value: CrmModuleKey | null;
     onChange: (module: CrmModuleKey) => void;
     /** Active fields per form. */
     fieldCounts: Partial<Record<CrmModuleKey, number>>;
     /** Forms with unsaved changes. */
     unsaved: Set<CrmModuleKey>;
+    /** The Convert Lead entry: whether it is open, how to open it, its field count and whether it has unsaved changes. */
+    convert: { active: boolean; onSelect: () => void; fieldCount?: number; hasUnsaved: boolean };
 }) {
-    const tabRefs = useRef(new Map<CrmModuleKey, HTMLElement>());
+    const tabRefs = useRef(new Map<EntryId, HTMLElement>());
 
     const focusAt = (index: number) => {
         const key = ORDER[(index + ORDER.length) % ORDER.length];
         tabRefs.current.get(key)?.focus();
     };
 
-    const onKeyDown = (module: CrmModuleKey) => (e: React.KeyboardEvent) => {
+    const open = (id: EntryId) => (id === CONVERT_ID ? convert.onSelect() : onChange(id));
+
+    const onKeyDown = (module: EntryId) => (e: React.KeyboardEvent) => {
         const index = ORDER.indexOf(module);
         switch (e.key) {
             case 'ArrowRight':
@@ -90,7 +114,7 @@ export function ModuleHierarchySelector({
             case 'Enter':
             case ' ':
                 e.preventDefault();
-                onChange(module);
+                open(module);
                 break;
         }
     };
@@ -98,7 +122,8 @@ export function ModuleHierarchySelector({
     return (
         <Box role="tablist" aria-label="CRM forms" aria-orientation="horizontal" sx={{ display: 'flex', flexWrap: 'wrap', gap: 1.5, alignItems: 'stretch' }}>
             {CRM_MODULE_GROUPS.map((group) => {
-                const groupActive = group.modules.some((m) => m.key === value);
+                const entries = entriesOf(group);
+                const groupActive = entries.some((m) => (m.id === CONVERT_ID ? convert.active : !convert.active && m.id === value));
                 const headingId = `form-group-${group.key}`;
                 return (
                     <Box
@@ -115,7 +140,7 @@ export function ModuleHierarchySelector({
                             flexDirection: 'column',
                             gap: 0.85,
                             // Sales holds five forms: let it take the room, the single-form groups stay compact.
-                            flex: group.modules.length > 1 ? '1 1 420px' : '0 1 auto',
+                            flex: entries.length > 1 ? '1 1 420px' : '0 1 auto',
                             minWidth: 0,
                             transition: 'border-color 150ms ease',
                         }}
@@ -129,28 +154,29 @@ export function ModuleHierarchySelector({
                                 {group.label}
                             </Typography>
                             <Typography sx={{ fontSize: '0.68rem', color: 'var(--mui-palette-text-muted)', fontWeight: 600 }}>
-                                · {group.modules.length} form{group.modules.length === 1 ? '' : 's'}
+                                · {entries.length} form{entries.length === 1 ? '' : 's'}
                             </Typography>
                         </Box>
                         <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.75 }}>
-                            {group.modules.map((m) => {
-                                const active = m.key === value;
-                                const count = fieldCounts[m.key];
-                                const hasUnsaved = unsaved.has(m.key);
+                            {entries.map((m) => {
+                                const isConvert = m.id === CONVERT_ID;
+                                const active = isConvert ? convert.active : !convert.active && m.id === value;
+                                const count = isConvert ? convert.fieldCount : fieldCounts[m.id as CrmModuleKey];
+                                const hasUnsaved = isConvert ? convert.hasUnsaved : unsaved.has(m.id as CrmModuleKey);
                                 return (
                                     <Box
-                                        key={m.key}
+                                        key={m.id}
                                         ref={(el: HTMLElement | null) => {
-                                            if (el) tabRefs.current.set(m.key, el);
-                                            else tabRefs.current.delete(m.key);
+                                            if (el) tabRefs.current.set(m.id, el);
+                                            else tabRefs.current.delete(m.id);
                                         }}
                                         role="tab"
                                         aria-selected={active}
                                         aria-label={`${m.label}${count !== undefined ? `, ${count} active fields` : ''}${hasUnsaved ? ', unsaved changes' : ''}`}
                                         // With nothing selected yet, the first form keeps the tablist reachable by keyboard.
-                                        tabIndex={active || (value === null && m.key === ORDER[0]) ? 0 : -1}
-                                        onClick={() => onChange(m.key)}
-                                        onKeyDown={onKeyDown(m.key)}
+                                        tabIndex={active || (value === null && !convert.active && m.id === ORDER[0]) ? 0 : -1}
+                                        onClick={() => open(m.id)}
+                                        onKeyDown={onKeyDown(m.id)}
                                         sx={{
                                             display: 'inline-flex',
                                             alignItems: 'center',
@@ -165,24 +191,36 @@ export function ModuleHierarchySelector({
                                             fontSize: '0.82rem',
                                             fontWeight: active ? 700 : 600,
                                             transition: 'background-color 150ms ease, border-color 150ms ease, color 150ms ease, box-shadow 150ms ease',
-                                            ...(active
-                                                ? {
-                                                      background: 'linear-gradient(135deg, var(--crm-blue-50) 0%, var(--crm-blue-100) 100%)',
-                                                      border: '1px solid var(--crm-blue-400)',
-                                                      color: 'var(--crm-text-blue-900)',
-                                                      boxShadow: '0 1px 3px rgb(var(--crm-accent-rgb) / 0.12)',
+                                            ...(isConvert
+                                                ? // Tinted with a dashed edge: Convert Lead is composed of other forms, not a form of its own.
+                                                  {
+                                                      backgroundColor: active ? CONVERT_TINT.strong : CONVERT_TINT.soft,
+                                                      border: `1px ${active ? 'solid' : 'dashed'} ${CONVERT_TINT.border}`,
+                                                      color: active ? 'var(--crm-slate-900)' : 'var(--crm-slate-700)',
+                                                      ...(active ? { borderColor: 'var(--mui-palette-warning-main)' } : {}),
+                                                      '&:hover': { backgroundColor: CONVERT_TINT.strong, borderColor: 'var(--mui-palette-warning-main)', color: 'var(--crm-slate-900)' },
                                                   }
-                                                : {
-                                                      backgroundColor: 'var(--mui-palette-background-subtle)',
-                                                      border: '1px solid var(--mui-palette-border-main)',
-                                                      color: 'var(--crm-slate-700)',
-                                                      '&:hover': { backgroundColor: 'var(--mui-palette-background-hover)', borderColor: 'var(--mui-palette-border-strong)', color: 'var(--crm-slate-900)' },
-                                                  }),
+                                                : active
+                                                  ? {
+                                                        background: 'linear-gradient(135deg, var(--crm-blue-50) 0%, var(--crm-blue-100) 100%)',
+                                                        border: '1px solid var(--crm-blue-400)',
+                                                        color: 'var(--crm-text-blue-900)',
+                                                        boxShadow: '0 1px 3px rgb(var(--crm-accent-rgb) / 0.12)',
+                                                    }
+                                                  : {
+                                                        backgroundColor: 'var(--mui-palette-background-subtle)',
+                                                        border: '1px solid var(--mui-palette-border-main)',
+                                                        color: 'var(--crm-slate-700)',
+                                                        '&:hover': { backgroundColor: 'var(--mui-palette-background-hover)', borderColor: 'var(--mui-palette-border-strong)', color: 'var(--crm-slate-900)' },
+                                                    }),
                                             '&:focus-visible': { boxShadow: '0 0 0 2px var(--crm-blue-300)' },
                                         }}
                                     >
-                                        <Box component="span" sx={{ display: 'flex', color: active ? 'var(--crm-text-blue-600)' : 'var(--mui-palette-text-secondary)' }}>
-                                            {MODULE_ICONS[m.key]}
+                                        <Box
+                                            component="span"
+                                            sx={{ display: 'flex', color: isConvert ? CONVERT_TINT.text : active ? 'var(--crm-text-blue-600)' : 'var(--mui-palette-text-secondary)' }}
+                                        >
+                                            {isConvert ? CONVERT_ICON : MODULE_ICONS[m.id as CrmModuleKey]}
                                         </Box>
                                         <span>{m.label}</span>
                                         {count !== undefined && (
@@ -195,9 +233,9 @@ export function ModuleHierarchySelector({
                                                     fontSize: '0.66rem',
                                                     fontWeight: 700,
                                                     lineHeight: 1.6,
-                                                    border: `1px solid ${active ? 'var(--crm-blue-300)' : 'var(--mui-palette-border-main)'}`,
-                                                    backgroundColor: active ? 'var(--mui-palette-background-paper)' : 'var(--mui-palette-background-paper)',
-                                                    color: active ? 'var(--crm-text-blue-600)' : 'var(--mui-palette-text-secondary)',
+                                                    border: `1px solid ${isConvert ? CONVERT_TINT.border : active ? 'var(--crm-blue-300)' : 'var(--mui-palette-border-main)'}`,
+                                                    backgroundColor: 'var(--mui-palette-background-paper)',
+                                                    color: isConvert ? CONVERT_TINT.text : active ? 'var(--crm-text-blue-600)' : 'var(--mui-palette-text-secondary)',
                                                 }}
                                             >
                                                 {count}

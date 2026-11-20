@@ -27,7 +27,7 @@ export default function QuotationsPage() {
     if (!user) return null;
 
     return (
-        <Box sx={{ minHeight: '100vh', backgroundColor: 'var(--mui-palette-background-subtle)', display: 'flex', flexDirection: 'column' }}>
+        <Box sx={{ height: '100dvh', overflow: 'hidden', backgroundColor: 'var(--mui-palette-background-subtle)', display: 'flex', flexDirection: 'column' }}>
             <Navbar />
             <ErrorAlert error={error} onClose={clearError} />
             <QuotationsMasterView key={viewKey} />

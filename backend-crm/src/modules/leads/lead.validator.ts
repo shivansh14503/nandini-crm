@@ -53,7 +53,7 @@ const leadFields = z.object({
     leadSource: optionalText('Lead Source', L.option),
     productCategory: stringList('Product Category', 30, L.option).default([]),
     followupType: optionalText('Followup Type', L.option),
-    addDescription: optionalDescription('Add Description'),
+    addDescription: optionalDescription('Follow Up Remarks'),
     registrationType: optionalText('Registration Type', 30),
     gstNo: optionalGst,
     turnover: optionalText('Turnover', 30),
@@ -143,9 +143,8 @@ export const convertLeadSchema = z.object({
     contactName: requiredPersonName('Contact Name', L.personName),
     contactMobile: phone('Mobile'),
     contactPhone3: optionalPhone('Phone 3'),
-    contactEmails: corporateEmailListSchema.refine((emails) => emails.some((row) => row.email), {
-        message: 'Email Address is required.',
-    }),
+    // Required (or not) as the Contact form's configuration says: `convertLead` checks it.
+    contactEmails: corporateEmailListSchema,
     isPrimaryContact: z.boolean().default(true),
     designation: optionalText('Designation', L.option),
     department: optionalText('Department', L.option),

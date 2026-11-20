@@ -4,7 +4,6 @@ import React from 'react';
 import { Box, Container, SxProps, Theme } from '@mui/material';
 import { Navbar } from './Navbar';
 import { AppBreadcrumbs, type BreadcrumbItem } from '../common/AppBreadcrumbs';
-import { EnterpriseFooter } from '../common/EnterpriseFooter';
 
 export interface AppPageLayoutProps {
     children: React.ReactNode;
@@ -12,13 +11,12 @@ export interface AppPageLayoutProps {
     headerActions?: React.ReactNode;
     maxWidth?: 'xs' | 'sm' | 'md' | 'lg' | 'xl' | false;
     fullWidth?: boolean;
-    showFooter?: boolean;
     sx?: SxProps<Theme>;
 }
 
 /**
  * Standard enterprise page shell for all CRM views.
- * Guarantees permanent Navbar, route-aware auto-breadcrumbs, and consistent footer.
+ * Guarantees permanent Navbar and route-aware auto-breadcrumbs.
  */
 export function AppPageLayout({
     children,
@@ -26,7 +24,6 @@ export function AppPageLayout({
     headerActions,
     maxWidth = 'xl',
     fullWidth = false,
-    showFooter = true,
     sx,
 }: AppPageLayoutProps) {
     return (
@@ -107,9 +104,6 @@ export function AppPageLayout({
                     </Box>
                 </Container>
             )}
-
-            {/* Enterprise Footer */}
-            {showFooter && <EnterpriseFooter />}
         </Box>
     );
 }

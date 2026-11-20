@@ -22,7 +22,8 @@ import { FormConfigsOverrideContext, useFormConfigsQuery } from '@/hooks/queries
 import ChevronRightRoundedIcon from '@mui/icons-material/ChevronRightRounded';
 import { CRM_MODULE_KEYS, moduleGroupOf, moduleNavLabel, type CrmModuleKey } from '@/types/formConfig.types';
 import { modulesTouchedBy, tabsTouchedBy, viewsTouchedForModule } from './configDraft';
-import { GROUP_ICONS, MODULE_ICONS, ModuleHierarchySelector } from './ModuleHierarchySelector';
+import { CONVERT_ICON, GROUP_ICONS, MODULE_ICONS, ModuleHierarchySelector } from './ModuleHierarchySelector';
+import { CONVERT_RECORDS, CONVERT_TINT, ConvertLeadFieldsPanel, convertFieldKeys, isConvertModule } from './ConvertLeadFieldsPanel';
 import { EmptyState, PillTabs, surfaceSx, errorMessage, primaryButtonSx, secondaryButtonSx } from './builderUi';
 import { ConfigDraftActionsContext, ConfigDraftChangesContext, changedIds, useConfigDraft } from './useConfigDraft';
 import { DropdownManagerPanel, categoriesForModule } from './DropdownManagerPanel';
@@ -85,6 +86,11 @@ export function FormCustomizationView() {
 
     /** No form is open until the admin picks one in the selector. */
     const [module, setModule] = useState<CrmModuleKey | null>(null);
+    /**
+     * Convert Lead is open: not a module of its own, but the contact, organization and opportunity fields the Convert Lead
+     * form collects (`module` is the record shown). Their settings are those forms' own.
+     */
+    const [convert, setConvert] = useState(false);
     const [view, setView] = useState<BuilderView>('dropdowns');
     /** Placeholders / hints the selected module's form codes for its built-in fields (prefill the field editor). */
     const [coded, setCoded] = useState<{ module: CrmModuleKey | null; defaults: CodedFieldDefaultsMap }>({ module: null, defaults: NO_CODED_DEFAULTS });
@@ -133,17 +139,39 @@ export function FormCustomizationView() {
         [ops, savedConfigs, configs, module],
     );
     const dropdownCount = useMemo(() => (configs && module ? categoriesForModule(configs, module).length : 0), [configs, module]);
-    const group = module ? moduleGroupOf(module) : null;
+    /** Active Convert Lead fields per record (what the Convert Lead form collects from each form). */
+    const convertCounts = useMemo(
+        () =>
+            Object.fromEntries(
+                CONVERT_RECORDS.map(({ module: m }) => {
+                    const keys = convertFieldKeys(m);
+                    return [m, configs?.fieldsByModule[m]?.filter((f) => f.isActive && f.isSystem && keys.has(f.fieldKey)).length ?? 0];
+                }),
+            ) as Record<(typeof CONVERT_RECORDS)[number]['module'], number>,
+        [configs],
+    );
+    const convertTotal = CONVERT_RECORDS.reduce((sum, r) => sum + convertCounts[r.module], 0);
+    const convertUnsaved = CONVERT_RECORDS.some((r) => unsavedModules.has(r.module));
+    const group = module ? (convert ? moduleGroupOf('leads') : moduleGroupOf(module)) : null;
+    const openModule = (next: CrmModuleKey) => {
+        setConvert(false);
+        setModule(next);
+    };
+    const openConvert = () => {
+        setConvert(true);
+        if (!isConvertModule(module)) setModule(CONVERT_RECORDS[0].module);
+    };
+    const fieldsCountOf = (m: CrmModuleKey) => (convert && isConvertModule(m) ? convertCounts[m] : fieldCounts[m]);
     const viewItems = VIEWS.map((v) => ({
         ...v,
-        count: !configs || !module ? undefined : v.key === 'dropdowns' ? dropdownCount : v.key === 'fields' ? fieldCounts[module] : undefined,
+        count: !configs || !module ? undefined : v.key === 'dropdowns' ? dropdownCount : v.key === 'fields' ? fieldsCountOf(module) : undefined,
         hasUnsaved: v.key === 'dropdowns' ? viewsTouched.dropdowns : v.key === 'fields' ? viewsTouched.fields : false,
         unsavedTooltip: v.key === 'dropdowns' ? 'Unsaved dropdown changes on this form' : 'Unsaved field, section or tab changes on this form',
     }));
 
     return (
         <Box sx={{ px: { xs: 2, md: 3 }, pt: 2, pb: canEdit ? 12 : 4, width: '100%', maxWidth: 1440, mx: 'auto' }}>
-            <AppBreadcrumbsBar items={[{ label: 'Administration' }, { label: 'Admin', href: ROUTES.ADMIN }, { label: 'Form Customization' }]} />
+            <AppBreadcrumbsBar items={[{ label: 'Admin', href: ROUTES.ADMIN }, { label: 'Form Customization' }]} />
 
             {/* ── Header ── */}
             <Box sx={{ ...surfaceSx, mb: 2, overflow: 'hidden' }}>
@@ -183,7 +211,13 @@ export function FormCustomizationView() {
                     </Button>
                 </Box>
                 <Box sx={{ px: { xs: 2, md: 3 }, py: 1.5, backgroundColor: 'var(--mui-palette-background-subtle)', borderTop: '1px solid var(--mui-palette-border-main)' }}>
-                    <ModuleHierarchySelector value={module} onChange={setModule} fieldCounts={configs ? fieldCounts : {}} unsaved={unsavedModules} />
+                    <ModuleHierarchySelector
+                        value={module}
+                        onChange={openModule}
+                        fieldCounts={configs ? fieldCounts : {}}
+                        unsaved={unsavedModules}
+                        convert={{ active: convert, onSelect: openConvert, fieldCount: configs ? convertTotal : undefined, hasUnsaved: convertUnsaved }}
+                    />
                 </Box>
             </Box>
 
@@ -205,8 +239,8 @@ export function FormCustomizationView() {
                             px: 1.25,
                             py: 0.6,
                             borderRadius: '8px',
-                            border: '1px solid var(--mui-palette-border-main)',
-                            backgroundColor: 'var(--mui-palette-background-paper)',
+                            border: `1px ${convert ? 'dashed' : 'solid'} ${convert ? CONVERT_TINT.border : 'var(--mui-palette-border-main)'}`,
+                            backgroundColor: convert ? CONVERT_TINT.soft : 'var(--mui-palette-background-paper)',
                             minWidth: 0,
                             flexWrap: 'wrap',
                         }}
@@ -218,15 +252,23 @@ export function FormCustomizationView() {
                             {group.label}
                         </Typography>
                         <ChevronRightRoundedIcon sx={{ fontSize: 16, color: 'var(--crm-slate-300)' }} />
-                        <Box component="span" sx={{ display: 'flex', color: 'var(--crm-text-blue-600)' }}>
-                            {MODULE_ICONS[module]}
+                        <Box component="span" sx={{ display: 'flex', color: convert ? CONVERT_TINT.text : 'var(--crm-text-blue-600)' }}>
+                            {convert ? CONVERT_ICON : MODULE_ICONS[module]}
                         </Box>
                         <Typography component="span" sx={{ fontSize: '0.84rem', fontWeight: 700, color: 'var(--crm-slate-900)' }}>
-                            {moduleNavLabel(module)}
+                            {convert ? 'Convert Lead' : moduleNavLabel(module)}
                         </Typography>
+                        {convert && (
+                            <>
+                                <ChevronRightRoundedIcon sx={{ fontSize: 16, color: 'var(--crm-slate-300)' }} />
+                                <Typography component="span" sx={{ fontSize: '0.84rem', fontWeight: 700, color: 'var(--crm-slate-900)' }}>
+                                    {CONVERT_RECORDS.find((r) => r.module === module)?.label ?? moduleNavLabel(module)}
+                                </Typography>
+                            </>
+                        )}
                         {configs && (
                             <Typography component="span" sx={{ fontSize: '0.74rem', color: 'var(--mui-palette-text-secondary)', ml: 0.5 }}>
-                                {dropdownCount} Dropdown{dropdownCount === 1 ? '' : 's'} • {fieldCounts[module]} Field{fieldCounts[module] === 1 ? '' : 's'}
+                                {dropdownCount} Dropdown{dropdownCount === 1 ? '' : 's'} • {fieldsCountOf(module)} Field{fieldsCountOf(module) === 1 ? '' : 's'}
                             </Typography>
                         )}
                         {unsavedModules.has(module) && (
@@ -272,9 +314,55 @@ export function FormCustomizationView() {
                     <FormConfigsOverrideContext.Provider value={configs}>
                         <ConfigDraftActionsContext.Provider value={actions}>
                             <ConfigDraftChangesContext.Provider value={changed}>
-                                {view === 'dropdowns' && <DropdownManagerPanel module={module} configs={configs} canEdit={canEdit && !saving} notify={notify} />}
-                                {view === 'fields' && <FormFieldsBuilderPanel module={module} configs={configs} canEdit={canEdit && !saving} notify={notify} unsavedTabs={unsavedTabs} />}
-                                {view === 'preview' && <FormLivePreviewPanel module={module} configs={configs} unsavedCount={ops.length} unsavedTabs={unsavedTabs} />}
+                                {convert && isConvertModule(module) ? (
+                                    // Tinted frame: Convert Lead is not a form of its own, it collects fields of the three forms below.
+                                    <Box
+                                        sx={{
+                                            p: { xs: 1.25, md: 1.75 },
+                                            borderRadius: '14px',
+                                            border: `1px dashed ${CONVERT_TINT.border}`,
+                                            backgroundColor: CONVERT_TINT.soft,
+                                            display: 'flex',
+                                            flexDirection: 'column',
+                                            gap: 1.5,
+                                        }}
+                                    >
+                                        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1.5, flexWrap: 'wrap' }}>
+                                            <Typography sx={{ fontSize: '0.8rem', color: 'var(--crm-slate-700)', maxWidth: 640 }}>
+                                                <strong style={{ color: CONVERT_TINT.text }}>Convert Lead</strong> creates a contact, an organization and an opportunity from a
+                                                lead. It uses each form&apos;s own fields and settings, so pick a record to configure what Convert Lead shows for it.
+                                            </Typography>
+                                            <PillTabs
+                                                items={CONVERT_RECORDS.map((r) => ({
+                                                    key: r.module,
+                                                    label: r.label,
+                                                    count: convertCounts[r.module],
+                                                    hasUnsaved: unsavedModules.has(r.module),
+                                                    unsavedTooltip: `Unsaved changes on the ${r.label} form`,
+                                                }))}
+                                                value={module}
+                                                onChange={setModule}
+                                            />
+                                        </Box>
+                                        {view === 'dropdowns' && <DropdownManagerPanel module={module} configs={configs} canEdit={canEdit && !saving} notify={notify} />}
+                                        {view === 'fields' && <ConvertLeadFieldsPanel module={module} configs={configs} canEdit={canEdit && !saving} notify={notify} />}
+                                        {view === 'preview' && (
+                                            <FormLivePreviewPanel
+                                                module={module}
+                                                configs={configs}
+                                                unsavedCount={ops.length}
+                                                onlyFieldKeys={convertFieldKeys(module)}
+                                                gridLabel={CONVERT_RECORDS.find((r) => r.module === module)?.label}
+                                            />
+                                        )}
+                                    </Box>
+                                ) : (
+                                    <>
+                                        {view === 'dropdowns' && <DropdownManagerPanel module={module} configs={configs} canEdit={canEdit && !saving} notify={notify} />}
+                                        {view === 'fields' && <FormFieldsBuilderPanel module={module} configs={configs} canEdit={canEdit && !saving} notify={notify} unsavedTabs={unsavedTabs} />}
+                                        {view === 'preview' && <FormLivePreviewPanel module={module} configs={configs} unsavedCount={ops.length} unsavedTabs={unsavedTabs} />}
+                                    </>
+                                )}
                             </ConfigDraftChangesContext.Provider>
                         </ConfigDraftActionsContext.Provider>
                     </FormConfigsOverrideContext.Provider>

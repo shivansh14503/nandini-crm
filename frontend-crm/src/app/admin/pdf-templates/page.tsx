@@ -8,7 +8,7 @@ export default function PdfTemplatesPage() {
     return (
         <AdminPageShell
             loadingMessage="Loading PDF templates..."
-            breadcrumbs={[{ label: 'Administration', href: ROUTES.ADMIN }, { label: 'PDF Templates' }]}
+            breadcrumbs={[{ label: 'Admin', href: ROUTES.ADMIN }, { label: 'PDF Templates' }]}
         >
             <PdfTemplatesListView />
         </AdminPageShell>
