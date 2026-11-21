@@ -11,6 +11,7 @@ import { createContactRecord } from '../contacts/contact.service.js';
 import { checkModulePayload, loadModuleFieldConfig, type ModuleFieldConfig } from '../form-configs/customFieldValidator.js';
 import { contactInputSchema } from '../contacts/contact.validator.js';
 import { assertStatusTransition, createLeadRecord } from '../leads/lead.service.js';
+import { loadRatingConfig, newLeadRatingColumns, type RatingConfig } from '../leads/lead.followUp.js';
 import { leadImportSchema } from '../leads/lead.validator.js';
 import { createOrganizationRecord } from '../organizations/organization.service.js';
 import { organizationImportSchema } from '../organizations/organization.validator.js';
@@ -68,7 +69,7 @@ export interface ImportResult {
 
 const PROGRESS_EVERY_ROWS = 20;
 /** Lead fields the template doesn't offer but the record requires; documented defaults, applied only when blank. */
-const LEAD_IMPORT_DEFAULTS = { leadSource: 'Other', leadType: 'Cold', remarks: 'Imported via bulk import', followupType: 'Call' } as const;
+const LEAD_IMPORT_DEFAULTS = { leadSource: 'Other', remarks: 'Imported via bulk import', followupType: 'Call' } as const;
 
 /** Opportunity fields the template doesn't offer (or left blank) but the record requires. */
 const OPPORTUNITY_IMPORT_DEFAULTS = {
@@ -112,6 +113,8 @@ interface ImportContext {
     fieldConfig: ModuleFieldConfig;
     /** Active users and the organizations the rows name, read once instead of once per row. */
     lookups: PrefetchedLookups;
+    /** Lead imports: the Rating rules new leads are rated by. */
+    ratingConfig?: RatingConfig;
 }
 
 /** Entities whose rows link to an organization by name. */
@@ -127,7 +130,8 @@ async function loadImportContext(data: ImportJobData): Promise<ImportContext> {
     const organizationsByName = LINKS_ORGANIZATION_BY_NAME.has(data.entity)
         ? await prefetchOrganizationsByName(prisma, data.rows.map((row) => row.values.organizationName))
         : undefined;
-    return { fieldConfig, lookups: { activeUsernames, organizationsByName } };
+    const ratingConfig = data.entity === 'leads' ? await loadRatingConfig(prisma) : undefined;
+    return { fieldConfig, lookups: { activeUsernames, organizationsByName }, ratingConfig };
 }
 
 /**
@@ -205,7 +209,7 @@ const rowBuilders: Record<ImportEntity, (v: Record<string, string>, user: AuthUs
             emailAddress: emailList(v.email),
             organizationName: v.organizationName,
             leadSource: v.leadSource || LEAD_IMPORT_DEFAULTS.leadSource,
-            leadType: v.leadType || LEAD_IMPORT_DEFAULTS.leadType,
+            leadType: v.leadType,
             status,
             primaryCity: v.primaryCity,
             primaryState: v.primaryState,
@@ -216,7 +220,10 @@ const rowBuilders: Record<ImportEntity, (v: Record<string, string>, user: AuthUs
         };
         const input = leadImportSchema.parse(raw);
         checkRow(ctx, raw);
-        return (tx) => createLeadRecord(tx, input, user, ctx.lookups);
+        // Rated like any new lead: by the new-lead rule, from today to its follow-up.
+        if (!ctx.ratingConfig) throw new Error('Lead import context has no Rating rules.');
+        const rating = newLeadRatingColumns(ctx.ratingConfig, businessToday(), input.nextFollowupDate);
+        return (tx) => createLeadRecord(tx, input, user, rating, ctx.lookups);
     },
     opportunities: (v, user, ctx) => {
         const productCategory = splitList(v.productCategory);

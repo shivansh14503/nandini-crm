@@ -27,6 +27,12 @@ export interface LeadFormData {
     organizationName?: string;
     department?: string;
     leadType: string;
+    /** Rating: Hot / Warm / Cold, set by the system (read-only, not on any form). */
+    rating?: string;
+    /** Why the current Rating (read-only). */
+    ratingReason?: string;
+    /** Consecutive unanswered calls (read-only). */
+    unansweredCalls?: number;
     status: string;
     nextFollowupDate: string;
     nextFollowupTime?: string;
@@ -105,14 +111,11 @@ export const FOLLOWUP_TYPES: string[] = [
     'Site Visit',
 ];
 
-export const LEAD_TYPES: string[] = [
-    'Hot',
-    'Warm',
-    'Cold',
-    'Corporate',
-    'SME',
-    'Enterprise',
-];
+/** Fallback Lead Type options while the admin configuration (`lead_type`) loads. */
+export const LEAD_TYPES: string[] = ['Inbound', 'Outbound', 'Marketing'];
+
+/** A lead's Rating (`Lead.rating`). Set by the system, never on a form; not the same thing as Lead Type. */
+export const LEAD_RATINGS = ['Hot', 'Warm', 'Cold'] as const;
 
 export const LEAD_STATUSES: string[] = [
     'New',

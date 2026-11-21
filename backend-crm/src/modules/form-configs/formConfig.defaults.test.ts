@@ -29,7 +29,6 @@ describe('field locking policy', () => {
     it('makes business-preference fields required by default but not locked', () => {
         for (const [module, key] of [
             ['leads', 'mobile'],
-            ['leads', 'nextFollowupDate'],
             ['organizations', 'billingState'],
             ['opportunities', 'commission'],
             ['quotations', 'paymentTerms'],
@@ -39,6 +38,11 @@ describe('field locking policy', () => {
             const f = byKey(module, key);
             assert.ok(f.isRequired && !f.isCoreLocked, `${module}:${key} is default-required and unlockable`);
         }
+    });
+
+    it("locks the lead's Next Followup Date: every open lead is rated from it", () => {
+        const f = byKey('leads', 'nextFollowupDate');
+        assert.ok(f.isRequired && f.isCoreLocked);
     });
 
     it('frees Mailing Name and Account Status on organizations', () => {

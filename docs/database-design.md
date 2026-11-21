@@ -1,7 +1,7 @@
 # Nandini CRM — Database Design
 
-> **Status:** living document, generated from `backend-crm/prisma/schema.prisma` and `prisma/migrations/` (37 migrations,
-> latest `20261117100000_contact_dropdown_labels_match_form`). Update it in the same change as any schema migration.
+> **Status:** living document, generated from `backend-crm/prisma/schema.prisma` and `prisma/migrations/` (51 migrations,
+> latest `20261121090000_lead_rating_rules`). Update it in the same change as any schema migration.
 > Related: [System design](system-design.md) · [API plan](api-plan.md) · [Build plan](build-plan.md)
 
 ---
@@ -27,7 +27,7 @@
 | Partner master | `PartnerCompany`, `PartnerCompanyContact` |
 | Reference masters | `NatureOfCall`, `Country`, `Subdivision`, `City` |
 | Numbering | `DocumentSeriesSettings`, `DocumentSeries`, `SequenceCounter` |
-| Customisation | `DropdownCategory`, `DropdownOption`, `FormFieldDefinition` |
+| Customisation | `DropdownCategory`, `DropdownOption`, `FormFieldDefinition`, `ModuleSetting` |
 | PDF | `PdfTemplate`, `PdfAsset`, `PdfSavedItem` |
 | Audit & UI state | `AuditLog`, `TableFilter`, `ModuleScorecard` |
 | Email checks | `EmailValidationRun` |
@@ -158,14 +158,20 @@ Indexes: `organizationId`, `mobile`, `name`, `assignedTo`, `(isDeleted, createdA
 | Group | Columns |
 | --- | --- |
 | Identity | `id`, `leadCode` (UNIQUE), `name`, `mobile`, `otherPhone`, `mailingName`, `tradeName`, `organizationName`, `designation`, `department` |
-| Qualification | `leadSource`, `leadType`, `status` (default `New`), `productCategoryJson`, `followupType`, `customerResponse` (latest follow-up outcome, `shared_customer_response`; required on every edit by the form), `nextFollowupDate` (DATE), `nextFollowupTime`, `registrationType`, `gstNumber`, `turnover`, `noOfEmployee`, `referredBy`, `assignedTo`, `remarks`, `description` |
+| Qualification | `leadSource`, `leadType` (Lead Type: admin dropdown `lead_type`, e.g. Inbound / Outbound / Marketing), `rating` (Rating: `Hot` / `Warm` / `Cold`, set by the system and never on a form — not a form-builder field), `status` (default `New`), `productCategoryJson`, `followupType`, `customerResponse` (latest follow-up outcome, `shared_customer_response`; required on every edit by the form), `nextFollowupDate` (DATE), `nextFollowupTime`, `registrationType`, `gstNumber`, `turnover`, `noOfEmployee`, `referredBy`, `assignedTo`, `remarks`, `description` |
 | Addresses | `primary*` (with `primaryCityId` → `City`), `other*` (with `otherCityId`), `copyAddressFromLeft` |
 | Conversion | `convertedAt`, `convertedBy`, `convertedOrganizationId`, `convertedContactId`, `convertedOpportunityId` (FKs) — set only by the convert endpoint |
 | Other | `customDataJson`, audit/soft-delete columns |
 
 Status `Converted` is a system option: it can only be set by conversion and can never be left.
-Indexes: `status`, `assignedTo`, `mobile`, `nextFollowupDate`, `primaryCityId`, `otherCityId`,
+Indexes: `status`, `rating`, `assignedTo`, `mobile`, `nextFollowupDate`, `primaryCityId`, `otherCityId`,
 `(isDeleted, createdAt)`, `(isDeleted, assignedTo, createdAt)`.
+Migration `20261120200000_lead_rating` added `rating` and moved any `Hot` / `Warm` / `Cold` still stored in `leadType` into it.
+Rating bookkeeping ([lead-rating-rules.md](lead-rating-rules.md), migration `20261121090000_lead_rating_rules`):
+`ratingReason` (why, NVARCHAR(200)), `unansweredCalls` (INT, default 0: consecutive "Unanswered calls" responses),
+`ratingAgeingFrom` (DATE, indexed) + `ratingAgeingJson` (`{ limits: { hot, warm }, response }`): set only while the
+Rating ages under a "Days since response" rule; the nightly job reads them. `nextFollowupDate` is now a locked,
+required field for leads (closed leads have none).
 
 ### 4.5 `Opportunity` and `OpportunityLineItem`
 
@@ -276,6 +282,13 @@ codes already in use (e.g. imported) are skipped.
 
 Index: `(module, isActive, sortOrder)` on fields; `(categoryId, isActive, sortOrder)` on options.
 Per the project's rules, deletes in the form builder are permanent (no reset/restore).
+
+Option `metaJson` keys the app reads: `ratingRule` on the options of the list the leads Customer Response field
+uses (`{ rule: followUpGap | daysSinceResponse | unansweredCalls, hot, warm }` or `{ rule: always, rating }`) and
+`closesLead: true` on lead Status options. Both are validated by the API.
+
+`ModuleSetting` — module-level settings edited in Form Builder outside the fields: PK `(module, key)`, `valueJson`,
+`updatedBy`, timestamps. Today `leads` / `ratingNewLead` = `{ hot, warm }` (no row = default Hot 0–5 days, then Warm).
 
 ### 4.15 PDF tables
 

@@ -51,7 +51,9 @@ export type DraftOp =
     | { kind: 'updateCategory'; categoryKey: string; payload: UpdateCategoryPayload; summary: string }
     | { kind: 'deleteCategory'; categoryKey: string; summary: string }
     | { kind: 'deleteOption'; optionId: string; summary: string }
-    | { kind: 'deleteField'; fieldId: string; summary: string };
+    | { kind: 'deleteField'; fieldId: string; summary: string }
+    /** A module setting (e.g. leads › ratingNewLead, the new-lead Rating limits): saved with PUT …/settings/:key. */
+    | { kind: 'setModuleSetting'; module: CrmModuleKey; key: string; value: unknown; summary: string };
 
 const TEMP_PREFIX = 'draft-';
 let tempSeq = 0;
@@ -223,6 +225,10 @@ function releaseCategory(s: FormConfigsPayload, removed: FormFieldDefinitionDto)
 
 function applyOp(s: FormConfigsPayload, op: DraftOp): void {
     switch (op.kind) {
+        case 'setModuleSetting': {
+            s.moduleSettings = { ...s.moduleSettings, [op.module]: { ...s.moduleSettings?.[op.module], [op.key]: op.value } };
+            return;
+        }
         case 'createCategory': {
             const { label, module, description, options } = op.payload;
             s.categories.push(newCategory(op.key, label, module, description ?? '', options, op.optionIds));
@@ -509,6 +515,7 @@ export function modulesTouchedBy(ops: DraftOp[], base: FormConfigsPayload, draft
             case 'renameSection':
             case 'createTab':
             case 'deleteTab':
+            case 'setModuleSetting':
                 touched.add(op.module);
                 break;
         }
@@ -688,6 +695,7 @@ export interface ConfigWriter {
     deleteCategory(categoryKey: string): Promise<unknown>;
     deleteOption(optionId: string): Promise<unknown>;
     deleteField(fieldId: string): Promise<unknown>;
+    setModuleSetting(module: CrmModuleKey, key: string, value: unknown): Promise<unknown>;
 }
 
 export interface ReplayResult {
@@ -786,6 +794,9 @@ export async function replayOps(ops: DraftOp[], api: ConfigWriter): Promise<Repl
                 return;
             case 'deleteField':
                 await api.deleteField(rid(op.fieldId));
+                return;
+            case 'setModuleSetting':
+                await api.setModuleSetting(op.module, op.key, op.value);
                 return;
         }
     };

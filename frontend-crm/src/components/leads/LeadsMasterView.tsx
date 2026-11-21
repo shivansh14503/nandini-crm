@@ -2,7 +2,11 @@
 
 import React, { useState, useMemo, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
-import { Box, Chip, Typography } from '@mui/material';
+import { Box, Chip, Tooltip, Typography } from '@mui/material';
+import EventBusyOutlinedIcon from '@mui/icons-material/EventBusyOutlined';
+import { localToday } from '@/utils/pastDates';
+import { isFollowUpExpired } from '../forms/FollowUpDecision';
+import { ratingChipColors, useLeadRatingConfig } from '@/utils/leadRating';
 import GroupOutlinedIcon from '@mui/icons-material/GroupOutlined';
 import LocalFireDepartmentOutlinedIcon from '@mui/icons-material/LocalFireDepartmentOutlined';
 import PersonAddAltOutlinedIcon from '@mui/icons-material/PersonAddAltOutlined';
@@ -98,7 +102,14 @@ export function LeadsMasterView() {
         if (flash.recordId) setDrawerLeadId(flash.recordId);
     });
 
-    const todayStr = useMemo(() => new Date().toISOString().split('T')[0], []);
+    // Today on this device's clock (IST for the team), not UTC: UTC's date lags until 05:30 IST.
+    const todayStr = useMemo(() => localToday(), []);
+    // Overdue: an open lead whose next follow-up has passed (closed leads have none to miss).
+    const { closingStatuses } = useLeadRatingConfig();
+    const isOverdue = useCallback(
+        (l: Lead) => !closingStatuses.has(l.status) && Boolean(l.nextFollowupDate) && isFollowUpExpired({ date: l.nextFollowupDate, time: l.nextFollowupTime ?? '' }),
+        [closingStatuses],
+    );
 
     const [importOpen, setImportOpen] = useState(false);
 
@@ -110,7 +121,7 @@ export function LeadsMasterView() {
                 id: 'hot',
                 label: 'Hot Leads',
                 icon: <LocalFireDepartmentOutlinedIcon sx={{ fontSize: 16 }} />,
-                count: baseLeads.filter((l) => l.leadType === 'Hot').length,
+                count: baseLeads.filter((l) => l.rating === 'Hot').length,
                 activeColor: 'var(--mui-palette-error-main)',
                 activeBgColor: 'var(--mui-palette-error-soft)',
                 activeBadgeBgColor: 'var(--crm-red-100)',
@@ -123,24 +134,34 @@ export function LeadsMasterView() {
                 activeColor: 'var(--mui-palette-warning-main)',
             },
             {
+                id: 'overdue',
+                label: 'Overdue',
+                icon: <EventBusyOutlinedIcon sx={{ fontSize: 16 }} />,
+                count: baseLeads.filter(isOverdue).length,
+                activeColor: 'var(--mui-palette-error-main)',
+                activeBgColor: 'var(--mui-palette-error-soft)',
+                activeBadgeBgColor: 'var(--crm-red-100)',
+            },
+            {
                 id: 'my_leads',
                 label: 'My Leads',
                 icon: <AccountCircleOutlinedIcon sx={{ fontSize: 16 }} />,
                 count: currentUsername ? baseLeads.filter((l) => (l.assignedTo || '').includes(currentUsername)).length : 0,
             },
         ];
-    }, [baseLeads, todayStr, currentUsername]);
+    }, [baseLeads, todayStr, currentUsername, isOverdue]);
 
     // ── Filter Logic ──────────────────────────────────────────────────────────
     /** Leads in the active pill view: the status cards count these, so "My Leads" shows my pipeline. */
     const tabLeads = useMemo(() => {
         return baseLeads.filter((lead) => {
-            if (activeTab === 'hot' && lead.leadType !== 'Hot') return false;
+            if (activeTab === 'hot' && lead.rating !== 'Hot') return false;
             if (activeTab === 'followup_today' && lead.nextFollowupDate !== todayStr) return false;
+            if (activeTab === 'overdue' && !isOverdue(lead)) return false;
             if (activeTab === 'my_leads' && (!currentUsername || !(lead.assignedTo || '').includes(currentUsername))) return false;
             return true;
         });
-    }, [baseLeads, activeTab, todayStr, currentUsername]);
+    }, [baseLeads, activeTab, todayStr, currentUsername, isOverdue]);
 
     // ── Scorecard ─────────────────────────────────────────────────────────────
     // An admin-configured scorecard (pencil on "All Leads") replaces the built-in status buckets below.
@@ -314,6 +335,26 @@ export function LeadsMasterView() {
                 ),
             },
             {
+                // Hot / Warm / Cold, set by the system from each follow-up; the tooltip says why.
+                id: 'rating',
+                label: 'RATING',
+                sortable: true,
+                minWidth: 100,
+                render: (l) =>
+                    l.rating ? (
+                        <Tooltip title={l.ratingReason || ''} arrow disableInteractive>
+                            <Chip
+                                label={l.rating}
+                                size="small"
+                                icon={l.rating === 'Hot' ? <LocalFireDepartmentOutlinedIcon sx={{ fontSize: '14px !important', color: 'inherit !important' }} /> : undefined}
+                                sx={{ height: 22, fontSize: '0.72rem', fontWeight: 700, border: '1px solid', ...ratingChipColors(l.rating) }}
+                            />
+                        </Tooltip>
+                    ) : (
+                        <Typography sx={{ fontSize: '0.78rem', color: 'var(--mui-palette-text-muted)' }}>-</Typography>
+                    ),
+            },
+            {
                 id: 'leadSource',
                 label: 'LEAD SOURCE',
                 sortable: true,
@@ -471,6 +512,7 @@ export function LeadsMasterView() {
                 minWidth: 150,
                 render: (l) => {
                     const isToday = l.nextFollowupDate === todayStr;
+                    const overdue = isOverdue(l);
 
                     return (
                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.8 }}>
@@ -489,7 +531,24 @@ export function LeadsMasterView() {
                                     }}
                                 >
                                     {l.nextFollowupDate || '-'}
-                                    {isToday && (
+                                    {overdue ? (
+                                        <Box
+                                            component="span"
+                                            sx={{
+                                                ml: 0.6,
+                                                px: 0.6,
+                                                py: 0.1,
+                                                borderRadius: '4px',
+                                                fontSize: '0.62rem',
+                                                fontWeight: 800,
+                                                backgroundColor: 'var(--mui-palette-error-soft)',
+                                                color: 'var(--crm-red-700)',
+                                                border: '1px solid var(--mui-palette-error-softBorder)',
+                                            }}
+                                        >
+                                            OVERDUE
+                                        </Box>
+                                    ) : isToday && (
                                         <Box
                                             component="span"
                                             sx={{
@@ -538,7 +597,7 @@ export function LeadsMasterView() {
                 render: (l) => <Typography sx={plainCellSx}>{formatDateTime(l.createdAt) || '-'}</Typography>,
             },
         ],
-        [todayStr, leadSourceLabel, showNumber]
+        [todayStr, leadSourceLabel, showNumber, isOverdue]
     );
 
     // Row clicks only open the drawer; its eye button leads on to the detail page with the related modules.

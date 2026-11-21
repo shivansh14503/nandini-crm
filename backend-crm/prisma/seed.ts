@@ -27,6 +27,8 @@ import { connectRedis, isRedisReady, redis } from '../src/config/redis.js';
 import { createContactRecord } from '../src/modules/contacts/contact.service.js';
 import { contactInputSchema } from '../src/modules/contacts/contact.validator.js';
 import { createLeadRecord } from '../src/modules/leads/lead.service.js';
+import { loadRatingConfig, newLeadRatingColumns, type RatingColumns } from '../src/modules/leads/lead.followUp.js';
+import { businessToday } from '../src/validators/notInPast.js';
 import { leadImportSchema } from '../src/modules/leads/lead.validator.js';
 import { createOpportunityRecord } from '../src/modules/opportunities/opportunity.service.js';
 import { opportunityInputSchema } from '../src/modules/opportunities/opportunity.validator.js';
@@ -371,8 +373,17 @@ async function seedDemoRecords(admin: AuthUser): Promise<void> {
     report('contacts', contacts);
 
     const leads: Tally = { created: 0, skipped: [] };
+    const ratingConfig = await loadRatingConfig(prisma);
     for (const l of await loadMock('leads')) {
-        await attempt(leads, l.name, () => runInTransaction((tx) => createLeadRecord(tx, leadImportSchema.parse(l), actorFor(l))));
+        await attempt(leads, l.name, () =>
+            runInTransaction((tx) => {
+                const input = leadImportSchema.parse(l);
+                // Rated by the new-lead rule, unless the demo data presets a Rating.
+                const rating = newLeadRatingColumns(ratingConfig, businessToday(), input.nextFollowupDate);
+                const preset = typeof l.rating === 'string' && l.rating ? { rating: l.rating, ratingReason: 'Demo data' } : {};
+                return createLeadRecord(tx, input, actorFor(l), { ...rating, ...preset } as RatingColumns);
+            }),
+        );
     }
     report('leads', leads);
 

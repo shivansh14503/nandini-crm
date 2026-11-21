@@ -1,5 +1,5 @@
 /** Quick view pill; `'all'` means no pill is active. */
-export type LeadFilterTab = 'all' | 'hot' | 'followup_today' | 'my_leads';
+export type LeadFilterTab = 'all' | 'hot' | 'followup_today' | 'overdue' | 'my_leads';
 
 /** Status summary card buckets: the 9 lead statuses grouped into pipeline stages. */
 export type LeadStatusBucket = 'all' | 'new' | 'in_process' | 'converted' | 'lost';
@@ -18,6 +18,7 @@ export type LeadSortField =
     | 'organizationName'
     | 'mobile'
     | 'leadType'
+    | 'rating'
     | 'status'
     | 'nextFollowupDate'
     | 'assignedTo'

@@ -1,7 +1,8 @@
 'use client';
 
 import React, { useMemo } from 'react';
-import { Box, Skeleton, Typography } from '@mui/material';
+import { Box, Skeleton, Tooltip, Typography } from '@mui/material';
+import { ratingChipColors } from '@/utils/leadRating';
 import EventRepeatOutlinedIcon from '@mui/icons-material/EventRepeatOutlined';
 import { useEntityAuditEntries, type AuditEntityType } from '@/hooks/queries/useAuditLogs';
 import { glassSurfaceSx, GLASS_SHADOW, GLASS_RADIUS, FLOAT_INSET } from '@/theme/glass';
@@ -103,13 +104,45 @@ export function FollowUpHistoryPanel({ entityType, recordId, recordLabel }: Foll
     );
 }
 
+/** `Rating Warm → Hot` (or just `Rating Hot` when it stayed or is the first); the reason on hover. */
+function RatingChange({ from, to, reason }: { from: string; to: string; reason?: string }) {
+    const pill = (rating: string) => (
+        <Box
+            component="span"
+            sx={{ px: 0.8, py: 0.1, borderRadius: '999px', fontSize: '0.68rem', fontWeight: 700, border: '1px solid', ...ratingChipColors(rating) }}
+        >
+            {rating}
+        </Box>
+    );
+    return (
+        <Tooltip title={reason ?? ''} arrow disableInteractive>
+            <Box component="span" sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5, fontSize: '0.7rem', color: 'var(--mui-palette-text-secondary)' }}>
+                Rating
+                {from && from !== to && (
+                    <>
+                        {pill(from)}
+                        <span aria-hidden>→</span>
+                    </>
+                )}
+                {pill(to)}
+            </Box>
+        </Tooltip>
+    );
+}
+
 function TimelineItem({ event, recordLabel, latest, last }: { event: FollowUpEvent; recordLabel: string; latest: boolean; last: boolean }) {
     const fallbackTitle =
-        event.kind === 'created' ? `${recordLabel} created` : event.kind === 'converted' ? `${recordLabel} converted` : 'Follow-up recorded';
+        event.kind === 'created'
+            ? `${recordLabel} created`
+            : event.kind === 'converted'
+              ? `${recordLabel} converted`
+              : event.kind === 'rated'
+                ? 'Rating changed'
+                : 'Follow-up recorded';
     // The customer response is the title; creation is still marked on the timestamp line.
-    const title = event.kind === 'converted' ? fallbackTitle : event.response || fallbackTitle;
+    const title = event.kind === 'converted' || event.kind === 'rated' ? fallbackTitle : event.response || fallbackTitle;
     const markCreated = event.kind === 'created' && Boolean(event.response);
-    const showSlot = event.kind !== 'converted';
+    const showSlot = event.kind !== 'converted' && event.kind !== 'rated' && !event.closedAs;
 
     return (
         <Box component="li" sx={{ position: 'relative', pl: 2.5, pb: last ? 0 : 2.25 }}>
@@ -160,6 +193,23 @@ function TimelineItem({ event, recordLabel, latest, last }: { event: FollowUpEve
                     {event.retained && (
                         <Typography component="span" sx={{ fontSize: '0.72rem', color: 'var(--mui-palette-text-secondary)' }}>
                             (kept)
+                        </Typography>
+                    )}
+                </Box>
+            )}
+
+            {event.closedAs && (
+                <Typography sx={{ mt: 0.6, fontSize: '0.74rem', color: 'var(--mui-palette-text-secondary)' }}>
+                    Lead closed as <strong>{event.closedAs}</strong> · follow-up removed
+                </Typography>
+            )}
+
+            {(event.rating?.to || (event.unansweredCalls ?? 0) > 0) && (
+                <Box sx={{ mt: 0.6, display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 0.75 }}>
+                    {event.rating?.to && <RatingChange from={event.rating.from} to={event.rating.to} reason={event.reason} />}
+                    {(event.unansweredCalls ?? 0) > 0 && (
+                        <Typography component="span" sx={{ fontSize: '0.72rem', color: 'var(--mui-palette-text-secondary)' }}>
+                            {event.unansweredCalls} unanswered {event.unansweredCalls === 1 ? 'call' : 'calls'} in a row
                         </Typography>
                     )}
                 </Box>

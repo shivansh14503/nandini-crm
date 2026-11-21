@@ -29,6 +29,8 @@ export interface DrawerBadgeItem {
     backgroundColor?: string;
     borderColor?: string;
     isMonospace?: boolean;
+    /** Shown on hover (e.g. why a lead has its Rating). */
+    tooltip?: string;
 }
 
 /**

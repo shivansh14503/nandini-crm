@@ -71,6 +71,8 @@ export interface ConfigDraftActions {
      * field. Returns the number of fields deleted.
      */
     deleteTab(module: CrmModuleKey, tabKey: string): number;
+    /** A module setting (e.g. the new-lead Rating limits); repeated edits of one setting stay one change. */
+    setModuleSetting(module: CrmModuleKey, key: string, value: unknown, summary: string): void;
 }
 
 export interface ConfigDraft {
@@ -387,12 +389,17 @@ export function useConfigDraft(base: FormConfigsPayload | undefined, refetch: ()
                     return;
                 }
                 const renamedTo = payload.label;
+                const meta = payload.meta ?? undefined;
                 const what =
                     renamedTo !== undefined && renamedTo !== option.label
                         ? `renamed '${option.label}' to '${renamedTo}'`
                         : payload.isDefault !== undefined
                           ? `${payload.isDefault ? 'set' : 'removed'} '${option.label}' as default`
-                          : `updated '${option.label}'`;
+                          : meta && 'ratingRule' in meta && JSON.stringify(meta.ratingRule) !== JSON.stringify(option.meta?.ratingRule)
+                            ? `Rating rule of '${option.label}'`
+                            : meta && 'closesLead' in meta && meta.closesLead !== option.meta?.closesLead
+                              ? `'${option.label}' ${meta.closesLead ? 'closes' : 'no longer closes'} the lead`
+                              : `updated '${option.label}'`;
                 push({ kind: 'updateOption', optionId, payload, summary: `${category.label}: ${what}` });
             },
 
@@ -572,6 +579,17 @@ export function useConfigDraft(base: FormConfigsPayload | undefined, refetch: ()
                     push({ kind: 'deleteTab', module, tabKey, label: tab.label, summary: `${moduleLabel(module)}: deleted tab '${tab.label}'` });
                 }
                 return fields.length;
+            },
+
+            setModuleSetting(module, key, value, summary) {
+                const others = opsRef.current.filter((op) => !(op.kind === 'setModuleSetting' && op.module === module && op.key === key));
+                // Back to the saved value: nothing left to save for it.
+                const saved = baseRef.current?.moduleSettings?.[module]?.[key];
+                if (JSON.stringify(saved ?? null) === JSON.stringify(value)) {
+                    commit(others);
+                    return;
+                }
+                commit([...others, { kind: 'setModuleSetting', module, key, value, summary: `${moduleLabel(module)}: ${summary}` }]);
             },
         }),
         // eslint-disable-next-line react-hooks/exhaustive-deps -- the actions read the latest state through refs

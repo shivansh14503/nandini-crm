@@ -13,7 +13,8 @@ import { assertAssigneeValid, assertRecordAccess, buildAccessScopeWhere } from '
 import { emailsInclude, normalizeEmails, replaceEmails } from '../shared/entityEmails.js';
 import { assertEmailsDeliverable, queueEmailVerification } from '../email-verification/emailVerification.service.js';
 import type { PrefetchedLookups } from '../shared/prefetch.js';
-import { assertNotInPast, nextFollowupCheck } from '../../validators/notInPast.js';
+import { businessNow } from '../../validators/notInPast.js';
+import { assertFutureSlot, loadRatingConfig, newLeadRatingColumns, planLeadEdit, type RatingColumns } from './lead.followUp.js';
 import { codeSearchPrefix, phoneSearch, phoneVariants, phoneWhere } from '../shared/searchTerms.js';
 import { lockRecords, runInTransaction, softDeleteData, type BulkDeleteResult } from '../shared/transactions.js';
 import { assertTaxIdsUnique } from '../shared/taxIdentifiers.js';
@@ -29,6 +30,9 @@ import {
 } from './lead.validator.js';
 
 export const leadInclude = { emailAddress: emailsInclude } as const;
+
+const omitKeys = (source: Record<string, unknown>, keys: string[]): Record<string, unknown> =>
+    Object.fromEntries(Object.entries(source).filter(([key]) => !keys.includes(key)));
 
 export const leadNotFound = () => HttpError.notFound('Lead not found');
 /** Columns `assertRecordAccess` reads. */
@@ -76,12 +80,23 @@ async function loadLead(tx: TransactionClient | typeof prisma, id: string) {
     return row;
 }
 
-/** Inserts a lead inside the caller's transaction (used by `create`, import and the seed). */
-export async function createLeadRecord(tx: TransactionClient, input: LeadInput, user: AuthUser, lookups: PrefetchedLookups = {}): Promise<LeadDto> {
+/**
+ * Inserts a lead inside the caller's transaction (used by `create`, import and the seed). `rating` is its first
+ * Rating (`newLeadRatingColumns`); the Rating is never taken from the lead input.
+ */
+export async function createLeadRecord(
+    tx: TransactionClient,
+    input: LeadInput,
+    user: AuthUser,
+    rating: RatingColumns,
+    lookups: PrefetchedLookups = {},
+): Promise<LeadDto> {
     await assertTaxIdsUnique(tx, 'lead', { gstNumber: input.gstNumber });
     const leadCode = await generateEntityCode(tx, 'LD');
     const assignedTo = (await assertAssigneeValid(tx, input.assignedTo, { activeUsernames: lookups.activeUsernames })) ?? user.username;
-    const row = await tx.lead.create({ data: { ...(await resolveAddressPlaces(tx, 'lead', toLeadData({ ...input, assignedTo }))), leadCode, createdBy: user.username } });
+    const row = await tx.lead.create({
+        data: { ...(await resolveAddressPlaces(tx, 'lead', toLeadData({ ...input, assignedTo }))), ...rating, leadCode, createdBy: user.username },
+    });
     await replaceEmails(tx, { leadId: row.id }, normalizeEmails(input.emailAddress));
 
     const dto = toLeadDto(await loadLead(tx, row.id));
@@ -110,6 +125,7 @@ export const leadService = {
         if (filters.excludeStatus?.length) statusFilter.notIn = filters.excludeStatus;
         if (Object.keys(statusFilter).length > 0) where.status = statusFilter;
         if (filters.leadType?.length) where.leadType = { in: filters.leadType };
+        if (filters.rating?.length) where.rating = { in: filters.rating };
         if (filters.leadSource?.length) where.leadSource = { in: filters.leadSource };
         if (filters.assignedTo) where.assignedTo = filters.assignedTo;
         if (filters.organizationName) where.organizationName = filters.organizationName;
@@ -148,17 +164,31 @@ export const leadService = {
         const input = leadInputSchema.parse(body);
         input.customFields = await validateModulePayload('leads', asPayload(body), input.customFields);
         assertStatusTransition(null, input.status);
-        assertNotInPast([nextFollowupCheck(input)]);
+        // Every new lead needs its first follow-up, date and time, later than now (checked at save time).
+        const now = businessNow();
+        assertFutureSlot({ date: input.nextFollowupDate ?? '', time: input.nextFollowupTime ?? '' }, now);
         await assertEmailsDeliverable(input.emailAddress, 'emailAddress');
 
-        const created = await runInTransaction((tx) => createLeadRecord(tx, input, user));
+        const created = await runInTransaction(async (tx) => {
+            const rating = newLeadRatingColumns(await loadRatingConfig(tx), now.slice(0, 10), input.nextFollowupDate);
+            return createLeadRecord(tx, input, user, rating);
+        });
         await cacheService.invalidateEntityCaches('leads');
         queueEmailVerification({ leadId: created.id });
         return created;
     },
 
-    async update(id: string, patch: Record<string, unknown>, user: AuthUser): Promise<LeadDto> {
+    /**
+     * An edit either records a follow-up (a Customer Response is sent: the Rating is worked out again and a
+     * FOLLOW_UP history row written) or changes details only (no response: the follow-up, Rating and unanswered
+     * calls stay as they are). See `planLeadEdit` and docs/lead-rating-rules.md §3.
+     */
+    async update(id: string, body: Record<string, unknown>, user: AuthUser): Promise<LeadDto> {
         const fieldConfig = await loadModuleFieldConfig('leads');
+        const { followUpDecision, ...rest } = body;
+        const response = typeof rest.customerResponse === 'string' ? rest.customerResponse.trim() : '';
+        // Customer Response and Remarks belong to a recorded follow-up: a details-only save keeps the stored ones.
+        const patch: Record<string, unknown> = response ? rest : omitKeys(rest, ['customerResponse', 'remarks']);
         if ('emailAddress' in patch) await assertEmailsDeliverable(patch.emailAddress, 'emailAddress', { leadId: id });
         const updated = await runInTransaction(async (tx) => {
             await lockRecords(tx, 'lead', [id]);
@@ -167,23 +197,39 @@ export const leadService = {
             const before = toLeadDto(existing);
             const merged: Record<string, unknown> = { ...before, ...patch };
             const input = leadInputSchema.parse(merged);
+            // The follow-up's date and time are checked by `planLeadEdit` (required only when one is scheduled).
             input.customFields = checkModulePayload(fieldConfig, merged, input.customFields, {
-                submittedKeys: new Set(Object.keys(patch)),
+                submittedKeys: new Set(Object.keys(patch).filter((key) => key !== 'nextFollowupDate' && key !== 'nextFollowupTime')),
                 previousCustomFields: before.customFields,
             });
             assertStatusTransition(existing.status, input.status);
-            assertNotInPast([nextFollowupCheck(input, before)]);
+            const plan = planLeadEdit({
+                state: existing,
+                response,
+                remarks: input.remarks ?? '',
+                decision: followUpDecision,
+                nextStatus: input.status,
+                next: { date: input.nextFollowupDate ?? '', time: input.nextFollowupTime ?? '' },
+                config: await loadRatingConfig(tx),
+                now: businessNow(),
+            });
             await assertTaxIdsUnique(tx, 'lead', { gstNumber: input.gstNumber }, { excludeId: id, previous: { gstNumber: existing.gstNumber } });
             const assignedTo = (await assertAssigneeValid(tx, input.assignedTo, { previous: existing.assignedTo })) ?? existing.assignedTo;
 
-            await tx.lead.update({ where: { id }, data: { ...(await resolveAddressPlaces(tx, 'lead', toLeadData({ ...input, assignedTo }))), updatedBy: user.username } });
+            await tx.lead.update({
+                where: { id },
+                data: { ...(await resolveAddressPlaces(tx, 'lead', toLeadData({ ...input, assignedTo }))), ...plan.data, updatedBy: user.username },
+            });
             if ('emailAddress' in patch) {
                 await replaceEmails(tx, { leadId: id }, normalizeEmails(input.emailAddress));
             }
 
             const after = toLeadDto(await loadLead(tx, id));
             const changes = diffRecords(before, after);
-            if (Object.keys(changes).length > 0) {
+            if (plan.followUp) {
+                // Written even when nothing else changed: every recorded follow-up is part of the history.
+                await auditService.record(tx, { entityType: 'Lead', entityId: id, action: 'FOLLOW_UP', changedBy: user.username, changes: { ...changes, followUp: plan.followUp } });
+            } else if (Object.keys(changes).length > 0) {
                 await auditService.record(tx, { entityType: 'Lead', entityId: id, action: 'UPDATE', changedBy: user.username, changes });
             }
             return after;

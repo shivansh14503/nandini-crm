@@ -7,7 +7,7 @@ import { leadController } from './lead.controller.js';
 
 /**
  * /api/leads
- *   GET    /             ?page&limit&search&sortBy&sortOrder&status&excludeStatus&leadType&leadSource
+ *   GET    /             ?page&limit&search&sortBy&sortOrder&status&excludeStatus&leadType&rating&leadSource
  *                         &organizationName&assignedTo&mine&nextFollowupDate&createdWithinDays
  *   GET    /check-duplicates ?mobile&emails&excludeId&excludeType  (informational; never blocks a save)
  *   GET    /:id

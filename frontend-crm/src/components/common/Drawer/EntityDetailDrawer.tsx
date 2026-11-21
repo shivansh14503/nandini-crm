@@ -434,8 +434,8 @@ export function EntityDetailDrawer({
                 {badges.length > 0 && (
                     <Box sx={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 0.8, mt: 1.8 }}>
                         {badges.map((b, idx) => (
+                            <Tooltip key={idx} title={b.tooltip ?? ''} arrow disableInteractive>
                             <Box
-                                key={idx}
                                 sx={{
                                     display: 'inline-flex',
                                     alignItems: 'center',
@@ -454,6 +454,7 @@ export function EntityDetailDrawer({
                                 {b.icon}
                                 <span>{b.label}</span>
                             </Box>
+                            </Tooltip>
                         ))}
                     </Box>
                 )}

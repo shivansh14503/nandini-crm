@@ -44,7 +44,10 @@ import { OrganizationNameAutocomplete } from '@/components/organizations/Organiz
 import { useOrganizationNameCheck } from '@/components/organizations/useOrganizationNameCheck';
 import { useFormMode } from '@/context/FormModeContext';
 import { upperCase, useUndoSafeSanitizer } from '@/components/forms/undoSafeInput';
-import { CUSTOMER_RESPONSE_CATEGORY, CUSTOMER_RESPONSES, FieldGlow, useFollowUpDecision } from '@/components/forms/FollowUpDecision';
+import { CUSTOMER_RESPONSE_CATEGORY, CUSTOMER_RESPONSES, FieldGlow, useFollowUpDecision, type FollowUpDecision } from '@/components/forms/FollowUpDecision';
+import { useLeadRatingConfig } from '@/utils/leadRating';
+import { Typography } from '@mui/material';
+import EventBusyOutlinedIcon from '@mui/icons-material/EventBusyOutlined';
 
 const groupLabelSx = { mb: 2 } as const;
 /** Set only by the Convert Lead flow, never picked by hand. */
@@ -56,18 +59,64 @@ export interface LeadOverviewSectionProps {
     notify?: (message: string, severity?: 'success' | 'error' | 'info' | 'warning') => void;
     /** Told while the user still owes the next follow-up decision; the form refuses to save until it's made. */
     onDecisionPendingChange?: (pending: boolean) => void;
+    /** Told the keep / new decision the save sends. */
+    onDecisionChange?: (decision: FollowUpDecision | null) => void;
+    /** The saved lead's status and Rating (edit), to tell closing / reopening apart and say which Rating stays. */
+    savedStatus?: string;
+    savedRating?: string;
+}
+
+/** In place of the follow-up while a lead is being closed: none is scheduled and the Rating stays as it is. */
+function ClosingNote({ rating }: { rating: string }) {
+    return (
+        <Box
+            sx={{
+                display: 'flex',
+                alignItems: 'flex-start',
+                gap: 1,
+                alignSelf: 'start',
+                mt: 3,
+                p: 1.25,
+                borderRadius: '8px',
+                border: '1px solid var(--mui-palette-border-main)',
+                backgroundColor: 'var(--mui-palette-background-subtle)',
+            }}
+        >
+            <EventBusyOutlinedIcon sx={{ fontSize: 18, mt: 0.1, color: 'var(--mui-palette-text-muted)' }} />
+            <Typography sx={{ fontSize: '0.78rem', color: 'var(--mui-palette-text-secondary)' }}>
+                Closing removes the next follow-up and keeps the Rating{rating ? ` (${rating})` : ''} as it is.
+            </Typography>
+        </Box>
+    );
 }
 
 /** Overview tab of the Lead form. Must be rendered inside a `FormProvider<LeadFormData>`. */
-export function LeadOverviewSection({ leadId, notify, onDecisionPendingChange }: LeadOverviewSectionProps = {}) {
+export function LeadOverviewSection({ leadId, notify, onDecisionPendingChange, onDecisionChange, savedStatus = '', savedRating = '' }: LeadOverviewSectionProps = {}) {
     const getOptions = useDropdownOptionsGetter();
     const { control, setValue, getValues, getFieldState } = useFormContext<LeadFormData>();
     const { mode } = useFormMode();
     const isEdit = mode === 'edit';
 
+    // An edit with a Customer Response records a follow-up (and re-rates the lead); without one it changes details
+    // only. A closing status ("Closes the lead" in Form Builder) schedules no follow-up and keeps the Rating.
+    const { closingStatuses } = useLeadRatingConfig();
+    const status = useWatch({ control, name: 'status' }) ?? '';
+    const response = useWatch({ control, name: 'customerResponse' }) ?? '';
+    const closing = isEdit && closingStatuses.has(status);
+    const wasClosed = closingStatuses.has(savedStatus);
+    const responseRequired = isEdit && (closing ? !wasClosed : wasClosed);
+
     // Customer Response → keep or reschedule the next follow-up (see FollowUpDecision).
-    const { setAnchor: setResponseAnchor, onResponseChange, glow: followUpGlow, popper: followUpPopper } = useFollowUpDecision({ enabled: isEdit, notify, onPendingChange: onDecisionPendingChange });
+    const { setAnchor: setResponseAnchor, onResponseChange, onSuspendChange, glow: followUpGlow, popper: followUpPopper } = useFollowUpDecision({
+        enabled: isEdit,
+        notify,
+        onPendingChange: onDecisionPendingChange,
+        onDecisionChange,
+        responseOptional: true,
+        suspended: closing,
+    });
     const customerResponseOptions = getOptions(CUSTOMER_RESPONSE_CATEGORY, CUSTOMER_RESPONSES);
+    const followUpLocked = isEdit && !response.trim();
 
     // Informational only: lists (and links to) the records that already use the mobile / email; never blocks the save.
     const mobile = useWatch({ control, name: 'mobile' });
@@ -204,8 +253,19 @@ export function LeadOverviewSection({ leadId, notify, onDecisionPendingChange }:
                 <SectionLabel label="PIPELINE & FOLLOW-UP" sx={groupLabelSx} />
                 <FormGrid columns={3}>
                     <RhfSelect<LeadFormData> name="leadSource" label="Lead Source" required options={leadSourceOptions} placeholder="Select Lead Source" />
-                    <RhfSelect<LeadFormData> name="leadType" label="Lead Type" required hint="Urgency" options={LEAD_TYPES} />
-                    <RhfSelect<LeadFormData> name="status" label="Status" hint="Default: New" options={LEAD_STATUSES} disabledOptions={CONVERT_ONLY_STATUSES} placeholder="Select Status" />
+                    <RhfSelect<LeadFormData> name="leadType" label="Lead Type" required options={LEAD_TYPES} placeholder="Select Lead Type" />
+                    <RhfSelect<LeadFormData>
+                        name="status"
+                        label="Status"
+                        hint="Default: New"
+                        options={LEAD_STATUSES}
+                        disabledOptions={CONVERT_ONLY_STATUSES}
+                        placeholder="Select Status"
+                        // Into or out of a closing status: drop or ask again the follow-up question.
+                        onValueChange={(next, previous) => {
+                            if (isEdit && closingStatuses.has(next) !== closingStatuses.has(previous)) onSuspendChange(closingStatuses.has(next));
+                        }}
+                    />
                     {/* Picks from the CRM's contacts (Contact Search popup); a name can still be typed. */}
                     <RhfLookup<LeadFormData, 'contact'>
                         name="referredBy"
@@ -215,24 +275,35 @@ export function LeadOverviewSection({ leadId, notify, onDecisionPendingChange }:
                         placeholder="Search or select contact..."
                     />
                     <RhfSelect<LeadFormData> name="followupType" label="Followup Type" hint="Default: Call" options={FOLLOWUP_TYPES} placeholder="Select Type" />
-                    {/* Asked on every edit (a new lead has no follow-up to report on yet).
-                        Starts its own row so it sits beside the Next Followup Date / Assigned to it decides. */}
+                    {/* Picked to record a follow-up (a new lead has none to report on yet); left empty, the edit
+                        changes details only. Starts its own row so it sits beside the Next Followup Date it decides. */}
                     {mode !== 'create' && (
                         <Box ref={setResponseAnchor} sx={{ minWidth: 0, gridColumnStart: 1, '&& > *': { mb: 0 } }}>
                             <RhfSelect<LeadFormData>
                                 name="customerResponse"
                                 label="Customer Response"
-                                required={isEdit}
-                                hint="From the last follow-up"
+                                required={responseRequired}
+                                hint={!isEdit ? 'From the last follow-up' : closing ? 'Why the lead is closed' : 'Leave empty to change details only'}
                                 options={customerResponseOptions}
                                 placeholder="Select customer response"
                                 onValueChange={onResponseChange}
                             />
                         </Box>
                     )}
-                    <FieldGlow active={followUpGlow}>
-                        <RhfDateTimeField<LeadFormData> dateName="nextFollowupDate" timeName="nextFollowupTime" label="Next Followup Date" required hint="Date & time" />
-                    </FieldGlow>
+                    {closing ? (
+                        <ClosingNote rating={savedRating} />
+                    ) : (
+                        <FieldGlow active={followUpGlow}>
+                            <RhfDateTimeField<LeadFormData>
+                                dateName="nextFollowupDate"
+                                timeName="nextFollowupTime"
+                                label="Next Followup Date"
+                                required
+                                disabled={followUpLocked}
+                                hint={followUpLocked ? 'Pick a Customer Response to change it' : 'Date & time'}
+                            />
+                        </FieldGlow>
+                    )}
                     <RhfLookup<LeadFormData> name="assignedTo" label="Assigned to" lookupType="user" required placeholder="Select Representative" />
                     <RhfMultiAutocomplete<LeadFormData> name="productCategory" label="Product Category" required options={PRODUCT_CATEGORIES} placeholder="Search and select products..." />
                 </FormGrid>
@@ -243,7 +314,8 @@ export function LeadOverviewSection({ leadId, notify, onDecisionPendingChange }:
             {/* ── Notes: full width ── */}
             <FormGrid columns={1}>
                 <FormGridItem>
-                    <RhfTextField<LeadFormData> name="remarks" label="Remarks" required hint="Action items / requirement brief" multiline minRows={3} maxRows={5} placeholder="Enter specific followup requirement, client demand, or notes..." />
+                    {/* Remarks go with a recorded follow-up, so a details-only edit doesn't ask for them. */}
+                    <RhfTextField<LeadFormData> name="remarks" label="Remarks" required={!isEdit || Boolean(response.trim())} hint="Action items / requirement brief" multiline minRows={3} maxRows={5} placeholder="Enter specific followup requirement, client demand, or notes..." />
                 </FormGridItem>
             </FormGrid>
         </Box>

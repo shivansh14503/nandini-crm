@@ -29,17 +29,22 @@ import { ConfigDraftActionsContext, ConfigDraftChangesContext, changedIds, useCo
 import { DropdownManagerPanel, categoriesForModule } from './DropdownManagerPanel';
 import { FormFieldsBuilderPanel } from './FormFieldsBuilderPanel';
 import { FormLivePreviewPanel } from './FormLivePreviewPanel';
+import { RatingRulesPanel } from './RatingRulesPanel';
+import { leadRatingConfig } from '@/utils/leadRating';
+import LocalFireDepartmentOutlinedIcon from '@mui/icons-material/LocalFireDepartmentOutlined';
 import { isAdminRole } from '@/utils/adminRoles';
 import { CodedFieldDefaultsProvider, type CodedFieldDefaultsMap } from '@/context/CodedFieldDefaultsContext';
 import { CodedDefaultsHarvester } from './CodedDefaultsHarvester';
 
 const NO_CODED_DEFAULTS: CodedFieldDefaultsMap = {};
 
-type BuilderView = 'dropdowns' | 'fields' | 'preview';
+type BuilderView = 'dropdowns' | 'fields' | 'rules' | 'preview';
 
 const VIEWS = [
     { key: 'dropdowns' as const, label: 'Dropdowns', icon: <ListAltOutlinedIcon sx={{ fontSize: 17 }} /> },
     { key: 'fields' as const, label: 'Form Fields & Sections', icon: <ViewQuiltOutlinedIcon sx={{ fontSize: 17 }} /> },
+    // Leads only: how a lead's Rating (Hot / Warm / Cold) is worked out.
+    { key: 'rules' as const, label: 'Rating Rules', icon: <LocalFireDepartmentOutlinedIcon sx={{ fontSize: 17 }} /> },
     { key: 'preview' as const, label: 'Live Preview', icon: <VisibilityOutlinedIcon sx={{ fontSize: 17 }} /> },
 ];
 
@@ -91,7 +96,7 @@ export function FormCustomizationView() {
      * form collects (`module` is the record shown). Their settings are those forms' own.
      */
     const [convert, setConvert] = useState(false);
-    const [view, setView] = useState<BuilderView>('dropdowns');
+    const [selectedView, setView] = useState<BuilderView>('dropdowns');
     /** Placeholders / hints the selected module's form codes for its built-in fields (prefill the field editor). */
     const [coded, setCoded] = useState<{ module: CrmModuleKey | null; defaults: CodedFieldDefaultsMap }>({ module: null, defaults: NO_CODED_DEFAULTS });
     const [toast, setToast] = useState<{ open: boolean; message: string; severity: 'success' | 'error' | 'info' | 'warning' }>({
@@ -162,11 +167,30 @@ export function FormCustomizationView() {
         if (!isConvertModule(module)) setModule(CONVERT_RECORDS[0].module);
     };
     const fieldsCountOf = (m: CrmModuleKey) => (convert && isConvertModule(m) ? convertCounts[m] : fieldCounts[m]);
-    const viewItems = VIEWS.map((v) => ({
+    const showRules = module === 'leads' && !convert;
+    // Rating Rules edits: the new-lead limits, and the meta of the leads Customer Response / Status options.
+    const rulesTouched = useMemo(() => {
+        if (!showRules || !configs) return false;
+        const { responseCategory, statusCategory } = leadRatingConfig(configs);
+        const ruleOptionIds = new Set([...(responseCategory?.options ?? []), ...(statusCategory?.options ?? [])].map((o) => o.id));
+        return ops.some(
+            (op) =>
+                (op.kind === 'setModuleSetting' && op.module === 'leads') ||
+                (op.kind === 'updateOption' && op.payload.meta !== undefined && ruleOptionIds.has(op.optionId)),
+        );
+    }, [showRules, configs, ops]);
+    // The Rating Rules tab belongs to Leads: on any other form it shows Dropdowns instead.
+    const view: BuilderView = selectedView === 'rules' && !showRules ? 'dropdowns' : selectedView;
+    const viewItems = VIEWS.filter((v) => v.key !== 'rules' || showRules).map((v) => ({
         ...v,
         count: !configs || !module ? undefined : v.key === 'dropdowns' ? dropdownCount : v.key === 'fields' ? fieldsCountOf(module) : undefined,
-        hasUnsaved: v.key === 'dropdowns' ? viewsTouched.dropdowns : v.key === 'fields' ? viewsTouched.fields : false,
-        unsavedTooltip: v.key === 'dropdowns' ? 'Unsaved dropdown changes on this form' : 'Unsaved field, section or tab changes on this form',
+        hasUnsaved: v.key === 'dropdowns' ? viewsTouched.dropdowns : v.key === 'fields' ? viewsTouched.fields : v.key === 'rules' ? rulesTouched : false,
+        unsavedTooltip:
+            v.key === 'dropdowns'
+                ? 'Unsaved dropdown changes on this form'
+                : v.key === 'rules'
+                  ? 'Unsaved Rating Rules changes'
+                  : 'Unsaved field, section or tab changes on this form',
     }));
 
     return (
@@ -360,6 +384,9 @@ export function FormCustomizationView() {
                                     <>
                                         {view === 'dropdowns' && <DropdownManagerPanel module={module} configs={configs} canEdit={canEdit && !saving} notify={notify} />}
                                         {view === 'fields' && <FormFieldsBuilderPanel module={module} configs={configs} canEdit={canEdit && !saving} notify={notify} unsavedTabs={unsavedTabs} />}
+                                        {view === 'rules' && showRules && (
+                                            <RatingRulesPanel configs={configs} canEdit={canEdit && !saving} notify={notify} onManageOptions={() => setView('dropdowns')} />
+                                        )}
                                         {view === 'preview' && <FormLivePreviewPanel module={module} configs={configs} unsavedCount={ops.length} unsavedTabs={unsavedTabs} />}
                                     </>
                                 )}

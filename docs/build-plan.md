@@ -66,6 +66,9 @@ Exit: the critical flows above run in CI.
 
 ### Phase 9 — Sales workflow depth (P2)
 
+- [x] **Lead Rating rules** (2026-11-21) — automatic Hot / Warm / Cold `Lead.rating` from each recorded follow-up,
+      admin-set limits per Customer Response option and for new leads (Form Builder › Leads › Rating Rules), closing
+      statuses, nightly ageing, follow-up history. [lead-rating-rules.md](lead-rating-rules.md)
 - [ ] Activities / follow-ups (calls, meetings, notes) linked to any record, with reminders.
 - [ ] PDFs for Opportunities (and later Tickets) via the module adapter pattern.
 - [ ] Email quotation PDF to the contact (needs an SMTP/provider decision).

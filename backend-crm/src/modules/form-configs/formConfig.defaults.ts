@@ -198,15 +198,16 @@ export const DEFAULT_CATEGORIES: DefaultCategory[] = [
         key: 'shared_customer_response',
         label: 'Customer Response',
         module: 'shared',
-        description: 'What the customer said on the last follow-up, picked on every edit (Leads, Opportunities).',
+        description: 'What the customer said on the last follow-up (Leads, Opportunities). On leads, each option also sets the Rating.',
+        // Starting Rating rules (option meta `ratingRule`, docs/lead-rating-rules.md); only leads read them.
         options: [
-            'Interested - wants a demo',
-            'Interested - send quotation',
-            'Asked to call back later',
-            'Not reachable / no answer',
-            'Needs internal discussion',
-            'Using another product',
-            'Not interested',
+            { value: 'Interested - wants a demo', meta: { ratingRule: { rule: 'followUpGap', hot: 5, warm: 'noLimit' } } },
+            { value: 'Interested - send quotation', meta: { ratingRule: { rule: 'daysSinceResponse', hot: 6, warm: 14 } } },
+            { value: 'Asked to call back later', meta: { ratingRule: { rule: 'followUpGap', hot: 5, warm: 'noLimit' } } },
+            { value: 'Not reachable / no answer', meta: { ratingRule: { rule: 'unansweredCalls', hot: 2, warm: 4 } } },
+            { value: 'Needs internal discussion', meta: { ratingRule: { rule: 'followUpGap', hot: 5, warm: 'noLimit' } } },
+            { value: 'Using another product', meta: { ratingRule: { rule: 'always', rating: 'Cold' } } },
+            { value: 'Not interested', meta: { ratingRule: { rule: 'always', rating: 'Cold' } } },
         ],
     },
     {
@@ -232,13 +233,14 @@ export const DEFAULT_CATEGORIES: DefaultCategory[] = [
         key: 'lead_status',
         label: 'Status',
         module: 'leads',
-        description: "'New' is the default and 'Converted' is set by the Convert action.",
+        description: "'New' is the default and 'Converted' is set by the Convert action. Statuses with 'Closes the lead' on mark a lead Lost.",
         options: withSystem(
             ['New', 'Contacted', 'In Discussion', 'Demo Scheduled', 'Proposal Sent', 'Qualified', 'Negotiation', 'Converted', 'Unqualified / Lost'],
             ['New', 'Converted'],
-        ),
+        ).map((o) => (o.value === 'Unqualified / Lost' ? { ...o, meta: { closesLead: true } } : o)),
     },
-    { key: 'lead_type', label: 'Lead Type', module: 'leads', options: ['Hot', 'Warm', 'Cold', 'Corporate', 'SME', 'Enterprise'] },
+    // Lead Type is how the lead came in. Hot / Warm / Cold is the lead's Rating (`Lead.rating`, set by the system).
+    { key: 'lead_type', label: 'Lead Type', module: 'leads', options: ['Inbound', 'Outbound', 'Marketing'] },
     {
         key: 'lead_designation',
         label: 'Designation',
@@ -582,7 +584,6 @@ export const DEFAULT_SELECTED_OPTIONS: Readonly<Record<string, readonly string[]
     shared_product_category: ['Biz Analyst'],
     shared_followup_type: ['Call'],
     lead_status: ['New'],
-    lead_type: ['Hot'],
     lead_department: ['Executive Management'],
     contact_communication_type: ['Call', 'Email'],
     shared_left_job: ['No'],
@@ -697,7 +698,8 @@ const RAW_DEFAULT_FIELDS: DefaultField[] = [
         sel('followupType', 'Followup Type', 'shared_followup_type'),
         // What the customer said on the last follow-up. Asked on every edit (the form enforces it there).
         sel('customerResponse', 'Customer Response', 'shared_customer_response'),
-        t('nextFollowupDate', 'Next Followup Date', { type: 'datetime', soft: true }),
+        // Locked and required: every open lead needs its next follow-up (date and time) to be rated.
+        t('nextFollowupDate', 'Next Followup Date', { type: 'datetime', req: true }),
         t('assignedTo', 'Assigned to', { type: 'lookup', req: true }),
         { key: 'productCategory', label: 'Product Category', type: 'multiselect', cat: 'shared_product_category', soft: true },
     ]),

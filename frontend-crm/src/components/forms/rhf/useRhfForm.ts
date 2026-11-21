@@ -48,6 +48,11 @@ export interface UseRhfFormOptions<T extends FieldValues> {
      */
     extraRules?: (values: T) => ConfigValidationIssue[];
     /**
+     * Fields whose configured rules (required…) don't apply to these values, e.g. a lead edit that only changes
+     * details needs no Remarks. `extraRules` still apply. Read at validation time.
+     */
+    relaxedFields?: (values: T) => readonly string[];
+    /**
      * Built-in date / date-time fields that can't be set in the past. `module`'s custom date fields are added
      * automatically. Values equal to the form's loaded defaults (an existing record's own dates) still pass.
      */
@@ -86,6 +91,7 @@ export function useRhfForm<T extends FieldValues>({
     module,
     dropdownDefaults,
     extraRules,
+    relaxedFields,
     noPastDates,
     assigneeField,
 }: UseRhfFormOptions<T>): UseRhfFormReturn<T> {
@@ -105,7 +111,7 @@ export function useRhfForm<T extends FieldValues>({
         resolver: withConfiguredFieldRules(zodResolver(schema as never) as unknown as Resolver<T>, module, extraRules, {
             fields: noPastDates ?? [],
             initial: () => formRef.current?.formState.defaultValues ?? initialValues,
-        }),
+        }, relaxedFields),
         defaultValues: initialValues,
         mode: 'onTouched',
     });
@@ -160,6 +166,7 @@ function withConfiguredFieldRules<T extends FieldValues>(
     module: CrmModuleKey | undefined,
     extraRules: ((values: T) => ConfigValidationIssue[]) | undefined,
     pastDates: { fields: PastDateField[]; initial: () => unknown },
+    relaxedFields?: (values: T) => readonly string[],
 ): Resolver<T> {
     if (!module && !extraRules && pastDates.fields.length === 0) return base;
     return async (values, context, options) => {
@@ -171,8 +178,9 @@ function withConfiguredFieldRules<T extends FieldValues>(
                   .filter((f) => !f.isSystem && f.isActive && f.fieldType === 'date')
                   .map((f) => ({ name: `customFields.${f.fieldKey}`, label: f.label, kind: 'date' as const }))
             : [];
+        const relaxed = new Set(relaxedFields?.(values) ?? []);
         const issues = [
-            ...(module ? validateConfiguredFields(configs, module, values) : []),
+            ...(module ? validateConfiguredFields(configs, module, values).filter((issue) => !relaxed.has(issue.path)) : []),
             ...(extraRules?.(values) ?? []),
             ...pastDateIssues([...pastDates.fields, ...customDates], values, pastDates.initial()),
         ];

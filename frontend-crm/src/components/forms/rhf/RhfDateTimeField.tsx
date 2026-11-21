@@ -33,6 +33,8 @@ export interface RhfDateTimeFieldProps<T extends FieldValues> {
     combined?: boolean;
     /** Width token; defaults to `sm` for a date alone and `md` for date + time. */
     fieldSize?: FieldSize;
+    /** Shows the value without letting it change (separate date + time only). */
+    disabled?: boolean;
 }
 
 /** Paired date + optional time input bound to two RHF fields. */
@@ -44,6 +46,7 @@ export function RhfDateTimeField<T extends FieldValues>({
     hint,
     combined = false,
     fieldSize,
+    disabled = false,
 }: RhfDateTimeFieldProps<T>) {
     const size = fieldSize ?? (combined || timeName ? 'md' : 'sm');
     const date = useController<T>({ name: dateName });
@@ -120,6 +123,7 @@ export function RhfDateTimeField<T extends FieldValues>({
                     type="date"
                     fullWidth
                     size="small"
+                    disabled={disabled}
                     error={Boolean(date.fieldState.error)}
                     slotProps={{
                         // Past days are greyed out in the picker (the form also rejects a typed past date).
@@ -136,6 +140,7 @@ export function RhfDateTimeField<T extends FieldValues>({
                         date={typeof date.field.value === 'string' ? date.field.value : ''}
                         error={Boolean(time.fieldState.error)}
                         ariaLabel={`${label} time`}
+                        disabled={disabled}
                     />
                 )}
             </Box>

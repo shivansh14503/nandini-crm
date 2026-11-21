@@ -191,6 +191,8 @@ export const leadListQuerySchema = z.object({
     /** e.g. `excludeStatus=Converted` to hide converted leads. */
     excludeStatus: csvQuery,
     leadType: csvQuery,
+    /** Hot / Warm / Cold. */
+    rating: csvQuery,
     leadSource: csvQuery,
     assignedTo: z.string().trim().max(L.username).optional(),
     /** Leads for one organization (leads keep the name as text; compared case-insensitively by SQL Server). */
@@ -210,6 +212,7 @@ export const LEAD_SORT_FIELDS = [
     'organizationName',
     'status',
     'leadType',
+    'rating',
     'leadSource',
     'nextFollowupDate',
     'assignedTo',

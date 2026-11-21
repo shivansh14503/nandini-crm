@@ -1,6 +1,6 @@
 # Nandini CRM — API Plan
 
-> **Status:** living document. Lists every endpoint of `backend-crm` as of 2026-11-18 plus the planned ones.
+> **Status:** living document. Lists every endpoint of `backend-crm` as of 2026-11-21 plus the planned ones.
 > When you add, change or remove a route, update this file in the same change (the route files'
 > header comments are the per-module source of truth; keep them in step too).
 > Related: [System design](system-design.md) · [Database design](database-design.md) · [Build plan](build-plan.md)
@@ -81,7 +81,7 @@ The auth endpoints use the older `{ status: 'ok', … }` envelope rather than `{
 
 | Base | Type | Extra endpoints | List filters |
 | --- | --- | --- | --- |
-| `/leads` | CRUD | `GET /check-duplicates?mobile&emails&excludeId&excludeType` — informational matches in leads/contacts/organizations · `POST /:id/convert` — atomic conversion → `{ organization, contact, opportunity, organizationCreated, contactCreated }`; body also takes `extraFields: { contacts, organizations, opportunities }` (fieldKey → value) for the other fields an admin shows on Convert Lead (`isVisibleInConvert`; custom fields included, saved on the new records). Every field shown there is checked by its record's form rules (`400` with the convert form's field name, or `extraFields.<module>.<fieldKey>`, in `errors[].path`), except for a contact or organization that already exists and is linked as it is | `status`, `excludeStatus`, `leadType`, `leadSource`, `organizationName`, `assignedTo`, `nextFollowupDate` |
+| `/leads` | CRUD | `GET /check-duplicates?mobile&emails&excludeId&excludeType` — informational matches in leads/contacts/organizations · `POST /:id/convert` — atomic conversion → `{ organization, contact, opportunity, organizationCreated, contactCreated }`; body also takes `extraFields: { contacts, organizations, opportunities }` (fieldKey → value) for the other fields an admin shows on Convert Lead (`isVisibleInConvert`; custom fields included, saved on the new records). Every field shown there is checked by its record's form rules (`400` with the convert form's field name, or `extraFields.<module>.<fieldKey>`, in `errors[].path`), except for a contact or organization that already exists and is linked as it is | `status`, `excludeStatus`, `leadType`, `rating` (Hot / Warm / Cold), `leadSource`, `organizationName`, `assignedTo`, `nextFollowupDate` |
 | `/opportunities` | CRUD | – (line-item totals computed server-side; line items replaced only when sent) | `salesStage`, `excludeSalesStage`, `organizationId`, `contactId`, `productId`, `assignedTo`, `minGrandTotal`, `nextFollowupDate` |
 | `/quotations` | CRUD | `GET /:id/pdf?templateId&disposition=inline\|attachment` → `application/pdf` (30/min/user, Redis-cached). Creating a quotation advances the linked opportunity's stage | `status`, `quoteStage`, `opportunityId`, `organizationId`, `contactId`, `productId`, `assignedTo` |
 | `/organizations` | CRUD | `GET /check-unique?organizationName&gstNumber&excludeId` → `{ exists, field?, accountCode?, message? }` · `PATCH /bulk-status` `{ ids, status: 'Active'\|'Inactive', inactivityReason? }`. `GET /:id` records a "recently viewed" entry | `accountStatus`, `customerType`, `natureOfBusiness`, `assignedTo`, `parentOrganizationId`, `recent` |
@@ -144,19 +144,33 @@ The auth endpoints use the older `{ status: 'ok', … }` envelope rather than `{
 
 | Method | Path | Description |
 | --- | --- | --- |
-| GET | `/` | `{ categories, fieldsByModule, moduleTabs }` (`?includeInactive`) |
+| GET | `/` | `{ categories, fieldsByModule, moduleTabs, moduleSettings }` (`?includeInactive`); `moduleSettings.leads.ratingNewLead` = new-lead Rating limits (missing = default) |
 | POST | `/categories` | `{ label, module, description?, options? }`; key derived from label |
 | PATCH | `/categories/:categoryKey` | `{ label?, description?, module? }` |
 | DELETE | `/categories/:categoryKey` | Hard delete (admin-created only; removes options + linked custom fields) |
 | POST | `/categories/:categoryKey/options` | `{ value, meta? }`; an existing value is a 409 |
 | PUT | `/categories/:categoryKey/options/reorder` | `{ optionIds }` |
-| PATCH | `/options/:optionId` | `{ label?, meta?, isDefault? }`; a rename rewrites stored values in records and filters |
+| PATCH | `/options/:optionId` | `{ label?, meta?, isDefault? }`; a rename rewrites stored values in records and filters. `meta.ratingRule` (Customer Response options) and `meta.closesLead` (Status options) are validated — [lead-rating-rules.md](lead-rating-rules.md) |
 | DELETE | `/options/:optionId` | Permanent; blocked for system options |
 | POST | `/fields` | Add a custom field (key = label in snake_case) |
 | PATCH | `/fields/:fieldId` | Update; core-locked fields can't be hidden or made optional. `isVisibleInConvert` (contacts / organizations / opportunities): refused for fields Convert Lead can't draw (pickers, the ones the conversion fills) and, off, for core fields it has inputs for |
 | DELETE | `/fields/:fieldId` | Permanent; custom fields only |
 | PUT | `/modules/:module/fields/reorder` | `{ fieldIds }` |
 | PATCH | `/modules/:module/sections/:sectionKey` | `{ sectionLabel }` |
+| PUT | `/modules/:module/settings/:settingKey` | `{ value }` — a module setting; today only `leads/ratingNewLead` `{ hot, warm }` (unknown setting → 404). Audited in the Form Builder trail |
+
+**Lead Rating** ([lead-rating-rules.md](lead-rating-rules.md)) — `rating`, `ratingReason`, `unansweredCalls` are
+read-only on the lead DTO (a `rating` sent by a client is ignored).
+
+- `POST /leads`: `nextFollowupDate` + `nextFollowupTime` required and later than now (IST) → `400` on
+  `nextFollowupDate` / `nextFollowupTime`. Rated by the new-lead rule.
+- `PATCH /leads/:id`: with a non-blank `customerResponse` the edit records a follow-up and needs
+  `followUpDecision: 'keep' | 'new'` (`400` on `followUpDecision`; not needed when the new status closes the lead).
+  `keep`: the saved follow-up must still be later than now and unchanged; `new`: date + time later than now.
+  Writes a `FOLLOW_UP` audit row (field diff + `followUp` summary). Without a response the edit changes details only:
+  `customerResponse` / `remarks` are ignored, and changing the follow-up, closing or reopening the lead is a `400` on
+  `customerResponse`. A closing status ("Closes the lead") keeps the Rating and clears the follow-up.
+- `POST /leads/:id/convert` keeps the lead's Rating as it is that day and clears the lead's own follow-up.
 
 **Document series** — `/document-series`
 

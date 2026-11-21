@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { booleanQuery } from '../../validators/common.js';
 import { CATEGORY_MODULES, CRM_MODULES, CUSTOM_FIELD_TYPES, FIELD_SIZES } from './formConfig.defaults.js';
+import { CLOSES_LEAD_META_KEY, RATING_RULE_META_KEY, ratingLimitsSchema, ratingRuleSchema } from '../leads/lead.rating.js';
 
 /**
  * Request schemas for /api/form-configs. Rules that depend on the stored row (system options can't be renamed or
@@ -33,7 +34,29 @@ const blankableText = (max: number) => z.string().trim().max(max).nullable().opt
 const label = (field: string, max: number) =>
     z.string({ error: `${field} is required.` }).trim().min(1, { message: `${field} is required.` }).max(max, { message: `${field} cannot exceed ${max} characters.` });
 
-const metaSchema = z.record(z.string(), z.unknown()).nullable().optional();
+/**
+ * Free-form option meta, except the keys the app reads: a Customer Response option's Rating rule (`ratingRule`) and
+ * a Status option's "Closes the lead" switch (`closesLead`), docs/lead-rating-rules.md.
+ */
+const metaSchema = z
+    .record(z.string(), z.unknown())
+    .nullable()
+    .optional()
+    .superRefine((meta, ctx) => {
+        if (!meta) return;
+        if (RATING_RULE_META_KEY in meta) {
+            const rule = ratingRuleSchema.safeParse(meta[RATING_RULE_META_KEY]);
+            if (!rule.success) ctx.addIssue({ code: 'custom', path: [RATING_RULE_META_KEY], message: rule.error.issues[0]?.message ?? 'Invalid Rating rule.' });
+        }
+        if (CLOSES_LEAD_META_KEY in meta && typeof meta[CLOSES_LEAD_META_KEY] !== 'boolean') {
+            ctx.addIssue({ code: 'custom', path: [CLOSES_LEAD_META_KEY], message: '"Closes the lead" must be on or off.' });
+        }
+    });
+
+/** Module settings an admin can change (`PUT /modules/:module/settings/:settingKey`), by `module:settingKey`. */
+export const MODULE_SETTING_SCHEMAS: Readonly<Record<string, z.ZodType>> = {
+    'leads:ratingNewLead': ratingLimitsSchema,
+};
 
 export const moduleSchema = z.enum(CRM_MODULES, { error: `module must be one of: ${CRM_MODULES.join(', ')}.` });
 
@@ -44,6 +67,7 @@ export const optionIdParamSchema = z.object({ optionId: z.string().trim().min(1)
 export const fieldIdParamSchema = z.object({ fieldId: z.string().trim().min(1).max(50) });
 export const moduleParamSchema = z.object({ module: moduleSchema });
 export const sectionParamSchema = z.object({ module: moduleSchema, sectionKey: z.string().trim().min(1).max(80) });
+export const moduleSettingParamSchema = z.object({ module: moduleSchema, settingKey: z.string().trim().min(1).max(80) });
 
 export const formConfigQuerySchema = z.object({ includeInactive: booleanQuery });
 

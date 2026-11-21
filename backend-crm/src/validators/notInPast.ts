@@ -12,6 +12,9 @@ import { wallClockNow } from '../utils/mappers.js';
 /** Now as a wall-clock `YYYY-MM-DDTHH:mm` in the business timezone. */
 export const businessNow = (): string => wallClockNow(ENV.BUSINESS_TIMEZONE).toISOString().slice(0, 16);
 
+/** Today in the business timezone, `YYYY-MM-DD`. */
+export const businessToday = (): string => businessNow().slice(0, 10);
+
 /** `11:30 AM`, `11:30am`, `9 PM` or `14:30` → minutes since midnight; null when it isn't a time. */
 export function parseTimeOfDay(text: string | null | undefined): number | null {
     const match = /^\s*(\d{1,2})(?::(\d{2}))?\s*([AaPp][Mm])?\s*$/.exec(text ?? '');

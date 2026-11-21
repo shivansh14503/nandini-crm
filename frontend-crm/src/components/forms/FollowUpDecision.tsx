@@ -49,6 +49,18 @@ export interface UseFollowUpDecisionOptions {
     notify?: Notify;
     /** Told when the popup starts / stops awaiting an answer; feed it to {@link followUpEditIssues} so the form won't save meanwhile. */
     onPendingChange?: (pending: boolean) => void;
+    /** Told the decision the save sends (`keep` / `new`), or null while none is made (or the response was cleared). */
+    onDecisionChange?: (decision: FollowUpDecision | null) => void;
+    /**
+     * Leads: the response may be cleared again (a details-only edit), which puts the saved follow-up back and asks
+     * nothing. Opportunities always record one.
+     */
+    responseOptional?: boolean;
+    /**
+     * No follow-up is asked for (a lead being closed): picking a response opens no popup. Report changes with the
+     * returned `onSuspendChange` so a pending question is dropped (or asked again).
+     */
+    suspended?: boolean;
 }
 
 /**
@@ -56,8 +68,8 @@ export interface UseFollowUpDecisionOptions {
  * field, call `onResponseChange` when the user picks a response, wrap the date field in `<FieldGlow active={glow}>`
  * and render `popper` anywhere in the section.
  */
-export function useFollowUpDecision({ enabled, notify, onPendingChange }: UseFollowUpDecisionOptions) {
-    const { control, setValue, clearErrors } = useFormContext<FollowUpFields>();
+export function useFollowUpDecision({ enabled, notify, onPendingChange, onDecisionChange, responseOptional = false, suspended = false }: UseFollowUpDecisionOptions) {
+    const { control, setValue, getValues, clearErrors } = useFormContext<FollowUpFields>();
     // The record's saved follow-up (the form's defaults, set by `reset` when the record loads).
     const { defaultValues, submitCount } = useFormState({ control });
     // Save attempts made while the popup is open make it glow (instead of flagging the field).
@@ -88,12 +100,22 @@ export function useFollowUpDecision({ enabled, notify, onPendingChange }: UseFol
         window.setTimeout(() => focusFormField('nextFollowupDate'), 0);
     };
 
-    /** Call with the newly picked response and the one it replaces. Every different pick asks again. */
-    const onResponseChange = (next: string, previous: string | undefined) => {
-        if (!enabled || !next || next === previous) return;
+    /** Back to the saved follow-up with nothing asked (response cleared, or the lead is being closed). */
+    const standDown = () => {
+        setOpen(false);
+        setPending(false);
+        setGlowRequested(false);
+        setSlot(existing);
+        onDecisionChange?.(null);
+        clearErrors(['followUpDecision', 'nextFollowupDate', 'nextFollowupTime']);
+    };
+
+    /** Asks keep / new for the picked response (or straight for a new date when the saved one can't be kept). */
+    const ask = () => {
         if (isFollowUpExpired(existing)) {
             setPending(false);
             askForNewDate();
+            onDecisionChange?.('new');
             notify?.(
                 existing.date
                     ? 'The previous follow-up has expired. Select a new follow-up date and time.'
@@ -102,14 +124,37 @@ export function useFollowUpDecision({ enabled, notify, onPendingChange }: UseFol
             );
             return;
         }
+        onDecisionChange?.(null);
         setPending(true);
         setOpenedAtSubmit(submitCount);
         setOpen(true);
     };
 
+    /** Call with the newly picked response and the one it replaces. Every different pick asks again. */
+    const onResponseChange = (next: string, previous: string | undefined) => {
+        if (!enabled || next === previous) return;
+        if (!next) {
+            if (responseOptional) standDown();
+            return;
+        }
+        if (suspended) return;
+        ask();
+    };
+
+    /**
+     * Call when the form starts or stops being suspended (e.g. the lead's status moves to or from a closing one):
+     * closing drops the question; going back (with a response picked) asks again.
+     */
+    const onSuspendChange = (nowSuspended: boolean) => {
+        if (!enabled) return;
+        if (nowSuspended) standDown();
+        else if (getValues('customerResponse')) ask();
+    };
+
     const onDecide = (decision: FollowUpDecision) => {
         setOpen(false);
         setPending(false);
+        onDecisionChange?.(decision);
         clearErrors(['customerResponse', 'followUpDecision', 'nextFollowupDate', 'nextFollowupTime']);
         if (decision === 'keep') {
             setSlot(existing);
@@ -122,6 +167,7 @@ export function useFollowUpDecision({ enabled, notify, onPendingChange }: UseFol
     return {
         setAnchor,
         onResponseChange,
+        onSuspendChange,
         /** The date field glows until both a date and a time are picked. */
         glow: glowRequested && !(date && time),
         popper: (
@@ -136,18 +182,38 @@ export function useFollowUpDecision({ enabled, notify, onPendingChange }: UseFol
     };
 }
 
+export interface FollowUpEditRules {
+    /** A Customer Response must be picked (default). Leads make it optional: none = a details-only edit. */
+    requireResponse?: boolean;
+    /** No follow-up is scheduled by this save (a lead being closed): only the response rule applies. */
+    skipFollowUp?: boolean;
+    /** The response the requirement asks for, worded for the case (e.g. closing a lead). */
+    responseMessage?: string;
+}
+
 /**
- * Save rules of an edit form using the flow: a customer response is required, the keep / reschedule decision must
- * be made, and the next follow-up needs a date and a time.
+ * Save rules of an edit form using the flow: a customer response (unless optional), the keep / reschedule decision,
+ * and a next follow-up with a date and a time that is still later than now when Save is clicked.
  */
-export function followUpEditIssues(values: FollowUpFields, decisionPending: boolean): ConfigValidationIssue[] {
-    if (!values.customerResponse?.trim()) return [{ path: 'customerResponse', message: 'Customer Response is required.' }];
+export function followUpEditIssues(values: FollowUpFields, decisionPending: boolean, rules: FollowUpEditRules = {}): ConfigValidationIssue[] {
+    const { requireResponse = true, skipFollowUp = false, responseMessage = 'Customer Response is required.' } = rules;
+    const response = values.customerResponse?.trim();
+    if (!response) return requireResponse ? [{ path: 'customerResponse', message: responseMessage }] : [];
+    if (skipFollowUp) return [];
     if (decisionPending) {
         // Not on customerResponse: the popup itself glows (see useFollowUpDecision), the field stays as it is.
         return [{ path: 'followUpDecision', message: 'Choose whether to keep the current follow-up or schedule a new one.' }];
     }
+    return followUpSlotIssues(values);
+}
+
+/** A follow-up being saved needs a date and a time later than now (checked again whenever Save is clicked). */
+export function followUpSlotIssues(values: Pick<FollowUpFields, 'nextFollowupDate' | 'nextFollowupTime'>): ConfigValidationIssue[] {
     if (!values.nextFollowupDate?.trim()) return [{ path: 'nextFollowupDate', message: 'Select the next follow-up date.' }];
     if (!values.nextFollowupTime?.trim()) return [{ path: 'nextFollowupTime', message: 'Select the next follow-up time.' }];
+    if (isFollowUpExpired({ date: values.nextFollowupDate, time: values.nextFollowupTime })) {
+        return [{ path: 'nextFollowupTime', message: 'The next follow-up must be later than now. Pick a later date or time.' }];
+    }
     return [];
 }
 

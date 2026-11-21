@@ -3,6 +3,7 @@ import type { DropdownCategory, DropdownOption, FormFieldDefinition } from '../.
 import { auditService, diffRecords } from '../../services/audit.service.js';
 import { CACHE_KEYS, cacheService } from '../../services/cache.service.js';
 import type { AuthUser } from '../../types/user.types.js';
+import { z } from 'zod';
 import { HttpError } from '../../utils/httpError.js';
 import { runInTransaction } from '../shared/transactions.js';
 import { dropdownKeyFromLabel, fieldKeyFromLabel } from './derivedKeys.js';
@@ -27,6 +28,7 @@ import {
     createFieldSchema,
     createOptionSchema,
     formConfigQuerySchema,
+    MODULE_SETTING_SCHEMAS,
     reorderFieldsSchema,
     reorderOptionsSchema,
     renameSectionSchema,
@@ -119,6 +121,8 @@ export interface FormConfigsPayload {
     fieldsByModule: Record<CrmModuleKey, FormFieldDefinitionDto[]>;
     /** Built-in tabs of each module, followed by its admin-created tabs (from the fields placed on them). */
     moduleTabs: Record<CrmModuleKey, { key: string; label: string; isCustom?: boolean }[]>;
+    /** Module settings (`ModuleSetting`) by module, then key, e.g. `leads.ratingNewLead`. Missing = default. */
+    moduleSettings: Partial<Record<CrmModuleKey, Record<string, unknown>>>;
 }
 
 /** Section each built-in field has on the hand-built form, by `module:fieldKey`. */
@@ -528,7 +532,7 @@ export const formConfigService = {
     /** Every category (with options) and every field grouped by module. Inactive rows only with `includeInactive`. */
     async getAllConfigs(includeInactive = false): Promise<FormConfigsPayload> {
         return cacheService.getOrSet(configCacheKey(includeInactive), CONFIG_TTL_SECONDS, async () => {
-            const [categories, allRows] = await Promise.all([
+            const [categories, allRows, settingRows] = await Promise.all([
                 prisma.dropdownCategory.findMany({
                     where: { deletedAt: null },
                     include: {
@@ -540,7 +544,17 @@ export const formConfigService = {
                 prisma.formFieldDefinition.findMany({
                     orderBy: [{ module: 'asc' }, { sortOrder: 'asc' }, { label: 'asc' }],
                 }),
+                prisma.moduleSetting.findMany(),
             ]);
+            const moduleSettings: FormConfigsPayload['moduleSettings'] = {};
+            for (const row of settingRows) {
+                if (!(CRM_MODULES as readonly string[]).includes(row.module)) continue;
+                try {
+                    (moduleSettings[row.module as CrmModuleKey] ??= {})[row.key] = JSON.parse(row.valueJson);
+                } catch {
+                    // A malformed value reads as unset (the default applies).
+                }
+            }
             const fields = includeInactive ? allRows : allRows.filter((f) => f.isActive);
             const categoryKeys = new Map(categories.map((c) => [c.id, c.key]));
             const fieldsByModule = Object.fromEntries(CRM_MODULES.map((m) => [m, [] as FormFieldDefinitionDto[]])) as Record<
@@ -581,8 +595,36 @@ export const formConfigService = {
                 })),
                 fieldsByModule,
                 moduleTabs,
+                moduleSettings,
             };
         });
+    },
+
+    /** Sets one module setting (Form Builder, e.g. the new-lead Rating limits). Audited in the Form Builder trail. */
+    async updateModuleSetting(module: CrmModuleKey, settingKey: string, body: unknown, user: AuthUser): Promise<unknown> {
+        const schema = MODULE_SETTING_SCHEMAS[`${module}:${settingKey}`];
+        if (!schema) throw HttpError.notFound(`${moduleName(module)} has no setting "${settingKey}".`);
+        const { value } = z.object({ value: schema }).parse(body);
+        const valueJson = JSON.stringify(value);
+        await runInTransaction(async (tx) => {
+            const where = { module_key: { module, key: settingKey } };
+            const before = await tx.moduleSetting.findUnique({ where });
+            if (before?.valueJson === valueJson) return;
+            await tx.moduleSetting.upsert({
+                where,
+                create: { module, key: settingKey, valueJson, updatedBy: user.username },
+                update: { valueJson, updatedBy: user.username },
+            });
+            await auditService.record(tx, {
+                entityType: 'ModuleSetting',
+                entityId: `${module}:${settingKey}`,
+                action: before ? 'UPDATE' : 'CREATE',
+                changedBy: user.username,
+                changes: withMeta({ setting: settingKey, value: { from: before ? JSON.parse(before.valueJson) : null, to: value } }, user, { module }),
+            });
+        });
+        await invalidate();
+        return value;
     },
 
     async getConfigs(query: unknown): Promise<FormConfigsPayload> {

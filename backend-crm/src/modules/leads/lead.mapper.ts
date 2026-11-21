@@ -29,6 +29,12 @@ export interface LeadDto {
     organizationName: string;
     department: string;
     leadType: string;
+    /** Hot / Warm / Cold, set by the system (read-only: not part of the lead input). */
+    rating: string;
+    /** Why the current Rating (read-only). */
+    ratingReason: string;
+    /** Consecutive unanswered calls (read-only). */
+    unansweredCalls: number;
     status: string;
     nextFollowupDate: string;
     nextFollowupTime: string;
@@ -85,6 +91,9 @@ export function toLeadDto(row: LeadRow): LeadDto {
         organizationName: text(row.organizationName),
         department: text(row.department),
         leadType: text(row.leadType),
+        rating: text(row.rating),
+        ratingReason: text(row.ratingReason),
+        unansweredCalls: row.unansweredCalls,
         status: row.status,
         nextFollowupDate: toDateOnly(row.nextFollowupDate),
         nextFollowupTime: text(row.nextFollowupTime),

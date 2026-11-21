@@ -10,7 +10,8 @@
         "designation": "Managing Director / MD",
         "department": "Executive Management",
         "leadSource": "Website Enquiry",
-        "leadType": "Hot",
+        "leadType": "Inbound",
+        "rating": "Hot",
         "productCategory": [
             "Biz Analyst",
             "TallyPrime",
@@ -71,7 +72,8 @@
         "designation": "IT Manager / Systems Head",
         "department": "Information Technology (IT)",
         "leadSource": "Exhibition / Trade Show",
-        "leadType": "Hot",
+        "leadType": "Outbound",
+        "rating": "Hot",
         "productCategory": [
             "Acronis",
             "Cloud Backup Solutions"
@@ -124,7 +126,8 @@
         "designation": "Proprietor / Owner",
         "department": "Executive Management",
         "leadSource": "Client Referral",
-        "leadType": "Warm",
+        "leadType": "Marketing",
+        "rating": "Warm",
         "productCategory": [
             "Connect 2T",
             "TallyPrime"
@@ -177,7 +180,8 @@
         "designation": "Chief Financial Officer (CFO)",
         "department": "Finance & Accounts",
         "leadSource": "LinkedIn / Social Media",
-        "leadType": "Warm",
+        "leadType": "Inbound",
+        "rating": "Warm",
         "productCategory": [
             "CredFlow",
             "B-Softwares"
@@ -230,7 +234,8 @@
         "designation": "Proprietor / Owner",
         "department": "Executive Management",
         "leadSource": "Cold Call",
-        "leadType": "Cold",
+        "leadType": "Outbound",
+        "rating": "Cold",
         "productCategory": [
             "TallyPrime",
             "Tally Software Services (TSS)"
@@ -283,7 +288,8 @@
         "designation": "Director / Partner",
         "department": "Operations",
         "leadSource": "Tally Partner Network",
-        "leadType": "Hot",
+        "leadType": "Marketing",
+        "rating": "Hot",
         "productCategory": [
             "Tally Server 9",
             "Biz Analyst",
@@ -337,7 +343,8 @@
         "designation": "Purchase Head / Manager",
         "department": "Procurement & Purchase",
         "leadSource": "Partner Referral",
-        "leadType": "Warm",
+        "leadType": "Inbound",
+        "rating": "Warm",
         "productCategory": [
             "Cyber Security & Antivirus",
             "Cloud Backup Solutions"
@@ -390,7 +397,8 @@
         "designation": "Accounts & Finance Head",
         "department": "Finance & Accounts",
         "leadSource": "Website Enquiry",
-        "leadType": "Hot",
+        "leadType": "Outbound",
+        "rating": "Hot",
         "productCategory": [
             "Biz Analyst",
             "Connect 2T"
@@ -443,7 +451,8 @@
         "designation": "Independent Consultant",
         "department": "Operations",
         "leadSource": "Website Enquiry",
-        "leadType": "Warm",
+        "leadType": "Marketing",
+        "rating": "Warm",
         "productCategory": [
             "Biz Analyst"
         ],

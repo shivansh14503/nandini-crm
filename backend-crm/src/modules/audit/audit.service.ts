@@ -65,8 +65,18 @@ function toRevisions(entry: AuditEntryDto, time: string): AuditRevisionItem[] {
     const base = { author: entry.changedBy, time };
     const changes = (entry.changes ?? {}) as Record<string, unknown>;
 
-    if (entry.action === 'UPDATE' || entry.action === 'STATUS_CHANGE') {
+    if (entry.action === 'UPDATE' || entry.action === 'STATUS_CHANGE' || entry.action === 'FOLLOW_UP') {
         const note = typeof changes.reason === 'string' ? changes.reason : undefined;
+        if (entry.action === 'FOLLOW_UP') {
+            // The `followUp` block isn't a field diff: the record's Follow-up History panel reads it.
+            const items = Object.entries(changes)
+                .filter(([, value]) => isDiff(value))
+                .map(([field, value]) => {
+                    const diff = value as { from: unknown; to: unknown };
+                    return { ...base, title: `${fieldLabel(field)} updated`, from: displayValue(diff.from), to: displayValue(diff.to), tag: 'Follow-up' };
+                });
+            return items.length > 0 ? items : [{ ...base, title: 'Follow-up recorded', tag: 'Follow-up' }];
+        }
         const items = Object.entries(changes)
             .filter(([, value]) => isDiff(value))
             .map(([field, value]) => {

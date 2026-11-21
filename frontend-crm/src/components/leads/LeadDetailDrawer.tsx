@@ -22,6 +22,7 @@ import PublishedWithChangesIcon from '@mui/icons-material/PublishedWithChanges';
 import { ROUTES } from '@/config/constants';
 import { withListOrigin } from '@/utils/listOrigin';
 import type { Lead } from '@/types/lead.types';
+import { ratingChipColors } from '@/utils/leadRating';
 import { useLead, useDropdownOptionLabel } from '@/hooks/queries';
 import {
     EntityDetailDrawer,
@@ -111,8 +112,8 @@ export function LeadDetailDrawer({
         }
     };
 
-    const isHot = l.leadType === 'Hot';
-    const isWarm = l.leadType === 'Warm';
+    // Rating (Hot / Warm / Cold) is set by the system; Lead Type (Inbound / Outbound / …) is a separate dropdown.
+    const isHot = l.rating === 'Hot';
     const hasOrg = Boolean(l.organizationName && l.organizationName.trim().length > 0);
     const isConverted = l.status === 'Converted';
 
@@ -132,13 +133,26 @@ export function LeadDetailDrawer({
             }
             verified={true}
             badges={[
-                {
-                    label: l.leadType || 'Normal',
-                    icon: isHot ? <LocalFireDepartmentIcon sx={{ fontSize: '13px !important' }} /> : undefined,
-                    color: isHot ? 'var(--crm-red-700)' : isWarm ? 'var(--crm-amber-700)' : 'var(--crm-text-blue-900)',
-                    backgroundColor: isHot ? 'var(--crm-red-100)' : isWarm ? 'var(--crm-amber-100)' : 'var(--mui-palette-primary-soft)',
-                    borderColor: isHot ? 'var(--crm-red-300)' : isWarm ? 'var(--mui-palette-warning-softBorder)' : 'var(--mui-palette-primary-softBorder)',
-                },
+                ...(l.rating
+                    ? [
+                          {
+                              label: `Rating: ${l.rating}`,
+                              icon: isHot ? <LocalFireDepartmentIcon sx={{ fontSize: '13px !important' }} /> : undefined,
+                              ...ratingChipColors(l.rating),
+                              tooltip: l.ratingReason || undefined,
+                          },
+                      ]
+                    : []),
+                ...(l.leadType
+                    ? [
+                          {
+                              label: l.leadType,
+                              color: 'var(--crm-slate-600)',
+                              backgroundColor: 'var(--mui-palette-background-hover)',
+                              borderColor: 'var(--mui-palette-border-strong)',
+                          },
+                      ]
+                    : []),
                 scorecardBadge?.fieldKey === 'status'
                     ? scorecardBadge
                     : {

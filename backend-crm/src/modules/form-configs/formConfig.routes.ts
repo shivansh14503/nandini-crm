@@ -6,6 +6,7 @@ import {
     categoryKeyParamSchema,
     fieldIdParamSchema,
     moduleParamSchema,
+    moduleSettingParamSchema,
     optionIdParamSchema,
     sectionParamSchema,
 } from './formConfig.validator.js';
@@ -29,6 +30,10 @@ export const FORM_CONFIG_ADMIN_ROLES = ['Admin', 'Administrator', 'Super Admin']
  *   DELETE /fields/:fieldId                           permanent delete of a custom field; blocked for built-in fields
  *   PUT    /modules/:module/fields/reorder            { fieldIds }
  *   PATCH  /modules/:module/sections/:sectionKey      { sectionLabel }
+ *   PUT    /modules/:module/settings/:settingKey      { value }  module setting, e.g. leads/ratingNewLead { hot, warm }
+ *
+ * Option `meta` is free-form except `ratingRule` (Customer Response options) and `closesLead` (Status options),
+ * which are validated: docs/lead-rating-rules.md.
  *
  * Deletes are permanent: a deleted built-in field stays a hidden tombstone and is never restored.
  */
@@ -57,5 +62,6 @@ router.patch('/fields/:fieldId', admin, validateRequest({ params: fieldIdParamSc
 router.delete('/fields/:fieldId', admin, validateRequest({ params: fieldIdParamSchema }), formConfigController.deleteField);
 router.put('/modules/:module/fields/reorder', admin, validateRequest({ params: moduleParamSchema }), formConfigController.reorderFields);
 router.patch('/modules/:module/sections/:sectionKey', admin, validateRequest({ params: sectionParamSchema }), formConfigController.renameSection);
+router.put('/modules/:module/settings/:settingKey', admin, validateRequest({ params: moduleSettingParamSchema }), formConfigController.updateModuleSetting);
 
 export default router;

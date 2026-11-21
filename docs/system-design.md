@@ -1,6 +1,6 @@
 # Nandini CRM — System Design
 
-> **Status:** living document. Describes the system as built (code as of 2026-11-18, commit `ffa3f28`).
+> **Status:** living document. Describes the system as built (code as of 2026-11-21; Lead Rating worker added).
 > Update it in the same change that alters architecture, infrastructure, Redis usage, queues or security.
 > Related: [Database design](database-design.md) · [API plan](api-plan.md) · [Build plan](build-plan.md)
 
@@ -23,7 +23,7 @@ flowchart LR
 
     subgraph Node["Node.js API process (backend-crm)"]
         EX["Express 5<br/>routes → controllers → services"]
-        WK["BullMQ workers<br/>(import, audit)<br/>RUN_WORKERS=true"]
+        WK["BullMQ workers<br/>(import, audit, lead rating)<br/>RUN_WORKERS=true"]
         PDF["PDF renderer<br/>Puppeteer + semaphore"]
     end
 
@@ -136,6 +136,7 @@ comes from these places instead:
 | bcrypt (login) | Runs on libuv's thread pool (4 threads by default), so hashing doesn't block the loop | 12 rounds |
 | BullMQ import worker | Async job loop on the same event loop (or the separate worker process) | **concurrency 1** |
 | BullMQ audit worker | Same | **concurrency 5** |
+| BullMQ lead rating worker | Same; one run a night (plus a catch-up at start-up) | **concurrency 1** |
 | PDF rendering | Separate **Chromium processes**; one shared browser, a fresh incognito context + page per job | `PDF_MAX_CONCURRENCY` (default 3) via an in-process FIFO `Semaphore` |
 
 Because the import worker shares the event loop with HTTP handling when `RUN_WORKERS=true`, production should run
@@ -227,6 +228,7 @@ commands fail immediately instead of hanging, and reconnects in the background (
 | `recent:{userId}:{entity}` | sorted set (score = view time) | 30 days | `GET /api/organizations/:id` | "Recently viewed" (max 20 per user per entity) |
 | `bull:crm-import:*` | BullMQ internals | 1 day (completed) / 7 days (failed) | import queue | Import jobs, progress, results |
 | `bull:crm-audit:*` | BullMQ internals | 1 h (completed) / 7 days (failed) | audit queue | Async audit events |
+| `bull:crm-lead-rating:*` | BullMQ internals (job scheduler + runs) | 7 days (completed) / 30 days (failed) | lead rating worker | Nightly Rating ageing |
 
 `cache:dashboard:*` is defined and invalidated but nothing writes it yet (no dashboard API).
 
@@ -265,6 +267,7 @@ flowchart LR
 | --- | --- | --- | --- | --- | --- |
 | `crm-import` | `POST /api/import/:entity` (job id = import id) | 1 | **1** (a retry would duplicate rows already created) | done 1 day / 500 jobs; failed 7 days | Reports progress every 20 rows; result `{ total, created, failed[] }` |
 | `crm-audit` | `auditService.enqueue` (login, login failed, logout, PDF generated, import summary) | 5 | 5, exponential backoff from 1 s | done 1 h / 1000 jobs; failed 7 days | Data-change audits do **not** go through the queue (see below) |
+| `crm-lead-rating` | Job scheduler `lead-rating-ageing`, cron `5 0 * * *` in `BUSINESS_TIMEZONE` (upserted when the worker starts) | 1 | 1 (the next night catches up) | done 7 days / 30 jobs; failed 30 days | `ageLeadRatings`: re-rates leads ageing under a "Days since response" rule, writing only changed rows (history by `system`). The worker also runs it once at start-up, so a night missed while nothing ran (or Redis was down) is made up; runs are idempotent ([lead-rating-rules.md](lead-rating-rules.md)) |
 
 **Import flow:** the frontend wizard parses the CSV/XLSX in the browser (papaparse / xlsx), maps columns, validates
 rows client-side, then posts up to 5,000 mapped rows. The worker validates each row with the same Zod schema and

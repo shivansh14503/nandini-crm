@@ -16,6 +16,7 @@ export type AuditEntityType =
     | 'DropdownCategory'
     | 'DropdownOption'
     | 'FormField'
+    | 'ModuleSetting'
     | 'PdfTemplate'
     | 'PdfAsset'
     | 'PdfSavedItem'
@@ -28,6 +29,8 @@ export type AuditAction =
     | 'DELETE'
     | 'STATUS_CHANGE'
     | 'CONVERT'
+    /** A lead follow-up: the field diff plus a `followUp` block (lead.followUp.ts FollowUpSummary). */
+    | 'FOLLOW_UP'
     | 'IMPORT'
     | 'LOGIN'
     | 'LOGIN_FAILED'

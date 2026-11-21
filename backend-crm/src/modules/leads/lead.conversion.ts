@@ -20,7 +20,9 @@ import { lockRecords, runSerializable } from '../shared/transactions.js';
 import { leadInclude, leadNotFound } from './lead.service.js';
 import type { LeadRow } from './lead.mapper.js';
 import { CONVERTED_STATUS, convertLeadSchema, type ConvertLeadInput } from './lead.validator.js';
-import { assertNotInPast, nextFollowupCheck } from '../../validators/notInPast.js';
+import { assertNotInPast, businessToday, nextFollowupCheck } from '../../validators/notInPast.js';
+import { toDateOnly } from '../../utils/mappers.js';
+import { frozenRatingColumns } from './lead.followUp.js';
 import { queueEmailVerification } from '../email-verification/emailVerification.service.js';
 
 /** `LeadConversionResult` from frontend-crm/src/services/leadConversion.service.ts. */
@@ -250,6 +252,9 @@ export async function convertLead(leadId: string, body: unknown, user: AuthUser)
             user,
         );
 
+        // Converting closes the lead (the opportunity carries the follow-up on): its Rating stays as it is today and
+        // stops ageing, and its own next follow-up goes.
+        const frozen = frozenRatingColumns(lead, businessToday());
         await tx.lead.update({
             where: { id: leadId },
             data: {
@@ -259,6 +264,9 @@ export async function convertLead(leadId: string, body: unknown, user: AuthUser)
                 convertedOrganizationId: organization.id,
                 convertedContactId: contact.id,
                 convertedOpportunityId: opportunity.id,
+                ...frozen,
+                nextFollowupDate: null,
+                nextFollowupTime: null,
                 updatedBy: user.username,
             },
         });
@@ -269,6 +277,8 @@ export async function convertLead(leadId: string, body: unknown, user: AuthUser)
             changedBy: user.username,
             changes: {
                 status: { from: lead.status, to: CONVERTED_STATUS },
+                ...(frozen.rating !== lead.rating ? { rating: { from: lead.rating ?? '', to: frozen.rating ?? '' } } : {}),
+                previousFollowUp: { date: toDateOnly(lead.nextFollowupDate), time: lead.nextFollowupTime ?? '' },
                 organizationId: organization.id,
                 organizationCreated: !existingOrganization,
                 contactId: contact.id,

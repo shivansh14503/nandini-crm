@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { prisma } from '../../config/prisma.js';
 import { CATEGORY_MODULES } from '../form-configs/formConfig.defaults.js';
+import { closesLeadFromMeta, describeLimits, describeRatingRule, newLeadLimitsFrom, ratingRuleFromMeta } from '../leads/lead.rating.js';
 import type { FormConfigAuditMeta } from '../form-configs/formConfig.service.js';
 import { displayTime, displayValue, fieldLabel, isDiff, parseChanges, type AuditEntryDto, type AuditRevisionItem } from './audit.format.js';
 
@@ -14,7 +15,7 @@ import { displayTime, displayValue, fieldLabel, isDiff, parseChanges, type Audit
 
 /** Route segments that select this trail (any case). */
 const ROUTE_NAMES = new Set(['form-configs', 'form-config', 'formconfigs', 'formconfig', 'form-customization']);
-const FORM_CONFIG_ENTITY_TYPES = ['DropdownCategory', 'DropdownOption', 'FormField'] as const;
+const FORM_CONFIG_ENTITY_TYPES = ['DropdownCategory', 'DropdownOption', 'FormField', 'ModuleSetting'] as const;
 const SCOPES = ['all', ...CATEGORY_MODULES] as const;
 type Scope = (typeof SCOPES)[number];
 
@@ -298,6 +299,14 @@ function optionRevisions(row: ParsedRow, ctx: AuditContext, base: Base): AuditRe
                 note: moved ? `Name changed. ${moved}` : 'Name changed',
             };
         }
+        if (prop === 'metaJson') {
+            const from = describeOptionMeta(diff.from);
+            const to = describeOptionMeta(diff.to);
+            if (from || to) {
+                const what = (to ?? from ?? '').startsWith('Closes') || (to ?? from ?? '').startsWith('Keeps') ? '"Closes the lead"' : 'Rating rule';
+                return { ...base, tag: 'Updated', title: `Option "${label}" — ${what} changed in${where}`, from: from ?? 'Default', to: to ?? 'Default' };
+            }
+        }
         return { ...base, tag: 'Updated', title: `Option "${label}" — ${propLabel(prop)} updated in${where}`, from: propValue(prop, diff.from), to: propValue(prop, diff.to) };
     });
     return items.length ? items : [{ ...base, tag: 'Updated', title: `Option "${label}" updated in${where}`, note: str(c.reason) }];
@@ -340,7 +349,32 @@ function toRevisions(row: ParsedRow, ctx: AuditContext, author: string): AuditRe
     const base: Base = { author, time: displayTime(row.createdAt) };
     if (row.entityType === 'DropdownCategory') return categoryRevisions(row, ctx, base);
     if (row.entityType === 'DropdownOption') return optionRevisions(row, ctx, base);
+    if (row.entityType === 'ModuleSetting') return settingRevisions(row, ctx, base);
     return fieldRevisions(row, ctx, base);
+}
+
+/** Module settings: today only the new-lead Rating limits (Form Builder › Leads › Rating Rules). */
+function settingRevisions(row: ParsedRow, ctx: AuditContext, base: Base): AuditRevisionItem[] {
+    const c = row.changes;
+    const describe = (value: unknown) => (value ? describeLimits(newLeadLimitsFrom(value), 'days') : 'Default');
+    if (c.setting === 'ratingNewLead' && isDiff(c.value)) {
+        return [{ ...base, tag: 'Updated', title: `Rating Rules for new leads updated on ${moduleLabel(ctx.module)}`, from: describe(c.value.from), to: describe(c.value.to) }];
+    }
+    return [{ ...base, tag: 'Updated', title: `Setting "${str(c.setting) ?? row.entityId}" updated on ${moduleLabel(ctx.module)}` }];
+}
+
+/** An option's meta in words when it holds a Rating rule or the "Closes the lead" switch; null otherwise. */
+function describeOptionMeta(json: unknown): string | null {
+    if (typeof json !== 'string' || !json) return null;
+    try {
+        const meta: unknown = JSON.parse(json);
+        const rule = ratingRuleFromMeta(meta);
+        if (rule) return describeRatingRule(rule);
+        if (meta && typeof meta === 'object' && 'closesLead' in meta) return closesLeadFromMeta(meta) ? 'Closes the lead' : 'Keeps the lead open';
+    } catch {
+        return null;
+    }
+    return null;
 }
 
 export const formConfigAuditService = {

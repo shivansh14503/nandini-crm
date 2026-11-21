@@ -4,7 +4,8 @@ import { parseTimeOfDay } from '@/utils/pastDates';
 /** One item of a record's follow-up history. */
 export interface FollowUpEvent {
     id: string;
-    kind: 'created' | 'followUp' | 'converted';
+    /** `rated`: the Rating changed on its own (the nightly ageing of a lead). */
+    kind: 'created' | 'followUp' | 'converted' | 'rated';
     /** ISO timestamp of the change. */
     at: string;
     author: string;
@@ -17,6 +18,27 @@ export interface FollowUpEvent {
     next: string;
     /** The next follow-up stayed the same. */
     retained?: boolean;
+    /** Leads: the Rating before and after ('' when none). */
+    rating?: { from: string; to: string };
+    /** Leads: unanswered calls in a row after this follow-up (shown when > 0). */
+    unansweredCalls?: number;
+    /** Leads: this follow-up closed the lead, with that status. */
+    closedAs?: string;
+    /** Why the Rating is what it is. */
+    reason?: string;
+}
+
+/** The `followUp` block of a lead's FOLLOW_UP history row (backend lead.followUp.ts FollowUpSummary). */
+interface FollowUpSummary {
+    response?: string;
+    remarks?: string;
+    previous?: { date?: string; time?: string };
+    next?: { date?: string; time?: string };
+    decision?: 'keep' | 'new' | 'closed';
+    status?: { from?: string; to?: string };
+    rating?: { from?: string; to?: string };
+    unansweredCalls?: number;
+    reason?: string;
 }
 
 const FOLLOW_UP_FIELDS = ['nextFollowupDate', 'nextFollowupTime', 'customerResponse', 'remarks'] as const;
@@ -65,24 +87,65 @@ export function buildFollowUpEvents(entries: AuditEntry[]): FollowUpEvent[] {
 
         if (entry.action === 'CREATE') {
             for (const field of FOLLOW_UP_FIELDS) state[field] = str(changes[field]);
+            const rating = str(changes.rating);
             events.push({
                 ...base,
                 kind: 'created',
                 response: state.customerResponse || undefined,
                 remarks: state.remarks || undefined,
                 next: formatSlot(state.nextFollowupDate, state.nextFollowupTime),
+                rating: rating ? { from: '', to: rating } : undefined,
+                reason: str(changes.ratingReason) || undefined,
             });
             continue;
         }
 
         if (entry.action === 'CONVERT') {
-            events.push({ ...base, kind: 'converted', next: formatSlot(state.nextFollowupDate, state.nextFollowupTime) });
+            const rating = isDiff(changes.rating) ? { from: str(changes.rating.from), to: str(changes.rating.to) } : undefined;
+            events.push({ ...base, kind: 'converted', next: formatSlot(state.nextFollowupDate, state.nextFollowupTime), rating });
+            state.nextFollowupDate = '';
+            state.nextFollowupTime = '';
+            continue;
+        }
+
+        // A lead follow-up: its own summary says it all (it is written even when nothing else changed).
+        if (entry.action === 'FOLLOW_UP' && changes.followUp && typeof changes.followUp === 'object') {
+            const f = changes.followUp as FollowUpSummary;
+            for (const field of FOLLOW_UP_FIELDS) if (isDiff(changes[field])) state[field] = str((changes[field] as { to: unknown }).to);
+            state.nextFollowupDate = str(f.next?.date);
+            state.nextFollowupTime = str(f.next?.time);
+            const previous = formatSlot(str(f.previous?.date), str(f.previous?.time));
+            events.push({
+                ...base,
+                kind: 'followUp',
+                response: str(f.response) || undefined,
+                remarks: str(f.remarks) || undefined,
+                previous,
+                next: formatSlot(state.nextFollowupDate, state.nextFollowupTime),
+                retained: f.decision === 'keep',
+                rating: f.rating ? { from: str(f.rating.from), to: str(f.rating.to) } : undefined,
+                unansweredCalls: typeof f.unansweredCalls === 'number' ? f.unansweredCalls : undefined,
+                closedAs: f.decision === 'closed' ? str(f.status?.to) || 'Closed' : undefined,
+                reason: str(f.reason) || undefined,
+            });
             continue;
         }
 
         if (entry.action !== 'UPDATE' && entry.action !== 'STATUS_CHANGE') continue;
         const touched = FOLLOW_UP_FIELDS.filter((field) => isDiff(changes[field]));
-        if (touched.length === 0) continue;
+        if (touched.length === 0) {
+            // The Rating moving on by itself (the nightly ageing).
+            if (isDiff(changes.rating)) {
+                events.push({
+                    ...base,
+                    kind: 'rated',
+                    next: formatSlot(state.nextFollowupDate, state.nextFollowupTime),
+                    rating: { from: str(changes.rating.from), to: str(changes.rating.to) },
+                    reason: isDiff(changes.ratingReason) ? str(changes.ratingReason.to) : undefined,
+                });
+            }
+            continue;
+        }
 
         const before = { ...state };
         for (const field of touched) {

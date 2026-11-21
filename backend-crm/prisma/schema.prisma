@@ -309,7 +309,18 @@ model Lead {
   otherPhone          String?   @db.NVarChar(20)
   organizationName    String?   @db.NVarChar(200)
   department          String?   @db.NVarChar(100)
+  /// Lead Type (admin dropdown `lead_type`, e.g. Inbound / Outbound / Marketing).
   leadType            String?   @db.NVarChar(30)
+  /// Rating: Hot / Warm / Cold. Set by the system, never on a form (not a form-builder field). docs/lead-rating-rules.md
+  rating              String?   @db.NVarChar(10)
+  /// Why the current Rating, e.g. `Follow-up in 3 days after "Asked to call back later"`.
+  ratingReason        String?   @db.NVarChar(200)
+  /// Consecutive "Unanswered calls" responses; any other response resets it to 0.
+  unansweredCalls     Int       @default(0)
+  /// Set while the Rating ages under a "Days since response" rule: the IST day of that response ...
+  ratingAgeingFrom    DateTime? @db.Date
+  /// ... and the rule's limits plus the response's label `{ limits: { hot, warm }, response }`, snapshot at that save.
+  ratingAgeingJson    String?   @db.NVarChar(400)
   status              String    @default("New") @db.NVarChar(30)
   nextFollowupDate    DateTime? @db.Date
   nextFollowupTime    String?   @db.NVarChar(20)
@@ -364,6 +375,9 @@ model Lead {
   @@index([primaryCityId])
   @@index([otherCityId])
   @@index([status])
+  @@index([rating])
+  /// The nightly Rating ageing job reads the leads with an ageing snapshot.
+  @@index([ratingAgeingFrom])
   @@index([assignedTo])
   @@index([mobile])
   @@index([nextFollowupDate])
@@ -1058,6 +1072,20 @@ model ModuleScorecard {
   updatedBy        String?  @db.NVarChar(50)
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
+}
+
+/// A module-level setting an admin edits in Form Builder outside the form's fields, as one JSON value per
+/// (module, key). E.g. leads › ratingNewLead: the Rating limits for new leads (docs/lead-rating-rules.md).
+model ModuleSetting {
+  /// CrmModuleKey, e.g. leads.
+  module    String   @db.NVarChar(40)
+  key       String   @db.NVarChar(80)
+  valueJson String   @db.NVarChar(Max)
+  updatedBy String?  @db.NVarChar(50)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@id([module, key])
 }
 
 /// One admin bulk email check (Settings › Email Validation): the addresses picked, checked one at a time in the

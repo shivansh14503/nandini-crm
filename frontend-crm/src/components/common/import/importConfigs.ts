@@ -57,7 +57,7 @@ export const IMPORT_CONFIGS: Record<ImportEntityType, ImportEntityConfig> = {
             { key: 'email', label: 'Email', required: false, aliases: ['email address', 'e-mail', 'mail', 'email id'], sample: ['amit@example.com', 'neha@example.com'] },
             { key: 'organizationName', label: 'Organization', required: false, aliases: ['organization', 'company', 'company name'], sample: ['Patel Enterprises', 'Gupta & Co'] },
             { key: 'leadSource', label: 'Lead Source', required: false, aliases: ['source'], sample: ['Website', 'Referral'] },
-            { key: 'leadType', label: 'Lead Type', required: false, aliases: ['type'], sample: ['Hot', 'Warm'] },
+            { key: 'leadType', label: 'Lead Type', required: false, aliases: ['type'], sample: ['Inbound', 'Outbound'] },
             { key: 'status', label: 'Status', required: false, aliases: ['lead status', 'stage'], sample: ['New', 'Contacted'] },
             { key: 'primaryCity', label: 'City', required: false, aliases: ['city'], sample: ['Pune', 'Delhi'] },
             { key: 'primaryState', label: 'State', required: false, aliases: ['state'], sample: ['Maharashtra', 'Delhi'] },

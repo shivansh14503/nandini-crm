@@ -2,7 +2,8 @@
 
 import { NO_PAST_DATES } from '@/utils/pastDates';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { followUpEditIssues } from '../forms/FollowUpDecision';
+import { followUpEditIssues, followUpSlotIssues, type FollowUpDecision } from '../forms/FollowUpDecision';
+import { useLeadRatingConfig } from '@/utils/leadRating';
 import { useRouter } from 'next/navigation';
 import { FormProvider, type Path } from 'react-hook-form';
 import ArticleOutlinedIcon from '@mui/icons-material/ArticleOutlined';
@@ -53,6 +54,10 @@ export interface LeadFormProps {
     breadcrumbItems?: BreadcrumbItem[];
 }
 
+function omitKeys<T extends object>(values: T, keys: (keyof T)[]): Partial<T> {
+    return Object.fromEntries(Object.entries(values).filter(([key]) => !keys.includes(key as keyof T))) as Partial<T>;
+}
+
 const DEFAULT_FORM: LeadFormData = {
     name: '',
     mobile: '',
@@ -81,7 +86,7 @@ const DEFAULT_FORM: LeadFormData = {
     otherPhone: '',
     organizationName: '',
     department: 'Executive Management',
-    leadType: 'Hot',
+    leadType: '',
     status: 'New',
     nextFollowupDate: '',
     nextFollowupTime: '',
@@ -126,10 +131,56 @@ export default function LeadForm({
     const setFollowUpPending = useCallback((pending: boolean) => {
         followUpDecisionPending.current = pending;
     }, []);
+    // The keep / new answer the save sends with a recorded follow-up (the server checks it again).
+    const [followUpDecision, setFollowUpDecision] = useState<FollowUpDecision | null>(null);
+
+    // Rating rules (closing statuses) and the saved lead's status / Rating; read when the form validates.
+    const ratingConfig = useLeadRatingConfig();
+    const ratingConfigRef = useRef(ratingConfig);
+    useEffect(() => {
+        ratingConfigRef.current = ratingConfig;
+    }, [ratingConfig]);
+    const [saved, setSaved] = useState<{ status: string; rating: string }>({ status: '', rating: '' });
+    const savedRef = useRef(saved);
+    useEffect(() => {
+        savedRef.current = saved;
+    }, [saved]);
+    /** What a lead edit does with these values (docs/lead-rating-rules.md §3). */
+    const editKind = (values: LeadFormData) => {
+        const closing = ratingConfigRef.current.closingStatuses;
+        const isClosing = closing.has(values.status ?? '');
+        const wasClosed = closing.has(savedRef.current.status);
+        const response = Boolean(values.customerResponse?.trim());
+        return { isClosing, wasClosed, response };
+    };
+
     const { methods, toast, showToast, closeToast, createSubmitHandler } = useRhfForm<LeadFormData>({
         schema: leadFormSchema,
         noPastDates: NO_PAST_DATES.followup,
-        extraRules: mode === 'edit' ? (values) => followUpEditIssues(values, followUpDecisionPending.current) : undefined,
+        // A new lead's first follow-up and every rescheduled one must be later than now when Save is clicked.
+        extraRules:
+            mode === 'edit'
+                ? (values) => {
+                      const { isClosing, wasClosed } = editKind(values);
+                      return followUpEditIssues(values, followUpDecisionPending.current, {
+                          // Optional for a details-only edit; needed to close a lead or to reopen one.
+                          requireResponse: isClosing ? !wasClosed : wasClosed,
+                          skipFollowUp: isClosing,
+                          responseMessage: isClosing ? 'Pick a Customer Response to close the lead.' : 'Pick a Customer Response to reopen the lead.',
+                      });
+                  }
+                : mode === 'create'
+                  ? (values) => followUpSlotIssues(values)
+                  : undefined,
+        // A details-only edit records no follow-up (no Remarks needed); closing a lead schedules none.
+        relaxedFields:
+            mode === 'edit'
+                ? (values) => {
+                      const { isClosing, response } = editKind(values);
+                      if (isClosing) return ['nextFollowupDate', 'nextFollowupTime'];
+                      return response ? [] : ['remarks', 'customerResponse'];
+                  }
+                : undefined,
         module: 'leads',
         defaultValues: { ...DEFAULT_FORM, ...initialData },
         dropdownDefaults: { enabled: mode === 'create', keep: initialData },
@@ -158,8 +209,9 @@ export default function LeadForm({
             .then((found) => {
                 if (active && found) {
                     const loaded = normalizeAddressFields(found, LEAD_ADDRESS_PAIRS);
-                    // Every edit records a fresh customer response, so the edit form starts without one.
+                    // A follow-up is recorded with a fresh response and remarks; left empty, the edit changes details only.
                     reset(mode === 'edit' ? { ...loaded, customerResponse: '', remarks: '' } : loaded);
+                    setSaved({ status: found.status ?? '', rating: found.rating ?? '' });
                     setRecordCode(found.leadCode ?? '');
                     setAudit({ createdAt: found.createdAt, createdBy: found.createdBy, updatedAt: found.updatedAt, updatedBy: found.updatedBy });
                 }
@@ -176,13 +228,28 @@ export default function LeadForm({
     const handleSave = createSubmitHandler(async (values) => {
         try {
             const editing = mode === 'edit' && Boolean(leadId);
-            const saved = editing ? await leadService.update(leadId!, values) : await leadService.create(values);
+            const isClosing = ratingConfig.closingStatuses.has(values.status ?? '');
+            const response = Boolean(values.customerResponse?.trim());
+            // Details only: the stored response, remarks and follow-up stay (the server keeps them too).
+            const payload: Partial<LeadFormData> & { followUpDecision?: FollowUpDecision } = !editing
+                ? values
+                : !response
+                  ? omitKeys(values, ['customerResponse', 'remarks', 'nextFollowupDate', 'nextFollowupTime'])
+                  : isClosing
+                    ? values
+                    : { ...values, followUpDecision: followUpDecision ?? undefined };
+            const result = editing ? await leadService.update(leadId!, payload) : await leadService.create(values);
             reset(values);
+            const rated = result?.rating ? ` Rating: ${result.rating}.` : '';
             setSaveFlash({
                 listPath: ROUTES.LEADS,
-                message: editing ? 'Lead details updated successfully!' : 'Lead created successfully! Added to your sales pipeline.',
+                message: editing
+                    ? response
+                        ? `Follow-up recorded.${rated}`
+                        : 'Lead details updated successfully!'
+                    : `Lead created successfully! Added to your sales pipeline.${rated}`,
                 severity: 'success',
-                recordId: saved?.id ?? leadId,
+                recordId: result?.id ?? leadId,
             });
             router.push(ROUTES.LEADS);
         } catch (err: unknown) {
@@ -235,7 +302,14 @@ export default function LeadForm({
                 >
                     {/* Keep both panels mounted so validation state of hidden tab is preserved */}
                     <div hidden={activeTab !== 'overview'}>
-                        <LeadOverviewSection leadId={leadId} notify={showToast} onDecisionPendingChange={setFollowUpPending} />
+                        <LeadOverviewSection
+                            leadId={leadId}
+                            notify={showToast}
+                            onDecisionPendingChange={setFollowUpPending}
+                            onDecisionChange={setFollowUpDecision}
+                            savedStatus={saved.status}
+                            savedRating={saved.rating}
+                        />
                         <DynamicModuleCustomFields module="leads" tabKey="overview" />
                     </div>
                     <div hidden={activeTab !== 'address'}>

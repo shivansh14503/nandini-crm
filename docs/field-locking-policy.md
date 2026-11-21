@@ -35,9 +35,9 @@ Fields not listed are ○ Free today and stay ○ Free.
 | Mobile | 🔒R | ⭐ | Lead duplicate check is informational only (never blocks a save) |
 | GST Number | 🔒 | 🔒 | Conditional (registration type) |
 | Lead Source | 🔒R | ⭐ | Reporting preference |
-| Lead Type | 🔒R | ⭐ | Classification preference |
+| Lead Type | 🔒R | ⭐ | Classification preference (Inbound / Outbound / …; not the Rating) |
 | Status | — | ○ (list fixed) | Defaults to `New` when omitted; Convert sets `Converted` |
-| Next Followup Date | 🔒R | ⭐ | Records without one just don't show in "Follow-up today" |
+| Next Followup Date | 🔒R | 🔒R | Locked again (2026-11-21): every open lead is rated from its next follow-up, date and time ([lead-rating-rules.md](lead-rating-rules.md)); a closing status clears it |
 | Assigned to | 🔒R | 🔒 | Ownership / access scope |
 | Product Category | 🔒R | ⭐ | Classification preference |
 | Add Description | 🔒R | ⭐ | Note-taking preference |

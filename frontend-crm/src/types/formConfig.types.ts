@@ -195,6 +195,8 @@ export interface FormConfigsPayload {
     categories: DropdownCategoryDto[];
     fieldsByModule: Record<CrmModuleKey, FormFieldDefinitionDto[]>;
     moduleTabs: Record<CrmModuleKey, ModuleTabDefinition[]>;
+    /** Module settings by module, then key (e.g. `leads.ratingNewLead`); missing = default. */
+    moduleSettings?: Partial<Record<CrmModuleKey, Record<string, unknown>>>;
 }
 
 /** A section of a module form, as configured. */

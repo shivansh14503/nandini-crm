@@ -65,4 +65,7 @@ export const formConfigService = {
         mutate(apiClient.put<ApiResponse<FormFieldDefinitionDto[]>>(`${BASE}/modules/${enc(module)}/fields/reorder`, { fieldIds })),
     renameSection: (module: CrmModuleKey, sectionKey: string, sectionLabel: string) =>
         mutate(apiClient.patch<ApiResponse<FormFieldDefinitionDto[]>>(`${BASE}/modules/${enc(module)}/sections/${enc(sectionKey)}`, { sectionLabel })),
+    /** A module setting, e.g. ('leads', 'ratingNewLead', { hot, warm }): the new-lead Rating limits. */
+    setModuleSetting: (module: CrmModuleKey, key: string, value: unknown) =>
+        mutate(apiClient.put<ApiResponse<unknown>>(`${BASE}/modules/${enc(module)}/settings/${enc(key)}`, { value })),
 };

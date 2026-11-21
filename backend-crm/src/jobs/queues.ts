@@ -6,6 +6,7 @@ import { createRedisConnection, isRedisReady } from '../config/redis.js';
 export const QUEUE_NAMES = {
     import: 'crm-import',
     audit: 'crm-audit',
+    leadRating: 'crm-lead-rating',
 } as const;
 
 /** How long a producer waits for Redis before falling back to synchronous processing. */
@@ -45,6 +46,14 @@ export const auditQueue = () =>
         backoff: { type: 'exponential', delay: 1_000 },
         removeOnComplete: { age: 60 * 60, count: 1_000 },
         removeOnFail: { age: 7 * 24 * 60 * 60 },
+    });
+
+/** Nightly Lead Rating ageing (job scheduler at 00:05 IST): no retries, the next night or start-up catches up. */
+export const leadRatingQueue = () =>
+    getQueue(QUEUE_NAMES.leadRating, {
+        attempts: 1,
+        removeOnComplete: { age: 7 * 24 * 60 * 60, count: 30 },
+        removeOnFail: { age: 30 * 24 * 60 * 60 },
     });
 
 /** Background jobs are usable only while Redis is reachable (checked on the shared client). */
