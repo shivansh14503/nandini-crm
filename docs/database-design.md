@@ -278,7 +278,7 @@ codes already in use (e.g. imported) are skipped.
 | --- | --- | --- |
 | `DropdownCategory` | A named option list, e.g. `lead_status`. `module` = owning module or `shared` | `key` UNIQUE; `isSystem` for built-ins; `deletedAt` tombstone so startup seeding doesn't recreate a deleted built-in |
 | `DropdownOption` | One option (cascades from category) | UNIQUE `(categoryId, value)`; deleting removes the row (records keep the raw value, shown tagged "Removed"); `isSystem` options (e.g. lead `Converted`) can't be deleted or renamed; `isDefault` pre-selects; `metaJson` for extras |
-| `FormFieldDefinition` | One field of one module's form | UNIQUE `(module, fieldKey)`; tab/section placement, order, size, placeholder, hint, default; `isRequired`, `isCoreLocked`, `isSystem`, `isActive`, `isVisibleInForm`, `isVisibleInDrawer`, `isVisibleInConvert` (contacts / organizations / opportunities: shown on the Convert Lead form, set apart from the record's own form); Convert Lead's own `convertIsRequired`, `convertFieldSize` (a size or `auto`) and `convertSortOrder`, all nullable: `NULL` = the record's form setting applies, so changes made on that form reach Convert Lead (fields with a `convertSortOrder` fill, in that order, the places they hold on the form; others keep theirs); `dropdownCategoryId`; `validationRulesJson` (`min`, `max`, `minLength`, `maxLength`, `pattern`). Custom fields have keys prefixed `cf_` |
+| `FormFieldDefinition` | One field of one module's form | UNIQUE `(module, fieldKey)`; tab/section placement, order, size, placeholder, hint, default; `isRequired`, `isCoreLocked`, `isSystem`, `isActive`, `isVisibleInForm`, `isVisibleInDrawer`, `isVisibleInConvert` (contacts / organizations / opportunities: shown on the Convert Lead form, set apart from the record's own form); Convert Lead's own `convertIsRequired`, `convertFieldSize` (a size or `auto`) and `convertSortOrder`, all nullable: `NULL` = the record's form setting applies, so changes made on that form reach Convert Lead (fields with a `convertSortOrder` fill, in that order, the places they hold on the form; others keep theirs); `convertSectionKey` (the field's Convert Lead section, see `ModuleSetting` `convertSections`; `NULL` = its section on the form); `dropdownCategoryId`; `validationRulesJson` (`min`, `max`, `minLength`, `maxLength`, `pattern`). Custom fields have keys prefixed `cf_` |
 
 Index: `(module, isActive, sortOrder)` on fields; `(categoryId, isActive, sortOrder)` on options.
 Per the project's rules, deletes in the form builder are permanent (no reset/restore).
@@ -288,7 +288,12 @@ uses (`{ rule: followUpGap | daysSinceResponse | unansweredCalls, hot, warm }` o
 `closesLead: true` on lead Status options. Both are validated by the API.
 
 `ModuleSetting` — module-level settings edited in Form Builder outside the fields: PK `(module, key)`, `valueJson`,
-`updatedBy`, timestamps. Today `leads` / `ratingNewLead` = `{ hot, warm }` (no row = default Hot 0–5 days, then Warm).
+`updatedBy`, timestamps. Today `leads` / `ratingNewLead` = `{ hot, warm }` (no row = default Hot 0–5 days, then Warm),
+and `contacts` / `organizations` / `opportunities` › `convertSections` = Convert Lead's own sections of that record:
+`[{ key, label, custom?, deleted? }]`, listing form sections Convert Lead renamed (by section key) or deleted, and
+sections made on Convert Lead (`custom`, keys prefixed `convert_`). No row = Convert Lead uses the form's sections. A
+field's place in them is its `convertSectionKey`; deleting a section moves its fields, never deletes them. Convert Lead
+shows a section only while one of its fields is on it.
 
 ### 4.15 PDF tables
 

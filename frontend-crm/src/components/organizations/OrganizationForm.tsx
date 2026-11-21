@@ -21,7 +21,7 @@ import { useAuth } from '@/context/AuthContext';
 import { ROUTES } from '@/config/constants';
 import { focusFormField } from '@/utils/formFocus';
 import { normalizeAddressFields } from '@/utils/address';
-import { validateWithToast, organizationFormSchema } from '../../validations';
+import { organizationFormSchema } from '../../validations';
 import type { OrganizationFormData } from '@/types/organization.types';
 
 // Tab components
@@ -33,7 +33,10 @@ import {
 import { FormConfigProvider } from '@/context/FormConfigContext';
 import { DynamicModuleCustomFields } from '@/components/forms/DynamicModuleCustomFields';
 import { getFormConfigs } from '@/services/masterData.store';
-import { validateConfiguredFields } from '@/utils/formConfig';
+import { useFormConfigs } from '@/hooks/queries/useFormConfigs';
+import { fieldFormName, moduleFields, validateConfiguredFields, type ConfigValidationIssue } from '@/utils/formConfig';
+import type { FormConfigsPayload } from '@/types/formConfig.types';
+import type { FormStepwise } from '@/components/forms/formStepwise';
 import { useDropdownDefaults, withDropdownDefaults } from '@/components/forms/rhf/useDropdownDefaults';
 import { useTaxIdDuplicateCheck } from '@/components/forms/rhf/useTaxIdDuplicateCheck';
 import { withDefaultAssignee } from '@/components/forms/rhf/useRhfForm';
@@ -55,7 +58,6 @@ export const ORGANIZATION_FORM_TABS: (FormTabDefinition & { id: TabKey })[] = [
         id: 'tax_bank',
         label: 'Tax & Bank Details',
         icon: <AccountBalanceOutlinedIcon sx={{ fontSize: 18 }} />,
-        hasDot: true,
     },
 ];
 
@@ -172,6 +174,51 @@ const FIELD_TAB_MAP: Record<string, TabKey> = {
     partnerCompany: 'overview',
 };
 
+const FIELD_ORDER = Object.keys(FIELD_TAB_MAP);
+const TAB_ORDER: string[] = ORGANIZATION_FORM_TABS.map((t) => t.id);
+
+/** Tab that renders a field: the hand-built tabs first, then the admin configuration (custom fields). */
+function issueTab(configs: FormConfigsPayload | null, path: string): string | undefined {
+    const builtIn = FIELD_TAB_MAP[path.split('.')[0]];
+    if (builtIn) return builtIn;
+    return moduleFields(configs, 'organizations').find((f) => fieldFormName(f) === path)?.tabKey;
+}
+
+const tabRank = (tab: string | undefined) => {
+    const index = tab ? TAB_ORDER.indexOf(tab) : -1;
+    return index === -1 ? TAB_ORDER.length : index;
+};
+
+/**
+ * Every problem blocking a save, in the order the form shows the fields (tab by tab, then top to bottom), so the
+ * user is walked through them one at a time instead of being sent to a later tab's rule first.
+ */
+function collectOrganizationIssues(configs: FormConfigsPayload | null, data: OrganizationFormData): ConfigValidationIssue[] {
+    const issues: ConfigValidationIssue[] = [];
+    const parsed = organizationFormSchema.safeParse(data);
+    if (!parsed.success) {
+        for (const issue of parsed.error.issues) {
+            const [head, key] = issue.path.map(String);
+            issues.push({ path: head === 'customFields' && key ? `${head}.${key}` : (head ?? ''), message: issue.message });
+        }
+    }
+    issues.push(...validateConfiguredFields(configs, 'organizations', data));
+
+    const fields = moduleFields(configs, 'organizations');
+    const position = (path: string) => {
+        const configured = fields.find((f) => fieldFormName(f) === path);
+        if (configured) return configured.sortOrder;
+        const index = FIELD_ORDER.indexOf(path);
+        return 1_000_000 + (index === -1 ? FIELD_ORDER.length : index);
+    };
+    const seen = new Set<string>();
+    return issues
+        .filter((issue) => issue.path && !seen.has(issue.path) && seen.add(issue.path))
+        .map((issue, index) => ({ issue, index, tab: tabRank(issueTab(configs, issue.path)), pos: position(issue.path) }))
+        .sort((a, b) => a.tab - b.tab || a.pos - b.pos || a.index - b.index)
+        .map(({ issue }) => issue);
+}
+
 // ─── Component Props ──────────────────────────────────────────────────────────
 export interface OrganizationFormProps {
     mode?: 'create' | 'edit' | 'view';
@@ -225,6 +272,7 @@ export default function OrganizationForm({
         defaultValues: startValues,
         mode: 'onTouched',
     });
+    const formConfigs = useFormConfigs();
     // GSTIN / PAN another organization already uses are flagged as soon as they're fully typed.
     useTaxIdDuplicateCheck(methods, { owner: 'organization', excludeId: organizationId, enabled: mode !== 'view' });
     // Configuration loaded (or changed) after the form opened: untouched dropdowns follow, in the mirror too.
@@ -379,8 +427,8 @@ export default function OrganizationForm({
     }, [form]);
 
     // ── Submit logic with Zod Validation ──────────────────────────────────────
-    const handleSubmit = async (redirectAfter: boolean) => {
-        if (isLocked) return;
+    /** The values a save sends: the local mirror with the form's values on top, normalised. */
+    const buildSubmitData = (): OrganizationFormData => {
         const currentData = { ...form, ...methods.getValues() };
         // Mailing name is not editable: it is always the organization name.
         currentData.mailingName = currentData.organizationName;
@@ -396,62 +444,59 @@ export default function OrganizationForm({
         if (!currentData.shippingStreet && currentData.shippingAddress) {
             currentData.shippingStreet = currentData.shippingAddress;
         }
-        if (!currentData.gstNumber && currentData.gstNumber) {
-            currentData.gstNumber = currentData.gstNumber;
-        }
-        if (!currentData.gstNumber && currentData.gstNumber) {
-            currentData.gstNumber = currentData.gstNumber;
-        }
-
         // The single Partner Company lookup owns the first entry; any further saved partners are kept behind it.
         const partner = currentData.partnerCompany?.trim() ?? '';
         const otherPartners = (currentData.partnerCompanies ?? []).slice(1).filter((p) => p !== partner);
         currentData.partnerCompanies = partner ? [partner, ...otherPartners] : [];
+        return currentData;
+    };
 
-        // Switches to the tab that renders the field (if needed) and focuses it.
-        const revealField = (fieldName: string) => {
-            const targetTab = FIELD_TAB_MAP[fieldName];
-            if (targetTab && targetTab !== activeTab) {
-                pendingFocusField.current = fieldName;
-                setActiveTab(targetTab);
-            } else {
-                focusFormField(fieldName);
-            }
-        };
-
-        // The live check already found this name taken: don't round-trip just to be told again.
+    /**
+     * Schema rules + admin form rules (required custom fields, built-in fields made required, custom field formats),
+     * in the form's order. A name the live check already found taken comes first: no round-trip to be told again.
+     */
+    const collectIssues = (data: OrganizationFormData): ConfigValidationIssue[] => {
+        const issues = collectOrganizationIssues(formConfigs, data);
         const nameError = methods.getFieldState('organizationName').error;
         if (nameError?.type === 'duplicate') {
-            setToast({ open: true, message: nameError.message || 'An organization with this name already exists.', severity: 'error' });
-            revealField('organizationName');
-            return;
+            const message = nameError.message || 'An organization with this name already exists.';
+            return [{ path: 'organizationName', message }, ...issues.filter((i) => i.path !== 'organizationName')];
         }
+        return issues;
+    };
 
-        const validation = validateWithToast(organizationFormSchema, currentData);
-        if (!validation.success) {
-            setToast({ open: true, message: validation.error, severity: 'error' });
-            if (validation.fieldName) revealField(validation.fieldName);
-            return;
+    // Switches to the tab that renders the field (if needed) and focuses it; unknown fields stay on the current tab.
+    const revealField = (fieldName: string) => {
+        const targetTab = issueTab(formConfigs, fieldName) as TabKey | undefined;
+        if (targetTab && targetTab !== activeTab) {
+            pendingFocusField.current = fieldName;
+            setActiveTab(targetTab);
+        } else {
+            focusFormField(fieldName);
         }
+    };
 
-        // Admin form rules: required custom fields, built-in fields made required, custom field formats.
-        const configIssues = validateConfiguredFields(getFormConfigs(), 'organizations', currentData);
-        if (configIssues.length > 0) {
-            for (const issue of configIssues) {
-                methods.setError(issue.path as Path<OrganizationFormData>, { type: 'custom', message: issue.message });
-            }
-            const first = configIssues[0];
-            setToast({ open: true, message: first.message, severity: 'error' });
-            const customKey = first.path.startsWith('customFields.') ? first.path.slice('customFields.'.length) : undefined;
-            const customTab = customKey
-                ? (getFormConfigs()?.fieldsByModule.organizations.find((f) => f.fieldKey === customKey)?.tabKey as TabKey | undefined)
-                : undefined;
-            if (customTab && customTab !== activeTab) {
-                pendingFocusField.current = first.path;
-                setActiveTab(customTab);
-            } else {
-                revealField(first.path);
-            }
+    /** Flags one issue on its field (keeping an error already there, e.g. the duplicate name), says why and goes to it. */
+    const reportIssue = (issue: ConfigValidationIssue) => {
+        const path = issue.path as Path<OrganizationFormData>;
+        if (!methods.getFieldState(path).error) methods.setError(path, { type: 'custom', message: issue.message });
+        setToast({ open: true, message: issue.message, severity: 'error' });
+        revealField(issue.path);
+    };
+
+    // Save / "Next" checks of CommonFormLayout (Next on a new organization until every required field is in).
+    const stepwise: FormStepwise = {
+        issues: () => collectIssues(buildSubmitData()),
+        notify: (message) => setToast({ open: true, message, severity: 'error' }),
+        fieldTab: (path) => FIELD_TAB_MAP[path.split('.')[0]],
+    };
+
+    const handleSubmit = async (redirectAfter: boolean) => {
+        if (isLocked) return;
+        const currentData = buildSubmitData();
+        const [firstIssue] = collectIssues(currentData);
+        if (firstIssue) {
+            reportIssue(firstIssue);
             return;
         }
         setSubmitting(true);
@@ -508,12 +553,9 @@ export default function OrganizationForm({
             ...ORGANIZATION_FORM_TABS[0],
             badge: `${progressCount}/10 done`,
         },
-        {
-            ...ORGANIZATION_FORM_TABS[1],
-            sublabel: form.billingCity || form.shippingCity ? '(Configured)' : '(3 Locs)',
-        },
+        ORGANIZATION_FORM_TABS[1],
         ORGANIZATION_FORM_TABS[2],
-    ], [progressCount, form.billingCity, form.shippingCity]);
+    ], [progressCount]);
 
     return (
         <FormProvider {...methods}>
@@ -528,6 +570,7 @@ export default function OrganizationForm({
                     onTabChange={(tabId) => setActiveTab(tabId as TabKey)}
                     onCancel={handleDiscard}
                     onSave={effectiveMode === 'view' ? () => router.push(ROUTES.ORGANIZATION_EDIT(organizationId!)) : () => handleSubmit(true)}
+                    stepwise={isLocked ? undefined : stepwise}
                     recordView={{
                         title: form.organizationName,
                         code: showNumber('organization') ? recordCode : undefined,

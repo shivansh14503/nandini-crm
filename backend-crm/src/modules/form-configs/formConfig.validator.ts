@@ -53,9 +53,40 @@ const metaSchema = z
         }
     });
 
+/** Key of a Convert Lead section: a record's form section key, or `convert_…` for one made on Convert Lead. */
+const CONVERT_SECTION_KEY = /^[a-z][a-z0-9_]{0,79}$/;
+
+/**
+ * Convert Lead's own sections of a contact / organization / opportunity (setting `convertSections`): renamed and
+ * deleted sections of the record's form (by its section key) and sections made on Convert Lead (`custom`). Sections
+ * not listed show as on the record's form. Deleting a section never deletes its fields.
+ */
+export const convertSectionsSchema = z
+    .array(
+        z.object({
+            key: z.string().trim().regex(CONVERT_SECTION_KEY, { message: KEY_MESSAGE }),
+            label: label('Section', 120),
+            /** Made on Convert Lead (not a section of the record's form). */
+            custom: z.boolean().optional(),
+            /** A section of the record's form that Convert Lead doesn't show (its fields were moved to another one). */
+            deleted: z.boolean().optional(),
+        }),
+    )
+    .max(200)
+    .superRefine((sections, ctx) => {
+        const seen = new Set<string>();
+        sections.forEach((s, i) => {
+            if (seen.has(s.key)) ctx.addIssue({ code: 'custom', path: [i, 'key'], message: `Section key '${s.key}' is listed twice.` });
+            seen.add(s.key);
+        });
+    });
+
 /** Module settings an admin can change (`PUT /modules/:module/settings/:settingKey`), by `module:settingKey`. */
 export const MODULE_SETTING_SCHEMAS: Readonly<Record<string, z.ZodType>> = {
     'leads:ratingNewLead': ratingLimitsSchema,
+    'contacts:convertSections': convertSectionsSchema,
+    'organizations:convertSections': convertSectionsSchema,
+    'opportunities:convertSections': convertSectionsSchema,
 };
 
 export const moduleSchema = z.enum(CRM_MODULES, { error: `module must be one of: ${CRM_MODULES.join(', ')}.` });
@@ -188,6 +219,8 @@ export const updateFieldSchema = z
         convertIsRequired: z.boolean().nullable().optional(),
         /** Convert Lead's own width ('auto' = no width); null → the record's form setting. */
         convertFieldSize: z.enum([...FIELD_SIZES, 'auto']).nullable().optional(),
+        /** The field's section on Convert Lead (see convertSectionsSchema); null → its section on the record's form. */
+        convertSectionKey: z.string().trim().regex(CONVERT_SECTION_KEY, { message: KEY_MESSAGE }).nullable().optional(),
         /** null unlinks; select / multiselect fields only. */
         dropdownCategoryKey: z.string().trim().min(1).max(80).nullable().optional(),
         validationRules: z.record(z.string(), z.unknown()).nullable().optional(),

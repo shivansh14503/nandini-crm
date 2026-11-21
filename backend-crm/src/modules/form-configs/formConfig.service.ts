@@ -116,6 +116,8 @@ export interface FormFieldDefinitionDto {
     convertFieldSize: string | null;
     /** Convert Lead order (null → the field keeps the place it has on the record's form). */
     convertSortOrder: number | null;
+    /** Convert Lead section (setting `convertSections`); null → the field's section on the record's form. */
+    convertSectionKey: string | null;
     dropdownCategoryId: string | null;
     dropdownCategoryKey: string | null;
     validationRules: Record<string, unknown> | null;
@@ -263,6 +265,7 @@ const toFieldDto = (f: FormFieldDefinition, categoryKeys: Map<string, string>): 
     convertIsRequired: f.convertIsRequired,
     convertFieldSize: f.convertFieldSize,
     convertSortOrder: f.convertSortOrder,
+    convertSectionKey: f.convertSectionKey,
     dropdownCategoryId: f.dropdownCategoryId,
     dropdownCategoryKey: f.dropdownCategoryId ? (categoryKeys.get(f.dropdownCategoryId) ?? null) : null,
     validationRules: parseJsonObject(f.validationRulesJson),
@@ -1010,7 +1013,8 @@ export const formConfigService = {
                     reject('isVisibleInConvert', `${before.label} is a core field and must stay on Convert Lead.`);
                 }
             }
-            if ((input.convertIsRequired !== undefined || input.convertFieldSize !== undefined) && !isConvertModule(before.module)) {
+            const convertSetting = input.convertIsRequired !== undefined || input.convertFieldSize !== undefined || input.convertSectionKey !== undefined;
+            if (convertSetting && !isConvertModule(before.module)) {
                 reject('convertIsRequired', 'Only contact, organization and opportunity fields have Convert Lead settings.');
             }
             if (before.isCoreLocked && input.convertIsRequired === false) reject('convertIsRequired', `${before.label} is a core field and must stay required.`);
@@ -1084,6 +1088,7 @@ export const formConfigService = {
                     ...(input.isVisibleInConvert !== undefined ? { isVisibleInConvert: input.isVisibleInConvert } : {}),
                     ...(input.convertIsRequired !== undefined ? { convertIsRequired: input.convertIsRequired } : {}),
                     ...(input.convertFieldSize !== undefined ? { convertFieldSize: input.convertFieldSize } : {}),
+                    ...(input.convertSectionKey !== undefined ? { convertSectionKey: input.convertSectionKey } : {}),
                     ...(dropdownCategoryId !== undefined ? { dropdownCategoryId } : {}),
                     ...(input.validationRules !== undefined
                         ? { validationRulesJson: input.validationRules ? JSON.stringify(input.validationRules) : null }
@@ -1171,6 +1176,7 @@ export const formConfigService = {
                         convertIsRequired: null,
                         convertFieldSize: null,
                         convertSortOrder: null,
+                        convertSectionKey: null,
                         dropdownCategoryId: null,
                         validationRulesJson: JSON.stringify({ _deleted: true }),
                     },

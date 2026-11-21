@@ -127,7 +127,7 @@ export default function TicketForm({ mode = 'create', initialData, ticketId, bre
     const showNumber = useShowRecordNumber();
     const [audit, setAudit] = useState<RecordAuditStamp>();
 
-    const { methods, toast, showToast, closeToast, createSubmitHandler } = useRhfForm<TicketFormData>({
+    const { methods, toast, showToast, closeToast, createSubmitHandler, stepwise } = useRhfForm<TicketFormData>({
         schema: ticketFormSchema,
         noPastDates: NO_PAST_DATES.ticket,
         module: 'tickets',
@@ -316,6 +316,7 @@ export default function TicketForm({ mode = 'create', initialData, ticketId, bre
                     onSave={mode === 'view' ? () => router.push(ROUTES.TICKET_EDIT(ticketId!)) : handleSave}
                     submitting={isSubmitting}
                     saveLabel={mode === 'view' ? 'Edit Ticket' : mode === 'edit' ? 'Update Ticket' : 'Save Ticket'}
+                    stepwise={{ ...stepwise, fieldTab: (path) => (path.startsWith('customFields.') ? undefined : 'overview') }}
                     cancelLabel={mode === 'view' ? 'Back' : 'Cancel'}
                     recordView={{
                         title: ticketSubject || shownTicketNumber || '',

@@ -5,6 +5,7 @@ import { Box, Button, CircularProgress, Tooltip } from '@mui/material';
 import EditOutlinedIcon from '@mui/icons-material/EditOutlined';
 import SaveOutlinedIcon from '@mui/icons-material/SaveOutlined';
 import CloseIcon from '@mui/icons-material/Close';
+import ArrowForwardRoundedIcon from '@mui/icons-material/ArrowForwardRounded';
 
 export interface FormStickyFooterProps {
     onCancel: () => void;
@@ -22,6 +23,8 @@ export interface FormStickyFooterProps {
     cancelDisabled?: boolean;
     /** Optional status shown at the left of the bar. */
     status?: React.ReactNode;
+    /** `next`: the primary action moves on to the form's next step (arrow after the label) instead of saving. */
+    saveKind?: 'save' | 'next';
 }
 
 /**
@@ -39,14 +42,16 @@ export function FormStickyFooter({
     saveDisabledTooltip,
     cancelDisabled = false,
     status,
+    saveKind = 'save',
 }: FormStickyFooterProps) {
     const isView = mode === 'view';
+    const isNext = !isView && saveKind === 'next';
     const saveButton = (
         <Button
             variant="contained"
             size="small"
             startIcon={
-                isView ? (
+                isNext ? undefined : isView ? (
                     <EditOutlinedIcon sx={{ fontSize: 18 }} />
                 ) : submitting ? (
                     <CircularProgress size={16} color="inherit" />
@@ -54,6 +59,7 @@ export function FormStickyFooter({
                     <SaveOutlinedIcon sx={{ fontSize: 18 }} />
                 )
             }
+            endIcon={isNext ? <ArrowForwardRoundedIcon sx={{ fontSize: 18 }} /> : undefined}
             onClick={onSave}
             disabled={submitting || saveDisabled}
             sx={{

@@ -324,6 +324,7 @@ export function useConfigDraft(base: FormConfigsPayload | undefined, refetch: ()
         // Convert Lead's own settings aren't taken on create: they follow it as an edit.
         if (payload.convertIsRequired !== undefined) leftover.convertIsRequired = payload.convertIsRequired;
         if (payload.convertFieldSize !== undefined) leftover.convertFieldSize = payload.convertFieldSize;
+        if (payload.convertSectionKey !== undefined) leftover.convertSectionKey = payload.convertSectionKey;
 
         const next: CreateFieldPayload = { ...created.payload };
         // The key follows the label (the API derives it the same way when the field is saved).

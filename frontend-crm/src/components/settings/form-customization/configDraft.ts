@@ -320,6 +320,7 @@ function applyOp(s: FormConfigsPayload, op: DraftOp): void {
                 convertIsRequired: null,
                 convertFieldSize: null,
                 convertSortOrder: null,
+                convertSectionKey: null,
                 dropdownCategoryId: null,
                 dropdownCategoryKey: null,
                 validationRules: null,
@@ -352,6 +353,7 @@ function applyOp(s: FormConfigsPayload, op: DraftOp): void {
             if (p.isVisibleInConvert !== undefined) field.isVisibleInConvert = p.isVisibleInConvert;
             if (p.convertIsRequired !== undefined) field.convertIsRequired = p.convertIsRequired;
             if (p.convertFieldSize !== undefined) field.convertFieldSize = p.convertFieldSize;
+            if (p.convertSectionKey !== undefined) field.convertSectionKey = p.convertSectionKey;
             if (p.dropdownCategoryKey !== undefined) setCategoryLink(s, field, p.dropdownCategoryKey);
             if (field.label !== before.label) renameOwnDropdown(s, field, before.label);
             if (field.tabKey !== before.tabKey || field.sectionKey !== before.sectionKey) {
@@ -433,6 +435,7 @@ function applyOp(s: FormConfigsPayload, op: DraftOp): void {
                     convertIsRequired: null,
                     convertFieldSize: null,
                     convertSortOrder: null,
+                    convertSectionKey: null,
                     dropdownCategoryKey: null,
                     dropdownCategoryId: null,
                     validationRules: { _deleted: true },
@@ -545,7 +548,7 @@ export function modulesTouchedBy(ops: DraftOp[], base: FormConfigsPayload, draft
 }
 
 /** Field settings that belong to Convert Lead alone (Form Builder › Convert Lead). */
-const CONVERT_ONLY_KEYS: ReadonlySet<string> = new Set(['isVisibleInConvert', 'convertIsRequired', 'convertFieldSize']);
+const CONVERT_ONLY_KEYS: ReadonlySet<string> = new Set(['isVisibleInConvert', 'convertIsRequired', 'convertFieldSize', 'convertSectionKey']);
 
 /** Whether a field edit only changes Convert Lead's own settings, not the record's form. */
 export const isConvertOnlyPayload = (payload: UpdateFieldPayload) => Object.keys(payload).every((key) => CONVERT_ONLY_KEYS.has(key));

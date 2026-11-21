@@ -966,6 +966,8 @@ model FormFieldDefinition {
   convertFieldSize    String?  @db.NVarChar(10)
   /// Convert Lead order: the fields that have one fill, in this order, the places they hold on the record's form.
   convertSortOrder    Int?
+  /// Convert Lead section of the field (ModuleSetting `convertSections`); null → its section on the record's form.
+  convertSectionKey   String?  @db.NVarChar(80)
   dropdownCategoryId  String?  @db.NVarChar(50)
   validationRulesJson String?  @db.NVarChar(Max)
   createdAt           DateTime @default(now())

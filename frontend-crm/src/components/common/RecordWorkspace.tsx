@@ -92,6 +92,17 @@ export function RecordWorkspace({ entityType, entity, title, listHref, children 
     const [drawerEntity, setDrawerEntity] = useState<SecondaryDrawerEntity | null>(null);
     const [drawerCollapsed, setDrawerCollapsed] = useState(false);
 
+    // `cacheComponents` keeps a left page alive (hidden) and restores its state on return, so opening the record
+    // again would bring back the module table. Leaving the page (effects clean up when it hides) starts it fresh.
+    useEffect(
+        () => () => {
+            setActiveModuleId(null);
+            setDrawerEntity(null);
+            setDrawerCollapsed(false);
+        },
+        []
+    );
+
     const modules = useRelatedModulesForEntity(entityType, entity ?? null);
     const activeModule = modules.find((m) => m.id === activeModuleId);
 

@@ -17,20 +17,24 @@ export interface ConvertSection {
 }
 
 /**
- * The sections a record's Convert Lead fields fall into, as the record's own form shows them: the module's sections
- * and field order from the Form Builder, keeping the fields an admin put on Convert Lead (built-in and custom).
- * The Convert Lead form and the Form Builder's Convert Lead preview both lay out from this, so they match.
+ * The sections a record's Convert Lead fields fall into: Convert Lead's own sections and order (Form Builder ›
+ * Convert Lead; by default the record's form's), keeping the fields an admin put on Convert Lead (built-in and
+ * custom). A section with none of them is left out. The Convert Lead form and the Form Builder's Convert Lead preview
+ * both lay out from this, so they match.
  */
 export function convertSections(configs: FormConfigsPayload | null, module: ConvertModule): ConvertSection[] {
     return groupSections(convertShownFields(configs, module)).map((s) => ({ sectionKey: s.sectionKey, sectionLabel: s.sectionLabel, fields: s.fields }));
 }
 
+/**
+ * Section heading, styled like the record forms' SectionLabel. Not SectionLabel itself: that one re-reads the name from
+ * the record's form, while Convert Lead names its sections on its own.
+ */
 const sectionHeadingSx = {
-    fontSize: '0.7rem',
     fontWeight: 700,
-    letterSpacing: '0.06em',
-    textTransform: 'uppercase',
-    color: 'var(--mui-palette-text-secondary)',
+    color: 'var(--mui-palette-text-primary)',
+    fontSize: '0.82rem',
+    letterSpacing: '0.02em',
     mb: 1.5,
 } as const;
 
@@ -66,7 +70,8 @@ export function ConvertRecordSections({ module, fields, extra }: ConvertRecordSe
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5 }}>
             {groups.map((section, index) => (
                 <Box key={section.sectionKey}>
-                    {groups.length > 1 && section.sectionLabel && <Typography sx={sectionHeadingSx}>{section.sectionLabel}</Typography>}
+                    {/* Every section is named (as Convert Lead names it); a section with no field turned on isn't listed at all. */}
+                    {section.sectionLabel && <Typography sx={sectionHeadingSx}>{section.sectionLabel}</Typography>}
                     <FormGrid columns={3}>
                         {section.nodes.map(([key, node]) => (
                             <React.Fragment key={key}>{node}</React.Fragment>

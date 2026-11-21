@@ -111,7 +111,7 @@ export default function ProductForm({
 }: ProductFormProps) {
     const router = useRouter();
 
-    const { methods, toast, showToast, closeToast, createSubmitHandler } =
+    const { methods, toast, showToast, closeToast, createSubmitHandler, stepwise } =
         useRhfForm<ProductFormData>({
             schema: productFormSchema,
             module: 'products',
@@ -197,6 +197,7 @@ export default function ProductForm({
                     onSave={mode === 'view' ? () => router.push(ROUTES.PRODUCT_EDIT(productId!)) : handleSave}
                     submitting={isSubmitting}
                     saveLabel={mode === 'view' ? 'Edit Product' : mode === 'edit' ? 'Update Product' : 'Save Product'}
+                    stepwise={stepwise}
                     cancelLabel={mode === 'view' ? 'Back' : 'Cancel'}
                     recordView={{
                         title: productName || '',

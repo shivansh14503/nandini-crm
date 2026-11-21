@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Box, Paper, Typography, type SxProps, type Theme } from '@mui/material';
 import { type BreadcrumbItem } from './AppBreadcrumbs';
 import { FormHeader } from '../forms/FormHeader';
@@ -10,7 +10,10 @@ import { FormStickyFooter } from '../forms/FormStickyFooter';
 import { DynamicModuleCustomFields } from '../forms/DynamicModuleCustomFields';
 import { useFormConfigContext } from '@/context/FormConfigContext';
 import { useCodedDefaultsRecorder } from '@/context/CodedFieldDefaultsContext';
-import { useFormContext, type FieldValues, type UseFormReturn } from 'react-hook-form';
+import { useFormContext, useWatch, type Control, type FieldValues, type Path, type UseFormReturn } from 'react-hook-form';
+import { orderIssues, type FormStepwise } from '../forms/formStepwise';
+import { focusFormField } from '@/utils/formFocus';
+import { fieldFormName, type ConfigValidationIssue } from '@/utils/formConfig';
 import { useFormDraftGuard } from '@/hooks/useFormDraftGuard';
 import { UnsavedChangesModal } from './UnsavedChangesModal';
 import { FormSectionsSkeleton } from './skeletons';
@@ -23,8 +26,6 @@ export interface FormTabItem {
     label: string;
     icon?: React.ReactNode;
     badge?: React.ReactNode;
-    hasDot?: boolean;
-    sublabel?: string;
 }
 
 export interface CommonFormLayoutProps {
@@ -97,6 +98,11 @@ export interface CommonFormLayoutProps {
      */
     saveLabel?: string;
     /**
+     * Step-by-step checks (`useRhfForm`'s `stepwise`): Save reports the first missing field in the form's order
+     * (tab by tab, top to bottom), and a new record with several tabs shows "Next" until nothing is missing.
+     */
+    stepwise?: FormStepwise;
+    /**
      * Text for the cancel button. Defaults to "Cancel".
      */
     cancelLabel?: string;
@@ -128,6 +134,12 @@ export interface CommonFormLayoutProps {
     loading?: boolean;
 }
 
+/** Re-renders `render` whenever any form value changes, without re-rendering the whole layout. */
+function ValueWatcher({ control, render }: { control: Control<FieldValues>; render: () => React.ReactNode }) {
+    useWatch({ control });
+    return <>{render()}</>;
+}
+
 /**
  * Caps the field area (not the card) so form grids stay proportional on ultrawide monitors: past this width
  * the 3-column grids' cells would grow far wider than any field-size token, scattering fields across the row.
@@ -154,6 +166,7 @@ export function CommonFormLayout({
     onSave,
     submitting = false,
     saveLabel = 'Save Record',
+    stepwise,
     cancelLabel = 'Cancel',
     toast,
     hideFooter = false,
@@ -228,6 +241,84 @@ export function CommonFormLayout({
         setCustomSelection(null);
         if (tabId !== FORM_FIELDS_TAB_ID) onTabChange?.(tabId);
     };
+    // ── Step-by-step checks (see FormStepwise) ──
+    const stepTabIds = effectiveTabs.map((t) => t.id);
+    const issueTab = (path: string): string | undefined => {
+        const configured = configCtx ? (configCtx.customFields.find((f) => fieldFormName(f) === path) ?? configCtx.systemFields.get(path)) : undefined;
+        const tab = stepwise?.fieldTab?.(path) ?? configured?.tabKey;
+        if (tab && stepTabIds.includes(tab)) return tab;
+        // One tab of the form's own (or the stand-in for none): every field not on a custom tab sits there.
+        if (ownTabs.length === 1) return ownTabs[0].id;
+        return effectiveActiveTab;
+    };
+    const tabRankOf = (path: string) => {
+        const index = stepTabIds.indexOf(issueTab(path) ?? '');
+        return index === -1 ? stepTabIds.length : index;
+    };
+    const orderedIssues = () => (stepwise ? orderIssues(stepwise.issues(), tabRankOf) : []);
+    const stepwiseActive = Boolean(stepwise) && mode !== 'view' && !isHarvestCopy;
+    const nextEnabled = stepwiseActive && mode === 'create' && stepTabIds.length > 1;
+
+    // Focus to run once a step's tab has rendered (the tab switch re-renders the form first).
+    const pendingStepFocus = useRef<(() => void) | null>(null);
+    useEffect(() => {
+        const focus = pendingStepFocus.current;
+        if (!focus) return;
+        pendingStepFocus.current = null;
+        const frame = requestAnimationFrame(focus);
+        return () => cancelAnimationFrame(frame);
+    }, [effectiveActiveTab]);
+    const showStepTab = (tab: string | undefined, focus: () => void) => {
+        pendingStepFocus.current = null;
+        if (tab && tab !== effectiveActiveTab) {
+            pendingStepFocus.current = focus;
+            handleTabChange(tab);
+        } else {
+            focus();
+        }
+    };
+    /** Marks the field (keeping an error already there, e.g. a duplicate name) and says why. */
+    const reportIssue = (issue: ConfigValidationIssue) => {
+        const path = issue.path as Path<FieldValues>;
+        if (formCtx && !formCtx.getFieldState(path).error) formCtx.setError(path, { type: 'custom', message: issue.message });
+        stepwise?.notify(issue.message);
+    };
+    const focusFirstIssueOf = (tab: string | undefined) => () => {
+        const first = orderedIssues().find((i) => issueTab(i.path) === tab);
+        if (first) focusFormField(first.path);
+    };
+    /** "Next": checks the open tab like Save (one field at a time); once it's complete, moves to the next tab's first missing field. */
+    const handleNext = () => {
+        const issues = orderedIssues();
+        const here = issues.find((i) => issueTab(i.path) === effectiveActiveTab);
+        if (here) {
+            reportIssue(here);
+            focusFormField(here.path);
+            return;
+        }
+        const current = stepTabIds.indexOf(effectiveActiveTab ?? '');
+        const next = issues.find((i) => tabRankOf(i.path) > current) ?? issues[0];
+        if (!next) {
+            onSave();
+            return;
+        }
+        const tab = issueTab(next.path);
+        showStepTab(tab, focusFirstIssueOf(tab));
+    };
+    /** Save: the first missing field in the form's order (any tab), or the form's own save once nothing is missing. */
+    const handleStepSave = async () => {
+        const [first] = orderedIssues();
+        if (!first) {
+            onSave();
+            return;
+        }
+        // A save attempt as far as the form can tell (inline errors, submit count: e.g. the follow-up popup glows),
+        // without the form's own "first error" toast and focus, which would follow a different order.
+        if (formCtx) await formCtx.handleSubmit(() => {}, () => {})();
+        reportIssue(first);
+        showStepTab(issueTab(first.path), () => focusFormField(first.path));
+    };
+
     /** The form's own panels, hidden (not unmounted) while a custom tab is shown, followed by that tab's fields. */
     const content = (padded: boolean) =>
         customTabs.length === 0 ? (
@@ -240,6 +331,24 @@ export function CommonFormLayout({
                 )}
             </>
         );
+
+    /** "Next" while a new record still misses something (re-read on every change), then the form's Save. */
+    const renderFooter = () => {
+        const pending = nextEnabled && Boolean(stepwise?.issues().length);
+        return (
+            <FormStickyFooter
+                onCancel={handleCancel}
+                onSave={!stepwiseActive ? onSave : pending ? handleNext : () => void handleStepSave()}
+                submitting={submitting}
+                saveLabel={pending ? 'Next' : saveLabel}
+                saveKind={pending ? 'next' : 'save'}
+                cancelLabel={cancelLabel}
+                mode={mode}
+                saveDisabled={saveDisabled || nothingToUpdate}
+                saveDisabledTooltip={saveDisabled ? saveDisabledTooltip : nothingToUpdate ? 'No changes to update' : undefined}
+            />
+        );
+    };
 
     if (mode === 'view' && recordView) {
         return (
@@ -366,26 +475,6 @@ export function CommonFormLayout({
                                         </Box>
                                     )}
 
-                                    {tab.sublabel && (
-                                        <Typography
-                                            component="span"
-                                            sx={{ fontSize: '0.76rem', color: 'var(--mui-palette-text-muted)', fontWeight: 400 }}
-                                        >
-                                            {tab.sublabel}
-                                        </Typography>
-                                    )}
-
-                                    {tab.hasDot && (
-                                        <Box
-                                            sx={{
-                                                width: 7,
-                                                height: 7,
-                                                borderRadius: '50%',
-                                                backgroundColor: '#f97316',
-                                                ml: 0.5,
-                                            }}
-                                        />
-                                    )}
                                 </Box>
                             );
                         })}
@@ -417,18 +506,7 @@ export function CommonFormLayout({
             </Paper>
 
             {/* ── Bottom Sticky Action Bar ── */}
-            {!hideFooter && (
-                <FormStickyFooter
-                    onCancel={handleCancel}
-                    onSave={onSave}
-                    submitting={submitting}
-                    saveLabel={saveLabel}
-                    cancelLabel={cancelLabel}
-                    mode={mode}
-                    saveDisabled={saveDisabled || nothingToUpdate}
-                    saveDisabledTooltip={saveDisabled ? saveDisabledTooltip : nothingToUpdate ? 'No changes to update' : undefined}
-                />
-            )}
+            {!hideFooter && (formCtx && nextEnabled ? <ValueWatcher control={formCtx.control} render={renderFooter} /> : renderFooter())}
 
             {/* ── Notifications Toast ── */}
             {toast}

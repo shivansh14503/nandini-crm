@@ -96,7 +96,7 @@ export function ConvertLeadForm({ leadId, breadcrumbItems }: ConvertLeadFormProp
     const [lead, setLead] = useState<Lead | null>(null);
     const [loading, setLoading] = useState(true);
 
-    const { methods, toast, showToast, closeToast, createSubmitHandler } =
+    const { methods, toast, showToast, closeToast, createSubmitHandler, stepwise } =
         useRhfForm<ConvertLeadFormValues>({
             schema: convertLeadFormSchema,
             noPastDates: NO_PAST_DATES.followup,
@@ -185,6 +185,7 @@ export function ConvertLeadForm({ leadId, breadcrumbItems }: ConvertLeadFormProp
                 onSave={handleSave}
                 submitting={isSubmitting}
                 saveLabel="Convert Lead"
+                stepwise={stepwise}
                 cancelLabel="Cancel"
                 toast={
                     <AppToast

@@ -580,7 +580,7 @@ function NewTabDialog({ module, onClose, onCreate }: { module: CrmModuleKey; onC
     );
 }
 
-function SectionBlock({
+export function SectionBlock({
     section,
     first,
     canEdit,
@@ -591,7 +591,10 @@ function SectionBlock({
     onPatch,
     onDelete,
     onDeleteSection,
-    lockedFields,
+    lockedFields = [],
+    deleteDisabledReason,
+    note,
+    convert = false,
     headerProps,
     rowDragProps,
     rowDragSx,
@@ -601,20 +604,27 @@ function SectionBlock({
     placesOf,
 }: {
     module: CrmModuleKey;
-    section: ConfiguredSection;
+    section: Pick<ConfiguredSection, 'sectionKey' | 'sectionLabel' | 'fields'>;
     /** First section of the tab (no divider above it). */
     first: boolean;
     canEdit: boolean;
     busy: boolean;
     onRename: (label: string) => Promise<void>;
-    onAddField: () => void;
-    onEdit: (field: FormFieldDefinitionDto) => void;
+    /** Omitted where fields can't be added (Convert Lead: its fields come from the records' forms). */
+    onAddField?: () => void;
+    onEdit?: (field: FormFieldDefinitionDto) => void;
     onPatch: (field: FormFieldDefinitionDto, body: UpdateFieldPayload) => Promise<void>;
-    onDelete: (field: FormFieldDefinitionDto) => void;
+    onDelete?: (field: FormFieldDefinitionDto) => void;
     /** Opens the confirmation for deleting the whole section. */
     onDeleteSection: () => void;
     /** Core-locked fields of the section (archived ones included): while any, it can't be deleted. */
-    lockedFields: FormFieldDefinitionDto[];
+    lockedFields?: FormFieldDefinitionDto[];
+    /** Why the section can't be deleted (null → it can), in place of the core-locked rule. */
+    deleteDisabledReason?: string | null;
+    /** Short muted note after the field count (e.g. why the section doesn't show). */
+    note?: string;
+    /** Convert Lead's rows (see FieldRow `convert`). */
+    convert?: boolean;
     /** Tab-level drag and drop: the header is the boundary a row crosses to enter this section. */
     headerProps: GroupDragProps;
     rowDragProps: (field: FormFieldDefinitionDto, isDraggable?: boolean) => RowDragProps;
@@ -628,7 +638,13 @@ function SectionBlock({
     /** Other forms that have a field (shown under its label). */
     placesOf: (field: FormFieldDefinitionDto) => FieldPlace[];
 }) {
-    const canDeleteSection = lockedFields.length === 0;
+    const deleteBlockedBy =
+        deleteDisabledReason !== undefined
+            ? deleteDisabledReason
+            : lockedFields.length > 0
+              ? `Cannot delete section: contains core-locked field(s): ${lockedFields.map((f) => f.label).join(', ')}`
+              : null;
+    const canDeleteSection = !deleteBlockedBy;
     const sectionDragDisabled = !canEdit || busy || !canDragSection;
     const [renaming, setRenaming] = useState(false);
     const [label, setLabel] = useState(section.sectionLabel);
@@ -713,27 +729,22 @@ function SectionBlock({
                 )}
                 <Typography sx={{ fontSize: '0.72rem', color: 'var(--mui-palette-text-muted)' }}>
                     {section.fields.length} field{section.fields.length === 1 ? '' : 's'}
+                    {note ? ` · ${note}` : ''}
                 </Typography>
-                {canEdit && (
+                {canEdit && onAddField && (
                     <Button size="small" startIcon={<AddRoundedIcon sx={{ fontSize: 16 }} />} onClick={onAddField} sx={{ ml: 'auto', textTransform: 'none', fontSize: '0.76rem', fontWeight: 600 }}>
                         Add field here
                     </Button>
                 )}
                 {canEdit && (
-                    <Tooltip
-                        arrow
-                        title={
-                            canDeleteSection
-                                ? 'Delete section'
-                                : `Cannot delete section: contains core-locked field(s): ${lockedFields.map((f) => f.label).join(', ')}`
-                        }
-                    >
+                    <Tooltip arrow title={deleteBlockedBy ?? 'Delete section'}>
                         {/* span: a disabled button fires no events, so the tooltip hangs on its wrapper. */}
                         <span>
                             <IconButton
                                 size="small"
-                                aria-label={canDeleteSection ? `Delete section ${section.sectionLabel}` : `Section ${section.sectionLabel} can't be deleted: it holds core-locked fields`}
+                                aria-label={canDeleteSection ? `Delete section ${section.sectionLabel}` : `Section ${section.sectionLabel} can't be deleted`}
                                 disabled={busy || !canDeleteSection}
+                                sx={{ ml: onAddField ? 0 : 'auto' }}
                                 onClick={onDeleteSection}
                             >
                                 <DeleteOutlineOutlinedIcon sx={{ fontSize: 17, color: busy || !canDeleteSection ? undefined : dangerColor }} />
@@ -750,9 +761,10 @@ function SectionBlock({
                         field={field}
                         canEdit={canEdit}
                         busy={busy}
-                        onEdit={() => onEdit(field)}
+                        onEdit={onEdit ? () => onEdit(field) : undefined}
                         onPatch={(body) => onPatch(field, body)}
-                        onDelete={() => onDelete(field)}
+                        onDelete={onDelete ? () => onDelete(field) : undefined}
+                        convert={convert}
                         places={placesOf(field)}
                         dragProps={rowDragProps(field, field.isActive)}
                         dragSx={rowDragSx(field)}

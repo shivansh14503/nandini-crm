@@ -138,7 +138,7 @@ export default function PartnerCompanyForm({
         []
     );
 
-    const { methods, toast, showToast, closeToast } = useRhfForm<PartnerCompanyFormData>({
+    const { methods, toast, showToast, closeToast, stepwise } = useRhfForm<PartnerCompanyFormData>({
         schema: partnerCompanyFormSchema,
         module: 'partner-companies',
         defaultValues: initialValues,
@@ -269,6 +269,7 @@ export default function PartnerCompanyForm({
                     onSave={mode === 'view' ? () => router.push(ROUTES.PARTNER_COMPANY_EDIT(partnerCompanyId!)) : handleSave}
                     submitting={isSubmitting}
                     saveLabel={mode === 'view' ? 'Edit Partner Company' : mode === 'edit' ? 'Update Partner Company' : 'Save Partner Company'}
+                    stepwise={{ ...stepwise, fieldTab: tabForField }}
                     cancelLabel={mode === 'view' ? 'Back' : 'Cancel'}
                     recordView={{
                         title: partnerName,

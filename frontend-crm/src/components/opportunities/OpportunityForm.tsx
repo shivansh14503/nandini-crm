@@ -129,7 +129,7 @@ export default function OpportunityForm({
     const setFollowUpPending = useCallback((pending: boolean) => {
         followUpDecisionPending.current = pending;
     }, []);
-    const { methods, toast, showToast, closeToast, createSubmitHandler } =
+    const { methods, toast, showToast, closeToast, createSubmitHandler, stepwise } =
         useRhfForm<OpportunityFormData>({
             schema: opportunityFormSchema,
             noPastDates: NO_PAST_DATES.opportunity,
@@ -236,6 +236,7 @@ export default function OpportunityForm({
                     onSave={mode === 'view' ? () => router.push(ROUTES.OPPORTUNITY_EDIT(opportunityId!)) : handleSave}
                     submitting={isSubmitting}
                     saveLabel={mode === 'view' ? 'Edit Opportunity' : mode === 'edit' ? 'Update Opportunity' : 'Save Opportunity'}
+                    stepwise={{ ...stepwise, fieldTab: (path) => (path.startsWith('lineItems') ? 'line_items' : undefined) }}
                     cancelLabel={mode === 'view' ? 'Back' : 'Cancel'}
                     recordView={{
                         title: orgName || '',

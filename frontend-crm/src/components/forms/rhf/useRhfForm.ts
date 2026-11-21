@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
     useForm,
     type DefaultValues,
@@ -20,6 +20,7 @@ import type { CrmModuleKey } from '@/types/formConfig.types';
 import { moduleFields, validateConfiguredFields, type ConfigValidationIssue } from '@/utils/formConfig';
 import { pastDateIssues, type PastDateField } from '@/utils/pastDates';
 import { useDropdownDefaults, withDropdownDefaults, type DropdownDefaultsOptions } from './useDropdownDefaults';
+import type { FormStepwise } from '../formStepwise';
 
 export type FormToastState = {
     open: boolean;
@@ -79,6 +80,11 @@ export interface UseRhfFormReturn<T extends FieldValues> {
     closeToast: () => void;
     /** Builds a submit handler that toasts the first zod issue on validation failure. */
     createSubmitHandler: (onValid: (values: T) => Promise<void> | void) => () => Promise<void>;
+    /**
+     * Pass to `CommonFormLayout`'s `stepwise`: the issues the save would report right now (same rules as the
+     * resolver), so the layout can walk the user through them one at a time ("Next" on new records).
+     */
+    stepwise: FormStepwise;
 }
 
 /**
@@ -142,7 +148,25 @@ export function useRhfForm<T extends FieldValues>({
         [methods, showToast]
     );
 
-    return { methods, toast, showToast, closeToast, createSubmitHandler };
+    const issues = useCallback((): ConfigValidationIssue[] => {
+        const values = methods.getValues();
+        const found: ConfigValidationIssue[] = [];
+        try {
+            const parsed = schema.safeParse(values);
+            if (!parsed.success) for (const issue of parsed.error.issues) found.push({ path: issue.path.map(String).join('.'), message: issue.message });
+        } catch {
+            /* async refinements: left to the resolver on save */
+        }
+        found.push(
+            ...configuredIssues(values, module, extraRules, { fields: noPastDates ?? [], initial: () => methods.formState.defaultValues ?? initialValues }, relaxedFields),
+        );
+        const seen = new Set<string>();
+        return found.filter((issue) => issue.path && !seen.has(issue.path) && Boolean(seen.add(issue.path)));
+    }, [methods, schema, module, extraRules, noPastDates, initialValues, relaxedFields]);
+    const notify = useCallback((message: string) => showToast(message, 'error'), [showToast]);
+    const stepwise = useMemo<FormStepwise>(() => ({ issues, notify }), [issues, notify]);
+
+    return { methods, toast, showToast, closeToast, createSubmitHandler, stepwise };
 }
 
 /** Sets `message` at a dotted RHF path (`customFields.region`) unless that path already has an error. */
@@ -155,6 +179,32 @@ function setNestedError(errors: Record<string, unknown>, path: string, message: 
     }
     const leaf = keys[keys.length - 1];
     if (!node[leaf]) node[leaf] = { type: 'custom', message };
+}
+
+/**
+ * The admin's field rules for `module` (required / formats), the form's extra rules and its no-past-date fields.
+ * The configuration is read at call time, so forms opened before it loaded still use the latest rules.
+ */
+function configuredIssues<T extends FieldValues>(
+    values: T,
+    module: CrmModuleKey | undefined,
+    extraRules: ((values: T) => ConfigValidationIssue[]) | undefined,
+    pastDates: { fields: PastDateField[]; initial: () => unknown },
+    relaxedFields?: (values: T) => readonly string[],
+): ConfigValidationIssue[] {
+    const configs = getFormConfigs();
+    // Admin-defined date fields of the module can't be set in the past either.
+    const customDates: PastDateField[] = module
+        ? moduleFields(configs, module)
+              .filter((f) => !f.isSystem && f.isActive && f.fieldType === 'date')
+              .map((f) => ({ name: `customFields.${f.fieldKey}`, label: f.label, kind: 'date' as const }))
+        : [];
+    const relaxed = new Set(relaxedFields?.(values) ?? []);
+    return [
+        ...(module ? validateConfiguredFields(configs, module, values).filter((issue) => !relaxed.has(issue.path)) : []),
+        ...(extraRules?.(values) ?? []),
+        ...pastDateIssues([...pastDates.fields, ...customDates], values, pastDates.initial()),
+    ];
 }
 
 /**
@@ -171,19 +221,7 @@ function withConfiguredFieldRules<T extends FieldValues>(
     if (!module && !extraRules && pastDates.fields.length === 0) return base;
     return async (values, context, options) => {
         const result = await base(values, context, options);
-        const configs = getFormConfigs();
-        // Admin-defined date fields of the module can't be set in the past either.
-        const customDates: PastDateField[] = module
-            ? moduleFields(configs, module)
-                  .filter((f) => !f.isSystem && f.isActive && f.fieldType === 'date')
-                  .map((f) => ({ name: `customFields.${f.fieldKey}`, label: f.label, kind: 'date' as const }))
-            : [];
-        const relaxed = new Set(relaxedFields?.(values) ?? []);
-        const issues = [
-            ...(module ? validateConfiguredFields(configs, module, values).filter((issue) => !relaxed.has(issue.path)) : []),
-            ...(extraRules?.(values) ?? []),
-            ...pastDateIssues([...pastDates.fields, ...customDates], values, pastDates.initial()),
-        ];
+        const issues = configuredIssues(values, module, extraRules, pastDates, relaxedFields);
         if (issues.length === 0) return result;
         const errors = { ...(result.errors as Record<string, unknown>) };
         for (const issue of issues) setNestedError(errors, issue.path, issue.message);

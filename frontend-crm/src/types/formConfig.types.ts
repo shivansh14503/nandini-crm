@@ -189,6 +189,8 @@ export interface FormFieldDefinitionDto {
     convertFieldSize?: ConvertFieldSize | null;
     /** Convert Lead order (null → the field keeps the place it has on the record's form). */
     convertSortOrder?: number | null;
+    /** Convert Lead section (see ConvertSectionDef); null → the field's section on the record's form. */
+    convertSectionKey?: string | null;
     dropdownCategoryId: string | null;
     dropdownCategoryKey: string | null;
     validationRules: Record<string, unknown> | null;
@@ -293,7 +295,23 @@ export interface UpdateFieldPayload {
     /** Convert Lead's own "required" / width; null → back to the record's form setting. */
     convertIsRequired?: boolean | null;
     convertFieldSize?: ConvertFieldSize | null;
+    /** The field's section on Convert Lead; null → its section on the record's form. */
+    convertSectionKey?: string | null;
     dropdownCategoryKey?: string | null;
+}
+
+/**
+ * One of Convert Lead's own sections of a contact / organization / opportunity, stored in that module's setting
+ * `convertSections`: a renamed or deleted section of the record's form (by its key), or one made on Convert Lead
+ * (`custom`). Sections not listed show as on the record's form. Mirrors convertSectionsSchema in the API.
+ */
+export interface ConvertSectionDef {
+    key: string;
+    label: string;
+    /** Made on Convert Lead (not a section of the record's form). */
+    custom?: boolean;
+    /** A section of the record's form that Convert Lead doesn't show (its fields were moved to another one). */
+    deleted?: boolean;
 }
 
 /** `Compliance & Legal` → `compliance_legal`: key of an admin-created tab (the API accepts ^[a-z][a-z0-9_]{1,39}$). */

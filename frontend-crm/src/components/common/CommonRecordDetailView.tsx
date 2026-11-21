@@ -19,7 +19,6 @@ export interface RecordDetailTab {
     label: string;
     icon?: React.ReactNode;
     badge?: React.ReactNode;
-    sublabel?: React.ReactNode;
 }
 
 export type RecordAuditInfo = RecordAuditStamp;
@@ -292,11 +291,6 @@ export function CommonRecordDetailView({
                                 label={
                                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
                                         {tab.label}
-                                        {tab.sublabel && (
-                                            <Typography component="span" sx={{ fontSize: '0.74rem', color: 'var(--mui-palette-text-muted)', fontWeight: 400 }}>
-                                                {tab.sublabel}
-                                            </Typography>
-                                        )}
                                     </Box>
                                 }
                                 sx={{

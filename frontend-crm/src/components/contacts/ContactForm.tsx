@@ -91,7 +91,7 @@ export default function ContactForm({
 }: ContactFormProps) {
     const router = useRouter();
 
-    const { methods, toast, showToast, closeToast, createSubmitHandler } = useRhfForm<ContactFormData>({
+    const { methods, toast, showToast, closeToast, createSubmitHandler, stepwise } = useRhfForm<ContactFormData>({
         schema: contactFormSchema,
         module: 'contacts',
         defaultValues: { ...DEFAULT_FORM, ...initialData },
@@ -200,6 +200,7 @@ export default function ContactForm({
                     onSave={mode === 'view' ? () => router.push(ROUTES.CONTACT_EDIT(contactId!)) : handleSave}
                     submitting={isSubmitting}
                     saveLabel={mode === 'view' ? 'Edit Contact' : mode === 'edit' ? 'Update Contact' : 'Save Contact'}
+                    stepwise={stepwise}
                     cancelLabel={mode === 'view' ? 'Back' : 'Cancel'}
                     recordView={{
                         title: contactName || '',

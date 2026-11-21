@@ -1,6 +1,6 @@
-import type { FormConfigsPayload, FormFieldDefinitionDto } from '@/types/formConfig.types';
+import { sectionKeyFromLabel, type ConvertSectionDef, type FormConfigsPayload, type FormFieldDefinitionDto } from '@/types/formConfig.types';
 import { CONVERT_FIELD_NAMES, NOT_CHECKED_FOR_REQUIRED, type ConvertLeadFormValues, type ConvertModule } from '@/validations/convertLead.schema';
-import { isEmptyValue, moduleFields, type ConfigValidationIssue } from './formConfig';
+import { groupSections, isEmptyValue, moduleFields, type ConfigValidationIssue } from './formConfig';
 
 /**
  * Which Contact / Organization / Opportunity fields the Convert Lead form shows. An admin picks them per field in
@@ -58,19 +58,98 @@ export const hasOwnConvertSettings = (field: FormFieldDefinitionDto) => field.co
 export const hasOwnConvertOrder = (configs: FormConfigsPayload | null | undefined, module: ConvertModule) =>
     moduleFields(configs, module).some((f) => f.convertSortOrder != null);
 
+// ── Sections ─────────────────────────────────────────────────────────────────
+
+/** Module setting holding Convert Lead's own sections of a record (ConvertSectionDef[]). */
+export const CONVERT_SECTIONS_SETTING = 'convertSections';
+/** Convert Lead has no tabs: every field it lays out sits on this one. */
+export const CONVERT_TAB_KEY = 'convert';
+/** Key prefix of sections made on Convert Lead (so they never clash with a section added to the form later). */
+export const CONVERT_SECTION_PREFIX = 'convert_';
+
+const isSectionDef = (value: unknown): value is ConvertSectionDef =>
+    Boolean(value) && typeof (value as ConvertSectionDef).key === 'string' && typeof (value as ConvertSectionDef).label === 'string';
+
+/** Convert Lead's own sections of `module` (renamed / deleted form sections and ones made on Convert Lead). */
+export function convertSectionDefs(configs: FormConfigsPayload | null | undefined, module: ConvertModule): ConvertSectionDef[] {
+    const raw = configs?.moduleSettings?.[module]?.[CONVERT_SECTIONS_SETTING];
+    return Array.isArray(raw) ? raw.filter(isSectionDef) : [];
+}
+
 /**
- * Every field of `module` in Convert Lead's order, with Convert Lead's settings applied (convertSettingsOf) and
- * `sortOrder` renumbered to that order. Fields with a Convert Lead order fill, in that order, the places they hold on
- * the record's form; the others (e.g. one added to the form later) keep their place there. Sections and tabs are
- * the record's form's.
+ * Every field of `module` in Convert Lead's order and section, with Convert Lead's settings applied (convertSettingsOf).
+ * - Order: fields with a Convert Lead order fill, in that order, the places they hold on the record's form; the others
+ *   (e.g. one added to the form later) keep their place there. `sortOrder` is renumbered to it.
+ * - Section (`sectionKey` / `sectionLabel`, all on one tab, CONVERT_TAB_KEY): the field's Convert Lead section, else
+ *   its section on the record's form, named as Convert Lead renamed it or else as the form names it. A field whose
+ *   section Convert Lead deleted goes to the first section left. Sections come in the order of their first field.
+ * The record's form keeps its own `sectionKey`: read it from moduleFields when needed.
  */
 export function convertOrderedFields(configs: FormConfigsPayload | null | undefined, module: ConvertModule): FormFieldDefinitionDto[] {
     const fields = moduleFields(configs, module);
     const ranked = fields.filter((f) => f.convertSortOrder != null).sort((a, b) => (a.convertSortOrder ?? 0) - (b.convertSortOrder ?? 0));
     let next = 0;
-    return fields
-        .map((f) => (f.convertSortOrder != null ? ranked[next++] : f))
-        .map((f, i) => ({ ...convertSettingsOf(f), sortOrder: (i + 1) * 10 }));
+    const ordered = fields.map((f) => (f.convertSortOrder != null ? ranked[next++] : f));
+
+    const defs = new Map(convertSectionDefs(configs, module).map((d) => [d.key, d]));
+    const formLabels = new Map<string, string>();
+    for (const f of fields) if (!formLabels.has(f.sectionKey)) formLabels.set(f.sectionKey, f.sectionLabel);
+    const isLive = (key: string) => {
+        const def = defs.get(key);
+        return def ? !def.deleted : formLabels.has(key);
+    };
+    const wanted = (f: FormFieldDefinitionDto) => [f.convertSectionKey, f.sectionKey].find((k): k is string => Boolean(k) && isLive(k!));
+    const fallback = ordered.map(wanted).find(Boolean) ?? [...defs.values()].find((d) => d.custom && !d.deleted)?.key;
+
+    return ordered.map((f, i) => {
+        const sectionKey = wanted(f) ?? fallback ?? f.sectionKey;
+        return {
+            ...convertSettingsOf(f),
+            sortOrder: (i + 1) * 10,
+            tabKey: CONVERT_TAB_KEY,
+            sectionKey,
+            sectionLabel: defs.get(sectionKey)?.label ?? formLabels.get(sectionKey) ?? f.sectionLabel,
+        };
+    });
+}
+
+export interface ConvertBuilderSection {
+    sectionKey: string;
+    sectionLabel: string;
+    /** Made on Convert Lead (not a section of the record's form). */
+    custom: boolean;
+    /** Active fields in the section, in Convert Lead's order (shown on Convert Lead or not). */
+    fields: FormFieldDefinitionDto[];
+}
+
+/**
+ * Convert Lead's sections of `module` as Form Builder › Convert Lead lists them: every section holding an active field
+ * (in the order of their first field), then sections made on Convert Lead that are still empty. The Convert Lead form
+ * itself only shows sections with a field turned on.
+ */
+export function convertBuilderSections(configs: FormConfigsPayload | null | undefined, module: ConvertModule): ConvertBuilderSection[] {
+    const defs = convertSectionDefs(configs, module);
+    const custom = new Set(defs.filter((d) => d.custom).map((d) => d.key));
+    const filled = groupSections(convertOrderedFields(configs, module).filter((f) => f.isActive)).map((s) => ({
+        sectionKey: s.sectionKey,
+        sectionLabel: s.sectionLabel,
+        custom: custom.has(s.sectionKey),
+        fields: s.fields,
+    }));
+    const empty = defs
+        .filter((d) => d.custom && !d.deleted && !filled.some((s) => s.sectionKey === d.key))
+        .map((d) => ({ sectionKey: d.key, sectionLabel: d.label, custom: true, fields: [] }));
+    return [...filled, ...empty];
+}
+
+/** Key for a new Convert Lead section named `label`, free among the record's form sections and Convert Lead's own. */
+export function newConvertSectionKey(configs: FormConfigsPayload | null | undefined, module: ConvertModule, label: string): string {
+    const slug = sectionKeyFromLabel(label).slice(0, 60) || 'section';
+    const taken = new Set([...moduleFields(configs, module).map((f) => f.sectionKey), ...convertSectionDefs(configs, module).map((d) => d.key)]);
+    const root = `${CONVERT_SECTION_PREFIX}${slug}`;
+    let key = root;
+    for (let n = 2; taken.has(key); n++) key = `${root}_${n}`;
+    return key;
 }
 
 /** The fields of `module` that Convert Lead shows, in Convert Lead's order and with its settings (convertOrderedFields). */

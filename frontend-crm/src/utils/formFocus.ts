@@ -1,6 +1,11 @@
 const FOCUSABLE =
     'input:not([type="hidden"]):not([aria-hidden="true"]), textarea, select, [role="combobox"], [tabindex="0"]';
 
+/** The mounted element of a form field (by RHF name, `data-field`, id or test id), or null. */
+export function findFormField(fieldName: string): HTMLElement | null {
+    return fieldName && typeof document !== 'undefined' ? findFieldElement(fieldName) : null;
+}
+
 function findFieldElement(fieldName: string): HTMLElement | null {
     const key = CSS.escape(fieldName);
     // `data-field` wrappers (FormField) first, then native name/id/test-id hooks.

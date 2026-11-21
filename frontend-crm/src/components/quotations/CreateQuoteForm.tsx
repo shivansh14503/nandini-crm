@@ -123,6 +123,15 @@ const ADDRESS_FIELD_KEYS = [
     'copyAddressFromBilling',
 ];
 
+/** Tab that renders a field (line item paths like `lineItems.0.quantity` go by their first key). */
+function quotationFieldTab(path: string): QuotationTabKey | undefined {
+    const key = path.split('.')[0];
+    if (OVERVIEW_FIELD_KEYS.includes(key)) return 'overview';
+    if (LINE_ITEMS_FIELD_KEYS.includes(key)) return 'line_items';
+    if (ADDRESS_FIELD_KEYS.includes(key)) return 'address';
+    return undefined;
+}
+
 /** Country/state pairs normalised to the ISO address master when address data is loaded. */
 const QUOTATION_ADDRESS_PAIRS = [
     ['billingCountry', 'billingState'],
@@ -233,7 +242,7 @@ export function CreateQuoteForm({
     const [activeTab, setActiveTab] = useState<QuotationTabKey>('overview');
     const [addressPrepopulated, setAddressPrepopulated] = useState(true);
 
-    const { methods, toast, showToast, closeToast } =
+    const { methods, toast, showToast, closeToast, stepwise } =
         useRhfForm<QuotationFormData>({
             schema: quotationFormSchema,
             noPastDates: NO_PAST_DATES.quotation,
@@ -489,6 +498,7 @@ export function CreateQuoteForm({
                     onSave={mode === 'view' ? () => router.push(ROUTES.QUOTATION_EDIT(quotationId!)) : handleSave}
                     submitting={isSubmitting}
                     saveLabel={mode === 'view' ? 'Edit Quotation' : isEdit ? 'Update Quotation' : 'Save Quotation'}
+                    stepwise={{ ...stepwise, fieldTab: quotationFieldTab }}
                     cancelLabel={mode === 'view' ? 'Back' : 'Cancel'}
                     mode={mode}
                     headerExtra={mode === 'view' && quotationId ? <PdfActionsButton module="QUOTATION" recordId={quotationId} /> : undefined}

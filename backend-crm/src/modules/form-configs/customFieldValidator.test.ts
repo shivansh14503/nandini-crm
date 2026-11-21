@@ -31,6 +31,7 @@ function field(overrides: Partial<FormFieldDefinitionDto> & Pick<FormFieldDefini
         convertIsRequired: null,
         convertFieldSize: null,
         convertSortOrder: null,
+        convertSectionKey: null,
         dropdownCategoryId: null,
         dropdownCategoryKey: null,
         validationRules: null,

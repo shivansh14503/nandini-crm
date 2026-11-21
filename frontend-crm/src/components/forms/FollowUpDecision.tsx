@@ -83,6 +83,24 @@ export function useFollowUpDecision({ enabled, notify, onPendingChange, onDecisi
     const time = useWatch({ control, name: 'nextFollowupTime' }) ?? '';
 
     const setPending = (pending: boolean) => onPendingChange?.(pending);
+
+    // The question only exists for a picked response in edit mode. Discard resets the form (the response is gone), and
+    // the edit page may be kept alive and shown again later (Next's cacheComponents), so drop it whenever either is
+    // missing: the next Edit starts clean.
+    const response = useWatch({ control, name: 'customerResponse' }) ?? '';
+    const active = enabled && Boolean(response.trim());
+    if (!active && (open || glowRequested || openedAtSubmit !== 0)) {
+        setOpen(false);
+        setGlowRequested(false);
+        setOpenedAtSubmit(0);
+    }
+    // The form's own copy of the pending question / decision is cleared with it.
+    React.useEffect(() => {
+        if (active) return;
+        onPendingChange?.(false);
+        onDecisionChange?.(null);
+    }, [active, onPendingChange, onDecisionChange]);
+
     const setSlot = (slot: FollowUpSlot) => {
         setValue('nextFollowupDate', slot.date, { shouldDirty: true });
         setValue('nextFollowupTime', slot.time, { shouldDirty: true });

@@ -154,7 +154,7 @@ export default function LeadForm({
         return { isClosing, wasClosed, response };
     };
 
-    const { methods, toast, showToast, closeToast, createSubmitHandler } = useRhfForm<LeadFormData>({
+    const { methods, toast, showToast, closeToast, createSubmitHandler, stepwise } = useRhfForm<LeadFormData>({
         schema: leadFormSchema,
         noPastDates: NO_PAST_DATES.followup,
         // A new lead's first follow-up and every rescheduled one must be later than now when Save is clicked.
@@ -288,6 +288,7 @@ export default function LeadForm({
                     onSave={mode === 'view' ? () => router.push(ROUTES.LEAD_EDIT(leadId!)) : handleSave}
                     submitting={isSubmitting}
                     saveLabel={mode === 'view' ? 'Edit Lead' : mode === 'edit' ? 'Update Lead' : 'Save Lead'}
+                    stepwise={{ ...stepwise, fieldTab: (path) => (/^(primary|other)/.test(path) ? 'address' : undefined) }}
                     cancelLabel={mode === 'view' ? 'Back' : 'Cancel'}
                     recordView={{
                         title: leadName || '',

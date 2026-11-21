@@ -41,9 +41,7 @@ export interface FormTabDefinition {
     id: string;
     label: string;
     icon: React.ReactNode;
-    sublabel?: string;
     badge?: React.ReactNode | number | string;
-    hasDot?: boolean;
 }
 
 
