@@ -2,15 +2,10 @@
 
 import React, { useState, useMemo, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
-import { Box, Chip, Typography } from '@mui/material';
 import PersonOutlinedIcon from '@mui/icons-material/PersonOutlined';
 import StarBorderIcon from '@mui/icons-material/StarBorder';
 import ScheduleIcon from '@mui/icons-material/Schedule';
 import AccountCircleOutlinedIcon from '@mui/icons-material/AccountCircleOutlined';
-import PhoneOutlinedIcon from '@mui/icons-material/PhoneOutlined';
-import EmailOutlinedIcon from '@mui/icons-material/EmailOutlined';
-import ApartmentIcon from '@mui/icons-material/Apartment';
-import { RecordLink } from '../../common/RecordLink';
 import { CommonMasterView } from '../../common/CommonMasterView';
 import { useTableFilter } from '../../common/TableFilter';
 import { MasterHeaderActions } from '../../common/MasterHeaderActions';
@@ -18,25 +13,18 @@ import { buildExtendedSearchConfig } from '../../common/buildExtendedSearchConfi
 import { AppToast } from '../../common/AppToast';
 import { useSaveFlash } from '@/utils/saveFlash';
 import { DataImportModal } from '../../common/import';
-import { documentNumberColumn, type DataTableColumn, type DataTableFilterItem } from '../../common/DataTable';
+import { type DataTableFilterItem } from '../../common/DataTable';
 import { ROUTES } from '@/config/constants';
 import { useAuth } from '@/context/AuthContext';
-import { useContacts, useBulkDeleteContacts, useOrganizations } from '@/hooks/queries';
-import { useShowRecordNumber } from '@/hooks/queries/useDocumentSeries';
-import { wasModified } from '../../common/Drawer/RecordAuditFooter';
-import { formatDateTime } from '@/utils/date';
-import { formatPhoneDisplay } from '@/utils/phone';
-import type { ExtendedOrganization } from '@/types/organization.types';
+import { useContacts, useBulkDeleteContacts } from '@/hooks/queries';
 import type { Contact } from '@/types/contact.types';
 import type { ContactFilterTab } from './types';
 import { ContactDetailDrawer } from '../ContactDetailDrawer';
 import { useSearchScope, useSearchScopedRows } from '../../search/SearchScope';
-
+import { useContactColumns } from './contactColumns';
 
 /** Stable empty list while the first page loads (keeps memoized filters from recomputing). */
 const NO_RECORDS: Contact[] = [];
-const NO_ORGANIZATIONS: ExtendedOrganization[] = [];
-const plainCellSx = { fontSize: '0.78rem', color: 'var(--crm-slate-700)' } as const;
 export function ContactsMasterView() {
     const router = useRouter();
     const { user } = useAuth();
@@ -70,16 +58,6 @@ export function ContactsMasterView() {
     // Tracked by id so the drawer always shows the cached copy and closes if the contact is deleted.
     const [drawerContactId, setDrawerContactId] = useState<string | null>(null);
 
-    // Location column: the contact's organization's billing city and state.
-    const { data: organizations = NO_ORGANIZATIONS } = useOrganizations();
-    const locationOf = useMemo(() => {
-        const byId = new Map(organizations.map((o) => [o.id, o]));
-        const byName = new Map(organizations.map((o) => [o.organizationName.trim().toLowerCase(), o]));
-        return (c: Contact) => {
-            const org = (c.organizationId && byId.get(c.organizationId)) || byName.get((c.organizationName || '').trim().toLowerCase());
-            return org ? [org.billingCity, org.billingState].filter(Boolean).join(', ') : '';
-        };
-    }, [organizations]);
     const selectedDrawerContact = useMemo(
         () => (drawerContactId ? contacts.find((c) => c.id === drawerContactId) ?? null : null),
         [contacts, drawerContactId]
@@ -231,159 +209,9 @@ export function ContactsMasterView() {
         }
     };
 
-    const showNumber = useShowRecordNumber();
-
     // ── Declarative Column Definitions ──────────────────────────────────────
-    const columns: DataTableColumn<Contact>[] = useMemo(
-        () => [
-            ...(showNumber('contact')
-                ? [
-                      {
-                          // Not one of the basic columns; switch it on from Modify Columns.
-                          ...documentNumberColumn<Contact>({
-                              id: 'contactCode',
-                              label: 'CONTACT NO.',
-                              getNumber: (c) => c.contactCode,
-                              getHref: (c) => ROUTES.CONTACT_DETAIL(c.id),
-                              onOpen: (c) => setDrawerContactId(c.id),
-                          }),
-                          defaultHidden: true,
-                      },
-                  ]
-                : []),
-            {
-                id: 'name',
-                locked: true,
-                label: 'NAME',
-                sortable: true,
-                minWidth: 200,
-                render: (c) => (
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                        <PersonOutlinedIcon sx={{ fontSize: 16, color: 'var(--crm-text-blue-600)' }} />
-                        <RecordLink
-                            href={ROUTES.CONTACT_DETAIL(c.id)}
-                            onOpen={() => setDrawerContactId(c.id)}
-                            sx={{
-                                fontWeight: 700,
-                                color: 'var(--crm-text-blue-700)',
-                                fontSize: '0.82rem',
-                                cursor: 'pointer',
-                                '&:hover': { textDecoration: 'underline' },
-                            }}
-                        >
-                            {c.name}
-                        </RecordLink>
-                        {c.isPrimaryContact && (
-                            <Chip
-                                label="Primary"
-                                size="small"
-                                sx={{
-                                    height: 18,
-                                    fontSize: '0.64rem',
-                                    fontWeight: 700,
-                                    backgroundColor: 'var(--mui-palette-primary-soft)',
-                                    color: 'var(--crm-text-blue-700)',
-                                    border: '1px solid var(--mui-palette-primary-softBorder)',
-                                }}
-                            />
-                        )}
-                    </Box>
-                ),
-            },
-            {
-                id: 'designation',
-                label: 'JOB TITLE',
-                sortable: true,
-                minWidth: 150,
-                render: (c) => <Typography sx={plainCellSx}>{c.designation || '-'}</Typography>,
-            },
-            {
-                id: 'organizationName',
-                label: 'ORGANIZATION NAME',
-                sortable: true,
-                minWidth: 180,
-                render: (c) => (
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.8 }}>
-                        <ApartmentIcon sx={{ fontSize: 14, color: 'var(--mui-palette-text-secondary)' }} />
-                        {c.organizationId && c.organizationName ? (
-                            <RecordLink href={ROUTES.ORGANIZATION_DETAIL(c.organizationId)} sx={{ fontSize: '0.8rem', fontWeight: 500 }}>
-                                {c.organizationName}
-                            </RecordLink>
-                        ) : (
-                            <Typography sx={{ fontSize: '0.8rem', color: 'var(--crm-slate-700)', fontWeight: 500 }}>
-                                {c.organizationName || '-'}
-                            </Typography>
-                        )}
-                    </Box>
-                ),
-            },
-            {
-                id: 'mobile',
-                label: 'MOBILE',
-                sortable: true,
-                minWidth: 140,
-                render: (c) => (
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.6 }}>
-                        <PhoneOutlinedIcon sx={{ fontSize: 14, color: 'var(--mui-palette-text-muted)' }} />
-                        <Typography sx={plainCellSx}>{c.mobile ? formatPhoneDisplay(c.mobile) || c.mobile : '-'}</Typography>
-                    </Box>
-                ),
-            },
-            {
-                id: 'officePhone',
-                label: 'OFFICE PHONE',
-                sortable: true,
-                minWidth: 140,
-                render: (c) => (
-                    <Typography sx={plainCellSx}>{c.officePhone ? formatPhoneDisplay(c.officePhone) || c.officePhone : '-'}</Typography>
-                ),
-            },
-            {
-                id: 'email',
-                fieldKey: 'emailAddress',
-                label: 'EMAIL',
-                sortable: false,
-                minWidth: 180,
-                render: (c) => {
-                    const email = (c.emailAddress?.find((e) => e.isPrimary) ?? c.emailAddress?.[0])?.email;
-                    return (
-                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.6 }}>
-                            <EmailOutlinedIcon sx={{ fontSize: 14, color: 'var(--mui-palette-text-muted)' }} />
-                            <Typography sx={plainCellSx}>{email || '-'}</Typography>
-                        </Box>
-                    );
-                },
-            },
-            {
-                // Derived: the linked organization's billing city and state (contacts have no address of their own).
-                id: 'location',
-                label: 'LOCATION',
-                sortable: false,
-                minWidth: 150,
-                render: (c) => <Typography sx={plainCellSx}>{locationOf(c) || '-'}</Typography>,
-            },
-            {
-                id: 'updatedAt',
-                label: 'DATE MODIFIED',
-                sortable: true,
-                minWidth: 170,
-                render: (c) =>
-                    wasModified(c) ? (
-                        <Typography sx={plainCellSx}>{formatDateTime(c.updatedAt) || '-'}</Typography>
-                    ) : (
-                        <Typography sx={{ ...plainCellSx, color: 'var(--mui-palette-text-muted)' }}>- - -</Typography>
-                    ),
-            },
-            {
-                id: 'createdAt',
-                label: 'DATE CREATED',
-                sortable: true,
-                minWidth: 170,
-                render: (c) => <Typography sx={plainCellSx}>{formatDateTime(c.createdAt) || '-'}</Typography>,
-            },
-        ],
-        [locationOf, showNumber]
-    );
+    const openDrawerRecord = useCallback((record: Contact) => setDrawerContactId(record.id), []);
+    const columns = useContactColumns(openDrawerRecord);
 
     // Row clicks only open the drawer; its eye button leads on to the detail page with the related modules.
     const closeDrawer = useCallback(() => setDrawerContactId(null), []);

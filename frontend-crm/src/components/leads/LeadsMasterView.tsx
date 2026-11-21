@@ -2,25 +2,19 @@
 
 import React, { useState, useMemo, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
-import { Box, Chip, Tooltip, Typography } from '@mui/material';
 import EventBusyOutlinedIcon from '@mui/icons-material/EventBusyOutlined';
 import { localToday } from '@/utils/pastDates';
 import { isFollowUpExpired } from '../forms/FollowUpDecision';
-import { ratingChipColors, useLeadRatingConfig } from '@/utils/leadRating';
+import { useLeadRatingConfig } from '@/utils/leadRating';
 import GroupOutlinedIcon from '@mui/icons-material/GroupOutlined';
 import LocalFireDepartmentOutlinedIcon from '@mui/icons-material/LocalFireDepartmentOutlined';
 import PersonAddAltOutlinedIcon from '@mui/icons-material/PersonAddAltOutlined';
 import TodayOutlinedIcon from '@mui/icons-material/TodayOutlined';
 import AccountCircleOutlinedIcon from '@mui/icons-material/AccountCircleOutlined';
 import PersonOutlinedIcon from '@mui/icons-material/PersonOutlined';
-import PhoneOutlinedIcon from '@mui/icons-material/PhoneOutlined';
-import EmailOutlinedIcon from '@mui/icons-material/EmailOutlined';
-import ApartmentIcon from '@mui/icons-material/Apartment';
-import CalendarMonthOutlinedIcon from '@mui/icons-material/CalendarMonthOutlined';
 import AutorenewOutlinedIcon from '@mui/icons-material/AutorenewOutlined';
 import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutlineOutlined';
 import HighlightOffOutlinedIcon from '@mui/icons-material/HighlightOffOutlined';
-import { RecordLink } from '../common/RecordLink';
 import { StatusSummaryCards, StatusSummaryCardsSkeleton, type StatusSummaryItem } from '../common/StatusSummaryCards';
 import { CommonMasterView } from '../common/CommonMasterView';
 import { useTableFilter } from '../common/TableFilter';
@@ -29,7 +23,7 @@ import { buildExtendedSearchConfig } from '../common/buildExtendedSearchConfig';
 import { AppToast } from '../common/AppToast';
 import { useSaveFlash } from '@/utils/saveFlash';
 import { DataImportModal } from '../common/import';
-import { documentNumberColumn, type DataTableColumn, type DataTableFilterItem } from '../common/DataTable';
+import { type DataTableFilterItem } from '../common/DataTable';
 import { ROUTES } from '@/config/constants';
 import { useAuth } from '@/context/AuthContext';
 import type { Lead } from '@/types/lead.types';
@@ -37,13 +31,9 @@ import { useLeads, useBulkDeleteLeads, useDropdownOptionLabel } from '@/hooks/qu
 import { useShowRecordNumber } from '@/hooks/queries/useDocumentSeries';
 import { getLeadStatusBucket, type LeadFilterTab, type LeadStatusBucket } from './master';
 import { LeadDetailDrawer } from './LeadDetailDrawer';
-import { formatDateTime } from '@/utils/date';
-import { formatPhoneDisplay } from '@/utils/phone';
 import { useSearchScope, useSearchScopedRows } from '../search/SearchScope';
 import { useModuleScorecard } from '../common/scorecard/useModuleScorecard';
-
-const plainCellSx = { fontSize: '0.78rem', color: 'var(--crm-slate-700)' } as const;
-
+import { useLeadColumns } from './leadColumns';
 
 /** Stable empty list while the first page loads (keeps memoized filters from recomputing). */
 const NO_RECORDS: Lead[] = [];
@@ -290,316 +280,8 @@ export function LeadsMasterView() {
     };
 
     // ── Declarative Column Definitions ────────────────────────────────────────
-    const columns: DataTableColumn<Lead>[] = useMemo(
-        () => [
-            ...(showNumber('lead')
-                ? [
-                      documentNumberColumn<Lead>({
-                          id: 'leadCode',
-                          label: 'LEAD NUMBER',
-                          getNumber: (l) => l.leadCode,
-                          getHref: (l) => ROUTES.LEAD_DETAIL(l.id),
-                          onOpen: (l) => setDrawerLeadId(l.id),
-                      }),
-                  ]
-                : []),
-            {
-                id: 'name',
-                locked: true,
-                label: 'NAME',
-                sortable: true,
-                minWidth: 200,
-                render: (l) => (
-                    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.3 }}>
-                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                            <PersonOutlinedIcon sx={{ fontSize: 16, color: 'var(--crm-text-blue-600)', flexShrink: 0 }} />
-                            <RecordLink
-                                href={ROUTES.LEAD_DETAIL(l.id)}
-                                onOpen={() => setDrawerLeadId(l.id)}
-                                sx={{
-                                    fontWeight: 700,
-                                    color: 'var(--crm-text-blue-700)',
-                                    fontSize: '0.82rem',
-                                    cursor: 'pointer',
-                                    '&:hover': { textDecoration: 'underline' },
-                                }}
-                            >
-                                {l.name}
-                            </RecordLink>
-                        </Box>
-                        {l.designation && (
-                            <Typography sx={{ fontSize: '0.7rem', color: 'var(--mui-palette-text-secondary)', pl: 3 }} noWrap>
-                                {l.designation}
-                            </Typography>
-                        )}
-                    </Box>
-                ),
-            },
-            {
-                // Hot / Warm / Cold, set by the system from each follow-up; the tooltip says why.
-                id: 'rating',
-                label: 'RATING',
-                sortable: true,
-                minWidth: 100,
-                render: (l) =>
-                    l.rating ? (
-                        <Tooltip title={l.ratingReason || ''} arrow disableInteractive>
-                            <Chip
-                                label={l.rating}
-                                size="small"
-                                icon={l.rating === 'Hot' ? <LocalFireDepartmentOutlinedIcon sx={{ fontSize: '14px !important', color: 'inherit !important' }} /> : undefined}
-                                sx={{ height: 22, fontSize: '0.72rem', fontWeight: 700, border: '1px solid', ...ratingChipColors(l.rating) }}
-                            />
-                        </Tooltip>
-                    ) : (
-                        <Typography sx={{ fontSize: '0.78rem', color: 'var(--mui-palette-text-muted)' }}>-</Typography>
-                    ),
-            },
-            {
-                id: 'leadSource',
-                label: 'LEAD SOURCE',
-                sortable: true,
-                minWidth: 140,
-                render: (l) => <Typography sx={plainCellSx}>{leadSourceLabel(l.leadSource) || '-'}</Typography>,
-            },
-            {
-                id: 'productCategory',
-                label: 'PRODUCT CATEGORY',
-                sortable: false,
-                minWidth: 170,
-                render: (l) => (
-                    <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
-                        {l.productCategory && l.productCategory.length > 0 ? (
-                            l.productCategory.map((prod, idx) => (
-                                <Chip
-                                    key={idx}
-                                    label={prod}
-                                    size="small"
-                                    sx={{
-                                        height: 20,
-                                        fontSize: '0.68rem',
-                                        fontWeight: 600,
-                                        backgroundColor: 'var(--crm-green-50)',
-                                        color: 'var(--crm-green-800)',
-                                        border: '1px solid var(--crm-green-200)',
-                                    }}
-                                />
-                            ))
-                        ) : (
-                            <Typography sx={{ fontSize: '0.78rem', color: 'var(--mui-palette-text-muted)' }}>-</Typography>
-                        )}
-                    </Box>
-                ),
-            },
-            {
-                id: 'organizationName',
-                label: 'ORGANIZATION NAME',
-                sortable: true,
-                minWidth: 180,
-                render: (l) => (
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.8 }}>
-                        <ApartmentIcon sx={{ fontSize: 15, color: 'var(--mui-palette-text-secondary)', flexShrink: 0 }} />
-                        <Box>
-                            <Typography sx={{ fontSize: '0.8rem', color: 'var(--mui-palette-text-primary)', fontWeight: 600 }}>
-                                {l.organizationName || 'Individual Prospect'}
-                            </Typography>
-                            {l.primaryCity && (
-                                <Typography sx={{ fontSize: '0.7rem', color: 'var(--mui-palette-text-secondary)' }}>
-                                    {l.primaryCity}{l.primaryState ? `, ${l.primaryState}` : ''}
-                                </Typography>
-                            )}
-                        </Box>
-                    </Box>
-                ),
-            },
-            {
-                id: 'status',
-                label: 'STATUS',
-                sortable: true,
-                minWidth: 120,
-                render: (l) => {
-                    let bg = 'var(--mui-palette-primary-soft)';
-                    let color = 'var(--crm-text-blue-700)';
-                    let border = 'var(--mui-palette-primary-softBorder)';
-
-                    if (l.status === 'New') {
-                        bg = 'var(--mui-palette-primary-soft)';
-                        color = 'var(--crm-text-blue-800)';
-                        border = 'var(--mui-palette-primary-softBorder)';
-                    } else if (l.status === 'Contacted' || l.status === 'In Discussion') {
-                        bg = 'var(--crm-violet-50)';
-                        color = 'var(--crm-violet-700)';
-                        border = 'var(--crm-violet-200)';
-                    } else if (l.status === 'Demo Scheduled') {
-                        bg = 'var(--crm-fuchsia-50)';
-                        color = 'var(--crm-fuchsia-700)';
-                        border = 'var(--crm-fuchsia-200)';
-                    } else if (l.status === 'Proposal Sent' || l.status === 'Negotiation') {
-                        bg = 'var(--mui-palette-warning-soft)';
-                        color = 'var(--crm-amber-700)';
-                        border = 'var(--mui-palette-warning-softBorder)';
-                    } else if (l.status === 'Converted') {
-                        bg = 'var(--mui-palette-success-soft)';
-                        color = 'var(--crm-emerald-700)';
-                        border = 'var(--mui-palette-success-softBorder)';
-                    } else if (l.status.includes('Lost') || l.status.includes('Unqualified')) {
-                        bg = 'var(--mui-palette-error-soft)';
-                        color = 'var(--crm-red-700)';
-                        border = 'var(--mui-palette-error-softBorder)';
-                    }
-
-                    return (
-                        <Chip
-                            label={l.status || 'New'}
-                            size="small"
-                            sx={{
-                                height: 22,
-                                fontSize: '0.72rem',
-                                fontWeight: 600,
-                                backgroundColor: bg,
-                                color: color,
-                                border: `1px solid ${border}`,
-                            }}
-                        />
-                    );
-                },
-            },
-            {
-                // The lead's email list; the primary address (else the first) is shown.
-                id: 'emailAddress',
-                label: 'EMAIL',
-                sortable: false,
-                minWidth: 190,
-                render: (l) => {
-                    const email = (l.emailAddress?.find((e) => e.isPrimary) ?? l.emailAddress?.[0])?.email;
-                    return (
-                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.6 }}>
-                            {email && <EmailOutlinedIcon sx={{ fontSize: 14, color: 'var(--mui-palette-text-muted)' }} />}
-                            <Typography sx={plainCellSx}>{email || '-'}</Typography>
-                        </Box>
-                    );
-                },
-            },
-            {
-                id: 'mobile',
-                label: 'MOBILE',
-                sortable: true,
-                minWidth: 140,
-                render: (l) => {
-                    const phone = l.mobile || l.otherPhone;
-                    return (
-                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.6 }}>
-                            {phone && <PhoneOutlinedIcon sx={{ fontSize: 14, color: 'var(--mui-palette-text-secondary)' }} />}
-                            <Typography sx={{ ...plainCellSx, fontWeight: 600 }}>
-                                {phone ? formatPhoneDisplay(phone) || phone : '-'}
-                            </Typography>
-                        </Box>
-                    );
-                },
-            },
-            {
-                // Leads keep no remarks log: "Add Description" is the action-items note updated on each follow-up.
-                id: 'remarks',
-                label: 'LATEST REMARKS',
-                sortable: true,
-                minWidth: 220,
-                width: 280,
-                render: (l) => <Typography sx={plainCellSx}>{l.remarks || '-'}</Typography>,
-            },
-            {
-                id: 'nextFollowupDate',
-                label: 'NEXT FOLLOWUP DATE',
-                sortable: true,
-                minWidth: 150,
-                render: (l) => {
-                    const isToday = l.nextFollowupDate === todayStr;
-                    const overdue = isOverdue(l);
-
-                    return (
-                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.8 }}>
-                            <CalendarMonthOutlinedIcon
-                                sx={{
-                                    fontSize: 16,
-                                    color: isToday ? 'var(--mui-palette-warning-main)' : 'var(--mui-palette-text-secondary)',
-                                }}
-                            />
-                            <Box>
-                                <Typography
-                                    sx={{
-                                        fontSize: '0.78rem',
-                                        fontWeight: isToday ? 700 : 500,
-                                        color: isToday ? 'var(--crm-amber-700)' : 'var(--crm-slate-700)',
-                                    }}
-                                >
-                                    {l.nextFollowupDate || '-'}
-                                    {overdue ? (
-                                        <Box
-                                            component="span"
-                                            sx={{
-                                                ml: 0.6,
-                                                px: 0.6,
-                                                py: 0.1,
-                                                borderRadius: '4px',
-                                                fontSize: '0.62rem',
-                                                fontWeight: 800,
-                                                backgroundColor: 'var(--mui-palette-error-soft)',
-                                                color: 'var(--crm-red-700)',
-                                                border: '1px solid var(--mui-palette-error-softBorder)',
-                                            }}
-                                        >
-                                            OVERDUE
-                                        </Box>
-                                    ) : isToday && (
-                                        <Box
-                                            component="span"
-                                            sx={{
-                                                ml: 0.6,
-                                                px: 0.6,
-                                                py: 0.1,
-                                                borderRadius: '4px',
-                                                fontSize: '0.62rem',
-                                                fontWeight: 800,
-                                                backgroundColor: 'var(--crm-amber-100)',
-                                                color: 'var(--crm-amber-700)',
-                                                border: '1px solid var(--mui-palette-warning-softBorder)',
-                                            }}
-                                        >
-                                            TODAY
-                                        </Box>
-                                    )}
-                                </Typography>
-                                {(l.nextFollowupTime || l.followupType) && (
-                                    <Typography sx={{ fontSize: '0.7rem', color: 'var(--mui-palette-text-secondary)' }}>
-                                        {l.followupType ? `${l.followupType} • ` : ''}
-                                        {l.nextFollowupTime || ''}
-                                    </Typography>
-                                )}
-                            </Box>
-                        </Box>
-                    );
-                },
-            },
-            {
-                id: 'assignedTo',
-                label: 'USER',
-                sortable: true,
-                minWidth: 130,
-                render: (l) => (
-                    <Typography sx={{ fontSize: '0.78rem', color: 'var(--crm-slate-600)', fontWeight: 500 }}>
-                        {l.assignedTo || '-'}
-                    </Typography>
-                ),
-            },
-            {
-                id: 'createdAt',
-                label: 'DATE CREATED',
-                sortable: true,
-                minWidth: 170,
-                render: (l) => <Typography sx={plainCellSx}>{formatDateTime(l.createdAt) || '-'}</Typography>,
-            },
-        ],
-        [todayStr, leadSourceLabel, showNumber, isOverdue]
-    );
+    const openDrawerRecord = useCallback((record: Lead) => setDrawerLeadId(record.id), []);
+    const columns = useLeadColumns(openDrawerRecord);
 
     // Row clicks only open the drawer; its eye button leads on to the detail page with the related modules.
     const closeDrawer = useCallback(() => setDrawerLeadId(null), []);

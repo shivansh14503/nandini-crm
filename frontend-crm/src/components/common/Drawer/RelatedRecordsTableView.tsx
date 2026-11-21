@@ -1,8 +1,7 @@
 'use client';
 
-import React, { useMemo, useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import { getCountryNameByCode } from '@/data/addressMaster';
-import { wasModified } from './RecordAuditFooter';
 import {
     Box,
     Typography,
@@ -27,8 +26,27 @@ import Inventory2OutlinedIcon from '@mui/icons-material/Inventory2Outlined';
 import RequestQuoteOutlinedIcon from '@mui/icons-material/RequestQuoteOutlined';
 import HandshakeOutlinedIcon from '@mui/icons-material/HandshakeOutlined';
 import AdminPanelSettingsOutlinedIcon from '@mui/icons-material/AdminPanelSettingsOutlined';
+import ViewColumnIcon from '@mui/icons-material/ViewColumn';
 
-import { DataTable, type DataTableColumn, type SortOrder } from '../DataTable';
+import {
+    ColumnVisibilityPopover,
+    DataTable,
+    MAX_PINNED_COLUMNS,
+    isCrmModuleKey,
+    useColumnVisibility,
+    useFormFieldColumns,
+    type DataTableColumn,
+    type SortOrder,
+} from '../DataTable';
+import { useScorecardColumns } from '../scorecard/scorecardDisplay';
+import { useLeadColumns } from '@/components/leads/leadColumns';
+import { useOpportunityColumns } from '@/components/opportunities/opportunityColumns';
+import { useQuotationColumns } from '@/components/quotations/quotationColumns';
+import { useOrganizationColumns } from '@/components/organizations/organizationColumns';
+import { useContactColumns } from '@/components/contacts/master/contactColumns';
+import { useTicketColumns } from '@/components/tickets/master/ticketColumns';
+import { useProductColumns } from '@/components/products/master/productColumns';
+import type { Product } from '@/types/product.types';
 import { RecordLink } from '../RecordLink';
 import { ROUTES } from '@/config/constants';
 import {
@@ -36,7 +54,6 @@ import {
     useRelatedDatasets,
     type CrmEntityType,
 } from '@/config/relatedModules.config';
-import { useDropdownOptionLabel } from '@/hooks/queries/useFormConfigs';
 import { useShowRecordNumber } from '@/hooks/queries/useDocumentSeries';
 import { glassSurfaceSx, GLASS_SHADOW, GLASS_RADIUS, FLOAT_INSET, NAVBAR_HEIGHT } from '@/theme/glass';
 import { moduleKeyFrom, moduleTableTintVars } from '@/theme/moduleColors';
@@ -94,6 +111,14 @@ const formatCurrency = (val: unknown): string => {
         maximumFractionDigits: 0,
     }).format(num);
 };
+
+/** Product rows here are line items whose own id isn't the product's: link to the catalogue product instead. */
+const catalogueProductId = (p: Product) => String((p as unknown as RelatedRow).productId ?? p.id);
+
+/** 'LEAD SOURCE' → 'Lead Source'. */
+function titleCaseLabel(label: string): string {
+    return label.toLowerCase().replace(/(^|[\s\-/(&])([a-z])/g, (_, sep: string, ch: string) => sep + ch.toUpperCase());
+}
 
 function normalizeModuleKey(moduleId: string): string {
     const normalized = moduleId.trim().toLowerCase().replace(/-/g, '_');
@@ -232,7 +257,7 @@ function renderStatusPill(status: unknown): React.ReactNode {
     );
 }
 
-function getColumnsForModule(moduleKey: string, leadSourceLabel: (value: string) => string): DataTableColumn<RelatedRow>[] {
+function getColumnsForModule(moduleKey: string): DataTableColumn<RelatedRow>[] {
     const primary = (row: RelatedRow, value: unknown, mono = false) => renderPrimaryCell(value, mono, relatedRecordHref(moduleKey, row));
     switch (moduleKey) {
         case 'activities':
@@ -242,49 +267,6 @@ function getColumnsForModule(moduleKey: string, leadSourceLabel: (value: string)
                 { id: 'contact', label: 'Contact', minWidth: 150, sortable: true, accessor: 'contact' },
                 { id: 'startDate', label: 'Start Date', minWidth: 130, sortable: true, accessor: 'startDate' },
                 { id: 'assignedTo', label: 'Assigned User', minWidth: 140, sortable: true, accessor: 'assignedTo' },
-            ];
-
-        case 'tickets':
-            return [
-                { id: 'ticketNumber', label: 'Ticket Number', minWidth: 140, sortable: true, render: (r) => primary(r, r.ticketNumber, true) },
-                { id: 'subject', label: 'Subject', minWidth: 210, sortable: true, accessor: 'subject' },
-                { id: 'status', label: 'Status', minWidth: 120, sortable: true, render: (r) => renderStatusPill(r.status) },
-                { id: 'priority', label: 'Priority', minWidth: 110, sortable: true, accessor: 'priority' },
-                { id: 'supportType', label: 'Support Type', minWidth: 140, sortable: true, accessor: 'supportType' },
-                { id: 'supportMode', label: 'Support Mode', minWidth: 130, sortable: true, accessor: 'supportMode' },
-                { id: 'dateCreated', label: 'Date Created', minWidth: 130, sortable: true, accessor: 'dateCreated' },
-                { id: 'assignedTo', label: 'Assigned User', minWidth: 140, sortable: true, accessor: 'assignedTo' },
-            ];
-
-        case 'contacts':
-            return [
-                { id: 'name', label: 'Name', minWidth: 180, sortable: true, render: (r) => primary(r, r.name) },
-                { id: 'organizationName', label: 'Organization', minWidth: 190, sortable: true, accessor: 'organizationName' },
-                {
-                    id: 'mobile',
-                    label: 'Mobile / Phone',
-                    minWidth: 150,
-                    sortable: true,
-                    render: (r) => String(r.mobile || r.officePhone || '-'),
-                },
-                {
-                    id: 'email',
-                    label: 'Email',
-                    minWidth: 190,
-                    sortable: true,
-                    render: (r) => {
-                        const emails = r.emailAddress as Array<{ email?: string }> | undefined;
-                        return String(r.email || emails?.[0]?.email || '-');
-                    },
-                },
-                { id: 'designation', label: 'Designation', minWidth: 150, sortable: true, accessor: 'designation' },
-                {
-                    id: 'assignedTo',
-                    label: 'Assigned User',
-                    minWidth: 140,
-                    sortable: true,
-                    render: (r) => String(r.assignedTo || '-'),
-                },
             ];
 
         case 'contracts':
@@ -311,76 +293,11 @@ function getColumnsForModule(moduleKey: string, leadSourceLabel: (value: string)
                 { id: 'assignedTo', label: 'Assigned User', minWidth: 140, sortable: true, accessor: 'assignedTo' },
             ];
 
-        case 'leads':
-            return [
-                { id: 'leadCode', label: 'Lead Number', minWidth: 140, sortable: true, render: (r) => primary(r, r.leadCode || r.leadNumber, true) },
-                { id: 'name', label: 'Name', minWidth: 170, sortable: true, render: (r) => primary(r, r.name) },
-                { id: 'organizationName', label: 'Organization Name', minWidth: 190, sortable: true, accessor: 'organizationName' },
-                { id: 'status', label: 'Status', minWidth: 130, sortable: true, render: (r) => renderStatusPill(r.status) },
-                { id: 'leadSource', label: 'Lead Source', minWidth: 140, sortable: true, render: (r) => leadSourceLabel(String(r.leadSource ?? '')) },
-                {
-                    id: 'productCategory',
-                    label: 'Product Category',
-                    minWidth: 170,
-                    sortable: false,
-                    render: (r) =>
-                        Array.isArray(r.productCategory) ? r.productCategory.join(', ') : String(r.productCategory || '-'),
-                },
-                {
-                    id: 'email',
-                    label: 'Email',
-                    minWidth: 180,
-                    sortable: false,
-                    render: (r) => {
-                        const emails = r.emailAddress as Array<{ email?: string }> | undefined;
-                        return String(r.email || emails?.[0]?.email || '-');
-                    },
-                },
-                { id: 'mobile', label: 'Mobile', minWidth: 140, sortable: true, accessor: 'mobile' },
-                { id: 'assignedTo', label: 'Assigned User', minWidth: 140, sortable: true, render: (r) => String(r.assignedTo || '-') },
-                { id: 'createdAt', label: 'Date Created', minWidth: 130, sortable: true, render: (r) => String(r.createdAt || r.dateCreated || '-') },
-            ];
-
-        case 'organizations':
-            return [
-                { id: 'organizationName', label: 'Organization Name', minWidth: 210, sortable: true, render: (r) => primary(r, r.organizationName) },
-                { id: 'natureOfBusiness', label: 'Nature of Business', minWidth: 170, sortable: true, accessor: 'natureOfBusiness' },
-                { id: 'customerType', label: 'Customer Type', minWidth: 140, sortable: true, accessor: 'customerType' },
-                { id: 'accountStatus', label: 'Status', minWidth: 120, sortable: true, render: (r) => renderStatusPill(r.accountStatus) },
-                { id: 'billingCity', label: 'City', minWidth: 130, sortable: true, accessor: 'billingCity' },
-                { id: 'billingState', label: 'State', minWidth: 130, sortable: true, accessor: 'billingState' },
-            ];
-
         case 'partner_contacts':
             return [
                 { id: 'name', label: 'Name', minWidth: 180, sortable: true, render: (r) => primary(r, r.name) },
                 { id: 'email', label: 'Email', minWidth: 200, sortable: true, accessor: 'email' },
                 { id: 'phone', label: 'Phone', minWidth: 150, sortable: true, accessor: 'phone' },
-            ];
-
-        case 'opportunities':
-            return [
-                { id: 'opportunityCode', label: 'Opp Number', minWidth: 150, sortable: true, render: (r) => primary(r, r.opportunityCode || r.oppNumber, true) },
-                { id: 'organizationName', label: 'Organization Name', minWidth: 190, sortable: true, accessor: 'organizationName' },
-                {
-                    id: 'productCategory',
-                    label: 'Product Category',
-                    minWidth: 170,
-                    sortable: false,
-                    render: (r) =>
-                        Array.isArray(r.productCategory) ? r.productCategory.join(', ') : String(r.productCategory || '-'),
-                },
-                { id: 'type', label: 'Type', minWidth: 140, sortable: true, accessor: 'type' },
-                { id: 'salesStage', label: 'Sales Stage', minWidth: 160, sortable: true, render: (r) => renderStatusPill(r.salesStage) },
-                {
-                    id: 'subTotal',
-                    label: 'Actual (Before Tax)',
-                    minWidth: 150,
-                    sortable: true,
-                    render: (r) => formatCurrency(r.subTotal ?? r.grandTotal ?? 0),
-                },
-                { id: 'assignedTo', label: 'Assigned User', minWidth: 140, sortable: true, render: (r) => String(r.assignedTo || '-') },
-                { id: 'createdAt', label: 'Date Created', minWidth: 130, sortable: true, render: (r) => String(r.createdAt || r.dateCreated || '-') },
             ];
 
         case 'member_organizations':
@@ -407,47 +324,11 @@ function getColumnsForModule(moduleKey: string, leadSourceLabel: (value: string)
                 { id: 'publishDate', label: 'Publish Date', minWidth: 130, sortable: true, accessor: 'publishDate' },
             ];
 
+        // CRM modules (leads, contacts, …) use their list page's columns; these are the quote / deal line-item extras.
         case 'products':
             return [
-                { id: 'productName', label: 'Product Name', minWidth: 210, sortable: true, render: (r) => primary(r, r.productName) },
-                { id: 'serialNumber', label: 'Product Code', minWidth: 150, sortable: true, render: (r) => String(r.serialNumber || r.productCode || '-') },
-                { id: 'status', label: 'Status', minWidth: 120, sortable: true, render: (r) => renderStatusPill(r.status || 'Active') },
-                { id: 'category', label: 'Category', minWidth: 140, sortable: true, render: (r) => String(r.category || '-') },
                 { id: 'quantity', label: 'Quantity', minWidth: 100, sortable: true, render: (r) => String(r.quantity ?? '-') },
                 { id: 'total', label: 'Amount', minWidth: 130, sortable: true, render: (r) => (r.total !== undefined ? formatCurrency(r.total) : formatCurrency(r.mrp)) },
-                {
-                    id: 'updatedAt',
-                    label: 'Date Modified',
-                    minWidth: 130,
-                    sortable: true,
-                    // Blank until the product is edited after creation.
-                    render: (r) =>
-                        r.updatedAt
-                            ? wasModified({ createdAt: r.createdAt as string, updatedAt: r.updatedAt as string, updatedBy: r.updatedBy as string })
-                                ? String(r.updatedAt)
-                                : ''
-                            : String(r.dateModified || ''),
-                },
-                { id: 'createdAt', label: 'Date Created', minWidth: 130, sortable: true, render: (r) => String(r.createdAt || r.dateCreated || '-') },
-            ];
-
-        case 'quotations':
-            return [
-                { id: 'quotationCode', label: 'Quotation Number', minWidth: 150, sortable: true, render: (r) => primary(r, r.quotationCode, true) },
-                {
-                    id: 'quotationTitle',
-                    label: 'Quotation Title',
-                    minWidth: 210,
-                    sortable: true,
-                    render: (r) => String(r.quotationTitle || r.quotationSubject || 'Quotation'),
-                },
-                { id: 'quoteStage', label: 'Quote Stage', minWidth: 130, sortable: true, render: (r) => renderStatusPill(r.quoteStage || r.status) },
-                { id: 'contact', label: 'Contact', minWidth: 160, sortable: true, accessor: 'contact' },
-                { id: 'organizationName', label: 'Organization', minWidth: 190, sortable: true, accessor: 'organizationName' },
-                { id: 'grandTotal', label: 'Grand Total', minWidth: 140, sortable: true, render: (r) => formatCurrency(r.grandTotal) },
-                { id: 'validUntil', label: 'Valid Until', minWidth: 130, sortable: true, accessor: 'validUntil' },
-                { id: 'quoteDate', label: 'Date Created', minWidth: 130, sortable: true, render: (r) => String(r.quoteDate || r.createdAt || '-') },
-                { id: 'assignedTo', label: 'User', minWidth: 140, sortable: true, render: (r) => String(r.assignedTo || '-') },
             ];
 
         case 'partner_company':
@@ -497,15 +378,72 @@ export function RelatedRecordsTableView({
     const moduleKey = useMemo(() => normalizeModuleKey(moduleId), [moduleId]);
     const tintModule = moduleKeyFrom(moduleKey);
 
-    const leadSourceLabel = useDropdownOptionLabel('shared_lead_source');
-    const columns = useMemo(
-        () =>
-            getColumnsForModule(moduleKey, leadSourceLabel).filter((c) =>
-                // Products list their number as `serialNumber`.
-                c.id === 'serialNumber' ? showNumber('product') : isShownField(c.id, showNumber)
-            ),
-        [moduleKey, leadSourceLabel, showNumber]
+    // A plain click on a record link opens it in the secondary drawer, like a row click.
+    const openRecord = useCallback(
+        (record: unknown) => {
+            const row = record as RelatedRow;
+            setActiveRowId(String(row.id ?? ''));
+            onRowClick(row, moduleKey);
+        },
+        [onRowClick, moduleKey]
     );
+
+    // CRM modules use their list page's own columns, so Modify Columns offers the same choices here as there.
+    // Every hook runs (rules of hooks); only the ones that fetch data are limited to their own module.
+    const [now] = useState(() => Date.now());
+    const moduleColumns: Record<string, DataTableColumn<never>[]> = {
+        leads: useLeadColumns(openRecord),
+        opportunities: useOpportunityColumns(openRecord, { enabled: open && moduleKey === 'opportunities' }),
+        quotations: useQuotationColumns(openRecord),
+        organizations: useOrganizationColumns(openRecord),
+        contacts: useContactColumns(openRecord, { enabled: open && moduleKey === 'contacts' }),
+        tickets: useTicketColumns(openRecord, now),
+        products: useProductColumns(openRecord, catalogueProductId),
+    };
+    const listPageColumns = moduleColumns[moduleKey] as DataTableColumn<RelatedRow>[] | undefined;
+
+    const columns = useMemo(() => {
+        const own = getColumnsForModule(moduleKey);
+        if (listPageColumns) {
+            // Products here are quote / deal line items: keep their quantity and amount next to the catalogue columns.
+            const lineItemColumns = moduleKey === 'products' ? own.filter((c) => c.id === 'quantity' || c.id === 'total') : [];
+            return [...listPageColumns, ...lineItemColumns];
+        }
+        return (
+            own
+                .filter((c) => isShownField(c.id, showNumber))
+                // The first column identifies the record (its number or name link), so it can't be hidden.
+                .map((c, i) => (i === 0 ? { ...c, locked: true } : c))
+        );
+    }, [moduleKey, showNumber, listPageColumns]);
+
+    // Same field list as the module's main table: every built-in and custom form field (hidden until switched on in
+    // Modify Columns, grouped by form tab), plus the scorecard colors when the admin enabled them.
+    const formModule = useMemo(() => {
+        const key = moduleKey === 'partner_company' ? 'partner-companies' : moduleKey;
+        return isCrmModuleKey(key) ? key : undefined;
+    }, [moduleKey]);
+    const withFieldColumns = useScorecardColumns<RelatedRow>(useFormFieldColumns<RelatedRow>(columns, formModule), formModule);
+    // Field columns come labelled in capitals; this table's headers are title case.
+    const allColumns = useMemo(
+        () => (withFieldColumns ?? columns).map((c) => (c.label === c.label.toUpperCase() ? { ...c, label: titleCaseLabel(c.label) } : c)),
+        [withFieldColumns, columns]
+    );
+
+    // Modify Columns: one saved choice per related module, shared by every parent record that lists it.
+    const {
+        orderedColumns,
+        visibleColumnIds,
+        activeColumns,
+        pinnedColumnIds,
+        toggleColumn,
+        setColumnsVisible,
+        togglePin,
+        reorderColumns,
+        reorderPinned,
+        resetDefaults,
+    } = useColumnVisibility<RelatedRow>(allColumns, `related_${moduleKey}`);
+    const [columnAnchorEl, setColumnAnchorEl] = useState<HTMLElement | null>(null);
 
     const datasets = useRelatedDatasets(entityType, entityData, open);
 
@@ -683,6 +621,46 @@ export function RelatedRecordsTableView({
                         />
                     </Box>
 
+                    <Tooltip title="Modify Columns">
+                        <IconButton
+                            size="small"
+                            aria-label="Modify Columns"
+                            onClick={(e) => setColumnAnchorEl(e.currentTarget)}
+                            sx={{
+                                width: 26,
+                                height: 26,
+                                flexShrink: 0,
+                                border: '1px solid var(--mui-palette-border-main)',
+                                borderRadius: '6px',
+                                color: 'var(--mui-palette-text-secondary)',
+                                backgroundColor: 'var(--mui-palette-background-paper)',
+                                transition: 'all 0.15s ease',
+                                '&:hover': {
+                                    borderColor: 'var(--crm-blue-300)',
+                                    backgroundColor: 'var(--mui-palette-primary-soft)',
+                                    color: 'var(--crm-text-blue-700)',
+                                },
+                            }}
+                        >
+                            <ViewColumnIcon sx={{ fontSize: 15 }} />
+                        </IconButton>
+                    </Tooltip>
+                    <ColumnVisibilityPopover<RelatedRow>
+                        columns={orderedColumns}
+                        visibleColumnIds={visibleColumnIds}
+                        onToggleColumn={toggleColumn}
+                        onSetColumnsVisible={setColumnsVisible}
+                        onResetDefaults={resetDefaults}
+                        pinnedColumnIds={pinnedColumnIds}
+                        onTogglePin={togglePin}
+                        maxPinned={MAX_PINNED_COLUMNS}
+                        onReorderColumns={reorderColumns}
+                        onReorderPinned={reorderPinned}
+                        anchorEl={columnAnchorEl}
+                        onClose={() => setColumnAnchorEl(null)}
+                        tableId={`related_${moduleKey}`}
+                    />
+
                     {onClose && (
                         <Tooltip title={closeTooltip}>
                             <IconButton
@@ -721,7 +699,7 @@ export function RelatedRecordsTableView({
             >
                 <DataTable<RelatedRow>
                     data={filteredAndSortedRecords}
-                    columns={columns}
+                    columns={activeColumns}
                     selectable={false}
                     sortField={sortField}
                     sortOrder={sortOrder}

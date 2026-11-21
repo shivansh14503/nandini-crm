@@ -2,12 +2,10 @@
 
 import React, { useState, useMemo, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
-import { Box, Chip, Typography } from '@mui/material';
 import InventoryOutlinedIcon from '@mui/icons-material/InventoryOutlined';
 import CategoryOutlinedIcon from '@mui/icons-material/CategoryOutlined';
 import NewReleasesOutlinedIcon from '@mui/icons-material/NewReleasesOutlined';
 import StarBorderIcon from '@mui/icons-material/StarBorder';
-import { RecordLink } from '../../common/RecordLink';
 import { CommonMasterView } from '../../common/CommonMasterView';
 import { useTableFilter } from '../../common/TableFilter';
 import { MasterHeaderActions } from '../../common/MasterHeaderActions';
@@ -15,7 +13,7 @@ import { buildExtendedSearchConfig } from '../../common/buildExtendedSearchConfi
 import { AppToast } from '../../common/AppToast';
 import { useSaveFlash } from '@/utils/saveFlash';
 import { DataImportModal } from '../../common/import';
-import { documentNumberColumn, type DataTableColumn, type DataTableFilterItem } from '../../common/DataTable';
+import { type DataTableFilterItem } from '../../common/DataTable';
 import { ROUTES } from '@/config/constants';
 import type { Product } from '@/types/product.types';
 import { useProducts, useBulkDeleteProducts } from '@/hooks/queries';
@@ -23,17 +21,9 @@ import { useShowRecordNumber } from '@/hooks/queries/useDocumentSeries';
 import type { ProductFilterTab } from './types';
 import { ProductDetailDrawer } from '../ProductDetailDrawer';
 import { useSearchScope, useSearchScopedRows } from '../../search/SearchScope';
+import { useProductColumns } from './productColumns';
 
 const RECENTLY_ADDED_DAYS = 7;
-
-const TAX_RATE_COLORS: Record<string, { bg: string; color: string; border: string }> = {
-    '0%': { bg: 'var(--crm-green-50)', color: 'var(--crm-green-700)', border: 'var(--crm-green-200)' },
-    '5%': { bg: 'var(--mui-palette-primary-soft)', color: 'var(--crm-text-blue-700)', border: 'var(--mui-palette-primary-softBorder)' },
-    '12%': { bg: 'var(--crm-yellow-50)', color: 'var(--crm-yellow-800)', border: 'var(--mui-palette-warning-softBorder)' },
-    '18%': { bg: 'var(--crm-orange-50)', color: 'var(--crm-orange-700)', border: 'var(--crm-orange-200)' },
-    '28%': { bg: 'var(--mui-palette-error-soft)', color: 'var(--crm-red-700)', border: 'var(--mui-palette-error-softBorder)' },
-};
-
 
 /** Stable empty list while the first page loads (keeps memoized filters from recomputing). */
 const NO_RECORDS: Product[] = [];
@@ -209,128 +199,8 @@ export function ProductsMasterView() {
     }, [products]);
 
     // ── Declarative Column Definitions ────────────────────────────────────────
-    const columns: DataTableColumn<Product>[] = useMemo(
-        () => [
-            ...(showNumber('product')
-                ? [
-                      documentNumberColumn<Product>({
-                          id: 'productCode',
-                          label: 'PRODUCT NO.',
-                          getNumber: (p) => p.productCode,
-                          getHref: (p) => ROUTES.PRODUCT_DETAIL(p.id),
-                          onOpen: (p) => setDrawerProductId(p.id),
-                      }),
-                  ]
-                : []),
-            {
-                id: 'productName',
-                locked: true,
-                label: 'PRODUCT NAME',
-                sortable: true,
-                minWidth: 220,
-                render: (p) => (
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                        <InventoryOutlinedIcon sx={{ fontSize: 16, color: 'var(--crm-text-blue-600)' }} />
-                        <RecordLink
-                            href={ROUTES.PRODUCT_DETAIL(p.id)}
-                            onOpen={() => setDrawerProductId(p.id)}
-                            sx={{
-                                fontWeight: 700,
-                                color: 'var(--crm-text-blue-700)',
-                                fontSize: '0.82rem',
-                                cursor: 'pointer',
-                                lineHeight: 1.2,
-                                '&:hover': { textDecoration: 'underline' },
-                            }}
-                        >
-                            {p.productName}
-                        </RecordLink>
-                    </Box>
-                ),
-            },
-            {
-                id: 'category',
-                label: 'CATEGORY',
-                sortable: true,
-                minWidth: 140,
-                render: (p) => (
-                    <Typography sx={{ fontSize: '0.8rem', color: 'var(--crm-slate-700)', fontWeight: 500 }}>
-                        {p.category || '-'}
-                    </Typography>
-                ),
-            },
-            {
-                id: 'manufacturer',
-                label: 'MANUFACTURER',
-                sortable: true,
-                minWidth: 160,
-                render: (p) => (
-                    <Typography sx={{ fontSize: '0.8rem', color: 'var(--crm-slate-600)' }}>
-                        {p.manufacturer || '-'}
-                    </Typography>
-                ),
-            },
-            {
-                id: 'hsnCode',
-                label: 'HSN CODE',
-                sortable: true,
-                minWidth: 110,
-                render: (p) => (
-                    <Typography sx={{ fontSize: '0.78rem', color: 'var(--mui-palette-text-secondary)', fontFamily: 'monospace' }}>
-                        {p.hsnCode || '-'}
-                    </Typography>
-                ),
-            },
-            {
-                id: 'mrp',
-                label: 'MRP (₹)',
-                sortable: true,
-                minWidth: 100,
-                render: (p) => (
-                    <Typography sx={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--mui-palette-text-primary)' }}>
-                        {p.mrp ? `₹${Number(p.mrp).toLocaleString('en-IN')}` : '-'}
-                    </Typography>
-                ),
-            },
-            {
-                id: 'taxRate',
-                label: 'TAX',
-                sortable: true,
-                minWidth: 80,
-                render: (p) => {
-                    const style = TAX_RATE_COLORS[p.taxRate || ''] || { bg: 'var(--mui-palette-background-hover)', color: 'var(--crm-slate-600)', border: 'var(--mui-palette-border-strong)' };
-                    return p.taxRate ? (
-                        <Chip
-                            label={p.taxRate}
-                            size="small"
-                            sx={{
-                                height: 20,
-                                fontSize: '0.7rem',
-                                fontWeight: 700,
-                                backgroundColor: style.bg,
-                                color: style.color,
-                                border: `1px solid ${style.border}`,
-                            }}
-                        />
-                    ) : (
-                        <Typography sx={{ fontSize: '0.78rem', color: 'var(--mui-palette-text-muted)' }}>-</Typography>
-                    );
-                },
-            },
-            {
-                id: 'type',
-                label: 'TYPE',
-                sortable: true,
-                minWidth: 100,
-                render: (p) => (
-                    <Typography sx={{ fontSize: '0.78rem', color: 'var(--mui-palette-text-secondary)' }}>
-                        {p.type || '-'}
-                    </Typography>
-                ),
-            },
-        ],
-        [showNumber]
-    );
+    const openDrawerRecord = useCallback((record: Product) => setDrawerProductId(record.id), []);
+    const columns = useProductColumns(openDrawerRecord);
 
     return (
         <CommonMasterView<Product, ProductFilterTab>
