@@ -253,6 +253,7 @@ export function ContactsMasterView() {
                 : []),
             {
                 id: 'name',
+                locked: true,
                 label: 'NAME',
                 sortable: true,
                 minWidth: 200,

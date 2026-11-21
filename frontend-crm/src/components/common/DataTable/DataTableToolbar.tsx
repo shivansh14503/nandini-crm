@@ -472,7 +472,12 @@ export function DataTableToolbar({
                                 border: '1px solid var(--mui-palette-border-main)',
                                 borderRadius: '8px',
                                 p: 0.8,
-                                '&:hover': { backgroundColor: 'var(--mui-palette-background-hover)', color: 'var(--crm-blue-700)' },
+                                transition: 'all 0.15s ease',
+                                '&:hover': {
+                                    borderColor: 'var(--crm-blue-300)',
+                                    backgroundColor: 'var(--mui-palette-primary-soft)',
+                                    color: 'var(--crm-text-blue-700)',
+                                },
                             }}
                         >
                             <ViewColumnIcon sx={{ fontSize: 18 }} />

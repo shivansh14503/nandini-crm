@@ -259,6 +259,7 @@ export function QuotationsMasterView() {
                 : []),
             {
                 id: 'quotationTitle',
+                locked: true,
                 label: 'TITLE',
                 sortable: true,
                 minWidth: 200,

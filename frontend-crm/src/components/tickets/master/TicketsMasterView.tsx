@@ -229,6 +229,7 @@ export function TicketsMasterView() {
                 : []),
             {
                 id: 'ticketSubject',
+                locked: true,
                 label: 'SUBJECT',
                 sortable: true,
                 minWidth: 220,

@@ -338,6 +338,7 @@ export function OpportunitiesMasterView() {
                 : []),
             {
                 id: 'opportunityName',
+                locked: true,
                 label: 'NAME',
                 sortable: true,
                 minWidth: 180,

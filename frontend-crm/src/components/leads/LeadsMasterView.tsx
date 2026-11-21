@@ -305,6 +305,7 @@ export function LeadsMasterView() {
                 : []),
             {
                 id: 'name',
+                locked: true,
                 label: 'NAME',
                 sortable: true,
                 minWidth: 200,

@@ -224,6 +224,7 @@ export function ProductsMasterView() {
                 : []),
             {
                 id: 'productName',
+                locked: true,
                 label: 'PRODUCT NAME',
                 sortable: true,
                 minWidth: 220,
