@@ -70,13 +70,14 @@ function checkConvertRecord(
     module: ConvertModuleKey,
     payload: Record<string, unknown> & { customFields?: Record<string, unknown> },
 ): { customFields: Record<string, unknown>; issues: ApiFieldError[] } {
-    // Convert Lead's own visibility stands in for the form's; a few names it fills itself are never "required".
+    // Convert Lead's own visibility and "required" (when an admin set one; else the form's) stand in for the form's;
+    // a few names it fills itself are never "required".
     const shown: ModuleFieldConfig = {
         ...config,
         fields: config.fields.map((f) => ({
             ...f,
             isVisibleInForm: f.isVisibleInConvert && (!f.isSystem || f.fieldKey in CONVERT_FIELD_NAMES[module] || !convertFieldUnavailableReason(module, f)),
-            isRequired: f.isRequired && !(f.isSystem && NOT_CHECKED_FOR_REQUIRED.has(f.fieldKey)),
+            isRequired: (f.convertIsRequired ?? f.isRequired) && !(f.isSystem && NOT_CHECKED_FOR_REQUIRED.has(f.fieldKey)),
         })),
     };
     const names: Record<string, string> = CONVERT_FIELD_NAMES[module];

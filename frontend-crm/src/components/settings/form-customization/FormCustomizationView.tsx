@@ -24,6 +24,7 @@ import { CRM_MODULE_KEYS, moduleGroupOf, moduleNavLabel, type CrmModuleKey } fro
 import { modulesTouchedBy, tabsTouchedBy, viewsTouchedForModule } from './configDraft';
 import { CONVERT_ICON, GROUP_ICONS, MODULE_ICONS, ModuleHierarchySelector } from './ModuleHierarchySelector';
 import { CONVERT_RECORDS, CONVERT_TINT, ConvertLeadFieldsPanel, convertFieldKeys, isConvertModule } from './ConvertLeadFieldsPanel';
+import { convertShownFields } from '@/utils/convertLeadFields';
 import { EmptyState, PillTabs, surfaceSx, errorMessage, primaryButtonSx, secondaryButtonSx } from './builderUi';
 import { ConfigDraftActionsContext, ConfigDraftChangesContext, changedIds, useConfigDraft } from './useConfigDraft';
 import { DropdownManagerPanel, categoriesForModule } from './DropdownManagerPanel';
@@ -375,7 +376,7 @@ export function FormCustomizationView() {
                                                 module={module}
                                                 configs={configs}
                                                 unsavedCount={ops.length}
-                                                onlyFieldKeys={convertFieldKeys(module, configs)}
+                                                onlyFields={convertShownFields(configs, module)}
                                                 gridLabel={CONVERT_RECORDS.find((r) => r.module === module)?.label}
                                             />
                                         )}

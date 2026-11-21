@@ -102,6 +102,8 @@ export const FIELD_TYPE_LABELS: Record<FieldType, string> = {
 };
 
 export type ConfigFieldSize = 'xs' | 'sm' | 'md' | 'lg' | 'full';
+/** Convert Lead's own width of a field: a size, or `'auto'` for none (null there means "as on the record's form"). */
+export type ConvertFieldSize = ConfigFieldSize | 'auto';
 
 export interface DropdownOptionDto {
     id: string;
@@ -177,6 +179,16 @@ export interface FormFieldDefinitionDto {
     isVisibleInDrawer: boolean;
     /** Contacts / organizations / opportunities: shown on the Convert Lead form (independent of isVisibleInForm). */
     isVisibleInConvert: boolean;
+    /**
+     * Convert Lead's own settings (Form Builder › Convert Lead), which leave the record's form as it is. null / missing →
+     * the record's form setting applies, so changes made there reach Convert Lead. Read them through
+     * `convertSettingsOf` (utils/convertLeadFields.ts).
+     */
+    convertIsRequired?: boolean | null;
+    /** A size, `'auto'` (no width), or null → `fieldSize`. */
+    convertFieldSize?: ConvertFieldSize | null;
+    /** Convert Lead order (null → the field keeps the place it has on the record's form). */
+    convertSortOrder?: number | null;
     dropdownCategoryId: string | null;
     dropdownCategoryKey: string | null;
     validationRules: Record<string, unknown> | null;
@@ -278,6 +290,9 @@ export interface UpdateFieldPayload {
     isVisibleInDrawer?: boolean;
     /** Shown on Convert Lead (contacts / organizations / opportunities). */
     isVisibleInConvert?: boolean;
+    /** Convert Lead's own "required" / width; null → back to the record's form setting. */
+    convertIsRequired?: boolean | null;
+    convertFieldSize?: ConvertFieldSize | null;
     dropdownCategoryKey?: string | null;
 }
 

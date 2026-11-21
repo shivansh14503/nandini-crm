@@ -184,6 +184,10 @@ export const updateFieldSchema = z
         isVisibleInDrawer: z.boolean().optional(),
         /** Contacts / organizations / opportunities: shown on Convert Lead. Core Convert Lead fields can't be hidden. */
         isVisibleInConvert: z.boolean().optional(),
+        /** Convert Lead's own "required"; null → the record's form setting. Blocked (false) for core-locked fields. */
+        convertIsRequired: z.boolean().nullable().optional(),
+        /** Convert Lead's own width ('auto' = no width); null → the record's form setting. */
+        convertFieldSize: z.enum([...FIELD_SIZES, 'auto']).nullable().optional(),
         /** null unlinks; select / multiselect fields only. */
         dropdownCategoryKey: z.string().trim().min(1).max(80).nullable().optional(),
         validationRules: z.record(z.string(), z.unknown()).nullable().optional(),
@@ -192,6 +196,11 @@ export const updateFieldSchema = z
 
 export const reorderFieldsSchema = z.object({
     fieldIds: z.array(z.string().trim().min(1).max(50)).min(1).max(1000),
+});
+
+/** Convert Lead's own field order (contacts / organizations / opportunities); an empty list clears it. */
+export const reorderConvertFieldsSchema = z.object({
+    fieldIds: z.array(z.string().trim().min(1).max(50)).max(1000),
 });
 
 export const renameSectionSchema = z.object({ sectionLabel: label('Section', 120) });

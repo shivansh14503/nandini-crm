@@ -29,6 +29,7 @@ import {
     createOptionSchema,
     formConfigQuerySchema,
     MODULE_SETTING_SCHEMAS,
+    reorderConvertFieldsSchema,
     reorderFieldsSchema,
     reorderOptionsSchema,
     renameSectionSchema,
@@ -109,6 +110,12 @@ export interface FormFieldDefinitionDto {
     isVisibleInDrawer: boolean;
     /** Shown on the Convert Lead form (contacts / organizations / opportunities only). */
     isVisibleInConvert: boolean;
+    /** Convert Lead's own "required" (null → isRequired, the record's form setting). */
+    convertIsRequired: boolean | null;
+    /** Convert Lead's own width: a size, 'auto' (no width), or null → fieldSize, the record's form setting. */
+    convertFieldSize: string | null;
+    /** Convert Lead order (null → the field keeps the place it has on the record's form). */
+    convertSortOrder: number | null;
     dropdownCategoryId: string | null;
     dropdownCategoryKey: string | null;
     validationRules: Record<string, unknown> | null;
@@ -253,6 +260,9 @@ const toFieldDto = (f: FormFieldDefinition, categoryKeys: Map<string, string>): 
     isVisibleInForm: f.isVisibleInForm,
     isVisibleInDrawer: f.isVisibleInDrawer,
     isVisibleInConvert: f.isVisibleInConvert,
+    convertIsRequired: f.convertIsRequired,
+    convertFieldSize: f.convertFieldSize,
+    convertSortOrder: f.convertSortOrder,
     dropdownCategoryId: f.dropdownCategoryId,
     dropdownCategoryKey: f.dropdownCategoryId ? (categoryKeys.get(f.dropdownCategoryId) ?? null) : null,
     validationRules: parseJsonObject(f.validationRulesJson),
@@ -950,6 +960,8 @@ export const formConfigService = {
                     isActive: true,
                     isVisibleInForm: input.isVisibleInForm,
                     isVisibleInDrawer: input.isVisibleInDrawer,
+                    // A field added to the contact / organization / opportunity form shows on Convert Lead too.
+                    isVisibleInConvert: isConvertModule(input.module),
                     dropdownCategoryId: categoryId,
                     validationRulesJson: input.validationRules ? JSON.stringify(input.validationRules) : null,
                 },
@@ -998,6 +1010,10 @@ export const formConfigService = {
                     reject('isVisibleInConvert', `${before.label} is a core field and must stay on Convert Lead.`);
                 }
             }
+            if ((input.convertIsRequired !== undefined || input.convertFieldSize !== undefined) && !isConvertModule(before.module)) {
+                reject('convertIsRequired', 'Only contact, organization and opportunity fields have Convert Lead settings.');
+            }
+            if (before.isCoreLocked && input.convertIsRequired === false) reject('convertIsRequired', `${before.label} is a core field and must stay required.`);
             if (input.tabKey !== undefined) assertTab(before.module, input.tabKey);
             const nextTabKey = input.tabKey ?? before.tabKey;
             const tabLabel =
@@ -1066,6 +1082,8 @@ export const formConfigService = {
                     ...(input.isVisibleInForm !== undefined ? { isVisibleInForm: input.isVisibleInForm } : {}),
                     ...(input.isVisibleInDrawer !== undefined ? { isVisibleInDrawer: input.isVisibleInDrawer } : {}),
                     ...(input.isVisibleInConvert !== undefined ? { isVisibleInConvert: input.isVisibleInConvert } : {}),
+                    ...(input.convertIsRequired !== undefined ? { convertIsRequired: input.convertIsRequired } : {}),
+                    ...(input.convertFieldSize !== undefined ? { convertFieldSize: input.convertFieldSize } : {}),
                     ...(dropdownCategoryId !== undefined ? { dropdownCategoryId } : {}),
                     ...(input.validationRules !== undefined
                         ? { validationRulesJson: input.validationRules ? JSON.stringify(input.validationRules) : null }
@@ -1150,6 +1168,9 @@ export const formConfigService = {
                         isVisibleInDrawer: false,
                         isVisibleInConvert: false,
                         isRequired: false,
+                        convertIsRequired: null,
+                        convertFieldSize: null,
+                        convertSortOrder: null,
                         dropdownCategoryId: null,
                         validationRulesJson: JSON.stringify({ _deleted: true }),
                     },
@@ -1201,6 +1222,37 @@ export const formConfigService = {
                 action: 'UPDATE',
                 changedBy: user.username,
                 changes: withMeta({ reordered: ordered.length }, user, { module }),
+            });
+        });
+        await invalidate();
+        return (await formConfigService.getAllConfigs(true)).fieldsByModule[module];
+    },
+
+    /**
+     * Sets Convert Lead's own field order for contacts / organizations / opportunities (the record's form keeps its
+     * order). The listed fields fill, in the given order, the places they hold on the record's form; the others keep
+     * theirs (so a field added to the form later shows where it sits there). An empty list clears it: Convert Lead
+     * follows the record's form order again.
+     */
+    async reorderConvertFields(module: CrmModuleKey, body: unknown, user: AuthUser): Promise<FormFieldDefinitionDto[]> {
+        const { fieldIds } = reorderConvertFieldsSchema.parse(body);
+        if (!isConvertModule(module)) throw HttpError.badRequest('Only contact, organization and opportunity fields have a Convert Lead order.');
+        await runInTransaction(async (tx) => {
+            const fields = await tx.formFieldDefinition.findMany({ where: { module }, select: { id: true, convertSortOrder: true } });
+            const known = new Set(fields.map((f) => f.id));
+            const unknown = fieldIds.filter((id) => !known.has(id));
+            if (unknown.length > 0) throw HttpError.badRequest(`Some fields do not belong to ${module}.`, [{ message: unknown.join(', '), path: ['fieldIds'] }]);
+            const rank = new Map([...new Set(fieldIds)].map((id, index) => [id, (index + 1) * 10]));
+            for (const field of fields) {
+                const convertSortOrder = rank.get(field.id) ?? null;
+                if (field.convertSortOrder !== convertSortOrder) await tx.formFieldDefinition.update({ where: { id: field.id }, data: { convertSortOrder } });
+            }
+            await auditService.record(tx, {
+                entityType: 'FormField',
+                entityId: module,
+                action: 'UPDATE',
+                changedBy: user.username,
+                changes: withMeta(rank.size > 0 ? { convertReordered: rank.size } : { convertOrderReset: true }, user, { module }),
             });
         });
         await invalidate();

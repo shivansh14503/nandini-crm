@@ -37,6 +37,8 @@ export type DraftOp =
       }
     | { kind: 'updateField'; fieldId: string; payload: UpdateFieldPayload; summary: string }
     | { kind: 'reorderFields'; module: CrmModuleKey; fieldIds: string[]; summary: string }
+    /** Convert Lead's own field order of a contact / organization / opportunity (empty → the record's form order). */
+    | { kind: 'reorderConvertFields'; module: CrmModuleKey; fieldIds: string[]; summary: string }
     | { kind: 'renameSection'; module: CrmModuleKey; sectionKey: string; sectionLabel: string; summary: string }
     /**
      * A new (admin-created) tab. It has no API call of its own: a custom tab is stored through the fields placed on
@@ -54,6 +56,9 @@ export type DraftOp =
     | { kind: 'deleteField'; fieldId: string; summary: string }
     /** A module setting (e.g. leads › ratingNewLead, the new-lead Rating limits): saved with PUT …/settings/:key. */
     | { kind: 'setModuleSetting'; module: CrmModuleKey; key: string; value: unknown; summary: string };
+
+/** Records a lead conversion creates: their fields also have Convert Lead settings. */
+const CONVERT_MODULES: ReadonlySet<CrmModuleKey> = new Set(['contacts', 'organizations', 'opportunities']);
 
 const TEMP_PREFIX = 'draft-';
 let tempSeq = 0;
@@ -310,7 +315,11 @@ function applyOp(s: FormConfigsPayload, op: DraftOp): void {
                 isActive: true,
                 isVisibleInForm: p.isVisibleInForm ?? true,
                 isVisibleInDrawer: p.isVisibleInDrawer ?? true,
-                isVisibleInConvert: false,
+                // Same as the API: a field added to the contact / organization / opportunity form shows on Convert Lead too.
+                isVisibleInConvert: CONVERT_MODULES.has(p.module),
+                convertIsRequired: null,
+                convertFieldSize: null,
+                convertSortOrder: null,
                 dropdownCategoryId: null,
                 dropdownCategoryKey: null,
                 validationRules: null,
@@ -341,6 +350,8 @@ function applyOp(s: FormConfigsPayload, op: DraftOp): void {
             if (p.isVisibleInForm !== undefined) field.isVisibleInForm = p.isVisibleInForm;
             if (p.isVisibleInDrawer !== undefined) field.isVisibleInDrawer = p.isVisibleInDrawer;
             if (p.isVisibleInConvert !== undefined) field.isVisibleInConvert = p.isVisibleInConvert;
+            if (p.convertIsRequired !== undefined) field.convertIsRequired = p.convertIsRequired;
+            if (p.convertFieldSize !== undefined) field.convertFieldSize = p.convertFieldSize;
             if (p.dropdownCategoryKey !== undefined) setCategoryLink(s, field, p.dropdownCategoryKey);
             if (field.label !== before.label) renameOwnDropdown(s, field, before.label);
             if (field.tabKey !== before.tabKey || field.sectionKey !== before.sectionKey) {
@@ -354,6 +365,12 @@ function applyOp(s: FormConfigsPayload, op: DraftOp): void {
             const fields = s.fieldsByModule[op.module] ?? [];
             const listed = op.fieldIds.map((id) => fields.find((f) => f.id === id)).filter((f): f is FormFieldDefinitionDto => Boolean(f));
             renumber([...listed, ...byOrder(fields).filter((f) => !listed.includes(f))]);
+            return;
+        }
+        case 'reorderConvertFields': {
+            // Mirrors the API: listed fields get the order given, the others none (they keep their form place).
+            const rank = new Map([...new Set(op.fieldIds)].map((id, i) => [id, (i + 1) * 10]));
+            for (const field of s.fieldsByModule[op.module] ?? []) field.convertSortOrder = rank.get(field.id) ?? null;
             return;
         }
         case 'renameSection': {
@@ -413,6 +430,9 @@ function applyOp(s: FormConfigsPayload, op: DraftOp): void {
                     isVisibleInDrawer: false,
                     isVisibleInConvert: false,
                     isRequired: false,
+                    convertIsRequired: null,
+                    convertFieldSize: null,
+                    convertSortOrder: null,
                     dropdownCategoryKey: null,
                     dropdownCategoryId: null,
                     validationRules: { _deleted: true },
@@ -512,6 +532,7 @@ export function modulesTouchedBy(ops: DraftOp[], base: FormConfigsPayload, draft
                 break;
             }
             case 'reorderFields':
+            case 'reorderConvertFields':
             case 'renameSection':
             case 'createTab':
             case 'deleteTab':
@@ -522,6 +543,12 @@ export function modulesTouchedBy(ops: DraftOp[], base: FormConfigsPayload, draft
     }
     return touched;
 }
+
+/** Field settings that belong to Convert Lead alone (Form Builder › Convert Lead). */
+const CONVERT_ONLY_KEYS: ReadonlySet<string> = new Set(['isVisibleInConvert', 'convertIsRequired', 'convertFieldSize']);
+
+/** Whether a field edit only changes Convert Lead's own settings, not the record's form. */
+export const isConvertOnlyPayload = (payload: UpdateFieldPayload) => Object.keys(payload).every((key) => CONVERT_ONLY_KEYS.has(key));
 
 /**
  * Tabs of `module` with unsaved changes: fields created, edited, moved (in or out), deleted or reordered on them,
@@ -551,6 +578,8 @@ export function tabsTouchedBy(ops: DraftOp[], base: FormConfigsPayload | undefin
                 break;
             case 'updateField':
             case 'deleteField': {
+                // Convert Lead's own settings leave the record's form (and its tabs) as they are.
+                if (op.kind === 'updateField' && isConvertOnlyPayload(op.payload)) break;
                 for (const f of [savedField(op.fieldId), draftField(op.fieldId)]) if (f?.module === module) tabs.add(f.tabKey);
                 break;
             }
@@ -640,7 +669,7 @@ export function opRefersTo(op: DraftOp, id: string): boolean {
 /** Removes `id` from reorder lists. */
 export function withoutId(op: DraftOp, id: string): DraftOp {
     if (op.kind === 'reorderOptions') return { ...op, optionIds: op.optionIds.filter((x) => x !== id) };
-    if (op.kind === 'reorderFields') return { ...op, fieldIds: op.fieldIds.filter((x) => x !== id) };
+    if (op.kind === 'reorderFields' || op.kind === 'reorderConvertFields') return { ...op, fieldIds: op.fieldIds.filter((x) => x !== id) };
     return op;
 }
 
@@ -690,6 +719,7 @@ export interface ConfigWriter {
     createField(payload: CreateFieldPayload): Promise<FormFieldDefinitionDto>;
     updateField(fieldId: string, payload: UpdateFieldPayload): Promise<Pick<FormFieldDefinitionDto, 'dropdownCategoryKey'>>;
     reorderFields(module: CrmModuleKey, fieldIds: string[]): Promise<unknown>;
+    reorderConvertFields(module: CrmModuleKey, fieldIds: string[]): Promise<unknown>;
     renameSection(module: CrmModuleKey, sectionKey: string, sectionLabel: string): Promise<unknown>;
     updateCategory(categoryKey: string, payload: UpdateCategoryPayload): Promise<Pick<DropdownCategoryDto, 'key'>>;
     deleteCategory(categoryKey: string): Promise<unknown>;
@@ -774,6 +804,9 @@ export async function replayOps(ops: DraftOp[], api: ConfigWriter): Promise<Repl
             case 'reorderFields':
                 await api.reorderFields(op.module, realIds(op.fieldIds));
                 return;
+            case 'reorderConvertFields':
+                await api.reorderConvertFields(op.module, realIds(op.fieldIds));
+                return;
             case 'renameSection':
                 await api.renameSection(op.module, op.sectionKey, op.sectionLabel);
                 return;
@@ -814,6 +847,7 @@ export async function replayOps(ops: DraftOp[], api: ConfigWriter): Promise<Repl
             case 'updateField':
                 return { ...op, fieldId: rid(op.fieldId), payload: { ...op.payload, dropdownCategoryKey: rkeyOpt(op.payload.dropdownCategoryKey) } };
             case 'reorderFields':
+            case 'reorderConvertFields':
                 return { ...op, fieldIds: op.fieldIds.map(rid) };
             case 'updateCategory':
             case 'deleteCategory':

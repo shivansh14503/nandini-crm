@@ -63,6 +63,9 @@ export const formConfigService = {
     deleteField:(fieldId: string) => mutate(apiClient.delete<ApiResponse<{ id: string }>>(`${BASE}/fields/${enc(fieldId)}`)),
     reorderFields: (module: CrmModuleKey, fieldIds: string[]) =>
         mutate(apiClient.put<ApiResponse<FormFieldDefinitionDto[]>>(`${BASE}/modules/${enc(module)}/fields/reorder`, { fieldIds })),
+    /** Convert Lead's own order of a contact / organization / opportunity's fields; [] → the record's form order again. */
+    reorderConvertFields: (module: CrmModuleKey, fieldIds: string[]) =>
+        mutate(apiClient.put<ApiResponse<FormFieldDefinitionDto[]>>(`${BASE}/modules/${enc(module)}/fields/convert-order`, { fieldIds })),
     renameSection: (module: CrmModuleKey, sectionKey: string, sectionLabel: string) =>
         mutate(apiClient.patch<ApiResponse<FormFieldDefinitionDto[]>>(`${BASE}/modules/${enc(module)}/sections/${enc(sectionKey)}`, { sectionLabel })),
     /** A module setting, e.g. ('leads', 'ratingNewLead', { hot, warm }): the new-lead Rating limits. */

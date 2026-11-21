@@ -53,6 +53,8 @@ export interface ConfigDraftActions {
     createField(payload: CreateFieldPayload): { id: string; label: string };
     updateField(fieldId: string, payload: UpdateFieldPayload): void;
     reorderFields(module: CrmModuleKey, fieldIds: string[]): void;
+    /** Convert Lead's own field order of a record (the record's form keeps its order); [] → the form's order again. */
+    reorderConvertFields(module: CrmModuleKey, fieldIds: string[]): void;
     renameSection(module: CrmModuleKey, sectionKey: string, sectionLabel: string): void;
     /** Adds an admin-created tab to the module's form; returns its key (a slug of the name, unique on the form). */
     createTab(module: CrmModuleKey, label: string): { key: string; label: string };
@@ -319,6 +321,9 @@ export function useConfigDraft(base: FormConfigsPayload | undefined, refetch: ()
         const leftover: UpdateFieldPayload = {};
         for (const key of PLACEMENT_KEYS) if (payload[key] !== undefined) leftover[key] = payload[key];
         if (payload.dropdownCategoryKey !== undefined && created.categoryKey) leftover.dropdownCategoryKey = payload.dropdownCategoryKey;
+        // Convert Lead's own settings aren't taken on create: they follow it as an edit.
+        if (payload.convertIsRequired !== undefined) leftover.convertIsRequired = payload.convertIsRequired;
+        if (payload.convertFieldSize !== undefined) leftover.convertFieldSize = payload.convertFieldSize;
 
         const next: CreateFieldPayload = { ...created.payload };
         // The key follows the label (the API derives it the same way when the field is saved).
@@ -440,6 +445,7 @@ export function useConfigDraft(base: FormConfigsPayload | undefined, refetch: ()
                 let payload = tabLabel ? { ...input, tabLabel } : input;
                 if (field.isCoreLocked && payload.isRequired === false) fail(`${field.label} is a core field and must stay required.`);
                 if (field.isCoreLocked && payload.isVisibleInForm === false) fail(`${field.label} is a core field and cannot be hidden.`);
+                if (field.isCoreLocked && payload.convertIsRequired === false) fail(`${field.label} is a core field and must stay required.`);
                 // A renamed builder-added field takes a key from its new label: refused when another field has it.
                 if (!field.isSystem && payload.label !== undefined && payload.label !== field.label) {
                     fieldKeyFor(s, field.module, payload.label, field.id);
@@ -468,6 +474,14 @@ export function useConfigDraft(base: FormConfigsPayload | undefined, refetch: ()
             reorderFields(module, fieldIds) {
                 const rest = opsRef.current.filter((op) => !(op.kind === 'reorderFields' && op.module === module));
                 commit([...rest, { kind: 'reorderFields', module, fieldIds, summary: `${moduleLabel(module)}: reordered fields` }]);
+            },
+
+            reorderConvertFields(module, fieldIds) {
+                const rest = opsRef.current.filter((op) => !(op.kind === 'reorderConvertFields' && op.module === module));
+                const summary = fieldIds.length
+                    ? `Convert Lead › ${moduleLabel(module)}: reordered fields`
+                    : `Convert Lead › ${moduleLabel(module)}: order follows the form again`;
+                commit([...rest, { kind: 'reorderConvertFields', module, fieldIds, summary }]);
             },
 
             renameSection(module, sectionKey, sectionLabel) {

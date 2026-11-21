@@ -48,6 +48,9 @@ export const formConfigController = {
     async reorderFields(req: Request, res: Response): Promise<void> {
         sendSuccess(res, await formConfigService.reorderFields(moduleParam(req), req.body, requireUser(req)), 'Fields reordered');
     },
+    async reorderConvertFields(req: Request, res: Response): Promise<void> {
+        sendSuccess(res, await formConfigService.reorderConvertFields(moduleParam(req), req.body, requireUser(req)), 'Convert Lead fields reordered');
+    },
     async updateModuleSetting(req: Request, res: Response): Promise<void> {
         sendSuccess(res, await formConfigService.updateModuleSetting(moduleParam(req), param(req, 'settingKey'), req.body, requireUser(req)), 'Setting saved');
     },

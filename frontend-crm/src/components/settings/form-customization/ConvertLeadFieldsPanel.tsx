@@ -1,11 +1,12 @@
 'use client';
 
 import React, { useMemo, useState } from 'react';
-import { Box, Typography } from '@mui/material';
+import { Box, Button, Tooltip, Typography } from '@mui/material';
+import RestartAltRoundedIcon from '@mui/icons-material/RestartAltRounded';
 import { CONVERT_FIELD_NAMES, type ConvertModule } from '@/validations/convertLead.schema';
 import type { FormConfigsPayload, FormFieldDefinitionDto, UpdateFieldPayload } from '@/types/formConfig.types';
-import { moduleFields } from '@/utils/formConfig';
-import { convertShownFields } from '@/utils/convertLeadFields';
+import { groupSections } from '@/utils/formConfig';
+import { convertOrderedFields, convertShownFields, hasOwnConvertOrder } from '@/utils/convertLeadFields';
 import { DragHandle, EmptyState, errorMessage, panelHeaderSx, surfaceSx } from './builderUi';
 import { CONVERT_GRID_COLUMNS, FieldRow } from './FormFieldsBuilderPanel';
 import { fieldPlaces } from './fieldPlaces';
@@ -37,6 +38,25 @@ export const CONVERT_TINT = {
     text: 'var(--crm-amber-700)',
 } as const;
 
+const resetButtonSx = {
+    flexShrink: 0,
+    textTransform: 'none',
+    fontSize: '0.76rem',
+    fontWeight: 600,
+    borderRadius: '8px',
+    px: 1.25,
+    whiteSpace: 'nowrap',
+    border: '1px solid var(--mui-palette-border-main)',
+    color: 'var(--crm-slate-700)',
+    backgroundColor: 'var(--mui-palette-background-paper)',
+    transition: 'all 0.15s ease',
+    '&:hover': {
+        borderColor: 'var(--crm-blue-300)',
+        backgroundColor: 'var(--mui-palette-primary-soft)',
+        color: 'var(--crm-text-blue-700)',
+    },
+} as const;
+
 export interface ConvertLeadFieldsPanelProps {
     /** The record whose Convert Lead fields are shown. */
     module: ConvertModule;
@@ -46,17 +66,21 @@ export interface ConvertLeadFieldsPanelProps {
 }
 
 /**
- * Every field of one of Convert Lead's records (built-in and custom), in the record's form order. The Convert switch
- * picks what Convert Lead shows, independently of the record's own form. Label, required, width and order are the
- * record's own settings, shared with its form.
+ * Every field of one of Convert Lead's records (built-in and custom), in Convert Lead's order. The Convert switch,
+ * required, width and order set here are Convert Lead's own (the record's form keeps its settings); until set they
+ * follow the record's form (see convertOrderedFields). Labels, sections and dropdowns are the record's form's.
  */
 export function ConvertLeadFieldsPanel({ module, configs, canEdit, notify }: ConvertLeadFieldsPanelProps) {
     const draft = useConfigDraftActions();
     const [busy, setBusy] = useState(false);
 
-    const allFields = useMemo(() => moduleFields(configs, module), [configs, module]);
-    const rows = useMemo(() => allFields.filter((f) => f.isActive), [allFields]);
+    // Rows as Convert Lead lays them out: its own order and settings, grouped by the record's form sections.
+    const rows = useMemo(
+        () => groupSections(convertOrderedFields(configs, module).filter((f) => f.isActive)).flatMap((s) => s.fields),
+        [configs, module],
+    );
     const shownCount = useMemo(() => convertShownFields(configs, module).length, [configs, module]);
+    const ownOrder = useMemo(() => hasOwnConvertOrder(configs, module), [configs, module]);
     const recordLabel = CONVERT_RECORDS.find((r) => r.module === module)?.label ?? module;
 
     const run = async (action: () => unknown) => {
@@ -71,21 +95,16 @@ export function ConvertLeadFieldsPanel({ module, configs, canEdit, notify }: Con
     };
     const patch = (field: FormFieldDefinitionDto, body: UpdateFieldPayload) => run(() => draft.updateField(field.id, body));
 
-    // The listed rows keep the module-order slots they occupy, filled in the dropped order: fields not listed stay put.
-    const { orderedItems, getRowDragProps, getRowDragSx } = useDragReorder({
-        items: rows,
-        canDrag: canEdit && !busy,
-        onReorder: (orderedIds) => {
-            const shown = new Set(orderedIds);
-            let next = 0;
-            const ids = allFields.map((f) => (shown.has(f.id) ? orderedIds[next++] : f.id));
-            try {
-                draft.reorderFields(module, ids);
-            } catch (err) {
-                notify(errorMessage(err), 'error');
-            }
-        },
-    });
+    // Convert Lead's own order: the record's form keeps its order. Fields within a section keep it; a field dropped
+    // ahead of another section's fields takes its section along (sections come in the order of their first field).
+    const reorder = (orderedIds: string[]) => {
+        try {
+            draft.reorderConvertFields(module, orderedIds);
+        } catch (err) {
+            notify(errorMessage(err), 'error');
+        }
+    };
+    const { orderedItems, getRowDragProps, getRowDragSx } = useDragReorder({ items: rows, canDrag: canEdit && !busy, onReorder: reorder });
 
     return (
         <Box sx={{ ...surfaceSx, overflow: 'hidden' }}>
@@ -94,8 +113,9 @@ export function ConvertLeadFieldsPanel({ module, configs, canEdit, notify }: Con
                     <strong>
                         {shownCount} of {rows.length} {recordLabel} field{rows.length === 1 ? '' : 's'}
                     </strong>{' '}
-                    are shown when a lead is converted. Turn a field&apos;s <strong>Convert</strong> switch on or off to choose; this doesn&apos;t change the{' '}
-                    {recordLabel} form. Required, width and order are the {recordLabel} form&apos;s own settings, shared with it.
+                    are shown when a lead is converted. The <strong>Convert</strong> switch, required, width and order set here apply to Convert Lead only:
+                    the {recordLabel} form stays as it is. Until you change them here they follow the {recordLabel} form, and fields added to that form
+                    show here too.
                 </Typography>
             </Box>
 
@@ -145,11 +165,26 @@ export function ConvertLeadFieldsPanel({ module, configs, canEdit, notify }: Con
 
             <Box sx={{ px: 2, py: 1.5, borderTop: '1px solid var(--mui-palette-border-main)', backgroundColor: 'var(--mui-palette-background-subtle)', display: 'flex', alignItems: 'center', gap: 1 }}>
                 <DragHandle disabled title="Drag a field by its grip to reorder it" />
-                <Typography sx={{ fontSize: '0.74rem', color: 'var(--mui-palette-text-secondary)' }}>
-                    Drag a field by its grip to change the order Convert Lead shows it in. A required field that is shown must be filled in on a new{' '}
-                    {recordLabel.toLowerCase()}; an existing one that is linked is not checked. A required field left off Convert Lead is not asked for. Fields are
-                    added and deleted, and tabs and sections managed, on the {recordLabel} form itself.
+                <Typography sx={{ fontSize: '0.74rem', color: 'var(--mui-palette-text-secondary)', flex: 1 }}>
+                    Drag a field by its grip to change the order Convert Lead shows it in (the {recordLabel} form keeps its order). A required field that is
+                    shown must be filled in on a new {recordLabel.toLowerCase()}; an existing one that is linked is not checked. A required field left off
+                    Convert Lead is not asked for. Labels, sections and dropdowns come from the {recordLabel} form, where fields are added and deleted.
                 </Typography>
+                {ownOrder && (
+                    <Tooltip title={`Show the fields in the ${recordLabel} form's order again`} arrow>
+                        <span>
+                            <Button
+                                size="small"
+                                startIcon={<RestartAltRoundedIcon sx={{ fontSize: 16 }} />}
+                                disabled={!canEdit || busy}
+                                onClick={() => reorder([])}
+                                sx={resetButtonSx}
+                            >
+                                Use form order
+                            </Button>
+                        </span>
+                    </Tooltip>
+                )}
             </Box>
         </Box>
     );

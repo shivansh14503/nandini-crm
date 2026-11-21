@@ -8,7 +8,7 @@ import { FormModeProvider } from '@/context/FormModeContext';
 import { DynamicFormField } from '@/components/forms/DynamicFormField';
 import { FormGrid } from '@/components/forms/FormGrid';
 import { SectionLabel } from '@/components/forms/SectionLabel';
-import { CRM_MODULE_LABELS, type CrmModuleKey, type FormConfigsPayload } from '@/types/formConfig.types';
+import { CRM_MODULE_LABELS, type CrmModuleKey, type FormConfigsPayload, type FormFieldDefinitionDto } from '@/types/formConfig.types';
 import { groupSections, moduleFields } from '@/utils/formConfig';
 import { EmptyState, PillTabs, panelHeaderSx, surfaceSx } from './builderUi';
 
@@ -20,11 +20,11 @@ export interface FormLivePreviewPanelProps {
     /** Tabs with unsaved changes (orange dot on their pill). */
     unsavedTabs?: Set<string>;
     /**
-     * Preview only these built-in fields, without tabs: how Convert Lead shows the module's fields (in the module's
-     * own sections and order, as ConvertRecordSections lays them out).
+     * Preview only these fields, without tabs: how Convert Lead shows the module's fields (`convertShownFields`: its
+     * own order, widths and required, in the module's sections, as ConvertRecordSections lays them out).
      */
-    onlyFieldKeys?: ReadonlySet<string>;
-    /** Heading of the single grid shown with `onlyFieldKeys`. */
+    onlyFields?: FormFieldDefinitionDto[];
+    /** Heading of the single grid shown with `onlyFields`. */
     gridLabel?: string;
 }
 
@@ -33,8 +33,9 @@ export interface FormLivePreviewPanelProps {
  * required flags, visibility, dropdown options, section names and custom fields, unsaved changes included.
  * Values typed here are never saved.
  */
-export function FormLivePreviewPanel({ module, configs, unsavedCount = 0, unsavedTabs, onlyFieldKeys, gridLabel }: FormLivePreviewPanelProps) {
-    const tabs = useMemo(() => (onlyFieldKeys ? [] : (configs.moduleTabs[module] ?? [])), [configs, module, onlyFieldKeys]);
+export function FormLivePreviewPanel({ module, configs, unsavedCount = 0, unsavedTabs, onlyFields, gridLabel }: FormLivePreviewPanelProps) {
+    const convertOnly = Boolean(onlyFields);
+    const tabs = useMemo(() => (convertOnly ? [] : (configs.moduleTabs[module] ?? [])), [configs, module, convertOnly]);
     const [selectedTab, setTabKey] = useState(tabs[0]?.key ?? 'overview');
     const tabKey = tabs.some((t) => t.key === selectedTab) ? selectedTab : (tabs[0]?.key ?? 'overview');
     const methods = useForm({ defaultValues: { customFields: {} } as Record<string, unknown>, mode: 'onTouched' });
@@ -47,14 +48,14 @@ export function FormLivePreviewPanel({ module, configs, unsavedCount = 0, unsave
     const sections = useMemo(() => {
         // Convert Lead lays a record out like its own form (one grid per section, in the configured order), showing
         // the fields picked for it, whatever the record's own form shows.
-        if (onlyFieldKeys) return groupSections(moduleFields(configs, module).filter((f) => f.isActive && onlyFieldKeys.has(f.fieldKey)));
+        if (onlyFields) return groupSections(onlyFields);
         return groupSections(moduleFields(configs, module).filter((f) => f.isActive && f.isVisibleInForm), tabKey);
-    }, [configs, module, tabKey, onlyFieldKeys]);
+    }, [configs, module, tabKey, onlyFields]);
 
     return (
         <Box sx={{ ...surfaceSx, overflow: 'hidden' }}>
             <Box sx={{ ...panelHeaderSx, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1.5, flexWrap: 'wrap' }}>
-                {!onlyFieldKeys && (
+                {!convertOnly && (
                     <PillTabs
                         items={tabs.map((t) => ({ key: t.key, label: t.label, hasUnsaved: unsavedTabs?.has(t.key) ?? false }))}
                         value={tabKey}
@@ -62,7 +63,7 @@ export function FormLivePreviewPanel({ module, configs, unsavedCount = 0, unsave
                     />
                 )}
                 <Typography sx={{ fontSize: '0.74rem', color: 'var(--mui-palette-text-secondary)', display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                    <VisibilityOutlinedIcon sx={{ fontSize: 15 }} /> Preview of the {onlyFieldKeys ? `Convert Lead ${gridLabel ?? ''} fields` : `${CRM_MODULE_LABELS[module]} form`}
+                    <VisibilityOutlinedIcon sx={{ fontSize: 15 }} /> Preview of the {convertOnly ? `Convert Lead ${gridLabel ?? ''} fields` : `${CRM_MODULE_LABELS[module]} form`}
                     {unsavedCount > 0 ? ` — includes ${unsavedCount} unsaved change${unsavedCount === 1 ? '' : 's'}` : ''}
                 </Typography>
             </Box>

@@ -4,6 +4,7 @@ import React, { createContext, useCallback, useContext, useMemo, useState } from
 import { useFormConfigs, resolveConfiguredFieldProps, type ConfiguredFieldDefaults, type ConfiguredFieldProps } from '@/hooks/queries/useFormConfigs';
 import { sectionKeyFromLabel, type CrmModuleKey, type FormConfigsPayload, type FormFieldDefinitionDto } from '@/types/formConfig.types';
 import { allModuleFieldsIncludingDeleted, moduleFields } from '@/utils/formConfig';
+import { convertSettingsOf } from '@/utils/convertLeadFields';
 import { useCodedDefaultsRecorder } from './CodedFieldDefaultsContext';
 
 /**
@@ -155,7 +156,8 @@ export function FormConfigProvider({ module, fieldNames, borrowed = false, child
             .filter((f) => f.isSystem)
             // A borrowing form has no sections to move fields between: every field counts as sitting where it is.
             // Convert Lead (the borrowing form) shows the fields an admin put on it, whatever the module's form shows.
-            .map((f) => (borrowed ? { ...f, defaultSectionKey: null, defaultTabKey: null, isVisibleInForm: f.isVisibleInConvert } : f));
+            // It also takes Convert Lead's own width and "required" where an admin set them (convertSettingsOf).
+            .map((f) => (borrowed ? { ...convertSettingsOf(f), defaultSectionKey: null, defaultTabKey: null, isVisibleInForm: f.isVisibleInConvert } : f));
         return {
             module,
             configs,

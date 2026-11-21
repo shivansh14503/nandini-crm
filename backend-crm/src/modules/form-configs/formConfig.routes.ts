@@ -61,6 +61,7 @@ router.post('/fields', admin, formConfigController.createField);
 router.patch('/fields/:fieldId', admin, validateRequest({ params: fieldIdParamSchema }), formConfigController.updateField);
 router.delete('/fields/:fieldId', admin, validateRequest({ params: fieldIdParamSchema }), formConfigController.deleteField);
 router.put('/modules/:module/fields/reorder', admin, validateRequest({ params: moduleParamSchema }), formConfigController.reorderFields);
+router.put('/modules/:module/fields/convert-order', admin, validateRequest({ params: moduleParamSchema }), formConfigController.reorderConvertFields);
 router.patch('/modules/:module/sections/:sectionKey', admin, validateRequest({ params: sectionParamSchema }), formConfigController.renameSection);
 router.put('/modules/:module/settings/:settingKey', admin, validateRequest({ params: moduleSettingParamSchema }), formConfigController.updateModuleSetting);
 

@@ -41,9 +41,41 @@ export const isShownOnConvert = (module: ConvertModule, field: FormFieldDefiniti
 /** A core field Convert Lead has an input for: it can't be taken off Convert Lead. */
 export const isLockedOnConvert = (module: ConvertModule, field: FormFieldDefinitionDto) => field.isCoreLocked && isConvertInput(module, field);
 
-/** The fields of `module` that Convert Lead shows, in the module's order. */
+/**
+ * The field as Convert Lead uses it: Convert Lead's own width and "required" (Form Builder › Convert Lead) where an
+ * admin set them, else the record's form settings, so a change made on the record's form reaches Convert Lead unless
+ * Convert Lead has its own setting.
+ */
+export function convertSettingsOf<T extends FormFieldDefinitionDto>(field: T): T {
+    const size = field.convertFieldSize;
+    return { ...field, fieldSize: size === 'auto' ? null : (size ?? field.fieldSize), isRequired: field.convertIsRequired ?? field.isRequired };
+}
+
+/** Whether Convert Lead has its own width or "required" for the field (instead of the record's form settings). */
+export const hasOwnConvertSettings = (field: FormFieldDefinitionDto) => field.convertIsRequired != null || field.convertFieldSize != null;
+
+/** Whether Convert Lead has its own field order for `module` (instead of the record's form order). */
+export const hasOwnConvertOrder = (configs: FormConfigsPayload | null | undefined, module: ConvertModule) =>
+    moduleFields(configs, module).some((f) => f.convertSortOrder != null);
+
+/**
+ * Every field of `module` in Convert Lead's order, with Convert Lead's settings applied (convertSettingsOf) and
+ * `sortOrder` renumbered to that order. Fields with a Convert Lead order fill, in that order, the places they hold on
+ * the record's form; the others (e.g. one added to the form later) keep their place there. Sections and tabs are
+ * the record's form's.
+ */
+export function convertOrderedFields(configs: FormConfigsPayload | null | undefined, module: ConvertModule): FormFieldDefinitionDto[] {
+    const fields = moduleFields(configs, module);
+    const ranked = fields.filter((f) => f.convertSortOrder != null).sort((a, b) => (a.convertSortOrder ?? 0) - (b.convertSortOrder ?? 0));
+    let next = 0;
+    return fields
+        .map((f) => (f.convertSortOrder != null ? ranked[next++] : f))
+        .map((f, i) => ({ ...convertSettingsOf(f), sortOrder: (i + 1) * 10 }));
+}
+
+/** The fields of `module` that Convert Lead shows, in Convert Lead's order and with its settings (convertOrderedFields). */
 export const convertShownFields = (configs: FormConfigsPayload | null | undefined, module: ConvertModule) =>
-    moduleFields(configs, module).filter((f) => isShownOnConvert(module, f));
+    convertOrderedFields(configs, module).filter((f) => isShownOnConvert(module, f));
 
 /** The Convert Lead form's name for a field. */
 export function convertFieldName(module: ConvertModule, field: Pick<FieldShape, 'fieldKey' | 'isSystem'>): string {

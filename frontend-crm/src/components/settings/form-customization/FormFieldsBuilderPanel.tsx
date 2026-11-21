@@ -54,7 +54,8 @@ import {
 import { FieldEditorModal } from './FieldEditorModal';
 import { useDragReorder, type GroupDragProps, type RowDragProps } from './useDragReorder';
 import { categoryAfterFieldRemoval, isTempId } from './configDraft';
-import { convertFieldUnavailableReason, isLockedOnConvert } from '@/utils/convertLeadFields';
+import { convertFieldUnavailableReason, hasOwnConvertSettings, isLockedOnConvert } from '@/utils/convertLeadFields';
+import RestartAltRoundedIcon from '@mui/icons-material/RestartAltRounded';
 import type { ConvertModule } from '@/validations/convertLead.schema';
 import ShareOutlinedIcon from '@mui/icons-material/ShareOutlined';
 import VisibilityOffOutlinedIcon from '@mui/icons-material/VisibilityOffOutlined';
@@ -90,6 +91,44 @@ function ConvertSwitch({
             disabledReason={reason}
             onChange={(isVisibleInConvert) => void onPatch({ isVisibleInConvert })}
         />
+    );
+}
+
+const SIZE_NAME = (size: ConfigFieldSize | null | undefined) => (size ? size.toUpperCase() : 'Auto');
+
+/**
+ * Marks a Convert Lead row whose width or "required" is Convert Lead's own (it no longer follows the record's form),
+ * with a button that makes it follow the form again.
+ */
+function OwnConvertSettings({ field, disabled, onReset }: { field: FormFieldDefinitionDto; disabled: boolean; onReset: () => void }) {
+    const own = [
+        field.convertFieldSize != null && `width ${SIZE_NAME(field.convertFieldSize === 'auto' ? null : field.convertFieldSize)}`,
+        field.convertIsRequired != null && (field.convertIsRequired ? 'required' : 'optional'),
+    ].filter(Boolean);
+    return (
+        <Box component="span" sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.25 }}>
+            <Badge tone="custom" title={`Convert Lead only: ${own.join(', ')}. The form itself is unchanged.`}>
+                Convert only
+            </Badge>
+            <Tooltip title="Use the form's width and required again" arrow>
+                <span>
+                    <IconButton
+                        size="small"
+                        aria-label={`Use the form's settings for ${field.label}`}
+                        disabled={disabled}
+                        onClick={onReset}
+                        sx={{
+                            p: 0.25,
+                            color: 'var(--mui-palette-text-muted)',
+                            transition: 'all 0.15s ease',
+                            '&:hover': { color: 'var(--crm-text-blue-700)', backgroundColor: 'var(--mui-palette-primary-soft)' },
+                        }}
+                    >
+                        <RestartAltRoundedIcon sx={{ fontSize: 15 }} />
+                    </IconButton>
+                </span>
+            </Tooltip>
+        </Box>
     );
 }
 
@@ -850,6 +889,9 @@ export function FieldRow({
                             Unsaved
                         </Badge>
                     )}
+                    {convert && hasOwnConvertSettings(field) && (
+                        <OwnConvertSettings field={field} disabled={!canEdit || busy} onReset={() => void onPatch({ convertIsRequired: null, convertFieldSize: null })} />
+                    )}
                 </Box>
                 {places && places.length > 0 && <SharedPlaces places={places} />}
             </Box>
@@ -863,7 +905,11 @@ export function FieldRow({
                 value={field.fieldSize ?? ''}
                 displayEmpty
                 disabled={disabled}
-                onChange={(e) => void onPatch({ fieldSize: (e.target.value as ConfigFieldSize) || null })}
+                onChange={(e) => {
+                    const size = (e.target.value as ConfigFieldSize) || null;
+                    // Convert Lead keeps its own width ('auto' = none); the record's form keeps its setting.
+                    void onPatch(convert ? { convertFieldSize: size ?? 'auto' } : { fieldSize: size });
+                }}
                 sx={{ fontSize: '0.78rem', height: 30, borderRadius: '8px' }}
                 inputProps={{ 'aria-label': `Width of ${field.label}` }}
             >
@@ -879,7 +925,7 @@ export function FieldRow({
                 checked={field.isRequired}
                 disabled={disabled || locked}
                 disabledReason={locked ? lockReason : undefined}
-                onChange={(isRequired) => void onPatch({ isRequired })}
+                onChange={(isRequired) => void onPatch(convert ? { convertIsRequired: isRequired } : { isRequired })}
             />
             {convert && isConvertModule(field.module) ? (
                 <ConvertSwitch field={field} module={field.module} disabled={disabled} onPatch={onPatch} />
