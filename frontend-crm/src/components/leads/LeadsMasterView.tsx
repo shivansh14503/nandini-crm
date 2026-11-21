@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useMemo, useCallback } from 'react';
+import { useResetTab } from '@/hooks/useResetTab';
 import { useRouter } from 'next/navigation';
 import EventBusyOutlinedIcon from '@mui/icons-material/EventBusyOutlined';
 import { localToday } from '@/utils/pastDates';
@@ -50,7 +51,7 @@ export function LeadsMasterView() {
     const leadsLoading = !embeddedInSearch && leadsPending;
     const leads = useSearchScopedRows(leadsLoaded);
     const bulkDeleteMutation = useBulkDeleteLeads();
-    const [activeTab, setActiveTab] = useState<LeadFilterTab>('all');
+    const [activeTab, setActiveTab] = useResetTab<LeadFilterTab>('all');
     const [statusBucket, setStatusBucket] = useState<LeadStatusBucket>('all');
     const [searchQuery, setSearchQuery] = useState('');
     const [selectedIds, setSelectedIds] = useState<string[]>([]);

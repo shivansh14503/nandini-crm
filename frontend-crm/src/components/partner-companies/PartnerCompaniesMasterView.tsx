@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useCallback, useMemo, useState } from 'react';
+import { useResetTab } from '@/hooks/useResetTab';
 import { useRouter } from 'next/navigation';
 import { Box, Button, Chip, Typography } from '@mui/material';
 import HandshakeOutlinedIcon from '@mui/icons-material/HandshakeOutlined';
@@ -84,7 +85,7 @@ export function PartnerCompaniesMasterView() {
     const listLoading = !embeddedInSearch && listPending;
     const allPartners = useSearchScopedRows(allPartnersLoaded);
     const bulkDeleteMutation = useBulkDeletePartnerCompanies();
-    const [activeTab, setActiveTab] = useState<PartnerCompanyFilterTab>('all');
+    const [activeTab, setActiveTab] = useResetTab<PartnerCompanyFilterTab>('all');
     const [searchQuery, setSearchQuery] = useState('');
     const [selectedIds, setSelectedIds] = useState<string[]>([]);
     const [page, setPage] = useState(0);

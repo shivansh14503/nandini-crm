@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useMemo, useCallback } from 'react';
+import { useResetTab } from '@/hooks/useResetTab';
 import { useRouter } from 'next/navigation';
 import InventoryOutlinedIcon from '@mui/icons-material/InventoryOutlined';
 import CategoryOutlinedIcon from '@mui/icons-material/CategoryOutlined';
@@ -37,7 +38,7 @@ export function ProductsMasterView() {
     const listLoading = !embeddedInSearch && listPending;
     const allProducts = useSearchScopedRows(allProductsLoaded);
     const bulkDeleteMutation = useBulkDeleteProducts();
-    const [activeTab, setActiveTab] = useState<ProductFilterTab>('all');
+    const [activeTab, setActiveTab] = useResetTab<ProductFilterTab>('all');
     const [searchQuery, setSearchQuery] = useState('');
     const [selectedIds, setSelectedIds] = useState<string[]>([]);
     const [page, setPage] = useState(0);

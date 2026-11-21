@@ -72,19 +72,19 @@ const leadFields = z.object({
     noOfEmployee: optionalText('No of Employee', 30),
     referredBy: optionalText('Referred By', L.organizationName),
 
-    primaryAddress: optionalText('Primary Street', L.address),
-    primaryCity: optionalText('Primary City', L.shortText),
-    primaryState: optionalText('Primary State', L.shortText),
+    primaryAddress: optionalText('Billing Street', L.address),
+    primaryCity: optionalText('Billing City', L.shortText),
+    primaryState: optionalText('Billing State', L.shortText),
     primaryPostalCode: optionalPostalCode,
-    primaryCountry: optionalText('Primary Country', L.shortText),
-    primaryLatitude: optionalText('Primary Latitude', 30),
+    primaryCountry: optionalText('Billing Country', L.shortText),
+    primaryLatitude: optionalText('Billing Latitude', 30),
 
-    otherAddress: optionalText('Other Street', L.address),
-    otherCity: optionalText('Other City', L.shortText),
-    otherState: optionalText('Other State', L.shortText),
+    otherAddress: optionalText('Shipping Street', L.address),
+    otherCity: optionalText('Shipping City', L.shortText),
+    otherState: optionalText('Shipping State', L.shortText),
     otherPostalCode: optionalPostalCode,
-    otherCountry: optionalText('Other Country', L.shortText),
-    otherLongitude: optionalText('Other Longitude', 30),
+    otherCountry: optionalText('Shipping Country', L.shortText),
+    otherLongitude: optionalText('Shipping Longitude', 30),
     copyAddressFromLeft: z.boolean().default(false),
     customFields: customFieldsSchema,
 });
@@ -159,7 +159,6 @@ export const convertLeadSchema = z.object({
 
     // Opportunity
     productCategory: stringList('Product Category', 30, L.option).default([]),
-    principalCompany: optionalText('Principal Company', L.organizationName),
     referredBy: optionalText('Referred By', L.organizationName),
     opportunityType: optionalText('Opportunity Type', L.option),
     nextFollowupDate: optionalDate('Next Followup Date'),
@@ -168,7 +167,6 @@ export const convertLeadSchema = z.object({
     opportunityDescription: optionalText('Opportunity Description', L.longText),
     opportunityLeadSource: optionalText('Lead Source', L.option),
     opportunityAssignedTo: requiredText('Opportunity Assigned to', L.username),
-    copyActivitiesTo: stringList('Copy Activities to', 10, 30).default([]),
 
     /**
      * Values of the other fields an admin put on Convert Lead (Form Builder › Convert Lead), per record, keyed by the

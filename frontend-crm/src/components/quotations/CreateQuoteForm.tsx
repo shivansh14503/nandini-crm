@@ -2,6 +2,7 @@
 
 import { NO_PAST_DATES } from '@/utils/pastDates';
 import React, { useEffect, useState, useCallback } from 'react';
+import { useResetTab } from '@/hooks/useResetTab';
 import { useRouter } from 'next/navigation';
 import { FormProvider, type FieldErrors } from 'react-hook-form';
 import { Box, Alert } from '@mui/material';
@@ -239,7 +240,7 @@ export function CreateQuoteForm({
     const [loading, setLoading] = useState<boolean>(() =>
         mode !== 'create' ? Boolean(quotationId) : Boolean(opportunityId)
     );
-    const [activeTab, setActiveTab] = useState<QuotationTabKey>('overview');
+    const [activeTab, setActiveTab] = useResetTab<QuotationTabKey>('overview');
     const [addressPrepopulated, setAddressPrepopulated] = useState(true);
 
     const { methods, toast, showToast, closeToast, stepwise } =

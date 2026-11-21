@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useMemo, useCallback } from 'react';
+import { useResetTab } from '@/hooks/useResetTab';
 import { useRouter } from 'next/navigation';
 import TrendingUpOutlinedIcon from '@mui/icons-material/TrendingUpOutlined';
 import MonetizationOnOutlinedIcon from '@mui/icons-material/MonetizationOnOutlined';
@@ -41,7 +42,7 @@ export function OpportunitiesMasterView() {
     const listLoading = !embeddedInSearch && listPending;
     const allOpportunities = useSearchScopedRows(allOpportunitiesLoaded);
     const bulkDeleteMutation = useBulkDeleteOpportunities();
-    const [activeTab, setActiveTab] = useState<OpportunityFilterTab>('all');
+    const [activeTab, setActiveTab] = useResetTab<OpportunityFilterTab>('all');
     const [searchQuery, setSearchQuery] = useState('');
     const [selectedIds, setSelectedIds] = useState<string[]>([]);
     const [page, setPage] = useState(0);

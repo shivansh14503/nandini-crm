@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { useResetTab } from '@/hooks/useResetTab';
 import { useRouter } from 'next/navigation';
 import { FormProvider, useWatch, type FieldErrors, type Path } from 'react-hook-form';
 import { Box, Divider } from '@mui/material';
@@ -128,7 +129,7 @@ export default function PartnerCompanyForm({
     breadcrumbItems,
 }: PartnerCompanyFormProps) {
     const router = useRouter();
-    const [activeTab, setActiveTab] = useState<PartnerCompanyTabKey>('company_info');
+    const [activeTab, setActiveTab] = useResetTab<PartnerCompanyTabKey>('company_info');
     const pendingFocusField = useRef<string | null>(null);
 
     const initialValues = useMemo<PartnerCompanyFormData>(

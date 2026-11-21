@@ -4,7 +4,6 @@ import React from 'react';
 
 import { ConvertRecordSections } from './ConvertRecordSections';
 import {
-    RhfChipGroup,
     RhfMultiAutocomplete,
     RhfDateTimeField,
     RhfLookup,
@@ -22,8 +21,6 @@ import { FormConfigProvider } from '@/context/FormConfigContext';
 import { useDropdownOptionsGetter } from '@/hooks/queries/useFormConfigs';
 
 type F = ConvertLeadFormValues;
-
-const COPY_ACTIVITY_TARGETS = ['Contact', 'Customer', 'Opportunity'];
 
 /** "Create Opportunity" section of the Convert Lead form. */
 export function ConvertOpportunitySection() {
@@ -70,12 +67,6 @@ export function ConvertOpportunitySection() {
                         />
                     ),
                 }}
-                extra={
-                    <>
-                        <RhfTextField<F> name="principalCompany" label="Principal Company" placeholder="Principal / OEM company" />
-                        <RhfChipGroup<F> name="copyActivitiesTo" label="Copy Activities to" options={COPY_ACTIVITY_TARGETS} />
-                    </>
-                }
             />
         </FormConfigProvider>
     );

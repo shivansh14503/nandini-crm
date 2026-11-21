@@ -2,6 +2,7 @@
 
 import { NO_PAST_DATES } from '@/utils/pastDates';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { useResetTab } from '@/hooks/useResetTab';
 import { useRouter } from 'next/navigation';
 import { FormProvider, useWatch } from 'react-hook-form';
 import { Box } from '@mui/material';
@@ -122,7 +123,7 @@ const EMPTY_CONTACTS: Contact[] = [];
 
 export default function TicketForm({ mode = 'create', initialData, ticketId, breadcrumbItems }: TicketFormProps) {
     const router = useRouter();
-    const [activeTab, setActiveTab] = useState<TicketTabKey>('overview');
+    const [activeTab, setActiveTab] = useResetTab<TicketTabKey>('overview');
     const [ticketNumber, setTicketNumber] = useState('');
     const showNumber = useShowRecordNumber();
     const [audit, setAudit] = useState<RecordAuditStamp>();

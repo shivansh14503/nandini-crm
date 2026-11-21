@@ -1,6 +1,7 @@
 'use client';
 
-import { useState, useCallback, useMemo, useEffect, useRef } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
+import { useResetTab } from '@/hooks/useResetTab';
 import { useRouter } from 'next/navigation';
 import { FormProvider, useForm, type Path } from 'react-hook-form';
 import { Alert, Typography } from '@mui/material';
@@ -255,7 +256,7 @@ export default function OrganizationForm({
     const [recordCode, setRecordCode] = useState('');
     const showNumber = useShowRecordNumber();
     const [persistedStatus, setPersistedStatus] = useState(initialData?.accountStatus ?? 'Active');
-    const [activeTab, setActiveTab] = useState<TabKey>(initialTab);
+    const [activeTab, setActiveTab] = useResetTab<TabKey>(initialTab);
     const [audit, setAudit] = useState<{ createdAt?: string; createdBy?: string; updatedAt?: string; updatedBy?: string }>({});
     const pendingFocusField = useRef<string | null>(null);
     // Values "Discard" resets to: blank for create, the last loaded record for edit.
@@ -410,22 +411,6 @@ export default function OrganizationForm({
         setIsDirty(true);
     };
 
-    // ── Calculation of completion progress ────────────────────────────────────
-    const progressCount = useMemo(() => {
-        let count = 0;
-        if (form.organizationName.trim()) count++;
-        if (form.natureOfBusiness) count++;
-        if (form.accountStatus) count++;
-        if (form.typeOfEntity) count++;
-        if (form.customerType) count++;
-        if (form.sapCodeTallyId.trim()) count++;
-        if (form.leadSource) count++;
-        if (form.tradeName?.trim()) count++;
-        if (form.annualTurnover) count++;
-        if (form.addDescriptionAndScope.trim()) count++;
-        return Math.min(count, 10);
-    }, [form]);
-
     // ── Submit logic with Zod Validation ──────────────────────────────────────
     /** The values a save sends: the local mirror with the form's values on top, normalised. */
     const buildSubmitData = (): OrganizationFormData => {
@@ -547,16 +532,6 @@ export default function OrganizationForm({
     // While dirty, CommonFormLayout asks "Keep Editing" / "Discard & Leave" before this runs.
     const handleDiscard = () => router.push(ROUTES.ORGANIZATIONS);
 
-    // ─── Tabs Configuration (derived from ORGANIZATION_FORM_TABS) ───────────────
-    const tabs = useMemo(() => [
-        {
-            ...ORGANIZATION_FORM_TABS[0],
-            badge: `${progressCount}/10 done`,
-        },
-        ORGANIZATION_FORM_TABS[1],
-        ORGANIZATION_FORM_TABS[2],
-    ], [progressCount]);
-
     return (
         <FormProvider {...methods}>
             <FormConfigProvider module="organizations">
@@ -565,7 +540,7 @@ export default function OrganizationForm({
                     isDirty={isDirty}
                     onDiscard={handleGuardDiscard}
                     breadcrumbItems={breadcrumbItems || defaultBreadcrumbs}
-                    tabs={tabs}
+                    tabs={ORGANIZATION_FORM_TABS}
                     activeTab={activeTab}
                     onTabChange={(tabId) => setActiveTab(tabId as TabKey)}
                     onCancel={handleDiscard}

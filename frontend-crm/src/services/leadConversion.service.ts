@@ -111,7 +111,6 @@ export function buildConvertLeadDefaults(lead: Lead): ConvertLeadFormValues {
         contactAssignedTo: lead.assignedTo,
 
         productCategory: lead.productCategory ?? [],
-        principalCompany: '',
         referredBy: lead.referredBy ?? '',
         opportunityType: 'New Business',
         nextFollowupDate: lead.nextFollowupDate,
@@ -120,7 +119,6 @@ export function buildConvertLeadDefaults(lead: Lead): ConvertLeadFormValues {
         opportunityDescription: lead.remarks ?? '',
         opportunityLeadSource: lead.leadSource ?? '',
         opportunityAssignedTo: lead.assignedTo,
-        copyActivitiesTo: [],
         // Other fields an admin may put on Convert Lead start from what the conversion would carry over from the lead.
         extraFields: {
             contacts: {},

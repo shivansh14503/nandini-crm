@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useMemo, useCallback } from 'react';
+import { useResetTab } from '@/hooks/useResetTab';
 import { useRouter } from 'next/navigation';
 import ConfirmationNumberOutlinedIcon from '@mui/icons-material/ConfirmationNumberOutlined';
 import PersonOutlinedIcon from '@mui/icons-material/PersonOutlined';
@@ -65,7 +66,7 @@ export function TicketsMasterView() {
     const listLoading = !embeddedInSearch && listPending;
     const allTickets = useSearchScopedRows(allTicketsLoaded);
     const bulkDeleteMutation = useBulkDeleteTickets();
-    const [activeTab, setActiveTab] = useState<TicketFilterTab>('all');
+    const [activeTab, setActiveTab] = useResetTab<TicketFilterTab>('all');
     const [searchQuery, setSearchQuery] = useState('');
     const [selectedIds, setSelectedIds] = useState<string[]>([]);
     const [page, setPage] = useState(0);

@@ -2,6 +2,7 @@
 
 import { NO_PAST_DATES } from '@/utils/pastDates';
 import React, { useState, useCallback, useEffect, useRef } from 'react';
+import { useResetTab } from '@/hooks/useResetTab';
 import { followUpEditIssues } from '../forms/FollowUpDecision';
 import { useRouter } from 'next/navigation';
 import { FormProvider } from 'react-hook-form';
@@ -119,7 +120,7 @@ export default function OpportunityForm({
     breadcrumbItems,
 }: OpportunityFormProps) {
     const router = useRouter();
-    const [activeTab, setActiveTab] = useState<OpportunityTabKey>('basic');
+    const [activeTab, setActiveTab] = useResetTab<OpportunityTabKey>('basic');
     const [audit, setAudit] = useState<RecordAuditStamp>();
     const [recordCode, setRecordCode] = useState('');
     const showNumber = useShowRecordNumber();

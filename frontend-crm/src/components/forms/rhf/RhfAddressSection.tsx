@@ -175,7 +175,7 @@ export function RhfAddressSection<T extends FieldValues>({
                 gap: { xs: 3, md: 4 },
             }}
         >
-            {/* ── Left Column: Billing / Primary Address ── */}
+            {/* ── Left Column: Billing Address ── */}
             <Box sx={columnSx}>
                 <Box sx={headerRowSx}>
                     <SectionLabel
@@ -222,7 +222,7 @@ export function RhfAddressSection<T extends FieldValues>({
                 </FormGrid>
             </Box>
 
-            {/* ── Right Column: Shipping / Other Address ── */}
+            {/* ── Right Column: Shipping Address ── */}
             <Box sx={columnSx}>
                 <Box sx={headerRowSx}>
                     <SectionLabel

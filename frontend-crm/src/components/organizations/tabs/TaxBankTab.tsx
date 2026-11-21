@@ -36,26 +36,25 @@ function TaxBankTabInner({ form, set }: TaxBankTabProps) {
     const registrationType = useWatch({ control, name: 'registrationType' }) ?? form?.registrationType ?? '';
     const gstNumber = useWatch({ control, name: 'gstNumber' }) ?? form?.gstNumber ?? '';
 
-    // Synchronize registrationType changes
+    // Mirror into the parent state only on a real change: `set` marks the form dirty, so opening the tab must not call it.
     React.useEffect(() => {
-        if (set && registrationType) {
+        if (set && registrationType && registrationType !== form?.registrationType) {
             set('registrationType', registrationType);
         }
-        // Only 'Registered' / SEZ carry a GSTIN (the API drops it for every other type), so the field hides and clears.
-        if (registrationType && !isGstRegistrationType(registrationType)) {
-            setValue('gstNumber', '', { shouldValidate: true });
-            if (set) {
-                set('gstNumber', '');
-            }
-        }
-    }, [registrationType, setValue, set]);
+    }, [registrationType, set, form?.registrationType]);
 
-    // Synchronize gstNumber changes with external set callback if provided
+    // Only 'Registered' / SEZ carry a GSTIN (the API drops it for every other type), so the field hides and clears.
     React.useEffect(() => {
-        if (set && gstNumber !== undefined) {
+        if (registrationType && !isGstRegistrationType(registrationType) && gstNumber) {
+            setValue('gstNumber', '', { shouldValidate: true });
+        }
+    }, [registrationType, gstNumber, setValue]);
+
+    React.useEffect(() => {
+        if (set && gstNumber !== undefined && gstNumber !== (form?.gstNumber ?? '')) {
             set('gstNumber', gstNumber);
         }
-    }, [gstNumber, set]);
+    }, [gstNumber, set, form?.gstNumber]);
 
     return (
         <Box sx={{ p: { xs: 2.5, md: 3.5 }, display: 'flex', flexDirection: 'column', gap: 3.5 }}>

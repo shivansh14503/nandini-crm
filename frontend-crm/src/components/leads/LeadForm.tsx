@@ -2,6 +2,7 @@
 
 import { NO_PAST_DATES } from '@/utils/pastDates';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { useResetTab } from '@/hooks/useResetTab';
 import { followUpEditIssues, followUpSlotIssues, type FollowUpDecision } from '../forms/FollowUpDecision';
 import { useLeadRatingConfig } from '@/utils/leadRating';
 import { useRouter } from 'next/navigation';
@@ -121,7 +122,7 @@ export default function LeadForm({
     breadcrumbItems,
 }: LeadFormProps) {
     const router = useRouter();
-    const [activeTab, setActiveTab] = useState<LeadTabKey>('overview');
+    const [activeTab, setActiveTab] = useResetTab<LeadTabKey>('overview');
     const [audit, setAudit] = useState<RecordAuditStamp>();
     const [recordCode, setRecordCode] = useState('');
     const showNumber = useShowRecordNumber();

@@ -172,7 +172,7 @@ function opportunityPayload(values: ConvertLeadInput, lead: LeadRow, organizatio
         type: values.opportunityType,
         salesStage: NEW_OPPORTUNITY_STAGE,
         leadSource: values.opportunityLeadSource,
-        leadGivenBy: values.principalCompany || values.referredBy || lead.createdBy,
+        leadGivenBy: values.referredBy || lead.createdBy,
         nextFollowupDate: values.nextFollowupDate,
         nextFollowupTime: values.nextFollowupTime,
         followupType: values.followupType,
@@ -285,7 +285,6 @@ export async function convertLead(leadId: string, body: unknown, user: AuthUser)
                 contactId: contact.id,
                 contactCreated: !existingContact,
                 opportunityId: opportunity.id,
-                copyActivitiesTo: values.copyActivitiesTo,
             },
         });
 

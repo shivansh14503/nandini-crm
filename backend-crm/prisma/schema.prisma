@@ -4,7 +4,7 @@
 // Contracts mirror frontend-crm/src/types/*.types.ts; service mappers translate rows to those shapes.
 //
 // SQL Server rules applied throughout:
-// â€¢ No scalar lists: string arrays (productCategory, communicationType, copyActivitiesTo, partnerCompanies)
+// â€¢ No scalar lists: string arrays (productCategory, communicationType, partnerCompanies)
 //   are JSON in NVarChar(Max); repeating objects (emails, line items) are child tables.
 // â€¢ No multiple cascade paths (error 1785): every cross-entity FK is NoAction/NoAction. Only owned
 //   children (emails, line items) cascade from their single parent.

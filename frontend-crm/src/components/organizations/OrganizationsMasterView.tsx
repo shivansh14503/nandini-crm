@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useMemo, useCallback } from 'react';
+import { useResetTab } from '@/hooks/useResetTab';
 import { useRouter } from 'next/navigation';
 import { Button } from '@mui/material';
 import FileDownloadOutlinedIcon from '@mui/icons-material/FileDownloadOutlined';
@@ -40,7 +41,7 @@ export function OrganizationsMasterView() {
     const allOrganizations = useSearchScopedRows(allOrganizationsLoaded);
     const bulkDeleteMutation = useBulkDeleteOrganizations();
     const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-    const [activeTab, setActiveTab] = useState<FilterTab>('all');
+    const [activeTab, setActiveTab] = useResetTab<FilterTab>('all');
     const [searchQuery, setSearchQuery] = useState('');
     const [rowsPerPage, setRowsPerPage] = useState<number>(25);
     const [currentPage, setCurrentPage] = useState<number>(1);

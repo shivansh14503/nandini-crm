@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import { useResetTab } from '@/hooks/useResetTab';
 import {
     Drawer,
     useMediaQuery,
@@ -99,7 +100,7 @@ export function EntityDetailDrawer({
     module,
 }: EntityDetailDrawerProps) {
     const moduleColor = module ? getModuleColor(module) : undefined;
-    const [currentTab, setCurrentTab] = useState<number>(defaultTabIndex);
+    const [currentTab, setCurrentTab] = useResetTab<number>(defaultTabIndex);
     const [toastMessage, setToastMessage] = useState<string | null>(null);
     const [internalCollapsed, setInternalCollapsed] = useState<boolean>(false);
     const stack = useDrawerStack();

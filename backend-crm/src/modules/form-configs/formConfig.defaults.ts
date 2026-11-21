@@ -706,8 +706,8 @@ const RAW_DEFAULT_FIELDS: DefaultField[] = [
     ...section('leads', 'overview', 'NOTES', [
         t('remarks', 'Remarks', { type: 'textarea', soft: true }),
     ]),
-    ...section('leads', 'address', 'PRIMARY ADDRESS', addressFields('primary', 'optional')),
-    ...section('leads', 'address', 'OTHER ADDRESS', addressFields('other', 'optional')),
+    ...section('leads', 'address', 'BILLING ADDRESS', addressFields('primary', 'optional')),
+    ...section('leads', 'address', 'SHIPPING ADDRESS', addressFields('other', 'optional')),
 
     // ── Contacts ──
     ...section('contacts', 'overview', 'Contact Details & Association', [

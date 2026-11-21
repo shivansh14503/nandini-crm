@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useEffect, useRef } from 'react';
-import { useFormContext, useWatch, type FieldValues } from 'react-hook-form';
+import { get, useFormContext, useWatch, type FieldValues } from 'react-hook-form';
 import { useFormMode } from '@/context/FormModeContext';
 import { useFormConfigs } from '@/hooks/queries/useFormConfigs';
 import { useCodedFieldDefaults } from '@/context/CodedFieldDefaultsContext';
@@ -56,8 +56,9 @@ const TYPE_SIZE: Partial<Record<FormFieldDefinitionDto['fieldType'], FieldSize>>
 export function DynamicFormField({ field, required, applyDefault = true, name: nameOverride }: DynamicFormFieldProps) {
     const configs = useFormConfigs();
     const { mode } = useFormMode();
-    const { getValues, setValue } = useFormContext<FieldValues>();
+    const { control: formControl, getValues, setValue, resetField } = useFormContext<FieldValues>();
     const name = nameOverride ?? fieldFormName(field);
+    const emptyValue = field.fieldType === 'multiselect' ? [] : field.fieldType === 'checkbox' ? false : '';
     // Form builder Live Preview: a built-in field without overrides shows the texts its hand-built form codes.
     const coded = useCodedFieldDefaults(field.isSystem ? field.fieldKey : undefined);
     const category = findCategory(configs, field.dropdownCategoryKey);
@@ -66,6 +67,7 @@ export function DynamicFormField({ field, required, applyDefault = true, name: n
 
     // Last default this field applied: while the value still equals it (nobody changed it), a changed default
     // replaces it, and a removed one clears it so the placeholder shows (e.g. in the admin Live Preview).
+    // Applied with `resetField`, so the value also becomes the field's default and an untouched form stays clean.
     const appliedDefault = useRef<string | undefined>(undefined);
     useEffect(() => {
         if (!applyDefault || mode !== 'create') return;
@@ -75,10 +77,10 @@ export function DynamicFormField({ field, required, applyDefault = true, name: n
         const stillApplied = appliedDefault.current !== undefined && JSON.stringify(current) === appliedDefault.current;
         if (!isEmpty && !stillApplied) return;
         if (fallback !== undefined) {
-            setValue(name, fallback, { shouldDirty: false });
+            resetField(name, { defaultValue: fallback });
             appliedDefault.current = JSON.stringify(fallback);
         } else if (stillApplied) {
-            setValue(name, field.fieldType === 'multiselect' ? [] : field.fieldType === 'checkbox' ? false : '', { shouldDirty: false });
+            resetField(name, { defaultValue: emptyValue });
             appliedDefault.current = undefined;
         }
         // Only on mount / when the definition changes.
@@ -89,6 +91,23 @@ export function DynamicFormField({ field, required, applyDefault = true, name: n
     // becomes a one-item list, and a list keeps its first pick, so the control never gets the wrong shape.
     // Watched (not read once) so values loaded later by `reset()` for an existing record are fixed up too.
     const watched: unknown = useWatch({ name });
+
+    // Custom fields usually aren't in a form's (or a loaded record's) values, so the input registers as
+    // `undefined` and the form counts as changed against its defaults ("Unsaved Changes" with nothing typed).
+    // Such a field starts empty, and that empty value becomes its default. Re-checked when the defaults change
+    // (an existing record loaded by `reset()`), since the input then re-registers without a default again.
+    const fieldDefault: unknown = get(formControl._defaultValues, name);
+    useEffect(() => {
+        const current: unknown = getValues(name);
+        if (current === undefined) {
+            resetField(name, { defaultValue: fieldDefault ?? emptyValue });
+        } else if (fieldDefault === undefined && JSON.stringify(current) === JSON.stringify(emptyValue)) {
+            resetField(name, { defaultValue: emptyValue });
+        }
+        // `emptyValue` follows `field.fieldType`.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [watched, fieldDefault, name, field.fieldType, getValues, resetField]);
+
     useEffect(() => {
         if (field.fieldType === 'multiselect' && typeof watched === 'string') {
             setValue(name, watched.split(',').map((v) => v.trim()).filter(Boolean), { shouldDirty: false });

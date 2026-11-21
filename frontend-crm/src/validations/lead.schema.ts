@@ -51,18 +51,18 @@ export const leadFormSchema = z.object({
     noOfEmployee: optionalString,
     referredBy: optionalString,
 
-    // Primary Address
-    primaryAddress: optionalText('Primary Street', L.address),
-    primaryCity: optionalText('Primary City', L.shortText),
-    primaryState: optionalText('Primary State', L.shortText),
+    // Billing Address
+    primaryAddress: optionalText('Billing Street', L.address),
+    primaryCity: optionalText('Billing City', L.shortText),
+    primaryState: optionalText('Billing State', L.shortText),
     primaryPostalCode: zodPostalCodeOptional,
     primaryCountry: optionalString.default('India'),
     primaryLatitude: optionalString,
 
-    // Other Address
-    otherAddress: optionalText('Other Street', L.address),
-    otherCity: optionalText('Other City', L.shortText),
-    otherState: optionalText('Other State', L.shortText),
+    // Shipping Address
+    otherAddress: optionalText('Shipping Street', L.address),
+    otherCity: optionalText('Shipping City', L.shortText),
+    otherState: optionalText('Shipping State', L.shortText),
     otherPostalCode: zodPostalCodeOptional,
     otherCountry: optionalString.default('India'),
     copyAddressFromLeft: z.boolean().default(false),

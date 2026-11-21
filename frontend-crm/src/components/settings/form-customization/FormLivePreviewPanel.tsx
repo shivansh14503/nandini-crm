@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useEffect, useMemo, useState } from 'react';
+import { useResetTab } from '@/hooks/useResetTab';
 import { Box, Typography } from '@mui/material';
 import VisibilityOutlinedIcon from '@mui/icons-material/VisibilityOutlined';
 import { FormProvider, useForm } from 'react-hook-form';
@@ -36,7 +37,7 @@ export interface FormLivePreviewPanelProps {
 export function FormLivePreviewPanel({ module, configs, unsavedCount = 0, unsavedTabs, onlyFields, gridLabel }: FormLivePreviewPanelProps) {
     const convertOnly = Boolean(onlyFields);
     const tabs = useMemo(() => (convertOnly ? [] : (configs.moduleTabs[module] ?? [])), [configs, module, convertOnly]);
-    const [selectedTab, setTabKey] = useState(tabs[0]?.key ?? 'overview');
+    const [selectedTab, setTabKey] = useResetTab(tabs[0]?.key ?? 'overview');
     const tabKey = tabs.some((t) => t.key === selectedTab) ? selectedTab : (tabs[0]?.key ?? 'overview');
     const methods = useForm({ defaultValues: { customFields: {} } as Record<string, unknown>, mode: 'onTouched' });
 

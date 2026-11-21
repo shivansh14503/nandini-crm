@@ -40,7 +40,7 @@ export interface LeadFormData {
     noOfEmployee?: string;
     referredBy?: string;
 
-    // Primary Address - Left Column
+    // Billing Address - Left Column
     primaryAddress?: string;
     primaryCity?: string;
     primaryState?: string;
@@ -48,7 +48,7 @@ export interface LeadFormData {
     primaryCountry?: string;
     primaryLatitude?: string;
 
-    // Other Address - Right Column
+    // Shipping Address - Right Column
     otherAddress?: string;
     otherCity?: string;
     otherState?: string;

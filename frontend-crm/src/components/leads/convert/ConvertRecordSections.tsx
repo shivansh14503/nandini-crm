@@ -42,8 +42,6 @@ export interface ConvertRecordSectionsProps {
     module: ConvertModule;
     /** Convert Lead's own input of each field it has one for, by the module's `fieldKey`. Other fields are drawn from their configuration. */
     fields: Readonly<Record<string, React.ReactNode>>;
-    /** Conversion-only inputs (no field on the module's form): added after the record's own fields. */
-    extra?: React.ReactNode;
 }
 
 /**
@@ -51,7 +49,7 @@ export interface ConvertRecordSectionsProps {
  * that form (named as configured), fields in the configured order and at the width they have there. Must be rendered
  * inside the record's borrowed FormConfigProvider.
  */
-export function ConvertRecordSections({ module, fields, extra }: ConvertRecordSectionsProps) {
+export function ConvertRecordSections({ module, fields }: ConvertRecordSectionsProps) {
     const configs = useFormConfigs();
     const sections = convertSections(configs, module);
     // Before the configuration loads, Convert Lead's own inputs show in one grid.
@@ -68,7 +66,7 @@ export function ConvertRecordSections({ module, fields, extra }: ConvertRecordSe
 
     return (
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5 }}>
-            {groups.map((section, index) => (
+            {groups.map((section) => (
                 <Box key={section.sectionKey}>
                     {/* Every section is named (as Convert Lead names it); a section with no field turned on isn't listed at all. */}
                     {section.sectionLabel && <Typography sx={sectionHeadingSx}>{section.sectionLabel}</Typography>}
@@ -76,11 +74,9 @@ export function ConvertRecordSections({ module, fields, extra }: ConvertRecordSe
                         {section.nodes.map(([key, node]) => (
                             <React.Fragment key={key}>{node}</React.Fragment>
                         ))}
-                        {index === groups.length - 1 && extra}
                     </FormGrid>
                 </Box>
             ))}
-            {groups.length === 0 && extra && <FormGrid columns={3}>{extra}</FormGrid>}
         </Box>
     );
 }

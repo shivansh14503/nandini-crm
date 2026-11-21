@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useMemo, useCallback } from 'react';
+import { useResetTab } from '@/hooks/useResetTab';
 import { useRouter } from 'next/navigation';
 import RequestQuoteOutlinedIcon from '@mui/icons-material/RequestQuoteOutlined';
 import DraftsOutlinedIcon from '@mui/icons-material/DraftsOutlined';
@@ -40,7 +41,7 @@ export function QuotationsMasterView() {
     const allQuotations = useSearchScopedRows(allQuotationsLoaded);
     const deleteMutation = useDeleteQuotation();
     const bulkDeleteMutation = useBulkDeleteQuotations();
-    const [activeTab, setActiveTab] = useState<QuotationFilterTab>('all');
+    const [activeTab, setActiveTab] = useResetTab<QuotationFilterTab>('all');
     const [searchQuery, setSearchQuery] = useState('');
     const [selectedIds, setSelectedIds] = useState<string[]>([]);
     const [page, setPage] = useState(0);

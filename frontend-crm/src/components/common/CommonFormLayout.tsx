@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Box, Paper, Typography, type SxProps, type Theme } from '@mui/material';
 import { type BreadcrumbItem } from './AppBreadcrumbs';
 import { FormHeader } from '../forms/FormHeader';
@@ -208,6 +208,9 @@ export function CommonFormLayout({
     const configCtx = useFormConfigContext();
     /** Selected custom tab, remembered with the form's own tab at that moment. */
     const [customSelection, setCustomSelection] = useState<{ key: string; basis: string | undefined } | null>(null);
+    // Pages stay mounted but hidden after you leave (cacheComponents): open on the form's own tab each time it's shown.
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- only an effect sees the page being shown again
+    useLayoutEffect(() => setCustomSelection(null), []);
     const customTabs = useMemo(() => {
         if (!configCtx?.configs) return [];
         const own = new Set((tabs ?? []).map((t) => t.id));

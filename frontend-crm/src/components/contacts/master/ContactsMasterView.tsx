@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useMemo, useCallback } from 'react';
+import { useResetTab } from '@/hooks/useResetTab';
 import { useRouter } from 'next/navigation';
 import PersonOutlinedIcon from '@mui/icons-material/PersonOutlined';
 import StarBorderIcon from '@mui/icons-material/StarBorder';
@@ -37,7 +38,7 @@ export function ContactsMasterView() {
     const listLoading = !embeddedInSearch && listPending;
     const allContacts = useSearchScopedRows(allContactsLoaded);
     const bulkDeleteMutation = useBulkDeleteContacts();
-    const [activeTab, setActiveTab] = useState<ContactFilterTab>('all');
+    const [activeTab, setActiveTab] = useResetTab<ContactFilterTab>('all');
     const [searchQuery, setSearchQuery] = useState('');
     const [selectedIds, setSelectedIds] = useState<string[]>([]);
     const [page, setPage] = useState(0);

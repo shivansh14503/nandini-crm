@@ -1,6 +1,5 @@
 import { z } from 'zod';
-import { FIELD_MAX_LENGTH as L } from '../config/fieldLimits';
-import { requiredString, optionalString, optionalText } from './common';
+import { requiredString, optionalString } from './common';
 import { contactFormSchema } from './contact.schema';
 import { organizationFieldsSchema } from './organization.schema';
 import { opportunityFormSchema } from './opportunity.schema';
@@ -46,8 +45,6 @@ export const convertLeadFormSchema = z.object({
 
     // ── Opportunity (Opportunity form rules) ───────────────────────────────────
     productCategory: opportunity.productCategory,
-    // Conversion only (no Opportunity form field).
-    principalCompany: optionalText('Principal Company', L.organizationName),
     referredBy: opportunity.referredBy,
     opportunityType: opportunity.type,
     nextFollowupDate: opportunity.nextFollowupDate,
@@ -56,8 +53,6 @@ export const convertLeadFormSchema = z.object({
     opportunityDescription: opportunity.remarks,
     opportunityLeadSource: opportunity.leadSource,
     opportunityAssignedTo: opportunity.assignedTo,
-    // Conversion only.
-    copyActivitiesTo: z.array(z.string()),
 
     // Other fields an admin put on Convert Lead (Form Builder › Convert Lead), per record by `fieldKey`. Their
     // "required" rule is checked from the configuration (convertRequiredIssues); the API checks the rest.

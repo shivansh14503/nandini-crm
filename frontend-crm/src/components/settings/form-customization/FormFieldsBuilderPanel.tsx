@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useCallback, useMemo, useState } from 'react';
+import { useResetTab } from '@/hooks/useResetTab';
 import {
     Box,
     Button,
@@ -149,7 +150,7 @@ export const CONVERT_GRID_COLUMNS = '28px minmax(180px, 1.6fr) 120px 92px 70px 7
 /** Every field of a module grouped by tab and section, with inline toggles and the field editor. */
 export function FormFieldsBuilderPanel({ module, configs, canEdit, notify, unsavedTabs }: FormFieldsBuilderPanelProps) {
     const tabs = useMemo(() => configs.moduleTabs[module] ?? [], [configs, module]);
-    const [selectedTab, setTabKey] = useState(tabs[0]?.key ?? 'overview');
+    const [selectedTab, setTabKey] = useResetTab(tabs[0]?.key ?? 'overview');
     // Falls back to the first tab when the module changes.
     const tabKey = tabs.some((t) => t.key === selectedTab) ? selectedTab : (tabs[0]?.key ?? 'overview');
     const [editor, setEditor] = useState<{ open: boolean; field?: FormFieldDefinitionDto; sectionKey?: string }>({ open: false });

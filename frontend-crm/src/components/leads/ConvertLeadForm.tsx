@@ -78,7 +78,6 @@ const EMPTY_DEFAULTS: ConvertLeadFormValues = {
     contactAssignedTo: '',
 
     productCategory: ['Biz Analyst'],
-    principalCompany: '',
     referredBy: '',
     opportunityType: 'New Business',
     nextFollowupDate: '',
@@ -87,7 +86,6 @@ const EMPTY_DEFAULTS: ConvertLeadFormValues = {
     opportunityDescription: '',
     opportunityLeadSource: 'Website Enquiry',
     opportunityAssignedTo: '',
-    copyActivitiesTo: [],
     extraFields: { contacts: {}, organizations: {}, opportunities: {} },
 };
 

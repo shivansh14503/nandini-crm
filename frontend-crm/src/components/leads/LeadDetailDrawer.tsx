@@ -385,13 +385,13 @@ export function LeadDetailDrawer({
                 ),
                 address: (
                     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                        {/* Primary Address Card */}
+                        {/* Billing Address Card */}
                         <DrawerSectionCard
-                            title="PRIMARY REGISTERED ADDRESS"
+                            title="BILLING ADDRESS"
                             icon={<PlaceOutlinedIcon sx={{ fontSize: 18, color: 'var(--crm-text-blue-600)' }} />}
                         >
                             <Typography sx={{ fontSize: '0.84rem', color: 'var(--mui-palette-text-primary)', fontWeight: 500, lineHeight: 1.4 }}>
-                                {l.primaryAddress || 'No primary address specified'}
+                                {l.primaryAddress || 'No billing address specified'}
                             </Typography>
                             <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2, mt: 1.2, pt: 1, borderTop: '1px solid var(--mui-palette-border-light)' }}>
                                 <Box>
@@ -415,13 +415,13 @@ export function LeadDetailDrawer({
                             </Box>
                         </DrawerSectionCard>
 
-                        {/* Other Address Card */}
+                        {/* Shipping Address Card */}
                         <DrawerSectionCard
-                            title="OTHER / DISPATCH ADDRESS"
+                            title="SHIPPING ADDRESS"
                             icon={<BusinessOutlinedIcon sx={{ fontSize: 18, color: 'var(--mui-palette-text-secondary)' }} />}
                         >
                             <Typography sx={{ fontSize: '0.84rem', color: 'var(--mui-palette-text-primary)', fontWeight: 500, lineHeight: 1.4 }}>
-                                {l.otherAddress || 'Same as primary address or not provided'}
+                                {l.otherAddress || 'Same as billing address or not provided'}
                             </Typography>
                             <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2, mt: 1.2, pt: 1, borderTop: '1px solid var(--mui-palette-border-light)' }}>
                                 <Box>

@@ -11,8 +11,6 @@ export function LeadAddressSection() {
     return (
         <Box sx={{ p: { xs: 2.5, md: 3.5 } }}>
             <RhfAddressSection<LeadFormData>
-                billingTitle="PRIMARY ADDRESS"
-                shippingTitle="OTHER ADDRESS"
                 streetLabel="Street"
                 shippingStreetLabel="Street"
                 copyFieldName="copyAddressFromLeft"
