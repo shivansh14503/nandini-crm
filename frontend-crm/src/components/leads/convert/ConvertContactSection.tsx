@@ -12,7 +12,6 @@ import {
     RhfCheckbox,
     RhfChipGroup,
     RhfEmailList,
-    RhfLookup,
     RhfSelect,
     RhfTextField,
     RhfPhoneField,
@@ -49,7 +48,6 @@ const CONTACT_FIELDS = [
     'isPrimaryContact',
     'doNotCall',
     'contactDescription',
-    'contactAssignedTo',
 ] as const satisfies readonly (keyof F)[];
 
 const contactLabel = (c: Contact) => `${c.name} (${c.mobile})`;
@@ -91,7 +89,6 @@ export function ConvertContactSection() {
         setValue('isPrimaryContact', contact.isPrimaryContact, opts);
         setValue('doNotCall', contact.doNotCall, opts);
         setValue('contactDescription', contact.addDescription ?? '', opts);
-        setValue('contactAssignedTo', contact.assignedTo, opts);
         // The other fields an admin put on Convert Lead show the contact's own values.
         setValue('extraFields.contacts', extraValuesFrom(configs, 'contacts', contact as unknown as Record<string, unknown>), opts);
     };
@@ -167,7 +164,6 @@ export function ConvertContactSection() {
                             department: (
                                 <RhfSelect<F> name="department" label="Department" options={getOptions('contact_department', CONTACT_DEPARTMENTS)} placeholder="Select Department" />
                             ),
-                            assignedTo: <RhfLookup<F> name="contactAssignedTo" label="Assigned to" lookupType="user" required placeholder="Select assigned sales rep" />,
                             communicationType: (
                                 <RhfChipGroup<F>
                                     name="communicationType"

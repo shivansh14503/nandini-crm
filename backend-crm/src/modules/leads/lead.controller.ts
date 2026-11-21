@@ -11,6 +11,10 @@ export const leadController = {
 
     async convert(req: Request, res: Response): Promise<void> {
         const result = await convertLead(String(req.params.id), req.body, requireUser(req));
+        if (!result.opportunity) {
+            sendSuccess(res, result, 'Lead converted without an opportunity');
+            return;
+        }
         const shown = (await shownNumberModules()).has('opportunity');
         sendSuccess(res, result, shown ? `Lead converted to opportunity ${result.opportunity.opportunityCode}` : 'Lead converted to opportunity');
     },

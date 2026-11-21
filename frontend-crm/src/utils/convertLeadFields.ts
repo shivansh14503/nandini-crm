@@ -11,11 +11,14 @@ import { groupSections, isEmptyValue, moduleFields, type ConfigValidationIssue }
 
 type FieldShape = Pick<FormFieldDefinitionDto, 'fieldKey' | 'fieldType' | 'isSystem' | 'dropdownCategoryKey'>;
 
-/** Built-in fields the conversion fills in itself (from the lead or the linked records). */
+/**
+ * Built-in fields the conversion fills in itself (from the lead or the linked records). Assigned To is the lead's own
+ * Assigned To on every new record, so the module forms' Assigned To never reaches Convert Lead.
+ */
 const CONVERT_FILLED_FIELDS: Readonly<Record<ConvertModule, ReadonlySet<string>>> = {
-    contacts: new Set(),
-    organizations: new Set(['partnerCompany']),
-    opportunities: new Set(['contact', 'contactNumber', 'contactEmail', 'leadGivenBy']),
+    contacts: new Set(['assignedTo']),
+    organizations: new Set(['partnerCompany', 'assignedTo']),
+    opportunities: new Set(['contact', 'contactNumber', 'contactEmail', 'leadGivenBy', 'assignedTo']),
 };
 
 /** Whether Convert Lead has its own input for the field. */
@@ -185,13 +188,14 @@ const readPath = (values: unknown, path: string): unknown =>
 
 /**
  * "Required" of every field Convert Lead shows, as on the record's own form. A linked existing contact or
- * organization is taken as it is, so its fields aren't checked.
+ * organization is taken as it is, and a skipped opportunity isn't created, so their fields aren't checked.
  */
 export function convertRequiredIssues(configs: FormConfigsPayload | null | undefined, values: ConvertLeadFormValues): ConfigValidationIssue[] {
     const issues: ConfigValidationIssue[] = [];
     for (const record of Object.keys(CONVERT_FIELD_NAMES) as ConvertModule[]) {
         if (record === 'contacts' && values.existingContactId) continue;
         if (record === 'organizations' && values.existingOrganizationId) continue;
+        if (record === 'opportunities' && !values.createOpportunity) continue;
         for (const field of convertShownFields(configs, record)) {
             if (!field.isRequired || (field.isSystem && NOT_CHECKED_FOR_REQUIRED.has(field.fieldKey))) continue;
             const name = convertFieldName(record, field);

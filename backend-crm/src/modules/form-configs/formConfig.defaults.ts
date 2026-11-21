@@ -946,7 +946,6 @@ export const CONVERT_FIELD_NAMES: Readonly<Record<ConvertModuleKey, Readonly<Rec
         communicationType: 'communicationType',
         doNotCall: 'doNotCall',
         addDescription: 'contactDescription',
-        assignedTo: 'contactAssignedTo',
     },
     organizations: {
         organizationName: 'organizationName',
@@ -957,7 +956,6 @@ export const CONVERT_FIELD_NAMES: Readonly<Record<ConvertModuleKey, Readonly<Rec
         leadSource: 'leadSource',
         memberOf: 'memberOf',
         addDescriptionAndScope: 'organizationDescription',
-        assignedTo: 'organizationAssignedTo',
     },
     opportunities: {
         productCategory: 'productCategory',
@@ -968,15 +966,17 @@ export const CONVERT_FIELD_NAMES: Readonly<Record<ConvertModuleKey, Readonly<Rec
         nextFollowupDate: 'nextFollowupDate',
         followupType: 'followupType',
         remarks: 'opportunityDescription',
-        assignedTo: 'opportunityAssignedTo',
     },
 };
 
-/** Built-in fields the conversion fills in itself (from the lead or the linked records), so they can't be shown there. */
+/**
+ * Built-in fields the conversion fills in itself (from the lead or the linked records), so they can't be shown there.
+ * Assigned To is the lead's own Assigned To on every new record. Mirrors frontend-crm utils/convertLeadFields.ts.
+ */
 const CONVERT_FILLED_FIELDS: Readonly<Record<ConvertModuleKey, ReadonlySet<string>>> = {
-    contacts: new Set(),
-    organizations: new Set(['partnerCompany']),
-    opportunities: new Set(['contact', 'contactNumber', 'contactEmail', 'leadGivenBy']),
+    contacts: new Set(['assignedTo']),
+    organizations: new Set(['partnerCompany', 'assignedTo']),
+    opportunities: new Set(['contact', 'contactNumber', 'contactEmail', 'leadGivenBy', 'assignedTo']),
 };
 
 /**

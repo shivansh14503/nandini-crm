@@ -17,7 +17,7 @@ import { AppToast } from '../common/AppToast';
 import { setSaveFlash } from '@/utils/saveFlash';
 import { CommonFormLayout } from '../common/CommonFormLayout';
 import { BreadcrumbsSkeleton, FormCardSkeleton } from '../common/skeletons';
-import { SectionLabel, useRhfForm } from '@/components/forms';
+import { RhfCheckbox, SectionLabel, useRhfForm } from '@/components/forms';
 import { ROUTES } from '@/config/constants';
 import type { Lead } from '@/types/lead.types';
 import {
@@ -62,7 +62,6 @@ const EMPTY_DEFAULTS: ConvertLeadFormValues = {
     leadSource: '',
     memberOf: '',
     organizationDescription: '',
-    organizationAssignedTo: '',
 
     existingContactId: '',
     contactName: '',
@@ -75,8 +74,8 @@ const EMPTY_DEFAULTS: ConvertLeadFormValues = {
     communicationType: ['Call', 'Email'],
     doNotCall: false,
     contactDescription: '',
-    contactAssignedTo: '',
 
+    createOpportunity: true,
     productCategory: ['Biz Analyst'],
     referredBy: '',
     opportunityType: 'New Business',
@@ -85,7 +84,6 @@ const EMPTY_DEFAULTS: ConvertLeadFormValues = {
     followupType: 'Call',
     opportunityDescription: '',
     opportunityLeadSource: 'Website Enquiry',
-    opportunityAssignedTo: '',
     extraFields: { contacts: {}, organizations: {}, opportunities: {} },
 };
 
@@ -150,9 +148,10 @@ export function ConvertLeadForm({ leadId, breadcrumbItems }: ConvertLeadFormProp
             const contactNote = result.contactCreated
                 ? `Created contact "${result.contact.name}".`
                 : `Linked existing contact "${result.contact.name}".`;
+            const opportunityNote = result.opportunity ? '' : ' No opportunity was created.';
 
             reset(values);
-            setSaveFlash({ listPath: ROUTES.LEADS, message: `Lead converted successfully! ${orgNote} ${contactNote}`, severity: 'success', recordId: leadId });
+            setSaveFlash({ listPath: ROUTES.LEADS, message: `Lead converted successfully! ${orgNote} ${contactNote}${opportunityNote}`, severity: 'success', recordId: leadId });
             router.push(ROUTES.LEADS);
         } catch (err: unknown) {
             showToast(err instanceof Error ? err.message : 'Failed to convert lead.', 'error');
@@ -210,10 +209,15 @@ export function ConvertLeadForm({ leadId, breadcrumbItems }: ConvertLeadFormProp
 
                 <Divider sx={sectionDividerSx} />
 
-                <SectionLabel
-                    icon={<MonetizationOnOutlinedIcon sx={{ fontSize: 18 }} />}
-                    label="3. Create Opportunity"
-                />
+                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 2, flexWrap: 'wrap', mb: 1 }}>
+                    <SectionLabel
+                        icon={<MonetizationOnOutlinedIcon sx={{ fontSize: 18 }} />}
+                        label="3. Create Opportunity"
+                        sx={{ mb: 0 }}
+                    />
+                    {/* Off when the deal already has an opportunity: the lead converts without creating another. */}
+                    <RhfCheckbox<ConvertLeadFormValues> name="createOpportunity" label="Create a new opportunity" />
+                </Box>
                 <ConvertOpportunitySection />
             </CommonFormLayout>
         </FormProvider>

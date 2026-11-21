@@ -29,7 +29,8 @@ import { queueEmailVerification } from '../email-verification/emailVerification.
 export interface LeadConversionResult {
     organization: OrganizationDto;
     contact: ContactDto;
-    opportunity: OpportunityDto;
+    /** Null when the conversion skipped it (`createOpportunity: false`). */
+    opportunity: OpportunityDto | null;
     organizationCreated: boolean;
     contactCreated: boolean;
 }
@@ -104,7 +105,7 @@ function registrationTypeFor(lead: LeadRow): string | undefined {
     return lead.registrationType?.trim() || undefined;
 }
 
-/** Port of `toOrganizationPayload`; also keeps the organization owner the form collects. */
+/** Port of `toOrganizationPayload`; the organization goes to the lead's own Assigned To. */
 function organizationPayload(values: ConvertLeadInput, lead: LeadRow) {
     return {
         organizationName: values.organizationName,
@@ -120,7 +121,7 @@ function organizationPayload(values: ConvertLeadInput, lead: LeadRow) {
         addDescriptionAndScope: values.organizationDescription,
         accountVerified: false,
         provideSupport: 'No',
-        assignedTo: values.organizationAssignedTo,
+        assignedTo: lead.assignedTo,
         billingAddress: lead.primaryAddress,
         billingCity: lead.primaryCity,
         billingState: lead.primaryState,
@@ -132,8 +133,8 @@ function organizationPayload(values: ConvertLeadInput, lead: LeadRow) {
     };
 }
 
-/** Port of `toContactPayload`. */
-function contactPayload(values: ConvertLeadInput, organization: Pick<OrganizationDto, 'id' | 'organizationName'>) {
+/** Port of `toContactPayload`; the contact goes to the lead's own Assigned To. */
+function contactPayload(values: ConvertLeadInput, lead: LeadRow, organization: Pick<OrganizationDto, 'id' | 'organizationName'>) {
     return {
         name: values.contactName,
         organizationName: organization.organizationName,
@@ -141,7 +142,7 @@ function contactPayload(values: ConvertLeadInput, organization: Pick<Organizatio
         mobile: values.contactMobile,
         phone3: values.contactPhone3,
         emailAddress: values.contactEmails,
-        assignedTo: values.contactAssignedTo,
+        assignedTo: lead.assignedTo,
         isPrimaryContact: values.isPrimaryContact,
         designation: values.designation,
         department: values.department,
@@ -178,7 +179,7 @@ function opportunityPayload(values: ConvertLeadInput, lead: LeadRow, organizatio
         followupType: values.followupType,
         remarks: description && description.length >= 3 ? description : (lead.remarks ?? undefined),
         description,
-        assignedTo: values.opportunityAssignedTo,
+        assignedTo: lead.assignedTo,
         commission: NEW_OPPORTUNITY_COMMISSION,
         lineItems: [],
         lumpSumDiscount: 0,
@@ -187,14 +188,14 @@ function opportunityPayload(values: ConvertLeadInput, lead: LeadRow, organizatio
 
 /**
  * POST /api/leads/:id/convert — the frontend's `convertLead` as one serializable transaction: find or create the
- * Organization (by id, then name) and the Contact (by id, then mobile), create the Opportunity, mark the lead
- * Converted with links to all three, and audit it. Any failure rolls the whole conversion back. The lead's record
+ * Organization (by id, then name) and the Contact (by id, then mobile), create the Opportunity (unless
+ * `createOpportunity` is off), mark the lead Converted with links to them, and audit it. Any failure rolls the whole conversion back. The lead's record
  * lock (shared with lead edits) also makes concurrent conversions of one lead queue instead of deadlocking.
  */
 export async function convertLead(leadId: string, body: unknown, user: AuthUser): Promise<LeadConversionResult> {
     const values = convertLeadSchema.parse(body);
     // The new opportunity's follow-up is a fresh value, so it can't be in the past.
-    assertNotInPast([nextFollowupCheck(values)]);
+    if (values.createOpportunity) assertNotInPast([nextFollowupCheck(values)]);
     // Loaded before the transaction (a cache miss queries through the shared client).
     const [contactConfig, organizationConfig, opportunityConfig] = await Promise.all([
         loadModuleFieldConfig('contacts'),
@@ -214,13 +215,18 @@ export async function convertLead(leadId: string, body: unknown, user: AuthUser)
         // Each new record is held to its own form's rules for the fields Convert Lead shows, with the extra fields an
         // admin put there merged in. An existing contact or organization is linked as it is, so it isn't checked.
         const extras = values.extraFields;
-        const contactDraft = withExtraFields(contactPayload(values, { id: '', organizationName: values.organizationName }), contactConfig, 'contacts', extras.contacts);
+        const contactDraft = withExtraFields(contactPayload(values, lead, { id: '', organizationName: values.organizationName }), contactConfig, 'contacts', extras.contacts);
         const organizationDraft = withExtraFields(organizationPayload(values, lead), organizationConfig, 'organizations', extras.organizations);
-        const opportunityDraft = withExtraFields(opportunityPayload(values, lead, null, null), opportunityConfig, 'opportunities', extras.opportunities);
         const contactCheck = existingContact ? null : checkConvertRecord(contactConfig, 'contacts', contactDraft);
         const organizationCheck = existingOrganization ? null : checkConvertRecord(organizationConfig, 'organizations', organizationDraft);
-        const opportunityCheck = checkConvertRecord(opportunityConfig, 'opportunities', opportunityDraft);
-        throwFieldIssues([...(contactCheck?.issues ?? []), ...(organizationCheck?.issues ?? []), ...opportunityCheck.issues]);
+        const opportunityCheck = values.createOpportunity
+            ? checkConvertRecord(
+                  opportunityConfig,
+                  'opportunities',
+                  withExtraFields(opportunityPayload(values, lead, null, null), opportunityConfig, 'opportunities', extras.opportunities),
+              )
+            : null;
+        throwFieldIssues([...(contactCheck?.issues ?? []), ...(organizationCheck?.issues ?? []), ...(opportunityCheck?.issues ?? [])]);
 
         const organization = existingOrganization
             ? toOrganizationDto(existingOrganization, { isMyAccount: existingOrganization.assignedTo === user.username, isRecentlyViewed: false })
@@ -238,20 +244,22 @@ export async function convertLead(leadId: string, body: unknown, user: AuthUser)
             : await createContactRecord(
                   tx,
                   contactInputSchema.parse({
-                      ...withExtraFields(contactPayload(values, organization), contactConfig, 'contacts', extras.contacts),
+                      ...withExtraFields(contactPayload(values, lead, organization), contactConfig, 'contacts', extras.contacts),
                       customFields: contactCheck?.customFields,
                   }),
                   user,
               );
 
-        const opportunity = await createOpportunityRecord(
-            tx,
-            opportunityInputSchema.parse({
-                ...withExtraFields(opportunityPayload(values, lead, organization, contact), opportunityConfig, 'opportunities', extras.opportunities),
-                customFields: opportunityCheck.customFields,
-            }),
-            user,
-        );
+        const opportunity = opportunityCheck
+            ? await createOpportunityRecord(
+                  tx,
+                  opportunityInputSchema.parse({
+                      ...withExtraFields(opportunityPayload(values, lead, organization, contact), opportunityConfig, 'opportunities', extras.opportunities),
+                      customFields: opportunityCheck.customFields,
+                  }),
+                  user,
+              )
+            : null;
 
         // Converting closes the lead (the opportunity carries the follow-up on): its Rating stays as it is today and
         // stops ageing, and its own next follow-up goes.
@@ -264,7 +272,7 @@ export async function convertLead(leadId: string, body: unknown, user: AuthUser)
                 convertedBy: user.username,
                 convertedOrganizationId: organization.id,
                 convertedContactId: contact.id,
-                convertedOpportunityId: opportunity.id,
+                convertedOpportunityId: opportunity?.id ?? null,
                 ...frozen,
                 nextFollowupDate: null,
                 nextFollowupTime: null,
@@ -284,7 +292,8 @@ export async function convertLead(leadId: string, body: unknown, user: AuthUser)
                 organizationCreated: !existingOrganization,
                 contactId: contact.id,
                 contactCreated: !existingContact,
-                opportunityId: opportunity.id,
+                opportunityId: opportunity?.id ?? null,
+                opportunityCreated: Boolean(opportunity),
             },
         });
 
@@ -293,7 +302,7 @@ export async function convertLead(leadId: string, body: unknown, user: AuthUser)
 
     await Promise.all([
         cacheService.invalidateEntityCaches('leads'),
-        cacheService.invalidateEntityCaches('opportunities'),
+        ...(result.opportunity ? [cacheService.invalidateEntityCaches('opportunities')] : []),
         ...(result.organizationCreated ? [cacheService.invalidateEntityCaches('organizations')] : []),
         ...(result.contactCreated ? [cacheService.invalidateEntityCaches('contacts')] : []),
     ]);

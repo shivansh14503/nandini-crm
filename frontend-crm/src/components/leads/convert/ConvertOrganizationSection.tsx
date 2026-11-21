@@ -33,7 +33,6 @@ const ORGANIZATION_FIELDS = [
     'leadSource',
     'memberOf',
     'organizationDescription',
-    'organizationAssignedTo',
 ] as const satisfies readonly (keyof F)[];
 
 /**
@@ -84,7 +83,6 @@ export function ConvertOrganizationSection() {
         setValue('leadSource', existing.leadSource || getValues('opportunityLeadSource') || '', opts);
         setValue('memberOf', existing.memberOf ?? '', opts);
         setValue('organizationDescription', existing.addDescriptionAndScope ?? '', opts);
-        if (existing.assignedTo) setValue('organizationAssignedTo', existing.assignedTo, opts);
         // The other fields an admin put on Convert Lead show the organization's own values.
         setValue('extraFields.organizations', extraValuesFrom(configs, 'organizations', existing as unknown as Record<string, unknown>), opts);
     }, [existing, defaultValues, setValue, getValues, configs]);
@@ -136,9 +134,6 @@ export function ConvertOrganizationSection() {
                                 <RhfSelect<F> name="leadSource" label="Lead Source" options={getOptions('shared_lead_source', ORG_LEAD_SOURCES)} placeholder="Select Lead Source" />
                             ),
                             memberOf: <RhfTextField<F> name="memberOf" label="Member of (Parent Corporation)" placeholder="e.g. Apex Holdings Conglomerate Ltd." />,
-                            assignedTo: (
-                                <RhfLookup<F> name="organizationAssignedTo" label="Assigned to (Account Executive)" lookupType="user" required placeholder="Select assigned sales rep" />
-                            ),
                             addDescriptionAndScope: (
                                 <RhfTextField<F> name="organizationDescription" label="Add Description & Scope" multiline minRows={3} placeholder="Notes about this organization..." />
                             ),

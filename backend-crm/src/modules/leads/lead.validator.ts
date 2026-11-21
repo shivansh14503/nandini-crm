@@ -140,7 +140,7 @@ export const convertLeadSchema = z.object({
     leadSource: optionalText('Lead Source', L.option),
     memberOf: optionalText('Member of', L.organizationName),
     organizationDescription: optionalText('Organization Description', L.longText),
-    organizationAssignedTo: requiredText('Organization Assigned to', L.username),
+    // No Assigned To: the new organization, contact and opportunity go to the lead's own Assigned To.
 
     // Contact
     existingContactId: optionalText('Contact', 50),
@@ -155,9 +155,10 @@ export const convertLeadSchema = z.object({
     communicationType: stringList('Communication Type', 10, 30).default(['Call', 'Email']),
     doNotCall: z.boolean().default(false),
     contactDescription: optionalText('Contact Description', L.longText),
-    contactAssignedTo: requiredText('Contact Assigned to', L.username),
 
-    // Opportunity
+    // Opportunity. `createOpportunity: false` converts without one (the deal already has an opportunity); the
+    // opportunity fields are then ignored.
+    createOpportunity: z.boolean().default(true),
     productCategory: stringList('Product Category', 30, L.option).default([]),
     referredBy: optionalText('Referred By', L.organizationName),
     opportunityType: optionalText('Opportunity Type', L.option),
@@ -166,7 +167,6 @@ export const convertLeadSchema = z.object({
     followupType: optionalText('Followup Type', L.option),
     opportunityDescription: optionalText('Opportunity Description', L.longText),
     opportunityLeadSource: optionalText('Lead Source', L.option),
-    opportunityAssignedTo: requiredText('Opportunity Assigned to', L.username),
 
     /**
      * Values of the other fields an admin put on Convert Lead (Form Builder › Convert Lead), per record, keyed by the

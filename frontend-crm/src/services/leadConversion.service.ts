@@ -14,7 +14,8 @@ import { builtInDropdownDefaults, isEmptyValue } from '../utils/formConfig';
 export interface LeadConversionResult {
     organization: ExtendedOrganization;
     contact: Contact;
-    opportunity: Opportunity;
+    /** Null when the conversion skipped creating one (`createOpportunity: false`). */
+    opportunity: Opportunity | null;
     organizationCreated: boolean;
     contactCreated: boolean;
 }
@@ -93,7 +94,6 @@ export function buildConvertLeadDefaults(lead: Lead): ConvertLeadFormValues {
         leadSource: lead.leadSource ?? '',
         memberOf: '',
         organizationDescription: '',
-        organizationAssignedTo: lead.assignedTo,
 
         existingContactId: '',
         contactName: lead.name,
@@ -108,8 +108,8 @@ export function buildConvertLeadDefaults(lead: Lead): ConvertLeadFormValues {
         communicationType: ['Call', 'Email'],
         doNotCall: false,
         contactDescription: '',
-        contactAssignedTo: lead.assignedTo,
 
+        createOpportunity: true,
         productCategory: lead.productCategory ?? [],
         referredBy: lead.referredBy ?? '',
         opportunityType: 'New Business',
@@ -118,7 +118,6 @@ export function buildConvertLeadDefaults(lead: Lead): ConvertLeadFormValues {
         followupType: lead.followupType ?? '',
         opportunityDescription: lead.remarks ?? '',
         opportunityLeadSource: lead.leadSource ?? '',
-        opportunityAssignedTo: lead.assignedTo,
         // Other fields an admin may put on Convert Lead start from what the conversion would carry over from the lead.
         extraFields: {
             contacts: {},
@@ -139,7 +138,7 @@ export function buildConvertLeadDefaults(lead: Lead): ConvertLeadFormValues {
 
 /**
  * POST /api/leads/:id/convert: reuses or creates the Organization and Contact, creates the Opportunity linked to
- * both and marks the lead Converted, all in one database transaction (nothing is left half-converted).
+ * both (unless `createOpportunity` is off) and marks the lead Converted, all in one database transaction (nothing is left half-converted).
  */
 export async function convertLead(leadId: string, values: ConvertLeadFormValues): Promise<LeadConversionResult> {
     const res = await apiClient.post<ApiResponse<LeadConversionResult>>(`${leadService.endpoint}/${encodeURIComponent(leadId)}/convert`, values);

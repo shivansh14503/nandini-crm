@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { requiredString, optionalString } from './common';
+import { optionalString } from './common';
 import { contactFormSchema } from './contact.schema';
 import { organizationFieldsSchema } from './organization.schema';
 import { opportunityFormSchema } from './opportunity.schema';
@@ -8,11 +8,27 @@ const contact = contactFormSchema.shape;
 const organization = organizationFieldsSchema.shape;
 const opportunity = opportunityFormSchema.shape;
 
+/** The Opportunity form's rules for the opportunity fields; checked only when the conversion creates one. */
+const opportunityRules = z.object({
+    productCategory: opportunity.productCategory,
+    referredBy: opportunity.referredBy,
+    opportunityType: opportunity.type,
+    nextFollowupDate: opportunity.nextFollowupDate,
+    nextFollowupTime: opportunity.nextFollowupTime,
+    followupType: opportunity.followupType,
+    opportunityDescription: opportunity.remarks,
+    opportunityLeadSource: opportunity.leadSource,
+});
+type OpportunityValues = z.output<typeof opportunityRules>;
+/** A field typed as its opportunity rule's output but not checked by itself (see the refinement below). */
+const deferred = <K extends keyof OpportunityValues>() => z.custom<OpportunityValues[K]>(() => true);
+
 /**
  * Combined schema for the Convert Lead form. A lead conversion produces up to three records (Contact, Organization,
  * Opportunity), so all three sections are validated together. Every field the conversion shares with a module form
  * uses that form's own rule (the same validator object), so the two can't drift apart. Fields an admin may relax are
  * required per the module's form configuration (CONVERT_CONFIGURED_FIELDS, checked by ConvertLeadForm).
+ * Assigned To isn't on it: the new records go to the lead's own Assigned To (set by the API).
  */
 export const convertLeadFormSchema = z.object({
     // ── Organization (Organization form rules) ─────────────────────────────────
@@ -25,8 +41,6 @@ export const convertLeadFormSchema = z.object({
     leadSource: organization.leadSource,
     memberOf: organization.memberOf,
     organizationDescription: organization.addDescriptionAndScope,
-    // Locked and required on organizations (the API requires an owner).
-    organizationAssignedTo: requiredString('Assigned Representative'),
 
     // ── Contact (Contact form rules) ───────────────────────────────────────────
     existingContactId: optionalString,
@@ -41,18 +55,18 @@ export const convertLeadFormSchema = z.object({
     communicationType: contact.communicationType,
     doNotCall: contact.doNotCall,
     contactDescription: contact.addDescription,
-    contactAssignedTo: contact.assignedTo,
 
-    // ── Opportunity (Opportunity form rules) ───────────────────────────────────
-    productCategory: opportunity.productCategory,
-    referredBy: opportunity.referredBy,
-    opportunityType: opportunity.type,
-    nextFollowupDate: opportunity.nextFollowupDate,
-    nextFollowupTime: opportunity.nextFollowupTime,
-    followupType: opportunity.followupType,
-    opportunityDescription: opportunity.remarks,
-    opportunityLeadSource: opportunity.leadSource,
-    opportunityAssignedTo: opportunity.assignedTo,
+    // ── Opportunity (Opportunity form rules, only when one is created) ────────
+    // Off when the deal already has an opportunity: the lead converts into the contact and organization only.
+    createOpportunity: z.boolean(),
+    productCategory: deferred<'productCategory'>(),
+    referredBy: deferred<'referredBy'>(),
+    opportunityType: deferred<'opportunityType'>(),
+    nextFollowupDate: deferred<'nextFollowupDate'>(),
+    nextFollowupTime: deferred<'nextFollowupTime'>(),
+    followupType: deferred<'followupType'>(),
+    opportunityDescription: deferred<'opportunityDescription'>(),
+    opportunityLeadSource: deferred<'opportunityLeadSource'>(),
 
     // Other fields an admin put on Convert Lead (Form Builder › Convert Lead), per record by `fieldKey`. Their
     // "required" rule is checked from the configuration (convertRequiredIssues); the API checks the rest.
@@ -61,7 +75,15 @@ export const convertLeadFormSchema = z.object({
         organizations: z.record(z.string(), z.unknown()),
         opportunities: z.record(z.string(), z.unknown()),
     }),
-});
+}).superRefine(
+    (values, ctx) => {
+        if (!values.createOpportunity) return;
+        const parsed = opportunityRules.safeParse(values);
+        for (const issue of parsed.error?.issues ?? []) ctx.addIssue({ code: 'custom', message: issue.message, path: issue.path });
+    },
+    // Checked alongside the other sections' errors, not only once those are fixed.
+    { when: () => true },
+);
 
 export type ConvertLeadFormValues = z.infer<typeof convertLeadFormSchema>;
 
@@ -86,7 +108,6 @@ export const CONVERT_FIELD_NAMES = {
         communicationType: 'communicationType',
         doNotCall: 'doNotCall',
         addDescription: 'contactDescription',
-        assignedTo: 'contactAssignedTo',
     },
     organizations: {
         organizationName: 'organizationName',
@@ -97,7 +118,6 @@ export const CONVERT_FIELD_NAMES = {
         leadSource: 'leadSource',
         memberOf: 'memberOf',
         addDescriptionAndScope: 'organizationDescription',
-        assignedTo: 'organizationAssignedTo',
     },
     opportunities: {
         productCategory: 'productCategory',
@@ -108,7 +128,6 @@ export const CONVERT_FIELD_NAMES = {
         nextFollowupDate: 'nextFollowupDate',
         followupType: 'followupType',
         remarks: 'opportunityDescription',
-        assignedTo: 'opportunityAssignedTo',
     },
 } as const satisfies Record<ConvertModule, Record<string, keyof ConvertLeadFormValues>>;
 

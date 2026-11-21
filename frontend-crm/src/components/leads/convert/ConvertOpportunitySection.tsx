@@ -1,6 +1,8 @@
 'use client';
 
-import React from 'react';
+import React, { useEffect } from 'react';
+import { Alert } from '@mui/material';
+import { useFormContext, useWatch, type Path } from 'react-hook-form';
 
 import { ConvertRecordSections } from './ConvertRecordSections';
 import {
@@ -22,9 +24,32 @@ import { useDropdownOptionsGetter } from '@/hooks/queries/useFormConfigs';
 
 type F = ConvertLeadFormValues;
 
-/** "Create Opportunity" section of the Convert Lead form. */
+/** The section's own inputs (organization name belongs to the organization section). */
+const OPPORTUNITY_INPUTS = [
+    ...Object.values(CONVERT_FIELD_NAMES.opportunities).filter((name) => name !== 'organizationName'),
+    'nextFollowupTime',
+    'extraFields.opportunities',
+] as const satisfies readonly Path<F>[];
+
+/** "Create Opportunity" section of the Convert Lead form; collapses to a note when no opportunity is created. */
 export function ConvertOpportunitySection() {
     const getOptions = useDropdownOptionsGetter();
+    const { control, resetField } = useFormContext<F>();
+    const createOpportunity = useWatch({ control, name: 'createOpportunity' });
+
+    // Skipped: back to the values taken from the lead, so a hidden field (e.g. a past follow-up date) can't block saving.
+    useEffect(() => {
+        if (!createOpportunity) for (const name of OPPORTUNITY_INPUTS) resetField(name);
+    }, [createOpportunity, resetField]);
+
+    if (!createOpportunity) {
+        return (
+            <Alert severity="info" sx={{ mt: 1 }}>
+                No opportunity will be created. The lead is converted into the contact and organization above only.
+            </Alert>
+        );
+    }
+
     // The fields follow the Opportunity form's configuration (Form Builder).
     return (
         <FormConfigProvider module="opportunities" fieldNames={CONVERT_FIELD_NAMES.opportunities} borrowed>
@@ -44,7 +69,6 @@ export function ConvertOpportunitySection() {
                         <RhfSelect<F> name="followupType" label="Followup Type" hint="Default: Call" options={getOptions('shared_followup_type', FOLLOWUP_TYPES)} placeholder="Select Type" />
                     ),
                     nextFollowupDate: <RhfDateTimeField<F> dateName="nextFollowupDate" timeName="nextFollowupTime" label="Next Followup Date" required hint="Next touchpoint" />,
-                    assignedTo: <RhfLookup<F> name="opportunityAssignedTo" label="Assigned to" lookupType="user" required hint="Account executive" placeholder="Assign to user..." />,
                     productCategory: (
                         <RhfMultiAutocomplete<F>
                             name="productCategory"
