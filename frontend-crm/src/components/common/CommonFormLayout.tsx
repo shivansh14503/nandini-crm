@@ -97,6 +97,10 @@ export interface CommonFormLayoutProps {
      * Text for the primary save button (e.g. "Save Contact", "Save Lead").
      */
     saveLabel?: string;
+    /** Replaces the Save button's icon (passed to FormStickyFooter). */
+    saveIcon?: React.ReactNode;
+    /** Extra styling for the Save button (passed to FormStickyFooter). */
+    saveSx?: SxProps<Theme>;
     /**
      * Step-by-step checks (`useRhfForm`'s `stepwise`): Save reports the first missing field in the form's order
      * (tab by tab, top to bottom), and a new record with several tabs shows "Next" until nothing is missing.
@@ -166,6 +170,8 @@ export function CommonFormLayout({
     onSave,
     submitting = false,
     saveLabel = 'Save Record',
+    saveIcon,
+    saveSx,
     stepwise,
     cancelLabel = 'Cancel',
     toast,
@@ -345,6 +351,8 @@ export function CommonFormLayout({
                 submitting={submitting}
                 saveLabel={pending ? 'Next' : saveLabel}
                 saveKind={pending ? 'next' : 'save'}
+                saveIcon={saveIcon}
+                saveSx={pending ? undefined : saveSx}
                 cancelLabel={cancelLabel}
                 mode={mode}
                 saveDisabled={saveDisabled || nothingToUpdate}

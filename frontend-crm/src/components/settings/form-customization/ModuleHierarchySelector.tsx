@@ -14,7 +14,7 @@ import RequestQuoteOutlinedIcon from '@mui/icons-material/RequestQuoteOutlined';
 import ConfirmationNumberOutlinedIcon from '@mui/icons-material/ConfirmationNumberOutlined';
 import CategoryOutlinedIcon from '@mui/icons-material/CategoryOutlined';
 import HandshakeOutlinedIcon from '@mui/icons-material/HandshakeOutlined';
-import TransformOutlinedIcon from '@mui/icons-material/TransformOutlined';
+import PublishedWithChangesIcon from '@mui/icons-material/PublishedWithChanges';
 import { CRM_MODULE_GROUPS, type CrmModuleGroupKey, type CrmModuleKey } from '@/types/formConfig.types';
 import { CONVERT_TINT } from './ConvertLeadFieldsPanel';
 
@@ -38,7 +38,8 @@ export const MODULE_ICONS: Record<CrmModuleKey, React.ReactNode> = {
     'partner-companies': <HandshakeOutlinedIcon sx={ICON_SX} />,
 };
 
-export const CONVERT_ICON = <TransformOutlinedIcon sx={ICON_SX} />;
+/** Same green convert icon as the Convert Lead action in the lead's side drawer and on the Convert Lead form. */
+export const CONVERT_ICON = <PublishedWithChangesIcon sx={{ ...ICON_SX, color: 'var(--crm-emerald-600)' }} />;
 
 /** Selector id of the Convert Lead entry (not a module of its own: it composes the contact, organization and opportunity forms). */
 const CONVERT_ID = 'convert-lead';

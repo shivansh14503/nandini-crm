@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { Box, Button, CircularProgress, Tooltip } from '@mui/material';
+import { Box, Button, CircularProgress, Tooltip, type SxProps, type Theme } from '@mui/material';
 import EditOutlinedIcon from '@mui/icons-material/EditOutlined';
 import SaveOutlinedIcon from '@mui/icons-material/SaveOutlined';
 import CloseIcon from '@mui/icons-material/Close';
@@ -25,6 +25,10 @@ export interface FormStickyFooterProps {
     status?: React.ReactNode;
     /** `next`: the primary action moves on to the form's next step (arrow after the label) instead of saving. */
     saveKind?: 'save' | 'next';
+    /** Replaces the Save icon (e.g. Convert Lead's convert icon). */
+    saveIcon?: React.ReactNode;
+    /** Extra styling for the primary action, applied over the default brand gradient. */
+    saveSx?: SxProps<Theme>;
 }
 
 /**
@@ -43,6 +47,8 @@ export function FormStickyFooter({
     cancelDisabled = false,
     status,
     saveKind = 'save',
+    saveIcon,
+    saveSx,
 }: FormStickyFooterProps) {
     const isView = mode === 'view';
     const isNext = !isView && saveKind === 'next';
@@ -56,13 +62,13 @@ export function FormStickyFooter({
                 ) : submitting ? (
                     <CircularProgress size={16} color="inherit" />
                 ) : (
-                    <SaveOutlinedIcon sx={{ fontSize: 18 }} />
+                    (saveIcon ?? <SaveOutlinedIcon sx={{ fontSize: 18 }} />)
                 )
             }
             endIcon={isNext ? <ArrowForwardRoundedIcon sx={{ fontSize: 18 }} /> : undefined}
             onClick={onSave}
             disabled={submitting || saveDisabled}
-            sx={{
+            sx={[{
                 height: 36,
                 px: 2,
                 fontSize: '0.82rem',
@@ -81,7 +87,7 @@ export function FormStickyFooter({
                     color: 'var(--mui-palette-text-muted)',
                     boxShadow: 'none',
                 },
-            }}
+            }, ...(Array.isArray(saveSx) ? saveSx : saveSx ? [saveSx] : [])]}
         >
             {saveLabel}
         </Button>

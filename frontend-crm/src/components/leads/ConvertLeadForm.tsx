@@ -10,7 +10,7 @@ import { Box, Divider } from '@mui/material';
 import PersonOutlineOutlinedIcon from '@mui/icons-material/PersonOutlineOutlined';
 import BusinessOutlinedIcon from '@mui/icons-material/BusinessOutlined';
 import MonetizationOnOutlinedIcon from '@mui/icons-material/MonetizationOnOutlined';
-import TransformOutlinedIcon from '@mui/icons-material/TransformOutlined';
+import PublishedWithChangesIcon from '@mui/icons-material/PublishedWithChanges';
 
 import { type BreadcrumbItem } from '../common/AppBreadcrumbs';
 import { AppToast } from '../common/AppToast';
@@ -46,9 +46,22 @@ const CONVERT_TABS = [
     {
         id: 'convert',
         label: 'Convert Lead',
-        icon: <TransformOutlinedIcon sx={{ fontSize: 18, color: 'var(--crm-text-blue-600)' }} />,
+        icon: <PublishedWithChangesIcon sx={{ fontSize: 18, color: 'var(--crm-emerald-600)' }} />,
     },
 ];
+
+/** Same green "Convert Lead" look as the action in the lead's side drawer. */
+const convertButtonSx = {
+    color: 'var(--crm-emerald-700)',
+    background: 'var(--mui-palette-success-soft)',
+    border: '1px solid var(--mui-palette-success-softBorder)',
+    boxShadow: 'none',
+    '&:hover': {
+        background: 'var(--crm-emerald-100)',
+        borderColor: 'var(--crm-emerald-600)',
+        boxShadow: 'none',
+    },
+} as const;
 
 const sectionDividerSx = { my: 3.5, borderColor: 'var(--mui-palette-border-light)' } as const;
 
@@ -182,6 +195,8 @@ export function ConvertLeadForm({ leadId, breadcrumbItems }: ConvertLeadFormProp
                 onSave={handleSave}
                 submitting={isSubmitting}
                 saveLabel="Convert Lead"
+                saveIcon={<PublishedWithChangesIcon sx={{ fontSize: 18 }} />}
+                saveSx={convertButtonSx}
                 stepwise={stepwise}
                 cancelLabel="Cancel"
                 toast={
