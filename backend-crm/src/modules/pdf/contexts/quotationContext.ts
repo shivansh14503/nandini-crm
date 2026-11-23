@@ -200,7 +200,7 @@ async function loadRecordMeta(recordId: string, user: AuthUser): Promise<RecordM
             quotationCode: true,
             quotationTitle: true,
             organizationName: true,
-            contactName: true,
+            contact: true,
             updatedAt: true,
             assignedTo: true,
             createdBy: true,
@@ -213,7 +213,7 @@ async function loadRecordMeta(recordId: string, user: AuthUser): Promise<RecordM
     return {
         id: row.id,
         updatedAt: row.updatedAt,
-        fileBaseName: fileBaseName(code, row.organizationName, row.contactName),
+        fileBaseName: fileBaseName(code, row.organizationName, row.contact),
         title: code ? `${code} · ${row.quotationTitle}` : row.quotationTitle,
     };
 }
