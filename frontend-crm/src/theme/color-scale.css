@@ -188,6 +188,13 @@
 
   /* Accent as "R G B" for translucent rings/glows: rgb(var(--crm-accent-rgb) / 0.25) */
   --crm-accent-rgb: 37 99 235;
+
+  /* Company-logo green in both themes (Convert Lead). Light: readable shades of #7ABD54; dark: the brand accent itself. */
+  --crm-logo-green-text: #417526;
+  --crm-logo-green-soft: #EEF7E6;
+  --crm-logo-green-soft-hover: #DFF0D2;
+  --crm-logo-green-border: #B5D99C;
+  --crm-logo-green-border-hover: #7ABD54;
 }
 
 .dark {
@@ -368,6 +375,13 @@
   --crm-text-blue-900: #C5EDAE;
 
   --crm-accent-rgb: 122 189 84;
+
+  /* Company-logo green in both themes (Convert Lead): same values as the dark brand accent. */
+  --crm-logo-green-text: #7ABD54;
+  --crm-logo-green-soft: #162620;
+  --crm-logo-green-soft-hover: #1E352B;
+  --crm-logo-green-border: #2B4C3B;
+  --crm-logo-green-border-hover: #7ABD54;
 }
 
 /*

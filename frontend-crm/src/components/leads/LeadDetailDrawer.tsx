@@ -459,7 +459,7 @@ export function LeadDetailDrawer({
             secondaryAction={{
                 label: isConverted ? 'Lead Converted' : 'Convert Lead',
                 icon: isConverted ? (
-                    <CheckCircleOutlinedIcon sx={{ fontSize: 16, color: 'var(--crm-emerald-600)' }} />
+                    <CheckCircleOutlinedIcon sx={{ fontSize: 16, color: 'var(--crm-logo-green-text)' }} />
                 ) : (
                     <PublishedWithChangesIcon sx={{ fontSize: 16 }} />
                 ),
@@ -477,12 +477,13 @@ export function LeadDetailDrawer({
                     height: 36,
                     px: 1.8,
                     borderRadius: '6px',
-                    color: isConverted ? 'var(--crm-emerald-700)' : hasOrg ? 'var(--crm-emerald-700)' : 'var(--mui-palette-error-main)',
-                    borderColor: isConverted ? 'var(--mui-palette-success-softBorder)' : hasOrg ? 'var(--mui-palette-success-softBorder)' : 'var(--crm-red-300)',
-                    backgroundColor: isConverted ? 'var(--mui-palette-success-soft)' : hasOrg ? 'var(--mui-palette-success-soft)' : 'var(--mui-palette-error-soft)',
+                    // Company-logo green in both themes; red while the lead has no organisation to convert to.
+                    color: isConverted || hasOrg ? 'var(--crm-logo-green-text)' : 'var(--mui-palette-error-main)',
+                    borderColor: isConverted || hasOrg ? 'var(--crm-logo-green-border)' : 'var(--crm-red-300)',
+                    backgroundColor: isConverted || hasOrg ? 'var(--crm-logo-green-soft)' : 'var(--mui-palette-error-soft)',
                     '&:hover': {
-                        borderColor: isConverted ? 'var(--crm-emerald-700)' : hasOrg ? 'var(--crm-emerald-600)' : 'var(--crm-red-500)',
-                        backgroundColor: isConverted ? 'var(--crm-emerald-100)' : hasOrg ? 'var(--crm-emerald-100)' : 'var(--crm-red-100)',
+                        borderColor: isConverted || hasOrg ? 'var(--crm-logo-green-border-hover)' : 'var(--crm-red-500)',
+                        backgroundColor: isConverted || hasOrg ? 'var(--crm-logo-green-soft-hover)' : 'var(--crm-red-100)',
                     },
                 },
             }}
