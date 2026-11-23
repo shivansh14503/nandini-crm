@@ -12,9 +12,10 @@ desktops from the start. Changes to existing UI must not make it less responsive
 3. **Multi-pane layouts collapse**: three panes on desktop, two on tablet, one column on phones. Side panels on
    phones become a collapsible section, tabs, or a bottom sheet (`Drawer anchor="bottom"`).
 4. **Touch works**: tap targets at least 32 px (40 px preferred); nothing is reachable by hover alone (hover-only
-   handles and actions must also show or work on tap). Drag and drop needs a touch sensor (dnd-kit
-   `TouchSensor` with a short press delay so a swipe still scrolls) **and** a non-drag way to do the same thing
-   (an add button, move up / down buttons).
+   handles and actions must also show or work on tap). Drag and drop must work on touch while a swipe still
+   scrolls (a dnd-kit `TouchSensor` with a short press delay, or touch drags that start only from a grip with
+   `touch-action: none`, as `useDragReorder` and the Drawer Layout builder do) **and** have a non-drag way to do
+   the same thing (an add button, move up / down buttons).
 5. **Tables and wide content** scroll inside their own container (`overflowX: 'auto'`), never the page. Toolbars
    wrap (`flexWrap: 'wrap'`) instead of overflowing.
 6. **Dialogs and drawers** fit a phone screen: full width minus a small margin, content scrolls inside.

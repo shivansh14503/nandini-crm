@@ -109,6 +109,25 @@ export function moveBadge(doc: DrawerLayoutDocument, id: string, index: number) 
     list.splice(Math.max(0, Math.min(from.index < index ? index - 1 : index, list.length)), 0, from.badge);
 }
 
+/**
+ * Puts an existing block / section / badge at `index` of the list it ends up in, counted without the item itself
+ * (what a drag shows: the slot it lands in). The move helpers above count with the item still at its old place.
+ */
+export function placeBlock(doc: DrawerLayoutDocument, id: string, sectionId: string, index: number) {
+    const from = findBlock(doc, id);
+    if (from) moveBlock(doc, id, sectionId, from.section.id === sectionId && from.index <= index ? index + 1 : index);
+}
+
+export function placeSection(doc: DrawerLayoutDocument, id: string, tab: string, index: number) {
+    const from = findSection(doc, id);
+    if (from) moveSection(doc, id, tab, from.tab === tab && from.index <= index ? index + 1 : index);
+}
+
+export function placeBadge(doc: DrawerLayoutDocument, id: string, index: number) {
+    const from = findBadge(doc, id);
+    if (from) moveBadge(doc, id, from.index <= index ? index + 1 : index);
+}
+
 // ─── Reducer ────────────────────────────────────────────────────────────────────
 
 function reducer(state: State, action: Action): State {
