@@ -46,19 +46,19 @@ const CONVERT_TABS = [
     {
         id: 'convert',
         label: 'Convert Lead',
-        icon: <PublishedWithChangesIcon sx={{ fontSize: 18, color: 'var(--crm-emerald-600)' }} />,
+        icon: <PublishedWithChangesIcon sx={{ fontSize: 18, color: 'var(--crm-logo-green-text)' }} />,
     },
 ];
 
-/** Same green "Convert Lead" look as the action in the lead's side drawer. */
+/** Same company-logo green "Convert Lead" look as the action in the lead's side drawer. */
 const convertButtonSx = {
-    color: 'var(--crm-emerald-700)',
-    background: 'var(--mui-palette-success-soft)',
-    border: '1px solid var(--mui-palette-success-softBorder)',
+    color: 'var(--crm-logo-green-text)',
+    background: 'var(--crm-logo-green-soft)',
+    border: '1px solid var(--crm-logo-green-border)',
     boxShadow: 'none',
     '&:hover': {
-        background: 'var(--crm-emerald-100)',
-        borderColor: 'var(--crm-emerald-600)',
+        background: 'var(--crm-logo-green-soft-hover)',
+        borderColor: 'var(--crm-logo-green-border-hover)',
         boxShadow: 'none',
     },
 } as const;
