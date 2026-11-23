@@ -33,6 +33,7 @@ describe('categoryFor / severityFor', () => {
     it('admin settings are CONFIG, records are DATA', () => {
         assert.equal(categoryFor('FormField', 'UPDATE'), 'CONFIG');
         assert.equal(categoryFor('Scorecard', 'DELETE'), 'CONFIG');
+        assert.equal(categoryFor('DrawerLayout', 'UPDATE'), 'CONFIG');
         assert.equal(categoryFor('Quotation', 'UPDATE'), 'DATA');
     });
     it('grades severity', () => {
@@ -112,6 +113,8 @@ describe('labelFromChanges', () => {
     });
     it('names settings rows', () => {
         assert.equal(labelFromChanges('Scorecard', 'opportunities', {}), 'Opportunities scorecard');
+        assert.equal(labelFromChanges('DrawerLayout', 'leads', {}), 'Leads drawer layout');
+        assert.equal(labelFromChanges('DrawerPiece', 'p1', { name: 'Follow-up card' }), 'Drawer pieces › Follow-up card');
         assert.equal(labelFromChanges('DocumentSeries', 'document-series', {}), 'Document Series');
         assert.equal(labelFromChanges('Import', 'imp1', { fileName: 'leads.xlsx' }), 'leads.xlsx');
         assert.equal(labelFromChanges('AuditExport', 'e1', { format: 'csv', fileName: 'audit-log-2026-11-23-1131.csv' }), 'audit-log-2026-11-23-1131.csv');

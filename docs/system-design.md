@@ -326,6 +326,10 @@ flowchart LR
   made of columns and blocks. The block model lives in `backend-crm/src/modules/pdf/document/` and is **copied** to
   `frontend-crm/src/lib/pdf-document/` by `npm run sync:pdf-document`, so the builder canvas renders with the exact code
   the server prints with. `validators/contractSync.test.ts` fails while the copies differ.
+- Record drawer layouts follow the same pattern: the layout document (`backend-crm/src/modules/drawer-layouts/document/`)
+  is copied to `frontend-crm/src/lib/drawer-layout/` by `npm run sync:drawer-layout`, and the same contract test guards
+  the copy. Drawers read the saved layouts once (`GET /api/drawer-layouts`, TanStack Query, stale 5 min); a save or reset
+  fires `notifyCrmUpdate('drawer-layouts')` so open tabs refetch.
 - Module support is pluggable through `moduleAdapters.ts` (only `QUOTATION` today). The renderer sits behind the
   `PdfRenderer` interface, so Puppeteer could be swapped for e.g. Gotenberg.
 - The README's PDF section still mentions Handlebars (`templateEngine.ts`, `sanitize.ts`); those files no longer exist —

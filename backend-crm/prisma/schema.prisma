@@ -1181,6 +1181,34 @@ model ModuleScorecard {
   updatedAt        DateTime @updatedAt
 }
 
+/// Admin-designed record side drawer of a module (Admin › Form Customization › Drawer Layout): header, badges and the
+/// sections / blocks of each form tab. One row per module; no row = the drawer's built-in layout. Hard-deleted on reset.
+model DrawerLayout {
+  /// DRAWER_LAYOUT_MODULES (src/modules/drawer-layouts/document/schema.ts), e.g. leads.
+  module     String   @id @db.NVarChar(40)
+  /// JSON DrawerLayoutDocument (same file), validated on save; a row that no longer parses is ignored.
+  layoutJson String   @db.NVarChar(Max)
+  /// Optimistic-concurrency counter; bumped on every save.
+  version    Int      @default(1)
+  updatedBy  String?  @db.NVarChar(50)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+}
+
+/// A section an admin saved to the Drawer Layout builder's "Pieces" library. Inserting one places a copy, so later
+/// edits or deletes never change a layout. Hard-deleted.
+model DrawerPiece {
+  id          String   @id @default(uuid()) @db.NVarChar(50)
+  module      String   @db.NVarChar(40)
+  name        String   @db.NVarChar(120)
+  /// JSON DrawerSection.
+  sectionJson String   @db.NVarChar(Max)
+  createdBy   String   @db.NVarChar(50)
+  createdAt   DateTime @default(now())
+
+  @@index([module])
+}
+
 /// A module-level setting an admin edits in Form Builder outside the form's fields, as one JSON value per
 /// (module, key). E.g. leads › ratingNewLead: the Rating limits for new leads (docs/lead-rating-rules.md).
 model ModuleSetting {

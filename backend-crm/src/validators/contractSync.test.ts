@@ -4,6 +4,7 @@ import path from 'node:path';
 import { describe, it } from 'node:test';
 import { pathToFileURL } from 'node:url';
 import { DOCUMENT_DEST, expectedFrontendFiles } from '../../scripts/syncPdfDocument.js';
+import { DRAWER_LAYOUT_DEST, expectedDrawerLayoutFiles } from '../../scripts/syncDrawerLayout.js';
 import { FIELD_MAX_LENGTH } from '../config/fieldLimits.js';
 import {
     CRM_MODULES,
@@ -48,6 +49,14 @@ describe('backend ↔ frontend contract', { skip }, () => {
         assert.deepEqual(readdirSync(DOCUMENT_DEST).sort(), Object.keys(expected).sort());
         for (const [name, content] of Object.entries(expected)) {
             assert.equal(readFileSync(path.join(DOCUMENT_DEST, name), 'utf8'), content, `${name} is out of date`);
+        }
+    });
+
+    it('frontend lib/drawer-layout is an exact copy of the drawer layout model (run npm run sync:drawer-layout)', () => {
+        const expected = expectedDrawerLayoutFiles();
+        assert.deepEqual(readdirSync(DRAWER_LAYOUT_DEST).sort(), Object.keys(expected).sort());
+        for (const [name, content] of Object.entries(expected)) {
+            assert.equal(readFileSync(path.join(DRAWER_LAYOUT_DEST, name), 'utf8'), content, `${name} is out of date`);
         }
     });
 

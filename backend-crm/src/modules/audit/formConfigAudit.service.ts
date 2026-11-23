@@ -7,7 +7,7 @@ import { displayTime, displayValue, fieldLabel, isDiff, parseChanges, type Audit
 
 /**
  * Form Customization audit trail (GET /api/audit-logs/form-configs/:scope) — who changed which dropdown, option,
- * field or section, when, and with which role. `scope` is a module key, `shared`, or `all`.
+ * field or section, drawer layout or drawer piece, when, and with which role. `scope` is a module key, `shared`, or `all`.
  *
  * Entries written since `_meta` was added carry their module / labels / actor role (see `withMeta` in
  * formConfig.service.ts); older ones are resolved from the current rows where those still exist.
@@ -15,7 +15,7 @@ import { displayTime, displayValue, fieldLabel, isDiff, parseChanges, type Audit
 
 /** Route segments that select this trail (any case). */
 const ROUTE_NAMES = new Set(['form-configs', 'form-config', 'formconfigs', 'formconfig', 'form-customization']);
-const FORM_CONFIG_ENTITY_TYPES = ['DropdownCategory', 'DropdownOption', 'FormField', 'ModuleSetting'] as const;
+const FORM_CONFIG_ENTITY_TYPES = ['DropdownCategory', 'DropdownOption', 'FormField', 'ModuleSetting', 'DrawerLayout', 'DrawerPiece'] as const;
 const SCOPES = ['all', ...CATEGORY_MODULES] as const;
 type Scope = (typeof SCOPES)[number];
 
@@ -350,7 +350,31 @@ function toRevisions(row: ParsedRow, ctx: AuditContext, author: string): AuditRe
     if (row.entityType === 'DropdownCategory') return categoryRevisions(row, ctx, base);
     if (row.entityType === 'DropdownOption') return optionRevisions(row, ctx, base);
     if (row.entityType === 'ModuleSetting') return settingRevisions(row, ctx, base);
+    if (row.entityType === 'DrawerLayout' || row.entityType === 'DrawerPiece') return drawerRevisions(row, ctx, base);
     return fieldRevisions(row, ctx, base);
+}
+
+/** Parts of a drawer layout as the audit entry names them (see summarizeLayout); `tab:<key>` is a form tab. */
+const DRAWER_PARTS: Record<string, string> = { title: 'Title', subtitle: 'Subtitle', avatar: 'Avatar', badges: 'Badges' };
+const drawerPart = (prop: string) =>
+    DRAWER_PARTS[prop] ?? (prop.startsWith('tab:') ? `${prop.slice(4).replace(/[-_]/g, ' ').replace(/^\w/, (c) => c.toUpperCase())} tab` : fieldLabel(prop));
+
+/** Record side drawer layouts (Form Customization › Drawer Layout) and the builder's saved pieces. */
+function drawerRevisions(row: ParsedRow, ctx: AuditContext, base: Base): AuditRevisionItem[] {
+    const c = row.changes;
+    const module = moduleLabel(ctx.module ?? str(c.module));
+    if (row.entityType === 'DrawerPiece') {
+        const name = str(c.name) ?? 'Unnamed';
+        return row.action === 'DELETE'
+            ? [{ ...base, tag: 'Deleted', title: `Drawer piece "${name}" deleted (${module})` }]
+            : [{ ...base, tag: 'Created', title: `Drawer piece "${name}" saved (${module})`, note: typeof c.blocks === 'number' ? plural(c.blocks, 'item') : undefined }];
+    }
+    if (row.action === 'DELETE') return [{ ...base, tag: 'Reset', title: `Drawer layout reset to the built-in one on ${module}` }];
+    if (row.action === 'CREATE') return [{ ...base, tag: 'Created', title: `Custom drawer layout saved on ${module}` }];
+    const items = Object.entries(c)
+        .filter((entry): entry is [string, { from: unknown; to: unknown }] => isDiff(entry[1]))
+        .map(([prop, diff]) => ({ ...base, tag: 'Updated', title: `Drawer layout (${module}) — ${drawerPart(prop)} updated`, from: displayValue(diff.from), to: displayValue(diff.to) }));
+    return items.length ? items : [{ ...base, tag: 'Updated', title: `Drawer layout updated on ${module}` }];
 }
 
 /** Module settings: today only the new-lead Rating limits (Form Builder › Leads › Rating Rules). */

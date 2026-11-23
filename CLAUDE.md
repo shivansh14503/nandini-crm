@@ -13,6 +13,9 @@ build plan. See `docs/build-plan.md` Part 3.
 
 Whenever creating or modifying UI components in `frontend-crm`, **you must strictly follow the Dual-Brand Color Theme System** documented below so Light Mode and Dark Mode remain 100% consistent, readable, and production-grade.
 
+Anything new in `frontend-crm` must also be **fully responsive** (phone, tablet and desktop, touch included): see
+[.claude/rules/responsive-ui.md](.claude/rules/responsive-ui.md).
+
 ---
 
 ## 1. Core Brand Identity: Light Mode = Blue, Dark Mode = Green

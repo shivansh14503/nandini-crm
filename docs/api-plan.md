@@ -114,7 +114,7 @@ The auth endpoints use the older `{ status: 'ok', … }` envelope rather than `{
 | GET | `/lookups/form-configs?includeInactive` | 1 h | Same payload as `GET /form-configs` |
 | GET | `/lookups/tax-id-holders?owner&gstNumber&panNumber&excludeId` | never | "Is this GSTIN / PAN already used?" |
 | GET | `/lookups/email-check?email` | never (DB is the record) | Form's on-blur check → `{ email, status, reason, message, suggestion }`. An address already saved on any record returns its stored result (no provider call); otherwise free checks, then the provider. Rate limited per user |
-| GET | `/audit-logs/:entityType/:entityId?limit=100` | – | `{ entries, revisions }` newest first (entry `id` is a string). `entityType` ∈ organizations, contacts, leads, opportunities, quotations, products, tickets, partner-companies, users, pdf-templates, form-configs (`entityId` = module key, `shared` or `all`). **Access:** admins read every trail. Others: organizations / contacts / leads / opportunities / quotations / tickets need access to the record (403; 404 if it doesn't exist); `users` only their own trail; `pdf-templates` and `form-configs` admin-only (403); products and partner companies any signed-in user |
+| GET | `/audit-logs/:entityType/:entityId?limit=100` | – | `{ entries, revisions }` newest first (entry `id` is a string). `entityType` ∈ organizations, contacts, leads, opportunities, quotations, products, tickets, partner-companies, users, pdf-templates, form-configs (`entityId` = module key, `shared` or `all`; includes drawer layout and drawer piece changes). **Access:** admins read every trail. Others: organizations / contacts / leads / opportunities / quotations / tickets need access to the record (403; 404 if it doesn't exist); `users` only their own trail; `pdf-templates` and `form-configs` admin-only (403); products and partner companies any signed-in user |
 
 ### 2.5 Personal state
 
@@ -132,6 +132,21 @@ The auth endpoints use the older `{ status: 'ok', … }` envelope rather than `{
 | GET | `/scorecards` | `{ [module]: { module, fieldKey, currencyFieldKey, options: [{ value, color, hidden? }], listViewColor, drawerViewColor, updatedBy, updatedAt } }` for configured modules (any signed-in user) |
 | PUT | `/scorecards/:module` | Admin only. `{ fieldKey, currencyFieldKey?, options, listViewColor, drawerViewColor }`. **400** when `fieldKey` isn't an active `select` field of the module, `currencyFieldKey` isn't an active `amount` / `number` field, an option isn't in the field's dropdown, or a color isn't `#RRGGBB` |
 | DELETE | `/scorecards/:module` | Admin only. Back to the screen's built-in cards |
+
+### 2.5b Record drawer layouts (Form Customization › Drawer Layout)
+
+`/drawer-layouts` (`GET /` any signed-in user; changes admin only) and `/drawer-pieces` (admin only). The layout
+document schema is `backend-crm/src/modules/drawer-layouts/document/schema.ts` (copied to the frontend by
+`npm run sync:drawer-layout`). Modules: `leads`.
+
+| Method | Path | Description |
+| --- | --- | --- |
+| GET | `/drawer-layouts` | `{ [module]: { module, layout, version, updatedBy, updatedAt } }` for modules with a saved layout (missing = built-in layout) |
+| PUT | `/drawer-layouts/:module` | Admin only. `{ layout, version }` (`version` = the one edited, `null` when there was none). Goes live straight away; audited (`DrawerLayout`, readable per-part diff). **400** for an invalid document or a field / address the module's form doesn't have (inactive fields count as missing); **409** when another admin saved or reset it since `version` |
+| DELETE | `/drawer-layouts/:module` | Admin only. Back to the built-in layout (audited) |
+| GET | `/drawer-pieces?module=leads` | Admin only. The builder's saved pieces, newest first: `[{ id, module, name, section, createdBy, createdAt }]` |
+| POST | `/drawer-pieces` | Admin only. `{ module, name, section }` → 201 with the piece. **400** for an invalid section or when the module already has 100 pieces |
+| DELETE | `/drawer-pieces/:id` | Admin only. Permanent; layouts that used it keep their copy. **404** when unknown |
 
 ### 2.6 Bulk import
 

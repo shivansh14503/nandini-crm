@@ -8,6 +8,8 @@ import { auditLogKeys } from '@/hooks/queries/useAuditLogs';
 import { MASTER_DATA_QUERY_KEY } from '@/hooks/queries/useMasterData';
 import { FORM_CONFIGS_QUERY_KEY } from '@/hooks/queries/useFormConfigs';
 import { FORM_CONFIG_SYNC_ENTITY } from '@/services/formConfig.service';
+import { DRAWER_LAYOUT_SYNC_ENTITY } from '@/services/drawerLayout.service';
+import { DRAWER_LAYOUTS_QUERY_KEY } from '@/hooks/queries/useDrawerLayouts';
 
 export function QueryProvider({ children }: { children: React.ReactNode }) {
     const [queryClient] = useState(
@@ -33,6 +35,10 @@ export function QueryProvider({ children }: { children: React.ReactNode }) {
                 // Admin form / dropdown changes only affect the configuration queries.
                 if (entity === FORM_CONFIG_SYNC_ENTITY) {
                     queryClient.invalidateQueries({ queryKey: FORM_CONFIGS_QUERY_KEY });
+                    return;
+                }
+                if (entity === DRAWER_LAYOUT_SYNC_ENTITY) {
+                    queryClient.invalidateQueries({ queryKey: DRAWER_LAYOUTS_QUERY_KEY });
                     return;
                 }
                 const key = queryEntityFromSync(entity);
