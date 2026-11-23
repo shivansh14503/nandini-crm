@@ -1,5 +1,6 @@
 "use client";
 
+import { Suspense } from 'react';
 import { usePathname } from 'next/navigation';
 import { Box, CircularProgress, Typography } from '@mui/material';
 import { PageSkeleton, type PageSkeletonVariant } from './skeletons';
@@ -35,11 +36,44 @@ function variantForPath(pathname: string | null): PageSkeletonVariant | 'spinner
     return 'detail';
 }
 
+/**
+ * LoadingScreen is mostly used as a page's `<Suspense>` fallback, and a fallback renders outside its own
+ * boundary. With `cacheComponents`, `usePathname()` suspends while a route with an unknown dynamic param
+ * (`/leads/[id]/convert`, `/[...slug]`) is prerendered, so reading it there blocks the whole route. The
+ * route-based skeleton therefore reads the pathname inside a boundary of its own; its plain backdrop only
+ * shows in the prerendered shell until the route streams in. An explicit `variant` skips the pathname.
+ */
 export function LoadingScreen({ message, minHeight = '100vh', variant }: LoadingScreenProps) {
-    const pathname = usePathname();
-    const resolved = variant ?? variantForPath(pathname);
+    if (variant) return <LoadingView variant={variant} message={message} minHeight={minHeight} />;
 
-    if (resolved !== 'spinner') return <PageSkeleton variant={resolved} label={message} />;
+    return (
+        <Suspense fallback={<LoadingBackdrop message={message} minHeight={minHeight} />}>
+            <RouteLoadingView message={message} minHeight={minHeight} />
+        </Suspense>
+    );
+}
+
+type LoadingViewProps = Omit<LoadingScreenProps, 'variant'>;
+
+function RouteLoadingView(props: LoadingViewProps) {
+    const pathname = usePathname();
+    return <LoadingView {...props} variant={variantForPath(pathname)} />;
+}
+
+/** A blank, page-coloured placeholder for the moment before the route (and so the skeleton shape) is known. */
+function LoadingBackdrop({ message, minHeight }: LoadingViewProps) {
+    return (
+        <Box
+            role="status"
+            aria-busy="true"
+            aria-label={message ?? 'Loading'}
+            sx={{ minHeight, backgroundColor: 'var(--mui-palette-background-subtle)' }}
+        />
+    );
+}
+
+function LoadingView({ message, minHeight, variant }: LoadingViewProps & { variant: PageSkeletonVariant | 'spinner' }) {
+    if (variant !== 'spinner') return <PageSkeleton variant={variant} label={message} />;
 
     return (
         <Box
