@@ -39,7 +39,7 @@ export const MODULE_ICONS: Record<CrmModuleKey, React.ReactNode> = {
 };
 
 /** Same green convert icon as the Convert Lead action in the lead's side drawer and on the Convert Lead form. */
-export const CONVERT_ICON = <PublishedWithChangesIcon sx={{ ...ICON_SX, color: 'var(--crm-emerald-600)' }} />;
+export const CONVERT_ICON = <PublishedWithChangesIcon sx={{ ...ICON_SX, color: 'var(--crm-logo-green-text)' }} />;
 
 /** Selector id of the Convert Lead entry (not a module of its own: it composes the contact, organization and opportunity forms). */
 const CONVERT_ID = 'convert-lead';
