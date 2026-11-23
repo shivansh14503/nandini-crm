@@ -49,8 +49,16 @@ const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', '
 const pad = (n: number) => String(n).padStart(2, '0');
 const str = (value: unknown) => (value === null || value === undefined ? '' : String(value).trim());
 
-const isDiff = (value: unknown): value is { from: unknown; to: unknown } =>
-    typeof value === 'object' && value !== null && 'from' in value && 'to' in value;
+/**
+ * A `{ from, to }` change pair. One side may be missing: JSON drops an `undefined` value, so a field that was
+ * filled in for the first time arrives as `{ to }` and one that was cleared as `{ from }` (same rule as the
+ * backend's audit.format.ts `isDiff`). A missing side reads as '' through `str`.
+ */
+const isDiff = (value: unknown): value is { from?: unknown; to?: unknown } => {
+    if (typeof value !== 'object' || value === null || Array.isArray(value)) return false;
+    const keys = Object.keys(value);
+    return keys.length > 0 && keys.length <= 2 && keys.every((key) => key === 'from' || key === 'to');
+};
 
 /** `2026-11-16` + `11:10 AM` → `16 Nov 2026 · 11:10 am`; '' when no date. */
 export function formatSlot(date: string, time: string): string {
@@ -111,7 +119,7 @@ export function buildFollowUpEvents(entries: AuditEntry[]): FollowUpEvent[] {
         // A lead follow-up: its own summary says it all (it is written even when nothing else changed).
         if (entry.action === 'FOLLOW_UP' && changes.followUp && typeof changes.followUp === 'object') {
             const f = changes.followUp as FollowUpSummary;
-            for (const field of FOLLOW_UP_FIELDS) if (isDiff(changes[field])) state[field] = str((changes[field] as { to: unknown }).to);
+            for (const field of FOLLOW_UP_FIELDS) if (isDiff(changes[field])) state[field] = str((changes[field] as { to?: unknown }).to);
             state.nextFollowupDate = str(f.next?.date);
             state.nextFollowupTime = str(f.next?.time);
             const previous = formatSlot(str(f.previous?.date), str(f.previous?.time));
@@ -149,7 +157,7 @@ export function buildFollowUpEvents(entries: AuditEntry[]): FollowUpEvent[] {
 
         const before = { ...state };
         for (const field of touched) {
-            const diff = changes[field] as { from: unknown; to: unknown };
+            const diff = changes[field] as { from?: unknown; to?: unknown };
             before[field] = str(diff.from);
             state[field] = str(diff.to);
         }
