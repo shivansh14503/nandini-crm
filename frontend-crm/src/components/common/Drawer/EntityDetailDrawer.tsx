@@ -393,9 +393,8 @@ export function EntityDetailDrawer({
                         </Box>
                     </Box>
 
-                    {/* Top Right Header Actions (and, under them, e.g. the Rating box) */}
-                    <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 1, flexShrink: 0 }}>
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                    {/* Top Right Header Actions */}
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, flexShrink: 0 }}>
                         {headerActions?.onSync && (
                             <Tooltip title="Synchronize Data">
                                 <IconButton
@@ -432,13 +431,13 @@ export function EntityDetailDrawer({
                             </IconButton>
                         </Tooltip>
                     </Box>
-                    {headerAside}
-                    </Box>
                 </Box>
 
                 {/* Status Badges Row */}
-                {badges.length > 0 && (
-                    <Box sx={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 0.8, mt: 1.8 }}>
+                {/* Status Badges Row, with e.g. the Rating box on its right */}
+                {(badges.length > 0 || headerAside) && (
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mt: 1.8 }}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 0.8, flex: 1, minWidth: 0 }}>
                         {badges.map((b, idx) => (
                             <Tooltip key={idx} title={b.tooltip ?? ''} arrow disableInteractive>
                             <Box
@@ -462,6 +461,8 @@ export function EntityDetailDrawer({
                             </Box>
                             </Tooltip>
                         ))}
+                    </Box>
+                    {headerAside && <Box sx={{ flexShrink: 0 }}>{headerAside}</Box>}
                     </Box>
                 )}
             </Box>

@@ -85,7 +85,7 @@ export interface EntityDetailDrawerProps {
     includeChangesTab?: boolean; // Default true: attaches the standardized 'Changes' tab (needs auditEntity)
     changesTabLabel?: string; // Default 'Changes'
     defaultTabIndex?: number;
-    /** Shown under the header buttons on the right (e.g. a lead's Rating box). */
+    /** Shown at the right end of the badge row (e.g. a lead's Rating box). */
     headerAside?: React.ReactNode;
     primaryAction?: DrawerActionButtonProps;
     secondaryAction?: DrawerActionButtonProps;
