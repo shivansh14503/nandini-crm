@@ -131,7 +131,6 @@ export function RelatedSecondaryDrawer({
                     onClose={onClose}
                     title={recordTitle}
                     subtitle={`${moduleLabel}${parentTitle ? ` • ${parentTitle}` : ''}`}
-                    statusText="Linked Record Verified"
                     tabs={[
                         {
                             id: 'overview',

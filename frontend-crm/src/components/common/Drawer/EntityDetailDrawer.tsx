@@ -86,7 +86,6 @@ export function EntityDetailDrawer({
     includeChangesTab = true,
     changesTabLabel = 'Changes',
     defaultTabIndex = 0,
-    statusText = 'Ready for Order Processing',
     primaryAction,
     secondaryAction,
     footerActions,
@@ -547,29 +546,12 @@ export function EntityDetailDrawer({
                     backgroundColor: 'transparent',
                     display: 'flex',
                     alignItems: 'center',
-                    justifyContent: 'space-between',
+                    justifyContent: 'flex-end',
                     gap: 1.5,
                 }}
             >
-                {/* Status Indicator */}
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 0 }}>
-                    <Box
-                        sx={{
-                            width: 8,
-                            height: 8,
-                            flexShrink: 0,
-                            borderRadius: '50%',
-                            backgroundColor: 'var(--mui-palette-success-main)',
-                            boxShadow: '0 0 0 3px color-mix(in srgb, var(--mui-palette-success-main) 20%, transparent)',
-                        }}
-                    />
-                    <Typography noWrap sx={{ fontSize: '0.78rem', fontWeight: 600, color: 'var(--crm-slate-700)' }}>
-                        {statusText}
-                    </Typography>
-                </Box>
-
-                {/* Right Action Buttons */}
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexShrink: 0 }}>
+                {/* Action buttons only */}
+                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', flexWrap: 'wrap', gap: 1, minWidth: 0 }}>
                     {footerActions}
 
                     {secondaryAction && (

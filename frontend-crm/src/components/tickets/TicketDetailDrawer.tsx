@@ -6,7 +6,7 @@ import ContentCopyOutlinedIcon from '@mui/icons-material/ContentCopyOutlined';
 
 import { ROUTES } from '@/config/constants';
 import { withListOrigin } from '@/utils/listOrigin';
-import { isTicketOverdue, type Ticket } from '@/types/ticket.types';
+import type { Ticket } from '@/types/ticket.types';
 import { useTicket } from '@/hooks/queries';
 import { EntityDetailDrawer, copyToClipboard } from '@/components/common/Drawer';
 import { useLayoutDrawerProps } from '@/components/common/Drawer/layout';
@@ -34,7 +34,6 @@ export function TicketDetailDrawer({ ticket, open, onClose, onEdit, hideBackdrop
     if (!t) return null;
 
     const handleEdit = () => (onEdit ? onEdit(t.id) : router.push(ROUTES.TICKET_EDIT(t.id)));
-    const overdue = isTicketOverdue(t);
 
     return (
         <EntityDetailDrawer
@@ -56,7 +55,6 @@ export function TicketDetailDrawer({ ticket, open, onClose, onEdit, hideBackdrop
             auditEntity={{ type: 'tickets', id: t.id }}
             recordAudit={t}
             includeChangesTab
-            statusText={overdue ? `${t.ticketStatus} • Overdue` : t.ticketStatus}
             primaryAction={{ label: 'Edit Ticket', onClick: handleEdit }}
             secondaryAction={
                 showNumber('ticket')

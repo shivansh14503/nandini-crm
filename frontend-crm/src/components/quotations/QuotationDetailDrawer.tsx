@@ -50,7 +50,6 @@ export function QuotationDetailDrawer({ quotation: initialQuotation, open, onClo
             subtitle={view.subtitle}
             avatarIcon={view.avatarIcon}
             avatarBg={view.avatarBg}
-            statusText={`Valid Until: ${quotation.validUntil || quotation.quoteDate || '-'}`}
             badges={view.badges}
             headerActions={{
                 onEdit: handleEdit,

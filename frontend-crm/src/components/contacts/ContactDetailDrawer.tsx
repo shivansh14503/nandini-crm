@@ -40,7 +40,6 @@ export function ContactDetailDrawer({ contact, open, onClose, onEdit }: ContactD
         }
     };
 
-    const leftJob = c.leftJob === 'Yes';
 
     return (
         <EntityDetailDrawer
@@ -62,7 +61,6 @@ export function ContactDetailDrawer({ contact, open, onClose, onEdit }: ContactD
             auditEntity={{ type: 'contacts', id: c.id }}
             recordAudit={c}
             includeChangesTab={true}
-            statusText={leftJob ? 'Former employee' : 'Direct Channel Active'}
             primaryAction={{
                 label: 'Edit Contact',
                 onClick: handleEdit,

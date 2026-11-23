@@ -85,7 +85,6 @@ export interface EntityDetailDrawerProps {
     includeChangesTab?: boolean; // Default true: attaches the standardized 'Changes' tab (needs auditEntity)
     changesTabLabel?: string; // Default 'Changes'
     defaultTabIndex?: number;
-    statusText?: string;
     primaryAction?: DrawerActionButtonProps;
     secondaryAction?: DrawerActionButtonProps;
     footerActions?: React.ReactNode;

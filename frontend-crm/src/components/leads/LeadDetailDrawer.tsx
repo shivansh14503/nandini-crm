@@ -112,7 +112,6 @@ export function LeadDetailDrawer({
             auditEntity={{ type: 'leads', id: l.id }}
             recordAudit={l}
             includeChangesTab={true}
-            statusText={isConverted ? 'Lead Converted' : `Next Followup: ${l.nextFollowupDate}`}
             primaryAction={{
                 label: 'Edit Lead',
                 onClick: handleEdit,
