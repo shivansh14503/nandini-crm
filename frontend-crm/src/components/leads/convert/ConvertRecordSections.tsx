@@ -7,7 +7,8 @@ import { useFormConfigs } from '@/hooks/queries/useFormConfigs';
 import { groupSections } from '@/utils/formConfig';
 import { convertFieldName, convertShownFields, isConvertInput } from '@/utils/convertLeadFields';
 import type { FormConfigsPayload, FormFieldDefinitionDto } from '@/types/formConfig.types';
-import type { ConvertModule } from '@/validations/convertLead.schema';
+import { CONVERT_FIELD_NAMES, type ConvertModule } from '@/validations/convertLead.schema';
+import { LeadLocked } from './LeadLocked';
 
 export interface ConvertSection {
     sectionKey: string;
@@ -59,10 +60,21 @@ export function ConvertRecordSections({ module, fields }: ConvertRecordSectionsP
               sectionLabel: s.sectionLabel,
               nodes: s.fields.map((f): [string, React.ReactNode] => [
                   f.fieldKey,
-                  isConvertInput(module, f) ? fields[f.fieldKey] : <DynamicFormField field={f} name={convertFieldName(module, f)} />,
+                  <LeadLocked key={f.fieldKey} name={convertFieldName(module, f)}>
+                      {isConvertInput(module, f) ? fields[f.fieldKey] : <DynamicFormField field={f} name={convertFieldName(module, f)} />}
+                  </LeadLocked>,
               ]),
           }))
-        : [{ sectionKey: 'all', sectionLabel: '', nodes: Object.entries(fields) }];
+        : [
+              {
+                  sectionKey: 'all',
+                  sectionLabel: '',
+                  nodes: Object.entries(fields).map(([key, node]): [string, React.ReactNode] => [
+                      key,
+                      <LeadLocked key={key} name={(CONVERT_FIELD_NAMES[module] as Record<string, string>)[key] ?? key}>{node}</LeadLocked>,
+                  ]),
+              },
+          ];
 
     return (
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5 }}>

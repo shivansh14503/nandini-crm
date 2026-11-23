@@ -82,6 +82,33 @@ export function withAdminDropdownDefaults(values: ConvertLeadFormValues): Conver
     return result as ConvertLeadFormValues;
 }
 
+const hasText = (value: unknown) => typeof value === 'string' && value.trim() !== '';
+
+/**
+ * Convert Lead fields whose value comes from the lead itself (not a form or admin default): shown read-only, as the
+ * lead is their source. Organization Name stays editable, since it is how an existing organization is picked, and
+ * so does the next follow-up, which schedules the new opportunity's next step.
+ */
+export function leadPrefilledFields(lead: Lead): Set<string> {
+    const defaults = buildConvertLeadDefaults(lead);
+    const fromLead: Record<string, unknown> = {
+        contactName: lead.name,
+        contactMobile: lead.mobile,
+        contactPhone3: lead.otherPhone,
+        contactEmails: lead.emailAddress?.some((e) => hasText(e.email)) ? 'yes' : '',
+        designation: lead.designation,
+        department: lead.department,
+        leadSource: lead.leadSource,
+        opportunityLeadSource: lead.leadSource,
+        productCategory: lead.productCategory?.length ? 'yes' : '',
+        referredBy: lead.referredBy,
+        followupType: lead.followupType,
+        opportunityDescription: lead.remarks,
+    };
+    for (const [key, value] of Object.entries(defaults.extraFields.organizations)) fromLead[`extraFields.organizations.${key}`] = value;
+    return new Set(Object.keys(fromLead).filter((name) => hasText(fromLead[name])));
+}
+
 /** Maps a lead onto the initial values of the Convert Lead form. */
 export function buildConvertLeadDefaults(lead: Lead): ConvertLeadFormValues {
     return withAdminDropdownDefaults({
