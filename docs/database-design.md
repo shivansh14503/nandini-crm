@@ -29,7 +29,7 @@
 | Numbering | `DocumentSeriesSettings`, `DocumentSeries`, `SequenceCounter` |
 | Customisation | `DropdownCategory`, `DropdownOption`, `FormFieldDefinition`, `ModuleSetting` |
 | PDF | `PdfTemplate`, `PdfAsset`, `PdfSavedItem` |
-| Audit & UI state | `AuditLog`, `TableFilter`, `ModuleScorecard` |
+| Audit & UI state | `AuditLog`, `AuditExport`, `AuditDigest`, `TableFilter`, `ModuleScorecard` |
 | Email checks | `EmailValidationRun` |
 
 ## 2. Design conventions
@@ -316,12 +316,12 @@ with `@ignore` so schema diffs stay empty.
 
 | Group | Columns |
 | --- | --- |
-| What | `category` (`DATA` / `CONFIG` / `SECURITY`), `action` (`CREATE`, `UPDATE`, `DELETE`, `RESTORE`, `REVERT`, `STATUS_CHANGE`, `CONVERT`, `FOLLOW_UP`, `EMAIL_CHECK` (an email check changed an address's result on a record: `{ verificationStatus: { from, to }, email, reason, runId? }`), `IMPORT`, `LOGIN`, `LOGIN_FAILED`, `LOGOUT`, `ACCESS_DENIED`, `SET_DEFAULT`, `DUPLICATE`, `PDF_GENERATED`), `severity` (`INFO` / `NOTICE` / `WARNING` / `CRITICAL`), `module` (CRM module key or admin area: `form-customization`, `pdf-templates`, `document-series`, `cities`, `users`) |
+| What | `category` (`DATA` / `CONFIG` / `SECURITY`), `action` (`CREATE`, `UPDATE`, `DELETE`, `RESTORE`, `REVERT`, `STATUS_CHANGE`, `CONVERT`, `FOLLOW_UP`, `EMAIL_CHECK` (an email check changed an address's result on a record: `{ verificationStatus: { from, to }, email, reason, runId? }`), `IMPORT`, `LOGIN`, `LOGIN_FAILED`, `LOGOUT`, `ACCESS_DENIED`, `SET_DEFAULT`, `DUPLICATE`, `PDF_GENERATED`, `EXPORT` (an audit log export: `{ format, rowCount, truncated, fileName, filters }`), `LEDGER_VERIFY` (a "Verify integrity" run: `{ result, message, digests, unreadableFiles, upToBlock, durationMs }`)), `severity` (`INFO` / `NOTICE` / `WARNING` / `CRITICAL`), `module` (CRM module key or admin area: `form-customization`, `pdf-templates`, `document-series`, `cities`, `users`) |
 | Which record | `entityType`, `entityId`, `entityCode` (record number at the time; shown only once the module has a document series), `entityLabel` (record name at the time, so renamed / deleted records stay readable) |
 | Change | `changedFields` (`\|status\|assignedTo\|` for diffs), `changesJson` (`{ field: { from, to } }` for updates, a snapshot or summary otherwise; sensitive keys stored as `[redacted]`) |
 | Who | `changedBy` (username, `system` for jobs), `actorId` (`Users.Id`), `actorRole` (role at the time) |
 | Where / how | `source` (`UI` = the web app, `API` = any other client, `IMPORT`, `JOB`), `requestId` (same on every row one request / import / job run writes; equals the `X-Request-Id` response header and the log line's `req.id`), `sessionId` (JWT id), `httpMethod`, `route` (`/api/leads/:id`, or `job:<name>`), `page` (the screen, sent by the web app), `ipAddress`, `userAgent` |
-| Undo | `revertsId` (the entry an undo / restore reverses) |
+| Undo | `revertsId` (the entry an undo / restore reverses: a `REVERT` points at the UPDATE / STATUS_CHANGE it put back, a `RESTORE` at the DELETE; at most one per entry) |
 
 Indexes (all PAGE-compressed): `(createdAt)`, `(entityType, entityId, id)` record timelines, `(changedBy, createdAt)`,
 `(module, createdAt)`, `(category, createdAt)`, `(action, createdAt)`, `(requestId)`, `(ipAddress, createdAt)`,
@@ -332,6 +332,14 @@ add `old → new` to `FIELD_ALIASES` in `src/modules/audit/audit.format.ts`; rea
 before 2026-11-21 were copied in date order with `category` / `module` / `severity` / labels / `actorId` /
 `changedFields` / sign-in IPs worked out from the old data; their `source` is null except `JOB` for `system`, and
 their request columns are null.
+
+**Integrity.** `sys.sp_generate_database_ledger_digest` (nightly at 00:15 business time, on demand, and at the start of
+every check) hashes the ledger up to its latest block; the JSON is written to a file under `AUDIT_DIGEST_DIR` (one
+folder per database, never overwritten) and listed in `AuditDigest`. "Verify integrity" runs
+`sys.sp_verify_database_ledger` with every digest **file** (never the database copy, which an attacker with database
+access could change too). Both procedures need `ALLOW_SNAPSHOT_ISOLATION ON` (migration
+`20261123120000_audit_snapshot_isolation`, which runs outside a transaction) and, for a non-owner login,
+`GRANT VIEW LEDGER CONTENT` and `GRANT GENERATE LEDGER DIGEST` on the database.
 
 ### 4.17 `TableFilter`
 
@@ -360,6 +368,24 @@ least `EMAIL_VERIFICATION_LIST_API_MIN` addresses) and, for list runs, `phase` (
 and were sent), `providerJobId`, `providerProgress` (0–100), `lastPolledAt`. Each result is written onto every `EntityEmail` row with that address. Kept as history (never
 deleted). Index `createdAt`.
 
+### 4.20 `AuditExport`
+
+One CSV / Excel export of the audit log (migration `20261123120100_audit_export_digest`). `id` (uuid, also the
+BullMQ job id and the file name on disk under `AUDIT_EXPORT_DIR`), `requestedBy` (username; only they can poll or
+download it), `format` (`csv` | `xlsx`), `filtersJson` (the list filters at the time), `status` (`queued` | `running` |
+`completed` | `failed` | `expired`), `rowCount`, `truncated` (hit the cap: 1,000,000 CSV / 500,000 Excel), `fileName`
+(`audit-log-YYYY-MM-DD-HHmm.csv`), `fileSize`, `message` (why it failed), `createdAt`, `finishedAt`. Files are deleted
+after 24 h (row → `expired`); an export still `running` after 6 h (a crashed worker) is marked `failed`. Kept as
+history. Indexes `(requestedBy, createdAt)`, `(createdAt)`. The export itself is an `AuditLog` `EXPORT` entry.
+
+### 4.21 `AuditDigest`
+
+The saved ledger digests, for the Integrity panel (same migration). `id` (INT identity), `blockId` (BIGINT), `hash`,
+`lastCommitTime`, `digestTime`, `digestJson` (SQL Server's JSON as returned), `fileName` (the copy under
+`AUDIT_DIGEST_DIR`), `source` (`JOB` nightly | `MANUAL` "Save a digest now" | `VERIFY` start of a check), `createdBy`,
+`createdAt`. A digest of a block already saved is not saved again while its file exists. Verification reads the files,
+not these rows. Index `(createdAt)`.
+
 ## 5. Index strategy
 
 - **Scoped list composites** `(isDeleted, assignedTo, createdAt)` match the most common query: "live records I own or
@@ -378,6 +404,8 @@ deleted). Index `createdAt`.
 | Create | Number from `SequenceCounter` → INSERT row → child rows (emails/line items) → `AuditLog` CREATE, one transaction |
 | Update | App lock on the record → read → diff → UPDATE → replace children → name write-through to linked rows → `AuditLog` UPDATE |
 | Delete | `isDeleted = 1, deletedAt = now` (+ `AuditLog` DELETE); children stay attached |
+| Restore (Admin › Audit Log) | App lock → uniqueness re-checked → `isDeleted = 0, deletedAt = null` (+ `AuditLog` RESTORE with `revertsId`) |
+| Undo (Admin › Audit Log) | The module's normal Update with the entry's `from` values for fields not changed since; written as `AuditLog` REVERT with `revertsId` |
 | Lead conversion | Serializable tx: create/link Organization + Contact, create Opportunity, set lead `status = Converted` + `converted*` columns, audit each |
 | City rename | Name written through to every address that references the city id |
 | Option value rename / field key rename | Stored values in records, saved filters and PDF template paths follow (`optionValueRename.ts`, `fieldKeyRename.ts`) |

@@ -23,7 +23,7 @@ flowchart LR
 
     subgraph Node["Node.js API process (backend-crm)"]
         EX["Express 5<br/>routes → controllers → services"]
-        WK["BullMQ workers<br/>(import, audit, lead rating)<br/>RUN_WORKERS=true"]
+        WK["BullMQ workers<br/>(import, audit, lead rating,<br/>audit export, audit ledger)<br/>RUN_WORKERS=true"]
         PDF["PDF renderer<br/>Puppeteer + semaphore"]
     end
 
@@ -137,6 +137,7 @@ comes from these places instead:
 | BullMQ import worker | Async job loop on the same event loop (or the separate worker process) | **concurrency 1** |
 | BullMQ audit worker | Same | **concurrency 5** |
 | BullMQ lead rating worker | Same; one run a night (plus a catch-up at start-up) | **concurrency 1** |
+| BullMQ audit export / audit ledger workers | Same; an export streams entries 1,000 at a time to a file, a ledger check holds one long SQL call on its own connection | **concurrency 1** each |
 | PDF rendering | Separate **Chromium processes**; one shared browser, a fresh incognito context + page per job | `PDF_MAX_CONCURRENCY` (default 3) via an in-process FIFO `Semaphore` |
 
 Because the import worker shares the event loop with HTTP handling when `RUN_WORKERS=true`, production should run
@@ -234,6 +235,8 @@ commands fail immediately instead of hanging, and reconnects in the background (
 | `bull:crm-import:*` | BullMQ internals | 1 day (completed) / 7 days (failed) | import queue | Import jobs, progress, results |
 | `bull:crm-audit:*` | BullMQ internals | 1 h (completed) / 7 days (failed) | audit queue | Async audit events |
 | `bull:crm-lead-rating:*` | BullMQ internals (job scheduler + runs) | 7 days (completed) / 30 days (failed) | lead rating worker | Nightly Rating ageing |
+| `bull:crm-audit-export:*` | BullMQ internals | 1 day (completed) / 7 days (failed) | audit export queue | Audit log exports over 5,000 entries |
+| `bull:crm-audit-ledger:*` | BullMQ internals (job scheduler + runs) | removed when done | audit ledger worker | Nightly ledger digest; "Verify integrity" (job id `ledger-verify`: present = running) |
 
 `cache:dashboard:*` is defined and invalidated but nothing writes it yet (no dashboard API).
 
@@ -255,6 +258,7 @@ changes the key.
 | Audit events (logins, PDF generated, import summaries) | Written directly to SQL instead of queued |
 | Imports | ≤ 500 rows run synchronously inside the request; larger imports return `503 IMPORT_QUEUE_UNAVAILABLE` |
 | Import status polling | `503` |
+| Audit log export / Verify integrity | Run in the API process instead (the export after its response; one check at a time per process); the nightly digest doesn't run |
 | Recently viewed | Not recorded, lists report none |
 | `/api/health` | Reports `redis: "unavailable"` |
 
@@ -272,6 +276,8 @@ flowchart LR
 | --- | --- | --- | --- | --- | --- |
 | `crm-import` | `POST /api/import/:entity` (job id = import id) | 1 | **1** (a retry would duplicate rows already created) | done 1 day / 500 jobs; failed 7 days | Reports progress every 20 rows; result `{ total, created, failed[] }` |
 | `crm-audit` | `auditService.enqueue` (login, login failed, logout, access denied, PDF generated, import summary); each job carries the request's audit origin | 5 | 5, exponential backoff from 1 s | done 1 h / 1000 jobs; failed 7 days | Data-change audits do **not** go through the queue (see below) |
+| `crm-audit-export` | `POST /api/admin/audit-logs/exports` over 5,000 entries (job id = export id) | 1 | 1 | done 1 day / 200 jobs; failed 7 days | Streams the matching entries newest first, 1,000 per query, to a CSV or a streaming Excel writer (`utils/xlsxWriter.ts`: constant memory; peak heap ~120 MB on a 169 k-entry export) under `AUDIT_EXPORT_DIR`; writes the `EXPORT` entry with the requesting admin's origin; files deleted after 24 h by the nightly ledger job |
+| `crm-audit-ledger` | Job scheduler `audit-ledger-digest`, cron `15 0 * * *` in `BUSINESS_TIMEZONE`; `POST /api/admin/audit-logs/integrity/verify` (job id `ledger-verify`) | 1 | 1 | removed when done | Nightly: saves a ledger digest outside the database (`AUDIT_DIGEST_DIR` + `AuditDigest`) and tidies old exports. Verify: `sys.sp_verify_database_ledger` against every digest file on a separate SQL connection with a long timeout (`AUDIT_VERIFY_TIMEOUT_MS`, default 30 min; ~100 s per million entries) and writes a `LEDGER_VERIFY` entry |
 | `crm-lead-rating` | Job scheduler `lead-rating-ageing`, cron `5 0 * * *` in `BUSINESS_TIMEZONE` (upserted when the worker starts) | 1 | 1 (the next night catches up) | done 7 days / 30 jobs; failed 30 days | `ageLeadRatings`: re-rates leads ageing under a "Days since response" rule, writing only changed rows (history by `system`). The worker also runs it once at start-up, so a night missed while nothing ran (or Redis was down) is made up; runs are idempotent ([lead-rating-rules.md](lead-rating-rules.md)) |
 
 **Import flow:** the frontend wizard parses the CSV/XLSX in the browser (papaparse / xlsx), maps columns, validates
@@ -330,7 +336,7 @@ flowchart LR
 | **Document numbering** | `DocumentSeries` per module + `DocumentSeriesSettings` (company prefix, separator, financial year). `generateDocumentCode` builds e.g. `NIPL/L/26-27/1004`; modules without a series keep `LD-0001` style codes, which the UI hides. |
 | **Soft delete** | Core entities set `isDeleted` / `deletedAt`; lists and lookups always filter `isDeleted = false`. |
 | **Denormalised names** | Contacts, opportunities, quotations and tickets store the organization/contact *name* next to the id (for sort/search). `shared/nameSync.ts` writes renames through to all live linked rows in the same transaction. City names are written through the same way when an admin renames a city. |
-| **Audit trail / revisions** | Every create/update/delete stores a field-level diff in `AuditLog` (append-only ledger table, kept forever, with who / where / how per entry — [database design §4.16](database-design.md#416-auditlog)); `GET /api/audit-logs/:entityType/:entityId` turns it into a revision timeline. `GET /api/admin/audit-logs` queries the whole log for admins (filters, keyset paging, labelled entry, facets, stats); the screen, undo / restore and integrity checks are being built ([build plan Phase 11](build-plan.md)). |
+| **Audit trail / revisions** | Every create/update/delete stores a field-level diff in `AuditLog` (append-only ledger table, kept forever, with who / where / how per entry — [database design §4.16](database-design.md#416-auditlog)); `GET /api/audit-logs/:entityType/:entityId` turns it into a revision timeline. `GET /api/admin/audit-logs` queries the whole log for admins (filters, keyset paging, labelled entry, facets, stats) for Admin › Audit Log. From an entry an admin can **undo** an update (the `from` values go back through the module's own update, inside `runAsRevertOf` so its entry is written as `REVERT`; fields changed since are left alone) or **restore** a deleted record (`<module>Service.restore`, uniqueness checked again), each once; **export** the current filter to CSV / Excel; and **verify integrity** against ledger digests kept outside the database ([build plan Phase 11](build-plan.md)). |
 | **Global search** | One query per category (organizations, contacts, leads, opportunities), access-scoped, with smart detection of entity codes, phone numbers and GSTIN prefixes. |
 | **Table filters** | Each user's recent (last 10) and saved filters per module are stored in `TableFilter`. |
 | **Email verification** | Free checks (syntax, typo of a common provider, disposable domain, DNS — the domain lookup is cached in Redis for a day) then QuickEmailVerification for the mailbox. **The database is the record of checked addresses**: an address saved on any lead / contact / organization with a result is never sent to the provider again from a form or a save, and there is no periodic re-check. Invalid addresses are never stored: the form refuses to save once its on-blur check said "invalid" (toast, no second call), and the save check rejects them server-side. No Redis cache of results; a 30-minute in-process memory of recent provider answers makes the on-blur check, the save check and the post-save background check of one new address cost one credit (lost on restart or across API instances, costing at most one extra credit). Admins re-check addresses in bulk under Settings › Email Validation; an `EmailValidationRun` is processed in the API process (one run at a time, cancellable, resumed at startup). Small runs call the single-address API per address and stop when the provider runs out of credits. Runs of at least `EMAIL_VERIFICATION_LIST_API_MIN` (default 1,000, the provider's own cut-off) use its **List API**: the free checks run first (8 at a time, failures decided for free), the rest are uploaded as one CSV (`POST /v1/bulk-verify`; credits for the whole list are taken at upload, "unknown" results refunded), the job is polled (`GET /v1/bulk-verify/status/{id}`, every 2 / 5 / 15 min by list size; no callback URL, so the API needn't be reachable from the internet; status `ready` = waiting for credits), then the safe-to-send / valid / invalid reports are downloaded and written onto the records (safe to send = valid, valid only = risky, invalid = invalid, unknown = undecided; reasons from the full report when its columns are recognised) and the job is deleted at the provider. **Every result that changes an address on a record is audited** (`EMAIL_CHECK` on the record, from / to result + reason; bulk runs by the admin who started them with the run id as request id, the post-save check by `system`; re-checks that confirm the stored result write nothing). Env: `EMAIL_VERIFICATION_ENABLED`, `QUICKEMAILVERIFICATION_API_KEY`, `EMAIL_VERIFICATION_LIST_API_MIN`. |
@@ -394,6 +400,10 @@ flowchart TB
 - Migrations: `npm run db:deploy` (`prisma migrate deploy`). Reference data: `npm run seed`.
 - Chromium needs its system libraries and fonts on Linux; see the README's "Installing Chromium" section.
 - Health probe: `GET /api/health` (excluded from request logs).
+- Audit log: `AUDIT_DIGEST_DIR` must point at storage the database server can't write (another disk, a mounted
+  share or blob container), or the digests prove little; `AUDIT_EXPORT_DIR` (default the OS temp folder) needs room
+  for a day of exports (a CSV of a million entries is ~0.5 GB, an Excel file of 500 k entries ~45 MB). A non-owner database login needs
+  `GRANT VIEW LEDGER CONTENT, GENERATE LEDGER DIGEST TO <user>` for the Integrity panel.
 
 ## 10. Known gaps and risks
 

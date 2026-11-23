@@ -221,6 +221,11 @@ export const auditIdParamSchema = z.object({
         .refine(isBigIntId, 'id must be an audit entry id.'),
 });
 
+/** POST /:id/undo — `fields`: undo only these of the entry's fields (default: every one that can be). */
+export const auditUndoBodySchema = z.object({
+    fields: z.array(z.string().regex(FIELD_KEY, 'fields must be field keys such as assignedTo or customFields.po_number.')).min(1).max(200).optional(),
+});
+
 // ── Ranges ───────────────────────────────────────────────────────────────────
 
 /** `createdAt >= gte AND createdAt < lt`; either end may be open. */

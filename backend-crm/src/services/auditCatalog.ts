@@ -24,7 +24,11 @@ export type AuditEntityType =
     | 'PdfAsset'
     | 'PdfSavedItem'
     | 'DocumentSeries'
-    | 'City';
+    | 'City'
+    /** An export of the audit log itself (Admin › Audit Log). */
+    | 'AuditExport'
+    /** The audit log's SQL Server ledger (integrity checks). */
+    | 'AuditLedger';
 
 export type AuditAction =
     | 'CREATE'
@@ -48,7 +52,11 @@ export type AuditAction =
     | 'ACCESS_DENIED'
     | 'SET_DEFAULT'
     | 'DUPLICATE'
-    | 'PDF_GENERATED';
+    | 'PDF_GENERATED'
+    /** Entries of the audit log exported to a file. */
+    | 'EXPORT'
+    /** The ledger was checked for tampering ("Verify integrity"); CRITICAL when it failed. */
+    | 'LEDGER_VERIFY';
 
 /** DATA = a CRM record changed; CONFIG = an admin setting changed; SECURITY = sign-ins and refused access. */
 export type AuditCategory = 'DATA' | 'CONFIG' | 'SECURITY';
@@ -76,6 +84,8 @@ const MODULE_BY_ENTITY: Record<AuditEntityType, string> = {
     PdfSavedItem: 'pdf-templates',
     DocumentSeries: 'document-series',
     City: 'cities',
+    AuditExport: 'audit-log',
+    AuditLedger: 'audit-log',
 };
 
 const CONFIG_ENTITIES: ReadonlySet<AuditEntityType> = new Set([
@@ -91,7 +101,7 @@ const CONFIG_ENTITIES: ReadonlySet<AuditEntityType> = new Set([
     'City',
 ]);
 
-const SECURITY_ACTIONS: ReadonlySet<AuditAction> = new Set(['LOGIN', 'LOGIN_FAILED', 'LOGOUT', 'ACCESS_DENIED']);
+const SECURITY_ACTIONS: ReadonlySet<AuditAction> = new Set(['LOGIN', 'LOGIN_FAILED', 'LOGOUT', 'ACCESS_DENIED', 'EXPORT', 'LEDGER_VERIFY']);
 
 /** Actions whose `changes` are a `{ field: { from, to } }` diff. */
 const DIFF_ACTIONS: ReadonlySet<AuditAction> = new Set(['UPDATE', 'STATUS_CHANGE', 'FOLLOW_UP', 'CONVERT', 'REVERT', 'EMAIL_CHECK']);
@@ -122,7 +132,7 @@ export function categoryFor(entityType: AuditEntityType, action: AuditAction): A
  */
 export function severityFor(action: AuditAction, category: AuditCategory): AuditSeverity {
     if (action === 'LOGIN_FAILED' || action === 'ACCESS_DENIED') return 'WARNING';
-    if (['DELETE', 'RESTORE', 'REVERT', 'CONVERT', 'IMPORT'].includes(action) || category === 'CONFIG') return 'NOTICE';
+    if (['DELETE', 'RESTORE', 'REVERT', 'CONVERT', 'IMPORT', 'EXPORT'].includes(action) || category === 'CONFIG') return 'NOTICE';
     return 'INFO';
 }
 
@@ -228,8 +238,8 @@ export function labelFromChanges(entityType: AuditEntityType, entityId: string, 
         case 'DocumentSeries':
             return 'Document Series';
         case 'Import':
-            return pick('fileName');
         case 'PdfAsset':
+        case 'AuditExport':
             return pick('fileName');
         default:
             return pick('name', 'label');

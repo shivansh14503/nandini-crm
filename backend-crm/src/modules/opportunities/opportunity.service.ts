@@ -15,7 +15,7 @@ import { findOrganizationByName, type PrefetchedLookups } from '../shared/prefet
 import { assertReference } from '../shared/references.js';
 import { assertNotInPast, nextFollowupCheck, type PastCheck } from '../../validators/notInPast.js';
 import { codeSearchPrefix, phoneSearch, phoneWhere } from '../shared/searchTerms.js';
-import { lockRecords, runInTransaction, softDeleteData, type BulkDeleteResult } from '../shared/transactions.js';
+import { assertDeletedRow, lockRecords, restoreData, runInTransaction, softDeleteData, type BulkDeleteResult } from '../shared/transactions.js';
 import { toOpportunityData, toOpportunityDto, type OpportunityDto } from './opportunity.mapper.js';
 import {
     OPPORTUNITY_SORT_FIELDS,
@@ -235,6 +235,20 @@ export const opportunityService = {
             assertRecordAccess(user, existing);
             await tx.opportunity.update({ where: { id }, data: softDeleteData(user) });
             await auditService.record(tx, { entityType: 'Opportunity', entityId: id, action: 'DELETE', changedBy: user.username });
+        });
+        await cacheService.invalidateEntityCaches('opportunities');
+    },
+
+    /**
+     * Restore from Admin › Audit Log: brings back a deleted opportunity.
+     * Writes a RESTORE entry pointing at the DELETE it reverses (`revertsId`).
+     */
+    async restore(id: string, user: AuthUser, revertsId?: string): Promise<void> {
+        await runInTransaction(async (tx) => {
+            await lockRecords(tx, 'opportunity', [id]);
+            assertDeletedRow(await tx.opportunity.findUnique({ where: { id }, select: { isDeleted: true } }), 'Opportunity');
+            await tx.opportunity.update({ where: { id }, data: restoreData(user) });
+            await auditService.record(tx, { entityType: 'Opportunity', entityId: id, action: 'RESTORE', changedBy: user.username, revertsId });
         });
         await cacheService.invalidateEntityCaches('opportunities');
     },

@@ -7,6 +7,8 @@ export const QUEUE_NAMES = {
     import: 'crm-import',
     audit: 'crm-audit',
     leadRating: 'crm-lead-rating',
+    auditExport: 'crm-audit-export',
+    auditLedger: 'crm-audit-ledger',
 } as const;
 
 /** How long a producer waits for Redis before falling back to synchronous processing. */
@@ -54,6 +56,25 @@ export const leadRatingQueue = () =>
         attempts: 1,
         removeOnComplete: { age: 7 * 24 * 60 * 60, count: 30 },
         removeOnFail: { age: 30 * 24 * 60 * 60 },
+    });
+
+/** Audit log exports (Admin › Audit Log): once each; the AuditExport row keeps the outcome. */
+export const auditExportQueue = () =>
+    getQueue(QUEUE_NAMES.auditExport, {
+        attempts: 1,
+        removeOnComplete: { age: 24 * 60 * 60, count: 200 },
+        removeOnFail: { age: 7 * 24 * 60 * 60 },
+    });
+
+/**
+ * Audit ledger: the nightly digest (job scheduler) and "Verify integrity" runs. Once each; a verify job is added under
+ * a fixed id and removed when it ends, so only one runs at a time and its presence means "running".
+ */
+export const auditLedgerQueue = () =>
+    getQueue(QUEUE_NAMES.auditLedger, {
+        attempts: 1,
+        removeOnComplete: true,
+        removeOnFail: true,
     });
 
 /** Background jobs are usable only while Redis is reachable (checked on the shared client). */

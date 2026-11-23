@@ -16,7 +16,7 @@ import { assertEmailsDeliverable, queueEmailVerification } from '../email-verifi
 import { invalidateSyncedCaches, propagateContactName, type NameSyncCounts } from '../shared/nameSync.js';
 import { findOrganizationByName, type PrefetchedLookups } from '../shared/prefetch.js';
 import { codeSearchPrefix, phoneSearch, phoneWhere } from '../shared/searchTerms.js';
-import { acquireLocks, lockRecords, runInTransaction, softDeleteData, type BulkDeleteResult } from '../shared/transactions.js';
+import { acquireLocks, assertDeletedRow, lockRecords, restoreData, runInTransaction, softDeleteData, type BulkDeleteResult } from '../shared/transactions.js';
 import { toContactData, toContactDto, type ContactDto } from './contact.mapper.js';
 import { CONTACT_SORT_FIELDS, contactInputSchema, contactListQuerySchema, type ContactInput } from './contact.validator.js';
 
@@ -237,6 +237,21 @@ export const contactService = {
             assertRecordAccess(user, existing);
             await tx.contact.update({ where: { id }, data: softDeleteData(user) });
             await auditService.record(tx, { entityType: 'Contact', entityId: id, action: 'DELETE', changedBy: user.username });
+        });
+        await cacheService.invalidateEntityCaches('contacts');
+    },
+
+    /**
+     * Restore from Admin › Audit Log: brings back a deleted contact (its mobile must still be free).
+     * Writes a RESTORE entry pointing at the DELETE it reverses (`revertsId`).
+     */
+    async restore(id: string, user: AuthUser, revertsId?: string): Promise<void> {
+        await runInTransaction(async (tx) => {
+            await lockRecords(tx, 'contact', [id]);
+            const row = assertDeletedRow(await tx.contact.findUnique({ where: { id }, select: { isDeleted: true, mobile: true } }), 'Contact');
+            if (row.mobile) await assertUniqueMobile(tx, row.mobile, id);
+            await tx.contact.update({ where: { id }, data: restoreData(user) });
+            await auditService.record(tx, { entityType: 'Contact', entityId: id, action: 'RESTORE', changedBy: user.username, revertsId });
         });
         await cacheService.invalidateEntityCaches('contacts');
     },

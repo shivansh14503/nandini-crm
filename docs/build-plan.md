@@ -26,7 +26,7 @@
 | Quotation PDF | ✅ templates, builder, preview, cached render |
 | Admin: forms, dropdowns, document series, cities, PDF templates | ✅ |
 | Responsive layout | ✅ phones (from 320 px), tablets and desktops: menu drawer below 1200 px, icon-only navbar controls up to 1420 px, related records as a button on phones, no sideways page scroll |
-| Audit log | ⚠️ foundation, admin query API and Admin › Audit Log screen done (ledger table, who / where / how per entry, `/api/admin/audit-logs`); undo / restore, export, integrity pending (Phase 11) |
+| Audit log | ✅ ledger table with who / where / how per entry, Admin › Audit Log screen (`/api/admin/audit-logs`), undo / restore, CSV / Excel export, ledger integrity checks; alert rules later (Phase 11 E) |
 | Users admin | ❌ seed / DB only |
 | Dashboard | ❌ static page, no data |
 | Tests | ⚠️ 14 backend unit test files; no API integration, no frontend, no E2E |
@@ -135,16 +135,23 @@ access decided later); log **all changes** plus sign-ins and refused access; **k
 - [x] Light / dark per the theme rules; module identity colours only for the module dots; chart series tokens
       `--crm-chart-audit-*` with their own dark steps (checked for colour-blind separation).
 
-**D. Undo, restore, export, integrity**
-- [ ] **Restore** a soft-deleted record from its DELETE entry (uniqueness re-checked; writes `RESTORE` with `revertsId`).
-- [ ] **Undo** an UPDATE: put the `from` values back through the module's normal update path (validation, field
-      locking, name write-through); refuse fields changed again since (conflict list), write `REVERT` with
-      `revertsId`; an entry can be undone once. Not for CONVERT, IMPORT or Form Customization (form config deletes stay
-      permanent by design).
-- [ ] CSV / XLSX export of the current filter (large exports in BullMQ); every export is itself audited.
-- [ ] Integrity: nightly `sys.sp_generate_database_ledger_digest` saved outside the database (file under
+**D. Undo, restore, export, integrity** ✅ (2026-11-23, [API plan §2.7](api-plan.md#27-administration-))
+- [x] **Restore** a soft-deleted record from its DELETE entry (uniqueness re-checked; writes `RESTORE` with `revertsId`).
+      `restore()` on the 8 record services; "Restore record" band in the entry drawer.
+- [x] **Undo** an UPDATE / STATUS_CHANGE: put the `from` values back through the module's normal update path
+      (validation, field locking, name write-through); refuse fields changed again since (conflict list), write `REVERT`
+      with `revertsId`; an entry can be undone once. Not for CONVERT, IMPORT or Form Customization (form config deletes
+      stay permanent by design). The drawer's "Undo this change…" dialog lists every field (put back / changed since /
+      already / not editable) with a tick box per field that can go back.
+- [x] CSV / XLSX export of the current filter (over 5,000 entries in BullMQ `crm-audit-export`, streamed with constant
+      memory; caps 1 M CSV / 500 k Excel newest entries); every export is itself audited (`EXPORT`), and only the admin
+      who asked can download it, for 24 h. Checked on 1 M entries: 169 k-entry CSV in 24 s, Excel in 27 s.
+- [x] Integrity: nightly (00:15) `sys.sp_generate_database_ledger_digest` saved outside the database (file under
       `AUDIT_DIGEST_DIR` + an `AuditDigest` row for the screen); "Verify integrity" runs
-      `sys.sp_verify_database_ledger` against the saved digests.
+      `sys.sp_verify_database_ledger` against the saved digest files in the background and logs a `LEDGER_VERIFY`
+      entry (verified / FAILED / couldn't run). Needs snapshot isolation (migration
+      `20261123120000_audit_snapshot_isolation`). 1 M entries verified in 95–97 s.
+- [x] Unit tests: `auditUndo.test.ts`, `auditExport.format.test.ts`, `auditLedger.test.ts`, `xlsxWriter.test.ts`.
 
 **E. Later**
 - [ ] Alert rules (e.g. > 50 deletes in 10 min, 5 failed sign-ins from one IP) shown in-app; per-user activity tab once

@@ -1,3 +1,4 @@
+import { ENV } from '../config/env';
 import type { ApiResponse } from '../types/api.types';
 import { apiClient } from './apiClient';
 
@@ -67,6 +68,12 @@ export interface AuditDetailRow {
     value: string;
 }
 
+/** Whether an action can be taken on an entry now, and why not. */
+export interface AuditActionAvailability {
+    available: boolean;
+    reason?: string;
+}
+
 export interface AuditEntryResponse {
     entry: AuditEntryDetail;
     changes: unknown;
@@ -75,6 +82,103 @@ export interface AuditEntryResponse {
     /** Other entries of the same request (first 100). */
     related: AuditListItem[];
     relatedCount: number;
+    /** Undo (field / status change of a CRM record) and Restore (its delete); null when the entry offers neither. */
+    actions: { undo: AuditActionAvailability | null; restore: AuditActionAvailability | null };
+    /** The entry that undid / restored this one. */
+    reversedBy: AuditListItem | null;
+    /** The entry this one undid / restored. */
+    reverses: AuditListItem | null;
+}
+
+/**
+ * `ready`: can be put back. `conflict`: changed again since (left alone). `already`: holds the earlier value again.
+ * `blocked`: can't be written back.
+ */
+export type UndoFieldStatus = 'ready' | 'conflict' | 'already' | 'blocked';
+
+/** One field of an undo, values as shown on screen. */
+export interface UndoField {
+    key: string;
+    label: string;
+    /** Value before the change (what an undo puts back). */
+    from: string;
+    /** Value the change set. */
+    to: string;
+    /** Value on the record now. */
+    current: string;
+    status: UndoFieldStatus;
+}
+
+export interface UndoPreview {
+    id: string;
+    canUndo: boolean;
+    fields: UndoField[];
+}
+
+export interface UndoResult {
+    id: string;
+    /** The REVERT entry written. */
+    revertId: string | null;
+    undone: UndoField[];
+    conflicts: UndoField[];
+    /** Fields the record's own rules didn't take back. */
+    notReverted: UndoField[];
+}
+
+export interface RestoreResult {
+    id: string;
+    restoreId: string | null;
+    entityType: string;
+    entityId: string;
+    module: string;
+}
+
+export type AuditExportFormat = 'csv' | 'xlsx';
+
+export interface AuditExport {
+    id: string;
+    format: AuditExportFormat;
+    status: 'queued' | 'running' | 'completed' | 'failed' | 'expired';
+    rowCount: number;
+    /** More entries matched than `cap`; only the newest were written. */
+    truncated: boolean;
+    cap: number | null;
+    fileName: string | null;
+    fileSize: number | null;
+    message: string | null;
+    createdAt: string;
+    finishedAt: string | null;
+    expiresAt: string | null;
+}
+
+export interface AuditDigestInfo {
+    id: number;
+    blockId: string;
+    digestTime: string;
+    /** In the business timezone. */
+    time: string;
+    source: 'JOB' | 'MANUAL' | 'VERIFY';
+    createdBy: string;
+}
+
+export interface AuditIntegrityStatus {
+    /** False when AUDIT_DIGEST_DIR isn't set (digests are kept next to the app: development only). */
+    digestDirConfigured: boolean;
+    schedule: string;
+    digests: { count: number; latest: AuditDigestInfo | null };
+    lastCheck: {
+        entryId: string;
+        createdAt: string;
+        time: string;
+        changedBy: string;
+        /** verified · failed (the log was altered) · error (the check couldn't run) */
+        result: 'verified' | 'failed' | 'error';
+        message: string;
+        digests: number;
+        upToBlock: number | null;
+        durationMs: number | null;
+    } | null;
+    running: { by: string; startedAt: string } | null;
 }
 
 export interface AuditListPage {
@@ -169,5 +273,38 @@ export const auditAdminService = {
     },
     async stats(range: AuditRange): Promise<AuditStats> {
         return (await apiClient.get<ApiResponse<AuditStats>>(`${BASE}/stats`, { params: toParams(range) })).data;
+    },
+
+    async undoPreview(id: string): Promise<UndoPreview> {
+        return (await apiClient.get<ApiResponse<UndoPreview>>(`${BASE}/${encodeURIComponent(id)}/undo`)).data;
+    },
+    /** `fields`: only these keys (default: every field that can be put back). */
+    async undo(id: string, fields?: string[]): Promise<UndoResult> {
+        return (await apiClient.post<ApiResponse<UndoResult>>(`${BASE}/${encodeURIComponent(id)}/undo`, fields ? { fields } : {})).data;
+    },
+    async restore(id: string): Promise<RestoreResult> {
+        return (await apiClient.post<ApiResponse<RestoreResult>>(`${BASE}/${encodeURIComponent(id)}/restore`, {})).data;
+    },
+
+    /** Starts an export of what `query` matches; small ones come back completed. */
+    async createExport(format: AuditExportFormat, query: AuditListQuery): Promise<AuditExport> {
+        return (await apiClient.post<ApiResponse<AuditExport>>(`${BASE}/exports`, { format, filters: toParams(query) })).data;
+    },
+    async getExport(id: string): Promise<AuditExport> {
+        return (await apiClient.get<ApiResponse<AuditExport>>(`${BASE}/exports/${encodeURIComponent(id)}`)).data;
+    },
+    /** The file, streamed by the browser straight to disk (the session cookie authenticates it). */
+    exportDownloadUrl(id: string): string {
+        return `${ENV.API_URL}${BASE}/exports/${encodeURIComponent(id)}/download`;
+    },
+
+    async integrity(): Promise<AuditIntegrityStatus> {
+        return (await apiClient.get<ApiResponse<AuditIntegrityStatus>>(`${BASE}/integrity`)).data;
+    },
+    async saveDigest(): Promise<{ digest: AuditDigestInfo | null; status: AuditIntegrityStatus }> {
+        return (await apiClient.post<ApiResponse<{ digest: AuditDigestInfo | null; status: AuditIntegrityStatus }>>(`${BASE}/integrity/digest`, {})).data;
+    },
+    async verifyIntegrity(): Promise<AuditIntegrityStatus> {
+        return (await apiClient.post<ApiResponse<AuditIntegrityStatus>>(`${BASE}/integrity/verify`, {})).data;
     },
 };

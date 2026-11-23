@@ -11,7 +11,7 @@ import { parsePagination } from '../../utils/pagination.js';
 import { asPayload, checkModulePayload, loadModuleFieldConfig, validateModulePayload } from '../form-configs/customFieldValidator.js';
 import { shownNumberModules } from '../document-series/documentSeries.service.js';
 import { codeSearchPrefix } from '../shared/searchTerms.js';
-import { acquireLocks, lockRecords, runInTransaction, softDeleteData, type BulkDeleteResult } from '../shared/transactions.js';
+import { acquireLocks, assertDeletedRow, lockRecords, restoreData, runInTransaction, softDeleteData, type BulkDeleteResult } from '../shared/transactions.js';
 import { toProductData, toProductDto, type ProductDto } from './product.mapper.js';
 import { PRODUCT_SORT_FIELDS, productInputSchema, productListQuerySchema, type ProductInput } from './product.validator.js';
 
@@ -132,6 +132,21 @@ export const productService = {
             const result = await tx.product.updateMany({ where: { id, isDeleted: false }, data: softDeleteData(actor) });
             if (result.count === 0) throw notFound();
             await auditService.record(tx, { entityType: 'Product', entityId: id, action: 'DELETE', changedBy: actor.username });
+        });
+        await cacheService.invalidateEntityCaches('products');
+    },
+
+    /**
+     * Restore from Admin › Audit Log: brings back a deleted product (its name must still be free).
+     * Writes a RESTORE entry pointing at the DELETE it reverses (`revertsId`).
+     */
+    async restore(id: string, actor: AuthUser, revertsId?: string): Promise<void> {
+        await runInTransaction(async (tx) => {
+            await lockRecords(tx, 'product', [id]);
+            const row = assertDeletedRow(await tx.product.findUnique({ where: { id }, select: { isDeleted: true, productName: true } }), 'Product');
+            await assertUniqueName(tx, row.productName, id);
+            await tx.product.update({ where: { id }, data: restoreData(actor) });
+            await auditService.record(tx, { entityType: 'Product', entityId: id, action: 'RESTORE', changedBy: actor.username, revertsId });
         });
         await cacheService.invalidateEntityCaches('products');
     },

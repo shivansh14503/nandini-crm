@@ -9,7 +9,7 @@ import { daysAgo, nullable } from '../../utils/mappers.js';
 import { parsePagination } from '../../utils/pagination.js';
 import { normalizeEmails } from '../shared/entityEmails.js';
 import { asPayload, checkModulePayload, loadModuleFieldConfig, validateModulePayload } from '../form-configs/customFieldValidator.js';
-import { acquireLocks, lockRecords, runInTransaction, softDeleteData, type BulkDeleteResult } from '../shared/transactions.js';
+import { acquireLocks, assertDeletedRow, lockRecords, restoreData, runInTransaction, softDeleteData, type BulkDeleteResult } from '../shared/transactions.js';
 import { assertTaxIdsUnique } from '../shared/taxIdentifiers.js';
 import { toPartnerCompanyData, toPartnerCompanyDto, type PartnerCompanyDto } from './partnerCompany.mapper.js';
 import { resolveAddressPlaces } from '../cities/cityAddresses.js';
@@ -170,6 +170,22 @@ export const partnerCompanyService = {
             const result = await tx.partnerCompany.updateMany({ where: { id, isDeleted: false }, data: softDeleteData(user) });
             if (result.count === 0) throw notFound();
             await auditService.record(tx, { entityType: 'PartnerCompany', entityId: id, action: 'DELETE', changedBy: user.username });
+        });
+        await invalidatePartnerCaches();
+    },
+
+    /**
+     * Restore from Admin › Audit Log: brings back a deleted partner company (its name, GSTIN and PAN must still be free).
+     * Writes a RESTORE entry pointing at the DELETE it reverses (`revertsId`).
+     */
+    async restore(id: string, user: AuthUser, revertsId?: string): Promise<void> {
+        await runInTransaction(async (tx) => {
+            await lockRecords(tx, 'partnerCompany', [id]);
+            const row = assertDeletedRow(await tx.partnerCompany.findUnique({ where: { id }, select: { isDeleted: true, partnerName: true, gstNumber: true, panNumber: true } }), 'Partner company');
+            await assertUniqueName(tx, row.partnerName, id);
+            await assertTaxIdsUnique(tx, 'partnerCompany', { gstNumber: row.gstNumber, panNumber: row.panNumber }, { excludeId: id });
+            await tx.partnerCompany.update({ where: { id }, data: restoreData(user) });
+            await auditService.record(tx, { entityType: 'PartnerCompany', entityId: id, action: 'RESTORE', changedBy: user.username, revertsId });
         });
         await invalidatePartnerCaches();
     },

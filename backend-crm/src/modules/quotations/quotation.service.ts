@@ -15,7 +15,7 @@ import { assertAssigneeValid, assertRecordAccess, buildAccessScopeWhere } from '
 import { assertReference } from '../shared/references.js';
 import { assertNotInPast, type PastCheck } from '../../validators/notInPast.js';
 import { codeSearchPrefix } from '../shared/searchTerms.js';
-import { lockRecords, runInTransaction, softDeleteData, type BulkDeleteResult } from '../shared/transactions.js';
+import { assertDeletedRow, lockRecords, restoreData, runInTransaction, softDeleteData, type BulkDeleteResult } from '../shared/transactions.js';
 import { toQuotationData, toQuotationDto, type QuotationDto, type QuotationLinks } from './quotation.mapper.js';
 import { resolveAddressPlaces } from '../cities/cityAddresses.js';
 import {
@@ -243,6 +243,20 @@ export const quotationService = {
             assertRecordAccess(user, existing);
             await tx.quotation.update({ where: { id }, data: softDeleteData(user) });
             await auditService.record(tx, { entityType: 'Quotation', entityId: id, action: 'DELETE', changedBy: user.username });
+        });
+        await cacheService.invalidateEntityCaches('quotations');
+    },
+
+    /**
+     * Restore from Admin › Audit Log: brings back a deleted quotation.
+     * Writes a RESTORE entry pointing at the DELETE it reverses (`revertsId`).
+     */
+    async restore(id: string, user: AuthUser, revertsId?: string): Promise<void> {
+        await runInTransaction(async (tx) => {
+            await lockRecords(tx, 'quotation', [id]);
+            assertDeletedRow(await tx.quotation.findUnique({ where: { id }, select: { isDeleted: true } }), 'Quotation');
+            await tx.quotation.update({ where: { id }, data: restoreData(user) });
+            await auditService.record(tx, { entityType: 'Quotation', entityId: id, action: 'RESTORE', changedBy: user.username, revertsId });
         });
         await cacheService.invalidateEntityCaches('quotations');
     },

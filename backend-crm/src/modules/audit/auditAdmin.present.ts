@@ -134,6 +134,8 @@ const ACTION_LABELS: Record<string, string> = {
     SET_DEFAULT: 'Set as default',
     DUPLICATE: 'Duplicated',
     PDF_GENERATED: 'PDF generated',
+    EXPORT: 'Exported',
+    LEDGER_VERIFY: 'Integrity check',
 };
 export const actionLabel = (action: string) => ACTION_LABELS[action] ?? humanize(action.toLowerCase());
 
@@ -141,6 +143,7 @@ const MODULE_LABELS: Record<string, string> = {
     'pdf-templates': 'PDF Templates',
     'form-customization': 'Form Customization',
     'document-series': 'Document Series',
+    'audit-log': 'Audit Log',
 };
 /** `partner-companies` → `Partner Companies`. */
 export const moduleLabel = (key: string) => MODULE_LABELS[key] ?? humanize(key.replace(/-/g, ' '));
@@ -370,6 +373,17 @@ export function summarize(action: string, module: string, changes: unknown, labe
             const template = text(c.templateName);
             return template ? `PDF generated (${template})` : 'PDF generated';
         }
+        case 'RESTORE':
+            return 'Restored';
+        case 'EXPORT': {
+            const rows = count(c.rowCount);
+            const format = text(c.format)?.toUpperCase();
+            return `Exported ${rows !== undefined ? `${rows.toLocaleString('en-IN')} ` : ''}entr${rows === 1 ? 'y' : 'ies'}${format ? ` to ${format}` : ''}`;
+        }
+        case 'LEDGER_VERIFY':
+            if (c.result === 'verified') return `Integrity verified: ${text(c.message) ?? 'no changes found'}`;
+            if (c.result === 'error') return `Integrity check could not run: ${text(c.message) ?? 'see details'}`;
+            return `Integrity check FAILED: ${text(c.message) ?? 'see details'}`;
         default:
             return actionLabel(action);
     }

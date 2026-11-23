@@ -6,6 +6,9 @@ import { ROUTES } from '@/config/constants';
 import { getModuleColor, moduleKeyFrom } from '@/theme/moduleColors';
 import type { AuditListItem } from '@/services/auditAdmin.service';
 
+/** Root of every audit log query (list, counts, entries, undo previews, integrity): invalidating it refreshes the screen. */
+export const AUDIT_LOG_KEY = ['admin-audit-log'] as const;
+
 /** Detail page of a CRM record, by audit module key; null for everything that isn't a record page. */
 export function recordHref(module: string, entityId: string): string | null {
     switch (module) {

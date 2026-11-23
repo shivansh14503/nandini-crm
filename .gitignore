@@ -48,6 +48,8 @@ coverage/
 *.sqlite3
 *.db
 uploads/
+# Audit log ledger digests saved by a development API (production points AUDIT_DIGEST_DIR elsewhere)
+/backend-crm/storage/
 
 # Operating System Files
 .DS_Store

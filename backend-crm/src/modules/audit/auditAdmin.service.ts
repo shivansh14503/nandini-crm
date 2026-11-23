@@ -36,9 +36,11 @@ import {
     resolveRange,
     zonedDate,
     zonedDayStart,
+    type AuditListFilters,
     type IdBounds,
     type TimeRange,
 } from './auditAdmin.query.js';
+import { entryActions } from './auditUndo.js';
 import { propLabel, propValue } from './formConfigAudit.service.js';
 
 /**
@@ -113,7 +115,7 @@ async function loadRecordStatuses(rows: AuditRowLike[]): Promise<Map<string, Exc
 /** Fields that hold a username: shown as the user's name. */
 const USER_FIELDS = new Set(['assignedTo', 'createdBy', 'updatedBy', 'leadGivenBy']);
 
-async function buildLabeler(): Promise<FieldLabeler> {
+export async function buildLabeler(): Promise<FieldLabeler> {
     const byModule = new Map<string, Map<string, string>>();
     // Every user (a few dozen rows) so stored usernames read as names.
     const users = await prisma.user.findMany({ select: { username: true, fullName: true } });
@@ -140,7 +142,7 @@ async function buildLabeler(): Promise<FieldLabeler> {
     };
 }
 
-async function presentContext(rows: AuditRowLike[]): Promise<PresentContext> {
+export async function presentContext(rows: AuditRowLike[]): Promise<PresentContext> {
     const [labeler, shown, statuses] = await Promise.all([buildLabeler(), shownNumberModules(), loadRecordStatuses(rows)]);
     return {
         labeler,
@@ -238,6 +240,35 @@ async function eventsPerDay(range: Required<TimeRange>, bounds: IdBounds | null)
     return [...days.values()];
 }
 
+/**
+ * The WHERE of every entry `filters` match (paging fields ignored), seeking the id range of its dates; null when the
+ * dates hold no entries.
+ */
+export async function matchingWhere(filters: AuditListFilters): Promise<Prisma.AuditLogWhereInput | null> {
+    const range = resolveRange(filters.from, filters.to, TZ());
+    if (!range.gte) return buildAuditWhere({ ...filters, cursor: undefined }, range);
+    const bounds = await idBounds({ ...range, gte: range.gte });
+    return bounds ? buildAuditWhere({ ...filters, cursor: undefined }, range, bounds) : null;
+}
+
+/** Every entry `filters` match, newest first, `batchSize` at a time: the export reads these. */
+export async function* entryBatches(filters: AuditListFilters, batchSize: number) {
+    const where = await matchingWhere(filters);
+    if (!where) return;
+    let before: bigint | undefined;
+    for (;;) {
+        const rows = await prisma.auditLog.findMany({
+            where: before === undefined ? where : { AND: [where, { id: { lt: before } }] },
+            orderBy: { id: 'desc' },
+            take: batchSize,
+        });
+        if (rows.length === 0) return;
+        yield rows;
+        if (rows.length < batchSize) return;
+        before = rows[rows.length - 1].id;
+    }
+}
+
 export const auditAdminService = {
     /** Newest first, `limit` per page; `nextCursor` (an id) fetches the next page, null on the last one. */
     async list(query: unknown) {
@@ -275,14 +306,20 @@ export const auditAdminService = {
         if (!row) throw HttpError.notFound('Audit entry not found');
 
         const sameRequest = row.requestId ? { requestId: row.requestId, id: { not: row.id } } : undefined;
-        const [related, relatedCount] = sameRequest
-            ? await Promise.all([
-                  prisma.auditLog.findMany({ where: sameRequest, orderBy: { id: 'asc' }, take: RELATED_LIMIT }),
-                  prisma.auditLog.count({ where: sameRequest }),
-              ])
-            : [[], 0];
+        const [[related, relatedCount], reversedBy, reverses] = await Promise.all([
+            sameRequest
+                ? Promise.all([
+                      prisma.auditLog.findMany({ where: sameRequest, orderBy: { id: 'asc' }, take: RELATED_LIMIT }),
+                      prisma.auditLog.count({ where: sameRequest }),
+                  ])
+                : Promise.resolve([[], 0] as const),
+            // The entry that undid / restored this one, and the one this entry undid / restored.
+            prisma.auditLog.findFirst({ where: { revertsId: row.id }, orderBy: { id: 'asc' } }),
+            row.revertsId === null ? null : prisma.auditLog.findUnique({ where: { id: row.revertsId } }),
+        ]);
 
-        const ctx = await presentContext([row, ...related]);
+        const linked = [reversedBy, reverses].filter((other) => other !== null);
+        const ctx = await presentContext([row, ...related, ...linked]);
         const changes = parseChanges(row.changesJson);
         return {
             entry: toEntryDetail(row, ctx, changes),
@@ -291,6 +328,9 @@ export const auditAdminService = {
             details: detailRows(row.action, row.module, changes, ctx.labeler),
             related: related.map((other) => toListItem(other, ctx)),
             relatedCount,
+            actions: entryActions(row, changes, ctx.recordStatus(row.entityType, row.entityId), reversedBy !== null),
+            reversedBy: reversedBy ? toListItem(reversedBy, ctx) : null,
+            reverses: reverses ? toListItem(reverses, ctx) : null,
         };
     },
 

@@ -114,6 +114,7 @@ describe('labelFromChanges', () => {
         assert.equal(labelFromChanges('Scorecard', 'opportunities', {}), 'Opportunities scorecard');
         assert.equal(labelFromChanges('DocumentSeries', 'document-series', {}), 'Document Series');
         assert.equal(labelFromChanges('Import', 'imp1', { fileName: 'leads.xlsx' }), 'leads.xlsx');
+        assert.equal(labelFromChanges('AuditExport', 'e1', { format: 'csv', fileName: 'audit-log-2026-11-23-1131.csv' }), 'audit-log-2026-11-23-1131.csv');
     });
     it('is undefined when nothing names the record', () => {
         assert.equal(labelFromChanges('Lead', 'id', {}), undefined);

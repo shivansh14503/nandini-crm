@@ -12,7 +12,7 @@ import {
     type AuditEntityType,
     type AuditSeverity,
 } from './auditCatalog.js';
-import { currentAuditOrigin, type AuditOrigin } from './auditContext.js';
+import { currentAuditOrigin, currentRevertTarget, type AuditOrigin } from './auditContext.js';
 import { labelKey, resolveLabels } from './auditLabels.js';
 
 export type { AuditAction, AuditCategory, AuditEntityType, AuditSeverity } from './auditCatalog.js';
@@ -35,6 +35,17 @@ export interface AuditEntry {
 /** A queued entry carries the origin captured when it was queued: the worker runs outside the request. */
 interface QueuedAuditEntry extends AuditEntry {
     origin?: AuditOrigin;
+}
+
+/** Actions an undo (`runAsRevertOf`) writes through a module's normal update path. */
+const UNDO_WRITES: ReadonlySet<AuditAction> = new Set(['UPDATE', 'STATUS_CHANGE', 'FOLLOW_UP']);
+
+/** Inside an undo, the update entry of the record being put back becomes a REVERT of the entry being undone. */
+function asRevert(entry: AuditEntry): AuditEntry {
+    const target = currentRevertTarget();
+    if (!target || entry.revertsId || !UNDO_WRITES.has(entry.action)) return entry;
+    if (entry.entityType !== target.entityType || entry.entityId !== target.entityId) return entry;
+    return { ...entry, action: 'REVERT', revertsId: target.id };
 }
 
 /** Fields that change on every write and would only add noise to a diff. */
@@ -107,13 +118,13 @@ async function toRows(client: TransactionClient, entries: AuditEntry[], origin: 
  */
 export const auditService = {
     async record(tx: TransactionClient, entry: AuditEntry): Promise<void> {
-        await insertRows(tx, await toRows(tx, [entry], currentAuditOrigin()));
+        await insertRows(tx, await toRows(tx, [asRevert(entry)], currentAuditOrigin()));
     },
 
     /** Any number of entries (inserted in batches), e.g. bulk deletes and bulk email checks. */
     async recordMany(tx: TransactionClient, entries: AuditEntry[]): Promise<void> {
         if (entries.length === 0) return;
-        await insertRows(tx, await toRows(tx, entries, currentAuditOrigin()));
+        await insertRows(tx, await toRows(tx, entries.map(asRevert), currentAuditOrigin()));
     },
 
     /** Direct write outside a transaction (the audit worker and the no-Redis fallback). */

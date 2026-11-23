@@ -39,11 +39,12 @@ import { EmptyState, errorMessage, inputSx, panelHeaderSx, PillTabs, secondaryBu
 import { auditAdminService, type AuditListItem } from '@/services/auditAdmin.service';
 import { AuditEventsChart, shortDate } from './AuditEventsChart';
 import { AuditEntryDrawer } from './AuditEntryDrawer';
+import { useAuditExport } from './AuditExportButton';
+import { AuditIntegrityPanel } from './AuditIntegrityPanel';
 import { AUDIT_FILTER_SCOPE, CATEGORY_TABS, SOURCE_LABELS, aggregateRange, criteriaToQuery, useAuditFilterFields, type CategoryTab } from './auditLogFilter';
-import { ActionPill, ModuleDot, RecordCell, displayUser } from './auditLogUi';
+import { AUDIT_LOG_KEY, ActionPill, ModuleDot, RecordCell, displayUser } from './auditLogUi';
 
 const PAGE_SIZE = 50;
-export const AUDIT_LOG_KEY = ['admin-audit-log'] as const;
 
 const headCellSx = {
     fontSize: '0.72rem',
@@ -199,36 +200,41 @@ export function AuditLogView() {
     const summaryLabel = !query.from && !query.to ? 'Last 30 days' : stats.data ? periodLabel(stats.data.from, stats.data.to) : '';
 
     const refresh = () => queryClient.invalidateQueries({ queryKey: AUDIT_LOG_KEY });
+    const exporter = useAuditExport(query);
 
     return (
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0 }}>
-            {/* Header */}
-            <Box sx={{ ...surfaceSx, p: { xs: 2, md: 2.5 }, display: 'flex', gap: 1.5, alignItems: 'flex-start', flexWrap: 'wrap' }}>
-                <Box
-                    sx={{
-                        width: 40,
-                        height: 40,
-                        borderRadius: '10px',
-                        flexShrink: 0,
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        backgroundColor: 'var(--mui-palette-primary-soft)',
-                        border: '1px solid var(--mui-palette-primary-softBorder)',
-                        color: 'var(--crm-text-blue-600)',
-                    }}
-                >
-                    <SecurityOutlinedIcon />
+            {/* Header + integrity */}
+            <Box sx={{ display: 'grid', gap: 2, gridTemplateColumns: { xs: '1fr', lg: 'minmax(0, 1fr) 400px' } }}>
+                <Box sx={{ ...surfaceSx, p: { xs: 2, md: 2.5 }, display: 'flex', gap: 1.5, alignItems: 'flex-start', flexWrap: 'wrap' }}>
+                    <Box
+                        sx={{
+                            width: 40,
+                            height: 40,
+                            borderRadius: '10px',
+                            flexShrink: 0,
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            backgroundColor: 'var(--mui-palette-primary-soft)',
+                            border: '1px solid var(--mui-palette-primary-softBorder)',
+                            color: 'var(--crm-text-blue-600)',
+                        }}
+                    >
+                        <SecurityOutlinedIcon />
+                    </Box>
+                    <Box sx={{ minWidth: 0, flex: 1 }}>
+                        <Typography component="h1" sx={{ fontWeight: 700, fontSize: '1.1rem', color: 'var(--crm-slate-900)' }}>
+                            Audit Log
+                        </Typography>
+                        <Typography sx={{ fontSize: '0.8rem', color: 'var(--mui-palette-text-secondary)', mt: 0.25, lineHeight: 1.55 }}>
+                            Every change made in the CRM, with the values before and after, who made it, when, from which screen and IP address. Sign-ins, failed sign-ins
+                            and refused access are recorded too. Entries can&apos;t be edited or deleted; they are kept forever. Open an entry to undo a change or restore a
+                            deleted record.
+                        </Typography>
+                    </Box>
                 </Box>
-                <Box sx={{ minWidth: 0, flex: 1 }}>
-                    <Typography component="h1" sx={{ fontWeight: 700, fontSize: '1.1rem', color: 'var(--crm-slate-900)' }}>
-                        Audit Log
-                    </Typography>
-                    <Typography sx={{ fontSize: '0.8rem', color: 'var(--mui-palette-text-secondary)', mt: 0.25, lineHeight: 1.55 }}>
-                        Every change made in the CRM, with the values before and after, who made it, when, from which screen and IP address. Sign-ins, failed sign-ins
-                        and refused access are recorded too. Entries can&apos;t be edited or deleted; they are kept forever.
-                    </Typography>
-                </Box>
+                <AuditIntegrityPanel />
             </Box>
 
             {/* Summary strip */}
@@ -394,9 +400,11 @@ export function AuditLogView() {
                                 Refresh
                             </Button>
                         </Tooltip>
+                        {exporter.button}
                     </Box>
                 </Box>
                 <ActiveFilterChips controller={controller} />
+                {exporter.status}
 
                 {list.isLoading ? (
                     <Box sx={{ p: 2 }}>

@@ -33,6 +33,15 @@ interface Store {
     origin: AuditOrigin;
     /** The live request: the signed-in user and the matched route are only known after later middleware runs. */
     req?: Request;
+    /** Set while an audit entry is being undone: the change it makes to that record is written as a REVERT of it. */
+    revertOf?: RevertTarget;
+}
+
+/** The audit entry being undone and the record it is about. */
+export interface RevertTarget {
+    id: string;
+    entityType: string;
+    entityId: string;
 }
 
 const storage = new AsyncLocalStorage<Store>();
@@ -105,3 +114,15 @@ export function currentAuditOrigin(): AuditOrigin | undefined {
 export function runWithAuditOrigin<T>(origin: Partial<AuditOrigin> & Pick<AuditOrigin, 'source'>, fn: () => T): T {
     return storage.run({ origin: { ...origin, requestId: origin.requestId ?? randomUUID() } }, fn);
 }
+
+/**
+ * Runs `fn` (a module's normal update) as the undo of audit entry `target`: the update entry it writes for that
+ * record becomes a `REVERT` pointing at the entry (audit.service.ts), with the request's own who / where / how.
+ */
+export function runAsRevertOf<T>(target: RevertTarget, fn: () => T): T {
+    const store = storage.getStore();
+    return storage.run({ origin: store?.origin ?? { requestId: randomUUID(), source: 'API' }, req: store?.req, revertOf: target }, fn);
+}
+
+/** The audit entry the current code is undoing, if any. */
+export const currentRevertTarget = (): RevertTarget | undefined => storage.getStore()?.revertOf;

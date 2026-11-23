@@ -938,6 +938,57 @@ model AuditLog {
   @@index([revertsId])
 }
 
+/// An export of the audit log (Admin › Audit Log "Export"): the filter, its progress and the file it produced under
+/// AUDIT_EXPORT_DIR (`<id>.csv|xlsx`, removed after 24 hours). Downloadable by the admin who asked for it; every
+/// finished export also writes an EXPORT entry to AuditLog.
+model AuditExport {
+  id          String    @id @default(uuid()) @db.NVarChar(50)
+  /// Username of the admin who asked for it (the only one who can download it).
+  requestedBy String    @db.NVarChar(50)
+  /// csv | xlsx
+  format      String    @db.NVarChar(10)
+  /// The list filter as sent (GET /api/admin/audit-logs query, JSON).
+  filtersJson String    @db.NVarChar(Max)
+  /// queued | running | completed | failed | expired (file removed after 24 hours)
+  status      String    @db.NVarChar(20)
+  /// Entries written so far (all of them once completed).
+  rowCount    Int       @default(0)
+  /// More entries matched than the format's cap; only the newest were written.
+  truncated   Boolean   @default(false)
+  /// Download name, e.g. `audit-log-2026-11-23-1015.csv`.
+  fileName    String?   @db.NVarChar(200)
+  fileSize    Int?
+  /// Why it failed.
+  message     String?   @db.NVarChar(500)
+  createdAt   DateTime  @default(now())
+  finishedAt  DateTime?
+
+  @@index([requestedBy, createdAt])
+  @@index([createdAt])
+}
+
+/// A SQL Server ledger digest (`sys.sp_generate_database_ledger_digest`): the hash of the latest ledger block, which
+/// "Verify integrity" checks the AuditLog ledger against. The trusted copy is the JSON file under AUDIT_DIGEST_DIR
+/// (outside the database); this row only lists digests on the Admin › Audit Log screen.
+model AuditDigest {
+  id             Int       @id @default(autoincrement())
+  blockId        BigInt
+  /// Block hash, hex.
+  hash           String    @db.NVarChar(100)
+  lastCommitTime DateTime?
+  digestTime     DateTime
+  /// The digest exactly as SQL Server returned it.
+  digestJson     String    @db.NVarChar(Max)
+  /// File name under AUDIT_DIGEST_DIR.
+  fileName       String    @db.NVarChar(260)
+  /// JOB (nightly) | MANUAL ("Save a digest now") | VERIFY (taken by "Verify integrity")
+  source         String    @db.NVarChar(10)
+  createdBy      String    @db.NVarChar(50)
+  createdAt      DateTime  @default(now())
+
+  @@index([createdAt])
+}
+
 // ── Form & dropdown customization (admin-managed) ─────────────────────────────
 
 /// A named list of dropdown options (e.g. lead_status). Shared categories (module = 'shared') feed several forms.

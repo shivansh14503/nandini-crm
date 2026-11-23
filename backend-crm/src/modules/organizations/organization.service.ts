@@ -28,7 +28,7 @@ import { assertEmailsDeliverable, queueEmailVerification } from '../email-verifi
 import { invalidateSyncedCaches, propagateOrganizationName, type NameSyncCounts } from '../shared/nameSync.js';
 import { codeSearchPrefix, gstSearchPrefix } from '../shared/searchTerms.js';
 import type { PrefetchedLookups } from '../shared/prefetch.js';
-import { acquireLocks, lockRecords, runInTransaction, softDeleteData, type BulkDeleteResult } from '../shared/transactions.js';
+import { acquireLocks, assertDeletedRow, lockRecords, restoreData, runInTransaction, softDeleteData, type BulkDeleteResult } from '../shared/transactions.js';
 import { toOrganizationDto, type OrganizationDto, type OrganizationRow } from './organization.mapper.js';
 import { resolveAddressPlaces } from '../cities/cityAddresses.js';
 import {
@@ -616,6 +616,22 @@ export const organizationService = {
             await auditService.record(tx, { entityType: 'Organization', entityId: id, action: 'DELETE', changedBy: user.username });
         });
         await Promise.all([cacheService.invalidateEntityCaches('organizations'), recentViewsService.forget(RECENT_ENTITY, user.id, [id])]);
+    },
+
+    /**
+     * Restore from Admin › Audit Log: brings back a deleted organization (its name, GSTIN and PAN must still be free).
+     * Writes a RESTORE entry pointing at the DELETE it reverses (`revertsId`).
+     */
+    async restore(id: string, user: AuthUser, revertsId?: string): Promise<void> {
+        await runInTransaction(async (tx) => {
+            await lockRecords(tx, 'organization', [id]);
+            const row = assertDeletedRow(await tx.organization.findUnique({ where: { id }, select: { isDeleted: true, organizationName: true, gstNumber: true, panNumber: true } }), 'Organization');
+            // assertUnique reads only the name and PAN of its input.
+            await assertUnique(tx, { organizationName: row.organizationName, panNumber: row.panNumber } as OrganizationWriteInput, row.gstNumber, { excludeId: id });
+            await tx.organization.update({ where: { id }, data: restoreData(user) });
+            await auditService.record(tx, { entityType: 'Organization', entityId: id, action: 'RESTORE', changedBy: user.username, revertsId });
+        });
+        await cacheService.invalidateEntityCaches('organizations');
     },
 
     async bulkRemove(ids: string[], user: AuthUser): Promise<BulkDeleteResult> {

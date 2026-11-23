@@ -1,4 +1,6 @@
 import 'dotenv/config';
+import os from 'node:os';
+import path from 'node:path';
 import { z } from 'zod';
 import { resolveDatabaseUrl } from './databaseUrl.js';
 
@@ -66,6 +68,13 @@ const envSchema = z
          * smaller ones call the single-address API per address (the provider recommends that up to 1,000).
          */
         EMAIL_VERIFICATION_LIST_API_MIN: z.coerce.number().int().min(1).max(1_000_000).default(1_000),
+
+        /** Audit log exports (kept 24 h). Shared storage when workers run in their own process. */
+        AUDIT_EXPORT_DIR: z.string().trim().min(1).optional(),
+        /** Ledger digests of the audit log: outside the database server, on storage its admins can't change. */
+        AUDIT_DIGEST_DIR: z.string().trim().min(1).optional(),
+        /** Longest a "Verify integrity" run may take; it reads the whole ledger (~100 s per million entries). */
+        AUDIT_VERIFY_TIMEOUT_MS: z.coerce.number().int().min(60_000).max(6 * 60 * 60 * 1000).default(30 * 60 * 1000),
     })
     .superRefine((env, ctx) => {
         if (env.NODE_ENV === 'production' && (!env.JWT_SECRET || env.JWT_SECRET.length < 32)) {
@@ -116,6 +125,13 @@ export const ENV = {
         ENABLED: env.EMAIL_VERIFICATION_ENABLED,
         QEV_API_KEY: env.QUICKEMAILVERIFICATION_API_KEY,
         LIST_API_MIN: env.EMAIL_VERIFICATION_LIST_API_MIN,
+    },
+    AUDIT: {
+        EXPORT_DIR: path.resolve(env.AUDIT_EXPORT_DIR ?? path.join(os.tmpdir(), 'nandini-crm', 'audit-exports')),
+        DIGEST_DIR: path.resolve(env.AUDIT_DIGEST_DIR ?? path.join('storage', 'audit-digests')),
+        /** True when AUDIT_DIGEST_DIR is set (the default folder sits next to the app: fine for development only). */
+        DIGEST_DIR_CONFIGURED: Boolean(env.AUDIT_DIGEST_DIR),
+        VERIFY_TIMEOUT_MS: env.AUDIT_VERIFY_TIMEOUT_MS,
     },
     COOKIE: {
         NAME: 'token',

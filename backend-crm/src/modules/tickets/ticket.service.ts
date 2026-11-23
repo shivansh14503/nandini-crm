@@ -14,7 +14,7 @@ import { assertAssigneeValid, assertRecordAccess, buildAccessScopeWhere } from '
 import { findOrganizationByName, type PrefetchedLookups } from '../shared/prefetch.js';
 import { assertNotInPast, type PastCheck } from '../../validators/notInPast.js';
 import { codeSearchPrefix, phoneSearch, phoneWhere } from '../shared/searchTerms.js';
-import { lockRecords, runInTransaction, softDeleteData, type BulkDeleteResult } from '../shared/transactions.js';
+import { assertDeletedRow, lockRecords, restoreData, runInTransaction, softDeleteData, type BulkDeleteResult } from '../shared/transactions.js';
 import { toTicketData, toTicketDto, type TicketDto } from './ticket.mapper.js';
 import { TICKET_CLOSED_STATUSES, TICKET_SORT_FIELDS, ticketInputSchema, ticketListQuerySchema, type TicketInput } from './ticket.validator.js';
 
@@ -214,6 +214,20 @@ export const ticketService = {
             assertRecordAccess(user, existing);
             await tx.ticket.update({ where: { id }, data: softDeleteData(user) });
             await auditService.record(tx, { entityType: 'Ticket', entityId: id, action: 'DELETE', changedBy: user.username });
+        });
+        await cacheService.invalidateEntityCaches('tickets');
+    },
+
+    /**
+     * Restore from Admin › Audit Log: brings back a deleted ticket.
+     * Writes a RESTORE entry pointing at the DELETE it reverses (`revertsId`).
+     */
+    async restore(id: string, user: AuthUser, revertsId?: string): Promise<void> {
+        await runInTransaction(async (tx) => {
+            await lockRecords(tx, 'ticket', [id]);
+            assertDeletedRow(await tx.ticket.findUnique({ where: { id }, select: { isDeleted: true } }), 'Ticket');
+            await tx.ticket.update({ where: { id }, data: restoreData(user) });
+            await auditService.record(tx, { entityType: 'Ticket', entityId: id, action: 'RESTORE', changedBy: user.username, revertsId });
         });
         await cacheService.invalidateEntityCaches('tickets');
     },

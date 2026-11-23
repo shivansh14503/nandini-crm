@@ -8,11 +8,12 @@ import HistoryRoundedIcon from '@mui/icons-material/HistoryRounded';
 import PersonSearchOutlinedIcon from '@mui/icons-material/PersonSearchOutlined';
 import { DrawerCopyButton } from '@/components/common/Drawer';
 import { errorMessage, secondaryButtonSx } from '@/components/settings/form-customization/builderUi';
-import { auditAdminService, type AuditEntryDetail, type AuditListItem } from '@/services/auditAdmin.service';
-import { ActionPill, ModuleDot, RecordCell, displayUser } from './auditLogUi';
+import { auditAdminService, type AuditListItem } from '@/services/auditAdmin.service';
+import { AuditEntryActions } from './AuditEntryActions';
+import { AUDIT_LOG_KEY, ActionPill, ModuleDot, RecordCell, displayUser } from './auditLogUi';
 import { SOURCE_LABELS } from './auditLogFilter';
 
-export const auditEntryKey = (id: string) => ['admin-audit-log', 'entry', id] as const;
+export const auditEntryKey = (id: string) => [...AUDIT_LOG_KEY, 'entry', id] as const;
 
 const BROWSERS: [string, RegExp][] = [
     ['Edge', /Edg\/(\d+)/],
@@ -73,6 +74,27 @@ function InfoRow({ label, value, copy }: { label: string; value: React.ReactNode
     );
 }
 
+/** `Entry #12 · Asha Admin, 21-Nov-2026, 11:15 AM` as a link to that entry. */
+function EntryLink({ item, userNames, onOpen }: { item: AuditListItem; userNames: Map<string, string>; onOpen: (id: string) => void }) {
+    return (
+        <Button
+            size="small"
+            onClick={() => onOpen(item.id)}
+            sx={{
+                ...secondaryButtonSx,
+                p: 0,
+                minWidth: 0,
+                border: 'none',
+                textAlign: 'left',
+                justifyContent: 'flex-start',
+                '&:hover': { backgroundColor: 'transparent', color: 'var(--crm-text-blue-700)', textDecoration: 'underline' },
+            }}
+        >
+            Entry #{item.id} · {displayUser(item.changedBy, userNames)}, {item.time}
+        </Button>
+    );
+}
+
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
     return (
         <Box sx={{ px: 2.5, py: 2, borderBottom: '1px solid var(--mui-palette-border-main)' }}>
@@ -94,12 +116,10 @@ export interface AuditEntryDrawerProps {
     onRecordHistory: (entry: AuditListItem) => void;
     /** "Everything this user did that day". */
     onUserDay: (entry: AuditListItem) => void;
-    /** Extra actions for the entry (undo / restore). */
-    renderActions?: (entry: AuditEntryDetail) => React.ReactNode;
 }
 
 /** One audit entry: what changed (Field / Before / After), who did it from where, and the rest of the same request. */
-export function AuditEntryDrawer({ id, userNames, onClose, onOpenEntry, onOpenRecord, onRecordHistory, onUserDay, renderActions }: AuditEntryDrawerProps) {
+export function AuditEntryDrawer({ id, userNames, onClose, onOpenEntry, onOpenRecord, onRecordHistory, onUserDay }: AuditEntryDrawerProps) {
     const query = useQuery({ queryKey: auditEntryKey(id ?? ''), queryFn: () => auditAdminService.get(id!), enabled: Boolean(id) });
     const data = query.data;
     const entry = data?.entry;
@@ -180,21 +200,24 @@ export function AuditEntryDrawer({ id, userNames, onClose, onOpenEntry, onOpenRe
 
             {data && entry && (
                 <Box sx={{ overflowY: 'auto' }}>
-                    {renderActions?.(entry)}
+                    {/* Undo / Restore (keyed: its outcome belongs to this entry only) */}
+                    <AuditEntryActions key={entry.id} data={data} onOpenEntry={onOpenEntry} />
 
                     {/* Record */}
                     <Section title="Record">
                         <InfoRow label="Module" value={<ModuleDot module={entry.module} label={entry.moduleLabel} />} />
                         <InfoRow label="Record" value={<RecordCell item={entry} onOpen={onOpenRecord} />} />
                         <InfoRow label="Record ID" value={entry.entityId} copy={entry.entityId} />
-                        {entry.revertsId && (
+                        {data.reverses && (
                             <InfoRow
-                                label="Undoes"
-                                value={
-                                    <Button size="small" onClick={() => onOpenEntry(entry.revertsId!)} sx={{ ...secondaryButtonSx, p: 0, minWidth: 0, border: 'none' }}>
-                                        Entry #{entry.revertsId}
-                                    </Button>
-                                }
+                                label={entry.action === 'RESTORE' ? 'Restores' : 'Undoes'}
+                                value={<EntryLink item={data.reverses} userNames={userNames} onOpen={onOpenEntry} />}
+                            />
+                        )}
+                        {data.reversedBy && (
+                            <InfoRow
+                                label={data.reversedBy.action === 'RESTORE' ? 'Restored by' : 'Undone by'}
+                                value={<EntryLink item={data.reversedBy} userNames={userNames} onOpen={onOpenEntry} />}
                             />
                         )}
                         <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', mt: 1.5 }}>

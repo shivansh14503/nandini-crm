@@ -107,6 +107,20 @@ export const softDeleteData = (actor: AuthUser) => ({
     updatedBy: actor.username,
 });
 
+/** Columns set when a soft-deleted core entity is brought back (Admin › Audit Log "Restore"). */
+export const restoreData = (actor: AuthUser) => ({
+    isDeleted: false,
+    deletedAt: null,
+    updatedBy: actor.username,
+});
+
+/** The row of a record about to be restored: 404 when there is none, 409 when it isn't deleted. */
+export function assertDeletedRow<T extends { isDeleted: boolean }>(row: T | null, what: string): T {
+    if (!row) throw HttpError.notFound(`${what} not found`);
+    if (!row.isDeleted) throw HttpError.conflict(`This ${what.toLowerCase()} isn't deleted, so there is nothing to restore.`);
+    return row;
+}
+
 export interface BulkDeleteResult {
     deleted: number;
     ids: string[];
