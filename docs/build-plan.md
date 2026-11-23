@@ -172,7 +172,7 @@ only (not the full record page); Save goes live straight away; Leads first.
       Customization trail; the lead drawer renders from the layout (built-in layout = the old hand-built drawer);
       Form Customization › Leads › Drawer Layout builder: fields / blocks / pieces palette, live drawer canvas with a
       sample or real lead, settings panel, undo / redo, Save / Reset, Pieces library; avatar = preset icon, initials or
-      any emoji (the OS emoji panel); responsive (3 panes / 2 panes / phone with a bottom sheet) with touch drag and
+      a set of emoji; responsive (3 panes / 2 panes / phone with a bottom sheet) with touch drag and
       add / move buttons.
 - [ ] The other drawers: Opportunities, Quotations, Organizations, Contacts, Products, Tickets, Partner Companies
       (each needs its system values, address prefixes, built-in layout and pieces).
