@@ -97,10 +97,12 @@ const ADMIN_MODULES: AdminModule[] = [
     {
         key: 'audit',
         title: 'System Audit & Security',
-        description: 'Search the CRM-wide audit log, review failed sign-in attempts and manage security policies.',
+        description:
+            'Search every change made in the CRM, by whom, when, from which screen and IP, with before / after values. Review failed sign-ins and refused access.',
         icon: <SecurityOutlinedIcon />,
-        badge: BADGES.comingSoon,
-        highlights: ['Audit log', 'Security events', 'Policies'],
+        href: ROUTES.AUDIT_LOG,
+        badge: BADGES.available,
+        highlights: ['Audit log', 'Before / after', 'Security events', 'Who / where'],
     },
 ];
 

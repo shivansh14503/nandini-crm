@@ -167,11 +167,20 @@ describe('buildAuditWhere', () => {
     });
 
     it('matches changed fields, custom fields and IP prefixes', () => {
-        assert.deepEqual(buildAuditWhere({ field: 'assignedTo' }, {}).changedFields, { contains: '|assignedTo|' });
-        assert.deepEqual(buildAuditWhere({ field: 'customFields.po_number' }, {}).AND, [
+        assert.deepEqual(buildAuditWhere({ field: ['assignedTo'] }, {}).AND, [{ changedFields: { contains: '|assignedTo|' } }]);
+        assert.deepEqual(buildAuditWhere({ field: ['customFields.po_number'] }, {}).AND, [
             { changedFields: { contains: '|customFields|' } },
             { changesJson: { contains: '"po[_]number":' } },
         ]);
+        assert.deepEqual(buildAuditWhere({ field: ['status', 'customFields.region'] }, {}).AND, [
+            {
+                OR: [
+                    { AND: [{ changedFields: { contains: '|status|' } }] },
+                    { AND: [{ changedFields: { contains: '|customFields|' } }, { changesJson: { contains: '"region":' } }] },
+                ],
+            },
+        ]);
+        assert.deepEqual(auditListQuerySchema.parse({ field: 'status,customFields.region' }).field, ['status', 'customFields.region']);
         assert.deepEqual(buildAuditWhere({ ip: '192.168.1.*' }, {}).ipAddress, { startsWith: '192.168.1.' });
         assert.equal(buildAuditWhere({ ip: '10.0.0.5' }, {}).ipAddress, '10.0.0.5');
     });

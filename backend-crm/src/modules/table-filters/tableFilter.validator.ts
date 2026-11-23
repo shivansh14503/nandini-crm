@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { moduleSchema } from '../form-configs/formConfig.validator.js';
+import { CRM_MODULES } from '../form-configs/formConfig.defaults.js';
 
 /** Operators the frontend filter engine understands (frontend-crm/src/components/common/TableFilter/types.ts). */
 export const FILTER_OPERATORS = [
@@ -38,6 +38,10 @@ export const criteriaSchema = z.object({
 });
 
 export type TableFilterCriteria = z.infer<typeof criteriaSchema>;
+
+/** Screens with a Filter dialog: the CRM module lists, plus Admin › Audit Log (`audit-log`). */
+export const TABLE_FILTER_SCREENS = [...CRM_MODULES, 'audit-log'] as const;
+const moduleSchema = z.enum(TABLE_FILTER_SCREENS, { error: `module must be one of: ${TABLE_FILTER_SCREENS.join(', ')}.` });
 
 export const listQuerySchema = z.object({ module: moduleSchema });
 

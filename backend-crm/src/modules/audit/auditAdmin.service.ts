@@ -110,8 +110,14 @@ async function loadRecordStatuses(rows: AuditRowLike[]): Promise<Map<string, Exc
  * archived and deleted fields, so old entries keep their names. Form Customization entries use the Form Builder's
  * property names. Labels are cosmetic: if the configuration can't be read, keys are shown humanized.
  */
+/** Fields that hold a username: shown as the user's name. */
+const USER_FIELDS = new Set(['assignedTo', 'createdBy', 'updatedBy', 'leadGivenBy']);
+
 async function buildLabeler(): Promise<FieldLabeler> {
     const byModule = new Map<string, Map<string, string>>();
+    // Every user (a few dozen rows) so stored usernames read as names.
+    const users = await prisma.user.findMany({ select: { username: true, fullName: true } });
+    const userNames = new Map(users.map((user) => [user.username.toLowerCase(), user.fullName.trim() || user.username]));
     try {
         const config = await formConfigService.getAllConfigs(true);
         for (const [module, fields] of Object.entries(config.fieldsByModule)) {
@@ -127,7 +133,9 @@ async function buildLabeler(): Promise<FieldLabeler> {
             return byModule.get(module)?.get(key) ?? (custom ? undefined : COMMON_LABELS[key]) ?? humanize(custom ? key.slice(13) : key);
         },
         value(module, key, value) {
-            return module === 'form-customization' ? propValue(key, value) : namedValue(key, value);
+            if (module === 'form-customization') return propValue(key, value);
+            if (USER_FIELDS.has(key) && typeof value === 'string') return userNames.get(value.toLowerCase()) ?? namedValue(key, value);
+            return namedValue(key, value);
         },
     };
 }

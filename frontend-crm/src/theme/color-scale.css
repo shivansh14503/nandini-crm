@@ -433,6 +433,11 @@
   --crm-module-partner-companies-text: #A21CAF;
   --crm-module-partner-companies-soft: #FDF4FF;
   --crm-module-partner-companies-border: #F5D0FE;
+
+  /* Audit log chart series (Data / Configuration / Security). Checked for colour-blind separation on white. */
+  --crm-chart-audit-data: #2563EB;
+  --crm-chart-audit-config: #D97706;
+  --crm-chart-audit-security: #E11D48;
 }
 
 .dark {
@@ -469,4 +474,9 @@
   --crm-module-partner-companies-text: #F0ABFC;
   --crm-module-partner-companies-soft: color-mix(in srgb, #C026D3 16%, #151E2E);
   --crm-module-partner-companies-border: color-mix(in srgb, #C026D3 42%, #151E2E);
+
+  /* Audit log chart series: own dark steps (brand green first), checked for colour-blind separation on #151E2E. */
+  --crm-chart-audit-data: #5E9E3D;
+  --crm-chart-audit-config: #9575E6;
+  --crm-chart-audit-security: #E0546A;
 }

@@ -3,18 +3,18 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { tableFilterService } from '@/services/tableFilter.service';
-import type { CrmModuleKey } from '@/types/formConfig.types';
+import { moduleNavLabel, type CrmModuleKey } from '@/types/formConfig.types';
 import { activeConditionCount, applyCriteria, cleanCriteria } from './applyFilter';
 import { useTableFilterFields, type ModuleFilterFields } from './filterFields';
-import type { FilterCriteria, FilterSort, TableFilterLists } from './types';
+import type { FilterCriteria, FilterSort, TableFilterLists, TableFilterScope } from './types';
 import { useSearchScope } from '../../search/SearchScope';
 
 const EMPTY_LISTS: TableFilterLists = { recent: [], saved: [] };
-const listKey = (module: CrmModuleKey) => ['table-filters', module] as const;
+const listKey = (module: TableFilterScope) => ['table-filters', module] as const;
 /** The applied filter survives leaving the list and coming back (same browser tab). */
-const sessionKey = (module: CrmModuleKey) => `crm.tableFilter.${module}`;
+const sessionKey = (module: TableFilterScope) => `crm.tableFilter.${module}`;
 
-function readSession(module: CrmModuleKey): FilterCriteria | null {
+function readSession(module: TableFilterScope): FilterCriteria | null {
     try {
         const raw = sessionStorage.getItem(sessionKey(module));
         const parsed = raw ? (JSON.parse(raw) as FilterCriteria) : null;
@@ -24,7 +24,7 @@ function readSession(module: CrmModuleKey): FilterCriteria | null {
     }
 }
 
-function writeSession(module: CrmModuleKey, criteria: FilterCriteria | null) {
+function writeSession(module: TableFilterScope, criteria: FilterCriteria | null) {
     try {
         if (criteria) sessionStorage.setItem(sessionKey(module), JSON.stringify(criteria));
         else sessionStorage.removeItem(sessionKey(module));
@@ -44,12 +44,17 @@ export interface UseTableFilterOptions<T> {
 }
 
 export interface TableFilterController<T = unknown> {
-    module: CrmModuleKey;
+    /** Where recent / saved filters are kept. */
+    module: TableFilterScope;
+    /** Dialog title: "Filter {title}". */
+    title: string;
     fields: ModuleFilterFields;
     /** Applied filter (null = none). */
     criteria: FilterCriteria | null;
     activeCount: number;
     filteredRows: T[];
+    /** Records the applied filter keeps; null when the filter runs on the server (no count). */
+    matchCount: number | null;
     isOpen: boolean;
     open: () => void;
     close: () => void;
@@ -64,16 +69,37 @@ export interface TableFilterController<T = unknown> {
     removeSaved: (id: string) => Promise<void>;
     /** Drops conditions on unknown fields and incomplete ones. */
     clean: (criteria: FilterCriteria) => FilterCriteria;
-    /** How many loaded records a draft filter would keep (live count in the dialog). */
-    countMatches: (criteria: FilterCriteria) => number;
+    /** How many loaded records a draft filter would keep (live count in the dialog); null when unknown. */
+    countMatches: (criteria: FilterCriteria) => number | null;
 }
 
 /**
  * State of a list's Filter dialog: the applied filter, the rows it keeps, and the user's recent / saved filters.
  * Filtering runs here over the loaded rows; pass `filteredRows` on to the tab, search, sort and pagination logic.
  */
-export function useTableFilter<T>({ module, rows, onSortChange, onChange }: UseTableFilterOptions<T>): TableFilterController<T> {
-    const fields = useTableFilterFields(module);
+export function useTableFilter<T>(options: UseTableFilterOptions<T>): TableFilterController<T> {
+    const fields = useTableFilterFields(options.module);
+    return useFilterController({ ...options, title: moduleNavLabel(options.module), fields });
+}
+
+export interface UseFilterControllerOptions<T> {
+    module: TableFilterScope;
+    title: string;
+    fields: ModuleFilterFields;
+    /** Loaded rows to filter in the browser; leave out when the filter runs on the server (read `criteria`). */
+    rows?: T[];
+    onSortChange?: (sort: FilterSort) => void;
+    onChange?: () => void;
+}
+
+const NO_ROWS: never[] = [];
+
+/**
+ * The Filter dialog's state for any field set: useTableFilter for the module lists, or a screen whose filter runs on
+ * the server (Admin › Audit Log), which passes no `rows` and sends `criteria` with its own requests.
+ */
+export function useFilterController<T>({ module, title, fields, rows, onSortChange, onChange }: UseFilterControllerOptions<T>): TableFilterController<T> {
+    const serverSide = rows === undefined;
     // In the global search results the list starts unfiltered and leaves the list page's applied filter alone.
     const embedded = Boolean(useSearchScope());
     const queryClient = useQueryClient();
@@ -158,14 +184,16 @@ export function useTableFilter<T>({ module, rows, onSortChange, onChange }: UseT
         [criteria, setCriteria]
     );
 
-    const filteredRows = useMemo(() => applyCriteria(rows, criteria, fields.byKey), [rows, criteria, fields.byKey]);
+    const filteredRows = useMemo(() => (rows ? applyCriteria(rows, criteria, fields.byKey) : (NO_ROWS as T[])), [rows, criteria, fields.byKey]);
 
     return {
         module,
+        title,
         fields,
         criteria,
         activeCount: activeConditionCount(criteria),
         filteredRows,
+        matchCount: serverSide ? null : filteredRows.length,
         isOpen,
         open: useCallback(() => setIsOpen(true), []),
         close: useCallback(() => setIsOpen(false), []),
@@ -182,6 +210,6 @@ export function useTableFilter<T>({ module, rows, onSortChange, onChange }: UseT
             await removeMutation.mutateAsync(id);
         },
         clean,
-        countMatches: (c) => applyCriteria(rows, c, fields.byKey).length,
+        countMatches: (c) => (rows ? applyCriteria(rows, c, fields.byKey).length : null),
     };
 }

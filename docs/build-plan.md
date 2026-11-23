@@ -25,7 +25,7 @@
 | Tickets, Products, Partner Companies | ✅ CRUD, import |
 | Quotation PDF | ✅ templates, builder, preview, cached render |
 | Admin: forms, dropdowns, document series, cities, PDF templates | ✅ |
-| Audit log | ⚠️ foundation and admin query API done (ledger table, who / where / how per entry, `/api/admin/audit-logs`); admin screen, undo / restore pending (Phase 11) |
+| Audit log | ⚠️ foundation, admin query API and Admin › Audit Log screen done (ledger table, who / where / how per entry, `/api/admin/audit-logs`); undo / restore, export, integrity pending (Phase 11) |
 | Users admin | ❌ seed / DB only |
 | Dashboard | ❌ static page, no data |
 | Tests | ⚠️ 14 backend unit test files; no API integration, no frontend, no E2E |
@@ -122,11 +122,17 @@ access decided later); log **all changes** plus sign-ins and refused access; **k
       that matches nothing scans the window's stored values, ~1 s — a full-text index is the fix if that matters).
 - [x] Unit tests: `auditAdmin.query.test.ts`, `auditAdmin.present.test.ts`.
 
-**C. Admin screen** (`/admin/audit-log`, the "System Audit & Security" card becomes Available)
-- [ ] Summary strip + events-per-day chart; filter bar with saved / recent filters (reuse `TableFilter`); table
-      (time, user, action, module dot, record link or "Deleted", summary, source); detail drawer; preset tabs
-      (All, Data, Configuration, Security); links "history of this record" / "everything this user did that day".
-- [ ] Light / dark per the theme rules; module identity colours only for the module dots.
+**C. Admin screen** ✅ (2026-11-23, `/admin/audit-log`, the "System Audit & Security" card is Available)
+- [x] Summary strip (events in the period, today, failed sign-ins and refused access 24 h, deletes 7 days; a click
+      shows those entries) + events-per-day chart by category (a click on a day filters to it) + most active users;
+      filter bar: search box, date choice and the `TableFilter` dialog with recent / saved filters (`module=audit-log`,
+      run on the server through `useFilterController`; options from the last year's facets, changed fields from the
+      form configuration); table (time, user, action, module dot, record link or "Deleted" / "Removed", summary,
+      source) with "Load 50 older" keyset paging; detail drawer (Field / Before / After, details, who / where / how,
+      other entries of the same request); category tabs (All, Data, Configuration, Security); links "History of this
+      record" / "Everything this user did that day". User fields (Assigned To …) show names, not usernames.
+- [x] Light / dark per the theme rules; module identity colours only for the module dots; chart series tokens
+      `--crm-chart-audit-*` with their own dark steps (checked for colour-blind separation).
 
 **D. Undo, restore, export, integrity**
 - [ ] **Restore** a soft-deleted record from its DELETE entry (uniqueness re-checked; writes `RESTORE` with `revertsId`).

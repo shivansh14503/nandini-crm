@@ -20,7 +20,7 @@ export function toLocalYmd(value: unknown): string | undefined {
 }
 
 /** Inclusive [from, to] of a date operator ('' = open end); undefined when its inputs are missing. */
-function dateRange(c: FilterCondition): [string, string] | undefined {
+export function dateRange(c: FilterCondition): [string, string] | undefined {
     const today = new Date();
     const t = ymd(today);
     switch (c.op) {
@@ -168,7 +168,7 @@ export function describeCondition(field: FilterFieldDef, c: FilterCondition): st
             return `${field.label}: ${shown}`;
         }
         case 'text':
-            return `${field.label} contains "${c.value}"`;
+            return `${field.label} ${field.exactMatch ? 'is' : 'contains'} "${c.value}"`;
         case 'days': {
             const label = DAYS_OPERATORS.find((o) => o.op === c.op)?.label.toLowerCase() ?? '';
             return `${field.label}: ${label} ${c.value}`;

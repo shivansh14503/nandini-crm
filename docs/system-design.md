@@ -1,6 +1,6 @@
 # Nandini CRM — System Design
 
-> **Status:** living document. Describes the system as built (code as of 2026-11-23; audit context + ledger audit table, admin audit query API).
+> **Status:** living document. Describes the system as built (code as of 2026-11-23; audit context + ledger audit table, admin audit query API and screen).
 > Update it in the same change that alters architecture, infrastructure, Redis usage, queues or security.
 > Related: [Database design](database-design.md) · [API plan](api-plan.md) · [Build plan](build-plan.md)
 

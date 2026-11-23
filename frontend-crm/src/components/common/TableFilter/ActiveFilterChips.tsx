@@ -27,7 +27,7 @@ export function ActiveFilterChips({ controller }: { controller: TableFilterContr
         >
             <FilterListIcon sx={{ fontSize: 16, color: 'var(--crm-text-blue-600)' }} />
             <Typography sx={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--crm-text-blue-800)', mr: 0.5 }}>
-                {controller.filteredRows.length.toLocaleString('en-IN')} match
+                {controller.matchCount === null ? 'Filtered by' : `${controller.matchCount.toLocaleString('en-IN')} match`}
             </Typography>
             {entries.map(([key, c]) => {
                 const field = fields.byKey.get(key)!;

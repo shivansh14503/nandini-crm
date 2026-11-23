@@ -33,7 +33,6 @@ import AddIcon from '@mui/icons-material/Add';
 import BookmarkBorderIcon from '@mui/icons-material/BookmarkBorder';
 import CheckBoxOutlineBlankIcon from '@mui/icons-material/CheckBoxOutlineBlank';
 import CheckBoxIcon from '@mui/icons-material/CheckBox';
-import { moduleNavLabel } from '@/types/formConfig.types';
 import { activeConditionCount, describeCriteria } from './applyFilter';
 import { DATE_OPERATORS, DAYS_OPERATORS, type FilterCondition, type FilterCriteria, type FilterFieldDef, type SavedTableFilter } from './types';
 import type { TableFilterController } from './useTableFilter';
@@ -112,6 +111,7 @@ function FilterDialog({ controller, sortOptions }: TableFilterModalProps) {
 
     const cleaned = useMemo(() => controller.clean(draft), [controller, draft]);
     const draftCount = activeConditionCount(cleaned);
+    // null when the filter runs on the server (no live count).
     const matchCount = useMemo(() => controller.countMatches(cleaned), [controller, cleaned]);
 
     const setCondition = (key: string, condition: FilterCondition | null) =>
@@ -167,8 +167,6 @@ function FilterDialog({ controller, sortOptions }: TableFilterModalProps) {
         }
     };
 
-    const moduleLabel = moduleNavLabel(controller.module);
-
     return (
         <Dialog
             open
@@ -179,7 +177,7 @@ function FilterDialog({ controller, sortOptions }: TableFilterModalProps) {
             slotProps={{ paper: { sx: { borderRadius: '14px', boxShadow: '0 20px 50px rgba(15,23,42,0.18)', height: 'min(680px, 88vh)' } } }}
         >
             <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1, pb: 0, pr: 1.5 }}>
-                <Typography sx={{ fontSize: '1.05rem', fontWeight: 800, color: 'var(--crm-slate-900)', flex: 1 }}>Filter {moduleLabel}</Typography>
+                <Typography sx={{ fontSize: '1.05rem', fontWeight: 800, color: 'var(--crm-slate-900)', flex: 1 }}>Filter {controller.title}</Typography>
                 <IconButton size="small" onClick={controller.close} aria-label="Close filter">
                     <CloseIcon fontSize="small" />
                 </IconButton>
@@ -425,7 +423,11 @@ function FilterDialog({ controller, sortOptions }: TableFilterModalProps) {
                         Clear
                     </Button>
                     <Typography sx={{ flex: 1, fontSize: '0.78rem', color: 'var(--mui-palette-text-secondary)', textAlign: 'right', pr: 1 }}>
-                        {draftCount > 0 ? `${matchCount.toLocaleString('en-IN')} matching record${matchCount === 1 ? '' : 's'}` : 'No filters set'}
+                        {draftCount === 0
+                            ? 'No filters set'
+                            : matchCount === null
+                              ? `${draftCount} filter${draftCount === 1 ? '' : 's'} set`
+                              : `${matchCount.toLocaleString('en-IN')} matching record${matchCount === 1 ? '' : 's'}`}
                     </Typography>
                     <Button onClick={controller.close} sx={textBtnSx}>
                         Cancel
@@ -588,7 +590,7 @@ function FieldControl({
                 <TextField
                     size="small"
                     fullWidth
-                    placeholder="Contains..."
+                    placeholder={field.placeholder ?? 'Contains...'}
                     value={condition?.value ?? ''}
                     onChange={(e) => onChange(e.target.value ? { op: 'contains', value: e.target.value } : null)}
                     sx={inputSx}

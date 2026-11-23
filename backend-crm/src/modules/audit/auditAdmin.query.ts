@@ -195,8 +195,8 @@ export const auditListQuerySchema = z.object({
     entityCode: text(50),
     /** Record name at the time, matched anywhere in it. */
     entityLabel: text(200),
-    /** Entries whose update changed this field. */
-    field: z.preprocess(blankToUndefined, z.string().regex(FIELD_KEY, 'field must be a field key such as assignedTo or customFields.po_number.').optional()),
+    /** Entries whose update changed any of these fields. */
+    field: listParam(z.string().regex(FIELD_KEY, 'field must be a field key such as assignedTo or customFields.po_number.')),
     /** Exact IP address, or a prefix ending in `*` (`192.168.1.*`). */
     ip: z.preprocess(blankToUndefined, z.string().regex(/^[0-9A-Fa-f:.]{1,45}\*?$/, 'ip must be an IP address, or a prefix ending in *.').optional()),
     requestId: text(50),
@@ -269,6 +269,12 @@ export interface IdBounds {
 /** SQL Server LIKE treats `%`, `_` and `[` as patterns and Prisma's `contains` doesn't escape them: match them literally. */
 export const likeLiteral = (value: string) => value.replace(/[[%_]/g, (c) => `[${c}]`);
 
+/** An update changed this field. Custom field changes are one `customFields` diff: narrow by the list, then by the key inside the JSON. */
+function fieldConditions(field: string): Prisma.AuditLogWhereInput[] {
+    if (!field.startsWith('customFields.')) return [{ changedFields: { contains: `|${field}|` } }];
+    return [{ changedFields: { contains: '|customFields|' } }, { changesJson: { contains: likeLiteral(`"${field.slice(13)}":`) } }];
+}
+
 /**
  * Filters → Prisma where. With `bounds` the date range is also an `id` range, so SQL Server seeks the clustered key
  * (id order is write order) instead of scanning; the `createdAt` condition stays for exactness.
@@ -297,14 +303,8 @@ export function buildAuditWhere(filters: Partial<AuditListFilters>, range: TimeR
     if (filters.requestId) where.requestId = filters.requestId;
     if (filters.ip) where.ipAddress = filters.ip.endsWith('*') ? { startsWith: likeLiteral(filters.ip.slice(0, -1)) } : filters.ip;
 
-    if (filters.field) {
-        if (filters.field.startsWith('customFields.')) {
-            // Custom field changes are one `customFields` diff: narrow by the list, then by the key inside the JSON.
-            and.push({ changedFields: { contains: '|customFields|' } }, { changesJson: { contains: likeLiteral(`"${filters.field.slice(13)}":`) } });
-        } else {
-            where.changedFields = { contains: `|${filters.field}|` };
-        }
-    }
+    if (filters.field?.length === 1) and.push(...fieldConditions(filters.field[0]));
+    else if (filters.field) and.push({ OR: filters.field.map((field) => ({ AND: fieldConditions(field) })) });
 
     if (filters.q) {
         const q = likeLiteral(filters.q);

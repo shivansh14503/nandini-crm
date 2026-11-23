@@ -1,5 +1,8 @@
 import type { CrmModuleKey } from '@/types/formConfig.types';
 
+/** Screens with a Filter dialog: the CRM module lists, plus Admin › Audit Log (its filter runs on the server). */
+export type TableFilterScope = CrmModuleKey | 'audit-log';
+
 /**
  * Operators of a filter condition. Mirrors FILTER_OPERATORS in
  * backend-crm/src/modules/table-filters/tableFilter.validator.ts (the backend stores criteria as-is).
@@ -64,11 +67,15 @@ export interface FilterFieldDef {
     normalizeValue?: (value: string) => string;
     /** Phone numbers: matched on digits only. */
     digitsOnly?: boolean;
+    /** `text` fields matched as a whole value (described as "is" instead of "contains"). */
+    exactMatch?: boolean;
+    /** `text` fields: hint shown in the empty box (default "Contains..."). */
+    placeholder?: string;
 }
 
 export interface SavedTableFilter {
     id: string;
-    module: CrmModuleKey;
+    module: TableFilterScope;
     kind: 'recent' | 'saved';
     name: string | null;
     criteria: FilterCriteria;
