@@ -122,7 +122,8 @@ export function buildConvertLeadDefaults(lead: Lead): ConvertLeadFormValues {
         extraFields: {
             contacts: {},
             organizations: {
-                tradeName: lead.tradeName && lead.tradeName !== lead.organizationName ? lead.tradeName : '',
+                // As on the Organization form, Trade Name starts as the organization name (and follows it while they match).
+                tradeName: lead.tradeName || lead.organizationName || '',
                 billingAddress: lead.primaryAddress ?? '',
                 billingCity: lead.primaryCity ?? '',
                 billingState: lead.primaryState ?? '',
