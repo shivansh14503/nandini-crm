@@ -87,7 +87,7 @@ export function LookupField({
     onSelectClick,
     onClear,
     loading = false,
-    disabled = false,
+    disabled,
     required = false,
     lookupTooltip = 'Select from Directory',
     fieldSize,
