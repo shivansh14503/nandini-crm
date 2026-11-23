@@ -67,6 +67,19 @@ const convertButtonSx = {
 
 const sectionDividerSx = { my: 3.5, borderColor: 'var(--mui-palette-border-light)' } as const;
 
+/**
+ * Editable inputs get a darker outline and the locked ones (values from the lead, see LeadLocked) a soft fill, so the
+ * two are easy to tell apart. Hover, focus and error outlines are left to the fields' own styles.
+ */
+const inputStatesSx = {
+    '& .MuiOutlinedInput-root:not(.Mui-disabled):not(:has(input[readonly])):not(.Mui-focused):not(.Mui-error):not(:hover) .MuiOutlinedInput-notchedOutline': {
+        borderColor: 'var(--crm-slate-500)',
+    },
+    // Locked: disabled (from the lead) or read-only (Mailing Name follows Organization Name).
+    '& .MuiOutlinedInput-root:is(.Mui-disabled, :has(input[readonly]))': { backgroundColor: 'var(--mui-palette-background-subtle)' },
+    '& .MuiOutlinedInput-root:is(.Mui-disabled, :has(input[readonly])) .MuiOutlinedInput-notchedOutline': { borderColor: 'var(--mui-palette-border-main)' },
+} as const;
+
 const EMPTY_DEFAULTS: ConvertLeadFormValues = {
     existingOrganizationId: '',
     organizationName: '',
@@ -221,32 +234,34 @@ export function ConvertLeadForm({ leadId, breadcrumbItems }: ConvertLeadFormProp
                         />
                     }
                 >
-                    <SectionLabel
-                        icon={<PersonOutlineOutlinedIcon sx={{ fontSize: 18 }} />}
-                        label="1. Create Contact OR Select Contact"
-                    />
-                    <ConvertContactSection />
-
-                    <Divider sx={sectionDividerSx} />
-
-                    <SectionLabel
-                        icon={<BusinessOutlinedIcon sx={{ fontSize: 18 }} />}
-                        label="2. Create Organization OR Select Organization"
-                    />
-                    <ConvertOrganizationSection />
-
-                    <Divider sx={sectionDividerSx} />
-
-                    <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 2, flexWrap: 'wrap', mb: 1 }}>
+                    <Box sx={inputStatesSx}>
                         <SectionLabel
-                            icon={<MonetizationOnOutlinedIcon sx={{ fontSize: 18 }} />}
-                            label="3. Create Opportunity"
-                            sx={{ mb: 0 }}
+                            icon={<PersonOutlineOutlinedIcon sx={{ fontSize: 18 }} />}
+                            label="1. Create Contact OR Select Contact"
                         />
-                        {/* Off when the deal already has an opportunity: the lead converts without creating another. */}
-                        <RhfCheckbox<ConvertLeadFormValues> name="createOpportunity" label="Create a new opportunity" />
+                        <ConvertContactSection />
+
+                        <Divider sx={sectionDividerSx} />
+
+                        <SectionLabel
+                            icon={<BusinessOutlinedIcon sx={{ fontSize: 18 }} />}
+                            label="2. Create Organization OR Select Organization"
+                        />
+                        <ConvertOrganizationSection />
+
+                        <Divider sx={sectionDividerSx} />
+
+                        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 2, flexWrap: 'wrap', mb: 1 }}>
+                            <SectionLabel
+                                icon={<MonetizationOnOutlinedIcon sx={{ fontSize: 18 }} />}
+                                label="3. Create Opportunity"
+                                sx={{ mb: 0 }}
+                            />
+                            {/* Off when the deal already has an opportunity: the lead converts without creating another. */}
+                            <RhfCheckbox<ConvertLeadFormValues> name="createOpportunity" label="Create a new opportunity" />
+                        </Box>
+                        <ConvertOpportunitySection />
                     </Box>
-                    <ConvertOpportunitySection />
                 </CommonFormLayout>
             </LeadPrefilledProvider>
         </FormProvider>
