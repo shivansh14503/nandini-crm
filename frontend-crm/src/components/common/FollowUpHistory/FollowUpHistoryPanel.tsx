@@ -2,7 +2,7 @@
 
 import React, { useMemo } from 'react';
 import { Box, Skeleton, Tooltip, Typography } from '@mui/material';
-import { ratingChipColors } from '@/utils/leadRating';
+import { RatingBadge } from '@/components/common/RatingBadge';
 import EventRepeatOutlinedIcon from '@mui/icons-material/EventRepeatOutlined';
 import { useEntityAuditEntries, type AuditEntityType } from '@/hooks/queries/useAuditLogs';
 import { glassSurfaceSx, GLASS_SHADOW, GLASS_RADIUS, FLOAT_INSET } from '@/theme/glass';
@@ -106,14 +106,7 @@ export function FollowUpHistoryPanel({ entityType, recordId, recordLabel }: Foll
 
 /** `Rating Warm → Hot` (or just `Rating Hot` when it stayed or is the first); the reason on hover. */
 function RatingChange({ from, to, reason }: { from: string; to: string; reason?: string }) {
-    const pill = (rating: string) => (
-        <Box
-            component="span"
-            sx={{ px: 0.8, py: 0.1, borderRadius: '999px', fontSize: '0.68rem', fontWeight: 700, border: '1px solid', ...ratingChipColors(rating) }}
-        >
-            {rating}
-        </Box>
-    );
+    const pill = (rating: string) => <RatingBadge rating={rating} variant="small" />;
     return (
         <Tooltip title={reason ?? ''} arrow disableInteractive>
             <Box component="span" sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5, fontSize: '0.7rem', color: 'var(--mui-palette-text-secondary)' }}>

@@ -342,7 +342,7 @@ function BadgeSettings({ editor, fields, readOnly, badge, index, onRemove }: Pan
     return (
         <>
             <Group title="Value">
-                <FieldSelect label="Field" fields={fields} value={badge.field} disabled={readOnly} onChange={(f) => update({ field: f.key, style: f.key === 'rating' || f.key === 'status' ? 'auto' : badge.style })} />
+                <FieldSelect label="Field" fields={fields.filter((f) => f.key !== 'rating')} value={badge.field} disabled={readOnly} onChange={(f) => update({ field: f.key, style: f.key === 'status' ? 'auto' : badge.style })} />
                 <TextInput label="Text before the value" placeholder="e.g. Rating: " value={badge.prefix} max={LIMITS.badgePrefix} disabled={readOnly} onChange={(v) => update({ prefix: v }, 'prefix')} />
             </Group>
             <Group title="Colour" hint={badge.style === 'auto' ? 'Rating uses Hot / Warm / Cold colours, a scorecard uses its grade colour, Status is green, anything else grey.' : undefined}>

@@ -7,6 +7,7 @@ import { useShowRecordNumber } from '@/hooks/queries/useDocumentSeries';
 import type { DrawerLayoutModule } from '@/lib/drawer-layout';
 import type { SeriesModule } from '@/types/documentSeries.types';
 import type { DrawerBadgeItem, FormTabDefinition } from '../types';
+import { RatingBadge } from '@/components/common/RatingBadge';
 import { LayoutTabSections, useDrawerLayout, useLayoutCtx, useLayoutHeader } from './DrawerLayoutRenderer';
 
 export interface LayoutDrawerProps {
@@ -15,6 +16,8 @@ export interface LayoutDrawerProps {
     avatarIcon: React.ReactNode | undefined;
     avatarBg: string;
     badges: DrawerBadgeItem[];
+    /** The lead's Rating box (under the header buttons), when the record has a rating. */
+    headerAside: React.ReactNode;
     formTabs: FormTabDefinition[];
     tabContents: Record<string, React.ReactNode>;
 }
@@ -65,6 +68,7 @@ export function useLayoutDrawerProps(module: DrawerLayoutModule, record: unknown
         avatarIcon: header.avatarIcon,
         avatarBg: header.avatarBg,
         badges: header.badges.flatMap((b) => (b.item ? [b.item] : [])),
+        headerAside: header.rating ? <RatingBadge rating={header.rating.value} reason={header.rating.reason} variant="block" /> : null,
         formTabs: tabs,
         tabContents,
     };

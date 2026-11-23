@@ -178,6 +178,9 @@ only (not the full record page); Save goes live straight away; Leads first.
       Partner Companies render from their layout (built-in layouts reproduce the old hand-built drawers); new blocks
       Line items and Totals (opportunities, quotations), new field looks User / Code pill / Hidden until revealed,
       system values per module (record numbers, Grand Total, AMC / Cloud / Verified flags), more avatar icons
+- [x] Lead Rating (Hot / Warm / Cold) in its own box under the drawer's header buttons, and the same icon + colour
+      badge (`RatingBadge`: fire, sun, snowflake) in the leads table, follow-up history and Rating Rules; drawer
+      footers show only buttons
       (each needs its system values, address prefixes, built-in layout and pieces).
 - [ ] Footer actions in the layout.
 

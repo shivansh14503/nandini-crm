@@ -2,7 +2,7 @@
 
 import React, { useMemo } from 'react';
 import { Box, Button, MenuItem, TextField, Tooltip, Typography } from '@mui/material';
-import LocalFireDepartmentOutlinedIcon from '@mui/icons-material/LocalFireDepartmentOutlined';
+import { RatingBadge } from '@/components/common/RatingBadge';
 import ListAltOutlinedIcon from '@mui/icons-material/ListAltOutlined';
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 import type { DropdownOptionDto, FormConfigsPayload } from '@/types/formConfig.types';
@@ -19,7 +19,6 @@ import {
     RATING_RULE_KINDS,
     RATING_RULE_META_KEY,
     RATINGS,
-    ratingChipColors,
     ratingRuleFromMeta,
     RULE_HINTS,
     RULE_LABELS,
@@ -193,13 +192,9 @@ function HeaderRow({ first }: { first: string }) {
 }
 
 function RatingHead({ rating }: { rating: Rating }) {
-    const colors = ratingChipColors(rating);
     return (
         <Box sx={{ display: 'flex', alignItems: 'center' }}>
-            <Box component="span" sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.4, px: 0.9, py: 0.1, borderRadius: '999px', fontSize: '0.68rem', fontWeight: 700, border: '1px solid', ...colors }}>
-                {rating === 'Hot' && <LocalFireDepartmentOutlinedIcon sx={{ fontSize: 13 }} />}
-                {rating}
-            </Box>
+            <RatingBadge rating={rating} variant="small" />
         </Box>
     );
 }

@@ -7,7 +7,6 @@ import StarOutlineRoundedIcon from '@mui/icons-material/StarOutlineRounded';
 import PhoneOutlinedIcon from '@mui/icons-material/PhoneOutlined';
 import EmailOutlinedIcon from '@mui/icons-material/EmailOutlined';
 import PlaceOutlinedIcon from '@mui/icons-material/PlaceOutlined';
-import LocalFireDepartmentIcon from '@mui/icons-material/LocalFireDepartment';
 import VisibilityOutlinedIcon from '@mui/icons-material/VisibilityOutlined';
 import VisibilityOffOutlinedIcon from '@mui/icons-material/VisibilityOffOutlined';
 import { getCountryNameByCode } from '@/data/addressMaster';
@@ -15,7 +14,6 @@ import { useFormConfigs } from '@/hooks/queries/useFormConfigs';
 import { useDrawerLayouts } from '@/hooks/queries/useDrawerLayouts';
 import { LINE_ITEM_MODULES, pruneLayout, type DrawerBadge, type DrawerBlock, type DrawerLayoutDocument, type DrawerLayoutModule, type DrawerSection, type SectionStyle } from '@/lib/drawer-layout';
 import type { FormConfigsPayload } from '@/types/formConfig.types';
-import { ratingChipColors } from '@/utils/leadRating';
 import { ReadOnlyField } from '@/components/forms/ReadOnlyField';
 import { EmailActions, PhoneActions } from '@/components/common/ContactActions';
 import { DoubleClickCopyText } from '@/components/common/useDoubleClickCopy';
@@ -703,7 +701,12 @@ export interface LayoutHeader {
     avatarBg: string;
     /** Badges with the layout badge each came from (`null` when it renders nothing for this record). */
     badges: { badge: DrawerBadge; item: DrawerBadgeItem | null }[];
+    /** The lead's Rating (Hot / Warm / Cold) and why: shown in its own box under the header buttons, never as a badge. */
+    rating: { value: string; reason?: string } | null;
 }
+
+/** The Rating has a fixed place in the header (its own box), so a layout never shows it as a badge. */
+export const isRatingBadge = (badge: DrawerBadge) => badge.field === 'rating';
 
 /** Header of a drawer from its layout. `showEmptyBadges` (builder) keeps empty badges, labelled with the field name. */
 export function useLayoutHeader(layout: DrawerLayoutDocument, ctx: LayoutCtx, showEmptyBadges = false): LayoutHeader {
@@ -714,7 +717,10 @@ export function useLayoutHeader(layout: DrawerLayoutDocument, ctx: LayoutCtx, sh
     const subtitle = header.subtitleFields.map(first).filter(Boolean).join(' • ');
     const hot = header.hotAvatar && ctx.record?.rating === 'Hot';
 
-    const badges = header.badges.map((badge) => {
+    const ratingValue = ctx.module === 'leads' && !ctx.hidden.has('rating') && typeof ctx.record?.rating === 'string' ? ctx.record.rating.trim() : '';
+    const rating = ratingValue ? { value: ratingValue, reason: typeof ctx.record?.ratingReason === 'string' ? ctx.record.ratingReason : undefined } : null;
+
+    const badges = header.badges.filter((b) => !isRatingBadge(b)).map((badge) => {
         const def = ctx.fields.get(badge.field);
         // A yes / no value shows its badge (the prefix, or the field's name) only while it is on.
         if (def?.type === 'checkbox') {
@@ -730,21 +736,9 @@ export function useLayoutHeader(layout: DrawerLayoutDocument, ctx: LayoutCtx, sh
         }
         const label = `${badge.prefix}${values.join(', ') || '—'}`;
         if (badge.style !== 'auto') return { badge, item: { label, ...BADGE_TONES[badge.style] } };
-        if (badge.field === 'rating') {
-            const rating = String(ctx.record?.rating ?? '');
-            return {
-                badge,
-                item: {
-                    label,
-                    ...ratingChipColors(rating),
-                    icon: rating === 'Hot' ? <LocalFireDepartmentIcon sx={{ fontSize: '13px !important' }} /> : undefined,
-                    tooltip: typeof ctx.record?.ratingReason === 'string' ? ctx.record.ratingReason : undefined,
-                },
-            };
-        }
         if (scorecardBadge && scorecardBadge.fieldKey === badge.field) return { badge, item: { ...scorecardBadge, label: `${badge.prefix}${scorecardBadge.label}` } };
         return { badge, item: { label, ...autoTone(badge.field, String(def ? (rawFieldValue(ctx.record, def) ?? '') : '')) } };
     });
 
-    return { title, subtitle, avatarIcon: avatarContent(header.avatar), avatarBg: avatarBackground(header.avatar, hot), badges };
+    return { title, subtitle, avatarIcon: avatarContent(header.avatar), avatarBg: avatarBackground(header.avatar, hot), badges, rating };
 }

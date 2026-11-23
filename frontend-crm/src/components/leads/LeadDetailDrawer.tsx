@@ -103,6 +103,7 @@ export function LeadDetailDrawer({
             avatarBg={view.avatarBg}
             verified={true}
             badges={view.badges}
+            headerAside={view.headerAside}
             headerActions={{
                 onEdit: handleEdit,
                 onView: () => router.push(withListOrigin(ROUTES.LEAD_DETAIL(l.id))),

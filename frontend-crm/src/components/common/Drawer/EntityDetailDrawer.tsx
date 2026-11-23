@@ -77,6 +77,7 @@ export function EntityDetailDrawer({
     loading = false,
     badges = [],
     headerActions,
+    headerAside,
     tabs = [],
     formTabs,
     tabContents,
@@ -392,8 +393,9 @@ export function EntityDetailDrawer({
                         </Box>
                     </Box>
 
-                    {/* Top Right Header Actions */}
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, flexShrink: 0 }}>
+                    {/* Top Right Header Actions (and, under them, e.g. the Rating box) */}
+                    <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 1, flexShrink: 0 }}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
                         {headerActions?.onSync && (
                             <Tooltip title="Synchronize Data">
                                 <IconButton
@@ -429,6 +431,8 @@ export function EntityDetailDrawer({
                                 <CloseIcon sx={{ fontSize: 20 }} />
                             </IconButton>
                         </Tooltip>
+                    </Box>
+                    {headerAside}
                     </Box>
                 </Box>
 
