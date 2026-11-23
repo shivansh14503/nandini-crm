@@ -42,9 +42,20 @@ export function normalizeApiError(error: unknown, fallbackStatus?: number): ApiC
     });
 }
 
+/**
+ * Tells the API a request comes from this web app, and from which screen, for the admin audit log
+ * (backend-crm/src/services/auditContext.ts: entries get source "UI" and the page path). Only the path is sent,
+ * never the query string.
+ */
+export function setAuditHeaders(headers: Headers): void {
+    headers.set('X-CRM-Client', 'web');
+    if (typeof window !== 'undefined') headers.set('X-CRM-Page', window.location.pathname);
+}
+
 const requestInterceptors: RequestInterceptor[] = [
     (url, options) => {
         const headers = new Headers(options.headers);
+        setAuditHeaders(headers);
         if (!headers.has('Accept')) {
             headers.set('Accept', 'application/json');
         }

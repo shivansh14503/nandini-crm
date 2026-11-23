@@ -1,7 +1,7 @@
 # Nandini CRM — Database Design
 
-> **Status:** living document, generated from `backend-crm/prisma/schema.prisma` and `prisma/migrations/` (51 migrations,
-> latest `20261121090000_lead_rating_rules`). Update it in the same change as any schema migration.
+> **Status:** living document, generated from `backend-crm/prisma/schema.prisma` and `prisma/migrations/` (55 migrations,
+> latest `20261121200000_audit_ledger`). Update it in the same change as any schema migration.
 > Related: [System design](system-design.md) · [API plan](api-plan.md) · [Build plan](build-plan.md)
 
 ---
@@ -305,11 +305,33 @@ shows a section only while one of its fields is on it.
 
 ### 4.16 `AuditLog`
 
-`entityType`, `entityId`, `action` (`CREATE`, `UPDATE`, `DELETE`, `STATUS_CHANGE`, `CONVERT`, `IMPORT`, `LOGIN`,
-`LOGIN_FAILED`, `LOGOUT`, `SET_DEFAULT`, `DUPLICATE`, `PDF_GENERATED`), `changedBy` (username), `changesJson`
-(`{ field: { from, to } }` for updates, a snapshot or summary otherwise), `createdAt`.
-Indexes: `(entityType, entityId, createdAt)` for timelines, `changedBy`. Append-only; grows without bound (no
-retention job yet).
+Every change in the CRM, one row per event (migration `20261121200000_audit_ledger`; writer `services/audit.service.ts`).
+
+**Storage.** An **append-only ledger table** (`WITH (LEDGER = ON (APPEND_ONLY = ON), DATA_COMPRESSION = PAGE)`):
+rows can only be inserted. UPDATE and DELETE fail for every login, db_owner included, and
+`sys.sp_verify_database_ledger` proves no row was altered. Retention is **indefinite** (owner's decision, 2026-11-21).
+`id` is a `BIGINT IDENTITY` clustered key (ever-increasing, so inserts append and `id` order = write order); SQL Server
+adds two hidden columns (`ledger_start_transaction_id`, `ledger_start_sequence_number`), declared in the Prisma model
+with `@ignore` so schema diffs stay empty.
+
+| Group | Columns |
+| --- | --- |
+| What | `category` (`DATA` / `CONFIG` / `SECURITY`), `action` (`CREATE`, `UPDATE`, `DELETE`, `RESTORE`, `REVERT`, `STATUS_CHANGE`, `CONVERT`, `FOLLOW_UP`, `IMPORT`, `LOGIN`, `LOGIN_FAILED`, `LOGOUT`, `ACCESS_DENIED`, `SET_DEFAULT`, `DUPLICATE`, `PDF_GENERATED`), `severity` (`INFO` / `NOTICE` / `WARNING` / `CRITICAL`), `module` (CRM module key or admin area: `form-customization`, `pdf-templates`, `document-series`, `cities`, `users`) |
+| Which record | `entityType`, `entityId`, `entityCode` (record number at the time; shown only once the module has a document series), `entityLabel` (record name at the time, so renamed / deleted records stay readable) |
+| Change | `changedFields` (`\|status\|assignedTo\|` for diffs), `changesJson` (`{ field: { from, to } }` for updates, a snapshot or summary otherwise; sensitive keys stored as `[redacted]`) |
+| Who | `changedBy` (username, `system` for jobs), `actorId` (`Users.Id`), `actorRole` (role at the time) |
+| Where / how | `source` (`UI` = the web app, `API` = any other client, `IMPORT`, `JOB`), `requestId` (same on every row one request / import / job run writes; equals the `X-Request-Id` response header and the log line's `req.id`), `sessionId` (JWT id), `httpMethod`, `route` (`/api/leads/:id`, or `job:<name>`), `page` (the screen, sent by the web app), `ipAddress`, `userAgent` |
+| Undo | `revertsId` (the entry an undo / restore reverses) |
+
+Indexes (all PAGE-compressed): `(createdAt)`, `(entityType, entityId, id)` record timelines, `(changedBy, createdAt)`,
+`(module, createdAt)`, `(category, createdAt)`, `(action, createdAt)`, `(requestId)`, `(ipAddress, createdAt)`,
+`(revertsId)`.
+
+**Rules.** Never write a migration that updates or deletes `AuditLog` rows (it fails). When a field key is renamed,
+add `old → new` to `FIELD_ALIASES` in `src/modules/audit/audit.format.ts`; readers show the new key. Rows written
+before 2026-11-21 were copied in date order with `category` / `module` / `severity` / labels / `actorId` /
+`changedFields` / sign-in IPs worked out from the old data; their `source` is null except `JOB` for `system`, and
+their request columns are null.
 
 ### 4.17 `TableFilter`
 
@@ -374,7 +396,10 @@ deleted). Index `createdAt`.
 
 ## 8. Known issues / future work
 
-- `AuditLog` has no retention or archiving policy.
+- `AuditLog` keeps every row forever (an append-only ledger table, by decision). Growth estimate: ~60 users, a few
+  thousand rows a day, a few GB a year after PAGE compression. **SQL Server Express caps database size** (50 GB on
+  SQL Server 2025), so production should run Standard edition or Azure SQL; if retention is ever wanted, a ledger table
+  can't be purged in place (drop and recreate with an archive copy).
 - Owner/creator columns are usernames without FKs; renaming a username would orphan ownership. Treat usernames as
   immutable until an id-based migration is done.
 - `contains` searches on large tables will need full-text indexes eventually.

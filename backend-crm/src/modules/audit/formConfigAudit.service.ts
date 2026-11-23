@@ -389,7 +389,7 @@ export const formConfigAuditService = {
         const parsed: ParsedRow[] = rows.map((row) => {
             const rawChanges = parseChanges(row.changesJson);
             const changes = rawChanges && typeof rawChanges === 'object' && !Array.isArray(rawChanges) ? (rawChanges as Changes) : {};
-            return { ...row, changes, rawChanges };
+            return { ...row, id: String(row.id), changes, rawChanges };
         });
 
         const legacy = await resolveLegacyContexts(parsed);

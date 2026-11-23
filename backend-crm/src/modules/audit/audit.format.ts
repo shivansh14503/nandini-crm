@@ -52,11 +52,25 @@ export function displayValue(value: unknown): string {
 export const isDiff = (value: unknown): value is { from: unknown; to: unknown } =>
     typeof value === 'object' && value !== null && 'from' in value && 'to' in value;
 
-/** Parses a stored `changesJson` (falls back to the raw string when it isn't JSON). */
+/**
+ * Renamed field keys, old → new. AuditLog is append-only (a ledger table), so a field rename can't rewrite the
+ * stored entries the way earlier migrations did: add the old key here and every reader shows the new one.
+ */
+export const FIELD_ALIASES: Readonly<Record<string, string>> = {};
+
+/** Top-level keys of a stored diff / snapshot under their current names (FIELD_ALIASES). */
+export function applyFieldAliases(changes: unknown): unknown {
+    if (!changes || typeof changes !== 'object' || Array.isArray(changes)) return changes;
+    const entries = Object.entries(changes as Record<string, unknown>);
+    if (!entries.some(([key]) => key in FIELD_ALIASES)) return changes;
+    return Object.fromEntries(entries.map(([key, value]) => [FIELD_ALIASES[key] ?? key, value]));
+}
+
+/** Parses a stored `changesJson` (falls back to the raw string when it isn't JSON), keys under their current names. */
 export function parseChanges(json: string | null): unknown {
     if (!json) return null;
     try {
-        return JSON.parse(json);
+        return applyFieldAliases(JSON.parse(json));
     } catch {
         return json;
     }

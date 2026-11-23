@@ -26,7 +26,7 @@ router.put('/:module', admin, async (req: Request, res: Response) => {
 });
 
 router.delete('/:module', admin, async (req: Request, res: Response) => {
-    sendSuccess(res, await scorecardService.reset(req.params), 'Scorecard reset');
+    sendSuccess(res, await scorecardService.reset(req.params, requireUser(req)), 'Scorecard reset');
 });
 
 export default router;

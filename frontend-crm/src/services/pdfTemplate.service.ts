@@ -14,7 +14,7 @@ import type {
     PdfTemplateUpdateInput,
 } from '../types/pdfTemplate.types';
 import type { PdfDocument, SavedItemContent } from '../lib/pdf-document';
-import { ApiClientError, apiClient } from './apiClient';
+import { ApiClientError, apiClient, setAuditHeaders } from './apiClient';
 import { notifyCrmUpdate } from './crmSync';
 
 const ENDPOINT = '/api/pdf-templates';
@@ -69,6 +69,7 @@ async function parseError(response: Response): Promise<ApiClientError> {
 async function fetchBinary(endpoint: string, init: RequestInit & { accept: string }, signal?: AbortSignal): Promise<Response> {
     const { accept, ...rest } = init;
     const headers = new Headers(rest.headers);
+    setAuditHeaders(headers);
     headers.set('Accept', `${accept}, application/json`);
     if (rest.body && !headers.has('Content-Type')) headers.set('Content-Type', 'application/json');
     const timeout = typeof AbortSignal !== 'undefined' && typeof AbortSignal.timeout === 'function' ? AbortSignal.timeout(BINARY_TIMEOUT_MS) : undefined;

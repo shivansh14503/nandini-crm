@@ -58,12 +58,27 @@ export const authService = {
         if (!valid) {
             await loginRateLimit.recordFailure(context.ip);
             // Failures for unknown usernames aren't audited: anyone could flood the log with made-up names.
-            void auditService.enqueue({ entityType: 'User', entityId: String(user.id), action: 'LOGIN_FAILED', changedBy: user.username, changes: { ip: context.ip } });
+            void auditService.enqueue({
+                entityType: 'User',
+                entityId: String(user.id),
+                action: 'LOGIN_FAILED',
+                changedBy: user.username,
+                actor: { id: user.id, role: user.role },
+                changes: { ip: context.ip, reason: 'Wrong password' },
+            });
             throw new HttpError(INVALID_CREDENTIALS, StatusCodes.UNAUTHORIZED, { code: 'INVALID_CREDENTIALS' });
         }
 
         // Only revealed after a correct password, so it doesn't help username enumeration.
         if (!user.isActive) {
+            void auditService.enqueue({
+                entityType: 'User',
+                entityId: String(user.id),
+                action: 'LOGIN_FAILED',
+                changedBy: user.username,
+                actor: { id: user.id, role: user.role },
+                changes: { ip: context.ip, reason: 'Account deactivated' },
+            });
             throw new HttpError('This account has been deactivated. Contact your administrator.', StatusCodes.FORBIDDEN, {
                 code: 'ACCOUNT_INACTIVE',
             });
@@ -83,7 +98,14 @@ export const authService = {
         const authUser: AuthUser = { id: user.id, username: user.username, role: user.role };
         const jti = randomUUID();
         const tracked = await sessionService.create(user.id, jti, context);
-        void auditService.enqueue({ entityType: 'User', entityId: String(user.id), action: 'LOGIN', changedBy: user.username, changes: { ip: context.ip } });
+        void auditService.enqueue({
+            entityType: 'User',
+            entityId: String(user.id),
+            action: 'LOGIN',
+            changedBy: user.username,
+            actor: { id: user.id, role: user.role, sessionId: jti },
+            changes: { ip: context.ip },
+        });
 
         return { user: authUser, token: tokenService.generateToken(authUser, { jti, tracked }) };
     },

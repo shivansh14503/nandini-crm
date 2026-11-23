@@ -1,6 +1,7 @@
 import { logger } from '../../config/logger.js';
 import { prisma } from '../../config/prisma.js';
 import { auditService } from '../../services/audit.service.js';
+import { runWithAuditOrigin } from '../../services/auditContext.js';
 import { cacheService } from '../../services/cache.service.js';
 import { toDateOnly } from '../../utils/mappers.js';
 import { businessToday } from '../../validators/notInPast.js';
@@ -21,8 +22,13 @@ export interface AgeingRunResult {
  * with, docs/lead-rating-rules.md). Only leads whose Rating changes are written, each with a history entry by
  * `system`. Safe to run twice at once or after a missed night: a lead is only written while its Rating is still the
  * one this run read, so two runs never record the same change twice.
+ * Its audit entries are tagged source JOB, route `job:lead-rating-ageing`, one request id per run.
  */
-export async function ageLeadRatings(today: string = businessToday()): Promise<AgeingRunResult> {
+export function ageLeadRatings(today: string = businessToday()): Promise<AgeingRunResult> {
+    return runWithAuditOrigin({ source: 'JOB', route: 'job:lead-rating-ageing' }, () => ageLeads(today));
+}
+
+async function ageLeads(today: string): Promise<AgeingRunResult> {
     let checked = 0;
     let changed = 0;
     let cursor: string | undefined;

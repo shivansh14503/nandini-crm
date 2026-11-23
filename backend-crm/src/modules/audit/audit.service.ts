@@ -1,10 +1,54 @@
 import { z } from 'zod';
 import { prisma } from '../../config/prisma.js';
 import type { AuditEntityType } from '../../services/audit.service.js';
+import type { AuthUser } from '../../types/user.types.js';
+import { HttpError } from '../../utils/httpError.js';
+import { FORM_CONFIG_ADMIN_ROLES } from '../form-configs/formConfig.routes.js';
+import { assertRecordAccess } from '../shared/accessControl.js';
 import { displayTime, displayValue, fieldLabel, isDiff, parseChanges, type AuditEntryDto, type AuditRevisionItem } from './audit.format.js';
 import { formConfigAuditService, isFormConfigsEntityType } from './formConfigAudit.service.js';
 
 export type { AuditEntryDto, AuditRevisionItem } from './audit.format.js';
+
+const ADMIN_ROLES = new Set<string>(FORM_CONFIG_ADMIN_ROLES.map((role) => role.toLowerCase()));
+export const isAuditAdmin = (user: AuthUser): boolean => ADMIN_ROLES.has(user.role.toLowerCase());
+
+type OwnerColumns = { assignedTo: string | null; createdBy: string | null } | null;
+const OWNER_SELECT = { assignedTo: true, createdBy: true } as const;
+
+/**
+ * Row-scoped entities: a record's trail follows the record's own access rule (global role, assignee or creator).
+ * Soft-deleted records are included, so an owner can still read why their record went away.
+ */
+const ROW_SCOPED_OWNERS: Partial<Record<AuditEntityType, (id: string) => Promise<OwnerColumns>>> = {
+    Organization: (id) => prisma.organization.findUnique({ where: { id }, select: OWNER_SELECT }),
+    Contact: (id) => prisma.contact.findUnique({ where: { id }, select: OWNER_SELECT }),
+    Lead: (id) => prisma.lead.findUnique({ where: { id }, select: OWNER_SELECT }),
+    Opportunity: (id) => prisma.opportunity.findUnique({ where: { id }, select: OWNER_SELECT }),
+    Quotation: (id) => prisma.quotation.findUnique({ where: { id }, select: OWNER_SELECT }),
+    Ticket: (id) => prisma.ticket.findUnique({ where: { id }, select: OWNER_SELECT }),
+};
+
+/** Admin-area trails (sign-ins carry IP addresses; templates are admin-managed). A user may read their own. */
+const ADMIN_ONLY: ReadonlySet<AuditEntityType> = new Set(['User', 'PdfTemplate']);
+
+/**
+ * Who may read one record's trail. Admins read every trail. Otherwise: row-scoped records need access to the
+ * record, admin-area trails are admin-only (a user's own User trail excepted), and products / partner companies
+ * stay readable by any signed-in user, like the records themselves.
+ */
+async function assertCanReadTrail(user: AuthUser, entityType: AuditEntityType, entityId: string): Promise<void> {
+    if (isAuditAdmin(user)) return;
+    if (ADMIN_ONLY.has(entityType)) {
+        if (entityType === 'User' && entityId === String(user.id)) return;
+        throw HttpError.forbidden();
+    }
+    const loadOwner = ROW_SCOPED_OWNERS[entityType];
+    if (!loadOwner) return;
+    const record = await loadOwner(entityId);
+    if (!record) throw HttpError.notFound('Record not found');
+    assertRecordAccess(user, record);
+}
 
 /** Route segment (plural or singular, any case) → stored entity type. */
 const ENTITY_TYPES: Record<string, AuditEntityType> = {
@@ -55,6 +99,8 @@ const ACTION_TITLES: Record<string, { title: string; tag: string }> = {
     LOGIN: { title: 'Signed in', tag: 'Login' },
     LOGIN_FAILED: { title: 'Failed sign-in attempt', tag: 'Security' },
     LOGOUT: { title: 'Signed out', tag: 'Logout' },
+    ACCESS_DENIED: { title: 'Access refused', tag: 'Security' },
+    RESTORE: { title: 'Record restored', tag: 'Restored' },
     SET_DEFAULT: { title: 'Set as default template', tag: 'Default' },
     DUPLICATE: { title: 'Duplicated', tag: 'Created' },
     PDF_GENERATED: { title: 'PDF generated', tag: 'PDF' },
@@ -101,19 +147,24 @@ export const auditLogService = {
      * Newest first: raw entries plus timeline items ready for `AuditTrailTimeline`.
      * `form-configs` is the Form Customization trail: `entityId` is a module key, `shared`, or `all`.
      */
-    async forEntity(params: unknown, query: unknown) {
+    async forEntity(params: unknown, query: unknown, user: AuthUser) {
         const { limit } = auditQuerySchema.parse(query ?? {});
-        if (isFormConfigsEntityType(params)) return formConfigAuditService.forScope(params, limit);
+        if (isFormConfigsEntityType(params)) {
+            if (!isAuditAdmin(user)) throw HttpError.forbidden();
+            return formConfigAuditService.forScope(params, limit);
+        }
 
         const { entityType, entityId } = auditParamsSchema.parse(params);
+        await assertCanReadTrail(user, entityType, entityId);
         const rows = await prisma.auditLog.findMany({
             where: { entityType, entityId },
-            orderBy: { createdAt: 'desc' },
+            // id is write order; served by the (entityType, entityId, id) index.
+            orderBy: { id: 'desc' },
             take: limit,
         });
 
         const entries: AuditEntryDto[] = rows.map((row) => ({
-            id: row.id,
+            id: String(row.id),
             action: row.action,
             changedBy: row.changedBy,
             createdAt: row.createdAt.toISOString(),

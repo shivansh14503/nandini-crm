@@ -25,6 +25,7 @@
 | Tickets, Products, Partner Companies | ✅ CRUD, import |
 | Quotation PDF | ✅ templates, builder, preview, cached render |
 | Admin: forms, dropdowns, document series, cities, PDF templates | ✅ |
+| Audit log | ⚠️ foundation done (ledger table, full who / where / how per entry); admin screen, undo / restore pending (Phase 11) |
 | Users admin | ❌ seed / DB only |
 | Dashboard | ❌ static page, no data |
 | Tests | ⚠️ 14 backend unit test files; no API integration, no frontend, no E2E |
@@ -76,11 +77,66 @@ Exit: the critical flows above run in CI.
 
 ### Phase 10 — Scale & operations (P3)
 
-- [ ] `AuditLog` retention / archiving.
+- [x] ~~`AuditLog` retention / archiving~~ — decided 2026-11-21: keep every entry forever (append-only ledger table,
+      Phase 11). Revisit only together with a move off SQL Server Express (database size cap).
 - [ ] Full-text search indexes for large tables.
 - [ ] Migrate owner/creator columns from usernames to user ids (then usernames can be renamed).
 - [ ] Structured log shipping and alerting (pino JSON → log service); health checks for Redis and Chromium.
 - [ ] Drop legacy `Quotation` alias columns once no client uses them.
+
+### Phase 11 — Admin Audit Log (P1, started 2026-11-21)
+
+A CRM-wide audit log in Admin: every change in the application, filterable by date, user, module, record, field,
+action, category, source and IP, with undo / restore. Decisions (owner, 2026-11-21): **admin-only** for now (wider
+access decided later); log **all changes** plus sign-ins and refused access; **keep forever**; tamper-proof
+(SQL Server ledger); restore and undo **in scope**; old entries backfilled; production-grade from the start
+(~60 users at launch); built before User Management.
+
+**A. Foundation** ✅ (2026-11-21)
+- [x] Record history access: follows the record's own access rule; sign-in, PDF template and Form Customization trails
+      admin-only (it was open to any signed-in user).
+- [x] `AuditLog` rebuilt as an append-only **ledger table** (BIGINT clustered key, PAGE compression, 9 indexes) with
+      who / where / how columns; 684 existing rows copied with labels, actors, modules and changed fields filled in.
+      [database-design §4.16](database-design.md#416-auditlog)
+- [x] Request context (AsyncLocalStorage): actor id + role, session, source (UI / API / IMPORT / JOB), route, screen,
+      IP, browser and request id on every entry without touching the audit calls; `X-Request-Id` on every response.
+- [x] Record number + name stored per entry; category / module / severity / changed fields; sensitive keys redacted.
+- [x] New events: refused access (403), failed sign-in on a deactivated account, scorecard save / reset; imports and the
+      nightly Lead Rating job tagged with their own source and request id.
+- [x] Unit tests: `auditCatalog.test.ts`, `auditContext.test.ts`.
+
+**B. Query API** (admin-only, `/api/admin/audit-logs`)
+- [ ] `GET /` — filters (date range, users, modules, actions, categories, severities, sources, record id / number /
+      name, changed field, IP, request id, free text) + keyset paging on `id` (no `COUNT(*)` over the whole range).
+- [ ] `GET /:id` — one entry with a labelled Field / Before / After table (form-config labels incl. custom fields;
+      record numbers only for modules with a document series), and the other entries of the same request.
+- [ ] `GET /facets` (filter options with counts for the chosen range) and `GET /stats` (today, failed sign-ins 24 h,
+      deletes 7 days, most active users, events per day).
+- [ ] Performance check: 1 M seeded rows in a scratch database, a 30-day all-module page in < 300 ms.
+
+**C. Admin screen** (`/admin/audit-log`, the "System Audit & Security" card becomes Available)
+- [ ] Summary strip + events-per-day chart; filter bar with saved / recent filters (reuse `TableFilter`); table
+      (time, user, action, module dot, record link or "Deleted", summary, source); detail drawer; preset tabs
+      (All, Data, Configuration, Security); links "history of this record" / "everything this user did that day".
+- [ ] Light / dark per the theme rules; module identity colours only for the module dots.
+
+**D. Undo, restore, export, integrity**
+- [ ] **Restore** a soft-deleted record from its DELETE entry (uniqueness re-checked; writes `RESTORE` with `revertsId`).
+- [ ] **Undo** an UPDATE: put the `from` values back through the module's normal update path (validation, field
+      locking, name write-through); refuse fields changed again since (conflict list), write `REVERT` with
+      `revertsId`; an entry can be undone once. Not for CONVERT, IMPORT or Form Customization (form config deletes stay
+      permanent by design).
+- [ ] CSV / XLSX export of the current filter (large exports in BullMQ); every export is itself audited.
+- [ ] Integrity: nightly `sys.sp_generate_database_ledger_digest` saved outside the database (file under
+      `AUDIT_DIGEST_DIR` + an `AuditDigest` row for the screen); "Verify integrity" runs
+      `sys.sp_verify_database_ledger` against the saved digests.
+
+**E. Later**
+- [ ] Alert rules (e.g. > 50 deletes in 10 min, 5 failed sign-ins from one IP) shown in-app; per-user activity tab once
+      User Management exists; wider (manager) access if decided; optional record-view logging.
+
+Exit: an admin can answer "who changed this lead's Assigned To last week, from which screen and IP?" in under a
+minute, undo it, and prove the log hasn't been altered.
 
 ## Part 3 — Keeping these documents current
 

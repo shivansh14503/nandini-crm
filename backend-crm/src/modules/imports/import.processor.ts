@@ -3,6 +3,7 @@ import { ENV } from '../../config/env.js';
 import { logger } from '../../config/logger.js';
 import { Prisma } from '../../generated/prisma/client.js';
 import { auditService } from '../../services/audit.service.js';
+import { runWithAuditOrigin, type AuditOrigin } from '../../services/auditContext.js';
 import { cacheService } from '../../services/cache.service.js';
 import type { AuthUser } from '../../types/user.types.js';
 import { HttpError } from '../../utils/httpError.js';
@@ -52,6 +53,8 @@ export interface ImportJobData {
     rows: ImportRow[];
     user: AuthUser;
     fileName?: string;
+    /** Audit context of the upload request (IP, browser, screen, session), carried into the worker. */
+    origin?: AuditOrigin;
 }
 
 export interface ImportRowFailure {
@@ -309,8 +312,17 @@ function describeError(err: unknown): string[] {
 /**
  * Imports rows one by one, each in its own transaction, so a bad row never undoes the good ones.
  * Shared by the BullMQ import worker and the synchronous fallback used when Redis is unavailable.
+ * Every audit entry it writes (one CREATE per row, then the IMPORT summary) is tagged source IMPORT with the import
+ * id as its request id, plus the upload request's IP / browser / screen.
  */
-export async function processImport(data: ImportJobData, onProgress?: (percent: number) => Promise<void> | void): Promise<ImportResult> {
+export function processImport(data: ImportJobData, onProgress?: (percent: number) => Promise<void> | void): Promise<ImportResult> {
+    return runWithAuditOrigin(
+        { ...data.origin, source: 'IMPORT', requestId: data.importId, actorId: data.user.id, actorRole: data.user.role },
+        () => importRows(data, onProgress),
+    );
+}
+
+async function importRows(data: ImportJobData, onProgress?: (percent: number) => Promise<void> | void): Promise<ImportResult> {
     const build = rowBuilders[data.entity];
     const failed: ImportRowFailure[] = [];
     let created = 0;

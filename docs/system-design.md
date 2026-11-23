@@ -1,6 +1,6 @@
 # Nandini CRM — System Design
 
-> **Status:** living document. Describes the system as built (code as of 2026-11-21; Lead Rating worker added).
+> **Status:** living document. Describes the system as built (code as of 2026-11-21; audit context + ledger audit table).
 > Update it in the same change that alters architecture, infrastructure, Redis usage, queues or security.
 > Related: [Database design](database-design.md) · [API plan](api-plan.md) · [Build plan](build-plan.md)
 
@@ -73,7 +73,7 @@ Cross-cutting code:
 | --- | --- |
 | `src/config` | `env.ts` (Zod-validated environment), `prisma.ts` (single client, connect-with-retry, keep-alive), `redis.ts` (shared client), `logger.ts` (pino with secret redaction), `fieldLimits.ts` |
 | `src/middlewares` | `authenticate` / `requireRole`, `validateRequest`, Redis rate limiter, global `errorHandler` |
-| `src/services` | `audit.service` (diffs + write paths), `cache.service` (fail-open Redis cache), `recentViews.service` |
+| `src/services` | `audit.service` (diffs + write paths), `auditContext` (per-request who / where), `auditCatalog` + `auditLabels` (entry columns), `cache.service` (fail-open Redis cache), `recentViews.service` |
 | `src/modules/shared` | Generic CRUD controller/routes, row-level access control, transactions + application locks, email child rows, name write-through (`nameSync`), tax-ID uniqueness, search term parsing, bulk prefetch |
 | `src/jobs` | BullMQ queues, workers, standalone worker entry point |
 | `src/utils` | Response envelopes, pagination, `HttpError`, Prisma error helpers, code generator, name formatting |
@@ -189,6 +189,10 @@ Role names are compared case-insensitively and with any dash style.
   `customFieldValidator.ts`, so API clients and stale tabs can't bypass it.
 - Rate limits in Redis (fail-open): failed logins per IP, PDF renders per user, PDF previews per user.
 - Logger redacts passwords, auth headers and cookies. 5xx responses hide internals in production.
+- **Audit log** (`AuditLog`, an append-only SQL Server ledger table — see §5 "Audit write paths"): every change,
+  sign-in, failed sign-in (wrong password or deactivated account) and refused request (403, at most one per user +
+  route per minute) is recorded with who / where / how. Record history (`GET /api/audit-logs/...`) follows the
+  record's own access rule; sign-in history, PDF template and Form Customization trails are admin-only.
 - PDF rendering: Chromium runs with JavaScript disabled and every network request except `data:` / `about:blank`
   aborted; images are embedded as data URIs.
 
@@ -266,7 +270,7 @@ flowchart LR
 | Queue | Producer | Worker concurrency | Attempts | Job retention | Notes |
 | --- | --- | --- | --- | --- | --- |
 | `crm-import` | `POST /api/import/:entity` (job id = import id) | 1 | **1** (a retry would duplicate rows already created) | done 1 day / 500 jobs; failed 7 days | Reports progress every 20 rows; result `{ total, created, failed[] }` |
-| `crm-audit` | `auditService.enqueue` (login, login failed, logout, PDF generated, import summary) | 5 | 5, exponential backoff from 1 s | done 1 h / 1000 jobs; failed 7 days | Data-change audits do **not** go through the queue (see below) |
+| `crm-audit` | `auditService.enqueue` (login, login failed, logout, access denied, PDF generated, import summary); each job carries the request's audit origin | 5 | 5, exponential backoff from 1 s | done 1 h / 1000 jobs; failed 7 days | Data-change audits do **not** go through the queue (see below) |
 | `crm-lead-rating` | Job scheduler `lead-rating-ageing`, cron `5 0 * * *` in `BUSINESS_TIMEZONE` (upserted when the worker starts) | 1 | 1 (the next night catches up) | done 7 days / 30 jobs; failed 30 days | `ageLeadRatings`: re-rates leads ageing under a "Days since response" rule, writing only changed rows (history by `system`). The worker also runs it once at start-up, so a night missed while nothing ran (or Redis was down) is made up; runs are idempotent ([lead-rating-rules.md](lead-rating-rules.md)) |
 
 **Import flow:** the frontend wizard parses the CSV/XLSX in the browser (papaparse / xlsx), maps columns, validates
@@ -281,6 +285,17 @@ identical). The browser polls `GET /api/import/jobs/:importId` until the job com
    entry can never disagree.
 2. `enqueue` — fire-and-forget through `crm-audit` for events that have no transaction of their own; falls back to a
    direct write when Redis is down. Never throws.
+
+**Audit context** (`services/auditContext.ts`): the first middleware gives each request an id (`X-Request-Id`
+response header, pino `req.id`) and opens an AsyncLocalStorage context. When an entry is written, `auditService`
+fills in the actor id / role and session (from `req.user` / `req.auth`), source (`UI` when the web app sent
+`X-CRM-Client: web`, else `API`), route pattern, screen (`X-CRM-Page`), IP and browser, so the individual audit calls
+pass nothing extra. `enqueue` snapshots this origin into the job, because the worker runs outside the request.
+Imports run under source `IMPORT` with the import id as request id (every imported row + the summary share it, plus
+the upload request's IP / browser); the nightly Lead Rating ageing runs under source `JOB`, route
+`job:lead-rating-ageing`, one request id per run. `services/auditCatalog.ts` sets category / module / severity /
+changed fields and redacts sensitive keys; `services/auditLabels.ts` stores the record's number and name at the time
+(one lookup per entity type per write, falling back to the entry's own snapshot).
 
 ## 6. PDF generation
 
@@ -314,7 +329,7 @@ flowchart LR
 | **Document numbering** | `DocumentSeries` per module + `DocumentSeriesSettings` (company prefix, separator, financial year). `generateDocumentCode` builds e.g. `NIPL/L/26-27/1004`; modules without a series keep `LD-0001` style codes, which the UI hides. |
 | **Soft delete** | Core entities set `isDeleted` / `deletedAt`; lists and lookups always filter `isDeleted = false`. |
 | **Denormalised names** | Contacts, opportunities, quotations and tickets store the organization/contact *name* next to the id (for sort/search). `shared/nameSync.ts` writes renames through to all live linked rows in the same transaction. City names are written through the same way when an admin renames a city. |
-| **Audit trail / revisions** | Every create/update/delete stores a field-level diff in `AuditLog`; `GET /api/audit-logs/:entityType/:entityId` turns it into a revision timeline. |
+| **Audit trail / revisions** | Every create/update/delete stores a field-level diff in `AuditLog` (append-only ledger table, kept forever, with who / where / how per entry — [database design §4.16](database-design.md#416-auditlog)); `GET /api/audit-logs/:entityType/:entityId` turns it into a revision timeline. The admin-wide Audit Log screen is being built ([build plan Phase 11](build-plan.md)). |
 | **Global search** | One query per category (organizations, contacts, leads, opportunities), access-scoped, with smart detection of entity codes, phone numbers and GSTIN prefixes. |
 | **Table filters** | Each user's recent (last 10) and saved filters per module are stored in `TableFilter`. |
 | **Email verification** | Free checks (syntax, typo of a common provider, disposable domain, DNS — the domain lookup is cached in Redis for a day) then QuickEmailVerification for the mailbox. **The database is the record of checked addresses**: an address saved on any lead / contact / organization with a result is never sent to the provider again from a form or a save, and there is no periodic re-check. Invalid addresses are never stored: the form refuses to save once its on-blur check said "invalid" (toast, no second call), and the save check rejects them server-side. No Redis cache of results; a 30-minute in-process memory of recent provider answers makes the on-blur check, the save check and the post-save background check of one new address cost one credit (lost on restart or across API instances, costing at most one extra credit). Admins re-check addresses in bulk under Settings › Email Validation; an `EmailValidationRun` is processed in the API process (one run at a time, cancellable, resumed at startup). Small runs call the single-address API per address and stop when the provider runs out of credits. Runs of at least `EMAIL_VERIFICATION_LIST_API_MIN` (default 1,000, the provider's own cut-off) use its **List API**: the free checks run first (8 at a time, failures decided for free), the rest are uploaded as one CSV (`POST /v1/bulk-verify`; credits for the whole list are taken at upload, "unknown" results refunded), the job is polled (`GET /v1/bulk-verify/status/{id}`, every 2 / 5 / 15 min by list size; no callback URL, so the API needn't be reachable from the internet; status `ready` = waiting for credits), then the safe-to-send / valid / invalid reports are downloaded and written onto the records (safe to send = valid, valid only = risky, invalid = invalid, unknown = undecided; reasons from the full report when its columns are recognised) and the job is deleted at the provider. Env: `EMAIL_VERIFICATION_ENABLED`, `QUICKEMAILVERIFICATION_API_KEY`, `EMAIL_VERIFICATION_LIST_API_MIN`. |

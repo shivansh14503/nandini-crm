@@ -1,6 +1,8 @@
 import { prisma } from '../../config/prisma.js';
 import type { ModuleScorecard } from '../../generated/prisma/client.js';
+import { auditService, diffRecords } from '../../services/audit.service.js';
 import type { AuthUser } from '../../types/user.types.js';
+import { runInTransaction } from '../shared/transactions.js';
 import { HttpError } from '../../utils/httpError.js';
 import { toIso } from '../../utils/mappers.js';
 import {
@@ -51,6 +53,9 @@ function toDto(row: ModuleScorecard): ScorecardDto {
     };
 }
 
+/** The settings an audit entry records (who / when are on the entry itself). */
+const auditView = ({ updatedBy: _by, updatedAt: _at, module: _module, ...settings }: ScorecardDto) => settings;
+
 /** An active form field of the module with one of the given types, or a 400 naming the problem. */
 async function requireField(module: string, fieldKey: string, types: Set<string>, what: string) {
     const field = await prisma.formFieldDefinition.findUnique({ where: { module_fieldKey: { module, fieldKey } } });
@@ -93,18 +98,30 @@ export const scorecardService = {
             drawerViewColor: input.drawerViewColor,
             updatedBy: user.username,
         };
-        const row = await prisma.moduleScorecard.upsert({
-            where: { module },
-            create: { module, ...data },
-            update: data,
+        return runInTransaction(async (tx) => {
+            const existing = await tx.moduleScorecard.findUnique({ where: { module } });
+            const row = await tx.moduleScorecard.upsert({ where: { module }, create: { module, ...data }, update: data });
+            const after = auditView(toDto(row));
+            await auditService.record(tx, {
+                entityType: 'Scorecard',
+                entityId: module,
+                action: existing ? 'UPDATE' : 'CREATE',
+                changedBy: user.username,
+                changes: existing ? diffRecords(auditView(toDto(existing)), after) : after,
+            });
+            return toDto(row);
         });
-        return toDto(row);
     },
 
     /** Back to the screen's built-in cards. */
-    async reset(params: unknown): Promise<{ module: string }> {
+    async reset(params: unknown, user: AuthUser): Promise<{ module: string }> {
         const { module } = scorecardModuleParamSchema.parse(params);
-        await prisma.moduleScorecard.deleteMany({ where: { module } });
+        await runInTransaction(async (tx) => {
+            const existing = await tx.moduleScorecard.findUnique({ where: { module } });
+            if (!existing) return;
+            await tx.moduleScorecard.delete({ where: { module } });
+            await auditService.record(tx, { entityType: 'Scorecard', entityId: module, action: 'DELETE', changedBy: user.username, changes: auditView(toDto(existing)) });
+        });
         return { module };
     },
 };

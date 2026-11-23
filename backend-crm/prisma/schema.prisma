@@ -873,21 +873,69 @@ model City {
   @@index([subdivisionCode, searchName])
 }
 
-// â”€â”€ Audit trail â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Audit trail ─────────────────────────────────────────────────────────────────
 
+/// Every change in the CRM, one row per audited event (src/services/audit.service.ts writes it; docs/database-design.md §4.16).
+/// An **append-only ledger table** (`LEDGER = ON (APPEND_ONLY = ON)`, created in migration 20261121200000_audit_ledger):
+/// rows can only be inserted. UPDATE / DELETE fail for every login, db_owner included, and
+/// `sys.sp_verify_database_ledger` proves no row was altered. Never write a migration that updates or deletes rows here:
+/// rename old field keys at read time (`FIELD_ALIASES` in src/modules/audit/audit.format.ts) instead.
 model AuditLog {
-  id          String   @id @default(uuid()) @db.NVarChar(50)
-  entityType  String   @db.NVarChar(30)
-  entityId    String   @db.NVarChar(50)
-  /// CREATE | UPDATE | DELETE | CONVERT | IMPORT | STATUS_CHANGE â€¦
-  action      String   @db.NVarChar(30)
-  changedBy   String   @db.NVarChar(50)
+  /// Ever-increasing, so the clustered key appends at the end and `id` order is write order (keyset paging).
+  id            BigInt   @id @default(autoincrement())
+  createdAt     DateTime @default(now())
+  /// DATA | CONFIG | SECURITY
+  category      String   @db.NVarChar(12)
+  /// CREATE | UPDATE | DELETE | RESTORE | REVERT | STATUS_CHANGE | CONVERT | FOLLOW_UP | IMPORT | LOGIN | LOGIN_FAILED | LOGOUT | ACCESS_DENIED …
+  action        String   @db.NVarChar(30)
+  /// INFO | NOTICE | WARNING | CRITICAL
+  severity      String   @default("INFO") @db.NVarChar(10)
+  /// App area: a CRM module key (`leads`, `opportunities` …) or an admin area (`form-customization`, `pdf-templates`, `users` …).
+  module        String   @db.NVarChar(40)
+  entityType    String   @db.NVarChar(30)
+  entityId      String   @db.NVarChar(50)
+  /// Record number at the time (shown only once the module has a document series).
+  entityCode    String?  @db.NVarChar(50)
+  /// Record name at the time, so renamed and deleted records stay readable.
+  entityLabel   String?  @db.NVarChar(200)
+  /// `|field|field|` — the fields an update changed ("every change to Assigned To").
+  changedFields String?  @db.NVarChar(1000)
   /// JSON diff `{ field: { from, to } }` or a snapshot, depending on the action.
-  changesJson String?  @db.NVarChar(Max)
-  createdAt   DateTime @default(now())
+  changesJson   String?  @db.NVarChar(Max)
+  /// Username of the actor, or `system` for background jobs.
+  changedBy     String   @db.NVarChar(50)
+  /// `Users.Id` of the actor (null for system jobs).
+  actorId       Int?
+  /// The actor's role at the time.
+  actorRole     String?  @db.NVarChar(50)
+  /// UI (the CRM web app) | API (any other client) | IMPORT | JOB
+  source        String?  @db.NVarChar(10)
+  /// Same value on every entry written by one request, import or job run.
+  requestId     String?  @db.NVarChar(50)
+  /// Sign-in session (JWT id) the request belonged to.
+  sessionId     String?  @db.NVarChar(50)
+  httpMethod    String?  @db.NVarChar(10)
+  /// Route pattern, e.g. `/api/leads/:id`.
+  route         String?  @db.NVarChar(200)
+  /// Screen the user was on, e.g. `/leads/123` (sent by the web app).
+  page          String?  @db.NVarChar(300)
+  ipAddress     String?  @db.NVarChar(45)
+  userAgent     String?  @db.NVarChar(400)
+  /// The entry an undo / restore reverses.
+  revertsId     BigInt?
+  /// SQL Server ledger columns (hidden, generated). Declared so schema diffs leave them alone; not in the client.
+  ledgerStartTransactionId  BigInt @default(dbgenerated()) @map("ledger_start_transaction_id") @ignore
+  ledgerStartSequenceNumber BigInt @default(dbgenerated()) @map("ledger_start_sequence_number") @ignore
 
-  @@index([entityType, entityId, createdAt])
-  @@index([changedBy])
+  @@index([createdAt])
+  @@index([entityType, entityId, id])
+  @@index([changedBy, createdAt])
+  @@index([module, createdAt])
+  @@index([category, createdAt])
+  @@index([action, createdAt])
+  @@index([requestId])
+  @@index([ipAddress, createdAt])
+  @@index([revertsId])
 }
 
 // ── Form & dropdown customization (admin-managed) ─────────────────────────────

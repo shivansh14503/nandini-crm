@@ -9,6 +9,7 @@ import { logger } from './config/logger.js';
 import { connectDatabase, prisma, startDatabaseKeepAlive, stopDatabaseKeepAlive } from './config/prisma.js';
 import { connectRedis, isRedisReady, redis } from './config/redis.js';
 import { cacheService } from './services/cache.service.js';
+import { auditContextMiddleware, REQUEST_ID_HEADER } from './services/auditContext.js';
 import authRouter from './modules/auth/auth.routes.js';
 import productRouter from './modules/products/product.routes.js';
 import organizationRouter from './modules/organizations/organization.routes.js';
@@ -45,6 +46,8 @@ const app: Express = express();
 if (ENV.IS_PRODUCTION) app.set('trust proxy', 1);
 
 // ── Global Middleware ──────────────────────────────────────────────────────────
+// First: a request id (X-Request-Id, log req.id) and the audit context every audit entry reads its who / where from.
+app.use(auditContextMiddleware);
 app.use(helmet());
 app.use(
     cors({
@@ -56,8 +59,8 @@ app.use(
             return callback(new Error(`CORS blocked for origin: ${origin}`));
         },
         credentials: true,
-        // The frontend reads the server's PDF file name and rate-limit retry hints.
-        exposedHeaders: ['Content-Disposition', 'Retry-After'],
+        // The frontend reads the server's PDF file name, rate-limit retry hints and the request id (error reference).
+        exposedHeaders: ['Content-Disposition', 'Retry-After', REQUEST_ID_HEADER],
     }),
 );
 app.use(

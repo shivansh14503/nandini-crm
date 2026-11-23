@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import { StatusCodes } from 'http-status-codes';
 import { importQueue, isQueueAvailable, tryEnqueue } from '../../jobs/queues.js';
+import { currentAuditOrigin } from '../../services/auditContext.js';
 import type { AuthUser } from '../../types/user.types.js';
 import { HttpError } from '../../utils/httpError.js';
 import { optionalText } from '../../validators/common.js';
@@ -51,7 +52,7 @@ export const importService = {
     /** Queues the import (202) or, when Redis is down and the file is small enough, runs it now (200). */
     async start(entity: ImportEntity, body: z.infer<typeof importBodySchema>, user: AuthUser): Promise<ImportStartResult> {
         const importId = randomUUID();
-        const data: ImportJobData = { importId, entity, rows: body.rows, user, fileName: body.fileName };
+        const data: ImportJobData = { importId, entity, rows: body.rows, user, fileName: body.fileName, origin: currentAuditOrigin() };
 
         const jobId = await tryEnqueue(importQueue, entity, data, { jobId: importId });
         if (jobId) return { status: 'queued', importId, total: body.rows.length };

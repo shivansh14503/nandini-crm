@@ -4,6 +4,7 @@ import { ZodError } from 'zod';
 import { Prisma } from '../generated/prisma/client.js';
 import { ENV } from '../config/env.js';
 import { logger } from '../config/logger.js';
+import { auditService } from '../services/audit.service.js';
 import { HttpError, type ApiFieldError } from '../utils/httpError.js';
 import { isTransactionUnavailableError, isWriteConflictError } from '../utils/prismaErrors.js';
 
@@ -83,6 +84,28 @@ function isClientHttpError(err: unknown): err is Error & { status: number; expos
     return err instanceof Error && typeof (err as { status?: unknown }).status === 'number' && (err as { expose?: unknown }).expose === true;
 }
 
+/** One ACCESS_DENIED entry per user + method + path per minute, so a retrying client can't flood the audit log. */
+const ACCESS_DENIED_WINDOW_MS = 60_000;
+const recentDenials = new Map<string, number>();
+
+/** Records a signed-in user's refused request (role or record-access check) in the audit log. */
+function auditAccessDenied(req: Request, message: string): void {
+    if (!req.user) return;
+    const path = req.originalUrl.split('?')[0].slice(0, 200);
+    const key = `${req.user.id}|${req.method}|${path}`;
+    const now = Date.now();
+    if ((recentDenials.get(key) ?? 0) > now - ACCESS_DENIED_WINDOW_MS) return;
+    if (recentDenials.size > 5000) recentDenials.clear();
+    recentDenials.set(key, now);
+    void auditService.enqueue({
+        entityType: 'User',
+        entityId: String(req.user.id),
+        action: 'ACCESS_DENIED',
+        changedBy: req.user.username,
+        changes: { method: req.method, path, message },
+    });
+}
+
 export function errorHandler(err: unknown, req: Request, res: Response, _next: NextFunction): void {
     let statusCode: number = StatusCodes.INTERNAL_SERVER_ERROR;
     let body: ErrorBody = { status: 'error', message: 'Internal Server Error' };
@@ -110,6 +133,8 @@ export function errorHandler(err: unknown, req: Request, res: Response, _next: N
             message: err.type === 'entity.parse.failed' ? 'Request body is not valid JSON.' : err.message,
         };
     }
+
+    if (statusCode === StatusCodes.FORBIDDEN) auditAccessDenied(req, body.message);
 
     if (statusCode >= StatusCodes.INTERNAL_SERVER_ERROR) {
         logger.error({ err, method: req.method, url: req.originalUrl }, 'Unhandled error');

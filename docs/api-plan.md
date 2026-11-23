@@ -21,6 +21,8 @@
 | Deletes | Soft deletes for business records (`isDeleted`), hard deletes only for personal / config data where noted |
 | Updates | `PUT /:id` takes a **partial** record merged onto the stored one; `PATCH /:id` is an alias |
 | Time zone | Wall-clock inputs (ticket due dates) and audit display times use `BUSINESS_TIMEZONE` (default `Asia/Kolkata`) |
+| Request id | Every response carries `X-Request-Id` (exposed to the browser); the same id is the log line's `req.id` and every audit entry the request wrote |
+| Audit headers | The web app sends `X-CRM-Client: web` (audit `source` = `UI`, otherwise `API`) and `X-CRM-Page: <screen path>` (audit `page`; path only, no query string) |
 
 ### 1.1 Response envelopes
 
@@ -112,7 +114,7 @@ The auth endpoints use the older `{ status: 'ok', … }` envelope rather than `{
 | GET | `/lookups/form-configs?includeInactive` | 1 h | Same payload as `GET /form-configs` |
 | GET | `/lookups/tax-id-holders?owner&gstNumber&panNumber&excludeId` | never | "Is this GSTIN / PAN already used?" |
 | GET | `/lookups/email-check?email` | never (DB is the record) | Form's on-blur check → `{ email, status, reason, message, suggestion }`. An address already saved on any record returns its stored result (no provider call); otherwise free checks, then the provider. Rate limited per user |
-| GET | `/audit-logs/:entityType/:entityId?limit=100` | – | `{ entries, revisions }` newest first. `entityType` ∈ organizations, contacts, leads, opportunities, quotations, products, tickets, partner-companies, users, form-configs (`entityId` = module key, `shared` or `all`) |
+| GET | `/audit-logs/:entityType/:entityId?limit=100` | – | `{ entries, revisions }` newest first (entry `id` is a string). `entityType` ∈ organizations, contacts, leads, opportunities, quotations, products, tickets, partner-companies, users, pdf-templates, form-configs (`entityId` = module key, `shared` or `all`). **Access:** admins read every trail. Others: organizations / contacts / leads / opportunities / quotations / tickets need access to the record (403; 404 if it doesn't exist); `users` only their own trail; `pdf-templates` and `form-configs` admin-only (403); products and partner companies any signed-in user |
 
 ### 2.5 Personal state
 

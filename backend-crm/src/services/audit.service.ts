@@ -1,43 +1,21 @@
 import { prisma, type TransactionClient } from '../config/prisma.js';
 import { logger } from '../config/logger.js';
+import type { Prisma } from '../generated/prisma/client.js';
 import { auditQueue, tryEnqueue } from '../jobs/queues.js';
+import {
+    categoryFor,
+    changedFieldsOf,
+    moduleFor,
+    redact,
+    severityFor,
+    type AuditAction,
+    type AuditEntityType,
+    type AuditSeverity,
+} from './auditCatalog.js';
+import { currentAuditOrigin, type AuditOrigin } from './auditContext.js';
+import { labelKey, resolveLabels } from './auditLabels.js';
 
-export type AuditEntityType =
-    | 'Organization'
-    | 'Contact'
-    | 'Lead'
-    | 'Opportunity'
-    | 'Quotation'
-    | 'Product'
-    | 'Ticket'
-    | 'PartnerCompany'
-    | 'User'
-    | 'Import'
-    | 'DropdownCategory'
-    | 'DropdownOption'
-    | 'FormField'
-    | 'ModuleSetting'
-    | 'PdfTemplate'
-    | 'PdfAsset'
-    | 'PdfSavedItem'
-    | 'DocumentSeries'
-    | 'City';
-
-export type AuditAction =
-    | 'CREATE'
-    | 'UPDATE'
-    | 'DELETE'
-    | 'STATUS_CHANGE'
-    | 'CONVERT'
-    /** A lead follow-up: the field diff plus a `followUp` block (lead.followUp.ts FollowUpSummary). */
-    | 'FOLLOW_UP'
-    | 'IMPORT'
-    | 'LOGIN'
-    | 'LOGIN_FAILED'
-    | 'LOGOUT'
-    | 'SET_DEFAULT'
-    | 'DUPLICATE'
-    | 'PDF_GENERATED';
+export type { AuditAction, AuditCategory, AuditEntityType, AuditSeverity } from './auditCatalog.js';
 
 export interface AuditEntry {
     entityType: AuditEntityType;
@@ -46,6 +24,17 @@ export interface AuditEntry {
     changedBy: string;
     /** A `{ field: { from, to } }` diff for updates, or a snapshot / summary for other actions. */
     changes?: unknown;
+    /** What the request context can't know yet, e.g. at sign-in the user isn't on the request. */
+    actor?: { id?: number; role?: string; sessionId?: string };
+    /** Overrides the action's default severity (auditCatalog.severityFor). */
+    severity?: AuditSeverity;
+    /** The entry this one undoes / restores (`AuditLog.id`). */
+    revertsId?: string;
+}
+
+/** A queued entry carries the origin captured when it was queued: the worker runs outside the request. */
+interface QueuedAuditEntry extends AuditEntry {
+    origin?: AuditOrigin;
 }
 
 /** Fields that change on every write and would only add noise to a diff. */
@@ -63,41 +52,76 @@ export function diffRecords(before: object, after: object): Record<string, { fro
     return changes;
 }
 
-const toRow = (entry: AuditEntry) => ({
-    entityType: entry.entityType,
-    entityId: entry.entityId,
-    action: entry.action,
-    changedBy: entry.changedBy,
-    changesJson: entry.changes === undefined ? null : JSON.stringify(entry.changes),
-});
+const clip = (value: string | undefined, max: number) => (value ? value.slice(0, max) : null);
+
+/** Full rows: catalog columns, record labels (one lookup per entity type), and the request / job origin. */
+async function toRows(client: TransactionClient, entries: AuditEntry[], origin: AuditOrigin | undefined): Promise<Prisma.AuditLogCreateManyInput[]> {
+    const labels = await resolveLabels(client, entries);
+    return entries.map((entry) => {
+        const changes = entry.changes === undefined ? undefined : redact(entry.changes);
+        const category = categoryFor(entry.entityType, entry.action);
+        const label = labels.get(labelKey(entry.entityType, entry.entityId));
+        return {
+            category,
+            action: entry.action,
+            severity: entry.severity ?? severityFor(entry.action, category),
+            module: moduleFor(entry.entityType, changes),
+            entityType: entry.entityType,
+            entityId: entry.entityId,
+            entityCode: label?.code ?? null,
+            entityLabel: label?.label ?? null,
+            changedFields: changedFieldsOf(entry.action, changes),
+            changesJson: changes === undefined ? null : JSON.stringify(changes),
+            changedBy: entry.changedBy.slice(0, 50),
+            actorId: entry.actor?.id ?? origin?.actorId ?? null,
+            actorRole: clip(entry.actor?.role ?? origin?.actorRole, 50),
+            source: origin?.source ?? null,
+            requestId: clip(origin?.requestId, 50),
+            sessionId: clip(entry.actor?.sessionId ?? origin?.sessionId, 50),
+            httpMethod: clip(origin?.httpMethod, 10),
+            route: clip(origin?.route, 200),
+            page: clip(origin?.page, 300),
+            ipAddress: clip(origin?.ipAddress, 45),
+            userAgent: clip(origin?.userAgent, 400),
+            revertsId: entry.revertsId ? BigInt(entry.revertsId) : null,
+        };
+    });
+}
 
 /**
  * Two write paths:
  *  • `record` / `recordMany` write inside the caller's transaction. Used for every data change, so a change
  *    and its audit entry commit (or roll back) together; an audit trail that can lose entries isn't one.
- *  • `enqueue` hands events that have no transaction of their own (logins, import summaries) to the BullMQ
- *    audit queue, falling back to a direct write when Redis is unavailable.
+ *  • `enqueue` hands events that have no transaction of their own (logins, import summaries, refused access) to the
+ *    BullMQ audit queue with the current origin, falling back to a direct write when Redis is unavailable.
+ * Who / where / how (actor, role, source, request id, session, route, screen, IP, browser) comes from the request
+ * context (auditContext.ts); the table is append-only (AuditLog in schema.prisma).
  */
 export const auditService = {
     async record(tx: TransactionClient, entry: AuditEntry): Promise<void> {
-        await tx.auditLog.create({ data: toRow(entry) });
+        const [row] = await toRows(tx, [entry], currentAuditOrigin());
+        // createMany: a plain INSERT, no OUTPUT clause or read-back of the new row.
+        await tx.auditLog.createMany({ data: [row] });
     },
 
     async recordMany(tx: TransactionClient, entries: AuditEntry[]): Promise<void> {
         if (entries.length === 0) return;
-        await tx.auditLog.createMany({ data: entries.map(toRow) });
+        await tx.auditLog.createMany({ data: await toRows(tx, entries, currentAuditOrigin()) });
     },
 
     /** Direct write outside a transaction (the audit worker and the no-Redis fallback). */
-    async write(entry: AuditEntry): Promise<void> {
-        await prisma.auditLog.create({ data: toRow(entry) });
+    async write(entry: QueuedAuditEntry): Promise<void> {
+        const { origin, ...rest } = entry;
+        const rows = await toRows(prisma as unknown as TransactionClient, [rest], origin ?? currentAuditOrigin());
+        await prisma.auditLog.createMany({ data: rows });
     },
 
     /** Fire-and-forget: never throws, so auditing can't break the action being audited. */
     async enqueue(entry: AuditEntry): Promise<void> {
+        const queued: QueuedAuditEntry = { ...entry, origin: currentAuditOrigin() };
         try {
-            const jobId = await tryEnqueue(auditQueue, entry.action, entry);
-            if (!jobId) await auditService.write(entry);
+            const jobId = await tryEnqueue(auditQueue, entry.action, queued);
+            if (!jobId) await auditService.write(queued);
         } catch (err) {
             logger.error({ err: (err as Error).message, entry: { ...entry, changes: undefined } }, 'Failed to record audit event');
         }
