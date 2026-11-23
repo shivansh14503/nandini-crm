@@ -25,8 +25,7 @@ import {
     useSaveDrawerPiece,
 } from '@/hooks/queries/useDrawerLayouts';
 import { auditLogKeys } from '@/hooks/queries/useAuditLogs';
-import { usePaginatedLeads } from '@/hooks/queries/useLeads';
-import { LIMITS, cloneSection, pruneLayout, type DrawerBadge, type DrawerBlock, type DrawerLayoutDocument, type DrawerLayoutModule, type DrawerSection } from '@/lib/drawer-layout';
+import { LIMITS, LINE_ITEM_MODULES, cloneSection, pruneLayout, type DrawerBadge, type DrawerBlock, type DrawerLayoutDocument, type DrawerLayoutModule, type DrawerSection } from '@/lib/drawer-layout';
 import type { FormConfigsPayload } from '@/types/formConfig.types';
 import type { DrawerLayoutConfig, DrawerPiece } from '@/types/drawerLayout.types';
 import { activeOptionValues, findCategory } from '@/utils/formConfig';
@@ -50,6 +49,7 @@ import { BuilderSettings } from './BuilderSettings';
 import { LayoutDrag, type DragSource, type DropPlan, type DropResult, type DropTarget } from './LayoutDrag';
 import { findBlock, findSection, insertBlock, insertSection, moveBlock, placeBadge, placeBlock, placeSection, removeBlock, removeSection, useLayoutEditor, type Selection } from './layoutEditor';
 import { SAMPLE_RECORDS, SAMPLE_RECORD_ID } from './sampleRecords';
+import { previewRecordLabel, usePreviewRecords } from './previewRecords';
 
 /**
  * Form Customization → Drawer Layout: the admin designs what a record's side drawer shows (header, badges and each
@@ -59,7 +59,16 @@ import { SAMPLE_RECORDS, SAMPLE_RECORD_ID } from './sampleRecords';
 
 type Notify = (message: string, severity?: 'success' | 'error' | 'info' | 'warning') => void;
 
-const MODULE_NOUN: Record<DrawerLayoutModule, { one: string; many: string }> = { leads: { one: 'lead', many: 'leads' } };
+const MODULE_NOUN: Record<DrawerLayoutModule, { one: string; many: string }> = {
+    leads: { one: 'lead', many: 'leads' },
+    contacts: { one: 'contact', many: 'contacts' },
+    organizations: { one: 'organization', many: 'organizations' },
+    opportunities: { one: 'opportunity', many: 'opportunities' },
+    quotations: { one: 'quotation', many: 'quotations' },
+    products: { one: 'product', many: 'products' },
+    tickets: { one: 'ticket', many: 'tickets' },
+    'partner-companies': { one: 'partner company', many: 'partner companies' },
+};
 
 const TAB_ICONS: Record<string, React.ReactNode> = {
     overview: <ArticleOutlinedIcon sx={{ fontSize: 17 }} />,
@@ -261,9 +270,8 @@ function LayoutBuilder({
     };
 
     // ─── Preview record, tabs, mode ─────────────────────────────────────────────
-    // The 25 most recent leads to preview with (one page, not the whole list).
-    const leadsQuery = usePaginatedLeads({ page: 1, limit: 25 }, { enabled: module === 'leads' });
-    const records = useMemo(() => (module === 'leads' ? ((leadsQuery.data?.data ?? []) as unknown as Record<string, unknown>[]) : []), [module, leadsQuery.data]);
+    // The 25 most recent records to preview with (one page, not the whole list).
+    const records = usePreviewRecords(module);
     const [sampleId, setSampleId] = useState(SAMPLE_RECORD_ID);
     const record = useMemo(() => {
         const picked = sampleId === SAMPLE_RECORD_ID ? undefined : records.find((r) => r.id === sampleId);
@@ -328,6 +336,10 @@ function LayoutBuilder({
                 return { id, type: 'address', prefix: source.prefix ?? addresses[0]?.prefix ?? 'primary', emptyText: '' };
             case 'customFields':
                 return { id, type: 'customFields' };
+            case 'lineItems':
+                return { id, type: 'lineItems', emptyText: '' };
+            case 'totals':
+                return { id, type: 'totals' };
             default:
                 return null;
         }
@@ -337,6 +349,7 @@ function LayoutBuilder({
     const sectionTitleFor = (source: DragSource): string => {
         if (source.source === 'field' || (source.source === 'block' && source.blockType === 'address')) return source.label.toUpperCase();
         if (source.source === 'block' && source.blockType === 'customFields') return 'MORE DETAILS';
+        if (source.source === 'block' && source.blockType === 'totals') return 'TOTALS';
         if (source.source === 'canvas-block') return source.label.toUpperCase();
         return '';
     };
@@ -518,6 +531,7 @@ function LayoutBuilder({
             addresses={addresses}
             placed={ctx.placed}
             customFieldsPlaced={customFieldsPlaced}
+            lineItems={LINE_ITEM_MODULES.includes(module)}
             builtInPieces={builtInPieces}
             savedPieces={piecesQuery.data ?? []}
             piecesLoading={piecesQuery.isLoading}
@@ -592,6 +606,7 @@ function LayoutBuilder({
                     sampleId={sampleId}
                     onSample={setSampleId}
                     records={records}
+                    labelOf={(r) => previewRecordLabel(module, r, doc.header.titleField)}
                     onDiscard={() => reset(base.doc, true)}
                     onReset={() => setConfirmReset(true)}
                     onSave={() => void handleSave()}
@@ -755,6 +770,7 @@ function Toolbar({
     sampleId,
     onSample,
     records,
+    labelOf,
     onDiscard,
     onReset,
     onSave,
@@ -773,6 +789,7 @@ function Toolbar({
     sampleId: string;
     onSample: (id: string) => void;
     records: Record<string, unknown>[];
+    labelOf: (record: Record<string, unknown>) => string;
     onDiscard: () => void;
     onReset: () => void;
     onSave: () => void;
@@ -805,7 +822,7 @@ function Toolbar({
                 </MenuItem>
                 {records.map((r) => (
                     <MenuItem key={String(r.id)} value={String(r.id)} sx={{ fontSize: '0.84rem' }}>
-                        {[r.name, r.leadCode].filter(Boolean).join(' · ') || String(r.id)}
+                        {labelOf(r)}
                     </MenuItem>
                 ))}
             </TextField>

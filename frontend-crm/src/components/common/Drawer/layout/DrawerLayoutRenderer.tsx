@@ -1,28 +1,33 @@
 'use client';
 
-import React, { useMemo } from 'react';
-import { Box, Chip, Typography, type SxProps, type Theme } from '@mui/material';
+import React, { useMemo, useState } from 'react';
+import { Box, Chip, IconButton, Tooltip, Typography, type SxProps, type Theme } from '@mui/material';
 import ApartmentIcon from '@mui/icons-material/Apartment';
 import StarOutlineRoundedIcon from '@mui/icons-material/StarOutlineRounded';
 import PhoneOutlinedIcon from '@mui/icons-material/PhoneOutlined';
 import EmailOutlinedIcon from '@mui/icons-material/EmailOutlined';
 import PlaceOutlinedIcon from '@mui/icons-material/PlaceOutlined';
 import LocalFireDepartmentIcon from '@mui/icons-material/LocalFireDepartment';
+import VisibilityOutlinedIcon from '@mui/icons-material/VisibilityOutlined';
+import VisibilityOffOutlinedIcon from '@mui/icons-material/VisibilityOffOutlined';
 import { getCountryNameByCode } from '@/data/addressMaster';
 import { useFormConfigs } from '@/hooks/queries/useFormConfigs';
 import { useDrawerLayouts } from '@/hooks/queries/useDrawerLayouts';
-import { pruneLayout, type DrawerBadge, type DrawerBlock, type DrawerLayoutDocument, type DrawerLayoutModule, type DrawerSection, type SectionStyle } from '@/lib/drawer-layout';
+import { LINE_ITEM_MODULES, pruneLayout, type DrawerBadge, type DrawerBlock, type DrawerLayoutDocument, type DrawerLayoutModule, type DrawerSection, type SectionStyle } from '@/lib/drawer-layout';
 import type { FormConfigsPayload } from '@/types/formConfig.types';
 import { ratingChipColors } from '@/utils/leadRating';
 import { ReadOnlyField } from '@/components/forms/ReadOnlyField';
 import { EmailActions, PhoneActions } from '@/components/common/ContactActions';
 import { DoubleClickCopyText } from '@/components/common/useDoubleClickCopy';
 import { useScorecardBadge } from '@/components/common/scorecard/scorecardDisplay';
-import { DrawerChannelRow, DrawerSectionCard } from '../DrawerPrimitives';
+import { findCrmUser } from '@/services/masterData.store';
+import { TICKET_PRIORITY_COLORS, TICKET_STATUS_COLORS } from '@/components/tickets/TicketBadges';
+import type { TicketPriority, TicketStatus } from '@/types/ticket.types';
+import { DrawerChannelRow, DrawerCopyButton, DrawerSectionCard } from '../DrawerPrimitives';
 import type { DrawerBadgeItem } from '../types';
 import { avatarBackground, avatarContent } from './avatar';
 import { defaultLayoutFor } from './defaultLayouts';
-import { drawerAddressesFor, drawerFieldsFor, fieldDisplayValues, rawFieldValue, type AddressDef, type DrawerFieldDef } from './drawerFields';
+import { drawerAddressesFor, drawerFieldsFor, fieldDisplayValues, formatRupees, isOn, rawFieldValue, type AddressDef, type DrawerFieldDef } from './drawerFields';
 
 /**
  * Renders a drawer layout for a record: the header (title, subtitle, avatar, badges) and each tab's sections. The
@@ -80,7 +85,7 @@ export function useDrawerLayout(module: DrawerLayoutModule): { layout: DrawerLay
         if (!configs) return { layout: saved, isCustom: true };
         const known = new Set(drawerFieldsFor(configs, module).map((f) => f.key));
         const addresses = new Set(drawerAddressesFor(configs, module).map((a) => a.prefix));
-        return { layout: pruneLayout(saved, (k) => known.has(k), (p) => addresses.has(p), 'name').doc, isCustom: true };
+        return { layout: pruneLayout(saved, (k) => known.has(k), (p) => addresses.has(p), defaultLayoutFor(module).header.titleField).doc, isCustom: true };
     }, [saved, configs, module]);
 }
 
@@ -96,7 +101,7 @@ function addressParts(ctx: LayoutCtx, prefix: string) {
     const r = ctx.record ?? {};
     const text = (k: string) => (typeof r[`${prefix}${k}`] === 'string' ? String(r[`${prefix}${k}`]).trim() : '');
     const country = text('Country');
-    return { street: text('Address'), city: text('City'), state: text('State'), pin: text('PostalCode'), country: country ? getCountryNameByCode(country) || country : '' };
+    return { street: text('Address') || text('Street'), city: text('City'), state: text('State'), pin: text('PostalCode'), country: country ? getCountryNameByCode(country) || country : '' };
 }
 
 /** Custom fields the "Other custom fields" block lists: visible in drawer, not placed elsewhere, with a value. */
@@ -114,6 +119,10 @@ export function blockHasContent(block: DrawerBlock, ctx: LayoutCtx): boolean {
         }
         case 'customFields':
             return remainingCustomFields(ctx).length > 0;
+        case 'lineItems':
+            return lineItemsOf(ctx).length > 0;
+        case 'totals':
+            return lineItemsOf(ctx).length > 0 || num(ctx.record?.grandTotal) > 0;
         default:
             // Headings, text and dividers don't count: a section of only those is "empty".
             return false;
@@ -123,13 +132,13 @@ export function blockHasContent(block: DrawerBlock, ctx: LayoutCtx): boolean {
 /** Whether the block renders anything for this record (an empty field still shows its empty text unless hidden). */
 export function blockIsVisible(block: DrawerBlock, ctx: LayoutCtx): boolean {
     if (block.type === 'field') return !block.hideEmpty || blockHasContent(block, ctx);
-    if (block.type === 'customFields') return blockHasContent(block, ctx);
+    if (block.type === 'customFields' || block.type === 'totals') return blockHasContent(block, ctx);
     return true;
 }
 
 export function sectionIsVisible(section: DrawerSection, ctx: LayoutCtx): boolean {
     if (!section.hideEmpty) return section.blocks.length > 0;
-    return section.blocks.some((b) => blockHasContent(b, ctx) || (b.type === 'field' && !b.hideEmpty));
+    return section.blocks.some((b) => blockHasContent(b, ctx) || (b.type === 'field' && !b.hideEmpty) || b.type === 'lineItems');
 }
 
 // ─── Section shell & grid ───────────────────────────────────────────────────────
@@ -284,6 +293,40 @@ function FieldBlockBody({ block, ctx, sectionStyle }: { block: Extract<DrawerBlo
                 </Box>
             );
         }
+        case 'person':
+            return (
+                <Box>
+                    {heading}
+                    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+                        {(rawList(ctx, block.field).length ? rawList(ctx, block.field) : values).map((raw, i) => (
+                            <PersonRow key={`${raw}-${i}`} value={raw} fallback={values[i] ?? raw} />
+                        ))}
+                    </Box>
+                </Box>
+            );
+        case 'code':
+            return (
+                <Box>
+                    {heading}
+                    <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.75 }}>
+                        {values.map((v, i) => (
+                            <Box key={`${v}-${i}`} sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.25, minWidth: 0, maxWidth: '100%' }}>
+                                <Box component="span" sx={codeSx}>
+                                    {v}
+                                </Box>
+                                <DrawerCopyButton text={v} title={`Copy ${label}`} iconColor="var(--mui-palette-text-secondary)" />
+                            </Box>
+                        ))}
+                    </Box>
+                </Box>
+            );
+        case 'masked':
+            return (
+                <Box>
+                    {heading}
+                    <MaskedValue value={values.join(', ')} label={label} />
+                </Box>
+            );
         default:
             return block.showLabel ? (
                 <ReadOnlyField label={label} value={copyable(values.join(', '))} />
@@ -291,6 +334,96 @@ function FieldBlockBody({ block, ctx, sectionStyle }: { block: Extract<DrawerBlo
                 <Typography sx={{ fontSize: '0.86rem', fontWeight: 600, color: 'var(--crm-slate-900)', wordBreak: 'break-word', whiteSpace: 'pre-wrap' }}>{copyable(values.join(', '))}</Typography>
             );
     }
+}
+
+const codeSx: SxProps<Theme> = {
+    fontFamily: 'monospace',
+    fontSize: '0.82rem',
+    fontWeight: 700,
+    color: 'var(--crm-slate-900)',
+    backgroundColor: 'var(--mui-palette-background-hover)',
+    border: '1px solid var(--mui-palette-border-main)',
+    borderRadius: '6px',
+    px: 1,
+    py: 0.2,
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap',
+};
+
+/** Stored values of a field as a list of strings (users are stored by username). */
+function rawList(ctx: LayoutCtx, key: string): string[] {
+    const def = ctx.fields.get(key);
+    if (!def || ctx.hidden.has(key)) return [];
+    const raw = rawFieldValue(ctx.record, def);
+    return (Array.isArray(raw) ? raw : [raw]).filter((v) => typeof v === 'string' && v.trim()).map((v) => String(v));
+}
+
+const initialsOf = (name: string) => {
+    const parts = name.replace(/[._-]+/g, ' ').trim().split(/\s+/);
+    return ((parts[0]?.[0] ?? '') + (parts.length > 1 ? parts[parts.length - 1][0] : '')).toUpperCase();
+};
+
+/** A user: initials in a brand circle, name, and role • department when the user is known. */
+function PersonRow({ value, fallback }: { value: string; fallback: string }) {
+    const user = findCrmUser(value);
+    const name = user?.name || fallback;
+    return (
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.25, minWidth: 0 }}>
+            <Box
+                sx={{
+                    width: 34,
+                    height: 34,
+                    flexShrink: 0,
+                    borderRadius: '50%',
+                    background: 'linear-gradient(135deg, var(--crm-fill-blue-600) 0%, var(--crm-fill-blue-700) 100%)',
+                    color: '#ffffff',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontSize: '0.78rem',
+                    fontWeight: 700,
+                    boxShadow: '0 2px 8px rgb(var(--crm-accent-rgb) / 0.25)',
+                }}
+            >
+                {initialsOf(name)}
+            </Box>
+            <Box sx={{ minWidth: 0 }}>
+                <Typography noWrap sx={{ fontSize: '0.88rem', fontWeight: 700, color: 'var(--crm-slate-900)', lineHeight: 1.3 }}>
+                    {name}
+                </Typography>
+                {user && (
+                    <Typography noWrap sx={{ fontSize: '0.72rem', color: 'var(--mui-palette-text-secondary)' }}>
+                        {[user.role, user.department].filter(Boolean).join(' • ')}
+                    </Typography>
+                )}
+            </Box>
+        </Box>
+    );
+}
+
+/** All but the last 4 characters hidden until the eye button is pressed; copy always copies the whole value. */
+function MaskedValue({ value, label }: { value: string; label: string }) {
+    const [shown, setShown] = useState(false);
+    const masked = value.length > 4 ? `•••• ${value.slice(-4)}` : value;
+    return (
+        <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5, minWidth: 0, maxWidth: '100%' }}>
+            <Box component="span" sx={{ fontFamily: 'monospace', fontSize: '0.86rem', fontWeight: 600, color: 'var(--crm-slate-900)', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                {shown ? value : masked}
+            </Box>
+            <Tooltip title={shown ? `Hide ${label.toLowerCase()}` : `Show ${label.toLowerCase()}`}>
+                <IconButton
+                    size="small"
+                    onClick={() => setShown((v) => !v)}
+                    aria-label={shown ? `Hide ${label}` : `Show ${label}`}
+                    sx={{ width: 32, height: 32, color: 'var(--mui-palette-text-secondary)', '&:hover': { color: 'var(--crm-text-blue-700)', backgroundColor: 'var(--mui-palette-primary-soft)' } }}
+                >
+                    {shown ? <VisibilityOffOutlinedIcon sx={{ fontSize: 16 }} /> : <VisibilityOutlinedIcon sx={{ fontSize: 16 }} />}
+                </IconButton>
+            </Tooltip>
+            <DrawerCopyButton text={value} title={`Copy ${label}`} iconColor="var(--mui-palette-text-secondary)" />
+        </Box>
+    );
 }
 
 /** The stored phone (E.164) behind a formatted value, so call / SMS links get the real number. */
@@ -356,6 +489,109 @@ function CustomFieldsBody({ ctx, columns, placeholder }: { ctx: LayoutCtx; colum
     );
 }
 
+// ─── Line items & totals (opportunities, quotations) ────────────────────────────
+
+interface LineItem {
+    id?: string;
+    productName?: string;
+    description?: string;
+    quantity?: number;
+    amount?: number;
+    discount?: number;
+    discountType?: string;
+    taxRate?: string;
+    taxAmount?: number;
+    total?: number;
+}
+
+const num = (value: unknown): number => (typeof value === 'number' && Number.isFinite(value) ? value : Number(value) || 0);
+
+function lineItemsOf(ctx: LayoutCtx): LineItem[] {
+    if (!LINE_ITEM_MODULES.includes(ctx.module)) return [];
+    const items = ctx.record?.lineItems;
+    return Array.isArray(items) ? (items as LineItem[]) : [];
+}
+
+const smallLabelSx: SxProps<Theme> = { fontSize: '0.7rem', color: 'var(--mui-palette-text-secondary)' };
+
+function LineItemsBody({ block, ctx }: { block: Extract<DrawerBlock, { type: 'lineItems' }>; ctx: LayoutCtx }) {
+    const items = lineItemsOf(ctx);
+    const group = typeof ctx.record?.groupName === 'string' ? ctx.record.groupName.trim() : '';
+    const currency = typeof ctx.record?.currency === 'string' ? ctx.record.currency.trim() : '';
+    if (items.length === 0) {
+        return (
+            <Box sx={{ p: 2.5, textAlign: 'center', backgroundColor: 'var(--mui-palette-background-subtle)', borderRadius: '8px', border: '1px dashed var(--mui-palette-border-main)' }}>
+                <Typography sx={{ fontSize: '0.82rem', color: 'var(--mui-palette-text-secondary)' }}>{block.emptyText || 'No line items yet.'}</Typography>
+            </Box>
+        );
+    }
+    return (
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.25 }}>
+            {(group || currency) && (
+                <Box sx={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', flexWrap: 'wrap', gap: 1 }}>
+                    <Typography sx={{ fontSize: '0.86rem', fontWeight: 700, color: 'var(--mui-palette-text-primary)' }}>{group || 'Products & Services'}</Typography>
+                    {currency && <Typography sx={{ fontSize: '0.74rem', color: 'var(--mui-palette-text-secondary)' }}>Currency: {currency}</Typography>}
+                </Box>
+            )}
+            {items.map((item, idx) => (
+                <Box key={item.id || idx} sx={{ p: 1.5, borderRadius: '8px', border: '1px solid var(--mui-palette-border-main)', backgroundColor: 'var(--mui-palette-background-paper)' }}>
+                    <Box sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 1.5, mb: 1 }}>
+                        <Box sx={{ minWidth: 0 }}>
+                            <Typography sx={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--crm-slate-900)', wordBreak: 'break-word' }}>{item.productName || 'Item'}</Typography>
+                            {item.description && <Typography sx={{ fontSize: '0.75rem', color: 'var(--mui-palette-text-secondary)', mt: 0.3, lineHeight: 1.4 }}>{item.description}</Typography>}
+                        </Box>
+                        <Typography sx={{ fontSize: '0.92rem', fontWeight: 800, color: 'var(--crm-green-700)', whiteSpace: 'nowrap' }}>{formatRupees(num(item.total))}</Typography>
+                    </Box>
+                    <Box sx={{ display: 'grid', gridTemplateColumns: { xs: 'repeat(2, minmax(0, 1fr))', sm: 'repeat(4, minmax(0, 1fr))' }, gap: 1, pt: 1, borderTop: '1px dashed var(--mui-palette-border-main)', fontSize: '0.75rem' }}>
+                        <Box>
+                            <Typography sx={smallLabelSx}>Qty</Typography>
+                            <Typography sx={{ fontSize: '0.78rem', fontWeight: 600 }}>{num(item.quantity)}</Typography>
+                        </Box>
+                        <Box>
+                            <Typography sx={smallLabelSx}>Unit Price</Typography>
+                            <Typography sx={{ fontSize: '0.78rem', fontWeight: 600 }}>{formatRupees(num(item.amount))}</Typography>
+                        </Box>
+                        <Box>
+                            <Typography sx={smallLabelSx}>Discount</Typography>
+                            <Typography sx={{ fontSize: '0.78rem', fontWeight: 600, color: num(item.discount) > 0 ? 'var(--mui-palette-error-main)' : undefined }}>
+                                {num(item.discount) > 0 ? (item.discountType === 'percentage' ? `${num(item.discount)}%` : formatRupees(num(item.discount))) : '—'}
+                            </Typography>
+                        </Box>
+                        <Box>
+                            <Typography sx={smallLabelSx}>Tax{item.taxRate ? ` (${item.taxRate})` : ''}</Typography>
+                            <Typography sx={{ fontSize: '0.78rem', fontWeight: 600 }}>{formatRupees(num(item.taxAmount))}</Typography>
+                        </Box>
+                    </Box>
+                </Box>
+            ))}
+        </Box>
+    );
+}
+
+function TotalsBody({ ctx }: { ctx: LayoutCtx }) {
+    const r = ctx.record ?? {};
+    const row = (label: string, value: string, color?: string, strong = false) => (
+        <Box key={label} sx={{ display: 'flex', justifyContent: 'space-between', gap: 1.5 }}>
+            <Typography sx={{ fontSize: '0.82rem', color: 'var(--mui-palette-text-secondary)' }}>{label}</Typography>
+            <Typography sx={{ fontSize: '0.84rem', fontWeight: strong ? 700 : 600, color: color ?? 'var(--mui-palette-text-primary)', whiteSpace: 'nowrap' }}>{value}</Typography>
+        </Box>
+    );
+    return (
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+            {row('Gross Total', formatRupees(num(r.totalAmount)))}
+            {num(r.totalDiscount) > 0 && row('Item Discounts', `- ${formatRupees(num(r.totalDiscount))}`, 'var(--mui-palette-error-main)')}
+            {num(r.lumpSumDiscount) > 0 && row('Lump Sum Discount', `- ${formatRupees(num(r.lumpSumDiscount))}`, 'var(--mui-palette-error-main)')}
+            {row('Subtotal', formatRupees(num(r.subtotal)), 'var(--crm-slate-900)', true)}
+            {row('Tax', `+ ${formatRupees(num(r.totalTax))}`, 'var(--crm-text-blue-600)')}
+            <Box sx={{ height: '1px', backgroundColor: 'var(--mui-palette-border-strong)', my: 0.5 }} />
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 1.5 }}>
+                <Typography sx={{ fontSize: '0.94rem', fontWeight: 800, color: 'var(--crm-slate-900)' }}>Grand Total</Typography>
+                <Typography sx={{ fontSize: '1.1rem', fontWeight: 800, color: 'var(--crm-green-700)', whiteSpace: 'nowrap' }}>{formatRupees(num(r.grandTotal))}</Typography>
+            </Box>
+        </Box>
+    );
+}
+
 /**
  * One block's content. `placeholder` (builder only) is shown inside the "Other custom fields" block so it can be
  * found and moved even when the sample record has no custom values.
@@ -374,6 +610,10 @@ export function BlockBody({ block, ctx, section, placeholder }: { block: DrawerB
             return <AddressBlockBody block={block} ctx={ctx} />;
         case 'customFields':
             return <CustomFieldsBody ctx={ctx} columns={section.columns} placeholder={placeholder} />;
+        case 'lineItems':
+            return <LineItemsBody block={block} ctx={ctx} />;
+        case 'totals':
+            return <TotalsBody ctx={ctx} />;
         default:
             return null;
     }
@@ -415,13 +655,46 @@ const BADGE_TONES: Record<Exclude<DrawerBadge['style'], 'auto'>, Pick<DrawerBadg
 };
 
 export const BADGE_STYLE_LABELS: Record<DrawerBadge['style'], string> = {
-    auto: 'Value colours (Rating, scorecard, Status)',
+    auto: 'Value colours (Rating, stage, status, priority, …)',
     neutral: 'Neutral grey',
     brand: 'Brand (blue / green)',
     success: 'Green',
     warning: 'Amber',
     danger: 'Red',
 };
+
+type Tone = Pick<DrawerBadgeItem, 'color' | 'backgroundColor' | 'borderColor'>;
+const pill = (c: { bg: string; color: string; border: string }): Tone => ({ color: c.color, backgroundColor: c.bg, borderColor: c.border });
+
+/** Colours of an "auto" badge from what the value means (stages, statuses, priorities, money). */
+function autoTone(field: string, value: string): Tone {
+    switch (field) {
+        case 'status':
+        case 'grandTotal':
+            return BADGE_TONES.success;
+        case 'salesStage':
+            if (value === 'Closed Won') return BADGE_TONES.success;
+            if (value === 'Closed Lost') return BADGE_TONES.danger;
+            if (value === 'Negotiation' || value === 'Proposal/Price Quote') return BADGE_TONES.warning;
+            return BADGE_TONES.brand;
+        case 'quoteStage':
+            return value === 'Accepted' ? BADGE_TONES.success : value === 'Rejected' ? BADGE_TONES.danger : value === 'Sent' ? BADGE_TONES.brand : BADGE_TONES.neutral;
+        case 'accountStatus':
+            return value === 'Inactive' ? BADGE_TONES.warning : BADGE_TONES.success;
+        case 'leftJob':
+            return value === 'Yes' ? BADGE_TONES.danger : BADGE_TONES.success;
+        case 'ticketPriority': {
+            const c = TICKET_PRIORITY_COLORS[value as TicketPriority];
+            return c ? pill(c) : BADGE_TONES.neutral;
+        }
+        case 'ticketStatus': {
+            const c = TICKET_STATUS_COLORS[value as TicketStatus];
+            return c ? pill(c) : BADGE_TONES.neutral;
+        }
+        default:
+            return BADGE_TONES.neutral;
+    }
+}
 
 export interface LayoutHeader {
     title: string;
@@ -442,8 +715,15 @@ export function useLayoutHeader(layout: DrawerLayoutDocument, ctx: LayoutCtx, sh
     const hot = header.hotAvatar && ctx.record?.rating === 'Hot';
 
     const badges = header.badges.map((badge) => {
-        const values = fieldValues(ctx, badge.field);
         const def = ctx.fields.get(badge.field);
+        // A yes / no value shows its badge (the prefix, or the field's name) only while it is on.
+        if (def?.type === 'checkbox') {
+            const on = !ctx.hidden.has(badge.field) && isOn(def ? rawFieldValue(ctx.record, def) : undefined);
+            const text = badge.prefix.trim() || def.label;
+            if (!on) return { badge, item: showEmptyBadges ? { label: `${text} (off)`, ...BADGE_TONES.neutral } : null };
+            return { badge, item: { label: text, ...(badge.style === 'auto' ? BADGE_TONES.success : BADGE_TONES[badge.style]) } };
+        }
+        const values = fieldValues(ctx, badge.field);
         if (values.length === 0 && (badge.hideEmpty || !showEmptyBadges)) {
             if (!showEmptyBadges) return { badge, item: null };
             return { badge, item: { label: `${badge.prefix}${def?.label ?? badge.field} (empty)`, ...BADGE_TONES.neutral } };
@@ -463,8 +743,7 @@ export function useLayoutHeader(layout: DrawerLayoutDocument, ctx: LayoutCtx, sh
             };
         }
         if (scorecardBadge && scorecardBadge.fieldKey === badge.field) return { badge, item: { ...scorecardBadge, label: `${badge.prefix}${scorecardBadge.label}` } };
-        if (badge.field === 'status') return { badge, item: { label, ...BADGE_TONES.success } };
-        return { badge, item: { label, ...BADGE_TONES.neutral } };
+        return { badge, item: { label, ...autoTone(badge.field, String(def ? (rawFieldValue(ctx.record, def) ?? '') : '')) } };
     });
 
     return { title, subtitle, avatarIcon: avatarContent(header.avatar), avatarBg: avatarBackground(header.avatar, hot), badges };

@@ -3,6 +3,7 @@ import { ADDRESS_PREFIXES, SYSTEM_FIELDS, type DrawerLayoutModule } from '@/lib/
 import type { FieldType, FormConfigsPayload, FormFieldDefinitionDto } from '@/types/formConfig.types';
 import { distinctFieldLabels, findCategory, formatCustomValue, isBuiltInCountryField, isEmptyValue, moduleFields, optionLabelMap } from '@/utils/formConfig';
 import { formatPhoneDisplay } from '@/utils/phone';
+import { findCrmUser } from '@/services/masterData.store';
 
 /**
  * The values a drawer layout can show for a module: the form's active fields (built-in and custom, labelled so no
@@ -28,6 +29,19 @@ export interface DrawerFieldDef {
 const SYSTEM_FIELD_DEFS: Record<string, { label: string; type: FieldType }> = {
     leadCode: { label: 'Lead Code', type: 'text' },
     rating: { label: 'Rating', type: 'select' },
+    contactCode: { label: 'Contact Code', type: 'text' },
+    accountCode: { label: 'Account Code', type: 'text' },
+    accountVerified: { label: 'Account Verified', type: 'checkbox' },
+    activeAmc: { label: 'Active AMC', type: 'checkbox' },
+    activeCloud: { label: 'Active Cloud', type: 'checkbox' },
+    opportunityCode: { label: 'Opportunity Code', type: 'text' },
+    quotationCode: { label: 'Quotation Code', type: 'text' },
+    grandTotal: { label: 'Grand Total', type: 'amount' },
+    productCode: { label: 'Product Code', type: 'text' },
+    ticketNumber: { label: 'Ticket Number', type: 'text' },
+    amcFlag: { label: 'AMC', type: 'checkbox' },
+    cloudFlag: { label: 'Cloud', type: 'checkbox' },
+    description: { label: 'Detailed Scope / Notes', type: 'textarea' },
 };
 
 export const CUSTOM_GROUP = 'Custom fields';
@@ -83,6 +97,12 @@ export function rawFieldValue(record: AnyRecord | null | undefined, def: DrawerF
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
+/** 125000 → '₹1,25,000'. */
+export const formatRupees = (value: number): string => `₹${value.toLocaleString('en-IN', { maximumFractionDigits: 2 })}`;
+
+/** Whether a yes / no value (a checkbox or a system flag) is on. */
+export const isOn = (value: unknown): boolean => value === true || value === 'true' || value === 'Yes';
+
 /** '2026-11-28' → '28-Nov-2026'; anything else unchanged. */
 export function formatDay(value: string): string {
     const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(value);
@@ -105,6 +125,8 @@ export function formatClock(value: string): string {
 export function fieldDisplayValues(record: AnyRecord | null | undefined, def: DrawerFieldDef, configs: FormConfigsPayload | null | undefined): string[] {
     const raw = rawFieldValue(record, def);
     if (isEmptyValue(raw)) return [];
+    // A yes / no value counts as empty while it is off, so "hide when empty" hides it.
+    if (def.type === 'checkbox' && !isOn(raw)) return [];
     const labels = optionLabelMap(findCategory(configs, def.categoryKey));
     const one = (value: unknown): string => {
         if (value && typeof value === 'object' && 'email' in value) return String((value as { email?: unknown }).email ?? '').trim();
@@ -116,7 +138,11 @@ export function fieldDisplayValues(record: AnyRecord | null | undefined, def: Dr
             const time = record?.[def.key.replace(/Date$/, 'Time')];
             return [formatDay(text), typeof time === 'string' && time.trim() ? formatClock(time) : ''].filter(Boolean).join(', ');
         }
+        // Users are stored by username: show their name.
+        if (def.key === 'assignedTo') return findCrmUser(text)?.name || text;
         if (def.form) return formatCustomValue(def.form, value, labels);
+        if (def.type === 'checkbox') return value === true || value === 'true' ? 'Yes' : 'No';
+        if (def.type === 'amount' && !Number.isNaN(Number(value))) return formatRupees(Number(value));
         return labels?.[text] ?? text;
     };
     return (Array.isArray(raw) ? raw : [raw]).map(one).filter((v) => v !== '');

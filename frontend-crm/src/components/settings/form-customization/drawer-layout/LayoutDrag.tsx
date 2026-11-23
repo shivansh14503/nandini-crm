@@ -35,7 +35,7 @@ import { findBadge, findBlock, findSection, type Selection } from './layoutEdito
 
 export type DragSource =
     | { source: 'field'; key: string; label: string }
-    | { source: 'block'; blockType: 'heading' | 'text' | 'divider' | 'address' | 'customFields'; prefix?: string; label: string }
+    | { source: 'block'; blockType: 'heading' | 'text' | 'divider' | 'address' | 'customFields' | 'lineItems' | 'totals'; prefix?: string; label: string }
     | { source: 'section'; columns: 1 | 2; label: string }
     | { source: 'piece'; pieceId: string; label: string }
     | { source: 'canvas-block'; blockId: string; label: string }

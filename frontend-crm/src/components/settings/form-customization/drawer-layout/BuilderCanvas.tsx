@@ -14,7 +14,7 @@ import TuneOutlinedIcon from '@mui/icons-material/TuneOutlined';
 import VerifiedIcon from '@mui/icons-material/Verified';
 import VisibilityOutlinedIcon from '@mui/icons-material/VisibilityOutlined';
 import type { DrawerBlock, DrawerLayoutDocument, DrawerSection } from '@/lib/drawer-layout';
-import { getModuleColor } from '@/theme/moduleColors';
+import { getModuleColor, moduleKeyFrom } from '@/theme/moduleColors';
 import {
     BlockBody,
     LayoutTabSections,
@@ -67,6 +67,8 @@ function blockLabel(block: DrawerBlock, ctx: LayoutCtx): string {
     if (block.type === 'field') return block.label.trim() || ctx.fields.get(block.field)?.label || block.field;
     if (block.type === 'address') return ctx.addresses.find((a) => a.prefix === block.prefix)?.label ?? 'Address';
     if (block.type === 'customFields') return 'Other custom fields';
+    if (block.type === 'lineItems') return 'Line items';
+    if (block.type === 'totals') return 'Totals';
     if (block.type === 'heading') return block.text || 'Heading';
     return block.type === 'text' ? 'Static text' : 'Divider';
 }
@@ -399,7 +401,7 @@ export function BuilderCanvas({
     footer: React.ReactNode;
 }) {
     const edit = mode === 'edit';
-    const moduleColor = getModuleColor(ctx.module);
+    const moduleColor = getModuleColor(moduleKeyFrom(ctx.module) ?? 'leads');
     const { preview, itemId, source: dragging, target: t, attachRoot } = useLayoutDrag();
     // While dragging, the layout as it will be after the drop.
     const view = preview ?? doc;

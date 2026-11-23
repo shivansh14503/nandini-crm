@@ -1,4 +1,4 @@
-import type { DrawerBlock, DrawerLayoutDocument, DrawerSection } from './schema.js';
+import { LINE_ITEM_BLOCKS, type DrawerBlock, type DrawerLayoutDocument, type DrawerSection } from './schema.js';
 
 /**
  * Pure helpers over a drawer layout: the form fields it points at (checked on save, pruned in the builder when a
@@ -32,6 +32,13 @@ export function sectionFieldRefs(section: DrawerSection, tab = 'Section'): Field
 export function layoutAddressPrefixes(doc: DrawerLayoutDocument): string[] {
     return Object.values(doc.tabs).flatMap((sections) => sections.flatMap((s) => s.blocks.flatMap((b) => (b.type === 'address' ? [b.prefix] : []))));
 }
+
+/** Whether any of the sections uses a line-item block (line items / totals). */
+export function sectionsUseLineItems(sections: DrawerSection[]): boolean {
+    return sections.some((s) => s.blocks.some((b) => LINE_ITEM_BLOCKS.includes(b.type)));
+}
+
+export const layoutUsesLineItems = (doc: DrawerLayoutDocument): boolean => Object.values(doc.tabs).some(sectionsUseLineItems);
 
 /**
  * The layout minus anything that points at a field (or address) the form no longer has: such badges, subtitle
@@ -80,6 +87,10 @@ const describeBlock = (b: DrawerBlock): string => {
             return `${b.prefix} address`;
         case 'customFields':
             return 'other custom fields';
+        case 'lineItems':
+            return 'line items';
+        case 'totals':
+            return 'totals';
         case 'heading':
             return `heading "${b.text}"`;
         case 'text':
