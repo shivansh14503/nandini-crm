@@ -86,6 +86,7 @@ const LOADERS: Partial<Record<AuditEntityType, Loader>> = {
 };
 
 const clip = (value: string | null | undefined, max: number) => (value ? value.slice(0, max) : null);
+const LOOKUP_BATCH = 1000;
 
 /**
  * Labels for a batch of entries, keyed by `labelKey`. Never throws: a failed lookup falls back to the entry's own
@@ -101,8 +102,12 @@ export async function resolveLabels(client: TransactionClient, targets: LabelTar
         idsByType.set(t.entityType, ids);
     }
     for (const [entityType, ids] of idsByType) {
+        const all = [...ids];
         try {
-            for (const [id, label] of await LOADERS[entityType]!(client, [...ids])) live.set(labelKey(entityType, id), label);
+            // 1,000 ids per query keeps `IN (…)` under SQL Server's 2,100-parameter limit.
+            for (let i = 0; i < all.length; i += LOOKUP_BATCH) {
+                for (const [id, label] of await LOADERS[entityType]!(client, all.slice(i, i + LOOKUP_BATCH))) live.set(labelKey(entityType, id), label);
+            }
         } catch (err) {
             logger.warn({ err: (err as Error).message, entityType }, 'Audit label lookup failed; using the entry snapshot');
         }

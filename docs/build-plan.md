@@ -101,6 +101,8 @@ access decided later); log **all changes** plus sign-ins and refused access; **k
 - [x] Request context (AsyncLocalStorage): actor id + role, session, source (UI / API / IMPORT / JOB), route, screen,
       IP, browser and request id on every entry without touching the audit calls; `X-Request-Id` on every response.
 - [x] Record number + name stored per entry; category / module / severity / changed fields; sensitive keys redacted.
+- [x] Email check results on records (`EMAIL_CHECK`: post-save check, bulk runs, the admin's "accept"); saved list
+      filters stay unaudited (personal view settings, owner's decision 2026-11-23).
 - [x] New events: refused access (403), failed sign-in on a deactivated account, scorecard save / reset; imports and the
       nightly Lead Rating job tagged with their own source and request id.
 - [x] Unit tests: `auditCatalog.test.ts`, `auditContext.test.ts`.

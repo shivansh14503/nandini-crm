@@ -193,7 +193,7 @@ read-only on the lead DTO (a `rating` sent by a client is ignored).
 | GET | `/runs/:id` | One bulk check (progress) |
 | POST | `/runs` | `{ emails }` (≤ 10,000) or `{ filter: { status, search, sort }, limit }` (≤ 50,000) → 202 queued run (`mode` = `list` when it has at least `EMAIL_VERIFICATION_LIST_API_MIN` addresses and a provider key is set, else `single`; list runs report `phase`, `providerProgress`, `providerTotal`). 409 while another check is active; 400 when none of the addresses are saved on a record |
 | POST | `/runs/:id/cancel` | Stops before the next address; results so far stay |
-| POST | `/actions` | `{ action: accept | markBounced | remove, emails }` → `{ affectedRecords }`. `accept` = status `valid` (reason `admin_accepted`); `markBounced` ticks "Invalid Bounce"; `remove` deletes the address from every record (next address becomes primary). `markBounced` / `remove` write an UPDATE to each record's audit log |
+| POST | `/actions` | `{ action: accept | markBounced | remove, emails }` → `{ affectedRecords }`. `accept` = status `valid` (reason `admin_accepted`); `markBounced` ticks "Invalid Bounce"; `remove` deletes the address from every record (next address becomes primary). Each action writes an UPDATE to each affected record's audit log (`accept`: one per record whose result changed) |
 
 **Cities** — `/cities` 🔐
 

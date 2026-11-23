@@ -2,8 +2,12 @@ import { ENV } from '../../config/env.js';
 import { logger } from '../../config/logger.js';
 import { prisma } from '../../config/prisma.js';
 import type { Prisma } from '../../generated/prisma/client.js';
+import { auditService } from '../../services/audit.service.js';
+import { runWithAuditOrigin } from '../../services/auditContext.js';
 import type { EmailOwner } from '../shared/entityEmails.js';
+import { runInTransaction } from '../shared/transactions.js';
 import { HttpError } from '../../utils/httpError.js';
+import { CHECKED_ROW_SELECT, emailCheckEntries } from './emailCheckAudit.js';
 import { runLocalChecks, type EmailCheckResult, type EmailVerificationStatus } from './localChecks.js';
 import { verifyWithProvider, type ProviderResult } from './provider.js';
 
@@ -181,7 +185,13 @@ async function verifyOwner(owner: EmailOwner): Promise<void> {
         const outcome = await verifyEmail(email, now);
         if (!outcome) continue;
         // Matched by address, not id: a save in the meantime replaces the rows (and carries the result over).
-        await prisma.entityEmail.updateMany({ where: { ...owner, email }, data: outcome });
+        const where = { ...owner, email };
+        await runInTransaction(async (tx) => {
+            const before = await tx.entityEmail.findMany({ where, select: CHECKED_ROW_SELECT });
+            await tx.entityEmail.updateMany({ where, data: outcome });
+            const result = { status: outcome.verificationStatus, reason: outcome.verificationReason };
+            await auditService.recordMany(tx, emailCheckEntries(before, () => result, { action: 'EMAIL_CHECK', changedBy: 'system' }));
+        });
     }
 }
 
@@ -202,7 +212,8 @@ async function drain(): Promise<void> {
             const [key, owner] = pending.entries().next().value as [string, EmailOwner];
             pending.delete(key);
             try {
-                await verifyOwner(owner);
+                // Its own audit origin (source JOB), not the save request that happened to queue it.
+                await runWithAuditOrigin({ source: 'JOB', route: 'job:email-check' }, () => verifyOwner(owner));
             } catch (err) {
                 logger.warn({ err: (err as Error).message, owner }, 'Email verification failed');
             }

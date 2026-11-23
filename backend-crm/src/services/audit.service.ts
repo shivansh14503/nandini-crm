@@ -54,6 +54,14 @@ export function diffRecords(before: object, after: object): Record<string, { fro
 
 const clip = (value: string | undefined, max: number) => (value ? value.slice(0, max) : null);
 
+/** Rows per INSERT: 22 columns each stays under SQL Server's 2,100 parameters per statement. */
+const INSERT_BATCH = 80;
+
+async function insertRows(client: TransactionClient, rows: Prisma.AuditLogCreateManyInput[]): Promise<void> {
+    // createMany: a plain INSERT, no OUTPUT clause or read-back of the new rows.
+    for (let i = 0; i < rows.length; i += INSERT_BATCH) await client.auditLog.createMany({ data: rows.slice(i, i + INSERT_BATCH) });
+}
+
 /** Full rows: catalog columns, record labels (one lookup per entity type), and the request / job origin. */
 async function toRows(client: TransactionClient, entries: AuditEntry[], origin: AuditOrigin | undefined): Promise<Prisma.AuditLogCreateManyInput[]> {
     const labels = await resolveLabels(client, entries);
@@ -99,21 +107,20 @@ async function toRows(client: TransactionClient, entries: AuditEntry[], origin: 
  */
 export const auditService = {
     async record(tx: TransactionClient, entry: AuditEntry): Promise<void> {
-        const [row] = await toRows(tx, [entry], currentAuditOrigin());
-        // createMany: a plain INSERT, no OUTPUT clause or read-back of the new row.
-        await tx.auditLog.createMany({ data: [row] });
+        await insertRows(tx, await toRows(tx, [entry], currentAuditOrigin()));
     },
 
+    /** Any number of entries (inserted in batches), e.g. bulk deletes and bulk email checks. */
     async recordMany(tx: TransactionClient, entries: AuditEntry[]): Promise<void> {
         if (entries.length === 0) return;
-        await tx.auditLog.createMany({ data: await toRows(tx, entries, currentAuditOrigin()) });
+        await insertRows(tx, await toRows(tx, entries, currentAuditOrigin()));
     },
 
     /** Direct write outside a transaction (the audit worker and the no-Redis fallback). */
     async write(entry: QueuedAuditEntry): Promise<void> {
         const { origin, ...rest } = entry;
-        const rows = await toRows(prisma as unknown as TransactionClient, [rest], origin ?? currentAuditOrigin());
-        await prisma.auditLog.createMany({ data: rows });
+        const client = prisma as unknown as TransactionClient;
+        await insertRows(client, await toRows(client, [rest], origin ?? currentAuditOrigin()));
     },
 
     /** Fire-and-forget: never throws, so auditing can't break the action being audited. */

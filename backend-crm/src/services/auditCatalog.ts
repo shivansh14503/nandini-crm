@@ -38,6 +38,8 @@ export type AuditAction =
     | 'CONVERT'
     /** A lead follow-up: the field diff plus a `followUp` block (lead.followUp.ts FollowUpSummary). */
     | 'FOLLOW_UP'
+    /** An email check changed an address's result on a record (email-verification/emailCheckAudit.ts). */
+    | 'EMAIL_CHECK'
     | 'IMPORT'
     | 'LOGIN'
     | 'LOGIN_FAILED'
@@ -92,7 +94,7 @@ const CONFIG_ENTITIES: ReadonlySet<AuditEntityType> = new Set([
 const SECURITY_ACTIONS: ReadonlySet<AuditAction> = new Set(['LOGIN', 'LOGIN_FAILED', 'LOGOUT', 'ACCESS_DENIED']);
 
 /** Actions whose `changes` are a `{ field: { from, to } }` diff. */
-const DIFF_ACTIONS: ReadonlySet<AuditAction> = new Set(['UPDATE', 'STATUS_CHANGE', 'FOLLOW_UP', 'CONVERT', 'REVERT']);
+const DIFF_ACTIONS: ReadonlySet<AuditAction> = new Set(['UPDATE', 'STATUS_CHANGE', 'FOLLOW_UP', 'CONVERT', 'REVERT', 'EMAIL_CHECK']);
 
 /** Keys inside a diff that describe the entry rather than a changed field. */
 const NON_FIELD_KEYS = new Set(['_meta', 'followUp']);

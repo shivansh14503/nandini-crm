@@ -4,6 +4,7 @@ import { logger } from '../../config/logger.js';
 import { prisma } from '../../config/prisma.js';
 import { Prisma, type EmailValidationRun, type EntityEmail } from '../../generated/prisma/client.js';
 import { auditService, type AuditEntityType } from '../../services/audit.service.js';
+import { runWithAuditOrigin } from '../../services/auditContext.js';
 import { cacheService, type CachedEntity } from '../../services/cache.service.js';
 import type { AuthUser } from '../../types/user.types.js';
 import { HttpError } from '../../utils/httpError.js';
@@ -11,6 +12,7 @@ import { runInTransaction } from '../shared/transactions.js';
 import { toEmailDtos, type EmailOwner } from '../shared/entityEmails.js';
 import { runLocalChecks, type EmailVerificationStatus } from './localChecks.js';
 import { askProviderFresh } from './emailVerification.service.js';
+import { CHECKED_ROW_SELECT, emailCheckEntries, type CheckedRow } from './emailCheckAudit.js';
 import { decideFromReports, reportDetails, reportEmails, type Decision, type ReportDetail } from './listReports.js';
 import {
     ProviderListError,
@@ -235,8 +237,16 @@ async function completeRun(runId: string, total: number): Promise<void> {
 /** SQL Server allows about 2,100 parameters per statement. */
 const MAX_SQL_LIST = 1_000;
 
-/** Writes decided results grouped by (status, reason), in chunks, plus the run's counters, in one transaction. */
-async function writeDecisions(runId: string, decisions: Map<string, Decision>, extra: Prisma.EmailValidationRunUpdateInput): Promise<void> {
+/**
+ * Writes decided results grouped by (status, reason), in chunks, plus the run's counters and an EMAIL_CHECK audit
+ * entry on each record whose result changed (by the admin who started the run), in one transaction. The timeout
+ * grows with the batch: a list run imports up to 50,000 results at once.
+ */
+async function writeDecisions(
+    run: Pick<EmailValidationRun, 'id' | 'startedBy'>,
+    decisions: Map<string, Decision>,
+    extra: Prisma.EmailValidationRunUpdateInput,
+): Promise<void> {
     const groups = new Map<string, { decision: Decision; emails: string[] }>();
     const counts = { valid: 0, risky: 0, invalid: 0 };
     for (const [email, decision] of decisions) {
@@ -247,29 +257,35 @@ async function writeDecisions(runId: string, decisions: Map<string, Decision>, e
         counts[decision.status] += 1;
     }
     const now = new Date();
-    const writes: Prisma.PrismaPromise<unknown>[] = [];
-    for (const { decision, emails } of groups.values()) {
-        for (let i = 0; i < emails.length; i += MAX_SQL_LIST) {
-            writes.push(
-                prisma.entityEmail.updateMany({
-                    where: { email: { in: emails.slice(i, i + MAX_SQL_LIST) } },
-                    data: { verificationStatus: decision.status, verificationReason: decision.reason, verifiedAt: now },
-                }),
+    await prisma.$transaction(
+        async (tx) => {
+            const before: CheckedRow[] = [];
+            for (const { decision, emails } of groups.values()) {
+                for (let i = 0; i < emails.length; i += MAX_SQL_LIST) {
+                    const chunk = emails.slice(i, i + MAX_SQL_LIST);
+                    before.push(...(await tx.entityEmail.findMany({ where: { email: { in: chunk } }, select: CHECKED_ROW_SELECT })));
+                    await tx.entityEmail.updateMany({
+                        where: { email: { in: chunk } },
+                        data: { verificationStatus: decision.status, verificationReason: decision.reason, verifiedAt: now },
+                    });
+                }
+            }
+            await tx.emailValidationRun.update({
+                where: { id: run.id },
+                data: {
+                    ...extra,
+                    validCount: { increment: counts.valid },
+                    riskyCount: { increment: counts.risky },
+                    invalidCount: { increment: counts.invalid },
+                },
+            });
+            await auditService.recordMany(
+                tx,
+                emailCheckEntries(before, (email) => decisions.get(email), { action: 'EMAIL_CHECK', changedBy: run.startedBy, runId: run.id }),
             );
-        }
-    }
-    writes.push(
-        prisma.emailValidationRun.update({
-            where: { id: runId },
-            data: {
-                ...extra,
-                validCount: { increment: counts.valid },
-                riskyCount: { increment: counts.risky },
-                invalidCount: { increment: counts.invalid },
-            },
-        }),
+        },
+        { maxWait: 10_000, timeout: 30_000 + decisions.size * 5 },
     );
-    await prisma.$transaction(writes);
 }
 
 // ── Single mode: one provider call per address ──────────────────────────────────
@@ -307,7 +323,7 @@ async function processSingleRun(run: EmailValidationRun): Promise<void> {
             return;
         }
         if (outcome.status) {
-            await writeDecisions(run.id, new Map([[email, { status: outcome.status, reason: outcome.reason }]]), { processed: index + 1 });
+            await writeDecisions(run, new Map([[email, { status: outcome.status, reason: outcome.reason }]]), { processed: index + 1 });
         } else {
             await prisma.emailValidationRun.update({ where: { id: run.id }, data: { processed: index + 1, undecidedCount: { increment: 1 } } });
         }
@@ -382,7 +398,7 @@ async function runLocalPhase(run: EmailValidationRun): Promise<string[] | null> 
             if (local?.status) decisions.set(email, { status: local.status, reason: local.reason ?? local.status });
             else toProvider.push(email);
         });
-        await writeDecisions(run.id, decisions, { processed: start + batch.length });
+        await writeDecisions(run, decisions, { processed: start + batch.length });
     }
     await prisma.emailValidationRun.update({ where: { id: run.id }, data: { phase: 'uploading', providerEmailsJson: JSON.stringify(toProvider) } });
     return toProvider;
@@ -467,7 +483,7 @@ async function processListRun(initial: EmailValidationRun): Promise<void> {
         );
         const details = urls.fullreport ? reportDetails(await downloadListReport(urls.fullreport).catch(() => '')) : new Map<string, ReportDetail>();
         const { decisions, undecided } = decideFromReports(toProvider, { safetosend, valid, invalid }, details);
-        await writeDecisions(run.id, decisions, { processed: total, undecidedCount: { increment: undecided } });
+        await writeDecisions(run, decisions, { processed: total, undecidedCount: { increment: undecided } });
     } catch (err) {
         logger.warn({ err: (err as Error).message, runId: run.id }, 'Email list import failed');
         const message = err instanceof ProviderListError ? err.message : 'The results could not be read.';
@@ -496,7 +512,12 @@ async function drainRuns(): Promise<void> {
             const next = await prisma.emailValidationRun.findFirst({ where: { status: { in: ACTIVE_STATUSES } }, orderBy: { createdAt: 'asc' } });
             if (!next) return;
             try {
-                await processRun(next.id);
+                // Every result entry of the run shares the run id as its request id, attributed to the admin who started it.
+                const starter = await prisma.user.findUnique({ where: { username: next.startedBy }, select: { id: true, role: true } });
+                await runWithAuditOrigin(
+                    { source: 'JOB', route: 'job:email-validation-run', requestId: next.id, actorId: starter?.id, actorRole: starter?.role },
+                    () => processRun(next.id),
+                );
             } catch (err) {
                 logger.error({ err: (err as Error).message, runId: next.id }, 'Bulk email check failed');
                 await prisma.emailValidationRun
@@ -664,12 +685,18 @@ export const emailValidationAdminService = {
         const unique = [...new Set(emails)];
 
         if (action === 'accept') {
-            const result = await prisma.entityEmail.updateMany({
-                where: { email: { in: unique } },
-                data: { verificationStatus: 'valid', verificationReason: 'admin_accepted', verifiedAt: new Date() },
+            const count = await runInTransaction(async (tx) => {
+                const before = await tx.entityEmail.findMany({ where: { email: { in: unique } }, select: CHECKED_ROW_SELECT });
+                const result = await tx.entityEmail.updateMany({
+                    where: { email: { in: unique } },
+                    data: { verificationStatus: 'valid', verificationReason: 'admin_accepted', verifiedAt: new Date() },
+                });
+                const accepted = { status: 'valid', reason: 'admin_accepted' };
+                await auditService.recordMany(tx, emailCheckEntries(before, () => accepted, { action: 'UPDATE', changedBy: user.username }));
+                return result.count;
             });
             await invalidateRecordCaches();
-            return { affectedRecords: result.count };
+            return { affectedRecords: count };
         }
 
         const affectedRecords = await runInTransaction(async (tx) => {

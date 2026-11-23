@@ -20,26 +20,40 @@ export interface SaveFlash {
 let pending: (SaveFlash & { at: number }) | null = null;
 /** A flash nobody picked up within this window (e.g. the user navigated elsewhere) is dropped. */
 const MAX_AGE_MS = 30_000;
+/**
+ * How long a list must stay mounted before its flash counts as delivered. Returning to a list mounts it more
+ * than once (a throwaway first instance, Strict Mode's re-mount) and only the last one stays on screen, so the
+ * flash is kept until an instance outlives this delay; otherwise the discarded one would swallow it.
+ */
+const SETTLE_MS = 500;
 
 export function setSaveFlash(flash: SaveFlash): void {
     pending = { ...flash, at: Date.now() };
 }
 
-function takeSaveFlash(listPath: string): SaveFlash | null {
+function peekSaveFlash(listPath: string): (SaveFlash & { at: number }) | null {
     if (!pending || pending.listPath !== listPath) return null;
-    const flash = pending;
-    pending = null;
-    return Date.now() - flash.at <= MAX_AGE_MS ? flash : null;
+    if (Date.now() - pending.at > MAX_AGE_MS) {
+        pending = null;
+        return null;
+    }
+    return pending;
 }
 
-/** On mount, picks up a flash left for `listPath` and hands it to `onFlash` (once). */
+/** On mount, picks up a flash left for `listPath` and hands it to `onFlash` (once it is on screen). */
 export function useSaveFlash(listPath: string, onFlash: (flash: SaveFlash) => void): void {
     const onFlashRef = useRef(onFlash);
     useEffect(() => {
         onFlashRef.current = onFlash;
     });
     useEffect(() => {
-        const flash = takeSaveFlash(listPath);
-        if (flash) onFlashRef.current(flash);
+        const flash = peekSaveFlash(listPath);
+        if (!flash) return;
+        onFlashRef.current(flash);
+        // Consumed only if this instance stays mounted; an unmount first leaves it for the next instance.
+        const timer = window.setTimeout(() => {
+            if (pending === flash) pending = null;
+        }, SETTLE_MS);
+        return () => window.clearTimeout(timer);
     }, [listPath]);
 }

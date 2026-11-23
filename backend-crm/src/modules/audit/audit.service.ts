@@ -106,10 +106,34 @@ const ACTION_TITLES: Record<string, { title: string; tag: string }> = {
     PDF_GENERATED: { title: 'PDF generated', tag: 'PDF' },
 };
 
+const EMAIL_RESULT_LABELS: Record<string, string> = {
+    valid: 'Valid',
+    risky: 'Risky',
+    invalid: 'Invalid',
+    undecided: 'Undecided',
+    unchecked: 'Not checked',
+};
+const emailResultLabel = (value: unknown) => EMAIL_RESULT_LABELS[String(value)] ?? displayValue(value);
+
 /** One timeline item per changed field for updates; one item for every other action. */
 function toRevisions(entry: AuditEntryDto, time: string): AuditRevisionItem[] {
     const base = { author: entry.changedBy, time };
     const changes = (entry.changes ?? {}) as Record<string, unknown>;
+
+    // An email check result (emailCheckAudit.ts): "Email checked: a@b.com · Not checked → Invalid".
+    if (typeof changes.email === 'string' && isDiff(changes.verificationStatus)) {
+        const accepted = changes.reason === 'admin_accepted';
+        return [
+            {
+                ...base,
+                title: `${accepted ? 'Email accepted' : 'Email checked'}: ${changes.email}`,
+                from: emailResultLabel(changes.verificationStatus.from),
+                to: emailResultLabel(changes.verificationStatus.to),
+                note: !accepted && typeof changes.reason === 'string' ? fieldLabel(changes.reason.replace(/_/g, ' ')) : undefined,
+                tag: 'Email check',
+            },
+        ];
+    }
 
     if (entry.action === 'UPDATE' || entry.action === 'STATUS_CHANGE' || entry.action === 'FOLLOW_UP') {
         const note = typeof changes.reason === 'string' ? changes.reason : undefined;
