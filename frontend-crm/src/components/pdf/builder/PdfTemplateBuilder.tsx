@@ -446,8 +446,17 @@ function BuilderLayout({ module, template, initialMeta, contextLoading, record, 
                 </Alert>
             )}
 
-            {/* Panel + canvas */}
-            <Box sx={{ ...surfaceSx, overflow: 'hidden', display: 'flex', flexDirection: { xs: 'column', md: 'row' }, height: 'calc(100vh - 210px)', minHeight: 560 }}>
+            {/* Panel + canvas. Below `md` they stack: each gets its own height and scrolls inside it (see LeftPanel / Canvas). */}
+            <Box
+                sx={{
+                    ...surfaceSx,
+                    overflow: 'hidden',
+                    display: 'flex',
+                    flexDirection: { xs: 'column', md: 'row' },
+                    height: { xs: 'auto', md: 'calc(100vh - 210px)' },
+                    minHeight: { md: 560 },
+                }}
+            >
                 <LeftPanel meta={meta} onMetaChange={(patch) => setMeta((m) => ({ ...m, ...patch }))} isNew={isNew} isCurrentDefault={Boolean(template?.isDefault)} />
                 <Canvas zoom={zoom} />
             </Box>

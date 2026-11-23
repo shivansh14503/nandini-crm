@@ -86,7 +86,7 @@ export function FieldPickerButton({
                 disableAutoFocus
                 anchorOrigin={{ vertical: 'bottom', horizontal: 'left' }}
                 slotProps={{
-                    paper: { sx: { mt: 0.5, p: 1.5, width: 360, borderRadius: '10px', border: '1px solid var(--mui-palette-border-main)', boxShadow: '0 8px 24px rgba(15,23,42,0.10)' } },
+                    paper: { sx: { mt: 0.5, p: 1.5, width: 360, maxWidth: 'calc(100vw - 24px)', borderRadius: '10px', border: '1px solid var(--mui-palette-border-main)', boxShadow: '0 8px 24px rgba(15,23,42,0.10)' } },
                     transition: { onEntered: () => searchRef.current?.focus() },
                 }}
             >

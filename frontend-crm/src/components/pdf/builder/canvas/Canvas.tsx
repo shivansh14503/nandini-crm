@@ -444,7 +444,7 @@ export function Canvas({ zoom }: { zoom: number }) {
 
     return (
         // `light` class: the canvas previews a printed page, so it keeps light-scheme colors in dark mode.
-        <Box onClick={onBackgroundClick} className="light" sx={{ colorScheme: 'light', color: 'text.primary', flex: 1, minWidth: 0, minHeight: 0, overflow: 'auto', backgroundColor: '#e8edf3', backgroundImage: 'radial-gradient(#cbd5e1 1px, transparent 1px)', backgroundSize: '16px 16px', p: { xs: 2, md: 4 } }}>
+        <Box onClick={onBackgroundClick} className="light" sx={{ colorScheme: 'light', color: 'text.primary', flex: 1, minWidth: 0, minHeight: { xs: '75vh', md: 0 }, overflow: 'auto', backgroundColor: '#e8edf3', backgroundImage: 'radial-gradient(#cbd5e1 1px, transparent 1px)', backgroundSize: '16px 16px', p: { xs: 2, md: 4 } }}>
             <Box
                 data-testid="pdf-canvas-page"
                 style={{ ...cssToStyle(bandBaseCss(doc.theme)), zoom }}

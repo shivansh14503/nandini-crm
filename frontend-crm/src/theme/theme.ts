@@ -209,7 +209,18 @@ export const theme = createTheme({
         // The page keeps a permanent scrollbar gutter (see globals.css), so MUI's body scroll lock
         // and its compensating padding-right would only add a horizontal jump when overlays open.
         MuiModal: { defaultProps: { disableScrollLock: true } },
-        MuiDialog: { defaultProps: { disableScrollLock: true } },
+        MuiDialog: {
+            defaultProps: { disableScrollLock: true },
+            // Phones: a 12px margin (the floating chrome's inset) instead of MUI's 32px, so dialogs get the screen's width.
+            styleOverrides: {
+                paper: ({ theme }) => ({
+                    [theme.breakpoints.down('sm')]: { margin: 12, maxWidth: 'calc(100% - 24px)', maxHeight: 'calc(100% - 24px)' },
+                }),
+                paperFullWidth: ({ theme }) => ({
+                    [theme.breakpoints.down('sm')]: { width: 'calc(100% - 24px)' },
+                }),
+            },
+        },
         // Via ModalProps: persistent/permanent drawers render a plain div and would leak a root-level prop to the DOM.
         MuiDrawer: { defaultProps: { ModalProps: { disableScrollLock: true } } },
         MuiMenu: { defaultProps: { disableScrollLock: true } },

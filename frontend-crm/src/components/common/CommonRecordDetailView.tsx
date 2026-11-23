@@ -130,12 +130,13 @@ export function CommonRecordDetailView({
                 {loading ? (
                     <RecordHeaderSkeleton sx={{ flex: 1, minWidth: 0, '& > :last-child': { display: 'none' } }} />
                 ) : (
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, minWidth: 0 }}>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: { xs: 1.5, sm: 2 }, minWidth: 0 }}>
                     <Avatar
                         variant="rounded"
                         sx={{
-                            width: 56,
-                            height: 56,
+                            width: { xs: 44, sm: 56 },
+                            height: { xs: 44, sm: 56 },
+                            flexShrink: 0,
                             borderRadius: '14px',
                             fontWeight: 800,
                             fontSize: '1.1rem',
@@ -149,7 +150,13 @@ export function CommonRecordDetailView({
                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
                             <Typography
                                 component="h1"
-                                sx={{ fontSize: '22px', fontWeight: 700, color: 'var(--crm-slate-900)', lineHeight: 1.25 }}
+                                sx={{
+                                    fontSize: { xs: '18px', sm: '22px' },
+                                    fontWeight: 700,
+                                    color: 'var(--crm-slate-900)',
+                                    lineHeight: 1.25,
+                                    overflowWrap: 'anywhere',
+                                }}
                             >
                                 {title || '—'}
                             </Typography>

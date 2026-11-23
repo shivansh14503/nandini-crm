@@ -1,9 +1,11 @@
 'use client';
 
 import React, { useEffect, useRef, useState } from 'react';
-import { Box, IconButton, List, ListItem, ListItemButton, Tooltip, Typography } from '@mui/material';
+import { Backdrop, Box, ButtonBase, IconButton, List, ListItem, ListItemButton, Tooltip, Typography, useMediaQuery, useTheme } from '@mui/material';
 import PushPinOutlinedIcon from '@mui/icons-material/PushPinOutlined';
 import KeyboardDoubleArrowLeftIcon from '@mui/icons-material/KeyboardDoubleArrowLeft';
+import CloseIcon from '@mui/icons-material/Close';
+import AccountTreeOutlinedIcon from '@mui/icons-material/AccountTreeOutlined';
 import { glassSurfaceSx, GLASS_SHADOW, GLASS_SHADOW_RAISED, GLASS_RADIUS, FLOAT_INSET, NAVBAR_HEIGHT } from '@/theme/glass';
 
 export interface RelatedModuleItem {
@@ -29,6 +31,15 @@ export const DOCK = {
 /** Left space the page content reserves for the dock. */
 export function dockContentOffset(expanded: boolean): number {
     return DOCK.inset + (expanded ? DOCK.expandedWidth : DOCK.railWidth) + DOCK.contentGap;
+}
+
+/**
+ * Phones (below `sm`) have no room for the rail beside the page: the dock becomes a "Related" button in the
+ * bottom-left corner that opens the full panel over the page, and the page reserves no space for it.
+ */
+export function useDockAsButton(): boolean {
+    const theme = useTheme();
+    return useMediaQuery(theme.breakpoints.down('sm'));
 }
 
 export interface RelatedModulesSidebarProps {
@@ -60,7 +71,11 @@ export function RelatedModulesSidebar({
 }: RelatedModulesSidebarProps) {
     const [peek, setPeek] = useState(false);
     const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
-    const expanded = pinned || peek;
+    // Phones: the panel opens from the floating "Related" button and closes once a module is picked.
+    const asButton = useDockAsButton();
+    const [sheetOpen, setSheetOpen] = useState(false);
+    const expanded = asButton || pinned || peek;
+    const totalCount = modules.reduce((sum, m) => sum + (m.count > 0 ? m.count : 0), 0);
 
     const schedulePeek = (next: boolean) => {
         if (timer.current) clearTimeout(timer.current);
@@ -85,17 +100,83 @@ export function RelatedModulesSidebar({
         transition: `opacity 0.15s ${EASE} ${expanded ? '0.06s' : '0s'}`,
     } as const;
 
+    // Peeking on hover / focus is for the rail; the phone panel is opened and closed explicitly.
+    const peekEnabled = !pinned && !asButton;
+
     return (
+        <>
+        {asButton && (
+            <>
+                <ButtonBase
+                    onClick={() => setSheetOpen(true)}
+                    aria-label={`Related records (${totalCount})`}
+                    aria-expanded={sheetOpen}
+                    sx={{
+                        position: 'fixed',
+                        left: DOCK.inset,
+                        bottom: `calc(${DOCK.inset}px + env(safe-area-inset-bottom, 0px))`,
+                        zIndex: 1300,
+                        height: 44,
+                        pl: 1.5,
+                        pr: totalCount > 0 ? 1 : 1.75,
+                        gap: 1,
+                        borderRadius: '22px',
+                        fontSize: '0.84rem',
+                        fontWeight: 700,
+                        color: '#ffffff',
+                        background: 'linear-gradient(135deg, var(--crm-fill-blue-700) 0%, var(--crm-fill-blue-600) 100%)',
+                        boxShadow: '0 6px 18px rgb(var(--crm-accent-rgb) / 0.35)',
+                        transition: 'background 0.15s ease, box-shadow 0.15s ease',
+                        '&:hover': {
+                            background: 'linear-gradient(135deg, var(--crm-fill-blue-800) 0%, var(--crm-fill-blue-700) 100%)',
+                        },
+                        '&.Mui-focusVisible': { boxShadow: '0 0 0 3px rgb(var(--crm-accent-rgb) / 0.32)' },
+                    }}
+                >
+                    <AccountTreeOutlinedIcon sx={{ fontSize: 18 }} />
+                    Related
+                    {totalCount > 0 && (
+                        <Box
+                            component="span"
+                            sx={{
+                                minWidth: 22,
+                                height: 22,
+                                px: 0.6,
+                                borderRadius: '11px',
+                                fontSize: '0.7rem',
+                                lineHeight: '22px',
+                                textAlign: 'center',
+                                color: 'var(--crm-text-blue-900)',
+                                backgroundColor: 'var(--mui-palette-background-paper)',
+                            }}
+                        >
+                            {totalCount > 99 ? '99+' : totalCount}
+                        </Box>
+                    )}
+                </ButtonBase>
+                <Backdrop
+                    open={sheetOpen}
+                    onClick={() => setSheetOpen(false)}
+                    sx={{
+                        zIndex: 1299,
+                        backgroundColor: 'rgba(15, 23, 42, 0.25)',
+                        backdropFilter: 'blur(4px)',
+                        WebkitBackdropFilter: 'blur(4px)',
+                    }}
+                />
+            </>
+        )}
         <Box
             component="nav"
             aria-label="Related records"
-            onMouseEnter={() => !pinned && schedulePeek(true)}
-            onMouseLeave={() => !pinned && schedulePeek(false)}
-            onFocus={() => !pinned && setPeek(true)}
+            onMouseEnter={() => peekEnabled && schedulePeek(true)}
+            onMouseLeave={() => peekEnabled && schedulePeek(false)}
+            onFocus={() => peekEnabled && setPeek(true)}
             onBlur={(e) => {
                 if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setPeek(false);
             }}
             onKeyDown={(e) => {
+                if (e.key === 'Escape' && asButton) setSheetOpen(false);
                 if (e.key === 'Escape' && peek) {
                     setPeek(false);
                     (document.activeElement as HTMLElement | null)?.blur();
@@ -103,19 +184,27 @@ export function RelatedModulesSidebar({
             }}
             sx={{
                 ...glassSurfaceSx,
+                ...(asButton && {
+                    display: sheetOpen ? 'flex' : 'none',
+                    backgroundColor: 'color-mix(in srgb, var(--mui-palette-background-paper) 94%, transparent)',
+                }),
                 position: 'fixed',
                 top,
                 left: DOCK.inset,
                 zIndex: 1300,
-                width: expanded ? DOCK.expandedWidth : DOCK.railWidth,
+                width: asButton
+                    ? `min(${DOCK.expandedWidth + 40}px, calc(100vw - ${DOCK.inset * 2}px))`
+                    : expanded
+                      ? DOCK.expandedWidth
+                      : DOCK.railWidth,
                 maxHeight: `calc(100vh - ${top + DOCK.inset}px)`,
-                display: 'flex',
+                ...(!asButton && { display: 'flex' }),
                 flexDirection: 'column',
                 p: 1,
                 boxSizing: 'border-box',
                 overflow: 'hidden',
                 borderRadius: GLASS_RADIUS,
-                boxShadow: peek && !pinned ? GLASS_SHADOW_RAISED : GLASS_SHADOW,
+                boxShadow: (peek && !pinned) || asButton ? GLASS_SHADOW_RAISED : GLASS_SHADOW,
                 transition: `width 0.22s ${EASE}, top 0.22s ${EASE}, box-shadow 0.22s ${EASE}`,
                 '@media (prefers-reduced-motion: reduce)': { transition: 'none' },
             }}
@@ -147,12 +236,12 @@ export function RelatedModulesSidebar({
                 >
                     Related
                 </Typography>
-                <Tooltip title={`${pinned ? 'Collapse' : 'Keep open'} (Ctrl+\\)`} placement="right">
+                <Tooltip title={asButton ? 'Close' : `${pinned ? 'Collapse' : 'Keep open'} (Ctrl+\\)`} placement="right">
                     <IconButton
                         size="small"
-                        onClick={onTogglePinned}
-                        aria-pressed={pinned}
-                        aria-label={pinned ? 'Collapse sidebar' : 'Keep sidebar open'}
+                        onClick={asButton ? () => setSheetOpen(false) : onTogglePinned}
+                        aria-pressed={asButton ? undefined : pinned}
+                        aria-label={asButton ? 'Close related records' : pinned ? 'Collapse sidebar' : 'Keep sidebar open'}
                         tabIndex={expanded ? 0 : -1}
                         sx={{
                             ...labelSx,
@@ -171,7 +260,7 @@ export function RelatedModulesSidebar({
                             '&.Mui-focusVisible': { boxShadow: '0 0 0 3px rgb(var(--crm-accent-rgb) / 0.22)' },
                         }}
                     >
-                        {pinned ? <KeyboardDoubleArrowLeftIcon /> : <PushPinOutlinedIcon />}
+                        {asButton ? <CloseIcon /> : pinned ? <KeyboardDoubleArrowLeftIcon /> : <PushPinOutlinedIcon />}
                     </IconButton>
                 </Tooltip>
             </Box>
@@ -198,6 +287,7 @@ export function RelatedModulesSidebar({
                                     onClick={() => {
                                         item.onClick?.();
                                         onModuleSelect?.(item.id);
+                                        setSheetOpen(false);
                                     }}
                                     selected={isActive}
                                     aria-label={`${item.label} (${item.count})`}
@@ -308,5 +398,6 @@ export function RelatedModulesSidebar({
             </Box>
 
         </Box>
+        </>
     );
 }

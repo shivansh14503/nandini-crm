@@ -410,7 +410,9 @@ function FilterDialog({ controller, sortOptions }: TableFilterModalProps) {
             </DialogContent>
 
             {tab === 'advanced' && (
-                <DialogActions sx={{ px: 3, py: 1.5, borderTop: '1px solid var(--mui-palette-border-main)', gap: 1 }}>
+                <DialogActions
+                    sx={{ px: { xs: 2, sm: 3 }, py: 1.5, borderTop: '1px solid var(--mui-palette-border-main)', gap: 1, flexWrap: { xs: 'wrap', sm: 'nowrap' } }}
+                >
                     <Button
                         onClick={() => {
                             setDraft(EMPTY);
@@ -422,7 +424,18 @@ function FilterDialog({ controller, sortOptions }: TableFilterModalProps) {
                     >
                         Clear
                     </Button>
-                    <Typography sx={{ flex: 1, fontSize: '0.78rem', color: 'var(--mui-palette-text-secondary)', textAlign: 'right', pr: 1 }}>
+                    {/* Phones: the match count takes its own row above the buttons. */}
+                    <Typography
+                        sx={{
+                            flex: { xs: '1 1 100%', sm: 1 },
+                            order: { xs: -1, sm: 0 },
+                            ml: { xs: '0 !important', sm: 1 },
+                            fontSize: '0.78rem',
+                            color: 'var(--mui-palette-text-secondary)',
+                            textAlign: { xs: 'left', sm: 'right' },
+                            pr: 1,
+                        }}
+                    >
                         {draftCount === 0
                             ? 'No filters set'
                             : matchCount === null

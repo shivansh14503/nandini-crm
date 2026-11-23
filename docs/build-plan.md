@@ -25,6 +25,7 @@
 | Tickets, Products, Partner Companies | ✅ CRUD, import |
 | Quotation PDF | ✅ templates, builder, preview, cached render |
 | Admin: forms, dropdowns, document series, cities, PDF templates | ✅ |
+| Responsive layout | ✅ phones (from 320 px), tablets and desktops: menu drawer below 1200 px, icon-only navbar controls up to 1420 px, related records as a button on phones, no sideways page scroll |
 | Audit log | ⚠️ foundation, admin query API and Admin › Audit Log screen done (ledger table, who / where / how per entry, `/api/admin/audit-logs`); undo / restore, export, integrity pending (Phase 11) |
 | Users admin | ❌ seed / DB only |
 | Dashboard | ❌ static page, no data |

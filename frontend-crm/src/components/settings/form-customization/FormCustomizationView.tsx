@@ -200,7 +200,7 @@ export function FormCustomizationView() {
 
             {/* ── Header ── */}
             <Box sx={{ ...surfaceSx, mb: 2, overflow: 'hidden' }}>
-                <Box sx={{ px: { xs: 2, md: 3 }, py: 2.25, display: 'flex', alignItems: 'flex-start', gap: 1.5 }}>
+                <Box sx={{ px: { xs: 2, md: 3 }, py: 2.25, display: 'flex', alignItems: 'flex-start', flexWrap: { xs: 'wrap', sm: 'nowrap' }, gap: 1.5 }}>
                     <Box
                         sx={{
                             width: 40,
@@ -217,7 +217,8 @@ export function FormCustomizationView() {
                     >
                         <TuneOutlinedIcon />
                     </Box>
-                    <Box sx={{ minWidth: 0, flex: 1 }}>
+                    {/* Phones: the text keeps the row beside the icon and the button wraps below it. */}
+                    <Box sx={{ minWidth: { xs: 'calc(100% - 52px)', sm: 0 }, flex: 1 }}>
                         <Typography component="h1" sx={{ fontWeight: 700, fontSize: '1.15rem', color: 'var(--crm-slate-900)' }}>
                             Form & Dropdown Customization
                         </Typography>
@@ -230,7 +231,7 @@ export function FormCustomizationView() {
                         size="small"
                         startIcon={<HistoryOutlinedIcon sx={{ fontSize: 16 }} />}
                         onClick={() => setIsDrawerCollapsed(false)}
-                        sx={{ ...secondaryButtonSx, flexShrink: 0, whiteSpace: 'nowrap' }}
+                        sx={{ ...secondaryButtonSx, flexShrink: 0, whiteSpace: 'nowrap', ml: { xs: '52px', sm: 0 } }}
                     >
                         Activity / Changes
                     </Button>

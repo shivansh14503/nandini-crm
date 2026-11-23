@@ -380,7 +380,7 @@ export function EmailValidationView() {
                 </Box>
             </Box>
 
-            {!enabled && <Alert severity="warning">Email verification is turned off on the server (EMAIL_VERIFICATION_ENABLED=false), so checks can&apos;t run.</Alert>}
+            {!enabled && <Alert severity="warning" sx={{ overflowWrap: 'anywhere' }}>Email verification is turned off on the server (EMAIL_VERIFICATION_ENABLED=false), so checks can&apos;t run.</Alert>}
             {enabled && !providerConfigured && (
                 <Alert severity="info">
                     No verification provider key is set, so checks only run the free tests (format, typos, disposable providers, whether the domain takes email). Mailboxes

@@ -9,6 +9,8 @@ import {
     Chip,
     Tooltip,
     InputBase,
+    useMediaQuery,
+    useTheme,
 } from '@mui/material';
 import CloseIcon from '@mui/icons-material/Close';
 import SearchIcon from '@mui/icons-material/Search';
@@ -370,6 +372,8 @@ export function RelatedRecordsTableView({
     entityType = 'organization',
 }: RelatedRecordsTableViewProps) {
     const showNumber = useShowRecordNumber();
+    const theme = useTheme();
+    const isWide = useMediaQuery(theme.breakpoints.up('lg'));
     const [searchQuery, setSearchQuery] = useState('');
     const [sortField, setSortField] = useState<string>('');
     const [sortOrder, setSortOrder] = useState<SortOrder>('asc');
@@ -501,7 +505,8 @@ export function RelatedRecordsTableView({
     };
 
     // A collapsed drawer slides fully off-screen, so the table keeps only the standard inset from the viewport edge.
-    const effectiveRightOffset = Math.max(FLOAT_INSET, isRightDrawerCollapsed ? 0 : rightOffset);
+    // Below `lg` there is no room beside the drawer: it floats over the table, which keeps the full width.
+    const effectiveRightOffset = Math.max(FLOAT_INSET, isRightDrawerCollapsed || !isWide ? 0 : rightOffset);
 
     return (
         <Box
@@ -512,7 +517,7 @@ export function RelatedRecordsTableView({
                 position: 'fixed',
                 top: FLOAT_INSET + NAVBAR_HEIGHT + FLOAT_INSET,
                 bottom: FLOAT_INSET,
-                left: leftOffset,
+                left: Math.max(FLOAT_INSET, leftOffset),
                 right: effectiveRightOffset,
                 zIndex: 1290, // Tucks underneath both side panels
                 borderRadius: GLASS_RADIUS,

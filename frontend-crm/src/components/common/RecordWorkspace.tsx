@@ -9,6 +9,7 @@ import {
     DrawerStackContext,
     DOCK,
     dockContentOffset,
+    useDockAsButton,
     type DrawerStackContextValue,
 } from './Drawer';
 import { RelatedSecondaryDrawer, type SecondaryDrawerEntity } from './RelatedSecondaryDrawer';
@@ -86,7 +87,9 @@ export function RecordWorkspace({ entityType, entity, title, listHref, children 
         window.addEventListener('keydown', onKey);
         return () => window.removeEventListener('keydown', onKey);
     }, [togglePinned]);
-    const sidebarWidth = dockContentOffset(pinned && !isSmallScreen);
+    // Phones: the dock is a floating "Related" button, so the page keeps its full width.
+    const dockAsButton = useDockAsButton();
+    const sidebarWidth = dockAsButton ? 0 : dockContentOffset(pinned && !isSmallScreen);
 
     const [activeModuleId, setActiveModuleId] = useState<string | null>(null);
     const [drawerEntity, setDrawerEntity] = useState<SecondaryDrawerEntity | null>(null);
@@ -140,7 +143,8 @@ export function RecordWorkspace({ entityType, entity, title, listHref, children 
                 sx={{
                     minWidth: 0,
                     '& > :not(header)': {
-                        paddingLeft: `${sidebarWidth}px`,
+                        // Phones: no dock beside the page, so the page keeps its own left padding.
+                        ...(!dockAsButton && { paddingLeft: `${sidebarWidth}px` }),
                         transition: 'padding-left 0.22s cubic-bezier(0.2, 0, 0, 1)',
                         // A module table floats over the page: hide the detail view so the glass sits on a calm background.
                         visibility: activeModuleId ? 'hidden' : 'visible',

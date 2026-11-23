@@ -73,8 +73,8 @@ export function DataTableToolbar({
                     borderBottom: '1px solid var(--mui-palette-border-light)',
                 }}
             >
-                {/* Left Controls */}
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                {/* Left Controls (wrap on phones: the search box takes its own full-width row) */}
+                <Box sx={{ display: 'flex', alignItems: 'center', flexWrap: { xs: 'wrap', sm: 'nowrap' }, gap: 1, minWidth: 0 }}>
                     {/* Checkbox with dropdown */}
                     <Box sx={{ display: 'flex', alignItems: 'center' }}>
                         <Checkbox
@@ -253,7 +253,7 @@ export function DataTableToolbar({
                         value={searchQuery}
                         onChange={(e) => onSearchChange(e.target.value)}
                         sx={{
-                            width: { xs: 180, sm: 260 },
+                            width: { xs: '100%', sm: 260 },
                             '& .MuiOutlinedInput-root': {
                                 height: 32,
                                 fontSize: '0.8rem',
@@ -286,7 +286,7 @@ export function DataTableToolbar({
 
                 {/* Right: Showing records & Mini Pager */}
                 {onPageChange && (
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 1.5, minWidth: 0 }}>
                         <Typography sx={{ fontSize: '0.78rem', color: 'var(--mui-palette-text-secondary)' }}>
                             Showing{' '}
                             <Typography component="span" sx={{ fontWeight: 700, color: 'var(--mui-palette-text-primary)' }}>
@@ -433,7 +433,7 @@ export function DataTableToolbar({
             )}
 
             {/* Actions: Bulk selection or primary actions */}
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 1 }}>
                 {selectedCount > 0 ? (
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
                         <Typography sx={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--crm-text-blue-700)' }}>

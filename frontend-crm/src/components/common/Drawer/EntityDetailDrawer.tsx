@@ -261,7 +261,10 @@ export function EntityDetailDrawer({
                         sx={{
                             position: 'fixed',
                             top: '45%',
-                            right: isCollapsed ? 0 : `calc(${drawerWidthCss} + ${FLOAT_INSET}px)`,
+                            // The drawer never grows past the viewport (minus its insets), so neither does the tab's offset.
+                            right: isCollapsed ? 0 : `calc(min(${drawerWidthCss}, 100vw - ${FLOAT_INSET * 2}px) + ${FLOAT_INSET}px)`,
+                            // Phones: the open drawer covers the screen and the tab would sit on the left edge; close it instead.
+                            display: isCollapsed ? 'flex' : { xs: 'none', sm: 'flex' },
                             transform: 'translateY(-50%)',
                             zIndex: 1410,
                             width: 24,
@@ -269,7 +272,6 @@ export function EntityDetailDrawer({
                             backgroundColor: 'var(--crm-fill-blue-600)',
                             color: '#ffffff',
                             borderRadius: '8px 0 0 8px',
-                            display: 'flex',
                             alignItems: 'center',
                             justifyContent: 'center',
                             cursor: 'pointer',

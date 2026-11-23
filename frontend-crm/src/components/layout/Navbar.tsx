@@ -18,78 +18,34 @@ import {
     Divider,
     Typography,
     Avatar,
+    IconButton,
+    useMediaQuery,
+    useTheme,
 } from '@mui/material';
 import { glassSurfaceSx, GLASS_SHADOW, GLASS_RADIUS, FLOAT_INSET, NAVBAR_HEIGHT } from '@/theme/glass';
 import { useRightPanelWidth } from './rightPanelStore';
-import HomeIcon from '@mui/icons-material/Home';
 import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown';
 import LogoutIcon from '@mui/icons-material/Logout';
 import PersonIcon from '@mui/icons-material/Person';
 import AddIcon from '@mui/icons-material/Add';
 import NotificationsIcon from '@mui/icons-material/Notifications';
 import AdminPanelSettingsOutlinedIcon from '@mui/icons-material/AdminPanelSettingsOutlined';
+import MenuIcon from '@mui/icons-material/Menu';
 import { getModuleColor, moduleForPath } from '@/theme/moduleColors';
 import Badge from '@mui/material/Badge';
 import { useAuth } from '../../context/AuthContext';
 import { GlobalSearch } from './GlobalSearch';
 import { ThemeModeToggle } from './ThemeModeToggle';
 import { APP_CONFIG, ROUTES } from '@/config/constants';
+import { NAV_ITEMS, ModuleDot, type NavGroup } from './navItems';
+import { MobileNavDrawer } from './MobileNavDrawer';
 
-/* ─── Nav pill definitions ─────────────────────────────── */
-const NAV_ITEMS = [
-    {
-        label: 'Home',
-        icon: <HomeIcon fontSize="small" />,
-        items: [
-            { label: 'Dashboard', href: '/dashboard' },
-            { label: 'My Activities', href: '/dashboard' },
-            { label: 'Calendar', href: '/dashboard' },
-        ],
-    },
-    {
-        label: 'Sales',
-        items: [
-            { label: 'Leads', href: '/leads' },
-            { label: 'Opportunities', href: '/opportunities' },
-            { label: 'Quotations', href: '/quotations' },
-            { label: 'Organizations', href: '/organizations' },
-            { label: 'Contacts', href: '/contacts' },
-        ],
-    },
-    {
-        label: 'Support',
-        items: [
-            { label: 'Tickets', href: ROUTES.TICKETS },
-            { label: 'SLA Policies', href: '/dashboard' },
-            { label: 'Helpdesk Teams', href: '/dashboard' },
-        ],
-    },
-    {
-        label: 'Activities',
-        items: [
-            { label: 'All Activities', href: '/dashboard' },
-            { label: 'Calls', href: '/dashboard' },
-            { label: 'Meetings', href: '/dashboard' },
-            { label: 'Emails', href: '/dashboard' },
-        ],
-    },
-    {
-        label: 'Inventory',
-        items: [
-            { label: 'Product Catalog', href: '/products' },
-            { label: 'Categories', href: '/dashboard' },
-            { label: 'Stock Movements', href: '/dashboard' },
-        ],
-    },
-    {
-        label: 'All',
-        items: [
-            { label: 'Partner Company', href: ROUTES.PARTNER_COMPANIES },
-            { label: 'Reports', href: '/dashboard' },
-            { label: 'Integrations', href: '/dashboard' },
-        ],
-    },
-] as const;
+/**
+ * Narrowest viewport (px) where the pills fit beside the full search box, Create button and user name. From `lg`
+ * up to this width the pills stay and the right-side controls switch to their compact, icon-only form; below `lg`
+ * the pills move into the menu drawer.
+ */
+const FULL_NAVBAR_MIN_WIDTH = 1420;
 
 /* ─── Shared hover + click/tap dropdown behaviour ───────── */
 const CLOSE_DELAY_MS = 150;
@@ -161,7 +117,7 @@ function useDropdown() {
 }
 
 /* ─── Hover/click-dropdown pill ─────────────────────────── */
-function NavPill({ item }: { item: { label: string; icon?: React.ReactNode; items: readonly { label: string; href: string }[] } }) {
+function NavPill({ item }: { item: NavGroup }) {
     const { open, close, menuId, setAnchorEl, anchorEl, hoverProps, triggerProps, handleClickAway } = useDropdown();
     const hasModuleItems = item.items.some((sub) => moduleForPath(sub.href));
 
@@ -255,24 +211,6 @@ function NavPill({ item }: { item: { label: string; icon?: React.ReactNode; item
                 )}
             </Popper>
         </Box>
-    );
-}
-
-/** Small dot in the module's identity color; non-module items get an empty slot so labels stay aligned. */
-function ModuleDot({ href }: { href: string }) {
-    const moduleKey = moduleForPath(href);
-    return (
-        <Box
-            component="span"
-            aria-hidden
-            sx={{
-                width: 7,
-                height: 7,
-                borderRadius: '50%',
-                flexShrink: 0,
-                backgroundColor: moduleKey ? getModuleColor(moduleKey).main : 'transparent',
-            }}
-        />
     );
 }
 
@@ -523,7 +461,7 @@ function NotificationBell() {
                             elevation={8}
                             {...hoverProps}
                             sx={{
-                                width: 320,
+                                width: `min(320px, calc(100vw - ${FLOAT_INSET * 2}px))`,
                                 borderRadius: '12px',
                                 overflow: 'hidden',
                                 border: '1px solid var(--crm-gray-200)',
@@ -729,7 +667,24 @@ export function Navbar() {
     const { user, logout } = useAuth();
     // A docked detail drawer: end the bar 12px short of it and switch the right-side controls to icons.
     const panelWidth = useRightPanelWidth();
-    const compact = panelWidth > 0;
+    const docked = panelWidth > 0;
+    const theme = useTheme();
+    // Between `lg` and FULL_NAVBAR_MIN_WIDTH the pills only fit beside icon-only controls.
+    const narrowDesktop = useMediaQuery(
+        `(min-width:${theme.breakpoints.values.lg}px) and (max-width:${FULL_NAVBAR_MIN_WIDTH - 0.05}px)`
+    );
+    // Phones: Create and the user menu shrink to icons so the bar fits a 320px screen.
+    const isPhone = useMediaQuery(theme.breakpoints.down('sm'));
+    const compact = docked || narrowDesktop;
+
+    // Below `lg` the nav pills live in the menu drawer.
+    const [menuOpen, setMenuOpen] = useState(false);
+    const [menuPath, setMenuPath] = useState('');
+    const openMenu = () => {
+        // Read on open (not usePathname) so the navbar never needs a Suspense boundary around it.
+        setMenuPath(window.location.pathname);
+        setMenuOpen(true);
+    };
 
     const handleLogout = async () => {
         try {
@@ -782,13 +737,40 @@ export function Navbar() {
                 sx={{
                     justifyContent: 'space-between',
                     minHeight: `${NAVBAR_HEIGHT}px !important`,
-                    pl: { xs: 1.5, md: 1.75 },
-                    pr: { xs: 1.5, md: 2 },
+                    pl: { xs: 1.25, md: 1.75 },
+                    pr: { xs: 1.25, md: 2 },
                 }}
             >
 
                 {/* ── LEFT: Logo + Nav pills ── */}
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: compact ? 1 : { xs: 1, md: 2 }, minWidth: 0 }}>
+                    {/* Menu button (phones / tablets): opens the drawer with the nav groups */}
+                    <IconButton
+                        onClick={openMenu}
+                        aria-label="Open menu"
+                        aria-haspopup="dialog"
+                        aria-expanded={menuOpen}
+                        size="small"
+                        sx={{
+                            display: { xs: 'inline-flex', lg: 'none' },
+                            width: 36,
+                            height: 36,
+                            flexShrink: 0,
+                            borderRadius: '8px',
+                            border: '1px solid var(--mui-palette-border-main)',
+                            color: 'var(--mui-palette-text-secondary)',
+                            backgroundColor: 'var(--mui-palette-background-paper)',
+                            transition: 'all 0.15s ease',
+                            '&:hover': {
+                                borderColor: 'var(--crm-blue-300)',
+                                backgroundColor: 'var(--mui-palette-primary-soft)',
+                                color: 'var(--crm-text-blue-700)',
+                            },
+                        }}
+                    >
+                        <MenuIcon sx={{ fontSize: 20 }} />
+                    </IconButton>
+
                     {/* Logo — clicks → dashboard */}
                     <Box
                         component={Link}
@@ -800,7 +782,7 @@ export function Navbar() {
                             gap: 1.2,
                             cursor: 'pointer',
                             flexShrink: 0,
-                            mr: compact ? 0.5 : { xs: 1, md: 2 },
+                            mr: compact ? 0.5 : { xs: 0, md: 2 },
                             transition: 'opacity 0.15s',
                             '&:hover': { opacity: 0.82 },
                         }}
@@ -812,8 +794,9 @@ export function Navbar() {
                             height={32}
                             style={{ width: '32px', height: '32px', objectFit: 'contain', borderRadius: '6px' }}
                         />
-                        {/* Compact bar: the name only stays on extra-wide screens, where there is room for it. */}
-                        <Box sx={{ display: compact ? { xs: 'none', xl: 'block' } : 'block' }}>
+                        {/* Docked drawer: the name only stays on extra-wide screens, where there is room for it.
+                            Phones show the logo alone. */}
+                        <Box sx={{ display: docked ? { xs: 'none', xl: 'block' } : { xs: 'none', sm: 'block' } }}>
                             <Typography
                                 sx={{
                                     fontSize: '0.85rem',
@@ -839,8 +822,8 @@ export function Navbar() {
                         </Box>
                     </Box>
 
-                    {/* Nav pills */}
-                    <Box sx={{ display: { xs: 'none', md: 'flex' }, alignItems: 'center', gap: 0.5 }}>
+                    {/* Nav pills (the menu drawer below `lg`) */}
+                    <Box sx={{ display: { xs: 'none', lg: 'flex' }, alignItems: 'center', gap: 0.5 }}>
                         {NAV_ITEMS.map((item) => (
                             <NavPill key={item.label} item={item} />
                         ))}
@@ -848,16 +831,18 @@ export function Navbar() {
                 </Box>
 
                 {/* ── RIGHT: Search + Create + User menu (icon-only while a drawer is docked) ── */}
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: compact ? 0.75 : 1.5, flexShrink: 0 }}>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: compact || isPhone ? 0.75 : 1.5, flexShrink: 0 }}>
 
                     {/* Global search (every module; Enter opens /search) */}
                     <GlobalSearch compact={compact} />
 
                     {/* Create button */}
-                    <CreateButton compact={compact} />
+                    <CreateButton compact={compact || isPhone} />
 
-                    {/* Light / dark / system */}
-                    <ThemeModeToggle />
+                    {/* Light / dark (in the menu drawer on phones) */}
+                    <Box sx={{ display: { xs: 'none', sm: 'flex' } }}>
+                        <ThemeModeToggle />
+                    </Box>
 
                     {/* Notification bell */}
                     <NotificationBell />
@@ -865,6 +850,7 @@ export function Navbar() {
                     {/* Vertical divider */}
                     <Box
                         sx={{
+                            display: { xs: 'none', sm: 'block' },
                             width: '1px',
                             height: 24,
                             backgroundColor: 'var(--crm-gray-200)',
@@ -873,10 +859,18 @@ export function Navbar() {
                     />
 
                     {/* User menu */}
-                    {user && <UserMenu user={user} onLogout={handleLogout} compact={compact} />}
+                    {user && <UserMenu user={user} onLogout={handleLogout} compact={compact || isPhone} />}
                 </Box>
             </Toolbar>
         </AppBar>
+        <MobileNavDrawer
+            open={menuOpen}
+            onClose={() => setMenuOpen(false)}
+            groups={NAV_ITEMS}
+            currentPath={menuPath}
+            user={user}
+            onLogout={handleLogout}
+        />
         </>
     );
 }

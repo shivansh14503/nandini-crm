@@ -212,12 +212,14 @@ function OverviewTabInner({
                 <Box
                     sx={{
                         display: 'flex',
-                        alignItems: 'center',
+                        // Phones: the two settings stack instead of squeezing side by side.
+                        flexDirection: { xs: 'column', sm: 'row' },
+                        alignItems: { xs: 'stretch', sm: 'center' },
                         p: 1.75,
                         border: '1px solid var(--mui-palette-border-main)',
                         borderRadius: '10px',
                         backgroundColor: 'var(--mui-palette-background-subtle)',
-                        gap: 2,
+                        gap: { xs: 1.5, sm: 2 },
                     }}
                 >
                     {/* Left: Account Verified */}
@@ -227,8 +229,11 @@ function OverviewTabInner({
                             display: 'flex',
                             alignItems: 'center',
                             justifyContent: 'space-between',
-                            pr: 2,
-                            borderRight: '1px solid var(--mui-palette-border-main)',
+                            gap: 1.5,
+                            pr: { xs: 0, sm: 2 },
+                            pb: { xs: 1.5, sm: 0 },
+                            borderRight: { xs: 'none', sm: '1px solid var(--mui-palette-border-main)' },
+                            borderBottom: { xs: '1px solid var(--mui-palette-border-main)', sm: 'none' },
                         }}
                     >
                         <Box>
@@ -302,7 +307,8 @@ function OverviewTabInner({
                             display: 'flex',
                             alignItems: 'center',
                             justifyContent: 'space-between',
-                            pl: 1,
+                            gap: 1.5,
+                            pl: { xs: 0, sm: 1 },
                         }}
                     >
                         <Box>

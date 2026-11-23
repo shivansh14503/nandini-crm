@@ -101,6 +101,8 @@ export function FormStickyFooter({
                 mt: 2,
                 display: 'flex',
                 alignItems: 'center',
+                // Narrow screens: the buttons drop below the status instead of squeezing it.
+                flexWrap: 'wrap',
                 gap: 1,
             }}
         >

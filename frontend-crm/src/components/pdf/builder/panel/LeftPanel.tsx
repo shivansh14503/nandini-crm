@@ -19,7 +19,18 @@ export function LeftPanel(props: { meta: TemplateMeta; onMetaChange: (patch: Par
         <Box
             component="aside"
             aria-label="Template builder panel"
-            sx={{ width: { xs: '100%', md: 380 }, flexShrink: 0, display: 'flex', flexDirection: 'column', minHeight: 0, borderRight: { md: '1px solid var(--crm-slate-200)' }, backgroundColor: 'var(--mui-palette-background-paper)' }}
+            sx={{
+                width: { xs: '100%', md: 380 },
+                // Stacked above the canvas (below `md`): a fixed height with its own scroll, so the canvas stays reachable.
+                height: { xs: 'min(560px, 70vh)', md: 'auto' },
+                flexShrink: 0,
+                display: 'flex',
+                flexDirection: 'column',
+                minHeight: 0,
+                borderRight: { md: '1px solid var(--crm-slate-200)' },
+                borderBottom: { xs: '1px solid var(--crm-slate-200)', md: 'none' },
+                backgroundColor: 'var(--mui-palette-background-paper)',
+            }}
         >
             <Box role="tablist" aria-label="Panel" sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', borderBottom: '1px solid var(--mui-palette-border-main)' }}>
                 {tabs.map((t) => {
