@@ -491,7 +491,7 @@ export function BuilderCanvas({
                             )}
                         </Box>
                     </Box>
-                    <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 1, flexShrink: 0 }}>
+                    <Box sx={{ flexShrink: 0 }}>
                         <Box aria-hidden sx={{ display: 'flex', gap: 0.5, color: 'var(--mui-palette-text-muted)' }}>
                             {[EditOutlinedIcon, VisibilityOutlinedIcon, CloseIcon].map((Icon, i) => (
                                 <Box key={i} sx={{ width: 30, height: 30, borderRadius: '8px', border: '1px solid var(--mui-palette-border-main)', display: { xs: i === 1 ? 'none' : 'grid', sm: 'grid' }, placeItems: 'center' }}>
@@ -499,11 +499,11 @@ export function BuilderCanvas({
                                 </Box>
                             ))}
                         </Box>
-                        {header.rating && <RatingBadge rating={header.rating.value} reason={header.rating.reason} variant="block" />}
                     </Box>
                 </Box>
 
-                <Box {...(dropping ? dndZone('badges') : {})} sx={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 0.8, mt: 1.8, minHeight: 26, position: 'relative' }}>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mt: 1.8 }}>
+                <Box {...(dropping ? dndZone('badges') : {})} sx={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 0.8, minHeight: 26, position: 'relative', flex: 1, minWidth: 0 }}>
                     {header.badges.map(({ badge, item }) =>
                         item ? (
                             edit ? (
@@ -557,6 +557,12 @@ export function BuilderCanvas({
                             Badge
                         </Box>
                     )}
+                </Box>
+                {header.rating && (
+                    <Box sx={{ flexShrink: 0 }}>
+                        <RatingBadge rating={header.rating.value} reason={header.rating.reason} variant="block" />
+                    </Box>
+                )}
                 </Box>
             </Box>
 

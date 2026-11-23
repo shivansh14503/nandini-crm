@@ -61,8 +61,6 @@ export function RatingBadge({ rating, variant = 'chip', reason, sx }: RatingBadg
                 fontSize: size.fontSize,
                 fontWeight: 800,
                 letterSpacing: variant === 'block' ? '0.02em' : 0,
-                // The block spans the width of the buttons above it.
-                alignSelf: variant === 'block' ? 'stretch' : undefined,
                 whiteSpace: 'nowrap',
                 lineHeight: 1,
                 cursor: 'default',
