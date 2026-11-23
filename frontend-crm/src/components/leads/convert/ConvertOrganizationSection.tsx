@@ -71,7 +71,10 @@ export function ConvertOrganizationSection() {
                 wasLinked.current = false;
                 const defaults = (defaultValues ?? {}) as Partial<F>;
                 for (const field of ORGANIZATION_FIELDS) setValue(field, defaults[field] as never, { shouldDirty: true });
-                setValue('extraFields.organizations', defaults.extraFields?.organizations ?? {}, { shouldDirty: true });
+                const extras = { ...defaults.extraFields?.organizations };
+                // A trade name that was the lead's organization name follows the name now in the field.
+                if (extras.tradeName === defaults.organizationName) extras.tradeName = getValues('organizationName') ?? '';
+                setValue('extraFields.organizations', extras, { shouldDirty: true });
             }
             return;
         }
@@ -84,9 +87,26 @@ export function ConvertOrganizationSection() {
         setValue('leadSource', existing.leadSource || getValues('opportunityLeadSource') || '', opts);
         setValue('memberOf', existing.memberOf ?? '', opts);
         setValue('organizationDescription', existing.addDescriptionAndScope ?? '', opts);
-        // The other fields an admin put on Convert Lead show the organization's own values.
-        setValue('extraFields.organizations', extraValuesFrom(configs, 'organizations', existing as unknown as Record<string, unknown>), opts);
+        // The other fields an admin put on Convert Lead show the organization's own values (a blank trade name is its
+        // name, as the Organization form shows it).
+        const extras = extraValuesFrom(configs, 'organizations', existing as unknown as Record<string, unknown>);
+        if ('tradeName' in extras) extras.tradeName = existing.tradeName || existing.organizationName;
+        setValue('extraFields.organizations', extras, opts);
     }, [existing, defaultValues, setValue, getValues, configs]);
+
+    // Trade Name starts as the organization name and follows it while the two match, as on the Organization form.
+    // A linked organization shows its own trade name (above).
+    const previousName = useRef<string | null>(null);
+    useEffect(() => {
+        const name = organizationName ?? '';
+        const previous = previousName.current;
+        previousName.current = name;
+        if (existing || previous === null || previous === name) return;
+        const tradeName = getValues('extraFields.organizations.tradeName');
+        if (typeof tradeName === 'string' && (tradeName === '' || tradeName === previous)) {
+            setValue('extraFields.organizations.tradeName', name, { shouldDirty: true });
+        }
+    }, [organizationName, existing, getValues, setValue]);
 
     /**
      * A linked organization was removed (name cleared with [X] or deleted): back to the organization the lead brought,
