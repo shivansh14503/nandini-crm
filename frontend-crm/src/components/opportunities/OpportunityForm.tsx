@@ -13,7 +13,7 @@ import ReceiptLongOutlinedIcon from '@mui/icons-material/ReceiptLongOutlined';
 
 import { type BreadcrumbItem } from '../common/AppBreadcrumbs';
 import { AppToast } from '../common/AppToast';
-import { setSaveFlash } from '@/utils/saveFlash';
+import { setSaveFlash, useSaveFlash } from '@/utils/saveFlash';
 import { CommonFormLayout } from '../common/CommonFormLayout';
 import { type FormTabDefinition } from '../common/Drawer';
 import { useRhfForm } from '../forms/rhf';
@@ -192,6 +192,9 @@ export default function OpportunityForm({
         },
         [setValue]
     );
+
+    // A lead conversion lands on the new opportunity's detail page with its message (see ConvertLeadForm).
+    useSaveFlash(opportunityId ? ROUTES.OPPORTUNITY_DETAIL(opportunityId) : '', (flash) => showToast(flash.message, flash.severity));
 
     // ── Submit Logic with Validation ──────────────────────────────────────────
     const handleSave = createSubmitHandler(async (values) => {

@@ -646,7 +646,7 @@ function FallbackOverviewProvider({
             addDescriptionAndScope: defaultValues?.addDescriptionAndScope || '',
             accountVerified: defaultValues?.accountVerified || false,
             provideSupport: defaultValues?.provideSupport || 'Yes',
-            registrationType: defaultValues?.registrationType || 'Registered',
+            registrationType: defaultValues?.registrationType || '',
             gstNumber: defaultValues?.gstNumber || defaultValues?.gstNumber || '',
             ...defaultValues,
         },

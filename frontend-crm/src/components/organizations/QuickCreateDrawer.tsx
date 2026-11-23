@@ -117,7 +117,7 @@ export function QuickCreateDrawer({ open, onClose, onSave }: QuickCreateDrawerPr
             billingState: formData.billingState,
             billingPostalCode: '110001',
             billingCountry: DEFAULT_COUNTRY_CODE,
-            registrationType: 'Registered',
+            registrationType: formData.gstNumber ? 'Registered' : '',
             gstNumber: formData.gstNumber.toUpperCase(),
             panNumber: formData.gstNumber ? formData.gstNumber.substring(2, 12).toUpperCase() : '',
             assignedTo: formData.assignedTo,

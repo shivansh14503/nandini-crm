@@ -111,7 +111,8 @@ const DEFAULT_FORM: OrganizationFormData = {
     copyAddressFromBilling: false,
 
     // Tax & Bank Details
-    registrationType: 'Registered',
+    // Empty until picked (Form Builder decides whether it's required), so nothing is chosen for the user.
+    registrationType: '',
     panNumber: '',
     msmeRegnNumber: '',
     accountName: '',

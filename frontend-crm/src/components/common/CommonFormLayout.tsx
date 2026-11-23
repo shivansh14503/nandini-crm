@@ -103,7 +103,8 @@ export interface CommonFormLayoutProps {
     saveSx?: SxProps<Theme>;
     /**
      * Step-by-step checks (`useRhfForm`'s `stepwise`): Save reports the first missing field in the form's order
-     * (tab by tab, top to bottom), and a new record with several tabs shows "Next" until nothing is missing.
+     * (tab by tab, top to bottom), and a new record with several tabs shows "Next" on every tab before the last, and
+     * on the last one until nothing is missing.
      */
     stepwise?: FormStepwise;
     /**
@@ -306,12 +307,13 @@ export function CommonFormLayout({
             return;
         }
         const current = stepTabIds.indexOf(effectiveActiveTab ?? '');
-        const next = issues.find((i) => tabRankOf(i.path) > current) ?? issues[0];
-        if (!next) {
+        const next = issues.find((i) => tabRankOf(i.path) > current);
+        // A later tab with nothing required is still a step: Next opens it so its fields aren't missed.
+        const tab = next ? issueTab(next.path) : current >= 0 && current < stepTabIds.length - 1 ? stepTabIds[current + 1] : issues[0] && issueTab(issues[0].path);
+        if (!tab && !issues[0]) {
             onSave();
             return;
         }
-        const tab = issueTab(next.path);
         showStepTab(tab, focusFirstIssueOf(tab));
     };
     /** Save: the first missing field in the form's order (any tab), or the form's own save once nothing is missing. */
@@ -343,7 +345,10 @@ export function CommonFormLayout({
 
     /** "Next" while a new record still misses something (re-read on every change), then the form's Save. */
     const renderFooter = () => {
-        const pending = nextEnabled && Boolean(stepwise?.issues().length);
+        // Every tab before the last gets "Next" (even one with nothing required), so later tabs aren't missed.
+        const activeIndex = stepTabIds.indexOf(effectiveActiveTab ?? '');
+        const laterTab = activeIndex >= 0 && activeIndex < stepTabIds.length - 1;
+        const pending = nextEnabled && (laterTab || Boolean(stepwise?.issues().length));
         return (
             <FormStickyFooter
                 onCancel={handleCancel}

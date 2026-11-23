@@ -117,7 +117,8 @@ const organizationFields = z.object({
     copyAddressFromBilling: z.boolean().default(false),
 
     // Tax & bank
-    registrationType: textWithDefault('Registration Type', 30, 'Registered'),
+    // No default: left blank, it stays blank (whether it's required comes from the form configuration).
+    registrationType: optionalText('Registration Type', 30),
     panNumber: optionalPan,
     msmeRegnNumber: optionalUpperText('MSME Regn. Number', L.msme),
     accountName: optionalText('Account Name', L.organizationName),
