@@ -2,6 +2,7 @@ import { PrismaMssql } from '@prisma/adapter-mssql';
 import { PrismaClient } from '../generated/prisma/client.js';
 import { ENV } from './env.js';
 import { logger } from './logger.js';
+import { assertPrismaClientCurrent } from './prismaClientCheck.js';
 
 /** Single Prisma client for the process, connected through the SQL Server driver adapter (Prisma 7). */
 export const prisma = new PrismaClient({
@@ -25,6 +26,8 @@ const RETRY_DELAY_MS = 5000;
  * Retries up to 3 times to allow Azure SQL Serverless auto-pause resumption.
  */
 export async function connectDatabase(): Promise<void> {
+    // A client generated from an older schema would fail later, at first use of a new table or column.
+    assertPrismaClientCurrent();
     for (let attempt = 1; attempt <= MAX_CONNECT_RETRIES; attempt++) {
         try {
             await prisma.$connect();

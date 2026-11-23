@@ -338,8 +338,8 @@ every check) hashes the ledger up to its latest block; the JSON is written to a 
 folder per database, never overwritten) and listed in `AuditDigest`. "Verify integrity" runs
 `sys.sp_verify_database_ledger` with every digest **file** (never the database copy, which an attacker with database
 access could change too). Both procedures need `ALLOW_SNAPSHOT_ISOLATION ON` (migration
-`20261123120000_audit_snapshot_isolation`, which runs outside a transaction) and, for a non-owner login,
-`GRANT VIEW LEDGER CONTENT` and `GRANT GENERATE LEDGER DIGEST` on the database.
+`20261123120000_audit_snapshot_isolation`, which runs outside a transaction). Verifying needs `VIEW LEDGER CONTENT`
+(`GRANT VIEW LEDGER CONTENT TO <login>` when the app's login isn't db_owner); generating a digest needs no grant.
 
 ### 4.17 `TableFilter`
 

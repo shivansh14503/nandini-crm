@@ -113,7 +113,10 @@ Order of global middleware (`src/app.ts`): `helmet` → `cors` (credentials, LAN
 `start()` in `src/app.ts`:
 
 1. Start connecting to Redis **in the background** (never blocks startup).
-2. Connect to SQL Server, `SELECT 1`, up to 3 attempts 5 s apart (Azure SQL Serverless may be waking up). Failure = exit 1.
+2. Check the generated Prisma client matches `prisma/schema.prisma` (every model and column; `prismaClientCheck.ts`).
+   A client older than the schema (code updated without `npm install` / `npm run prisma:generate`) = exit 1 naming
+   the fix. Then connect to SQL Server, `SELECT 1`, up to 3 attempts 5 s apart (Azure SQL Serverless may be waking
+   up). Failure = exit 1.
 3. Start the optional DB keep-alive ping (`DB_KEEPALIVE_INTERVAL_MS`).
 4. Seed missing form-field / dropdown defaults (`seedFormConfigsSafely`), never overwriting admin edits.
 5. Seed built-in PDF templates (Classic, Modern, Compact).
@@ -402,8 +405,8 @@ flowchart TB
 - Health probe: `GET /api/health` (excluded from request logs).
 - Audit log: `AUDIT_DIGEST_DIR` must point at storage the database server can't write (another disk, a mounted
   share or blob container), or the digests prove little; `AUDIT_EXPORT_DIR` (default the OS temp folder) needs room
-  for a day of exports (a CSV of a million entries is ~0.5 GB, an Excel file of 500 k entries ~45 MB). A non-owner database login needs
-  `GRANT VIEW LEDGER CONTENT, GENERATE LEDGER DIGEST TO <user>` for the Integrity panel.
+  for a day of exports (a CSV of a million entries is ~0.5 GB, an Excel file of 500 k entries ~45 MB). A database login that isn't db_owner needs
+  `GRANT VIEW LEDGER CONTENT TO <user>` for "Verify integrity".
 
 ## 10. Known gaps and risks
 

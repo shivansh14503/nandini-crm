@@ -21,8 +21,8 @@ import { databaseFolder, digestFileName, isVerificationFailure, ledgerTime, pars
  *  • "Verify integrity" checks the ledger against every saved digest file plus a fresh one, as a background job (it
  *    reads the whole ledger: ~100 s per million entries) on its own connection with a long timeout. The result is a
  *    LEDGER_VERIFY entry: INFO when verified, CRITICAL when the ledger doesn't match, WARNING when it couldn't run.
- * Needs ALLOW_SNAPSHOT_ISOLATION (migration 20261123120000) and, for a login that isn't db_owner,
- * `GRANT VIEW LEDGER CONTENT` and `GRANT GENERATE LEDGER DIGEST`.
+ * Needs ALLOW_SNAPSHOT_ISOLATION (migration 20261123120000); verifying needs `VIEW LEDGER CONTENT` (granted when the
+ * login isn't db_owner). Generating a digest needs no grant.
  */
 
 const VERIFY_JOB_ID = 'ledger-verify';
