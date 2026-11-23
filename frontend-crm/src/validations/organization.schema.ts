@@ -79,7 +79,8 @@ export const organizationFieldsSchema = z.object({
         copyAddressFromBilling: z.boolean().default(false),
 
         // Tax & Bank Details
-        registrationType: configurableOption('Registration Type', 'Registered'),
+        // Blank stays blank: whether it's required comes from the form configuration.
+        registrationType: optionalString,
         panNumber: zodPanOptional,
         msmeRegnNumber: optionalText('MSME Regn. Number', L.msme),
         accountName: optionalText('Account Name', L.organizationName),

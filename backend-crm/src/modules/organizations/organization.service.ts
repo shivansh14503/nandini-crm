@@ -336,7 +336,7 @@ function toOrganizationData(
         shippingLongitude: nullable(input.shippingLongitude),
         copyAddressFromBilling: input.copyAddressFromBilling,
 
-        registrationType: input.registrationType,
+        registrationType: nullable(input.registrationType),
         panNumber: input.panNumber ?? null,
         msmeRegnNumber: input.msmeRegnNumber ?? null,
         accountName: nullable(input.accountName),

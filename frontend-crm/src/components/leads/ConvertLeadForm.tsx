@@ -163,9 +163,17 @@ export function ConvertLeadForm({ leadId, breadcrumbItems }: ConvertLeadFormProp
                 : `Linked existing contact "${result.contact.name}".`;
             const opportunityNote = result.opportunity ? '' : ' No opportunity was created.';
 
+            const message = `Lead converted successfully! ${orgNote} ${contactNote}${opportunityNote}`;
             reset(values);
-            setSaveFlash({ listPath: ROUTES.LEADS, message: `Lead converted successfully! ${orgNote} ${contactNote}${opportunityNote}`, severity: 'success', recordId: leadId });
-            router.push(ROUTES.LEADS);
+            if (result.opportunity) {
+                // Straight to the new opportunity's detail page, which shows the message.
+                const detailPath = ROUTES.OPPORTUNITY_DETAIL(result.opportunity.id);
+                setSaveFlash({ listPath: detailPath, message, severity: 'success' });
+                router.push(detailPath);
+            } else {
+                setSaveFlash({ listPath: ROUTES.LEADS, message, severity: 'success', recordId: leadId });
+                router.push(ROUTES.LEADS);
+            }
         } catch (err: unknown) {
             showToast(err instanceof Error ? err.message : 'Failed to convert lead.', 'error');
         }

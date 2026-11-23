@@ -212,7 +212,7 @@ function FallbackTaxBankProvider({
 }) {
     const methods = useForm<OrganizationFormData>({
         defaultValues: {
-            registrationType: defaultValues?.registrationType || 'Registered',
+            registrationType: defaultValues?.registrationType || '',
             gstNumber: defaultValues?.gstNumber || '',
             ...defaultValues,
         },
