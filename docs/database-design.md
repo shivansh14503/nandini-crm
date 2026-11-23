@@ -1,7 +1,7 @@
 # Nandini CRM — Database Design
 
-> **Status:** living document, generated from `backend-crm/prisma/schema.prisma` and `prisma/migrations/` (55 migrations,
-> latest `20261121200000_audit_ledger`). Update it in the same change as any schema migration.
+> **Status:** living document, generated from `backend-crm/prisma/schema.prisma` and `prisma/migrations/` (58 migrations,
+> latest `20261123140000_drawer_layouts`). Update it in the same change as any schema migration.
 > Related: [System design](system-design.md) · [API plan](api-plan.md) · [Build plan](build-plan.md)
 
 ---
@@ -27,7 +27,7 @@
 | Partner master | `PartnerCompany`, `PartnerCompanyContact` |
 | Reference masters | `NatureOfCall`, `Country`, `Subdivision`, `City` |
 | Numbering | `DocumentSeriesSettings`, `DocumentSeries`, `SequenceCounter` |
-| Customisation | `DropdownCategory`, `DropdownOption`, `FormFieldDefinition`, `ModuleSetting` |
+| Customisation | `DropdownCategory`, `DropdownOption`, `FormFieldDefinition`, `ModuleSetting`, `DrawerLayout`, `DrawerPiece` |
 | PDF | `PdfTemplate`, `PdfAsset`, `PdfSavedItem` |
 | Audit & UI state | `AuditLog`, `AuditExport`, `AuditDigest`, `TableFilter`, `ModuleScorecard` |
 | Email checks | `EmailValidationRun` |
@@ -294,6 +294,17 @@ and `contacts` / `organizations` / `opportunities` › `convertSections` = Conve
 sections made on Convert Lead (`custom`, keys prefixed `convert_`). No row = Convert Lead uses the form's sections. A
 field's place in them is its `convertSectionKey`; deleting a section moves its fields, never deletes them. Convert Lead
 shows a section only while one of its fields is on it.
+
+Record side drawer layouts (Form Customization › Drawer Layout, migration `20261123140000_drawer_layouts`):
+
+| Table | Purpose | Key rules |
+| --- | --- | --- |
+| `DrawerLayout` | The admin's layout of one module's record drawer | PK `module` (today only `leads`); `layoutJson` = the layout document (header: title / subtitle fields, avatar, badges; per form tab key: sections → blocks), validated by `modules/drawer-layouts/document/schema.ts` on save; `version` (default 1, +1 per save, optimistic concurrency: a stale save is a 409); `updatedBy`, timestamps. No row = the built-in layout (`frontend-crm/src/components/common/Drawer/layout/defaultLayouts.ts`); Reset deletes the row |
+| `DrawerPiece` | A section saved to the builder's Pieces library | `id` (uuid), `module`, `name`, `sectionJson` (one layout section), `createdBy`, `createdAt`; index `(module)`; at most 100 per module; deletes are permanent |
+
+Layouts and pieces reference fields by `fieldKey` (plus the module's system values, e.g. `leadCode`, `rating`) and
+addresses by prefix (`primary`, `other`). Saving checks them against the active fields; a field removed later is left
+out when the layout is read (the builder says so and the next save drops it).
 
 ### 4.15 PDF tables
 

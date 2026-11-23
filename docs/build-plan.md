@@ -160,6 +160,24 @@ access decided later); log **all changes** plus sign-ins and refused access; **k
 Exit: an admin can answer "who changed this lead's Assigned To last week, from which screen and IP?" in under a
 minute, undo it, and prove the log hasn't been altered.
 
+### Phase 12 — Admin-designed record drawers (P2, started 2026-11-23)
+
+Admins lay out a record's side drawer (header, badges, each form tab's sections) by drag and drop, like the PDF
+builder. Decisions (owner, 2026-11-23): one layout per module; header, badges and tab contents customizable, footer
+later; drawer tabs mirror the form's tabs; today's coded cards become ready-made pieces that can be rebuilt; side drawer
+only (not the full record page); Save goes live straight away; Leads first.
+
+- [x] **Leads pilot** (2026-11-23): `DrawerLayout` / `DrawerPiece` tables, `/api/drawer-layouts` + `/api/drawer-pieces`
+      ([API plan §2.5b](api-plan.md#25b-record-drawer-layouts-form-customization--drawer-layout)), audited in the Form
+      Customization trail; the lead drawer renders from the layout (built-in layout = the old hand-built drawer);
+      Form Customization › Leads › Drawer Layout builder: fields / blocks / pieces palette, live drawer canvas with a
+      sample or real lead, settings panel, undo / redo, Save / Reset, Pieces library; avatar = preset icon, initials or
+      any emoji (the OS emoji panel); responsive (3 panes / 2 panes / phone with a bottom sheet) with touch drag and
+      add / move buttons.
+- [ ] The other drawers: Opportunities, Quotations, Organizations, Contacts, Products, Tickets, Partner Companies
+      (each needs its system values, address prefixes, built-in layout and pieces).
+- [ ] Footer actions in the layout.
+
 ## Part 3 — Keeping these documents current
 
 These four documents are part of the codebase. Rules (also in the root `CLAUDE.md`):

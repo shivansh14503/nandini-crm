@@ -1,0 +1,110 @@
+import type { DrawerBlock, DrawerLayoutDocument, DrawerSection } from './schema.js';
+
+/**
+ * Pure helpers over a drawer layout: the form fields it points at (checked on save, pruned in the builder when a
+ * field is removed from the form), a readable summary for the audit log, and copying a section with fresh ids.
+ */
+
+export interface FieldRef {
+    field: string;
+    /** Where it is used, e.g. "Header title", "Badge 2", "Overview › KEY FACTS". */
+    where: string;
+}
+
+const sectionName = (tab: string, section: DrawerSection) => `${tab} › ${section.title.trim() || 'Untitled section'}`;
+
+/** Every field key the layout shows (header title / subtitle / badges and field blocks), with where it is used. */
+export function layoutFieldRefs(doc: DrawerLayoutDocument): FieldRef[] {
+    const refs: FieldRef[] = [{ field: doc.header.titleField, where: 'Header title' }];
+    doc.header.subtitleFields.forEach((field) => refs.push({ field, where: 'Header subtitle' }));
+    doc.header.badges.forEach((b, i) => refs.push({ field: b.field, where: `Badge ${i + 1}` }));
+    for (const [tab, sections] of Object.entries(doc.tabs)) {
+        for (const section of sections) refs.push(...sectionFieldRefs(section, tab));
+    }
+    return refs;
+}
+
+export function sectionFieldRefs(section: DrawerSection, tab = 'Section'): FieldRef[] {
+    return section.blocks.flatMap((b) => (b.type === 'field' ? [{ field: b.field, where: sectionName(tab, section) }] : []));
+}
+
+/** Address prefixes the layout's address blocks use (e.g. `primary`). */
+export function layoutAddressPrefixes(doc: DrawerLayoutDocument): string[] {
+    return Object.values(doc.tabs).flatMap((sections) => sections.flatMap((s) => s.blocks.flatMap((b) => (b.type === 'address' ? [b.prefix] : []))));
+}
+
+/**
+ * The layout minus anything that points at a field (or address) the form no longer has: such badges, subtitle
+ * entries and blocks are dropped; an unknown title falls back to `fallbackTitle`. `removed` counts what was dropped.
+ */
+export function pruneLayout(
+    doc: DrawerLayoutDocument,
+    isKnownField: (key: string) => boolean,
+    isKnownAddress: (prefix: string) => boolean,
+    fallbackTitle: string,
+): { doc: DrawerLayoutDocument; removed: number } {
+    let removed = 0;
+    const keepBlock = (b: DrawerBlock) => {
+        const ok = b.type === 'field' ? isKnownField(b.field) : b.type === 'address' ? isKnownAddress(b.prefix) : true;
+        if (!ok) removed++;
+        return ok;
+    };
+    const known = (key: string) => {
+        const ok = isKnownField(key);
+        if (!ok) removed++;
+        return ok;
+    };
+    const subtitleFields = doc.header.subtitleFields.filter(known);
+    const badges = doc.header.badges.filter((b) => known(b.field));
+    const titleField = known(doc.header.titleField) ? doc.header.titleField : fallbackTitle;
+    const tabs = Object.fromEntries(
+        Object.entries(doc.tabs).map(([tab, sections]) => [tab, sections.map((s) => ({ ...s, blocks: s.blocks.filter(keepBlock) }))]),
+    );
+    if (removed === 0) return { doc, removed };
+    return { doc: { ...doc, header: { ...doc.header, titleField, subtitleFields, badges }, tabs }, removed };
+}
+
+/** A copy of the section (and its blocks) with new ids, e.g. when a library piece is inserted. */
+export function cloneSection(section: DrawerSection, newId: (prefix: string) => string): DrawerSection {
+    return { ...section, id: newId('s'), blocks: section.blocks.map((b) => ({ ...b, id: newId('b') })) };
+}
+
+const describeAvatar = (doc: DrawerLayoutDocument) =>
+    doc.header.avatar.kind === 'icon' ? `Icon: ${doc.header.avatar.icon}` : doc.header.avatar.kind === 'emoji' ? `Emoji ${doc.header.avatar.emoji}` : 'Initials';
+
+const describeBlock = (b: DrawerBlock): string => {
+    switch (b.type) {
+        case 'field':
+            return b.label.trim() ? `${b.field} ("${b.label.trim()}")` : b.field;
+        case 'address':
+            return `${b.prefix} address`;
+        case 'customFields':
+            return 'other custom fields';
+        case 'heading':
+            return `heading "${b.text}"`;
+        case 'text':
+            return 'static text';
+        default:
+            return b.type;
+    }
+};
+
+/**
+ * What an admin would compare between two versions, one entry per part: header pieces, then each tab's sections as
+ * "TITLE: field, field, …". Diffing two summaries gives a readable audit entry instead of two JSON blobs.
+ */
+export function summarizeLayout(doc: DrawerLayoutDocument): Record<string, string> {
+    const summary: Record<string, string> = {
+        title: doc.header.titleField,
+        subtitle: doc.header.subtitleFields.join(', ') || '(none)',
+        avatar: describeAvatar(doc) + (doc.header.hotAvatar ? ', red when Hot' : ''),
+        badges: doc.header.badges.map((b) => `${b.prefix}${b.field} (${b.style})`).join(', ') || '(none)',
+    };
+    for (const [tab, sections] of Object.entries(doc.tabs)) {
+        summary[`tab:${tab}`] =
+            sections
+                .map((s) => `${s.title.trim() || 'Untitled'} [${s.columns} col, ${s.style}]: ${s.blocks.map(describeBlock).join(', ') || 'empty'}`)
+                .join(' | ') || '(empty)';
+    }
+    return summary;
+}

@@ -8,6 +8,7 @@ import ViewQuiltOutlinedIcon from '@mui/icons-material/ViewQuiltOutlined';
 import VisibilityOutlinedIcon from '@mui/icons-material/VisibilityOutlined';
 import HistoryOutlinedIcon from '@mui/icons-material/HistoryOutlined';
 import PublicOutlinedIcon from '@mui/icons-material/PublicOutlined';
+import ViewSidebarOutlinedIcon from '@mui/icons-material/ViewSidebarOutlined';
 import { useQueryClient } from '@tanstack/react-query';
 import { AppBreadcrumbsBar } from '@/components/common/AppBreadcrumbsBar';
 import { AppToast } from '@/components/common/AppToast';
@@ -36,10 +37,17 @@ import LocalFireDepartmentOutlinedIcon from '@mui/icons-material/LocalFireDepart
 import { isAdminRole } from '@/utils/adminRoles';
 import { CodedFieldDefaultsProvider, type CodedFieldDefaultsMap } from '@/context/CodedFieldDefaultsContext';
 import { CodedDefaultsHarvester } from './CodedDefaultsHarvester';
+import { DrawerLayoutPanel } from './drawer-layout/DrawerLayoutPanel';
+import { DRAWER_LAYOUT_MODULES, type DrawerLayoutModule } from '@/lib/drawer-layout';
 
 const NO_CODED_DEFAULTS: CodedFieldDefaultsMap = {};
 
-type BuilderView = 'dropdowns' | 'fields' | 'rules' | 'preview';
+type BuilderView = 'dropdowns' | 'fields' | 'rules' | 'preview' | 'drawer';
+
+/** Forms whose record side drawer an admin can lay out (Drawer Layout tab). */
+const isDrawerLayoutModule = (m: CrmModuleKey | null): m is DrawerLayoutModule => Boolean(m && (DRAWER_LAYOUT_MODULES as readonly string[]).includes(m));
+
+const LEAVE_DRAWER_MESSAGE = 'You have unsaved drawer layout changes. Leave without saving them?';
 
 const VIEWS = [
     { key: 'dropdowns' as const, label: 'Dropdowns', icon: <ListAltOutlinedIcon sx={{ fontSize: 17 }} /> },
@@ -47,6 +55,8 @@ const VIEWS = [
     // Leads only: how a lead's Rating (Hot / Warm / Cold) is worked out.
     { key: 'rules' as const, label: 'Rating Rules', icon: <LocalFireDepartmentOutlinedIcon sx={{ fontSize: 17 }} /> },
     { key: 'preview' as const, label: 'Live Preview', icon: <VisibilityOutlinedIcon sx={{ fontSize: 17 }} /> },
+    // What the record's side drawer shows (header, badges, each tab's sections); saved on its own, not with the form draft.
+    { key: 'drawer' as const, label: 'Drawer Layout', icon: <ViewSidebarOutlinedIcon sx={{ fontSize: 17 }} /> },
 ];
 
 /** Asks before leaving the page (reload, close, or an in-app link) while there are unsaved changes. */
@@ -88,7 +98,9 @@ export function FormCustomizationView() {
     const { draft: configs, ops, dirty, saving, actions, save, discard } = useConfigDraft(savedConfigs, refetch);
     const changed = useMemo(() => changedIds(ops), [ops]);
     const [discardOpen, setDiscardOpen] = useState(false);
-    useLeaveGuard(dirty);
+    /** The Drawer Layout builder has unsaved edits (they are saved separately from the form draft). */
+    const [drawerDirty, setDrawerDirty] = useState(false);
+    useLeaveGuard(dirty || drawerDirty);
 
     /** No form is open until the admin picks one in the selector. */
     const [module, setModule] = useState<CrmModuleKey | null>(null);
@@ -159,11 +171,15 @@ export function FormCustomizationView() {
     const convertTotal = CONVERT_RECORDS.reduce((sum, r) => sum + convertCounts[r.module], 0);
     const convertUnsaved = CONVERT_RECORDS.some((r) => unsavedModules.has(r.module));
     const group = module ? (convert ? moduleGroupOf('leads') : moduleGroupOf(module)) : null;
+    /** Leaving the Drawer Layout builder drops its unsaved edits: ask first. */
+    const leaveDrawerOk = () => !drawerDirty || window.confirm(LEAVE_DRAWER_MESSAGE);
     const openModule = (next: CrmModuleKey) => {
+        if (next !== module && !leaveDrawerOk()) return;
         setConvert(false);
         setModule(next);
     };
     const openConvert = () => {
+        if (!leaveDrawerOk()) return;
         setConvert(true);
         if (!isConvertModule(module)) setModule(CONVERT_RECORDS[0].module);
     };
@@ -181,8 +197,14 @@ export function FormCustomizationView() {
         );
     }, [showRules, configs, ops]);
     // The Rating Rules tab belongs to Leads: on any other form it shows Dropdowns instead.
-    const view: BuilderView = selectedView === 'rules' && !showRules ? 'dropdowns' : selectedView;
-    const viewItems = VIEWS.filter((v) => v.key !== 'rules' || showRules).map((v) => ({
+    const showDrawer = isDrawerLayoutModule(module) && !convert;
+    // Rating Rules and Drawer Layout exist only on some forms: elsewhere the page shows Dropdowns instead.
+    const view: BuilderView = (selectedView === 'rules' && !showRules) || (selectedView === 'drawer' && !showDrawer) ? 'dropdowns' : selectedView;
+    const changeView = (next: BuilderView) => {
+        if (view === 'drawer' && next !== 'drawer' && !leaveDrawerOk()) return;
+        setView(next);
+    };
+    const viewItems = VIEWS.filter((v) => (v.key !== 'rules' || showRules) && (v.key !== 'drawer' || showDrawer)).map((v) => ({
         ...v,
         count: !configs || !module ? undefined : v.key === 'dropdowns' ? dropdownCount : v.key === 'fields' ? fieldsCountOf(module) : undefined,
         hasUnsaved: v.key === 'dropdowns' ? viewsTouched.dropdowns : v.key === 'fields' ? viewsTouched.fields : v.key === 'rules' ? rulesTouched : false,
@@ -301,7 +323,7 @@ export function FormCustomizationView() {
                             <Box component="span" title="Unsaved changes on this form" sx={{ width: 7, height: 7, borderRadius: '50%', backgroundColor: '#f59e0b', boxShadow: '0 0 0 2px var(--crm-amber-100)', ml: 0.25 }} />
                         )}
                     </Box>
-                    <PillTabs items={viewItems} value={view} onChange={setView} />
+                    <PillTabs items={viewItems} value={view} onChange={changeView} />
                 </Box>
             )}
 
@@ -390,6 +412,16 @@ export function FormCustomizationView() {
                                             <RatingRulesPanel configs={configs} canEdit={canEdit && !saving} notify={notify} onManageOptions={() => setView('dropdowns')} />
                                         )}
                                         {view === 'preview' && <FormLivePreviewPanel module={module} configs={configs} unsavedCount={ops.length} unsavedTabs={unsavedTabs} />}
+                                        {view === 'drawer' && isDrawerLayoutModule(module) && savedConfigs && (
+                                            <DrawerLayoutPanel
+                                                module={module}
+                                                configs={savedConfigs}
+                                                canEdit={canEdit}
+                                                notify={notify}
+                                                formDraftDirty={dirty}
+                                                onDirtyChange={setDrawerDirty}
+                                            />
+                                        )}
                                     </>
                                 )}
                             </ConfigDraftChangesContext.Provider>
@@ -402,7 +434,8 @@ export function FormCustomizationView() {
                 <CodedDefaultsHarvester key={module} module={module} onChange={(defaults) => setCoded({ module, defaults })} />
             )}
 
-            {canEdit && configs && (
+            {/* The Drawer Layout has its own Save; the form footer shows there only while form changes are unsaved. */}
+            {canEdit && configs && (view !== 'drawer' || dirty) && (
                 <FormStickyFooter
                     onCancel={() => setDiscardOpen(true)}
                     onSave={() => void handleSave()}

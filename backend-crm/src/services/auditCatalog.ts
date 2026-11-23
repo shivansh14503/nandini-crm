@@ -20,6 +20,8 @@ export type AuditEntityType =
     | 'FormField'
     | 'ModuleSetting'
     | 'Scorecard'
+    | 'DrawerLayout'
+    | 'DrawerPiece'
     | 'PdfTemplate'
     | 'PdfAsset'
     | 'PdfSavedItem'
@@ -79,6 +81,8 @@ const MODULE_BY_ENTITY: Record<AuditEntityType, string> = {
     FormField: 'form-customization',
     ModuleSetting: 'form-customization',
     Scorecard: 'form-customization',
+    DrawerLayout: 'form-customization',
+    DrawerPiece: 'form-customization',
     PdfTemplate: 'pdf-templates',
     PdfAsset: 'pdf-templates',
     PdfSavedItem: 'pdf-templates',
@@ -94,6 +98,8 @@ const CONFIG_ENTITIES: ReadonlySet<AuditEntityType> = new Set([
     'FormField',
     'ModuleSetting',
     'Scorecard',
+    'DrawerLayout',
+    'DrawerPiece',
     'PdfTemplate',
     'PdfAsset',
     'PdfSavedItem',
@@ -233,6 +239,10 @@ export function labelFromChanges(entityType: AuditEntityType, entityId: string, 
         }
         case 'Scorecard':
             return `${moduleTitle(entityId) ?? entityId} scorecard`;
+        case 'DrawerLayout':
+            return `${moduleTitle(entityId) ?? entityId} drawer layout`;
+        case 'DrawerPiece':
+            return joinLabel('Drawer pieces', pick('name'));
         case 'ModuleSetting':
             return entityId;
         case 'DocumentSeries':

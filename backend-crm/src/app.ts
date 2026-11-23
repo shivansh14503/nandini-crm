@@ -31,6 +31,7 @@ import emailValidationRouter from './modules/email-verification/emailValidation.
 import { resumeEmailValidationRuns } from './modules/email-verification/emailValidation.admin.service.js';
 import tableFilterRouter from './modules/table-filters/tableFilter.routes.js';
 import scorecardRouter from './modules/scorecards/scorecard.routes.js';
+import { drawerLayoutRouter, drawerPieceRouter } from './modules/drawer-layouts/drawerLayout.routes.js';
 import { seedFormConfigsSafely } from './modules/form-configs/formConfig.seed.js';
 import { pdfAssetRouter, pdfSavedItemRouter, pdfTemplateRouter } from './modules/pdf/pdf.routes.js';
 import { seedPdfTemplatesSafely } from './modules/pdf/pdfTemplate.seed.js';
@@ -110,6 +111,8 @@ app.use('/api/document-series', documentSeriesRouter);
 app.use('/api/email-validation', emailValidationRouter);
 app.use('/api/table-filters', tableFilterRouter);
 app.use('/api/scorecards', scorecardRouter);
+app.use('/api/drawer-layouts', drawerLayoutRouter);
+app.use('/api/drawer-pieces', drawerPieceRouter);
 
 // ── 404 + global error handler ─────────────────────────────────────────────────
 app.use(notFoundHandler);
