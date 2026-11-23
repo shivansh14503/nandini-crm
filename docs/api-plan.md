@@ -1,6 +1,6 @@
 # Nandini CRM — API Plan
 
-> **Status:** living document. Lists every endpoint of `backend-crm` as of 2026-11-21 plus the planned ones.
+> **Status:** living document. Lists every endpoint of `backend-crm` as of 2026-11-23 plus the planned ones.
 > When you add, change or remove a route, update this file in the same change (the route files'
 > header comments are the per-module source of truth; keep them in step too).
 > Related: [System design](system-design.md) · [Database design](database-design.md) · [Build plan](build-plan.md)
@@ -226,6 +226,22 @@ read-only on the lead DTO (a `rating` sent by a client is ignored).
 | GET | `/pdf-saved-items?module=QUOTATION` | 🔐 | Builder library, newest first |
 | POST | `/pdf-saved-items` | 🔐 | `{ module, name, content: { kind: 'section'\|'block', … } }` |
 | DELETE | `/pdf-saved-items/:id` | 🔐 | Soft delete |
+
+**Audit log** — `/admin/audit-logs` 🔐 (Admin › Audit Log; every change, sign-in and refused access in the CRM)
+
+| Method | Path | Description |
+| --- | --- | --- |
+| GET | `/?from&to&user&module&action&category&severity&source&entityType&entityId&entityCode&entityLabel&field&ip&requestId&q&cursor&limit` | `{ items: AuditListItem[], nextCursor, limit }`, newest first. **Keyset paging** on `id`: pass `nextCursor` back as `cursor` (null on the last page); there is no `total`. `limit` default 50, max 200. Filters are AND-ed; multi-value filters (`user`, `module`, `action`, `category`, `severity`, `source`, `entityType`) take repeated params or comma lists. `from` / `to`: `YYYY-MM-DD` (a whole business-timezone day, `to` included) or an ISO date-time with a timezone; either end may be left open. `category` ∈ DATA, CONFIG, SECURITY; `severity` ∈ INFO, NOTICE, WARNING, CRITICAL; `source` ∈ UI, API, IMPORT, JOB; `entityType` = stored type (`Lead`) or route name (`leads`); `entityCode` / `entityLabel` match anywhere in the record number / name at the time; `field` = a changed field key or `customFields.<key>`; `ip` exact, or a prefix ending in `*`; `q` = free text over record name / number / id, user, IP, request id and the stored values (send a date range with it). Item: `{ id, createdAt, time, category, action, actionLabel, severity, module, moduleLabel, entityType, entityId, entityCode, entityLabel, recordStatus, summary, changedFields, changedBy, actorId, actorRole, source, ipAddress, requestId, page, revertsId }` — `entityCode` only for modules with a document series; `recordStatus` = `live` / `deleted` / `missing` for CRM records, null otherwise; `changedFields` lists custom fields as `customFields.<key>` |
+| GET | `/facets?from&to` | Filter options with counts for the range (default the last 30 days, max 366): `{ from, to, total, users, modules, actions, categories, severities, sources }`, each `[{ value, label, count }]`, most used first (`users[].label` = full name) |
+| GET | `/stats?from&to` | Summary strip: `{ from, to, today, failedSignIns24h, accessDenied24h, deletes7d, total, mostActiveUsers: [{ username, label, count }] (top 5, jobs left out), eventsPerDay: [{ date, total, data, config, security }] }`. `today` / `24h` / `7d` are fixed windows; the rest follow the range (default the last 30 days, max 366); every day of the range is listed, empty ones as 0 |
+| GET | `/:id` | `{ entry, changes, fields, details, related, relatedCount }`: `entry` = list item plus `sessionId`, `httpMethod`, `route`, `userAgent`; `changes` = the stored JSON; `fields` = `[{ key, label, before, after }]` labelled from the form configuration (custom fields included; `before` null for a create, `after` null for a delete); `details` = `[{ key, label, value }]` for everything else the entry recorded (sign-in IP, refused path, import counts, reason, follow-up); `related` = the first 100 other entries of the same request (`relatedCount` = all of them; filter `requestId` for the rest). 404 when there's no such entry |
+
+Invalid filter values return `400 VALIDATION_ERROR` (never silently widened); a range over 366 days on `/facets` /
+`/stats`, or `from` after `to`, returns `400 BAD_REQUEST`. Date-ranged queries first read the range's first and last
+`id` from the `createdAt` index, then seek the clustered key, so a page costs the same at any depth; nothing counts
+the whole range for the list. Performance check: `npm run perf:audit` (scratch database only; results in
+[build plan Phase 11](build-plan.md)). Free text (`q`) also reads the stored values, so a search that matches nothing
+scans the whole range: send a date range with it.
 
 ## 3. Rate limits
 

@@ -86,9 +86,9 @@ const PROP_LABELS: Record<string, string> = {
     sortOrder: 'Position',
     deletedAt: 'Deleted',
 };
-const propLabel = (prop: string) => PROP_LABELS[prop] ?? fieldLabel(prop);
+export const propLabel = (prop: string) => PROP_LABELS[prop] ?? fieldLabel(prop);
 
-function propValue(prop: string, value: unknown): string {
+export function propValue(prop: string, value: unknown): string {
     if (prop === 'isActive' && typeof value === 'boolean') return value ? 'Active' : 'Inactive';
     if (prop === 'module' && typeof value === 'string') return moduleLabel(value);
     if (typeof value === 'boolean') return value ? 'Yes' : 'No';

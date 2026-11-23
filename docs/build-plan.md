@@ -25,7 +25,7 @@
 | Tickets, Products, Partner Companies | ✅ CRUD, import |
 | Quotation PDF | ✅ templates, builder, preview, cached render |
 | Admin: forms, dropdowns, document series, cities, PDF templates | ✅ |
-| Audit log | ⚠️ foundation done (ledger table, full who / where / how per entry); admin screen, undo / restore pending (Phase 11) |
+| Audit log | ⚠️ foundation and admin query API done (ledger table, who / where / how per entry, `/api/admin/audit-logs`); admin screen, undo / restore pending (Phase 11) |
 | Users admin | ❌ seed / DB only |
 | Dashboard | ❌ static page, no data |
 | Tests | ⚠️ 14 backend unit test files; no API integration, no frontend, no E2E |
@@ -107,14 +107,20 @@ access decided later); log **all changes** plus sign-ins and refused access; **k
       nightly Lead Rating job tagged with their own source and request id.
 - [x] Unit tests: `auditCatalog.test.ts`, `auditContext.test.ts`.
 
-**B. Query API** (admin-only, `/api/admin/audit-logs`)
-- [ ] `GET /` — filters (date range, users, modules, actions, categories, severities, sources, record id / number /
+**B. Query API** ✅ (2026-11-23, admin-only, `/api/admin/audit-logs`, [API plan §2.7](api-plan.md#27-administration-))
+- [x] `GET /` — filters (date range, users, modules, actions, categories, severities, sources, record id / number /
       name, changed field, IP, request id, free text) + keyset paging on `id` (no `COUNT(*)` over the whole range).
-- [ ] `GET /:id` — one entry with a labelled Field / Before / After table (form-config labels incl. custom fields;
+      A date range is first turned into an `id` range (from the `createdAt` index), so every page seeks the
+      clustered key.
+- [x] `GET /:id` — one entry with a labelled Field / Before / After table (form-config labels incl. custom fields;
       record numbers only for modules with a document series), and the other entries of the same request.
-- [ ] `GET /facets` (filter options with counts for the chosen range) and `GET /stats` (today, failed sign-ins 24 h,
-      deletes 7 days, most active users, events per day).
-- [ ] Performance check: 1 M seeded rows in a scratch database, a 30-day all-module page in < 300 ms.
+- [x] `GET /facets` (filter options with counts for the chosen range) and `GET /stats` (today, failed sign-ins 24 h,
+      refused access 24 h, deletes 7 days, most active users, events per day by category).
+- [x] Performance check: 1 M seeded rows in a scratch database, a 30-day all-module page in < 300 ms
+      (`npm run perf:audit`, 2026-11-23: 1 M entries over 180 days, 167 k in the window: first page **52 ms**, any
+      filter 40–55 ms, a deep page 44 ms, one record's history 3 ms, entry 10 ms, facets 380 ms, stats 310 ms; free text
+      that matches nothing scans the window's stored values, ~1 s — a full-text index is the fix if that matters).
+- [x] Unit tests: `auditAdmin.query.test.ts`, `auditAdmin.present.test.ts`.
 
 **C. Admin screen** (`/admin/audit-log`, the "System Audit & Security" card becomes Available)
 - [ ] Summary strip + events-per-day chart; filter bar with saved / recent filters (reuse `TableFilter`); table
