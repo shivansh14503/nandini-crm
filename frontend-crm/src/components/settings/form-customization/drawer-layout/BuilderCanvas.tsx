@@ -1,7 +1,6 @@
 'use client';
 
 import React from 'react';
-import { useDraggable, useDroppable } from '@dnd-kit/core';
 import { Box, IconButton, Tooltip, Typography } from '@mui/material';
 import AddRoundedIcon from '@mui/icons-material/AddRounded';
 import CloseIcon from '@mui/icons-material/Close';
@@ -23,15 +22,17 @@ import {
     blockHasContent,
     blockSpansRow,
     sectionGridSx,
+    useLayoutHeader,
     type LayoutCtx,
     type LayoutHeader,
 } from '@/components/common/Drawer/layout';
-import { DropLine, useActiveDrag, useDropTarget, type DragSource, type DropZone } from './LayoutDnd';
-import type { Selection } from './layoutEditor';
+import { DND_HANDLE, dndItem, dndZone, useLayoutDrag } from './LayoutDrag';
+import { findBlock, type Selection } from './layoutEditor';
 
 /**
- * The drawer being designed, at its real width. In edit mode every part is selectable and draggable (header,
- * badges, sections by their title bar, blocks); in preview mode it renders exactly what users see.
+ * The drawer being designed, at its real width. In edit mode every part is selectable and draggable (header badges,
+ * sections by their title bar, blocks); in preview mode it renders exactly what users see. While something is being
+ * dragged it shows the layout as it will be after the drop (see LayoutDrag), with the dragged item's slot as a gap.
  */
 
 export interface CanvasTab {
@@ -43,15 +44,24 @@ export interface CanvasTab {
 const selectedRing = '0 0 0 2px var(--crm-fill-blue-600)';
 const hoverRing = '0 0 0 1px var(--crm-blue-300)';
 
-function useDragDrop(dragId: string, source: DragSource, dropId: string, zone: DropZone, disabled: boolean) {
-    const { setNodeRef: setDragRef, attributes, listeners, isDragging } = useDraggable({ id: dragId, data: source, disabled });
-    const { setNodeRef: setDropRef } = useDroppable({ id: dropId, data: zone, disabled });
-    const setRef = (node: HTMLElement | null) => {
-        setDragRef(node);
-        setDropRef(node);
-    };
-    return { setRef, attributes, listeners, isDragging };
-}
+/** How the dragged item's own slot looks: an empty gap for a move, a faint preview of something new. */
+type SlotLook = 'gap' | 'preview' | null;
+
+const slotSx = (look: Exclude<SlotLook, null>) => ({
+    backgroundColor: 'rgb(var(--crm-accent-rgb) / 0.06)',
+    boxShadow: 'none',
+    outline: '1.5px dashed var(--crm-blue-300)',
+    outlineOffset: '-1.5px',
+    '&:hover': { boxShadow: 'none' },
+    '& > *': look === 'gap' ? { visibility: 'hidden' } : { opacity: 0.55 },
+});
+
+/** Enter / Space selects (the Settings panel then has buttons to move it without dragging). */
+const selectOnKey = (onSelect: () => void) => (e: React.KeyboardEvent) => {
+    if (e.target !== e.currentTarget || (e.key !== 'Enter' && e.key !== ' ')) return;
+    e.preventDefault();
+    onSelect();
+};
 
 function blockLabel(block: DrawerBlock, ctx: LayoutCtx): string {
     if (block.type === 'field') return block.label.trim() || ctx.fields.get(block.field)?.label || block.field;
@@ -61,49 +71,52 @@ function blockLabel(block: DrawerBlock, ctx: LayoutCtx): string {
     return block.type === 'text' ? 'Static text' : 'Divider';
 }
 
-function CanvasBlock({
-    block,
-    index,
-    section,
-    ctx,
-    selected,
-    onSelect,
-    readOnly,
-}: {
+interface CanvasBlockProps {
     block: DrawerBlock;
-    index: number;
     section: DrawerSection;
     ctx: LayoutCtx;
     selected: boolean;
-    onSelect: () => void;
+    onSelect: (s: Selection) => void;
     readOnly: boolean;
-}) {
+    slot: SlotLook;
+}
+
+/**
+ * Re-renders only when something it shows changes (a drag re-renders the canvas each time the slot moves, and most
+ * blocks stay as they are). Of its section it only uses the columns and the look.
+ */
+const CanvasBlock = React.memo(
+    CanvasBlockView,
+    (a, b) =>
+        a.block === b.block &&
+        a.ctx === b.ctx &&
+        a.selected === b.selected &&
+        a.onSelect === b.onSelect &&
+        a.readOnly === b.readOnly &&
+        a.slot === b.slot &&
+        a.section.columns === b.section.columns &&
+        a.section.style === b.section.style,
+);
+
+function CanvasBlockView({ block, section, ctx, selected, onSelect: onSelectItem, readOnly, slot }: CanvasBlockProps) {
+    const onSelect = () => onSelectItem({ kind: 'block', id: block.id });
     const half = section.columns === 2 && !blockSpansRow(block);
     const label = blockLabel(block, ctx);
-    const { setRef, attributes, listeners, isDragging } = useDragDrop(
-        `drag-block-${block.id}`,
-        { source: 'canvas-block', blockId: block.id, label },
-        `drop-block-${block.id}`,
-        { target: 'block', blockId: block.id, sectionId: section.id, half },
-        readOnly,
-    );
-    const target = useDropTarget();
-    const lineBefore = target?.kind === 'block' && target.sectionId === section.id && target.index === index;
     const hiddenForRecord = block.type === 'field' && block.hideEmpty && !blockHasContent(block, ctx);
 
     return (
         <Box
-            ref={setRef}
-            {...attributes}
-            {...listeners}
+            {...(readOnly ? {} : dndItem('block', block.id, { source: 'canvas-block', blockId: block.id, label }, half))}
             role="button"
-            aria-label={`${label}. Drag to move, click to edit.`}
+            tabIndex={0}
+            aria-label={`${label}. ${readOnly ? 'Press Enter to view.' : 'Drag to move, or press Enter to edit.'}`}
             aria-pressed={selected}
             data-layout-selected={selected ? 'true' : undefined}
             onClick={(e) => {
                 e.stopPropagation();
                 onSelect();
             }}
+            onKeyDown={selectOnKey(onSelect)}
             sx={{
                 position: 'relative',
                 minWidth: 0,
@@ -111,8 +124,7 @@ function CanvasBlock({
                 p: '6px 8px 6px 22px',
                 m: '-6px -8px -6px -22px',
                 cursor: readOnly ? 'pointer' : 'grab',
-                touchAction: 'manipulation',
-                opacity: isDragging ? 0.35 : hiddenForRecord ? 0.5 : 1,
+                opacity: hiddenForRecord ? 0.5 : 1,
                 outline: 'none',
                 boxShadow: selected ? selectedRing : 'none',
                 backgroundColor: selected ? 'rgb(var(--crm-accent-rgb) / 0.06)' : 'transparent',
@@ -121,13 +133,37 @@ function CanvasBlock({
                 '&:hover .blk-handle, &:focus-visible .blk-handle': { opacity: 1 },
                 '&:focus-visible': { boxShadow: selectedRing },
                 ...(section.columns === 2 && !half ? { gridColumn: '1 / -1' } : {}),
+                ...(slot ? slotSx(slot) : {}),
             }}
         >
-            {lineBefore && <DropLine vertical={half} />}
-            <DragIndicatorRoundedIcon
-                className="blk-handle"
-                sx={{ position: 'absolute', left: 2, top: 7, fontSize: 16, color: 'var(--mui-palette-text-muted)', opacity: { xs: 0.7, md: selected ? 1 : 0 }, transition: 'opacity 0.12s' }}
-            />
+            {!readOnly && (
+                <Box
+                    className="blk-handle"
+                    {...DND_HANDLE}
+                    aria-hidden
+                    sx={{
+                        position: 'absolute',
+                        left: 0,
+                        top: 0,
+                        width: 22,
+                        height: 32,
+                        display: 'flex',
+                        justifyContent: 'center',
+                        pt: '7px',
+                        boxSizing: 'border-box',
+                        color: 'var(--mui-palette-text-muted)',
+                        cursor: 'grab',
+                        touchAction: 'none',
+                        opacity: { xs: 0.7, md: selected ? 1 : 0 },
+                        transition: 'opacity 0.12s',
+                        // Bigger than it looks, so a finger finds it.
+                        '&::before': { content: '""', position: 'absolute', inset: '-4px -6px' },
+                        '@media (hover: none)': { opacity: 0.8 },
+                    }}
+                >
+                    <DragIndicatorRoundedIcon sx={{ fontSize: 16 }} />
+                </Box>
+            )}
             <BlockBody
                 block={block}
                 ctx={ctx}
@@ -150,48 +186,55 @@ function CanvasBlock({
     );
 }
 
-function CanvasSection({
+const CanvasSection = React.memo(function CanvasSection({
     section,
-    index,
-    tab,
     ctx,
     selection,
     onSelect,
-    onRemove,
+    onRemove: onRemoveSection,
     readOnly,
+    dragItemId,
+    dragLook,
+    receiving,
 }: {
     section: DrawerSection;
-    index: number;
-    tab: string;
     ctx: LayoutCtx;
     selection: Selection | null;
     onSelect: (s: Selection) => void;
-    onRemove: () => void;
+    onRemove: (id: string) => void;
     readOnly: boolean;
+    /** The item being dragged (shown as its slot when it is this section or one of its blocks). */
+    dragItemId: string | null;
+    dragLook: Exclude<SlotLook, null>;
+    /** A block is being dragged into this section from elsewhere. */
+    receiving: boolean;
 }) {
+    const slot = dragItemId === section.id ? dragLook : null;
+    const onRemove = () => onRemoveSection(section.id);
     const selected = selection?.kind === 'section' && selection.id === section.id;
-    const { setNodeRef: setDragRef, attributes: dragAttributes, listeners: dragListeners, isDragging } = useDraggable({ id: `drag-section-${section.id}`, data: { source: 'canvas-section', sectionId: section.id, label: section.title || 'Section' } satisfies DragSource, disabled: readOnly });
-    const { setNodeRef: setDropRef } = useDroppable({ id: `drop-section-${section.id}`, data: { target: 'section', sectionId: section.id } satisfies DropZone, disabled: readOnly });
-    const { setNodeRef: setBodyRef } = useDroppable({ id: `drop-body-${section.id}`, data: { target: 'section-body', sectionId: section.id } satisfies DropZone, disabled: readOnly });
-    const target = useDropTarget();
-    const active = useActiveDrag();
-    const lineBefore = target?.kind === 'section' && target.tab === tab && target.index === index;
-    const lineAfterBlocks = target?.kind === 'block' && target.sectionId === section.id && target.index === section.blocks.length;
-    const receiving = target?.kind === 'block' && target.sectionId === section.id && active?.source !== 'canvas-section';
+    const title = section.title.trim() || 'Untitled section';
+    const select = () => onSelect({ kind: 'section', id: section.id });
 
     return (
         <Box
-            ref={setDropRef}
+            {...(readOnly ? {} : dndItem('section', section.id, { source: 'canvas-section', sectionId: section.id, label: title }))}
             data-layout-selected={selected ? 'true' : undefined}
-            sx={{ position: 'relative', opacity: isDragging ? 0.4 : 1, borderRadius: '10px', boxShadow: selected ? selectedRing : receiving ? '0 0 0 2px rgb(var(--crm-accent-rgb) / 0.35)' : 'none', '&:hover': { boxShadow: selected ? selectedRing : hoverRing } }}
+            sx={{
+                position: 'relative',
+                borderRadius: '10px',
+                cursor: readOnly ? 'pointer' : 'grab',
+                boxShadow: selected ? selectedRing : receiving ? '0 0 0 2px rgb(var(--crm-accent-rgb) / 0.35)' : 'none',
+                transition: 'box-shadow 0.15s ease',
+                '&:hover': { boxShadow: selected ? selectedRing : receiving ? '0 0 0 2px rgb(var(--crm-accent-rgb) / 0.35)' : hoverRing },
+                ...(slot ? slotSx(slot) : {}),
+            }}
             onClick={(e) => {
                 e.stopPropagation();
-                onSelect({ kind: 'section', id: section.id });
+                select();
             }}
         >
-            {lineBefore && <DropLine />}
             <SectionShell
-                section={{ ...section, title: section.title.trim() || 'Untitled section' }}
+                section={{ ...section, title }}
                 action={
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
                         {section.piece && section.piece.toLowerCase() !== section.title.trim().toLowerCase() && (
@@ -224,12 +267,24 @@ function CanvasSection({
                             <>
                                 <Tooltip title="Drag to move this section" arrow>
                                     <Box
-                                        ref={setDragRef}
-                                        {...dragAttributes}
-                                        {...dragListeners}
-                                        aria-label={`Move section ${section.title}`}
-                                        onClick={(e) => e.stopPropagation()}
-                                        sx={{ display: 'flex', p: 0.25, borderRadius: '4px', cursor: 'grab', touchAction: 'none', color: 'var(--mui-palette-text-muted)', '&:hover': { color: 'var(--crm-text-blue-700)', backgroundColor: 'var(--mui-palette-primary-soft)' } }}
+                                        {...DND_HANDLE}
+                                        role="button"
+                                        tabIndex={0}
+                                        aria-label={`Section ${title}. Drag to move, or press Enter to select it.`}
+                                        onKeyDown={selectOnKey(select)}
+                                        sx={{
+                                            display: 'grid',
+                                            placeItems: 'center',
+                                            width: 32,
+                                            height: 32,
+                                            borderRadius: '6px',
+                                            cursor: 'grab',
+                                            touchAction: 'none',
+                                            color: 'var(--mui-palette-text-muted)',
+                                            outline: 'none',
+                                            '&:hover': { color: 'var(--crm-text-blue-700)', backgroundColor: 'var(--mui-palette-primary-soft)' },
+                                            '&:focus-visible': { boxShadow: '0 0 0 3px rgb(var(--crm-accent-rgb) / 0.22)' },
+                                        }}
                                     >
                                         <DragIndicatorRoundedIcon sx={{ fontSize: 18 }} />
                                     </Box>
@@ -237,7 +292,7 @@ function CanvasSection({
                                 <Tooltip title="Remove section" arrow>
                                     <IconButton
                                         size="small"
-                                        aria-label={`Remove section ${section.title}`}
+                                        aria-label={`Remove section ${title}`}
                                         onClick={(e) => {
                                             e.stopPropagation();
                                             onRemove();
@@ -252,17 +307,17 @@ function CanvasSection({
                     </Box>
                 }
             >
-                <Box ref={setBodyRef} sx={{ ...(sectionGridSx(section.columns) as object), position: 'relative', minHeight: 36 }}>
-                    {section.blocks.map((block, i) => (
+                <Box {...dndZone('section-body')} sx={{ ...(sectionGridSx(section.columns) as object), position: 'relative', minHeight: 36, cursor: 'pointer' }}>
+                    {section.blocks.map((block) => (
                         <CanvasBlock
                             key={block.id}
                             block={block}
-                            index={i}
                             section={section}
                             ctx={ctx}
                             selected={selection?.kind === 'block' && selection.id === block.id}
-                            onSelect={() => onSelect({ kind: 'block', id: block.id })}
+                            onSelect={onSelect}
                             readOnly={readOnly}
+                            slot={dragItemId === block.id ? dragLook : null}
                         />
                     ))}
                     {section.blocks.length === 0 && (
@@ -270,27 +325,25 @@ function CanvasSection({
                             Drop fields or blocks here
                         </Box>
                     )}
-                    {lineAfterBlocks && section.blocks.length > 0 && <DropLine sx={{ top: 'auto', bottom: -6 }} />}
                 </Box>
             </SectionShell>
         </Box>
     );
-}
+});
 
-function CanvasBadge({ id, index, label, item, selected, onSelect, readOnly }: { id: string; index: number; label: string; item: NonNullable<LayoutHeader['badges'][number]['item']>; selected: boolean; onSelect: () => void; readOnly: boolean }) {
-    const { setRef, attributes, listeners, isDragging } = useDragDrop(`drag-badge-${id}`, { source: 'canvas-badge', badgeId: id, label }, `drop-badge-${id}`, { target: 'badge', badgeId: id }, readOnly);
-    const target = useDropTarget();
+function CanvasBadge({ id, label, item, selected, onSelect, readOnly, slot }: { id: string; label: string; item: NonNullable<LayoutHeader['badges'][number]['item']>; selected: boolean; onSelect: () => void; readOnly: boolean; slot: SlotLook }) {
     return (
         <Box
-            ref={setRef}
-            {...attributes}
-            {...listeners}
+            // Small enough to be its own grip on touch screens.
+            {...(readOnly ? {} : { ...dndItem('badge', id, { source: 'canvas-badge', badgeId: id, label }, true), ...DND_HANDLE })}
             role="button"
-            aria-label={`Badge ${label}. Drag to reorder, click to edit.`}
+            tabIndex={0}
+            aria-label={`Badge ${label}. ${readOnly ? 'Press Enter to view.' : 'Drag to reorder, or press Enter to edit.'}`}
             onClick={(e) => {
                 e.stopPropagation();
                 onSelect();
             }}
+            onKeyDown={selectOnKey(onSelect)}
             sx={{
                 position: 'relative',
                 display: 'inline-flex',
@@ -305,13 +358,13 @@ function CanvasBadge({ id, index, label, item, selected, onSelect, readOnly }: {
                 fontSize: '0.7rem',
                 fontWeight: 700,
                 cursor: readOnly ? 'pointer' : 'grab',
-                opacity: isDragging ? 0.35 : 1,
+                touchAction: readOnly ? undefined : 'none',
                 boxShadow: selected ? '0 0 0 2px var(--mui-palette-background-paper), 0 0 0 4px var(--crm-fill-blue-600)' : 'none',
                 outline: 'none',
                 '&:focus-visible': { boxShadow: '0 0 0 3px rgb(var(--crm-accent-rgb) / 0.35)' },
+                ...(slot ? { ...slotSx(slot), borderColor: 'transparent' } : {}),
             }}
         >
-            {target?.kind === 'badge' && target.index === index && <DropLine vertical sx={{ left: -6, top: 2, bottom: 2 }} />}
             {item.icon}
             <span>{item.label}</span>
         </Box>
@@ -321,7 +374,6 @@ function CanvasBadge({ id, index, label, item, selected, onSelect, readOnly }: {
 export function BuilderCanvas({
     doc,
     ctx,
-    header,
     tabs,
     tab,
     onTab,
@@ -335,7 +387,6 @@ export function BuilderCanvas({
 }: {
     doc: DrawerLayoutDocument;
     ctx: LayoutCtx;
-    header: LayoutHeader;
     tabs: CanvasTab[];
     tab: string;
     onTab: (tab: string) => void;
@@ -349,10 +400,17 @@ export function BuilderCanvas({
 }) {
     const edit = mode === 'edit';
     const moduleColor = getModuleColor(ctx.module);
-    const { setNodeRef: setTabZoneRef } = useDroppable({ id: `drop-tab-${tab}`, data: { target: 'tab', tab } satisfies DropZone, disabled: !edit || readOnly || tab === '__changes' });
-    const { setNodeRef: setBadgesZoneRef } = useDroppable({ id: 'drop-badges', data: { target: 'badges' } satisfies DropZone, disabled: !edit || readOnly });
-    const target = useDropTarget();
-    const sections = doc.tabs[tab] ?? [];
+    const { preview, itemId, source: dragging, target: t, attachRoot } = useLayoutDrag();
+    // While dragging, the layout as it will be after the drop.
+    const view = preview ?? doc;
+    const header = useLayoutHeader(view, ctx, true);
+    const sections = view.tabs[tab] ?? [];
+    const dropping = edit && !readOnly;
+    const dragLook = dragging?.source.startsWith('canvas-') ? 'gap' : 'preview';
+    const slotOf = (id: string): SlotLook => (itemId === id ? dragLook : null);
+    // The section a block is being dragged into, when that's not where it came from.
+    const into = t?.kind === 'block' ? t.sectionId : t?.kind === 'newSection' ? (view.tabs[t.tab]?.[t.index]?.id ?? null) : null;
+    const home = dragging?.source === 'canvas-block' ? (findBlock(doc, dragging.blockId)?.section.id ?? null) : null;
     const headerSelected = selection?.kind === 'header';
     const initials = header.title
         .split(/\s+/)
@@ -363,6 +421,7 @@ export function BuilderCanvas({
 
     return (
         <Box
+            ref={attachRoot}
             onClick={() => edit && onSelect(null)}
             sx={{
                 width: '100%',
@@ -438,19 +497,19 @@ export function BuilderCanvas({
                     </Box>
                 </Box>
 
-                <Box ref={setBadgesZoneRef} sx={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 0.8, mt: 1.8, minHeight: 26, position: 'relative' }}>
-                    {header.badges.map(({ badge, item }, i) =>
+                <Box {...(dropping ? dndZone('badges') : {})} sx={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 0.8, mt: 1.8, minHeight: 26, position: 'relative' }}>
+                    {header.badges.map(({ badge, item }) =>
                         item ? (
                             edit ? (
                                 <CanvasBadge
                                     key={badge.id}
                                     id={badge.id}
-                                    index={i}
                                     label={item.label}
                                     item={item}
                                     selected={selection?.kind === 'badge' && selection.id === badge.id}
                                     onSelect={() => onSelect({ kind: 'badge', id: badge.id })}
                                     readOnly={readOnly}
+                                    slot={slotOf(badge.id)}
                                 />
                             ) : (
                                 <Box
@@ -462,11 +521,6 @@ export function BuilderCanvas({
                                 </Box>
                             )
                         ) : null,
-                    )}
-                    {edit && target?.kind === 'badge' && target.index === doc.header.badges.length && (
-                        <Box sx={{ position: 'relative', width: 4, height: 22 }}>
-                            <DropLine vertical sx={{ left: 0 }} />
-                        </Box>
                     )}
                     {edit && !readOnly && (
                         <Box
@@ -504,7 +558,7 @@ export function BuilderCanvas({
             <Box role="tablist" sx={{ display: 'flex', gap: 0.5, px: 1.5, py: 1, overflowX: 'auto', borderBottom: '1px solid var(--mui-palette-border-main)', backgroundColor: 'var(--mui-palette-background-subtle)' }}>
                 {[...tabs, { key: '__changes', label: 'Changes', icon: <HistoryOutlinedIcon sx={{ fontSize: 17 }} /> }].map((t) => {
                     const on = t.key === tab;
-                    const empty = t.key !== '__changes' && (doc.tabs[t.key]?.length ?? 0) === 0;
+                    const empty = t.key !== '__changes' && (view.tabs[t.key]?.length ?? 0) === 0;
                     return (
                         <Box
                             key={t.key}
@@ -557,22 +611,24 @@ export function BuilderCanvas({
                         <Typography sx={{ fontSize: '0.8rem', mt: 0.5 }}>Built-in tab with the record&apos;s history. It is always last and isn&apos;t part of the layout.</Typography>
                     </Box>
                 ) : edit ? (
-                    <Box ref={setTabZoneRef} sx={{ display: 'flex', flexDirection: 'column', gap: 2, position: 'relative' }}>
-                        {sections.map((section, i) => (
+                    <Box {...(dropping ? dndZone('tab', tab) : {})} sx={{ display: 'flex', flexDirection: 'column', gap: 2, position: 'relative' }}>
+                        {sections.map((section) => (
                             <CanvasSection
                                 key={section.id}
                                 section={section}
-                                index={i}
-                                tab={tab}
                                 ctx={ctx}
                                 selection={selection}
                                 onSelect={onSelect}
-                                onRemove={() => onRemoveSection(section.id)}
+                                onRemove={onRemoveSection}
                                 readOnly={readOnly}
+                                dragItemId={itemId}
+                                dragLook={dragLook}
+                                receiving={into === section.id && into !== home}
                             />
                         ))}
                         {!readOnly && (
                             <Box
+                                {...dndZone('new-section')}
                                 sx={{
                                     position: 'relative',
                                     border: '1.5px dashed var(--mui-palette-border-strong)',
@@ -581,7 +637,6 @@ export function BuilderCanvas({
                                     textAlign: 'center',
                                     fontSize: '0.78rem',
                                     color: 'var(--mui-palette-text-muted)',
-                                    backgroundColor: target && (target.kind === 'section' || target.kind === 'newSection') && target.tab === tab && target.index === sections.length ? 'var(--mui-palette-primary-soft)' : 'transparent',
                                 }}
                             >
                                 {sections.length === 0 ? 'This tab is hidden from users until it has a section. ' : ''}

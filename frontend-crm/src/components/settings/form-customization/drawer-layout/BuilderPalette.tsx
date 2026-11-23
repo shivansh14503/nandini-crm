@@ -1,7 +1,6 @@
 'use client';
 
 import React, { useMemo, useState } from 'react';
-import { useDraggable } from '@dnd-kit/core';
 import { Box, CircularProgress, IconButton, InputAdornment, TextField, Tooltip, Typography } from '@mui/material';
 import AddRoundedIcon from '@mui/icons-material/AddRounded';
 import CheckRoundedIcon from '@mui/icons-material/CheckRounded';
@@ -29,7 +28,7 @@ import type { FieldType } from '@/types/formConfig.types';
 import type { DrawerPiece } from '@/types/drawerLayout.types';
 import type { AddressDef, BuiltInPiece, DrawerFieldDef } from '@/components/common/Drawer/layout';
 import { inputSx } from '../builderUi';
-import type { DragSource } from './LayoutDnd';
+import { DND_HANDLE, dndSource, type DragSource } from './LayoutDrag';
 
 /**
  * Left panel of the Drawer Layout builder: form fields, layout blocks and ready-made / saved pieces. Drag any item
@@ -74,12 +73,10 @@ function PaletteItem({
     onRemove?: () => void;
     readOnly: boolean;
 }) {
-    const { setNodeRef, attributes, listeners, isDragging } = useDraggable({ id, data: source, disabled: readOnly });
     return (
         <Box
-            ref={setNodeRef}
-            {...attributes}
-            {...listeners}
+            {...(readOnly ? {} : dndSource(source))}
+            data-palette-item={id}
             aria-label={`${title}. Drag onto the drawer, or press Add.`}
             sx={{
                 display: 'flex',
@@ -92,15 +89,30 @@ function PaletteItem({
                 border: '1px solid var(--mui-palette-border-main)',
                 backgroundColor: 'var(--mui-palette-background-paper)',
                 cursor: readOnly ? 'default' : 'grab',
-                opacity: isDragging ? 0.4 : 1,
-                touchAction: 'manipulation',
                 outline: 'none',
                 transition: 'border-color 0.12s ease, background-color 0.12s ease',
                 '&:hover': readOnly ? undefined : { borderColor: 'var(--crm-blue-300)', backgroundColor: 'var(--mui-palette-primary-soft)' },
                 '&:focus-visible': { boxShadow: '0 0 0 3px rgb(var(--crm-accent-rgb) / 0.22)' },
             }}
         >
-            {!readOnly && <DragIndicatorRoundedIcon sx={{ fontSize: 16, color: 'var(--mui-palette-text-muted)', flexShrink: 0 }} />}
+            {!readOnly && (
+                // The grip: on touch screens drags start here, so the list still scrolls under a finger.
+                <Box
+                    {...DND_HANDLE}
+                    aria-hidden
+                    sx={{
+                        position: 'relative',
+                        display: 'flex',
+                        flexShrink: 0,
+                        color: 'var(--mui-palette-text-muted)',
+                        touchAction: 'none',
+                        cursor: 'grab',
+                        '&::before': { content: '""', position: 'absolute', inset: '-10px -8px' },
+                    }}
+                >
+                    <DragIndicatorRoundedIcon sx={{ fontSize: 16 }} />
+                </Box>
+            )}
             <Box sx={{ display: 'flex', color: 'var(--crm-text-blue-600)', flexShrink: 0 }}>{icon}</Box>
             <Box sx={{ minWidth: 0, flex: 1 }}>
                 <Typography noWrap sx={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--crm-slate-900)' }}>

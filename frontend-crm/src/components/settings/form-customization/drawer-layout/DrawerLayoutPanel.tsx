@@ -47,8 +47,8 @@ import { ConfirmDeleteDialog, errorMessage, inputSx, primaryButtonSx, secondaryB
 import { BuilderCanvas, type CanvasTab } from './BuilderCanvas';
 import { BuilderPalette } from './BuilderPalette';
 import { BuilderSettings } from './BuilderSettings';
-import { LayoutDnd, type DragSource, type DropTarget } from './LayoutDnd';
-import { findBlock, findSection, insertBlock, insertSection, moveBadge, moveBlock, moveSection, removeBlock, removeSection, useLayoutEditor, type Selection } from './layoutEditor';
+import { LayoutDrag, type DragSource, type DropPlan, type DropResult, type DropTarget } from './LayoutDrag';
+import { findBlock, findSection, insertBlock, insertSection, moveBlock, placeBadge, placeBlock, placeSection, removeBlock, removeSection, useLayoutEditor, type Selection } from './layoutEditor';
 import { SAMPLE_RECORDS, SAMPLE_RECORD_ID } from './sampleRecords';
 
 /**
@@ -301,21 +301,13 @@ function LayoutBuilder({
 
     // ─── Building blocks ────────────────────────────────────────────────────────
     const warn = (message: string) => notify(message, 'warning');
-    const roomFor = (blocks: number, sectionId?: string, newSectionTab?: string): boolean => {
-        if (countBlocks(doc) + blocks > LIMITS.totalBlocks) {
-            warn(`A drawer can have at most ${LIMITS.totalBlocks} items.`);
-            return false;
-        }
+    /** Why the drawer has no room for more items here, if it hasn't. */
+    const roomError = (blocks: number, sectionId?: string, newSectionTab?: string): string | null => {
+        if (countBlocks(doc) + blocks > LIMITS.totalBlocks) return `A drawer can have at most ${LIMITS.totalBlocks} items.`;
         const section = sectionId ? findSection(doc, sectionId)?.section : undefined;
-        if (section && section.blocks.length + blocks > LIMITS.blocksPerSection) {
-            warn(`A section can have at most ${LIMITS.blocksPerSection} items.`);
-            return false;
-        }
-        if (newSectionTab && (doc.tabs[newSectionTab]?.length ?? 0) >= LIMITS.sectionsPerTab) {
-            warn(`A tab can have at most ${LIMITS.sectionsPerTab} sections.`);
-            return false;
-        }
-        return true;
+        if (section && section.blocks.length + 1 > LIMITS.blocksPerSection) return `A section can have at most ${LIMITS.blocksPerSection} items.`;
+        if (newSectionTab && (doc.tabs[newSectionTab]?.length ?? 0) >= LIMITS.sectionsPerTab) return `A tab can have at most ${LIMITS.sectionsPerTab} sections.`;
+        return null;
     };
 
     const makeBlock = (source: DragSource): DrawerBlock | null => {
@@ -379,50 +371,77 @@ function LayoutBuilder({
     };
 
     // ─── Drop / add ─────────────────────────────────────────────────────────────
-    const onDrop = (source: DragSource, target: DropTarget) => {
-        if (readOnly) return;
-        switch (target.kind) {
-            case 'block': {
-                if (source.source === 'canvas-block') return edit((d) => moveBlock(d, source.blockId, target.sectionId, target.index));
-                const block = makeBlock(source);
-                if (!block || !roomFor(1, target.sectionId)) return;
-                edit((d) => insertBlock(d, target.sectionId, target.index, block), { select: { kind: 'block', id: block.id } });
-                return;
-            }
-            case 'newSection': {
-                if (!roomFor(source.source === 'canvas-block' ? 0 : 1, undefined, target.tab)) return;
-                const section = newSection(sectionTitleFor(source), source.source === 'block' && source.blockType === 'customFields' ? 2 : 1);
-                if (source.source === 'canvas-block') {
-                    edit(
-                        (d) => {
-                            insertSection(d, target.tab, target.index, section);
-                            moveBlock(d, source.blockId, section.id, 0);
-                        },
-                        { select: { kind: 'block', id: source.blockId } },
-                    );
-                    return;
+    /**
+     * What dropping `source` on each target does. New items are made once, here, so the live preview while dragging
+     * and the drop itself use the same ids (the dropped item is the one the admin watched move into place).
+     */
+    const prepareDrop = (source: DragSource): DropPlan => {
+        const block = makeBlock(source);
+        const started = newSection(sectionTitleFor(source), source.source === 'block' && source.blockType === 'customFields' ? 2 : 1);
+        const section = source.source === 'section' ? newSection('NEW SECTION', source.columns) : source.source === 'piece' ? makePieceSection(source.pieceId) : null;
+        const badge = source.source === 'field' ? newBadge(source.key) : null;
+        // Each drop inserts its own copy: an object handed to an immer draft would otherwise be changed in place.
+        const copy = <T,>(value: T): T => structuredClone(value);
+
+        return (target) => {
+            switch (target.kind) {
+                case 'block': {
+                    if (source.source === 'canvas-block') {
+                        const from = findBlock(doc, source.blockId);
+                        if (!from) return null;
+                        const error = from.section.id === target.sectionId ? null : roomError(0, target.sectionId);
+                        if (error) return { error };
+                        return { itemId: source.blockId, recipe: (d) => placeBlock(d, source.blockId, target.sectionId, target.index) };
+                    }
+                    if (!block) return null;
+                    const error = roomError(1, target.sectionId);
+                    if (error) return { error };
+                    return { itemId: block.id, select: { kind: 'block', id: block.id }, recipe: (d) => insertBlock(d, target.sectionId, target.index, copy(block)) };
                 }
-                const block = makeBlock(source);
-                if (!block) return;
-                edit((d) => insertSection(d, target.tab, target.index, { ...section, blocks: [block] }), { select: { kind: 'block', id: block.id } });
-                return;
+                case 'newSection': {
+                    if (source.source === 'canvas-block') {
+                        const error = roomError(0, undefined, target.tab);
+                        if (error) return { error };
+                        return {
+                            itemId: source.blockId,
+                            createdSectionId: started.id,
+                            select: { kind: 'block', id: source.blockId },
+                            recipe: (d) => {
+                                insertSection(d, target.tab, target.index, copy(started));
+                                moveBlock(d, source.blockId, started.id, 0);
+                            },
+                        };
+                    }
+                    if (!block) return null;
+                    const error = roomError(1, undefined, target.tab);
+                    if (error) return { error };
+                    return {
+                        itemId: block.id,
+                        createdSectionId: started.id,
+                        select: { kind: 'block', id: block.id },
+                        recipe: (d) => insertSection(d, target.tab, target.index, { ...copy(started), blocks: [copy(block)] }),
+                    };
+                }
+                case 'section': {
+                    if (source.source === 'canvas-section') return { itemId: source.sectionId, recipe: (d) => placeSection(d, source.sectionId, target.tab, target.index) };
+                    if (!section) return null;
+                    const error = roomError(section.blocks.length, undefined, target.tab);
+                    if (error) return { error };
+                    return { itemId: section.id, select: { kind: 'section', id: section.id }, recipe: (d) => insertSection(d, target.tab, target.index, copy(section)) };
+                }
+                case 'badge': {
+                    if (source.source === 'canvas-badge') return { itemId: source.badgeId, recipe: (d) => placeBadge(d, source.badgeId, target.index) };
+                    if (!badge) return null;
+                    if (doc.header.badges.length >= LIMITS.badges) return { error: `The header can have at most ${LIMITS.badges} badges.` };
+                    return { itemId: badge.id, select: { kind: 'badge', id: badge.id }, recipe: (d) => void d.header.badges.splice(target.index, 0, copy(badge)) };
+                }
             }
-            case 'section': {
-                if (source.source === 'canvas-section') return edit((d) => moveSection(d, source.sectionId, target.tab, target.index));
-                const section = source.source === 'section' ? newSection('NEW SECTION', source.columns) : source.source === 'piece' ? makePieceSection(source.pieceId) : null;
-                if (!section || !roomFor(section.blocks.length, undefined, target.tab)) return;
-                edit((d) => insertSection(d, target.tab, target.index, section), { select: { kind: 'section', id: section.id } });
-                return;
-            }
-            case 'badge': {
-                if (source.source === 'canvas-badge') return edit((d) => moveBadge(d, source.badgeId, target.index));
-                if (source.source !== 'field') return;
-                if (doc.header.badges.length >= LIMITS.badges) return warn(`The header can have at most ${LIMITS.badges} badges.`);
-                const badge = newBadge(source.key);
-                edit((d) => void d.header.badges.splice(target.index, 0, badge), { select: { kind: 'badge', id: badge.id } });
-                return;
-            }
-        }
+        };
+    };
+
+    const commitDrop = (result: Extract<DropResult, { recipe: unknown }>) => {
+        if (readOnly) return;
+        edit(result.recipe, result.select ? { select: result.select } : undefined);
     };
 
     /** The + of a palette item: into the selected section (after the selected field), or a new section at the end of the tab. */
@@ -443,7 +462,10 @@ function LayoutBuilder({
         } else {
             target = { kind: 'section', tab: workTab, index: inTab ? inTab.index + 1 : (doc.tabs[workTab]?.length ?? 0) };
         }
-        onDrop(source, target);
+        const result = prepareDrop(source)(target);
+        if (!result) return;
+        if ('error' in result) return warn(result.error);
+        commitDrop(result);
         // Bring the new item (the editor selects it) into view once it has rendered.
         window.setTimeout(() => document.querySelector('[data-layout-selected="true"]')?.scrollIntoView({ block: 'nearest', behavior: 'smooth' }), 80);
     };
@@ -528,7 +550,6 @@ function LayoutBuilder({
         <BuilderCanvas
             doc={doc}
             ctx={ctx}
-            header={header}
             tabs={tabs}
             tab={tab}
             onTab={setTab}
@@ -551,7 +572,7 @@ function LayoutBuilder({
     const stickySx = wide || !phone ? ({ position: 'sticky', top: 16, maxHeight: 'calc(100vh - 32px)', overflowY: 'auto', alignSelf: 'start' } as const) : {};
 
     return (
-        <LayoutDnd doc={doc} disabled={readOnly || mode === 'preview'} onDrop={onDrop}>
+        <LayoutDrag doc={doc} disabled={readOnly || mode === 'preview'} prepare={prepareDrop} onCommit={commitDrop} onReject={warn}>
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
                 <Toolbar
                     noun={noun.one}
@@ -674,7 +695,7 @@ function LayoutBuilder({
                     “{pieceToDelete?.name}” is removed from Pieces for all admins. Sections already on the drawer stay as they are.
                 </span>
             </ConfirmDeleteDialog>
-        </LayoutDnd>
+        </LayoutDrag>
     );
 }
 

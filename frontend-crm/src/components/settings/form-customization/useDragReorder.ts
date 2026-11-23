@@ -3,7 +3,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
 
 /** Elements inside a row that keep their own pointer behaviour (typing, selecting, clicking) instead of starting a drag. */
-const INTERACTIVE_SELECTOR = [
+export const INTERACTIVE_SELECTOR = [
     'input',
     'textarea',
     'select',
@@ -18,16 +18,16 @@ const INTERACTIVE_SELECTOR = [
 ].join(', ');
 
 /** Vertical movement before a press becomes a drag (so plain clicks never move anything). */
-const DRAG_THRESHOLD_PX = 4;
+export const DRAG_THRESHOLD_PX = 4;
 /** A sibling's slot flips only once the dragged edge is this far past its middle (no jitter on the boundary). */
-const HYSTERESIS_PX = 6;
-const SETTLE_MS = 180;
-const SHIFT_MS = 220;
-const EASE = 'cubic-bezier(0.2, 0, 0, 1)';
-const LIFT_SCALE = 1.012;
-const LIFT_SHADOW = '0 14px 30px -6px rgba(15, 23, 42, 0.18), 0 4px 12px -2px rgb(var(--crm-accent-rgb) / 0.14), 0 0 0 1.5px var(--crm-blue-400)';
+export const HYSTERESIS_PX = 6;
+export const SETTLE_MS = 180;
+export const SHIFT_MS = 220;
+export const EASE = 'cubic-bezier(0.2, 0, 0, 1)';
+export const LIFT_SCALE = 1.012;
+export const LIFT_SHADOW = '0 14px 30px -6px rgba(15, 23, 42, 0.18), 0 4px 12px -2px rgb(var(--crm-accent-rgb) / 0.14), 0 0 0 1.5px var(--crm-blue-400)';
 /** Same three layers, transparent: lets the shadow fade out while the row settles. */
-const SETTLED_SHADOW = '0 0 0 0 rgba(15, 23, 42, 0), 0 0 0 0 rgb(var(--crm-accent-rgb) / 0), 0 0 0 0 rgb(var(--crm-accent-rgb) / 0)';
+export const SETTLED_SHADOW = '0 0 0 0 rgba(15, 23, 42, 0), 0 0 0 0 rgb(var(--crm-accent-rgb) / 0), 0 0 0 0 rgb(var(--crm-accent-rgb) / 0)';
 /** Group header of the section a row is being dragged into (from another section). */
 const TARGET_GROUP_BG = 'var(--mui-palette-primary-soft)';
 const TARGET_GROUP_SHADOW = 'inset 3px 0 0 var(--mui-palette-primary-main), inset 0 -1px 0 var(--crm-blue-200)';
@@ -51,7 +51,7 @@ const DRAG_STYLE_PROPS = [
 ] as const;
 
 /** Nearest ancestor that actually scrolls vertically, else the page. */
-function findScroller(el: HTMLElement): HTMLElement {
+export function findScroller(el: HTMLElement): HTMLElement {
     for (let node = el.parentElement; node && node !== document.body; node = node.parentElement) {
         const { overflowY } = getComputedStyle(node);
         if ((overflowY === 'auto' || overflowY === 'scroll' || overflowY === 'overlay') && node.scrollHeight > node.clientHeight + 1) return node;
@@ -60,7 +60,7 @@ function findScroller(el: HTMLElement): HTMLElement {
 }
 
 /** Scroll speed for a pointer at `clientY`: negative = up, positive = down, eased in as it nears the edge. */
-function autoScrollSpeed(scroller: HTMLElement, clientY: number): number {
+export function autoScrollSpeed(scroller: HTMLElement, clientY: number): number {
     const isPage = scroller === document.scrollingElement || scroller === document.documentElement;
     const rect = isPage ? { top: 0, bottom: window.innerHeight } : scroller.getBoundingClientRect();
     // Only the part of the scroll area that is on screen counts.
@@ -76,7 +76,7 @@ function autoScrollSpeed(scroller: HTMLElement, clientY: number): number {
 }
 
 /** Page-wide drag styling (no text selection, grabbing cursor); returns the previous values to restore. */
-function lockBody(): { userSelect: string; cursor: string } {
+export function lockBody(): { userSelect: string; cursor: string } {
     const { style } = document.body;
     const previous = { userSelect: style.userSelect, cursor: style.cursor };
     style.userSelect = 'none';
@@ -85,7 +85,7 @@ function lockBody(): { userSelect: string; cursor: string } {
     return previous;
 }
 
-function unlockBody(previous: { userSelect: string; cursor: string }): void {
+export function unlockBody(previous: { userSelect: string; cursor: string }): void {
     document.body.style.userSelect = previous.userSelect;
     document.body.style.cursor = previous.cursor;
 }
