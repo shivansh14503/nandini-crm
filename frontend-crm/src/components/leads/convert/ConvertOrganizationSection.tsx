@@ -38,7 +38,8 @@ const ORGANIZATION_FIELDS = [
 /**
  * "Create Organization OR Select Organization" section of the Convert Lead form. The fields follow the Organization
  * form's configuration (Form Builder). Naming an existing organization (typed or picked) links it as it is: its
- * details are filled in and shown read-only, and only the name stays editable.
+ * details are filled in and shown read-only, and only the name stays editable. Clearing the name of a linked
+ * organization brings back the lead's own organization details.
  */
 export function ConvertOrganizationSection() {
     const getOptions = useDropdownOptionsGetter();
@@ -87,6 +88,18 @@ export function ConvertOrganizationSection() {
         setValue('extraFields.organizations', extraValuesFrom(configs, 'organizations', existing as unknown as Record<string, unknown>), opts);
     }, [existing, defaultValues, setValue, getValues, configs]);
 
+    /**
+     * A linked organization was removed (name cleared with [X] or deleted): back to the organization the lead brought,
+     * name included, as when a selected contact is cleared. The effect above then refills the rest from the lead. If the
+     * lead's own name is the organization just removed, the name stays empty, since that name would only link it again.
+     */
+    const releaseOrganization = () => {
+        if (!existing) return;
+        const leadName = ((defaultValues ?? {}) as Partial<F>).organizationName ?? '';
+        const relinks = matchExistingOrganization(organizations, leadName)?.id === existing.id;
+        setValue('organizationName', relinks ? '' : leadName, { shouldDirty: true });
+    };
+
     return (
         <>
             {existing && (
@@ -95,7 +108,7 @@ export function ConvertOrganizationSection() {
                     details can’t be edited here.
                     {organizationName?.trim().toLowerCase() !== existing.organizationName.trim().toLowerCase() &&
                         ` You typed “${organizationName.trim()}”, which is the same legal name written differently.`}
-                    {' '}Change the name to create a new organization instead.
+                    {' '}Clear the name to go back to the lead’s organization details, or change it to create a new organization instead.
                 </Alert>
             )}
             <FormConfigProvider module="organizations" fieldNames={CONVERT_FIELD_NAMES.organizations} borrowed>
@@ -115,6 +128,7 @@ export function ConvertOrganizationSection() {
                                         options={organizationNames}
                                         placeholder="Search or enter organization..."
                                         lookupType="organization"
+                                        onClearRecord={releaseOrganization}
                                     />
                                 </FormModeProvider>
                             ),
