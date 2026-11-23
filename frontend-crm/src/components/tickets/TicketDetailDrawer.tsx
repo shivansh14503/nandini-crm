@@ -1,33 +1,16 @@
 'use client';
 
-import React, { useEffect, useMemo, useState } from 'react';
+import React from 'react';
 import { useRouter } from 'next/navigation';
-import { Box, Chip, Typography } from '@mui/material';
-import ConfirmationNumberOutlinedIcon from '@mui/icons-material/ConfirmationNumberOutlined';
-import ReportProblemOutlinedIcon from '@mui/icons-material/ReportProblemOutlined';
-import BuildCircleOutlinedIcon from '@mui/icons-material/BuildCircleOutlined';
-import ApartmentOutlinedIcon from '@mui/icons-material/ApartmentOutlined';
-import PersonOutlineIcon from '@mui/icons-material/PersonOutlined';
-import HandshakeOutlinedIcon from '@mui/icons-material/HandshakeOutlined';
 import ContentCopyOutlinedIcon from '@mui/icons-material/ContentCopyOutlined';
 
 import { ROUTES } from '@/config/constants';
 import { withListOrigin } from '@/utils/listOrigin';
 import { isTicketOverdue, type Ticket } from '@/types/ticket.types';
 import { useTicket } from '@/hooks/queries';
-import { findCrmUser } from '@/services/masterData.store';
-import { ReadOnlyField } from '@/components/forms/ReadOnlyField';
-import { EmailActions, PhoneActions } from '@/components/common/ContactActions';
-import { formatPhoneDisplay } from '@/utils/phone';
-import {
-    EntityDetailDrawer,
-    DrawerSectionCard,
-    DrawerMetricGrid,
-    copyToClipboard,
-} from '@/components/common/Drawer';
+import { EntityDetailDrawer, copyToClipboard } from '@/components/common/Drawer';
+import { useLayoutDrawerProps } from '@/components/common/Drawer/layout';
 import { TICKET_FORM_TABS } from './TicketForm';
-import { TicketPriorityPill, TicketStatusPill, formatTicketDue } from './TicketBadges';
-import { DynamicDrawerCustomFields } from '@/components/common/Drawer/DynamicDrawerCustomFields';
 import { useShowRecordNumber } from '@/hooks/queries/useDocumentSeries';
 
 export interface TicketDetailDrawerProps {
@@ -38,37 +21,6 @@ export interface TicketDetailDrawerProps {
     hideBackdrop?: boolean;
 }
 
-const sectionIcon = (icon: React.ReactNode) => (
-    <Box sx={{ color: 'var(--crm-text-blue-600)', display: 'inline-flex' }}>{icon}</Box>
-);
-
-const getInitials = (name: string) => {
-    const parts = name.replace(/[._-]+/g, ' ').trim().split(/\s+/);
-    return ((parts[0]?.[0] ?? '') + (parts.length > 1 ? parts[parts.length - 1][0] : '')).toUpperCase();
-};
-
-/** Labelled multi-line text; renders nothing when empty. */
-function TextBlock({ label, value }: { label: string; value?: string }) {
-    if (!value?.trim()) return null;
-    return (
-        <Box sx={{ '& + &': { mt: 1.5 } }}>
-            <Typography sx={{ fontSize: '0.68rem', fontWeight: 700, color: 'var(--mui-palette-text-secondary)', letterSpacing: 0.3, mb: 0.4 }}>
-                {label.toUpperCase()}
-            </Typography>
-            <Typography sx={{ fontSize: '0.84rem', color: 'var(--crm-slate-700)', lineHeight: 1.55, whiteSpace: 'pre-wrap' }}>{value}</Typography>
-        </Box>
-    );
-}
-
-const flagChip = (label: string) => (
-    <Chip
-        key={label}
-        label={label}
-        size="small"
-        sx={{ height: 20, fontSize: '0.68rem', fontWeight: 700, backgroundColor: 'var(--mui-palette-primary-soft)', color: 'var(--crm-text-blue-700)', border: '1px solid var(--mui-palette-primary-softBorder)' }}
-    />
-);
-
 export function TicketDetailDrawer({ ticket, open, onClose, onEdit, hideBackdrop }: TicketDetailDrawerProps) {
     const showNumber = useShowRecordNumber();
     const router = useRouter();
@@ -76,13 +28,13 @@ export function TicketDetailDrawer({ ticket, open, onClose, onEdit, hideBackdrop
     const { data: freshTicket } = useTicket(open && ticket?.id ? ticket.id : undefined);
     const t = freshTicket ?? ticket;
 
+    // Header, badges and tabs come from the Tickets drawer layout (Admin › Form Customization › Drawer Layout).
+    const view = useLayoutDrawerProps('tickets', t, TICKET_FORM_TABS);
+
     if (!t) return null;
 
     const handleEdit = () => (onEdit ? onEdit(t.id) : router.push(ROUTES.TICKET_EDIT(t.id)));
     const overdue = isTicketOverdue(t);
-    const assignedUser = findCrmUser(t.assignedTo);
-    const assignedDisplayName = assignedUser?.name || t.assignedTo;
-    const flags = [t.amcFlag && 'AMC', t.cloudFlag && 'Cloud'].filter((f): f is string => Boolean(f));
 
     return (
         <EntityDetailDrawer
@@ -90,155 +42,17 @@ export function TicketDetailDrawer({ ticket, open, onClose, onEdit, hideBackdrop
             module="tickets"
             onClose={onClose}
             hideBackdrop={hideBackdrop}
-            title={t.ticketSubject || (showNumber('ticket') ? t.ticketNumber : 'Ticket')}
-            subtitle={[showNumber('ticket') ? t.ticketNumber : '', t.organizationName].filter(Boolean).join(' • ')}
-            avatarIcon={<ConfirmationNumberOutlinedIcon />}
-            avatarBg="linear-gradient(135deg, var(--crm-fill-blue-700) 0%, var(--crm-fill-blue-600) 100%)"
-            badges={[
-                ...(showNumber('ticket') ? [{
-                    label: t.ticketNumber,
-                    isMonospace: true,
-                    backgroundColor: 'var(--mui-palette-primary-soft)',
-                    color: 'var(--crm-text-blue-700)',
-                    borderColor: 'var(--mui-palette-primary-softBorder)',
-                }] : []),
-                {
-                    label: t.natureOfCall || 'General',
-                    backgroundColor: 'var(--mui-palette-background-subtle)',
-                    color: 'var(--crm-slate-600)',
-                    borderColor: 'var(--mui-palette-border-main)',
-                },
-            ]}
+            title={view.title}
+            subtitle={view.subtitle}
+            avatarIcon={view.avatarIcon}
+            avatarBg={view.avatarBg}
+            badges={view.badges}
             headerActions={{
                 onEdit: handleEdit,
                 onView: () => router.push(withListOrigin(ROUTES.TICKET_DETAIL(t.id))),
             }}
-            formTabs={TICKET_FORM_TABS}
-            tabContents={{
-                overview: (
-                    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                        <DrawerMetricGrid
-                            items={[
-                                { label: 'PRIORITY', value: <TicketPriorityPill priority={t.ticketPriority} />, bg: 'var(--mui-palette-background-subtle)', borderColor: 'var(--mui-palette-border-light)', p: 1.2 },
-                                { label: 'STATUS', value: <TicketStatusPill status={t.ticketStatus} />, bg: 'var(--mui-palette-background-subtle)', borderColor: 'var(--mui-palette-border-light)', p: 1.2 },
-                                {
-                                    label: 'SUPPORT TYPE',
-                                    value: t.supportType,
-                                    valueSize: '0.92rem',
-                                    valueWeight: 800,
-                                    bg: 'var(--mui-palette-background-subtle)',
-                                    borderColor: 'var(--mui-palette-border-light)',
-                                    p: 1.2,
-                                    sublabel: flags.length ? <Box sx={{ display: 'flex', gap: 0.5, mt: 0.6 }}>{flags.map(flagChip)}</Box> : undefined,
-                                },
-                                {
-                                    label: 'DUE DATE',
-                                    value: formatTicketDue(t.dueDate),
-                                    valueSize: '0.86rem',
-                                    valueWeight: 800,
-                                    labelColor: overdue ? 'var(--crm-red-700)' : undefined,
-                                    valueColor: overdue ? 'var(--crm-red-700)' : 'var(--crm-slate-900)',
-                                    bg: overdue ? 'var(--mui-palette-error-soft)' : 'var(--mui-palette-background-subtle)',
-                                    borderColor: overdue ? 'var(--mui-palette-error-softBorder)' : 'var(--mui-palette-border-light)',
-                                    p: 1.2,
-                                    sublabel: overdue ? (
-                                        <Typography sx={{ fontSize: '0.7rem', fontWeight: 700, color: 'var(--mui-palette-error-main)', mt: 0.4 }}>Overdue</Typography>
-                                    ) : undefined,
-                                },
-                            ]}
-                        />
-
-                        <DrawerSectionCard p={1.8} icon={sectionIcon(<ReportProblemOutlinedIcon sx={{ fontSize: 15 }} />)} title="Problem Details">
-                            <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 1.5, mb: 1.5 }}>
-                                <ReadOnlyField label="Nature Of Call" value={t.natureOfCall} />
-                                <ReadOnlyField label="Support Mode" value={t.supportMode} />
-                                <ReadOnlyField label="Source" value={t.source} />
-                            </Box>
-                            <TextBlock label="Problem Reported" value={t.problemReported} />
-                            <TextBlock label="Problem Observed" value={t.problemObserved} />
-                            <TextBlock label="Reason For Escalated Calls" value={t.reasonForEscalatedCalls} />
-                        </DrawerSectionCard>
-
-                        <DrawerSectionCard p={1.8} icon={sectionIcon(<BuildCircleOutlinedIcon sx={{ fontSize: 15 }} />)} title="Resolution & RCA">
-                            {t.resolution || t.rca || t.addDescription ? (
-                                <>
-                                    <TextBlock label="Resolution" value={t.resolution} />
-                                    <TextBlock label="RCA (Root Cause Analysis)" value={t.rca} />
-                                    <TextBlock label="Additional Description" value={t.addDescription} />
-                                </>
-                            ) : (
-                                <Typography sx={{ color: 'var(--mui-palette-text-muted)', fontSize: '0.84rem' }}>No resolution recorded yet.</Typography>
-                            )}
-                        </DrawerSectionCard>
-
-                        <DrawerSectionCard p={1.8} icon={sectionIcon(<ApartmentOutlinedIcon sx={{ fontSize: 15 }} />)} title="Client & Contact Information">
-                            <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 1.5 }}>
-                                <ReadOnlyField label="Organization" value={t.organizationName} />
-                                <ReadOnlyField label="Contact" value={t.contact} />
-                                <ReadOnlyField
-                                    label="Contact Number"
-                                    value={t.contactNumber ? formatPhoneDisplay(t.contactNumber) || t.contactNumber : undefined}
-                                    actions={<PhoneActions phone={t.contactNumber} />}
-                                />
-                                <ReadOnlyField label="Contact Email" value={t.contactEmail} actions={<EmailActions email={t.contactEmail} />} />
-                                <ReadOnlyField label="Left Job" value={t.leftJob} />
-                            </Box>
-                            <Box sx={{ mt: 1.5 }}>
-                                <TextBlock label="Account Address" value={t.accountAddress} />
-                            </Box>
-                        </DrawerSectionCard>
-
-                        <DrawerSectionCard p={1.8} icon={sectionIcon(<PersonOutlineIcon sx={{ fontSize: 15 }} />)} title="Assigned Representative">
-                            {t.assignedTo ? (
-                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.25 }}>
-                                    <Box
-                                        sx={{
-                                            width: 34,
-                                            height: 34,
-                                            borderRadius: '50%',
-                                            background: 'linear-gradient(135deg, var(--crm-fill-blue-600) 0%, var(--crm-fill-blue-700) 100%)',
-                                            color: '#ffffff',
-                                            display: 'flex',
-                                            alignItems: 'center',
-                                            justifyContent: 'center',
-                                            fontSize: '0.78rem',
-                                            fontWeight: 700,
-                                            boxShadow: '0 2px 8px rgb(var(--crm-accent-rgb) / 0.25)',
-                                        }}
-                                    >
-                                        {getInitials(assignedDisplayName)}
-                                    </Box>
-                                    <Box>
-                                        <Typography sx={{ fontSize: '0.88rem', fontWeight: 700, color: 'var(--crm-slate-900)', lineHeight: 1.3 }}>
-                                            {assignedDisplayName}
-                                        </Typography>
-                                        <Typography sx={{ fontSize: '0.72rem', color: 'var(--mui-palette-text-secondary)' }}>
-                                            {assignedUser ? `${assignedUser.role} • ${assignedUser.department}` : 'Support Representative'}
-                                        </Typography>
-                                    </Box>
-                                </Box>
-                            ) : (
-                                <Typography sx={{ color: 'var(--mui-palette-text-muted)', fontSize: '0.86rem' }}>Unassigned</Typography>
-                            )}
-                        </DrawerSectionCard>
-
-                        {/* Admin-defined custom fields */}
-                        <DynamicDrawerCustomFields module="tickets" record={t} />
-                    </Box>
-                ),
-                partner_company: (
-                    <DrawerSectionCard p={1.8} icon={sectionIcon(<HandshakeOutlinedIcon sx={{ fontSize: 15 }} />)} title="Partner Company">
-                        {t.partnerCompany || t.partnerCompanyContact ? (
-                            <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 1.5 }}>
-                                <ReadOnlyField label="Partner Company" value={t.partnerCompany} />
-                                <ReadOnlyField label="Partner Company Contact" value={t.partnerCompanyContact} />
-                            </Box>
-                        ) : (
-                            <Typography sx={{ color: 'var(--mui-palette-text-muted)', fontSize: '0.84rem' }}>No partner company involved.</Typography>
-                        )}
-                    </DrawerSectionCard>
-                ),
-            }}
+            formTabs={view.formTabs}
+            tabContents={view.tabContents}
             auditEntity={{ type: 'tickets', id: t.id }}
             recordAudit={t}
             includeChangesTab

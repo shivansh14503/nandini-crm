@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 
 // Icons
@@ -16,7 +16,6 @@ import { EntityDetailDrawer } from '@/components/common/Drawer';
 import { useLayoutDrawerProps } from '@/components/common/Drawer/layout';
 import { AppToast } from '@/components/common/AppToast';
 import { LEAD_FORM_TABS } from './LeadForm';
-import { useShowRecordNumber } from '@/hooks/queries/useDocumentSeries';
 
 export interface LeadDetailDrawerProps {
     lead: Lead | null;
@@ -35,7 +34,6 @@ export function LeadDetailDrawer({
     onLeadUpdated,
     onShowToast,
 }: LeadDetailDrawerProps) {
-    const showNumber = useShowRecordNumber();
     const router = useRouter();
 
     const { data: freshLead } = useLead(open && lead?.id ? lead.id : undefined);
@@ -57,8 +55,7 @@ export function LeadDetailDrawer({
     });
 
     // Header, badges and tabs come from the Leads drawer layout (Admin › Form Customization › Drawer Layout).
-    const hiddenValues = useMemo(() => new Set(showNumber('lead') ? [] : ['leadCode']), [showNumber]);
-    const view = useLayoutDrawerProps('leads', freshLead ?? lead, LEAD_FORM_TABS, hiddenValues);
+    const view = useLayoutDrawerProps('leads', freshLead ?? lead, LEAD_FORM_TABS);
 
     const l = freshLead ?? lead;
     if (!l) return null;

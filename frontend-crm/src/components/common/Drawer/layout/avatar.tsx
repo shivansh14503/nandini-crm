@@ -15,6 +15,9 @@ import SchoolOutlinedIcon from '@mui/icons-material/SchoolOutlined';
 import SupportAgentOutlinedIcon from '@mui/icons-material/SupportAgentOutlined';
 import PhoneInTalkOutlinedIcon from '@mui/icons-material/PhoneInTalkOutlined';
 import WorkOutlineOutlinedIcon from '@mui/icons-material/WorkOutlineOutlined';
+import RequestQuoteOutlinedIcon from '@mui/icons-material/RequestQuoteOutlined';
+import Inventory2OutlinedIcon from '@mui/icons-material/Inventory2Outlined';
+import ConfirmationNumberOutlinedIcon from '@mui/icons-material/ConfirmationNumberOutlined';
 import type { AvatarIcon, DrawerAvatar } from '@/lib/drawer-layout';
 
 /** Preset avatar icons offered in the builder (keys are stored in the layout). */
@@ -31,6 +34,9 @@ export const AVATAR_ICON_OPTIONS: Record<AvatarIcon, { label: string; Icon: SvgI
     support: { label: 'Support', Icon: SupportAgentOutlinedIcon },
     phone: { label: 'Phone', Icon: PhoneInTalkOutlinedIcon },
     work: { label: 'Work', Icon: WorkOutlineOutlinedIcon },
+    quote: { label: 'Quotation', Icon: RequestQuoteOutlinedIcon },
+    box: { label: 'Product', Icon: Inventory2OutlinedIcon },
+    ticket: { label: 'Ticket', Icon: ConfirmationNumberOutlinedIcon },
 };
 
 const BRAND_FILL = 'linear-gradient(135deg, var(--crm-fill-blue-600) 0%, var(--crm-fill-blue-700) 100%)';

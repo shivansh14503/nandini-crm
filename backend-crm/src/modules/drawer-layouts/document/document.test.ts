@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { cloneSection, documentSchema, isSingleEmoji, layoutFieldRefs, pruneLayout, summarizeLayout, type DrawerLayoutDocument } from './index.js';
+import { cloneSection, documentSchema, isSingleEmoji, layoutFieldRefs, layoutUsesLineItems, pruneLayout, summarizeLayout, type DrawerLayoutDocument } from './index.js';
 
 const field = (id: string, key: string) => ({
     id,
@@ -108,5 +108,16 @@ describe('refs', () => {
         assert.equal(summary.badges, 'Rating: rating (auto)');
         assert.equal(summary['tab:overview'], 'KEY FACTS [2 col, card]: designation, cf_budget');
         assert.equal(summary.avatar, 'Icon: person, red when Hot');
+    });
+
+    it('accepts line items and totals blocks and notices them', () => {
+        const doc = layout();
+        assert.equal(layoutUsesLineItems(doc), false);
+        doc.tabs.line_items = [
+            { id: 's9', title: '', style: 'plain', columns: 1, hideEmpty: false, blocks: [{ id: 'b9', type: 'lineItems', emptyText: '' }, { id: 'b10', type: 'totals' }] },
+        ];
+        assert.equal(documentSchema.safeParse(doc).success, true);
+        assert.equal(layoutUsesLineItems(doc), true);
+        assert.match(summarizeLayout(doc)['tab:line_items'], /line items, totals/);
     });
 });

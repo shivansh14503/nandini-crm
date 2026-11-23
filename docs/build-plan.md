@@ -174,7 +174,10 @@ only (not the full record page); Save goes live straight away; Leads first.
       sample or real lead, settings panel, undo / redo, Save / Reset, Pieces library; avatar = preset icon, initials or
       a set of emoji; responsive (3 panes / 2 panes / phone with a bottom sheet) with touch drag and
       add / move buttons.
-- [ ] The other drawers: Opportunities, Quotations, Organizations, Contacts, Products, Tickets, Partner Companies
+- [x] **Every other drawer** (2026-11-23): Opportunities, Quotations, Organizations, Contacts, Products, Tickets and
+      Partner Companies render from their layout (built-in layouts reproduce the old hand-built drawers); new blocks
+      Line items and Totals (opportunities, quotations), new field looks User / Code pill / Hidden until revealed,
+      system values per module (record numbers, Grand Total, AMC / Cloud / Verified flags), more avatar icons
       (each needs its system values, address prefixes, built-in layout and pieces).
 - [ ] Footer actions in the layout.
 

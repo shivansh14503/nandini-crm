@@ -137,7 +137,9 @@ The auth endpoints use the older `{ status: 'ok', … }` envelope rather than `{
 
 `/drawer-layouts` (`GET /` any signed-in user; changes admin only) and `/drawer-pieces` (admin only). The layout
 document schema is `backend-crm/src/modules/drawer-layouts/document/schema.ts` (copied to the frontend by
-`npm run sync:drawer-layout`). Modules: `leads`.
+`npm run sync:drawer-layout`). Modules: `leads`, `contacts`, `organizations`, `opportunities`, `quotations`, `products`,
+`tickets`, `partner-companies`. The `lineItems` and `totals` blocks are allowed only on `opportunities` and
+`quotations` (**400** elsewhere, also for pieces).
 
 | Method | Path | Description |
 | --- | --- | --- |

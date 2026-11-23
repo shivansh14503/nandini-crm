@@ -13,19 +13,36 @@ import { z } from 'zod';
 
 export const DRAWER_LAYOUT_VERSION = 1;
 
-/** Modules whose drawer reads a saved layout. Others keep their hand-built drawer until they are switched over. */
-export const DRAWER_LAYOUT_MODULES = ['leads'] as const;
+/** Modules whose record drawer is drawn from a layout (every CRM module). */
+export const DRAWER_LAYOUT_MODULES = ['leads', 'contacts', 'organizations', 'opportunities', 'quotations', 'products', 'tickets', 'partner-companies'] as const;
 export type DrawerLayoutModule = (typeof DRAWER_LAYOUT_MODULES)[number];
 
 /** Values a drawer can show that aren't form fields (set by the system, never typed in). */
 export const SYSTEM_FIELDS: Record<DrawerLayoutModule, readonly string[]> = {
     leads: ['leadCode', 'rating'],
+    contacts: ['contactCode'],
+    organizations: ['accountCode', 'accountVerified', 'activeAmc', 'activeCloud'],
+    opportunities: ['opportunityCode', 'grandTotal', 'description'],
+    quotations: ['quotationCode', 'grandTotal'],
+    products: ['productCode'],
+    tickets: ['ticketNumber', 'amcFlag', 'cloudFlag'],
+    'partner-companies': [],
 };
 
 /** Each module's addresses, by field prefix (`primary` → primaryAddress, primaryCity, primaryState, …). */
 export const ADDRESS_PREFIXES: Record<DrawerLayoutModule, readonly string[]> = {
     leads: ['primary', 'other'],
+    contacts: [],
+    organizations: ['billing', 'shipping'],
+    opportunities: [],
+    quotations: ['billing', 'shipping'],
+    products: [],
+    tickets: [],
+    'partner-companies': ['billing', 'shipping'],
 };
+
+/** Modules whose records carry line items (products and services with totals): only they may use those blocks. */
+export const LINE_ITEM_MODULES: readonly DrawerLayoutModule[] = ['opportunities', 'quotations'];
 
 /** Preset avatar icons (the frontend maps each to an icon). */
 export const AVATAR_ICONS = [
@@ -41,6 +58,9 @@ export const AVATAR_ICONS = [
     'support',
     'phone',
     'work',
+    'quote',
+    'box',
+    'ticket',
 ] as const;
 export type AvatarIcon = (typeof AVATAR_ICONS)[number];
 
@@ -55,13 +75,16 @@ export type SectionStyle = (typeof SECTION_STYLES)[number];
 /**
  * How a field block shows its value. standard = label over value; large = big bold value; emphasis = brand-coloured
  * value with an icon; chip / chips = pill(s); quote = italic with a left rule; channel = phone / email rows with
- * call / mail buttons.
+ * call / mail buttons; person = a user with initials, role and department; code = monospace pill with a copy
+ * button; masked = all but the last 4 characters hidden until revealed (account numbers).
  */
-export const FIELD_DISPLAYS = ['standard', 'large', 'emphasis', 'chip', 'chips', 'quote', 'channel'] as const;
+export const FIELD_DISPLAYS = ['standard', 'large', 'emphasis', 'chip', 'chips', 'quote', 'channel', 'person', 'code', 'masked'] as const;
 export type FieldDisplay = (typeof FIELD_DISPLAYS)[number];
 
-export const BLOCK_TYPES = ['field', 'heading', 'text', 'divider', 'address', 'customFields'] as const;
+export const BLOCK_TYPES = ['field', 'heading', 'text', 'divider', 'address', 'customFields', 'lineItems', 'totals'] as const;
 export type BlockType = (typeof BLOCK_TYPES)[number];
+/** Blocks only a module in LINE_ITEM_MODULES may use. */
+export const LINE_ITEM_BLOCKS: readonly BlockType[] = ['lineItems', 'totals'];
 
 export const LIMITS = {
     subtitleFields: 4,
@@ -126,7 +149,7 @@ export const headerSchema = z.object({
     /** Joined with " • "; empty values are skipped. */
     subtitleFields: z.array(fieldKey).max(LIMITS.subtitleFields),
     avatar: avatarSchema,
-    /** Leads: the avatar turns red while the lead's Rating is Hot. */
+    /** Leads only: the avatar turns red while the lead's Rating is Hot (ignored elsewhere). */
     hotAvatar: z.boolean(),
     badges: z.array(badgeSchema).max(LIMITS.badges),
 });
@@ -159,6 +182,10 @@ export const blockSchema = z.discriminatedUnion('type', [
     z.object({ id, type: z.literal('address'), prefix: addressPrefix, emptyText: text(LIMITS.emptyText) }),
     /** Every custom field marked "Visible in Drawer" that isn't placed elsewhere on the layout (new ones land here). */
     z.object({ id, type: z.literal('customFields') }),
+    /** The record's products and services, one card each (opportunities, quotations). */
+    z.object({ id, type: z.literal('lineItems'), emptyText: text(LIMITS.emptyText) }),
+    /** Gross, discounts, subtotal, tax and grand total of the line items (opportunities, quotations). */
+    z.object({ id, type: z.literal('totals') }),
 ]);
 export type DrawerBlock = z.infer<typeof blockSchema>;
 export type DrawerFieldBlock = z.infer<typeof fieldBlockSchema>;

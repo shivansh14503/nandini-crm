@@ -204,6 +204,9 @@ const DISPLAY_LABELS: Record<FieldDisplay, string> = {
     chips: 'Chips (one per value)',
     quote: 'Quote box',
     channel: 'Call / email row with buttons',
+    person: 'User with role and department',
+    code: 'Code pill with copy button',
+    masked: 'Hidden until revealed (last 4 shown)',
 };
 
 function displaysFor(type: FieldType | undefined): FieldDisplay[] {
@@ -211,6 +214,8 @@ function displaysFor(type: FieldType | undefined): FieldDisplay[] {
     if (type === 'multiselect' || type === 'email') list.push('chips');
     if (type === 'text' || type === 'textarea' || type === 'uppercase') list.push('quote');
     if (type === 'phone' || type === 'email') list.push('channel');
+    if (type === 'lookup') list.push('person');
+    if (type === 'text' || type === 'uppercase' || type === 'number') list.push('code', 'masked');
     return list;
 }
 
@@ -638,6 +643,16 @@ function BlockSettings({
                     their own, so keep it somewhere on the drawer. Place a custom field elsewhere and it leaves this list.
                 </Typography>
             )}
+            {block.type === 'lineItems' && (
+                <Group title="Line items" hint="Every product and service on the record, one card each with quantity, price, discount and tax.">
+                    <TextInput label="Text when there are none" placeholder="No line items yet." value={block.emptyText} max={LIMITS.emptyText} disabled={readOnly} onChange={(v) => update({ emptyText: v }, 'emptyText')} />
+                </Group>
+            )}
+            {block.type === 'totals' && (
+                <Typography sx={{ fontSize: '0.8rem', color: 'var(--mui-palette-text-secondary)', lineHeight: 1.5 }}>
+                    Gross total, item and lump-sum discounts, subtotal, tax and the grand total of the record&apos;s line items.
+                </Typography>
+            )}
             {block.type === 'divider' && <Typography sx={{ fontSize: '0.8rem', color: 'var(--mui-palette-text-secondary)' }}>A thin line between the items above and below it.</Typography>}
             {position}
             <RemoveButton label="Remove" disabled={readOnly} onClick={onRemove} />
@@ -655,7 +670,7 @@ export function selectionTitle(selection: Selection | null, doc: DrawerLayoutDoc
     const block = findBlock(doc, selection.id)?.block;
     if (!block) return 'Settings';
     if (block.type === 'field') return fields.find((f) => f.key === block.field)?.label ?? 'Field';
-    return { heading: 'Heading', text: 'Static text', divider: 'Divider', address: 'Address', customFields: 'Other custom fields' }[block.type];
+    return { heading: 'Heading', text: 'Static text', divider: 'Divider', address: 'Address', customFields: 'Other custom fields', lineItems: 'Line items', totals: 'Totals' }[block.type];
 }
 
 export function BuilderSettings({

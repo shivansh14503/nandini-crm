@@ -13,6 +13,8 @@ import PlaceOutlinedIcon from '@mui/icons-material/PlaceOutlined';
 import SearchRoundedIcon from '@mui/icons-material/SearchRounded';
 import TitleRoundedIcon from '@mui/icons-material/TitleRounded';
 import TuneOutlinedIcon from '@mui/icons-material/TuneOutlined';
+import ReceiptLongOutlinedIcon from '@mui/icons-material/ReceiptLongOutlined';
+import CalculateOutlinedIcon from '@mui/icons-material/CalculateOutlined';
 import ViewAgendaOutlinedIcon from '@mui/icons-material/ViewAgendaOutlined';
 import ViewColumnOutlinedIcon from '@mui/icons-material/ViewColumnOutlined';
 import ShortTextRoundedIcon from '@mui/icons-material/ShortTextRounded';
@@ -178,6 +180,7 @@ export function BuilderPalette({
     addresses,
     placed,
     customFieldsPlaced,
+    lineItems = false,
     builtInPieces,
     savedPieces,
     piecesLoading,
@@ -189,6 +192,8 @@ export function BuilderPalette({
     addresses: AddressDef[];
     placed: Set<string>;
     customFieldsPlaced: boolean;
+    /** The module's records have line items (opportunities, quotations): offer the line items and totals blocks. */
+    lineItems?: boolean;
     builtInPieces: BuiltInPiece[];
     savedPieces: DrawerPiece[];
     piecesLoading: boolean;
@@ -335,6 +340,28 @@ export function BuilderPalette({
                             onAdd={onAdd}
                             readOnly={readOnly}
                         />
+                        {lineItems && (
+                            <>
+                                <PaletteItem
+                                    id="palette-line-items"
+                                    source={{ source: 'block', blockType: 'lineItems', label: 'Line items' }}
+                                    title="Line items"
+                                    subtitle="Products and services, one card each"
+                                    icon={<ReceiptLongOutlinedIcon sx={{ fontSize: 17 }} />}
+                                    onAdd={onAdd}
+                                    readOnly={readOnly}
+                                />
+                                <PaletteItem
+                                    id="palette-totals"
+                                    source={{ source: 'block', blockType: 'totals', label: 'Totals' }}
+                                    title="Totals"
+                                    subtitle="Discounts, tax and grand total"
+                                    icon={<CalculateOutlinedIcon sx={{ fontSize: 17 }} />}
+                                    onAdd={onAdd}
+                                    readOnly={readOnly}
+                                />
+                            </>
+                        )}
                     </>
                 )}
 

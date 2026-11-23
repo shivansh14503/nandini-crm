@@ -1,15 +1,9 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Box, Typography, Chip, Divider } from '@mui/material';
 
 // Icons
-import BusinessOutlinedIcon from '@mui/icons-material/BusinessOutlined';
-import PersonOutlinedIcon from '@mui/icons-material/PersonOutlined';
-import PhoneOutlinedIcon from '@mui/icons-material/PhoneOutlined';
-import EmailOutlinedIcon from '@mui/icons-material/EmailOutlined';
-import CalendarMonthOutlinedIcon from '@mui/icons-material/CalendarMonthOutlined';
 import EditOutlinedIcon from '@mui/icons-material/EditOutlined';
 import RequestQuoteOutlinedIcon from '@mui/icons-material/RequestQuoteOutlined';
 import CheckCircleOutlinedIcon from '@mui/icons-material/CheckCircleOutlined';
@@ -17,18 +11,11 @@ import CheckCircleOutlinedIcon from '@mui/icons-material/CheckCircleOutlined';
 import { ROUTES } from '@/config/constants';
 import { withListOrigin } from '@/utils/listOrigin';
 import type { Opportunity } from '@/types/opportunity.types';
-import {
-    EntityDetailDrawer,
-    DrawerSectionCard,
-} from '@/components/common/Drawer';
+import { EntityDetailDrawer } from '@/components/common/Drawer';
+import { useLayoutDrawerProps } from '@/components/common/Drawer/layout';
 import { AppToast } from '@/components/common/AppToast';
 import { useOpportunity, useOrganization, useOrganizations, useQuotations } from '@/hooks/queries';
 import { OPPORTUNITY_FORM_TABS } from './OpportunityForm';
-import { DynamicDrawerCustomFields } from '@/components/common/Drawer/DynamicDrawerCustomFields';
-import { DoubleClickCopyText } from '@/components/common/useDoubleClickCopy';
-import { formatPhoneDisplay } from '@/utils/phone';
-import { EmailActions, PhoneActions } from '@/components/common/ContactActions';
-import { useShowRecordNumber } from '@/hooks/queries/useDocumentSeries';
 
 export interface OpportunityDetailDrawerProps {
     opportunity: Opportunity | null;
@@ -45,11 +32,13 @@ export function OpportunityDetailDrawer({
     onEdit,
     onShowToast,
 }: OpportunityDetailDrawerProps) {
-    const showNumber = useShowRecordNumber();
     const router = useRouter();
 
     const { data: freshOpp } = useOpportunity(open && opportunity?.id ? opportunity.id : undefined);
     const opp = freshOpp ?? opportunity;
+
+    // Header, badges and tabs come from the Opportunities drawer layout (Admin › Form Customization › Drawer Layout).
+    const view = useLayoutDrawerProps('opportunities', opp, OPPORTUNITY_FORM_TABS);
 
     const { data: linkedOrgById } = useOrganization(
         open && opp?.organizationId ? opp.organizationId : undefined
@@ -123,309 +112,23 @@ export function OpportunityDetailDrawer({
         }
     };
 
-    const getStageColor = (stage: string) => {
-        switch (stage) {
-            case 'Closed Won':
-                return { bg: 'var(--crm-green-100)', text: 'var(--crm-green-700)', border: 'var(--crm-green-300)' };
-            case 'Closed Lost':
-                return { bg: 'var(--crm-red-100)', text: 'var(--crm-red-700)', border: 'var(--crm-red-300)' };
-            case 'Negotiation':
-            case 'Proposal/Price Quote':
-                return { bg: 'var(--crm-amber-100)', text: 'var(--crm-amber-700)', border: 'var(--mui-palette-warning-softBorder)' };
-            default:
-                return { bg: 'var(--mui-palette-primary-soft)', text: 'var(--crm-text-blue-700)', border: 'var(--mui-palette-primary-softBorder)' };
-        }
-    };
-
-    const stageColors = getStageColor(opp.salesStage);
-
     return (
         <>
             <EntityDetailDrawer
             open={open}
             module="opportunities"
             onClose={onClose}
-            title={opp.organizationName}
-            subtitle={[showNumber('opportunity') ? opp.opportunityCode : '', opp.contact].filter(Boolean).join(' • ')}
-            avatarText={opp.organizationName.substring(0, 2).toUpperCase()}
-            avatarBg="var(--crm-fill-blue-900)"
-            badges={[
-                {
-                    label: opp.salesStage,
-                    backgroundColor: stageColors.bg,
-                    color: stageColors.text,
-                    borderColor: stageColors.border,
-                },
-                {
-                    label: `₹${opp.grandTotal.toLocaleString('en-IN')}`,
-                    backgroundColor: 'var(--crm-green-50)',
-                    color: 'var(--crm-green-700)',
-                    borderColor: 'var(--crm-green-200)',
-                },
-                {
-                    label: opp.type,
-                    backgroundColor: 'var(--mui-palette-background-hover)',
-                    color: 'var(--crm-slate-600)',
-                    borderColor: 'var(--mui-palette-border-strong)',
-                },
-            ]}
+            title={view.title}
+            subtitle={view.subtitle}
+            avatarIcon={view.avatarIcon}
+            avatarBg={view.avatarBg}
+            badges={view.badges}
             headerActions={{
                 onEdit: handleEdit,
                 onView: () => router.push(withListOrigin(ROUTES.OPPORTUNITY_DETAIL(opp.id))),
             }}
-            formTabs={OPPORTUNITY_FORM_TABS}
-            tabContents={{
-                basic: (
-                    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5 }}>
-                        {/* Organization & Deal Card */}
-                        <DrawerSectionCard title="CLIENT ORGANIZATION" bg="var(--mui-palette-background-subtle)">
-                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 0.5 }}>
-                                <BusinessOutlinedIcon sx={{ fontSize: 18, color: 'var(--crm-text-blue-600)' }} />
-                                <Typography sx={{ fontSize: '0.98rem', fontWeight: 800, color: 'var(--mui-palette-text-primary)' }}>
-                                    <DoubleClickCopyText>{opp.organizationName}</DoubleClickCopyText>
-                                </Typography>
-                            </Box>
-                            <Typography sx={{ fontSize: '0.75rem', color: 'var(--mui-palette-text-secondary)', mt: 0.3 }}>
-                                {showNumber('opportunity') && <>Deal Ref: {opp.opportunityCode} • </>}Type: {opp.type}
-                            </Typography>
-                        </DrawerSectionCard>
-
-                        {/* Primary Contact Person Details */}
-                        <DrawerSectionCard title="CONTACT PERSON DETAILS">
-                            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.2, mt: 1 }}>
-                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                                    <PersonOutlinedIcon sx={{ fontSize: 16, color: 'var(--mui-palette-text-secondary)' }} />
-                                    <Typography sx={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--mui-palette-text-primary)' }}>
-                                        {opp.contact}
-                                    </Typography>
-                                </Box>
-
-                                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                                        <PhoneOutlinedIcon sx={{ fontSize: 16, color: 'var(--mui-palette-text-secondary)' }} />
-                                        <Typography sx={{ fontSize: '0.82rem', color: 'var(--mui-palette-text-primary)' }}>
-                                            {formatPhoneDisplay(opp.contactNumber) || opp.contactNumber}
-                                        </Typography>
-                                    </Box>
-                                    <PhoneActions phone={opp.contactNumber} />
-                                </Box>
-
-                                {opp.contactEmail && (
-                                    <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                                            <EmailOutlinedIcon sx={{ fontSize: 16, color: 'var(--mui-palette-text-secondary)' }} />
-                                            <Typography sx={{ fontSize: '0.82rem', color: 'var(--mui-palette-text-primary)' }}>
-                                                {opp.contactEmail}
-                                            </Typography>
-                                        </Box>
-                                        <EmailActions email={opp.contactEmail} />
-                                    </Box>
-                                )}
-                            </Box>
-                        </DrawerSectionCard>
-
-                        {/* Admin-defined custom fields */}
-                        <DynamicDrawerCustomFields module="opportunities" record={opp} />
-
-                        {/* Product Categories */}
-                        <Box>
-                            <Typography sx={{ fontSize: '0.68rem', fontWeight: 700, color: 'var(--mui-palette-text-secondary)', mb: 1, letterSpacing: '0.04em' }}>
-                                PRODUCT INTEREST
-                            </Typography>
-                            <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.8 }}>
-                                {(opp.productCategory || []).map((cat) => (
-                                    <Chip
-                                        key={cat}
-                                        label={cat}
-                                        size="small"
-                                        sx={{
-                                            fontSize: '0.75rem',
-                                            fontWeight: 600,
-                                            backgroundColor: 'var(--mui-palette-primary-soft)',
-                                            color: 'var(--crm-text-blue-700)',
-                                            border: '1px solid var(--mui-palette-primary-softBorder)',
-                                        }}
-                                    />
-                                ))}
-                            </Box>
-                        </Box>
-
-                        {/* Next Followup Info */}
-                        <DrawerSectionCard bg="var(--mui-palette-warning-soft)" borderColor="var(--mui-palette-warning-softBorder)">
-                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-                                <CalendarMonthOutlinedIcon sx={{ fontSize: 20, color: 'var(--crm-amber-700)' }} />
-                                <Box>
-                                    <Typography sx={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--crm-amber-800)' }}>
-                                        Next Followup: {opp.nextFollowupDate} {opp.nextFollowupTime ? `at ${opp.nextFollowupTime}` : ''}
-                                    </Typography>
-                                    <Typography sx={{ fontSize: '0.72rem', color: 'var(--crm-amber-700)' }}>
-                                        Method: {opp.followupType || 'Call'} • Lead Given By: {opp.leadGivenBy}
-                                    </Typography>
-                                </Box>
-                            </Box>
-                        </DrawerSectionCard>
-
-                        {/* Scope & Descriptions */}
-                        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
-                            <DrawerSectionCard title="ACTION BRIEF / REMARKS">
-                                <Typography sx={{ fontSize: '0.82rem', color: 'var(--crm-slate-700)', lineHeight: 1.5 }}>
-                                    {opp.remarks}
-                                </Typography>
-                            </DrawerSectionCard>
-
-                            {opp.description && (
-                                <DrawerSectionCard title="DETAILED SCOPE / NOTES">
-                                    <Typography sx={{ fontSize: '0.82rem', color: 'var(--crm-slate-700)', lineHeight: 1.5 }}>
-                                        {opp.description}
-                                    </Typography>
-                                </DrawerSectionCard>
-                            )}
-                        </Box>
-
-                        {/* Billing Details & Commission */}
-                        <DrawerSectionCard title="BILLING & COMMISSION" bg="var(--mui-palette-background-subtle)">
-                            <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1.5, mt: 1 }}>
-                                <Box>
-                                    <Typography sx={{ fontSize: '0.7rem', color: 'var(--mui-palette-text-secondary)' }}>Tally Serial No:</Typography>
-                                    <Typography sx={{ fontSize: '0.82rem', fontWeight: 600, color: 'var(--mui-palette-text-primary)' }}>
-                                        {opp.tallySerialNo || '—'}
-                                    </Typography>
-                                </Box>
-                                <Box>
-                                    <Typography sx={{ fontSize: '0.7rem', color: 'var(--mui-palette-text-secondary)' }}>Invoice No:</Typography>
-                                    <Typography sx={{ fontSize: '0.82rem', fontWeight: 600, color: 'var(--mui-palette-text-primary)' }}>
-                                        {opp.invoiceNo || '—'}
-                                    </Typography>
-                                </Box>
-                                <Box>
-                                    <Typography sx={{ fontSize: '0.7rem', color: 'var(--mui-palette-text-secondary)' }}>Commission:</Typography>
-                                    <Typography sx={{ fontSize: '0.82rem', fontWeight: 600, color: 'var(--mui-palette-text-primary)' }}>
-                                        {opp.commission || 'Standard (10%)'}
-                                    </Typography>
-                                </Box>
-                                <Box>
-                                    <Typography sx={{ fontSize: '0.7rem', color: 'var(--mui-palette-text-secondary)' }}>Document Attached:</Typography>
-                                    <Typography sx={{ fontSize: '0.82rem', fontWeight: 600, color: 'var(--mui-palette-text-primary)' }}>
-                                        {opp.addDocument || 'No'}
-                                    </Typography>
-                                </Box>
-                            </Box>
-                        </DrawerSectionCard>
-                    </Box>
-                ),
-                line_items: (
-                    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5 }}>
-                        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                            <Typography sx={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--mui-palette-text-primary)' }}>
-                                {opp.groupName || 'Products & Services'}
-                            </Typography>
-                            <Typography sx={{ fontSize: '0.78rem', color: 'var(--mui-palette-text-secondary)' }}>
-                                Currency: {opp.currency || 'Indian Rupee: ₹'}
-                            </Typography>
-                        </Box>
-
-                        {!opp.lineItems || opp.lineItems.length === 0 ? (
-                            <Box sx={{ p: 3, textAlign: 'center', backgroundColor: 'var(--mui-palette-background-subtle)', borderRadius: '8px' }}>
-                                <Typography sx={{ fontSize: '0.82rem', color: 'var(--mui-palette-text-secondary)' }}>
-                                    No line items specified for this opportunity.
-                                </Typography>
-                            </Box>
-                        ) : (
-                            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
-                                {opp.lineItems.map((item, idx) => (
-                                    <DrawerSectionCard key={item.id || idx} p={1.8}>
-                                        <Box sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', mb: 1 }}>
-                                            <Box>
-                                                <Typography sx={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--mui-palette-text-primary)' }}>
-                                                    {item.productName}
-                                                </Typography>
-                                                {item.description && (
-                                                    <Typography sx={{ fontSize: '0.75rem', color: 'var(--mui-palette-text-secondary)', mt: 0.3 }}>
-                                                        {item.description}
-                                                    </Typography>
-                                                )}
-                                            </Box>
-                                            <Typography sx={{ fontSize: '0.92rem', fontWeight: 800, color: 'var(--crm-green-700)' }}>
-                                                ₹{item.total.toLocaleString('en-IN')}
-                                            </Typography>
-                                        </Box>
-
-                                        <Box
-                                            sx={{
-                                                display: 'grid',
-                                                gridTemplateColumns: 'repeat(4, 1fr)',
-                                                gap: 1,
-                                                pt: 1,
-                                                borderTop: '1px dashed var(--mui-palette-border-main)',
-                                                fontSize: '0.75rem',
-                                            }}
-                                        >
-                                            <Box>
-                                                <Typography sx={{ color: 'var(--mui-palette-text-secondary)' }}>Qty:</Typography>
-                                                <Typography sx={{ fontWeight: 600 }}>{item.quantity}</Typography>
-                                            </Box>
-                                            <Box>
-                                                <Typography sx={{ color: 'var(--mui-palette-text-secondary)' }}>Unit Price:</Typography>
-                                                <Typography sx={{ fontWeight: 600 }}>₹{item.amount.toLocaleString('en-IN')}</Typography>
-                                            </Box>
-                                            <Box>
-                                                <Typography sx={{ color: 'var(--mui-palette-text-secondary)' }}>Discount:</Typography>
-                                                <Typography sx={{ fontWeight: 600, color: 'var(--mui-palette-error-main)' }}>
-                                                    {item.discount > 0 ? `${item.discount}${item.discountType === 'percentage' ? '%' : '₹'}` : '0'}
-                                                </Typography>
-                                            </Box>
-                                            <Box>
-                                                <Typography sx={{ color: 'var(--mui-palette-text-secondary)' }}>Tax ({item.taxRate}):</Typography>
-                                                <Typography sx={{ fontWeight: 600 }}>₹{item.taxAmount.toLocaleString('en-IN')}</Typography>
-                                            </Box>
-                                        </Box>
-                                    </DrawerSectionCard>
-                                ))}
-                            </Box>
-                        )}
-
-                        {/* Financial Summary */}
-                        <DrawerSectionCard
-                            title="FINANCIAL TOTALS"
-                            titleSx={{ fontSize: '0.75rem', color: 'var(--crm-text-blue-900)', letterSpacing: '0.03em' }}
-                            bg="var(--mui-palette-background-subtle)"
-                            borderColor="var(--mui-palette-border-strong)"
-                        >
-                            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1, mt: 1 }}>
-                                <Box sx={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.82rem' }}>
-                                    <Typography sx={{ color: 'var(--mui-palette-text-secondary)' }}>Gross Total:</Typography>
-                                    <Typography sx={{ fontWeight: 600 }}>₹{opp.totalAmount.toLocaleString('en-IN')}</Typography>
-                                </Box>
-                                <Box sx={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.82rem' }}>
-                                    <Typography sx={{ color: 'var(--mui-palette-text-secondary)' }}>Total Discount:</Typography>
-                                    <Typography sx={{ fontWeight: 600, color: 'var(--mui-palette-error-main)' }}>- ₹{opp.totalDiscount.toLocaleString('en-IN')}</Typography>
-                                </Box>
-                                <Box sx={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.82rem' }}>
-                                    <Typography sx={{ color: 'var(--mui-palette-text-secondary)' }}>Subtotal:</Typography>
-                                    <Typography sx={{ fontWeight: 700 }}>₹{opp.subtotal.toLocaleString('en-IN')}</Typography>
-                                </Box>
-                                <Box sx={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.82rem' }}>
-                                    <Typography sx={{ color: 'var(--mui-palette-text-secondary)' }}>Tax Total:</Typography>
-                                    <Typography sx={{ fontWeight: 600, color: 'var(--crm-text-blue-600)' }}>+ ₹{opp.totalTax.toLocaleString('en-IN')}</Typography>
-                                </Box>
-                                {opp.lumpSumDiscount > 0 && (
-                                    <Box sx={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.82rem' }}>
-                                        <Typography sx={{ color: 'var(--mui-palette-text-secondary)' }}>Lump Sum Discount:</Typography>
-                                        <Typography sx={{ fontWeight: 600, color: 'var(--mui-palette-error-main)' }}>- ₹{opp.lumpSumDiscount.toLocaleString('en-IN')}</Typography>
-                                    </Box>
-                                )}
-                                <Divider sx={{ my: 0.5 }} />
-                                <Box sx={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.94rem' }}>
-                                    <Typography sx={{ fontWeight: 800, color: 'var(--crm-slate-900)' }}>Grand Total:</Typography>
-                                    <Typography sx={{ fontWeight: 800, color: 'var(--crm-green-700)', fontSize: '1.05rem' }}>
-                                        ₹{opp.grandTotal.toLocaleString('en-IN')}
-                                    </Typography>
-                                </Box>
-                            </Box>
-                        </DrawerSectionCard>
-                    </Box>
-                ),
-            }}
+            formTabs={view.formTabs}
+            tabContents={view.tabContents}
             auditEntity={{ type: 'opportunities', id: opp.id }}
             recordAudit={opp}
             includeChangesTab={true}

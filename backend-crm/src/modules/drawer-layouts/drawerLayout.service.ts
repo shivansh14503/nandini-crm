@@ -7,11 +7,14 @@ import { toIso } from '../../utils/mappers.js';
 import { runInTransaction } from '../shared/transactions.js';
 import {
     ADDRESS_PREFIXES,
+    LINE_ITEM_MODULES,
     SYSTEM_FIELDS,
     documentSchema,
     layoutAddressPrefixes,
     layoutFieldRefs,
+    layoutUsesLineItems,
     sectionFieldRefs,
+    sectionsUseLineItems,
     sectionSchema,
     summarizeLayout,
     type DrawerLayoutDocument,
@@ -100,6 +103,11 @@ function assertKnownAddresses(prefixes: string[], module: DrawerLayoutModule) {
     if (unknown) throw HttpError.badRequest(`"${unknown}" is not an address of this form.`);
 }
 
+/** Line items / totals blocks only on modules whose records have line items. */
+function assertLineItemsAllowed(uses: boolean, module: DrawerLayoutModule) {
+    if (uses && !LINE_ITEM_MODULES.includes(module)) throw HttpError.badRequest('Line items and totals can only be shown on Opportunities and Quotations drawers.');
+}
+
 export const drawerLayoutService = {
     /** Every saved layout, keyed by module (modules on their built-in layout are left out). */
     async listAll(): Promise<Partial<Record<DrawerLayoutModule, DrawerLayoutDto>>> {
@@ -112,6 +120,7 @@ export const drawerLayoutService = {
         const { module } = drawerModuleParamSchema.parse(params);
         const { layout, version } = saveDrawerLayoutSchema.parse(body);
         assertKnownAddresses(layoutAddressPrefixes(layout), module);
+        assertLineItemsAllowed(layoutUsesLineItems(layout), module);
 
         return runInTransaction(async (tx) => {
             assertKnownFields(layoutFieldRefs(layout), await allowedFields(tx, module), 'layout');
@@ -175,6 +184,7 @@ export const drawerPieceService = {
             input.section.blocks.flatMap((b) => (b.type === 'address' ? [b.prefix] : [])),
             input.module,
         );
+        assertLineItemsAllowed(sectionsUseLineItems([input.section]), input.module);
         const row = await runInTransaction(async (tx) => {
             assertKnownFields(sectionFieldRefs(input.section, input.name), await allowedFields(tx, input.module), 'section');
             const count = await tx.drawerPiece.count({ where: { module: input.module } });
