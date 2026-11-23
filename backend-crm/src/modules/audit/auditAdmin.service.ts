@@ -10,12 +10,12 @@ import { parseChanges } from './audit.format.js';
 import {
     actionLabel,
     CATEGORY_LABELS,
-    cellValue,
     COMMON_LABELS,
     detailRows,
     fieldRows,
     humanize,
     moduleLabel,
+    namedValue,
     SEVERITY_LABELS,
     SOURCE_LABELS,
     toEntryDetail,
@@ -127,7 +127,7 @@ async function buildLabeler(): Promise<FieldLabeler> {
             return byModule.get(module)?.get(key) ?? (custom ? undefined : COMMON_LABELS[key]) ?? humanize(custom ? key.slice(13) : key);
         },
         value(module, key, value) {
-            return module === 'form-customization' ? propValue(key, value) : cellValue(value);
+            return module === 'form-customization' ? propValue(key, value) : namedValue(key, value);
         },
     };
 }

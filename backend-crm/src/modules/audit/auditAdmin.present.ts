@@ -125,6 +125,7 @@ const ACTION_LABELS: Record<string, string> = {
     STATUS_CHANGE: 'Status changed',
     CONVERT: 'Converted',
     FOLLOW_UP: 'Follow-up',
+    EMAIL_CHECK: 'Email checked',
     IMPORT: 'Imported',
     LOGIN: 'Signed in',
     LOGIN_FAILED: 'Failed sign-in',
@@ -167,6 +168,9 @@ export const COMMON_LABELS: Record<string, string> = {
     bytes: 'Size (bytes)',
     cached: 'From Cache',
     followUp: 'Follow-up',
+    verificationStatus: 'Email Check Result',
+    email: 'Email Address',
+    runId: 'Bulk Check',
     reordered: 'Reordered',
     reset: 'Reset to Defaults',
 };
@@ -199,6 +203,17 @@ export function cellValue(value: unknown): string {
     return clip(String(value));
 }
 
+/** Stored codes shown by name: email check results (email-verification/emailCheckAudit.ts). */
+const VALUE_NAMES: Readonly<Record<string, Readonly<Record<string, string>>>> = {
+    verificationStatus: { valid: 'Valid', risky: 'Risky', invalid: 'Invalid', undecided: 'Undecided', unchecked: 'Not checked' },
+};
+
+/** `cellValue`, with the stored codes of known keys (an email check result) by name. */
+export function namedValue(key: string, value: unknown): string {
+    const names = VALUE_NAMES[key];
+    return names && typeof value === 'string' && names[value] ? names[value] : cellValue(value);
+}
+
 const isEmpty = (value: unknown) =>
     value === null ||
     value === undefined ||
@@ -209,7 +224,7 @@ const isEmpty = (value: unknown) =>
 // ── Changes ──────────────────────────────────────────────────────────────────
 
 /** Actions whose changes are a `{ field: { from, to } }` diff (auditCatalog DIFF_ACTIONS). */
-const DIFF_ACTIONS = new Set(['UPDATE', 'STATUS_CHANGE', 'FOLLOW_UP', 'CONVERT', 'REVERT']);
+const DIFF_ACTIONS = new Set(['UPDATE', 'STATUS_CHANGE', 'FOLLOW_UP', 'CONVERT', 'REVERT', 'EMAIL_CHECK']);
 /** Actions whose changes are a snapshot of the record: after a create, before a delete. */
 const SNAPSHOT_AFTER = new Set(['CREATE', 'DUPLICATE', 'RESTORE']);
 const SNAPSHOT_BEFORE = new Set(['DELETE']);
@@ -317,6 +332,12 @@ function listOf(labels: string[]): string {
 export function summarize(action: string, module: string, changes: unknown, labeler: FieldLabeler): string {
     const c = asObject(changes) ?? {};
     const fields = [...new Set(expandDiff(changes).map(({ key }) => labeler.label(module, key)))];
+    // An email check result (an EMAIL_CHECK, or the admin's "accept" as an UPDATE): "Email checked: a@b.in · Not checked → Invalid".
+    if (typeof c.email === 'string' && isDiff(c.verificationStatus)) {
+        const verb = c.reason === 'admin_accepted' ? 'Email accepted' : 'Email checked';
+        const result = c.verificationStatus as { from?: unknown; to?: unknown };
+        return `${verb}: ${c.email} · ${namedValue('verificationStatus', result.from)} → ${namedValue('verificationStatus', result.to)}`;
+    }
     switch (action) {
         case 'UPDATE':
         case 'STATUS_CHANGE':

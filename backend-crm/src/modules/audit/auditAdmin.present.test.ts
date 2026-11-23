@@ -7,6 +7,7 @@ import {
     expandDiff,
     fieldRows,
     humanize,
+    namedValue,
     snapshotEntries,
     summarize,
     toListItem,
@@ -93,6 +94,22 @@ describe('fieldRows', () => {
     });
 });
 
+describe('email check entries', () => {
+    it('show the result change as a field and the address as a detail', () => {
+        const check = { verificationStatus: { from: 'valid', to: 'risky' }, email: 'a@x.in', reason: 'accept_all', runId: 'run-1' };
+        const named: FieldLabeler = { label: (_m, key) => (key === 'verificationStatus' ? 'Email Check Result' : key), value: (_m, key, value) => namedValue(key, value) };
+        assert.deepEqual(fieldRows('EMAIL_CHECK', 'leads', check, named), [{ key: 'verificationStatus', label: 'Email Check Result', before: 'Valid', after: 'Risky' }]);
+        assert.deepEqual(
+            detailRows('EMAIL_CHECK', 'leads', check, named).map((row) => [row.label, row.value]),
+            [
+                ['Email Address', 'a@x.in'],
+                ['Reason', 'accept_all'],
+                ['Bulk Check', 'run-1'],
+            ],
+        );
+    });
+});
+
 describe('detailRows', () => {
     it('lists what an event recorded', () => {
         const rows = detailRows('ACCESS_DENIED', 'users', { method: 'PUT', path: '/api/document-series', message: 'No' }, { ...labeler, label: (_m, key) => key });
@@ -137,6 +154,9 @@ describe('summarize', () => {
         assert.equal(summarize('IMPORT', 'leads', { fileName: 'leads.xlsx', total: 120, created: 118, failed: 2 }, labeler), 'Imported 118 of 120 rows from leads.xlsx');
         assert.equal(summarize('PDF_GENERATED', 'quotations', { templateName: 'Classic' }, labeler), 'PDF generated (Classic)');
         assert.equal(summarize('CREATE', 'leads', {}, labeler), 'Created');
+        const check = { verificationStatus: { from: 'unchecked', to: 'invalid' }, email: 'a@x.in', reason: 'mailbox_not_found' };
+        assert.equal(summarize('EMAIL_CHECK', 'leads', check, labeler), 'Email checked: a@x.in · Not checked → Invalid');
+        assert.equal(summarize('UPDATE', 'leads', { ...check, reason: 'admin_accepted' }, labeler), 'Email accepted: a@x.in · Not checked → Invalid');
         assert.equal(summarize('SOMETHING_NEW', 'leads', null, labeler), 'Something New');
     });
 });
