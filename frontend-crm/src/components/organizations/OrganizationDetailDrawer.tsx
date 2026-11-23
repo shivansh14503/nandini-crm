@@ -38,7 +38,6 @@ export function OrganizationDetailDrawer({ organization, open, onClose, onEdit, 
         }
     };
 
-    const isActive = org.accountStatus !== 'Inactive';
 
     return (
         <EntityDetailDrawer
@@ -61,7 +60,6 @@ export function OrganizationDetailDrawer({ organization, open, onClose, onEdit, 
             auditEntity={{ type: 'organizations', id: org.id }}
             recordAudit={org}
             includeChangesTab={true}
-            statusText={isActive ? 'Ready for Order Processing' : 'Inactive account'}
             primaryAction={{
                 label: 'Edit Details',
                 onClick: handleEdit,

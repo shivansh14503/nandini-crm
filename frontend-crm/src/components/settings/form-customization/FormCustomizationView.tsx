@@ -466,7 +466,6 @@ export function FormCustomizationView() {
                     { label: user?.role || 'Admin', backgroundColor: 'var(--crm-blue-50)', color: 'var(--crm-text-blue-700)', borderColor: 'var(--mui-palette-primary-softBorder)' },
                     ...(module ? [{ label: moduleNavLabel(module), backgroundColor: 'var(--mui-palette-background-hover)', color: 'var(--crm-slate-600)', borderColor: 'var(--mui-palette-border-main)' }] : []),
                 ]}
-                statusText={dirty ? `${ops.length} unsaved change${ops.length === 1 ? '' : 's'} in draft` : 'All form configurations synced'}
                 // Until a form is picked, the Changes tab alone shows the audit trail across all modules.
                 tabs={
                     module

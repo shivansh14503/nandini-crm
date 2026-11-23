@@ -61,7 +61,6 @@ export function ProductDetailDrawer({ product, open, onClose, onEdit }: ProductD
             auditEntity={{ type: 'products', id: p.id }}
             recordAudit={p}
             includeChangesTab={true}
-            statusText="In Catalog • Active"
             primaryAction={{
                 label: 'Edit Product',
                 onClick: handleEdit,
