@@ -1,12 +1,12 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
+import { isDiff } from './audit.format.js';
 import {
     cellValue,
     detailRows,
     expandDiff,
     fieldRows,
     humanize,
-    isDiff,
     snapshotEntries,
     summarize,
     toListItem,

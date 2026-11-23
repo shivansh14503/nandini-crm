@@ -49,8 +49,15 @@ export function displayValue(value: unknown): string {
     return String(value);
 }
 
-export const isDiff = (value: unknown): value is { from: unknown; to: unknown } =>
-    typeof value === 'object' && value !== null && 'from' in value && 'to' in value;
+/**
+ * A stored `{ from, to }` pair. JSON drops an `undefined` side, so a value that was added (or removed) is stored as
+ * `{ to }` (or `{ from }`): any object holding only these keys is one, and the missing side reads as undefined.
+ */
+export function isDiff(value: unknown): value is { from: unknown; to: unknown } {
+    if (typeof value !== 'object' || value === null || Array.isArray(value)) return false;
+    const keys = Object.keys(value);
+    return keys.length > 0 && keys.length <= 2 && keys.every((key) => key === 'from' || key === 'to');
+}
 
 /**
  * Renamed field keys, old → new. AuditLog is append-only (a ledger table), so a field rename can't rewrite the

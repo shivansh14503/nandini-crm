@@ -126,9 +126,15 @@ export function severityFor(action: AuditAction, category: AuditCategory): Audit
     return 'INFO';
 }
 
+/**
+ * A `{ from, to }` pair. JSON drops an `undefined` side, so a value that was added (or removed) arrives as `{ to }`
+ * (or `{ from }`): any object holding only these keys is one. Same rule as `isDiff` in modules/audit/audit.format.ts.
+ */
 const isDiffValue = (value: unknown): boolean => {
     const object = asObject(value);
-    return Boolean(object && 'from' in object && 'to' in object);
+    if (!object) return false;
+    const keys = Object.keys(object);
+    return keys.length > 0 && keys.length <= 2 && keys.every((key) => key === 'from' || key === 'to');
 };
 
 /** `|status|assignedTo|` for a diff (in the diff's own order), null for every other action. Max 1,000 chars. */

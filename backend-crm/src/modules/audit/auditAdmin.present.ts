@@ -1,4 +1,4 @@
-import { displayTime, parseChanges } from './audit.format.js';
+import { displayTime, isDiff, parseChanges } from './audit.format.js';
 
 /**
  * How the admin Audit Log shows an entry: the list row (with a one-line summary) and the detail's labelled
@@ -179,17 +179,6 @@ const clip = (value: string) => (value.length > MAX_CELL ? `${value.slice(0, MAX
 const asObject = (value: unknown): Record<string, unknown> | undefined =>
     value !== null && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : undefined;
 
-/**
- * A stored `{ from, to }` pair. JSON drops an `undefined` side, so a value that was added (or removed) is stored as
- * `{ to }` (or `{ from }`): any object holding only these keys is one.
- */
-export function isDiff(value: unknown): value is { from?: unknown; to?: unknown } {
-    const object = asObject(value);
-    if (!object) return false;
-    const keys = Object.keys(object);
-    return keys.length > 0 && keys.length <= 2 && keys.every((key) => key === 'from' || key === 'to');
-}
-
 /** An item of a list value (email list, line items) by its name-like key. */
 function itemText(item: unknown): string {
     const object = asObject(item);
@@ -367,10 +356,7 @@ export function summarize(action: string, module: string, changes: unknown, labe
 
 // ── DTOs ─────────────────────────────────────────────────────────────────────
 
-/**
- * Keys of the fields a diff changed, custom fields spelled out (`customFields.po_number`). Read from the changes
- * rather than the stored `changedFields` filter column, which leaves out one-sided pairs (`{ to }`).
- */
+/** Keys of the fields a diff changed, read from the changes so custom fields are spelled out (`customFields.po_number`). */
 function changedFieldKeys(action: string, changes: unknown): string[] {
     return DIFF_ACTIONS.has(action) ? expandDiff(changes).map(({ key }) => key) : [];
 }

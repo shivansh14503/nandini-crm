@@ -57,6 +57,12 @@ describe('changedFieldsOf', () => {
         };
         assert.equal(changedFieldsOf('UPDATE', changes), '|status|assignedTo|');
     });
+    it('counts a value that was added or removed (JSON drops the undefined side)', () => {
+        const changes = JSON.parse(JSON.stringify({ companyPrefix: { from: '', to: 'NIPL' }, lead: { from: undefined, to: { modulePrefix: 'L' } } }));
+        assert.equal(changedFieldsOf('UPDATE', changes), '|companyPrefix|lead|');
+        assert.equal(changedFieldsOf('UPDATE', { removed: { from: 'x' } }), '|removed|');
+        assert.equal(changedFieldsOf('UPDATE', { note: { to: 1, by: 'x' } }), null);
+    });
     it('is null for snapshots, non-diff actions and empty diffs', () => {
         assert.equal(changedFieldsOf('CREATE', { name: 'Acme' }), null);
         assert.equal(changedFieldsOf('UPDATE', { reordered: 32 }), null);
