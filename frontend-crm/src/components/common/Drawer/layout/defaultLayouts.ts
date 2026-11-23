@@ -69,7 +69,6 @@ function leadsLayout(): DrawerLayoutDocument {
             avatar: { kind: 'icon', icon: 'person' },
             hotAvatar: true,
             badges: [
-                { id: 'g-rating', field: 'rating', prefix: 'Rating: ', style: 'auto', hideEmpty: true },
                 { id: 'g-type', field: 'leadType', prefix: '', style: 'neutral', hideEmpty: true },
                 { id: 'g-status', field: 'status', prefix: '', style: 'auto', hideEmpty: true },
                 { id: 'g-owner', field: 'assignedTo', prefix: '', style: 'neutral', hideEmpty: true },

@@ -15,6 +15,7 @@ import VerifiedIcon from '@mui/icons-material/Verified';
 import VisibilityOutlinedIcon from '@mui/icons-material/VisibilityOutlined';
 import type { DrawerBlock, DrawerLayoutDocument, DrawerSection } from '@/lib/drawer-layout';
 import { getModuleColor, moduleKeyFrom } from '@/theme/moduleColors';
+import { RatingBadge } from '@/components/common/RatingBadge';
 import {
     BlockBody,
     LayoutTabSections,
@@ -490,12 +491,15 @@ export function BuilderCanvas({
                             )}
                         </Box>
                     </Box>
-                    <Box aria-hidden sx={{ display: 'flex', gap: 0.5, flexShrink: 0, color: 'var(--mui-palette-text-muted)' }}>
-                        {[EditOutlinedIcon, VisibilityOutlinedIcon, CloseIcon].map((Icon, i) => (
-                            <Box key={i} sx={{ width: 30, height: 30, borderRadius: '8px', border: '1px solid var(--mui-palette-border-main)', display: { xs: i === 1 ? 'none' : 'grid', sm: 'grid' }, placeItems: 'center' }}>
-                                <Icon sx={{ fontSize: 17 }} />
-                            </Box>
-                        ))}
+                    <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 1, flexShrink: 0 }}>
+                        <Box aria-hidden sx={{ display: 'flex', gap: 0.5, color: 'var(--mui-palette-text-muted)' }}>
+                            {[EditOutlinedIcon, VisibilityOutlinedIcon, CloseIcon].map((Icon, i) => (
+                                <Box key={i} sx={{ width: 30, height: 30, borderRadius: '8px', border: '1px solid var(--mui-palette-border-main)', display: { xs: i === 1 ? 'none' : 'grid', sm: 'grid' }, placeItems: 'center' }}>
+                                    <Icon sx={{ fontSize: 17 }} />
+                                </Box>
+                            ))}
+                        </Box>
+                        {header.rating && <RatingBadge rating={header.rating.value} reason={header.rating.reason} variant="block" />}
                     </Box>
                 </Box>
 

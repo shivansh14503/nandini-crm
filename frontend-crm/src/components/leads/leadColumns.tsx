@@ -1,11 +1,11 @@
 'use client';
 
 import React, { useMemo, useCallback } from 'react';
-import { Box, Chip, Tooltip, Typography } from '@mui/material';
+import { Box, Chip, Typography } from '@mui/material';
 import { localToday } from '@/utils/pastDates';
 import { isFollowUpExpired } from '../forms/FollowUpDecision';
-import { ratingChipColors, useLeadRatingConfig } from '@/utils/leadRating';
-import LocalFireDepartmentOutlinedIcon from '@mui/icons-material/LocalFireDepartmentOutlined';
+import { useLeadRatingConfig } from '@/utils/leadRating';
+import { RatingBadge } from '@/components/common/RatingBadge';
 import PersonOutlinedIcon from '@mui/icons-material/PersonOutlined';
 import PhoneOutlinedIcon from '@mui/icons-material/PhoneOutlined';
 import EmailOutlinedIcon from '@mui/icons-material/EmailOutlined';
@@ -92,14 +92,7 @@ export function useLeadColumns(openRecord: (record: Lead) => void): DataTableCol
                 minWidth: 100,
                 render: (l) =>
                     l.rating ? (
-                        <Tooltip title={l.ratingReason || ''} arrow disableInteractive>
-                            <Chip
-                                label={l.rating}
-                                size="small"
-                                icon={l.rating === 'Hot' ? <LocalFireDepartmentOutlinedIcon sx={{ fontSize: '14px !important', color: 'inherit !important' }} /> : undefined}
-                                sx={{ height: 22, fontSize: '0.72rem', fontWeight: 700, border: '1px solid', ...ratingChipColors(l.rating) }}
-                            />
-                        </Tooltip>
+                        <RatingBadge rating={l.rating} reason={l.ratingReason || undefined} />
                     ) : (
                         <Typography sx={{ fontSize: '0.78rem', color: 'var(--mui-palette-text-muted)' }}>-</Typography>
                     ),

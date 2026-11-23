@@ -38,6 +38,7 @@ import {
     formatDay,
     newLayoutId,
     newSection,
+    isRatingBadge,
     useLayoutCtx,
     useLayoutHeader,
     type DrawerFieldDef,
@@ -58,6 +59,8 @@ import { previewRecordLabel, usePreviewRecords } from './previewRecords';
  */
 
 type Notify = (message: string, severity?: 'success' | 'error' | 'info' | 'warning') => void;
+
+const RATING_FIXED = 'The Rating always shows in its own box under the header buttons, so it can’t be a badge.';
 
 const MODULE_NOUN: Record<DrawerLayoutModule, { one: string; many: string }> = {
     leads: { one: 'lead', many: 'leads' },
@@ -184,8 +187,12 @@ function LayoutBuilder({
         (config: DrawerLayoutConfig | null) => {
             if (!config) return { doc: defaultLayoutFor(module), version: null as number | null, removed: 0 };
             const addressSet = new Set(addresses.map((a) => a.prefix));
-            const { doc, removed } = pruneLayout(config.layout, (k) => fieldMap.has(k), (p) => addressSet.has(p), defaultLayoutFor(module).header.titleField);
-            return { doc, version: config.version as number | null, removed };
+            const pruned = pruneLayout(config.layout, (k) => fieldMap.has(k), (p) => addressSet.has(p), defaultLayoutFor(module).header.titleField);
+            // The Rating has its own box in the header now, so an older layout's Rating badge is dropped.
+            const doc = pruned.doc.header.badges.some(isRatingBadge)
+                ? { ...pruned.doc, header: { ...pruned.doc.header, badges: pruned.doc.header.badges.filter((b) => !isRatingBadge(b)) } }
+                : pruned.doc;
+            return { doc, version: config.version as number | null, removed: pruned.removed };
         },
         [module, fieldMap, addresses],
     );
@@ -376,7 +383,8 @@ function LayoutBuilder({
     const addBadge = (field?: string) => {
         if (doc.header.badges.length >= LIMITS.badges) return warn(`The header can have at most ${LIMITS.badges} badges.`);
         const used = new Set(doc.header.badges.map((b) => b.field));
-        const key = field ?? fields.find((f) => !used.has(f.key) && f.key !== doc.header.titleField && !f.custom)?.key ?? fields[0]?.key;
+        if (field === 'rating') return warn(RATING_FIXED);
+        const key = field ?? fields.find((f) => !used.has(f.key) && f.key !== 'rating' && f.key !== doc.header.titleField && !f.custom)?.key ?? fields[0]?.key;
         if (!key) return;
         const badge = newBadge(key);
         edit((d) => void d.header.badges.push(badge), { select: { kind: 'badge', id: badge.id } });
@@ -443,6 +451,7 @@ function LayoutBuilder({
                     return { itemId: section.id, select: { kind: 'section', id: section.id }, recipe: (d) => insertSection(d, target.tab, target.index, copy(section)) };
                 }
                 case 'badge': {
+                    if (source.source === 'field' && source.key === 'rating') return { error: RATING_FIXED };
                     if (source.source === 'canvas-badge') return { itemId: source.badgeId, recipe: (d) => placeBadge(d, source.badgeId, target.index) };
                     if (!badge) return null;
                     if (doc.header.badges.length >= LIMITS.badges) return { error: `The header can have at most ${LIMITS.badges} badges.` };
