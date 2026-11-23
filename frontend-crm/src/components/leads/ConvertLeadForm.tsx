@@ -1,7 +1,7 @@
 'use client';
 
 import { NO_PAST_DATES } from '@/utils/pastDates';
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { FormProvider } from 'react-hook-form';
 import { Box, Divider } from '@mui/material';
@@ -23,6 +23,7 @@ import type { Lead } from '@/types/lead.types';
 import {
     buildConvertLeadDefaults,
     convertLead,
+    leadPrefilledFields,
     leadService,
 } from '@/services';
 import {
@@ -36,6 +37,7 @@ import {
     ConvertOpportunitySection,
     ConvertOrganizationSection,
 } from './convert';
+import { LeadPrefilledProvider } from './convert/LeadLocked';
 
 export interface ConvertLeadFormProps {
     leadId: string;
@@ -117,6 +119,8 @@ export function ConvertLeadForm({ leadId, breadcrumbItems }: ConvertLeadFormProp
         });
 
     const { reset, formState } = methods;
+    // Values the lead supplied show read-only (see LeadLocked).
+    const prefilled = useMemo(() => (lead ? leadPrefilledFields(lead) : new Set<string>()), [lead]);
     const { isDirty, isSubmitting } = formState;
 
     useEffect(() => {
@@ -194,55 +198,57 @@ export function ConvertLeadForm({ leadId, breadcrumbItems }: ConvertLeadFormProp
 
     return (
         <FormProvider {...methods}>
-            <CommonFormLayout
-                isDirty={isDirty}
-                breadcrumbItems={breadcrumbItems || defaultBreadcrumbs}
-                tabs={CONVERT_TABS}
-                activeTab="convert"
-                onCancel={handleDiscard}
-                onSave={handleSave}
-                submitting={isSubmitting}
-                saveLabel="Convert Lead"
-                saveIcon={<PublishedWithChangesIcon sx={{ fontSize: 18 }} />}
-                saveSx={convertButtonSx}
-                stepwise={stepwise}
-                cancelLabel="Cancel"
-                toast={
-                    <AppToast
-                        open={toast.open}
-                        message={toast.message}
-                        severity={toast.severity}
-                        onClose={closeToast}
-                    />
-                }
-            >
-                <SectionLabel
-                    icon={<PersonOutlineOutlinedIcon sx={{ fontSize: 18 }} />}
-                    label="1. Create Contact OR Select Contact"
-                />
-                <ConvertContactSection />
-
-                <Divider sx={sectionDividerSx} />
-
-                <SectionLabel
-                    icon={<BusinessOutlinedIcon sx={{ fontSize: 18 }} />}
-                    label="2. Create Organization OR Select Organization"
-                />
-                <ConvertOrganizationSection />
-
-                <Divider sx={sectionDividerSx} />
-
-                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 2, flexWrap: 'wrap', mb: 1 }}>
+            <LeadPrefilledProvider fields={prefilled}>
+                <CommonFormLayout
+                    isDirty={isDirty}
+                    breadcrumbItems={breadcrumbItems || defaultBreadcrumbs}
+                    tabs={CONVERT_TABS}
+                    activeTab="convert"
+                    onCancel={handleDiscard}
+                    onSave={handleSave}
+                    submitting={isSubmitting}
+                    saveLabel="Convert Lead"
+                    saveIcon={<PublishedWithChangesIcon sx={{ fontSize: 18 }} />}
+                    saveSx={convertButtonSx}
+                    stepwise={stepwise}
+                    cancelLabel="Cancel"
+                    toast={
+                        <AppToast
+                            open={toast.open}
+                            message={toast.message}
+                            severity={toast.severity}
+                            onClose={closeToast}
+                        />
+                    }
+                >
                     <SectionLabel
-                        icon={<MonetizationOnOutlinedIcon sx={{ fontSize: 18 }} />}
-                        label="3. Create Opportunity"
-                        sx={{ mb: 0 }}
+                        icon={<PersonOutlineOutlinedIcon sx={{ fontSize: 18 }} />}
+                        label="1. Create Contact OR Select Contact"
                     />
-                    {/* Off when the deal already has an opportunity: the lead converts without creating another. */}
-                    <RhfCheckbox<ConvertLeadFormValues> name="createOpportunity" label="Create a new opportunity" />
-                </Box>
-                <ConvertOpportunitySection />
-            </CommonFormLayout>
+                    <ConvertContactSection />
+
+                    <Divider sx={sectionDividerSx} />
+
+                    <SectionLabel
+                        icon={<BusinessOutlinedIcon sx={{ fontSize: 18 }} />}
+                        label="2. Create Organization OR Select Organization"
+                    />
+                    <ConvertOrganizationSection />
+
+                    <Divider sx={sectionDividerSx} />
+
+                    <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 2, flexWrap: 'wrap', mb: 1 }}>
+                        <SectionLabel
+                            icon={<MonetizationOnOutlinedIcon sx={{ fontSize: 18 }} />}
+                            label="3. Create Opportunity"
+                            sx={{ mb: 0 }}
+                        />
+                        {/* Off when the deal already has an opportunity: the lead converts without creating another. */}
+                        <RhfCheckbox<ConvertLeadFormValues> name="createOpportunity" label="Create a new opportunity" />
+                    </Box>
+                    <ConvertOpportunitySection />
+                </CommonFormLayout>
+            </LeadPrefilledProvider>
         </FormProvider>
     );
 }
