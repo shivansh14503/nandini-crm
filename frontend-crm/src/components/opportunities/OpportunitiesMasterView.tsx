@@ -287,14 +287,14 @@ export function OpportunitiesMasterView() {
             loading={listLoading}
             summary={
                 listLoading || scorecard.loading ? (
-                    <StatusSummaryCardsSkeleton count={stageScorecard.options.length + 1} balancedRows withAmount />
+                    <StatusSummaryCardsSkeleton count={stageScorecard.options.length + 1} singleRow withAmount />
                 ) : scorecard.configured ? (
                     <StatusSummaryCards<string>
                         items={scorecard.items}
                         activeId={scorecard.activeId}
                         onChange={scorecard.setActiveId}
                         onEdit={scorecard.onEdit}
-                        balancedRows
+                        singleRow
                     />
                 ) : null
             }

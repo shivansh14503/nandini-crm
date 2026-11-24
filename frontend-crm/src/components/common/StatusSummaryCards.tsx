@@ -1,7 +1,9 @@
 'use client';
 
-import React from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { Box, ButtonBase, IconButton, Skeleton, Tooltip, Typography } from '@mui/material';
+import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
+import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import EditOutlinedIcon from '@mui/icons-material/EditOutlined';
 
 /** Colour family of a card; each maps to theme tokens so light (blue) / dark (green) stay consistent. */
@@ -34,10 +36,10 @@ export interface StatusSummaryCardsProps<TId extends string = string> {
     /** Shows a pencil on the "All" card that opens the scorecard settings (admins). */
     onEdit?: () => void;
     /**
-     * Many cards: equal rows (one row when they fit, else two, e.g. 5 + 5) sized by the space the row really has,
-     * and a single swipeable row where two rows wouldn't fit. Without it, more than 6 cards fill rows left to right.
+     * Many cards: one row at every screen size that scrolls sideways (swipe, trackpad, or the arrow buttons on
+     * mouse devices) instead of wrapping. Without it, more than 6 cards fill rows left to right.
      */
-    balancedRows?: boolean;
+    singleRow?: boolean;
 }
 
 /** Theme colour per tone: `-main` tokens already switch for dark mode (brand = blue / green). */
@@ -78,67 +80,113 @@ const gridSx = (count: number) =>
         px: { xs: 0.25, md: 0 },
     }) as const;
 
-/** Gap between cards in px (theme spacing 1.75). */
-const CARD_GAP_PX = 14;
-/** Narrowest a card gets in balanced rows before the cards need another row. */
-const BALANCED_MIN_CARD_PX = 200;
-/** Width of a card in the single swipeable row. */
-const SWIPE_CARD_PX = 236;
-/** Wraps the balanced grid so it can size its columns from the width it really has (sidebars, drawers…). */
-const balancedWrapSx = { containerType: 'inline-size', mb: 2, minWidth: 0 } as const;
+/** Width of a card in the single scrolling row; cards stretch to fill the row when they all fit. */
+const SINGLE_ROW_CARD_PX = 230;
 
-/**
- * Balanced rows: one row when every card gets at least BALANCED_MIN_CARD_PX, else two equal rows, else (phones,
- * tablets) one swipeable row, so there is never a ragged last row or a third row pushing the list down.
- */
-function balancedGridSx(count: number) {
-    const widthFor = (cols: number) => cols * BALANCED_MIN_CARD_PX + (cols - 1) * CARD_GAP_PX;
-    const rows = (cols: number) => ({
-        gridAutoFlow: 'row',
-        gridAutoColumns: 'unset',
-        gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))`,
-        overflowX: 'visible',
-        paddingBottom: '4px',
-        paddingLeft: 0,
-        paddingRight: 0,
-    });
-    const twoRowCols = Math.ceil(count / 2);
-    return {
-        display: 'grid',
-        gap: 1.75,
-        minWidth: 0,
-        gridAutoFlow: 'column',
-        // A little wider than in rows so names like "All Opportunities" fit beside the icon on phones.
-        gridAutoColumns: `minmax(${SWIPE_CARD_PX}px, 1fr)`,
-        overflowX: 'auto',
-        // Room for the hover lift and focus ring inside the scroll container.
-        pt: 0.5,
-        pb: 1,
-        px: 0.25,
-        [`@container (min-width: ${widthFor(twoRowCols)}px)`]: rows(twoRowCols),
-        ...(count > twoRowCols ? { [`@container (min-width: ${widthFor(count)}px)`]: rows(count) } : {}),
-    } as const;
+const singleRowSx = {
+    display: 'grid',
+    gap: 1.75,
+    minWidth: 0,
+    gridAutoFlow: 'column',
+    gridAutoColumns: `minmax(${SINGLE_ROW_CARD_PX}px, 1fr)`,
+    overflowX: 'auto',
+    overscrollBehaviorX: 'contain',
+    scrollSnapType: 'x proximity',
+    scrollPaddingInline: '2px',
+    '& > *': { scrollSnapAlign: 'start' },
+    // Room for the hover lift and focus ring inside the scroll container.
+    pt: 0.5,
+    pb: 1,
+    px: 0.25,
+} as const;
+
+/** Round arrow at one end of the scrolling row (mouse devices; touch screens swipe). */
+function RowScrollArrow({ direction, visible, onClick }: { direction: -1 | 1; visible: boolean; onClick: () => void }) {
+    const Icon = direction < 0 ? ChevronLeftIcon : ChevronRightIcon;
+    return (
+        <IconButton
+            aria-label={direction < 0 ? 'Show earlier cards' : 'Show more cards'}
+            tabIndex={-1}
+            onClick={onClick}
+            sx={{
+                position: 'absolute',
+                top: '50%',
+                [direction < 0 ? 'left' : 'right']: -6,
+                transform: 'translateY(-50%)',
+                zIndex: 2,
+                width: 32,
+                height: 32,
+                backgroundColor: 'var(--mui-palette-background-paper)',
+                border: '1px solid var(--mui-palette-border-strong)',
+                boxShadow: '0 2px 8px rgba(15, 23, 42, 0.15)',
+                color: 'var(--crm-slate-700)',
+                opacity: visible ? 1 : 0,
+                pointerEvents: visible ? 'auto' : 'none',
+                transition: 'opacity 0.15s ease, background-color 0.15s ease, border-color 0.15s ease',
+                '&:hover': {
+                    borderColor: 'var(--crm-blue-300)',
+                    backgroundColor: 'var(--mui-palette-primary-soft)',
+                    color: 'var(--crm-text-blue-700)',
+                },
+                '@media (hover: none)': { display: 'none' },
+            }}
+        >
+            <Icon sx={{ fontSize: 20 }} />
+        </IconButton>
+    );
 }
 
-/** The cards' grid (inside its sizing wrapper when the rows are balanced). */
+/** One row of cards that scrolls sideways, with arrows at whichever end has more cards. */
+function SingleRow({ children, ...rest }: { children: React.ReactNode } & React.HTMLAttributes<HTMLDivElement>) {
+    const [el, setEl] = useState<HTMLDivElement | null>(null);
+    const [more, setMore] = useState({ left: false, right: false });
+
+    const update = useCallback(() => {
+        if (!el) return;
+        const max = el.scrollWidth - el.clientWidth;
+        setMore((prev) => {
+            const next = { left: el.scrollLeft > 1, right: el.scrollLeft < max - 1 };
+            return prev.left === next.left && prev.right === next.right ? prev : next;
+        });
+    }, [el]);
+
+    useEffect(() => {
+        if (!el) return;
+        el.addEventListener('scroll', update, { passive: true });
+        // Also runs once as soon as it starts observing, which sets the arrows for the first layout.
+        const observer = new ResizeObserver(update);
+        observer.observe(el);
+        return () => {
+            el.removeEventListener('scroll', update);
+            observer.disconnect();
+        };
+    }, [el, update]);
+
+    // Most of a screen at a time, keeping the last card in view for context.
+    const scrollByPage = (direction: -1 | 1) => el?.scrollBy({ left: direction * el.clientWidth * 0.8, behavior: 'smooth' });
+
+    return (
+        <Box sx={{ position: 'relative', mb: 2, minWidth: 0 }}>
+            <Box ref={setEl} {...rest} sx={singleRowSx}>
+                {children}
+            </Box>
+            <RowScrollArrow direction={-1} visible={more.left} onClick={() => scrollByPage(-1)} />
+            <RowScrollArrow direction={1} visible={more.right} onClick={() => scrollByPage(1)} />
+        </Box>
+    );
+}
+
+/** The cards' grid (one scrolling row with `singleRow`). */
 function CardsGrid({
     count,
-    balancedRows,
+    singleRow,
     children,
     ...rest
-}: { count: number; balancedRows?: boolean; children: React.ReactNode } & React.HTMLAttributes<HTMLDivElement>) {
-    if (!balancedRows) {
-        return (
-            <Box {...rest} sx={gridSx(count)}>
-                {children}
-            </Box>
-        );
-    }
+}: { count: number; singleRow?: boolean; children: React.ReactNode } & React.HTMLAttributes<HTMLDivElement>) {
+    if (singleRow) return <SingleRow {...rest}>{children}</SingleRow>;
     return (
-        <Box sx={balancedWrapSx}>
-            <Box {...rest} sx={balancedGridSx(count)}>
-                {children}
-            </Box>
+        <Box {...rest} sx={gridSx(count)}>
+            {children}
         </Box>
     );
 }
@@ -148,16 +196,16 @@ const skeletonSx = { bgcolor: 'var(--mui-palette-background-hover)' } as const;
 /** Placeholder row of cards while the records / scorecard load. */
 export function StatusSummaryCardsSkeleton({
     count = 5,
-    balancedRows,
+    singleRow,
     withAmount,
 }: {
     count?: number;
-    balancedRows?: boolean;
+    singleRow?: boolean;
     /** The cards will show amounts: same shape, so they don't jump when they load. */
     withAmount?: boolean;
 }) {
     return (
-        <CardsGrid count={count} balancedRows={balancedRows} aria-busy="true" aria-label="Loading summary">
+        <CardsGrid count={count} singleRow={singleRow} aria-busy="true" aria-label="Loading summary">
             {Array.from({ length: count }, (_, i) => (
                 <Box
                     key={i}
@@ -207,13 +255,13 @@ export function StatusSummaryCards<TId extends string = string>({
     total,
     allId,
     onEdit,
-    balancedRows,
+    singleRow,
 }: StatusSummaryCardsProps<TId>) {
     const base = total ?? items[0]?.count ?? 0;
     const resetId = allId ?? items[0]?.id;
 
     return (
-        <CardsGrid count={items.length} balancedRows={balancedRows} role="group" aria-label="Status summary">
+        <CardsGrid count={items.length} singleRow={singleRow} role="group" aria-label="Status summary">
             {items.map((item) => {
                 const c = item.color ?? TONE_COLOR[item.tone ?? 'brand'];
                 const isActive = item.id === activeId;
@@ -361,7 +409,7 @@ export function StatusSummaryCards<TId extends string = string>({
                             </Typography>
                             {/* Room for the edit pencil, which sits over this corner. */}
                             {isAll && onEdit && <Box sx={{ width: 26, flexShrink: 0 }} />}
-                            {!isAll && !balancedRows && sharePill}
+                            {!isAll && !singleRow && sharePill}
                         </Box>
 
                         {/* Count + hint, with the money total beside the count (below it when the card is narrow) */}
@@ -442,9 +490,9 @@ export function StatusSummaryCards<TId extends string = string>({
                             )}
                         </Box>
 
-                        {/* Share bar (pinned to the bottom so bars line up across cards); with balanced rows the share
+                        {/* Share bar (pinned to the bottom so bars line up across cards); in a single row the share
                             pill sits at its end, leaving the label the width of the card. */}
-                        {balancedRows ? (
+                        {singleRow ? (
                             <Box sx={{ position: 'relative', mt: 'auto', minHeight: 21, display: 'flex', alignItems: 'center', gap: 1 }}>
                                 {shareBar}
                                 {!isAll && sharePill}
