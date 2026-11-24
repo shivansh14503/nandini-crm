@@ -1,10 +1,11 @@
 'use client';
 
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useState } from 'react';
 import { Box, ButtonBase, IconButton, Skeleton, Tooltip, Typography } from '@mui/material';
 import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import EditOutlinedIcon from '@mui/icons-material/EditOutlined';
+import { useTableScroll } from './DataTable/useTableScroll';
 
 /** Colour family of a card; each maps to theme tokens so light (blue) / dark (green) stay consistent. */
 export type StatusSummaryTone = 'brand' | 'warning' | 'success' | 'error' | 'neutral';
@@ -36,8 +37,9 @@ export interface StatusSummaryCardsProps<TId extends string = string> {
     /** Shows a pencil on the "All" card that opens the scorecard settings (admins). */
     onEdit?: () => void;
     /**
-     * Many cards: one row at every screen size that scrolls sideways (swipe, trackpad, or the arrow buttons on
-     * mouse devices) instead of wrapping. Without it, more than 6 cards fill rows left to right.
+     * Many cards: one row at every screen size that scrolls sideways (swipe, trackpad, the arrow buttons on mouse
+     * devices, or holding the scroll-wheel button and moving the mouse) instead of wrapping. Without it, more
+     * than 6 cards fill rows left to right.
      */
     singleRow?: boolean;
 }
@@ -136,42 +138,40 @@ function RowScrollArrow({ direction, visible, onClick }: { direction: -1 | 1; vi
     );
 }
 
-/** One row of cards that scrolls sideways, with arrows at whichever end has more cards. */
+/**
+ * One row of cards that scrolls sideways: arrows at whichever end has more cards, and the same mouse panning as
+ * the list table (hold the scroll-wheel button anywhere, or drag the gaps between cards with the left button).
+ */
 function SingleRow({ children, ...rest }: { children: React.ReactNode } & React.HTMLAttributes<HTMLDivElement>) {
+    const { setContainer, canScrollLeft, canScrollRight, isPanning, onPointerDown } = useTableScroll();
     const [el, setEl] = useState<HTMLDivElement | null>(null);
-    const [more, setMore] = useState({ left: false, right: false });
-
-    const update = useCallback(() => {
-        if (!el) return;
-        const max = el.scrollWidth - el.clientWidth;
-        setMore((prev) => {
-            const next = { left: el.scrollLeft > 1, right: el.scrollLeft < max - 1 };
-            return prev.left === next.left && prev.right === next.right ? prev : next;
-        });
-    }, [el]);
-
-    useEffect(() => {
-        if (!el) return;
-        el.addEventListener('scroll', update, { passive: true });
-        // Also runs once as soon as it starts observing, which sets the arrows for the first layout.
-        const observer = new ResizeObserver(update);
-        observer.observe(el);
-        return () => {
-            el.removeEventListener('scroll', update);
-            observer.disconnect();
-        };
-    }, [el, update]);
+    const ref = useCallback(
+        (node: HTMLDivElement | null) => {
+            setEl(node);
+            setContainer(node);
+        },
+        [setContainer]
+    );
 
     // Most of a screen at a time, keeping the last card in view for context.
     const scrollByPage = (direction: -1 | 1) => el?.scrollBy({ left: direction * el.clientWidth * 0.8, behavior: 'smooth' });
 
     return (
         <Box sx={{ position: 'relative', mb: 2, minWidth: 0 }}>
-            <Box ref={setEl} {...rest} sx={singleRowSx}>
+            <Box
+                ref={ref}
+                {...rest}
+                onPointerDown={onPointerDown}
+                sx={{
+                    ...singleRowSx,
+                    // Snapping would fight the pointer while panning.
+                    ...(isPanning ? { scrollSnapType: 'none', cursor: 'grabbing', userSelect: 'none' } : null),
+                }}
+            >
                 {children}
             </Box>
-            <RowScrollArrow direction={-1} visible={more.left} onClick={() => scrollByPage(-1)} />
-            <RowScrollArrow direction={1} visible={more.right} onClick={() => scrollByPage(1)} />
+            <RowScrollArrow direction={-1} visible={canScrollLeft} onClick={() => scrollByPage(-1)} />
+            <RowScrollArrow direction={1} visible={canScrollRight} onClick={() => scrollByPage(1)} />
         </Box>
     );
 }
