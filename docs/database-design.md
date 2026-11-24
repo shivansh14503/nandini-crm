@@ -361,7 +361,8 @@ Per-user list filters: `username`, `module`, `kind` (`recent` â€” last 10 kept â
 ### 4.18 `ModuleScorecard`
 
 Admin settings of a list screen's summary cards, one row per module (PK `module`; no row = the screen's built-in
-cards: Leads' status buckets, Opportunities' one card per sales stage totalling Actual (Before Tax)). `fieldKey` (a single-choice `select` form field: one card per option), `currencyFieldKey` (optional
+cards: Leads' status buckets, Opportunities' one card per sales stage totalling Actual (Before Tax), Quotations' one card per quote stage totalling
+Grand Total). `fieldKey` (a single-choice `select` form field: one card per option), `currencyFieldKey` (optional
 `amount` / `number` field totalled per card, or a `builtin.*` key for a total the list works out from the record's
 line items, e.g. `builtin.grandTotal`; null = the screen's default total), `optionsJson` (`[{ value, color: "#RRGGBB", hidden? }]` in card
 order; values must be options of the field's dropdown), `listViewColor` / `drawerViewColor` (colors also mark the

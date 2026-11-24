@@ -9,10 +9,11 @@ export const BUILT_IN_AMOUNT_PREFIX = 'builtin.';
 
 /**
  * Totals each module's list screen works out from its records (not form fields) that a scorecard can total per
- * card. Keep in step with the frontend's `amounts` for that module (OPPORTUNITY_CARD_AMOUNTS). The screen's default
- * total is saved as `currencyFieldKey: null`, so it isn't listed.
+ * card. Keep in step with the frontend's `amounts` for that module (OPPORTUNITY_CARD_AMOUNTS,
+ * QUOTATION_CARD_AMOUNTS). The screen's default total is saved as `currencyFieldKey: null`, so it isn't listed.
  */
 export const BUILT_IN_SCORECARD_AMOUNTS: Readonly<Record<string, readonly string[]>> = {
+    // Default: Actual (Before Tax).
     opportunities: [
         'builtin.totalAmount',
         'builtin.subtotal',
@@ -21,6 +22,15 @@ export const BUILT_IN_SCORECARD_AMOUNTS: Readonly<Record<string, readonly string
         'builtin.grandTotal',
         'builtin.subtotalPlusTax',
         'builtin.commissionAmount',
+        'builtin.lumpSumDiscount',
+    ],
+    // Default: Grand Total.
+    quotations: [
+        'builtin.totalAmount',
+        'builtin.subtotal',
+        'builtin.totalDiscount',
+        'builtin.totalTax',
+        'builtin.subtotalPlusTax',
         'builtin.lumpSumDiscount',
     ],
 };

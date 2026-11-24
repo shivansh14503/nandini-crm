@@ -75,7 +75,12 @@ Exit: the critical flows above run in CI.
       Opportunities") with its count, share and Actual (Before Tax) total; clicking a card filters the list. Same
       component and admin scorecard settings as Leads (the built-in stage cards are the default an admin can recolor,
       hide or replace). Pills are now non-stage views that toggle off on re-click, and Followup Today filters by the
-      follow-up date.
+      follow-up date. The scorecard's currency dropdown also offers the deal's line-item totals (Total, Subtotal,
+      Discount, Tax, Grand Total, Subtotal + Tax, Commission Amount, Lump Sum Discount).
+- [x] **Quotation stage cards** (2026-11-24) — the same cards on the Quotations list: one per quote stage (plus "All
+      Quotations") with its count, share and Grand Total, in one row that scrolls sideways. The old Draft / Sent /
+      Accepted / Rejected pills (a status the quote form never sets) gave way to High Value (₹1L+) and My Quotes,
+      which toggle off on re-click.
 - [ ] Activities / follow-ups (calls, meetings, notes) linked to any record, with reminders.
 - [ ] PDFs for Opportunities (and later Tickets) via the module adapter pattern.
 - [ ] Email quotation PDF to the contact (needs an SMTP/provider decision).

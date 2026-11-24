@@ -13,7 +13,7 @@ import { wasModified } from '../common/Drawer/RecordAuditFooter';
 import { formatDateTime } from '@/utils/date';
 import { RecordLink } from '../common/RecordLink';
 
-export type QuotationFilterTab = 'all' | 'draft' | 'sent' | 'accepted' | 'rejected';
+export type QuotationFilterTab = 'all' | 'high_value' | 'my_quotes';
 /** Any column's field key: the table sorts on `row[sortField]`, including columns added from the form. */
 export type QuotationSortField = string;
 
