@@ -15,6 +15,7 @@ import DoneAllOutlinedIcon from '@mui/icons-material/DoneAllOutlined';
 import DraftsOutlinedIcon from '@mui/icons-material/DraftsOutlined';
 import EventOutlinedIcon from '@mui/icons-material/EventOutlined';
 import ExploreOutlinedIcon from '@mui/icons-material/ExploreOutlined';
+import FactCheckOutlinedIcon from '@mui/icons-material/FactCheckOutlined';
 import FlagOutlinedIcon from '@mui/icons-material/FlagOutlined';
 import HandshakeOutlinedIcon from '@mui/icons-material/HandshakeOutlined';
 import HighlightOffOutlinedIcon from '@mui/icons-material/HighlightOffOutlined';
@@ -24,10 +25,12 @@ import LayersOutlinedIcon from '@mui/icons-material/LayersOutlined';
 import LocalFireDepartmentOutlinedIcon from '@mui/icons-material/LocalFireDepartmentOutlined';
 import LockOutlinedIcon from '@mui/icons-material/LockOutlined';
 import PauseCircleOutlineOutlinedIcon from '@mui/icons-material/PauseCircleOutlineOutlined';
+import PaymentsOutlinedIcon from '@mui/icons-material/PaymentsOutlined';
 import PersonAddAltOutlinedIcon from '@mui/icons-material/PersonAddAltOutlined';
 import PlayCircleOutlineOutlinedIcon from '@mui/icons-material/PlayCircleOutlineOutlined';
 import PriorityHighOutlinedIcon from '@mui/icons-material/PriorityHighOutlined';
 import PublicOutlinedIcon from '@mui/icons-material/PublicOutlined';
+import ReceiptLongOutlinedIcon from '@mui/icons-material/ReceiptLongOutlined';
 import RocketLaunchOutlinedIcon from '@mui/icons-material/RocketLaunchOutlined';
 import SendOutlinedIcon from '@mui/icons-material/SendOutlined';
 import SpaOutlinedIcon from '@mui/icons-material/SpaOutlined';
@@ -73,6 +76,9 @@ const KEYWORD_RULES: readonly KeywordRule[] = [
     { pattern: /\b(meeting|demo|scheduled|follow)/, icon: EventOutlinedIcon, hint: 'Meeting lined up' },
     { pattern: /\b(proposal|quote|quotation)\b/, icon: DescriptionOutlinedIcon, hint: 'Proposal shared' },
     { pattern: /\b(negotiat)/, icon: HandshakeOutlinedIcon, hint: 'Discussing terms' },
+    { pattern: /\b(qualification|qualifying|discovery)\b/, icon: FactCheckOutlinedIcon, hint: 'Checking the fit' },
+    { pattern: /\b(po|purchase order|order|ordered)\b/, icon: ReceiptLongOutlinedIcon, hint: 'Order received' },
+    { pattern: /\b(advance|payment|deposit)\b/, icon: PaymentsOutlinedIcon, hint: 'Payment received' },
     { pattern: /\b(not interested|negative)\b/, icon: ThumbDownOffAltOutlinedIcon, hint: 'Not interested' },
     { pattern: /\b(interested|positive)\b/, icon: ThumbUpOffAltOutlinedIcon, hint: 'Showing interest' },
     { pattern: /\b(started|start|initiated)\b/, icon: PlayCircleOutlineOutlinedIcon },

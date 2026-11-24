@@ -27,7 +27,9 @@ export const SCORECARD_PALETTE: readonly { name: string; hex: string }[] = [
     { name: 'Slate', hex: '#64748B' },
 ];
 
-const hexOf = (name: string) => SCORECARD_PALETTE.find((c) => c.name === name)?.hex ?? SCORECARD_PALETTE[0].hex;
+/** Hex of a palette color by name ("Green"); the first palette color for an unknown name. */
+export const scorecardPaletteHex = (name: string) => SCORECARD_PALETTE.find((c) => c.name === name)?.hex ?? SCORECARD_PALETTE[0].hex;
+const hexOf = scorecardPaletteHex;
 
 /** First-time color for an option: meaning from its name (won → green, lost → red, …), else the palette in order. */
 export function suggestColor(label: string, index: number): string {

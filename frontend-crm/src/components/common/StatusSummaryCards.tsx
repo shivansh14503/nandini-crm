@@ -17,6 +17,10 @@ export interface StatusSummaryItem<TId extends string = string> {
     color?: string;
     /** Short hint under the count, e.g. which statuses the card covers. */
     hint?: string;
+    /** Formatted money total of the card's records (e.g. "₹2,28,377"), shown under the count. */
+    amount?: string;
+    /** What `amount` totals, shown above it (e.g. "Actual (Before Tax)"). */
+    amountLabel?: string;
 }
 
 export interface StatusSummaryCardsProps<TId extends string = string> {
@@ -29,6 +33,11 @@ export interface StatusSummaryCardsProps<TId extends string = string> {
     allId?: TId;
     /** Shows a pencil on the "All" card that opens the scorecard settings (admins). */
     onEdit?: () => void;
+    /**
+     * Many cards: equal rows (one row when they fit, else two, e.g. 5 + 5) sized by the space the row really has,
+     * and a single swipeable row where two rows wouldn't fit. Without it, more than 6 cards fill rows left to right.
+     */
+    balancedRows?: boolean;
 }
 
 /** Theme colour per tone: `-main` tokens already switch for dark mode (brand = blue / green). */
@@ -69,12 +78,86 @@ const gridSx = (count: number) =>
         px: { xs: 0.25, md: 0 },
     }) as const;
 
+/** Gap between cards in px (theme spacing 1.75). */
+const CARD_GAP_PX = 14;
+/** Narrowest a card gets in balanced rows before the cards need another row. */
+const BALANCED_MIN_CARD_PX = 200;
+/** Width of a card in the single swipeable row. */
+const SWIPE_CARD_PX = 236;
+/** Wraps the balanced grid so it can size its columns from the width it really has (sidebars, drawers…). */
+const balancedWrapSx = { containerType: 'inline-size', mb: 2, minWidth: 0 } as const;
+
+/**
+ * Balanced rows: one row when every card gets at least BALANCED_MIN_CARD_PX, else two equal rows, else (phones,
+ * tablets) one swipeable row, so there is never a ragged last row or a third row pushing the list down.
+ */
+function balancedGridSx(count: number) {
+    const widthFor = (cols: number) => cols * BALANCED_MIN_CARD_PX + (cols - 1) * CARD_GAP_PX;
+    const rows = (cols: number) => ({
+        gridAutoFlow: 'row',
+        gridAutoColumns: 'unset',
+        gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))`,
+        overflowX: 'visible',
+        paddingBottom: '4px',
+        paddingLeft: 0,
+        paddingRight: 0,
+    });
+    const twoRowCols = Math.ceil(count / 2);
+    return {
+        display: 'grid',
+        gap: 1.75,
+        minWidth: 0,
+        gridAutoFlow: 'column',
+        // A little wider than in rows so names like "All Opportunities" fit beside the icon on phones.
+        gridAutoColumns: `minmax(${SWIPE_CARD_PX}px, 1fr)`,
+        overflowX: 'auto',
+        // Room for the hover lift and focus ring inside the scroll container.
+        pt: 0.5,
+        pb: 1,
+        px: 0.25,
+        [`@container (min-width: ${widthFor(twoRowCols)}px)`]: rows(twoRowCols),
+        ...(count > twoRowCols ? { [`@container (min-width: ${widthFor(count)}px)`]: rows(count) } : {}),
+    } as const;
+}
+
+/** The cards' grid (inside its sizing wrapper when the rows are balanced). */
+function CardsGrid({
+    count,
+    balancedRows,
+    children,
+    ...rest
+}: { count: number; balancedRows?: boolean; children: React.ReactNode } & React.HTMLAttributes<HTMLDivElement>) {
+    if (!balancedRows) {
+        return (
+            <Box {...rest} sx={gridSx(count)}>
+                {children}
+            </Box>
+        );
+    }
+    return (
+        <Box sx={balancedWrapSx}>
+            <Box {...rest} sx={balancedGridSx(count)}>
+                {children}
+            </Box>
+        </Box>
+    );
+}
+
 const skeletonSx = { bgcolor: 'var(--mui-palette-background-hover)' } as const;
 
 /** Placeholder row of cards while the records / scorecard load. */
-export function StatusSummaryCardsSkeleton({ count = 5 }: { count?: number }) {
+export function StatusSummaryCardsSkeleton({
+    count = 5,
+    balancedRows,
+    withAmount,
+}: {
+    count?: number;
+    balancedRows?: boolean;
+    /** The cards will show amounts: same shape, so they don't jump when they load. */
+    withAmount?: boolean;
+}) {
     return (
-        <Box aria-busy="true" aria-label="Loading summary" sx={gridSx(count)}>
+        <CardsGrid count={count} balancedRows={balancedRows} aria-busy="true" aria-label="Loading summary">
             {Array.from({ length: count }, (_, i) => (
                 <Box
                     key={i}
@@ -92,12 +175,24 @@ export function StatusSummaryCardsSkeleton({ count = 5 }: { count?: number }) {
                         <Skeleton variant="rounded" width={38} height={38} sx={{ ...skeletonSx, borderRadius: '11px', flexShrink: 0 }} />
                         <Skeleton variant="rounded" height={12} width="45%" sx={skeletonSx} />
                     </Box>
-                    <Skeleton variant="rounded" height={32} width={48} sx={skeletonSx} />
-                    <Skeleton variant="rounded" height={10} width="60%" sx={skeletonSx} />
+                    {withAmount ? (
+                        <Box sx={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 1.5 }}>
+                            <Skeleton variant="rounded" height={32} width={48} sx={{ ...skeletonSx, flexShrink: 0 }} />
+                            <Box sx={{ flex: '0 1 55%', display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 0.5 }}>
+                                <Skeleton variant="rounded" height={9} width="85%" sx={skeletonSx} />
+                                <Skeleton variant="rounded" height={14} width="100%" sx={skeletonSx} />
+                            </Box>
+                        </Box>
+                    ) : (
+                        <>
+                            <Skeleton variant="rounded" height={32} width={48} sx={skeletonSx} />
+                            <Skeleton variant="rounded" height={10} width="60%" sx={skeletonSx} />
+                        </>
+                    )}
                     <Skeleton variant="rounded" height={6} sx={{ ...skeletonSx, mt: 'auto' }} />
                 </Box>
             ))}
-        </Box>
+        </CardsGrid>
     );
 }
 
@@ -112,21 +207,61 @@ export function StatusSummaryCards<TId extends string = string>({
     total,
     allId,
     onEdit,
+    balancedRows,
 }: StatusSummaryCardsProps<TId>) {
     const base = total ?? items[0]?.count ?? 0;
     const resetId = allId ?? items[0]?.id;
 
     return (
-        <Box
-            role="group"
-            aria-label="Status summary"
-            sx={gridSx(items.length)}
-        >
+        <CardsGrid count={items.length} balancedRows={balancedRows} role="group" aria-label="Status summary">
             {items.map((item) => {
                 const c = item.color ?? TONE_COLOR[item.tone ?? 'brand'];
                 const isActive = item.id === activeId;
                 const isAll = item.id === resetId;
                 const share = base > 0 ? (item.count / base) * 100 : 0;
+                const multiWord = /[\s/]/.test(item.label.trim());
+                const sharePill = (
+                    <Box
+                        component="span"
+                        sx={{
+                            flexShrink: 0,
+                            px: 0.9,
+                            py: 0.25,
+                            borderRadius: '999px',
+                            fontSize: '0.7rem',
+                            fontWeight: 700,
+                            color: c,
+                            backgroundColor: mix(c, 13),
+                            fontVariantNumeric: 'tabular-nums',
+                        }}
+                    >
+                        {formatShare(share)}%
+                    </Box>
+                );
+                const shareBar = (
+                    <Box
+                        sx={{
+                            position: 'relative',
+                            flex: 1,
+                            minWidth: 0,
+                            height: 6,
+                            borderRadius: 3,
+                            overflow: 'hidden',
+                            backgroundColor: mix(c, 12),
+                        }}
+                    >
+                        <Box
+                            sx={{
+                                height: '100%',
+                                width: `${Math.min(isAll ? 100 : share, 100)}%`,
+                                minWidth: item.count > 0 ? 6 : 0,
+                                borderRadius: 3,
+                                background: `linear-gradient(90deg, ${mix(c, 65)} 0%, ${c} 100%)`,
+                                transition: 'width 0.4s ease',
+                            }}
+                        />
+                    </Box>
+                );
 
                 return (
                     <Box key={item.id} sx={{ position: 'relative', display: 'flex', minWidth: 0 }}>
@@ -203,96 +338,120 @@ export function StatusSummaryCards<TId extends string = string>({
                                 {item.icon}
                             </Box>
                             <Typography
+                                title={item.label}
                                 sx={{
                                     flex: 1,
                                     minWidth: 0,
                                     fontSize: '0.74rem',
                                     fontWeight: 700,
+                                    lineHeight: 1.3,
                                     letterSpacing: '0.05em',
                                     textTransform: 'uppercase',
                                     color: isActive ? 'var(--crm-slate-900)' : 'var(--mui-palette-text-secondary)',
-                                    whiteSpace: 'nowrap',
                                     overflow: 'hidden',
-                                    textOverflow: 'ellipsis',
+                                    // A name of several words ("Proposal/Price Quote") may take a second line beside
+                                    // the icon tile; a single word stays on one line and ends in an ellipsis.
+                                    ...(multiWord
+                                        ? { display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflowWrap: 'break-word' }
+                                        : { whiteSpace: 'nowrap', textOverflow: 'ellipsis' }),
                                 }}
                             >
-                                {item.label}
+                                {/* A slash is a place to wrap, like a space. */}
+                                {multiWord ? item.label.replace(/\//g, '/\u200B') : item.label}
                             </Typography>
                             {/* Room for the edit pencil, which sits over this corner. */}
                             {isAll && onEdit && <Box sx={{ width: 26, flexShrink: 0 }} />}
-                            {!isAll && (
-                                <Box
-                                    component="span"
+                            {!isAll && !balancedRows && sharePill}
+                        </Box>
+
+                        {/* Count + hint, with the money total beside the count (below it when the card is narrow) */}
+                        <Box
+                            sx={{
+                                position: 'relative',
+                                minWidth: 0,
+                                display: 'flex',
+                                flexWrap: 'wrap',
+                                alignItems: 'flex-end',
+                                columnGap: 1.5,
+                                rowGap: 0.5,
+                            }}
+                        >
+                            <Box sx={{ minWidth: 0, maxWidth: '100%' }}>
+                                <Typography
                                     sx={{
-                                        flexShrink: 0,
-                                        px: 0.9,
-                                        py: 0.25,
-                                        borderRadius: '999px',
-                                        fontSize: '0.7rem',
-                                        fontWeight: 700,
-                                        color: c,
-                                        backgroundColor: mix(c, 13),
+                                        fontSize: '2rem',
+                                        fontWeight: 800,
+                                        lineHeight: 1.1,
+                                        letterSpacing: '-0.02em',
+                                        color: 'var(--crm-slate-900)',
                                         fontVariantNumeric: 'tabular-nums',
                                     }}
                                 >
-                                    {formatShare(share)}%
+                                    {formatCount(item.count)}
+                                </Typography>
+                                {item.hint && (
+                                    <Typography
+                                        title={item.hint}
+                                        sx={{
+                                            mt: 0.25,
+                                            fontSize: '0.74rem',
+                                            color: 'var(--mui-palette-text-muted)',
+                                            whiteSpace: 'nowrap',
+                                            overflow: 'hidden',
+                                            textOverflow: 'ellipsis',
+                                        }}
+                                    >
+                                        {item.hint}
+                                    </Typography>
+                                )}
+                            </Box>
+
+                            {item.amount !== undefined && (
+                                <Box sx={{ ml: 'auto', minWidth: 0, maxWidth: '100%', textAlign: 'right', pb: 0.25 }}>
+                                    {item.amountLabel && (
+                                        <Typography
+                                            sx={{
+                                                fontSize: '0.68rem',
+                                                fontWeight: 600,
+                                                lineHeight: 1.3,
+                                                color: 'var(--mui-palette-text-muted)',
+                                                whiteSpace: 'nowrap',
+                                                overflow: 'hidden',
+                                                textOverflow: 'ellipsis',
+                                            }}
+                                        >
+                                            {item.amountLabel}
+                                        </Typography>
+                                    )}
+                                    <Typography
+                                        title={item.amountLabel ? `${item.amountLabel}: ${item.amount}` : item.amount}
+                                        sx={{
+                                            fontSize: '0.95rem',
+                                            fontWeight: 700,
+                                            lineHeight: 1.3,
+                                            color: 'var(--crm-slate-900)',
+                                            fontVariantNumeric: 'tabular-nums',
+                                            whiteSpace: 'nowrap',
+                                            overflow: 'hidden',
+                                            textOverflow: 'ellipsis',
+                                        }}
+                                    >
+                                        {item.amount}
+                                    </Typography>
                                 </Box>
                             )}
                         </Box>
 
-                        {/* Count + hint */}
-                        <Box sx={{ position: 'relative', minWidth: 0 }}>
-                            <Typography
-                                sx={{
-                                    fontSize: '2rem',
-                                    fontWeight: 800,
-                                    lineHeight: 1.1,
-                                    letterSpacing: '-0.02em',
-                                    color: 'var(--crm-slate-900)',
-                                    fontVariantNumeric: 'tabular-nums',
-                                }}
-                            >
-                                {formatCount(item.count)}
-                            </Typography>
-                            {item.hint && (
-                                <Typography
-                                    title={item.hint}
-                                    sx={{
-                                        mt: 0.25,
-                                        fontSize: '0.74rem',
-                                        color: 'var(--mui-palette-text-muted)',
-                                        whiteSpace: 'nowrap',
-                                        overflow: 'hidden',
-                                        textOverflow: 'ellipsis',
-                                    }}
-                                >
-                                    {item.hint}
-                                </Typography>
-                            )}
-                        </Box>
-
-                        {/* Share bar (pinned to the bottom so bars line up across cards) */}
-                        <Box
-                            sx={{
-                                position: 'relative',
-                                mt: 'auto',
-                                height: 6,
-                                borderRadius: 3,
-                                overflow: 'hidden',
-                                backgroundColor: mix(c, 12),
-                            }}
-                        >
-                            <Box
-                                sx={{
-                                    height: '100%',
-                                    width: `${Math.min(isAll ? 100 : share, 100)}%`,
-                                    minWidth: item.count > 0 ? 6 : 0,
-                                    borderRadius: 3,
-                                    background: `linear-gradient(90deg, ${mix(c, 65)} 0%, ${c} 100%)`,
-                                    transition: 'width 0.4s ease',
-                                }}
-                            />
-                        </Box>
+                        {/* Share bar (pinned to the bottom so bars line up across cards); with balanced rows the share
+                            pill sits at its end, leaving the label the width of the card. */}
+                        {balancedRows ? (
+                            <Box sx={{ position: 'relative', mt: 'auto', minHeight: 21, display: 'flex', alignItems: 'center', gap: 1 }}>
+                                {shareBar}
+                                {!isAll && sharePill}
+                            </Box>
+                        ) : (
+                            <Box sx={{ position: 'relative', mt: 'auto', display: 'flex' }}>{shareBar}</Box>
+                        )}
                     </ButtonBase>
                     {isAll && onEdit && (
                         <Tooltip title="Edit scorecard">
@@ -324,6 +483,6 @@ export function StatusSummaryCards<TId extends string = string>({
                     </Box>
                 );
             })}
-        </Box>
+        </CardsGrid>
     );
 }

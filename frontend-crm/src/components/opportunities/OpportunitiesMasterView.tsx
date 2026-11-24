@@ -5,10 +5,12 @@ import { useResetTab } from '@/hooks/useResetTab';
 import { useRouter } from 'next/navigation';
 import TrendingUpOutlinedIcon from '@mui/icons-material/TrendingUpOutlined';
 import MonetizationOnOutlinedIcon from '@mui/icons-material/MonetizationOnOutlined';
-import CheckCircleOutlinedIcon from '@mui/icons-material/CheckCircleOutlined';
-import ScheduleIcon from '@mui/icons-material/Schedule';
+import TodayOutlinedIcon from '@mui/icons-material/TodayOutlined';
 import AccountCircleOutlinedIcon from '@mui/icons-material/AccountCircleOutlined';
 import WorkspacePremiumOutlinedIcon from '@mui/icons-material/WorkspacePremiumOutlined';
+import { localToday } from '@/utils/pastDates';
+import { StatusSummaryCards, StatusSummaryCardsSkeleton } from '../common/StatusSummaryCards';
+import { useModuleScorecard } from '../common/scorecard/useModuleScorecard';
 import { CommonMasterView } from '../common/CommonMasterView';
 import { useTableFilter } from '../common/TableFilter';
 import { MasterHeaderActions } from '../common/MasterHeaderActions';
@@ -22,13 +24,15 @@ import { useAuth } from '@/context/AuthContext';
 import type { Opportunity } from '@/types/opportunity.types';
 import { useOpportunities, useBulkDeleteOpportunities, useDropdownOptionLabel } from '@/hooks/queries';
 import { useShowRecordNumber } from '@/hooks/queries/useDocumentSeries';
-import type { OpportunityFilterTab, OpportunitySortField } from './master';
+import { OPPORTUNITY_CARD_AMOUNT, useStageScorecard, type OpportunityFilterTab, type OpportunitySortField } from './master';
 import { OpportunityDetailDrawer } from './OpportunityDetailDrawer';
 import { useSearchScope, useSearchScopedRows } from '../search/SearchScope';
 import { useOpportunityColumns } from './opportunityColumns';
 
 /** Stable empty list while the first page loads (keeps memoized filters from recomputing). */
 const NO_RECORDS: Opportunity[] = [];
+/** Still in the pipeline (not closed won / lost). */
+const isOpen = (o: Opportunity) => !['Closed Won', 'Closed Lost'].includes(o.salesStage);
 export function OpportunitiesMasterView() {
     const router = useRouter();
     const { user } = useAuth();
@@ -83,39 +87,27 @@ export function OpportunitiesMasterView() {
         if (flash.recordId) setDrawerOppId(flash.recordId);
     });
 
-    // ── Filter Tabs Configuration ─────────────────────────────────────────────
+    // Today on this device's clock (IST for the team), not UTC: UTC's date lags until 05:30 IST.
+    const todayStr = useMemo(() => localToday(), []);
+
+    // ── Quick View Pills ──────────────────────────────────────────────────────
+    // The sales stage (All / Qualification / ...) lives on the stage cards; the pills are other views and toggle
+    // off on re-click, as on Leads.
     const filterItems: DataTableFilterItem<OpportunityFilterTab>[] = useMemo(() => {
         return [
-            {
-                id: 'all',
-                label: 'All Opportunities',
-                icon: <TrendingUpOutlinedIcon sx={{ fontSize: 16 }} />,
-                count: opportunities.length,
-            },
             {
                 id: 'open',
                 label: 'Active Pipeline',
                 icon: <MonetizationOnOutlinedIcon sx={{ fontSize: 16 }} />,
-                count: opportunities.filter(
-                    (o) => !['Closed Won', 'Closed Lost'].includes(o.salesStage)
-                ).length,
+                count: opportunities.filter(isOpen).length,
                 activeColor: 'var(--mui-palette-primary-main)',
             },
             {
-                id: 'closing_soon',
+                id: 'followup_today',
                 label: 'Followup Today',
-                icon: <ScheduleIcon sx={{ fontSize: 16 }} />,
-                count: opportunities.filter((o) =>
-                    ['Proposal/Price Quote', 'Negotiation'].includes(o.salesStage)
-                ).length,
+                icon: <TodayOutlinedIcon sx={{ fontSize: 16 }} />,
+                count: opportunities.filter((o) => o.nextFollowupDate === todayStr).length,
                 activeColor: 'var(--mui-palette-warning-main)',
-            },
-            {
-                id: 'won',
-                label: 'Closed Won',
-                icon: <CheckCircleOutlinedIcon sx={{ fontSize: 16 }} />,
-                count: opportunities.filter((o) => o.salesStage === 'Closed Won').length,
-                activeColor: 'var(--mui-palette-success-main)',
             },
             {
                 id: 'high_value',
@@ -131,30 +123,43 @@ export function OpportunitiesMasterView() {
                 count: currentUsername ? opportunities.filter((o) => (o.assignedTo || '').includes(currentUsername)).length : 0,
             },
         ];
-    }, [opportunities, currentUsername]);
+    }, [opportunities, currentUsername, todayStr]);
 
     // ── Filter Logic ──────────────────────────────────────────────────────────
-    const showNumber = useShowRecordNumber();
-    const filteredOpportunities = useMemo(() => {
+    /** Deals in the active pill view: the stage cards count these, so "My Deals" shows my pipeline. */
+    const tabOpportunities = useMemo(() => {
         return opportunities.filter((opp) => {
-            if (activeTab === 'open' && ['Closed Won', 'Closed Lost'].includes(opp.salesStage)) {
-                return false;
-            }
-            if (
-                activeTab === 'closing_soon' &&
-                !['Proposal/Price Quote', 'Negotiation'].includes(opp.salesStage)
-            ) {
-                return false;
-            }
-            if (activeTab === 'won' && opp.salesStage !== 'Closed Won') {
-                return false;
-            }
-            if (activeTab === 'high_value' && (opp.grandTotal || 0) < 100000) {
-                return false;
-            }
-            if (activeTab === 'my_deals' && (!currentUsername || !(opp.assignedTo || '').includes(currentUsername))) {
-                return false;
-            }
+            if (activeTab === 'open' && !isOpen(opp)) return false;
+            if (activeTab === 'followup_today' && opp.nextFollowupDate !== todayStr) return false;
+            if (activeTab === 'high_value' && (opp.grandTotal || 0) < 100000) return false;
+            if (activeTab === 'my_deals' && (!currentUsername || !(opp.assignedTo || '').includes(currentUsername))) return false;
+            return true;
+        });
+    }, [opportunities, activeTab, todayStr, currentUsername]);
+
+    // ── Stage Cards ───────────────────────────────────────────────────────────
+    // One card per sales stage with its count and value before tax. An admin can recolor / hide stages or count
+    // by another dropdown from the pencil on "All Opportunities" (the same scorecard settings as Leads).
+    const goToFirstPage = useCallback(() => setPage(0), []);
+    const showSavedToast = useCallback((message: string) => setToast({ open: true, message, severity: 'success' }), []);
+    const opportunitiesIcon = useMemo(() => <TrendingUpOutlinedIcon />, []);
+    const stageScorecard = useStageScorecard();
+    const scorecard = useModuleScorecard<Opportunity>({
+        module: 'opportunities',
+        rows: tabOpportunities,
+        allLabel: 'All Opportunities',
+        allIcon: opportunitiesIcon,
+        onActiveChange: goToFirstPage,
+        onSaved: showSavedToast,
+        defaultScorecard: stageScorecard,
+        amount: OPPORTUNITY_CARD_AMOUNT,
+    });
+
+    const showNumber = useShowRecordNumber();
+    const { matches: matchesScorecard } = scorecard;
+    const filteredOpportunities = useMemo(() => {
+        return tabOpportunities.filter((opp) => {
+            if (!matchesScorecard(opp)) return false;
 
             if (searchQuery.trim()) {
                 const q = searchQuery.toLowerCase().trim();
@@ -187,7 +192,7 @@ export function OpportunitiesMasterView() {
 
             return true;
         });
-    }, [opportunities, activeTab, searchQuery, currentUsername, leadSourceLabel, showNumber]);
+    }, [tabOpportunities, matchesScorecard, searchQuery, leadSourceLabel, showNumber]);
 
     // ── Sort Logic ────────────────────────────────────────────────────────────
     const sortedOpportunities = useMemo(() => {
@@ -280,11 +285,24 @@ export function OpportunitiesMasterView() {
     return (
         <CommonMasterView<Opportunity, OpportunityFilterTab>
             loading={listLoading}
+            summary={
+                listLoading || scorecard.loading ? (
+                    <StatusSummaryCardsSkeleton count={stageScorecard.options.length + 1} balancedRows withAmount />
+                ) : scorecard.configured ? (
+                    <StatusSummaryCards<string>
+                        items={scorecard.items}
+                        activeId={scorecard.activeId}
+                        onChange={scorecard.setActiveId}
+                        onEdit={scorecard.onEdit}
+                        balancedRows
+                    />
+                ) : null
+            }
             filterConfig={{
                 filters: filterItems,
                 activeFilter: activeTab,
                 onFilterChange: (tab) => {
-                    setActiveTab(tab);
+                    setActiveTab((prev) => (prev === tab ? 'all' : tab));
                     setPage(0);
                 },
             }}
@@ -373,6 +391,7 @@ export function OpportunitiesMasterView() {
                 />
             }
         >
+            {scorecard.dialog}
             <DataImportModal
                 open={importOpen}
                 entity="opportunities"

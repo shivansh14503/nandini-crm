@@ -74,18 +74,30 @@ function optionsFor(
         });
 }
 
-/** Saved scorecard, or a starting point: the module's status / stage dropdown with suggested colors. */
-function initialDraft(configs: FormConfigsPayload | null, module: CrmModuleKey, config: ScorecardConfig | null): Draft {
+/** The screen's cards before an admin saves a scorecard (see `useModuleScorecard`'s `defaultScorecard`). */
+type DefaultScorecard = Pick<ScorecardConfig, 'fieldKey' | 'options'>;
+
+/**
+ * Saved scorecard, else the screen's default cards, else a starting point: the module's status / stage dropdown
+ * with suggested colors.
+ */
+function initialDraft(
+    configs: FormConfigsPayload | null,
+    module: CrmModuleKey,
+    config: ScorecardConfig | DefaultScorecard | null
+): Draft {
     const fields = scorecardDropdownFields(configs, module);
     const savedField = config && fields.some((f) => f.fieldKey === config.fieldKey) ? config.fieldKey : '';
     const fieldKey = savedField || (fields.find((f) => /status|stage/i.test(f.fieldKey)) ?? fields[0])?.fieldKey || '';
     const saved = savedField ? config?.options ?? [] : [];
+    // Only a saved scorecard has these; the default cards start with both colors on, like a new scorecard.
+    const savedConfig = config && 'listViewColor' in config ? config : null;
     return {
         fieldKey,
-        currencyFieldKey: (savedField && config?.currencyFieldKey) || '',
+        currencyFieldKey: (savedField && savedConfig?.currencyFieldKey) || '',
         options: fieldKey ? optionsFor(configs, module, fieldKey, saved) : [],
-        listViewColor: config?.listViewColor ?? true,
-        drawerViewColor: config?.drawerViewColor ?? true,
+        listViewColor: savedConfig?.listViewColor ?? true,
+        drawerViewColor: savedConfig?.drawerViewColor ?? true,
     };
 }
 
@@ -102,6 +114,10 @@ export interface ScorecardSettingsDialogProps {
     onClose: () => void;
     /** After a save or reset, e.g. to show a toast. */
     onSaved?: (message: string) => void;
+    /** The screen's own cards while nothing is saved: the dialog starts from them. */
+    defaultScorecard?: DefaultScorecard | null;
+    /** What the cards total when no currency field is picked (e.g. "Actual (Before Tax)"); unset = counts only. */
+    defaultAmountLabel?: string;
 }
 
 /**
@@ -132,12 +148,12 @@ export function ScorecardSettingsDialog(props: ScorecardSettingsDialogProps) {
     );
 }
 
-function ScorecardSettingsBody({ module, onClose, onSaved }: ScorecardSettingsDialogProps) {
+function ScorecardSettingsBody({ module, onClose, onSaved, defaultScorecard, defaultAmountLabel }: ScorecardSettingsDialogProps) {
     const configs = useFormConfigs();
     const config = useScorecard(module);
     const saveMutation = useSaveScorecard(module);
     const resetMutation = useResetScorecard(module);
-    const [draft, setDraft] = useState<Draft>(() => initialDraft(configs, module, config));
+    const [draft, setDraft] = useState<Draft>(() => initialDraft(configs, module, config ?? defaultScorecard ?? null));
     const [error, setError] = useState<string | null>(null);
     const [colorAnchor, setColorAnchor] = useState<{ el: HTMLElement; value: string } | null>(null);
 
@@ -340,15 +356,17 @@ function ScorecardSettingsBody({ module, onClose, onSaved }: ScorecardSettingsDi
                             onChange={(e) => setDraft((prev) => ({ ...prev, currencyFieldKey: e.target.value }))}
                             disabled={busy || currencyFields.length === 0}
                             helperText={
-                                currencyFields.length === 0
-                                    ? 'Add an Amount field to this module’s form to total it on the cards.'
-                                    : 'Each card also shows the total of this field.'
+                                defaultAmountLabel
+                                    ? `Without one, each card shows the total ${defaultAmountLabel}.`
+                                    : currencyFields.length === 0
+                                      ? 'Add an Amount field to this module’s form to total it on the cards.'
+                                      : 'Each card also shows the total of this field.'
                             }
                             slotProps={{ select: { displayEmpty: true } }}
                         >
                             <MenuItem value="">
                                 <Typography component="span" sx={{ color: 'var(--mui-palette-text-muted)', fontSize: 'inherit' }}>
-                                    None (counts only)
+                                    {defaultAmountLabel ? `Default: ${defaultAmountLabel}` : 'None (counts only)'}
                                 </Typography>
                             </MenuItem>
                             {currencyFields.map((f) => (
