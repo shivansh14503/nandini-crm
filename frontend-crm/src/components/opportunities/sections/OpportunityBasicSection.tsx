@@ -1,37 +1,28 @@
 'use client';
 
-import React, { useState } from 'react';
-import {
-    Box,
-    Divider,
-    FormHelperText,
-} from '@mui/material';
-// Raw text inputs show the admin-configured placeholder of the FormField they sit in.
-import { ConfiguredTextField as TextField } from '@/components/forms/ConfiguredTextField';
+import React, { useMemo } from 'react';
+import { Box, Divider } from '@mui/material';
+import { useFormContext, useWatch } from 'react-hook-form';
 import ArticleOutlinedIcon from '@mui/icons-material/ArticleOutlined';
 import ReceiptLongOutlinedIcon from '@mui/icons-material/ReceiptLongOutlined';
 import MonetizationOnOutlinedIcon from '@mui/icons-material/MonetizationOnOutlined';
 
 import {
     FIELD_MAX_LENGTH,
-    FormField,
     FormGrid,
     FormGridItem,
-    LookupField,
-    LOOKUP_FIELD_SIZE,
-    StyledSelect,
     SectionLabel,
-    fieldSx,
-    resolveOptionsFieldSize,
-    RhfPhoneField,
+    RhfDateTimeField,
     RhfEmailField,
+    RhfLookup,
+    RhfMultiAutocomplete,
+    RhfPhoneField,
+    RhfSelect,
+    RhfTextField,
 } from '@/components/forms';
-import { UserLookupModal } from '@/components/common/lookup';
-import { DATE_TIME_COLUMNS, TimePicker } from '@/components/forms/TimePicker';
-import { upperCase, useUndoSafeSanitizer } from '@/components/forms/undoSafeInput';
-import { formatPersonName } from '@/utils/personName';
-import { MultiAutocompleteInput, MultiSelectChips } from '@/components/forms/rhf/RhfMultiAutocomplete';
-import { localToday } from '@/utils/pastDates';
+import { useContacts, useOrganizations } from '@/hooks/queries';
+import type { Contact } from '@/types/contact.types';
+import type { ExtendedOrganization } from '@/types/organization.types';
 import type { OpportunityFormData } from '@/types/opportunity.types';
 import {
     OPPORTUNITY_SALES_STAGES,
@@ -45,32 +36,87 @@ import {
     FOLLOWUP_TYPES,
 } from '@/types/lead.types';
 import { useDropdownOptionsGetter } from '@/hooks/queries/useFormConfigs';
-import { useFormState } from 'react-hook-form';
 import { useFormMode } from '@/context/FormModeContext';
 import { CUSTOMER_RESPONSE_CATEGORY, CUSTOMER_RESPONSES, FieldGlow, useFollowUpDecision } from '@/components/forms/FollowUpDecision';
 
+type F = OpportunityFormData;
+
 export interface OpportunityBasicSectionProps {
-    form: OpportunityFormData;
-    setField: <K extends keyof OpportunityFormData>(key: K, value: OpportunityFormData[K]) => void;
     /** Top-right toast of the form (e.g. "previous follow-up has expired"). */
     notify?: (message: string, severity?: 'success' | 'error' | 'info' | 'warning') => void;
     /** Told while the user still owes the next follow-up decision; the form refuses to save until it's made. */
     onDecisionPendingChange?: (pending: boolean) => void;
 }
 
-export function OpportunityBasicSection({ form, setField, notify, onDecisionPendingChange }: OpportunityBasicSectionProps) {
+const sectionDividerSx = { my: 3.5, borderColor: 'var(--mui-palette-border-light)' } as const;
+
+// Stable fallbacks while the lists load, so memoized suggestions don't recompute every render.
+const EMPTY_ORGANIZATIONS: ExtendedOrganization[] = [];
+const EMPTY_CONTACTS: Contact[] = [];
+
+const sameName = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLowerCase();
+const primaryEmail = (c: Contact) => (c.emailAddress.find((e) => e.isPrimary) ?? c.emailAddress[0])?.email ?? '';
+
+/**
+ * BASIC tab of the Opportunity form, built from the shared React Hook Form fields (as the Lead, Ticket and Convert
+ * Lead forms are), so every field shows its own error and the lookups search the CRM's own records.
+ * Must be rendered inside a `FormProvider<OpportunityFormData>`.
+ */
+export function OpportunityBasicSection({ notify, onDecisionPendingChange }: OpportunityBasicSectionProps) {
     const getOptions = useDropdownOptionsGetter();
+    const { control, getValues, setValue } = useFormContext<F>();
     const { mode } = useFormMode();
     const isEdit = mode === 'edit';
+    const editable = mode !== 'view';
+
     // Customer Response → keep or reschedule the next follow-up (see FollowUpDecision).
-    const { setAnchor: setResponseAnchor, onResponseChange, glow: followUpGlow, popper: followUpPopper } = useFollowUpDecision({ enabled: isEdit, notify, onPendingChange: onDecisionPendingChange });
+    const { setAnchor: setResponseAnchor, onResponseChange, glow: followUpGlow, popper: followUpPopper } = useFollowUpDecision({
+        enabled: isEdit,
+        notify,
+        onPendingChange: onDecisionPendingChange,
+    });
     const customerResponseOptions = getOptions(CUSTOMER_RESPONSE_CATEGORY, CUSTOMER_RESPONSES);
-    const { errors } = useFormState<OpportunityFormData>();
-    const customerResponseError = errors.customerResponse?.message;
-    const followUpDateError = errors.nextFollowupDate?.message ?? errors.nextFollowupTime?.message;
-    const [userLookupOpen, setUserLookupOpen] = useState(false);
-    // Organization names are stored uppercase.
-    const orgNameInputRef = useUndoSafeSanitizer(upperCase);
+    const productCategory = useWatch({ control, name: 'productCategory' }) ?? [];
+
+    // Organizations and contacts from the CRM (as on the Ticket form). Contact suggestions narrow to the chosen
+    // organization's people when it has any on file.
+    const { data: organizations = EMPTY_ORGANIZATIONS } = useOrganizations(undefined, { enabled: editable });
+    const { data: contacts = EMPTY_CONTACTS } = useContacts(undefined, { enabled: editable });
+    const organizationName = useWatch({ control, name: 'organizationName' }) ?? '';
+    const organizationNames = useMemo(() => organizations.map((o) => o.organizationName), [organizations]);
+    const contactNames = useMemo(() => {
+        const org = organizationName.trim().toLowerCase();
+        const inOrg = org ? contacts.filter((c) => (c.organizationName ?? '').trim().toLowerCase() === org) : [];
+        return (inOrg.length > 0 ? inOrg : contacts).map((c) => c.name);
+    }, [contacts, organizationName]);
+
+    const touch = { shouldDirty: true, shouldValidate: true } as const;
+
+    const clearContactFields = () => {
+        setValue('contact', '', { shouldDirty: true });
+        setValue('contactNumber', '', touch);
+        setValue('contactEmail', '', touch);
+    };
+
+    // A contact who belongs to a different organization no longer applies.
+    const handleOrganizationPicked = (org: ExtendedOrganization) => {
+        const currentContact = getValues('contact')?.trim();
+        if (!currentContact) return;
+        const match = contacts.find((c) => sameName(c.name, currentContact));
+        if (match?.organizationName && !sameName(match.organizationName, org.organizationName)) clearContactFields();
+    };
+
+    // Picking a contact fills in their number, email and organization.
+    const handleContactPicked = (contact: Contact) => {
+        setValue('contactNumber', contact.mobile || '', touch);
+        setValue('contactEmail', primaryEmail(contact), touch);
+        if (contact.organizationName) setValue('organizationName', contact.organizationName, touch);
+    };
+
+    const handleContactCleared = () => {
+        setValue('contactNumber', '', touch);
+        setValue('contactEmail', '', touch);
+    };
 
     return (
         <Box sx={{ p: { xs: 2.5, md: 3.5 } }}>
@@ -84,314 +130,227 @@ export function OpportunityBasicSection({ form, setField, notify, onDecisionPend
             />
             <FormGrid columns={3}>
                 {/* ── Customer ── */}
-                <FormField name="organizationName" label="Organization name" required hint="Client company name">
-                    <TextField
-                        fullWidth
-                        size="small"
-                        placeholder="Enter legal / trading organization name"
-                        value={form.organizationName}
-                        inputRef={orgNameInputRef}
-                        onChange={(e) => setField('organizationName', e.target.value.toUpperCase())}
-                        sx={fieldSx}
-                        slotProps={{ htmlInput: { maxLength: FIELD_MAX_LENGTH.organizationName } }}
-                    />
-                </FormField>
+                <RhfLookup<F, 'organization'>
+                    name="organizationName"
+                    label="Organization name"
+                    required
+                    hint="Client company name"
+                    lookupType="organization"
+                    options={organizationNames}
+                    onSelectRecord={handleOrganizationPicked}
+                    placeholder="Enter legal / trading organization name"
+                />
 
-                <FormField name="contact" label="Contact" required size={LOOKUP_FIELD_SIZE} fit={null} hint="Primary decision maker">
-                    <LookupField
-                        value={form.contact}
-                        onChange={(val) => setField('contact', val)}
-                        formatValue={formatPersonName}
-                        placeholder="Type or select contact..."
-                        options={[
-                            'Vikram Singhania',
-                            'Neha Mehta',
-                            'Rohit Bansal',
-                            'Priya Nair',
-                            'Sunil Aggarwal',
-                            'Rajesh Gupta',
-                            'Amit Patel',
-                            'Pooja Verma',
-                        ]}
-                        required
-                    />
-                </FormField>
+                <RhfLookup<F, 'contact'>
+                    name="contact"
+                    label="Contact"
+                    required
+                    hint="Primary decision maker"
+                    lookupType="contact"
+                    options={contactNames}
+                    onSelectRecord={handleContactPicked}
+                    onClearRecord={handleContactCleared}
+                    placeholder="Type or select contact..."
+                />
 
-                <RhfPhoneField<OpportunityFormData>
+                <RhfPhoneField<F>
                     name="contactNumber"
                     label="Contact Number"
                     required
                     hint="Mobile / direct phone"
                     placeholder="e.g. 9800000000"
-                    onChange={(e) => setField('contactNumber', e.target.value)}
                 />
 
-                <RhfEmailField<OpportunityFormData>
+                <RhfEmailField<F>
                     name="contactEmail"
                     label="Contact Email"
                     hint="Official contact email"
                     placeholder="corporate.contact@company.com"
-                    onChange={(e) => setField('contactEmail', e.target.value)}
                 />
 
-                <FormField name="referredBy" label="Referred By" size={LOOKUP_FIELD_SIZE} fit={null} hint="Partner, agent, or client">
-                    <LookupField
-                        value={form.referredBy || ''}
-                        onChange={(val) => setField('referredBy', val)}
-                        placeholder="Referred by partner or person..."
-                        options={[
-                            'Shree Associates',
-                            'Apex Tally Partners',
-                            'Chartered Financials Ltd',
-                            'Global Tech Network',
-                            'Direct Partner Network',
-                        ]}
-                    />
-                </FormField>
+                {/* Picks from the CRM's contacts (as on the Lead form); a partner or campaign can still be typed. */}
+                <RhfLookup<F, 'contact'>
+                    name="referredBy"
+                    label="Referred By"
+                    hint="Partner, agent, or client"
+                    lookupType="contact"
+                    placeholder="Referred by partner or person..."
+                />
 
-                <FormField name="leadGivenBy" label="Lead Given By" size={LOOKUP_FIELD_SIZE} fit={null} required hint="Referrer or internal sponsor">
-                    <LookupField
-                        value={form.leadGivenBy}
-                        onChange={(val) => setField('leadGivenBy', val)}
-                        placeholder="Internal sponsor or external referrer..."
-                        options={[
-                            'Direct Inbound Marketing',
-                            'Mittal Sharma',
-                            'Rajesh Kumar',
-                            'Channel Partner Delhi-NCR',
-                            'Tally Sales Promotion Event',
-                        ]}
-                        required
-                    />
-                </FormField>
+                {/* Starts empty. Picks the CRM user who brought the deal in (stored by username, like Assigned to); an outside referrer can still be typed. */}
+                <RhfLookup<F, 'user'>
+                    name="leadGivenBy"
+                    label="Lead Given By"
+                    required
+                    hint="Referrer or internal sponsor"
+                    lookupType="user"
+                    placeholder="Internal sponsor or external referrer..."
+                />
 
                 {/* ── Pipeline ── */}
-                <FormField name="type" label="Type" required size={resolveOptionsFieldSize(OPPORTUNITY_TYPES)} hint="Nature of deal">
-                    <StyledSelect
-                        value={form.type}
-                        onChange={(v) => setField('type', v)}
-                        options={OPPORTUNITY_TYPES}
-                        placeholder="Select Opportunity Type"
-                        required
-                    />
-                </FormField>
+                <RhfSelect<F>
+                    name="type"
+                    label="Type"
+                    required
+                    hint="Nature of deal"
+                    options={getOptions('opportunity_type', OPPORTUNITY_TYPES)}
+                    placeholder="Select Opportunity Type"
+                />
 
-                <FormField name="leadSource" label="Lead Source" required size={resolveOptionsFieldSize(LEAD_SOURCES)}>
-                    <StyledSelect
-                        value={form.leadSource}
-                        onChange={(v) => setField('leadSource', v)}
-                        options={LEAD_SOURCES}
-                        placeholder="Select Lead Source"
-                        required
-                    />
-                </FormField>
+                <RhfSelect<F>
+                    name="leadSource"
+                    label="Lead Source"
+                    required
+                    options={getOptions('shared_lead_source', LEAD_SOURCES)}
+                    placeholder="Select Lead Source"
+                />
 
-                <FormField name="salesStage" label="Sales Stage" required size={resolveOptionsFieldSize(OPPORTUNITY_SALES_STAGES)} hint="Pipeline phase">
-                    <StyledSelect
-                        value={form.salesStage || 'Qualification'}
-                        onChange={(v) => setField('salesStage', v)}
-                        options={OPPORTUNITY_SALES_STAGES}
-                        placeholder="Select Sales Stage"
-                        required
-                    />
-                </FormField>
+                <RhfSelect<F>
+                    name="salesStage"
+                    label="Sales Stage"
+                    required
+                    hint="Pipeline phase"
+                    options={getOptions('opportunity_sales_stage', OPPORTUNITY_SALES_STAGES)}
+                    placeholder="Select Sales Stage"
+                />
 
                 {/* ── Follow-up & ownership ── */}
-                <FormField name="followupType" label="Followup Type" size={resolveOptionsFieldSize(FOLLOWUP_TYPES)} hint="Default: Call">
-                    <StyledSelect
-                        value={form.followupType || 'Call'}
-                        onChange={(v) => setField('followupType', v)}
-                        options={FOLLOWUP_TYPES}
-                        placeholder="Select Type"
-                    />
-                </FormField>
+                <RhfSelect<F>
+                    name="followupType"
+                    label="Followup Type"
+                    hint="Default: Call"
+                    options={getOptions('shared_followup_type', FOLLOWUP_TYPES)}
+                    placeholder="Select Type"
+                />
 
                 {/* Asked on every edit (a new opportunity has no follow-up to report on yet). */}
                 {mode !== 'create' && (
                     <Box ref={setResponseAnchor} sx={{ minWidth: 0, '&& > *': { mb: 0 } }}>
-                        <FormField name="customerResponse" label="Customer Response" required={isEdit} size={resolveOptionsFieldSize(customerResponseOptions)} hint="From the last follow-up">
-                            <StyledSelect
-                                value={form.customerResponse || ''}
-                                onChange={(v) => {
-                                    const previous = form.customerResponse || '';
-                                    setField('customerResponse', v);
-                                    onResponseChange(v, previous);
-                                }}
-                                options={customerResponseOptions}
-                                placeholder="Select customer response"
-                            />
-                            {customerResponseError && (
-                                <FormHelperText error sx={{ mx: 1.75 }}>
-                                    {customerResponseError}
-                                </FormHelperText>
-                            )}
-                        </FormField>
+                        <RhfSelect<F>
+                            name="customerResponse"
+                            label="Customer Response"
+                            required={isEdit}
+                            hint="From the last follow-up"
+                            options={customerResponseOptions}
+                            placeholder="Select customer response"
+                            onValueChange={onResponseChange}
+                        />
                     </Box>
                 )}
 
                 <FieldGlow active={followUpGlow}>
-                <FormField name="nextFollowupDate" label="Next Followup Date" required size="md" hint="Next touchpoint">
-                    <Box sx={{ display: 'grid', gridTemplateColumns: DATE_TIME_COLUMNS, gap: 1 }}>
-                        <TextField
-                            fullWidth
-                            size="small"
-                            type="date"
-                            value={form.nextFollowupDate}
-                            onChange={(e) => setField('nextFollowupDate', e.target.value)}
-                            slotProps={{ htmlInput: { min: localToday() } }}
-                            sx={fieldSx}
-                        />
-                        <TimePicker
-                            value={form.nextFollowupTime || ''}
-                            onChange={(value) => setField('nextFollowupTime', value)}
-                            date={form.nextFollowupDate}
-                            ariaLabel="Next followup time"
-                        />
-                    </Box>
-                    {followUpDateError && <FormHelperText error>{followUpDateError}</FormHelperText>}
-                </FormField>
+                    <RhfDateTimeField<F>
+                        dateName="nextFollowupDate"
+                        timeName="nextFollowupTime"
+                        label="Next Followup Date"
+                        required
+                        hint="Next touchpoint"
+                    />
                 </FieldGlow>
 
-                <FormField name="assignedTo" label="Assigned to" required size={LOOKUP_FIELD_SIZE} fit={null} hint="Account executive">
-                    <LookupField
-                        value={form.assignedTo}
-                        onChange={(val) => setField('assignedTo', val)}
-                        placeholder="Assign to user..."
-                        options={[
-                            'mittal.sharma',
-                            'rajesh.kumar',
-                            'anil.verma',
-                            'deepak.joshi',
-                            'amit.tandon',
-                        ]}
-                        onLookupClick={() => setUserLookupOpen(true)}
-                        required
-                    />
-                    <UserLookupModal
-                        open={userLookupOpen}
-                        onClose={() => setUserLookupOpen(false)}
-                        onSelect={(user) => setField('assignedTo', user.username)}
-                        selectedValue={form.assignedTo}
-                    />
-                </FormField>
+                <RhfLookup<F, 'user'>
+                    name="assignedTo"
+                    label="Assigned to"
+                    required
+                    hint="Account executive"
+                    lookupType="user"
+                    placeholder="Assign to user..."
+                />
 
                 {followUpPopper}
 
-                {/* Product Category:* (Multi-select chips, full row) */}
-                <FormField
+                {/* Product Category (multi-select chips, full row) */}
+                <RhfMultiAutocomplete<F>
                     name="productCategory"
                     label="Product Category"
                     required
-                    size="full"
-                    viewValue={
-                        (form.productCategory || []).length > 0 ? <MultiSelectChips values={form.productCategory || []} /> : null
-                    }
-                    hint={`${(form.productCategory || []).length} category selected`}
-                >
-                    <MultiAutocompleteInput
-                        value={form.productCategory || []}
-                        onChange={(next) => setField('productCategory', next)}
-                        options={getOptions('shared_product_category', PRODUCT_CATEGORIES)}
-                        placeholder="Search and select products..."
-                    />
-                </FormField>
+                    hint={`${productCategory.length} category selected`}
+                    options={getOptions('shared_product_category', PRODUCT_CATEGORIES)}
+                    placeholder="Search and select products..."
+                />
             </FormGrid>
 
             {/* ── Notes: full width ── */}
             <FormGrid columns={1} sx={{ mt: 2.5 }}>
                 <FormGridItem>
-                    <FormField name="remarks" label="Remarks" required size="full" hint="Stage summary & action items">
-                        <TextField
-                            fullWidth
-                            size="small"
-                            multiline
-                            minRows={4}
-                            maxRows={8}
-                            placeholder="Provide current milestone details or immediate actions..."
-                            value={form.remarks}
-                            onChange={(e) => setField('remarks', e.target.value)}
-                            sx={fieldSx}
-                            slotProps={{ htmlInput: { maxLength: FIELD_MAX_LENGTH.longText } }}
-                        />
-                    </FormField>
+                    <RhfTextField<F>
+                        name="remarks"
+                        label="Remarks"
+                        required
+                        hint="Stage summary & action items"
+                        multiline
+                        minRows={4}
+                        maxRows={8}
+                        placeholder="Provide current milestone details or immediate actions..."
+                        maxLength={FIELD_MAX_LENGTH.longText}
+                    />
                 </FormGridItem>
             </FormGrid>
 
             {/* ══════════════════════════════════════════════════════════════════════ */}
             {/* BILLING DETAILS                                                       */}
             {/* ══════════════════════════════════════════════════════════════════════ */}
-            <Divider sx={{ my: 3.5, borderColor: 'var(--mui-palette-border-light)' }} />
+            <Divider sx={sectionDividerSx} />
             <SectionLabel
                 icon={<ReceiptLongOutlinedIcon sx={{ fontSize: 18 }} />}
                 label="Billing Details"
                 sx={{ mb: 2.5 }}
             />
             <FormGrid columns={3}>
-                <FormField name="tallySerialNo" label="Tally Serial No" size="sm" hint="Optional serial number">
-                    <TextField
-                        fullWidth
-                        size="small"
-                        placeholder="e.g. 765432109"
-                        value={form.tallySerialNo || ''}
-                        onChange={(e) => setField('tallySerialNo', e.target.value)}
-                        sx={fieldSx}
-                        slotProps={{ htmlInput: { maxLength: FIELD_MAX_LENGTH.shortCode } }}
-                    />
-                </FormField>
+                <RhfTextField<F>
+                    name="tallySerialNo"
+                    label="Tally Serial No"
+                    hint="Optional serial number"
+                    placeholder="e.g. 765432109"
+                    fieldSize="sm"
+                    maxLength={FIELD_MAX_LENGTH.shortCode}
+                />
 
-                <FormField name="invoiceNo" label="Invoice No" size="sm" hint="Reference number">
-                    <TextField
-                        fullWidth
-                        size="small"
-                        placeholder="e.g. INV-2026-0982"
-                        value={form.invoiceNo || ''}
-                        onChange={(e) => setField('invoiceNo', e.target.value)}
-                        sx={fieldSx}
-                        slotProps={{ htmlInput: { maxLength: FIELD_MAX_LENGTH.shortCode } }}
-                    />
-                </FormField>
+                <RhfTextField<F>
+                    name="invoiceNo"
+                    label="Invoice No"
+                    hint="Reference number"
+                    placeholder="e.g. INV-2026-0982"
+                    fieldSize="sm"
+                    maxLength={FIELD_MAX_LENGTH.shortCode}
+                />
 
-                <FormField name="invoiceDate" label="Invoice Date" size="sm" hint="Billing issue date">
-                    <TextField
-                        fullWidth
-                        size="small"
-                        type="date"
-                        value={form.invoiceDate || ''}
-                        onChange={(e) => setField('invoiceDate', e.target.value)}
-                        slotProps={{ htmlInput: { min: localToday() } }}
-                        sx={fieldSx}
-                    />
-                </FormField>
+                <RhfTextField<F>
+                    name="invoiceDate"
+                    label="Invoice Date"
+                    hint="Billing issue date"
+                    type="date"
+                    fieldSize="sm"
+                />
             </FormGrid>
 
             {/* ══════════════════════════════════════════════════════════════════════ */}
             {/* COMMISSION & DOCUMENTATION                                            */}
             {/* ══════════════════════════════════════════════════════════════════════ */}
-            <Divider sx={{ my: 3.5, borderColor: 'var(--mui-palette-border-light)' }} />
+            <Divider sx={sectionDividerSx} />
             <SectionLabel
                 icon={<MonetizationOnOutlinedIcon sx={{ fontSize: 18 }} />}
                 label="Commission & Documentation"
                 sx={{ mb: 2.5 }}
             />
             <FormGrid columns={3}>
-                <FormField name="commission" label="Commission" required size={resolveOptionsFieldSize(OPPORTUNITY_COMMISSIONS)} hint="Sales / partner commission">
-                    <StyledSelect
-                        value={form.commission}
-                        onChange={(v) => setField('commission', v)}
-                        options={OPPORTUNITY_COMMISSIONS}
-                        placeholder="Select Commission"
-                        required
-                    />
-                </FormField>
+                <RhfSelect<F>
+                    name="commission"
+                    label="Commission"
+                    required
+                    hint="Sales / partner commission"
+                    options={getOptions('opportunity_commission', OPPORTUNITY_COMMISSIONS)}
+                    placeholder="Select Commission"
+                />
 
-                <FormField name="addDocument" label="Add Document" size="sm" hint="Documents / PO attached">
-                    <StyledSelect
-                        value={form.addDocument || 'No'}
-                        onChange={(v) => setField('addDocument', v)}
-                        options={OPPORTUNITY_DOCUMENT_OPTIONS}
-                        placeholder="Select"
-                    />
-                </FormField>
+                <RhfSelect<F>
+                    name="addDocument"
+                    label="Add Document"
+                    hint="Documents / PO attached"
+                    options={getOptions('opportunity_add_document', OPPORTUNITY_DOCUMENT_OPTIONS)}
+                    placeholder="Select"
+                    fieldSize="sm"
+                />
             </FormGrid>
         </Box>
     );
