@@ -362,7 +362,8 @@ Per-user list filters: `username`, `module`, `kind` (`recent` â€” last 10 kept â
 
 Admin settings of a list screen's summary cards, one row per module (PK `module`; no row = the screen's built-in
 cards: Leads' status buckets, Opportunities' one card per sales stage totalling Actual (Before Tax)). `fieldKey` (a single-choice `select` form field: one card per option), `currencyFieldKey` (optional
-`amount` / `number` field totalled per card), `optionsJson` (`[{ value, color: "#RRGGBB", hidden? }]` in card
+`amount` / `number` field totalled per card, or a `builtin.*` key for a total the list works out from the record's
+line items, e.g. `builtin.grandTotal`; null = the screen's default total), `optionsJson` (`[{ value, color: "#RRGGBB", hidden? }]` in card
 order; values must be options of the field's dropdown), `listViewColor` / `drawerViewColor` (colors also mark the
 field in the list column / record drawer; a record's Status always shows as a colored pill on its detail page, in the scorecard color when the scorecard counts by Status), `updatedBy`, timestamps. Hard-deleted on "Reset to default". Counting
 runs in the browser over the loaded list.

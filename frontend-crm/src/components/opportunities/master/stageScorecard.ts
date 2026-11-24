@@ -23,17 +23,43 @@ const STAGE_COLORS: Readonly<Record<string, string>> = {
     'Advance Received': 'Teal',
 };
 
-/** A deal's value after discounts, before tax (the list's "Actual (Before Tax)" column). */
-export function opportunityAmountBeforeTax(o: Opportunity): number {
-    const value = o.subtotal ?? (Number(o.grandTotal) || 0) - (Number(o.totalTax) || 0);
+const num = (value: unknown) => {
     const n = Number(value);
     return Number.isFinite(n) ? n : 0;
+};
+
+/** A deal's value after discounts, before tax (the list's "Actual (Before Tax)" column). */
+export function opportunityAmountBeforeTax(o: Opportunity): number {
+    return o.subtotal !== undefined && o.subtotal !== null ? num(o.subtotal) : num(o.grandTotal) - num(o.totalTax);
 }
 
-export const OPPORTUNITY_CARD_AMOUNT: ScorecardAmount<Opportunity> = {
-    label: 'Actual (Before Tax)',
-    of: opportunityAmountBeforeTax,
-};
+/** The percentage in a Commission option ("Standard (10%)" → 10); 0 when it names none. */
+export function commissionPercent(commission: string | undefined): number {
+    const match = (commission ?? '').match(/(\d+(?:\.\d+)?)\s*%/);
+    return match ? Number(match[1]) : 0;
+}
+
+/**
+ * Totals the stage cards can show, in the order of the scorecard's currency dropdown. The first is the default
+ * (saved as no currency field); the others are saved by key, which the API accepts only for keys it lists in
+ * BUILT_IN_SCORECARD_AMOUNTS (backend scorecard.validator.ts). Labels match the deal's Line Items totals.
+ */
+export const OPPORTUNITY_CARD_AMOUNTS: readonly ScorecardAmount<Opportunity>[] = [
+    { key: 'builtin.actualBeforeTax', label: 'Actual (Before Tax)', of: opportunityAmountBeforeTax },
+    { key: 'builtin.totalAmount', label: 'Total', of: (o) => num(o.totalAmount) },
+    { key: 'builtin.subtotal', label: 'Subtotal', of: (o) => num(o.subtotal) },
+    { key: 'builtin.totalDiscount', label: 'Discount', of: (o) => num(o.totalDiscount) },
+    { key: 'builtin.totalTax', label: 'Tax', of: (o) => num(o.totalTax) },
+    { key: 'builtin.grandTotal', label: 'Grand Total', of: (o) => num(o.grandTotal) },
+    { key: 'builtin.subtotalPlusTax', label: 'Subtotal + Tax', of: (o) => num(o.subtotal) + num(o.totalTax) },
+    {
+        key: 'builtin.commissionAmount',
+        label: 'Commission Amount',
+        // The deal's value before tax × the percentage in its Commission option.
+        of: (o) => Math.round((opportunityAmountBeforeTax(o) * commissionPercent(o.commission)) / 100),
+    },
+    { key: 'builtin.lumpSumDiscount', label: 'Lump Sum Discount', of: (o) => num(o.lumpSumDiscount) },
+];
 
 /**
  * The Opportunities list's cards until an admin saves a scorecard: one per active sales stage, in the admin's

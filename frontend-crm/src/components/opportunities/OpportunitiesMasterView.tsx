@@ -24,7 +24,7 @@ import { useAuth } from '@/context/AuthContext';
 import type { Opportunity } from '@/types/opportunity.types';
 import { useOpportunities, useBulkDeleteOpportunities, useDropdownOptionLabel } from '@/hooks/queries';
 import { useShowRecordNumber } from '@/hooks/queries/useDocumentSeries';
-import { OPPORTUNITY_CARD_AMOUNT, useStageScorecard, type OpportunityFilterTab, type OpportunitySortField } from './master';
+import { OPPORTUNITY_CARD_AMOUNTS, useStageScorecard, type OpportunityFilterTab, type OpportunitySortField } from './master';
 import { OpportunityDetailDrawer } from './OpportunityDetailDrawer';
 import { useSearchScope, useSearchScopedRows } from '../search/SearchScope';
 import { useOpportunityColumns } from './opportunityColumns';
@@ -138,8 +138,8 @@ export function OpportunitiesMasterView() {
     }, [opportunities, activeTab, todayStr, currentUsername]);
 
     // ── Stage Cards ───────────────────────────────────────────────────────────
-    // One card per sales stage with its count and value before tax. An admin can recolor / hide stages or count
-    // by another dropdown from the pencil on "All Opportunities" (the same scorecard settings as Leads).
+    // One card per sales stage with its count and value before tax. From the pencil on "All Opportunities" an admin
+    // can recolor / hide stages, count by another dropdown or total another value (the same settings as Leads).
     const goToFirstPage = useCallback(() => setPage(0), []);
     const showSavedToast = useCallback((message: string) => setToast({ open: true, message, severity: 'success' }), []);
     const opportunitiesIcon = useMemo(() => <TrendingUpOutlinedIcon />, []);
@@ -152,7 +152,7 @@ export function OpportunitiesMasterView() {
         onActiveChange: goToFirstPage,
         onSaved: showSavedToast,
         defaultScorecard: stageScorecard,
-        amount: OPPORTUNITY_CARD_AMOUNT,
+        amounts: OPPORTUNITY_CARD_AMOUNTS,
     });
 
     const showNumber = useShowRecordNumber();

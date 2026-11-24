@@ -18,9 +18,11 @@ export const SCORECARD_ALL_ID = '__all__';
 /** Cards a screen shows until an admin saves a scorecard: a dropdown field and a color per option. */
 export type DefaultScorecard = Pick<ScorecardConfig, 'fieldKey' | 'options'>;
 
-/** A money value of the module's records that every card totals, e.g. a deal's value before tax. */
+/** A money value the module's list works out from each record (not a form field), e.g. a deal's Grand Total. */
 export interface ScorecardAmount<T> {
-    /** Shown above each total, e.g. "Actual (Before Tax)". */
+    /** Saved as the scorecard's `currencyFieldKey`: `builtin.<name>`, listed by the API (BUILT_IN_SCORECARD_AMOUNTS). */
+    key: string;
+    /** Shown above each total and in the currency dropdown, e.g. "Actual (Before Tax)". */
     label: string;
     of: (row: T) => number;
 }
@@ -42,11 +44,11 @@ export interface UseModuleScorecardOptions<T> {
      */
     defaultScorecard?: DefaultScorecard | null;
     /**
-     * Total shown on every card (with its label) when the scorecard has no currency field of its own; a currency
-     * field the admin picks is shown the same way. Keep it stable (useMemo). Without it, a currency total is the
-     * card's hint line.
+     * Built-in totals the admin can pick in the currency dropdown besides the form's amount fields. The first is
+     * the default, shown when no currency field is picked. Totals appear on every card under the count, with their
+     * label. Keep it stable (a module constant or useMemo). Without it, a currency total is the card's hint line.
      */
-    amount?: ScorecardAmount<T>;
+    amounts?: readonly ScorecardAmount<T>[];
 }
 
 export interface ModuleScorecardState<T> {
@@ -54,7 +56,7 @@ export interface ModuleScorecardState<T> {
     loading: boolean;
     /** A scorecard (the admin's, else `defaultScorecard`) is in effect; when false the screen keeps its built-in cards. */
     configured: boolean;
-    /** The cards show amounts (`amount` was given and a total applies). */
+    /** The cards show amounts (`amounts` was given and a total applies). */
     withAmount: boolean;
     scorecard: ResolvedScorecard | null;
     /** Cards for StatusSummaryCards ("All" first). Empty when not configured. */
@@ -83,7 +85,7 @@ export function useModuleScorecard<T>({
     onActiveChange,
     onSaved,
     defaultScorecard,
-    amount,
+    amounts,
 }: UseModuleScorecardOptions<T>): ModuleScorecardState<T> {
     const { user } = useAuth();
     const configs = useFormConfigs();
@@ -122,16 +124,21 @@ export function useModuleScorecard<T>({
     const activeId =
         activeIdState !== SCORECARD_ALL_ID && visibleOptions.some((o) => o.value === activeIdState) ? activeIdState : SCORECARD_ALL_ID;
 
-    // A currency field the admin picked wins over the screen's built-in amount.
+    // The admin's currency pick: an amount form field, else one of the built-in totals, else the default total.
+    const builtInAmount = useMemo(() => {
+        if (!amounts?.length) return undefined;
+        const key = scorecard?.config.currencyFieldKey;
+        return amounts.find((a) => a.key === key) ?? amounts[0];
+    }, [amounts, scorecard]);
     const amountOf = useMemo<((row: T) => number) | null>(() => {
         if (!scorecard) return null;
         if (scorecard.currencyField) return scorecard.amountOf;
-        return amount?.of ?? null;
-    }, [scorecard, amount]);
-    const amountLabel = scorecard?.currencyField?.label ?? amount?.label;
-    // Screens given `amount` show every total as a labelled line under the count; others keep a currency total
+        return builtInAmount?.of ?? null;
+    }, [scorecard, builtInAmount]);
+    const amountLabel = scorecard?.currencyField?.label ?? builtInAmount?.label;
+    // Screens given `amounts` show every total as a labelled line under the count; others keep a currency total
     // as the card's hint line.
-    const withAmount = Boolean(amount) && Boolean(amountOf);
+    const withAmount = Boolean(amounts?.length) && Boolean(amountOf);
 
     const items = useMemo<StatusSummaryItem<string>[]>(() => {
         if (!scorecard) return [];
@@ -194,7 +201,7 @@ export function useModuleScorecard<T>({
             onClose={() => setDialogOpen(false)}
             onSaved={onSaved}
             defaultScorecard={defaultScorecard}
-            defaultAmountLabel={amount?.label}
+            builtInAmounts={amounts}
         />
     ) : null;
 
