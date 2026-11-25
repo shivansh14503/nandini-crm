@@ -67,6 +67,14 @@ export interface OpportunityFormData {
     commission: string;
     /** Required when Commission is Yes; empty (null from the API) when No. */
     commissionAmount?: number | string | null;
+    /** Self / Other while Commission is Yes (Self up to 1,000, Other above by default); empty otherwise. */
+    commissionType?: string;
+    /** The commission payee's bank details, shown while Commission Type is Other (as on the Organization form). */
+    accountName?: string;
+    accountNo?: string;
+    bankName?: string;
+    ifscCode?: string;
+    panNumber?: string;
 
     // Document
     addDocument?: string;
@@ -116,6 +124,11 @@ export const OPPORTUNITY_TYPES: string[] = [
 
 /** Fixed options (the API accepts only these); Yes asks for the Commission Amount. */
 export const OPPORTUNITY_COMMISSIONS: string[] = ['No', 'Yes'];
+
+/** Fixed Commission Type options (the API accepts only these); Other asks for the payee's bank details. */
+export const OPPORTUNITY_COMMISSION_TYPES: string[] = ['Self', 'Other'];
+/** Commission Amounts up to this default to Commission Type Self; larger ones to Other. */
+export const SMALL_COMMISSION_LIMIT = 1000;
 
 export const OPPORTUNITY_CURRENCIES: string[] = [
     'Indian Rupee: ₹',
