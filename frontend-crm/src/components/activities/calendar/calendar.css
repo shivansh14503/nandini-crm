@@ -93,12 +93,12 @@
     display: none;
 }
 
-/* Day / date links ("25", "Wed 25") read as brand links. */
-.crm-calendar a[data-navlink] {
+/* Day / date links ("25", "Wed 25"; `navLinkClass`) read as brand links: blue in light mode, green in dark. */
+.crm-cal-navlink.crm-cal-navlink {
     color: var(--crm-slate-900);
     text-decoration: none;
 }
-.crm-calendar a[data-navlink]:hover {
+.crm-cal-navlink.crm-cal-navlink:hover {
     color: var(--crm-text-blue-700);
     text-decoration: underline;
 }

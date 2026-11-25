@@ -40,6 +40,9 @@ export const relatedModuleLabel = (module: string | null | undefined): string =>
 /** What `/activities/new` reads from its query string to prefill a new activity. */
 export interface NewActivityQuery {
     type?: string;
+    /** Planned / Completed / Cancelled (a logged call arrives Completed). */
+    status?: string;
+    subject?: string;
     relatedModule?: ActivityRelatedModule | '';
     relatedId?: string;
     /** Business wall clock (`YYYY-MM-DDTHH:mm`) or, all-day, the first day. */
@@ -49,10 +52,12 @@ export interface NewActivityQuery {
     allDay?: boolean;
 }
 
-/** `/activities/new?type=…&relatedModule=…&relatedId=…&start=…&end=…&allDay=1` (empty values left out). */
+/** `/activities/new?type=…&status=…&subject=…&relatedModule=…&relatedId=…&start=…&end=…&allDay=1` (empty values left out). */
 export function newActivityHref(query: NewActivityQuery = {}): string {
     const params = new URLSearchParams();
     if (query.type) params.set('type', query.type);
+    if (query.status) params.set('status', query.status);
+    if (query.subject?.trim()) params.set('subject', query.subject.trim());
     if (query.relatedModule && query.relatedId) {
         params.set('relatedModule', query.relatedModule);
         params.set('relatedId', query.relatedId);

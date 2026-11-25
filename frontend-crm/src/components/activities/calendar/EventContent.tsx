@@ -82,9 +82,20 @@ export function EventContent({ item, Icon, timeText, list = false, compact = fal
                 }}
             >
                 <Box sx={{ width: 3, alignSelf: 'stretch', borderRadius: 2, backgroundColor: colors.strip, flexShrink: 0 }} />
+                {/* Phones: a range across noon ("11:30am – 12:30pm") is wider than the column, so it wraps under itself. */}
                 <Typography
                     component="span"
-                    sx={{ width: { xs: 92, sm: 132 }, flexShrink: 0, fontSize: '0.78rem', fontWeight: 600, color: 'var(--mui-palette-text-secondary)', whiteSpace: 'nowrap' }}
+                    sx={{
+                        width: { xs: 92, sm: 132 },
+                        flexShrink: 0,
+                        minWidth: 0,
+                        fontSize: '0.78rem',
+                        fontWeight: 600,
+                        lineHeight: 1.35,
+                        color: 'var(--mui-palette-text-secondary)',
+                        whiteSpace: { xs: 'normal', sm: 'nowrap' },
+                        overflowWrap: 'anywhere',
+                    }}
                 >
                     {timeText || 'All day'}
                 </Typography>

@@ -171,7 +171,8 @@ const checkboxLabelSx = {
 
 const linkButtonSx = {
     minWidth: 0,
-    height: 28,
+    // Tap target: at least 32px (responsive-ui.md rule 4); these sit in the phone's filter sheet.
+    height: 32,
     px: 1,
     textTransform: 'none',
     fontSize: '0.75rem',

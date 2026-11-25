@@ -4,26 +4,34 @@ import { Suspense, useEffect, useMemo } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Box, Container } from '@mui/material';
 import { useAuth } from '@/context/AuthContext';
+import { useFreshOnReturn } from '@/hooks/useFreshOnReturn';
 import { ROUTES } from '@/config/constants';
 import { Navbar } from '@/components/layout/Navbar';
 import { LoadingScreen } from '@/components/common/LoadingScreen';
 import ActivityForm from '@/components/activities/ActivityForm';
 import { useRelatedRecord } from '@/components/activities/relatedRecord';
-import { isActivityRelatedModule } from '@/types/activity.types';
+import { ACTIVITY_STATUSES, isActivityRelatedModule } from '@/types/activity.types';
 import type { ActivityFormValues } from '@/validations/activity.schema';
 import { isDay, isWallClock } from '@/utils/zonedTime';
 
 /**
- * `/activities/new?type&relatedModule&relatedId&start&end&allDay`: a new activity prefilled from the query string
- * (start / end are business-timezone wall clocks, or days when allDay=1). The related record is loaded first so
- * its label, organization and contact come with it.
+ * `/activities/new?type&status&subject&relatedModule&relatedId&start&end&allDay`: a new activity prefilled from the
+ * query string (start / end are business-timezone wall clocks, or days when allDay=1). The related record is loaded
+ * first so its label, organization and contact come with it.
  */
 function NewActivityContent() {
     const router = useRouter();
     const searchParams = useSearchParams();
     const { user, loading, isAuthenticated } = useAuth();
+    // Next keeps this page alive (cacheComponents) and keeps its state when only the query string changes: the form
+    // starts over on every return and for every query string, so a new slot or record is never shown with old values.
+    const viewKey = useFreshOnReturn();
+    const query = searchParams?.toString() ?? '';
 
     const type = searchParams?.get('type') ?? '';
+    const statusParam = searchParams?.get('status') ?? '';
+    const status = ACTIVITY_STATUSES.find((s) => s.toLowerCase() === statusParam.toLowerCase()) ?? '';
+    const subject = (searchParams?.get('subject') ?? '').trim();
     const moduleParam = searchParams?.get('relatedModule') ?? '';
     const relatedModule = isActivityRelatedModule(moduleParam) ? moduleParam : '';
     const relatedId = relatedModule ? (searchParams?.get('relatedId') ?? '') : '';
@@ -37,6 +45,8 @@ function NewActivityContent() {
         const target = related.target;
         return {
             ...(type ? { followupType: type } : {}),
+            ...(status ? { status } : {}),
+            ...(subject ? { subject } : {}),
             ...(allDay ? { allDay: true } : {}),
             ...(valid(start) ? { startAt: allDay ? start.slice(0, 10) : start } : {}),
             ...(valid(end) ? { endAt: allDay ? end.slice(0, 10) : end } : {}),
@@ -52,7 +62,7 @@ function NewActivityContent() {
                   }
                 : {}),
         };
-    }, [type, allDay, start, end, relatedModule, relatedId, related.target]);
+    }, [type, status, subject, allDay, start, end, relatedModule, relatedId, related.target]);
 
     useEffect(() => {
         if (!loading && !isAuthenticated) {
@@ -67,7 +77,7 @@ function NewActivityContent() {
         <Box sx={{ minHeight: '100vh', backgroundColor: 'var(--mui-palette-background-subtle)' }}>
             <Navbar />
             <Container maxWidth="xl" sx={{ pt: 2.5, pb: 1 }}>
-                <ActivityForm mode="create" initialData={initialData} />
+                <ActivityForm key={`${viewKey}:${query}`} mode="create" initialData={initialData} />
             </Container>
         </Box>
     );

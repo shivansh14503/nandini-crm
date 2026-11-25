@@ -92,6 +92,26 @@ const LINKED_ID_FIELDS: Readonly<Record<string, 'organizationId' | 'contactId'>>
     contact: 'contactId',
 };
 
+/** The organization and contact a related record filled in. */
+interface FilledLinks {
+    /** The related record they came from ('' for none). */
+    relatedId: string;
+    organizationName: string;
+    contact: string;
+}
+
+/**
+ * What the related record filled in, as far as the form can tell: with a related record set (a prefill built from it,
+ * or a saved activity), the organization and contact are taken as coming from it, so picking another related record
+ * replaces them, as the API does when an update re-points Related To (`mergeActivityPatch`). Without one they are the
+ * user's own.
+ */
+function linksFilledByRelated(values: Partial<ActivityFormValues>): FilledLinks {
+    const relatedId = values.relatedId ?? '';
+    if (!relatedId) return { relatedId, organizationName: '', contact: '' };
+    return { relatedId, organizationName: values.organizationName ?? '', contact: values.contact ?? '' };
+}
+
 /** Default length (minutes) of each Followup Type: the API's meta, else the option's meta, else the fallback. */
 export function useActivityDurations(clock: BusinessClock) {
     const getOptions = useModuleFormConfig('activities').getOptions;
@@ -267,6 +287,10 @@ export function ActivityFormFields({ clock, durationOf, compact = false, onOpenR
 
     // The Followup Type the End's default length was worked out for (a loaded record's type is taken as is).
     const previousType = useRef(getValues('followupType') ?? '');
+    // What the related record filled in (organization, contact): a later pick may replace those, never what the user
+    // entered. Seeded from the prefill here and from a loaded record on reset below.
+    const filledLinks = useRef<FilledLinks | null>(null);
+    if (filledLinks.current === null) filledLinks.current = linksFilledByRelated(getValues());
     useEffect(() => {
         const { unsubscribe } = watch((values, { name, type }) => {
             const currentType = values.followupType ?? '';
@@ -283,8 +307,14 @@ export function ActivityFormFields({ clock, durationOf, compact = false, onOpenR
                 }
                 return;
             }
-            // A record loaded (reset): its type is the reference from now on.
-            if (!name) previousType.current = currentType;
+            // A record loaded (reset): its type is the reference from now on, and so are its links when it relates
+            // to another record than the one they were worked out for.
+            if (!name) {
+                previousType.current = currentType;
+                if ((values.relatedId ?? '') !== (filledLinks.current?.relatedId ?? '')) {
+                    filledLinks.current = linksFilledByRelated(values as Partial<ActivityFormValues>);
+                }
+            }
             // All Day switched by the user: keep the days (timed → all-day) or start at 09:00 (all-day → timed).
             if (name === 'allDay' && type === 'change') {
                 const next = switchScheduleMode(
@@ -307,21 +337,28 @@ export function ActivityFormFields({ clock, durationOf, compact = false, onOpenR
     }, [watch, getValues, setValue, tz, durationOf, clock]);
 
     // ── Related record → organization / contact ───────────────────────────────
-    // What the last pick filled in: a later pick may replace those, never what the user entered.
-    const filledLinks = useRef({ organizationName: '', contact: '' });
+    // A pick fills the organization and contact that are empty or came from the previous related record (it clears
+    // those when the new record has none); what the user entered stays.
     const handleRelatedPicked = (target: ActivityLinkTarget) => {
-        const filled = filledLinks.current;
+        const filled = (filledLinks.current ??= { relatedId: '', organizationName: '', contact: '' });
+        filled.relatedId = target.id;
         const orgName = getValues('organizationName') ?? '';
-        if (target.organizationName && (!orgName.trim() || orgName === filled.organizationName)) {
-            setValue('organizationName', target.organizationName, touch);
-            setValue('organizationId', target.organizationId ?? '', dirty);
-            filled.organizationName = target.organizationName;
+        if (!orgName.trim() || orgName === filled.organizationName) {
+            const next = target.organizationName ?? '';
+            if (next || orgName) {
+                setValue('organizationName', next, touch);
+                setValue('organizationId', next ? (target.organizationId ?? '') : '', dirty);
+            }
+            filled.organizationName = next;
         }
         const contact = getValues('contact') ?? '';
-        if (target.contact && (!contact.trim() || contact === filled.contact)) {
-            setValue('contact', target.contact, touch);
-            setValue('contactId', target.contactId ?? '', dirty);
-            filled.contact = target.contact;
+        if (!contact.trim() || contact === filled.contact) {
+            const next = target.contact ?? '';
+            if (next || contact) {
+                setValue('contact', next, touch);
+                setValue('contactId', next ? (target.contactId ?? '') : '', dirty);
+            }
+            filled.contact = next;
         }
     };
 

@@ -84,6 +84,13 @@ const sortValue = (a: Activity, field: string): string | number => {
 
 const NO_RECORDS: Activity[] = [];
 
+/**
+ * True when the signed-in user may change or delete the row: the list also holds activities they were only invited to
+ * (`viewer.canEdit` false), which they may see and reply to, not edit. A row without viewer info keeps its actions
+ * (the API still checks).
+ */
+const canChange = (a: Activity) => a.viewer?.canEdit !== false;
+
 export interface ActivitiesMasterViewProps {
     /** `?mine=1` (My Activities). */
     mine?: boolean;
@@ -175,13 +182,32 @@ export function ActivitiesMasterView({ mine = false, type = '', status = '' }: A
     };
 
     const handleBulkDelete = async () => {
-        const count = selectedIds.length;
-        if (count === 0 || !window.confirm(`Are you sure you want to delete ${count} selected activit${count === 1 ? 'y' : 'ies'}?`)) return;
+        // Activities the user was only invited to are left out: one of them would fail the whole batch (403).
+        const byId = new Map(allActivities.map((a) => [a.id, a]));
+        const ids = selectedIds.filter((id) => {
+            const row = byId.get(id);
+            return !row || canChange(row);
+        });
+        const skipped = selectedIds.length - ids.length;
+        const count = ids.length;
+        const plural = (n: number) => `activit${n === 1 ? 'y' : 'ies'}`;
+        const skippedNote = skipped > 0 ? ` ${skipped} ${plural(skipped)} you were only invited to can't be deleted and will be kept.` : '';
+        if (count === 0) {
+            if (skipped > 0) {
+                setToast({ open: true, message: `You were only invited to the selected ${plural(skipped)}: only the owner can delete them.`, severity: 'warning' });
+            }
+            return;
+        }
+        if (!window.confirm(`Are you sure you want to delete ${count} selected ${plural(count)}?${skippedNote}`)) return;
         try {
-            await bulkDeleteMutation.mutateAsync(selectedIds);
-            if (drawerId && selectedIds.includes(drawerId)) closeDrawer();
+            await bulkDeleteMutation.mutateAsync(ids);
+            if (drawerId && ids.includes(drawerId)) closeDrawer();
             setSelectedIds([]);
-            setToast({ open: true, message: `${count} activit${count === 1 ? 'y' : 'ies'} deleted successfully.`, severity: 'success' });
+            setToast({
+                open: true,
+                message: `${count} ${plural(count)} deleted successfully.${skipped > 0 ? ` ${skipped} skipped: you were only invited.` : ''}`,
+                severity: 'success',
+            });
         } catch (err: unknown) {
             setToast({ open: true, message: err instanceof Error ? err.message : 'Failed to delete activities.', severity: 'error' });
         }
@@ -387,8 +413,9 @@ export function ActivitiesMasterView({ mine = false, type = '', status = '' }: A
             sortOrder={sortOrder}
             onSort={handleSort}
             onView={(a) => router.push(ROUTES.ACTIVITY_DETAIL(a.id))}
-            getEditHref={(a) => ROUTES.ACTIVITY_EDIT(a.id)}
+            getEditHref={(a) => (canChange(a) ? ROUTES.ACTIVITY_EDIT(a.id) : undefined)}
             onDelete={handleDelete}
+            canDeleteRow={canChange}
             getRowHref={(a) => ROUTES.ACTIVITY_DETAIL(a.id)}
             onRowClick={(a) => setDrawerId(a.id)}
             activeRowId={drawerActivity?.id}

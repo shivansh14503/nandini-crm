@@ -394,10 +394,13 @@ frontend-crm/src/
 ### 8.3 Activities and the calendar
 
 - **Screens:** `/activities` (list; `?mine=1`, `?type=`, `?status=` from the nav), `/activities/new` (query prefill
-  `type`, `relatedModule`, `relatedId`, `start`, `end`, `allDay`), `/activities/[id]` and `/[id]/edit`, and
+  `type`, `status`, `subject`, `relatedModule`, `relatedId`, `start`, `end`, `allDay`; the form remounts for every
+  query string and on every return, as Next keeps the page alive), `/activities/[id]` and `/[id]/edit`, and
   `/calendar?view=&date=&users=&activity=`. A quick-create dialog (same Form Builder fields) opens from a calendar
-  slot, the record drawers' Activities tab and the phone FAB; `ActivityDetailDrawer` marks complete, reschedules,
-  cancels, deletes, and lets invited colleagues reply. Seven record drawers (lead, opportunity, contact,
+  slot, the record drawers' Activities tab and the phone FAB, and hands what it holds to `/activities/new` ("Open the
+  full form"). `ActivityDetailDrawer` marks complete, reschedules, cancels and deletes (`viewer.canEdit`), and shows
+  Accept / Maybe / Decline to anyone invited as a colleague, owner or not. The list hides Edit / Delete on rows the
+  user was only invited to and leaves them out of a bulk delete. Seven record drawers (lead, opportunity, contact,
   organization, quotation, ticket, contract) get an Activities tab before Changes (`EntityDetailDrawer activities`).
 - **Time zone:** activities are true UTC instants; the screens show and enter them in the business timezone from
   `GET /api/activities/meta` (`Asia/Kolkata` by default), never the device's. `utils/zonedTime.ts` (Intl only, a copy

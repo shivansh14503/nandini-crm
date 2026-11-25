@@ -113,8 +113,11 @@ export interface CommonMasterViewProps<T = unknown, TFilter extends string = str
     onView?: (row: T) => void;
     onEdit?: (row: T) => void;
     getViewHref?: (row: T) => string;
-    getEditHref?: (row: T) => string;
+    /** Undefined for a row hides its Edit icon (a record the user may see but not change). */
+    getEditHref?: (row: T) => string | undefined;
     onDelete?: (row: T) => void;
+    /** False for a row hides its Delete icon (default: every row can be deleted). */
+    canDeleteRow?: (row: T) => boolean;
     onRowClick?: (row: T) => void;
     /** Ctrl / Cmd + click on a row opens this URL in a new tab. */
     getRowHref?: (row: T) => string | undefined;
@@ -246,6 +249,7 @@ export function CommonMasterView<T = unknown, TFilter extends string = string>({
     getViewHref,
     getEditHref,
     onDelete,
+    canDeleteRow,
     onRowClick,
     getRowHref,
     activeRowId,
@@ -412,6 +416,7 @@ export function CommonMasterView<T = unknown, TFilter extends string = string>({
                 getViewHref={getViewHref}
                 getEditHref={getEditHref}
                 onDeleteRow={onDelete}
+                canDeleteRow={canDeleteRow}
                 onRowClick={onRowClick}
                 getRowHref={getRowHref}
                 activeRowId={activeRowId}

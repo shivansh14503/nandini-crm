@@ -511,6 +511,7 @@ export default function CalendarView() {
                         rowMoreLinkClass="crm-cal-more"
                         moreLinkClass="crm-cal-more"
                         popoverClass="crm-cal-popover"
+                        navLinkClass="crm-cal-navlink"
                         listItemEventBeforeClass="crm-cal-hidden"
                         headerToolbar={false}
                         timeZone={timeZone}

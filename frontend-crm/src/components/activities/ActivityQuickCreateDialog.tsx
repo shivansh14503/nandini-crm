@@ -79,12 +79,16 @@ function QuickCreateContent({ prefill, onClose, onSaved }: Omit<ActivityQuickCre
         }
     });
 
-    // The full form, with what is filled in so far that the query string can carry.
+    // The full form, with what is filled in so far that the query string can carry. The dialog closes first, so its
+    // owner (calendar, Activities tab, FAB) doesn't show it again when the user comes back to that page.
     const openFullForm = () => {
         const v = getValues();
+        onClose();
         router.push(
             newActivityHref({
                 type: v.followupType,
+                status: v.status,
+                subject: v.subject,
                 relatedModule: v.relatedModule,
                 relatedId: v.relatedId,
                 start: v.followupType === NOTE_TYPE ? undefined : v.startAt,

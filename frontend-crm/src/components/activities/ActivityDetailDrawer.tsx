@@ -355,7 +355,8 @@ type ActivityDialog = 'complete' | 'reschedule' | null;
 
 /**
  * An activity at a glance: when (business timezone), what it is related to, who takes part, the outcome.
- * Owners (and their managers) can mark it complete, edit, reschedule, cancel or delete it; invited colleagues reply.
+ * Owners (and their managers) can mark it complete, edit, reschedule, cancel or delete it; invited colleagues reply
+ * (an invited colleague who may also edit it gets both).
  */
 export function ActivityDetailDrawer({ activity, activityId, open, onClose, onEdit, hideBackdrop }: ActivityDetailDrawerProps) {
     const router = useRouter();
@@ -577,30 +578,21 @@ export function ActivityDetailDrawer({ activity, activityId, open, onClose, onEd
         </Box>
     );
 
-    // Owners act on the activity; an invited colleague answers instead.
-    const footerActions = canEdit ? (
-        <>
-            {planned && (
-                <Button size="small" startIcon={<EventRepeatOutlinedIcon sx={{ fontSize: 16 }} />} onClick={() => setDialog('reschedule')} disabled={busy} sx={outlinedSx}>
-                    Reschedule
-                </Button>
-            )}
-            {planned && (
-                <Button size="small" startIcon={<EventBusyOutlinedIcon sx={{ fontSize: 16 }} />} onClick={cancelActivity} disabled={busy} sx={outlinedSx}>
-                    Cancel activity
-                </Button>
-            )}
-            <Button size="small" startIcon={<DeleteOutlineIcon sx={{ fontSize: 16 }} />} onClick={deleteActivity} disabled={busy} sx={destructiveSx}>
-                Delete
-            </Button>
-            {planned && (
-                <Button size="small" startIcon={<EditOutlinedIcon sx={{ fontSize: 16 }} />} onClick={handleEdit} sx={outlinedSx}>
-                    Edit
-                </Button>
-            )}
-        </>
-    ) : myResponse !== null ? (
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
+    // Owners act on the activity; anyone invited as a colleague replies, owner or not (a manager invited to a rep's
+    // meeting can also edit it, and still needs to accept or decline). A note has no replies.
+    const canReply = myResponse !== null && !isNote;
+    const rsvp = canReply ? (
+        <Box
+            sx={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'flex-end',
+                gap: 1,
+                flexWrap: 'wrap',
+                // Beside the owner's actions it takes its own row, above them.
+                ...(canEdit && { width: '100%' }),
+            }}
+        >
             <Typography sx={{ fontSize: '0.78rem', fontWeight: 600, color: 'var(--mui-palette-text-secondary)' }}>Going?</Typography>
             {(
                 [
@@ -629,6 +621,35 @@ export function ActivityDetailDrawer({ activity, activityId, open, onClose, onEd
             ))}
         </Box>
     ) : null;
+    const ownerActions = canEdit ? (
+        <>
+            {planned && (
+                <Button size="small" startIcon={<EventRepeatOutlinedIcon sx={{ fontSize: 16 }} />} onClick={() => setDialog('reschedule')} disabled={busy} sx={outlinedSx}>
+                    Reschedule
+                </Button>
+            )}
+            {planned && (
+                <Button size="small" startIcon={<EventBusyOutlinedIcon sx={{ fontSize: 16 }} />} onClick={cancelActivity} disabled={busy} sx={outlinedSx}>
+                    Cancel activity
+                </Button>
+            )}
+            <Button size="small" startIcon={<DeleteOutlineIcon sx={{ fontSize: 16 }} />} onClick={deleteActivity} disabled={busy} sx={destructiveSx}>
+                Delete
+            </Button>
+            {planned && (
+                <Button size="small" startIcon={<EditOutlinedIcon sx={{ fontSize: 16 }} />} onClick={handleEdit} sx={outlinedSx}>
+                    Edit
+                </Button>
+            )}
+        </>
+    ) : null;
+    const footerActions =
+        rsvp || ownerActions ? (
+            <>
+                {rsvp}
+                {ownerActions}
+            </>
+        ) : null;
 
     const primaryAction = !canEdit
         ? undefined
