@@ -14,6 +14,7 @@ import { assertAssigneeValid, assertRecordAccess, buildAccessScopeWhere } from '
 import { findOrganizationByName, type PrefetchedLookups } from '../shared/prefetch.js';
 import { assertReference } from '../shared/references.js';
 import { assertNotInPast, nextFollowupCheck, type PastCheck } from '../../validators/notInPast.js';
+import { tallySerialIssue } from '../../validators/tallySerial.js';
 import { codeSearchPrefix, phoneSearch, phoneWhere } from '../shared/searchTerms.js';
 import { assertDeletedRow, lockRecords, restoreData, runInTransaction, softDeleteData, type BulkDeleteResult } from '../shared/transactions.js';
 import { toOpportunityData, toOpportunityDto, type OpportunityDto } from './opportunity.mapper.js';
@@ -199,7 +200,12 @@ export const opportunityService = {
             // Retyping a name without picking a record means "re-link by name", not "keep the old id".
             if ('organizationName' in patch && !('organizationId' in patch)) delete merged.organizationId;
             if ('contact' in patch && !('contactId' in patch)) delete merged.contactId;
+            // A Tally Serial No saved before the 9-digit rule existed is kept as is until someone edits that field,
+            // so it doesn't block unrelated edits (stage changes, follow-ups, …) on the record.
+            const keepLegacyTallySerial = !('tallySerialNo' in patch) && tallySerialIssue(before.tallySerialNo) !== null;
+            if (keepLegacyTallySerial) delete merged.tallySerialNo;
             const input = opportunityInputSchema.parse(merged);
+            if (keepLegacyTallySerial) input.tallySerialNo = before.tallySerialNo;
             input.customFields = checkModulePayload(fieldConfig, merged, input.customFields, {
                 submittedKeys: new Set(Object.keys(patch)),
                 previousCustomFields: before.customFields,

@@ -11,6 +11,7 @@ import {
     zodAmount,
     quantitySchema,
     customFieldsSchema,
+    tallySerialNoOptional,
 } from './common';
 
 export const opportunityLineItemSchema = z.object({
@@ -56,7 +57,7 @@ export const opportunityFormSchema = z.object({
     assignedTo: requiredString('Assigned Representative'),
 
     // Billing Details
-    tallySerialNo: optionalText('Tally Serial No', L.shortCode),
+    tallySerialNo: tallySerialNoOptional('Tally Serial No'),
     invoiceNo: optionalText('Invoice No', L.shortCode),
     invoiceDate: optionalString,
 

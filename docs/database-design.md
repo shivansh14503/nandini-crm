@@ -178,7 +178,7 @@ required field for leads (closed leads have none).
 `Opportunity`: `opportunityCode` (UNIQUE), `opportunityName`, `productCategoryJson`, `contact`/`contactId`,
 `organizationName`/`organizationId`, `contactNumber`, `contactEmail`, `referredBy`, `type`, `salesStage`, `leadSource`,
 `leadGivenBy`, `nextFollowupDate`/`Time`, `followupType`, `customerResponse` (as on leads), `remarks`, `description`, `assignedTo`,
-billing (`tallySerialNo`, `invoiceNo`, `invoiceDate`), `commission`, `addDocument`, totals (`currency`, `groupName`,
+billing (`tallySerialNo` — 9 digits starting with 7, checked by the API, `invoiceNo`, `invoiceDate`), `commission`, `addDocument`, totals (`currency`, `groupName`,
 `lumpSumDiscount`, `totalAmount`, `totalDiscount`, `subtotal`, `totalTax`, `grandTotal` — recomputed and verified
 server-side), `customDataJson`, audit/soft-delete.
 

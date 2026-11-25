@@ -9,6 +9,7 @@ import {
     optionalDate,
     optionalDescription,
     optionalEmail,
+    optionalTallySerialNo,
     optionalText,
     phone,
     requiredPersonName,
@@ -47,7 +48,7 @@ export const opportunityInputSchema = z.object({
     description: optionalText('Description', L.longText),
     assignedTo: requiredText('Assigned Representative', L.username),
 
-    tallySerialNo: optionalText('Tally Serial No', L.shortCode),
+    tallySerialNo: optionalTallySerialNo('Tally Serial No'),
     invoiceNo: optionalText('Invoice No', L.shortCode),
     invoiceDate: optionalDate('Invoice Date'),
     commission: optionalText('Commission', L.option),

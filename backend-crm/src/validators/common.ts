@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { isValidPhoneNumber } from 'libphonenumber-js';
 import { FIELD_MAX_LENGTH as L } from '../config/fieldLimits.js';
 import { formatPersonName } from '../utils/personName.js';
+import { tallySerialIssue } from './tallySerial.js';
 
 /**
  * Zod primitives ported from frontend-crm/src/validations/common.ts so the API enforces exactly what the forms
@@ -131,6 +132,22 @@ const optionalIdentifier = (pattern: RegExp, message: string) =>
 export const optionalPan = optionalIdentifier(PAN_REGEX, 'Must be a valid 10-character Indian PAN (e.g. ABCDE1234F).');
 export const optionalGst = optionalIdentifier(GST_REGEX, 'Must be a valid 15-character GSTIN (e.g. 07AAAAA0000A1Z5).');
 export const optionalIfsc = optionalIdentifier(IFSC_REGEX, 'Must be a valid 11-character IFSC code (e.g. SBIN0001234).');
+
+// ── Tally Serial No ──────────────────────────────────────────────────────────
+
+/** Optional Tally Serial No: blank (→ undefined) or exactly 9 digits starting with 7. */
+export const optionalTallySerialNo = (field: string) =>
+    z.preprocess(
+        (value) => (value === null || (typeof value === 'string' && value.trim() === '') ? undefined : value),
+        z
+            .string()
+            .trim()
+            .superRefine((value, ctx) => {
+                const message = tallySerialIssue(value, field);
+                if (message) ctx.addIssue({ code: 'custom', message });
+            })
+            .optional(),
+    );
 
 // ── Postal codes (country-aware) ─────────────────────────────────────────────
 

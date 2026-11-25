@@ -134,6 +134,7 @@ const FIELD_RULES: readonly FieldRule[] = [
     { pattern: /^msme/, size: 'sm', maxLength: FIELD_MAX_LENGTH.msme },
     { pattern: /^(hsn|sac)(code)?$/, size: 'sm', maxLength: FIELD_MAX_LENGTH.hsn },
     { pattern: /(pincode|postalcode|zipcode|^zip$)/, size: 'xs', maxLength: FIELD_MAX_LENGTH.postalCode },
+    { pattern: /^tallyserial(no|number)?$/, size: 'sm', maxLength: FIELD_MAX_LENGTH.tallySerialNo },
     { pattern: /(sapcode|branchcode|tallyid)/, size: 'sm', maxLength: FIELD_MAX_LENGTH.shortCode },
     // Contact channels
     { pattern: /(mobile|phone|landline|fax)\d*$|contactnumber/, size: 'sm', maxLength: FIELD_MAX_LENGTH.phone },

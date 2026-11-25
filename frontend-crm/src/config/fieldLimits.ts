@@ -16,6 +16,8 @@ export const FIELD_MAX_LENGTH = {
     /** Udyam registration number, e.g. UDYAM-MH-26-0123456. */
     msme: 19,
     hsn: 8,
+    /** Tally licence serial number: exactly 9 digits, starting with 7. */
+    tallySerialNo: 9,
     shortCode: 30,
     bankAccount: 18,
     email: 120,
