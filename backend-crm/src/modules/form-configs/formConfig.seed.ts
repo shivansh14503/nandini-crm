@@ -140,19 +140,34 @@ export async function ensureFormConfigsSeeded(): Promise<void> {
         // Non-locked built-in fields may be deleted (tombstoned) by an admin: leave those as they are.
         // Only core-locked fields are forced back to active / visible / required.
         if (!def.isCoreLocked && isFieldTombstoned(row.validationRulesJson)) continue;
+        // A core-locked Convert Lead input must stay on Convert Lead (the API refuses taking it off), so its rules can
+        // always be met there (e.g. Referred By, required for Lead Source CA / Reference).
+        const lockedConvertInput =
+            def.isCoreLocked && isConvertModule(def.module) && def.fieldKey in CONVERT_FIELD_NAMES[def.module];
         const needsLockFix =
             row.isCoreLocked !== def.isCoreLocked ||
-            (def.isCoreLocked && (!row.isActive || !row.isVisibleInForm || (def.isRequired && !row.isRequired)));
+            (def.isCoreLocked && (!row.isActive || !row.isVisibleInForm || (def.isRequired && !row.isRequired))) ||
+            (lockedConvertInput && !row.isVisibleInConvert);
         if (!needsLockFix) continue;
         // A field that a release unlocks takes its new default `isRequired` once (it was admin-uneditable until
         // now); from then on it is an ordinary field and the admin's choice stands.
         const unlocking = row.isCoreLocked && !def.isCoreLocked;
+        // A field that a release locks takes its default `isRequired` (and Convert Lead's) too: the admin can't turn
+        // a locked field's Required off, so an earlier choice would stick. A lock-only field (Referred By) is
+        // required by its own rule only, e.g. when the Lead Source asks for it, never by the configuration.
+        const locking = !row.isCoreLocked && def.isCoreLocked;
         await prisma.formFieldDefinition.update({
             where: { id: row.id },
             data: {
                 isCoreLocked: def.isCoreLocked,
                 ...(def.isCoreLocked
-                    ? { isActive: true, isVisibleInForm: true, validationRulesJson: isFieldTombstoned(row.validationRulesJson) ? null : row.validationRulesJson, ...(def.isRequired ? { isRequired: true } : {}) }
+                    ? {
+                          isActive: true,
+                          isVisibleInForm: true,
+                          validationRulesJson: isFieldTombstoned(row.validationRulesJson) ? null : row.validationRulesJson,
+                          ...(locking ? { isRequired: def.isRequired, convertIsRequired: null } : def.isRequired ? { isRequired: true } : {}),
+                          ...(lockedConvertInput ? { isVisibleInConvert: true } : {}),
+                      }
                     : unlocking
                       ? { isRequired: def.isRequired }
                       : {}),
