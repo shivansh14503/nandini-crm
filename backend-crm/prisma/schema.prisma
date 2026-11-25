@@ -331,8 +331,8 @@ model Lead {
   description         String?   @db.NVarChar(2000)
   noOfEmployee        String?   @db.NVarChar(30)
   referredBy          String?   @db.NVarChar(200)
-  /// Lead Source Partner only: the shared Nature of Partner list (partner_nature). See shared/leadSource.ts.
-  natureOfPartner     String?   @db.NVarChar(100)
+  /// Lead Source Partner only: the partner organization (Customer Type Partner) the record came through. See shared/leadSource.ts.
+  partnerCompany      String?   @db.NVarChar(200)
 
   // Primary address
   primaryAddress    String? @db.NVarChar(250)
@@ -449,8 +449,8 @@ model Opportunity {
   contactNumber       String?   @db.NVarChar(20)
   contactEmail        String?   @db.NVarChar(120)
   referredBy          String?   @db.NVarChar(200)
-  /// Lead Source Partner only: the shared Nature of Partner list (partner_nature). See shared/leadSource.ts.
-  natureOfPartner     String?   @db.NVarChar(100)
+  /// Lead Source Partner only: the partner organization (Customer Type Partner) the record came through. See shared/leadSource.ts.
+  partnerCompany      String?   @db.NVarChar(200)
   type                String?   @db.NVarChar(50)
   salesStage          String    @db.NVarChar(50)
   leadSource          String?   @db.NVarChar(50)

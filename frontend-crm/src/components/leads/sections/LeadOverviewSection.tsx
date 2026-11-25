@@ -25,6 +25,7 @@ import {
     ExistingRecordMatches,
     useExistingRecordCheck,
     useLeadSourceDetails,
+    PartnerCompanyLookup,
 } from '@/components/forms';
 import { isGstRegistrationType } from '@/config/constants';
 import {
@@ -41,7 +42,6 @@ import {
     type LeadFormData,
 } from '@/types/lead.types';
 import { useDropdownOptionsGetter } from '@/hooks/queries/useFormConfigs';
-import { NATURE_OF_PARTNER_OPTIONS } from '@/types/partner.types';
 import { OrganizationNameAutocomplete } from '@/components/organizations/OrganizationNameAutocomplete';
 import { useOrganizationNameCheck } from '@/components/organizations/useOrganizationNameCheck';
 import { useFormMode } from '@/context/FormModeContext';
@@ -146,9 +146,9 @@ export function LeadOverviewSection({ leadId, notify, onDecisionPendingChange, o
     const turnoverOptions = getOptions('lead_turnover', LEAD_TURNOVER_RANGES);
     const employeeOptions = getOptions('lead_employee_range', LEAD_EMPLOYEE_RANGES);
     const leadSourceOptions = getOptions('shared_lead_source', LEAD_SOURCES);
-    // Lead Source CA / Reference asks who referred the lead, Partner for the partner's Nature of Partner.
-    const { needsReferredBy, showReferredBy, showNatureOfPartner } = useLeadSourceDetails<LeadFormData>(
-        { leadSource: 'leadSource', referredBy: 'referredBy', natureOfPartner: 'natureOfPartner' },
+    // Lead Source CA / Reference asks who referred the lead, Partner for the partner organization it came through.
+    const { needsReferredBy, showReferredBy, showPartnerCompany } = useLeadSourceDetails<LeadFormData>(
+        { leadSource: 'leadSource', referredBy: 'referredBy', partnerCompany: 'partnerCompany' },
         { readOnly: mode === 'view' },
     );
 
@@ -287,16 +287,9 @@ export function LeadOverviewSection({ leadId, notify, onDecisionPendingChange, o
                             placeholder="Search or select contact..."
                         />
                     )}
-                    {/* Lead Source Partner only, and then required: the Organization form's Nature of Partner list. */}
-                    {showNatureOfPartner && (
-                        <RhfSelect<LeadFormData>
-                            name="natureOfPartner"
-                            label="Nature of Partner"
-                            required
-                            options={getOptions('partner_nature', [...NATURE_OF_PARTNER_OPTIONS])}
-                            placeholder="Select Nature of Partner"
-                        />
-                    )}
+                    {/* Lead Source Partner only, and then required: a partner organization, picked from the organization
+                        picker opened on Customer Type = Partner. */}
+                    {showPartnerCompany && <PartnerCompanyLookup<LeadFormData> name="partnerCompany" />}
                     <RhfSelect<LeadFormData> name="followupType" label="Followup Type" hint="Default: Call" options={FOLLOWUP_TYPES} placeholder="Select Type" />
                     {/* Picked to record a follow-up (a new lead has none to report on yet); left empty, the edit
                         changes details only. Starts its own row so it sits beside the Next Followup Date it decides. */}

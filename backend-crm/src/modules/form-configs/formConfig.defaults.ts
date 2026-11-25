@@ -165,7 +165,7 @@ export const DEFAULT_CATEGORIES: DefaultCategory[] = [
             'Direct Walk-in',
             'Google Search / Ad',
             'Other',
-            // System: CA / Reference ask for Referred By and Partner for a Nature of Partner (shared/leadSource.ts).
+            // System: CA / Reference ask for Referred By and Partner for a Partner Company (shared/leadSource.ts).
             { value: 'CA', isSystem: true },
             { value: 'Reference', isSystem: true },
             { value: 'Partner', isSystem: true },
@@ -632,7 +632,7 @@ export const DEFAULT_CATEGORIES: DefaultCategory[] = [
         key: 'partner_nature',
         label: 'Nature of Partner',
         module: 'shared',
-        description: 'Kind of partner (Partner Companies, Organizations whose Customer Type is Partner, and Leads / Opportunities whose Lead Source is Partner).',
+        description: 'Kind of partner (Partner Companies, and Organizations whose Customer Type is Partner).',
         options: ['ISODA', 'TALLY-REFERRAL PARTNER', 'TALLY-3STAR', 'TALLY-3STAR PARTNER', 'TALLY-5STAR-SS', 'TALLY-5STARSI', 'TALLY-AP', 'Other'],
     },
 ];
@@ -760,10 +760,11 @@ const RAW_DEFAULT_FIELDS: DefaultField[] = [
         sel('leadSource', 'Lead Source', 'shared_lead_source', { soft: true }),
         sel('leadType', 'Lead Type', 'lead_type', { soft: true }),
         sel('status', 'Status', 'lead_status'),
-        // Conditional (locked): Referred By is shown, and required, for Lead Source CA / Reference; Nature of Partner
-        // (same list as partner organizations) for Lead Source Partner. See shared/leadSource.ts.
+        // Conditional (locked): Referred By is shown, and required, for Lead Source CA / Reference; Partner Company (an
+        // organization whose Customer Type is Partner, picked from the organization picker) for Lead Source Partner.
+        // See shared/leadSource.ts.
         t('referredBy', 'Referred By', { type: 'lookup', lock: true }),
-        sel('natureOfPartner', 'Nature of Partner', 'partner_nature', { lock: true }),
+        t('partnerCompany', 'Partner Company', { type: 'lookup', lock: true }),
         sel('followupType', 'Followup Type', 'shared_followup_type'),
         // What the customer said on the last follow-up; records a follow-up and sets the Rating. The leads' own list.
         sel('customerResponse', 'Customer Response', 'lead_customer_response'),
@@ -847,9 +848,9 @@ const RAW_DEFAULT_FIELDS: DefaultField[] = [
         t('contact', 'Contact', { type: 'lookup', req: true }),
         t('contactNumber', 'Contact Number', { type: 'phone' }),
         t('contactEmail', 'Contact Email', { type: 'email' }),
-        // Conditional (locked), as on leads: Referred By for Lead Source CA / Reference, Nature of Partner for Partner.
+        // Conditional (locked), as on leads: Referred By for Lead Source CA / Reference, Partner Company for Partner.
         t('referredBy', 'Referred By', { type: 'lookup', lock: true }),
-        sel('natureOfPartner', 'Nature of Partner', 'partner_nature', { lock: true }),
+        t('partnerCompany', 'Partner Company', { type: 'lookup', lock: true }),
         t('leadGivenBy', 'Lead Given By', { type: 'lookup', soft: true }),
         sel('type', 'Type', 'opportunity_type', { soft: true }),
         sel('leadSource', 'Lead Source', 'shared_lead_source', { soft: true }),
@@ -1078,7 +1079,7 @@ export const CONVERT_FIELD_NAMES: Readonly<Record<ConvertModuleKey, Readonly<Rec
         productCategory: 'productCategory',
         organizationName: 'organizationName',
         referredBy: 'referredBy',
-        natureOfPartner: 'opportunityNatureOfPartner',
+        partnerCompany: 'opportunityPartnerCompany',
         type: 'type',
         leadSource: 'opportunityLeadSource',
         nextFollowupDate: 'nextFollowupDate',

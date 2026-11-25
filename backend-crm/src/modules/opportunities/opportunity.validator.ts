@@ -17,6 +17,7 @@ import {
     requiredPersonName,
     requiredText,
     requiredUpperText,
+    optionalUpperText,
     stringList,
 } from '../../validators/common.js';
 import { lineItemListSchema } from '../shared/lineItems.js';
@@ -73,9 +74,9 @@ export const opportunityInputSchema = z.object({
     organizationId: optionalText('Organization', 50),
     contactNumber: optionalPhone('Contact Number'),
     contactEmail: optionalEmail,
-    // Required for Lead Source CA / Reference; Nature of Partner for Lead Source Partner (shared/leadSource.ts).
+    // Required for Lead Source CA / Reference; Partner Company for Lead Source Partner (shared/leadSource.ts).
     referredBy: optionalText('Referred By', L.organizationName),
-    natureOfPartner: optionalText('Nature of Partner', L.option),
+    partnerCompany: optionalUpperText('Partner Company', L.organizationName),
     type: optionalText('Type', L.option),
     salesStage: requiredText('Sales Stage', L.option),
     leadSource: optionalText('Lead Source', L.option),
