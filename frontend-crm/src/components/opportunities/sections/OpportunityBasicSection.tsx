@@ -21,6 +21,9 @@ import {
     RhfSelect,
     RhfTextField,
     RhfUppercaseField,
+    LockedInputs,
+    PICKED_CONTACT_HINT,
+    usePickedContactLocks,
 } from '@/components/forms';
 import { useContacts, useOrganizations } from '@/hooks/queries';
 import type { Contact } from '@/types/contact.types';
@@ -112,6 +115,9 @@ export function OpportunityBasicSection({ notify, onDecisionPendingChange }: Opp
         return (inOrg.length > 0 ? inOrg : contacts).map((c) => c.name);
     }, [contacts, organizationName]);
 
+    // Number, email and organization taken from the picked contact are locked (as Convert Lead locks the lead's values).
+    const locks = usePickedContactLocks<F>(control, contacts, { contact: 'contact', number: 'contactNumber', email: 'contactEmail', organization: 'organizationName' });
+
     const touch = { shouldDirty: true, shouldValidate: true } as const;
 
     const clearContactFields = () => {
@@ -155,17 +161,19 @@ export function OpportunityBasicSection({ notify, onDecisionPendingChange }: Opp
             />
             <FormGrid columns={3}>
                 {/* ── Customer ── */}
-                <RhfLookup<F, 'organization'>
-                    name="organizationName"
-                    label="Organization name"
-                    required
-                    hint="Client company name"
-                    lookupType="organization"
-                    options={organizationNames}
-                    onSelectRecord={handleOrganizationPicked}
-                    placeholder="Enter legal / trading organization name"
-                    maxLength={FIELD_MAX_LENGTH.organizationName}
-                />
+                <LockedInputs locked={locks.organization}>
+                    <RhfLookup<F, 'organization'>
+                        name="organizationName"
+                        label="Organization name"
+                        required
+                        hint={locks.organization ? PICKED_CONTACT_HINT : 'Client company name'}
+                        lookupType="organization"
+                        options={organizationNames}
+                        onSelectRecord={handleOrganizationPicked}
+                        placeholder="Enter legal / trading organization name"
+                        maxLength={FIELD_MAX_LENGTH.organizationName}
+                    />
+                </LockedInputs>
 
                 <RhfLookup<F, 'contact'>
                     name="contact"
@@ -180,20 +188,24 @@ export function OpportunityBasicSection({ notify, onDecisionPendingChange }: Opp
                     maxLength={FIELD_MAX_LENGTH.personName}
                 />
 
-                <RhfPhoneField<F>
-                    name="contactNumber"
-                    label="Contact Number"
-                    required
-                    hint="Mobile / direct phone"
-                    placeholder="e.g. 9800000000"
-                />
+                <LockedInputs locked={locks.number}>
+                    <RhfPhoneField<F>
+                        name="contactNumber"
+                        label="Contact Number"
+                        required
+                        hint={locks.number ? PICKED_CONTACT_HINT : 'Mobile / direct phone'}
+                        placeholder="e.g. 9800000000"
+                    />
+                </LockedInputs>
 
-                <RhfEmailField<F>
-                    name="contactEmail"
-                    label="Contact Email"
-                    hint="Official contact email"
-                    placeholder="corporate.contact@company.com"
-                />
+                <LockedInputs locked={locks.email}>
+                    <RhfEmailField<F>
+                        name="contactEmail"
+                        label="Contact Email"
+                        hint={locks.email ? PICKED_CONTACT_HINT : 'Official contact email'}
+                        placeholder="corporate.contact@company.com"
+                    />
+                </LockedInputs>
 
                 {/* Picks from the CRM's contacts (as on the Lead form); a partner or campaign can still be typed, as typed. */}
                 <RhfLookup<F, 'contact'>

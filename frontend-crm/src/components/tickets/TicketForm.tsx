@@ -48,6 +48,9 @@ import {
     RhfPhoneField,
     RhfEmailField,
     useRhfForm,
+    LockedInputs,
+    PICKED_CONTACT_HINT,
+    usePickedContactLocks,
 } from '@/components/forms';
 import { FormConfigProvider } from '@/context/FormConfigContext';
 import { DynamicModuleCustomFields } from '@/components/forms/DynamicModuleCustomFields';
@@ -144,6 +147,13 @@ export default function TicketForm({ mode = 'create', initialData, ticketId, bre
 
     const { data: organizations = EMPTY_ORGANIZATIONS } = useOrganizations();
     const { data: contacts = EMPTY_CONTACTS } = useContacts();
+    // Number, email and organization taken from the picked contact are locked (as Convert Lead locks the lead's values).
+    const contactLocks = usePickedContactLocks<TicketFormData>(methods.control, contacts, {
+        contact: 'contact',
+        number: 'contactNumber',
+        email: 'contactEmail',
+        organization: 'organizationName',
+    });
     const { natureOfCalls, partnerCompanies, partnerContacts } = useMasterData();
     const organizationNames = useMemo(() => organizations.map((o) => o.organizationName), [organizations]);
 
@@ -344,16 +354,19 @@ export default function TicketForm({ mode = 'create', initialData, ticketId, bre
                         <FormGrid columns={3} sx={{ mt: 1 }}>
                             {/* ── Customer ── */}
                             <RhfTextField<TicketFormData> name="ticketSubject" label="Ticket Subject" placeholder="Short summary of the issue" />
-                            <RhfLookup<TicketFormData, 'organization'>
-                                name="organizationName"
-                                label="Organization Name"
-                                required
-                                options={organizationNames}
-                                lookupType="organization"
-                                onSelectRecord={handleOrganizationPicked}
-                                onClearRecord={handleOrganizationCleared}
-                                placeholder="Search or select organization..."
-                            />
+                            <LockedInputs locked={contactLocks.organization}>
+                                <RhfLookup<TicketFormData, 'organization'>
+                                    name="organizationName"
+                                    label="Organization Name"
+                                    required
+                                    hint={contactLocks.organization ? PICKED_CONTACT_HINT : undefined}
+                                    options={organizationNames}
+                                    lookupType="organization"
+                                    onSelectRecord={handleOrganizationPicked}
+                                    onClearRecord={handleOrganizationCleared}
+                                    placeholder="Search or select organization..."
+                                />
+                            </LockedInputs>
                             <RhfLookup<TicketFormData, 'contact'>
                                 name="contact"
                                 label="Contact"
@@ -366,8 +379,22 @@ export default function TicketForm({ mode = 'create', initialData, ticketId, bre
                             />
 
                             {/* ── Contact channels ── */}
-                            <RhfPhoneField<TicketFormData> name="contactNumber" label="Contact Number" placeholder="e.g. 9876543210" />
-                            <RhfEmailField<TicketFormData> name="contactEmail" label="Contact Email" placeholder="e.g. name@company.com" />
+                            <LockedInputs locked={contactLocks.number}>
+                                <RhfPhoneField<TicketFormData>
+                                    name="contactNumber"
+                                    label="Contact Number"
+                                    hint={contactLocks.number ? PICKED_CONTACT_HINT : undefined}
+                                    placeholder="e.g. 9876543210"
+                                />
+                            </LockedInputs>
+                            <LockedInputs locked={contactLocks.email}>
+                                <RhfEmailField<TicketFormData>
+                                    name="contactEmail"
+                                    label="Contact Email"
+                                    hint={contactLocks.email ? PICKED_CONTACT_HINT : undefined}
+                                    placeholder="e.g. name@company.com"
+                                />
+                            </LockedInputs>
                             <RhfSelect<TicketFormData> name="leftJob" label="Left Job" options={['No', 'Yes']} />
 
                             {/* ── Classification ── */}

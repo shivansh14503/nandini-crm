@@ -38,6 +38,7 @@ import {
     ConvertOrganizationSection,
 } from './convert';
 import { LeadPrefilledProvider } from './convert/LeadLocked';
+import { lockedInputSx } from '@/components/forms/LockedInputs';
 
 export interface ConvertLeadFormProps {
     leadId: string;
@@ -76,8 +77,7 @@ const inputStatesSx = {
         borderColor: 'var(--crm-slate-500)',
     },
     // Locked: disabled (from the lead) or read-only (Mailing Name follows Organization Name).
-    '& .MuiOutlinedInput-root:is(.Mui-disabled, :has(input[readonly]))': { backgroundColor: 'var(--mui-palette-background-subtle)' },
-    '& .MuiOutlinedInput-root:is(.Mui-disabled, :has(input[readonly])) .MuiOutlinedInput-notchedOutline': { borderColor: 'var(--mui-palette-border-main)' },
+    ...lockedInputSx,
 } as const;
 
 const EMPTY_DEFAULTS: ConvertLeadFormValues = {

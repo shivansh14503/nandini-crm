@@ -8,6 +8,9 @@ import {
     FIELD_MAX_LENGTH,
     FormGrid,
     LockedField,
+    LockedInputs,
+    PICKED_CONTACT_HINT,
+    usePickedContactLocks,
     SectionLabel,
     RhfLookup,
     RhfAddressSection,
@@ -39,6 +42,8 @@ export function QuotationAddressSection() {
     const { data: contacts = NO_CONTACTS } = useContacts();
     const orgOptions = useMemo(() => organizations.map((o) => o.organizationName), [organizations]);
     const contactOptions = useMemo(() => contacts.map((c) => c.name), [contacts]);
+    // Number and email filled from a picked contact are locked, as on Convert Lead.
+    const contactLocks = usePickedContactLocks<QuotationFormData>(control, contacts, { contact: 'contact', number: 'contactNumber', email: 'contactEmail', organization: 'organizationName' });
 
     // ── Mailing name always equals the organization name (shown locked below) ─────
     // Dirty only when the user changed the organization, so opening an older quotation whose saved
@@ -139,18 +144,22 @@ export function QuotationAddressSection() {
                     hint="Signatory / quote recipient"
                     fieldSize="md"
                 />
-                <RhfPhoneField<QuotationFormData>
-                    name="contactNumber"
-                    label="Contact Number"
-                    placeholder="e.g. 9800000000"
-                    hint="Direct phone / WhatsApp"
-                />
-                <RhfEmailField<QuotationFormData>
-                    name="contactEmail"
-                    label="Contact Email"
-                    placeholder="contact@company.com"
-                    hint="Receives the quotation PDF"
-                />
+                <LockedInputs locked={contactLocks.number}>
+                    <RhfPhoneField<QuotationFormData>
+                        name="contactNumber"
+                        label="Contact Number"
+                        placeholder="e.g. 9800000000"
+                        hint={contactLocks.number ? PICKED_CONTACT_HINT : 'Direct phone / WhatsApp'}
+                    />
+                </LockedInputs>
+                <LockedInputs locked={contactLocks.email}>
+                    <RhfEmailField<QuotationFormData>
+                        name="contactEmail"
+                        label="Contact Email"
+                        placeholder="contact@company.com"
+                        hint={contactLocks.email ? PICKED_CONTACT_HINT : 'Receives the quotation PDF'}
+                    />
+                </LockedInputs>
             </FormGrid>
 
             <Divider sx={{ my: 3.5, borderColor: 'var(--mui-palette-border-light)' }} />
