@@ -35,7 +35,7 @@ Fields not listed are ○ Free today and stay ○ Free.
 | Mobile | 🔒R | ⭐ | Lead duplicate check is informational only (never blocks a save) |
 | GST Number | 🔒 | 🔒 | Conditional (registration type) |
 | Lead Source | 🔒R | ⭐ | Reporting preference |
-| Referred By | 🔒 | 🔒 | Conditional: shown, and required, only when Lead Source is CA or Reference (system options) |
+| Referred By | 🔒 | 🔒 | Conditional: shown, and required, only when Lead Source is CA or Reference (system options). Relation: an active Referral, picked in the Referral Search popup |
 | Partner Company | 🔒 | 🔒 | Conditional: shown, and required, only when Lead Source is Partner (organization picker opened on Customer Type = Partner) |
 | Lead Type | 🔒R | ⭐ | Classification preference (Inbound / Outbound / …; not the Rating) |
 | Status | — | ○ (list fixed) | Defaults to `New` when omitted; Convert sets `Converted` |
@@ -78,7 +78,7 @@ Fields not listed are ○ Free today and stay ○ Free.
 | Lead Given By | 🔒R | ⭐ | Attribution; conversion and import fill it automatically |
 | Type | 🔒R | ⭐ | Classification |
 | Lead Source | 🔒R | ⭐ | Reporting |
-| Referred By | 🔒 | 🔒 | Conditional: shown, and required, only when Lead Source is CA or Reference (system options) |
+| Referred By | 🔒 | 🔒 | Conditional: shown, and required, only when Lead Source is CA or Reference (system options). Relation: an active Referral, picked in the Referral Search popup |
 | Partner Company | 🔒 | 🔒 | Conditional: shown, and required, only when Lead Source is Partner (organization picker opened on Customer Type = Partner) |
 | Sales Stage | 🔒R | 🔒 | Logic: pipeline stage, filters, conversion sets it |
 | Next Followup Date | 🔒R | ⭐ | Same as leads |
@@ -177,11 +177,23 @@ leaves them out through `relaxedFields`. Only the system types hide fields; an a
 | Office Phone | 🔒R | ⭐ | Contact data |
 | Billing Street / City / State / PIN / Country | 🔒R | ⭐ | Address completeness |
 
+### Referrals
+
+| Field | Current | Final | Why |
+|---|---|---|---|
+| Name | 🔒R | 🔒 | Identity (Referred By shows it) |
+| Mobile | 🔒R | 🔒 | Unique key: the backend rejects a second referral with the same mobile |
+| Organization Name | 🔒R | 🔒 | Relation |
+| Status | 🔒R | ⭐ (list fixed) | Defaults to `Active`; only Active referrals can be picked as Referred By |
+| Assigned to | 🔒R | 🔒 | Ownership (who may change the referral) |
+
 ## Summary
 
 - Locked today: **~73** fields (every required field is locked: `isCoreLocked = req || lock`).
 - Final: **37 🔒 Locked**, **34 ⭐ Default required**, and Mailing Name / Account Status move to ○ Free.
 - Contracts (2026-11-25) added 5 🔒 and 6 ⭐ fields.
+- Referrals (2026-11-25) added 9 fields: 5 locked today (required: Name, Mobile, Organization Name, Status, Assigned
+  to), final 4 🔒 and 1 ⭐ (Status), and 4 ○ Free (Office Phone, Email Address, Designation, Department).
 - Activities (2026-11-25) added 15 fields: 6 🔒 (4 required, 2 not) and 9 ○ Free.
 
 ## Implementation steps

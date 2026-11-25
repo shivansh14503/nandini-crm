@@ -15,6 +15,7 @@ export type AuditEntityType =
     | 'contracts'
     | 'activities'
     | 'partner-companies'
+    | 'referrals'
     /** Form Customization admin trail: the id is a module key, `shared`, or `all`. */
     | 'form-configs'
     /** Admin › List Scorecards trail: the id is a module key. */

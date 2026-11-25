@@ -4,9 +4,10 @@ import type { AuthUser } from '../../types/user.types.js';
 
 /**
  * Keeps denormalized display names in step with the record they point to. Contacts, opportunities, quotations,
- * tickets, contracts and activities store the organization / contact name next to the id (lists sort and search on
- * it), so a rename is written through to every live linked row inside the renaming transaction. Activities also
- * keep the label of the record they are related to (`relatedTo`) and their contact attendees' names.
+ * tickets, contracts, activities and referrals store the organization / contact name next to the id, and leads and
+ * opportunities their Referred By referral's name (lists sort and search on it), so a rename is written through to
+ * every live linked row inside the renaming transaction. Activities also keep the label of the record they are
+ * related to (`relatedTo`) and their contact attendees' names.
  */
 
 /** Live rows renamed per entity; entities with no linked rows are omitted. */
@@ -34,6 +35,7 @@ export async function propagateOrganizationName(
         where: { relatedModule: 'organizations', relatedId: organizationId, isDeleted: false },
         data: { relatedTo: organizationName, updatedBy: actor.username },
     });
+    const referrals = await tx.referral.updateMany({ where, data });
     return compact({
         contacts: contacts.count,
         opportunities: opportunities.count,
@@ -41,6 +43,7 @@ export async function propagateOrganizationName(
         tickets: tickets.count,
         contracts: contracts.count,
         activities: activities.count + relatedActivities.count,
+        referrals: referrals.count,
     });
 }
 
@@ -64,6 +67,15 @@ export async function propagateContactName(tx: TransactionClient, contactId: str
         contracts: contracts.count,
         activities: activities.count + relatedActivities.count + attendees.count,
     });
+}
+
+/** A referral's new name, on the leads and opportunities that picked it as their Referred By. */
+export async function propagateReferralName(tx: TransactionClient, referralId: string, name: string, actor: AuthUser): Promise<NameSyncCounts> {
+    const where = { referredById: referralId, isDeleted: false };
+    const data = { referredBy: name, updatedBy: actor.username };
+    const leads = await tx.lead.updateMany({ where, data });
+    const opportunities = await tx.opportunity.updateMany({ where, data });
+    return compact({ leads: leads.count, opportunities: opportunities.count });
 }
 
 /** Clears the list / search / dashboard caches of the entities a rename touched (after commit). */

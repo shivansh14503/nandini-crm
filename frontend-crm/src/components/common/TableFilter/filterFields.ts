@@ -34,6 +34,7 @@ export const DEFAULT_FILTER_KEYS: Record<CrmModuleKey, string[]> = {
     contracts: ['status', 'assignedTo', 'contractTitle', 'contractPeriod', 'organizationName', 'startDate', 'endDate', 'renewalReminderDate', 'createdAt', 'createdBy', 'ageDays', 'unmodifiedDays'],
     activities: ['followupType', 'status', 'assignedTo', 'startAt', 'relatedTo', 'organizationName', 'createdAt', 'createdBy', 'ageDays', 'unmodifiedDays'],
     'partner-companies': ['assignedTo', 'natureOfPartner', 'createdAt', 'createdBy', 'ageDays', 'unmodifiedDays'],
+    referrals: ['status', 'assignedTo', 'organizationName', 'designation', 'department', 'mobile', 'createdAt', 'createdBy', 'ageDays', 'unmodifiedDays'],
 };
 
 /** Lookup fields that hold a CRM user. */

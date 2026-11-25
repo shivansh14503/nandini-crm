@@ -1,0 +1,35 @@
+'use client';
+
+import { useEffect } from 'react';
+import { useRouter } from 'next/navigation';
+import { Box, Container } from '@mui/material';
+import { useAuth } from '@/context/AuthContext';
+import { ROUTES } from '@/config/constants';
+import { Navbar } from '@/components/layout/Navbar';
+import { LoadingScreen } from '@/components/common/LoadingScreen';
+import ReferralForm from '@/components/referrals/ReferralForm';
+
+export default function NewReferralPage() {
+    const router = useRouter();
+    const { user, loading, isAuthenticated } = useAuth();
+
+    useEffect(() => {
+        if (!loading && !isAuthenticated) {
+            router.push(ROUTES.LOGIN);
+        }
+    }, [isAuthenticated, loading, router]);
+
+    if (loading) return <LoadingScreen message="Loading..." />;
+    if (!user) return null;
+
+    return (
+        <Box sx={{ minHeight: '100vh', backgroundColor: 'var(--mui-palette-background-subtle)' }}>
+            <Navbar />
+
+            <Container maxWidth="xl" sx={{ pt: 2.5, pb: 1 }}>
+                {/* ── Form with top action bar & breadcrumbs in a single row ── */}
+                <ReferralForm mode="create" />
+            </Container>
+        </Box>
+    );
+}

@@ -1,6 +1,6 @@
 # Nandini CRM — System Design
 
-> **Status:** living document. Describes the system as built (code as of 2026-11-25; audit context + ledger audit table, admin audit query API and screen, Users tab; Contracts module; Activities data model and API, Calendar Phase 1 PR1).
+> **Status:** living document. Describes the system as built (code as of 2026-11-25; audit context + ledger audit table, admin audit query API and screen, Users tab; Contracts module; Referrals module; Activities data model and API, Calendar Phase 1 PR1).
 > Update it in the same change that alters architecture, infrastructure, Redis usage, queues or security.
 > Related: [Database design](database-design.md) · [API plan](api-plan.md) · [Build plan](build-plan.md)
 
@@ -10,7 +10,7 @@
 
 An internal sales and support CRM for Nandini Infosystems. Sales staff move work through
 **Leads → Opportunities → Quotations**, keep **Organizations** and **Contacts** as the customer master, log support
-**Tickets** and **Contracts**, and manage **Products** and **Partner Companies**. Admins customise forms and dropdowns, number
+**Tickets** and **Contracts**, and manage **Products**, **Partner Companies** and **Referrals**. Admins customise forms and dropdowns, number
 documents, maintain the city list and design printable PDF templates.
 
 ## 2. High-level architecture
@@ -183,6 +183,7 @@ SQL Server is the only source of truth; Redis only ever holds derived or disposa
 | Global data roles | Admin, Director – Operations, Regional Sales Head, Sales Manager, System Administrator, Accounts Manager see **all** records |
 | Everyone else | Row-level scope: only records where they are the owner (`assignedTo`) **or** the creator (`createdBy`). Lists add this as a Prisma `where`; single-record reads/writes call `assertRecordAccess` (403) |
 | Activities (`modules/activities/activity.access.ts`) | The same rule **plus attendees**: a colleague invited to an activity (`ActivityAttendee.username`) can see it (lists, calendar, record, its audit trail) and reply to it (`POST /api/activities/:id/response`), but only the owner, the creator or a global role can change or delete it. Linking an activity to a record (Related To, and the `link-targets` picker) needs access to that record under its own module's rule (403 otherwise); an unchanged link is kept even if the editor can't see the record. The calendar's lead / opportunity follow-ups and contract renewals follow their modules' rules. Activities are not in global search |
+| Referrals (`modules/referrals`) | Lists and records are **not** row-scoped (everyone picks Referred By from them); changes and deletes need the owner, the creator or a global role (`assertRecordAccess`) |
 
 Role names are compared case-insensitively and with any dash style.
 
@@ -420,7 +421,7 @@ flowchart TB
 | --- | --- |
 | No user management API/UI | Users come from the seed or direct DB edits. `ROUTES.ADMIN_USERS` exists in the frontend but has no page. `sessionService.revokeAll` is ready for deactivation / password change. |
 | Dashboard has no data API | The dashboard page is static; `cache:dashboard:*` is reserved. |
-| No automated frontend tests | Backend has 46 `node:test` files (pure logic: validators, numbering, PDF document, access control, audit, time zones, activities). No integration/E2E tests. |
+| No automated frontend tests | Backend has 50 `node:test` files (pure logic: validators, numbering, PDF document, access control, audit, time zones, activities, referrals). No integration/E2E tests. |
 | Workers inside the API by default | Long imports share the event loop with requests unless `RUN_WORKERS=false` + separate worker. |
 | Rate limits fail open | Intentional for availability; brute-force protection disappears while Redis is down. |
 | Stale README PDF section | Describes the removed Handlebars engine. |

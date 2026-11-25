@@ -72,6 +72,7 @@ const MODULE_NOUN: Record<DrawerLayoutModule, { one: string; many: string }> = {
     tickets: { one: 'ticket', many: 'tickets' },
     contracts: { one: 'contract', many: 'contracts' },
     'partner-companies': { one: 'partner company', many: 'partner companies' },
+    referrals: { one: 'referral', many: 'referrals' },
 };
 
 const TAB_ICONS: Record<string, React.ReactNode> = {

@@ -11,6 +11,7 @@ import type { Contact } from '@/types/contact.types';
 import type { Opportunity } from '@/types/opportunity.types';
 import type { EntityLookupModalProps, LookupKind, LookupRecordMap } from '@/types/lookup.types';
 import type { ExtendedOrganization } from '@/types/organization.types';
+import type { Referral } from '@/types/referral.types';
 import { canonicalizeOrgName } from '@/utils/organizationName';
 import { opportunityLabel } from '@/utils/opportunityLabel';
 import { UserLookupModal } from './UserLookupModal';
@@ -21,6 +22,7 @@ import {
     OpportunityLookupModal,
     PartnerCompanyLookupModal,
     PartnerCompanyContactLookupModal,
+    ReferralLookupModal,
 } from './PresetLookupModals';
 
 const LOOKUP_MODALS: { [K in LookupKind]: React.ComponentType<EntityLookupModalProps<LookupRecordMap[K]>> } = {
@@ -31,6 +33,7 @@ const LOOKUP_MODALS: { [K in LookupKind]: React.ComponentType<EntityLookupModalP
     natureOfCall: NatureOfCallLookupModal,
     partnerCompany: PartnerCompanyLookupModal,
     partnerCompanyContact: PartnerCompanyContactLookupModal,
+    referral: ReferralLookupModal,
 };
 
 /** Display value written into a lookup field for each kind of record. */
@@ -42,6 +45,7 @@ export const LOOKUP_DISPLAY_VALUE: { [K in LookupKind]: (record: LookupRecordMap
     natureOfCall: (n) => n.name,
     partnerCompany: (p) => p.partnerName,
     partnerCompanyContact: (c) => c.name,
+    referral: (r) => r.name,
 };
 
 const sameText = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLowerCase();
@@ -59,6 +63,8 @@ export interface LookupRecordPools {
     organizations?: ExtendedOrganization[];
     contacts?: Contact[];
     opportunities?: Opportunity[];
+    /** Active referrals (see useActiveReferrals). */
+    referrals?: Referral[];
 }
 
 /** Resolves a typed / autocompleted field value back to its record (exact, case-insensitive match). */
@@ -84,6 +90,8 @@ export function findLookupRecord<K extends LookupKind>(
             return findByLabel(getPartnerCompanies(), (p) => p.partnerName, value) as LookupRecordMap[K] | undefined;
         case 'partnerCompanyContact':
             return findByLabel(getPartnerContacts(), (c) => c.name, value) as LookupRecordMap[K] | undefined;
+        case 'referral':
+            return findByLabel(pools.referrals ?? [], (r) => r.name, value) as LookupRecordMap[K] | undefined;
     }
 }
 

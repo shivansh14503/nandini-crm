@@ -15,6 +15,7 @@ const opportunity = opportunityFormSchema.shape;
 const opportunityRules = z.object({
     productCategory: opportunity.productCategory,
     referredBy: opportunity.referredBy,
+    referredById: opportunity.referredById,
     opportunityPartnerCompany: opportunity.partnerCompany,
     type: opportunity.type,
     nextFollowupDate: opportunity.nextFollowupDate,
@@ -68,6 +69,7 @@ export const convertLeadFormSchema = z.object({
     productCategory: deferred<'productCategory'>(),
     // Shown, and required, by the opportunity's Lead Source: CA / Reference → Referred By, Partner → Partner Company.
     referredBy: deferred<'referredBy'>(),
+    referredById: deferred<'referredById'>(),
     opportunityPartnerCompany: deferred<'opportunityPartnerCompany'>(),
     type: deferred<'type'>(),
     nextFollowupDate: deferred<'nextFollowupDate'>(),

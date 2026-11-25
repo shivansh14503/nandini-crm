@@ -69,6 +69,8 @@ const LOADERS: Partial<Record<AuditEntityType, Loader>> = {
         ]),
     PartnerCompany: async (c, ids) =>
         (await c.partnerCompany.findMany({ ...inIds(ids), select: { id: true, partnerName: true } })).map((r) => [r.id, { label: r.partnerName }]),
+    Referral: async (c, ids) =>
+        (await c.referral.findMany({ ...inIds(ids), select: { id: true, name: true } })).map((r) => [r.id, { label: r.name }]),
     User: async (c, ids) =>
         (await c.user.findMany({ where: { id: { in: intIds(ids) } }, select: { id: true, fullName: true, username: true } })).map((r) => [
             String(r.id),

@@ -15,7 +15,7 @@ function fakeTx(count = 1) {
             return { count };
         },
     });
-    const tx = Object.fromEntries(['contact', 'opportunity', 'quotation', 'ticket', 'contract', 'activity', 'activityAttendee'].map((name) => [name, model(name)]));
+    const tx = Object.fromEntries(['lead', 'contact', 'opportunity', 'quotation', 'ticket', 'contract', 'activity', 'activityAttendee', 'referral'].map((name) => [name, model(name)]));
     return { tx: tx as unknown as TransactionClient, calls };
 }
 
@@ -29,6 +29,19 @@ describe('propagateOrganizationName: activities', () => {
             { where: { relatedModule: 'organizations', relatedId: 'org1', isDeleted: false }, data: { relatedTo: 'ACME LTD', updatedBy: 'palak' } },
         ]);
         assert.equal(counts.activities, 2);
+    });
+
+    it('renames the activities next to the other linked modules (referrals included)', async () => {
+        const { tx } = fakeTx();
+        assert.deepEqual(await propagateOrganizationName(tx, 'org1', 'ACME LTD', actor), {
+            contacts: 1,
+            opportunities: 1,
+            quotations: 1,
+            tickets: 1,
+            contracts: 1,
+            activities: 2,
+            referrals: 1,
+        });
     });
 });
 

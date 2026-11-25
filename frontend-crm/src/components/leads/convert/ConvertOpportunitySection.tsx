@@ -8,11 +8,11 @@ import { ConvertRecordSections } from './ConvertRecordSections';
 import {
     RhfMultiAutocomplete,
     RhfDateTimeField,
-    RhfLookup,
     RhfSelect,
     RhfTextField,
     useLeadSourceDetails,
     PartnerCompanyLookup,
+    ReferredByLookup,
 } from '@/components/forms';
 import { OPPORTUNITY_TYPES } from '@/types/opportunity.types';
 import {
@@ -68,7 +68,7 @@ export function ConvertOpportunitySection() {
                     organizationName: <RhfTextField<F> name="organizationName" label="Organization name" required disabled hint="Taken from the organization section above" />,
                     // Lead Source CA / Reference only, and then required.
                     referredBy: showReferredBy ? (
-                        <RhfLookup<F> name="referredBy" label="Referred By" required={needsReferredBy} hint="Partner, agent, or client" placeholder="Referred by partner or person..." />
+                        <ReferredByLookup<F> name="referredBy" idName="referredById" required={needsReferredBy} />
                     ) : null,
                     // Lead Source Partner only, and then required: a partner organization (picker opens on Customer Type = Partner).
                     partnerCompany: showPartnerCompany ? <PartnerCompanyLookup<F> name="opportunityPartnerCompany" /> : null,

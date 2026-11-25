@@ -5,6 +5,7 @@ import { HttpError } from '../../utils/httpError.js';
 import { activityService } from '../activities/activity.service.js';
 import { contactService } from '../contacts/contact.service.js';
 import { contractService } from '../contracts/contract.service.js';
+import { referralService } from '../referrals/referral.service.js';
 import { leadService } from '../leads/lead.service.js';
 import { opportunityService } from '../opportunities/opportunity.service.js';
 import { organizationService } from '../organizations/organization.service.js';
@@ -43,6 +44,7 @@ const RECORD_SERVICES: Readonly<Record<string, RecordService>> = {
     Contract: contractService,
     Activity: activityService,
     PartnerCompany: partnerCompanyService,
+    Referral: referralService,
 };
 
 async function loadEntry(params: unknown) {

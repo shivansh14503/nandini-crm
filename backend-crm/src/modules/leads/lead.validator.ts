@@ -71,7 +71,9 @@ const leadFields = z.object({
     description: optionalText('Description', L.longText),
     noOfEmployee: optionalText('No of Employee', 30),
     // Required for Lead Source CA / Reference; Partner Company for Lead Source Partner (shared/leadSource.ts).
+    // Referred By is a Referral: its id, and its name (resolved by shared/referredBy.ts).
     referredBy: optionalText('Referred By', L.organizationName),
+    referredById: optionalText('Referred By', 50),
     partnerCompany: optionalUpperText('Partner Company', L.organizationName),
 
     primaryAddress: optionalText('Billing Street', L.address),
@@ -166,6 +168,7 @@ export const convertLeadSchema = z.object({
     productCategory: stringList('Product Category', 30, L.option).default([]),
     // Required for Lead Source CA / Reference, and the opportunity's Partner Company for Partner (checked by the conversion).
     referredBy: optionalText('Referred By', L.organizationName),
+    referredById: optionalText('Referred By', 50),
     opportunityPartnerCompany: optionalUpperText('Partner Company', L.organizationName),
     type: optionalText('Type', L.option),
     nextFollowupDate: optionalDate('Next Followup Date'),

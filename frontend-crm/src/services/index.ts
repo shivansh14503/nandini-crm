@@ -13,6 +13,7 @@ export * from './quotation.service';
 export * from './ticket.service';
 export * from './contract.service';
 export * from './activity.service';
+export * from './referral.service';
 export * from './partnerCompany.service';
 export * from './crmSync';
 export * from './import.service';

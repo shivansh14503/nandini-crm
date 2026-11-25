@@ -174,6 +174,7 @@ function opportunityPayload(values: ConvertLeadInput, lead: LeadRow, organizatio
         contactNumber: contact?.mobile,
         contactEmail: primaryEmail,
         referredBy: values.referredBy,
+        referredById: values.referredById,
         partnerCompany: values.opportunityPartnerCompany,
         type: values.type,
         salesStage: NEW_OPPORTUNITY_STAGE,
@@ -283,6 +284,8 @@ export async function convertLead(leadId: string, body: unknown, user: AuthUser)
                       customFields: opportunityCheck.customFields,
                   }),
                   user,
+                  {},
+                  { referredBy: lead.referredBy, referredById: lead.referredById },
               )
             : null;
 

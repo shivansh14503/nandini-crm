@@ -26,6 +26,7 @@ import {
     useExistingRecordCheck,
     useLeadSourceDetails,
     PartnerCompanyLookup,
+    ReferredByLookup,
 } from '@/components/forms';
 import { isGstRegistrationType } from '@/config/constants';
 import {
@@ -275,18 +276,8 @@ export function LeadOverviewSection({ leadId, notify, onDecisionPendingChange, o
                             if (isEdit && closingStatuses.has(next) !== closingStatuses.has(previous)) onSuspendChange(closingStatuses.has(next));
                         }}
                     />
-                    {/* Lead Source CA / Reference only, and then required. Picks from the CRM's contacts (Contact Search
-                        popup); a name can still be typed. */}
-                    {showReferredBy && (
-                        <RhfLookup<LeadFormData, 'contact'>
-                            name="referredBy"
-                            label="Referred By"
-                            lookupType="contact"
-                            required={needsReferredBy}
-                            hint="Contact who referred the lead"
-                            placeholder="Search or select contact..."
-                        />
-                    )}
+                    {/* Lead Source CA / Reference only, and then required: an active referral (Referral Search popup). */}
+                    {showReferredBy && <ReferredByLookup<LeadFormData> name="referredBy" idName="referredById" required={needsReferredBy} />}
                     {/* Lead Source Partner only, and then required: a partner organization, picked from the organization
                         picker opened on Customer Type = Partner. */}
                     {showPartnerCompany && <PartnerCompanyLookup<LeadFormData> name="partnerCompany" />}

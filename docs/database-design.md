@@ -1,6 +1,6 @@
 # Nandini CRM — Database Design
 
-> **Status:** living document, generated from `backend-crm/prisma/schema.prisma` and `prisma/migrations/` (72 migrations,
+> **Status:** living document, generated from `backend-crm/prisma/schema.prisma` and `prisma/migrations/` (73 migrations,
 > latest `20261126090000_activities`). Update it in the same change as any schema migration.
 > Related: [System design](system-design.md) · [API plan](api-plan.md) · [Build plan](build-plan.md)
 
@@ -12,7 +12,7 @@
 | --- | --- |
 | Engine | Microsoft SQL Server / Azure SQL (schema `dbo`) |
 | Access | Prisma 7 ORM through `@prisma/adapter-mssql`; a few raw SQL statements (`MERGE` for counters, `sp_getapplock` for locks, `OPENJSON`) |
-| Tables | **39** application tables + Prisma's `_prisma_migrations` |
+| Tables | **40** application tables + Prisma's `_prisma_migrations` |
 | Owned child tables ("sub tables") | 6: `EntityEmail`, `OpportunityLineItem`, `QuotationLineItem`, `PartnerCompanyContact`, `DropdownOption`, `ActivityAttendee` |
 | Migrations | `backend-crm/prisma/migrations/` (`npm run db:migrate` in dev, `npm run db:deploy` in prod) |
 | Seed | `backend-crm/prisma/seed.ts` (`npm run seed`) |
@@ -26,6 +26,7 @@
 | Activities & calendar | `Activity`, `ActivityAttendee` |
 | Owned children | `EntityEmail`, `OpportunityLineItem`, `QuotationLineItem` |
 | Partner master | `PartnerCompany`, `PartnerCompanyContact` |
+| Referral master | `Referral` (Referred By of leads and opportunities) |
 | Reference masters | `NatureOfCall`, `Country`, `Subdivision`, `City` |
 | Numbering | `DocumentSeriesSettings`, `DocumentSeries`, `SequenceCounter` |
 | Customisation | `DropdownCategory`, `DropdownOption`, `FormFieldDefinition`, `ModuleSetting`, `DrawerLayout`, `DrawerPiece` |
@@ -80,6 +81,7 @@ erDiagram
     Organization ||--o{ Ticket : has
     Organization ||--o{ Contract : has
     Organization ||--o{ Activity : "concerned by"
+    Organization ||--o{ Referral : has
     Contact ||--o{ EntityEmail : emailAddress
     Contact ||--o{ Opportunity : "contact for"
     Contact ||--o{ Quotation : "contact for"
@@ -89,6 +91,9 @@ erDiagram
     Contact ||--o{ ActivityAttendee : "invited as"
     Activity ||--o{ ActivityAttendee : attendees
     Lead ||--o{ EntityEmail : emailAddress
+    Referral ||--o{ EntityEmail : emailAddress
+    Referral ||--o{ Lead : "referred"
+    Referral ||--o{ Opportunity : "referred"
     Lead }o--o| Organization : "converted to"
     Lead }o--o| Contact : "converted to"
     Lead }o--o| Opportunity : "converted to"
@@ -171,7 +176,7 @@ Indexes: `organizationId`, `mobile`, `name`, `assignedTo`, `(isDeleted, createdA
 | Group | Columns |
 | --- | --- |
 | Identity | `id`, `leadCode` (UNIQUE), `name`, `mobile`, `otherPhone`, `mailingName`, `tradeName`, `organizationName`, `designation`, `department` |
-| Qualification | `leadSource`, `leadType` (Lead Type: admin dropdown `lead_type`, e.g. Inbound / Outbound / Marketing), `rating` (Rating: `Hot` / `Warm` / `Cold`, set by the system and never on a form — not a form-builder field), `status` (default `New`), `productCategoryJson`, `followupType`, `customerResponse` (latest follow-up outcome from `shared_customer_response`, the list leads and opportunities share; option meta `ratingRule` for leads, `opportunityStages` / `noFollowUp` for opportunities; migration `20261125220000_shared_customer_response`, which folded the short-lived leads-only `lead_customer_response` back in), `nextFollowupDate` (DATE), `nextFollowupTime`, `registrationType`, `gstNumber`, `turnover`, `noOfEmployee`, `referredBy` (shown, and required, when `leadSource` is CA or Reference), `partnerCompany` (set, and required, when `leadSource` is Partner: the name of an organization whose Customer Type is Partner, picked in the organization picker; migration `20261125210000_lead_partner_company`, which replaced the short-lived `natureOfPartner` column of `20261125180000_lead_source_details`), `assignedTo`, `remarks`, `description` |
+| Qualification | `leadSource`, `leadType` (Lead Type: admin dropdown `lead_type`, e.g. Inbound / Outbound / Marketing), `rating` (Rating: `Hot` / `Warm` / `Cold`, set by the system and never on a form — not a form-builder field), `status` (default `New`), `productCategoryJson`, `followupType`, `customerResponse` (latest follow-up outcome from `shared_customer_response`, the list leads and opportunities share; option meta `ratingRule` for leads, `opportunityStages` / `noFollowUp` for opportunities; migration `20261125220000_shared_customer_response`, which folded the short-lived leads-only `lead_customer_response` back in), `nextFollowupDate` (DATE), `nextFollowupTime`, `registrationType`, `gstNumber`, `turnover`, `noOfEmployee`, `referredBy` (shown, and required, when `leadSource` is CA or Reference: the name of the linked Referral) + `referredById` → `Referral` (NO ACTION, migration `20261125230000_referrals`; NULL for a value typed before that migration, which is kept as it is), `partnerCompany` (set, and required, when `leadSource` is Partner: the name of an organization whose Customer Type is Partner, picked in the organization picker; migration `20261125210000_lead_partner_company`, which replaced the short-lived `natureOfPartner` column of `20261125180000_lead_source_details`), `assignedTo`, `remarks`, `description` |
 | Addresses | `primary*` (with `primaryCityId` → `City`), `other*` (with `otherCityId`), `copyAddressFromLeft` |
 | Conversion | `convertedAt`, `convertedBy`, `convertedOrganizationId`, `convertedContactId`, `convertedOpportunityId` (FKs) — set only by the convert endpoint |
 | Other | `customDataJson`, audit/soft-delete columns |
@@ -189,7 +194,7 @@ required field for leads (closed leads have none).
 ### 4.5 `Opportunity` and `OpportunityLineItem`
 
 `Opportunity`: `opportunityCode` (UNIQUE), `opportunityName`, `productCategoryJson`, `contact`/`contactId`,
-`organizationName`/`organizationId`, `contactNumber` (optional), `contactEmail`, `referredBy` / `partnerCompany` (as on leads: required for Lead Source CA / Reference and Partner), `type`, `salesStage`, `leadSource`,
+`organizationName`/`organizationId`, `contactNumber` (optional), `contactEmail`, `referredBy` + `referredById` / `partnerCompany` (as on leads: required for Lead Source CA / Reference and Partner), `type`, `salesStage`, `leadSource`,
 `leadGivenBy`, `nextFollowupDate`/`Time`, `followupType`, `customerResponse` (as on leads), `remarks`, `description`, `assignedTo`,
 billing (`tallySerialNo` — 9 digits starting with 7, checked by the API, `invoiceNo`, `invoiceDate`), `commission` (fixed `Yes` / `No`, default `No`) with
 `commissionAmount` (DECIMAL(18,2), required above 0 when `Yes`, NULL when `No`), `commissionType` (fixed `Self` /
@@ -240,13 +245,13 @@ Products are not row-scoped (everyone sees all). Indexes: `productName`, `catego
 
 ### 4.9 `EntityEmail` (shared child table)
 
-One table holds emails for three parents. Exactly one of `organizationId`, `contactId`, `leadId` is set per row; each
+One table holds emails for four parents. Exactly one of `organizationId`, `contactId`, `leadId`, `referralId` is set per row; each
 FK cascades on delete. Columns: `email`, `isPrimary`, `isOptedOut`, `isInvalidBounce`, `sortOrder`, and the
 automatic check result `verificationStatus` (`valid` | `risky` | `invalid`; null = not checked / undecided),
 `verificationReason`, `verifiedAt`. The database is the record of checked addresses: a decided result is final
 (no periodic re-check), and an address saved on any record counts as checked everywhere — `replaceEmails` copies an
 existing result onto a new row with the same address. Only an admin bulk check (`EmailValidationRun`) changes it.
-Returned as `corporateEmails` (organizations) or `emailAddress` (contacts, leads). Writes replace the full set
+Returned as `corporateEmails` (organizations) or `emailAddress` (contacts, leads, referrals). Writes replace the full set
 (`replaceEmails`). Indexes on each FK and on `email` (duplicate checks).
 
 ### 4.10 `PartnerCompany` and `PartnerCompanyContact`
@@ -312,7 +317,7 @@ kept across a rename; an option without them falls back to 30 minutes and the ge
 `shared_followup_type` (Leads, Opportunities, Activities) has two system options, `Task` and `Note`, offered on
 Activities only: the Lead / Opportunity / Convert Lead forms hide them, their APIs refuse a change to one (a record
 already storing one keeps it), and neither can be the dropdown's default. Activities also have `activity_status` and
-`activity_reminder` (§4.23).
+`activity_reminder` (§4.24).
 
 `ModuleSetting` — module-level settings edited in Form Builder outside the fields: PK `(module, key)`, `valueJson`,
 `updatedBy`, timestamps. Today `leads` / `ratingNewLead` = `{ hot, warm }` (no row = default Hot 0–5 days, then Warm),
@@ -326,7 +331,7 @@ Record side drawer layouts (Form Customization › Drawer Layout, migration `202
 
 | Table | Purpose | Key rules |
 | --- | --- | --- |
-| `DrawerLayout` | The admin's layout of one module's record drawer | PK `module` (any CRM module key: `leads`, `contacts`, `organizations`, `opportunities`, `quotations`, `products`, `tickets`, `contracts`, `partner-companies`); `layoutJson` = the layout document (header: title / subtitle fields, avatar, badges; per form tab key: sections → blocks), validated by `modules/drawer-layouts/document/schema.ts` on save; `version` (default 1, +1 per save, optimistic concurrency: a stale save is a 409); `updatedBy`, timestamps. No row = the built-in layout (`frontend-crm/src/components/common/Drawer/layout/defaultLayouts.ts`); Reset deletes the row |
+| `DrawerLayout` | The admin's layout of one module's record drawer | PK `module` (any CRM module key: `leads`, `contacts`, `organizations`, `opportunities`, `quotations`, `products`, `tickets`, `contracts`, `partner-companies`, `referrals`); `layoutJson` = the layout document (header: title / subtitle fields, avatar, badges; per form tab key: sections → blocks), validated by `modules/drawer-layouts/document/schema.ts` on save; `version` (default 1, +1 per save, optimistic concurrency: a stale save is a 409); `updatedBy`, timestamps. No row = the built-in layout (`frontend-crm/src/components/common/Drawer/layout/defaultLayouts.ts`); Reset deletes the row |
 | `DrawerPiece` | A section saved to the builder's Pieces library | `id` (uuid), `module`, `name`, `sectionJson` (one layout section), `createdBy`, `createdAt`; index `(module)`; at most 100 per module; deletes are permanent |
 
 Layouts and pieces reference fields by `fieldKey` (plus the module's system values, e.g. `leadCode`, `rating`) and
@@ -447,7 +452,23 @@ Date in the form), `contract_type` (multi-select, stored in `contractTypeJson`).
 Indexes: `status`, `assignedTo`, `organizationId`, `contactId`, `opportunityId`, `endDate`, `renewalReminderDate`,
 `(isDeleted, createdAt)`, `(isDeleted, assignedTo, createdAt)`.
 
-### 4.23 `Activity` and `ActivityAttendee` (activities & calendar)
+### 4.23 `Referral` (Referred By master)
+
+People and firms who refer business (All › Referrals, migration `20261125230000_referrals`). Uses the Contact form's
+fields without Left Job, Phone 3–5, Is Primary Contact, Communication Type, DND and notes: `name`, `organizationName`
+(uppercase) + `organizationId` → `Organization` (NO ACTION; organization renames are written through), `mobile`
+(unique among live referrals, checked by the API), `officePhone`, `designation`, `department`, `assignedTo`, `status`
+(`Active` / `Inactive`, default `Active`; fixed dropdown `referral_status`), `customDataJson`, audit/soft delete.
+Emails live in `EntityEmail.referralId` (cascade). No record number (no document series).
+
+`Lead.referredById` and `Opportunity.referredById` point here (NO ACTION) and `referredBy` keeps the referral's name,
+written through on a rename (`propagateReferralName`). New values must be an **Active** referral; a referral that
+later goes Inactive or is deleted stays on the records that already have it. Rows created before the migration keep
+their free-text `referredBy` with `referredById` NULL (`modules/shared/referredBy.ts`).
+
+Indexes: `organizationId`, `mobile`, `name`, `assignedTo`, `status`, `(isDeleted, createdAt)`.
+
+### 4.24 `Activity` and `ActivityAttendee` (activities & calendar)
 
 Calls, meetings, tasks, notes and every other Followup Type (migration `20261126090000_activities`; module
 `backend-crm/src/modules/activities`). Unnumbered (no document series).

@@ -14,6 +14,7 @@ import type { Opportunity } from '@/types/opportunity.types';
 import type { NatureOfCallItem } from '@/types/ticket.types';
 import type { PartnerCompany, PartnerCompanyContact } from '@/types/partner.types';
 import type { Product } from '@/types/product.types';
+import type { Referral } from '@/types/referral.types';
 import { CUSTOMER_TYPES, ENTITY_TYPES, NATURE_OF_BUSINESS } from '@/components/organizations/constants';
 import { findCrmUser } from '@/services/masterData.store';
 import { getCountryNameByCode } from '@/data/addressMaster';
@@ -403,6 +404,37 @@ export const PARTNER_COMPANY_CONTACT_LOOKUP_PRESET: LookupPreset<PartnerCompanyC
     searchPredicate: (c, f, q) => {
         if (!containsText(c.partnerCompany, f.partnerCompany)) return false;
         return includesQuery(q, c.name, c.mobile, c.officePhone, c.email);
+    },
+};
+
+// ─── Referrals (Referred By) ──────────────────────────────────────────────────
+
+const primaryEmail = (r: Referral) => (r.emailAddress?.find((e) => e.isPrimary) ?? r.emailAddress?.[0])?.email ?? '';
+
+/** Referred By picker: lists the Active referrals (ReferralLookupModal passes only those). */
+export const REFERRAL_LOOKUP_PRESET: LookupPreset<Referral> = {
+    title: 'Referral Search',
+    subtitle: 'Select an active referral. Click a row to choose it.',
+    searchPlaceholder: 'Name, organization, mobile or email',
+    rowsPerPage: 10,
+    columns: [
+        { id: 'name', label: 'Name', minWidth: 170, sortable: true, render: (r) => <PrimaryText>{r.name}</PrimaryText> },
+        { id: 'organizationName', label: 'Organization', minWidth: 180, sortable: true },
+        { id: 'mobile', label: 'Mobile', minWidth: 120, sortable: true },
+        { id: 'email', label: 'Email Address', minWidth: 200, getValue: primaryEmail },
+        { id: 'designation', label: 'Designation', minWidth: 130, sortable: true },
+        { id: 'assignedTo', label: 'Assigned to', minWidth: 140, sortable: true, getValue: (r) => userName(r.assignedTo) },
+    ],
+    filterFields: [
+        { key: 'name', label: 'Name', type: 'text', width: 4, placeholder: 'Search referral name...' },
+        { key: 'organizationName', label: 'Organization', type: 'text', width: 4, placeholder: 'Search organization...' },
+        { key: 'phone', label: 'Any Phone', type: 'text', width: 4, placeholder: 'Search phone...' },
+    ],
+    searchPredicate: (r, f, q) => {
+        if (!containsText(r.name, f.name?.trim())) return false;
+        if (!containsText(r.organizationName, f.organizationName?.trim())) return false;
+        if (f.phone?.trim() && !containsPhone(r.mobile, f.phone) && !containsPhone(r.officePhone, f.phone)) return false;
+        return includesQuery(q, r.name, r.organizationName, r.mobile, r.officePhone, primaryEmail(r));
     },
 };
 

@@ -545,6 +545,7 @@ const CREATE_ITEMS = [
     { label: 'Ticket', href: ROUTES.TICKET_NEW },
     { label: 'Contract', href: ROUTES.CONTRACT_NEW },
     { label: 'Partner Company', href: ROUTES.PARTNER_COMPANY_NEW },
+    { label: 'Referral', href: ROUTES.REFERRAL_NEW },
     { label: 'Activity', href: '/dashboard' },
 ];
 

@@ -24,6 +24,7 @@
 | Leads, Opportunities, Quotations, Organizations, Contacts | ✅ CRUD, list filters, row-level access, audit, import (not quotations), lead conversion |
 | Tickets, Products, Partner Companies | ✅ CRUD, import |
 | Contracts | ✅ CRUD, list filters, status cards, row-level access, audit (no import) |
+| Referrals | ✅ CRUD, Active / Inactive status, audit, drawer layout, Form Builder (no import); Referred By on leads, opportunities and Convert Lead is picked from the active referrals (2026-11-25) |
 | Activities & calendar | ⚠️ data model, API (`/api/activities`, calendar feed, RSVP) and Form Builder fields; screens and reminders to come (Phase 14) |
 | Quotation PDF | ✅ templates, builder, preview, cached render |
 | Admin: forms, dropdowns, document series, cities, PDF templates | ✅ |
@@ -31,7 +32,7 @@
 | Audit log | ✅ ledger table with who / where / how per entry, Admin › Audit Log screen (`/api/admin/audit-logs`), undo / restore, CSV / Excel export, ledger integrity checks; alert rules later (Phase 11 E) |
 | Users admin | ❌ seed / DB only |
 | Dashboard | ❌ static page, no data |
-| Tests | ⚠️ 47 backend unit test files (`node:test`); no API integration, no frontend, no E2E |
+| Tests | ⚠️ 50 backend unit test files (`node:test`); no API integration, no frontend, no E2E |
 | CI/CD, containers | ❌ none in repo |
 
 ## Part 2 — Roadmap

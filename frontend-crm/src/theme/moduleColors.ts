@@ -15,7 +15,8 @@ export type ModuleKey =
     | 'contracts'
     | 'activities'
     | 'products'
-    | 'partnerCompanies';
+    | 'partnerCompanies'
+    | 'referrals';
 
 export interface ModuleColor {
     /** Icons, accent strips, dots. */
@@ -39,6 +40,7 @@ const CSS_NAME: Record<ModuleKey, string> = {
     activities: 'activities',
     products: 'products',
     partnerCompanies: 'partner-companies',
+    referrals: 'referrals',
 };
 
 const build = (key: ModuleKey): ModuleColor => {
@@ -90,6 +92,7 @@ const ROUTE_PREFIX: [string, ModuleKey][] = [
     ['/contracts', 'contracts'],
     ['/products', 'products'],
     ['/partner-companies', 'partnerCompanies'],
+    ['/referrals', 'referrals'],
 ];
 
 export const moduleForPath = (href: string): ModuleKey | undefined =>

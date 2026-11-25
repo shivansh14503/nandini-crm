@@ -115,6 +115,7 @@ export const RECORD_ENTITY_TYPES: ReadonlySet<string> = new Set([
     'Contract',
     'Activity',
     'PartnerCompany',
+    'Referral',
 ]);
 
 export interface ActionAvailability {

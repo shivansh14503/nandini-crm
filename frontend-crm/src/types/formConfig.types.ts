@@ -13,6 +13,7 @@ export const CRM_MODULE_KEYS = [
     'contracts',
     'activities',
     'partner-companies',
+    'referrals',
 ] as const;
 
 export type CrmModuleKey = (typeof CRM_MODULE_KEYS)[number];
@@ -28,6 +29,7 @@ export const CRM_MODULE_LABELS: Record<CrmModuleKey, string> = {
     contracts: 'Contracts',
     activities: 'Activities',
     'partner-companies': 'Partner Companies',
+    referrals: 'Referrals',
 };
 
 export type CrmModuleGroupKey = 'sales' | 'support' | 'activities' | 'inventory' | 'all';
@@ -62,7 +64,14 @@ export const CRM_MODULE_GROUPS: readonly CrmModuleGroup[] = [
     },
     { key: 'activities', label: 'Activities', modules: [{ key: 'activities', label: 'All Activities' }] },
     { key: 'inventory', label: 'Inventory', modules: [{ key: 'products', label: 'Product Catalog' }] },
-    { key: 'all', label: 'All', modules: [{ key: 'partner-companies', label: 'Partner Companies' }] },
+    {
+        key: 'all',
+        label: 'All',
+        modules: [
+            { key: 'partner-companies', label: 'Partner Companies' },
+            { key: 'referrals', label: 'Referrals' },
+        ],
+    },
 ];
 
 /** Navbar group of a module. */

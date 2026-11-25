@@ -11,5 +11,6 @@ export * from './lookup.types';
 export * from './ticket.types';
 export * from './contract.types';
 export * from './activity.types';
+export * from './referral.types';
 export * from './partner.types';
 export * from './formConfig.types';

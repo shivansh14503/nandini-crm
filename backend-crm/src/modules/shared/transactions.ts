@@ -108,6 +108,7 @@ export type LockedEntity =
     | 'ticket'
     | 'contract'
     | 'activity'
+    | 'referral'
     | 'partnerCompany';
 
 /** Columns set when a core entity is soft-deleted. */
