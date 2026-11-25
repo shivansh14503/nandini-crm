@@ -453,7 +453,7 @@ export const DEFAULT_CATEGORIES: DefaultCategory[] = [
     },
     {
         key: 'opportunity_type',
-        label: 'Opportunity Type',
+        label: 'Type',
         module: 'opportunities',
         options: ['Existing Business', 'New Business', 'Upgrade / Renewal', 'Add-on Module', 'Cloud Migration', 'Customization & Training'],
     },
@@ -1010,7 +1010,7 @@ export const CONVERT_FIELD_NAMES: Readonly<Record<ConvertModuleKey, Readonly<Rec
         productCategory: 'productCategory',
         organizationName: 'organizationName',
         referredBy: 'referredBy',
-        type: 'opportunityType',
+        type: 'type',
         leadSource: 'opportunityLeadSource',
         nextFollowupDate: 'nextFollowupDate',
         followupType: 'followupType',

@@ -106,7 +106,7 @@ const EMPTY_DEFAULTS: ConvertLeadFormValues = {
     createOpportunity: true,
     productCategory: ['Biz Analyst'],
     referredBy: '',
-    opportunityType: 'New Business',
+    type: 'New Business',
     nextFollowupDate: '',
     nextFollowupTime: '',
     followupType: 'Call',

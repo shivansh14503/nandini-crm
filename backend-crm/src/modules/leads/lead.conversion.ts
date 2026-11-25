@@ -170,7 +170,7 @@ function opportunityPayload(values: ConvertLeadInput, lead: LeadRow, organizatio
         contactNumber: contact?.mobile,
         contactEmail: primaryEmail,
         referredBy: values.referredBy,
-        type: values.opportunityType,
+        type: values.type,
         salesStage: NEW_OPPORTUNITY_STAGE,
         leadSource: values.opportunityLeadSource,
         leadGivenBy: values.referredBy || lead.createdBy,
