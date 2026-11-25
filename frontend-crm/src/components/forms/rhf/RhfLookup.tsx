@@ -11,7 +11,7 @@ import { RecordLookupModal, LOOKUP_DISPLAY_VALUE, findLookupRecord, useActiveRef
 import { findCrmUser, formatCrmUserDisplay, getAssignableUserNames, getPartnerCompanies } from '@/services/masterData.store';
 import { useContacts, useOpportunities, useOrganizations } from '@/hooks/queries';
 import { useMasterData } from '@/hooks/queries/useMasterData';
-import type { LookupFilterValues, LookupKind, LookupRecordMap } from '@/types/lookup.types';
+import type { LookupCopy, LookupFilterValues, LookupKind, LookupRecordMap } from '@/types/lookup.types';
 import { opportunityLabel } from '@/utils/opportunityLabel';
 import { useConfiguredPlaceholder } from '@/context/FormConfigContext';
 
@@ -63,6 +63,8 @@ export interface RhfLookupProps<T extends FieldValues, K extends LookupKind = Lo
     lookupFilters?: LookupFilterValues;
     /** Filters the picker always applies and shows locked (e.g. Customer Type = Partner for a Partner Company). */
     lockedLookupFilters?: LookupFilterValues;
+    /** The picker's wording for this field (e.g. "Partner Company Search"); see LookupCopy. */
+    lookupCopy?: LookupCopy;
 }
 
 /** React Hook Form bound lookup/autocomplete built on the shared {@link LookupField}. */
@@ -86,6 +88,7 @@ export function RhfLookup<T extends FieldValues, K extends LookupKind = LookupKi
     freeText = false,
     lookupFilters,
     lockedLookupFilters,
+    lookupCopy,
 }: RhfLookupProps<T, K>) {
     const { field, fieldState } = useController<T>({ name });
     const placeholder = useConfiguredPlaceholder(name, codedPlaceholder);
@@ -212,6 +215,7 @@ export function RhfLookup<T extends FieldValues, K extends LookupKind = LookupKi
                     selectedValue={value}
                     initialFilterValues={lookupFilters}
                     lockedFilterValues={lockedLookupFilters}
+                    copy={lookupCopy}
                 />
             )}
         </FormField>

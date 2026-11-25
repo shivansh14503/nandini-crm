@@ -6,7 +6,7 @@ import { useMasterData } from '@/hooks/queries/useMasterData';
 import type { ExtendedOrganization } from '@/types/organization.types';
 import type { EntityLookupModalProps } from '@/types/lookup.types';
 import { GenericLookupModal } from './GenericLookupModal';
-import { ORGANIZATION_LOOKUP_PRESET } from './lookupConfigs';
+import { applyLookupCopy, ORGANIZATION_LOOKUP_PRESET } from './lookupConfigs';
 
 const NO_ORGANIZATIONS: ExtendedOrganization[] = [];
 
@@ -17,17 +17,20 @@ export function OrganizationLookupModal({
     selectedValue,
     initialFilterValues,
     lockedFilterValues,
+    copy,
 }: EntityLookupModalProps<ExtendedOrganization>) {
     // Shared, cache-invalidated query: organizations created elsewhere show up without reopening.
     const { data: organizations = NO_ORGANIZATIONS, isLoading } = useOrganizations();
     // The user directory loads after module import, so "Assigned to" options are built from it here, not in the preset.
     const { users } = useMasterData();
+    // The field's own wording (e.g. "Partner Company Search" for a Partner Company) on top of the preset.
+    const preset = useMemo(() => applyLookupCopy(ORGANIZATION_LOOKUP_PRESET, copy), [copy]);
     const filterFields = useMemo(() => {
         const userOptions = users
             .map((u) => ({ value: u.username, label: u.name || u.username }))
             .sort((a, b) => a.label.localeCompare(b.label));
-        return ORGANIZATION_LOOKUP_PRESET.filterFields.map((f) => (f.key === 'assignedTo' ? { ...f, options: userOptions } : f));
-    }, [users]);
+        return preset.filterFields.map((f) => (f.key === 'assignedTo' ? { ...f, options: userOptions } : f));
+    }, [users, preset]);
 
     const selectedId = organizations.find((o) => o.organizationName === selectedValue)?.id;
     // Text already typed in the field seeds the name filter; an exact pick just highlights its row instead. The field's
@@ -42,7 +45,7 @@ export function OrganizationLookupModal({
             data={open ? organizations : NO_ORGANIZATIONS}
             loading={isLoading}
             selectedId={selectedId}
-            {...ORGANIZATION_LOOKUP_PRESET}
+            {...preset}
             filterFields={filterFields}
             initialFilterValues={startFilters}
             lockedFilterValues={lockedFilterValues}

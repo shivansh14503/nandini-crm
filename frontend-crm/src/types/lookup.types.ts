@@ -83,4 +83,22 @@ export interface EntityLookupModalProps<T> {
      * kept by "Clear". Pickers without those filter fields ignore them.
      */
     lockedFilterValues?: LookupFilterValues;
+    /** The picker's wording for one use (e.g. a Partner Company's organization picker). Pickers without it ignore it. */
+    copy?: LookupCopy;
+}
+
+/**
+ * Wording that personalizes a picker for one field, on top of its preset (see `applyLookupCopy`): e.g. the
+ * organization picker opened from Partner Company reads "Partner Company Search".
+ */
+export interface LookupCopy {
+    title?: string;
+    subtitle?: string;
+    emptyMessage?: string;
+    /** What the count beside the title counts (default "record" / "records"). */
+    recordLabel?: { one: string; other: string };
+    /** Filter label / placeholder by filter key. */
+    filters?: Record<string, { label?: string; placeholder?: string }>;
+    /** Column header by column id; `null` hides the column (e.g. Customer Type when it is locked to one value). */
+    columns?: Record<string, string | null>;
 }
