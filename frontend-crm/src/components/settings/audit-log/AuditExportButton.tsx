@@ -30,8 +30,11 @@ function download(id: string) {
     anchor.remove();
 }
 
-/** The Export toolbar button (format menu) and the export's progress / result shown under the toolbar. */
-export function useAuditExport(query: AuditListQuery) {
+/**
+ * The Export toolbar button (format menu) and the export's progress / result shown under the toolbar. `hint`: the
+ * button's tooltip (default: everything that matches the current filter).
+ */
+export function useAuditExport(query: AuditListQuery, { hint = 'Download everything that matches the current filter, newest first' }: { hint?: string } = {}) {
     const queryClient = useQueryClient();
     const [anchor, setAnchor] = useState<HTMLElement | null>(null);
     const [current, setCurrent] = useState<AuditExport | null>(null);
@@ -63,7 +66,7 @@ export function useAuditExport(query: AuditListQuery) {
     // The tooltip wraps only the button: React events from the menu (a portal) would otherwise bubble up and open it.
     const button = (
         <>
-            <Tooltip title="Download everything that matches the current filter, newest first">
+            <Tooltip title={hint}>
                 <span>
                     <Button
                         variant="outlined"

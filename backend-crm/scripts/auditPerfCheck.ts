@@ -173,6 +173,8 @@ async function main(): Promise<void> {
         await time('Entry detail', () => auditAdminService.get({ id: someId })),
         await time('Facets, 30 days', () => auditAdminService.facets(last30)),
         await time('Stats, 30 days', () => auditAdminService.stats(last30)),
+        await time('Users tab, 30 days', () => auditAdminService.users(last30)),
+        await time('Users tab, 366 days', () => auditAdminService.users({ from: day(-365), to: day(0) })),
     ];
 
     const width = Math.max(...results.map((r) => r.label.length));

@@ -152,7 +152,8 @@ export async function runExport(id: string, origin?: AuditOrigin): Promise<void>
             }
         }
         const { size } = await stat(file);
-        const fileName = exportFileName(format, row.createdAt, ENV.BUSINESS_TIMEZONE);
+        // One user's activity (Users tab, or a filter on one user) is named after them.
+        const fileName = exportFileName(format, row.createdAt, ENV.BUSINESS_TIMEZONE, filters.user?.length === 1 ? filters.user[0] : undefined);
         // The export counts once it is in the audit log: if that write fails, so does the export.
         await auditService.write({
             entityType: 'AuditExport',

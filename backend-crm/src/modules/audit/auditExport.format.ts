@@ -106,12 +106,26 @@ export function csvCell(value: string): string {
 /** One CSV record (RFC 4180: CRLF line ends, quoted cells may hold line breaks). */
 export const csvLine = (cells: readonly string[]): string => `${cells.map(csvCell).join(',')}\r\n`;
 
-/** `audit-log-2026-11-23-1015.csv` (time in the business timezone). */
-export function exportFileName(format: 'csv' | 'xlsx', at: Date, timeZone: string): string {
+/** A username as a file-name part: lower case, letters, digits, dots and dashes only (`Asha.K` → `asha.k`). */
+export function fileNamePart(value: string): string {
+    return value
+        .toLowerCase()
+        .replace(/[^a-z0-9.-]+/g, '-')
+        .replace(/^[.-]+|[.-]+$/g, '')
+        .slice(0, 40)
+        .replace(/[.-]+$/, '');
+}
+
+/**
+ * `audit-log-2026-11-23-1015.csv` (time in the business timezone); `audit-log-asha-2026-11-23-1015.csv` for one
+ * user's activity.
+ */
+export function exportFileName(format: 'csv' | 'xlsx', at: Date, timeZone: string, user?: string): string {
     const parts = Object.fromEntries(
         new Intl.DateTimeFormat('en-GB', { timeZone, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' })
             .formatToParts(at)
             .map((part) => [part.type, part.value]),
     );
-    return `audit-log-${parts.year}-${parts.month}-${parts.day}-${parts.hour}${parts.minute}.${format}`;
+    const subject = user ? fileNamePart(user) : '';
+    return `audit-log-${subject ? `${subject}-` : ''}${parts.year}-${parts.month}-${parts.day}-${parts.hour}${parts.minute}.${format}`;
 }

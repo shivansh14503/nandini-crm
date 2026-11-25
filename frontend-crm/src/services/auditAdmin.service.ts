@@ -226,6 +226,45 @@ export interface AuditStats {
     eventsPerDay: AuditDayCount[];
 }
 
+/**
+ * `active` / `inactive`: a CRM user. `system`: the background jobs. `unknown`: entries under a username that isn't in
+ * the user list any more.
+ */
+export type AuditUserStatus = 'active' | 'inactive' | 'system' | 'unknown';
+
+/** One row of the Users tab: who, their entries in the range (total and per category) and when they were last active. */
+export interface AuditUserActivity {
+    username: string;
+    name: string;
+    role: string | null;
+    department: string | null;
+    email: string | null;
+    status: AuditUserStatus;
+    onLeave: boolean;
+    isGroupUser: boolean;
+    lastLoginAt: string | null;
+    /** In the business timezone. */
+    lastLogin: string | null;
+    /** Newest entry, any time. */
+    lastActivityAt: string | null;
+    lastActivity: string | null;
+    /** What that entry was, e.g. `Updated · Leads`. */
+    lastActivityLabel: string | null;
+    total: number;
+    data: number;
+    config: number;
+    security: number;
+    signIns: number;
+    failedSignIns: number;
+}
+
+export interface AuditUsers {
+    from: string;
+    to: string;
+    /** Most active first. */
+    users: AuditUserActivity[];
+}
+
 /** Query of GET / (values within one filter are OR-ed, filters AND-ed). Dates are YYYY-MM-DD, `to` included. */
 export interface AuditListQuery {
     from?: string;
@@ -273,6 +312,10 @@ export const auditAdminService = {
     },
     async stats(range: AuditRange): Promise<AuditStats> {
         return (await apiClient.get<ApiResponse<AuditStats>>(`${BASE}/stats`, { params: toParams(range) })).data;
+    },
+    /** Users tab: every user with their activity in the range (default: the last 30 days). */
+    async users(range: AuditRange): Promise<AuditUsers> {
+        return (await apiClient.get<ApiResponse<AuditUsers>>(`${BASE}/users`, { params: toParams(range) })).data;
     },
 
     async undoPreview(id: string): Promise<UndoPreview> {
