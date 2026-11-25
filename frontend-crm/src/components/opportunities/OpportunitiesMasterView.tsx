@@ -153,7 +153,7 @@ export function OpportunitiesMasterView() {
                 const inOrg = opp.organizationName.toLowerCase().includes(q);
                 const inCode = showNumber('opportunity') && opp.opportunityCode.toLowerCase().includes(q);
                 const inContact = opp.contact.toLowerCase().includes(q);
-                const inPhone = opp.contactNumber.includes(q);
+                const inPhone = (opp.contactNumber ?? '').includes(q);
                 const inEmail = (opp.contactEmail || '').toLowerCase().includes(q);
                 const inStage = opp.salesStage.toLowerCase().includes(q);
                 const inType = opp.type.toLowerCase().includes(q);
