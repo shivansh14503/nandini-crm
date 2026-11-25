@@ -199,7 +199,6 @@ export function OpportunityBasicSection({ notify, onDecisionPendingChange }: Opp
                     <RhfPhoneField<F>
                         name="contactNumber"
                         label="Contact Number"
-                        required
                         hint={locks.number ? PICKED_CONTACT_HINT : 'Mobile / direct phone'}
                         placeholder="e.g. 9800000000"
                     />

@@ -31,7 +31,8 @@ export interface OpportunityFormData {
     organizationId?: string;
 
     // Basic Details - Row 3
-    contactNumber: string;
+    /** Optional. */
+    contactNumber?: string;
     contactEmail?: string;
 
     // Basic Details - Row 4

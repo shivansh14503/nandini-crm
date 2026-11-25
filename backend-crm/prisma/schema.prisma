@@ -444,7 +444,7 @@ model Opportunity {
   contactId           String?   @db.NVarChar(50)
   organizationName    String    @db.NVarChar(200)
   organizationId      String?   @db.NVarChar(50)
-  contactNumber       String    @db.NVarChar(20)
+  contactNumber       String?   @db.NVarChar(20)
   contactEmail        String?   @db.NVarChar(120)
   referredBy          String?   @db.NVarChar(200)
   type                String?   @db.NVarChar(50)

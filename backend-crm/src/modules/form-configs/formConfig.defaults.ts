@@ -809,7 +809,7 @@ const RAW_DEFAULT_FIELDS: DefaultField[] = [
     ...section('opportunities', 'basic', 'Primary Opportunity Details', [
         t('organizationName', 'Organization name', { type: 'lookup', req: true }),
         t('contact', 'Contact', { type: 'lookup', req: true }),
-        t('contactNumber', 'Contact Number', { type: 'phone', req: true }),
+        t('contactNumber', 'Contact Number', { type: 'phone' }),
         t('contactEmail', 'Contact Email', { type: 'email' }),
         t('referredBy', 'Referred By', { type: 'lookup' }),
         t('leadGivenBy', 'Lead Given By', { type: 'lookup', soft: true }),
