@@ -336,10 +336,12 @@ async function ranToday(day: string): Promise<boolean> {
 }
 
 /**
- * Makes up a run the scheduler missed (worker started late, Redis was down at 9): between the scheduled time and
- * noon on a scheduled day, once per process and day. Checks nothing in the database outside that window.
+ * The business day whose run the scheduler missed (worker started late, Redis was down at 9), or null: between the
+ * scheduled time and noon on a scheduled day, while no summary of that day is in EmailLog and this process hasn't run
+ * it. Checks nothing in the database outside that window. With Redis up the mail worker queues the run as a `morning`
+ * job (retries, stalled-run recovery, a graceful shutdown waits for it); `catchUpMorningSummary` runs it inline.
  */
-export async function catchUpMorningSummary(now = new Date()): Promise<MorningSummaryRunResult | null> {
+export async function missedMorningSummaryDay(now = new Date()): Promise<string | null> {
     if (!ENV.NOTIFICATIONS.MORNING_SUMMARY_ENABLED || !isMailConfigured()) return null;
     if (!shouldCatchUpMorningSummary(now, ENV.NOTIFICATIONS.MORNING_SUMMARY_CRON, ENV.BUSINESS_TIMEZONE, lastRunDay)) return null;
     const day = zonedDayOf(now, ENV.BUSINESS_TIMEZONE);
@@ -347,6 +349,13 @@ export async function catchUpMorningSummary(now = new Date()): Promise<MorningSu
         lastRunDay = day;
         return null;
     }
+    return day;
+}
+
+/** Makes up a missed run in this process (the mail worker's no-Redis fallback tick, where no job can be queued). */
+export async function catchUpMorningSummary(now = new Date()): Promise<MorningSummaryRunResult | null> {
+    const day = await missedMorningSummaryDay(now);
+    if (!day) return null;
     logger.info({ day }, 'Morning summary missed its scheduled time; sending it now');
     return runMorningSummary(now);
 }

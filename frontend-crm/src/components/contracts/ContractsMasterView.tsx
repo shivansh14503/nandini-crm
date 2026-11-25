@@ -29,6 +29,9 @@ import { isContractExpiringSoon } from './contractDates';
 
 /** Quick-view pills ('all' = none picked); the status lives on the status cards. */
 export type ContractFilterTab = 'all' | 'my_contracts' | 'expiring_soon';
+const CONTRACT_FILTER_TABS: readonly ContractFilterTab[] = ['all', 'my_contracts', 'expiring_soon'];
+const isContractFilterTab = (value: string | undefined): value is ContractFilterTab =>
+    (CONTRACT_FILTER_TABS as readonly string[]).includes(value ?? '');
 /** Any column's field key: the table sorts on the row's value, including columns added from the form. */
 export type ContractSortField = string;
 
@@ -52,7 +55,12 @@ const sortValue = (c: Contract, field: ContractSortField): string | number => {
 /** Stable empty list while the first page loads (keeps memoized filters from recomputing). */
 const NO_RECORDS: Contract[] = [];
 
-export function ContractsMasterView() {
+export interface ContractsMasterViewProps {
+    /** `?view=expiring_soon` / `?view=my_contracts` (the morning summary email's links): the pill to start on. */
+    view?: string;
+}
+
+export function ContractsMasterView({ view }: ContractsMasterViewProps) {
     const router = useRouter();
     const { user } = useAuth();
     const currentUsername = user?.username || '';
@@ -65,7 +73,7 @@ export function ContractsMasterView() {
     const allContracts = useSearchScopedRows(allContractsLoaded);
     const deleteMutation = useDeleteContract();
     const bulkDeleteMutation = useBulkDeleteContracts();
-    const [activeTab, setActiveTab] = useResetTab<ContractFilterTab>('all');
+    const [activeTab, setActiveTab] = useResetTab<ContractFilterTab>(isContractFilterTab(view) ? view : 'all');
     const [searchQuery, setSearchQuery] = useState('');
     const [selectedIds, setSelectedIds] = useState<string[]>([]);
     const [page, setPage] = useState(0);

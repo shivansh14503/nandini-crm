@@ -136,6 +136,10 @@ export function dropUnreadCountsOnRedisReady(): void {
  * Produces notifications outside a transaction (after a committed write, from the sweep). Rows whose key is already
  * stored are skipped; when a chunk loses a race on the unique key, its rows are inserted one by one and the
  * duplicates count as already sent. Never call it inside a transaction (use `insertMissingNotifications`).
+ *
+ * Each chunk commits on its own, so a failure partway leaves the earlier chunks stored, and a retry skips their keys
+ * (it never sees them as created). So when an insert fails, every recipient of the rows it tried has their cached
+ * unread count dropped before the error is thrown (a failed INSERT may also have committed on the server).
  */
 export async function notify(rows: readonly NotificationInput[], db: NotificationDb = prisma, now = new Date()): Promise<{ created: number }> {
     const unique = uniqueByKey(rows);
@@ -144,22 +148,27 @@ export async function notify(rows: readonly NotificationInput[], db: Notificatio
     const missing = unique.filter((row) => !stored.has(keyOf(row.dedupeKey)));
     const created: NotificationInput[] = [];
 
-    for (const part of chunk(missing, NOTIFICATION_INSERT_CHUNK)) {
-        try {
-            await db.notification.createMany({ data: part.map((row) => toNotificationData(row, now)) });
-            created.push(...part);
-        } catch (err) {
-            if (!isUniqueViolation(err)) throw err;
-            logger.debug({ rows: part.length }, 'Notification batch raced another writer; inserting one by one');
-            for (const row of part) {
-                try {
-                    await db.notification.create({ data: toNotificationData(row, now) });
-                    created.push(row);
-                } catch (rowErr) {
-                    if (!isUniqueViolation(rowErr)) throw rowErr;
+    try {
+        for (const part of chunk(missing, NOTIFICATION_INSERT_CHUNK)) {
+            try {
+                await db.notification.createMany({ data: part.map((row) => toNotificationData(row, now)) });
+                created.push(...part);
+            } catch (err) {
+                if (!isUniqueViolation(err)) throw err;
+                logger.debug({ rows: part.length }, 'Notification batch raced another writer; inserting one by one');
+                for (const row of part) {
+                    try {
+                        await db.notification.create({ data: toNotificationData(row, now) });
+                        created.push(row);
+                    } catch (rowErr) {
+                        if (!isUniqueViolation(rowErr)) throw rowErr;
+                    }
                 }
             }
         }
+    } catch (err) {
+        await invalidateUnreadCounts(missing.map((row) => row.username));
+        throw err;
     }
 
     await invalidateUnreadCounts(created.map((row) => row.username));

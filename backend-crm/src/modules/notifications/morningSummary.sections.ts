@@ -3,7 +3,7 @@ import type { CalendarItem } from '../activities/activity.calendar.js';
 import { allDayRange } from '../activities/activity.mapper.js';
 import { TASK_TYPE } from '../activities/activity.schedule.js';
 import { dayCount, daysOverdue, formatDay, formatDayLong, formatTime, joinParts, relatedLabel } from './notification.format.js';
-import { crmUrl, googleCalendarDetails, googleCalendarLink, recordPath } from './morningSummary.links.js';
+import { calendarDayPath, CONTRACTS_EXPIRING_PATH, crmUrl, googleCalendarDetails, googleCalendarLink, recordPath } from './morningSummary.links.js';
 
 /**
  * The morning summary's content, built from plain rows (the service loads them with the calendar feed's where-builders
@@ -231,18 +231,24 @@ export function compareFollowupsToday(a: SummaryFollowup, b: SummaryFollowup): n
 
 const followupDay = (item: SummaryFollowup, timeZone: string) => item.startDay ?? zonedDayOf(new Date(item.start), timeZone);
 
+/** Where a follow-up section's "and N more" links go, per module (absolute URLs). */
+interface FollowupMoreHrefs {
+    leads: string;
+    opportunities: string;
+}
+
 /** A follow-up section's total and its "and N more leads / opportunities" links (lists are capped per module). */
-function followupTotals(followups: FollowupRows, shown: readonly SummaryFollowup[], appUrl: string): { total: number; more: SummaryMoreLink[] } {
+function followupTotals(followups: FollowupRows, shown: readonly SummaryFollowup[], hrefs: FollowupMoreHrefs): { total: number; more: SummaryMoreLink[] } {
     const shownLeads = shown.filter((item) => item.module === 'leads').length;
     const shownOpportunities = shown.length - shownLeads;
     const more: SummaryMoreLink[] = [];
     if (followups.leads > shownLeads) {
-        more.push({ label: `and ${plural(followups.leads - shownLeads, 'more lead')}`, href: crmUrl(appUrl, '/leads') });
+        more.push({ label: `and ${plural(followups.leads - shownLeads, 'more lead')}`, href: hrefs.leads });
     }
     if (followups.opportunities > shownOpportunities) {
         more.push({
             label: `and ${plural(followups.opportunities - shownOpportunities, 'more opportunity', 'more opportunities')}`,
-            href: crmUrl(appUrl, '/opportunities'),
+            href: hrefs.opportunities,
         });
     }
     return { total: Math.max(followups.leads + followups.opportunities, shown.length), more };
@@ -314,8 +320,10 @@ export function buildMorningSummary(input: MorningSummaryInput): MorningSummary 
         });
     }
 
+    // The day's agenda lists every follow-up due that day; the lead / opportunity lists can't be filtered to it by URL.
+    const dayAgendaUrl = crmUrl(appUrl, calendarDayPath(day));
     const followups = [...input.followupsToday.rows].sort(compareFollowupsToday);
-    const followupsToday = followupTotals(input.followupsToday, followups, appUrl);
+    const followupsToday = followupTotals(input.followupsToday, followups, { leads: dayAgendaUrl, opportunities: dayAgendaUrl });
     if (followupsToday.total > 0) {
         sections.push({
             key: 'followupsToday',
@@ -327,7 +335,10 @@ export function buildMorningSummary(input: MorningSummaryInput): MorningSummary 
     }
 
     const overdueFollowups = input.overdueFollowups.rows.slice(0, SUMMARY_LIST_MAX);
-    const overdueFollowupTotals = followupTotals(input.overdueFollowups, overdueFollowups, appUrl);
+    const overdueFollowupTotals = followupTotals(input.overdueFollowups, overdueFollowups, {
+        leads: crmUrl(appUrl, '/leads'),
+        opportunities: crmUrl(appUrl, '/opportunities'),
+    });
     if (overdueFollowupTotals.total > 0) {
         sections.push({
             key: 'overdueFollowups',
@@ -349,7 +360,9 @@ export function buildMorningSummary(input: MorningSummaryInput): MorningSummary 
             title: 'Contract renewals',
             total: contractTotal,
             items: contracts,
-            more: contractTotal > contracts.length ? [{ label: `and ${contractTotal - contracts.length} more`, href: crmUrl(appUrl, '/contracts') }] : [],
+            // The first rows end soonest, so the rest are on the "Expiring in 30 Days" pill (a renewal reminder is
+            // set 15 days before the End Date by default).
+            more: contractTotal > contracts.length ? [{ label: `and ${contractTotal - contracts.length} more`, href: crmUrl(appUrl, CONTRACTS_EXPIRING_PATH) }] : [],
         });
     }
 

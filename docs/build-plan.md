@@ -280,10 +280,12 @@ keeps wall-clock times); all-day activities are entered as business-timezone day
       nodemailer 10.6.1 (Google Workspace SMTP relay or an app-password mailbox, STARTTLS required; off until
       `MAIL_ENABLED=true`) and the 9 AM morning summary email on its own `crm-mail` queue and worker (today's
       schedule with "Add to Google Calendar" links, overdue activities, follow-ups due / overdue, contract renewals,
-      full counts with "and N more" links; a missed run made up before noon). Frontend: the navbar
+      full counts with "and N more" links to the day's calendar agenda and to `/contracts?view=expiring_soon`; a
+      missed run queued as a one-off job before noon). Frontend: the navbar
       `NotificationBell` replaces the sample notifications (badge polled every minute while the tab is visible,
       module-tinted rows, mark read and open, mark all read,
-      cross-tab refresh) and "Preview morning email" (sandboxed preview, "Send me a test" for admins). Docs: system
+      cross-tab refresh), "Preview morning email" (sandboxed preview, "Send me a test" for admins) and the contracts
+      list's `?view=` pill (`expiring_soon`, `my_contracts`). Docs: system
       design §4–§5, §8.4, §9 (worker and SMTP relay setup). Unit tests for recipients, stale policy, keys, texts,
       producer chunking, delivery claims, EmailLog claims, cron catch-up, summary sections, Google links and escaping,
       STARTTLS enforcement (fake SMTP server), the guarded cache and the overdue / today split.

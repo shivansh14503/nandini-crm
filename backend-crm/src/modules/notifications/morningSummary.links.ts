@@ -17,6 +17,17 @@ export function crmUrl(appUrl: string, path: string): string {
     return `${appUrl.replace(/\/+$/, '')}${path.startsWith('/') ? path : `/${path}`}`;
 }
 
+/**
+ * The calendar's agenda of a business day (`YYYY-MM-DD`): the user's own activities, lead / opportunity follow-ups and
+ * renewal reminders of that day (the feed defaults to the signed-in user), still that day when the email is opened later.
+ */
+export function calendarDayPath(day: string): string {
+    return `/calendar?view=agenda&date=${encodeURIComponent(day)}`;
+}
+
+/** The contracts list on its "Expiring in 30 Days" pill (the frontend reads `?view=`). */
+export const CONTRACTS_EXPIRING_PATH = '/contracts?view=expiring_soon';
+
 /** Record page of a CRM module's record. */
 export function recordPath(module: 'activities' | 'leads' | 'opportunities' | 'contracts', id: string): string {
     return `/${module}/${encodeURIComponent(id)}`;

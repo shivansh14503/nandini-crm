@@ -161,15 +161,22 @@ describe('follow-ups', () => {
         assert.deepEqual(today.more, []);
     });
 
-    it('counts follow-ups due today beyond the listed ones and links the rest per module', () => {
+    it('counts follow-ups due today beyond the listed ones and links the rest to that day’s agenda', () => {
         const rows = [followup('l1'), followup('l2'), followup('o1', { module: 'opportunities' })];
         const summary = buildMorningSummary(input({ followupsToday: { leads: 70, opportunities: 1, rows } }));
         const today = section(summary, 'followupsToday');
         assert.equal(today.total, 71);
         assert.equal(today.items.length, 3);
-        assert.deepEqual(today.more, [{ label: 'and 68 more leads', href: `${APP}/leads` }]);
+        // The lead / opportunity lists can't be filtered to "due today, mine" by URL; the day's agenda shows exactly those.
+        assert.deepEqual(today.more, [{ label: 'and 68 more leads', href: `${APP}/calendar?view=agenda&date=2026-11-25` }]);
         assert.equal(summary.counts.followupsToday, 71);
         assert.equal(summary.headline, '71 follow-ups due');
+
+        const both = section(buildMorningSummary(input({ followupsToday: { leads: 3, opportunities: 2, rows } })), 'followupsToday');
+        assert.deepEqual(both.more, [
+            { label: 'and 1 more lead', href: `${APP}/calendar?view=agenda&date=2026-11-25` },
+            { label: 'and 1 more opportunity', href: `${APP}/calendar?view=agenda&date=2026-11-25` },
+        ]);
     });
 
     it('shows how overdue each one is and links the rest per module', () => {
@@ -214,7 +221,8 @@ describe('contract renewals', () => {
         const summary = buildMorningSummary(input({ contracts: { total: 52, rows } }));
         const contracts = section(summary, 'contracts');
         assert.equal(contracts.total, 52);
-        assert.deepEqual(contracts.more, [{ label: 'and 51 more', href: `${APP}/contracts` }]);
+        // The listed rows end soonest; the rest are on the contracts list's "Expiring in 30 Days" pill.
+        assert.deepEqual(contracts.more, [{ label: 'and 51 more', href: `${APP}/contracts?view=expiring_soon` }]);
         assert.equal(summary.counts.contracts, 52);
     });
 });

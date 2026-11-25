@@ -249,7 +249,7 @@ commands fail immediately instead of hanging, and reconnects in the background (
 | `bull:crm-audit-export:*` | BullMQ internals | 1 day (completed) / 7 days (failed) | audit export queue | Audit log exports over 5,000 entries |
 | `bull:crm-audit-ledger:*` | BullMQ internals (job scheduler + runs) | removed when done | audit ledger worker | Nightly ledger digest; "Verify integrity" (job id `ledger-verify`: present = running) |
 | `bull:crm-reminders:*` | BullMQ internals (2 job schedulers, delayed jobs, runs) | 1 day / 1000 jobs (completed) / 7 days (failed) | activity saves, reminders worker | Delayed job per activity reminder (job id `reminder-<activityId>-<remindAtMs>`), schedulers `reminder-sweep`, `reminder-nightly` (§5.1) |
-| `bull:crm-mail:*` | BullMQ internals (job scheduler + runs) | 7 days / 100 jobs (completed) / 30 days (failed) | mail worker | Scheduler `morning-summary` (§5.2) |
+| `bull:crm-mail:*` | BullMQ internals (job scheduler + runs) | 7 days / 100 jobs (completed) / 30 days (failed) | mail worker | Scheduler `morning-summary`, catch-up jobs `morning-catchup-<day>` (§5.2) |
 
 `cache:dashboard:*` is defined and invalidated but nothing writes it yet (no dashboard API).
 
@@ -260,7 +260,7 @@ Caches are read-through (`cacheService.getOrSet`). After a write **commits**, th
 every `cache:dashboard:*` using `SCAN` + `UNLINK` (never `KEYS`, so Redis isn't blocked). Form-config writes drop
 `cache:lookups:form-configs*`. PDF cache entries never need invalidation: any change to the template or the record
 changes the key. A user's `cache:notifications:unread:{username}` is deleted whenever notifications are written for
-them (producer) and whenever they mark one or all read (even when nothing changed, so a user can always clear a wrong
+them (producer, also when a later insert chunk fails) and whenever they mark one or all read (even when nothing changed, so a user can always clear a wrong
 badge); every `cache:notifications:unread:*` is deleted by the 00:20 nightly job and on every `ready` of the shared
 Redis client in each API and worker process (`dropUnreadCountsOnRedisReady`), because an invalidation made while
 Redis was unreachable is lost. The count is read with `cacheService.getOrSetGuarded`: on a miss it first writes a
@@ -303,7 +303,7 @@ flowchart LR
 | `crm-audit-ledger` | Job scheduler `audit-ledger-digest`, cron `15 0 * * *` in `BUSINESS_TIMEZONE`; `POST /api/admin/audit-logs/integrity/verify` (job id `ledger-verify`) | 1 | 1 | removed when done | Nightly: saves a ledger digest outside the database (`AUDIT_DIGEST_DIR` + `AuditDigest`) and tidies old exports. Verify: `sys.sp_verify_database_ledger` against every digest file on a separate SQL connection with a long timeout (`AUDIT_VERIFY_TIMEOUT_MS`, default 30 min; ~100 s per million entries) and writes a `LEDGER_VERIFY` entry |
 | `crm-lead-rating` | Job scheduler `lead-rating-ageing`, cron `5 0 * * *` in `BUSINESS_TIMEZONE` (upserted when the worker starts) | 1 | 1 (the next night catches up) | done 7 days / 30 jobs; failed 30 days | `ageLeadRatings`: re-rates leads ageing under a "Days since response" rule, writing only changed rows (history by `system`). The worker also runs it once at start-up, so a night missed while nothing ran (or Redis was down) is made up; runs are idempotent ([lead-rating-rules.md](lead-rating-rules.md)) |
 | `crm-reminders` | Activity saves (`remind`, delayed to `remindAt`); job schedulers `reminder-sweep` (`*/15 7-21 * * *`) and `reminder-nightly` (`20 0 * * *`), both in `BUSINESS_TIMEZONE`, upserted on every Redis `ready` | 1 | 3, exponential backoff from 30 s (every job is idempotent) | done 1 day / 1000 jobs; failed 7 days | In-app notifications (activity reminders, assignments, invitations, contract renewals); see §5.1 |
-| `crm-mail` | Job scheduler `morning-summary` (`MORNING_SUMMARY_CRON`, default `0 9 * * 1-6`, `BUSINESS_TIMEZONE`), upserted on every Redis `ready` (removed while `MORNING_SUMMARY_ENABLED=false`) | 1 | 3, exponential backoff from 30 s (sends are deduplicated in `EmailLog`, so a retry re-sends only what failed) | done 7 days / 100 jobs; failed 30 days | The morning summary email (§5.2). Its own queue so a slow or unreachable SMTP server (20 s timeouts per send, retries) never delays a reminder; later mail jobs (quotation emails) belong here too |
+| `crm-mail` | Job scheduler `morning-summary` (`MORNING_SUMMARY_CRON`, default `0 9 * * 1-6`, `BUSINESS_TIMEZONE`), upserted on every Redis `ready` (removed while `MORNING_SUMMARY_ENABLED=false`); a missed run as a one-off `morning` job (`morning-catchup-<day>`) | 1 | 3, exponential backoff from 30 s (sends are deduplicated in `EmailLog`, so a retry re-sends only what failed) | done 7 days / 100 jobs; failed 30 days | The morning summary email (§5.2). Its own queue so a slow or unreachable SMTP server (20 s timeouts per send, retries) never delays a reminder; later mail jobs (quotation emails) belong here too |
 
 **Import flow:** the frontend wizard parses the CSV/XLSX in the browser (papaparse / xlsx), maps columns, validates
 rows client-side, then posts up to 5,000 mapped rows. The worker validates each row with the same Zod schema and
@@ -350,6 +350,8 @@ one per event and recipient, made unique by `dedupeKey`, never audited.
 - **Producer** (`notification.producer.ts`, `notify(rows)`): reads which `dedupeKey`s already exist (500 per query),
   inserts the missing ones with `createMany` in chunks of 150 rows (SQL Server's 2,100-parameter limit; there is no
   `skipDuplicates` on SQL Server), treats a P2002 race as "already sent", and drops the recipients' unread-count cache.
+  The chunks are not one transaction, so when one fails the earlier ones stay and a retry skips their keys: on any
+  failure every recipient of the rows it tried has their count dropped before the error is thrown.
 - **Delayed job per reminder** (`scheduleActivityReminder`): when `remindAt` is set and `reminderSentAt` is null,
   `tryEnqueue(remindersQueue, 'remind', { activityId }, { delay: remindAt − now, jobId: 'reminder-<activityId>-<remindAtMs>' })`.
   A reschedule enqueues a new id; the old job then finds `remindAt` changed and does nothing.
@@ -389,9 +391,9 @@ where-builders and access rules (`morningSummary.service.ts` / `.sections.ts` / 
 | --- | --- |
 | Today's schedule | Planned activities (not Notes) the user owns or attends (not declined) that overlap today, all-day first, then by start; each Meeting / Call / other non-Task row has an **Add to Google Calendar** link |
 | Overdue activities | The user's Planned activities (not Notes) that were over by the start of today: started before it and ended at or before it, or without an end. The exact complement of today's overlap rule, so an activity is never in both (one running past midnight stays in today's schedule); count + the 10 oldest + "and N more" |
-| Follow-ups due today | Open leads and opportunities assigned to the user with `nextFollowupDate` today, with the time when set; at most 50 per module listed, the full counts in the headline and "and N more leads / opportunities" links |
-| Overdue follow-ups | The same with `nextFollowupDate` before today; count + the 10 oldest + "and N more" |
-| Contract renewals | The user's contracts (not Expired) whose renewal reminder is today or whose end date is within 30 days, one row each; at most 50 listed, the full count in the headline and "and N more" |
+| Follow-ups due today | Open leads and opportunities assigned to the user with `nextFollowupDate` today, with the time when set; at most 50 per module listed, the full counts in the headline and "and N more leads / opportunities" links to that day's calendar agenda (`/calendar?view=agenda&date=<day>`, which shows the user's own follow-ups of the day; the lead / opportunity lists can't be filtered to them by URL) |
+| Overdue follow-ups | The same with `nextFollowupDate` before today; count + the 10 oldest + "and N more" (to `/leads`, `/opportunities`) |
+| Contract renewals | The user's contracts (not Expired) whose renewal reminder is today or whose end date is within 30 days, one row each; at most 50 listed (soonest end first), the full count in the headline and "and N more" to the contracts list on its "Expiring in 30 Days" pill (`/contracts?view=expiring_soon`) |
 
 - **Email:** a headline with the counts ("3 meetings today · 5 follow-ups due · 2 overdue"), an "Open the CRM" button
   (`${APP_PUBLIC_URL}/calendar`), rows linking to their record pages (activities `/activities/<id>`), and a footer
@@ -409,10 +411,14 @@ where-builders and access rules (`morningSummary.service.ts` / `.sections.ts` / 
   the job (3 attempts); already-sent users are skipped by their dedupe key. With SMTP unreachable a run takes about
   ⌈users / 3⌉ × 20 s per attempt; that only holds the mail queue, never the reminders. Lists that come back full (50)
   are counted (one `COUNT` each), so a user's query count stays about eleven.
-- **Missed run:** BullMQ's scheduler doesn't backfill. On mail worker start / Redis `ready`, and on each fallback tick
-  while Redis is down, `catchUpMorningSummary` sends it once when today is a cron day, the time is between the
-  scheduled time and 12:00, and no `morning_summary:<today>:*` row is in `EmailLog` yet (pure helper
-  `shouldCatchUpMorningSummary`, unit-tested).
+- **Missed run:** BullMQ's scheduler doesn't backfill, and the scheduler upsert on mail worker start / Redis `ready`
+  removes an occurrence left overdue while no worker ran (checked against a local Redis). So right after that upsert,
+  `missedMorningSummaryDay` checks whether today is a cron day, the time is between the scheduled time and 12:00, and
+  no `morning_summary:<today>:*` row is in `EmailLog` yet (pure helper `shouldCatchUpMorningSummary`, unit-tested); if
+  so the run is queued as a one-off `morning` job with job id `morning-catchup-<day>` (every process adds it once), so
+  it gets the scheduled job's retries, stalled-job recovery and graceful shutdown. A catch-up job still waiting after
+  midnight is skipped (it would mail the next day's summary). While Redis is down the fallback tick runs it inline
+  instead (`catchUpMorningSummary`): no retries, and a shutdown doesn't wait for it.
 - **Preview / test** (`/api/notifications/morning-summary/*`, [API plan §2.5](api-plan.md#25-personal-state)): any
   user can preview their own email for today (works while mail is off); admin roles can send it to their own address
   now (`kind = 'morning_summary_test'`, no dedupe).
