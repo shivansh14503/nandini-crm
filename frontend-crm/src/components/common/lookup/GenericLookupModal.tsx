@@ -28,6 +28,7 @@ import SearchIcon from '@mui/icons-material/Search';
 import AddIcon from '@mui/icons-material/Add';
 import RestartAltIcon from '@mui/icons-material/RestartAlt';
 import SearchOffIcon from '@mui/icons-material/SearchOff';
+import LockOutlinedIcon from '@mui/icons-material/LockOutlined';
 import { splitMulti, joinMulti } from '@/types/lookup.types';
 import type {
     LookupColumn,
@@ -47,6 +48,8 @@ export interface GenericLookupModalProps<T extends { id: string }> {
     filterFields?: LookupFilterField[];
     /** Filter values the dialog opens with (e.g. the text already typed in the field); "Clear" still resets to blank. */
     initialFilterValues?: LookupFilterValues;
+    /** Filters fixed at these values: always applied, shown locked (disabled, lock icon) and kept by "Clear". */
+    lockedFilterValues?: LookupFilterValues;
     /** Receives the filter values and the main search text. Defaults to text match + exact filter match. */
     searchPredicate?: LookupSearchPredicate<T>;
     selectedId?: string;
@@ -72,6 +75,23 @@ const inputSx = {
     },
     '& .MuiInputLabel-root': { fontSize: '0.8rem' },
 } as const;
+
+/** A locked filter: the soft fill of a locked form input, its value kept readable, a lock in place of the arrow. */
+const lockedFilterSx = {
+    '& .MuiOutlinedInput-root.Mui-disabled': {
+        backgroundColor: 'var(--mui-palette-background-subtle)',
+        '& .MuiOutlinedInput-notchedOutline': { borderColor: 'var(--mui-palette-border-main)' },
+    },
+    '& .MuiInputBase-input.Mui-disabled': { WebkitTextFillColor: 'var(--crm-slate-600)', color: 'var(--crm-slate-600)' },
+    '& .MuiInputLabel-root.Mui-disabled': { color: 'var(--mui-palette-text-secondary)' },
+    '& .MuiSelect-icon': { display: 'none' },
+} as const;
+
+const lockAdornment = (
+    <InputAdornment position="end" sx={{ mr: 0.5 }}>
+        <LockOutlinedIcon sx={{ fontSize: 16, color: 'var(--mui-palette-text-muted)' }} />
+    </InputAdornment>
+);
 
 const headCellSx = {
     fontSize: '0.68rem',
@@ -112,6 +132,7 @@ function LookupDialog<T extends { id: string }>({
     data,
     filterFields = [],
     initialFilterValues,
+    lockedFilterValues,
     searchPredicate,
     selectedId,
     searchPlaceholder = 'Search…',
@@ -125,7 +146,9 @@ function LookupDialog<T extends { id: string }>({
     const [filters, setFilters] = useState<LookupFilterValues>(() => ({
         ...initialFilters(filterFields),
         ...initialFilterValues,
+        ...lockedFilterValues,
     }));
+    const isLocked = (key: string) => lockedFilterValues?.[key] !== undefined;
     const [page, setPage] = useState(0);
     const firstRowRef = useRef<HTMLTableRowElement>(null);
     const [sort, setSort] = useState<{ id: string; dir: 'asc' | 'desc' } | null>(null);
@@ -158,6 +181,7 @@ function LookupDialog<T extends { id: string }>({
     const rangeEnd = safePage * rowsPerPage + pageRows.length;
 
     const updateFilter = (key: string, value: string) => {
+        if (isLocked(key)) return;
         setFilters((prev) => ({ ...prev, [key]: value }));
         setPage(0);
     };
@@ -169,7 +193,7 @@ function LookupDialog<T extends { id: string }>({
 
     const handleReset = () => {
         setQuery('');
-        setFilters(initialFilters(filterFields));
+        setFilters({ ...initialFilters(filterFields), ...lockedFilterValues });
         setPage(0);
     };
 
@@ -268,8 +292,10 @@ function LookupDialog<T extends { id: string }>({
                                             const v = e.target.value as unknown as string | string[];
                                             updateFilter(f.key, joinMulti(typeof v === 'string' ? splitMulti(v) : v));
                                         }}
-                                        sx={inputSx}
+                                        disabled={isLocked(f.key)}
+                                        sx={isLocked(f.key) ? [inputSx, lockedFilterSx] : inputSx}
                                         slotProps={{
+                                            input: isLocked(f.key) ? { endAdornment: lockAdornment } : undefined,
                                             select: {
                                                 multiple: true,
                                                 renderValue: (v) => (v as string[]).join(', '),
@@ -291,7 +317,9 @@ function LookupDialog<T extends { id: string }>({
                                         label={f.label}
                                         value={filters[f.key] ?? ''}
                                         onChange={(e) => updateFilter(f.key, e.target.value)}
-                                        sx={inputSx}
+                                        disabled={isLocked(f.key)}
+                                        sx={isLocked(f.key) ? [inputSx, lockedFilterSx] : inputSx}
+                                        slotProps={isLocked(f.key) ? { input: { endAdornment: lockAdornment } } : undefined}
                                     >
                                         {(f.options ?? []).map((o) => (
                                             <MenuItem key={o.value} value={o.value} sx={{ fontSize: '0.82rem' }}>
@@ -307,7 +335,9 @@ function LookupDialog<T extends { id: string }>({
                                         placeholder={f.placeholder}
                                         value={filters[f.key] ?? ''}
                                         onChange={(e) => updateFilter(f.key, e.target.value)}
-                                        sx={inputSx}
+                                        disabled={isLocked(f.key)}
+                                        sx={isLocked(f.key) ? [inputSx, lockedFilterSx] : inputSx}
+                                        slotProps={isLocked(f.key) ? { input: { endAdornment: lockAdornment } } : undefined}
                                     />
                                 )}
                             </Grid>

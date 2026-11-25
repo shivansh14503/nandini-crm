@@ -61,6 +61,8 @@ export interface RhfLookupProps<T extends FieldValues, K extends LookupKind = Lo
      * to that organization's opportunities and is preferred when a typed label matches several.
      */
     lookupFilters?: LookupFilterValues;
+    /** Filters the picker always applies and shows locked (e.g. Customer Type = Partner for a Partner Company). */
+    lockedLookupFilters?: LookupFilterValues;
 }
 
 /** React Hook Form bound lookup/autocomplete built on the shared {@link LookupField}. */
@@ -83,6 +85,7 @@ export function RhfLookup<T extends FieldValues, K extends LookupKind = LookupKi
     nameCase,
     freeText = false,
     lookupFilters,
+    lockedLookupFilters,
 }: RhfLookupProps<T, K>) {
     const { field, fieldState } = useController<T>({ name });
     const placeholder = useConfiguredPlaceholder(name, codedPlaceholder);
@@ -208,6 +211,7 @@ export function RhfLookup<T extends FieldValues, K extends LookupKind = LookupKi
                     onSelect={handleSelect}
                     selectedValue={value}
                     initialFilterValues={lookupFilters}
+                    lockedFilterValues={lockedLookupFilters}
                 />
             )}
         </FormField>

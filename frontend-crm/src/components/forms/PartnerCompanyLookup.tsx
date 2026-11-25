@@ -7,7 +7,7 @@ import { useOrganizations } from '@/hooks/queries';
 import { isPartnerCustomerType, PARTNER_CUSTOMER_TYPE } from '@/config/constants';
 import type { LookupFilterValues } from '@/types/lookup.types';
 
-/** The organization picker opens on partner organizations (its Customer Type filter preset to Partner). */
+/** The organization picker shows partner organizations only: its Customer Type filter is locked to Partner. */
 const PARTNER_FILTERS: LookupFilterValues = { customerType: PARTNER_CUSTOMER_TYPE };
 
 export interface PartnerCompanyLookupProps<T extends FieldValues> {
@@ -17,8 +17,7 @@ export interface PartnerCompanyLookupProps<T extends FieldValues> {
 
 /**
  * Partner Company of a lead or opportunity whose Lead Source is Partner: an organization picked from the organization
- * picker, which opens with Customer Type = Partner selected (the filter can still be changed), as the Organization
- * form's Partner Company field did. Typing suggests partner organizations only; the name is stored (uppercase).
+ * picker, which opens with Customer Type locked to Partner, as the Organization form's Partner Company field did. Typing suggests partner organizations only; the name is stored (uppercase).
  */
 export function PartnerCompanyLookup<T extends FieldValues>({ name, required = true }: PartnerCompanyLookupProps<T>) {
     const { data: organizations } = useOrganizations();
@@ -44,7 +43,7 @@ export function PartnerCompanyLookup<T extends FieldValues>({ name, required = t
             hint="Organization with Customer Type Partner"
             placeholder="Search or select partner company..."
             options={partnerNames}
-            lookupFilters={PARTNER_FILTERS}
+            lockedLookupFilters={PARTNER_FILTERS}
         />
     );
 }
