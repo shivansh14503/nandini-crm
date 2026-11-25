@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useDeferredValue, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useDeferredValue, useMemo, useRef, useState } from 'react';
 import {
     Box,
     Button,
@@ -60,6 +60,8 @@ export interface GenericLookupModalProps<T extends { id: string }> {
     /** Shows a spinner instead of the empty state while data is being fetched. */
     loading?: boolean;
     emptyMessage?: string;
+    /** What the count beside the title counts (default "record" / "records"). */
+    recordLabel?: { one: string; other: string };
     /** Optional button beside Search / Clear, e.g. "Create Contact" when the record isn't there yet. */
     createAction?: { label: string; onClick: () => void };
 }
@@ -140,6 +142,7 @@ function LookupDialog<T extends { id: string }>({
     showSearchBox = true,
     loading = false,
     emptyMessage,
+    recordLabel = { one: 'record', other: 'records' },
     createAction,
 }: GenericLookupModalProps<T>) {
     const [query, setQuery] = useState('');
@@ -154,25 +157,37 @@ function LookupDialog<T extends { id: string }>({
     const [sort, setSort] = useState<{ id: string; dir: 'asc' | 'desc' } | null>(null);
     const deferredQuery = useDeferredValue(query);
 
-    const filtered = useMemo(() => {
-        const q = deferredQuery.trim().toLowerCase();
-        const rows = data.filter((item) => {
-            if (searchPredicate) return searchPredicate(item, filters, q);
+    const matches = useCallback(
+        (item: T, values: LookupFilterValues, q: string) => {
+            if (searchPredicate) return searchPredicate(item, values, q);
             const filtersMatch = filterFields.every((f) => {
-                if (!filters[f.key]) return true;
-                if (f.type === 'multiselect') return splitMulti(filters[f.key]).includes(fieldValue(item, f.key));
-                return fieldValue(item, f.key) === filters[f.key];
+                if (!values[f.key]) return true;
+                if (f.type === 'multiselect') return splitMulti(values[f.key]).includes(fieldValue(item, f.key));
+                return fieldValue(item, f.key) === values[f.key];
             });
             if (!filtersMatch) return false;
             return !q || columns.some((c) => cellText(item, c).toLowerCase().includes(q));
-        });
+        },
+        [searchPredicate, filterFields, columns]
+    );
+
+    // The count beside the title: every record this picker can offer (its locked filters applied).
+    const recordCount = useMemo(() => {
+        if (!lockedFilterValues) return data.length;
+        const locked = { ...Object.fromEntries(filterFields.map((f) => [f.key, ''])), ...lockedFilterValues };
+        return data.filter((item) => matches(item, locked, '')).length;
+    }, [data, lockedFilterValues, filterFields, matches]);
+
+    const filtered = useMemo(() => {
+        const q = deferredQuery.trim().toLowerCase();
+        const rows = data.filter((item) => matches(item, filters, q));
         const sortCol = sort && columns.find((c) => c.id === sort.id);
         if (!sort || !sortCol) return rows;
         const dir = sort.dir === 'asc' ? 1 : -1;
         return [...rows].sort(
             (a, b) => dir * cellText(a, sortCol).localeCompare(cellText(b, sortCol), undefined, { sensitivity: 'base' })
         );
-    }, [data, deferredQuery, filters, filterFields, columns, searchPredicate, sort]);
+    }, [data, deferredQuery, filters, columns, matches, sort]);
 
     const pageCount = Math.max(1, Math.ceil(filtered.length / rowsPerPage));
     const safePage = Math.min(page, pageCount - 1);
@@ -232,7 +247,7 @@ function LookupDialog<T extends { id: string }>({
                                 border: '1px solid var(--mui-palette-primary-softBorder)',
                             }}
                         >
-                            {data.length} records
+                            {recordCount} {recordCount === 1 ? recordLabel.one : recordLabel.other}
                         </Box>
                     </Box>
                     {subtitle && <Typography sx={{ fontSize: '0.78rem', color: 'var(--mui-palette-text-secondary)', mt: 0.3 }}>{subtitle}</Typography>}

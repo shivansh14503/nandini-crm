@@ -21,7 +21,7 @@ import { getCountryNameByCode } from '@/data/addressMaster';
 import { formatDateTime } from '@/utils/date';
 import { opportunityLabel } from '@/utils/opportunityLabel';
 import { splitMulti } from '@/types/lookup.types';
-import type { LookupColumn, LookupFilterField, LookupSearchPredicate } from '@/types/lookup.types';
+import type { LookupColumn, LookupCopy, LookupFilterField, LookupSearchPredicate } from '@/types/lookup.types';
 
 export interface LookupPreset<T> {
     title: string;
@@ -33,6 +33,23 @@ export interface LookupPreset<T> {
     showSearchBox?: boolean;
     rowsPerPage?: number;
     emptyMessage?: string;
+    recordLabel?: { one: string; other: string };
+}
+
+/** A preset with a field's own wording (see LookupCopy) applied; unchanged without one. */
+export function applyLookupCopy<T>(preset: LookupPreset<T>, copy?: LookupCopy): LookupPreset<T> {
+    if (!copy) return preset;
+    return {
+        ...preset,
+        title: copy.title ?? preset.title,
+        subtitle: copy.subtitle ?? preset.subtitle,
+        emptyMessage: copy.emptyMessage ?? preset.emptyMessage,
+        recordLabel: copy.recordLabel ?? preset.recordLabel,
+        filterFields: preset.filterFields.map((f) => ({ ...f, ...copy.filters?.[f.key] })),
+        columns: preset.columns
+            .filter((c) => copy.columns?.[c.id] !== null)
+            .map((c) => (copy.columns?.[c.id] ? { ...c, label: copy.columns[c.id] as string } : c)),
+    };
 }
 
 // ─── Shared cell renderers ────────────────────────────────────────────────────
