@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { optionalString } from './common';
+import { isPartnerCustomerType, NATURE_OF_PARTNER_REQUIRED_MESSAGE } from '../config/constants';
 import { contactFormSchema } from './contact.schema';
 import { organizationFieldsSchema } from './organization.schema';
 import { opportunityFormSchema } from './opportunity.schema';
@@ -38,6 +39,8 @@ export const convertLeadFormSchema = z.object({
     natureOfBusiness: organization.natureOfBusiness,
     typeOfEntity: organization.typeOfEntity,
     customerType: organization.customerType,
+    // Shown, and required, for a Partner organization (the Organization form's rule, below).
+    natureOfPartner: organization.natureOfPartner,
     leadSource: organization.leadSource,
     memberOf: organization.memberOf,
     organizationDescription: organization.addDescriptionAndScope,
@@ -77,6 +80,10 @@ export const convertLeadFormSchema = z.object({
     }),
 }).superRefine(
     (values, ctx) => {
+        // A new partner organization gives its Nature of Partner; an existing one is linked as it is.
+        if (!values.existingOrganizationId && isPartnerCustomerType(values.customerType) && !values.natureOfPartner?.trim()) {
+            ctx.addIssue({ code: 'custom', message: NATURE_OF_PARTNER_REQUIRED_MESSAGE, path: ['natureOfPartner'] });
+        }
         if (!values.createOpportunity) return;
         const parsed = opportunityRules.safeParse(values);
         for (const issue of parsed.error?.issues ?? []) ctx.addIssue({ code: 'custom', message: issue.message, path: issue.path });
@@ -115,6 +122,7 @@ export const CONVERT_FIELD_NAMES = {
         natureOfBusiness: 'natureOfBusiness',
         typeOfEntity: 'typeOfEntity',
         customerType: 'customerType',
+        natureOfPartner: 'natureOfPartner',
         leadSource: 'leadSource',
         memberOf: 'memberOf',
         addDescriptionAndScope: 'organizationDescription',

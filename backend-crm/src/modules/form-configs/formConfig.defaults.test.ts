@@ -49,6 +49,12 @@ describe('field locking policy', () => {
         }
     });
 
+    it("locks the organization's Nature of Partner, required only when Customer Type is Partner", () => {
+        const f = byKey('organizations', 'natureOfPartner');
+        assert.ok(f.isCoreLocked && !f.isRequired);
+        assert.equal(f.dropdownCategoryKey, 'partner_nature');
+    });
+
     it("locks the lead's Next Followup Date: every open lead is rated from it", () => {
         const f = byKey('leads', 'nextFollowupDate');
         assert.ok(f.isRequired && f.isCoreLocked);

@@ -129,6 +129,7 @@ export const APP_REQUIRED_CATEGORY_KEYS: ReadonlySet<string> = new Set([
     'org_nature_of_business',
     'org_type_of_entity',
     'org_customer_type',
+    'partner_nature',
     'contact_designation',
     'contact_department',
     'contact_communication_type',
@@ -597,7 +598,8 @@ export const DEFAULT_CATEGORIES: DefaultCategory[] = [
     {
         key: 'partner_nature',
         label: 'Nature of Partner',
-        module: 'partner-companies',
+        module: 'shared',
+        description: 'Kind of partner (Partner Companies, and Organizations whose Customer Type is Partner).',
         options: ['ISODA', 'TALLY-REFERRAL PARTNER', 'TALLY-3STAR', 'TALLY-3STAR PARTNER', 'TALLY-5STAR-SS', 'TALLY-5STARSI', 'TALLY-AP', 'Other'],
     },
 ];
@@ -772,6 +774,8 @@ const RAW_DEFAULT_FIELDS: DefaultField[] = [
         sel('natureOfBusiness', 'Nature of Business', 'org_nature_of_business', { soft: true }),
         sel('typeOfEntity', 'Type of Entity', 'org_type_of_entity', { soft: true }),
         sel('customerType', 'Customer Type', 'org_customer_type', { soft: true }),
+        // Conditional (locked): shown, and required, only when Customer Type is Partner. Same list as partner companies.
+        sel('natureOfPartner', 'Nature of Partner', 'partner_nature', { lock: true }),
         sel('accountStatus', 'Account Status', 'org_account_status'),
         t('sapCodeTallyId', 'SAP Code / Tally ID'),
         t('showroomBranchCode', 'Showroom / Branch Code'),
@@ -779,7 +783,6 @@ const RAW_DEFAULT_FIELDS: DefaultField[] = [
         sel('annualTurnover', 'Annual Turnover', 'org_annual_turnover'),
         sel('numberOfEmployees', 'Number of Employees', 'org_employee_count'),
         t('memberOf', 'Member of (Parent Corporation)', { type: 'lookup' }),
-        t('partnerCompany', 'Partner Company', { type: 'lookup' }),
         t('assignedTo', 'Assigned to (Account Executive)', { type: 'lookup', req: true }),
         t('addDescriptionAndScope', 'Add Description & Scope', { type: 'textarea' }),
     ]),
@@ -1028,6 +1031,7 @@ export const CONVERT_FIELD_NAMES: Readonly<Record<ConvertModuleKey, Readonly<Rec
         natureOfBusiness: 'natureOfBusiness',
         typeOfEntity: 'typeOfEntity',
         customerType: 'customerType',
+        natureOfPartner: 'natureOfPartner',
         leadSource: 'leadSource',
         memberOf: 'memberOf',
         addDescriptionAndScope: 'organizationDescription',

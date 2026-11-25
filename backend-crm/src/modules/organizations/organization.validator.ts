@@ -83,6 +83,8 @@ const organizationFields = z.object({
     inactivityReason: optionalText('Inactivity Reason', 500),
     typeOfEntity: optionalText('Type of Entity', L.option),
     customerType: optionalText('Customer Type', L.option),
+    // Required when Customer Type is Partner (assertNatureOfPartner); stored only for partner organizations.
+    natureOfPartner: optionalText('Nature of Partner', L.option),
     sapCodeTallyId: optionalText('SAP Code / Tally ID', L.shortCode),
     showroomBranchCode: optionalText('Showroom / Branch Code', L.shortCode),
     leadSource: optionalText('Lead Source', L.option),

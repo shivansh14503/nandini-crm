@@ -8,7 +8,8 @@ export const IMPORT_CONFIGS: Record<ImportEntityType, ImportEntityConfig> = {
         fields: [
             { key: 'organizationName', label: 'Organization Name', required: true, aliases: ['name', 'organization', 'company', 'company name', 'account name', 'org name'], sample: ['Acme Traders Pvt Ltd', 'Bright Tech Solutions'] },
             { key: 'natureOfBusiness', label: 'Nature of Business', required: false, aliases: ['industry', 'business', 'nature'], sample: ['Distributor / Trading / Wholesale', 'IT / Software'] },
-            { key: 'customerType', label: 'Customer Type', required: false, aliases: ['type', 'customer'], sample: ['End User', 'Distributor'] },
+            { key: 'customerType', label: 'Customer Type', required: false, aliases: ['type', 'customer'], sample: ['End User', 'Partner'] },
+            { key: 'natureOfPartner', label: 'Nature of Partner', required: false, aliases: ['partner type', 'nature of partner'], sample: ['', 'TALLY-3STAR PARTNER'] },
             { key: 'accountStatus', label: 'Status', required: false, aliases: ['status', 'account status'], sample: ['Active', 'Active'] },
             { key: 'billingStreet', label: 'Billing Street', required: false, aliases: ['street', 'address', 'billing address'], sample: ['12 MG Road', '45 Park Street'] },
             { key: 'billingCity', label: 'Billing City', required: false, aliases: ['city'], sample: ['Mumbai', 'Bengaluru'] },
