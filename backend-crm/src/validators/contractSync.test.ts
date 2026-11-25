@@ -21,12 +21,20 @@ import {
 } from '../modules/form-configs/formConfig.defaults.js';
 import {
     ACTIVITY_MAX_DURATION_DAYS,
+    ACTIVITY_NOT_APPLICABLE,
+    ACTIVITY_RELATED_MODULE_LABELS,
     ACTIVITY_RELATED_MODULES,
     ACTIVITY_REMINDERS,
     ACTIVITY_STATUSES,
+    END_BEFORE_START_MESSAGE,
     NOTE_TYPE,
+    START_REQUIRED_MESSAGE,
     TASK_TYPE,
+    TOO_LONG_MESSAGE,
+    normalizeSchedule,
 } from '../modules/activities/activity.schedule.js';
+import { MAX_ATTENDEES, NOTE_REMARKS_MESSAGE, PAST_START_MESSAGE, RELATED_RECORD_MESSAGE, activityPastIssues } from '../modules/activities/activity.validator.js';
+import * as zonedTime from '../utils/zonedTime.js';
 import { ACTIVITY_ONLY_TYPE_MESSAGE, activityOnlyTypeIssues, isActivityOnlyFollowupType } from '../modules/shared/followupTypes.js';
 
 /**
@@ -76,6 +84,46 @@ interface FrontendActivityTypes {
     ACTIVITY_REMINDERS: readonly string[];
     ACTIVITY_RELATED_MODULES: readonly string[];
     ACTIVITY_MAX_DURATION_DAYS: number;
+}
+
+interface FrontendActivityContract {
+    ACTIVITY_MAX_ATTENDEES: number;
+    ACTIVITY_NOT_APPLICABLE: Readonly<Record<string, readonly string[]>>;
+    ACTIVITY_RELATED_MODULE_LABELS: Readonly<Record<string, string>>;
+}
+
+interface FrontendZonedTime {
+    instantToZonedWallClock(instant: Date, timeZone: string): string;
+    zonedWallClockToInstant(wall: string, timeZone: string): Date;
+    zonedStartOfDay(day: string, timeZone: string): Date;
+    zonedDayOf(instant: Date, timeZone: string): string;
+    addDays(day: string, days: number): string;
+    daysBetween(first: string, last: string): number;
+}
+
+interface FrontendScheduleValues {
+    followupType: string;
+    status?: string;
+    allDay: boolean;
+    startAt: string;
+    endAt: string;
+}
+
+interface FrontendActivitySchedule {
+    START_REQUIRED_MESSAGE: string;
+    END_BEFORE_START_MESSAGE: string;
+    TOO_LONG_MESSAGE: string;
+    RELATED_RECORD_MESSAGE: string;
+    NOTE_REMARKS_MESSAGE: string;
+    PAST_START_MESSAGE: string;
+    activityScheduleIssues(values: FrontendScheduleValues, timeZone: string): { path: string; message: string }[];
+    activityPastIssues(
+        values: FrontendScheduleValues,
+        initial: Pick<FrontendScheduleValues, 'allDay' | 'startAt'> | undefined,
+        now: Date,
+        timeZone: string,
+    ): { path: string; message: string }[];
+    toApiSchedule(values: FrontendScheduleValues, timeZone: string): { allDay: boolean; startAt: string; endAt: string; startDay: string; endDay: string };
 }
 
 interface FrontendFollowupTypes {
@@ -184,6 +232,105 @@ describe('backend ↔ frontend contract', { skip }, () => {
         const seeded = DEFAULT_CATEGORIES.find((category) => category.key === FOLLOWUP_TYPE_CATEGORY_KEY);
         assert.ok(seeded, `${FOLLOWUP_TYPE_CATEGORY_KEY} is seeded`);
         assert.deepEqual([...frontend.ACTIVITY_TYPES].sort(), seeded.options.map((option) => (typeof option === 'string' ? option : option.value)).sort());
+        // Fields each type hides (the form's relaxedFields, the API's notApplicableKeys) and the "Related To" labels.
+        const contract = frontend as unknown as FrontendActivityContract;
+        assert.deepEqual(contract.ACTIVITY_NOT_APPLICABLE, ACTIVITY_NOT_APPLICABLE);
+        assert.equal(contract.ACTIVITY_MAX_ATTENDEES, MAX_ATTENDEES);
+        assert.deepEqual(contract.ACTIVITY_RELATED_MODULE_LABELS, ACTIVITY_RELATED_MODULE_LABELS);
+    });
+
+    it('frontend utils/zonedTime.ts converts times exactly as the backend', async () => {
+        const frontend = await loadFrontend<FrontendZonedTime>('utils/zonedTime.ts');
+        // The business timezone, a DST zone (gap and overlap days), a half-hour DST zone and UTC.
+        const zones = ['Asia/Kolkata', 'America/New_York', 'Europe/London', 'Australia/Lord_Howe', 'UTC'];
+        const instants = ['2026-11-25T05:00:00.000Z', '2026-03-08T07:30:00.000Z', '2026-11-01T05:30:00.000Z', '2026-10-25T00:59:00.000Z', '2026-12-31T23:59:00.000Z'];
+        const walls = ['2026-11-25T10:30', '2026-03-08T02:30', '2026-11-01T01:30', '2026-03-29T01:15', '2026-04-05T01:45', '2026-01-01T00:00'];
+        const days = ['2026-11-25', '2026-03-08', '2026-11-01', '2026-02-28', '2028-02-29'];
+        for (const zone of zones) {
+            for (const iso of instants) {
+                const instant = new Date(iso);
+                assert.equal(frontend.instantToZonedWallClock(instant, zone), zonedTime.instantToZonedWallClock(instant, zone), `${iso} in ${zone}`);
+                assert.equal(frontend.zonedDayOf(instant, zone), zonedTime.zonedDayOf(instant, zone), `${iso} in ${zone}`);
+            }
+            for (const wall of walls) {
+                assert.equal(frontend.zonedWallClockToInstant(wall, zone).toISOString(), zonedTime.zonedWallClockToInstant(wall, zone).toISOString(), `${wall} in ${zone}`);
+            }
+            for (const day of days) {
+                assert.equal(frontend.zonedStartOfDay(day, zone).toISOString(), zonedTime.zonedStartOfDay(day, zone).toISOString(), `${day} in ${zone}`);
+            }
+        }
+        for (const day of days) {
+            for (const n of [-400, -1, 0, 1, 31, 366]) assert.equal(frontend.addDays(day, n), zonedTime.addDays(day, n), `${day} + ${n}`);
+            assert.equal(frontend.daysBetween(day, '2026-11-25'), zonedTime.daysBetween(day, '2026-11-25'), day);
+        }
+    });
+
+    it('frontend utils/activitySchedule.ts applies the API schedule rules with the same messages', async () => {
+        const frontend = await loadFrontend<FrontendActivitySchedule>('utils/activitySchedule.ts');
+        assert.equal(frontend.START_REQUIRED_MESSAGE, START_REQUIRED_MESSAGE);
+        assert.equal(frontend.END_BEFORE_START_MESSAGE, END_BEFORE_START_MESSAGE);
+        assert.equal(frontend.TOO_LONG_MESSAGE, TOO_LONG_MESSAGE);
+        assert.equal(frontend.RELATED_RECORD_MESSAGE, RELATED_RECORD_MESSAGE);
+        assert.equal(frontend.NOTE_REMARKS_MESSAGE, NOTE_REMARKS_MESSAGE);
+        assert.equal(frontend.PAST_START_MESSAGE, PAST_START_MESSAGE);
+
+        const tz = 'Asia/Kolkata';
+        // The form's values → the API input (toApiSchedule) → the API's issues must equal the form's own issues.
+        const cases: FrontendScheduleValues[] = [
+            { followupType: 'Meeting', allDay: false, startAt: '2026-11-25T10:30', endAt: '2026-11-25T11:30' },
+            { followupType: 'Meeting', allDay: false, startAt: '2026-11-25T10:30', endAt: '2026-11-25T09:30' },
+            { followupType: 'Meeting', allDay: false, startAt: '2026-11-25T10:30', endAt: '2026-12-26T10:31' },
+            { followupType: 'Meeting', allDay: false, startAt: '2026-11-25T10:30', endAt: '2026-12-26T10:30' },
+            { followupType: 'Call', allDay: false, startAt: '2026-11-25T10:30', endAt: '' },
+            { followupType: 'Meeting', allDay: true, startAt: '2026-11-25', endAt: '2026-11-26' },
+            { followupType: 'Meeting', allDay: true, startAt: '2026-11-25', endAt: '2026-11-24' },
+            { followupType: 'Meeting', allDay: true, startAt: '2026-11-01', endAt: '2026-12-01' },
+            { followupType: 'Meeting', allDay: true, startAt: '2026-11-01', endAt: '2026-12-02' },
+            { followupType: 'Task', allDay: false, startAt: '2026-11-25T10:30', endAt: '2026-11-25T09:00' },
+            { followupType: 'Task', allDay: true, startAt: '2026-11-25', endAt: '' },
+            { followupType: 'Note', allDay: false, startAt: '', endAt: '' },
+        ];
+        for (const values of cases) {
+            const input = frontend.toApiSchedule(values, tz);
+            const api = normalizeSchedule(
+                {
+                    followupType: values.followupType,
+                    allDay: input.allDay,
+                    startAt: input.startAt || undefined,
+                    endAt: input.endAt || undefined,
+                    startDay: input.startDay || undefined,
+                    endDay: input.endDay || undefined,
+                },
+                tz,
+                30,
+            ).issues.map((issue) => ({ path: issue.path.join('.'), message: issue.message }));
+            assert.deepEqual(frontend.activityScheduleIssues(values, tz), api, JSON.stringify(values));
+        }
+
+        // Past starts: Planned only, today is fine all day, 5 minutes' grace, an unchanged start passes.
+        const now = new Date('2026-11-25T05:00:00.000Z'); // 10:30 IST
+        const pastCases: { values: FrontendScheduleValues; initial?: Pick<FrontendScheduleValues, 'allDay' | 'startAt'> }[] = [
+            { values: { followupType: 'Call', status: 'Planned', allDay: false, startAt: '2026-11-25T10:26', endAt: '' } },
+            { values: { followupType: 'Call', status: 'Planned', allDay: false, startAt: '2026-11-25T10:24', endAt: '' } },
+            { values: { followupType: 'Call', status: 'Completed', allDay: false, startAt: '2026-11-20T10:00', endAt: '' } },
+            { values: { followupType: 'Meeting', status: 'Planned', allDay: true, startAt: '2026-11-25', endAt: '' } },
+            { values: { followupType: 'Meeting', status: 'Planned', allDay: true, startAt: '2026-11-24', endAt: '' } },
+            { values: { followupType: 'Call', status: 'Planned', allDay: false, startAt: '2026-11-20T10:00', endAt: '' }, initial: { allDay: false, startAt: '2026-11-20T10:00' } },
+            { values: { followupType: 'Meeting', status: 'Planned', allDay: true, startAt: '2026-11-20', endAt: '' }, initial: { allDay: true, startAt: '2026-11-20' } },
+        ];
+        for (const { values, initial } of pastCases) {
+            const input = frontend.toApiSchedule(values, tz);
+            const startAt = values.allDay ? zonedTime.zonedStartOfDay(input.startDay, tz) : new Date(input.startAt);
+            const before = initial
+                ? initial.allDay
+                    ? { allDay: true, startAt: zonedTime.zonedStartOfDay(initial.startAt, tz).toISOString(), startDay: initial.startAt }
+                    : { allDay: false, startAt: zonedTime.zonedWallClockToInstant(initial.startAt, tz).toISOString(), startDay: '' }
+                : undefined;
+            const api = activityPastIssues({ followupType: values.followupType, status: values.status ?? 'Planned', allDay: values.allDay, startAt }, before, now, tz).map(
+                (issue) => ({ path: issue.path.join('.'), message: issue.message }),
+            );
+            assert.deepEqual(frontend.activityPastIssues(values, initial, now, tz), api, JSON.stringify(values));
+        }
     });
 
     it('frontend utils/followupTypes.ts applies the same Task / Note rule', async () => {

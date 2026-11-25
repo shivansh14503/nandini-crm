@@ -1,4 +1,4 @@
-import { useQuery } from '@tanstack/react-query';
+import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { activityService } from '@/services/activity.service';
 import type { PaginationParams } from '@/types/api.types';
 import type { ActivityMeta, ActivityRelatedModule, CalendarFeed, CalendarFeedParams } from '@/types/activity.types';
@@ -24,7 +24,7 @@ export function useActivityMeta() {
     });
 }
 
-/** The calendar feed of a window `[from, to)`. */
+/** The calendar feed of a window `[from, to)`. The previous window's entries stay while the next one loads. */
 export function useCalendarFeed(params: CalendarFeedParams | undefined, options: { enabled?: boolean } = {}) {
     const key: PaginationParams = params
         ? {
@@ -40,6 +40,7 @@ export function useCalendarFeed(params: CalendarFeedParams | undefined, options:
         queryKey: queryKeys.activities.calendar(key),
         queryFn: () => activityService.calendar(params!),
         enabled: Boolean(params) && (options.enabled ?? true),
+        placeholderData: keepPreviousData,
     });
 }
 

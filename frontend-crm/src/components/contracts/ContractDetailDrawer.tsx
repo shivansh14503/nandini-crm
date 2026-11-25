@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import ContentCopyOutlinedIcon from '@mui/icons-material/ContentCopyOutlined';
 
 import { ROUTES } from '@/config/constants';
+import { recordActivitiesContext } from '@/components/activities/activityLinks';
 import { withListOrigin } from '@/utils/listOrigin';
 import type { Contract } from '@/types/contract.types';
 import { useContract } from '@/hooks/queries';
@@ -53,6 +54,7 @@ export function ContractDetailDrawer({ contract, open, onClose, onEdit, hideBack
             formTabs={view.formTabs}
             tabContents={view.tabContents}
             auditEntity={{ type: 'contracts', id: c.id }}
+            activities={recordActivitiesContext('contracts', c)}
             recordAudit={c}
             includeChangesTab
             primaryAction={{ label: 'Edit Contract', onClick: handleEdit }}

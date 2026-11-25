@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import EditOutlinedIcon from '@mui/icons-material/EditOutlined';
 
 import { ROUTES } from '@/config/constants';
+import { recordActivitiesContext } from '@/components/activities/activityLinks';
 import { withListOrigin } from '@/utils/listOrigin';
 import type { Quotation } from '@/types/quotation.types';
 import { useQuotation } from '@/hooks/queries';
@@ -64,6 +65,7 @@ export function QuotationDetailDrawer({ quotation: initialQuotation, open, onClo
             formTabs={view.formTabs}
             tabContents={view.tabContents}
             auditEntity={{ type: 'quotations', id: quotation.id }}
+            activities={recordActivitiesContext('quotations', quotation)}
             recordAudit={quotation}
             includeChangesTab={true}
         />

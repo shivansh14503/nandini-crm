@@ -21,6 +21,8 @@ import { TicketDetailDrawer } from '@/components/tickets/TicketDetailDrawer';
 import type { Ticket } from '@/types/ticket.types';
 import { ContractDetailDrawer } from '@/components/contracts/ContractDetailDrawer';
 import type { Contract } from '@/types/contract.types';
+import type { Activity } from '@/types/activity.types';
+import { ActivityDetailDrawer } from '@/components/activities/ActivityDetailDrawer';
 import {
     EntityDetailDrawer,
     DrawerSectionCard,
@@ -61,6 +63,16 @@ export function RelatedSecondaryDrawer({
     const { type, data } = entity;
 
     switch (type) {
+        case 'activities':
+            return (
+                <ActivityDetailDrawer
+                    activity={data as unknown as Activity}
+                    open
+                    onClose={onClose}
+                    onEdit={(id) => router.push(ROUTES.ACTIVITY_EDIT(id))}
+                />
+            );
+
         case 'contacts':
             return <ContactDetailDrawer contact={data as unknown as Contact} open onClose={onClose} />;
 

@@ -49,6 +49,7 @@ import { useContactColumns } from '@/components/contacts/master/contactColumns';
 import { useTicketColumns } from '@/components/tickets/master/ticketColumns';
 import { useContractColumns } from '@/components/contracts/contractColumns';
 import { useProductColumns } from '@/components/products/master/productColumns';
+import { useActivityColumns } from '@/components/activities/activityColumns';
 import type { Product } from '@/types/product.types';
 import { RecordLink } from '../RecordLink';
 import { ROUTES } from '@/config/constants';
@@ -99,6 +100,8 @@ function relatedRecordHref(moduleKey: string, row: RelatedRow): string | undefin
             return id ? ROUTES.TICKET_DETAIL(id) : undefined;
         case 'contracts':
             return id ? ROUTES.CONTRACT_DETAIL(id) : undefined;
+        case 'activities':
+            return id ? ROUTES.ACTIVITY_DETAIL(id) : undefined;
         case 'products':
             // Line-item rows carry their own id; the catalogue product is `productId`.
             return row.productId ? ROUTES.PRODUCT_DETAIL(String(row.productId)) : undefined;
@@ -266,12 +269,14 @@ function getColumnsForModule(moduleKey: string): DataTableColumn<RelatedRow>[] {
     const primary = (row: RelatedRow, value: unknown, mono = false) => renderPrimaryCell(value, mono, relatedRecordHref(moduleKey, row));
     switch (moduleKey) {
         case 'activities':
+            // Fallback only: the table uses the Activities list's own columns (useActivityColumns).
             return [
                 { id: 'subject', label: 'Subject', minWidth: 200, sortable: true, render: (r) => primary(r, r.subject) },
+                { id: 'followupType', label: 'Type', minWidth: 120, sortable: true, accessor: 'followupType' },
                 { id: 'status', label: 'Status', minWidth: 120, sortable: true, render: (r) => renderStatusPill(r.status) },
-                { id: 'contact', label: 'Contact', minWidth: 150, sortable: true, accessor: 'contact' },
-                { id: 'startDate', label: 'Start Date', minWidth: 130, sortable: true, accessor: 'startDate' },
-                { id: 'assignedTo', label: 'Assigned User', minWidth: 140, sortable: true, accessor: 'assignedTo' },
+                { id: 'startAt', label: 'Start', minWidth: 150, sortable: true, accessor: 'startAt' },
+                { id: 'assignedTo', label: 'Assigned to', minWidth: 140, sortable: true, accessor: 'assignedTo' },
+                { id: 'relatedTo', label: 'Related To', minWidth: 160, sortable: true, accessor: 'relatedTo' },
             ];
 
         case 'history':
@@ -394,6 +399,7 @@ export function RelatedRecordsTableView({
         tickets: useTicketColumns(openRecord, now),
         contracts: useContractColumns(openRecord),
         products: useProductColumns(openRecord, catalogueProductId),
+        activities: useActivityColumns(openRecord),
     };
     const listPageColumns = moduleColumns[moduleKey] as DataTableColumn<RelatedRow>[] | undefined;
 

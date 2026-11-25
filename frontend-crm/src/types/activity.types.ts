@@ -14,6 +14,18 @@ export const NOTE_TYPE = 'Note';
 /** `activity_status` (fixed system options). */
 export const ACTIVITY_STATUSES = ['Planned', 'Completed', 'Cancelled'] as const;
 export type ActivityStatus = (typeof ACTIVITY_STATUSES)[number];
+export const PLANNED_STATUS: ActivityStatus = 'Planned';
+export const COMPLETED_STATUS: ActivityStatus = 'Completed';
+export const CANCELLED_STATUS: ActivityStatus = 'Cancelled';
+
+/**
+ * Built-in fields the activity form hides for a Followup Type, so they are never required for it (the form's
+ * `relaxedFields`, the API's `notApplicableKeys`). Only the system types hide fields; admin-added types show all.
+ */
+export const ACTIVITY_NOT_APPLICABLE: Readonly<Record<string, readonly string[]>> = {
+    Note: ['startAt', 'endAt', 'allDay', 'reminder', 'location', 'attendees', 'customerResponse', 'status'],
+    Task: ['endAt', 'location', 'attendees', 'customerResponse'],
+};
 
 /** `activity_reminder` (fixed system options; the stored value is the label). */
 export const ACTIVITY_REMINDERS = [
@@ -31,9 +43,24 @@ export type ActivityReminder = (typeof ACTIVITY_REMINDERS)[number];
 /** Modules an activity can be related to. */
 export const ACTIVITY_RELATED_MODULES = ['leads', 'opportunities', 'contacts', 'organizations', 'quotations', 'tickets', 'contracts'] as const;
 export type ActivityRelatedModule = (typeof ACTIVITY_RELATED_MODULES)[number];
+/** What the "Related To" type picker calls one record of each module. */
+export const ACTIVITY_RELATED_MODULE_LABELS: Readonly<Record<ActivityRelatedModule, string>> = {
+    leads: 'Lead',
+    opportunities: 'Opportunity',
+    contacts: 'Contact',
+    organizations: 'Organization',
+    quotations: 'Quotation',
+    tickets: 'Ticket',
+    contracts: 'Contract',
+};
+export const isActivityRelatedModule = (value: unknown): value is ActivityRelatedModule =>
+    typeof value === 'string' && (ACTIVITY_RELATED_MODULES as readonly string[]).includes(value);
 
 /** Longest an activity may last (days). */
 export const ACTIVITY_MAX_DURATION_DAYS = 31;
+
+/** Most attendees an activity can have. */
+export const ACTIVITY_MAX_ATTENDEES = 50;
 
 /** Attendee replies (Google Calendar's vocabulary). */
 export type AttendeeResponse = 'needsAction' | 'accepted' | 'tentative' | 'declined';

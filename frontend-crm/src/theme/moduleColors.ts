@@ -92,11 +92,17 @@ const ROUTE_PREFIX: [string, ModuleKey][] = [
     ['/contacts', 'contacts'],
     ['/tickets', 'tickets'],
     ['/contracts', 'contracts'],
+    ['/activities', 'activities'],
+    // The calendar shows activities (plus follow-ups and renewals).
+    ['/calendar', 'activities'],
     ['/documents', 'documents'],
     ['/products', 'products'],
     ['/partner-companies', 'partnerCompanies'],
     ['/referrals', 'referrals'],
 ];
 
-export const moduleForPath = (href: string): ModuleKey | undefined =>
-    ROUTE_PREFIX.find(([prefix]) => href === prefix || href.startsWith(`${prefix}/`))?.[1];
+export const moduleForPath = (href: string): ModuleKey | undefined => {
+    // `/activities?type=Call` and `/leads#notes` belong to their path's module.
+    const path = href.split(/[?#]/, 1)[0];
+    return ROUTE_PREFIX.find(([prefix]) => path === prefix || path.startsWith(`${prefix}/`))?.[1];
+};

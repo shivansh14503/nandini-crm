@@ -1,0 +1,119 @@
+/*
+ * FullCalendar v7 classic theme, coloured with CRM tokens (CLAUDE.md §2). The theme's own palette.css is not loaded:
+ * every `--fc-classic-*` variable it reads is mapped here, so light mode stays blue and dark mode green.
+ *
+ * Declared on `.crm-calendar` (the wrapper) and on `:root`: an event being dragged is attached to <body> for a moment,
+ * outside the wrapper, and still needs the variables. This file loads only with the calendar route.
+ */
+:root,
+.crm-calendar {
+    /* Buttons (the toolbar is our own; these cover FullCalendar's "+N more" popover close button and similar). */
+    --fc-classic-button: var(--mui-palette-background-paper);
+    --fc-classic-button-border: var(--mui-palette-border-main);
+    --fc-classic-button-strong: var(--mui-palette-primary-soft);
+    --fc-classic-button-strong-border: var(--crm-blue-300);
+    --fc-classic-button-outline: rgb(var(--crm-accent-rgb) / 0.22);
+    --fc-classic-button-foreground: var(--crm-slate-700);
+
+    /* Brand accent (focus rings, selected event outline). */
+    --fc-classic-primary: var(--crm-fill-blue-600);
+    --fc-classic-primary-foreground: #ffffff;
+
+    /* Calendar content. Events draw their own tinted chip (EventContent), so the event fill stays transparent. */
+    --fc-classic-event: transparent;
+    --fc-classic-event-contrast: var(--crm-slate-900);
+    --fc-classic-background-event: var(--crm-module-activities-main);
+    --fc-classic-background-event-opacity: 15%;
+    --fc-classic-background-event-foreground-opacity: 50%;
+    --fc-classic-highlight: rgb(var(--crm-accent-rgb) / 0.12);
+    --fc-classic-today: var(--mui-palette-primary-soft);
+    --fc-classic-now: var(--crm-text-blue-600);
+    --fc-classic-small-dot-width: 8px;
+    --fc-classic-large-dot-width: 10px;
+
+    /* Neutral surfaces. */
+    --fc-classic-background: var(--mui-palette-background-paper);
+    --fc-classic-faint: var(--mui-palette-background-subtle);
+    --fc-classic-muted: var(--mui-palette-background-hover);
+    --fc-classic-strong: var(--mui-palette-border-main);
+
+    /* Neutral text. */
+    --fc-classic-foreground: var(--crm-slate-900);
+    --fc-classic-faint-foreground: var(--mui-palette-text-muted);
+    --fc-classic-muted-foreground: var(--mui-palette-text-secondary);
+
+    /* Grid lines. */
+    --fc-classic-border: var(--mui-palette-border-main);
+    --fc-classic-strong-border: var(--mui-palette-border-strong);
+}
+
+.crm-calendar {
+    color: var(--crm-slate-900);
+    background-color: var(--mui-palette-background-paper);
+    min-width: 0;
+}
+
+/*
+ * The `crm-cal-*` classes below are added through FullCalendar's class options (CalendarView), which FullCalendar
+ * joins with the theme's own classes. Doubled selectors outrank the theme's single-class rules.
+ */
+
+/* The theme root sets 16px text; the CRM's tables and cards use 13px. */
+.crm-cal-root.crm-cal-root {
+    font-size: 0.8125rem;
+    line-height: 1.4;
+}
+
+/* Header bands: weekday headers, the all-day label and the agenda's day rows. */
+.crm-cal-day-header.crm-cal-day-header,
+.crm-cal-list-day.crm-cal-list-day {
+    background-color: var(--mui-palette-background-subtle);
+    color: var(--mui-palette-text-secondary);
+    font-weight: 600;
+}
+.crm-cal-slot-label.crm-cal-slot-label {
+    color: var(--mui-palette-text-secondary);
+}
+
+/* "+3 more" links. */
+.crm-cal-more.crm-cal-more {
+    color: var(--crm-text-blue-700);
+    font-weight: 600;
+}
+
+/* "+N more" popover. */
+.crm-cal-popover.crm-cal-popover {
+    background-color: var(--mui-palette-background-paper);
+    border-color: var(--mui-palette-border-main);
+    box-shadow: 0 8px 24px rgb(15 23 42 / 0.16);
+}
+
+/* The agenda's colour dot: the chip draws its own strip. */
+.crm-cal-hidden.crm-cal-hidden {
+    display: none;
+}
+
+/* Day / date links ("25", "Wed 25") read as brand links. */
+.crm-calendar a[data-navlink] {
+    color: var(--crm-slate-900);
+    text-decoration: none;
+}
+.crm-calendar a[data-navlink]:hover {
+    color: var(--crm-text-blue-700);
+    text-decoration: underline;
+}
+
+/* Our events: no fill or border of their own (the chip inside carries the tint). */
+.crm-calendar .crm-cal-event,
+.crm-cal-event {
+    background-color: transparent;
+    border-color: transparent;
+    box-shadow: none;
+}
+
+/* Phones: wide time grids scroll inside the calendar, never the page. */
+@media (max-width: 599.95px) {
+    .crm-calendar {
+        overflow-x: auto;
+    }
+}

@@ -3,6 +3,7 @@ import React from 'react';
 import type { SxProps, Theme } from '@mui/material';
 import type { AuditEntityType } from '@/hooks/queries/useAuditLogs';
 import type { RecordAuditStamp } from './RecordAuditFooter';
+import type { ActivityRelatedModule } from '@/types/activity.types';
 
 export interface DrawerTabItem {
     id: string;
@@ -55,6 +56,25 @@ export interface DrawerActionButtonProps {
     sx?: SxProps<Theme>;
 }
 
+/** The record a drawer's Activities tab belongs to: its activities, and the context new ones start with. */
+export interface RecordActivitiesContext {
+    module: ActivityRelatedModule;
+    id: string;
+    /** The record's label as the "Related To" picker shows it (lead name, opportunity label …). */
+    label: string;
+    /** Record number (LD-0001 …). */
+    code?: string;
+    organizationId?: string;
+    organizationName?: string;
+    contactId?: string;
+    contact?: string;
+    /**
+     * Leads and opportunities: their current next follow-up, shown read-only at the top of the tab. It is
+     * rescheduled on the record's edit form (`editHref`), where the follow-up decision lives.
+     */
+    nextFollowUp?: { date: string; time?: string; type?: string; editHref: string };
+}
+
 export interface EntityDetailDrawerProps {
     /** CRM module of the record: tints the header with that module's identity color. */
     module?: ModuleKey;
@@ -83,6 +103,8 @@ export interface EntityDetailDrawerProps {
     /** Created At / Last Modified stamps shown at the bottom of the overview tab only. */
     recordAudit?: RecordAuditStamp;
     includeChangesTab?: boolean; // Default true: attaches the standardized 'Changes' tab (needs auditEntity)
+    /** Adds an 'Activities' tab (before Changes) listing the record's activities, with buttons to log new ones. */
+    activities?: RecordActivitiesContext;
     changesTabLabel?: string; // Default 'Changes'
     defaultTabIndex?: number;
     /** Shown at the right end of the badge row (e.g. a lead's Rating box). */

@@ -25,7 +25,7 @@
 | Tickets, Products, Partner Companies | ✅ CRUD, import |
 | Contracts | ✅ CRUD, list filters, status cards, row-level access, audit (no import) |
 | Referrals | ✅ CRUD, Active / Inactive status, audit, drawer layout, Form Builder (no import); Referred By on leads, opportunities and Convert Lead is picked from the active referrals (2026-11-25) |
-| Activities & calendar | ⚠️ data model, API (`/api/activities`, calendar feed, RSVP) and Form Builder fields; screens and reminders to come (Phase 14) |
+| Activities & calendar | ⚠️ data model, API, Form Builder fields; Activities list, form, quick create, drawer, record Activities tabs and the Calendar page (FullCalendar v7, business timezone, drag to reschedule); reminders and notifications to come (Phase 14 PR3) |
 | Documents | ✅ read-only list (filters, export / file download), drawer and detail page of the opportunities' documents |
 | Quotation PDF | ✅ templates, builder, preview, cached render |
 | Admin: forms, dropdowns, document series, cities, PDF templates | ✅ |
@@ -253,10 +253,16 @@ keeps wall-clock times); all-day activities are entered as business-timezone day
       Query hooks, module registries and the module colour Olive (`--crm-module-activities-*`, `CLAUDE.md`; Brown is
       Documents') (no screens yet). Unit tests for time zones, schedule rules, attendee sync, access, calendar ranges,
       links.
-- [ ] **PR2: screens** — Activities list, form (timed / all-day, related record and attendee pickers), quick create,
-      detail drawer, Calendar page (FullCalendar v7, business-timezone rendering, drag to reschedule), Activities tab
-      in the Lead / Opportunity / Contact / Organization / Quotation / Ticket / Contract drawers, nav items (the
-      Activities menu keeps its Documents entry, Phase 15), Quick Create entry, Form Builder coded defaults.
+- [x] **PR2: screens** (2026-11-25) — Activities list (pills My Activities / Today / Overdue / Next 7 days / Calls /
+      Meetings / Tasks / Notes, a load window of the last 30 to the next 60 days, adjustable), form (Form Builder
+      driven; timed / all-day in the business timezone, related record and attendee pickers, fields a type doesn't use
+      hidden), quick create dialog, detail drawer (mark complete, reschedule, cancel, delete, RSVP), Calendar page
+      (FullCalendar v7 classic theme with CRM tokens; month / week / 3 days / day / agenda, drag and resize to
+      reschedule, long press on touch, read-only follow-ups and renewals, user / type / source / status filters),
+      Activities tab in the Lead / Opportunity / Contact / Organization / Quotation / Ticket / Contract drawers and the
+      related-records panels, nav items (the Activities menu keeps its Documents entry, Phase 15), Quick Create entry,
+      Form Builder coded defaults, audit log links. Contract tests keep the frontend time-zone and schedule rules
+      equal to the API's.
 - [ ] **PR3: notifications + reminders** — `Notification` table, `/api/notifications`, BullMQ `crm-reminders` worker
       (delayed jobs plus a sweep; idempotent claims on `reminderSentAt`), invitation / assignment notifications, the
       navbar bell.

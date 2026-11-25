@@ -112,6 +112,12 @@ export interface TimePickerProps {
     valueFormat?: TimeValueFormat;
     /** The date the time belongs to (`YYYY-MM-DD`): on today, times that have passed are greyed out. */
     date?: string | null;
+    /**
+     * The wall clock (`YYYY-MM-DDTHH:mm`) "today" and "passed" are read from: for times kept in another zone than the
+     * device's (the activity form's business timezone). `null` lets past times be picked (logging what already
+     * happened). Defaults to the device clock.
+     */
+    now?: string | null;
     error?: boolean;
     ariaLabel?: string;
     onBlur?: () => void;
@@ -139,6 +145,7 @@ export function TimePicker({
     name,
     placeholder = 'HH:mm',
     disabled,
+    now: nowProp,
 }: TimePickerProps) {
     const current = useMemo(() => parseTimeOfDay(value), [value]);
     const display = current === null ? value ?? '' : formatTime24(current);
@@ -158,9 +165,9 @@ export function TimePicker({
     const fieldHint = typedMinutes === null ? null : hint12(typedMinutes);
 
     // Earliest allowed time today (null on other days). No date yet counts as today: that's where the time lands.
-    const now = localNow();
-    const day = (date ?? '').slice(0, 10) || now.slice(0, 10);
-    const minMinutes = day === now.slice(0, 10) ? Number(now.slice(11, 13)) * 60 + Number(now.slice(14, 16)) : null;
+    const now = nowProp === undefined ? localNow() : nowProp;
+    const day = (date ?? '').slice(0, 10) || (now ?? localNow()).slice(0, 10);
+    const minMinutes = now !== null && day === now.slice(0, 10) ? Number(now.slice(11, 13)) * 60 + Number(now.slice(14, 16)) : null;
 
     // While typing, the columns follow what's typed so far (nothing is saved until blur / Enter).
     const typed = editing ? parsePartialTime(text) : null;

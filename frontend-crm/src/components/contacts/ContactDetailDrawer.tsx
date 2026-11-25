@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import PhoneOutlinedIcon from '@mui/icons-material/PhoneOutlined';
 
 import { ROUTES } from '@/config/constants';
+import { recordActivitiesContext } from '@/components/activities/activityLinks';
 import { withListOrigin } from '@/utils/listOrigin';
 import type { Contact } from '@/types/contact.types';
 import { useContact } from '@/hooks/queries';
@@ -59,6 +60,7 @@ export function ContactDetailDrawer({ contact, open, onClose, onEdit }: ContactD
             formTabs={view.formTabs}
             tabContents={view.tabContents}
             auditEntity={{ type: 'contacts', id: c.id }}
+            activities={recordActivitiesContext('contacts', c)}
             recordAudit={c}
             includeChangesTab={true}
             primaryAction={{
