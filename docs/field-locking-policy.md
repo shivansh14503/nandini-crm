@@ -36,7 +36,7 @@ Fields not listed are ○ Free today and stay ○ Free.
 | GST Number | 🔒 | 🔒 | Conditional (registration type) |
 | Lead Source | 🔒R | ⭐ | Reporting preference |
 | Referred By | 🔒 | 🔒 | Conditional: shown, and required, only when Lead Source is CA or Reference (system options) |
-| Nature of Partner | 🔒 | 🔒 | Conditional: shown, and required, only when Lead Source is Partner (list `partner_nature`, shared with organizations and partner companies) |
+| Partner Company | 🔒 | 🔒 | Conditional: shown, and required, only when Lead Source is Partner (organization picker opened on Customer Type = Partner) |
 | Lead Type | 🔒R | ⭐ | Classification preference (Inbound / Outbound / …; not the Rating) |
 | Status | — | ○ (list fixed) | Defaults to `New` when omitted; Convert sets `Converted` |
 | Next Followup Date | 🔒R | 🔒R | Locked again (2026-11-21): every open lead is rated from its next follow-up, date and time ([lead-rating-rules.md](lead-rating-rules.md)); a closing status clears it |
@@ -79,7 +79,7 @@ Fields not listed are ○ Free today and stay ○ Free.
 | Type | 🔒R | ⭐ | Classification |
 | Lead Source | 🔒R | ⭐ | Reporting |
 | Referred By | 🔒 | 🔒 | Conditional: shown, and required, only when Lead Source is CA or Reference (system options) |
-| Nature of Partner | 🔒 | 🔒 | Conditional: shown, and required, only when Lead Source is Partner (list `partner_nature`, shared with organizations and partner companies) |
+| Partner Company | 🔒 | 🔒 | Conditional: shown, and required, only when Lead Source is Partner (organization picker opened on Customer Type = Partner) |
 | Sales Stage | 🔒R | 🔒 | Logic: pipeline stage, filters, conversion sets it |
 | Next Followup Date | 🔒R | ⭐ | Same as leads |
 | Assigned to | 🔒R | 🔒 | Ownership |
@@ -163,7 +163,7 @@ Tally Serial Number, Contract Start / End Date, Renewal Reminder Date, Descripti
 
 ## Implementation steps
 
-1. **Defaults** (`formConfig.defaults.ts`): split `req` into `lock` (🔒, hard) and `req` (⭐, default `isRequired` only). The seed already re-syncs `isCoreLocked` on existing rows (`formConfig.seed.ts`).
+1. **Defaults** (`formConfig.defaults.ts`): split `req` into `lock` (🔒, hard) and `req` (⭐, default `isRequired` only). The seed already re-syncs `isCoreLocked` on existing rows (`formConfig.seed.ts`). When a release locks a field that was free, the seed also resets its `isRequired` to the default and clears `convertIsRequired` (an admin can't turn a locked field's Required off, so an earlier choice would stick; lock-only fields such as Referred By are required by their own rule only). A core-locked Convert Lead input is put back on Convert Lead (`isVisibleInConvert`).
 2. **Validators**: make every ⭐ field optional in its module validator (`lead.validator.ts`, `organization.validator.ts`, …) and let `checkModulePayload` enforce `isRequired` from the form config. This includes the lead-conversion schema (`lead.validator.ts` ~L120–156), which re-requires organization and opportunity fields.
 3. **Database**: these ⭐ fields are `NOT NULL` columns today and need a migration to become nullable:
    - Lead: `mobile`, `leadSource`, `productCategoryJson`, `remarks`, `leadType`, `nextFollowupDate`

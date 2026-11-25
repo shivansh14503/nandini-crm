@@ -14,7 +14,7 @@ const opportunity = opportunityFormSchema.shape;
 const opportunityRules = z.object({
     productCategory: opportunity.productCategory,
     referredBy: opportunity.referredBy,
-    opportunityNatureOfPartner: opportunity.natureOfPartner,
+    opportunityPartnerCompany: opportunity.partnerCompany,
     type: opportunity.type,
     nextFollowupDate: opportunity.nextFollowupDate,
     nextFollowupTime: opportunity.nextFollowupTime,
@@ -65,9 +65,9 @@ export const convertLeadFormSchema = z.object({
     // Off when the deal already has an opportunity: the lead converts into the contact and organization only.
     createOpportunity: z.boolean(),
     productCategory: deferred<'productCategory'>(),
-    // Shown, and required, by the opportunity's Lead Source: CA / Reference → Referred By, Partner → Nature of Partner.
+    // Shown, and required, by the opportunity's Lead Source: CA / Reference → Referred By, Partner → Partner Company.
     referredBy: deferred<'referredBy'>(),
-    opportunityNatureOfPartner: deferred<'opportunityNatureOfPartner'>(),
+    opportunityPartnerCompany: deferred<'opportunityPartnerCompany'>(),
     type: deferred<'type'>(),
     nextFollowupDate: deferred<'nextFollowupDate'>(),
     nextFollowupTime: deferred<'nextFollowupTime'>(),
@@ -92,8 +92,8 @@ export const convertLeadFormSchema = z.object({
         const parsed = opportunityRules.safeParse(values);
         for (const issue of parsed.error?.issues ?? []) ctx.addIssue({ code: 'custom', message: issue.message, path: issue.path });
         const sourceIssues = leadSourceDetailIssues(
-            { leadSource: values.opportunityLeadSource, referredBy: values.referredBy, natureOfPartner: values.opportunityNatureOfPartner },
-            { natureOfPartner: 'opportunityNatureOfPartner' },
+            { leadSource: values.opportunityLeadSource, referredBy: values.referredBy, partnerCompany: values.opportunityPartnerCompany },
+            { partnerCompany: 'opportunityPartnerCompany' },
         );
         for (const issue of sourceIssues) ctx.addIssue({ code: 'custom', message: issue.message, path: [issue.path] });
     },
@@ -140,7 +140,7 @@ export const CONVERT_FIELD_NAMES = {
         productCategory: 'productCategory',
         organizationName: 'organizationName',
         referredBy: 'referredBy',
-        natureOfPartner: 'opportunityNatureOfPartner',
+        partnerCompany: 'opportunityPartnerCompany',
         type: 'type',
         leadSource: 'opportunityLeadSource',
         nextFollowupDate: 'nextFollowupDate',

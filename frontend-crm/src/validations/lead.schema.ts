@@ -50,9 +50,9 @@ export const leadFormSchema = z.object({
     nextFollowupTime: optionalString,
     description: optionalText('Description', L.longText),
     noOfEmployee: optionalString,
-    // Required for Lead Source CA / Reference; Nature of Partner for Lead Source Partner (below).
+    // Required for Lead Source CA / Reference; Partner Company for Lead Source Partner (below).
     referredBy: optionalString,
-    natureOfPartner: optionalString,
+    partnerCompany: optionalString,
 
     // Billing Address
     primaryAddress: optionalText('Billing Street', L.address),
@@ -77,7 +77,7 @@ export const leadFormSchema = z.object({
     refinePostalCodeForCountry(ctx, 'primaryPostalCode', data.primaryPostalCode, data.primaryCountry);
     refinePostalCodeForCountry(ctx, 'otherPostalCode', data.otherPostalCode, data.otherCountry);
 
-    // The Lead Source's follow-up field: Referred By (CA, Reference) or Nature of Partner (Partner).
+    // The Lead Source's follow-up field: Referred By (CA, Reference) or Partner Company (Partner).
     for (const issue of leadSourceDetailIssues(data)) {
         ctx.addIssue({ code: z.ZodIssueCode.custom, message: issue.message, path: [issue.path] });
     }

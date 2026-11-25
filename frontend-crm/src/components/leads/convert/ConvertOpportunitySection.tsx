@@ -12,6 +12,7 @@ import {
     RhfSelect,
     RhfTextField,
     useLeadSourceDetails,
+    PartnerCompanyLookup,
 } from '@/components/forms';
 import { OPPORTUNITY_TYPES } from '@/types/opportunity.types';
 import {
@@ -22,7 +23,6 @@ import {
 import { CONVERT_FIELD_NAMES, type ConvertLeadFormValues } from '@/validations';
 import { FormConfigProvider } from '@/context/FormConfigContext';
 import { useDropdownOptionsGetter } from '@/hooks/queries/useFormConfigs';
-import { NATURE_OF_PARTNER_OPTIONS } from '@/types/partner.types';
 
 type F = ConvertLeadFormValues;
 
@@ -38,11 +38,11 @@ export function ConvertOpportunitySection() {
     const getOptions = useDropdownOptionsGetter();
     const { control, resetField } = useFormContext<F>();
     const createOpportunity = useWatch({ control, name: 'createOpportunity' });
-    // The opportunity's Lead Source asks for Referred By (CA, Reference) or a Nature of Partner (Partner), as on its form.
-    const { needsReferredBy, showReferredBy, showNatureOfPartner } = useLeadSourceDetails<F>({
+    // The opportunity's Lead Source asks for Referred By (CA, Reference) or a Partner Company (Partner), as on its form.
+    const { needsReferredBy, showReferredBy, showPartnerCompany } = useLeadSourceDetails<F>({
         leadSource: 'opportunityLeadSource',
         referredBy: 'referredBy',
-        natureOfPartner: 'opportunityNatureOfPartner',
+        partnerCompany: 'opportunityPartnerCompany',
     });
 
     // Skipped: back to the values taken from the lead, so a hidden field (e.g. a past follow-up date) can't block saving.
@@ -70,16 +70,8 @@ export function ConvertOpportunitySection() {
                     referredBy: showReferredBy ? (
                         <RhfLookup<F> name="referredBy" label="Referred By" required={needsReferredBy} hint="Partner, agent, or client" placeholder="Referred by partner or person..." />
                     ) : null,
-                    // Lead Source Partner only, and then required.
-                    natureOfPartner: showNatureOfPartner ? (
-                        <RhfSelect<F>
-                            name="opportunityNatureOfPartner"
-                            label="Nature of Partner"
-                            required
-                            options={getOptions('partner_nature', [...NATURE_OF_PARTNER_OPTIONS])}
-                            placeholder="Select Nature of Partner"
-                        />
-                    ) : null,
+                    // Lead Source Partner only, and then required: a partner organization (picker opens on Customer Type = Partner).
+                    partnerCompany: showPartnerCompany ? <PartnerCompanyLookup<F> name="opportunityPartnerCompany" /> : null,
                     type: (
                         <RhfSelect<F> name="type" label="Type" required hint="Nature of deal" options={getOptions('opportunity_type', OPPORTUNITY_TYPES)} placeholder="Select Type" />
                     ),

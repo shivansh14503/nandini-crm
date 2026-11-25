@@ -67,7 +67,7 @@ const DEFAULT_OPPORTUNITY_FORM: OpportunityFormData = {
     contactNumber: '',
     contactEmail: '',
     referredBy: '',
-    natureOfPartner: '',
+    partnerCompany: '',
     type: 'New Business',
     salesStage: 'Qualification',
     leadSource: 'Website Enquiry',

@@ -39,7 +39,7 @@ export interface OpportunityFormData {
     /** Shown, and required, when Lead Source is CA or Reference. */
     referredBy?: string;
     /** Shown, and required, when Lead Source is Partner (partner_nature, as on partner organizations). */
-    natureOfPartner?: string;
+    partnerCompany?: string;
 
     // Basic Details - Row 5
     type: string;

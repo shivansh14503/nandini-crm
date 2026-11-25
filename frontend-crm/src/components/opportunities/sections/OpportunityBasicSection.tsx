@@ -27,6 +27,7 @@ import {
     PICKED_CONTACT_HINT,
     usePickedContactLocks,
     useLeadSourceDetails,
+    PartnerCompanyLookup,
 } from '@/components/forms';
 import { useContacts, useOrganizations } from '@/hooks/queries';
 import type { Contact } from '@/types/contact.types';
@@ -47,7 +48,6 @@ import {
     FOLLOWUP_TYPES,
 } from '@/types/lead.types';
 import { useDropdownOptionsGetter } from '@/hooks/queries/useFormConfigs';
-import { NATURE_OF_PARTNER_OPTIONS } from '@/types/partner.types';
 import { useFormMode } from '@/context/FormModeContext';
 import { FieldGlow, OPPORTUNITY_CUSTOMER_RESPONSE_CATEGORY, OPPORTUNITY_CUSTOMER_RESPONSES, useFollowUpDecision } from '@/components/forms/FollowUpDecision';
 
@@ -80,9 +80,9 @@ export function OpportunityBasicSection({ notify, onDecisionPendingChange }: Opp
     const { mode } = useFormMode();
     const isEdit = mode === 'edit';
     const editable = mode !== 'view';
-    // Lead Source CA / Reference asks who referred the deal, Partner for the partner's Nature of Partner (as on leads).
-    const { needsReferredBy, showReferredBy, showNatureOfPartner } = useLeadSourceDetails<F>(
-        { leadSource: 'leadSource', referredBy: 'referredBy', natureOfPartner: 'natureOfPartner' },
+    // Lead Source CA / Reference asks who referred the deal, Partner for the partner organization it came through (as on leads).
+    const { needsReferredBy, showReferredBy, showPartnerCompany } = useLeadSourceDetails<F>(
+        { leadSource: 'leadSource', referredBy: 'referredBy', partnerCompany: 'partnerCompany' },
         { readOnly: !editable },
     );
 
@@ -235,16 +235,8 @@ export function OpportunityBasicSection({ notify, onDecisionPendingChange }: Opp
                     />
                 )}
 
-                {/* Lead Source Partner only, and then required: the Organization form's Nature of Partner list. */}
-                {showNatureOfPartner && (
-                    <RhfSelect<F>
-                        name="natureOfPartner"
-                        label="Nature of Partner"
-                        required
-                        options={getOptions('partner_nature', [...NATURE_OF_PARTNER_OPTIONS])}
-                        placeholder="Select Nature of Partner"
-                    />
-                )}
+                {/* Lead Source Partner only, and then required: a partner organization (picker opens on Customer Type = Partner). */}
+                {showPartnerCompany && <PartnerCompanyLookup<F> name="partnerCompany" />}
 
                 {/* Starts empty. Picks the CRM user who brought the deal in (stored by username, like Assigned to); an outside referrer can still be typed. */}
                 <RhfLookup<F, 'user'>

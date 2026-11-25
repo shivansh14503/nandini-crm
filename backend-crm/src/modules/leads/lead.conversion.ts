@@ -173,7 +173,7 @@ function opportunityPayload(values: ConvertLeadInput, lead: LeadRow, organizatio
         contactNumber: contact?.mobile,
         contactEmail: primaryEmail,
         referredBy: values.referredBy,
-        natureOfPartner: values.opportunityNatureOfPartner,
+        partnerCompany: values.opportunityPartnerCompany,
         type: values.type,
         salesStage: NEW_OPPORTUNITY_STAGE,
         leadSource: values.opportunityLeadSource,
@@ -235,11 +235,11 @@ export async function convertLead(leadId: string, body: unknown, user: AuthUser)
             !existingOrganization && isPartnerCustomerType(values.customerType) && !values.natureOfPartner
                 ? [{ message: NATURE_OF_PARTNER_REQUIRED_MESSAGE, path: ['natureOfPartner'] }]
                 : [];
-        // The opportunity's Lead Source asks for its Referred By (CA, Reference) or Nature of Partner (Partner), as on its form.
+        // The opportunity's Lead Source asks for its Referred By (CA, Reference) or Partner Company (Partner), as on its form.
         const leadSourceIssues: ApiFieldError[] = values.createOpportunity
             ? leadSourceDetailIssues(
-                  { leadSource: values.opportunityLeadSource, referredBy: values.referredBy, natureOfPartner: values.opportunityNatureOfPartner },
-                  { natureOfPartner: 'opportunityNatureOfPartner' },
+                  { leadSource: values.opportunityLeadSource, referredBy: values.referredBy, partnerCompany: values.opportunityPartnerCompany },
+                  { partnerCompany: 'opportunityPartnerCompany' },
               )
             : [];
         throwFieldIssues([

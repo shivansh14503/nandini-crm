@@ -145,7 +145,7 @@ function leadsLayout(): DrawerLayoutDocument {
                         f('b-owner', 'assignedTo', 'standard'),
                         f('b-referred', 'referredBy', 'standard'),
                         // Lead Source Partner only (empty otherwise, so hidden).
-                        f('b-npartner', 'natureOfPartner', 'standard'),
+                        f('b-partner', 'partnerCompany', 'standard'),
                     ],
                 },
                 {
@@ -343,7 +343,7 @@ function opportunitiesLayout(): DrawerLayoutDocument {
                     f('b-source', 'leadSource', 'standard'),
                     f('b-referred', 'referredBy', 'standard'),
                     // Lead Source Partner only (empty otherwise, so hidden).
-                    f('b-npartner', 'natureOfPartner', 'standard'),
+                    f('b-partner', 'partnerCompany', 'standard'),
                     f('b-owner', 'assignedTo', 'standard'),
                 ]),
                 sec('s-billing', 'BILLING & COMMISSION', 'subtle', 2, [
