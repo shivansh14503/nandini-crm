@@ -10,12 +10,14 @@ import type { CrmUser } from '@/types/user.types';
 import { CRM_USER_DEPARTMENTS } from '@/types/user.types';
 import type { ExtendedOrganization } from '@/types/organization.types';
 import type { Contact } from '@/types/contact.types';
+import type { Opportunity } from '@/types/opportunity.types';
 import type { NatureOfCallItem } from '@/types/ticket.types';
 import type { PartnerCompany, PartnerCompanyContact } from '@/types/partner.types';
 import { CUSTOMER_TYPES, ENTITY_TYPES, NATURE_OF_BUSINESS } from '@/components/organizations/constants';
 import { findCrmUser } from '@/services/masterData.store';
 import { getCountryNameByCode } from '@/data/addressMaster';
 import { formatDateTime } from '@/utils/date';
+import { opportunityLabel } from '@/utils/opportunityLabel';
 import { splitMulti } from '@/types/lookup.types';
 import type { LookupColumn, LookupFilterField, LookupSearchPredicate } from '@/types/lookup.types';
 
@@ -252,6 +254,39 @@ export const CONTACT_LOOKUP_PRESET: LookupPreset<ContactLookupRow> = {
         const owners = splitMulti(f.assignedTo);
         if (owners.length && !owners.includes(c.assignedTo)) return false;
         return true;
+    },
+};
+
+// ─── Opportunities ────────────────────────────────────────────────────────────
+
+export const OPPORTUNITY_LOOKUP_PRESET: LookupPreset<Opportunity> = {
+    title: 'Opportunity Search',
+    subtitle: 'Select an opportunity. Click a row to choose it.',
+    searchPlaceholder: 'Name, organization, contact or number',
+    rowsPerPage: 10,
+    emptyMessage: 'No opportunities found matching search criteria',
+    columns: [
+        // Only while opportunity numbers are shown (OpportunityLookupModal drops it otherwise).
+        { id: 'opportunityCode', label: 'Number', minWidth: 120, sortable: true },
+        { id: 'opportunityName', label: 'Name', minWidth: 220, sortable: true, getValue: opportunityLabel, render: (o) => <PrimaryText>{opportunityLabel(o)}</PrimaryText> },
+        { id: 'organizationName', label: 'Organization', minWidth: 200, sortable: true },
+        { id: 'contact', label: 'Contact', minWidth: 150, sortable: true },
+        { id: 'salesStage', label: 'Sales Stage', minWidth: 140, sortable: true },
+        { id: 'assignedTo', label: 'Assigned to', minWidth: 140, sortable: true, getValue: (o) => userName(o.assignedTo) },
+    ],
+    filterFields: [
+        { key: 'organizationName', label: 'Organization Name', type: 'text', width: 4, placeholder: 'Organization...' },
+        // Options come from the form configuration and the user directory; OpportunityLookupModal fills them in.
+        { key: 'salesStage', label: 'Sales Stage', type: 'multiselect', width: 4, options: [] },
+        { key: 'assignedTo', label: 'Assigned to', type: 'multiselect', width: 4, options: [] },
+    ],
+    searchPredicate: (o, f, q) => {
+        if (!containsText(o.organizationName, f.organizationName?.trim())) return false;
+        const stages = splitMulti(f.salesStage);
+        if (stages.length && !stages.includes(o.salesStage)) return false;
+        const owners = splitMulti(f.assignedTo);
+        if (owners.length && !owners.includes(o.assignedTo)) return false;
+        return includesQuery(q, opportunityLabel(o), o.organizationName, o.contact, o.opportunityCode);
     },
 };
 

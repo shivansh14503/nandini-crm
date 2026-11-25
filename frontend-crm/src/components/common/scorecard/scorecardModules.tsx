@@ -9,10 +9,12 @@ import PeopleOutlinedIcon from '@mui/icons-material/PeopleOutlined';
 import CategoryOutlinedIcon from '@mui/icons-material/CategoryOutlined';
 import ConfirmationNumberOutlinedIcon from '@mui/icons-material/ConfirmationNumberOutlined';
 import HandshakeOutlinedIcon from '@mui/icons-material/HandshakeOutlined';
+import HistoryEduOutlinedIcon from '@mui/icons-material/HistoryEduOutlined';
 import type { CrmModuleKey } from '@/types/formConfig.types';
 // Straight from the files (not the module barrels), so the registry never pulls in a list screen.
 import { OPPORTUNITY_CARD_AMOUNTS, useStageScorecard } from '../../opportunities/master/stageScorecard';
 import { QUOTATION_CARD_AMOUNTS, useQuoteStageScorecard } from '../../quotations/quoteStageScorecard';
+import { CONTRACT_CARD_AMOUNTS, useContractStatusScorecard } from '../../contracts/contractStatusScorecard';
 import type { DefaultScorecard, ScorecardAmount } from './scorecardItems';
 
 /**
@@ -26,7 +28,7 @@ export interface ScorecardModuleInfo {
     allIcon: React.ReactNode;
     /**
      * The list shows cards before an admin saves a scorecard: Leads its status buckets, Opportunities and
-     * Quotations their stage cards. The other lists show none until an admin switches their scorecard on.
+     * Quotations their stage cards, Contracts its status cards. The other lists show none until an admin switches their scorecard on.
      */
     builtInCards: boolean;
     /** Many cards: one row that scrolls sideways (see StatusSummaryCards' `singleRow`). */
@@ -60,6 +62,13 @@ export const SCORECARD_MODULES: Readonly<Record<CrmModuleKey, ScorecardModuleInf
     products: { allLabel: 'All Products', allIcon: <CategoryOutlinedIcon />, builtInCards: false, singleRow: false },
     tickets: { allLabel: 'All Tickets', allIcon: <ConfirmationNumberOutlinedIcon />, builtInCards: false, singleRow: false },
     'partner-companies': { allLabel: 'All Partner Companies', allIcon: <HandshakeOutlinedIcon />, builtInCards: false, singleRow: false },
+    contracts: {
+        allLabel: 'All Contracts',
+        allIcon: <HistoryEduOutlinedIcon />,
+        builtInCards: true,
+        singleRow: true,
+        amounts: CONTRACT_CARD_AMOUNTS as readonly ScorecardAmount<never>[],
+    },
 };
 
 /** The module's own totals, typed for its records. */
@@ -67,13 +76,15 @@ export const scorecardAmountsOf = <T,>(module: CrmModuleKey) => SCORECARD_MODULE
 
 /**
  * The per-option cards a list shows before an admin saves a scorecard (Opportunities and Quotations: one card per
- * stage), or null. Both stage hooks run every time (they only read the cached dropdown options), so the hook
+ * stage; Contracts: one per status), or null. Both stage hooks run every time (they only read the cached dropdown options), so the hook
  * order stays the same whichever module is asked for.
  */
 export function useDefaultScorecard(module: CrmModuleKey): DefaultScorecard | null {
     const opportunityStages = useStageScorecard();
     const quoteStages = useQuoteStageScorecard();
+    const contractStatuses = useContractStatusScorecard();
     if (module === 'opportunities') return opportunityStages;
     if (module === 'quotations') return quoteStages;
+    if (module === 'contracts') return contractStatuses;
     return null;
 }

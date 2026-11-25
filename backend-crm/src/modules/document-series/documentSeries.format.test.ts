@@ -56,6 +56,7 @@ describe('document numbers', () => {
     it('reproduces the original codes for modules without a series', () => {
         assert.equal(formatDocumentNumber(LEGACY_SETTINGS, legacyRule('lead'), fy, 42), 'LD-0042');
         assert.equal(formatDocumentNumber(LEGACY_SETTINGS, legacyRule('organization'), fy, 12345), 'ORG-12345');
+        assert.equal(formatDocumentNumber(LEGACY_SETTINGS, legacyRule('contract'), fy, 1), 'CTR-0001');
     });
 
     it('leaves out switched-off and blank parts with their separator', () => {

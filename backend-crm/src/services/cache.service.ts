@@ -83,5 +83,6 @@ export type CachedEntity =
     | 'quotations'
     | 'products'
     | 'tickets'
+    | 'contracts'
     | 'users'
     | 'partner-companies';

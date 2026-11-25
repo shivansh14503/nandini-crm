@@ -309,7 +309,7 @@ export function ScorecardsAdminView({ module }: { module: CrmModuleKey }) {
                         <Alert severity="info" sx={{ borderRadius: '10px', fontSize: '0.8rem' }}>
                             {module === 'leads'
                                 ? 'The Leads list shows its built-in cards (New, In Process, Converted and Lost). '
-                                : `The ${label} list shows its built-in cards, one per stage. `}
+                                : `The ${label} list shows its built-in cards, one per ${module === 'contracts' ? 'status' : 'stage'}. `}
                             Change any setting below to use your own cards instead.
                         </Alert>
                     )}

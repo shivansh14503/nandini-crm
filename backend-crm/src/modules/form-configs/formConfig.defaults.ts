@@ -19,6 +19,7 @@ export const CRM_MODULES = [
     'contacts',
     'products',
     'tickets',
+    'contracts',
     'partner-companies',
 ] as const;
 export type CrmModuleKey = (typeof CRM_MODULES)[number];
@@ -73,6 +74,7 @@ export const MODULE_TABS: Record<CrmModuleKey, { key: string; label: string }[]>
         { key: 'overview', label: 'Overview' },
         { key: 'partner_company', label: 'Partner Company' },
     ],
+    contracts: [{ key: 'overview', label: 'Overview' }],
     'partner-companies': [
         { key: 'company_info', label: 'Company Information' },
         { key: 'address', label: 'Address Information' },
@@ -565,6 +567,24 @@ export const DEFAULT_CATEGORIES: DefaultCategory[] = [
         options: ['Offsite Support', 'Onsite Support', 'Remote Support (AnyDesk/TeamViewer)', 'Phone Consultation'],
     },
 
+    // ── Contracts ──
+    { key: 'contract_title', label: 'Contract Title', module: 'contracts', options: ['Tally TSS', 'Tally On Cloud', 'Tally On AWS', 'Other'] },
+    {
+        key: 'contract_status',
+        label: 'Contract Status',
+        module: 'contracts',
+        description: "'Not Started' is the starting status; 'Expired' contracts are left out of Expiring Soon.",
+        options: withSystem(['Not Started', 'In Progress', 'Signed', 'Expired'], ['Not Started', 'Expired']),
+    },
+    {
+        key: 'contract_period',
+        label: 'Contract Period',
+        module: 'contracts',
+        description: "A period such as '2 Years' or '6 Months' sets the End Date from the Start Date.",
+        options: ['1 Year', '13 Months', 'Other'],
+    },
+    { key: 'contract_type', label: 'Contract Type', module: 'contracts', options: ['No of Visit', 'Remote Support'] },
+
     // ── Partner companies ──
     {
         key: 'partner_nature',
@@ -605,6 +625,7 @@ export const DEFAULT_SELECTED_OPTIONS: Readonly<Record<string, readonly string[]
     ticket_source: ['Call'],
     ticket_support_type: ['Free'],
     ticket_support_mode: ['Offsite Support'],
+    contract_status: ['Not Started'],
 };
 
 // ── Built-in field definitions ───────────────────────────────────────────────
@@ -886,6 +907,31 @@ const RAW_DEFAULT_FIELDS: DefaultField[] = [
     ...section('tickets', 'partner_company', 'Partner Company', [
         t('partnerCompany', 'Partner Company', { type: 'lookup' }),
         t('partnerCompanyContact', 'Partner Company Contact', { type: 'lookup' }),
+    ]),
+
+    // ── Contracts ──
+    ...section('contracts', 'overview', 'Contract Details', [
+        sel('contractTitle', 'Contract Title', 'contract_title', { req: true }),
+        sel('status', 'Status', 'contract_status', { req: true }),
+        t('contractValue', 'Contract Value', { type: 'amount', soft: true }),
+        t('assignedTo', 'Contract Manager', { type: 'lookup', req: true }),
+        t('organizationName', 'Organization Name', { type: 'lookup', req: true }),
+        t('contact', 'Contact Person', { type: 'lookup', req: true }),
+        t('opportunity', 'Opportunity', { type: 'lookup' }),
+        t('tallySerialNo', 'Tally Serial Number'),
+    ]),
+    ...section('contracts', 'overview', 'Term & Renewal', [
+        t('startDate', 'Contract Start Date', { type: 'date' }),
+        t('endDate', 'Contract End Date', { type: 'date' }),
+        sel('contractPeriod', 'Contract Period', 'contract_period', { soft: true }),
+        t('renewalReminderDate', 'Renewal Reminder Date', { type: 'datetime' }),
+        { key: 'contractType', label: 'Contract Type', type: 'multiselect', cat: 'contract_type', soft: true },
+    ]),
+    ...section('contracts', 'overview', 'Billing', [
+        t('billNumber', 'Bill Number', { soft: true }),
+        t('billDate', 'Bill Date', { type: 'date', soft: true }),
+        t('billAmount', 'Bill Amount', { type: 'amount', soft: true }),
+        t('description', 'Description', { type: 'textarea' }),
     ]),
 
     // ── Partner companies ──

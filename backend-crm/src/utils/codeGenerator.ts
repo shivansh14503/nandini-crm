@@ -11,6 +11,7 @@ export const ENTITY_CODE_PREFIX = {
     quotation: 'QT',
     product: 'PRD',
     ticket: 'TKT',
+    contract: 'CTR',
 } as const;
 
 export type EntityCodePrefix = (typeof ENTITY_CODE_PREFIX)[keyof typeof ENTITY_CODE_PREFIX];

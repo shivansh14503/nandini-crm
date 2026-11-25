@@ -13,6 +13,7 @@ import { leadStatusSummaryItems } from '@/components/leads/master/leadStatusCard
 import { ROUTES } from '@/config/constants';
 import {
     useContacts,
+    useContracts,
     useLeads,
     useOpportunities,
     useOrganizations,
@@ -35,6 +36,7 @@ const LIST_ROUTE: Record<CrmModuleKey, string> = {
     products: ROUTES.PRODUCTS,
     tickets: ROUTES.TICKETS,
     'partner-companies': ROUTES.PARTNER_COMPANIES,
+    contracts: ROUTES.CONTRACTS,
 };
 
 const NO_ROWS: readonly unknown[] = [];
@@ -56,6 +58,7 @@ function usePreviewRecords(module: CrmModuleKey): { rows: readonly unknown[]; lo
         products: useProducts(undefined, { enabled: module === 'products' }),
         tickets: useTickets(undefined, { enabled: module === 'tickets' }),
         'partner-companies': usePartnerCompanies(undefined, { enabled: module === 'partner-companies' }),
+        contracts: useContracts(undefined, { enabled: module === 'contracts' }),
     } satisfies Record<CrmModuleKey, unknown>;
     const query = queries[module];
     return { rows: (query.data as readonly unknown[] | undefined) ?? NO_ROWS, loading: query.isPending, failed: query.isError };
@@ -66,7 +69,7 @@ export interface ScorecardPreviewProps {
     configs: FormConfigsPayload | null;
     draft: ScorecardDraft;
     mode: DraftMode;
-    /** The screen's built-in stage cards (Opportunities, Quotations), for the "built-in" preview. */
+    /** The screen's built-in cards (Opportunities, Quotations, Contracts), for the "built-in" preview. */
     defaults: DefaultScorecard | null;
 }
 

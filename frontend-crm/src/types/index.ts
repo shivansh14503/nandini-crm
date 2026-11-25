@@ -9,5 +9,6 @@ export * from './quotation.types';
 export * from './user.types';
 export * from './lookup.types';
 export * from './ticket.types';
+export * from './contract.types';
 export * from './partner.types';
 export * from './formConfig.types';

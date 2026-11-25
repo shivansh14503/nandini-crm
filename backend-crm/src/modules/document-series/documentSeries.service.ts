@@ -136,6 +136,8 @@ async function codeTaken(tx: TransactionClient, module: SeriesModule, code: stri
             return (await tx.contact.count({ where: { contactCode: code } })) > 0;
         case 'ticket':
             return (await tx.ticket.count({ where: { ticketNumber: code } })) > 0;
+        case 'contract':
+            return (await tx.contract.count({ where: { contractNumber: code } })) > 0;
         case 'product':
             return (await tx.product.count({ where: { productCode: code } })) > 0;
     }

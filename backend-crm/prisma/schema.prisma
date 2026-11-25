@@ -79,7 +79,7 @@ model DocumentSeriesSettings {
 /// A series an admin added for a module, e.g. NIPL/L/26-27/1004. Series always include the financial year and
 /// restart every year. No row = the module keeps its original numbering (LD-0001, ...).
 model DocumentSeries {
-  /// lead | opportunity | quotation | organization | contact | ticket | product
+  /// lead | opportunity | quotation | organization | contact | ticket | contract | product
   module                 String   @id @db.NVarChar(30)
   modulePrefix           String   @db.NVarChar(10)
   includeCompanyPrefix   Boolean  @default(false)
@@ -185,6 +185,7 @@ model Organization {
   opportunities      Opportunity[]
   quotations         Quotation[]
   tickets            Ticket[]
+  contracts          Contract[]
   convertedLeads     Lead[]         @relation("LeadConvertedOrganization")
   billingCityRef     City?          @relation("OrganizationBillingCity", fields: [billingCityId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   shippingCityRef    City?          @relation("OrganizationShippingCity", fields: [shippingCityId], references: [id], onDelete: NoAction, onUpdate: NoAction)
@@ -272,6 +273,7 @@ model Contact {
   opportunities  Opportunity[]
   quotations     Quotation[]
   tickets        Ticket[]
+  contracts      Contract[]
   convertedLeads Lead[]        @relation("LeadConvertedContact")
 
   @@index([organizationId])
@@ -491,6 +493,7 @@ model Opportunity {
   contactRecord  Contact?              @relation(fields: [contactId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   lineItems      OpportunityLineItem[]
   quotations     Quotation[]
+  contracts      Contract[]
   convertedLeads Lead[]                @relation("LeadConvertedOpportunity")
 
   @@index([organizationId])
@@ -706,6 +709,72 @@ model Ticket {
   @@index([isDeleted, assignedTo, createdAt])
   /// Contact renames write the name through to linked tickets.
   @@index([contactId])
+}
+
+// â”€â”€ Contracts â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+
+/// Support contracts (Tally TSS, cloud, ...) sold to an organization, tracked through renewal.
+model Contract {
+  id             String @id @default(uuid()) @db.NVarChar(50)
+  contractNumber String @unique @db.NVarChar(50)
+
+  // Contract details
+  contractTitle    String   @db.NVarChar(100)
+  status           String   @default("Not Started") @db.NVarChar(30)
+  contractValue    Decimal? @db.Decimal(18, 2)
+  /// Contract Manager (username); row-level access is scoped on it.
+  assignedTo       String   @db.NVarChar(50)
+  /// Denormalized display names (organization uppercase); the ids are the links.
+  organizationName String   @db.NVarChar(200)
+  organizationId   String?  @db.NVarChar(50)
+  contact          String   @db.NVarChar(100)
+  contactId        String?  @db.NVarChar(50)
+  /// Label of the opportunity when it was picked (or text typed without picking one).
+  opportunity      String?  @db.NVarChar(200)
+  opportunityId    String?  @db.NVarChar(50)
+  tallySerialNo    String?  @db.NVarChar(30)
+
+  // Term & renewal
+  startDate           DateTime? @db.Date
+  endDate             DateTime? @db.Date
+  contractPeriod      String?   @db.NVarChar(100)
+  /// Local date-time from the form (`YYYY-MM-DDTHH:mm`), stored as datetime like Ticket.dueDate.
+  renewalReminderDate DateTime?
+  /// string[] as JSON.
+  contractTypeJson    String?   @db.NVarChar(Max)
+
+  // Billing
+  billNumber  String?   @db.NVarChar(30)
+  billDate    DateTime? @db.Date
+  billAmount  Decimal?  @db.Decimal(18, 2)
+  description String?   @db.NVarChar(2000)
+
+  /// Admin-defined custom field values `{ [fieldKey]: value }` (see FormFieldDefinition) as JSON.
+  customDataJson String? @db.NVarChar(Max)
+
+  createdBy String    @db.NVarChar(50)
+  updatedBy String?   @db.NVarChar(50)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  isDeleted Boolean   @default(false)
+  deletedAt DateTime?
+
+  organization      Organization? @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  contactRecord     Contact?      @relation(fields: [contactId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  opportunityRecord Opportunity?  @relation(fields: [opportunityId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([status])
+  @@index([assignedTo])
+  @@index([organizationId])
+  /// Contact renames write the name through to linked contracts.
+  @@index([contactId])
+  @@index([opportunityId])
+  /// "Expiring in 30 Days" and renewal reminders.
+  @@index([endDate])
+  @@index([renewalReminderDate])
+  @@index([isDeleted, createdAt])
+  /// Scoped lists ("mine" / row-level access) sorted by creation date.
+  @@index([isDeleted, assignedTo, createdAt])
 }
 
 // â”€â”€ Masters (reference data, seeded) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€

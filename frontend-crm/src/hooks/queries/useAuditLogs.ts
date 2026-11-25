@@ -12,6 +12,7 @@ export type AuditEntityType =
     | 'quotations'
     | 'products'
     | 'tickets'
+    | 'contracts'
     | 'partner-companies'
     /** Form Customization admin trail: the id is a module key, `shared`, or `all`. */
     | 'form-configs'

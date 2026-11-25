@@ -3,9 +3,9 @@ import { cacheService, type CachedEntity } from '../../services/cache.service.js
 import type { AuthUser } from '../../types/user.types.js';
 
 /**
- * Keeps denormalized display names in step with the record they point to. Contacts, opportunities, quotations
- * and tickets store the organization / contact name next to the id (lists sort and search on it), so a rename is
- * written through to every live linked row inside the renaming transaction.
+ * Keeps denormalized display names in step with the record they point to. Contacts, opportunities, quotations,
+ * tickets and contracts store the organization / contact name next to the id (lists sort and search on it), so a
+ * rename is written through to every live linked row inside the renaming transaction.
  */
 
 /** Live rows renamed per entity; entities with no linked rows are omitted. */
@@ -27,7 +27,14 @@ export async function propagateOrganizationName(
     const opportunities = await tx.opportunity.updateMany({ where, data });
     const quotations = await tx.quotation.updateMany({ where, data });
     const tickets = await tx.ticket.updateMany({ where, data });
-    return compact({ contacts: contacts.count, opportunities: opportunities.count, quotations: quotations.count, tickets: tickets.count });
+    const contracts = await tx.contract.updateMany({ where, data });
+    return compact({
+        contacts: contacts.count,
+        opportunities: opportunities.count,
+        quotations: quotations.count,
+        tickets: tickets.count,
+        contracts: contracts.count,
+    });
 }
 
 export async function propagateContactName(tx: TransactionClient, contactId: string, name: string, actor: AuthUser): Promise<NameSyncCounts> {
@@ -35,7 +42,8 @@ export async function propagateContactName(tx: TransactionClient, contactId: str
     const opportunities = await tx.opportunity.updateMany({ where, data: { contact: name, updatedBy: actor.username } });
     const quotations = await tx.quotation.updateMany({ where, data: { contact: name, updatedBy: actor.username } });
     const tickets = await tx.ticket.updateMany({ where, data: { contact: name, updatedBy: actor.username } });
-    return compact({ opportunities: opportunities.count, quotations: quotations.count, tickets: tickets.count });
+    const contracts = await tx.contract.updateMany({ where, data: { contact: name, updatedBy: actor.username } });
+    return compact({ opportunities: opportunities.count, quotations: quotations.count, tickets: tickets.count, contracts: contracts.count });
 }
 
 /** Clears the list / search / dashboard caches of the entities a rename touched (after commit). */

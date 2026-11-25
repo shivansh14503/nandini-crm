@@ -237,6 +237,29 @@ const SAMPLE_TICKET: Record<string, unknown> = {
     customFields: {},
 };
 
+const SAMPLE_CONTRACT: Record<string, unknown> = {
+    id: '__sample',
+    contractNumber: 'CTR-0042',
+    contractTitle: 'Tally TSS',
+    status: 'Signed',
+    contractValue: '13500',
+    assignedTo: 'Priya Mehta',
+    organizationName: 'BARKYARD PRIVATE LIMITED',
+    contact: 'Kavita Iyer',
+    opportunity: 'TallyPrime Silver renewal',
+    tallySerialNo: '780045612',
+    startDate: '2026-12-01',
+    endDate: '2027-12-31',
+    contractPeriod: '13 Months',
+    renewalReminderDate: '2027-12-16T11:00',
+    contractType: ['No of Visit', 'Remote Support'],
+    billNumber: 'INV-2026-0518',
+    billDate: '2026-12-01',
+    billAmount: '13500',
+    description: 'Yearly TSS with four on-site visits; remote support on call during office hours.',
+    customFields: {},
+};
+
 const SAMPLE_PARTNER: Record<string, unknown> = {
     id: '__sample',
     partnerName: 'Tally Solutions',
@@ -269,6 +292,7 @@ export const SAMPLE_RECORDS: Record<DrawerLayoutModule, Record<string, unknown>>
     quotations: SAMPLE_QUOTATION,
     products: SAMPLE_PRODUCT,
     tickets: SAMPLE_TICKET,
+    contracts: SAMPLE_CONTRACT,
     'partner-companies': SAMPLE_PARTNER,
 };
 

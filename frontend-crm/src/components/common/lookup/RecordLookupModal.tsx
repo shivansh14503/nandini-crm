@@ -8,18 +8,26 @@ import {
     getPartnerContacts,
 } from '@/services/masterData.store';
 import type { Contact } from '@/types/contact.types';
+import type { Opportunity } from '@/types/opportunity.types';
 import type { EntityLookupModalProps, LookupKind, LookupRecordMap } from '@/types/lookup.types';
 import type { ExtendedOrganization } from '@/types/organization.types';
 import { canonicalizeOrgName } from '@/utils/organizationName';
+import { opportunityLabel } from '@/utils/opportunityLabel';
 import { UserLookupModal } from './UserLookupModal';
 import { OrganizationLookupModal } from './OrganizationLookupModal';
 import { ContactLookupModal } from './ContactLookupModal';
-import { NatureOfCallLookupModal, PartnerCompanyLookupModal, PartnerCompanyContactLookupModal } from './PresetLookupModals';
+import {
+    NatureOfCallLookupModal,
+    OpportunityLookupModal,
+    PartnerCompanyLookupModal,
+    PartnerCompanyContactLookupModal,
+} from './PresetLookupModals';
 
 const LOOKUP_MODALS: { [K in LookupKind]: React.ComponentType<EntityLookupModalProps<LookupRecordMap[K]>> } = {
     user: UserLookupModal,
     organization: OrganizationLookupModal,
     contact: ContactLookupModal,
+    opportunity: OpportunityLookupModal,
     natureOfCall: NatureOfCallLookupModal,
     partnerCompany: PartnerCompanyLookupModal,
     partnerCompanyContact: PartnerCompanyContactLookupModal,
@@ -30,6 +38,7 @@ export const LOOKUP_DISPLAY_VALUE: { [K in LookupKind]: (record: LookupRecordMap
     user: (u) => u.username,
     organization: (o) => o.organizationName,
     contact: (c) => c.name,
+    opportunity: opportunityLabel,
     natureOfCall: (n) => n.name,
     partnerCompany: (p) => p.partnerName,
     partnerCompanyContact: (c) => c.name,
@@ -49,6 +58,7 @@ const findByCanonicalOrgName = (organizations: ExtendedOrganization[], value: st
 export interface LookupRecordPools {
     organizations?: ExtendedOrganization[];
     contacts?: Contact[];
+    opportunities?: Opportunity[];
 }
 
 /** Resolves a typed / autocompleted field value back to its record (exact, case-insensitive match). */
@@ -66,6 +76,8 @@ export function findLookupRecord<K extends LookupKind>(
                 findByCanonicalOrgName(pools.organizations ?? [], value)) as LookupRecordMap[K] | undefined;
         case 'contact':
             return findByLabel(pools.contacts ?? [], (c) => c.name, value) as LookupRecordMap[K] | undefined;
+        case 'opportunity':
+            return findByLabel(pools.opportunities ?? [], opportunityLabel, value) as LookupRecordMap[K] | undefined;
         case 'natureOfCall':
             return findByLabel(getNatureOfCalls(), (n) => n.name, value) as LookupRecordMap[K] | undefined;
         case 'partnerCompany':

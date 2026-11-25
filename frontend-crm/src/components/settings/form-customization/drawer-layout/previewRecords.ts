@@ -1,6 +1,7 @@
 import { useMemo } from 'react';
 import type { DrawerLayoutModule } from '@/lib/drawer-layout';
 import { usePaginatedContacts } from '@/hooks/queries/useContacts';
+import { usePaginatedContracts } from '@/hooks/queries/useContracts';
 import { usePaginatedLeads } from '@/hooks/queries/useLeads';
 import { usePaginatedOpportunities } from '@/hooks/queries/useOpportunities';
 import { usePaginatedOrganizations } from '@/hooks/queries/useOrganizations';
@@ -23,6 +24,7 @@ export function usePreviewRecords(module: DrawerLayoutModule): AnyRecord[] {
         quotations: usePaginatedQuotations(page, on('quotations')),
         products: usePaginatedProducts(page, on('products')),
         tickets: usePaginatedTickets(page, on('tickets')),
+        contracts: usePaginatedContracts(page, on('contracts')),
         'partner-companies': usePaginatedPartnerCompanies(page, on('partner-companies')),
     };
     const rows = lists[module].data?.data;
@@ -38,6 +40,7 @@ const NUMBER_FIELD: Partial<Record<DrawerLayoutModule, string>> = {
     quotations: 'quotationCode',
     products: 'productCode',
     tickets: 'ticketNumber',
+    contracts: 'contractNumber',
 };
 
 /** "Rohan Sharma · LD-00042" for the picker. */

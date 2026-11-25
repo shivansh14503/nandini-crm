@@ -3,6 +3,7 @@ import { Box } from '@mui/material';
 import ApartmentIcon from '@mui/icons-material/Apartment';
 import ConfirmationNumberOutlinedIcon from '@mui/icons-material/ConfirmationNumberOutlined';
 import HandshakeOutlinedIcon from '@mui/icons-material/HandshakeOutlined';
+import HistoryEduOutlinedIcon from '@mui/icons-material/HistoryEduOutlined';
 import Inventory2OutlinedIcon from '@mui/icons-material/Inventory2Outlined';
 import PersonOutlinedIcon from '@mui/icons-material/PersonOutlined';
 import RequestQuoteOutlinedIcon from '@mui/icons-material/RequestQuoteOutlined';
@@ -22,6 +23,7 @@ export const SEARCH_CATEGORY_META: Record<
     organizations: { label: 'Organizations', singular: 'Organization', Icon: ApartmentIcon, listHref: '/organizations', color: MODULE_COLORS.organizations },
     contacts: { label: 'Contacts', singular: 'Contact', Icon: PersonOutlinedIcon, listHref: '/contacts', color: MODULE_COLORS.contacts },
     tickets: { label: 'Tickets', singular: 'Ticket', Icon: ConfirmationNumberOutlinedIcon, listHref: '/tickets', color: MODULE_COLORS.tickets },
+    contracts: { label: 'Contracts', singular: 'Contract', Icon: HistoryEduOutlinedIcon, listHref: '/contracts', color: MODULE_COLORS.contracts },
     products: { label: 'Products', singular: 'Product', Icon: Inventory2OutlinedIcon, listHref: '/products', color: MODULE_COLORS.products },
     partnerCompanies: { label: 'Partner Companies', singular: 'Partner Company', Icon: HandshakeOutlinedIcon, listHref: '/partner-companies', color: MODULE_COLORS.partnerCompanies },
 };

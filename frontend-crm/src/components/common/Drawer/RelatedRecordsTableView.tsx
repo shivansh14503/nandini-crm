@@ -17,7 +17,7 @@ import SearchIcon from '@mui/icons-material/Search';
 import AssignmentOutlinedIcon from '@mui/icons-material/AssignmentOutlined';
 import ConfirmationNumberOutlinedIcon from '@mui/icons-material/ConfirmationNumberOutlined';
 import PeopleOutlinedIcon from '@mui/icons-material/PeopleOutlined';
-import DescriptionOutlinedIcon from '@mui/icons-material/DescriptionOutlined';
+import HistoryEduOutlinedIcon from '@mui/icons-material/HistoryEduOutlined';
 import HistoryOutlinedIcon from '@mui/icons-material/HistoryOutlined';
 import PersonAddAlt1OutlinedIcon from '@mui/icons-material/PersonAddAlt1Outlined';
 import GroupsOutlinedIcon from '@mui/icons-material/GroupsOutlined';
@@ -47,6 +47,7 @@ import { useQuotationColumns } from '@/components/quotations/quotationColumns';
 import { useOrganizationColumns } from '@/components/organizations/organizationColumns';
 import { useContactColumns } from '@/components/contacts/master/contactColumns';
 import { useTicketColumns } from '@/components/tickets/master/ticketColumns';
+import { useContractColumns } from '@/components/contracts/contractColumns';
 import { useProductColumns } from '@/components/products/master/productColumns';
 import type { Product } from '@/types/product.types';
 import { RecordLink } from '../RecordLink';
@@ -96,6 +97,8 @@ function relatedRecordHref(moduleKey: string, row: RelatedRow): string | undefin
             return id ? ROUTES.CONTACT_DETAIL(id) : undefined;
         case 'tickets':
             return id ? ROUTES.TICKET_DETAIL(id) : undefined;
+        case 'contracts':
+            return id ? ROUTES.CONTRACT_DETAIL(id) : undefined;
         case 'products':
             // Line-item rows carry their own id; the catalogue product is `productId`.
             return row.productId ? ROUTES.PRODUCT_DETAIL(String(row.productId)) : undefined;
@@ -138,7 +141,7 @@ function getModuleIcon(moduleKey: string): React.ReactNode {
         case 'contacts':
             return <PeopleOutlinedIcon sx={{ fontSize: 17 }} />;
         case 'contracts':
-            return <DescriptionOutlinedIcon sx={{ fontSize: 17 }} />;
+            return <HistoryEduOutlinedIcon sx={{ fontSize: 17 }} />;
         case 'history':
             return <HistoryOutlinedIcon sx={{ fontSize: 17 }} />;
         case 'leads':
@@ -271,19 +274,6 @@ function getColumnsForModule(moduleKey: string): DataTableColumn<RelatedRow>[] {
                 { id: 'assignedTo', label: 'Assigned User', minWidth: 140, sortable: true, accessor: 'assignedTo' },
             ];
 
-        case 'contracts':
-            return [
-                { id: 'contractNumber', label: 'Contract Number', minWidth: 150, sortable: true, render: (r) => primary(r, r.contractNumber, true) },
-                { id: 'contractTitle', label: 'Contract Title', minWidth: 200, sortable: true, accessor: 'contractTitle' },
-                { id: 'organizationName', label: 'Organization Name', minWidth: 190, sortable: true, accessor: 'organizationName' },
-                { id: 'contractManager', label: 'Contract Manager', minWidth: 150, sortable: true, accessor: 'contractManager' },
-                { id: 'contractValue', label: 'Contract Value', minWidth: 140, sortable: true, render: (r) => formatCurrency(r.contractValue) },
-                { id: 'status', label: 'Status', minWidth: 120, sortable: true, render: (r) => renderStatusPill(r.status) },
-                { id: 'contractEndDate', label: 'Contract End Date', minWidth: 150, sortable: true, accessor: 'contractEndDate' },
-                { id: 'contractPeriod', label: 'Contract Period', minWidth: 140, sortable: true, accessor: 'contractPeriod' },
-                { id: 'dateCreated', label: 'Date Created', minWidth: 130, sortable: true, accessor: 'dateCreated' },
-            ];
-
         case 'history':
             return [
                 { id: 'subject', label: 'Subject', minWidth: 210, sortable: true, render: (r) => primary(r, r.subject) },
@@ -402,6 +392,7 @@ export function RelatedRecordsTableView({
         organizations: useOrganizationColumns(openRecord),
         contacts: useContactColumns(openRecord, { enabled: open && moduleKey === 'contacts' }),
         tickets: useTicketColumns(openRecord, now),
+        contracts: useContractColumns(openRecord),
         products: useProductColumns(openRecord, catalogueProductId),
     };
     const listPageColumns = moduleColumns[moduleKey] as DataTableColumn<RelatedRow>[] | undefined;

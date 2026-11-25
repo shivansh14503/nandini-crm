@@ -103,7 +103,7 @@ export function buildUndoPatch(plans: UndoFieldPlan[], record: Record<string, un
 
 // ── What an entry offers ────────────────────────────────────────────────────
 
-/** CRM records an entry can be undone on or restored from (the 8 modules with soft delete). */
+/** CRM records an entry can be undone on or restored from (the 9 modules with soft delete). */
 export const RECORD_ENTITY_TYPES: ReadonlySet<string> = new Set([
     'Lead',
     'Contact',
@@ -112,6 +112,7 @@ export const RECORD_ENTITY_TYPES: ReadonlySet<string> = new Set([
     'Quotation',
     'Product',
     'Ticket',
+    'Contract',
     'PartnerCompany',
 ]);
 

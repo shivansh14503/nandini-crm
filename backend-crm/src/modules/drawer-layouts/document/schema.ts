@@ -14,7 +14,7 @@ import { z } from 'zod';
 export const DRAWER_LAYOUT_VERSION = 1;
 
 /** Modules whose record drawer is drawn from a layout (every CRM module). */
-export const DRAWER_LAYOUT_MODULES = ['leads', 'contacts', 'organizations', 'opportunities', 'quotations', 'products', 'tickets', 'partner-companies'] as const;
+export const DRAWER_LAYOUT_MODULES = ['leads', 'contacts', 'organizations', 'opportunities', 'quotations', 'products', 'tickets', 'contracts', 'partner-companies'] as const;
 export type DrawerLayoutModule = (typeof DRAWER_LAYOUT_MODULES)[number];
 
 /** Values a drawer can show that aren't form fields (set by the system, never typed in). */
@@ -26,6 +26,7 @@ export const SYSTEM_FIELDS: Record<DrawerLayoutModule, readonly string[]> = {
     quotations: ['quotationCode', 'grandTotal'],
     products: ['productCode'],
     tickets: ['ticketNumber', 'amcFlag', 'cloudFlag'],
+    contracts: ['contractNumber'],
     'partner-companies': [],
 };
 
@@ -38,6 +39,7 @@ export const ADDRESS_PREFIXES: Record<DrawerLayoutModule, readonly string[]> = {
     quotations: ['billing', 'shipping'],
     products: [],
     tickets: [],
+    contracts: [],
     'partner-companies': ['billing', 'shipping'],
 };
 
@@ -61,6 +63,7 @@ export const AVATAR_ICONS = [
     'quote',
     'box',
     'ticket',
+    'contract',
 ] as const;
 export type AvatarIcon = (typeof AVATAR_ICONS)[number];
 

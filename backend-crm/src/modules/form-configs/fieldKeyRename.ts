@@ -21,6 +21,7 @@ export const MODULE_TABLES: Record<CrmModuleKey, { table: string; lock: LockedEn
     contacts: { table: 'Contact', lock: 'contact' },
     products: { table: 'Product', lock: 'product' },
     tickets: { table: 'Ticket', lock: 'ticket' },
+    contracts: { table: 'Contract', lock: 'contract' },
     'partner-companies': { table: 'PartnerCompany', lock: 'partnerCompany' },
 };
 

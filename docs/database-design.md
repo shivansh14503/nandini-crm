@@ -1,7 +1,7 @@
 # Nandini CRM — Database Design
 
-> **Status:** living document, generated from `backend-crm/prisma/schema.prisma` and `prisma/migrations/` (58 migrations,
-> latest `20261123140000_drawer_layouts`). Update it in the same change as any schema migration.
+> **Status:** living document, generated from `backend-crm/prisma/schema.prisma` and `prisma/migrations/` (59 migrations,
+> latest `20261125042148_contracts`). Update it in the same change as any schema migration.
 > Related: [System design](system-design.md) · [API plan](api-plan.md) · [Build plan](build-plan.md)
 
 ---
@@ -12,7 +12,7 @@
 | --- | --- |
 | Engine | Microsoft SQL Server / Azure SQL (schema `dbo`) |
 | Access | Prisma 7 ORM through `@prisma/adapter-mssql`; a few raw SQL statements (`MERGE` for counters, `sp_getapplock` for locks, `OPENJSON`) |
-| Tables | **28** application tables + Prisma's `_prisma_migrations` |
+| Tables | **29** application tables + Prisma's `_prisma_migrations` |
 | Owned child tables ("sub tables") | 5: `EntityEmail`, `OpportunityLineItem`, `QuotationLineItem`, `PartnerCompanyContact`, `DropdownOption` |
 | Migrations | `backend-crm/prisma/migrations/` (`npm run db:migrate` in dev, `npm run db:deploy` in prod) |
 | Seed | `backend-crm/prisma/seed.ts` (`npm run seed`) |
@@ -22,7 +22,7 @@
 | Domain | Tables |
 | --- | --- |
 | Identity | `Users` (model `User`) |
-| CRM core | `Organization`, `Contact`, `Lead`, `Opportunity`, `Quotation`, `Ticket`, `Product` |
+| CRM core | `Organization`, `Contact`, `Lead`, `Opportunity`, `Quotation`, `Ticket`, `Contract`, `Product` |
 | Owned children | `EntityEmail`, `OpportunityLineItem`, `QuotationLineItem` |
 | Partner master | `PartnerCompany`, `PartnerCompanyContact` |
 | Reference masters | `NatureOfCall`, `Country`, `Subdivision`, `City` |
@@ -47,7 +47,7 @@ These rules come from SQL Server's constraints and apply across the schema:
 4. **No cascade cycles:** SQL Server rejects multiple cascade paths (error 1785). Every cross-entity foreign key is
    `ON DELETE NO ACTION / ON UPDATE NO ACTION`. Only owned children cascade from their single parent.
 5. **No scalar arrays:** string lists are stored as JSON in `NVARCHAR(MAX)` columns suffixed `Json`
-   (`productCategoryJson`, `communicationTypeJson`, `partnerCompaniesJson`, `emailAddressJson`). Repeating
+   (`productCategoryJson`, `communicationTypeJson`, `partnerCompaniesJson`, `emailAddressJson`, `contractTypeJson`). Repeating
    objects with their own fields (emails, line items) are child tables.
 6. **Custom fields:** each customisable entity has `customDataJson` = `{ "cf_fieldKey": value }`, described by
    `FormFieldDefinition` rows.
@@ -60,7 +60,7 @@ These rules come from SQL Server's constraints and apply across the schema:
    as DB defaults, because Prisma emits them without the `N` prefix; the API always sets them.
 10. **Money:** `DECIMAL(18,2)` (discount percentage on products `DECIMAL(5,2)`). Tax rate is a string (`"18%"`).
 11. **Dates:** `DATE` for calendar dates (follow-ups, quotation date, invoice date); `DATETIME2` for timestamps.
-    Ticket `dueDate` is a wall-clock time in `BUSINESS_TIMEZONE`.
+    Ticket `dueDate` and Contract `renewalReminderDate` are wall-clock times in `BUSINESS_TIMEZONE`.
 12. **Column widths** are ≥ the frontend's `FIELD_MAX_LENGTH` (`frontend-crm/src/config/fieldLimits.ts`).
 13. **Phones** are stored in E.164 (`+919811234567`), `NVARCHAR(20)`.
 
@@ -74,16 +74,19 @@ erDiagram
     Organization ||--o{ Opportunity : has
     Organization ||--o{ Quotation : has
     Organization ||--o{ Ticket : has
+    Organization ||--o{ Contract : has
     Contact ||--o{ EntityEmail : emailAddress
     Contact ||--o{ Opportunity : "contact for"
     Contact ||--o{ Quotation : "contact for"
     Contact ||--o{ Ticket : "raised by"
+    Contact ||--o{ Contract : "contact for"
     Lead ||--o{ EntityEmail : emailAddress
     Lead }o--o| Organization : "converted to"
     Lead }o--o| Contact : "converted to"
     Lead }o--o| Opportunity : "converted to"
     Opportunity ||--o{ OpportunityLineItem : lineItems
     Opportunity ||--o{ Quotation : quotes
+    Opportunity ||--o{ Contract : "contracted as"
     Quotation ||--o{ QuotationLineItem : lineItems
     Product ||--o{ OpportunityLineItem : "priced in"
     Product ||--o{ QuotationLineItem : "priced in"
@@ -266,7 +269,7 @@ Ticket categories: `name` (UNIQUE), `priority` (`High`/`Medium`/`Low`, suggests 
 | Table | Rows | Columns |
 | --- | --- | --- |
 | `DocumentSeriesSettings` | 0 or 1 (`id = 1`) | `companyPrefix`, `separator` (`/ - _ .` or none), `fyStartMonth` (4 = April), `fyFormat` (`YY-YY`, `YYYY-YY`, …) |
-| `DocumentSeries` | one per module that has a series | `module` PK (`lead`, `opportunity`, `quotation`, `organization`, `contact`, `ticket`, `product`), `modulePrefix`, `includeCompanyPrefix`, `includeFinancialYear`, `suffix`, `padLength`, `startingNumber`, `resetEachFinancialYear` |
+| `DocumentSeries` | one per module that has a series | `module` PK (`lead`, `opportunity`, `quotation`, `organization`, `contact`, `ticket`, `contract`, `product`), `modulePrefix`, `includeCompanyPrefix`, `includeFinancialYear`, `suffix`, `padLength`, `startingNumber`, `resetEachFinancialYear` |
 | `SequenceCounter` | one per counter | `prefix` PK = legacy prefix (`LD`, `QT`, …) or `LD@2026` for a counter that restarts each FY; `currentValue` |
 
 Example output: `NIPL/L/26-27/1004`. A module with no `DocumentSeries` row keeps `LD-0001` style codes, and the UI
@@ -300,7 +303,7 @@ Record side drawer layouts (Form Customization › Drawer Layout, migration `202
 
 | Table | Purpose | Key rules |
 | --- | --- | --- |
-| `DrawerLayout` | The admin's layout of one module's record drawer | PK `module` (any CRM module key: `leads`, `contacts`, `organizations`, `opportunities`, `quotations`, `products`, `tickets`, `partner-companies`); `layoutJson` = the layout document (header: title / subtitle fields, avatar, badges; per form tab key: sections → blocks), validated by `modules/drawer-layouts/document/schema.ts` on save; `version` (default 1, +1 per save, optimistic concurrency: a stale save is a 409); `updatedBy`, timestamps. No row = the built-in layout (`frontend-crm/src/components/common/Drawer/layout/defaultLayouts.ts`); Reset deletes the row |
+| `DrawerLayout` | The admin's layout of one module's record drawer | PK `module` (any CRM module key: `leads`, `contacts`, `organizations`, `opportunities`, `quotations`, `products`, `tickets`, `contracts`, `partner-companies`); `layoutJson` = the layout document (header: title / subtitle fields, avatar, badges; per form tab key: sections → blocks), validated by `modules/drawer-layouts/document/schema.ts` on save; `version` (default 1, +1 per save, optimistic concurrency: a stale save is a 409); `updatedBy`, timestamps. No row = the built-in layout (`frontend-crm/src/components/common/Drawer/layout/defaultLayouts.ts`); Reset deletes the row |
 | `DrawerPiece` | A section saved to the builder's Pieces library | `id` (uuid), `module`, `name`, `sectionJson` (one layout section), `createdBy`, `createdAt`; index `(module)`; at most 100 per module; deletes are permanent |
 
 Layouts and pieces reference fields by `fieldKey` (plus the module's system values, e.g. `leadCode`, `rating`) and
@@ -363,7 +366,7 @@ Per-user list filters: `username`, `module`, `kind` (`recent` — last 10 kept �
 
 Admin settings of a list screen's summary cards (Admin › List Scorecards), one row per module (PK `module`; no row =
 the screen's built-in cards: Leads' status buckets, Opportunities' one card per sales stage totalling Actual (Before Tax), Quotations' one card per quote stage totalling
-Grand Total; Contacts, Organizations, Products, Tickets and Partner Companies show no cards until an admin saves one). `fieldKey` (a single-choice `select` form field: one card per option), `currencyFieldKey` (optional
+Grand Total, Contracts' one card per contract status totalling Contract Value; Contacts, Organizations, Products, Tickets and Partner Companies show no cards until an admin saves one). `fieldKey` (a single-choice `select` form field: one card per option), `currencyFieldKey` (optional
 `amount` / `number` field totalled per card, or a `builtin.*` key for a total the list works out from the record's
 line items, e.g. `builtin.grandTotal`; null = the screen's default total), `optionsJson` (`[{ value, color: "#RRGGBB", hidden? }]` in card
 order; values must be options of the field's dropdown), `listViewColor` / `drawerViewColor` (colors also mark the
@@ -401,6 +404,24 @@ The saved ledger digests, for the Integrity panel (same migration). `id` (INT id
 `AUDIT_DIGEST_DIR`), `source` (`JOB` nightly | `MANUAL` "Save a digest now" | `VERIFY` start of a check), `createdBy`,
 `createdAt`. A digest of a block already saved is not saved again while its file exists. Verification reads the files,
 not these rows. Index `(createdAt)`.
+
+### 4.22 `Contract` (support)
+
+Support contracts (Support › Contracts, migration `20261125042148_contracts`). `contractNumber` (UNIQUE, series
+module `contract`, legacy prefix `CTR`), `contractTitle`, `status` (default `Not Started`), `contractValue`,
+`assignedTo` (the Contract Manager; row-level scope), `organizationName` (uppercase) + `organizationId`, `contact` +
+`contactId`, `opportunity` (the opportunity's label when picked, or typed text) + `opportunityId` → `Opportunity`,
+`tallySerialNo`, term (`startDate`, `endDate` DATE, `contractPeriod`, `renewalReminderDate` wall-clock DATETIME2),
+`contractTypeJson`, billing (`billNumber`, `billDate`, `billAmount`), `description`, `customDataJson`,
+audit/soft-delete. `contractValue` / `billAmount` are DECIMAL(18,2), returned as strings by the API. All three links
+are `NO ACTION`; organization and contact renames are written through.
+
+Dropdowns (`DropdownCategory.module = 'contracts'`): `contract_title`, `contract_status` (system options `Not Started`,
+`Expired`; default `Not Started`), `contract_period` (a value like `2 Years` / `13 Months` sets End Date from Start
+Date in the form), `contract_type` (multi-select, stored in `contractTypeJson`).
+
+Indexes: `status`, `assignedTo`, `organizationId`, `contactId`, `opportunityId`, `endDate`, `renewalReminderDate`,
+`(isDeleted, createdAt)`, `(isDeleted, assignedTo, createdAt)`.
 
 ## 5. Index strategy
 

@@ -14,6 +14,7 @@ export const NUMBER_FIELD_MODULE: Readonly<Record<string, SeriesModule>> = {
     accountCode: 'organization',
     contactCode: 'contact',
     ticketNumber: 'ticket',
+    contractNumber: 'contract',
     productCode: 'product',
 };
 

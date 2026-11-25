@@ -31,6 +31,7 @@ const RECORD_NUMBERS: Partial<Record<DrawerLayoutModule, { field: string; series
     quotations: { field: 'quotationCode', series: 'quotation' },
     products: { field: 'productCode', series: 'product' },
     tickets: { field: 'ticketNumber', series: 'ticket' },
+    contracts: { field: 'contractNumber', series: 'contract' },
 };
 
 /** Values the module's drawers must not show: the record number while Document Series hides it. */
