@@ -36,7 +36,7 @@ export const opportunityInputSchema = z.object({
     contactNumber: phone('Contact Number'),
     contactEmail: optionalEmail,
     referredBy: optionalText('Referred By', L.organizationName),
-    type: optionalText('Opportunity Type', L.option),
+    type: optionalText('Type', L.option),
     salesStage: requiredText('Sales Stage', L.option),
     leadSource: optionalText('Lead Source', L.option),
     leadGivenBy: optionalText('Lead Given By', L.organizationName),

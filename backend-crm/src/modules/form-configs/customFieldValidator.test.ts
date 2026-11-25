@@ -251,11 +251,11 @@ describe('configuredRequiredIssues (fields another form collects, e.g. Convert L
         field({ fieldKey: 'leadSource', label: 'Lead Source', isSystem: true, isRequired: false }),
         field({ fieldKey: 'commission', label: 'Commission', isSystem: true, isRequired: true, isVisibleInForm: false }),
     ]);
-    const paths = { type: 'opportunityType', leadSource: 'opportunityLeadSource', commission: 'commission' };
+    const paths = { type: 'type', leadSource: 'opportunityLeadSource', commission: 'commission' };
 
     it("reports required built-in fields under the other form's names", () => {
         const issues = configuredRequiredIssues(config, { type: '', leadSource: '' }, paths);
-        assert.deepEqual(issues, [{ path: ['opportunityType'], message: 'Type is required.' }]);
+        assert.deepEqual(issues, [{ path: ['type'], message: 'Type is required.' }]);
     });
 
     it('ignores optional and hidden fields, and passes filled values', () => {

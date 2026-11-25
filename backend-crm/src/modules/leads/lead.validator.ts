@@ -161,7 +161,7 @@ export const convertLeadSchema = z.object({
     createOpportunity: z.boolean().default(true),
     productCategory: stringList('Product Category', 30, L.option).default([]),
     referredBy: optionalText('Referred By', L.organizationName),
-    opportunityType: optionalText('Opportunity Type', L.option),
+    type: optionalText('Type', L.option),
     nextFollowupDate: optionalDate('Next Followup Date'),
     nextFollowupTime: optionalText('Next Followup Time', 20),
     followupType: optionalText('Followup Type', L.option),

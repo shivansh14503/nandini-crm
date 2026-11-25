@@ -205,7 +205,7 @@ export function OpportunityBasicSection({ notify, onDecisionPendingChange }: Opp
                     required
                     hint="Nature of deal"
                     options={getOptions('opportunity_type', OPPORTUNITY_TYPES)}
-                    placeholder="Select Opportunity Type"
+                    placeholder="Select Type"
                 />
 
                 <RhfSelect<F>

@@ -60,7 +60,7 @@ export function ConvertOpportunitySection() {
                     organizationName: <RhfTextField<F> name="organizationName" label="Organization name" required disabled hint="Taken from the organization section above" />,
                     referredBy: <RhfLookup<F> name="referredBy" label="Referred By" hint="Partner, agent, or client" placeholder="Referred by partner or person..." />,
                     type: (
-                        <RhfSelect<F> name="opportunityType" label="Type" required hint="Nature of deal" options={getOptions('opportunity_type', OPPORTUNITY_TYPES)} placeholder="Select Opportunity Type" />
+                        <RhfSelect<F> name="type" label="Type" required hint="Nature of deal" options={getOptions('opportunity_type', OPPORTUNITY_TYPES)} placeholder="Select Type" />
                     ),
                     leadSource: (
                         <RhfSelect<F> name="opportunityLeadSource" label="Lead Source" required options={getOptions('shared_lead_source', LEAD_SOURCES)} placeholder="Select Lead Source" />

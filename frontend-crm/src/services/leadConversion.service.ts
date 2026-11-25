@@ -139,7 +139,7 @@ export function buildConvertLeadDefaults(lead: Lead): ConvertLeadFormValues {
         createOpportunity: true,
         productCategory: lead.productCategory ?? [],
         referredBy: lead.referredBy ?? '',
-        opportunityType: 'New Business',
+        type: 'New Business',
         nextFollowupDate: lead.nextFollowupDate,
         nextFollowupTime: lead.nextFollowupTime ?? '',
         followupType: lead.followupType ?? '',
