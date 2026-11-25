@@ -389,7 +389,7 @@ where-builders and access rules (`morningSummary.service.ts` / `.sections.ts` / 
 
 | Section | Rows |
 | --- | --- |
-| Today's schedule | Planned activities (not Notes) the user owns or attends (not declined) that overlap today, all-day first, then by start; each Meeting / Call / other non-Task row has an **Add to Google Calendar** link |
+| Today's schedule | Planned activities (not Notes) the user owns or attends (not declined) that overlap today, all-day first, then by start; each Meeting / Call / other non-Task row has an **Add to Google Calendar** link; "and N more" opens that day's calendar agenda (`/calendar?view=agenda&date=<day>`) |
 | Overdue activities | The user's Planned activities (not Notes) that were over by the start of today: started before it and ended at or before it, or without an end. The exact complement of today's overlap rule, so an activity is never in both (one running past midnight stays in today's schedule); count + the 10 oldest + "and N more" |
 | Follow-ups due today | Open leads and opportunities assigned to the user with `nextFollowupDate` today, with the time when set; at most 50 per module listed, the full counts in the headline and "and N more leads / opportunities" links to that day's calendar agenda (`/calendar?view=agenda&date=<day>`, which shows the user's own follow-ups of the day; the lead / opportunity lists can't be filtered to them by URL) |
 | Overdue follow-ups | The same with `nextFollowupDate` before today; count + the 10 oldest + "and N more" (to `/leads`, `/opportunities`) |

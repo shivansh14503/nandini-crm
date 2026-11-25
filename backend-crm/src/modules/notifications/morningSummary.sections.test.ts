@@ -121,10 +121,10 @@ describe("today's schedule", () => {
         assert.equal(details, `Related to: LD-0012 Ramesh\n\nOpen in Nandini CRM: ${APP}/activities/timed`);
     });
 
-    it('links the rest of a capped list to the calendar', () => {
+    it("links the rest of a capped list to that day's calendar agenda", () => {
         const capped = section(buildMorningSummary(input({ today: { total: 60, rows } })), 'today');
         assert.equal(capped.total, 60);
-        assert.deepEqual(capped.more, [{ label: 'and 55 more', href: `${APP}/calendar` }]);
+        assert.deepEqual(capped.more, [{ label: 'and 55 more', href: `${APP}/calendar?view=agenda&date=2026-11-25` }]);
     });
 });
 

@@ -296,6 +296,8 @@ export function buildMorningSummary(input: MorningSummaryInput): MorningSummary 
     const sections: SummarySection[] = [];
     const activitiesUrl = crmUrl(appUrl, '/activities?mine=1');
 
+    // The day's agenda, so a link opened later in the day (or the next morning) still shows this day.
+    const dayAgendaUrl = crmUrl(appUrl, calendarDayPath(day));
     const todayRows = [...input.today.rows].sort(compareTodayRows);
     const todayTotal = Math.max(input.today.total, todayRows.length);
     if (todayTotal > 0) {
@@ -304,7 +306,7 @@ export function buildMorningSummary(input: MorningSummaryInput): MorningSummary 
             title: "Today's schedule",
             total: todayTotal,
             items: todayRows.map((row) => activityItem(row, input, todayWhen(row, day), true)),
-            more: todayTotal > todayRows.length ? [{ label: `and ${todayTotal - todayRows.length} more`, href: crmUrl(appUrl, '/calendar') }] : [],
+            more: todayTotal > todayRows.length ? [{ label: `and ${todayTotal - todayRows.length} more`, href: dayAgendaUrl }] : [],
         });
     }
 
@@ -321,7 +323,6 @@ export function buildMorningSummary(input: MorningSummaryInput): MorningSummary 
     }
 
     // The day's agenda lists every follow-up due that day; the lead / opportunity lists can't be filtered to it by URL.
-    const dayAgendaUrl = crmUrl(appUrl, calendarDayPath(day));
     const followups = [...input.followupsToday.rows].sort(compareFollowupsToday);
     const followupsToday = followupTotals(input.followupsToday, followups, { leads: dayAgendaUrl, opportunities: dayAgendaUrl });
     if (followupsToday.total > 0) {
