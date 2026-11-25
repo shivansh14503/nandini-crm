@@ -18,7 +18,7 @@ import { CommonFormLayout } from '../common/CommonFormLayout';
 import { type FormTabDefinition } from '../common/Drawer';
 import { useRhfForm } from '../forms/rhf';
 import { ROUTES } from '@/config/constants';
-import { opportunityFormSchema } from '../../validations';
+import { commissionIssues, opportunityFormSchema } from '../../validations';
 import type { OpportunityFormData } from '@/types/opportunity.types';
 import { opportunityService } from '../../services/opportunity.service';
 import type { RecordAuditStamp } from '../common/Drawer/RecordAuditFooter';
@@ -85,7 +85,8 @@ const DEFAULT_OPPORTUNITY_FORM: OpportunityFormData = {
     invoiceDate: '',
 
     // Commission Details
-    commission: 'Standard (10%)',
+    commission: 'No',
+    commissionAmount: '',
 
     // Document
     addDocument: 'No',
@@ -139,7 +140,10 @@ export default function OpportunityForm({
         useRhfForm<OpportunityFormData>({
             schema: opportunityFormSchema,
             noPastDates: NO_PAST_DATES.opportunity,
-            extraRules: mode === 'edit' ? (values) => followUpEditIssues(values, followUpDecisionPending.current) : undefined,
+            extraRules: (values) => [
+                ...commissionIssues(values),
+                ...(mode === 'edit' ? followUpEditIssues(values, followUpDecisionPending.current) : []),
+            ],
             module: 'opportunities',
             defaultValues: { ...DEFAULT_OPPORTUNITY_FORM, ...initialData },
             dropdownDefaults: { enabled: mode === 'create', keep: initialData },

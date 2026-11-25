@@ -461,8 +461,10 @@ model Opportunity {
   invoiceNo     String?   @db.NVarChar(30)
   invoiceDate   DateTime? @db.Date
 
-  commission  String? @db.NVarChar(50)
-  addDocument String? @default("No") @db.NVarChar(3)
+  /// Yes / No (fixed options). Commission Amount is required when Yes and cleared when No.
+  commission       String?  @db.NVarChar(50)
+  commissionAmount Decimal? @db.Decimal(18, 2)
+  addDocument      String?  @default("No") @db.NVarChar(3)
 
   // Line-item totals (verified server-side)
   /// No DB default: Prisma writes SQL Server string defaults without the N prefix (â‚¹ â†’ ?). The API always sets it.

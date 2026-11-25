@@ -67,40 +67,22 @@ export function buildQuotationDefaultsFromOpportunity(
     const today = new Date().toISOString().split('T')[0];
     const validityDate = new Date(Date.now() + 30 * 86400000).toISOString().split('T')[0];
 
-    const mappedLineItems: QuotationLineItem[] =
-        opportunity.lineItems && opportunity.lineItems.length > 0
-            ? opportunity.lineItems.map((item) => ({
-                  id: item.id || `line-${Date.now()}`,
-                  productId: item.productId || '',
-                  productName: item.productName || '',
-                  quantity: item.quantity || 1,
-                  amount: item.amount || 0,
-                  discount: item.discount || 0,
-                  discountType: item.discountType || 'percentage',
-                  salePrice: item.salePrice || item.amount || 0,
-                  taxRate: item.taxRate || 'GST 18%',
-                  taxAmount: item.taxAmount || 0,
-                  total: item.total || 0,
-                  description: item.description || '',
-                  note: item.note || '',
-              }))
-            : [
-                  {
-                      id: `item-${Date.now()}`,
-                      productId: '',
-                      productName: 'TallyPrime Gold (Multi-User Enterprise)',
-                      quantity: 1,
-                      amount: 54000,
-                      discount: 0,
-                      discountType: 'percentage',
-                      salePrice: 54000,
-                      taxRate: 'GST 18%',
-                      taxAmount: 9720,
-                      total: 63720,
-                      description: 'Standard enterprise package license',
-                      note: '',
-                  },
-              ];
+    // An opportunity without products starts a quote with no lines (as a new quotation does), never a sample line.
+    const mappedLineItems: QuotationLineItem[] = (opportunity.lineItems ?? []).map((item) => ({
+        id: item.id || `line-${Date.now()}`,
+        productId: item.productId || '',
+        productName: item.productName || '',
+        quantity: item.quantity || 1,
+        amount: item.amount || 0,
+        discount: item.discount || 0,
+        discountType: item.discountType || 'percentage',
+        salePrice: item.salePrice || item.amount || 0,
+        taxRate: item.taxRate || 'GST 18%',
+        taxAmount: item.taxAmount || 0,
+        total: item.total || 0,
+        description: item.description || '',
+        note: item.note || '',
+    }));
 
     const quoteTitle = opportunity.opportunityName || opportunity.organizationName || 'B-Softwares';
 
