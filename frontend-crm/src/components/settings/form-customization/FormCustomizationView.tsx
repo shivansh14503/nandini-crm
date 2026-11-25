@@ -32,6 +32,8 @@ import { DropdownManagerPanel, categoriesForModule } from './DropdownManagerPane
 import { FormFieldsBuilderPanel } from './FormFieldsBuilderPanel';
 import { FormLivePreviewPanel } from './FormLivePreviewPanel';
 import { RatingRulesPanel } from './RatingRulesPanel';
+import { ResponseRulesPanel } from './ResponseRulesPanel';
+import { opportunityResponseConfig } from '@/utils/opportunityResponseRules';
 import { leadRatingConfig } from '@/utils/leadRating';
 import LocalFireDepartmentOutlinedIcon from '@mui/icons-material/LocalFireDepartmentOutlined';
 import { isAdminRole } from '@/utils/adminRoles';
@@ -53,7 +55,8 @@ const LEAVE_DRAWER_MESSAGE = 'You have unsaved drawer layout changes. Leave with
 const VIEWS = [
     { key: 'dropdowns' as const, label: 'Dropdowns', icon: <ListAltOutlinedIcon sx={{ fontSize: 17 }} /> },
     { key: 'fields' as const, label: 'Form Fields & Sections', icon: <ViewQuiltOutlinedIcon sx={{ fontSize: 17 }} /> },
-    // Leads only: how a lead's Rating (Hot / Warm / Cold) is worked out.
+    // Leads: how a lead's Rating (Hot / Warm / Cold) is worked out ("Rating Rules"). Opportunities: which Customer
+    // Responses each Sales Stage offers ("Response Rules").
     { key: 'rules' as const, label: 'Rating Rules', icon: <LocalFireDepartmentOutlinedIcon sx={{ fontSize: 17 }} /> },
     { key: 'preview' as const, label: 'Live Preview', icon: <VisibilityOutlinedIcon sx={{ fontSize: 17 }} /> },
     // What the record's side drawer shows (header, badges, each tab's sections); saved on its own, not with the form draft.
@@ -157,18 +160,26 @@ export function FormCustomizationView() {
         if (!isConvertModule(module)) setModule(CONVERT_RECORDS[0].module);
     };
     const fieldsCountOf = (m: CrmModuleKey) => (convert && isConvertModule(m) ? convertCounts[m] : fieldCounts[m]);
-    const showRules = module === 'leads' && !convert;
-    // Rating Rules edits: the new-lead limits, and the meta of the leads Customer Response / Status options.
+    const showRules = (module === 'leads' || module === 'opportunities') && !convert;
+    const rulesLabel = module === 'opportunities' ? 'Response Rules' : 'Rating Rules';
+    // Rules edits: the meta of the options the tab sets (leads: Customer Response / Status, plus the new-lead limits;
+    // opportunities: Customer Response).
     const rulesTouched = useMemo(() => {
         if (!showRules || !configs) return false;
-        const { responseCategory, statusCategory } = leadRatingConfig(configs);
-        const ruleOptionIds = new Set([...(responseCategory?.options ?? []), ...(statusCategory?.options ?? [])].map((o) => o.id));
+        const ruleOptions =
+            module === 'opportunities'
+                ? (opportunityResponseConfig(configs).responseCategory?.options ?? [])
+                : (() => {
+                      const { responseCategory, statusCategory } = leadRatingConfig(configs);
+                      return [...(responseCategory?.options ?? []), ...(statusCategory?.options ?? [])];
+                  })();
+        const ruleOptionIds = new Set(ruleOptions.map((o) => o.id));
         return ops.some(
             (op) =>
-                (op.kind === 'setModuleSetting' && op.module === 'leads') ||
+                (module === 'leads' && op.kind === 'setModuleSetting' && op.module === 'leads') ||
                 (op.kind === 'updateOption' && op.payload.meta !== undefined && ruleOptionIds.has(op.optionId)),
         );
-    }, [showRules, configs, ops]);
+    }, [showRules, module, configs, ops]);
     // The Rating Rules tab belongs to Leads: on any other form it shows Dropdowns instead.
     const showDrawer = isDrawerLayoutModule(module) && !convert;
     // Rating Rules and Drawer Layout exist only on some forms: elsewhere the page shows Dropdowns instead.
@@ -179,13 +190,14 @@ export function FormCustomizationView() {
     };
     const viewItems = VIEWS.filter((v) => (v.key !== 'rules' || showRules) && (v.key !== 'drawer' || showDrawer)).map((v) => ({
         ...v,
+        label: v.key === 'rules' ? rulesLabel : v.label,
         count: !configs || !module ? undefined : v.key === 'dropdowns' ? dropdownCount : v.key === 'fields' ? fieldsCountOf(module) : undefined,
         hasUnsaved: v.key === 'dropdowns' ? viewsTouched.dropdowns : v.key === 'fields' ? viewsTouched.fields : v.key === 'rules' ? rulesTouched : false,
         unsavedTooltip:
             v.key === 'dropdowns'
                 ? 'Unsaved dropdown changes on this form'
                 : v.key === 'rules'
-                  ? 'Unsaved Rating Rules changes'
+                  ? `Unsaved ${rulesLabel} changes`
                   : 'Unsaved field, section or tab changes on this form',
     }));
 
@@ -381,7 +393,10 @@ export function FormCustomizationView() {
                                     <>
                                         {view === 'dropdowns' && <DropdownManagerPanel module={module} configs={configs} canEdit={canEdit && !saving} notify={notify} />}
                                         {view === 'fields' && <FormFieldsBuilderPanel module={module} configs={configs} canEdit={canEdit && !saving} notify={notify} unsavedTabs={unsavedTabs} />}
-                                        {view === 'rules' && showRules && (
+                                        {view === 'rules' && showRules && module === 'opportunities' && (
+                                            <ResponseRulesPanel configs={configs} canEdit={canEdit && !saving} notify={notify} onManageOptions={() => setView('dropdowns')} />
+                                        )}
+                                        {view === 'rules' && showRules && module === 'leads' && (
                                             <RatingRulesPanel configs={configs} canEdit={canEdit && !saving} notify={notify} onManageOptions={() => setView('dropdowns')} />
                                         )}
                                         {view === 'preview' && <FormLivePreviewPanel module={module} configs={configs} unsavedCount={ops.length} unsavedTabs={unsavedTabs} />}

@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { DEFAULT_CATEGORIES, DEFAULT_FIELDS, DEFAULT_SELECTED_OPTIONS, MODULE_TABS } from './formConfig.defaults.js';
 import { ratingRuleFromMeta } from '../leads/lead.rating.js';
+import { allowedStagesFromMeta, CLOSED_STAGES, noFollowUpFromMeta } from '../opportunities/opportunity.followUp.js';
 
 /** docs/field-locking-policy.md: which built-in fields the form builder may relax. */
 const byKey = (module: string, fieldKey: string) => {
@@ -102,17 +103,18 @@ describe('contracts defaults', () => {
     });
 });
 
-describe('Customer Response lists', () => {
-    const lead = DEFAULT_CATEGORIES.find((c) => c.key === 'lead_customer_response');
-    const options = (lead?.options ?? []).map((o) => (typeof o === 'string' ? { value: o, meta: undefined } : o));
+describe('Customer Response list', () => {
+    const list = DEFAULT_CATEGORIES.find((c) => c.key === 'shared_customer_response');
+    const options = (list?.options ?? []).map((o) => (typeof o === 'string' ? { value: o, meta: undefined } : o));
+    const stages = (DEFAULT_CATEGORIES.find((c) => c.key === 'opportunity_sales_stage')?.options ?? []).map((o) => (typeof o === 'string' ? o : o.value));
 
-    it('links the same field (key and label) to a list of its own on leads and opportunities', () => {
-        assert.equal(byKey('leads', 'customerResponse').dropdownCategoryKey, 'lead_customer_response');
+    it('is one list for the same field (key and label) on leads and opportunities', () => {
+        assert.equal(byKey('leads', 'customerResponse').dropdownCategoryKey, 'shared_customer_response');
         assert.equal(byKey('opportunities', 'customerResponse').dropdownCategoryKey, 'shared_customer_response');
         assert.equal(byKey('leads', 'customerResponse').label, byKey('opportunities', 'customerResponse').label);
     });
 
-    it('gives every lead option a valid starting Rating rule', () => {
+    it('gives every option a valid starting Rating rule', () => {
         assert.equal(options.length, 15);
         for (const option of options) assert.ok(ratingRuleFromMeta(option.meta), `${option.value} has a valid ratingRule`);
     });
@@ -124,5 +126,20 @@ describe('Customer Response lists', () => {
         }
         assert.deepEqual(rule('No Response'), rule('Not Reachable'));
         assert.equal(rule('No Response')?.rule, 'unansweredCalls');
+    });
+
+    it('lists only open Sales Stages, and offers every open stage at least one response', () => {
+        const open = stages.filter((s) => !CLOSED_STAGES.has(s));
+        for (const option of options) {
+            const allowed = allowedStagesFromMeta(option.meta);
+            for (const stage of allowed ?? []) assert.ok(open.includes(stage), `${option.value}: ${stage} is an open stage`);
+        }
+        for (const stage of open) {
+            assert.ok(options.some((o) => { const a = allowedStagesFromMeta(o.meta); return a === null || a.includes(stage); }), `${stage} has responses`);
+        }
+    });
+
+    it('takes no follow-up only for Do Not Contact', () => {
+        assert.deepEqual(options.filter((o) => noFollowUpFromMeta(o.meta)).map((o) => o.value), ['Do Not Contact']);
     });
 });

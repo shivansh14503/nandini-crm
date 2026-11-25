@@ -21,3 +21,7 @@ desktops from the start. Changes to existing UI must not make it less responsive
 6. **Dialogs and drawers** fit a phone screen: full width minus a small margin, content scrolls inside.
 7. Before calling the work done, look at it at the three widths in both light and dark mode (screenshots in the
    PR when the change is visual).
+
+> **For now (until the project owner says otherwise): skip the step 7 check.** Don't spend time looking at the
+> phone, tablet and desktop widths or taking width screenshots before finishing. Still write the UI with the
+> responsive patterns above (breakpoints, wrapping, `overflowX: 'auto'`, `minWidth: 0`).
