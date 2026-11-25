@@ -21,6 +21,12 @@ import { auditLedgerService } from './auditLedger.service.js';
  *   GET /stats    ?from&to (default: last 30 days, max 366) → { from, to, today, failedSignIns24h, accessDenied24h,
  *                   deletes7d, total, mostActiveUsers: [{ username, label, count }],
  *                   eventsPerDay: [{ date, total, data, config, security }] }
+ *   GET /users    ?from&to (default: last 30 days, max 366) → { from, to, users: [{ username, name, role, department,
+ *                   email, status: active|inactive|system|unknown, onLeave, isGroupUser, lastLoginAt, lastLogin,
+ *                   lastActivityAt, lastActivity, lastActivityLabel, total, data, config, security, signIns,
+ *                   failedSignIns }] }: every user (inactive ones too), the background jobs and any other username
+ *                   with entries in the range; counts follow the range, the newest entry is any time. Most active
+ *                   first. A user's own entries are GET /?user=<username>, their export POST /exports with that filter.
  *   GET /:id      → { entry, changes, fields: [{ key, label, before, after }], details: [{ key, label, value }],
  *                   related: AuditListItem[] (same request, first 100), relatedCount,
  *                   actions: { undo, restore: { available, reason? } | null }, reversedBy, reverses: AuditListItem | null }
@@ -35,7 +41,8 @@ import { auditLedgerService } from './auditLedger.service.js';
  *                   409 NOT_RESTORABLE / ALREADY_REVERSED / CONFLICT (not deleted, or its name / tax ids are taken now)
  *   POST /exports { format: csv|xlsx, filters: <GET / query> } → AuditExport { id, format, status: queued|running|
  *                   completed|failed|expired, rowCount, truncated, cap, fileName, fileSize, message, createdAt,
- *                   finishedAt, expiresAt }. Up to 5,000 entries it comes back completed; larger ones run in the
+ *                   finishedAt, expiresAt }. A filter on one user names the file after them
+ *                   (`audit-log-<username>-<date>-<time>.csv`). Up to 5,000 entries it comes back completed; larger ones run in the
  *                   background (poll GET /exports/:id). Caps: CSV 1,000,000, Excel 500,000 newest entries.
  *   GET /exports/:id → AuditExport (only the admin who asked for it; others get 404)
  *   GET /exports/:id/download → the file (text/csv with a BOM, or .xlsx); 409 not ready, 410 EXPORT_EXPIRED (24 h)
@@ -60,6 +67,10 @@ router.get('/facets', async (req: Request, res: Response) => {
 
 router.get('/stats', async (req: Request, res: Response) => {
     sendSuccess(res, await auditAdminService.stats(req.query));
+});
+
+router.get('/users', async (req: Request, res: Response) => {
+    sendSuccess(res, await auditAdminService.users(req.query));
 });
 
 router.post('/exports', async (req: Request, res: Response) => {

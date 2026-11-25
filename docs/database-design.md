@@ -363,13 +363,15 @@ Per-user list filters: `username`, `module`, `kind` (`recent` — last 10 kept �
 
 ### 4.18 `ModuleScorecard`
 
-Admin settings of a list screen's summary cards, one row per module (PK `module`; no row = the screen's built-in
-cards: Leads' status buckets, Opportunities' one card per sales stage totalling Actual (Before Tax), Quotations' one card per quote stage totalling
-Grand Total, Contracts' one card per contract status totalling Contract Value). `fieldKey` (a single-choice `select` form field: one card per option), `currencyFieldKey` (optional
+Admin settings of a list screen's summary cards (Admin › List Scorecards), one row per module (PK `module`; no row =
+the screen's built-in cards: Leads' status buckets, Opportunities' one card per sales stage totalling Actual (Before Tax), Quotations' one card per quote stage totalling
+Grand Total, Contracts' one card per contract status totalling Contract Value; Contacts, Organizations, Products, Tickets and Partner Companies show no cards until an admin saves one). `fieldKey` (a single-choice `select` form field: one card per option), `currencyFieldKey` (optional
 `amount` / `number` field totalled per card, or a `builtin.*` key for a total the list works out from the record's
 line items, e.g. `builtin.grandTotal`; null = the screen's default total), `optionsJson` (`[{ value, color: "#RRGGBB", hidden? }]` in card
 order; values must be options of the field's dropdown), `listViewColor` / `drawerViewColor` (colors also mark the
-field in the list column / record drawer; a record's Status always shows as a colored pill on its detail page, in the scorecard color when the scorecard counts by Status), `updatedBy`, timestamps. Hard-deleted on "Reset to default". Counting
+field in the list column / record drawer; a record's Status always shows as a colored pill on its detail page, in the scorecard color when the scorecard counts by Status), `enabled` (BIT, default 1; 0 = the list shows no cards while the
+settings and the two color switches are kept), `allLabel` (NVARCHAR(60), null = the screen's own "All Leads" wording),
+`version` (INT, starts at 1, +1 per save; a save naming an older version is refused with 409), `updatedBy`, timestamps. Hard-deleted on "Reset to default". Counting
 runs in the browser over the loaded list.
 
 ### 4.19 `EmailValidationRun`
@@ -390,7 +392,7 @@ One CSV / Excel export of the audit log (migration `20261123120100_audit_export_
 BullMQ job id and the file name on disk under `AUDIT_EXPORT_DIR`), `requestedBy` (username; only they can poll or
 download it), `format` (`csv` | `xlsx`), `filtersJson` (the list filters at the time), `status` (`queued` | `running` |
 `completed` | `failed` | `expired`), `rowCount`, `truncated` (hit the cap: 1,000,000 CSV / 500,000 Excel), `fileName`
-(`audit-log-YYYY-MM-DD-HHmm.csv`), `fileSize`, `message` (why it failed), `createdAt`, `finishedAt`. Files are deleted
+(`audit-log-YYYY-MM-DD-HHmm.csv`, or `audit-log-<username>-…` for one user's activity), `fileSize`, `message` (why it failed), `createdAt`, `finishedAt`. Files are deleted
 after 24 h (row → `expired`); an export still `running` after 6 h (a crashed worker) is marked `failed`. Kept as
 history. Indexes `(requestedBy, createdAt)`, `(createdAt)`. The export itself is an `AuditLog` `EXPORT` entry.
 

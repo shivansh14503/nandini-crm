@@ -9,8 +9,10 @@ import { scorecardService } from './scorecard.service.js';
  * /api/scorecards   (the summary cards above each module's list screen)
  *   GET    /           { [module]: ScorecardDto } for every configured module (any signed-in user)
  *   ── Admin only ──
- *   PUT    /:module    { fieldKey, currencyFieldKey?, options: [{ value, color, hidden? }], listViewColor, drawerViewColor }
- *                      (currencyFieldKey: an amount / number form field, or a built-in total of the list such as builtin.grandTotal)
+ *   PUT    /:module    { fieldKey, currencyFieldKey?, options: [{ value, color, hidden? }], listViewColor, drawerViewColor,
+ *                        enabled, allLabel?, version }
+ *                      (currencyFieldKey: an amount / number form field, or a built-in total of the list such as builtin.grandTotal;
+ *                       version: the one edited, null for none yet; 409 when someone saved since)
  *   DELETE /:module    back to the screen's built-in cards
  */
 const router = Router();

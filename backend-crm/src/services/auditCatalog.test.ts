@@ -18,6 +18,7 @@ describe('moduleFor', () => {
         assert.equal(moduleFor('Contract'), 'contracts');
         assert.equal(moduleFor('DropdownOption'), 'form-customization');
         assert.equal(moduleFor('PdfAsset'), 'pdf-templates');
+        assert.equal(moduleFor('Scorecard'), 'list-scorecards');
         assert.equal(moduleFor('User'), 'users');
     });
     it('files an import under the module it filled', () => {

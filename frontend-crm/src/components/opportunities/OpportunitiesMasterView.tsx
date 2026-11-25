@@ -9,8 +9,7 @@ import TodayOutlinedIcon from '@mui/icons-material/TodayOutlined';
 import AccountCircleOutlinedIcon from '@mui/icons-material/AccountCircleOutlined';
 import WorkspacePremiumOutlinedIcon from '@mui/icons-material/WorkspacePremiumOutlined';
 import { localToday } from '@/utils/pastDates';
-import { StatusSummaryCards, StatusSummaryCardsSkeleton } from '../common/StatusSummaryCards';
-import { useModuleScorecard } from '../common/scorecard/useModuleScorecard';
+import { ModuleScorecardSummary, useModuleScorecard } from '../common/scorecard/useModuleScorecard';
 import { CommonMasterView } from '../common/CommonMasterView';
 import { useTableFilter } from '../common/TableFilter';
 import { MasterHeaderActions } from '../common/MasterHeaderActions';
@@ -24,7 +23,7 @@ import { useAuth } from '@/context/AuthContext';
 import type { Opportunity } from '@/types/opportunity.types';
 import { useOpportunities, useBulkDeleteOpportunities, useDropdownOptionLabel } from '@/hooks/queries';
 import { useShowRecordNumber } from '@/hooks/queries/useDocumentSeries';
-import { OPPORTUNITY_CARD_AMOUNTS, useStageScorecard, type OpportunityFilterTab, type OpportunitySortField } from './master';
+import type { OpportunityFilterTab, OpportunitySortField } from './master';
 import { OpportunityDetailDrawer } from './OpportunityDetailDrawer';
 import { useSearchScope, useSearchScopedRows } from '../search/SearchScope';
 import { useOpportunityColumns } from './opportunityColumns';
@@ -138,22 +137,10 @@ export function OpportunitiesMasterView() {
     }, [opportunities, activeTab, todayStr, currentUsername]);
 
     // ── Stage Cards ───────────────────────────────────────────────────────────
-    // One card per sales stage with its count and value before tax. From the pencil on "All Opportunities" an admin
-    // can recolor / hide stages, count by another dropdown or total another value (the same settings as Leads).
+    // One card per sales stage with its count and value before tax, until an admin sets up other cards (or switches
+    // them off) under Admin › List Scorecards.
     const goToFirstPage = useCallback(() => setPage(0), []);
-    const showSavedToast = useCallback((message: string) => setToast({ open: true, message, severity: 'success' }), []);
-    const opportunitiesIcon = useMemo(() => <TrendingUpOutlinedIcon />, []);
-    const stageScorecard = useStageScorecard();
-    const scorecard = useModuleScorecard<Opportunity>({
-        module: 'opportunities',
-        rows: tabOpportunities,
-        allLabel: 'All Opportunities',
-        allIcon: opportunitiesIcon,
-        onActiveChange: goToFirstPage,
-        onSaved: showSavedToast,
-        defaultScorecard: stageScorecard,
-        amounts: OPPORTUNITY_CARD_AMOUNTS,
-    });
+    const scorecard = useModuleScorecard<Opportunity>({ module: 'opportunities', rows: tabOpportunities, onActiveChange: goToFirstPage });
 
     const showNumber = useShowRecordNumber();
     const { matches: matchesScorecard } = scorecard;
@@ -285,19 +272,7 @@ export function OpportunitiesMasterView() {
     return (
         <CommonMasterView<Opportunity, OpportunityFilterTab>
             loading={listLoading}
-            summary={
-                listLoading || scorecard.loading ? (
-                    <StatusSummaryCardsSkeleton count={stageScorecard.options.length + 1} singleRow withAmount />
-                ) : scorecard.configured ? (
-                    <StatusSummaryCards<string>
-                        items={scorecard.items}
-                        activeId={scorecard.activeId}
-                        onChange={scorecard.setActiveId}
-                        onEdit={scorecard.onEdit}
-                        singleRow
-                    />
-                ) : null
-            }
+            summary={<ModuleScorecardSummary state={scorecard} loading={listLoading} />}
             filterConfig={{
                 filters: filterItems,
                 activeFilter: activeTab,
@@ -391,7 +366,6 @@ export function OpportunitiesMasterView() {
                 />
             }
         >
-            {scorecard.dialog}
             <DataImportModal
                 open={importOpen}
                 entity="opportunities"

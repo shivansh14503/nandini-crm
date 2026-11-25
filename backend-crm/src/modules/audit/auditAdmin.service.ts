@@ -41,6 +41,7 @@ import {
     type TimeRange,
 } from './auditAdmin.query.js';
 import { entryActions } from './auditUndo.js';
+import { activityUsernames, buildUserActivity, type UserLastRow, type UserRangeRow } from './auditUsers.js';
 import { propLabel, propValue } from './formConfigAudit.service.js';
 
 /**
@@ -57,6 +58,8 @@ const TZ = () => ENV.BUSINESS_TIMEZONE;
 /** Other entries of the same request shown with one entry (an import writes one per row: `relatedCount` has them all). */
 const RELATED_LIMIT = 100;
 const TOP_USERS = 5;
+/** Usernames per "newest entry" lookup (SQL Server takes at most 2,100 parameters). */
+const LAST_ACTIVITY_CHUNK = 500;
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 /** Module key → its document series (record numbers are shown only once the module has one). */
@@ -271,6 +274,29 @@ export async function* entryBatches(filters: AuditListFilters, batchSize: number
     }
 }
 
+/**
+ * Newest entry of each username, any time: one `TOP 1` seek per user on the `(changedBy, createdAt)` index, so it
+ * costs the same however long the log is.
+ */
+async function lastActivity(usernames: string[]): Promise<UserLastRow[]> {
+    const rows: UserLastRow[] = [];
+    for (let i = 0; i < usernames.length; i += LAST_ACTIVITY_CHUNK) {
+        const names = usernames.slice(i, i + LAST_ACTIVITY_CHUNK);
+        rows.push(
+            ...(await prisma.$queryRaw<UserLastRow[]>(Prisma.sql`
+                SELECT n.[username], la.[createdAt] AS [lastAt], la.[action], la.[module]
+                FROM (VALUES ${Prisma.join(names.map((name) => Prisma.sql`(${name})`))}) AS n([username])
+                OUTER APPLY (
+                    SELECT TOP 1 a.[createdAt], a.[action], a.[module]
+                    FROM [dbo].[AuditLog] a
+                    WHERE a.[changedBy] = n.[username]
+                    ORDER BY a.[createdAt] DESC, a.[id] DESC
+                ) la`)),
+        );
+    }
+    return rows;
+}
+
 export const auditAdminService = {
     /** Newest first, `limit` per page; `nextCursor` (an id) fetches the next page, null on the last one. */
     async list(query: unknown) {
@@ -430,5 +456,33 @@ export const auditAdminService = {
             mostActiveUsers: top.map((row) => ({ username: row.changedBy, label: names.get(row.changedBy) ?? row.changedBy, count: row._count._all })),
             eventsPerDay: perDay,
         };
+    },
+
+    /**
+     * Users tab: everyone in the user list (inactive ones included), the background jobs and any other username with
+     * entries in the range, each with their entries in the range (default: the last 30 days, max 366) per category,
+     * sign-ins and failed sign-ins, their newest entry (any time) and last sign-in. Most active first.
+     */
+    async users(query: unknown) {
+        const { from, to } = auditRangeQuerySchema.parse(query ?? {});
+        const range = resolveAggregateRange(from, to, TZ());
+        const [directory, bounds] = await Promise.all([
+            prisma.user.findMany({
+                select: { username: true, fullName: true, role: true, department: true, email: true, isActive: true, isGroupUser: true, onLeave: true, lastLoginAt: true },
+            }),
+            idBounds(range),
+        ]);
+        const rangeRows = bounds
+            ? await prisma.$queryRaw<UserRangeRow[]>(Prisma.sql`
+                  SELECT [changedBy], [category], COUNT(*) AS [count],
+                         SUM(CASE WHEN [action] = 'LOGIN' THEN 1 ELSE 0 END) AS [signIns],
+                         SUM(CASE WHEN [action] = 'LOGIN_FAILED' THEN 1 ELSE 0 END) AS [failedSignIns]
+                  FROM [dbo].[AuditLog]
+                  WHERE [id] >= ${bounds.min} AND [id] <= ${bounds.max}
+                    AND [createdAt] >= ${range.gte} AND [createdAt] < ${range.lt}
+                  GROUP BY [changedBy], [category]`)
+            : [];
+        const last = await lastActivity(activityUsernames(directory, rangeRows));
+        return { ...rangeDto(range), users: buildUserActivity(directory, rangeRows, last) };
     },
 };

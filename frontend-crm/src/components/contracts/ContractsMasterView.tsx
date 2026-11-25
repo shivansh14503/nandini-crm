@@ -7,8 +7,7 @@ import HistoryEduOutlinedIcon from '@mui/icons-material/HistoryEduOutlined';
 import AccountCircleOutlinedIcon from '@mui/icons-material/AccountCircleOutlined';
 import EventBusyOutlinedIcon from '@mui/icons-material/EventBusyOutlined';
 
-import { StatusSummaryCards, StatusSummaryCardsSkeleton } from '../common/StatusSummaryCards';
-import { useModuleScorecard } from '../common/scorecard/useModuleScorecard';
+import { ModuleScorecardSummary, useModuleScorecard } from '../common/scorecard/useModuleScorecard';
 import { CommonMasterView } from '../common/CommonMasterView';
 import { useTableFilter } from '../common/TableFilter';
 import { MasterHeaderActions } from '../common/MasterHeaderActions';
@@ -26,7 +25,6 @@ import { useShowRecordNumber } from '@/hooks/queries/useDocumentSeries';
 import { useSearchScope, useSearchScopedRows } from '../search/SearchScope';
 import { ContractDetailDrawer } from './ContractDetailDrawer';
 import { useContractColumns } from './contractColumns';
-import { CONTRACT_CARD_AMOUNTS, useContractStatusScorecard } from './contractStatusScorecard';
 import { isContractExpiringSoon } from './contractDates';
 
 /** Quick-view pills ('all' = none picked); the status lives on the status cards. */
@@ -166,22 +164,10 @@ export function ContractsMasterView() {
     }, [contracts, activeTab, isMine, isExpiringSoon]);
 
     // ── Status Cards ──────────────────────────────────────────────────────────
-    // One card per contract status with its count and Contract Value. From the pencil on "All Contracts" an admin
-    // can recolor / hide statuses, count by another dropdown or total another amount (as on Quotations).
+    // One card per contract status with its count and Contract Value. Admins recolor / hide statuses, count by
+    // another dropdown or total another amount (or switch the cards off) under Admin › List Scorecards.
     const goToFirstPage = useCallback(() => setPage(0), []);
-    const showSavedToast = useCallback((message: string) => setToast({ open: true, message, severity: 'success' }), []);
-    const contractsIcon = useMemo(() => <HistoryEduOutlinedIcon />, []);
-    const statusScorecard = useContractStatusScorecard();
-    const scorecard = useModuleScorecard<Contract>({
-        module: 'contracts',
-        rows: tabContracts,
-        allLabel: 'All Contracts',
-        allIcon: contractsIcon,
-        onActiveChange: goToFirstPage,
-        onSaved: showSavedToast,
-        defaultScorecard: statusScorecard,
-        amounts: CONTRACT_CARD_AMOUNTS,
-    });
+    const scorecard = useModuleScorecard<Contract>({ module: 'contracts', rows: tabContracts, onActiveChange: goToFirstPage });
 
     // ── Filter & Sort ─────────────────────────────────────────────────────────
     const { matches: matchesScorecard } = scorecard;
@@ -229,19 +215,7 @@ export function ContractsMasterView() {
         <CommonMasterView<Contract, ContractFilterTab>
             loading={listLoading}
             breadcrumbItems={[{ label: 'Support' }, { label: 'Contracts' }]}
-            summary={
-                listLoading || scorecard.loading ? (
-                    <StatusSummaryCardsSkeleton count={statusScorecard.options.length + 1} singleRow withAmount />
-                ) : scorecard.configured ? (
-                    <StatusSummaryCards<string>
-                        items={scorecard.items}
-                        activeId={scorecard.activeId}
-                        onChange={scorecard.setActiveId}
-                        onEdit={scorecard.onEdit}
-                        singleRow
-                    />
-                ) : null
-            }
+            summary={<ModuleScorecardSummary state={scorecard} loading={listLoading} />}
             filterConfig={{
                 filters: filterItems,
                 activeFilter: activeTab,
@@ -336,7 +310,6 @@ export function ContractsMasterView() {
                 />
             }
         >
-            {scorecard.dialog}
         </CommonMasterView>
     );
 }

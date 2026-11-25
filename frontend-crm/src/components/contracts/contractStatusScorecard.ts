@@ -1,5 +1,5 @@
 import { CONTRACT_STATUSES, CONTRACT_STATUS_CATEGORY, type Contract } from '@/types/contract.types';
-import type { DefaultScorecard, ScorecardAmount } from '../common/scorecard/useModuleScorecard';
+import type { DefaultScorecard, ScorecardAmount } from '../common/scorecard/scorecardItems';
 import { scorecardNumber, useDropdownScorecard } from '../common/scorecard/stageScorecard';
 
 /**
@@ -15,7 +15,7 @@ const CONTRACT_STATUS_COLORS: Readonly<Record<string, string>> = {
 
 /**
  * Totals the contract status cards can show. Contract Value is the default, saved as no currency field; it reads
- * the form's own Contract Value, so the settings dialog doesn't offer that field a second time.
+ * the form's own Contract Value, so Admin › List Scorecards doesn't offer that field a second time.
  */
 export const CONTRACT_CARD_AMOUNTS: readonly ScorecardAmount<Contract>[] = [
     { key: 'builtin.contractValue', label: 'Contract Value', of: (c) => scorecardNumber(c.contractValue), fieldKey: 'contractValue' },

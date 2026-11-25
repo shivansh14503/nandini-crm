@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import type { AuditRowLike, FieldLabeler } from './auditAdmin.present.js';
-import { csvCell, csvLine, EXPORT_COLUMNS, exportCells, exportFileName, type ExportContext } from './auditExport.format.js';
+import { csvCell, csvLine, EXPORT_COLUMNS, exportCells, exportFileName, fileNamePart, type ExportContext } from './auditExport.format.js';
 
 describe('csvCell', () => {
     it('quotes cells holding commas, quotes or line breaks', () => {
@@ -30,6 +30,21 @@ describe('exportFileName', () => {
     it('stamps the business-timezone time', () => {
         assert.equal(exportFileName('csv', new Date('2026-11-23T04:45:00Z'), 'Asia/Kolkata'), 'audit-log-2026-11-23-1015.csv');
         assert.equal(exportFileName('xlsx', new Date('2026-11-23T20:00:00Z'), 'Asia/Kolkata'), 'audit-log-2026-11-24-0130.xlsx');
+    });
+
+    it("names one user's activity after them", () => {
+        assert.equal(exportFileName('xlsx', new Date('2026-11-23T04:45:00Z'), 'Asia/Kolkata', 'Asha.K'), 'audit-log-asha.k-2026-11-23-1015.xlsx');
+        assert.equal(exportFileName('csv', new Date('2026-11-23T04:45:00Z'), 'Asia/Kolkata', '../..'), 'audit-log-2026-11-23-1015.csv');
+    });
+});
+
+describe('fileNamePart', () => {
+    it('keeps letters, digits, dots and dashes, nothing a path or shell would read', () => {
+        assert.equal(fileNamePart('ravi_kumar'), 'ravi-kumar');
+        assert.equal(fileNamePart('Meera Iyer'), 'meera-iyer');
+        assert.equal(fileNamePart('../etc/passwd'), 'etc-passwd');
+        assert.equal(fileNamePart('a'.repeat(60)), 'a'.repeat(40));
+        assert.equal(fileNamePart('   '), '');
     });
 });
 

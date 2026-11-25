@@ -23,6 +23,7 @@ import type { ProductFilterTab } from './types';
 import { ProductDetailDrawer } from '../ProductDetailDrawer';
 import { useSearchScope, useSearchScopedRows } from '../../search/SearchScope';
 import { useProductColumns } from './productColumns';
+import { ModuleScorecardSummary, useModuleScorecard } from '../../common/scorecard/useModuleScorecard';
 
 const RECENTLY_ADDED_DAYS = 7;
 
@@ -78,7 +79,8 @@ export function ProductsMasterView() {
 
     // ── Filter Logic ──────────────────────────────────────────────────────────
     const showNumber = useShowRecordNumber();
-    const filteredProducts = useMemo(() => {
+    /** Products in the active pill view: the scorecard counts these. */
+    const tabProducts = useMemo(() => {
         const now = new Date().getTime();
         return products.filter((p) => {
             if (activeTab === 'hardware' && !['Hardware', 'Networking', 'Storage', 'Security', 'Peripherals'].includes(p.category || '')) return false;
@@ -88,6 +90,18 @@ export function ProductsMasterView() {
                 const created = new Date(p.createdAt).getTime();
                 if (now - created > RECENTLY_ADDED_DAYS * 86400000) return false;
             }
+            return true;
+        });
+    }, [products, activeTab]);
+
+    // Summary cards, once an admin switches them on under Admin › List Scorecards.
+    const goToFirstPage = useCallback(() => setPage(0), []);
+    const scorecard = useModuleScorecard<Product>({ module: 'products', rows: tabProducts, onActiveChange: goToFirstPage });
+    const { matches: matchesScorecard } = scorecard;
+
+    const filteredProducts = useMemo(() => {
+        return tabProducts.filter((p) => {
+            if (!matchesScorecard(p)) return false;
 
             if (searchQuery.trim()) {
                 const q = searchQuery.toLowerCase().trim();
@@ -101,7 +115,7 @@ export function ProductsMasterView() {
             }
             return true;
         });
-    }, [products, activeTab, searchQuery, showNumber]);
+    }, [tabProducts, matchesScorecard, searchQuery, showNumber]);
 
     // ── Sort Logic ────────────────────────────────────────────────────────────
     const sortedProducts = useMemo(() => {
@@ -206,6 +220,7 @@ export function ProductsMasterView() {
     return (
         <CommonMasterView<Product, ProductFilterTab>
             loading={listLoading}
+            summary={<ModuleScorecardSummary state={scorecard} loading={listLoading} />}
             filterConfig={{
                 filters: filterItems,
                 activeFilter: activeTab,

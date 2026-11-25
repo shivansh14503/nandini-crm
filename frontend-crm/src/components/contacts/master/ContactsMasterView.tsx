@@ -23,6 +23,7 @@ import type { ContactFilterTab } from './types';
 import { ContactDetailDrawer } from '../ContactDetailDrawer';
 import { useSearchScope, useSearchScopedRows } from '../../search/SearchScope';
 import { useContactColumns } from './contactColumns';
+import { ModuleScorecardSummary, useModuleScorecard } from '../../common/scorecard/useModuleScorecard';
 
 /** Stable empty list while the first page loads (keeps memoized filters from recomputing). */
 const NO_RECORDS: Contact[] = [];
@@ -117,17 +118,24 @@ export function ContactsMasterView() {
     }, [contacts, currentUsername]);
 
     // ── Filter & Search Logic ────────────────────────────────────────────────
-    const filteredContacts = useMemo(() => {
-        let result = contacts;
-
-        if (activeTab === 'primary') {
-            result = result.filter((c) => c.isPrimaryContact);
-        } else if (activeTab === 'my_contacts') {
-            result = currentUsername ? result.filter((c) => c.assignedTo === currentUsername) : [];
-        } else if (activeTab === 'recently_added') {
+    /** Contacts in the active pill view: the scorecard counts these. */
+    const tabContacts = useMemo(() => {
+        if (activeTab === 'primary') return contacts.filter((c) => c.isPrimaryContact);
+        if (activeTab === 'my_contacts') return currentUsername ? contacts.filter((c) => c.assignedTo === currentUsername) : [];
+        if (activeTab === 'recently_added') {
             const oneWeekAgo = new Date().getTime() - 7 * 86400000;
-            result = result.filter((c) => new Date(c.createdAt).getTime() >= oneWeekAgo);
+            return contacts.filter((c) => new Date(c.createdAt).getTime() >= oneWeekAgo);
         }
+        return contacts;
+    }, [contacts, activeTab, currentUsername]);
+
+    // Summary cards, once an admin switches them on under Admin › List Scorecards.
+    const goToFirstPage = useCallback(() => setPage(0), []);
+    const scorecard = useModuleScorecard<Contact>({ module: 'contacts', rows: tabContacts, onActiveChange: goToFirstPage });
+    const { matches: matchesScorecard } = scorecard;
+
+    const filteredContacts = useMemo(() => {
+        let result = tabContacts.filter(matchesScorecard);
 
         if (searchQuery.trim()) {
             const q = searchQuery.toLowerCase().trim();
@@ -164,7 +172,7 @@ export function ContactsMasterView() {
         }
 
         return result;
-    }, [contacts, activeTab, searchQuery, sortField, sortOrder, currentUsername]);
+    }, [tabContacts, matchesScorecard, searchQuery, sortField, sortOrder]);
 
     const handleSort = (field: string) => {
         if (sortField === field) {
@@ -220,6 +228,7 @@ export function ContactsMasterView() {
     return (
         <CommonMasterView<Contact, ContactFilterTab>
             loading={listLoading}
+            summary={<ModuleScorecardSummary state={scorecard} loading={listLoading} />}
             filterConfig={{
                 filters: filterItems,
                 activeFilter: activeTab,

@@ -31,6 +31,7 @@ import { downloadCsv, type CsvColumn } from '@/utils/csvExport';
 import { formatDateTime } from '@/utils/date';
 import { PartnerCompanyDetailDrawer } from './PartnerCompanyDetailDrawer';
 import { useSearchScope, useSearchScopedRows } from '../search/SearchScope';
+import { ModuleScorecardSummary, useModuleScorecard } from '../common/scorecard/useModuleScorecard';
 
 export type PartnerCompanyFilterTab = 'all' | 'mine' | 'recently_added';
 
@@ -135,10 +136,20 @@ export function PartnerCompaniesMasterView() {
     );
 
     // ── Filter, search & sort ────────────────────────────────────────────────
+    /** Partner companies in the active pill view: the scorecard counts these. */
+    const tabPartners = useMemo(() => {
+        if (activeTab === 'mine') return currentUsername ? partners.filter((p) => p.assignedTo === currentUsername) : [];
+        if (activeTab === 'recently_added') return partners.filter(isRecent);
+        return partners;
+    }, [partners, activeTab, currentUsername]);
+
+    // Summary cards, once an admin switches them on under Admin › List Scorecards.
+    const goToFirstPage = useCallback(() => setPage(0), []);
+    const scorecard = useModuleScorecard<ExtendedPartnerCompany>({ module: 'partner-companies', rows: tabPartners, onActiveChange: goToFirstPage });
+    const { matches: matchesScorecard } = scorecard;
+
     const filtered = useMemo(() => {
-        let result = partners;
-        if (activeTab === 'mine') result = currentUsername ? result.filter((p) => p.assignedTo === currentUsername) : [];
-        else if (activeTab === 'recently_added') result = result.filter(isRecent);
+        let result = tabPartners.filter(matchesScorecard);
 
         const q = searchQuery.trim().toLowerCase();
         if (q) {
@@ -159,7 +170,7 @@ export function PartnerCompaniesMasterView() {
             });
         }
         return result;
-    }, [partners, activeTab, searchQuery, sortField, sortOrder, currentUsername]);
+    }, [tabPartners, matchesScorecard, searchQuery, sortField, sortOrder]);
 
     const paginated = useMemo(() => filtered.slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage), [filtered, page, rowsPerPage]);
 
@@ -298,6 +309,7 @@ export function PartnerCompaniesMasterView() {
     return (
         <CommonMasterView<ExtendedPartnerCompany, PartnerCompanyFilterTab>
             loading={listLoading}
+            summary={<ModuleScorecardSummary state={scorecard} loading={listLoading} />}
             breadcrumbItems={[{ label: 'All' }, { label: 'Partner Companies' }]}
             filterConfig={{
                 filters: filterItems,

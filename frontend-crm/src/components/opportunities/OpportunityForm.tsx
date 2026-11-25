@@ -5,7 +5,7 @@ import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { useResetTab } from '@/hooks/useResetTab';
 import { followUpEditIssues } from '../forms/FollowUpDecision';
 import { useRouter } from 'next/navigation';
-import { FormProvider } from 'react-hook-form';
+import { FormProvider, useWatch } from 'react-hook-form';
 
 // Icons
 import ArticleOutlinedIcon from '@mui/icons-material/ArticleOutlined';
@@ -55,6 +55,10 @@ export interface OpportunityFormProps {
     breadcrumbItems?: BreadcrumbItem[];
 }
 
+/**
+ * A new opportunity's starting values. Text, lookups and line items start empty; dropdowns start on the admin's
+ * default option (Form Builder › Dropdowns), which `useRhfForm` applies over the values coded here.
+ */
 const DEFAULT_OPPORTUNITY_FORM: OpportunityFormData = {
     productCategory: ['Biz Analyst'],
     contact: '',
@@ -65,7 +69,8 @@ const DEFAULT_OPPORTUNITY_FORM: OpportunityFormData = {
     type: 'New Business',
     salesStage: 'Qualification',
     leadSource: 'Website Enquiry',
-    leadGivenBy: 'Direct Inbound Marketing',
+    // Empty until picked: nobody is credited with the lead on the user's behalf.
+    leadGivenBy: '',
     nextFollowupDate: '',
     nextFollowupTime: '',
     followupType: 'Call',
@@ -85,33 +90,33 @@ const DEFAULT_OPPORTUNITY_FORM: OpportunityFormData = {
     // Document
     addDocument: 'No',
 
-    // Line Items
+    // Line Items: none until the user adds a product (as on a new quotation or a converted lead).
     currency: 'Indian Rupee: ₹',
     groupName: 'Products & Services',
-    lineItems: [
-        {
-            id: 'line-1',
-            productId: 'prod-tally',
-            productName: 'TallyPrime Silver (Single User)',
-            quantity: 1,
-            amount: 22500,
-            discount: 0,
-            discountType: 'percentage',
-            salePrice: 22500,
-            taxRate: 'GST 18%',
-            taxAmount: 4050,
-            total: 26550,
-            description: 'Standard single-user perpetual license for accounting & compliance',
-            note: '',
-        },
-    ],
+    lineItems: [],
     lumpSumDiscount: 0,
-    totalAmount: 22500,
+    totalAmount: 0,
     totalDiscount: 0,
-    subtotal: 22500,
-    totalTax: 4050,
-    grandTotal: 26550,
+    subtotal: 0,
+    totalTax: 0,
+    grandTotal: 0,
 };
+
+const sameText = (a?: string, b?: string) => (a ?? '').trim().toLowerCase() === (b ?? '').trim().toLowerCase();
+
+/**
+ * Drops the saved organization / contact ids once their names change on an edit, so the server links the
+ * record to the newly picked (or typed) organization and contact by name instead of keeping the old ones.
+ */
+function withFreshLinks(values: OpportunityFormData, saved: { organizationName?: string; contact?: string }): OpportunityFormData {
+    const organizationChanged = !sameText(values.organizationName, saved.organizationName);
+    const contactChanged = organizationChanged || !sameText(values.contact, saved.contact);
+    return {
+        ...values,
+        organizationId: organizationChanged ? '' : values.organizationId,
+        contactId: contactChanged ? '' : values.contactId,
+    };
+}
 
 export default function OpportunityForm({
     mode = 'create',
@@ -141,9 +146,9 @@ export default function OpportunityForm({
             assigneeField: 'assignedTo',
         });
 
-    const { reset, watch, setValue, formState } = methods;
+    const { reset, control, formState } = methods;
     const { isDirty, isSubmitting } = formState;
-    const orgName = watch('organizationName');
+    const orgName = useWatch({ control, name: 'organizationName' });
 
     const defaultBreadcrumbs: BreadcrumbItem[] = [
         { label: 'Sales' },
@@ -183,16 +188,6 @@ export default function OpportunityForm({
         };
     }, [opportunityId, reset, mode]);
 
-    const setField = useCallback(
-        <K extends keyof OpportunityFormData>(key: K, value: OpportunityFormData[K]) => {
-            setValue(key, value as never, {
-                shouldDirty: true,
-                shouldValidate: true,
-            });
-        },
-        [setValue]
-    );
-
     // A lead conversion lands on the new opportunity's detail page with its message (see ConvertLeadForm).
     useSaveFlash(opportunityId ? ROUTES.OPPORTUNITY_DETAIL(opportunityId) : '', (flash) => showToast(flash.message, flash.severity));
 
@@ -205,7 +200,7 @@ export default function OpportunityForm({
                 saved = await opportunityService.create(values);
                 message = 'Opportunity created successfully! Added to your sales pipeline.';
             } else if (mode === 'edit' && opportunityId) {
-                saved = await opportunityService.update(opportunityId, values);
+                saved = await opportunityService.update(opportunityId, withFreshLinks(values, formState.defaultValues ?? {}));
                 message = 'Opportunity details updated successfully!';
             }
 
@@ -223,8 +218,6 @@ export default function OpportunityForm({
     const handleDiscard = () => {
         router.push(ROUTES.OPPORTUNITIES);
     };
-
-    const formValues = watch();
 
     return (
         <FormProvider {...methods}>
@@ -262,7 +255,7 @@ export default function OpportunityForm({
                     }
                 >
                     <div hidden={activeTab !== 'basic'}>
-                        <OpportunityBasicSection form={formValues} setField={setField} notify={showToast} onDecisionPendingChange={setFollowUpPending} />
+                        <OpportunityBasicSection notify={showToast} onDecisionPendingChange={setFollowUpPending} />
                         <DynamicModuleCustomFields module="opportunities" tabKey="basic" />
                     </div>
 

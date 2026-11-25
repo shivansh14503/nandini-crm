@@ -3,26 +3,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query';
-import {
-    Alert,
-    Badge as MuiBadge,
-    Box,
-    Button,
-    ButtonBase,
-    CircularProgress,
-    InputAdornment,
-    MenuItem,
-    Skeleton,
-    Table,
-    TableBody,
-    TableCell,
-    TableContainer,
-    TableHead,
-    TableRow,
-    TextField,
-    Tooltip,
-    Typography,
-} from '@mui/material';
+import { Alert, Badge as MuiBadge, Box, Button, ButtonBase, InputAdornment, MenuItem, Skeleton, TextField, Tooltip, Typography } from '@mui/material';
 import SecurityOutlinedIcon from '@mui/icons-material/SecurityOutlined';
 import SearchRoundedIcon from '@mui/icons-material/SearchRounded';
 import FilterListRoundedIcon from '@mui/icons-material/FilterListRounded';
@@ -36,27 +17,18 @@ import { useMasterData } from '@/hooks/queries/useMasterData';
 import { ActiveFilterChips, TableFilterModal, useFilterController, type FilterCondition, type FilterCriteria } from '@/components/common/TableFilter';
 import { TableSkeleton } from '@/components/common/skeletons';
 import { EmptyState, errorMessage, inputSx, panelHeaderSx, PillTabs, secondaryButtonSx, surfaceSx } from '@/components/settings/form-customization/builderUi';
-import { auditAdminService, type AuditListItem } from '@/services/auditAdmin.service';
+import { auditAdminService } from '@/services/auditAdmin.service';
+import { AuditEntriesTable } from './AuditEntriesTable';
 import { AuditEventsChart, shortDate } from './AuditEventsChart';
 import { AuditEntryDrawer } from './AuditEntryDrawer';
 import { useAuditExport } from './AuditExportButton';
 import { AuditIntegrityPanel } from './AuditIntegrityPanel';
-import { AUDIT_FILTER_SCOPE, CATEGORY_TABS, SOURCE_LABELS, aggregateRange, criteriaToQuery, useAuditFilterFields, type CategoryTab } from './auditLogFilter';
-import { AUDIT_LOG_KEY, ActionPill, ModuleDot, RecordCell, displayUser } from './auditLogUi';
+import { AuditUserHeader } from './AuditUserHeader';
+import { useAuditUsersList } from './AuditUsersList';
+import { AUDIT_FILTER_SCOPE, AUDIT_TABS, aggregateRange, criteriaToQuery, useAuditFilterFields, type AuditTab, type CategoryTab } from './auditLogFilter';
+import { AUDIT_LOG_KEY } from './auditLogUi';
 
 const PAGE_SIZE = 50;
-
-const headCellSx = {
-    fontSize: '0.72rem',
-    fontWeight: 700,
-    color: 'var(--crm-slate-600)',
-    textTransform: 'uppercase',
-    letterSpacing: '0.03em',
-    backgroundColor: 'var(--mui-palette-background-subtle)',
-    whiteSpace: 'nowrap',
-    py: 1.1,
-} as const;
-const cellSx = { py: 0.9, fontSize: '0.8rem', color: 'var(--crm-slate-700)', verticalAlign: 'top' } as const;
 
 /** Quick date choices on the filter bar; each is the `time` condition of the applied filter. */
 const DATE_CHOICES: { value: string; label: string }[] = [
@@ -135,7 +107,11 @@ export function AuditLogView() {
     const router = useRouter();
     const queryClient = useQueryClient();
     const { users } = useMasterData();
-    const [tab, setTab] = useState<CategoryTab>('all');
+    const [tab, setTab] = useState<AuditTab>('all');
+    /** Users tab: the user whose activity log is open (null: the list of users). */
+    const [activeUser, setActiveUser] = useState<string | null>(null);
+    /** Category of the open user's entries. */
+    const [userCategory, setUserCategory] = useState<CategoryTab>('all');
     const [searchInput, setSearchInput] = useState('');
     const [q, setQ] = useState('');
     const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -156,11 +132,21 @@ export function AuditLogView() {
         },
         staleTime: 5 * 60 * 1000,
     });
-    const fields = useAuditFilterFields(facets.data);
+    const usersTab = tab === 'users';
+    /** One user's activity log (Users tab): their entries, with the user already chosen. */
+    const userLog = usersTab && activeUser !== null;
+    /** The list of users (Users tab): no entries list. */
+    const usersList = usersTab && activeUser === null;
+
+    const fields = useAuditFilterFields(facets.data, { withoutUser: userLog });
     const controller = useFilterController({ module: AUDIT_FILTER_SCOPE, title: 'Audit Log', fields });
     const { criteria } = controller;
 
-    const query = useMemo(() => criteriaToQuery(criteria, fields.byKey, tab, q), [criteria, fields.byKey, tab, q]);
+    const category: CategoryTab = tab === 'users' ? userCategory : tab;
+    const query = useMemo(() => {
+        const base = criteriaToQuery(criteria, fields.byKey, category, q);
+        return userLog && activeUser ? { ...base, user: [activeUser] } : base;
+    }, [criteria, fields.byKey, category, q, userLog, activeUser]);
     const range = useMemo(() => aggregateRange(query), [query]);
 
     const stats = useQuery({ queryKey: [...AUDIT_LOG_KEY, 'stats', range], queryFn: () => auditAdminService.stats(range) });
@@ -169,7 +155,10 @@ export function AuditLogView() {
         queryFn: ({ pageParam }) => auditAdminService.list(query, pageParam, PAGE_SIZE),
         initialPageParam: undefined as string | undefined,
         getNextPageParam: (last) => last.nextCursor ?? undefined,
+        enabled: !usersList,
     });
+    // Users tab: everyone with their activity in the period (the same period as the summary).
+    const usersActivity = useQuery({ queryKey: [...AUDIT_LOG_KEY, 'users', range], queryFn: () => auditAdminService.users(range), enabled: usersTab });
     const rows = useMemo(() => list.data?.pages.flatMap((p) => p.items) ?? [], [list.data]);
 
     const userNames = useMemo(() => {
@@ -182,6 +171,7 @@ export function AuditLogView() {
     /** Replaces the applied filter (keeps nothing else) and shows the list from the top. */
     const showOnly = (conditions: Record<string, FilterCondition>) => {
         setTab('all');
+        setActiveUser(null);
         setSearchInput('');
         setQ('');
         setSelectedId(null);
@@ -200,7 +190,90 @@ export function AuditLogView() {
     const summaryLabel = !query.from && !query.to ? 'Last 30 days' : stats.data ? periodLabel(stats.data.from, stats.data.to) : '';
 
     const refresh = () => queryClient.invalidateQueries({ queryKey: AUDIT_LOG_KEY });
-    const exporter = useAuditExport(query);
+
+    /** A tab click always lands on the tab's start: the Users tab on its list of users. */
+    const changeTab = (next: AuditTab) => {
+        if (next === tab && !userLog) return;
+        setTab(next);
+        if (activeUser !== null) {
+            setActiveUser(null);
+            setSearchInput('');
+            setQ('');
+        }
+        setSelectedId(null);
+    };
+    /** Opens one user's activity log; a User condition in the applied filter would fight it, so it is dropped. */
+    const openUser = (username: string) => {
+        setActiveUser(username);
+        setUserCategory('all');
+        setSelectedId(null);
+        setSearchInput('');
+        setQ('');
+        if (criteria?.conditions.user) controller.removeCondition('user');
+    };
+    const closeUser = () => {
+        setActiveUser(null);
+        setSelectedId(null);
+        setSearchInput('');
+        setQ('');
+    };
+
+    const openUserInfo = activeUser ? usersActivity.data?.users.find((u) => u.username.toLowerCase() === activeUser.toLowerCase()) : undefined;
+    const openUserName = openUserInfo?.name ?? (activeUser ? (userNames.get(activeUser) ?? activeUser) : '');
+    const exporter = useAuditExport(query, userLog ? { hint: `Download ${openUserName}’s activity that matches the current filter, newest first` } : {});
+    const usersPeriod = !query.from && !query.to ? 'Last 30 days' : usersActivity.data ? periodLabel(usersActivity.data.from, usersActivity.data.to) : summaryLabel;
+    const usersPanel = useAuditUsersList({
+        data: usersActivity.data,
+        isLoading: usersActivity.isLoading,
+        error: usersActivity.isError ? usersActivity.error : null,
+        periodLabel: usersPeriod,
+        onOpen: openUser,
+    });
+
+    const dateControl = (
+        <>
+            <TextField
+                select
+                size="small"
+                value={dateChoice}
+                onChange={(e) => {
+                    const value = e.target.value;
+                    if (value === 'all') setTime(null);
+                    else if (value === 'between') setTime({ op: 'between', value: localYmd(new Date(Date.now() - 6 * 86_400_000)), value2: localYmd(new Date()) });
+                    else setTime({ op: value as FilterCondition['op'] });
+                }}
+                sx={{ ...inputSx, width: { xs: '100%', sm: 170 } }}
+                slotProps={{ htmlInput: { 'aria-label': 'Date' } }}
+            >
+                {DATE_CHOICES.map((c) => (
+                    <MenuItem key={c.value} value={c.value} sx={{ fontSize: '0.85rem' }}>
+                        {c.label}
+                    </MenuItem>
+                ))}
+            </TextField>
+            {dateChoice === 'between' && time && (
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, flexWrap: 'wrap' }}>
+                    <TextField
+                        type="date"
+                        size="small"
+                        value={time.value ?? ''}
+                        onChange={(e) => setTime({ op: 'between', value: e.target.value, value2: time.op === 'between' ? time.value2 : time.value })}
+                        sx={{ ...inputSx, width: 160 }}
+                        slotProps={{ htmlInput: { 'aria-label': 'From date' } }}
+                    />
+                    <Typography sx={{ fontSize: '0.8rem', color: 'var(--mui-palette-text-secondary)' }}>to</Typography>
+                    <TextField
+                        type="date"
+                        size="small"
+                        value={time.op === 'between' ? (time.value2 ?? '') : (time.value ?? '')}
+                        onChange={(e) => setTime({ op: 'between', value: time.value, value2: e.target.value })}
+                        sx={{ ...inputSx, width: 160 }}
+                        slotProps={{ htmlInput: { 'aria-label': 'To date' } }}
+                    />
+                </Box>
+            )}
+        </>
+    );
 
     return (
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0 }}>
@@ -324,171 +397,104 @@ export function AuditLogView() {
                 </Box>
             </Box>
 
-            {/* Entries */}
+            {/* Entries; on the Users tab the users, or one user's activity log */}
             <Box sx={{ ...surfaceSx, overflow: 'hidden', minWidth: 0 }}>
                 <Box sx={{ ...panelHeaderSx, display: 'flex', flexDirection: 'column', gap: 1.25 }}>
-                    <PillTabs items={CATEGORY_TABS.map((t) => ({ key: t.key, label: t.label }))} value={tab} onChange={setTab} />
-                    <Box sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 1 }}>
-                        <TextField
-                            size="small"
-                            placeholder="Search record, user, IP, value…"
-                            value={searchInput}
-                            onChange={(e) => setSearchInput(e.target.value)}
-                            sx={{ ...inputSx, width: { xs: '100%', sm: 280 } }}
-                            slotProps={{
-                                input: {
-                                    startAdornment: (
-                                        <InputAdornment position="start">
-                                            <SearchRoundedIcon sx={{ fontSize: 18, color: 'var(--mui-palette-text-muted)' }} />
-                                        </InputAdornment>
-                                    ),
-                                },
+                    <PillTabs
+                        items={AUDIT_TABS.map((t) => ({ key: t.key, label: t.label }))}
+                        value={tab}
+                        onChange={changeTab}
+                        sx={{ flexWrap: { xs: 'wrap', sm: 'nowrap' }, rowGap: 0.75 }}
+                    />
+                    {userLog && activeUser && (
+                        <AuditUserHeader
+                            username={activeUser}
+                            user={openUserInfo}
+                            loading={usersActivity.isLoading}
+                            error={usersActivity.isError ? errorMessage(usersActivity.error, 'Could not load this user’s summary.') : null}
+                            periodLabel={usersPeriod}
+                            category={userCategory}
+                            onCategory={(next) => {
+                                setUserCategory(next);
+                                setSelectedId(null);
                             }}
+                            onBack={closeUser}
                         />
-                        <TextField
-                            select
-                            size="small"
-                            value={dateChoice}
-                            onChange={(e) => {
-                                const value = e.target.value;
-                                if (value === 'all') setTime(null);
-                                else if (value === 'between') setTime({ op: 'between', value: localYmd(new Date(Date.now() - 6 * 86_400_000)), value2: localYmd(new Date()) });
-                                else setTime({ op: value as FilterCondition['op'] });
-                            }}
-                            sx={{ ...inputSx, width: { xs: '100%', sm: 170 } }}
-                            slotProps={{ htmlInput: { 'aria-label': 'Date' } }}
-                        >
-                            {DATE_CHOICES.map((c) => (
-                                <MenuItem key={c.value} value={c.value} sx={{ fontSize: '0.85rem' }}>
-                                    {c.label}
-                                </MenuItem>
-                            ))}
-                        </TextField>
-                        {dateChoice === 'between' && time && (
-                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, flexWrap: 'wrap' }}>
-                                <TextField
-                                    type="date"
-                                    size="small"
-                                    value={time.value ?? ''}
-                                    onChange={(e) => setTime({ op: 'between', value: e.target.value, value2: time.op === 'between' ? time.value2 : time.value })}
-                                    sx={{ ...inputSx, width: 160 }}
-                                    slotProps={{ htmlInput: { 'aria-label': 'From date' } }}
-                                />
-                                <Typography sx={{ fontSize: '0.8rem', color: 'var(--mui-palette-text-secondary)' }}>to</Typography>
-                                <TextField
-                                    type="date"
-                                    size="small"
-                                    value={time.op === 'between' ? (time.value2 ?? '') : (time.value ?? '')}
-                                    onChange={(e) => setTime({ op: 'between', value: time.value, value2: e.target.value })}
-                                    sx={{ ...inputSx, width: 160 }}
-                                    slotProps={{ htmlInput: { 'aria-label': 'To date' } }}
-                                />
-                            </Box>
+                    )}
+                    <Box sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 1 }}>
+                        {usersList ? (
+                            usersPanel.toolbar
+                        ) : (
+                            <TextField
+                                size="small"
+                                placeholder={userLog ? 'Search this user’s entries…' : 'Search record, user, IP, value…'}
+                                value={searchInput}
+                                onChange={(e) => setSearchInput(e.target.value)}
+                                sx={{ ...inputSx, width: { xs: '100%', sm: 280 } }}
+                                slotProps={{
+                                    htmlInput: { 'aria-label': 'Search entries' },
+                                    input: {
+                                        startAdornment: (
+                                            <InputAdornment position="start">
+                                                <SearchRoundedIcon sx={{ fontSize: 18, color: 'var(--mui-palette-text-muted)' }} />
+                                            </InputAdornment>
+                                        ),
+                                    },
+                                }}
+                            />
                         )}
-                        <MuiBadge
-                            badgeContent={controller.activeCount}
-                            invisible={controller.activeCount === 0}
-                            sx={{ '& .MuiBadge-badge': { backgroundColor: 'var(--crm-fill-blue-600)', color: '#fff', fontWeight: 700 } }}
-                        >
-                            <Button variant="outlined" size="small" startIcon={<FilterListRoundedIcon />} sx={{ ...secondaryButtonSx, height: 36 }} onClick={controller.open}>
-                                Filter
-                            </Button>
-                        </MuiBadge>
+                        {dateControl}
+                        {!usersList && (
+                            <MuiBadge
+                                badgeContent={controller.activeCount}
+                                invisible={controller.activeCount === 0}
+                                sx={{ '& .MuiBadge-badge': { backgroundColor: 'var(--crm-fill-blue-600)', color: '#fff', fontWeight: 700 } }}
+                            >
+                                <Button variant="outlined" size="small" startIcon={<FilterListRoundedIcon />} sx={{ ...secondaryButtonSx, height: 36 }} onClick={controller.open}>
+                                    Filter
+                                </Button>
+                            </MuiBadge>
+                        )}
                         <Box sx={{ flex: 1 }} />
-                        <Tooltip title="Load the newest entries">
+                        <Tooltip title={usersList ? 'Load the latest activity' : 'Load the newest entries'}>
                             <Button variant="outlined" size="small" startIcon={<RefreshRoundedIcon />} sx={{ ...secondaryButtonSx, height: 36 }} onClick={() => void refresh()}>
                                 Refresh
                             </Button>
                         </Tooltip>
-                        {exporter.button}
+                        {!usersList && exporter.button}
                     </Box>
                 </Box>
-                <ActiveFilterChips controller={controller} />
+                {!usersList && <ActiveFilterChips controller={controller} />}
                 {exporter.status}
 
-                {list.isLoading ? (
+                {usersList ? (
+                    usersPanel.body
+                ) : list.isLoading ? (
                     <Box sx={{ p: 2 }}>
-                        <TableSkeleton rows={8} columns={7} toolbar={false} />
+                        <TableSkeleton rows={8} columns={userLog ? 6 : 7} toolbar={false} />
                     </Box>
                 ) : list.isError ? (
                     <Alert severity="error" sx={{ m: 2 }}>
                         {errorMessage(list.error, 'Could not load the audit log.')}
                     </Alert>
                 ) : rows.length === 0 ? (
-                    <EmptyState title="No entries" description="Nothing in the audit log matches these filters." />
+                    <EmptyState
+                        title="No entries"
+                        description={userLog ? `${openUserName} has no entries that match these filters.` : 'Nothing in the audit log matches these filters.'}
+                    />
                 ) : (
-                    <>
-                        <TableContainer sx={{ overflowX: 'auto' }}>
-                            <Table size="small" sx={{ minWidth: 1120 }}>
-                                <TableHead>
-                                    <TableRow>
-                                        <TableCell sx={headCellSx}>Time</TableCell>
-                                        <TableCell sx={headCellSx}>User</TableCell>
-                                        <TableCell sx={headCellSx}>Action</TableCell>
-                                        <TableCell sx={headCellSx}>Module</TableCell>
-                                        <TableCell sx={headCellSx}>Record</TableCell>
-                                        <TableCell sx={headCellSx}>Summary</TableCell>
-                                        <TableCell sx={headCellSx}>Source</TableCell>
-                                    </TableRow>
-                                </TableHead>
-                                <TableBody>
-                                    {rows.map((row: AuditListItem) => (
-                                        <TableRow
-                                            key={row.id}
-                                            hover
-                                            selected={row.id === selectedId}
-                                            onClick={() => setSelectedId(row.id)}
-                                            tabIndex={0}
-                                            onKeyDown={(e) => {
-                                                if (e.key === 'Enter') setSelectedId(row.id);
-                                            }}
-                                            sx={{
-                                                cursor: 'pointer',
-                                                '&.Mui-selected, &.Mui-selected:hover': { backgroundColor: 'var(--mui-palette-primary-soft)' },
-                                                '&:focus-visible': { outline: '2px solid rgb(var(--crm-accent-rgb) / 0.4)', outlineOffset: -2 },
-                                            }}
-                                        >
-                                            <TableCell sx={{ ...cellSx, whiteSpace: 'nowrap' }}>{row.time}</TableCell>
-                                            <TableCell sx={{ ...cellSx, whiteSpace: 'nowrap', color: 'var(--crm-slate-900)', fontWeight: 600 }}>
-                                                {displayUser(row.changedBy, userNames)}
-                                            </TableCell>
-                                            <TableCell sx={cellSx}>
-                                                <ActionPill action={row.action} label={row.actionLabel} />
-                                            </TableCell>
-                                            <TableCell sx={cellSx}>
-                                                <ModuleDot module={row.module} label={row.moduleLabel} />
-                                            </TableCell>
-                                            <TableCell sx={{ ...cellSx, minWidth: 200, maxWidth: 280, wordBreak: 'break-word' }}>
-                                                <RecordCell item={row} onOpen={(href) => router.push(href)} />
-                                            </TableCell>
-                                            <TableCell sx={{ ...cellSx, minWidth: 220, maxWidth: 380, wordBreak: 'break-word' }}>{row.summary}</TableCell>
-                                            <TableCell sx={{ ...cellSx, whiteSpace: 'nowrap', color: 'var(--mui-palette-text-secondary)' }}>
-                                                {row.source ? (SOURCE_LABELS[row.source] ?? row.source) : '—'}
-                                            </TableCell>
-                                        </TableRow>
-                                    ))}
-                                </TableBody>
-                            </Table>
-                        </TableContainer>
-                        <Box sx={{ px: 2, py: 1.25, display: 'flex', alignItems: 'center', gap: 1.5, borderTop: '1px solid var(--mui-palette-border-main)' }}>
-                            <Typography sx={{ fontSize: '0.78rem', color: 'var(--mui-palette-text-secondary)', flex: 1 }}>
-                                Showing the newest {count(rows.length)} entr{rows.length === 1 ? 'y' : 'ies'}
-                                {list.hasNextPage ? '' : ' (all of them)'}
-                            </Typography>
-                            {list.hasNextPage && (
-                                <Button
-                                    variant="outlined"
-                                    size="small"
-                                    sx={secondaryButtonSx}
-                                    disabled={list.isFetchingNextPage}
-                                    startIcon={list.isFetchingNextPage ? <CircularProgress size={14} /> : undefined}
-                                    onClick={() => void list.fetchNextPage()}
-                                >
-                                    Load {PAGE_SIZE} older
-                                </Button>
-                            )}
-                        </Box>
-                    </>
+                    <AuditEntriesTable
+                        rows={rows}
+                        selectedId={selectedId}
+                        onSelect={setSelectedId}
+                        onOpenRecord={(href) => router.push(href)}
+                        userNames={userNames}
+                        hideUser={userLog}
+                        hasMore={Boolean(list.hasNextPage)}
+                        loadingMore={list.isFetchingNextPage}
+                        onLoadMore={() => void list.fetchNextPage()}
+                        pageSize={PAGE_SIZE}
+                    />
                 )}
             </Box>
 

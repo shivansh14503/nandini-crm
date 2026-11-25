@@ -1,5 +1,5 @@
 import { QUOTE_STAGES, type Quotation } from '@/types/quotation.types';
-import type { DefaultScorecard, ScorecardAmount } from '../common/scorecard/useModuleScorecard';
+import type { DefaultScorecard, ScorecardAmount } from '../common/scorecard/scorecardItems';
 import { LINE_ITEM_CARD_AMOUNTS, useDropdownScorecard } from '../common/scorecard/stageScorecard';
 
 /** Dropdown category of the Quote Stage field. */

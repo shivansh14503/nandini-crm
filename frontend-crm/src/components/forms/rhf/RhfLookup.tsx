@@ -43,6 +43,19 @@ export interface RhfLookupProps<T extends FieldValues, K extends LookupKind = Lo
     fieldSize?: FieldSize;
     /** Values (case-insensitive) left out of the auto-built suggestions, e.g. a record's own name. */
     excludeValues?: string[];
+    /** Most characters the input accepts (typed or pasted). */
+    maxLength?: number;
+    /**
+     * Name-cases typed text (default: on for contact lookups). Off for fields where a company or campaign can be
+     * typed instead of a person, so "KPMG India" isn't saved as "Kpmg India".
+     */
+    nameCase?: boolean;
+    /**
+     * `user` lookups only: someone outside the CRM can be typed as well. The username is stored only when a user is
+     * picked or their full name is typed exactly, so typing "Rajesh Kumar & Associates" or a name that starts with a
+     * username isn't turned into that user part-way.
+     */
+    freeText?: boolean;
     /**
      * Filter values the picker opens with. For `opportunity`, an `organizationName` also narrows the suggestions
      * to that organization's opportunities and is preferred when a typed label matches several.
@@ -66,6 +79,9 @@ export function RhfLookup<T extends FieldValues, K extends LookupKind = LookupKi
     onClearRecord,
     fieldSize,
     excludeValues,
+    maxLength,
+    nameCase,
+    freeText = false,
     lookupFilters,
 }: RhfLookupProps<T, K>) {
     const { field, fieldState } = useController<T>({ name });
@@ -77,10 +93,12 @@ export function RhfLookup<T extends FieldValues, K extends LookupKind = LookupKi
     // Organization names are stored uppercase.
     const uppercase = kind === 'organization' || /organizationName$/.test(name);
     // Contact person names are name-cased (CA kept uppercase).
-    const personName = kind === 'contact' || /contact(Person)?Name$/.test(name);
+    const personName = nameCase ?? (kind === 'contact' || /contact(Person)?Name$/.test(name));
     // The form keeps the username (API contract); the input and read-only view show the full name.
     const storesUsername = kind === 'user' && userValueField === 'username';
-    const displayValue = storesUsername ? formatCrmUserDisplay(value) : value;
+    // Free text: only a stored username is shown as its user's name; anything else stays exactly as typed.
+    const userOfValue = storesUsername && freeText ? findCrmUser(value) : undefined;
+    const displayValue = !storesUsername ? value : freeText ? (userOfValue?.username === value ? userOfValue.name : value) : formatCrmUserDisplay(value);
     // Every picker field (user, organization, contact…) shares one default width so they line up.
     const size = resolveFieldSize(name, 'lookup', fieldSize ?? LOOKUP_FIELD_SIZE);
     // Subscribes to the user directory so suggestions fill in once it loads (API mode).
@@ -146,7 +164,9 @@ export function RhfLookup<T extends FieldValues, K extends LookupKind = LookupKi
     // Only fires when there was something to clear, so empty-to-empty updates stay silent.
     const handleChange = (next: string) => {
         // Users are shown by full name but stored by username; partial text is kept as typed until it matches.
-        const matchedUser = storesUsername ? findCrmUser(next) : undefined;
+        // Free text matches a full name only, exactly as typed (no trimming, no usernames).
+        const found = storesUsername ? findCrmUser(next) : undefined;
+        const matchedUser = freeText && found && found.name.toLowerCase() !== next.toLowerCase() ? undefined : found;
         field.onChange(matchedUser?.status === 'Active' ? matchedUser.username : next);
         if (!next.trim()) {
             if (value.trim()) onClearRecord?.();
@@ -170,6 +190,7 @@ export function RhfLookup<T extends FieldValues, K extends LookupKind = LookupKi
                 disabled={disabled}
                 onLookupClick={kind ? () => setModalOpen(true) : onLookupClick}
                 matchMode={kind === 'organization' || kind === 'partnerCompany' ? 'organization' : 'substring'}
+                maxLength={maxLength}
             />
             {fieldState.error && (
                 <FormHelperText error sx={{ mx: 1.75 }}>

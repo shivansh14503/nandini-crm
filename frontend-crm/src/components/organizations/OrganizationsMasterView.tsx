@@ -24,6 +24,7 @@ import { OrganizationDetailDrawer } from './OrganizationDetailDrawer';
 import type { FilterTab, SortField } from './master';
 import { useSearchScope, useSearchScopedRows } from '../search/SearchScope';
 import { useOrganizationColumns } from './organizationColumns';
+import { ModuleScorecardSummary, useModuleScorecard } from '../common/scorecard/useModuleScorecard';
 
 /** Stable empty list while the first page loads (keeps memoized filters from recomputing). */
 const NO_RECORDS: ExtendedOrganization[] = [];
@@ -84,12 +85,25 @@ export function OrganizationsMasterView() {
     const [importOpen, setImportOpen] = useState(false);
 
     // ── Filter & Search Logic ─────────────────────────────────────────────────
-    const filteredOrganizations = useMemo(() => {
+    /** Organizations in the active pill view: the scorecard counts these. */
+    const tabOrganizations = useMemo(() => {
         return organizations.filter((org) => {
             if (activeTab === 'recent' && !org.isRecentlyViewed) return false;
             if (activeTab === 'my' && !org.isMyAccount) return false;
             if (activeTab === 'distributor' && !org.natureOfBusiness?.toLowerCase().includes('distributor')) return false;
             if (activeTab === 'enduser' && org.customerType !== 'End User') return false;
+            return true;
+        });
+    }, [organizations, activeTab]);
+
+    // Summary cards, once an admin switches them on under Admin › List Scorecards.
+    const goToFirstPage = useCallback(() => setCurrentPage(1), []);
+    const scorecard = useModuleScorecard<ExtendedOrganization>({ module: 'organizations', rows: tabOrganizations, onActiveChange: goToFirstPage });
+    const { matches: matchesScorecard } = scorecard;
+
+    const filteredOrganizations = useMemo(() => {
+        return tabOrganizations.filter((org) => {
+            if (!matchesScorecard(org)) return false;
 
             if (searchQuery.trim()) {
                 const q = searchQuery.toLowerCase().trim();
@@ -105,7 +119,7 @@ export function OrganizationsMasterView() {
             }
             return true;
         });
-    }, [organizations, activeTab, searchQuery]);
+    }, [tabOrganizations, matchesScorecard, searchQuery]);
 
     // ── Sort Logic ────────────────────────────────────────────────────────────
     const sortedOrganizations = useMemo(() => {
@@ -295,6 +309,7 @@ export function OrganizationsMasterView() {
     return (
         <CommonMasterView<ExtendedOrganization, FilterTab>
             loading={listLoading}
+            summary={<ModuleScorecardSummary state={scorecard} loading={listLoading} />}
             filterConfig={{
                 filters: filterItems,
                 activeFilter: activeTab,

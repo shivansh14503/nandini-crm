@@ -1,10 +1,11 @@
 'use client';
 
 import React, { useCallback, useState } from 'react';
+import NextLink from 'next/link';
 import { Box, ButtonBase, IconButton, Skeleton, Tooltip, Typography } from '@mui/material';
 import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
-import EditOutlinedIcon from '@mui/icons-material/EditOutlined';
+import SettingsOutlinedIcon from '@mui/icons-material/SettingsOutlined';
 import { useTableScroll } from './DataTable/useTableScroll';
 
 /** Colour family of a card; each maps to theme tokens so light (blue) / dark (green) stay consistent. */
@@ -34,8 +35,8 @@ export interface StatusSummaryCardsProps<TId extends string = string> {
     total?: number;
     /** Id of the card that means "no status filter"; clicking the active card returns to it. */
     allId?: TId;
-    /** Shows a pencil on the "All" card that opens the scorecard settings (admins). */
-    onEdit?: () => void;
+    /** Shows a gear on the "All" card that opens these cards' settings (admins: Admin › List Scorecards). */
+    settingsHref?: string;
     /**
      * Many cards: one row at every screen size that scrolls sideways (swipe, trackpad, the arrow buttons on mouse
      * devices, or holding the scroll-wheel button and moving the mouse) instead of wrapping. Without it, more
@@ -254,7 +255,7 @@ export function StatusSummaryCards<TId extends string = string>({
     onChange,
     total,
     allId,
-    onEdit,
+    settingsHref,
     singleRow,
 }: StatusSummaryCardsProps<TId>) {
     const base = total ?? items[0]?.count ?? 0;
@@ -407,8 +408,8 @@ export function StatusSummaryCards<TId extends string = string>({
                                 {/* A slash is a place to wrap, like a space. */}
                                 {multiWord ? item.label.replace(/\//g, '/\u200B') : item.label}
                             </Typography>
-                            {/* Room for the edit pencil, which sits over this corner. */}
-                            {isAll && onEdit && <Box sx={{ width: 26, flexShrink: 0 }} />}
+                            {/* Room for the settings gear, which sits over this corner. */}
+                            {isAll && settingsHref && <Box sx={{ width: { xs: 30, md: 26 }, flexShrink: 0 }} />}
                             {!isAll && !singleRow && sharePill}
                         </Box>
 
@@ -501,18 +502,20 @@ export function StatusSummaryCards<TId extends string = string>({
                             <Box sx={{ position: 'relative', mt: 'auto', display: 'flex' }}>{shareBar}</Box>
                         )}
                     </ButtonBase>
-                    {isAll && onEdit && (
-                        <Tooltip title="Edit scorecard">
+                    {isAll && settingsHref && (
+                        <Tooltip title="Scorecard settings">
                             <IconButton
+                                component={NextLink}
+                                href={settingsHref}
                                 size="small"
-                                aria-label="Edit scorecard"
-                                onClick={onEdit}
+                                aria-label="Scorecard settings"
                                 sx={{
                                     position: 'absolute',
                                     top: 10,
                                     right: 10,
-                                    width: 28,
-                                    height: 28,
+                                    // At least 32 px to tap on touch screens.
+                                    width: { xs: 32, md: 28 },
+                                    height: { xs: 32, md: 28 },
                                     border: '1px solid var(--mui-palette-border-main)',
                                     color: 'var(--mui-palette-text-secondary)',
                                     backgroundColor: 'var(--mui-palette-background-paper)',
@@ -524,7 +527,7 @@ export function StatusSummaryCards<TId extends string = string>({
                                     },
                                 }}
                             >
-                                <EditOutlinedIcon sx={{ fontSize: 15 }} />
+                                <SettingsOutlinedIcon sx={{ fontSize: 15 }} />
                             </IconButton>
                         </Tooltip>
                     )}

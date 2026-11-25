@@ -1,6 +1,6 @@
 import type { SxProps, Theme } from '@mui/material';
 import type { DropdownCategoryDto, FormConfigsPayload, FormFieldDefinitionDto, CrmModuleKey } from '@/types/formConfig.types';
-import type { ScorecardConfig } from '@/types/scorecard.types';
+import type { ScorecardConfig, ScorecardOption } from '@/types/scorecard.types';
 import { findCategory, moduleFields } from '@/utils/formConfig';
 import { readFieldValue } from '../DataTable/useFormFieldColumns';
 
@@ -104,7 +104,8 @@ export function resolveScorecard(
     const category = findCategory(configs, field.dropdownCategoryKey);
     const currencyField = config.currencyFieldKey ? fields.find((f) => f.fieldKey === config.currencyFieldKey && f.isActive) : undefined;
     const labels = new Map((category?.options ?? []).map((o) => [o.value, o.label || o.value]));
-    const colors = new Map(config.options.map((o) => [o.value, o.color]));
+    // New dropdown options take their card's suggested color in the list column and drawer too.
+    const colors = new Map(withNewOptions(config.options, category).map((o) => [o.value, o.color]));
     return {
         config,
         field,
@@ -123,6 +124,23 @@ export function resolveScorecard(
             return Number.isFinite(n) ? n : 0;
         },
     };
+}
+
+/**
+ * The cards of a scorecard in the admin's order: its saved options, then any option added to the field's dropdown
+ * since (active ones, in dropdown order, with a suggested color), so a new option gets a card straight away.
+ */
+export function scorecardCardOptions(scorecard: ResolvedScorecard): ScorecardOption[] {
+    return withNewOptions(scorecard.config.options, scorecard.category);
+}
+
+function withNewOptions(saved: ScorecardOption[], category: DropdownCategoryDto | undefined): ScorecardOption[] {
+    const known = new Set(saved.map((o) => o.value));
+    const added = (category?.options ?? [])
+        .filter((o) => o.isActive && !known.has(o.value))
+        .sort((a, b) => a.sortOrder - b.sortOrder)
+        .map((o, i) => ({ value: o.value, color: suggestColor(o.label || o.value, saved.length + i) }));
+    return added.length ? [...saved, ...added] : saved;
 }
 
 export const formatScorecardAmount = (amount: number) =>

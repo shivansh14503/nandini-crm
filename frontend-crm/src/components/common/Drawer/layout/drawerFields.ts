@@ -98,6 +98,9 @@ export function rawFieldValue(record: AnyRecord | null | undefined, def: DrawerF
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
+/** Fields that store a CRM username (Assigned to, an opportunity's Lead Given By). */
+const USER_FIELD_KEYS = new Set(['assignedTo', 'leadGivenBy']);
+
 /** 125000 → '₹1,25,000'. */
 export const formatRupees = (value: number): string => `₹${value.toLocaleString('en-IN', { maximumFractionDigits: 2 })}`;
 
@@ -141,8 +144,8 @@ export function fieldDisplayValues(record: AnyRecord | null | undefined, def: Dr
             const time = typeof paired === 'string' && paired.trim() ? paired : (/^\d{4}-\d{2}-\d{2}T(\d{2}:\d{2})/.exec(text)?.[1] ?? '');
             return [formatDay(text), time ? formatClock(time) : ''].filter(Boolean).join(', ');
         }
-        // Users are stored by username: show their name.
-        if (def.key === 'assignedTo') return findCrmUser(text)?.name || text;
+        // Users are stored by username: show their name (a typed outside referrer stays as typed).
+        if (USER_FIELD_KEYS.has(def.key)) return findCrmUser(text)?.name || text;
         if (def.form) return formatCustomValue(def.form, value, labels);
         if (def.type === 'checkbox') return value === true || value === 'true' ? 'Yes' : 'No';
         if (def.type === 'amount' && !Number.isNaN(Number(value))) return formatRupees(Number(value));
