@@ -14,7 +14,7 @@ export interface LeadFormData {
     leadSource: string;
     productCategory: string[];
     followupType: string;
-    /** What the customer said on the last follow-up (shared_customer_response); picked on every edit. */
+    /** What the customer said on the last follow-up (lead_customer_response); picked on every edit. */
     customerResponse?: string;
     remarks: string;
     registrationType?: string;

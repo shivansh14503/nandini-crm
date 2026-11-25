@@ -46,8 +46,9 @@ import { OrganizationNameAutocomplete } from '@/components/organizations/Organiz
 import { useOrganizationNameCheck } from '@/components/organizations/useOrganizationNameCheck';
 import { useFormMode } from '@/context/FormModeContext';
 import { upperCase, useUndoSafeSanitizer } from '@/components/forms/undoSafeInput';
-import { CUSTOMER_RESPONSE_CATEGORY, CUSTOMER_RESPONSES, FieldGlow, useFollowUpDecision, type FollowUpDecision } from '@/components/forms/FollowUpDecision';
+import { FieldGlow, LEAD_CUSTOMER_RESPONSES, useFollowUpDecision, type FollowUpDecision } from '@/components/forms/FollowUpDecision';
 import { useLeadRatingConfig } from '@/utils/leadRating';
+import { activeOptionValues } from '@/utils/formConfig';
 import { Typography } from '@mui/material';
 import EventBusyOutlinedIcon from '@mui/icons-material/EventBusyOutlined';
 
@@ -101,7 +102,7 @@ export function LeadOverviewSection({ leadId, notify, onDecisionPendingChange, o
 
     // An edit with a Customer Response records a follow-up (and re-rates the lead); without one it changes details
     // only. A closing status ("Closes the lead" in Form Builder) schedules no follow-up and keeps the Rating.
-    const { closingStatuses } = useLeadRatingConfig();
+    const { closingStatuses, responseCategory } = useLeadRatingConfig();
     const status = useWatch({ control, name: 'status' }) ?? '';
     const response = useWatch({ control, name: 'customerResponse' }) ?? '';
     const closing = isEdit && closingStatuses.has(status);
@@ -117,7 +118,8 @@ export function LeadOverviewSection({ leadId, notify, onDecisionPendingChange, o
         responseOptional: true,
         suspended: closing,
     });
-    const customerResponseOptions = getOptions(CUSTOMER_RESPONSE_CATEGORY, CUSTOMER_RESPONSES);
+    // The list the leads field is linked to (its options carry the Rating rules), not a hard-coded key.
+    const customerResponseOptions = activeOptionValues(responseCategory, LEAD_CUSTOMER_RESPONSES);
     const followUpLocked = isEdit && !response.trim();
 
     // Informational only: lists (and links to) the records that already use the mobile / email; never blocks the save.

@@ -17,11 +17,35 @@ import type { ConfigValidationIssue } from '@/utils/formConfig';
  * passed (or none at all) can't be kept: the date field is cleared and glows, and a warning toast says why.
  */
 
-/** Dropdown category of the Customer Response options (admin-managed, shared by leads and opportunities). */
-export const CUSTOMER_RESPONSE_CATEGORY = 'shared_customer_response';
+/**
+ * The Customer Response field is the same on both forms (key `customerResponse`, this flow); each module has its own
+ * list of answers, like Status. Leads read theirs through the field's link (`useLeadRatingConfig().responseCategory`),
+ * since each option also carries the lead's Rating rule (default list `lead_customer_response`).
+ */
+/** Opportunities' list (admin-managed). */
+export const OPPORTUNITY_CUSTOMER_RESPONSE_CATEGORY = 'shared_customer_response';
 
-/** Fallback options while the admin configuration loads (same defaults as the backend seed). */
-export const CUSTOMER_RESPONSES: string[] = [
+/** Fallback lead options while the admin configuration loads (same defaults as the backend seed). */
+export const LEAD_CUSTOMER_RESPONSES: string[] = [
+    'Interested',
+    'Need More Information',
+    'Requested Quotation',
+    'Requested Demo',
+    'Under Discussion',
+    'Call Back Later',
+    'Not Interested',
+    'Price Issue',
+    'Using Other Software',
+    'No Requirement',
+    'Requirement in Future',
+    'No Response',
+    'Wrong Number',
+    'Not Reachable',
+    'Do Not Contact',
+];
+
+/** Fallback opportunity options while the admin configuration loads (same defaults as the backend seed). */
+export const OPPORTUNITY_CUSTOMER_RESPONSES: string[] = [
     'Interested - wants a demo',
     'Interested - send quotation',
     'Asked to call back later',

@@ -44,19 +44,32 @@ Admins set the day and attempt limits in Form Builder.
 The days from the creation date to the first follow-up date: **Hot 0–5 days, Warm after** (Warm: no limit), editable the
 same way. Example: created 20 Nov → follow-up 20–25 Nov is Hot, 26 Nov onwards is Warm.
 
-### 2.3 Starting rules for today's Customer Response options
+### 2.3 Starting rules for the leads' Customer Response options
 
-Set in setup; the admin can change all of them.
+The leads' own list `lead_customer_response` (migration `20261125190000_lead_customer_response`). Opportunities have the
+same field (same key, label and follow-up flow) on their own list, `shared_customer_response`, like Status. Set in
+setup; the admin can change all of them in Form Builder › Leads › Rating Rules.
 
-| Option | Rule | Hot | Warm | Cold |
-| --- | --- | --- | --- | --- |
-| Interested - wants a demo | Follow-up gap | 0–5 days | no limit | never |
-| Interested - send quotation | Days since response | days 0–6 | days 7–14 | day 15+ |
-| Asked to call back later | Follow-up gap | 0–5 days | no limit | never |
-| Not reachable / no answer | Unanswered calls | 1–2 | 3–4 | 5+ |
-| Needs internal discussion | Follow-up gap | 0–5 days | no limit | never |
-| Using another product | Always | | | Cold |
-| Not interested | Always | | | Cold |
+| Option | Rule | Hot | Warm | Cold | Why |
+| --- | --- | --- | --- | --- | --- |
+| Interested | Follow-up gap | 0–7 days | 8–30 days | 31+ days | Buying signal; cools if the next step is pushed out |
+| Need More Information | Follow-up gap | 0–3 days | 4–15 days | 16+ days | Engaged; the info has to go out quickly |
+| Requested Quotation | Days since response | days 0–10 | days 11–30 | day 31+ | Strongest signal; ages nightly until a new response |
+| Requested Demo | Follow-up gap | 0–7 days | 8–21 days | 22+ days | Hot when the demo is booked within a week |
+| Under Discussion | Days since response | days 0–7 | days 8–21 | day 22+ | Decision in progress; ages if nothing is recorded |
+| Call Back Later | Follow-up gap | 0–3 days | 4–30 days | 31+ days | A near call-back keeps it Hot |
+| Not Interested | Always | | | Cold | Dead end |
+| Price Issue | Follow-up gap | Off | 0–15 days | 16+ days | Objection: never Hot |
+| Using Other Software | Always | | | Cold | Lost to a competitor |
+| No Requirement | Always | | | Cold | Dead end |
+| Requirement in Future | Follow-up gap | Off | 0–60 days | 61+ days | Nurture: Warm while the follow-up is within two months |
+| No Response | Unanswered calls | 1–2 | 3–4 | 5+ | Shares the counter with Not Reachable |
+| Wrong Number | Always | | | Cold | Bad data |
+| Not Reachable | Unanswered calls | 1–2 | 3–4 | 5+ | Shares the counter with No Response |
+| Do Not Contact | Always | | | Cold | Customer opted out |
+
+Leads that recorded a response from the old list keep that text on the record and in their history; their Rating keeps
+following the rule it was set with until the next follow-up is recorded with one of the options above.
 
 "Closes the lead" starts on for **Dead** (and `Unqualified / Lost` in the seed defaults).
 
@@ -91,7 +104,7 @@ it once at start-up to catch up (Redis is optional in dev; with no worker runnin
 | --- | --- |
 | `Lead.rating` | **Done** (migration `20261120200000_lead_rating`): `NVARCHAR(10)`, indexed. |
 | `Lead.unansweredCalls` | `INT NOT NULL DEFAULT 0` |
-| `Lead.ratingReason` | `NVARCHAR(200)`, why the current Rating, e.g. *Follow-up in 3 days after "Asked to call back later"*. Drawer tooltip and history. |
+| `Lead.ratingReason` | `NVARCHAR(200)`, why the current Rating, e.g. *Follow-up in 3 days after "Call Back Later"*. Drawer tooltip and history. |
 | `Lead.ratingAgeingFrom`, `ratingAgeingJson` | Snapshot of a *Days since response* rule: the response's IST day (`DATE`) and `{ limits: { hot, warm }, response }`. Both null otherwise. The reason reads *Ageing since "…" on 20 Nov 2026*, so it only changes with the Rating. |
 | `ModuleSetting` (new table) | `module`, `key` (unique together), `valueJson`, `updatedBy`, `updatedAt`. Holds the new-lead rule (`leads` / `ratingNewLead`). |
 | Customer Response option `metaJson` | `{ "ratingRule": { "rule": "followUpGap" \| "daysSinceResponse" \| "unansweredCalls" \| "always", "hot": n \| null, "warm": n \| "noLimit" \| null, "rating": "Hot" \| "Warm" \| "Cold" } }`. Follows the option on rename; goes away with it on delete. |
@@ -127,9 +140,9 @@ it once at start-up to catch up (Redis is optional in dev; with no worker runnin
 
   FOLLOW-UPS  (one row per Customer Response option, live from Dropdowns)
     Response                     Rule                   Hot        Warm          Cold
-    Interested - wants a demo    [Follow-up gap      v]  0–[5 v]    [No limit v]  never
-    Interested - send quotation  [Days since response v] 0–[6 v]    [14 v]        15+ days
-    Not reachable / no answer    [Unanswered calls   v]  1–[2 v]    [4 v]         5+ calls
+    Interested                   [Follow-up gap      v]  0–[7 v]    [30 v]        31+ days
+    Requested Quotation          [Days since response v] 0–[10 v]   [30 v]        31+ days
+    No Response                  [Unanswered calls   v]  1–[2 v]    [4 v]         5+ calls
     Not interested               [Always             v]  [Cold v]
   ```
 
@@ -154,10 +167,10 @@ it once at start-up to catch up (Redis is optional in dev; with no worker runnin
 
 - Create on 20 Nov with a follow-up on 25 Nov → Hot; on 26 Nov → Warm. A follow-up at the current minute or earlier,
   or with no time, is refused.
-- "Asked to call back later" with a new follow-up 5 days out → Hot; 6 days → Warm.
-- "Interested - send quotation" recorded on day 0 → Hot; the nightly job makes it Warm on day 7 and Cold on day 15.
-- "Not reachable / no answer" five times in a row → Hot, Hot, Warm, Warm, Cold; then any other response resets the
-  count to 0.
+- "Call Back Later" with a new follow-up 3 days out → Hot; 4 days → Warm; 31 days → Cold.
+- "Requested Quotation" recorded on day 0 → Hot; the nightly job makes it Warm on day 11 and Cold on day 31.
+- "No Response", "No Response", "Not Reachable", "No Response", "Not Reachable" in a row → Hot, Hot, Warm, Warm, Cold;
+  then any other response resets the count to 0.
 - An overdue follow-up alone never changes the counter or the Rating.
 - Keep chosen, then the follow-up passes before Save → save refused; switching to a new follow-up saves.
 - Editing only the phone number → no history entry; Rating and counter unchanged.

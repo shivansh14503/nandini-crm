@@ -124,6 +124,7 @@ export const APP_REQUIRED_CATEGORY_KEYS: ReadonlySet<string> = new Set([
     'shared_lead_source',
     'shared_followup_type',
     'shared_customer_response',
+    'lead_customer_response',
     'opportunity_type',
     'opportunity_commission_type',
     'org_nature_of_business',
@@ -206,16 +207,15 @@ export const DEFAULT_CATEGORIES: DefaultCategory[] = [
         key: 'shared_customer_response',
         label: 'Customer Response',
         module: 'shared',
-        description: 'What the customer said on the last follow-up (Leads, Opportunities). On leads, each option also sets the Rating.',
-        // Starting Rating rules (option meta `ratingRule`, docs/lead-rating-rules.md); only leads read them.
+        description: 'What the customer said on the last follow-up (Opportunities). Leads have their own list.',
         options: [
-            { value: 'Interested - wants a demo', meta: { ratingRule: { rule: 'followUpGap', hot: 5, warm: 'noLimit' } } },
-            { value: 'Interested - send quotation', meta: { ratingRule: { rule: 'daysSinceResponse', hot: 6, warm: 14 } } },
-            { value: 'Asked to call back later', meta: { ratingRule: { rule: 'followUpGap', hot: 5, warm: 'noLimit' } } },
-            { value: 'Not reachable / no answer', meta: { ratingRule: { rule: 'unansweredCalls', hot: 2, warm: 4 } } },
-            { value: 'Needs internal discussion', meta: { ratingRule: { rule: 'followUpGap', hot: 5, warm: 'noLimit' } } },
-            { value: 'Using another product', meta: { ratingRule: { rule: 'always', rating: 'Cold' } } },
-            { value: 'Not interested', meta: { ratingRule: { rule: 'always', rating: 'Cold' } } },
+            'Interested - wants a demo',
+            'Interested - send quotation',
+            'Asked to call back later',
+            'Not reachable / no answer',
+            'Needs internal discussion',
+            'Using another product',
+            'Not interested',
         ],
     },
     {
@@ -246,6 +246,35 @@ export const DEFAULT_CATEGORIES: DefaultCategory[] = [
             ['New', 'Contacted', 'In Discussion', 'Demo Scheduled', 'Proposal Sent', 'Qualified', 'Negotiation', 'Converted', 'Unqualified / Lost'],
             ['New', 'Converted'],
         ).map((o) => (o.value === 'Unqualified / Lost' ? { ...o, meta: { closesLead: true } } : o)),
+    },
+    // Same field as the opportunity's Customer Response (key `customerResponse`, same follow-up flow), with the leads'
+    // own answers: each option also sets the lead's Rating (option meta `ratingRule`, docs/lead-rating-rules.md 2.3).
+    {
+        key: 'lead_customer_response',
+        label: 'Customer Response',
+        module: 'leads',
+        description: 'What the customer said on the last follow-up. Each option sets the lead\'s Rating (Rating Rules tab).',
+        options: [
+            // Buying signals: Hot while the next step is close (or the request is fresh).
+            { value: 'Interested', meta: { ratingRule: { rule: 'followUpGap', hot: 7, warm: 30 } } },
+            { value: 'Need More Information', meta: { ratingRule: { rule: 'followUpGap', hot: 3, warm: 15 } } },
+            { value: 'Requested Quotation', meta: { ratingRule: { rule: 'daysSinceResponse', hot: 10, warm: 30 } } },
+            { value: 'Requested Demo', meta: { ratingRule: { rule: 'followUpGap', hot: 7, warm: 21 } } },
+            { value: 'Under Discussion', meta: { ratingRule: { rule: 'daysSinceResponse', hot: 7, warm: 21 } } },
+            { value: 'Call Back Later', meta: { ratingRule: { rule: 'followUpGap', hot: 3, warm: 30 } } },
+            // Dead ends: Cold whatever the follow-up.
+            { value: 'Not Interested', meta: { ratingRule: { rule: 'always', rating: 'Cold' } } },
+            // Objections and later needs: never Hot, Cold once the follow-up is pushed far out.
+            { value: 'Price Issue', meta: { ratingRule: { rule: 'followUpGap', hot: null, warm: 15 } } },
+            { value: 'Using Other Software', meta: { ratingRule: { rule: 'always', rating: 'Cold' } } },
+            { value: 'No Requirement', meta: { ratingRule: { rule: 'always', rating: 'Cold' } } },
+            { value: 'Requirement in Future', meta: { ratingRule: { rule: 'followUpGap', hot: null, warm: 60 } } },
+            // Unanswered attempts share one counter (lead.unansweredCalls): Hot for 2, Warm up to 4, Cold from the 5th.
+            { value: 'No Response', meta: { ratingRule: { rule: 'unansweredCalls', hot: 2, warm: 4 } } },
+            { value: 'Wrong Number', meta: { ratingRule: { rule: 'always', rating: 'Cold' } } },
+            { value: 'Not Reachable', meta: { ratingRule: { rule: 'unansweredCalls', hot: 2, warm: 4 } } },
+            { value: 'Do Not Contact', meta: { ratingRule: { rule: 'always', rating: 'Cold' } } },
+        ],
     },
     // Lead Type is how the lead came in. Hot / Warm / Cold is the lead's Rating (`Lead.rating`, set by the system).
     { key: 'lead_type', label: 'Lead Type', module: 'leads', options: ['Inbound', 'Outbound', 'Marketing'] },
@@ -736,8 +765,8 @@ const RAW_DEFAULT_FIELDS: DefaultField[] = [
         t('referredBy', 'Referred By', { type: 'lookup', lock: true }),
         sel('natureOfPartner', 'Nature of Partner', 'partner_nature', { lock: true }),
         sel('followupType', 'Followup Type', 'shared_followup_type'),
-        // What the customer said on the last follow-up. Asked on every edit (the form enforces it there).
-        sel('customerResponse', 'Customer Response', 'shared_customer_response'),
+        // What the customer said on the last follow-up; records a follow-up and sets the Rating. The leads' own list.
+        sel('customerResponse', 'Customer Response', 'lead_customer_response'),
         // Locked and required: every open lead needs its next follow-up (date and time) to be rated.
         t('nextFollowupDate', 'Next Followup Date', { type: 'datetime', req: true }),
         t('assignedTo', 'Assigned to', { type: 'lookup', req: true }),
