@@ -443,6 +443,11 @@
   --crm-module-partner-companies-text: #A21CAF;
   --crm-module-partner-companies-soft: #FDF4FF;
   --crm-module-partner-companies-border: #F5D0FE;
+  /* referrals: Emerald */
+  --crm-module-referrals-main: #059669;
+  --crm-module-referrals-text: #047857;
+  --crm-module-referrals-soft: #ECFDF5;
+  --crm-module-referrals-border: #A7F3D0;
 
   /* Audit log chart series (Data / Configuration / Security). Checked for colour-blind separation on white. */
   --crm-chart-audit-data: #2563EB;
@@ -492,6 +497,10 @@
   --crm-module-partner-companies-text: #F0ABFC;
   --crm-module-partner-companies-soft: color-mix(in srgb, #C026D3 16%, #151E2E);
   --crm-module-partner-companies-border: color-mix(in srgb, #C026D3 42%, #151E2E);
+  --crm-module-referrals-main: #34D399;
+  --crm-module-referrals-text: #6EE7B7;
+  --crm-module-referrals-soft: color-mix(in srgb, #059669 16%, #151E2E);
+  --crm-module-referrals-border: color-mix(in srgb, #059669 42%, #151E2E);
 
   /* Audit log chart series: own dark steps (brand green first), checked for colour-blind separation on #151E2E. */
   --crm-chart-audit-data: #5E9E3D;

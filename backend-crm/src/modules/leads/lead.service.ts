@@ -19,6 +19,7 @@ import { codeSearchPrefix, phoneSearch, phoneVariants, phoneWhere } from '../sha
 import { assertDeletedRow, lockRecords, restoreData, runInTransaction, softDeleteData, type BulkDeleteResult } from '../shared/transactions.js';
 import { assertTaxIdsUnique } from '../shared/taxIdentifiers.js';
 import { assertLeadSourceDetails, LEAD_SOURCE_DETAIL_KEYS } from '../shared/leadSource.js';
+import { resolveReferredBy } from '../shared/referredBy.js';
 import { toLeadData, toLeadDto, type LeadDto } from './lead.mapper.js';
 import { resolveAddressPlaces } from '../cities/cityAddresses.js';
 import {
@@ -94,6 +95,8 @@ export async function createLeadRecord(
 ): Promise<LeadDto> {
     await assertTaxIdsUnique(tx, 'lead', { gstNumber: input.gstNumber });
     const leadCode = await generateEntityCode(tx, 'LD');
+    // Referred By must be an active referral (imports name one; the form picks one).
+    Object.assign(input, await resolveReferredBy(tx, input));
     const assignedTo = (await assertAssigneeValid(tx, input.assignedTo, { activeUsernames: lookups.activeUsernames })) ?? user.username;
     const row = await tx.lead.create({
         data: { ...(await resolveAddressPlaces(tx, 'lead', toLeadData({ ...input, assignedTo }))), ...rating, leadCode, createdBy: user.username },
@@ -198,6 +201,8 @@ export const leadService = {
             assertRecordAccess(user, existing);
             const before = toLeadDto(existing);
             const merged: Record<string, unknown> = { ...before, ...patch };
+            // Retyping Referred By without picking a referral means "find it by name", not "keep the old link".
+            if ('referredBy' in patch && !('referredById' in patch)) delete merged.referredById;
             const input = leadInputSchema.parse(merged);
             // The follow-up's date and time are checked by `planLeadEdit` (required only when one is scheduled).
             input.customFields = checkModulePayload(fieldConfig, merged, input.customFields, {
@@ -218,6 +223,8 @@ export const leadService = {
                 now: businessNow(),
             });
             await assertTaxIdsUnique(tx, 'lead', { gstNumber: input.gstNumber }, { excludeId: id, previous: { gstNumber: existing.gstNumber } });
+            // A Referred By the lead already has (a legacy typed name, or a referral since made Inactive) stays.
+            Object.assign(input, await resolveReferredBy(tx, input, existing));
             const assignedTo = (await assertAssigneeValid(tx, input.assignedTo, { previous: existing.assignedTo })) ?? existing.assignedTo;
 
             await tx.lead.update({

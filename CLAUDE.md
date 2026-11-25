@@ -146,7 +146,8 @@ Each CRM module has one identity hue, used only as a **light tint** to tell modu
 | Opportunities | Violet | Tickets | Cyan |
 | Quotations | Teal | Products | Gold |
 | Organizations | Indigo | Partner Companies | Fuchsia |
-| Contracts | Rose | Documents | Brown |
+| Contracts | Rose | Referrals | Emerald |
+| Documents | Brown | | |
 
 - Never use module colors for buttons, hover states, focus rings, checkboxes or links; those stay on the brand accent.
 - `-main` for icons, dots and strips; `-soft` + `-border` for tinted tiles/badges with `-text` on top.

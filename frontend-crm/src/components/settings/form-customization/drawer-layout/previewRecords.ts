@@ -2,6 +2,7 @@ import { useMemo } from 'react';
 import type { DrawerLayoutModule } from '@/lib/drawer-layout';
 import { usePaginatedContacts } from '@/hooks/queries/useContacts';
 import { usePaginatedContracts } from '@/hooks/queries/useContracts';
+import { usePaginatedReferrals } from '@/hooks/queries/useReferrals';
 import { usePaginatedLeads } from '@/hooks/queries/useLeads';
 import { usePaginatedOpportunities } from '@/hooks/queries/useOpportunities';
 import { usePaginatedOrganizations } from '@/hooks/queries/useOrganizations';
@@ -26,6 +27,7 @@ export function usePreviewRecords(module: DrawerLayoutModule): AnyRecord[] {
         tickets: usePaginatedTickets(page, on('tickets')),
         contracts: usePaginatedContracts(page, on('contracts')),
         'partner-companies': usePaginatedPartnerCompanies(page, on('partner-companies')),
+        referrals: usePaginatedReferrals(page, on('referrals')),
     };
     const rows = lists[module].data?.data;
     return useMemo(() => (rows ?? []) as AnyRecord[], [rows]);

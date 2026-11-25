@@ -52,6 +52,7 @@ export const leadFormSchema = z.object({
     noOfEmployee: optionalString,
     // Required for Lead Source CA / Reference; Partner Company for Lead Source Partner (below).
     referredBy: optionalString,
+    referredById: optionalString,
     partnerCompany: optionalString,
 
     // Billing Address

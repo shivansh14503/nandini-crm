@@ -75,7 +75,9 @@ export const opportunityInputSchema = z.object({
     contactNumber: optionalPhone('Contact Number'),
     contactEmail: optionalEmail,
     // Required for Lead Source CA / Reference; Partner Company for Lead Source Partner (shared/leadSource.ts).
+    // Referred By is a Referral: its id, and its name (resolved by shared/referredBy.ts).
     referredBy: optionalText('Referred By', L.organizationName),
+    referredById: optionalText('Referred By', 50),
     partnerCompany: optionalUpperText('Partner Company', L.organizationName),
     type: optionalText('Type', L.option),
     salesStage: requiredText('Sales Stage', L.option),

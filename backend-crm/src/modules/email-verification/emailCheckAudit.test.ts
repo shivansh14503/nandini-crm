@@ -8,6 +8,7 @@ const row = (overrides: Partial<CheckedRow>): CheckedRow => ({
     leadId: null,
     contactId: null,
     organizationId: null,
+    referralId: null,
     verificationStatus: null,
     verificationReason: null,
     verifiedAt: null,
@@ -30,6 +31,7 @@ describe('emailCheckEntries', () => {
             row({ leadId: 'L1' }),
             row({ contactId: 'C1', verificationStatus: 'valid', verificationReason: 'accepted_email', verifiedAt: new Date() }),
             row({ organizationId: 'O1', email: 'b@acme.in', verificationStatus: 'valid', verificationReason: 'accepted_email', verifiedAt: new Date() }),
+            row({ referralId: 'R1' }),
         ];
         const results: Record<string, { status: string; reason: string }> = {
             'a@acme.in': { status: 'invalid', reason: 'rejected_email' },
@@ -37,12 +39,13 @@ describe('emailCheckEntries', () => {
         };
         const entries = emailCheckEntries(rows, (email) => results[email], { ...options, runId: 'run-1' });
 
-        assert.equal(entries.length, 2, 'the unchanged organization address writes nothing');
+        assert.equal(entries.length, 3, 'the unchanged organization address writes nothing');
         assert.deepEqual(
             entries.map((e) => [e.entityType, e.entityId, e.severity]),
             [
                 ['Lead', 'L1', 'NOTICE'],
                 ['Contact', 'C1', 'NOTICE'],
+                ['Referral', 'R1', 'NOTICE'],
             ],
         );
         assert.deepEqual(entries[0].changes, {

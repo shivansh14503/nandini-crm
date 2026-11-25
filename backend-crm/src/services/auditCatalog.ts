@@ -16,6 +16,7 @@ export type AuditEntityType =
     /** A file uploaded to a record field (an opportunity's Upload Doc); `changes.module` is its module. */
     | 'RecordFile'
     | 'PartnerCompany'
+    | 'Referral'
     | 'User'
     | 'Import'
     | 'DropdownCategory'
@@ -79,6 +80,7 @@ const MODULE_BY_ENTITY: Record<AuditEntityType, string> = {
     Contract: 'contracts',
     RecordFile: 'files',
     PartnerCompany: 'partner-companies',
+    Referral: 'referrals',
     User: 'users',
     Import: 'imports',
     DropdownCategory: 'form-customization',
@@ -219,6 +221,7 @@ export function labelFromChanges(entityType: AuditEntityType, entityId: string, 
             return pick('organizationName');
         case 'Contact':
         case 'Lead':
+        case 'Referral':
             return pick('name');
         case 'Opportunity':
             return pick('opportunityName', 'organizationName');

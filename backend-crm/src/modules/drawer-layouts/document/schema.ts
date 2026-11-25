@@ -14,7 +14,7 @@ import { z } from 'zod';
 export const DRAWER_LAYOUT_VERSION = 1;
 
 /** Modules whose record drawer is drawn from a layout (every CRM module). */
-export const DRAWER_LAYOUT_MODULES = ['leads', 'contacts', 'organizations', 'opportunities', 'quotations', 'products', 'tickets', 'contracts', 'partner-companies'] as const;
+export const DRAWER_LAYOUT_MODULES = ['leads', 'contacts', 'organizations', 'opportunities', 'quotations', 'products', 'tickets', 'contracts', 'partner-companies', 'referrals'] as const;
 export type DrawerLayoutModule = (typeof DRAWER_LAYOUT_MODULES)[number];
 
 /** Values a drawer can show that aren't form fields (set by the system, never typed in). */
@@ -28,6 +28,7 @@ export const SYSTEM_FIELDS: Record<DrawerLayoutModule, readonly string[]> = {
     tickets: ['ticketNumber', 'amcFlag', 'cloudFlag'],
     contracts: ['contractNumber'],
     'partner-companies': [],
+    referrals: [],
 };
 
 /** Each module's addresses, by field prefix (`primary` → primaryAddress, primaryCity, primaryState, …). */
@@ -41,6 +42,7 @@ export const ADDRESS_PREFIXES: Record<DrawerLayoutModule, readonly string[]> = {
     tickets: [],
     contracts: [],
     'partner-companies': ['billing', 'shipping'],
+    referrals: [],
 };
 
 /** Modules whose records carry line items (products and services with totals): only they may use those blocks. */

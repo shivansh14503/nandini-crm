@@ -21,6 +21,7 @@ import {
     useProducts,
     useQuotations,
     useTickets,
+    useReferrals,
 } from '@/hooks/queries';
 import { CRM_MODULE_LABELS, type CrmModuleKey, type FormConfigsPayload } from '@/types/formConfig.types';
 import { panelHeaderSx, surfaceSx } from '../form-customization/builderUi';
@@ -37,6 +38,7 @@ const LIST_ROUTE: Record<CrmModuleKey, string> = {
     tickets: ROUTES.TICKETS,
     'partner-companies': ROUTES.PARTNER_COMPANIES,
     contracts: ROUTES.CONTRACTS,
+    referrals: ROUTES.REFERRALS,
 };
 
 const NO_ROWS: readonly unknown[] = [];
@@ -59,6 +61,7 @@ function usePreviewRecords(module: CrmModuleKey): { rows: readonly unknown[]; lo
         tickets: useTickets(undefined, { enabled: module === 'tickets' }),
         'partner-companies': usePartnerCompanies(undefined, { enabled: module === 'partner-companies' }),
         contracts: useContracts(undefined, { enabled: module === 'contracts' }),
+        referrals: useReferrals(undefined, { enabled: module === 'referrals' }),
     } satisfies Record<CrmModuleKey, unknown>;
     const query = queries[module];
     return { rows: (query.data as readonly unknown[] | undefined) ?? NO_ROWS, loading: query.isPending, failed: query.isError };

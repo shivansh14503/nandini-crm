@@ -58,4 +58,4 @@ export function partnerCompanyFor(record: LeadSourceDetails): string | null {
 }
 
 /** The fields whose change re-checks the rule on an edit (a stored legacy record isn't refused for other edits). */
-export const LEAD_SOURCE_DETAIL_KEYS = ['leadSource', 'referredBy', 'partnerCompany'] as const;
+export const LEAD_SOURCE_DETAIL_KEYS = ['leadSource', 'referredBy', 'referredById', 'partnerCompany'] as const;

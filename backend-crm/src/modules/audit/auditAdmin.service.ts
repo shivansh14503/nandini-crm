@@ -89,6 +89,7 @@ const STATUS_LOADERS: Readonly<Record<string, StatusLoader>> = {
     Contract: (ids) => prisma.contract.findMany(inIds(ids)),
     Product: (ids) => prisma.product.findMany(inIds(ids)),
     PartnerCompany: (ids) => prisma.partnerCompany.findMany(inIds(ids)),
+    Referral: (ids) => prisma.referral.findMany(inIds(ids)),
 };
 
 const statusKey = (entityType: string, entityId: string) => `${entityType}:${entityId}`;

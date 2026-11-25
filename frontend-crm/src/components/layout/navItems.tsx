@@ -66,6 +66,7 @@ export const NAV_ITEMS: readonly NavGroup[] = [
         label: 'All',
         items: [
             { label: 'Partner Company', href: ROUTES.PARTNER_COMPANIES },
+            { label: 'Referrals', href: ROUTES.REFERRALS },
             { label: 'Reports', href: '/dashboard' },
             { label: 'Integrations', href: '/dashboard' },
         ],

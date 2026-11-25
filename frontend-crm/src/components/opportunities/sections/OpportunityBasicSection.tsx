@@ -29,6 +29,7 @@ import {
     usePickedContactLocks,
     useLeadSourceDetails,
     PartnerCompanyLookup,
+    ReferredByLookup,
 } from '@/components/forms';
 import { useContacts, useOrganizations } from '@/hooks/queries';
 import type { Contact } from '@/types/contact.types';
@@ -254,20 +255,8 @@ export function OpportunityBasicSection({ notify, onDecisionPendingChange }: Opp
                     />
                 </LockedInputs>
 
-                {/* Lead Source CA / Reference only, and then required (as on the Lead form). Picks from the CRM's
-                    contacts; a partner or campaign can still be typed, as typed. */}
-                {showReferredBy && (
-                    <RhfLookup<F, 'contact'>
-                        name="referredBy"
-                        label="Referred By"
-                        required={needsReferredBy}
-                        hint="Partner, agent, or client"
-                        lookupType="contact"
-                        placeholder="Referred by partner or person..."
-                        nameCase={false}
-                        maxLength={FIELD_MAX_LENGTH.organizationName}
-                    />
-                )}
+                {/* Lead Source CA / Reference only, and then required (as on the Lead form): an active referral. */}
+                {showReferredBy && <ReferredByLookup<F> name="referredBy" idName="referredById" required={needsReferredBy} />}
 
                 {/* Lead Source Partner only, and then required: a partner organization (picker opens on Customer Type = Partner). */}
                 {showPartnerCompany && <PartnerCompanyLookup<F> name="partnerCompany" />}

@@ -687,6 +687,8 @@ function autoTone(module: DrawerLayoutModule, field: string, value: string): Ton
         const name = CONTRACT_STATUS_PALETTE[value];
         return name ? paletteTone(scorecardPaletteHex(name)) : BADGE_TONES.neutral;
     }
+    // A referral's Active / Inactive reads like an organization's Account Status.
+    if (module === 'referrals' && field === 'status') return value === 'Inactive' ? BADGE_TONES.warning : BADGE_TONES.success;
     switch (field) {
         case 'status':
         case 'grandTotal':

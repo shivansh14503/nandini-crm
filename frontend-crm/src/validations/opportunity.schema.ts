@@ -50,6 +50,7 @@ export const opportunityFormSchema = z.object({
     contactEmail: zodEmailOptional,
     // Required for Lead Source CA / Reference; Partner Company for Lead Source Partner (leadSourceDetailIssues).
     referredBy: optionalString,
+    referredById: optionalString,
     partnerCompany: optionalString,
     type: optionalString,
     salesStage: requiredString('Sales Stage'),

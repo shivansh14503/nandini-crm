@@ -36,8 +36,10 @@ export interface OpportunityFormData {
     contactEmail?: string;
 
     // Basic Details - Row 4
-    /** Shown, and required, when Lead Source is CA or Reference. */
+    /** Shown, and required, when Lead Source is CA or Reference: the referral's name (see referredById). */
     referredBy?: string;
+    /** Id of the Referral picked as Referred By; empty for a value typed before the Referrals module existed. */
+    referredById?: string;
     /** Shown, and required, when Lead Source is Partner (partner_nature, as on partner organizations). */
     partnerCompany?: string;
 

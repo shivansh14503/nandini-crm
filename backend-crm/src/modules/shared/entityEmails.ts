@@ -72,7 +72,7 @@ export function toEmailDtos(rows: readonly EntityEmail[] | undefined): Corporate
         }));
 }
 
-export type EmailOwner = { organizationId: string } | { contactId: string } | { leadId: string };
+export type EmailOwner = { organizationId: string } | { contactId: string } | { leadId: string } | { referralId: string };
 
 /**
  * Replaces an owner's email list (delete + insert) inside the caller's transaction. Addresses that were already

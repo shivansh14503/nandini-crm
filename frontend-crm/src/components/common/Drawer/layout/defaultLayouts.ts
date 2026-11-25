@@ -242,6 +242,36 @@ function contactsLayout(): DrawerLayoutDocument {
     };
 }
 
+function referralsLayout(): DrawerLayoutDocument {
+    return {
+        version: DRAWER_LAYOUT_VERSION,
+        header: {
+            titleField: 'name',
+            subtitleFields: ['designation', 'organizationName'],
+            avatar: { kind: 'initials' },
+            hotAvatar: false,
+            badges: [{ id: 'g-status', field: 'status', prefix: '', style: 'auto', hideEmpty: true }],
+        },
+        tabs: {
+            overview: [
+                sec('s-overview', 'OVERVIEW', 'card', 2, [
+                    f('b-org', 'organizationName', 'emphasis', { ...full, label: 'Organisation', copy: true }),
+                    f('b-designation', 'designation', 'standard'),
+                    f('b-department', 'department', 'standard'),
+                    f('b-status', 'status', 'chip'),
+                ]),
+                sec('s-channels', 'COMMUNICATION CHANNELS', 'card', 1, [
+                    f('b-mobile', 'mobile', 'channel'),
+                    f('b-office', 'officePhone', 'channel'),
+                    f('b-email', 'emailAddress', 'channel'),
+                ]),
+                sec('s-owner', 'ASSIGNED USER', 'card', 1, [f('b-owner', 'assignedTo', 'person', { ...bare, hideEmpty: false, emptyText: 'Unassigned' })], 'Assigned User', false),
+                custom('s-custom'),
+            ],
+        },
+    };
+}
+
 function organizationsLayout(): DrawerLayoutDocument {
     return {
         version: DRAWER_LAYOUT_VERSION,
@@ -637,6 +667,7 @@ const DEFAULT_LAYOUTS: Record<DrawerLayoutModule, () => DrawerLayoutDocument> = 
     tickets: ticketsLayout,
     contracts: contractsLayout,
     'partner-companies': partnerCompaniesLayout,
+    referrals: referralsLayout,
 };
 
 /** The module's built-in layout (a fresh object each call). */
