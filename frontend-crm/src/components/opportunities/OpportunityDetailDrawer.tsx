@@ -9,6 +9,7 @@ import RequestQuoteOutlinedIcon from '@mui/icons-material/RequestQuoteOutlined';
 import CheckCircleOutlinedIcon from '@mui/icons-material/CheckCircleOutlined';
 
 import { ROUTES } from '@/config/constants';
+import { recordActivitiesContext } from '@/components/activities/activityLinks';
 import { withListOrigin } from '@/utils/listOrigin';
 import type { Opportunity } from '@/types/opportunity.types';
 import { EntityDetailDrawer } from '@/components/common/Drawer';
@@ -130,6 +131,7 @@ export function OpportunityDetailDrawer({
             formTabs={view.formTabs}
             tabContents={view.tabContents}
             auditEntity={{ type: 'opportunities', id: opp.id }}
+            activities={recordActivitiesContext('opportunities', opp)}
             recordAudit={opp}
             includeChangesTab={true}
             primaryAction={{

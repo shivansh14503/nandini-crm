@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import ContentCopyOutlinedIcon from '@mui/icons-material/ContentCopyOutlined';
 
 import { ROUTES } from '@/config/constants';
+import { recordActivitiesContext } from '@/components/activities/activityLinks';
 import { withListOrigin } from '@/utils/listOrigin';
 import type { Ticket } from '@/types/ticket.types';
 import { useTicket } from '@/hooks/queries';
@@ -53,6 +54,7 @@ export function TicketDetailDrawer({ ticket, open, onClose, onEdit, hideBackdrop
             formTabs={view.formTabs}
             tabContents={view.tabContents}
             auditEntity={{ type: 'tickets', id: t.id }}
+            activities={recordActivitiesContext('tickets', t)}
             recordAudit={t}
             includeChangesTab
             primaryAction={{ label: 'Edit Ticket', onClick: handleEdit }}

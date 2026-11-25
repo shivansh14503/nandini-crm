@@ -30,6 +30,8 @@ import {
     type AuditEntityType,
 } from '@/hooks/queries';
 import { useContracts } from '@/hooks/queries/useContracts';
+import { useRecordActivities } from '@/hooks/queries/useActivities';
+import type { Activity, ActivityRelatedModule } from '@/types/activity.types';
 import type { Contract } from '@/types/contract.types';
 import type { Contact } from '@/types/contact.types';
 import type { Lead } from '@/types/lead.types';
@@ -60,8 +62,21 @@ export interface RelatedRecordDatasets {
     products?: Product[];
     tickets?: Ticket[];
     contracts?: Contract[];
+    /** The record's activities (organizations and contacts roll up, as their Activities tab does). */
+    activities?: Activity[];
     auditRevisions?: AuditRevisionItem[];
 }
+
+/** The activities module key of each entity that has an Activities list (products have none). */
+const ACTIVITY_MODULE_OF: Partial<Record<CrmEntityType, ActivityRelatedModule>> = {
+    organization: 'organizations',
+    contact: 'contacts',
+    lead: 'leads',
+    opportunity: 'opportunities',
+    quotation: 'quotations',
+    ticket: 'tickets',
+    contract: 'contracts',
+};
 
 export function normalizeRelatedModuleKey(moduleId: string): string {
     const normalized = moduleId.trim().toLowerCase().replace(/-/g, '_');
@@ -483,6 +498,9 @@ export function resolveRelatedRecordsForModule(
         }
 
         case 'activities':
+            // Already the record's own list (useRecordActivities); rows keep the activity's keys for the table columns.
+            return (datasets.activities ?? []).map((a) => ({ ...a }) as RelatedRecordRow);
+
         case 'partner_contacts':
         case 'member_organizations':
         case 'documents':
@@ -551,6 +569,8 @@ export function useRelatedDatasets(
     const needsProducts = active && ['organization', 'opportunity', 'quotation'].includes(entityType);
     const needsTickets = active && ['organization', 'contact'].includes(entityType);
     const needsContracts = active && ['organization', 'contact', 'opportunity'].includes(entityType);
+    const activityModule = ACTIVITY_MODULE_OF[entityType];
+    const needsActivities = active && Boolean(activityModule && ctx.recordId);
 
     const { data: contacts } = useContacts(contactFilter, { enabled: needsContacts });
     const { data: opportunities } = useOpportunities(oppFilter, { enabled: needsOpps });
@@ -560,6 +580,7 @@ export function useRelatedDatasets(
     const { data: products } = useProducts(undefined, { enabled: needsProducts });
     const { data: tickets } = useTickets(ticketFilter, { enabled: needsTickets });
     const { data: contracts } = useContracts(contractFilter, { enabled: needsContracts });
+    const { data: activities } = useRecordActivities(activityModule ?? 'leads', ctx.recordId || undefined, { enabled: needsActivities });
     const { data: auditRevisions } = useEntityAuditLogs(
         AUDIT_ENTITY_MAP[entityType],
         active && ctx.recordId ? ctx.recordId : undefined
@@ -575,9 +596,10 @@ export function useRelatedDatasets(
             products,
             tickets,
             contracts,
+            activities,
             auditRevisions,
         }),
-        [contacts, opportunities, quotations, leads, organizations, products, tickets, contracts, auditRevisions]
+        [contacts, opportunities, quotations, leads, organizations, products, tickets, contracts, activities, auditRevisions]
     );
 }
 
@@ -661,6 +683,7 @@ export function getRelatedModulesForEntity(
 
         case 'quotation':
             return withClick([
+                { id: 'activities', label: 'Activities', icon: <AssignmentOutlinedIcon /> },
                 { id: 'line-items', label: 'Line Items', icon: <Inventory2OutlinedIcon /> },
                 { id: 'opportunities', label: 'Opportunities', icon: <TrendingUpOutlinedIcon /> },
                 { id: 'organizations', label: 'Organizations', icon: <ApartmentOutlinedIcon /> },

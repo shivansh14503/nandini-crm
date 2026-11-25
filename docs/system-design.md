@@ -1,6 +1,6 @@
 # Nandini CRM — System Design
 
-> **Status:** living document. Describes the system as built (code as of 2026-11-25; audit context + ledger audit table, admin audit query API and screen, Users tab; Contracts module; Referrals module; Documents module; Activities data model and API, Calendar Phase 1 PR1).
+> **Status:** living document. Describes the system as built (code as of 2026-11-25; audit context + ledger audit table, admin audit query API and screen, Users tab; Contracts module; Referrals module; Documents module; Activities data model and API, Calendar Phase 1 PR1; Activities screens and Calendar, PR2).
 > Update it in the same change that alters architecture, infrastructure, Redis usage, queues or security.
 > Related: [Database design](database-design.md) · [API plan](api-plan.md) · [Build plan](build-plan.md)
 
@@ -390,6 +390,38 @@ frontend-crm/src/
 - **Bootstrap:** after sign-in, `CrmDataBootstrap` prefetches lightweight masters (users, Nature of Call, partners);
   on sign-out it clears the whole query cache.
 - **Theme:** MUI `cssVariables` with class-based colour schemes; see the root `CLAUDE.md` for the token rules.
+
+### 8.3 Activities and the calendar
+
+- **Screens:** `/activities` (list; `?mine=1`, `?type=`, `?status=` from the nav), `/activities/new` (query prefill
+  `type`, `status`, `subject`, `relatedModule`, `relatedId`, `start`, `end`, `allDay`; the form remounts for every
+  query string and on every return, as Next keeps the page alive), `/activities/[id]` and `/[id]/edit`, and
+  `/calendar?view=&date=&users=&activity=`. A quick-create dialog (same Form Builder fields) opens from a calendar
+  slot, the record drawers' Activities tab and the phone FAB, and hands what it holds to `/activities/new` ("Open the
+  full form"). `ActivityDetailDrawer` marks complete, reschedules, cancels and deletes (`viewer.canEdit`), and shows
+  Accept / Maybe / Decline to anyone invited as a colleague, owner or not. The list hides Edit / Delete on rows the
+  user was only invited to and leaves them out of a bulk delete. Seven record drawers (lead, opportunity, contact,
+  organization, quotation, ticket, contract) get an Activities tab before Changes (`EntityDetailDrawer activities`).
+- **Time zone:** activities are true UTC instants; the screens show and enter them in the business timezone from
+  `GET /api/activities/meta` (`Asia/Kolkata` by default), never the device's. `utils/zonedTime.ts` (Intl only, a copy
+  of the backend's) converts wall clocks and days; `utils/activitySchedule.ts` holds the form's schedule rules
+  (Start required, End not before Start, 31 days at most, no Planned start in the past with 5 minutes' grace) with
+  the API's messages. Both are checked against the backend by `validators/contractSync.test.ts`. The "now" of the
+  past rule is the server's (`meta.now` plus the time elapsed since it was read), not the device clock.
+- **All-day contract:** the form holds the first and last day (inclusive) and sends `{ allDay: true, startDay,
+  endDay }`; timed activities send `{ allDay: false, startAt, endAt }` as instants. Updates are merge patches, so
+  the form always sends all four keys (`''` for the unused ones).
+- **Calendar:** FullCalendar v7 (`@fullcalendar/react` 7.1.4, MIT; `temporal-polyfill` for its named-time-zone
+  support), loaded with `next/dynamic` on `/calendar` only. Views: month, week, 3 days (tablets), day and agenda
+  (phones). `timeZone` is the business timezone: timed entries are ISO instants, all-day entries day strings with
+  FullCalendar's exclusive end. The classic theme plugin is used for layout with its palette replaced by
+  `calendar/calendar.css`, which maps every `--fc-classic-*` variable to CRM tokens (light blue, dark green). Event
+  chips carry the source module's tint (activities, lead / opportunity follow-ups, contract renewals). Activities
+  drag and resize to reschedule (long press on touch, no resize on coarse pointers) with an optimistic update and a
+  revert on error; follow-ups and renewals are read-only and open their record. Filters (users, types, sources,
+  statuses) sit in a rail on desktops, a right drawer on tablets and a bottom sheet on phones.
+- **Cache:** the calendar feed is `['activities', 'calendar', …]`; lead, opportunity and contract writes invalidate it
+  too (`QueryProvider`), since it shows their follow-ups and renewals.
 
 ## 9. Deployment topology
 

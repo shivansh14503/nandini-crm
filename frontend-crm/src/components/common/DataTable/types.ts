@@ -136,8 +136,11 @@ export interface DataTableProps<T> {
     onEditRow?: (row: T) => void;
     /** Real-link URLs for the action icons (enables open-in-new-tab). */
     getViewHref?: (row: T) => string;
-    getEditHref?: (row: T) => string;
+    /** Undefined for a row hides its Edit icon (a record the user may see but not change). */
+    getEditHref?: (row: T) => string | undefined;
     onDeleteRow?: (row: T) => void;
+    /** False for a row hides its Delete icon (default: every row can be deleted). */
+    canDeleteRow?: (row: T) => boolean;
     viewTooltip?: string;
     editTooltip?: string;
     deleteTooltip?: string;

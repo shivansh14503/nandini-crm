@@ -180,6 +180,7 @@ export function DataTable<T>({
     getViewHref,
     getEditHref,
     onDeleteRow,
+    canDeleteRow,
     viewTooltip,
     editTooltip,
     deleteTooltip,
@@ -332,7 +333,7 @@ export function DataTable<T>({
                 onEdit={onEditRow ? () => onEditRow(row) : undefined}
                 viewHref={getViewHref?.(row)}
                 editHref={getEditHref?.(row)}
-                onDelete={onDeleteRow ? () => onDeleteRow(row) : undefined}
+                onDelete={onDeleteRow && (canDeleteRow?.(row) ?? true) ? () => onDeleteRow(row) : undefined}
                 viewTooltip={viewTooltip}
                 editTooltip={editTooltip}
                 deleteTooltip={deleteTooltip}

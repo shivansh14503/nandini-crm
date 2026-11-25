@@ -1,7 +1,9 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import dynamic from 'next/dynamic';
 import { useResetTab } from '@/hooks/useResetTab';
+import { useRecordActivities } from '@/hooks/queries/useActivities';
 import {
     Drawer,
     useMediaQuery,
@@ -24,6 +26,7 @@ import SyncOutlinedIcon from '@mui/icons-material/SyncOutlined';
 import VisibilityOutlinedIcon from '@mui/icons-material/VisibilityOutlined';
 import VerifiedIcon from '@mui/icons-material/Verified';
 import HistoryOutlinedIcon from '@mui/icons-material/HistoryOutlined';
+import EventNoteOutlinedIcon from '@mui/icons-material/EventNoteOutlined';
 import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 
@@ -38,6 +41,13 @@ import { glassSurfaceSx, GLASS_SHADOW, GLASS_RADIUS, FLOAT_INSET } from '@/theme
 import { useRegisterRightPanel } from '@/components/layout/rightPanelStore';
 
 const CHANGES_TAB_ID = 'changes-tab';
+const ACTIVITIES_TAB_ID = 'activities-tab';
+
+// Loaded on demand: it brings the activity drawer and quick-create dialog (which themselves use this drawer).
+const RecordActivitiesPanel = dynamic(() => import('./RecordActivitiesPanel').then((m) => m.RecordActivitiesPanel), {
+    ssr: false,
+    loading: () => <FormFieldsSkeleton fields={4} columns={1} />,
+});
 
 interface FooterButtonProps {
     label: React.ReactNode;
@@ -85,6 +95,7 @@ export function EntityDetailDrawer({
     auditEntity,
     recordAudit,
     includeChangesTab = true,
+    activities,
     changesTabLabel = 'Changes',
     defaultTabIndex = 0,
     primaryAction,
@@ -104,6 +115,8 @@ export function EntityDetailDrawer({
     const [toastMessage, setToastMessage] = useState<string | null>(null);
     const [internalCollapsed, setInternalCollapsed] = useState<boolean>(false);
     const stack = useDrawerStack();
+    // The Activities tab's count (the panel reads the same cached list).
+    const recordActivities = useRecordActivities(activities?.module ?? 'leads', activities?.id, { enabled: Boolean(activities) && open });
 
     // Precedence: explicit props > shared stack context > internal standalone state
     const isCollapsed = isCollapsedProp ?? stack?.isCollapsed ?? internalCollapsed;
@@ -219,6 +232,15 @@ export function EntityDetailDrawer({
         formTabs && tabContents ? buildDrawerTabs(formTabs, tabContents) : tabs;
 
     const allTabs: DrawerTabItem[] = [...resolvedBaseTabs];
+    if (activities) {
+        allTabs.push({
+            id: ACTIVITIES_TAB_ID,
+            label: 'Activities',
+            icon: <EventNoteOutlinedIcon sx={{ fontSize: 16 }} />,
+            badge: recordActivities.data?.length || undefined,
+            content: <RecordActivitiesPanel {...activities} />,
+        });
+    }
     if (includeChangesTab && auditEntity) {
         allTabs.push({
             id: CHANGES_TAB_ID,

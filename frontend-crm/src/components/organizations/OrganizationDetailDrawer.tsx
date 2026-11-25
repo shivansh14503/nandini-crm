@@ -4,6 +4,7 @@ import React from 'react';
 import { useRouter } from 'next/navigation';
 
 import { ROUTES } from '@/config/constants';
+import { recordActivitiesContext } from '@/components/activities/activityLinks';
 import { withListOrigin } from '@/utils/listOrigin';
 import type { ExtendedOrganization } from '@/types/organization.types';
 import { useOrganization } from '@/hooks/queries';
@@ -58,6 +59,7 @@ export function OrganizationDetailDrawer({ organization, open, onClose, onEdit, 
             formTabs={view.formTabs}
             tabContents={view.tabContents}
             auditEntity={{ type: 'organizations', id: org.id }}
+            activities={recordActivitiesContext('organizations', org)}
             recordAudit={org}
             includeChangesTab={true}
             primaryAction={{

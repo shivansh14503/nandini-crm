@@ -546,7 +546,7 @@ const CREATE_ITEMS = [
     { label: 'Contract', href: ROUTES.CONTRACT_NEW },
     { label: 'Partner Company', href: ROUTES.PARTNER_COMPANY_NEW },
     { label: 'Referral', href: ROUTES.REFERRAL_NEW },
-    { label: 'Activity', href: '/dashboard' },
+    { label: 'Activity', href: ROUTES.ACTIVITY_NEW },
 ];
 
 function CreateButton({ compact = false }: { compact?: boolean }) {

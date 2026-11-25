@@ -9,6 +9,7 @@ import EditOutlinedIcon from '@mui/icons-material/EditOutlined';
 import PublishedWithChangesIcon from '@mui/icons-material/PublishedWithChanges';
 
 import { ROUTES } from '@/config/constants';
+import { recordActivitiesContext } from '@/components/activities/activityLinks';
 import { withListOrigin } from '@/utils/listOrigin';
 import type { Lead } from '@/types/lead.types';
 import { useLead } from '@/hooks/queries';
@@ -111,6 +112,7 @@ export function LeadDetailDrawer({
             formTabs={view.formTabs}
             tabContents={view.tabContents}
             auditEntity={{ type: 'leads', id: l.id }}
+            activities={recordActivitiesContext('leads', l)}
             recordAudit={l}
             includeChangesTab={true}
             primaryAction={{

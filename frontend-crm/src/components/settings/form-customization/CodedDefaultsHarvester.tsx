@@ -27,6 +27,7 @@ const TicketForm = dynamic(() => import('@/components/tickets/TicketForm'), { ss
 const ContractForm = dynamic(() => import('@/components/contracts/ContractForm'), { ssr: false });
 const PartnerCompanyForm = dynamic(() => import('@/components/partner-companies/PartnerCompanyForm'), { ssr: false });
 const ReferralForm = dynamic(() => import('@/components/referrals/ReferralForm'), { ssr: false });
+const ActivityForm = dynamic(() => import('@/components/activities/ActivityForm'), { ssr: false });
 
 /** The module's create form; every tab must be mounted (the organization form only mounts its active tab). */
 function ModuleForm({ module }: { module: CrmModuleKey }) {
@@ -57,6 +58,8 @@ function ModuleForm({ module }: { module: CrmModuleKey }) {
             return <PartnerCompanyForm mode="create" />;
         case 'referrals':
             return <ReferralForm mode="create" />;
+        case 'activities':
+            return <ActivityForm mode="create" />;
         default:
             return null;
     }

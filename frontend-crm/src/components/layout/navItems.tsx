@@ -21,8 +21,8 @@ export const NAV_ITEMS: readonly NavGroup[] = [
         icon: <HomeIcon fontSize="small" />,
         items: [
             { label: 'Dashboard', href: '/dashboard' },
-            { label: 'My Activities', href: '/dashboard' },
-            { label: 'Calendar', href: '/dashboard' },
+            { label: 'My Activities', href: `${ROUTES.ACTIVITIES}?mine=1` },
+            { label: 'Calendar', href: ROUTES.CALENDAR },
         ],
     },
     {
@@ -47,10 +47,12 @@ export const NAV_ITEMS: readonly NavGroup[] = [
     {
         label: 'Activities',
         items: [
-            { label: 'All Activities', href: '/dashboard' },
-            { label: 'Calls', href: '/dashboard' },
-            { label: 'Meetings', href: '/dashboard' },
-            { label: 'Emails', href: '/dashboard' },
+            { label: 'All Activities', href: ROUTES.ACTIVITIES },
+            { label: 'Calls', href: `${ROUTES.ACTIVITIES}?type=Call` },
+            { label: 'Meetings', href: `${ROUTES.ACTIVITIES}?type=Meeting` },
+            { label: 'Tasks', href: `${ROUTES.ACTIVITIES}?type=Task` },
+            { label: 'Emails', href: `${ROUTES.ACTIVITIES}?type=Email` },
+            { label: 'Calendar', href: ROUTES.CALENDAR },
             { label: 'Documents', href: ROUTES.DOCUMENTS },
         ],
     },
