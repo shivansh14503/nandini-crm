@@ -42,6 +42,8 @@ export interface LeadDto {
     description: string;
     noOfEmployee: string;
     referredBy: string;
+    /** The Referral picked as Referred By; absent for a legacy free-text value. */
+    referredById?: string;
     partnerCompany: string;
     primaryAddress: string;
     primaryCity: string;
@@ -102,6 +104,7 @@ export function toLeadDto(row: LeadRow): LeadDto {
         description: text(row.description),
         noOfEmployee: text(row.noOfEmployee),
         referredBy: text(row.referredBy),
+        referredById: row.referredById ?? undefined,
         partnerCompany: text(row.partnerCompany),
         primaryAddress: text(row.primaryAddress),
         primaryCity: text(row.primaryCity),
@@ -178,6 +181,7 @@ export function toLeadData(input: LeadInput): Omit<Prisma.LeadUncheckedCreateInp
         description: nullable(input.description),
         noOfEmployee: nullable(input.noOfEmployee),
         referredBy: nullable(input.referredBy),
+        referredById: nullable(input.referredById),
         // Kept only for Lead Source Partner (the form shows the field only then).
         partnerCompany: partnerCompanyFor(input),
         primaryAddress: primary.address,

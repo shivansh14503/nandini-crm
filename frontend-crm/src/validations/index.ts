@@ -8,4 +8,5 @@ export * from './convertLead.schema';
 export * from './quotation.schema';
 export * from './ticket.schema';
 export * from './contract.schema';
+export * from './referral.schema';
 export * from './partnerCompany.schema';

@@ -5,9 +5,9 @@
  * (the frontend keeps them as fallbacks while the configuration loads). Field definitions mirror the fields the
  * hand-built forms render; `fieldKey` is the React Hook Form name, so overrides apply to the matching control.
  *
- * Yes / No dropdowns (Left Job, Contract Create, Add Document, Commission) have built-in lists like every other dropdown, but
- * with fixed options (FIXED_OPTION_CATEGORY_KEYS): the API only accepts those values. The organization's Provide
- * Support switch stays a fixed toggle.
+ * Yes / No dropdowns (Left Job, Contract Create, Add Document, Commission) and the referral Status (Active / Inactive)
+ * have built-in lists like every other dropdown, but with fixed options (FIXED_OPTION_CATEGORY_KEYS): the API only
+ * accepts those values. The organization's Provide Support switch stays a fixed toggle.
  */
 
 /** In Sales navbar order (leads → opportunities → quotations → organizations → contacts), then the other forms. */
@@ -21,6 +21,7 @@ export const CRM_MODULES = [
     'tickets',
     'contracts',
     'partner-companies',
+    'referrals',
 ] as const;
 export type CrmModuleKey = (typeof CRM_MODULES)[number];
 
@@ -80,6 +81,7 @@ export const MODULE_TABS: Record<CrmModuleKey, { key: string; label: string }[]>
         { key: 'address', label: 'Address Information' },
         { key: 'statutory', label: 'Statutory' },
     ],
+    referrals: [{ key: 'overview', label: 'Overview' }],
 };
 
 /** `PIPELINE & FOLLOW-UP` → `pipeline_follow_up`. Must match `sectionKeyFromLabel` in the frontend. */
@@ -139,9 +141,9 @@ export const APP_REQUIRED_CATEGORY_KEYS: ReadonlySet<string> = new Set([
 
 /**
  * Built-in dropdowns whose options are fixed: the records' API validates the value against exactly these options
- * (Yes / No fields). Admins can reorder them, rename how they read and pick the default, but not add options.
+ * (Yes / No fields, referral Status). Admins can reorder them, rename how they read and pick the default, but not add options.
  */
-export const FIXED_OPTION_CATEGORY_KEYS: ReadonlySet<string> = new Set(['shared_left_job', 'product_contract_create', 'opportunity_add_document', 'opportunity_commission', 'opportunity_commission_type']);
+export const FIXED_OPTION_CATEGORY_KEYS: ReadonlySet<string> = new Set(['shared_left_job', 'product_contract_create', 'opportunity_add_document', 'opportunity_commission', 'opportunity_commission_type', 'referral_status']);
 
 const yesNo = (first: 'No' | 'Yes'): DefaultOption[] => withSystem(first === 'No' ? ['No', 'Yes'] : ['Yes', 'No'], ['Yes', 'No']);
 
@@ -626,6 +628,15 @@ export const DEFAULT_CATEGORIES: DefaultCategory[] = [
         description: 'Kind of partner (Partner Companies, and Organizations whose Customer Type is Partner).',
         options: ['ISODA', 'TALLY-REFERRAL PARTNER', 'TALLY-3STAR', 'TALLY-3STAR PARTNER', 'TALLY-5STAR-SS', 'TALLY-5STARSI', 'TALLY-AP', 'Other'],
     },
+
+    // ── Referrals ──
+    {
+        key: 'referral_status',
+        label: 'Status',
+        module: 'referrals',
+        description: "Fixed options: Active / Inactive. Only Active referrals are offered as Referred By on leads and opportunities.",
+        options: withSystem(['Active', 'Inactive'], ['Active', 'Inactive']),
+    },
 ];
 
 /**
@@ -661,6 +672,7 @@ export const DEFAULT_SELECTED_OPTIONS: Readonly<Record<string, readonly string[]
     ticket_support_type: ['Free'],
     ticket_support_mode: ['Offsite Support'],
     contract_status: ['Not Started'],
+    referral_status: ['Active'],
 };
 
 // ── Built-in field definitions ───────────────────────────────────────────────
@@ -1019,6 +1031,23 @@ const RAW_DEFAULT_FIELDS: DefaultField[] = [
         t('cinNo', 'CIN No', { type: 'uppercase' }),
         t('msmeRegnNumber', 'MSME Regn. Number', { type: 'uppercase' }),
         t('tanNumber', 'TAN Number', { type: 'uppercase' }),
+    ]),
+
+    // ── Referrals ── The Contact form's fields (same keys, labels and lists) without Left Job, Phone 3–5, Is Primary
+    // Contact, Communication Type, DND and the Notes section, plus Status.
+    ...section('referrals', 'overview', 'Referral Details & Association', [
+        t('name', 'Name', { req: true }),
+        t('mobile', 'Mobile', { type: 'phone', req: true }),
+        t('officePhone', 'Office Phone', { type: 'phone' }),
+        t('organizationName', 'Organization Name', { type: 'lookup', req: true }),
+        // Only Active referrals are offered as Referred By (fixed list: Active / Inactive).
+        sel('status', 'Status', 'referral_status', { req: true }),
+    ]),
+    ...section('referrals', 'overview', 'Communication Channels', [t('emailAddress', 'Email Address', { type: 'email', soft: true })]),
+    ...section('referrals', 'overview', 'Internal Assignment & Department Role', [
+        sel('designation', 'Designation', 'contact_designation'),
+        sel('department', 'Department', 'contact_department'),
+        t('assignedTo', 'Assigned to', { type: 'lookup', req: true }),
     ]),
 ];
 

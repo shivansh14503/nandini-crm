@@ -6,6 +6,8 @@ import { getPartnerContacts } from '@/services/masterData.store';
 import { useMasterData } from '@/hooks/queries/useMasterData';
 import { useOpportunities } from '@/hooks/queries/useOpportunities';
 import { useProducts } from '@/hooks/queries/useProducts';
+import { useReferrals } from '@/hooks/queries/useReferrals';
+import { ACTIVE_REFERRAL_STATUS, type Referral } from '@/types/referral.types';
 import type { Product } from '@/types/product.types';
 import { useDropdownOptions } from '@/hooks/queries/useFormConfigs';
 import { useShowRecordNumber } from '@/hooks/queries/useDocumentSeries';
@@ -21,6 +23,7 @@ import {
     PARTNER_COMPANY_LOOKUP_PRESET,
     PARTNER_COMPANY_CONTACT_LOOKUP_PRESET,
     PRODUCT_LOOKUP_PRESET,
+    REFERRAL_LOOKUP_PRESET,
     type LookupPreset,
 } from './lookupConfigs';
 
@@ -179,6 +182,35 @@ export function ProductLookupModal({ open, onClose, onSelect, selectedValue }: E
             selectedId={selectedId}
             {...PRODUCT_LOOKUP_PRESET}
             filterFields={filterFields}
+        />
+    );
+}
+
+const NO_REFERRALS: Referral[] = [];
+
+/** Active referrals of the Referrals module, the values Referred By can take on leads and opportunities. */
+export function useActiveReferrals(enabled = true): { referrals: Referral[]; isLoading: boolean } {
+    // Shared, cache-invalidated query: a referral added or deactivated elsewhere is reflected without reopening.
+    const { data, isLoading } = useReferrals(undefined, { enabled });
+    const referrals = React.useMemo(() => (data ?? NO_REFERRALS).filter((r) => r.status === ACTIVE_REFERRAL_STATUS), [data]);
+    return { referrals, isLoading };
+}
+
+/** Referred By picker: the Active referrals only. */
+export function ReferralLookupModal({ open, onClose, onSelect, selectedValue, initialFilterValues }: EntityLookupModalProps<Referral>) {
+    const { referrals, isLoading } = useActiveReferrals(open);
+    const selected = selectedValue?.trim().toLowerCase();
+    const selectedId = selected ? referrals.find((r) => r.name.trim().toLowerCase() === selected)?.id : undefined;
+    return (
+        <GenericLookupModal<Referral>
+            open={open}
+            onClose={onClose}
+            onSelect={onSelect}
+            data={open ? referrals : NO_REFERRALS}
+            loading={open && isLoading}
+            selectedId={selectedId}
+            {...REFERRAL_LOOKUP_PRESET}
+            initialFilterValues={initialFilterValues}
         />
     );
 }

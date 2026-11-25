@@ -272,6 +272,20 @@ const SAMPLE_CONTRACT: Record<string, unknown> = {
     customFields: {},
 };
 
+const SAMPLE_REFERRAL: Record<string, unknown> = {
+    id: '__sample',
+    name: 'Rajesh Khanna',
+    mobile: '+919811022334',
+    officePhone: '+911141002200',
+    emailAddress: [email('rajesh@khannaassociates.in')],
+    organizationName: 'KHANNA & ASSOCIATES',
+    designation: 'Director / Partner',
+    department: 'Finance & Accounts',
+    assignedTo: 'Priya Mehta',
+    status: 'Active',
+    customFields: {},
+};
+
 const SAMPLE_PARTNER: Record<string, unknown> = {
     id: '__sample',
     partnerName: 'Tally Solutions',
@@ -306,6 +320,7 @@ export const SAMPLE_RECORDS: Record<DrawerLayoutModule, Record<string, unknown>>
     tickets: SAMPLE_TICKET,
     contracts: SAMPLE_CONTRACT,
     'partner-companies': SAMPLE_PARTNER,
+    referrals: SAMPLE_REFERRAL,
 };
 
 export const SAMPLE_RECORD_ID = '__sample';
