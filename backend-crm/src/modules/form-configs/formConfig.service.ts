@@ -5,7 +5,9 @@ import { CACHE_KEYS, cacheService } from '../../services/cache.service.js';
 import type { AuthUser } from '../../types/user.types.js';
 import { z } from 'zod';
 import { HttpError } from '../../utils/httpError.js';
+import { activityOnlyDefaultIssues } from '../shared/followupTypes.js';
 import { runInTransaction } from '../shared/transactions.js';
+import { throwFieldIssues } from './customFieldValidator.js';
 import { dropdownKeyFromLabel, fieldKeyFromLabel } from './derivedKeys.js';
 import { countRecordsWithKey, describeMigration, lockModuleFields, migrateFieldKey, moduleColumnNames } from './fieldKeyRename.js';
 import { describeOptionMigration, migrateOptionValue, renameInList } from './optionValueRename.js';
@@ -845,6 +847,12 @@ export const formConfigService = {
         const input = updateOptionSchema.parse(body);
         const option = await runInTransaction(async (tx) => {
             const before = await findOption(tx, optionId);
+            // Task / Note of the Followup Type list are hidden on new Lead / Opportunity forms (and refused by their
+            // APIs), so they can't be what those forms start on.
+            if (input.isDefault === true) {
+                const category = await tx.dropdownCategory.findUnique({ where: { id: before.categoryId }, select: { key: true } });
+                throwFieldIssues(activityOnlyDefaultIssues(category?.key ?? '', before.value, input.isDefault));
+            }
             const renamed = input.label !== undefined && input.label !== before.label;
             // The app's code compares records against a system option's value (e.g. lead 'Converted'), and an
             // option's name and value are one, so a system option can't be renamed.

@@ -2,6 +2,7 @@ import { prisma } from '../../config/prisma.js';
 import { runAsRevertOf } from '../../services/auditContext.js';
 import type { AuthUser } from '../../types/user.types.js';
 import { HttpError } from '../../utils/httpError.js';
+import { activityService } from '../activities/activity.service.js';
 import { contactService } from '../contacts/contact.service.js';
 import { contractService } from '../contracts/contract.service.js';
 import { referralService } from '../referrals/referral.service.js';
@@ -41,6 +42,7 @@ const RECORD_SERVICES: Readonly<Record<string, RecordService>> = {
     Product: productService,
     Ticket: ticketService,
     Contract: contractService,
+    Activity: activityService,
     PartnerCompany: partnerCompanyService,
     Referral: referralService,
 };

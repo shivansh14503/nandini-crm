@@ -271,6 +271,50 @@ export const optionalWallClock = (field: string) =>
         z.string().refine(isWallClock, { message: `${field} must be a valid date and time.` }).optional(),
     );
 
+const INSTANT_PATTERN = /^(\d{4}-\d{2}-\d{2})T(\d{2}):(\d{2})(?::(\d{2})(?:\.\d{1,9})?)?(Z|[+-](\d{2}):(\d{2}))$/i;
+const NAIVE_DATE_TIME_PATTERN = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d+)?)?$/;
+
+/** True when `value` is an ISO-8601 date-time with `Z` or an explicit offset, naming a real moment. */
+const isInstant = (value: string): boolean => {
+    const match = INSTANT_PATTERN.exec(value);
+    if (!match) return false;
+    const [, day, hours, minutes, seconds, , offsetHours, offsetMinutes] = match;
+    if (!isCalendarDate(day) || Number(hours) > 23 || Number(minutes) > 59 || Number(seconds ?? 0) > 59) return false;
+    if (offsetHours !== undefined && (Number(offsetHours) > 14 || Number(offsetMinutes) > 59)) return false;
+    return !Number.isNaN(Date.parse(value));
+};
+
+const instantSchema = (field: string) =>
+    z
+        .string()
+        .trim()
+        .superRefine((value, ctx) => {
+            if (NAIVE_DATE_TIME_PATTERN.test(value)) {
+                ctx.addIssue({ code: 'custom', message: `${field} must include a timezone (e.g. 2026-11-25T10:30:00+05:30).` });
+            } else if (!isInstant(value)) {
+                ctx.addIssue({ code: 'custom', message: `${field} must be a valid date and time.` });
+            }
+        })
+        .transform((value) => {
+            const instant = new Date(value);
+            return Number.isNaN(instant.getTime()) ? value : instant.toISOString();
+        });
+
+/**
+ * A moment in time (`Activity.startAt`): ISO-8601 with `Z` or an explicit offset (`2026-11-25T10:30:00+05:30`),
+ * normalized to UTC (`2026-11-25T05:00:00.000Z`). A wall clock without a zone is refused: unlike the wall-clock
+ * fields above, the API can't tell which zone it was meant in. Blank / null / missing → undefined.
+ */
+export const optionalInstant = (field: string) =>
+    z.preprocess((value) => (value === null || (typeof value === 'string' && value.trim() === '') ? undefined : value), instantSchema(field).optional());
+
+/** `optionalInstant` that must be present. */
+export const requiredInstant = (field: string) =>
+    z.preprocess(
+        (value) => (value === null || (typeof value === 'string' && value.trim() === '') ? undefined : value),
+        z.string({ error: `${field} is required.` }).pipe(instantSchema(field)),
+    );
+
 /** Optional array of trimmed option strings (e.g. product categories), each bounded. */
 export const stringList = (field: string, maxItems: number, maxLength: number) =>
     z

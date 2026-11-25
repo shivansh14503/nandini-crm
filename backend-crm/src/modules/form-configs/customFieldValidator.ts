@@ -55,6 +55,11 @@ export interface PayloadCheckOptions {
     allowPastDates?: boolean;
     /** Business-timezone wall clock (`YYYY-MM-DDTHH:mm`) to compare dates with; defaults to now (tests pin it). */
     now?: string;
+    /**
+     * Built-in keys the form hides for this record (e.g. the schedule of an activity that is a Note): never required
+     * and not checked, like a hidden field. Needed on create too, where there are no `submittedKeys`.
+     */
+    notApplicableKeys?: ReadonlySet<string>;
 }
 
 const sameValue = (a: unknown, b: unknown) => a === b || JSON.stringify(a) === JSON.stringify(b);
@@ -245,7 +250,7 @@ export function checkModulePayload(
     customFields: Record<string, unknown> | undefined,
     options: PayloadCheckOptions = {},
 ): Record<string, unknown> {
-    const { submittedKeys, notRequired, previousCustomFields, allowPastDates } = options;
+    const { submittedKeys, notRequired, previousCustomFields, allowPastDates, notApplicableKeys } = options;
     const today = (options.now ?? businessNow()).slice(0, 10);
     const input = customFields ?? {};
     const issues: ApiFieldError[] = [];
@@ -255,6 +260,7 @@ export function checkModulePayload(
         const isCustom = !field.isSystem;
         if (isCustom) customDefs.set(field.fieldKey, field);
         if (!field.isActive || !field.isVisibleInForm) continue;
+        if (field.isSystem && notApplicableKeys?.has(field.fieldKey)) continue;
 
         const path = isCustom ? [CUSTOM_FIELDS_KEY, field.fieldKey] : [field.fieldKey];
         const value = isCustom ? input[field.fieldKey] : payload[field.fieldKey];

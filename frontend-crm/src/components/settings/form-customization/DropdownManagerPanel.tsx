@@ -32,6 +32,8 @@ import { EditCategoryDialog } from './EditCategoryDialog';
 import { useConfigDraftActions, useHasUnsavedChanges } from './useConfigDraft';
 import { CRM_MODULE_LABELS, type CrmModuleKey, type DropdownCategoryDto, type DropdownOptionDto, type FormConfigsPayload } from '@/types/formConfig.types';
 import { useDragReorder, type RowDragProps } from './useDragReorder';
+import { FOLLOWUP_TYPE_CATEGORY_KEY } from '@/utils/formConfig';
+import { isActivityOnlyFollowupType } from '@/utils/followupTypes';
 import {
     ControlTypePicker,
     ModuleTargetsPicker,
@@ -554,6 +556,11 @@ function CategoryEditor({
                             : 'No default: new records start empty and show the field’s placeholder.'}
                         {canEdit && (allowsSeveralDefaults ? ' Click the bookmark to add or remove defaults.' : ' Click the bookmark to set or remove the default.')}
                     </Typography>
+                    {category.key === FOLLOWUP_TYPE_CATEGORY_KEY && (
+                        <Typography sx={{ fontSize: '0.72rem', color: 'var(--mui-palette-text-secondary)', mt: 0.25 }}>
+                            Task and Note are offered on Activities only.
+                        </Typography>
+                    )}
                 </Box>
             </Box>
 
@@ -570,6 +577,8 @@ function CategoryEditor({
                             // An option's name is also the value records store, so a rename renames both (records follow).
                             onRename={(next) => run(() => draft.updateOption(option.id, { label: next }))}
                             onToggleDefault={(isDefault) => setDefault(option, isDefault)}
+                            // Task / Note (Activities only) can't be the default: leads and opportunities share the list.
+                            defaultBlocked={category.key === FOLLOWUP_TYPE_CATEGORY_KEY && isActivityOnlyFollowupType(option.value)}
                             onDelete={() => run(() => draft.deleteOption(option.id))}
                             dragProps={getRowDragProps(option, true)}
                             dragSx={getRowDragSx(option)}
@@ -590,6 +599,7 @@ function OptionRow({
     busy,
     onRename,
     onToggleDefault,
+    defaultBlocked = false,
     onDelete,
     dragProps,
     dragSx,
@@ -599,6 +609,8 @@ function OptionRow({
     busy: boolean;
     onRename: (label: string) => Promise<unknown>;
     onToggleDefault: (isDefault: boolean) => Promise<unknown>;
+    /** The option can't be made the default (an already-default one can still be cleared). */
+    defaultBlocked?: boolean;
     onDelete: () => Promise<unknown>;
     dragProps: RowDragProps;
     dragSx: Record<string, unknown>;
@@ -618,6 +630,7 @@ function OptionRow({
     };
     // A system option's name is what the CRM's logic matches records against, so it can't be renamed.
     const canRename = canEdit && !option.isSystem;
+    const cannotSetDefault = defaultBlocked && !option.isDefault;
 
     return (
         <Box
@@ -680,7 +693,9 @@ function OptionRow({
                     title={
                         option.isDefault
                             ? 'Remove as default (new records show the placeholder)'
-                            : 'Set as default (pre-selected on new records)'
+                            : cannotSetDefault
+                              ? `${option.label} is offered on Activities only, so it can't be the default`
+                              : 'Set as default (pre-selected on new records)'
                     }
                     arrow
                 >
@@ -689,7 +704,7 @@ function OptionRow({
                             size="small"
                             aria-label={option.isDefault ? `Remove ${option.label} as default` : `Set ${option.label} as default`}
                             aria-pressed={option.isDefault}
-                            disabled={busy}
+                            disabled={busy || cannotSetDefault}
                             onClick={() => void onToggleDefault(!option.isDefault)}
                         >
                             {option.isDefault ? (

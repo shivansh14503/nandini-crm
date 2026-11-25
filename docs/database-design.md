@@ -1,7 +1,7 @@
 # Nandini CRM — Database Design
 
-> **Status:** living document, generated from `backend-crm/prisma/schema.prisma` and `prisma/migrations/` (72 migrations,
-> latest `20261125233000_documents_module`). Update it in the same change as any schema migration.
+> **Status:** living document, generated from `backend-crm/prisma/schema.prisma` and `prisma/migrations/` (74 migrations,
+> latest `20261126090000_activities`). Update it in the same change as any schema migration.
 > Related: [System design](system-design.md) · [API plan](api-plan.md) · [Build plan](build-plan.md)
 
 ---
@@ -12,8 +12,8 @@
 | --- | --- |
 | Engine | Microsoft SQL Server / Azure SQL (schema `dbo`) |
 | Access | Prisma 7 ORM through `@prisma/adapter-mssql`; a few raw SQL statements (`MERGE` for counters, `sp_getapplock` for locks, `OPENJSON`) |
-| Tables | **30** application tables + Prisma's `_prisma_migrations` |
-| Owned child tables ("sub tables") | 5: `EntityEmail`, `OpportunityLineItem`, `QuotationLineItem`, `PartnerCompanyContact`, `DropdownOption` |
+| Tables | **41** application tables + Prisma's `_prisma_migrations` |
+| Owned child tables ("sub tables") | 6: `EntityEmail`, `OpportunityLineItem`, `QuotationLineItem`, `PartnerCompanyContact`, `DropdownOption`, `ActivityAttendee` |
 | Migrations | `backend-crm/prisma/migrations/` (`npm run db:migrate` in dev, `npm run db:deploy` in prod) |
 | Seed | `backend-crm/prisma/seed.ts` (`npm run seed`) |
 
@@ -23,13 +23,14 @@
 | --- | --- |
 | Identity | `Users` (model `User`) |
 | CRM core | `Organization`, `Contact`, `Lead`, `Opportunity`, `Quotation`, `Ticket`, `Contract`, `Document`, `Product` |
+| Activities & calendar | `Activity`, `ActivityAttendee` |
 | Owned children | `EntityEmail`, `OpportunityLineItem`, `QuotationLineItem` |
 | Partner master | `PartnerCompany`, `PartnerCompanyContact` |
 | Referral master | `Referral` (Referred By of leads and opportunities) |
 | Reference masters | `NatureOfCall`, `Country`, `Subdivision`, `City` |
 | Numbering | `DocumentSeriesSettings`, `DocumentSeries`, `SequenceCounter` |
 | Customisation | `DropdownCategory`, `DropdownOption`, `FormFieldDefinition`, `ModuleSetting`, `DrawerLayout`, `DrawerPiece` |
-| PDF | `PdfTemplate`, `PdfAsset`, `PdfSavedItem` |
+| PDF & files | `PdfTemplate`, `PdfAsset`, `PdfSavedItem`, `RecordFile` |
 | Audit & UI state | `AuditLog`, `AuditExport`, `AuditDigest`, `TableFilter`, `ModuleScorecard` |
 | Email checks | `EmailValidationRun` |
 
@@ -61,7 +62,10 @@ These rules come from SQL Server's constraints and apply across the schema:
    as DB defaults, because Prisma emits them without the `N` prefix; the API always sets them.
 10. **Money:** `DECIMAL(18,2)` (discount percentage on products `DECIMAL(5,2)`). Tax rate is a string (`"18%"`).
 11. **Dates:** `DATE` for calendar dates (follow-ups, quotation date, invoice date); `DATETIME2` for timestamps.
-    Ticket `dueDate` and Contract `renewalReminderDate` are wall-clock times in `BUSINESS_TIMEZONE`.
+    Ticket `dueDate` and Contract `renewalReminderDate` are wall-clock times in `BUSINESS_TIMEZONE` (stored as if
+    UTC). The exception is `Activity.startAt` / `endAt` (and `remindAt`): **true UTC instants**, with the zone they
+    were entered in kept in `Activity.timeZone`; everything else stays wall-clock. Conversions go through
+    `backend-crm/src/utils/zonedTime.ts`.
 12. **Column widths** are ≥ the frontend's `FIELD_MAX_LENGTH` (`frontend-crm/src/config/fieldLimits.ts`).
 13. **Phones** are stored in E.164 (`+919811234567`), `NVARCHAR(20)`.
 
@@ -76,12 +80,20 @@ erDiagram
     Organization ||--o{ Quotation : has
     Organization ||--o{ Ticket : has
     Organization ||--o{ Contract : has
+    Organization ||--o{ Activity : "concerned by"
+    Organization ||--o{ Referral : has
     Contact ||--o{ EntityEmail : emailAddress
     Contact ||--o{ Opportunity : "contact for"
     Contact ||--o{ Quotation : "contact for"
     Contact ||--o{ Ticket : "raised by"
     Contact ||--o{ Contract : "contact for"
+    Contact ||--o{ Activity : "contact for"
+    Contact ||--o{ ActivityAttendee : "invited as"
+    Activity ||--o{ ActivityAttendee : attendees
     Lead ||--o{ EntityEmail : emailAddress
+    Referral ||--o{ EntityEmail : emailAddress
+    Referral ||--o{ Lead : "referred"
+    Referral ||--o{ Opportunity : "referred"
     Lead }o--o| Organization : "converted to"
     Lead }o--o| Contact : "converted to"
     Lead }o--o| Opportunity : "converted to"
@@ -112,6 +124,8 @@ Not drawn (no foreign keys, linked by convention):
 - `DocumentSeries.module` → module name; `SequenceCounter.prefix` → series key.
 - `PdfTemplate.documentJson` may reference `PdfAsset.key` (logo) — deletion of a referenced asset is blocked in code.
 - `Ticket.natureOfCall` → `NatureOfCall.name`; `Ticket.partnerCompany` → `PartnerCompany.partnerName` (names, not ids).
+- `Activity.relatedModule + relatedId` → the linked record (a lead, opportunity, contact, organization, quotation,
+  ticket or contract; polymorphic, checked by the API). `ActivityAttendee.username` → `Users.Username`.
 
 ## 4. Table reference
 
@@ -296,8 +310,17 @@ Index: `(module, isActive, sortOrder)` on fields; `(categoryId, isActive, sortOr
 Per the project's rules, deletes in the form builder are permanent (no reset/restore).
 
 Option `metaJson` keys the app reads: `ratingRule` on the options of the list the leads Customer Response field
-uses (`{ rule: followUpGap | daysSinceResponse | unansweredCalls, hot, warm }` or `{ rule: always, rating }`) and
-`closesLead: true` on lead Status options. Both are validated by the API.
+uses (`{ rule: followUpGap | daysSinceResponse | unansweredCalls, hot, warm }` or `{ rule: always, rating }`),
+`opportunityStages` (Sales Stage values; absent = every open stage) and `noFollowUp: true` on the options of the list
+the opportunities Customer Response field uses (today the same `shared_customer_response`),
+`closesLead: true` on lead Status options (all validated by the API), and `durationMinutes` / `icon` on
+`shared_followup_type` options (an activity's default length and its calendar icon; seeded on the built-in types and
+kept across a rename; an option without them falls back to 30 minutes and the generic icon).
+
+`shared_followup_type` (Leads, Opportunities, Activities) has two system options, `Task` and `Note`, offered on
+Activities only: the Lead / Opportunity / Convert Lead forms hide them, their APIs refuse a change to one (a record
+already storing one keeps it), and neither can be the dropdown's default. Activities also have `activity_status` and
+`activity_reminder` (§4.25).
 
 `ModuleSetting` — module-level settings edited in Form Builder outside the fields: PK `(module, key)`, `valueJson`,
 `updatedBy`, timestamps. Today `leads` / `ratingNewLead` = `{ hot, warm }` (no row = default Hot 0–5 days, then Warm),
@@ -419,7 +442,7 @@ not these rows. Index `(createdAt)`.
 Support contracts (Support › Contracts, migration `20261125042148_contracts`). `contractNumber` (UNIQUE, series
 module `contract`, legacy prefix `CTR`), `contractTitle`, `status` (default `Not Started`), `contractValue`,
 `assignedTo` (the Contract Manager; row-level scope), `organizationName` (uppercase) + `organizationId`, `contact` +
-`contactId`, `opportunity` (the opportunity's label when picked, or typed text) + `opportunityId` → `Opportunity`,
+`contactId`, `opportunity` (the opportunity's label when picked, cut to 200 characters with "…" when its product list runs longer, or typed text) + `opportunityId` → `Opportunity`,
 `tallySerialNo` (9 digits starting with 7, checked by the API), term (`startDate`, `endDate` DATE, `contractPeriod`, `renewalReminderDate` wall-clock DATETIME2),
 `contractTypeJson`, billing (`billNumber`, `billDate`, `billAmount`), `description`, `customDataJson`,
 audit/soft-delete. `contractValue` / `billAmount` are DECIMAL(18,2), returned as strings by the API. All three links
@@ -461,6 +484,48 @@ opportunity's row-level access, and comes back with a restored opportunity. Both
 
 Indexes: `opportunityId` (unique), `documentFileId`, `createdAt`.
 
+### 4.25 `Activity` and `ActivityAttendee` (activities & calendar)
+
+Calls, meetings, tasks, notes and every other Followup Type (migration `20261126090000_activities`; module
+`backend-crm/src/modules/activities`). Unnumbered (no document series).
+
+`Activity`: `followupType` (option of `shared_followup_type`, default `Call`), `subject`, `status` (`activity_status`,
+default `Planned`), `assignedTo` (the owner; row-level scope), the linked record (`relatedModule` + `relatedId`, with
+its label `relatedTo` (at most 200 characters, cut with `…`) and number `relatedCode` kept for display and search; no
+foreign key), `organizationName` + `organizationId` → `Organization` and `contact` + `contactId` → `Contact` (filled
+from the linked record, editable, kept when the link is cleared; both `NO ACTION`, renames written through),
+schedule (`startAt`, `endAt`, `allDay`, `timeZone` default `Asia/Kolkata`, `location`), `reminder`
+(`activity_reminder` label) with the system columns `remindAt` (UTC, null when no reminder applies) and
+`reminderSentAt` (set by the reminder job, Phase 1 PR3; cleared when `remindAt` changes), outcome
+(`customerResponse`, `remarks`, `completedAt`, `completedBy`), `revision` (+1 on every schedule-relevant change:
+subject, type, times, all-day, location, owner, status, attendees added or removed), `customDataJson`,
+audit/soft-delete.
+
+Schedule rules (API): `startAt` / `endAt` are UTC instants; `endAt` ≥ `startAt` and at most 31 days after it; a Note
+has neither (and no reminder or attendees). All-day activities store business-timezone midnight of the first day →
+midnight after the last day (exclusive). An omitted end defaults to the type's duration (option meta
+`durationMinutes`, else 30 minutes). Completing sets `completedAt` / `completedBy`; leaving Completed clears them.
+
+`ActivityAttendee` (owned child, `ON DELETE CASCADE` from `Activity`): `kind` (`user` | `contact` | `email`),
+`username` / `contactId` → `Contact` (`NO ACTION`) / `email`, `name` (display snapshot: user's full name, contact
+name, or the email's name part; contact renames are written through), `responseStatus` (`needsAction` | `accepted` |
+`tentative` | `declined`, default `needsAction`), `respondedAt`, `sortOrder`, `createdAt`. Saves sync attendees by
+identity: unchanged rows aren't rewritten and replies of attendees who stay are kept.
+
+Indexes: `Activity` `(isDeleted, startAt)`, `(isDeleted, assignedTo, startAt)` (calendar ranges),
+`(relatedModule, relatedId)` (a record's Activities tab), `organizationId`, `contactId`, `status`,
+`(reminderSentAt, remindAt)` (reminder sweep), `(isDeleted, createdAt)`, `(isDeleted, assignedTo, createdAt)`;
+`ActivityAttendee` `activityId`, `username`, `contactId`, `email`, plus three hand-written **filtered unique** indexes
+(one row per colleague, contact and outside email of an activity): `UX_ActivityAttendee_user (activityId, username)
+WHERE username IS NOT NULL`, `UX_ActivityAttendee_contact (activityId, contactId) WHERE contactId IS NOT NULL`,
+`UX_ActivityAttendee_email (activityId, email) WHERE kind = 'email'`.
+
+Dropdowns (`DropdownCategory.module = 'activities'`): `activity_status` (fixed system options `Planned`, `Completed`,
+`Cancelled`; default `Planned`) and `activity_reminder` (fixed system options; value = label, e.g. `15 minutes before`;
+the minutes live in code, `ACTIVITY_REMINDER_MINUTES`). Activities share `shared_followup_type` (see §4.14) and
+`shared_customer_response` with leads and opportunities. An activity's Customer Response is any active option of that
+list, stored as text; activities read none of its option meta (no Rating, no Sales Stage check, no follow-up cleared).
+
 ## 5. Index strategy
 
 - **Scoped list composites** `(isDeleted, assignedTo, createdAt)` match the most common query: "live records I own or
@@ -471,6 +536,11 @@ Indexes: `opportunityId` (unique), `documentFileId`, `createdAt`.
   `UPDATE … WHERE organizationId = …` and `contactId = …`.
 - **Search columns** (`name`, `mobile`, `organizationName`, `gstNumber`, `email`) have plain indexes; `contains` searches
   still scan, but code/phone/GSTIN searches are rewritten as prefix (`startsWith`) or equality matches that can seek.
+- **Activity ranges** are always bounded on both sides: a calendar or list window `[from, to)` reads
+  `startAt >= from − 31 days AND startAt < to` (31 days = the longest an activity may last) and then keeps the ones
+  that end after `from`, so `(isDeleted, startAt)` / `(isDeleted, assignedTo, startAt)` seek instead of scanning.
+- **Reminder sweep** `(reminderSentAt, remindAt)`: the equality column (`reminderSentAt IS NULL`) comes first, then the
+  range on `remindAt`.
 
 ## 6. Data lifecycle
 
@@ -478,8 +548,8 @@ Indexes: `opportunityId` (unique), `documentFileId`, `createdAt`.
 | --- | --- |
 | Create | Number from `SequenceCounter` → INSERT row → child rows (emails/line items) → `AuditLog` CREATE, one transaction |
 | Update | App lock on the record → read → diff → UPDATE → replace children → name write-through to linked rows → `AuditLog` UPDATE |
-| Delete | `isDeleted = 1, deletedAt = now` (+ `AuditLog` DELETE); children stay attached |
-| Restore (Admin › Audit Log) | App lock → uniqueness re-checked → `isDeleted = 0, deletedAt = null` (+ `AuditLog` RESTORE with `revertsId`) |
+| Delete | `isDeleted = 1, deletedAt = now` (+ `AuditLog` DELETE); children stay attached. An activity's `remindAt` is also cleared (no reminder for a deleted activity); its attendees stay |
+| Restore (Admin › Audit Log) | App lock → uniqueness re-checked → `isDeleted = 0, deletedAt = null` (+ `AuditLog` RESTORE with `revertsId`). A restored activity gets its `remindAt` recomputed (a reminder already past stays off) |
 | Undo (Admin › Audit Log) | The module's normal Update with the entry's `from` values for fields not changed since; written as `AuditLog` REVERT with `revertsId` |
 | Lead conversion | Serializable tx: create/link Organization + Contact, create Opportunity, set lead `status = Converted` + `converted*` columns, audit each |
 | City rename | Name written through to every address that references the city id |
@@ -490,7 +560,8 @@ Indexes: `opportunityId` (unique), `documentFileId`, `createdAt`.
 - Migration history starts with `0_baseline` (the pre-existing `Users` table) and `20261030043331_init`.
 - Several migrations are **data migrations** written by hand (e.g. uppercasing organization names, aligning dropdown
   labels with stored values, linking addresses to city ids). Read them before squashing.
-- Prisma can't express the filtered unique index; it lives only in migration SQL.
+- Prisma can't express filtered unique indexes; they live only in migration SQL (live organization names, `20261031000000_organization_name_unique_live`, and the three
+  `UX_ActivityAttendee_*` indexes of `20261126090000_activities`).
 - `npm run seed` is idempotent: admin user, Nature of Call and partner masters, address master, city master, address→city
   links; demo data (`seed-data/demo/*.json`) only into an empty CRM and only outside production unless
   `SEED_DEMO_DATA=true`.

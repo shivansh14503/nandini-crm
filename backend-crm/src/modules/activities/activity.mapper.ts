@@ -1,0 +1,187 @@
+import type { Activity, ActivityAttendee, Prisma } from '../../generated/prisma/client.js';
+import { nullable, parseCustomFields, serializeCustomFields, text, toIso } from '../../utils/mappers.js';
+import { zonedDayOf } from '../../utils/zonedTime.js';
+import type { ActivityInput } from './activity.validator.js';
+
+/**
+ * `Activity` from frontend-crm/src/types/activity.types.ts. Times are true UTC instants (`…Z`); all-day activities
+ * also carry their inclusive business-timezone days. Empty values are '' (not null), except on attendees, whose
+ * blank keys are omitted (see AttendeeDto).
+ */
+export interface ActivityDto {
+    id: string;
+    followupType: string;
+    subject: string;
+    status: string;
+    /** Owner (username). */
+    assignedTo: string;
+    /** CrmModuleKey of the linked record, or '' when none. */
+    relatedModule: string;
+    relatedId?: string;
+    /** Display label of the linked record. */
+    relatedTo: string;
+    /** Its record number (LD-0001 …), '' when none. */
+    relatedCode: string;
+    organizationName: string;
+    organizationId?: string;
+    contact: string;
+    contactId?: string;
+    /** ISO instant, '' on notes. All-day: business-timezone midnight of the first day. */
+    startAt: string;
+    /** ISO instant, '' on notes. All-day: business-timezone midnight after the last day (exclusive). */
+    endAt: string;
+    allDay: boolean;
+    /** All-day only: first day `YYYY-MM-DD` in `timeZone`; '' otherwise. */
+    startDay: string;
+    /** All-day only: last day (inclusive) `YYYY-MM-DD` in `timeZone`; '' otherwise. */
+    endDay: string;
+    timeZone: string;
+    location: string;
+    /** activity_reminder option ('15 minutes before'), '' for none. */
+    reminder: string;
+    customerResponse: string;
+    remarks: string;
+    attendees: AttendeeDto[];
+    completedAt: string;
+    completedBy: string;
+    customFields: Record<string, unknown>;
+    createdBy: string;
+    /** Username of the last editor; empty until the record is first modified. */
+    updatedBy: string;
+    createdAt: string;
+    updatedAt: string;
+}
+
+/**
+ * One attendee. No row id (rows are re-created when the set changes, and replies key on the username), and keys
+ * without a value are left out rather than sent as '', so the shared "empty list entry" check (an object whose
+ * values are all blank) never counts a contact without an email as no attendee.
+ */
+export interface AttendeeDto {
+    kind: string;
+    username?: string;
+    contactId?: string;
+    email?: string;
+    name: string;
+    responseStatus: string;
+    respondedAt?: string;
+}
+
+/** What the signed-in user may do with the activity. Sent next to the DTO, outside the audited record. */
+export interface ActivityViewer {
+    canEdit: boolean;
+    /** The caller's reply when invited as a colleague, else null. */
+    myResponse: string | null;
+}
+
+export type ActivityView = ActivityDto & { viewer: ActivityViewer };
+
+export type ActivityRow = Activity & { attendees: ActivityAttendee[] };
+
+export function toAttendeeDto(row: Pick<ActivityAttendee, 'kind' | 'username' | 'contactId' | 'email' | 'name' | 'responseStatus' | 'respondedAt'>): AttendeeDto {
+    const dto: AttendeeDto = { kind: row.kind, name: row.name, responseStatus: row.responseStatus };
+    if (row.username) dto.username = row.username;
+    if (row.contactId) dto.contactId = row.contactId;
+    if (row.email) dto.email = row.email;
+    if (row.respondedAt) dto.respondedAt = row.respondedAt.toISOString();
+    return dto;
+}
+
+const bySortOrder = (a: { sortOrder: number }, b: { sortOrder: number }) => a.sortOrder - b.sortOrder;
+
+/** Inclusive first / last day of a stored all-day span (the end is exclusive midnight). */
+export function allDayRange(startAt: Date, endAt: Date | null, timeZone: string): { startDay: string; endDay: string } {
+    const startDay = zonedDayOf(startAt, timeZone);
+    if (!endAt || endAt.getTime() <= startAt.getTime()) return { startDay, endDay: startDay };
+    return { startDay, endDay: zonedDayOf(new Date(endAt.getTime() - 1), timeZone) };
+}
+
+export function toActivityDto(row: ActivityRow): ActivityDto {
+    const days = row.allDay && row.startAt ? allDayRange(row.startAt, row.endAt, row.timeZone) : { startDay: '', endDay: '' };
+    return {
+        id: row.id,
+        followupType: row.followupType,
+        subject: row.subject,
+        status: row.status,
+        assignedTo: row.assignedTo,
+        relatedModule: text(row.relatedModule),
+        relatedId: row.relatedId ?? undefined,
+        relatedTo: text(row.relatedTo),
+        relatedCode: text(row.relatedCode),
+        organizationName: text(row.organizationName),
+        organizationId: row.organizationId ?? undefined,
+        contact: text(row.contact),
+        contactId: row.contactId ?? undefined,
+        startAt: row.startAt ? toIso(row.startAt) : '',
+        endAt: row.endAt ? toIso(row.endAt) : '',
+        allDay: row.allDay,
+        startDay: days.startDay,
+        endDay: days.endDay,
+        timeZone: row.timeZone,
+        location: text(row.location),
+        reminder: text(row.reminder),
+        customerResponse: text(row.customerResponse),
+        remarks: text(row.remarks),
+        attendees: [...row.attendees].sort(bySortOrder).map(toAttendeeDto),
+        completedAt: row.completedAt ? toIso(row.completedAt) : '',
+        completedBy: text(row.completedBy),
+        customFields: parseCustomFields(row.customDataJson),
+        createdBy: row.createdBy,
+        updatedBy: row.updatedBy ?? '',
+        createdAt: toIso(row.createdAt),
+        updatedAt: toIso(row.updatedAt),
+    };
+}
+
+export interface ActivityLink {
+    id: string | null;
+    name: string;
+}
+
+/** The linked record and the organization / contact as resolved by the service (activity.links.ts). */
+export interface ActivityLinks {
+    relatedModule: string | null;
+    relatedId: string | null;
+    relatedTo: string;
+    relatedCode: string;
+    organization: ActivityLink;
+    contact: ActivityLink;
+}
+
+/** Start / End as stored (normalizeSchedule). */
+export interface StoredSchedule {
+    startAt: Date | null;
+    endAt: Date | null;
+    allDay: boolean;
+}
+
+type ActivityData = Omit<
+    Prisma.ActivityUncheckedCreateInput,
+    'createdBy' | 'timeZone' | 'remindAt' | 'reminderSentAt' | 'completedAt' | 'completedBy' | 'revision' | 'attendees'
+>;
+
+/** Writable columns; links come from the service, Start / End from `normalizeSchedule`. */
+export function toActivityData(input: ActivityInput, links: ActivityLinks, schedule: StoredSchedule): ActivityData {
+    return {
+        followupType: input.followupType,
+        subject: input.subject,
+        status: input.status,
+        assignedTo: input.assignedTo,
+        relatedModule: links.relatedModule,
+        relatedId: links.relatedId,
+        relatedTo: nullable(links.relatedTo),
+        relatedCode: nullable(links.relatedCode),
+        organizationName: nullable(links.organization.name),
+        organizationId: links.organization.id,
+        contact: nullable(links.contact.name),
+        contactId: links.contact.id,
+        startAt: schedule.startAt,
+        endAt: schedule.endAt,
+        allDay: schedule.allDay,
+        location: nullable(input.location),
+        reminder: nullable(input.reminder),
+        customerResponse: nullable(input.customerResponse),
+        remarks: nullable(input.remarks),
+        customDataJson: serializeCustomFields(input.customFields),
+    };
+}

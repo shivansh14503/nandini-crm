@@ -51,6 +51,12 @@ export const ROUTES = {
     CONTRACT_NEW: '/contracts/new',
     CONTRACT_DETAIL: (id: string | number) => `/contracts/${id}`,
     CONTRACT_EDIT: (id: string | number) => `/contracts/${id}/edit`,
+    // Activities & Calendar: the pages arrive with Calendar Phase 1 PR2.
+    ACTIVITIES: '/activities',
+    ACTIVITY_NEW: '/activities/new',
+    ACTIVITY_DETAIL: (id: string | number) => `/activities/${id}`,
+    ACTIVITY_EDIT: (id: string | number) => `/activities/${id}/edit`,
+    CALENDAR: '/calendar',
     DOCUMENTS: '/documents',
     DOCUMENT_DETAIL: (id: string | number) => `/documents/${id}`,
     REFERRALS: '/referrals',

@@ -16,6 +16,7 @@ describe('moduleFor', () => {
         assert.equal(moduleFor('Lead'), 'leads');
         assert.equal(moduleFor('PartnerCompany'), 'partner-companies');
         assert.equal(moduleFor('Contract'), 'contracts');
+        assert.equal(moduleFor('Activity'), 'activities');
         assert.equal(moduleFor('DropdownOption'), 'form-customization');
         assert.equal(moduleFor('PdfAsset'), 'pdf-templates');
         assert.equal(moduleFor('Scorecard'), 'list-scorecards');
@@ -46,6 +47,14 @@ describe('categoryFor / severityFor', () => {
         assert.equal(severityFor('LOGIN_FAILED', 'SECURITY'), 'WARNING');
         assert.equal(severityFor('ACCESS_DENIED', 'SECURITY'), 'WARNING');
         assert.equal(severityFor('LOGIN', 'SECURITY'), 'INFO');
+    });
+});
+
+describe('RSVP entries', () => {
+    it('are a DATA diff of the attendees, like an update', () => {
+        assert.equal(categoryFor('Activity', 'RSVP'), 'DATA');
+        assert.equal(severityFor('RSVP', 'DATA'), 'INFO');
+        assert.equal(changedFieldsOf('RSVP', { attendees: { from: [], to: [{ kind: 'user' }] } }), '|attendees|');
     });
 });
 
@@ -108,6 +117,8 @@ describe('labelFromChanges', () => {
         assert.equal(labelFromChanges('Ticket', 'id', { organizationName: 'Org' }), 'Org');
         assert.equal(labelFromChanges('Contract', 'id', { contractTitle: 'Tally TSS', organizationName: 'Org' }), 'Tally TSS');
         assert.equal(labelFromChanges('Contract', 'id', { organizationName: 'Org' }), 'Org');
+        assert.equal(labelFromChanges('Activity', 'id', { subject: 'Kick-off call', organizationName: 'Org' }), 'Kick-off call');
+        assert.equal(labelFromChanges('Activity', 'id', { subject: { from: 'Call', to: 'Demo' } }), 'Demo');
     });
     it('names form-customization entries by module and field, or the whole form', () => {
         assert.equal(labelFromChanges('FormField', 'f1', { _meta: { module: 'leads', fieldLabel: 'Phone 3' } }), 'Leads › Phone 3');

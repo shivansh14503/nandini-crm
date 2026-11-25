@@ -98,7 +98,18 @@ export function lockRecords(tx: TransactionClient, entity: LockedEntity, ids: st
     return acquireLocks(tx, ids.map((id) => `${entity}:id:${id}`));
 }
 
-export type LockedEntity = 'organization' | 'contact' | 'lead' | 'opportunity' | 'quotation' | 'product' | 'ticket' | 'contract' | 'referral' | 'partnerCompany';
+export type LockedEntity =
+    | 'organization'
+    | 'contact'
+    | 'lead'
+    | 'opportunity'
+    | 'quotation'
+    | 'product'
+    | 'ticket'
+    | 'contract'
+    | 'activity'
+    | 'referral'
+    | 'partnerCompany';
 
 /** Columns set when a core entity is soft-deleted. */
 export const softDeleteData = (actor: AuthUser) => ({

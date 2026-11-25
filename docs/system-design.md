@@ -1,6 +1,6 @@
 # Nandini CRM — System Design
 
-> **Status:** living document. Describes the system as built (code as of 2026-11-25; audit context + ledger audit table, admin audit query API and screen, Users tab; Contracts module; Documents module).
+> **Status:** living document. Describes the system as built (code as of 2026-11-25; audit context + ledger audit table, admin audit query API and screen, Users tab; Contracts module; Referrals module; Documents module; Activities data model and API, Calendar Phase 1 PR1).
 > Update it in the same change that alters architecture, infrastructure, Redis usage, queues or security.
 > Related: [Database design](database-design.md) · [API plan](api-plan.md) · [Build plan](build-plan.md)
 
@@ -10,7 +10,7 @@
 
 An internal sales and support CRM for Nandini Infosystems. Sales staff move work through
 **Leads → Opportunities → Quotations**, keep **Organizations** and **Contacts** as the customer master, log support
-**Tickets** and **Contracts**, browse the **Documents** added on opportunities, and manage **Products** and **Partner Companies**. Admins customise forms and dropdowns, number
+**Tickets** and **Contracts**, browse the **Documents** added on opportunities, and manage **Products**, **Partner Companies** and **Referrals**. Admins customise forms and dropdowns, number
 documents, maintain the city list and design printable PDF templates.
 
 ## 2. High-level architecture
@@ -182,6 +182,8 @@ SQL Server is the only source of truth; Redis only ever holds derived or disposa
 | Admin features | `requireRole('Admin', 'Administrator', 'Super Admin')` — form customisation, document series, cities, PDF template management |
 | Global data roles | Admin, Director – Operations, Regional Sales Head, Sales Manager, System Administrator, Accounts Manager see **all** records |
 | Everyone else | Row-level scope: only records where they are the owner (`assignedTo`) **or** the creator (`createdBy`). Lists add this as a Prisma `where`; single-record reads/writes call `assertRecordAccess` (403) |
+| Activities (`modules/activities/activity.access.ts`) | The same rule **plus attendees**: a colleague invited to an activity (`ActivityAttendee.username`) can see it (lists, calendar, record, its audit trail) and reply to it (`POST /api/activities/:id/response`), but only the owner, the creator or a global role can change or delete it. Linking an activity to a record (Related To, and the `link-targets` picker) needs access to that record under its own module's rule (403 otherwise); an unchanged link is kept even if the editor can't see the record. The calendar's lead / opportunity follow-ups and contract renewals follow their modules' rules. Activities are not in global search |
+| Referrals (`modules/referrals`) | Lists and records are **not** row-scoped (everyone picks Referred By from them); changes and deletes need the owner, the creator or a global role (`assertRecordAccess`) |
 
 Role names are compared case-insensitively and with any dash style.
 
@@ -348,6 +350,7 @@ flowchart LR
 | **Table filters** | Each user's recent (last 10) and saved filters per module are stored in `TableFilter`. |
 | **Email verification** | Free checks (syntax, typo of a common provider, disposable domain, DNS — the domain lookup is cached in Redis for a day) then QuickEmailVerification for the mailbox. **The database is the record of checked addresses**: an address saved on any lead / contact / organization with a result is never sent to the provider again from a form or a save, and there is no periodic re-check. Invalid addresses are never stored: the form refuses to save once its on-blur check said "invalid" (toast, no second call), and the save check rejects them server-side. No Redis cache of results; a 30-minute in-process memory of recent provider answers makes the on-blur check, the save check and the post-save background check of one new address cost one credit (lost on restart or across API instances, costing at most one extra credit). Admins re-check addresses in bulk under Settings › Email Validation; an `EmailValidationRun` is processed in the API process (one run at a time, cancellable, resumed at startup). Small runs call the single-address API per address and stop when the provider runs out of credits. Runs of at least `EMAIL_VERIFICATION_LIST_API_MIN` (default 1,000, the provider's own cut-off) use its **List API**: the free checks run first (8 at a time, failures decided for free), the rest are uploaded as one CSV (`POST /v1/bulk-verify`; credits for the whole list are taken at upload, "unknown" results refunded), the job is polled (`GET /v1/bulk-verify/status/{id}`, every 2 / 5 / 15 min by list size; no callback URL, so the API needn't be reachable from the internet; status `ready` = waiting for credits), then the safe-to-send / valid / invalid reports are downloaded and written onto the records (safe to send = valid, valid only = risky, invalid = invalid, unknown = undecided; reasons from the full report when its columns are recognised) and the job is deleted at the provider. **Every result that changes an address on a record is audited** (`EMAIL_CHECK` on the record, from / to result + reason; bulk runs by the admin who started them with the run id as request id, the post-save check by `system`; re-checks that confirm the stored result write nothing). Env: `EMAIL_VERIFICATION_ENABLED`, `QUICKEMAILVERIFICATION_API_KEY`, `EMAIL_VERIFICATION_LIST_API_MIN`. |
 | **Lead conversion** | `POST /api/leads/:id/convert` creates or links an Organization and Contact, creates an Opportunity and marks the lead `Converted` in one serializable transaction. |
+| **Time handling** | Most date-times are **wall clocks** in `BUSINESS_TIMEZONE` (default `Asia/Kolkata`) stored as if UTC (ticket `dueDate`, contract `renewalReminderDate`), and follow-ups are a `DATE` plus a time text. **Activities are the exception:** `startAt` / `endAt` / `remindAt` are true UTC instants, the API takes and returns ISO strings with a zone, and `Activity.timeZone` keeps the zone they were entered in (always `BUSINESS_TIMEZONE` in Phase 1). All-day activities are sent as inclusive days (`allDay: true`, `startDay` / `endDay` `YYYY-MM-DD`) and stored as midnight of the first day → midnight after the last day in that zone, so they stay on the same days whatever zone a viewer is in. Conversions (instant ↔ zoned wall clock, zoned midnight, day arithmetic, the old fake-UTC values → instants for the calendar feed) live in `backend-crm/src/utils/zonedTime.ts` (`Intl`-based, DST-safe, unit-tested). The no-past-dates rule compares in the business timezone; Completed / Cancelled activities may be in the past so a call can be logged afterwards. |
 
 ## 8. Frontend design
 
@@ -418,7 +421,7 @@ flowchart TB
 | --- | --- |
 | No user management API/UI | Users come from the seed or direct DB edits. `ROUTES.ADMIN_USERS` exists in the frontend but has no page. `sessionService.revokeAll` is ready for deactivation / password change. |
 | Dashboard has no data API | The dashboard page is static; `cache:dashboard:*` is reserved. |
-| No automated frontend tests | Backend has 14 `node:test` files (pure logic: validators, numbering, PDF document, access control). No integration/E2E tests. |
+| No automated frontend tests | Backend has 51 `node:test` files (pure logic: validators, numbering, PDF document, access control, audit, time zones, activities, referrals, documents). No integration/E2E tests. |
 | Workers inside the API by default | Long imports share the event loop with requests unless `RUN_WORKERS=false` + separate worker. |
 | Rate limits fail open | Intentional for availability; brute-force protection disappears while Redis is down. |
 | Stale README PDF section | Describes the removed Handlebars engine. |

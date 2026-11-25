@@ -22,6 +22,7 @@ import type { LeadFormData } from '@/types/lead.types';
 import { ApiClientError, leadService } from '@/services';
 import type { RecordAuditStamp } from '../common/Drawer/RecordAuditFooter';
 import { normalizeAddressFields } from '@/utils/address';
+import { activityOnlyTypeIssues } from '@/utils/followupTypes';
 
 // Modular Lead Form Sections
 import {
@@ -143,7 +144,7 @@ export default function LeadForm({
     useEffect(() => {
         ratingConfigRef.current = ratingConfig;
     }, [ratingConfig]);
-    const [saved, setSaved] = useState<{ status: string; rating: string }>({ status: '', rating: '' });
+    const [saved, setSaved] = useState<{ status: string; rating: string; followupType: string }>({ status: '', rating: '', followupType: '' });
     const savedRef = useRef(saved);
     useEffect(() => {
         savedRef.current = saved;
@@ -165,15 +166,19 @@ export default function LeadForm({
             mode === 'edit'
                 ? (values) => {
                       const { isClosing, wasClosed } = editKind(values);
-                      return followUpEditIssues(values, followUpDecisionPending.current, {
-                          // Optional for a details-only edit; needed to close a lead or to reopen one.
-                          requireResponse: isClosing ? !wasClosed : wasClosed,
-                          skipFollowUp: isClosing,
-                          responseMessage: isClosing ? 'Pick a Customer Response to close the lead.' : 'Pick a Customer Response to reopen the lead.',
-                      });
+                      return [
+                          ...followUpEditIssues(values, followUpDecisionPending.current, {
+                              // Optional for a details-only edit; needed to close a lead or to reopen one.
+                              requireResponse: isClosing ? !wasClosed : wasClosed,
+                              skipFollowUp: isClosing,
+                              responseMessage: isClosing ? 'Pick a Customer Response to close the lead.' : 'Pick a Customer Response to reopen the lead.',
+                          }),
+                          // Task / Note are Activities-only; a lead that already stores one keeps it.
+                          ...activityOnlyTypeIssues(values.followupType, savedRef.current.followupType),
+                      ];
                   }
                 : mode === 'create'
-                  ? (values) => followUpSlotIssues(values)
+                  ? (values) => [...followUpSlotIssues(values), ...activityOnlyTypeIssues(values.followupType)]
                   : undefined,
         // A details-only edit records no follow-up (no Remarks needed); closing a lead schedules none.
         relaxedFields:
@@ -214,7 +219,7 @@ export default function LeadForm({
                     const loaded = normalizeAddressFields(found, LEAD_ADDRESS_PAIRS);
                     // A follow-up is recorded with a fresh response and remarks; left empty, the edit changes details only.
                     reset(mode === 'edit' ? { ...loaded, customerResponse: '', remarks: '' } : loaded);
-                    setSaved({ status: found.status ?? '', rating: found.rating ?? '' });
+                    setSaved({ status: found.status ?? '', rating: found.rating ?? '', followupType: found.followupType ?? '' });
                     setRecordCode(found.leadCode ?? '');
                     setAudit({ createdAt: found.createdAt, createdBy: found.createdBy, updatedAt: found.updatedAt, updatedBy: found.updatedBy });
                 }

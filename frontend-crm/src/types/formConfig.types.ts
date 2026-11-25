@@ -11,6 +11,7 @@ export const CRM_MODULE_KEYS = [
     'products',
     'tickets',
     'contracts',
+    'activities',
     'partner-companies',
     'referrals',
 ] as const;
@@ -26,11 +27,12 @@ export const CRM_MODULE_LABELS: Record<CrmModuleKey, string> = {
     products: 'Products',
     tickets: 'Tickets',
     contracts: 'Contracts',
+    activities: 'Activities',
     'partner-companies': 'Partner Companies',
     referrals: 'Referrals',
 };
 
-export type CrmModuleGroupKey = 'sales' | 'support' | 'inventory' | 'all';
+export type CrmModuleGroupKey = 'sales' | 'support' | 'activities' | 'inventory' | 'all';
 
 export interface CrmModuleGroup {
     key: CrmModuleGroupKey;
@@ -60,6 +62,7 @@ export const CRM_MODULE_GROUPS: readonly CrmModuleGroup[] = [
             { key: 'contracts', label: 'Contracts' },
         ],
     },
+    { key: 'activities', label: 'Activities', modules: [{ key: 'activities', label: 'All Activities' }] },
     { key: 'inventory', label: 'Inventory', modules: [{ key: 'products', label: 'Product Catalog' }] },
     {
         key: 'all',

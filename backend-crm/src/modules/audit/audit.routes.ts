@@ -6,14 +6,16 @@ import { auditLogService } from './audit.service.js';
 
 /**
  * /api/audit-logs/:entityType/:entityId?limit=100
- *   entityType: organizations | contacts | leads | opportunities | quotations | products | tickets | contracts | partner-companies | referrals | users
+ *   entityType: organizations | contacts | leads | opportunities | quotations | products | tickets | contracts | activities
+ *             | partner-companies | referrals | users
  *             | pdf-templates | form-configs (entityId: a module key, `shared`, or `all` — the Form Customization admin trail)
  *             | scorecards (entityId: a module key — the List Scorecards admin trail)
  *   → { entityType, entityId, entries: [...], revisions: AuditRevisionItem[] } (newest first)
  *   Access: admins read every trail. Others: organizations / contacts / leads / opportunities / quotations / tickets /
- *   contracts need access to the record (403, or 404 when it doesn't exist); users (own trail only), pdf-templates,
- *   form-configs and scorecards are admin-only (403); products, partner companies and referrals are open to any signed-in
- *   user.
+ *   contracts need access to the record (403, or 404 when it doesn't exist), activities also let their invited
+ *   colleagues read it; users (own trail only), pdf-templates,
+ *   form-configs and scorecards are admin-only (403); products, partner companies and referrals are open to any
+ *   signed-in user.
  */
 const router = Router();
 router.use(authenticate);

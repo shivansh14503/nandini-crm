@@ -9,13 +9,25 @@ import { FIELD_MAX_LENGTH } from '../config/fieldLimits.js';
 import { TALLY_SERIAL_LENGTH, tallySerialIssue } from './tallySerial.js';
 import { leadSourceDetailIssues, PARTNER_LEAD_SOURCE, REFERRED_BY_LEAD_SOURCES } from '../modules/shared/leadSource.js';
 import {
+    ACTIVITY_ONLY_FOLLOWUP_TYPES,
     CRM_MODULES,
     CUSTOM_FIELD_TYPES,
+    DEFAULT_CATEGORIES,
     DEFAULT_FIELDS,
     FIELD_TYPES,
+    FOLLOWUP_TYPE_CATEGORY_KEY,
     MODULE_TABS,
     sectionKeyFromLabel,
 } from '../modules/form-configs/formConfig.defaults.js';
+import {
+    ACTIVITY_MAX_DURATION_DAYS,
+    ACTIVITY_RELATED_MODULES,
+    ACTIVITY_REMINDERS,
+    ACTIVITY_STATUSES,
+    NOTE_TYPE,
+    TASK_TYPE,
+} from '../modules/activities/activity.schedule.js';
+import { ACTIVITY_ONLY_TYPE_MESSAGE, activityOnlyTypeIssues, isActivityOnlyFollowupType } from '../modules/shared/followupTypes.js';
 
 /**
  * Contract between backend-crm and frontend-crm: constants each side keeps its own copy of must agree, or the UI
@@ -53,6 +65,23 @@ interface FrontendFormConfigTypes {
     /** Keyed by every `FieldType` (custom types plus lookup / datetime). */
     FIELD_TYPE_LABELS: Record<string, string>;
     sectionKeyFromLabel(label: string): string;
+}
+
+interface FrontendActivityTypes {
+    ACTIVITY_ONLY_FOLLOWUP_TYPES: readonly string[];
+    ACTIVITY_TYPES: readonly string[];
+    TASK_TYPE: string;
+    NOTE_TYPE: string;
+    ACTIVITY_STATUSES: readonly string[];
+    ACTIVITY_REMINDERS: readonly string[];
+    ACTIVITY_RELATED_MODULES: readonly string[];
+    ACTIVITY_MAX_DURATION_DAYS: number;
+}
+
+interface FrontendFollowupTypes {
+    ACTIVITY_ONLY_TYPE_MESSAGE: string;
+    isActivityOnlyFollowupType(value: string | null | undefined): boolean;
+    activityOnlyTypeIssues(value: string | null | undefined, previous?: string | null, path?: string): { path: string; message: string }[];
 }
 
 async function loadFrontend<T>(relativePath: string): Promise<T> {
@@ -139,6 +168,41 @@ describe('backend ↔ frontend contract', { skip }, () => {
         ];
         for (const label of labels) {
             assert.equal(frontend.sectionKeyFromLabel(label), sectionKeyFromLabel(label), `label: ${JSON.stringify(label)}`);
+        }
+    });
+
+    it('frontend types/activity.types.ts matches the activity constants', async () => {
+        const frontend = await loadFrontend<FrontendActivityTypes>('types/activity.types.ts');
+        assert.deepEqual([...frontend.ACTIVITY_ONLY_FOLLOWUP_TYPES], [...ACTIVITY_ONLY_FOLLOWUP_TYPES]);
+        assert.equal(frontend.TASK_TYPE, TASK_TYPE);
+        assert.equal(frontend.NOTE_TYPE, NOTE_TYPE);
+        assert.deepEqual([...frontend.ACTIVITY_STATUSES], [...ACTIVITY_STATUSES]);
+        assert.deepEqual([...frontend.ACTIVITY_REMINDERS], [...ACTIVITY_REMINDERS]);
+        assert.deepEqual([...frontend.ACTIVITY_RELATED_MODULES], [...ACTIVITY_RELATED_MODULES]);
+        assert.equal(frontend.ACTIVITY_MAX_DURATION_DAYS, ACTIVITY_MAX_DURATION_DAYS);
+        // The activity form's fallback Followup Type list is the seeded shared_followup_type list.
+        const seeded = DEFAULT_CATEGORIES.find((category) => category.key === FOLLOWUP_TYPE_CATEGORY_KEY);
+        assert.ok(seeded, `${FOLLOWUP_TYPE_CATEGORY_KEY} is seeded`);
+        assert.deepEqual([...frontend.ACTIVITY_TYPES].sort(), seeded.options.map((option) => (typeof option === 'string' ? option : option.value)).sort());
+    });
+
+    it('frontend utils/followupTypes.ts applies the same Task / Note rule', async () => {
+        const frontend = await loadFrontend<FrontendFollowupTypes>('utils/followupTypes.ts');
+        assert.equal(frontend.ACTIVITY_ONLY_TYPE_MESSAGE, ACTIVITY_ONLY_TYPE_MESSAGE);
+        const cases: [string | null | undefined, string | null | undefined][] = [
+            ['Task', undefined],
+            [' note ', undefined],
+            ['Task', 'Task'],
+            ['task', 'Task'],
+            ['Note', 'Call'],
+            ['Call', undefined],
+            ['', undefined],
+            [null, 'Note'],
+        ];
+        for (const [value, previous] of cases) {
+            assert.equal(frontend.isActivityOnlyFollowupType(value), isActivityOnlyFollowupType(value), JSON.stringify(value));
+            const expected = activityOnlyTypeIssues(value, previous).map((issue) => ({ path: issue.path.join('.'), message: issue.message }));
+            assert.deepEqual(frontend.activityOnlyTypeIssues(value, previous), expected, JSON.stringify([value, previous]));
         }
     });
 });

@@ -78,7 +78,7 @@ const primaryEmail = (c: Contact) => (c.emailAddress.find((e) => e.isPrimary) ??
  * Must be rendered inside a `FormProvider<OpportunityFormData>`.
  */
 export function OpportunityBasicSection({ notify, onDecisionPendingChange }: OpportunityBasicSectionProps) {
-    const getOptions = useDropdownOptionsGetter();
+    const getOptions = useDropdownOptionsGetter('opportunities');
     const { control, getValues, setValue, getFieldState } = useFormContext<F>();
     const { mode } = useFormMode();
     const isEdit = mode === 'edit';

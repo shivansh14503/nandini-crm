@@ -13,6 +13,7 @@ export type ModuleKey =
     | 'contacts'
     | 'tickets'
     | 'contracts'
+    | 'activities'
     | 'documents'
     | 'products'
     | 'partnerCompanies'
@@ -37,6 +38,7 @@ const CSS_NAME: Record<ModuleKey, string> = {
     contacts: 'contacts',
     tickets: 'tickets',
     contracts: 'contracts',
+    activities: 'activities',
     documents: 'documents',
     products: 'products',
     partnerCompanies: 'partner-companies',

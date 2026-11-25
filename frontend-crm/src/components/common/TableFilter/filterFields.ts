@@ -14,6 +14,7 @@ import {
     isBuiltInCountryField,
     moduleFields,
     optionLabelMap,
+    optionsForModule,
 } from '@/utils/formConfig';
 import type { FilterFieldDef, FilterOption } from './types';
 
@@ -31,6 +32,7 @@ export const DEFAULT_FILTER_KEYS: Record<CrmModuleKey, string[]> = {
     products: ['category', 'type', 'taxType', 'taxRate', 'createdAt', 'createdBy', 'ageDays', 'unmodifiedDays'],
     tickets: ['dueDate', 'assignedTo', 'ticketStatus', 'ticketPriority', 'source', 'supportType', 'supportMode', 'organizationName', 'createdAt', 'createdBy', 'ageDays', 'unmodifiedDays'],
     contracts: ['status', 'assignedTo', 'contractTitle', 'contractPeriod', 'organizationName', 'startDate', 'endDate', 'renewalReminderDate', 'createdAt', 'createdBy', 'ageDays', 'unmodifiedDays'],
+    activities: ['followupType', 'status', 'assignedTo', 'startAt', 'relatedTo', 'organizationName', 'createdAt', 'createdBy', 'ageDays', 'unmodifiedDays'],
     'partner-companies': ['assignedTo', 'natureOfPartner', 'createdAt', 'createdBy', 'ageDays', 'unmodifiedDays'],
     referrals: ['status', 'assignedTo', 'organizationName', 'designation', 'department', 'mobile', 'createdAt', 'createdBy', 'ageDays', 'unmodifiedDays'],
 };
@@ -97,7 +99,7 @@ function formField(
             // A select without a dropdown (e.g. an address State) is free text in practice.
             if (!category) return { ...base, kind: 'text' };
             const labels = optionLabelMap(category) ?? {};
-            const options = activeOptionValues(category).map((value) => ({ value, label: labels[value] ?? value }));
+            const options = optionsForModule(category.key, activeOptionValues(category), field.module).map((value) => ({ value, label: labels[value] ?? value }));
             return { ...base, kind: 'options', options };
         }
         case 'date':

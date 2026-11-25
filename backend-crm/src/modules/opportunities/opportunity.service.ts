@@ -9,7 +9,7 @@ import { HttpError } from '../../utils/httpError.js';
 import { daysAgo, fromDateOnly } from '../../utils/mappers.js';
 import { parsePagination } from '../../utils/pagination.js';
 import { calculateLineItems, lineItemsInclude, resolveProductIds, toLineItemData } from '../shared/lineItems.js';
-import { asPayload, checkModulePayload, loadModuleFieldConfig, validateModulePayload } from '../form-configs/customFieldValidator.js';
+import { asPayload, checkModulePayload, loadModuleFieldConfig, throwFieldIssues, validateModulePayload } from '../form-configs/customFieldValidator.js';
 import { assertAssigneeValid, assertRecordAccess, buildAccessScopeWhere } from '../shared/accessControl.js';
 import { findOrganizationByName, type PrefetchedLookups } from '../shared/prefetch.js';
 import { assertReference } from '../shared/references.js';
@@ -19,6 +19,7 @@ import { tallySerialIssue } from '../../validators/tallySerial.js';
 import { codeSearchPrefix, phoneSearch, phoneWhere } from '../shared/searchTerms.js';
 import { assertDeletedRow, lockRecords, restoreData, runInTransaction, softDeleteData, type BulkDeleteResult } from '../shared/transactions.js';
 import { assertLeadSourceDetails, LEAD_SOURCE_DETAIL_KEYS } from '../shared/leadSource.js';
+import { activityOnlyTypeIssues } from '../shared/followupTypes.js';
 import { resolveReferredBy, type ReferredByValue } from '../shared/referredBy.js';
 import { toOpportunityData, toOpportunityDto, type OpportunityDto } from './opportunity.mapper.js';
 import { assertRecordFile } from '../files/recordFile.service.js';
@@ -219,6 +220,8 @@ export const opportunityService = {
             notRequired: clearedKeys(plan, input.salesStage),
         });
         assertNotInPast(opportunityPastChecks(input));
+        // Task and Note are Followup Types of Activities only.
+        throwFieldIssues(activityOnlyTypeIssues(input.followupType));
         const created = await runInTransaction((tx) => createOpportunityRecord(tx, input, user));
         await cacheService.invalidateEntityCaches('opportunities');
         return created;
@@ -261,6 +264,8 @@ export const opportunityService = {
                 previousCustomFields: before.customFields,
             });
             assertNotInPast(opportunityPastChecks(input, before));
+            // Task / Note are Activities-only: refused when the value changes to one (a stored one stays editable).
+            throwFieldIssues(activityOnlyTypeIssues(input.followupType, before.followupType));
 
             const links = await resolveLinks(tx, input, existing);
             // A Referred By the opportunity already has (a legacy typed name, or a referral since made Inactive) stays.

@@ -1,6 +1,6 @@
 # Lead Rating Rules — Build Plan
 
-> **Status:** built 2026-11-21. Code: `backend-crm/src/modules/leads/lead.rating.ts` (rules, pure),
+> **Status:** built 2026-11-21 (Activities note added 2026-11-25). Code: `backend-crm/src/modules/leads/lead.rating.ts` (rules, pure),
 > `lead.followUp.ts` (save rules), `lead.ageing.ts` + `src/jobs/workers/leadRating.worker.ts` (nightly ageing);
 > frontend `src/utils/leadRating.ts`, `components/settings/form-customization/RatingRulesPanel.tsx`. Data model in
 > [database-design.md](database-design.md), endpoints in [api-plan.md](api-plan.md), the job in
@@ -15,7 +15,7 @@ Admins set the day and attempt limits in Form Builder.
 | --- | --- |
 | **Rating** | `Lead.rating`: `Hot` / `Warm` / `Cold`. Set only by the server. **Not on any form and not a Form Builder field.** Shown in the leads list (column, Hot Leads pill, filter), the drawer badge and the follow-up history. |
 | **Lead Type** | `Lead.leadType`: the admin dropdown `lead_type` (Inbound / Outbound / Marketing). Unrelated to Rating, untouched by this work. |
-| **Customer Response** | The outcome of a follow-up, picked from **our own dropdown**: whatever list the leads `customerResponse` field is linked to (today `shared_customer_response`, shared with opportunities, which read the Sales Stages on the same options and ignore the rule). Admins add, rename and delete its options; **each option carries its own rating rule**. Code reads the list through the field's link, never a hard-coded key. |
+| **Customer Response** | The outcome of a follow-up, picked from **our own dropdown**: whatever list the leads `customerResponse` field is linked to (today `shared_customer_response`, shared with opportunities, which read the Sales Stages on the same options and ignore the rule, and with activities, which read neither). Admins add, rename and delete its options; **each option carries its own rating rule**. Code reads the list through the field's link, never a hard-coded key. An **Activity**'s Customer Response (Calendar Phase 1) never changes a lead's Rating, its follow-up or its counter, even when the activity is related to the lead: only a follow-up recorded on the lead itself does. |
 | **Status** | The admin dropdown `lead_status`. Each option gets a **"Closes the lead"** switch (Lost). `Converted` (set only by Convert) always closes. |
 | **Follow-up state** | *Scheduled* / *Overdue*: worked out from the next follow-up against now, never stored. A lead can be Hot and Overdue. |
 | **Day** | An IST calendar day (`BUSINESS_TIMEZONE`), not 24-hour blocks. Times only decide whether a follow-up is in the future. |

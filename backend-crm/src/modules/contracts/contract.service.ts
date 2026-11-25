@@ -6,11 +6,12 @@ import type { AuthUser } from '../../types/user.types.js';
 import type { PaginatedResult } from '../../utils/apiResponse.js';
 import { generateEntityCode } from '../../utils/codeGenerator.js';
 import { HttpError } from '../../utils/httpError.js';
-import { daysAgo, parseStringArray } from '../../utils/mappers.js';
+import { daysAgo } from '../../utils/mappers.js';
 import { parsePagination } from '../../utils/pagination.js';
 import { asPayload, checkModulePayload, loadModuleFieldConfig, validateModulePayload } from '../form-configs/customFieldValidator.js';
 import { assertAssigneeValid, assertRecordAccess, buildAccessScopeWhere } from '../shared/accessControl.js';
 import { findOrganizationByName, type PrefetchedLookups } from '../shared/prefetch.js';
+import { opportunityLabel } from '../shared/opportunityLabel.js';
 import { assertReference } from '../shared/references.js';
 import { assertNotInPast } from '../../validators/notInPast.js';
 import { codeSearchPrefix } from '../shared/searchTerms.js';
@@ -23,11 +24,6 @@ import { tallySerialIssue } from '../../validators/tallySerial.js';
 const OWNER_SELECT = { assignedTo: true, createdBy: true } as const;
 
 const notFound = () => HttpError.notFound('Contract not found');
-
-/** What the form shows for an opportunity (frontend `opportunityLabel`): its name, else its products, else its organization. */
-function opportunityLabel(opportunity: { opportunityName: string | null; productCategoryJson: string | null; organizationName: string }): string {
-    return opportunity.opportunityName || parseStringArray(opportunity.productCategoryJson).join(', ') || opportunity.organizationName;
-}
 
 /**
  * Resolves the organization, contact and opportunity links. An explicit organization / contact id must reference an
