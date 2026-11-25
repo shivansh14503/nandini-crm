@@ -15,7 +15,7 @@ Admins set the day and attempt limits in Form Builder.
 | --- | --- |
 | **Rating** | `Lead.rating`: `Hot` / `Warm` / `Cold`. Set only by the server. **Not on any form and not a Form Builder field.** Shown in the leads list (column, Hot Leads pill, filter), the drawer badge and the follow-up history. |
 | **Lead Type** | `Lead.leadType`: the admin dropdown `lead_type` (Inbound / Outbound / Marketing). Unrelated to Rating, untouched by this work. |
-| **Customer Response** | The outcome of a follow-up, picked from **our own dropdown**: whatever list the leads `customerResponse` field is linked to (today `lead_customer_response`; opportunities use `shared_customer_response` and are not affected). Admins add, rename and delete its options; **each option carries its own rating rule**. Code reads the list through the field's link, never a hard-coded key. |
+| **Customer Response** | The outcome of a follow-up, picked from **our own dropdown**: whatever list the leads `customerResponse` field is linked to (today `shared_customer_response`, shared with opportunities, which read the Sales Stages on the same options and ignore the rule). Admins add, rename and delete its options; **each option carries its own rating rule**. Code reads the list through the field's link, never a hard-coded key. |
 | **Status** | The admin dropdown `lead_status`. Each option gets a **"Closes the lead"** switch (Lost). `Converted` (set only by Convert) always closes. |
 | **Follow-up state** | *Scheduled* / *Overdue*: worked out from the next follow-up against now, never stored. A lead can be Hot and Overdue. |
 | **Day** | An IST calendar day (`BUSINESS_TIMEZONE`), not 24-hour blocks. Times only decide whether a follow-up is in the future. |
@@ -46,10 +46,10 @@ same way. Example: created 20 Nov → follow-up 20–25 Nov is Hot, 26 Nov onwar
 
 ### 2.3 Starting rules for the leads' Customer Response options
 
-The leads' own list `lead_customer_response` (migrations `20261125190000_lead_customer_response`, and
-`20261125200000_lead_customer_response_options`, which rewrites a leads list that already existed to these options). Opportunities have the
-same field (same key, label and follow-up flow) on their own list, `shared_customer_response`, like Status. Set in
-setup; the admin can change all of them in Form Builder › Leads › Rating Rules.
+The list `shared_customer_response`, which the opportunity form uses too (same field, key and follow-up flow; there
+each option also lists the Sales Stages it fits, Form Builder › Opportunities › Response Rules). Migration
+`20261125220000_shared_customer_response` sets it up on existing databases. Set in setup; the admin can change all of
+them in Form Builder › Leads › Rating Rules.
 
 | Option | Rule | Hot | Warm | Cold | Why |
 | --- | --- | --- | --- | --- | --- |

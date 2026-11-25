@@ -18,15 +18,14 @@ import type { ConfigValidationIssue } from '@/utils/formConfig';
  */
 
 /**
- * The Customer Response field is the same on both forms (key `customerResponse`, this flow); each module has its own
- * list of answers, like Status. Leads read theirs through the field's link (`useLeadRatingConfig().responseCategory`),
- * since each option also carries the lead's Rating rule (default list `lead_customer_response`).
+ * The Customer Response field is the same on both forms (key `customerResponse`, this flow) and uses one list
+ * (`shared_customer_response`). Each form reads it through the field's link: leads for the Rating rules
+ * (`useLeadRatingConfig`), opportunities for the Sales Stages each option fits (`useOpportunityResponseConfig`).
  */
-/** Opportunities' list (admin-managed). */
-export const OPPORTUNITY_CUSTOMER_RESPONSE_CATEGORY = 'shared_customer_response';
+export const CUSTOMER_RESPONSE_CATEGORY = 'shared_customer_response';
 
-/** Fallback lead options while the admin configuration loads (same defaults as the backend seed). */
-export const LEAD_CUSTOMER_RESPONSES: string[] = [
+/** Fallback options while the admin configuration loads (same defaults as the backend seed). */
+export const CUSTOMER_RESPONSES: string[] = [
     'Interested',
     'Need More Information',
     'Requested Quotation',
@@ -42,17 +41,6 @@ export const LEAD_CUSTOMER_RESPONSES: string[] = [
     'Wrong Number',
     'Not Reachable',
     'Do Not Contact',
-];
-
-/** Fallback opportunity options while the admin configuration loads (same defaults as the backend seed). */
-export const OPPORTUNITY_CUSTOMER_RESPONSES: string[] = [
-    'Interested - wants a demo',
-    'Interested - send quotation',
-    'Asked to call back later',
-    'Not reachable / no answer',
-    'Needs internal discussion',
-    'Using another product',
-    'Not interested',
 ];
 
 /** The form fields the flow reads and writes (both forms use these names). */
