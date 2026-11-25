@@ -18,6 +18,7 @@ import { assertFutureSlot, loadRatingConfig, newLeadRatingColumns, planLeadEdit,
 import { codeSearchPrefix, phoneSearch, phoneVariants, phoneWhere } from '../shared/searchTerms.js';
 import { assertDeletedRow, lockRecords, restoreData, runInTransaction, softDeleteData, type BulkDeleteResult } from '../shared/transactions.js';
 import { assertTaxIdsUnique } from '../shared/taxIdentifiers.js';
+import { assertLeadSourceDetails, LEAD_SOURCE_DETAIL_KEYS } from '../shared/leadSource.js';
 import { toLeadData, toLeadDto, type LeadDto } from './lead.mapper.js';
 import { resolveAddressPlaces } from '../cities/cityAddresses.js';
 import {
@@ -163,6 +164,7 @@ export const leadService = {
     async create(body: unknown, user: AuthUser): Promise<LeadDto> {
         const input = leadInputSchema.parse(body);
         input.customFields = await validateModulePayload('leads', asPayload(body), input.customFields);
+        assertLeadSourceDetails(input);
         assertStatusTransition(null, input.status);
         // Every new lead needs its first follow-up, date and time, later than now (checked at save time).
         const now = businessNow();
@@ -203,6 +205,8 @@ export const leadService = {
                 previousCustomFields: before.customFields,
             });
             assertStatusTransition(existing.status, input.status);
+            // Re-checked when the edit touches them, so other edits of an older record aren't refused.
+            if (LEAD_SOURCE_DETAIL_KEYS.some((key) => key in patch)) assertLeadSourceDetails(input);
             const plan = planLeadEdit({
                 state: existing,
                 response,

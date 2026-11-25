@@ -24,6 +24,7 @@ import {
     RhfDateTimeField,
     ExistingRecordMatches,
     useExistingRecordCheck,
+    useLeadSourceDetails,
 } from '@/components/forms';
 import { isGstRegistrationType } from '@/config/constants';
 import {
@@ -40,6 +41,7 @@ import {
     type LeadFormData,
 } from '@/types/lead.types';
 import { useDropdownOptionsGetter } from '@/hooks/queries/useFormConfigs';
+import { NATURE_OF_PARTNER_OPTIONS } from '@/types/partner.types';
 import { OrganizationNameAutocomplete } from '@/components/organizations/OrganizationNameAutocomplete';
 import { useOrganizationNameCheck } from '@/components/organizations/useOrganizationNameCheck';
 import { useFormMode } from '@/context/FormModeContext';
@@ -142,6 +144,11 @@ export function LeadOverviewSection({ leadId, notify, onDecisionPendingChange, o
     const turnoverOptions = getOptions('lead_turnover', LEAD_TURNOVER_RANGES);
     const employeeOptions = getOptions('lead_employee_range', LEAD_EMPLOYEE_RANGES);
     const leadSourceOptions = getOptions('shared_lead_source', LEAD_SOURCES);
+    // Lead Source CA / Reference asks who referred the lead, Partner for the partner's Nature of Partner.
+    const { needsReferredBy, showReferredBy, showNatureOfPartner } = useLeadSourceDetails<LeadFormData>(
+        { leadSource: 'leadSource', referredBy: 'referredBy', natureOfPartner: 'natureOfPartner' },
+        { readOnly: mode === 'view' },
+    );
 
     // Organization name: same live check + "already in CRM" dropdown as the organization form. Informational
     // only here — a lead for a company that already exists is valid, so a match never blocks the save.
@@ -266,14 +273,28 @@ export function LeadOverviewSection({ leadId, notify, onDecisionPendingChange, o
                             if (isEdit && closingStatuses.has(next) !== closingStatuses.has(previous)) onSuspendChange(closingStatuses.has(next));
                         }}
                     />
-                    {/* Picks from the CRM's contacts (Contact Search popup); a name can still be typed. */}
-                    <RhfLookup<LeadFormData, 'contact'>
-                        name="referredBy"
-                        label="Referred By"
-                        lookupType="contact"
-                        hint="Contact who referred the lead"
-                        placeholder="Search or select contact..."
-                    />
+                    {/* Lead Source CA / Reference only, and then required. Picks from the CRM's contacts (Contact Search
+                        popup); a name can still be typed. */}
+                    {showReferredBy && (
+                        <RhfLookup<LeadFormData, 'contact'>
+                            name="referredBy"
+                            label="Referred By"
+                            lookupType="contact"
+                            required={needsReferredBy}
+                            hint="Contact who referred the lead"
+                            placeholder="Search or select contact..."
+                        />
+                    )}
+                    {/* Lead Source Partner only, and then required: the Organization form's Nature of Partner list. */}
+                    {showNatureOfPartner && (
+                        <RhfSelect<LeadFormData>
+                            name="natureOfPartner"
+                            label="Nature of Partner"
+                            required
+                            options={getOptions('partner_nature', [...NATURE_OF_PARTNER_OPTIONS])}
+                            placeholder="Select Nature of Partner"
+                        />
+                    )}
                     <RhfSelect<LeadFormData> name="followupType" label="Followup Type" hint="Default: Call" options={FOLLOWUP_TYPES} placeholder="Select Type" />
                     {/* Picked to record a follow-up (a new lead has none to report on yet); left empty, the edit
                         changes details only. Starts its own row so it sits beside the Next Followup Date it decides. */}

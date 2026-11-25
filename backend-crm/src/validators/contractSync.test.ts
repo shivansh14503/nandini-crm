@@ -7,6 +7,7 @@ import { DOCUMENT_DEST, expectedFrontendFiles } from '../../scripts/syncPdfDocum
 import { DRAWER_LAYOUT_DEST, expectedDrawerLayoutFiles } from '../../scripts/syncDrawerLayout.js';
 import { FIELD_MAX_LENGTH } from '../config/fieldLimits.js';
 import { TALLY_SERIAL_LENGTH, tallySerialIssue } from './tallySerial.js';
+import { leadSourceDetailIssues, PARTNER_LEAD_SOURCE, REFERRED_BY_LEAD_SOURCES } from '../modules/shared/leadSource.js';
 import {
     CRM_MODULES,
     CUSTOM_FIELD_TYPES,
@@ -35,6 +36,15 @@ interface FrontendFieldLimits {
 interface FrontendTallySerial {
     TALLY_SERIAL_LENGTH: number;
     tallySerialIssue(value: string | null | undefined, field?: string): string | null;
+}
+
+interface FrontendLeadSource {
+    REFERRED_BY_LEAD_SOURCES: readonly string[];
+    PARTNER_LEAD_SOURCE: string;
+    leadSourceDetailIssues(
+        values: { leadSource?: string | null; referredBy?: string | null; natureOfPartner?: string | null },
+        paths?: { referredBy?: string; natureOfPartner?: string },
+    ): { path: string; message: string }[];
 }
 
 interface FrontendFormConfigTypes {
@@ -82,7 +92,23 @@ describe('backend ↔ frontend contract', { skip }, () => {
         }
     });
 
-    it('CRM modules match, in the same (navbar) order', async () => {
+    it('Lead Source follow-up rules (Referred By / Nature of Partner) and messages match', async () => {
+        const frontend = await loadFrontend<FrontendLeadSource>('utils/leadSource.ts');
+        assert.deepEqual([...frontend.REFERRED_BY_LEAD_SOURCES], [...REFERRED_BY_LEAD_SOURCES]);
+        assert.equal(frontend.PARTNER_LEAD_SOURCE, PARTNER_LEAD_SOURCE);
+        const sources = ['', 'CA', ' reference ', 'Partner', 'partner', 'Client Referral', 'Website Enquiry', null, undefined];
+        for (const leadSource of sources) {
+            for (const referredBy of ['', 'Anita Desai', undefined]) {
+                for (const natureOfPartner of ['', 'TALLY-AP', undefined]) {
+                    const values = { leadSource, referredBy, natureOfPartner };
+                    const expected = leadSourceDetailIssues(values).map((i) => ({ path: String(i.path[0]), message: i.message }));
+                    assert.deepEqual(frontend.leadSourceDetailIssues(values), expected, JSON.stringify(values));
+                }
+            }
+        }
+    });
+
+        it('CRM modules match, in the same (navbar) order', async () => {
         const frontend = await loadFrontend<FrontendFormConfigTypes>('types/formConfig.types.ts');
         assert.deepEqual([...frontend.CRM_MODULE_KEYS], [...CRM_MODULES]);
     });

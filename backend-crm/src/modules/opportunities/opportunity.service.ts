@@ -17,6 +17,7 @@ import { assertNotInPast, nextFollowupCheck, type PastCheck } from '../../valida
 import { tallySerialIssue } from '../../validators/tallySerial.js';
 import { codeSearchPrefix, phoneSearch, phoneWhere } from '../shared/searchTerms.js';
 import { assertDeletedRow, lockRecords, restoreData, runInTransaction, softDeleteData, type BulkDeleteResult } from '../shared/transactions.js';
+import { assertLeadSourceDetails, LEAD_SOURCE_DETAIL_KEYS } from '../shared/leadSource.js';
 import { toOpportunityData, toOpportunityDto, type OpportunityDto } from './opportunity.mapper.js';
 import { assertRecordFile, RECORD_FILE_SELECT } from '../files/recordFile.service.js';
 import {
@@ -190,6 +191,7 @@ export const opportunityService = {
     async create(body: unknown, user: AuthUser): Promise<OpportunityDto> {
         const input = opportunityInputSchema.parse(body);
         assertDocumentation(input);
+        assertLeadSourceDetails(input);
         input.customFields = await validateModulePayload('opportunities', asPayload(body), input.customFields);
         assertNotInPast(opportunityPastChecks(input));
         const created = await runInTransaction((tx) => createOpportunityRecord(tx, input, user));
@@ -218,6 +220,8 @@ export const opportunityService = {
             // Checked when the stage or the document changes, so records saved at PO before the rule existed still
             // take unrelated edits (follow-ups, …).
             if (['salesStage', 'addDocument', 'documentFile'].some((key) => key in patch)) assertDocumentation(input);
+            // Likewise the Lead Source's follow-up field (Referred By / Nature of Partner), when the edit touches them.
+            if (LEAD_SOURCE_DETAIL_KEYS.some((key) => key in patch)) assertLeadSourceDetails(input);
             await assertRecordFile(tx, 'opportunities', input.documentFile, 'documentFile', existing.documentFileId);
             if (keepLegacyTallySerial) input.tallySerialNo = before.tallySerialNo;
             input.customFields = checkModulePayload(fieldConfig, merged, input.customFields, {

@@ -22,7 +22,8 @@ const SAMPLE_LEAD: Record<string, unknown> = {
     department: 'Procurement',
     turnover: '25 - 50 Cr',
     noOfEmployee: '201 - 500',
-    leadSource: 'Exhibition / Trade Show',
+    // Referred By goes with Lead Source CA / Reference.
+    leadSource: 'Reference',
     referredBy: 'Anita Desai',
     productCategory: ['TallyPrime', 'Tally On Cloud', 'Biz Analyst'],
     followupType: 'Demo / Presentation',
@@ -136,7 +137,8 @@ const SAMPLE_OPPORTUNITY: Record<string, unknown> = {
     referredBy: 'Anita Desai',
     leadGivenBy: 'Priya Mehta',
     type: 'New Business',
-    leadSource: 'Exhibition / Trade Show',
+    // Referred By goes with Lead Source CA / Reference.
+    leadSource: 'Reference',
     salesStage: 'Negotiation',
     followupType: 'Demo / Presentation',
     customerResponse: 'Interested',

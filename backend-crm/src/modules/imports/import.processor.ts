@@ -14,6 +14,7 @@ import { contactInputSchema } from '../contacts/contact.validator.js';
 import { assertStatusTransition, createLeadRecord } from '../leads/lead.service.js';
 import { loadRatingConfig, newLeadRatingColumns, type RatingConfig } from '../leads/lead.followUp.js';
 import { leadImportSchema } from '../leads/lead.validator.js';
+import { assertLeadSourceDetails } from '../shared/leadSource.js';
 import { createOrganizationRecord } from '../organizations/organization.service.js';
 import { organizationImportSchema } from '../organizations/organization.validator.js';
 import { createOpportunityRecord } from '../opportunities/opportunity.service.js';
@@ -213,6 +214,8 @@ const rowBuilders: Record<ImportEntity, (v: Record<string, string>, user: AuthUs
             emailAddress: emailList(v.email),
             organizationName: v.organizationName,
             leadSource: v.leadSource || LEAD_IMPORT_DEFAULTS.leadSource,
+            referredBy: v.referredBy,
+            natureOfPartner: v.natureOfPartner,
             leadType: v.leadType,
             status,
             primaryCity: v.primaryCity,
@@ -223,6 +226,7 @@ const rowBuilders: Record<ImportEntity, (v: Record<string, string>, user: AuthUs
             assignedTo: user.username,
         };
         const input = leadImportSchema.parse(raw);
+        assertLeadSourceDetails(input);
         checkRow(ctx, raw);
         // Rated like any new lead: by the new-lead rule, from today to its follow-up.
         if (!ctx.ratingConfig) throw new Error('Lead import context has no Rating rules.');
@@ -240,6 +244,8 @@ const rowBuilders: Record<ImportEntity, (v: Record<string, string>, user: AuthUs
             type: v.type || OPPORTUNITY_IMPORT_DEFAULTS.type,
             salesStage: v.salesStage || OPPORTUNITY_IMPORT_DEFAULTS.salesStage,
             leadSource: v.leadSource || OPPORTUNITY_IMPORT_DEFAULTS.leadSource,
+            referredBy: v.referredBy,
+            natureOfPartner: v.natureOfPartner,
             leadGivenBy: v.leadGivenBy || user.username,
             nextFollowupDate: businessToday(),
             followupType: OPPORTUNITY_IMPORT_DEFAULTS.followupType,
@@ -248,6 +254,7 @@ const rowBuilders: Record<ImportEntity, (v: Record<string, string>, user: AuthUs
             assignedTo: user.username,
         };
         const input = opportunityInputSchema.parse(raw);
+        assertLeadSourceDetails(input);
         checkRow(ctx, raw);
         return (tx) => createOpportunityRecord(tx, input, user, ctx.lookups);
     },

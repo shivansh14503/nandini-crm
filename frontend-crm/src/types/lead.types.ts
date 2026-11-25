@@ -38,7 +38,10 @@ export interface LeadFormData {
     nextFollowupTime?: string;
     description?: string;
     noOfEmployee?: string;
+    /** Shown, and required, when Lead Source is CA or Reference. */
     referredBy?: string;
+    /** Shown, and required, when Lead Source is Partner (partner_nature, as on partner organizations). */
+    natureOfPartner?: string;
 
     // Billing Address - Left Column
     primaryAddress?: string;
@@ -80,6 +83,10 @@ export const LEAD_SOURCES: string[] = [
     'Direct Walk-in',
     'Google Search / Ad',
     'Other',
+    // CA / Reference ask for Referred By, Partner for a Nature of Partner (see leadSourceDetailIssues).
+    'CA',
+    'Reference',
+    'Partner',
 ];
 
 export const PRODUCT_CATEGORIES: string[] = [

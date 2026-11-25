@@ -94,6 +94,7 @@ const DEFAULT_FORM: LeadFormData = {
     description: '',
     noOfEmployee: '',
     referredBy: '',
+    natureOfPartner: '',
 
     primaryAddress: '',
     primaryCity: '',

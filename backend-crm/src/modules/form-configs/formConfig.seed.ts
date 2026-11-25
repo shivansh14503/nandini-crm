@@ -34,14 +34,15 @@ export async function ensureFormConfigsSeeded(): Promise<void> {
         // Deleted by an admin: the tombstone keeps it from being recreated; leave it (and its options) alone.
         if (category.deletedAt) continue;
 
-        const existingValues = new Map(category.options.map((o) => [o.value, o]));
+        // Option values are unique per dropdown ignoring case (an admin's 'reference' is the default 'Reference').
+        const existingValues = new Map(category.options.map((o) => [o.value.toLowerCase(), o]));
         const maxSort = category.options.reduce((max, o) => Math.max(max, o.sortOrder), 0);
         const isNewCategory = category.options.length === 0;
         // A brand-new category gets every default option. An existing one only gets missing *system* options back:
         // non-system defaults the admin permanently deleted must not resurrect on the next start-up.
         const missing = def.options
             .map(toOption)
-            .filter((o) => !existingValues.has(o.value) && (isNewCategory || o.isSystem));
+            .filter((o) => !existingValues.has(o.value.toLowerCase()) && (isNewCategory || o.isSystem));
         if (missing.length > 0) {
             // A brand-new category takes the default order; options added to an existing one go last.
             const base = isNewCategory ? 0 : maxSort;
@@ -61,8 +62,8 @@ export async function ensureFormConfigsSeeded(): Promise<void> {
             changed += missing.length;
         }
 
-        const systemValues = def.options.map(toOption).filter((o) => o.isSystem).map((o) => o.value);
-        const drifted = category.options.filter((o) => systemValues.includes(o.value) && (!o.isSystem || !o.isActive));
+        const systemValues = def.options.map(toOption).filter((o) => o.isSystem).map((o) => o.value.toLowerCase());
+        const drifted = category.options.filter((o) => systemValues.includes(o.value.toLowerCase()) && (!o.isSystem || !o.isActive));
         if (drifted.length > 0) {
             await prisma.dropdownOption.updateMany({ where: { id: { in: drifted.map((o) => o.id) } }, data: { isSystem: true, isActive: true } });
             changed += drifted.length;

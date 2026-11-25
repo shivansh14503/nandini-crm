@@ -70,7 +70,9 @@ const leadFields = z.object({
     nextFollowupTime: optionalText('Next Followup Time', 20),
     description: optionalText('Description', L.longText),
     noOfEmployee: optionalText('No of Employee', 30),
+    // Required for Lead Source CA / Reference; Nature of Partner for Lead Source Partner (shared/leadSource.ts).
     referredBy: optionalText('Referred By', L.organizationName),
+    natureOfPartner: optionalText('Nature of Partner', L.option),
 
     primaryAddress: optionalText('Billing Street', L.address),
     primaryCity: optionalText('Billing City', L.shortText),
@@ -162,7 +164,9 @@ export const convertLeadSchema = z.object({
     // opportunity fields are then ignored.
     createOpportunity: z.boolean().default(true),
     productCategory: stringList('Product Category', 30, L.option).default([]),
+    // Required for Lead Source CA / Reference, and the opportunity's Nature of Partner for Partner (checked by the conversion).
     referredBy: optionalText('Referred By', L.organizationName),
+    opportunityNatureOfPartner: optionalText('Nature of Partner', L.option),
     type: optionalText('Type', L.option),
     nextFollowupDate: optionalDate('Next Followup Date'),
     nextFollowupTime: optionalText('Next Followup Time', 20),
