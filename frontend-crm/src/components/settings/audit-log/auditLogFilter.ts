@@ -20,6 +20,10 @@ export const CATEGORY_TABS = [
 ] as const;
 export type CategoryTab = (typeof CATEGORY_TABS)[number]['key'];
 
+/** Tabs of the entries panel: the categories, then Users (everyone, and one user's activity log). */
+export const AUDIT_TABS = [...CATEGORY_TABS, { key: 'users', label: 'Users' }] as const;
+export type AuditTab = (typeof AUDIT_TABS)[number]['key'];
+
 export const SOURCE_LABELS: Record<string, string> = { UI: 'Web app', API: 'API', IMPORT: 'Import', JOB: 'Background job' };
 const SEVERITY_LABELS: Record<string, string> = { INFO: 'Info', NOTICE: 'Notice', WARNING: 'Warning', CRITICAL: 'Critical' };
 
@@ -34,9 +38,10 @@ const fromLabels = (labels: Record<string, string>): FilterOption[] => Object.en
 
 /**
  * Every field an entry can be filtered by: dropdowns from the facets of the chosen range (only what occurs there),
- * changed fields from the form configuration (labels as on the forms, custom fields included).
+ * changed fields from the form configuration (labels as on the forms, custom fields included). `withoutUser`: one
+ * user's activity log (Users tab), where the user is already chosen.
  */
-export function useAuditFilterFields(facets: AuditFacets | undefined): ModuleFilterFields {
+export function useAuditFilterFields(facets: AuditFacets | undefined, { withoutUser = false }: { withoutUser?: boolean } = {}): ModuleFilterFields {
     const configs = useFormConfigs();
     const { users } = useMasterData();
 
@@ -77,8 +82,13 @@ export function useAuditFilterFields(facets: AuditFacets | undefined): ModuleFil
             { key: 'entityId', label: 'Record ID', kind: 'text', exactMatch: true, placeholder: 'The record’s id', getValue: none },
             { key: 'requestId', label: 'Request ID', kind: 'text', exactMatch: true, placeholder: 'From an entry’s details', getValue: none },
         ];
-        return { fields, byKey: new Map(fields.map((f) => [f.key, f])), defaultKeys: DEFAULT_KEYS };
-    }, [configs, users, facets]);
+        const shown = withoutUser ? fields.filter((f) => f.key !== 'user') : fields;
+        return {
+            fields: shown,
+            byKey: new Map(shown.map((f) => [f.key, f])),
+            defaultKeys: withoutUser ? DEFAULT_KEYS.filter((key) => key !== 'user') : DEFAULT_KEYS,
+        };
+    }, [configs, users, facets, withoutUser]);
 }
 
 const OPTION_KEYS = ['user', 'module', 'action', 'field', 'source', 'severity'] as const;
