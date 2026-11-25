@@ -54,8 +54,8 @@ interface FrontendLeadSource {
     REFERRED_BY_LEAD_SOURCES: readonly string[];
     PARTNER_LEAD_SOURCE: string;
     leadSourceDetailIssues(
-        values: { leadSource?: string | null; referredBy?: string | null; natureOfPartner?: string | null },
-        paths?: { referredBy?: string; natureOfPartner?: string },
+        values: { leadSource?: string | null; referredBy?: string | null; partnerCompany?: string | null },
+        paths?: { referredBy?: string; partnerCompany?: string },
     ): { path: string; message: string }[];
 }
 
@@ -121,15 +121,15 @@ describe('backend ↔ frontend contract', { skip }, () => {
         }
     });
 
-    it('Lead Source follow-up rules (Referred By / Nature of Partner) and messages match', async () => {
+    it('Lead Source follow-up rules (Referred By / Partner Company) and messages match', async () => {
         const frontend = await loadFrontend<FrontendLeadSource>('utils/leadSource.ts');
         assert.deepEqual([...frontend.REFERRED_BY_LEAD_SOURCES], [...REFERRED_BY_LEAD_SOURCES]);
         assert.equal(frontend.PARTNER_LEAD_SOURCE, PARTNER_LEAD_SOURCE);
         const sources = ['', 'CA', ' reference ', 'Partner', 'partner', 'Client Referral', 'Website Enquiry', null, undefined];
         for (const leadSource of sources) {
             for (const referredBy of ['', 'Anita Desai', undefined]) {
-                for (const natureOfPartner of ['', 'TALLY-AP', undefined]) {
-                    const values = { leadSource, referredBy, natureOfPartner };
+                for (const partnerCompany of ['', 'ACME PARTNERS', undefined]) {
+                    const values = { leadSource, referredBy, partnerCompany };
                     const expected = leadSourceDetailIssues(values).map((i) => ({ path: String(i.path[0]), message: i.message }));
                     assert.deepEqual(frontend.leadSourceDetailIssues(values), expected, JSON.stringify(values));
                 }

@@ -11,6 +11,7 @@ export * from './FieldNotice';
 export * from './ExistingRecordMatches';
 export * from './useExistingRecordCheck';
 export * from './useLeadSourceDetails';
+export * from './PartnerCompanyLookup';
 export * from './ReadOnlyField';
 export * from './LockedField';
 export * from './LockedInputs';

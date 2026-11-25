@@ -264,6 +264,8 @@ export interface DrawerChannelRowProps {
     badgeBorder?: string;
     valueWeight?: number;
     valueColor?: string;
+    /** A tag shown right after the value (e.g. `<PrimaryTag />` on the primary email); wraps under it when narrow. */
+    tag?: React.ReactNode;
     /** Action buttons (call / email / copy …) shown at the right edge; replaces the plain copy button. */
     actions?: React.ReactNode;
 }
@@ -280,16 +282,20 @@ export function DrawerChannelRow({
     badgeBorder,
     valueWeight = 600,
     valueColor = 'var(--crm-slate-900)',
+    tag,
     actions,
 }: DrawerChannelRowProps) {
     return (
-        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1, minWidth: 0 }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 0 }}>
                 {icon}
-                <Box>
-                    <Typography sx={{ fontSize: '0.84rem', fontWeight: valueWeight, color: valueColor }}>
-                        {value}
-                    </Typography>
+                <Box sx={{ minWidth: 0 }}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', columnGap: 0.75, rowGap: 0.25, minWidth: 0 }}>
+                        <Typography sx={{ fontSize: '0.84rem', fontWeight: valueWeight, color: valueColor, minWidth: 0, overflowWrap: 'anywhere' }}>
+                            {value}
+                        </Typography>
+                        {tag}
+                    </Box>
                     {caption && (
                         <Typography sx={{ fontSize: '0.68rem', color: 'var(--mui-palette-text-secondary)' }}>
                             {caption}

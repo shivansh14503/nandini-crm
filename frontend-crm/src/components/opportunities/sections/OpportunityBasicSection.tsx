@@ -1,7 +1,8 @@
 'use client';
 
 import React, { useEffect, useMemo, useRef } from 'react';
-import { Box, Divider } from '@mui/material';
+import { Box, Divider, Typography } from '@mui/material';
+import EventBusyOutlinedIcon from '@mui/icons-material/EventBusyOutlined';
 import { useFormContext, useWatch } from 'react-hook-form';
 import ArticleOutlinedIcon from '@mui/icons-material/ArticleOutlined';
 import ReceiptLongOutlinedIcon from '@mui/icons-material/ReceiptLongOutlined';
@@ -27,6 +28,7 @@ import {
     PICKED_CONTACT_HINT,
     usePickedContactLocks,
     useLeadSourceDetails,
+    PartnerCompanyLookup,
 } from '@/components/forms';
 import { useContacts, useOrganizations } from '@/hooks/queries';
 import type { Contact } from '@/types/contact.types';
@@ -47,9 +49,9 @@ import {
     FOLLOWUP_TYPES,
 } from '@/types/lead.types';
 import { useDropdownOptionsGetter } from '@/hooks/queries/useFormConfigs';
-import { NATURE_OF_PARTNER_OPTIONS } from '@/types/partner.types';
 import { useFormMode } from '@/context/FormModeContext';
-import { CUSTOMER_RESPONSE_CATEGORY, CUSTOMER_RESPONSES, FieldGlow, useFollowUpDecision } from '@/components/forms/FollowUpDecision';
+import { CUSTOMER_RESPONSES, FieldGlow, useFollowUpDecision } from '@/components/forms/FollowUpDecision';
+import { CLOSED_STAGES, useOpportunityResponseConfig } from '@/utils/opportunityResponseRules';
 
 type F = OpportunityFormData;
 
@@ -80,19 +82,51 @@ export function OpportunityBasicSection({ notify, onDecisionPendingChange }: Opp
     const { mode } = useFormMode();
     const isEdit = mode === 'edit';
     const editable = mode !== 'view';
-    // Lead Source CA / Reference asks who referred the deal, Partner for the partner's Nature of Partner (as on leads).
-    const { needsReferredBy, showReferredBy, showNatureOfPartner } = useLeadSourceDetails<F>(
-        { leadSource: 'leadSource', referredBy: 'referredBy', natureOfPartner: 'natureOfPartner' },
+    // Lead Source CA / Reference asks who referred the deal, Partner for the partner organization it came through (as on leads).
+    const { needsReferredBy, showReferredBy, showPartnerCompany } = useLeadSourceDetails<F>(
+        { leadSource: 'leadSource', referredBy: 'referredBy', partnerCompany: 'partnerCompany' },
         { readOnly: !editable },
     );
 
-    // Customer Response → keep or reschedule the next follow-up (see FollowUpDecision).
-    const { setAnchor: setResponseAnchor, onResponseChange, glow: followUpGlow, popper: followUpPopper } = useFollowUpDecision({
+    // Sales Stage → the Customer Responses that fit it → keep or reschedule the next follow-up (FollowUpDecision).
+    // Closed Won / Lost take neither a response nor a follow-up; a "no follow-up" response (Do Not Contact) clears the
+    // follow-up. Same rules on the server (opportunity.followUp.ts); admins set them in Form Builder › Response Rules.
+    const responseRules = useOpportunityResponseConfig();
+    const stage = useWatch({ control, name: 'salesStage' }) ?? '';
+    const response = useWatch({ control, name: 'customerResponse' }) ?? '';
+    const closed = editable && CLOSED_STAGES.has(stage);
+    const skipsFollowUp = isEdit && !closed && responseRules.noFollowUp(response);
+    const { setAnchor: setResponseAnchor, onResponseChange, onSuspendChange, glow: followUpGlow, popper: followUpPopper } = useFollowUpDecision({
         enabled: isEdit,
         notify,
         onPendingChange: onDecisionPendingChange,
+        // Cleared again (e.g. a stage change drops it): the saved follow-up comes back. The form still requires one.
+        responseOptional: true,
+        suspended: closed,
     });
-    const customerResponseOptions = getOptions(CUSTOMER_RESPONSE_CATEGORY, CUSTOMER_RESPONSES);
+    const stageResponses = responseRules.responseCategory ? responseRules.responsesFor(stage) : CUSTOMER_RESPONSES;
+    // A stored response from an older list still reads in view mode.
+    const customerResponseOptions = !isEdit && response && !stageResponses.includes(response) ? [...stageResponses, response] : stageResponses;
+    const onPickResponse = (next: string, previous: string) => {
+        // Do Not Contact: nothing to keep or reschedule, the follow-up goes on save.
+        if (responseRules.noFollowUp(next)) onResponseChange('', previous);
+        else onResponseChange(next, previous);
+    };
+    const onStageChange = (next: string, previous: string) => {
+        if (!isEdit) return;
+        const current = getValues('customerResponse') ?? '';
+        if (CLOSED_STAGES.has(next)) {
+            if (current) setValue('customerResponse', '', { shouldDirty: true });
+            onSuspendChange(true);
+            return;
+        }
+        if (current && !responseRules.allows(current, next)) {
+            setValue('customerResponse', '', { shouldDirty: true });
+            onResponseChange('', current);
+            notify?.(`"${current}" doesn't fit Sales Stage ${next}. Pick a Customer Response for this stage.`, 'info');
+        }
+        if (CLOSED_STAGES.has(previous)) onSuspendChange(false);
+    };
     const productCategory = useWatch({ control, name: 'productCategory' }) ?? [];
 
     // Organizations and contacts from the CRM (as on the Ticket form). Contact suggestions narrow to the chosen
@@ -235,16 +269,8 @@ export function OpportunityBasicSection({ notify, onDecisionPendingChange }: Opp
                     />
                 )}
 
-                {/* Lead Source Partner only, and then required: the Organization form's Nature of Partner list. */}
-                {showNatureOfPartner && (
-                    <RhfSelect<F>
-                        name="natureOfPartner"
-                        label="Nature of Partner"
-                        required
-                        options={getOptions('partner_nature', [...NATURE_OF_PARTNER_OPTIONS])}
-                        placeholder="Select Nature of Partner"
-                    />
-                )}
+                {/* Lead Source Partner only, and then required: a partner organization (picker opens on Customer Type = Partner). */}
+                {showPartnerCompany && <PartnerCompanyLookup<F> name="partnerCompany" />}
 
                 {/* Starts empty. Picks the CRM user who brought the deal in (stored by username, like Assigned to); an outside referrer can still be typed. */}
                 <RhfLookup<F, 'user'>
@@ -283,9 +309,10 @@ export function OpportunityBasicSection({ notify, onDecisionPendingChange }: Opp
                     hint="Pipeline phase"
                     options={getOptions('opportunity_sales_stage', OPPORTUNITY_SALES_STAGES)}
                     placeholder="Select Sales Stage"
-                    onValueChange={(next) => {
+                    onValueChange={(next, previous) => {
                         // A PO needs its document: Add Document turns Yes so its fields open.
                         if (next === PO_SALES_STAGE && getValues('addDocument') !== 'Yes') setValue('addDocument', 'Yes', touch);
+                        onStageChange(next, previous);
                     }}
                 />
 
@@ -298,30 +325,37 @@ export function OpportunityBasicSection({ notify, onDecisionPendingChange }: Opp
                     placeholder="Select Type"
                 />
 
-                {/* Asked on every edit (a new opportunity has no follow-up to report on yet). */}
-                {mode !== 'create' && (
+                {/* Asked on every edit (a new opportunity has no follow-up to report on yet), from the responses that
+                    fit the Sales Stage. A closed deal takes none. */}
+                {mode !== 'create' && !closed && (
                     <Box ref={setResponseAnchor} sx={{ minWidth: 0, '&& > *': { mb: 0 } }}>
                         <RhfSelect<F>
                             name="customerResponse"
                             label="Customer Response"
                             required={isEdit}
-                            hint="From the last follow-up"
+                            hint={isEdit && stage ? `Options for ${stage}` : 'From the last follow-up'}
                             options={customerResponseOptions}
                             placeholder="Select customer response"
-                            onValueChange={onResponseChange}
+                            onValueChange={onPickResponse}
                         />
                     </Box>
                 )}
 
-                <FieldGlow active={followUpGlow}>
-                    <RhfDateTimeField<F>
-                        dateName="nextFollowupDate"
-                        timeName="nextFollowupTime"
-                        label="Next Followup Date"
-                        required
-                        hint="Next touchpoint"
-                    />
-                </FieldGlow>
+                {closed ? (
+                    <FollowUpNote>A closed deal keeps no Customer Response or next follow-up: both are cleared when you save.</FollowUpNote>
+                ) : skipsFollowUp ? (
+                    <FollowUpNote>{`"${response}" takes no more follow-ups: the next follow-up is removed when you save.`}</FollowUpNote>
+                ) : (
+                    <FieldGlow active={followUpGlow}>
+                        <RhfDateTimeField<F>
+                            dateName="nextFollowupDate"
+                            timeName="nextFollowupTime"
+                            label="Next Followup Date"
+                            required
+                            hint="Next touchpoint"
+                        />
+                    </FieldGlow>
+                )}
 
                 <RhfLookup<F, 'user'>
                     name="assignedTo"
@@ -533,6 +567,29 @@ export function OpportunityBasicSection({ notify, onDecisionPendingChange }: Opp
                     />
                 </FormGrid>
             )}
+        </Box>
+    );
+}
+
+/** Stands in for the Next Followup Date when the save schedules none (closed deal, Do Not Contact). */
+function FollowUpNote({ children }: { children: React.ReactNode }) {
+    return (
+        <Box
+            sx={{
+                display: 'flex',
+                alignItems: 'flex-start',
+                gap: 1,
+                alignSelf: 'start',
+                minWidth: 0,
+                mt: 3,
+                p: 1.25,
+                borderRadius: '8px',
+                border: '1px solid var(--mui-palette-border-main)',
+                backgroundColor: 'var(--mui-palette-background-subtle)',
+            }}
+        >
+            <EventBusyOutlinedIcon sx={{ fontSize: 18, mt: 0.1, color: 'var(--mui-palette-text-muted)' }} />
+            <Typography sx={{ fontSize: '0.78rem', color: 'var(--mui-palette-text-secondary)' }}>{children}</Typography>
         </Box>
     );
 }

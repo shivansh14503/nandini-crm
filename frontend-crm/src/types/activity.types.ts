@@ -91,6 +91,7 @@ export interface ActivityFormData {
     attendees: ActivityAttendee[];
 
     // Outcome & Notes
+    /** Option of shared_customer_response (the Leads / Opportunities list, every active option); recorded only. */
     customerResponse: string;
     remarks: string;
 }

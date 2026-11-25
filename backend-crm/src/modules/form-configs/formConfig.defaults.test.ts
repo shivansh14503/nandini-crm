@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { ACTIVITY_REMINDERS, ACTIVITY_STATUSES } from '../activities/activity.schedule.js';
+import { ratingRuleFromMeta } from '../leads/lead.rating.js';
+import { allowedStagesFromMeta, CLOSED_STAGES, noFollowUpFromMeta } from '../opportunities/opportunity.followUp.js';
 import {
     ACTIVITY_ONLY_FOLLOWUP_TYPES,
     APP_REQUIRED_CATEGORY_KEYS,
@@ -192,5 +194,47 @@ describe('dropdown option naming', () => {
                 assert.ok(option.label === undefined || option.label === option.value, `${category.key}: ${option.value} has label ${option.label}`);
             }
         }
+    });
+});
+
+describe('Customer Response list', () => {
+    const list = DEFAULT_CATEGORIES.find((c) => c.key === 'shared_customer_response');
+    const options = (list?.options ?? []).map((o) => (typeof o === 'string' ? { value: o, meta: undefined } : o));
+    const stages = (DEFAULT_CATEGORIES.find((c) => c.key === 'opportunity_sales_stage')?.options ?? []).map((o) => (typeof o === 'string' ? o : o.value));
+
+    it('is one list for the same field (key and label) on leads, opportunities and activities', () => {
+        for (const module of ['leads', 'opportunities', 'activities']) {
+            assert.equal(byKey(module, 'customerResponse').dropdownCategoryKey, 'shared_customer_response', module);
+            assert.equal(byKey(module, 'customerResponse').label, 'Customer Response', module);
+        }
+    });
+
+    it('gives every option a valid starting Rating rule', () => {
+        assert.equal(options.length, 15);
+        for (const option of options) assert.ok(ratingRuleFromMeta(option.meta), `${option.value} has a valid ratingRule`);
+    });
+
+    it('rates the dead ends Cold and shares the unanswered-call counter between No Response and Not Reachable', () => {
+        const rule = (value: string) => ratingRuleFromMeta(options.find((o) => o.value === value)?.meta);
+        for (const value of ['Not Interested', 'Using Other Software', 'No Requirement', 'Wrong Number', 'Do Not Contact']) {
+            assert.deepEqual(rule(value), { rule: 'always', rating: 'Cold' }, value);
+        }
+        assert.deepEqual(rule('No Response'), rule('Not Reachable'));
+        assert.equal(rule('No Response')?.rule, 'unansweredCalls');
+    });
+
+    it('lists only open Sales Stages, and offers every open stage at least one response', () => {
+        const open = stages.filter((s) => !CLOSED_STAGES.has(s));
+        for (const option of options) {
+            const allowed = allowedStagesFromMeta(option.meta);
+            for (const stage of allowed ?? []) assert.ok(open.includes(stage), `${option.value}: ${stage} is an open stage`);
+        }
+        for (const stage of open) {
+            assert.ok(options.some((o) => { const a = allowedStagesFromMeta(o.meta); return a === null || a.includes(stage); }), `${stage} has responses`);
+        }
+    });
+
+    it('takes no follow-up only for Do Not Contact', () => {
+        assert.deepEqual(options.filter((o) => noFollowUpFromMeta(o.meta)).map((o) => o.value), ['Do Not Contact']);
     });
 });

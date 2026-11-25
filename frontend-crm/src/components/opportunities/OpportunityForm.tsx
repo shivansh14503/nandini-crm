@@ -4,6 +4,7 @@ import { NO_PAST_DATES } from '@/utils/pastDates';
 import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { useResetTab } from '@/hooks/useResetTab';
 import { followUpEditIssues } from '../forms/FollowUpDecision';
+import { CLOSED_STAGES, useOpportunityResponseConfig, type OpportunityResponseConfig } from '@/utils/opportunityResponseRules';
 import { useRouter } from 'next/navigation';
 import { FormProvider, useWatch } from 'react-hook-form';
 
@@ -68,7 +69,7 @@ const DEFAULT_OPPORTUNITY_FORM: OpportunityFormData = {
     contactNumber: '',
     contactEmail: '',
     referredBy: '',
-    natureOfPartner: '',
+    partnerCompany: '',
     type: 'New Business',
     salesStage: 'Qualification',
     leadSource: 'Website Enquiry',
@@ -151,17 +152,42 @@ export default function OpportunityForm({
     }, []);
     // The saved Followup Type: a stored Task / Note (Activities-only) stays, but an edit can't change to one.
     const savedFollowupType = useRef('');
+    // Sales Stage → Customer Response → follow-up (utils/opportunityResponseRules): read at validation time.
+    const responseRules = useOpportunityResponseConfig();
+    const responseRulesRef = useRef(responseRules);
+    useEffect(() => {
+        responseRulesRef.current = responseRules;
+    }, [responseRules]);
+    /** What the save does with the follow-up: none for a closed deal, none after a "no follow-up" response. */
+    const followUpKind = (values: OpportunityFormData, rules: OpportunityResponseConfig) => {
+        const closed = CLOSED_STAGES.has(values.salesStage ?? '');
+        const response = values.customerResponse?.trim() ?? '';
+        return { closed, response, noFollowUp: closed || (mode === 'edit' && rules.noFollowUp(response)) };
+    };
     const { methods, toast, showToast, closeToast, createSubmitHandler, stepwise } =
         useRhfForm<OpportunityFormData>({
             schema: opportunityFormSchema,
             noPastDates: NO_PAST_DATES.opportunity,
-            extraRules: (values) => [
-                ...commissionIssues(values),
-                ...documentationIssues(values),
-                ...leadSourceDetailIssues(values),
-                ...(mode === 'edit' ? followUpEditIssues(values, followUpDecisionPending.current) : []),
-                ...activityOnlyTypeIssues(values.followupType, mode === 'edit' ? savedFollowupType.current : undefined),
-            ],
+            extraRules: (values) => {
+                const { closed, response, noFollowUp } = followUpKind(values, responseRulesRef.current);
+                const stage = values.salesStage ?? '';
+                const misfit =
+                    mode === 'edit' && !closed && response && !responseRulesRef.current.allows(response, stage)
+                        ? [{ path: 'customerResponse', message: `Pick a Customer Response for Sales Stage ${stage}.` }]
+                        : [];
+                return [
+                    ...commissionIssues(values),
+                    ...documentationIssues(values),
+                    ...leadSourceDetailIssues(values),
+                    ...misfit,
+                    ...(mode === 'edit' ? followUpEditIssues(values, followUpDecisionPending.current, { requireResponse: !closed, skipFollowUp: noFollowUp }) : []),
+                    ...activityOnlyTypeIssues(values.followupType, mode === 'edit' ? savedFollowupType.current : undefined),
+                ];
+            },
+            relaxedFields: (values) => {
+                const { closed, noFollowUp } = followUpKind(values, responseRulesRef.current);
+                return noFollowUp ? ['nextFollowupDate', 'nextFollowupTime', ...(closed ? ['customerResponse'] : [])] : [];
+            },
             module: 'opportunities',
             defaultValues: { ...DEFAULT_OPPORTUNITY_FORM, ...initialData },
             dropdownDefaults: { enabled: mode === 'create', keep: initialData },
@@ -220,10 +246,13 @@ export default function OpportunityForm({
             let saved: { id: string } | undefined;
             let message = '';
             if (mode === 'create') {
-                saved = await opportunityService.create(values);
+                saved = await opportunityService.create(followUpKind(values, responseRules).closed ? { ...values, nextFollowupDate: '', nextFollowupTime: '' } : values);
                 message = 'Opportunity created successfully! Added to your sales pipeline.';
             } else if (mode === 'edit' && opportunityId) {
-                saved = await opportunityService.update(opportunityId, withFreshLinks(values, formState.defaultValues ?? {}));
+                // A closed deal stores no response; it and a "no follow-up" response store no next follow-up.
+                const { closed, noFollowUp } = followUpKind(values, responseRules);
+                const cleared = noFollowUp ? { ...values, ...(closed ? { customerResponse: '' } : {}), nextFollowupDate: '', nextFollowupTime: '' } : values;
+                saved = await opportunityService.update(opportunityId, withFreshLinks(cleared, formState.defaultValues ?? {}));
                 message = 'Opportunity details updated successfully!';
             }
 

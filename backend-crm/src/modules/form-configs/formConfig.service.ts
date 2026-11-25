@@ -10,7 +10,8 @@ import { runInTransaction } from '../shared/transactions.js';
 import { throwFieldIssues } from './customFieldValidator.js';
 import { dropdownKeyFromLabel, fieldKeyFromLabel } from './derivedKeys.js';
 import { countRecordsWithKey, describeMigration, lockModuleFields, migrateFieldKey, moduleColumnNames } from './fieldKeyRename.js';
-import { describeOptionMigration, migrateOptionValue } from './optionValueRename.js';
+import { describeOptionMigration, migrateOptionValue, renameInList } from './optionValueRename.js';
+import { OPPORTUNITY_STAGES_META_KEY } from '../opportunities/opportunity.followUp.js';
 import {
     APP_REQUIRED_CATEGORY_KEYS,
     CONVERT_FIELD_NAMES,
@@ -215,7 +216,26 @@ export async function changeOptionValue(tx: TransactionClient, option: DropdownO
     }
     const note = describeOptionMigration(await migrateOptionValue(tx, linkedFields, option.value, nextValue));
     await tx.dropdownOption.update({ where: { id: option.id }, data: { value: nextValue } });
+    if (linkedFields.some((f) => f.module === 'opportunities' && f.fieldKey === 'salesStage')) {
+        await renameStageInResponseRules(tx, option.value, nextValue);
+    }
     return note;
+}
+
+/** A renamed Sales Stage: the Customer Response options that list it (`opportunityStages`) follow. */
+async function renameStageInResponseRules(tx: TransactionClient, from: string, to: string): Promise<void> {
+    const field = await tx.formFieldDefinition.findUnique({
+        where: { module_fieldKey: { module: 'opportunities', fieldKey: 'customerResponse' } },
+        select: { dropdownCategoryId: true },
+    });
+    if (!field?.dropdownCategoryId) return;
+    const options = await tx.dropdownOption.findMany({ where: { categoryId: field.dropdownCategoryId }, select: { id: true, metaJson: true } });
+    for (const option of options) {
+        const meta = parseJsonObject(option.metaJson);
+        const stages = meta ? renameInList(meta[OPPORTUNITY_STAGES_META_KEY], from, to) : null;
+        if (!meta || !stages) continue;
+        await tx.dropdownOption.update({ where: { id: option.id }, data: { metaJson: JSON.stringify({ ...meta, [OPPORTUNITY_STAGES_META_KEY]: stages }) } });
+    }
 }
 
 function parseJsonObject(json: string | null): Record<string, unknown> | null {

@@ -31,7 +31,7 @@
 | Audit log | ✅ ledger table with who / where / how per entry, Admin › Audit Log screen (`/api/admin/audit-logs`), undo / restore, CSV / Excel export, ledger integrity checks; alert rules later (Phase 11 E) |
 | Users admin | ❌ seed / DB only |
 | Dashboard | ❌ static page, no data |
-| Tests | ⚠️ 46 backend unit test files (`node:test`); no API integration, no frontend, no E2E |
+| Tests | ⚠️ 47 backend unit test files (`node:test`); no API integration, no frontend, no E2E |
 | CI/CD, containers | ❌ none in repo |
 
 ## Part 2 — Roadmap
@@ -244,9 +244,10 @@ keeps wall-clock times); all-day activities are entered as business-timezone day
       reply only) and global roles. Related record (lead, opportunity, contact, organization, quotation, ticket,
       contract) checked against the caller's access; organization / contact derived from it; renames written through
       to activities and contact attendees. Form Builder: Activities module (15 fields, `activity_status`,
-      `activity_reminder`), Task / Note as Activities-only Followup Types (hidden on lead / opportunity / Convert Lead
-      forms, refused by their APIs unless unchanged, never the dropdown default), option meta `durationMinutes` /
-      `icon`. Audit: undo / restore for activities. Frontend: types, service, React Query hooks, module registries
+      `activity_reminder`; Customer Response is the leads / opportunities list `shared_customer_response`, recorded
+      only: no Rating, Sales Stage or follow-up rules), Task / Note as Activities-only Followup Types (hidden on
+      lead / opportunity / Convert Lead forms, refused by their APIs unless unchanged, never the dropdown default),
+      option meta `durationMinutes` / `icon`. Audit: undo / restore for activities. Frontend: types, service, React Query hooks, module registries
       (no screens yet). Unit tests for time zones, schedule rules, attendee sync, access, calendar ranges, links.
 - [ ] **PR2: screens** — Activities list, form (timed / all-day, related record and attendee pickers), quick create,
       detail drawer, Calendar page (FullCalendar v7, business-timezone rendering, drag to reschedule), Activities tab

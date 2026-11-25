@@ -1,6 +1,6 @@
 # Nandini CRM — Database Design
 
-> **Status:** living document, generated from `backend-crm/prisma/schema.prisma` and `prisma/migrations/` (68 migrations,
+> **Status:** living document, generated from `backend-crm/prisma/schema.prisma` and `prisma/migrations/` (72 migrations,
 > latest `20261126090000_activities`). Update it in the same change as any schema migration.
 > Related: [System design](system-design.md) · [API plan](api-plan.md) · [Build plan](build-plan.md)
 
@@ -171,7 +171,7 @@ Indexes: `organizationId`, `mobile`, `name`, `assignedTo`, `(isDeleted, createdA
 | Group | Columns |
 | --- | --- |
 | Identity | `id`, `leadCode` (UNIQUE), `name`, `mobile`, `otherPhone`, `mailingName`, `tradeName`, `organizationName`, `designation`, `department` |
-| Qualification | `leadSource`, `leadType` (Lead Type: admin dropdown `lead_type`, e.g. Inbound / Outbound / Marketing), `rating` (Rating: `Hot` / `Warm` / `Cold`, set by the system and never on a form — not a form-builder field), `status` (default `New`), `productCategoryJson`, `followupType`, `customerResponse` (latest follow-up outcome, `shared_customer_response`; required on every edit by the form), `nextFollowupDate` (DATE), `nextFollowupTime`, `registrationType`, `gstNumber`, `turnover`, `noOfEmployee`, `referredBy` (shown, and required, when `leadSource` is CA or Reference), `natureOfPartner` (set, and required, when `leadSource` is Partner; shared `partner_nature` list; migration `20261125180000_lead_source_details`), `assignedTo`, `remarks`, `description` |
+| Qualification | `leadSource`, `leadType` (Lead Type: admin dropdown `lead_type`, e.g. Inbound / Outbound / Marketing), `rating` (Rating: `Hot` / `Warm` / `Cold`, set by the system and never on a form — not a form-builder field), `status` (default `New`), `productCategoryJson`, `followupType`, `customerResponse` (latest follow-up outcome from `shared_customer_response`, the list leads and opportunities share; option meta `ratingRule` for leads, `opportunityStages` / `noFollowUp` for opportunities; migration `20261125220000_shared_customer_response`, which folded the short-lived leads-only `lead_customer_response` back in), `nextFollowupDate` (DATE), `nextFollowupTime`, `registrationType`, `gstNumber`, `turnover`, `noOfEmployee`, `referredBy` (shown, and required, when `leadSource` is CA or Reference), `partnerCompany` (set, and required, when `leadSource` is Partner: the name of an organization whose Customer Type is Partner, picked in the organization picker; migration `20261125210000_lead_partner_company`, which replaced the short-lived `natureOfPartner` column of `20261125180000_lead_source_details`), `assignedTo`, `remarks`, `description` |
 | Addresses | `primary*` (with `primaryCityId` → `City`), `other*` (with `otherCityId`), `copyAddressFromLeft` |
 | Conversion | `convertedAt`, `convertedBy`, `convertedOrganizationId`, `convertedContactId`, `convertedOpportunityId` (FKs) — set only by the convert endpoint |
 | Other | `customDataJson`, audit/soft-delete columns |
@@ -189,7 +189,7 @@ required field for leads (closed leads have none).
 ### 4.5 `Opportunity` and `OpportunityLineItem`
 
 `Opportunity`: `opportunityCode` (UNIQUE), `opportunityName`, `productCategoryJson`, `contact`/`contactId`,
-`organizationName`/`organizationId`, `contactNumber` (optional), `contactEmail`, `referredBy` / `natureOfPartner` (as on leads: required for Lead Source CA / Reference and Partner), `type`, `salesStage`, `leadSource`,
+`organizationName`/`organizationId`, `contactNumber` (optional), `contactEmail`, `referredBy` / `partnerCompany` (as on leads: required for Lead Source CA / Reference and Partner), `type`, `salesStage`, `leadSource`,
 `leadGivenBy`, `nextFollowupDate`/`Time`, `followupType`, `customerResponse` (as on leads), `remarks`, `description`, `assignedTo`,
 billing (`tallySerialNo` — 9 digits starting with 7, checked by the API, `invoiceNo`, `invoiceDate`), `commission` (fixed `Yes` / `No`, default `No`) with
 `commissionAmount` (DECIMAL(18,2), required above 0 when `Yes`, NULL when `No`), `commissionType` (fixed `Self` /
@@ -303,7 +303,9 @@ Per the project's rules, deletes in the form builder are permanent (no reset/res
 
 Option `metaJson` keys the app reads: `ratingRule` on the options of the list the leads Customer Response field
 uses (`{ rule: followUpGap | daysSinceResponse | unansweredCalls, hot, warm }` or `{ rule: always, rating }`),
-`closesLead: true` on lead Status options (both validated by the API), and `durationMinutes` / `icon` on
+`opportunityStages` (Sales Stage values; absent = every open stage) and `noFollowUp: true` on the options of the list
+the opportunities Customer Response field uses (today the same `shared_customer_response`),
+`closesLead: true` on lead Status options (all validated by the API), and `durationMinutes` / `icon` on
 `shared_followup_type` options (an activity's default length and its calendar icon; seeded on the built-in types and
 kept across a rename; an option without them falls back to 30 minutes and the generic icon).
 
@@ -484,7 +486,8 @@ WHERE username IS NOT NULL`, `UX_ActivityAttendee_contact (activityId, contactId
 Dropdowns (`DropdownCategory.module = 'activities'`): `activity_status` (fixed system options `Planned`, `Completed`,
 `Cancelled`; default `Planned`) and `activity_reminder` (fixed system options; value = label, e.g. `15 minutes before`;
 the minutes live in code, `ACTIVITY_REMINDER_MINUTES`). Activities share `shared_followup_type` (see §4.14) and
-`shared_customer_response` with leads and opportunities.
+`shared_customer_response` with leads and opportunities. An activity's Customer Response is any active option of that
+list, stored as text; activities read none of its option meta (no Rating, no Sales Stage check, no follow-up cleared).
 
 ## 5. Index strategy
 

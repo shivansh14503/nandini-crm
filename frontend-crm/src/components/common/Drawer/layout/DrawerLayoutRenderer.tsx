@@ -23,11 +23,12 @@ import { findCrmUser } from '@/services/masterData.store';
 import { TICKET_PRIORITY_COLORS, TICKET_STATUS_COLORS } from '@/components/tickets/TicketBadges';
 import type { TicketPriority, TicketStatus } from '@/types/ticket.types';
 import { DrawerChannelRow, DrawerCopyButton, DrawerSectionCard } from '../DrawerPrimitives';
+import { PrimaryTag } from '@/components/common/PrimaryTag';
 import { formatAddressLine } from '@/utils/address';
 import type { DrawerBadgeItem } from '../types';
 import { avatarBackground, avatarContent } from './avatar';
 import { defaultLayoutFor } from './defaultLayouts';
-import { drawerAddressesFor, drawerFieldsFor, fieldDisplayValues, formatRupees, isOn, rawFieldValue, type AddressDef, type DrawerFieldDef } from './drawerFields';
+import { drawerAddressesFor, drawerFieldsFor, fieldDisplayEntries, fieldDisplayValues, formatRupees, isOn, rawFieldValue, type AddressDef, type DrawerFieldDef, type FieldDisplayEntry } from './drawerFields';
 
 /**
  * Renders a drawer layout for a record: the header (title, subtitle, avatar, badges) and each tab's sections. The
@@ -95,6 +96,13 @@ export function fieldValues(ctx: LayoutCtx, key: string): string[] {
     if (ctx.hidden.has(key)) return [];
     const def = ctx.fields.get(key);
     return def ? fieldDisplayValues(ctx.record, def, ctx.configs) : [];
+}
+
+/** `fieldValues` with each entry's primary flag (the primary email comes first and carries the Primary tag). */
+function fieldEntries(ctx: LayoutCtx, key: string): FieldDisplayEntry[] {
+    if (ctx.hidden.has(key)) return [];
+    const def = ctx.fields.get(key);
+    return def ? fieldDisplayEntries(ctx.record, def, ctx.configs) : [];
 }
 
 function addressParts(ctx: LayoutCtx, prefix: string) {
@@ -203,7 +211,10 @@ const ORG_KEY = /organi[sz]ation|company|trade|mailing|partner/i;
 
 function FieldBlockBody({ block, ctx, sectionStyle }: { block: Extract<DrawerBlock, { type: 'field' }>; ctx: LayoutCtx; sectionStyle: SectionStyle }) {
     const def = ctx.fields.get(block.field);
-    const values = fieldValues(ctx, block.field);
+    const entries = fieldEntries(ctx, block.field);
+    const values = entries.map((entry) => entry.text);
+    // The Primary tag only means something when the list has a primary entry (emails); other lists show none.
+    const isPrimaryAt = (index: number) => entries[index]?.primary === true;
     const label = block.label.trim() || def?.label || block.field;
     const attention = sectionStyle === 'attention';
     const copyable = (text: string) => (block.copy ? <DoubleClickCopyText>{text}</DoubleClickCopyText> : text);
@@ -246,9 +257,16 @@ function FieldBlockBody({ block, ctx, sectionStyle }: { block: Extract<DrawerBlo
                 <Box>
                     {heading}
                     <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.8 }}>
-                        {(block.display === 'chip' ? [values.join(', ')] : values).map((v, i) => (
-                            <Chip key={`${v}-${i}`} label={v} size="small" sx={chipSx(attention)} />
-                        ))}
+                        {block.display === 'chip' ? (
+                            <Chip label={values.join(', ')} size="small" sx={chipSx(attention)} />
+                        ) : (
+                            values.map((v, i) => (
+                                <Box key={`${v}-${i}`} sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5, minWidth: 0, maxWidth: '100%' }}>
+                                    <Chip label={v} size="small" sx={[chipSx(attention), { maxWidth: '100%' }] as SxProps<Theme>} />
+                                    {isPrimaryAt(i) && <PrimaryTag />}
+                                </Box>
+                            ))
+                        )}
                     </Box>
                 </Box>
             );
@@ -285,6 +303,7 @@ function FieldBlockBody({ block, ctx, sectionStyle }: { block: Extract<DrawerBlo
                                 )
                             }
                             value={v}
+                            tag={isPrimaryAt(i) ? <PrimaryTag /> : undefined}
                             valueWeight={700}
                             caption={block.showLabel ? label : undefined}
                             actions={isEmail ? <EmailActions email={v} /> : <PhoneActions phone={String(rawPhone(ctx, block.field, i) ?? v)} />}

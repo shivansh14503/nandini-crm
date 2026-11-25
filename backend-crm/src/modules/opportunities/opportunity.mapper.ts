@@ -1,6 +1,6 @@
 import type { Opportunity, OpportunityLineItem, Prisma } from '../../generated/prisma/client.js';
 import { decimalToNumber, fromDateOnly, fromOptionalDateOnly, nullable, parseCustomFields, parseStringArray, serializeCustomFields, stringifyStringArray, text, toDateOnly, toIso } from '../../utils/mappers.js';
-import { natureOfPartnerFor } from '../shared/leadSource.js';
+import { partnerCompanyFor } from '../shared/leadSource.js';
 import { toLineItemDtos, type LineItemDto, type LineItemTotals } from '../shared/lineItems.js';
 import { toRecordFileDto, type RecordFileDto } from '../files/recordFile.service.js';
 import { defaultCommissionType, hasCommission, type OpportunityInput } from './opportunity.validator.js';
@@ -25,7 +25,7 @@ export interface OpportunityDto {
     contactNumber: string;
     contactEmail: string;
     referredBy: string;
-    natureOfPartner: string;
+    partnerCompany: string;
     type: string;
     salesStage: string;
     leadSource: string;
@@ -88,7 +88,7 @@ export function toOpportunityDto(row: OpportunityRow): OpportunityDto {
         contactNumber: text(row.contactNumber),
         contactEmail: text(row.contactEmail),
         referredBy: text(row.referredBy),
-        natureOfPartner: text(row.natureOfPartner),
+        partnerCompany: text(row.partnerCompany),
         type: text(row.type),
         salesStage: row.salesStage,
         leadSource: text(row.leadSource),
@@ -176,7 +176,7 @@ export function toOpportunityData(
         contactEmail: input.contactEmail ?? null,
         referredBy: nullable(input.referredBy),
         // Kept only for Lead Source Partner (the form shows the field only then).
-        natureOfPartner: natureOfPartnerFor(input),
+        partnerCompany: partnerCompanyFor(input),
         type: nullable(input.type),
         salesStage: input.salesStage,
         leadSource: nullable(input.leadSource),

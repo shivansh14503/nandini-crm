@@ -169,6 +169,15 @@ export const FOLLOWUP_TYPE_CATEGORY_KEY = 'shared_followup_type';
 
 const yesNo = (first: 'No' | 'Yes'): DefaultOption[] => withSystem(first === 'No' ? ['No', 'Yes'] : ['Yes', 'No'], ['Yes', 'No']);
 
+// Customer Response defaults: the lead Rating rule and the opportunity Sales Stages of each option.
+const [QUAL, DEMO, QUOTE, NEGO, HOLD, PO, ADVANCE] = ['Qualification', 'Demo', 'Proposal/Price Quote', 'Negotiation', 'On Hold', 'PO', 'Advance Received'];
+const COLD = { rule: 'always', rating: 'Cold' } as const;
+/** `stages` null = every open stage (no `opportunityStages` key, so stages added later offer it too). */
+const response = (value: string, ratingRule: Record<string, unknown>, stages: string[] | null, extra: Record<string, unknown> = {}): DefaultOption => ({
+    value,
+    meta: { ratingRule, ...(stages ? { opportunityStages: stages } : {}), ...extra },
+});
+
 export const DEFAULT_CATEGORIES: DefaultCategory[] = [
     // ── Shared ──
     {
@@ -188,7 +197,7 @@ export const DEFAULT_CATEGORIES: DefaultCategory[] = [
             'Direct Walk-in',
             'Google Search / Ad',
             'Other',
-            // System: CA / Reference ask for Referred By and Partner for a Nature of Partner (shared/leadSource.ts).
+            // System: CA / Reference ask for Referred By and Partner for a Partner Company (shared/leadSource.ts).
             { value: 'CA', isSystem: true },
             { value: 'Reference', isSystem: true },
             { value: 'Partner', isSystem: true },
@@ -241,16 +250,29 @@ export const DEFAULT_CATEGORIES: DefaultCategory[] = [
         key: 'shared_customer_response',
         label: 'Customer Response',
         module: 'shared',
-        description: 'What the customer said on the last follow-up (Leads, Opportunities). On leads, each option also sets the Rating.',
-        // Starting Rating rules (option meta `ratingRule`, docs/lead-rating-rules.md); only leads read them.
+        description:
+            'What the customer said on the last follow-up (Leads, Opportunities, Activities). On leads each option sets the Rating; on opportunities it lists the Sales Stages it fits (Response Rules). Activities only record it.',
+        // Option meta: `ratingRule` (leads, docs/lead-rating-rules.md 2.3), `opportunityStages` (opportunities; none =
+        // every open stage) and `noFollowUp` (opportunities: the next follow-up is cleared). See opportunity.followUp.ts.
+        // Activities offer every active option and read no meta: an activity's response sets no Rating, isn't checked
+        // against a Sales Stage and clears no follow-up.
         options: [
-            { value: 'Interested - wants a demo', meta: { ratingRule: { rule: 'followUpGap', hot: 5, warm: 'noLimit' } } },
-            { value: 'Interested - send quotation', meta: { ratingRule: { rule: 'daysSinceResponse', hot: 6, warm: 14 } } },
-            { value: 'Asked to call back later', meta: { ratingRule: { rule: 'followUpGap', hot: 5, warm: 'noLimit' } } },
-            { value: 'Not reachable / no answer', meta: { ratingRule: { rule: 'unansweredCalls', hot: 2, warm: 4 } } },
-            { value: 'Needs internal discussion', meta: { ratingRule: { rule: 'followUpGap', hot: 5, warm: 'noLimit' } } },
-            { value: 'Using another product', meta: { ratingRule: { rule: 'always', rating: 'Cold' } } },
-            { value: 'Not interested', meta: { ratingRule: { rule: 'always', rating: 'Cold' } } },
+            response('Interested', { rule: 'followUpGap', hot: 7, warm: 30 }, [QUAL, DEMO, QUOTE, HOLD]),
+            response('Need More Information', { rule: 'followUpGap', hot: 3, warm: 15 }, [QUAL, DEMO, QUOTE, NEGO, HOLD, PO, ADVANCE]),
+            response('Requested Quotation', { rule: 'daysSinceResponse', hot: 10, warm: 30 }, [QUAL, DEMO, QUOTE, NEGO]),
+            response('Requested Demo', { rule: 'followUpGap', hot: 7, warm: 21 }, [QUAL, DEMO, QUOTE]),
+            response('Under Discussion', { rule: 'daysSinceResponse', hot: 7, warm: 21 }, [QUAL, DEMO, QUOTE, NEGO, HOLD, PO, ADVANCE]),
+            response('Call Back Later', { rule: 'followUpGap', hot: 3, warm: 30 }, null),
+            response('Not Interested', COLD, [QUAL, DEMO, QUOTE, NEGO, HOLD]),
+            response('Price Issue', { rule: 'followUpGap', hot: null, warm: 15 }, [QUOTE, NEGO, HOLD]),
+            response('Using Other Software', COLD, [QUAL, DEMO, QUOTE, NEGO, HOLD]),
+            response('No Requirement', COLD, [QUAL, DEMO, HOLD]),
+            response('Requirement in Future', { rule: 'followUpGap', hot: null, warm: 60 }, [QUAL, DEMO, QUOTE, HOLD]),
+            // Unanswered attempts share one counter on leads (lead.unansweredCalls): Hot for 2, Warm up to 4, Cold from the 5th.
+            response('No Response', { rule: 'unansweredCalls', hot: 2, warm: 4 }, null),
+            response('Wrong Number', COLD, [QUAL, HOLD]),
+            response('Not Reachable', { rule: 'unansweredCalls', hot: 2, warm: 4 }, null),
+            response('Do Not Contact', COLD, null, { noFollowUp: true }),
         ],
     },
     {
@@ -654,7 +676,7 @@ export const DEFAULT_CATEGORIES: DefaultCategory[] = [
         key: 'partner_nature',
         label: 'Nature of Partner',
         module: 'shared',
-        description: 'Kind of partner (Partner Companies, Organizations whose Customer Type is Partner, and Leads / Opportunities whose Lead Source is Partner).',
+        description: 'Kind of partner (Partner Companies, and Organizations whose Customer Type is Partner).',
         options: ['ISODA', 'TALLY-REFERRAL PARTNER', 'TALLY-3STAR', 'TALLY-3STAR PARTNER', 'TALLY-5STAR-SS', 'TALLY-5STARSI', 'TALLY-AP', 'Other'],
     },
 ];
@@ -784,12 +806,13 @@ const RAW_DEFAULT_FIELDS: DefaultField[] = [
         sel('leadSource', 'Lead Source', 'shared_lead_source', { soft: true }),
         sel('leadType', 'Lead Type', 'lead_type', { soft: true }),
         sel('status', 'Status', 'lead_status'),
-        // Conditional (locked): Referred By is shown, and required, for Lead Source CA / Reference; Nature of Partner
-        // (same list as partner organizations) for Lead Source Partner. See shared/leadSource.ts.
+        // Conditional (locked): Referred By is shown, and required, for Lead Source CA / Reference; Partner Company (an
+        // organization whose Customer Type is Partner, picked from the organization picker) for Lead Source Partner.
+        // See shared/leadSource.ts.
         t('referredBy', 'Referred By', { type: 'lookup', lock: true }),
-        sel('natureOfPartner', 'Nature of Partner', 'partner_nature', { lock: true }),
+        t('partnerCompany', 'Partner Company', { type: 'lookup', lock: true }),
         sel('followupType', 'Followup Type', 'shared_followup_type'),
-        // What the customer said on the last follow-up. Asked on every edit (the form enforces it there).
+        // What the customer said on the last follow-up; records a follow-up and sets the Rating (same list as opportunities).
         sel('customerResponse', 'Customer Response', 'shared_customer_response'),
         // Locked and required: every open lead needs its next follow-up (date and time) to be rated.
         t('nextFollowupDate', 'Next Followup Date', { type: 'datetime', req: true }),
@@ -871,9 +894,9 @@ const RAW_DEFAULT_FIELDS: DefaultField[] = [
         t('contact', 'Contact', { type: 'lookup', req: true }),
         t('contactNumber', 'Contact Number', { type: 'phone' }),
         t('contactEmail', 'Contact Email', { type: 'email' }),
-        // Conditional (locked), as on leads: Referred By for Lead Source CA / Reference, Nature of Partner for Partner.
+        // Conditional (locked), as on leads: Referred By for Lead Source CA / Reference, Partner Company for Partner.
         t('referredBy', 'Referred By', { type: 'lookup', lock: true }),
-        sel('natureOfPartner', 'Nature of Partner', 'partner_nature', { lock: true }),
+        t('partnerCompany', 'Partner Company', { type: 'lookup', lock: true }),
         t('leadGivenBy', 'Lead Given By', { type: 'lookup', soft: true }),
         sel('type', 'Type', 'opportunity_type', { soft: true }),
         sel('leadSource', 'Lead Source', 'shared_lead_source', { soft: true }),
@@ -1049,6 +1072,7 @@ const RAW_DEFAULT_FIELDS: DefaultField[] = [
         t('attendees', 'Attendees', { type: 'lookup' }),
     ]),
     ...section('activities', 'overview', 'Outcome & Notes', [
+        // Same field, key, label and list as on leads and opportunities; recorded only (no Rating / Sales Stage rules).
         sel('customerResponse', 'Customer Response', 'shared_customer_response'),
         t('remarks', 'Remarks', { type: 'textarea' }),
     ]),
@@ -1130,7 +1154,7 @@ export const CONVERT_FIELD_NAMES: Readonly<Record<ConvertModuleKey, Readonly<Rec
         productCategory: 'productCategory',
         organizationName: 'organizationName',
         referredBy: 'referredBy',
-        natureOfPartner: 'opportunityNatureOfPartner',
+        partnerCompany: 'opportunityPartnerCompany',
         type: 'type',
         leadSource: 'opportunityLeadSource',
         nextFollowupDate: 'nextFollowupDate',

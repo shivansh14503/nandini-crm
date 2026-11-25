@@ -17,18 +17,30 @@ import type { ConfigValidationIssue } from '@/utils/formConfig';
  * passed (or none at all) can't be kept: the date field is cleared and glows, and a warning toast says why.
  */
 
-/** Dropdown category of the Customer Response options (admin-managed, shared by leads and opportunities). */
+/**
+ * The Customer Response field is the same on both forms (key `customerResponse`, this flow) and uses one list
+ * (`shared_customer_response`). Each form reads it through the field's link: leads for the Rating rules
+ * (`useLeadRatingConfig`), opportunities for the Sales Stages each option fits (`useOpportunityResponseConfig`).
+ */
 export const CUSTOMER_RESPONSE_CATEGORY = 'shared_customer_response';
 
 /** Fallback options while the admin configuration loads (same defaults as the backend seed). */
 export const CUSTOMER_RESPONSES: string[] = [
-    'Interested - wants a demo',
-    'Interested - send quotation',
-    'Asked to call back later',
-    'Not reachable / no answer',
-    'Needs internal discussion',
-    'Using another product',
-    'Not interested',
+    'Interested',
+    'Need More Information',
+    'Requested Quotation',
+    'Requested Demo',
+    'Under Discussion',
+    'Call Back Later',
+    'Not Interested',
+    'Price Issue',
+    'Using Other Software',
+    'No Requirement',
+    'Requirement in Future',
+    'No Response',
+    'Wrong Number',
+    'Not Reachable',
+    'Do Not Contact',
 ];
 
 /** The form fields the flow reads and writes (both forms use these names). */

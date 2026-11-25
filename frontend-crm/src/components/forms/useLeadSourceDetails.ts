@@ -7,13 +7,13 @@ import { isPartnerLeadSource, leadSourceNeedsReferredBy } from '@/utils/leadSour
 interface LeadSourceDetailNames<F extends FieldValues> {
     leadSource: Path<F>;
     referredBy: Path<F>;
-    natureOfPartner: Path<F>;
+    partnerCompany: Path<F>;
 }
 
 /**
  * The follow-up field a Lead Source asks for, on the Lead, Opportunity and Convert Lead forms: Referred By for CA /
- * Reference, Nature of Partner for Partner (both then required, see `leadSourceDetailIssues`). When the Lead Source
- * moves off those options the field is cleared, as on the Organization form's Nature of Partner. A Referred By a
+ * Reference, Partner Company for Partner (both then required, see `leadSourceDetailIssues`). When the Lead Source
+ * moves off those options the field is cleared, as on the Organization form's Partner Company. A Referred By a
  * record already holds under another Lead Source stays shown, so it isn't kept out of sight.
  */
 export function useLeadSourceDetails<F extends FieldValues>(names: LeadSourceDetailNames<F>, { readOnly = false } = {}) {
@@ -33,12 +33,12 @@ export function useLeadSourceDetails<F extends FieldValues>(names: LeadSourceDet
             clearErrors(name);
         };
         if (was.needsReferredBy && !needsReferredBy) clear(names.referredBy);
-        if (was.isPartner && !isPartner) clear(names.natureOfPartner);
-    }, [needsReferredBy, isPartner, readOnly, names.referredBy, names.natureOfPartner, getValues, setValue, clearErrors]);
+        if (was.isPartner && !isPartner) clear(names.partnerCompany);
+    }, [needsReferredBy, isPartner, readOnly, names.referredBy, names.partnerCompany, getValues, setValue, clearErrors]);
 
     return {
         needsReferredBy,
         showReferredBy: needsReferredBy || Boolean(referredBy?.trim()),
-        showNatureOfPartner: isPartner,
+        showPartnerCompany: isPartner,
     };
 }

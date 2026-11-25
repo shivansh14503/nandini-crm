@@ -20,6 +20,8 @@
 --     leads and opportunities that stored that spelling: the code compares those values exactly, and start-up
 --     seeding adds them as system options offered on Activities only;
 --   • Task / Note can't be a default (new Lead / Opportunity forms hide them and their API refuses them).
+-- The Customer Response dropdown (shared_customer_response) gets the same description touch-up: activities record a
+-- response from that list too, without its Rating / Sales Stage rules.
 -- No option or form field rows are inserted here: start-up seeding (formConfig.seed.ts) adds the Activities fields,
 -- the activity_status / activity_reminder dropdowns and the Task / Note options.
 --
@@ -153,6 +155,17 @@ UPDATE [dbo].[DropdownCategory]
 SET [description] = N'How the follow-up or activity happens (Leads, Opportunities, Activities). Task and Note are offered on Activities only.',
     [updatedAt] = SYSUTCDATETIME()
 WHERE [key] = N'shared_followup_type' AND [description] = N'How the next follow-up happens (Leads, Opportunities).';
+
+-- Data: the Customer Response dropdown is now also used by activities, which only record the response (description
+-- only if it still reads as 20261125220000_shared_customer_response or the start-up seed left it).
+UPDATE [dbo].[DropdownCategory]
+SET [description] = N'What the customer said on the last follow-up (Leads, Opportunities, Activities). On leads each option sets the Rating; on opportunities it lists the Sales Stages it fits (Response Rules). Activities only record it.',
+    [updatedAt] = SYSUTCDATETIME()
+WHERE [key] = N'shared_customer_response'
+  AND [description] IN (
+      N'What the customer said on the last follow-up (Leads, Opportunities). Rating rules for leads; Sales Stages for opportunities.',
+      N'What the customer said on the last follow-up (Leads, Opportunities). On leads each option sets the Rating; on opportunities it lists the Sales Stages it fits (Response Rules).'
+  );
 
 -- Data: default duration (minutes) and icon of the built-in Followup Types, kept in the option's meta so they survive
 -- a rename. Only options without meta; a renamed option has none and falls back to 30 minutes and the generic icon.

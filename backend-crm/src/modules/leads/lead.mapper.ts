@@ -1,7 +1,7 @@
 import type { EntityEmail, Lead, Prisma } from '../../generated/prisma/client.js';
 import { fromDateOnly, fromOptionalDateOnly, nullable, parseCustomFields, parseStringArray, serializeCustomFields, stringifyStringArray, text, toDateOnly, toIso, toIsoOrUndefined } from '../../utils/mappers.js';
 import { toEmailDtos, type CorporateEmailDto } from '../shared/entityEmails.js';
-import { natureOfPartnerFor } from '../shared/leadSource.js';
+import { partnerCompanyFor } from '../shared/leadSource.js';
 import { isGstRegistrationType } from '../shared/registrationType.js';
 import type { LeadInput } from './lead.validator.js';
 
@@ -42,7 +42,7 @@ export interface LeadDto {
     description: string;
     noOfEmployee: string;
     referredBy: string;
-    natureOfPartner: string;
+    partnerCompany: string;
     primaryAddress: string;
     primaryCity: string;
     primaryState: string;
@@ -102,7 +102,7 @@ export function toLeadDto(row: LeadRow): LeadDto {
         description: text(row.description),
         noOfEmployee: text(row.noOfEmployee),
         referredBy: text(row.referredBy),
-        natureOfPartner: text(row.natureOfPartner),
+        partnerCompany: text(row.partnerCompany),
         primaryAddress: text(row.primaryAddress),
         primaryCity: text(row.primaryCity),
         primaryState: text(row.primaryState),
@@ -179,7 +179,7 @@ export function toLeadData(input: LeadInput): Omit<Prisma.LeadUncheckedCreateInp
         noOfEmployee: nullable(input.noOfEmployee),
         referredBy: nullable(input.referredBy),
         // Kept only for Lead Source Partner (the form shows the field only then).
-        natureOfPartner: natureOfPartnerFor(input),
+        partnerCompany: partnerCompanyFor(input),
         primaryAddress: primary.address,
         primaryCity: primary.city,
         primaryState: primary.state,

@@ -41,6 +41,8 @@ export interface PayloadCheckOptions {
      * options are always checked. Omit it on create, where every required field is enforced.
      */
     submittedKeys?: ReadonlySet<string>;
+    /** Built-in keys this save leaves empty on purpose (e.g. the follow-up of a closed opportunity): not required. */
+    notRequired?: ReadonlySet<string>;
     /**
      * The record's stored custom field values (updates). Unchanged values skip the format / rule / option checks
      * (stored values pass, as in the form), and values of since-archived options stay valid.
@@ -248,7 +250,7 @@ export function checkModulePayload(
     customFields: Record<string, unknown> | undefined,
     options: PayloadCheckOptions = {},
 ): Record<string, unknown> {
-    const { submittedKeys, previousCustomFields, allowPastDates, notApplicableKeys } = options;
+    const { submittedKeys, notRequired, previousCustomFields, allowPastDates, notApplicableKeys } = options;
     const today = (options.now ?? businessNow()).slice(0, 10);
     const input = customFields ?? {};
     const issues: ApiFieldError[] = [];
@@ -262,7 +264,8 @@ export function checkModulePayload(
 
         const path = isCustom ? [CUSTOM_FIELDS_KEY, field.fieldKey] : [field.fieldKey];
         const value = isCustom ? input[field.fieldKey] : payload[field.fieldKey];
-        const requiredApplies = !submittedKeys || submittedKeys.has(isCustom ? CUSTOM_FIELDS_KEY : field.fieldKey);
+        const requiredApplies =
+            (!submittedKeys || submittedKeys.has(isCustom ? CUSTOM_FIELDS_KEY : field.fieldKey)) && !(!isCustom && notRequired?.has(field.fieldKey));
 
         if (field.isRequired && requiredApplies) {
             const isCheckbox = field.fieldType === 'checkbox';

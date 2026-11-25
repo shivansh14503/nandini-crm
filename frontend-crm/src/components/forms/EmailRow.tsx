@@ -25,6 +25,7 @@ import {
 import { FIELD_MAX_LENGTH } from './fieldSizing';
 import { useFormMode } from '@/context/FormModeContext';
 import { EmailActions } from '../common/ContactActions';
+import { PrimaryTag } from '../common/PrimaryTag';
 import type { CorporateEmail } from '@/types/organization.types';
 
 export interface EmailRowProps {
@@ -65,10 +66,13 @@ export function EmailRow({ email, onChange, onRemove, notice, placeholder = 'e.g
     if (mode === 'view') {
         return (
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap', py: 0.75 }}>
-                <Typography sx={{ fontSize: '0.88rem', fontWeight: 600, color: 'var(--crm-slate-900)' }}>{email.email || '—'}</Typography>
+                {/* The Primary tag sits right after the address (as in the drawer), before the actions. */}
+                <Box sx={{ display: 'inline-flex', alignItems: 'center', flexWrap: 'wrap', columnGap: 0.75, rowGap: 0.25, minWidth: 0 }}>
+                    <Typography sx={{ fontSize: '0.88rem', fontWeight: 600, color: 'var(--crm-slate-900)', minWidth: 0, overflowWrap: 'anywhere' }}>{email.email || '—'}</Typography>
+                    {email.isPrimary && <PrimaryTag />}
+                </Box>
                 <EmailActions email={email.email} />
                 <EmailVerificationBadge email={email} />
-                {email.isPrimary && <Chip label="Primary" size="small" sx={{ height: 20, fontSize: '0.68rem', fontWeight: 700, color: 'var(--crm-text-blue-700)', backgroundColor: 'var(--mui-palette-primary-soft)' }} />}
                 {email.isOptedOut && <Chip label="Opted Out (DND)" size="small" sx={{ height: 20, fontSize: '0.68rem', fontWeight: 700, color: 'var(--crm-amber-700)', backgroundColor: 'var(--crm-amber-100)' }} />}
                 {email.isInvalidBounce && <Chip label="Invalid Bounce" size="small" sx={{ height: 20, fontSize: '0.68rem', fontWeight: 700, color: 'var(--crm-red-700)', backgroundColor: 'var(--crm-red-100)' }} />}
             </Box>
