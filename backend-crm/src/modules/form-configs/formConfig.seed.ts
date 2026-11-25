@@ -161,10 +161,9 @@ export async function ensureFormConfigsSeeded(): Promise<void> {
         changed++;
     }
 
-    if (changed > 0) {
-        await cacheService.invalidatePattern(`${CACHE_KEYS.lookups('form-configs')}*`);
-        logger.info({ changed }, 'Form & dropdown configuration defaults seeded');
-    }
+    // Always: a migration run before this start-up may have changed the configuration behind the cache's back.
+    await cacheService.invalidatePattern(`${CACHE_KEYS.lookups('form-configs')}*`);
+    if (changed > 0) logger.info({ changed }, 'Form & dropdown configuration defaults seeded');
 }
 
 /** Key of the default field listed just before `fieldKey` in the same module, tab and section, if any. */

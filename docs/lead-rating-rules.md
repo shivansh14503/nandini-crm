@@ -46,7 +46,8 @@ same way. Example: created 20 Nov → follow-up 20–25 Nov is Hot, 26 Nov onwar
 
 ### 2.3 Starting rules for the leads' Customer Response options
 
-The leads' own list `lead_customer_response` (migration `20261125190000_lead_customer_response`). Opportunities have the
+The leads' own list `lead_customer_response` (migrations `20261125190000_lead_customer_response`, and
+`20261125200000_lead_customer_response_options`, which rewrites a leads list that already existed to these options). Opportunities have the
 same field (same key, label and follow-up flow) on their own list, `shared_customer_response`, like Status. Set in
 setup; the admin can change all of them in Form Builder › Leads › Rating Rules.
 
