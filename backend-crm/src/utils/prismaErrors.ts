@@ -16,3 +16,11 @@ export function isWriteConflictError(err: unknown): boolean {
 export function isTransactionUnavailableError(err: unknown): boolean {
     return err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2028';
 }
+
+/**
+ * P2002: a unique index refused the write (e.g. a dedupe key another process inserted first). Read from `code` so
+ * errors from interactive transactions and test doubles are recognized alike.
+ */
+export function isUniqueViolation(err: unknown): boolean {
+    return typeof err === 'object' && err !== null && (err as { code?: unknown }).code === 'P2002';
+}

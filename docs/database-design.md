@@ -1,7 +1,7 @@
 # Nandini CRM — Database Design
 
-> **Status:** living document, generated from `backend-crm/prisma/schema.prisma` and `prisma/migrations/` (74 migrations,
-> latest `20261126090000_activities`). Update it in the same change as any schema migration.
+> **Status:** living document, generated from `backend-crm/prisma/schema.prisma` and `prisma/migrations/` (75 migrations,
+> latest `20261126120000_notifications`, as of 2026-11-25). Update it in the same change as any schema migration.
 > Related: [System design](system-design.md) · [API plan](api-plan.md) · [Build plan](build-plan.md)
 
 ---
@@ -12,7 +12,7 @@
 | --- | --- |
 | Engine | Microsoft SQL Server / Azure SQL (schema `dbo`) |
 | Access | Prisma 7 ORM through `@prisma/adapter-mssql`; a few raw SQL statements (`MERGE` for counters, `sp_getapplock` for locks, `OPENJSON`) |
-| Tables | **41** application tables + Prisma's `_prisma_migrations` |
+| Tables | **43** application tables + Prisma's `_prisma_migrations` |
 | Owned child tables ("sub tables") | 6: `EntityEmail`, `OpportunityLineItem`, `QuotationLineItem`, `PartnerCompanyContact`, `DropdownOption`, `ActivityAttendee` |
 | Migrations | `backend-crm/prisma/migrations/` (`npm run db:migrate` in dev, `npm run db:deploy` in prod) |
 | Seed | `backend-crm/prisma/seed.ts` (`npm run seed`) |
@@ -32,6 +32,7 @@
 | Customisation | `DropdownCategory`, `DropdownOption`, `FormFieldDefinition`, `ModuleSetting`, `DrawerLayout`, `DrawerPiece` |
 | PDF & files | `PdfTemplate`, `PdfAsset`, `PdfSavedItem`, `RecordFile` |
 | Audit & UI state | `AuditLog`, `AuditExport`, `AuditDigest`, `TableFilter`, `ModuleScorecard` |
+| Notifications & outgoing mail | `Notification` (navbar bell), `EmailLog` (every email the CRM sends) |
 | Email checks | `EmailValidationRun` |
 
 ## 2. Design conventions
@@ -126,6 +127,8 @@ Not drawn (no foreign keys, linked by convention):
 - `Ticket.natureOfCall` → `NatureOfCall.name`; `Ticket.partnerCompany` → `PartnerCompany.partnerName` (names, not ids).
 - `Activity.relatedModule + relatedId` → the linked record (a lead, opportunity, contact, organization, quotation,
   ticket or contract; polymorphic, checked by the API). `ActivityAttendee.username` → `Users.Username`.
+- `Notification.username` / `EmailLog.toUsername` → `Users.Username`; `Notification.entityModule + entityId` → the
+  activity or contract it is about (no foreign key: the row outlives a deleted record and is purged by age).
 
 ## 4. Table reference
 
@@ -526,6 +529,37 @@ the minutes live in code, `ACTIVITY_REMINDER_MINUTES`). Activities share `shared
 `shared_customer_response` with leads and opportunities. An activity's Customer Response is any active option of that
 list, stored as text; activities read none of its option meta (no Rating, no Sales Stage check, no follow-up cleared).
 
+### 4.26 `Notification` and `EmailLog`
+
+Migration `20261126120000_notifications` (Calendar Phase 1 PR3; new tables only, nothing else changed). Module
+`backend-crm/src/modules/notifications`, mail layer `src/services/mail.service.ts`. Both are personal / system logs
+like `TableFilter`: **not audited**, hard-deleted by the nightly retention job (00:20, 1000 rows per batch).
+
+`Notification`: one in-app notification for one user (the navbar bell). `id` (uuid), `username` (recipient),
+`kind` (`activity_reminder` | `activity_assigned` | `activity_invited` | `contract_renewal`, NVARCHAR(40)), `title`
+(≤ 200), `body` (≤ 500, nullable), `entityModule` (`activities` | `contracts`) + `entityId` (the record it is about),
+`dueAt` (UTC instant it is about: the activity's start, the renewal reminder), `actor` (username who caused it, or
+`system`), `dedupeKey` (**UNIQUE**, ≤ 200: one row per event and recipient, e.g.
+`activity_reminder:<activityId>:<remindAtMs>:<username>`; a retried job or a second worker can't notify twice),
+`readAt` (null while unread), `createdAt`. Indexes: `(username, readAt)` (unread count), `(username, createdAt)` (the
+list, keyset-paged on `createdAt`, `id`), `createdAt` (purge). Inserts read the existing keys first and go in chunks of
+150 rows (SQL Server has no `skipDuplicates` and a 2,100-parameter limit); a P2002 race counts as already sent.
+
+`EmailLog`: one row per outgoing email, the idempotency claim and audit trail of what the CRM mailed whom (the
+morning summary today, quotation emails later). `id` (uuid), `kind` (`morning_summary` | `morning_summary_test` | …),
+`toUsername` (nullable, when the recipient is a CRM user), `toEmail` (≤ 120), `subject` (≤ 200), `dedupeKey`
+(**UNIQUE**, ≤ 200, e.g. `morning_summary:<YYYY-MM-DD>:<username>`; one-off sends get a unique key), `status`
+(`sending` | `sent` | `failed` | `skipped`, the last when mail was turned off), `error` (≤ 500, the SMTP / connection
+message, never credentials), `messageId` (≤ 250, the id the SMTP server accepted the message under), `attempts`
+(INT, default 0), `createdAt`, `sentAt`. Indexes: `createdAt` (purge), `(kind, createdAt)`. **Claim:** a send inserts
+its row as `sending`; when the key exists (P2002) the send belongs to another run unless that row is `failed` with
+fewer than 3 attempts or `skipped`, which is taken over by a conditional update on the status and attempts read; the
+row then becomes `sent` or `failed`.
+
+**Retention** (env, read by the nightly job): `Notification` rows that are read and older than
+`NOTIFICATION_RETENTION_DAYS` (default 90), and any row older than twice that; `EmailLog` rows older than
+`EMAIL_LOG_RETENTION_DAYS` (default 180).
+
 ## 5. Index strategy
 
 - **Scoped list composites** `(isDeleted, assignedTo, createdAt)` match the most common query: "live records I own or
@@ -541,6 +575,10 @@ list, stored as text; activities read none of its option meta (no Rating, no Sal
   that end after `from`, so `(isDeleted, startAt)` / `(isDeleted, assignedTo, startAt)` seek instead of scanning.
 - **Reminder sweep** `(reminderSentAt, remindAt)`: the equality column (`reminderSentAt IS NULL`) comes first, then the
   range on `remindAt`.
+- **Notifications** `(username, readAt)` answers the bell's unread count (cached in Redis on top, dropped on every
+  change), and
+  `(username, createdAt)` its newest-first list; unique `dedupeKey`s on `Notification` and `EmailLog` make deliveries
+  idempotent.
 
 ## 6. Data lifecycle
 
@@ -554,6 +592,8 @@ list, stored as text; activities read none of its option meta (no Rating, no Sal
 | Lead conversion | Serializable tx: create/link Organization + Contact, create Opportunity, set lead `status = Converted` + `converted*` columns, audit each |
 | City rename | Name written through to every address that references the city id |
 | Option value rename / field key rename | Stored values in records, saved filters and PDF template paths follow (`optionValueRename.ts`, `fieldKeyRename.ts`) |
+| Activity reminder due | One transaction: claim `Activity.reminderSentAt` (matching `remindAt` and `updatedAt`, writing `updatedAt` back unchanged) + insert the missing `Notification` rows |
+| Nightly retention (00:20) | Hard delete of old `Notification` and `EmailLog` rows (see §4.26) |
 
 ## 7. Migrations and seeding
 

@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { isRedisReady, redis } from '../config/redis.js';
 import { logger } from '../config/logger.js';
 
@@ -7,9 +8,87 @@ export const CACHE_KEYS = {
     addressMaster: 'cache:address-master',
     dashboard: (name: string) => `cache:dashboard:${name}`,
     search: (query: string) => `cache:search:${query}`,
+    /** A user's unread notification count (navbar bell), read with `getOrSetGuarded`; dropped by every write to their notifications. */
+    notificationsUnread: (username: string) => `cache:notifications:unread:${username.trim().toLowerCase()}`,
 } as const;
 
 const SCAN_BATCH_SIZE = 200;
+
+/** Prefix of the placeholder a guarded read-through writes while it reads the source (never valid JSON). */
+const GUARD_PREFIX = 'pending:';
+/** A placeholder outlives the source read it guards (a paused Azure SQL Serverless database takes up to a minute to resume). */
+const GUARD_TTL_SECONDS = 90;
+/** KEYS[1] = key; ARGV = expected placeholder, new value ('' deletes), TTL. Atomic compare-and-set. */
+const SWAP_IF_GUARD = `if redis.call('GET', KEYS[1]) ~= ARGV[1] then return 0 end
+if ARGV[2] == '' then redis.call('DEL', KEYS[1]) else redis.call('SET', KEYS[1], ARGV[2], 'EX', tonumber(ARGV[3])) end
+return 1`;
+
+/** The Redis calls of a guarded read-through (the shared client below, or a test double). */
+export interface GuardStore {
+    get(key: string): Promise<string | null>;
+    /** SET key value EX ttl, with NX when `onlyIfAbsent`; true when written. */
+    put(key: string, value: string, ttlSeconds: number, onlyIfAbsent: boolean): Promise<boolean>;
+    /** Sets `key` to `value` (null deletes it) only while it still holds `expected`, atomically; true when done. */
+    swap(key: string, expected: string, value: string | null, ttlSeconds: number): Promise<boolean>;
+}
+
+const sharedGuardStore: GuardStore = {
+    get: (key) => redis.get(key),
+    put: async (key, value, ttlSeconds, onlyIfAbsent) =>
+        (onlyIfAbsent ? await redis.set(key, value, 'EX', ttlSeconds, 'NX') : await redis.set(key, value, 'EX', ttlSeconds)) === 'OK',
+    swap: async (key, expected, value, ttlSeconds) => (await redis.eval(SWAP_IF_GUARD, 1, key, expected, value ?? '', String(ttlSeconds))) === 1,
+};
+
+export interface GuardedReadOptions {
+    /** Skip the cached value: read the source and cache what it says now (still guarded). */
+    refresh?: boolean;
+}
+
+/**
+ * Read-through that never caches a value an invalidation has made stale. On a miss it first writes a placeholder
+ * token (`SET … NX`), then reads the source, then replaces the placeholder with the value only if the placeholder is
+ * still there (Lua compare-and-set). An invalidation (`UNLINK`, `SCAN` + `UNLINK`) between the read and the write
+ * removes the placeholder, so the stale value is dropped and the next read goes to the source. A reader that finds
+ * another's placeholder reads the source without caching. Redis down or failing: the source, uncached.
+ */
+export async function guardedReadThrough<T>(
+    store: GuardStore,
+    ready: () => boolean,
+    key: string,
+    ttlSeconds: number,
+    fetcher: () => Promise<T>,
+    options: GuardedReadOptions = {},
+): Promise<T> {
+    let guard: string | null = null;
+    if (ready()) {
+        try {
+            const cached = options.refresh ? null : await store.get(key);
+            if (cached !== null && !cached.startsWith(GUARD_PREFIX)) return JSON.parse(cached) as T;
+            if (cached === null) {
+                const token = `${GUARD_PREFIX}${randomUUID()}`;
+                if (await store.put(key, token, GUARD_TTL_SECONDS, !options.refresh)) guard = token;
+            }
+        } catch (err) {
+            logger.warn({ err: (err as Error).message, key }, 'Cache read failed; using database');
+        }
+    }
+
+    let value: T;
+    try {
+        value = await fetcher();
+    } catch (err) {
+        if (guard) store.swap(key, guard, null, 0).catch(() => undefined);
+        throw err;
+    }
+
+    if (guard && ready()) {
+        // Fire-and-forget, like getOrSet: a failed cache write must not fail or slow the request.
+        store.swap(key, guard, value === undefined ? null : JSON.stringify(value), ttlSeconds).catch((err: Error) => {
+            logger.warn({ err: err.message, key }, 'Cache write failed');
+        });
+    }
+    return value;
+}
 
 /**
  * Redis-backed cache that never takes the API down: when Redis is unreachable every call logs at debug level
@@ -36,6 +115,14 @@ export const cacheService = {
             });
         }
         return value;
+    },
+
+    /**
+     * `getOrSet` for a value whose writers invalidate it: a source read that overlaps an invalidation is not cached
+     * (see `guardedReadThrough`). Only for keys read this way (they briefly hold a placeholder).
+     */
+    getOrSetGuarded<T>(key: string, ttlSeconds: number, fetcher: () => Promise<T>, options: GuardedReadOptions = {}): Promise<T> {
+        return guardedReadThrough(sharedGuardStore, isRedisReady, key, ttlSeconds, fetcher, options);
     },
 
     async invalidate(...keys: string[]): Promise<void> {

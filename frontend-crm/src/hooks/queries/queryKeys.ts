@@ -45,6 +45,14 @@ export const queryKeys = {
     users: {
         all: ['users'] as const,
     },
+    /** The signed-in user's notifications (navbar bell); `notifyCrmUpdate('/api/notifications')` refreshes them. */
+    notifications: {
+        all: ['notifications'] as const,
+        /** Pages of the bell list (an infinite query, newest first). */
+        list: (params?: { unreadOnly?: boolean }) => ['notifications', 'list', params ?? {}] as const,
+        /** The badge: polled every minute while the tab is visible. */
+        unreadCount: () => ['notifications', 'unread-count'] as const,
+    },
 } as const;
 
 export type QueryEntity = keyof typeof queryKeys;

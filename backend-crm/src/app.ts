@@ -35,12 +35,15 @@ import emailValidationRouter from './modules/email-verification/emailValidation.
 import { resumeEmailValidationRuns } from './modules/email-verification/emailValidation.admin.service.js';
 import tableFilterRouter from './modules/table-filters/tableFilter.routes.js';
 import scorecardRouter from './modules/scorecards/scorecard.routes.js';
+import notificationRouter from './modules/notifications/notification.routes.js';
+import { dropUnreadCountsOnRedisReady } from './modules/notifications/notification.producer.js';
 import { drawerLayoutRouter, drawerPieceRouter } from './modules/drawer-layouts/drawerLayout.routes.js';
 import { seedFormConfigsSafely } from './modules/form-configs/formConfig.seed.js';
 import { pdfAssetRouter, pdfSavedItemRouter, pdfTemplateRouter } from './modules/pdf/pdf.routes.js';
 import recordFileRouter from './modules/files/recordFile.routes.js';
 import { seedPdfTemplatesSafely } from './modules/pdf/pdfTemplate.seed.js';
 import { shutdownPdfRenderer } from './modules/pdf/renderer/puppeteerRenderer.js';
+import { closeMail } from './services/mail.service.js';
 import { closeQueues } from './jobs/queues.js';
 import { startWorkers, stopWorkers } from './jobs/workers/index.js';
 import { errorHandler, notFoundHandler } from './middlewares/errorHandler.js';
@@ -124,6 +127,7 @@ app.use('/api/table-filters', tableFilterRouter);
 app.use('/api/scorecards', scorecardRouter);
 app.use('/api/drawer-layouts', drawerLayoutRouter);
 app.use('/api/drawer-pieces', drawerPieceRouter);
+app.use('/api/notifications', notificationRouter);
 
 // ── 404 + global error handler ─────────────────────────────────────────────────
 app.use(notFoundHandler);
@@ -138,6 +142,8 @@ async function start(): Promise<Server> {
     // labels): drop them once Redis is up so a restart always serves what the database now holds. Only the
     // `cache:*` namespace; sessions and rate limits stay.
     redis.once('ready', () => void cacheService.invalidatePattern('cache:*'));
+    // Unread notification counts invalidated while Redis was unreachable: dropped on every reconnect.
+    dropUnreadCountsOnRedisReady();
     connectRedis();
     await connectDatabase();
     startDatabaseKeepAlive();
@@ -160,6 +166,7 @@ function registerShutdown(server: Server): void {
         server.close(async () => {
             stopDatabaseKeepAlive();
             await stopWorkers();
+            closeMail();
             await Promise.allSettled([closeQueues(), shutdownPdfRenderer(), prisma.$disconnect(), redis.quit()]);
             process.exit(0);
         });

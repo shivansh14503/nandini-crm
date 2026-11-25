@@ -1481,6 +1481,68 @@ model TableFilter {
   @@index([username, module, kind])
 }
 
+// ── Notifications & outgoing mail ──────────────────────────────────────────────
+
+/// In-app notification for one user (navbar bell): activity reminders, assignments and invitations, contract renewal
+/// reminders (src/modules/notifications). Personal state: hard-deleted by the nightly retention job
+/// (NOTIFICATION_RETENTION_DAYS: read rows older than that, any row older than twice that), never audited.
+model Notification {
+  id           String    @id @default(uuid()) @db.NVarChar(50)
+  /// Recipient (username, like TableFilter).
+  username     String    @db.NVarChar(50)
+  /// activity_reminder | activity_assigned | activity_invited | contract_renewal
+  kind         String    @db.NVarChar(40)
+  title        String    @db.NVarChar(200)
+  body         String?   @db.NVarChar(500)
+  /// CrmModuleKey of the record it is about (activities | contracts) and its id.
+  entityModule String?   @db.NVarChar(30)
+  entityId     String?   @db.NVarChar(50)
+  /// The moment the notification is about (activity start, renewal reminder), UTC.
+  dueAt        DateTime?
+  /// Who caused it (username) or 'system'.
+  actor        String?   @db.NVarChar(50)
+  /// Idempotency, one per event and recipient (builders in notification.reminders.ts).
+  dedupeKey    String    @unique @db.NVarChar(200)
+  readAt       DateTime?
+  createdAt    DateTime  @default(now())
+
+  /// Unread count / unread list of the bell.
+  @@index([username, readAt])
+  /// The bell list, newest first (keyset paging on createdAt, id).
+  @@index([username, createdAt])
+  /// Retention purge.
+  @@index([createdAt])
+}
+
+/// One outgoing email (src/services/mail.service.ts): idempotency and an audit trail of what the CRM mailed whom
+/// (the morning summary today; quotation emails later). A send first claims its row (status `sending`, unique
+/// dedupeKey), then marks it `sent` or `failed`. A personal / system log like Notification: not audited, rows older
+/// than EMAIL_LOG_RETENTION_DAYS are hard-deleted by the nightly job.
+model EmailLog {
+  id         String    @id @default(uuid()) @db.NVarChar(50)
+  /// morning_summary | morning_summary_test | …
+  kind       String    @db.NVarChar(40)
+  /// Recipient's username when the email goes to a CRM user.
+  toUsername String?   @db.NVarChar(50)
+  toEmail    String    @db.NVarChar(120)
+  subject    String    @db.NVarChar(200)
+  /// One send per key, e.g. `morning_summary:<YYYY-MM-DD>:<username>`; one-off sends get a unique key.
+  dedupeKey  String    @unique @db.NVarChar(200)
+  /// sending | sent | failed | skipped (mail turned off)
+  status     String    @db.NVarChar(20)
+  /// Why the send failed (SMTP response or connection error, never credentials).
+  error      String?   @db.NVarChar(500)
+  /// Message-ID the SMTP server accepted the message under.
+  messageId  String?   @db.NVarChar(250)
+  /// Send attempts so far (a failed send is retried by a later run while attempts < 3).
+  attempts   Int       @default(0)
+  createdAt  DateTime  @default(now())
+  sentAt     DateTime?
+
+  @@index([createdAt])
+  @@index([kind, createdAt])
+}
+
 /// Scorecard of a module's list screen (the summary cards above the table): the dropdown field the cards count by,
 /// an optional amount field each card totals, a colour per option value, and whether those colours also mark the
 /// field in the list column / record drawer. One row per module (no row = the screen's built-in cards); admins edit
