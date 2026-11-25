@@ -87,6 +87,7 @@ const STATUS_LOADERS: Readonly<Record<string, StatusLoader>> = {
     Quotation: (ids) => prisma.quotation.findMany(inIds(ids)),
     Ticket: (ids) => prisma.ticket.findMany(inIds(ids)),
     Contract: (ids) => prisma.contract.findMany(inIds(ids)),
+    Activity: (ids) => prisma.activity.findMany(inIds(ids)),
     Product: (ids) => prisma.product.findMany(inIds(ids)),
     PartnerCompany: (ids) => prisma.partnerCompany.findMany(inIds(ids)),
 };

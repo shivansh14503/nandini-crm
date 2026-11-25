@@ -59,6 +59,9 @@ const LOADERS: Partial<Record<AuditEntityType, Loader>> = {
             r.id,
             { code: r.contractNumber, label: str(r.contractTitle) ?? r.organizationName },
         ]),
+    // Activities are unnumbered: the subject is the label.
+    Activity: async (c, ids) =>
+        (await c.activity.findMany({ ...inIds(ids), select: { id: true, subject: true } })).map((r) => [r.id, { label: r.subject }]),
     Product: async (c, ids) =>
         (await c.product.findMany({ ...inIds(ids), select: { id: true, productCode: true, productName: true } })).map((r) => [
             r.id,

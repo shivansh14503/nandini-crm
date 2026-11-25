@@ -122,11 +122,13 @@ describe('entryActions', () => {
         assert.equal(entryActions({ action: 'DELETE', entityType: 'Lead' }, null, 'live', false).restore?.available, false);
         assert.equal(entryActions({ action: 'DELETE', entityType: 'Lead' }, null, 'missing', false).restore?.available, false);
         assert.deepEqual(entryActions({ action: 'DELETE', entityType: 'Contract' }, null, 'deleted', false), { undo: null, restore: { available: true } });
+        assert.deepEqual(entryActions({ action: 'DELETE', entityType: 'Activity' }, null, 'deleted', false), { undo: null, restore: { available: true } });
     });
 
     it('offers undo on field and status changes of a live CRM record, once', () => {
         assert.deepEqual(entryActions({ action: 'UPDATE', entityType: 'Contact' }, diff, 'live', false), { undo: { available: true }, restore: null });
         assert.equal(entryActions({ action: 'STATUS_CHANGE', entityType: 'Organization' }, diff, 'live', false).undo?.available, true);
+        assert.equal(entryActions({ action: 'UPDATE', entityType: 'Activity' }, diff, 'live', false).undo?.available, true);
         assert.equal(entryActions({ action: 'UPDATE', entityType: 'Contact' }, diff, 'live', true).undo?.available, false);
         assert.match(entryActions({ action: 'UPDATE', entityType: 'Contact' }, diff, 'deleted', false).undo?.reason ?? '', /Restore it first/);
         assert.equal(entryActions({ action: 'UPDATE', entityType: 'Contact' }, { reordered: 3 }, 'live', false).undo?.available, false);
@@ -136,6 +138,8 @@ describe('entryActions', () => {
         const none = { undo: null, restore: null };
         assert.deepEqual(entryActions({ action: 'CONVERT', entityType: 'Lead' }, diff, 'live', false), none);
         assert.deepEqual(entryActions({ action: 'FOLLOW_UP', entityType: 'Lead' }, diff, 'live', false), none);
+        // A colleague's reply: the update path can't set it back.
+        assert.deepEqual(entryActions({ action: 'RSVP', entityType: 'Activity' }, { attendees: { from: [], to: [] } }, 'live', false), none);
         assert.deepEqual(entryActions({ action: 'IMPORT', entityType: 'Import' }, null, null, false), none);
         assert.deepEqual(entryActions({ action: 'UPDATE', entityType: 'FormField' }, diff, null, false), none);
         assert.deepEqual(entryActions({ action: 'DELETE', entityType: 'DropdownOption' }, null, null, false), none);

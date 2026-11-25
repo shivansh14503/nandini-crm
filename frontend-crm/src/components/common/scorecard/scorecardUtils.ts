@@ -1,7 +1,7 @@
 import type { SxProps, Theme } from '@mui/material';
 import type { DropdownCategoryDto, FormConfigsPayload, FormFieldDefinitionDto, CrmModuleKey } from '@/types/formConfig.types';
 import type { ScorecardConfig, ScorecardOption } from '@/types/scorecard.types';
-import { findCategory, moduleFields } from '@/utils/formConfig';
+import { findCategory, moduleFields, optionsForModule } from '@/utils/formConfig';
 import { readFieldValue } from '../DataTable/useFormFieldColumns';
 
 /**
@@ -105,7 +105,7 @@ export function resolveScorecard(
     const currencyField = config.currencyFieldKey ? fields.find((f) => f.fieldKey === config.currencyFieldKey && f.isActive) : undefined;
     const labels = new Map((category?.options ?? []).map((o) => [o.value, o.label || o.value]));
     // New dropdown options take their card's suggested color in the list column and drawer too.
-    const colors = new Map(withNewOptions(config.options, category).map((o) => [o.value, o.color]));
+    const colors = new Map(withNewOptions(config.options, category, module).map((o) => [o.value, o.color]));
     return {
         config,
         field,
@@ -131,13 +131,16 @@ export function resolveScorecard(
  * since (active ones, in dropdown order, with a suggested color), so a new option gets a card straight away.
  */
 export function scorecardCardOptions(scorecard: ResolvedScorecard): ScorecardOption[] {
-    return withNewOptions(scorecard.config.options, scorecard.category);
+    return withNewOptions(scorecard.config.options, scorecard.category, scorecard.field.module);
 }
 
-function withNewOptions(saved: ScorecardOption[], category: DropdownCategoryDto | undefined): ScorecardOption[] {
+/** `module`: the list's module, so a shared dropdown only adds options that module offers (`optionsForModule`). */
+function withNewOptions(saved: ScorecardOption[], category: DropdownCategoryDto | undefined, module: CrmModuleKey): ScorecardOption[] {
     const known = new Set(saved.map((o) => o.value));
-    const added = (category?.options ?? [])
-        .filter((o) => o.isActive && !known.has(o.value))
+    const options = category?.options ?? [];
+    const offered = new Set(optionsForModule(category?.key, options.map((o) => o.value), module));
+    const added = options
+        .filter((o) => o.isActive && !known.has(o.value) && offered.has(o.value))
         .sort((a, b) => a.sortOrder - b.sortOrder)
         .map((o, i) => ({ value: o.value, color: suggestColor(o.label || o.value, saved.length + i) }));
     return added.length ? [...saved, ...added] : saved;

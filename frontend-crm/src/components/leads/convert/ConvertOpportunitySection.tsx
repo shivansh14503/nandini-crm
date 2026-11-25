@@ -35,7 +35,7 @@ const OPPORTUNITY_INPUTS = [
 
 /** "Create Opportunity" section of the Convert Lead form; collapses to a note when no opportunity is created. */
 export function ConvertOpportunitySection() {
-    const getOptions = useDropdownOptionsGetter();
+    const getOptions = useDropdownOptionsGetter('opportunities');
     const { control, resetField } = useFormContext<F>();
     const createOpportunity = useWatch({ control, name: 'createOpportunity' });
     // The opportunity's Lead Source asks for Referred By (CA, Reference) or a Nature of Partner (Partner), as on its form.

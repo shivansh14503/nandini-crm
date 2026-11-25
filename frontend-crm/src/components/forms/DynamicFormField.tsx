@@ -6,7 +6,7 @@ import { useFormMode } from '@/context/FormModeContext';
 import { useFormConfigs } from '@/hooks/queries/useFormConfigs';
 import { useCodedFieldDefaults } from '@/context/CodedFieldDefaultsContext';
 import type { FormFieldDefinitionDto } from '@/types/formConfig.types';
-import { activeOptionValues, defaultOptionValues, fieldFormName, findCategory, optionLabelMap, parseDefaultValue } from '@/utils/formConfig';
+import { activeOptionValues, defaultOptionValues, fieldFormName, findCategory, optionLabelMap, optionsForModule, parseDefaultValue } from '@/utils/formConfig';
 import type { RecordFileModule } from '@/types/recordFile.types';
 import type { FieldSize } from './fieldSizing';
 import { FieldAutoSizeProvider } from './FormField';
@@ -158,7 +158,8 @@ export function DynamicFormField({ field, required, applyDefault = true, name: n
             case 'select':
             case 'multiselect': {
                 const category = findCategory(configs, field.dropdownCategoryKey);
-                const options = activeOptionValues(category);
+                // The field's own module: the Form Builder's Live Preview renders this without a FormConfigProvider.
+                const options = optionsForModule(category?.key, activeOptionValues(category), field.module);
                 const optionLabels = optionLabelMap(category);
                 return field.fieldType === 'select' ? (
                     <RhfSelect {...common} options={options} optionLabels={optionLabels} placeholder={placeholder} fieldSize={fieldSize} />

@@ -10,6 +10,7 @@ import CategoryOutlinedIcon from '@mui/icons-material/CategoryOutlined';
 import ConfirmationNumberOutlinedIcon from '@mui/icons-material/ConfirmationNumberOutlined';
 import HandshakeOutlinedIcon from '@mui/icons-material/HandshakeOutlined';
 import HistoryEduOutlinedIcon from '@mui/icons-material/HistoryEduOutlined';
+import EventNoteOutlinedIcon from '@mui/icons-material/EventNoteOutlined';
 import type { CrmModuleKey } from '@/types/formConfig.types';
 // Straight from the files (not the module barrels), so the registry never pulls in a list screen.
 import { OPPORTUNITY_CARD_AMOUNTS, useStageScorecard } from '../../opportunities/master/stageScorecard';
@@ -69,6 +70,7 @@ export const SCORECARD_MODULES: Readonly<Record<CrmModuleKey, ScorecardModuleInf
         singleRow: true,
         amounts: CONTRACT_CARD_AMOUNTS as readonly ScorecardAmount<never>[],
     },
+    activities: { allLabel: 'All Activities', allIcon: <EventNoteOutlinedIcon />, builtInCards: false, singleRow: false },
 };
 
 /** The module's own totals, typed for its records. */

@@ -17,6 +17,7 @@ import { organizationConversionSchema } from '../organizations/organization.vali
 import { assertRecordAccess } from '../shared/accessControl.js';
 import { isPartnerCustomerType, NATURE_OF_PARTNER_REQUIRED_MESSAGE } from '../shared/customerType.js';
 import { leadSourceDetailIssues } from '../shared/leadSource.js';
+import { activityOnlyTypeIssues } from '../shared/followupTypes.js';
 import { normalizeEmails } from '../shared/entityEmails.js';
 import { lockRecords, runSerializable } from '../shared/transactions.js';
 import { leadInclude, leadNotFound } from './lead.service.js';
@@ -248,6 +249,8 @@ export async function convertLead(leadId: string, body: unknown, user: AuthUser)
             ...partnerIssues,
             ...(opportunityCheck?.issues ?? []),
             ...leadSourceIssues,
+            // The new opportunity's Followup Type can't be Task or Note (Activities only).
+            ...(values.createOpportunity ? activityOnlyTypeIssues(values.followupType) : []),
         ]);
 
         const organization = existingOrganization

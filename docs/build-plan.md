@@ -24,13 +24,14 @@
 | Leads, Opportunities, Quotations, Organizations, Contacts | ✅ CRUD, list filters, row-level access, audit, import (not quotations), lead conversion |
 | Tickets, Products, Partner Companies | ✅ CRUD, import |
 | Contracts | ✅ CRUD, list filters, status cards, row-level access, audit (no import) |
+| Activities & calendar | ⚠️ data model, API (`/api/activities`, calendar feed, RSVP) and Form Builder fields; screens and reminders to come (Phase 14) |
 | Quotation PDF | ✅ templates, builder, preview, cached render |
 | Admin: forms, dropdowns, document series, cities, PDF templates | ✅ |
 | Responsive layout | ✅ phones (from 320 px), tablets and desktops: menu drawer below 1200 px, icon-only navbar controls up to 1420 px, related records as a button on phones, no sideways page scroll |
 | Audit log | ✅ ledger table with who / where / how per entry, Admin › Audit Log screen (`/api/admin/audit-logs`), undo / restore, CSV / Excel export, ledger integrity checks; alert rules later (Phase 11 E) |
 | Users admin | ❌ seed / DB only |
 | Dashboard | ❌ static page, no data |
-| Tests | ⚠️ 14 backend unit test files; no API integration, no frontend, no E2E |
+| Tests | ⚠️ 46 backend unit test files (`node:test`); no API integration, no frontend, no E2E |
 | CI/CD, containers | ❌ none in repo |
 
 ## Part 2 — Roadmap
@@ -88,7 +89,8 @@ Exit: the critical flows above run in CI.
       the list column / drawer colors, with a live preview over the list's records. Saves are refused (409) when
       another admin saved first. Contacts, Organizations, Products, Tickets and Partner Companies can now have cards
       too (off until an admin switches them on). On the lists, admins get a gear on the "All" card that opens the page.
-- [ ] Activities / follow-ups (calls, meetings, notes) linked to any record, with reminders.
+- [ ] Activities / follow-ups (calls, meetings, notes) linked to any record, with reminders — now
+      [Phase 14](#phase-14--activities--calendar-p2-started-2026-11-25).
 - [ ] PDFs for Opportunities (and later Tickets) via the module adapter pattern.
 - [ ] Email quotation PDF to the contact (needs an SMTP/provider decision).
 - [ ] Quotation import (currently excluded).
@@ -226,8 +228,37 @@ only (not the full record page); Save goes live straight away; Leads first.
       The list has one card per contract status (plus "All Contracts") totalling Contract Value, and My Contracts /
       Expiring in 30 Days pills. The form moves End Date with Start Date and the period, and the reminder to 15 days
       before the end at 11:00, until the user types their own.
-- [ ] Renewal reminders: notify the Contract Manager on the Renewal Reminder Date (with Phase 9's activities and reminders).
+- [ ] Renewal reminders: notify the Contract Manager on the Renewal Reminder Date (with Phase 14's reminders, PR3).
+      Renewal reminders already show on the calendar feed (Phase 14 PR1).
 - [ ] Left out of the first version: contract import, contract PDF, creating a contract from an opportunity or product.
+
+### Phase 14 — Activities & Calendar (P2, started 2026-11-25)
+
+Phase 1 of the activities / calendar work, in three PRs. Activity times are true UTC instants (the rest of the CRM
+keeps wall-clock times); all-day activities are entered as business-timezone days.
+
+- [x] **PR1: database + API + Form Builder** (2026-11-25) — `Activity` / `ActivityAttendee` tables (migration
+      `20261126090000_activities`, filtered unique indexes per attendee), `/api/activities` CRUD + `GET /meta`,
+      `GET /calendar` (activities plus lead / opportunity follow-ups and contract renewal reminders, capped),
+      `GET /link-targets`, `POST /:id/response` (audited `RSVP`). Access: owner, creator, invited colleagues (view and
+      reply only) and global roles. Related record (lead, opportunity, contact, organization, quotation, ticket,
+      contract) checked against the caller's access; organization / contact derived from it; renames written through
+      to activities and contact attendees. Form Builder: Activities module (15 fields, `activity_status`,
+      `activity_reminder`), Task / Note as Activities-only Followup Types (hidden on lead / opportunity / Convert Lead
+      forms, refused by their APIs unless unchanged, never the dropdown default), option meta `durationMinutes` /
+      `icon`. Audit: undo / restore for activities. Frontend: types, service, React Query hooks, module registries
+      (no screens yet). Unit tests for time zones, schedule rules, attendee sync, access, calendar ranges, links.
+- [ ] **PR2: screens** — Activities list, form (timed / all-day, related record and attendee pickers), quick create,
+      detail drawer, Calendar page (FullCalendar v7, business-timezone rendering, drag to reschedule), Activities tab
+      in the Lead / Opportunity / Contact / Organization / Quotation / Ticket / Contract drawers, nav items, Quick
+      Create entry, module colour (Brown) in `CLAUDE.md`, Form Builder coded defaults.
+- [ ] **PR3: notifications + reminders** — `Notification` table, `/api/notifications`, BullMQ `crm-reminders` worker
+      (delayed jobs plus a sweep; idempotent claims on `reminderSentAt`), invitation / assignment notifications, the
+      navbar bell.
+- [ ] **Phase 2: calendar sync** (Google / Microsoft 365) — needs the app on HTTPS under a nandiniinfosys.com hostname
+      (`PUBLIC_API_URL`), unique company emails on users, `CalendarConnection` and `ActivityExternalLink` tables, Admin ›
+      API Integrations with encrypted credentials, `Activity.iCalUid` + organizer fields for inbound events, recurring
+      series materialized as occurrence rows, and inbound events clamped to the 31-day limit.
 
 ## Part 3 — Keeping these documents current
 

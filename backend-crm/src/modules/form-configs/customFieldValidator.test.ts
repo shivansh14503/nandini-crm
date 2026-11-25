@@ -117,6 +117,27 @@ describe('checkModulePayload: required fields', () => {
     });
 });
 
+describe('checkModulePayload: fields the form hides for the record (notApplicableKeys)', () => {
+    const config = configWith([
+        field({ fieldKey: 'location', label: 'Location', isSystem: true, isRequired: true, validationRules: { minLength: 5 } }),
+        field({ fieldKey: 'remarks', label: 'Remarks', isSystem: true, isRequired: true }),
+        field({ fieldKey: 'cf_location', label: 'Custom Location', isRequired: true }),
+    ]);
+    const notApplicableKeys = new Set(['location', 'cf_location']);
+
+    it('skips the required and rule checks of those built-in fields only', () => {
+        // Location (a built-in the form hides, e.g. on a Note) is neither required nor rule-checked; Remarks still is.
+        const issues = issuesOf(() => checkModulePayload(config, { location: 'x' }, {}, { notApplicableKeys }));
+        assert.deepEqual(issues.map((i) => i.path.join('.')), ['remarks', 'customFields.cf_location']);
+        assert.doesNotThrow(() => checkModulePayload(config, { remarks: 'Called back' }, { cf_location: 'Pune' }, { notApplicableKeys }));
+    });
+
+    it('changes nothing when not given', () => {
+        const issues = issuesOf(() => checkModulePayload(config, { remarks: 'Called back' }, { cf_location: 'Pune' }));
+        assert.deepEqual(issues.map((i) => i.path.join('.')), ['location']);
+    });
+});
+
 describe('checkModulePayload: formats and rules', () => {
     const cases: [FormFieldDefinitionDto['fieldType'], unknown, unknown][] = [
         ['email', 'a@b.co', 'not-an-email'],

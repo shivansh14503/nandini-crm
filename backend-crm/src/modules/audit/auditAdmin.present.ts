@@ -126,6 +126,7 @@ const ACTION_LABELS: Record<string, string> = {
     CONVERT: 'Converted',
     FOLLOW_UP: 'Follow-up',
     EMAIL_CHECK: 'Email checked',
+    RSVP: 'Replied',
     IMPORT: 'Imported',
     LOGIN: 'Signed in',
     LOGIN_FAILED: 'Failed sign-in',
@@ -228,7 +229,7 @@ const isEmpty = (value: unknown) =>
 // ── Changes ──────────────────────────────────────────────────────────────────
 
 /** Actions whose changes are a `{ field: { from, to } }` diff (auditCatalog DIFF_ACTIONS). */
-const DIFF_ACTIONS = new Set(['UPDATE', 'STATUS_CHANGE', 'FOLLOW_UP', 'CONVERT', 'REVERT', 'EMAIL_CHECK']);
+const DIFF_ACTIONS = new Set(['UPDATE', 'STATUS_CHANGE', 'FOLLOW_UP', 'CONVERT', 'REVERT', 'EMAIL_CHECK', 'RSVP']);
 /** Actions whose changes are a snapshot of the record: after a create, before a delete. */
 const SNAPSHOT_AFTER = new Set(['CREATE', 'DUPLICATE', 'RESTORE']);
 const SNAPSHOT_BEFORE = new Set(['DELETE']);
@@ -353,6 +354,8 @@ export function summarize(action: string, module: string, changes: unknown, labe
             return fields.length > 0 ? `Follow-up recorded: ${listOf(fields)}` : 'Follow-up recorded';
         case 'CONVERT':
             return 'Lead converted';
+        case 'RSVP':
+            return 'Replied to invitation';
         case 'REVERT':
             return fields.length > 0 ? `Undid change to ${listOf(fields)}` : 'Change undone';
         case 'IMPORT': {

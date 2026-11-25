@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { optionalString } from './common';
 import { isPartnerCustomerType, NATURE_OF_PARTNER_REQUIRED_MESSAGE } from '../config/constants';
 import { leadSourceDetailIssues } from '../utils/leadSource';
+import { activityOnlyTypeIssues } from '../utils/followupTypes';
 import { contactFormSchema } from './contact.schema';
 import { organizationFieldsSchema } from './organization.schema';
 import { opportunityFormSchema } from './opportunity.schema';
@@ -91,6 +92,8 @@ export const convertLeadFormSchema = z.object({
         if (!values.createOpportunity) return;
         const parsed = opportunityRules.safeParse(values);
         for (const issue of parsed.error?.issues ?? []) ctx.addIssue({ code: 'custom', message: issue.message, path: issue.path });
+        // Task / Note are Activities-only Followup Types; the new opportunity can't take one (the lead's may be one).
+        for (const issue of activityOnlyTypeIssues(values.followupType)) ctx.addIssue({ code: 'custom', message: issue.message, path: [issue.path] });
         const sourceIssues = leadSourceDetailIssues(
             { leadSource: values.opportunityLeadSource, referredBy: values.referredBy, natureOfPartner: values.opportunityNatureOfPartner },
             { natureOfPartner: 'opportunityNatureOfPartner' },

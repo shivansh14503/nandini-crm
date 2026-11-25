@@ -19,6 +19,13 @@ export const queryKeys = {
     contacts: createEntityKeys('contacts'),
     tickets: createEntityKeys('tickets'),
     contracts: createEntityKeys('contracts'),
+    activities: {
+        ...createEntityKeys('activities'),
+        /** Calendar feed of a window (activities plus lead / opportunity follow-ups and contract renewals). */
+        calendar: (params?: PaginationParams) => ['activities', 'calendar', params ?? {}] as const,
+        /** Business timezone, durations and reminders (GET /api/activities/meta). */
+        meta: () => ['activities', 'meta'] as const,
+    },
     leads: createEntityKeys('leads'),
     opportunities: createEntityKeys('opportunities'),
     quotations: createEntityKeys('quotations'),

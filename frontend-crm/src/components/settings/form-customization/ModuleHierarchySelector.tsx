@@ -15,6 +15,8 @@ import ConfirmationNumberOutlinedIcon from '@mui/icons-material/ConfirmationNumb
 import HistoryEduOutlinedIcon from '@mui/icons-material/HistoryEduOutlined';
 import CategoryOutlinedIcon from '@mui/icons-material/CategoryOutlined';
 import HandshakeOutlinedIcon from '@mui/icons-material/HandshakeOutlined';
+import EventNoteRoundedIcon from '@mui/icons-material/EventNoteRounded';
+import EventNoteOutlinedIcon from '@mui/icons-material/EventNoteOutlined';
 import PublishedWithChangesIcon from '@mui/icons-material/PublishedWithChanges';
 import { CRM_MODULE_GROUPS, type CrmModuleGroupKey, type CrmModuleKey } from '@/types/formConfig.types';
 import { CONVERT_TINT } from './ConvertLeadFieldsPanel';
@@ -24,6 +26,7 @@ const ICON_SX = { fontSize: 17 } as const;
 export const GROUP_ICONS: Record<CrmModuleGroupKey, React.ReactNode> = {
     sales: <TrendingUpRoundedIcon sx={{ fontSize: 15 }} />,
     support: <SupportAgentRoundedIcon sx={{ fontSize: 15 }} />,
+    activities: <EventNoteRoundedIcon sx={{ fontSize: 15 }} />,
     inventory: <Inventory2OutlinedIcon sx={{ fontSize: 15 }} />,
     all: <AppsRoundedIcon sx={{ fontSize: 15 }} />,
 };
@@ -36,6 +39,7 @@ export const MODULE_ICONS: Record<CrmModuleKey, React.ReactNode> = {
     quotations: <RequestQuoteOutlinedIcon sx={ICON_SX} />,
     tickets: <ConfirmationNumberOutlinedIcon sx={ICON_SX} />,
     contracts: <HistoryEduOutlinedIcon sx={ICON_SX} />,
+    activities: <EventNoteOutlinedIcon sx={ICON_SX} />,
     products: <CategoryOutlinedIcon sx={ICON_SX} />,
     'partner-companies': <HandshakeOutlinedIcon sx={ICON_SX} />,
 };

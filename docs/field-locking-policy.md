@@ -146,6 +146,27 @@ Tally Serial Number, Contract Start / End Date, Renewal Reminder Date, Descripti
 | Contract Type | ⭐ | Classification |
 | Bill Number / Bill Date / Bill Amount | ⭐ | Billing completeness |
 
+### Activities
+
+New module (2026-11-25, Calendar Phase 1), shipped with these tiers (no "Current" column; one tab, Overview).
+Fields not listed are ○ Free: Organization Name, Contact, End, All Day, Reminder, Location, Attendees, Customer
+Response, Remarks.
+
+| Field | Tier | Why |
+|---|---|---|
+| Followup Type | 🔒 required | Logic: Task / Note change which fields apply, the default length and the calendar icon. Same field, key and list (`shared_followup_type`) as on leads and opportunities |
+| Subject | 🔒 required | Identity: the list, drawer and calendar title |
+| Status | 🔒 required | Logic: Planned activities get reminders and can be overdue; defaults to `Planned` when omitted |
+| Assigned to | 🔒 required | Ownership / access scope (with attendees) |
+| Related To | 🔒 | Relation: the record's Activities tab and the organization / contact defaults depend on it |
+| Start | 🔒 | Logic: required by the API for every type but Note, so it must never be hidden |
+
+Fields that don't apply to a Followup Type are never required for it, whatever their tier or `isRequired`: a Note has
+no Start, End, All Day, Reminder, Location, Attendees, Customer Response or Status (saved as Completed); a Task has no
+End, Location, Attendees or Customer Response (`ACTIVITY_NOT_APPLICABLE` in `activity.schedule.ts`). The API passes
+them to `checkModulePayload` as `notApplicableKeys` (skipped like hidden fields, on create too); the form leaves them
+out through `relaxedFields`. Only the system types hide fields; an admin-added Followup Type shows them all.
+
 ### Partner companies
 
 | Field | Current | Final | Why |
@@ -160,6 +181,7 @@ Tally Serial Number, Contract Start / End Date, Renewal Reminder Date, Descripti
 - Locked today: **~73** fields (every required field is locked: `isCoreLocked = req || lock`).
 - Final: **37 🔒 Locked**, **34 ⭐ Default required**, and Mailing Name / Account Status move to ○ Free.
 - Contracts (2026-11-25) added 5 🔒 and 6 ⭐ fields.
+- Activities (2026-11-25) added 15 fields: 6 🔒 (4 required, 2 not) and 9 ○ Free.
 
 ## Implementation steps
 

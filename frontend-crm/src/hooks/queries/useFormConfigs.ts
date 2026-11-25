@@ -4,7 +4,15 @@ import { formConfigService } from '@/services/formConfig.service';
 import { getFormConfigs } from '@/services/masterData.store';
 import type { CrmModuleKey, FieldType, FormConfigsPayload, FormFieldDefinitionDto } from '@/types/formConfig.types';
 import type { FieldSize } from '@/components/forms/fieldSizing';
-import { activeOptionValues, allModuleFieldsIncludingDeleted, findCategory, groupSections, moduleFields, optionLabelMap } from '@/utils/formConfig';
+import {
+    activeOptionValues,
+    allModuleFieldsIncludingDeleted,
+    findCategory,
+    groupSections,
+    moduleFields,
+    optionLabelMap,
+    optionsForModule,
+} from '@/utils/formConfig';
 
 export const FORM_CONFIGS_QUERY_KEY = ['form-configs'] as const;
 const FORM_CONFIGS_STALE_MS = 5 * 60 * 1000;
@@ -38,16 +46,28 @@ export function useFormConfigsQuery() {
     });
 }
 
-/** Active option values of a dropdown category in admin order, falling back to `fallbackOptions` until it loads. */
-export function useDropdownOptions(categoryKey: string, fallbackOptions: readonly string[]): string[] {
+/**
+ * Active option values of a dropdown category in admin order, falling back to `fallbackOptions` until it loads.
+ * Pass the form's `module` so shared lists drop the options it doesn't offer (`optionsForModule`).
+ */
+export function useDropdownOptions(categoryKey: string, fallbackOptions: readonly string[], module?: CrmModuleKey): string[] {
     const configs = useFormConfigs();
-    return useMemo(() => activeOptionValues(findCategory(configs, categoryKey), fallbackOptions), [configs, categoryKey, fallbackOptions]);
+    return useMemo(
+        () => optionsForModule(categoryKey, activeOptionValues(findCategory(configs, categoryKey), fallbackOptions), module),
+        [configs, categoryKey, fallbackOptions, module],
+    );
 }
 
-/** Non-hook getter for components that need several categories (`getOptions('lead_status', LEAD_STATUSES)`). */
-export function useDropdownOptionsGetter(): (categoryKey: string, fallbackOptions: readonly string[]) => string[] {
+/**
+ * Non-hook getter for components that need several categories (`getOptions('lead_status', LEAD_STATUSES)`). Pass the
+ * form's `module` so shared lists drop the options it doesn't offer (`optionsForModule`).
+ */
+export function useDropdownOptionsGetter(module?: CrmModuleKey): (categoryKey: string, fallbackOptions: readonly string[]) => string[] {
     const configs = useFormConfigs();
-    return useCallback((categoryKey, fallbackOptions) => activeOptionValues(findCategory(configs, categoryKey), fallbackOptions), [configs]);
+    return useCallback(
+        (categoryKey, fallbackOptions) => optionsForModule(categoryKey, activeOptionValues(findCategory(configs, categoryKey), fallbackOptions), module),
+        [configs, module],
+    );
 }
 
 /**
@@ -113,7 +133,11 @@ export function resolveConfiguredFieldProps(
         hint: field.hint === null ? defaults.hint : field.hint || undefined,
         placeholder: field.placeholder === null ? defaults.placeholder : field.placeholder || undefined,
         fieldSize: (field.fieldSize as FieldSize | null) ?? defaults.fieldSize,
-        options: category ? activeOptionValues(category) : defaults.options ? [...defaults.options] : undefined,
+        options: category
+            ? optionsForModule(category.key, activeOptionValues(category), field.module)
+            : defaults.options
+              ? [...defaults.options]
+              : undefined,
         optionLabels: optionLabelMap(category),
         hidden: Boolean(field.isDeleted) || !field.isActive || !field.isVisibleInForm,
         sizeIsAuto: !field.fieldSize,
@@ -151,7 +175,8 @@ export function useModuleFormConfig(module: CrmModuleKey) {
             },
             getFieldProps: (fieldKey: string, defaults: ConfiguredFieldDefaults) =>
                 resolveConfiguredFieldProps(configs, allFields.find((f) => f.fieldKey === fieldKey && f.isSystem), defaults),
-            getOptions: (categoryKey: string, fallback: readonly string[]) => activeOptionValues(findCategory(configs, categoryKey), fallback),
+            getOptions: (categoryKey: string, fallback: readonly string[]) =>
+                optionsForModule(categoryKey, activeOptionValues(findCategory(configs, categoryKey), fallback), module),
             fieldTypeOf: (fieldKey: string): FieldType | undefined => getField(fieldKey)?.fieldType,
         };
     }, [configs, module]);

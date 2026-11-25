@@ -13,6 +13,7 @@ export type AuditEntityType =
     | 'Product'
     | 'Ticket'
     | 'Contract'
+    | 'Activity'
     /** A file uploaded to a record field (an opportunity's Upload Doc); `changes.module` is its module. */
     | 'RecordFile'
     | 'PartnerCompany'
@@ -49,6 +50,11 @@ export type AuditAction =
     | 'FOLLOW_UP'
     /** An email check changed an address's result on a record (email-verification/emailCheckAudit.ts). */
     | 'EMAIL_CHECK'
+    /**
+     * An invited colleague replied to an activity (diff of its attendees). Not an UPDATE: the update path can't set a
+     * colleague's reply, so it isn't undoable.
+     */
+    | 'RSVP'
     | 'IMPORT'
     | 'LOGIN'
     | 'LOGIN_FAILED'
@@ -77,6 +83,7 @@ const MODULE_BY_ENTITY: Record<AuditEntityType, string> = {
     Product: 'products',
     Ticket: 'tickets',
     Contract: 'contracts',
+    Activity: 'activities',
     RecordFile: 'files',
     PartnerCompany: 'partner-companies',
     User: 'users',
@@ -115,7 +122,7 @@ const CONFIG_ENTITIES: ReadonlySet<AuditEntityType> = new Set([
 const SECURITY_ACTIONS: ReadonlySet<AuditAction> = new Set(['LOGIN', 'LOGIN_FAILED', 'LOGOUT', 'ACCESS_DENIED', 'EXPORT', 'LEDGER_VERIFY']);
 
 /** Actions whose `changes` are a `{ field: { from, to } }` diff. */
-const DIFF_ACTIONS: ReadonlySet<AuditAction> = new Set(['UPDATE', 'STATUS_CHANGE', 'FOLLOW_UP', 'CONVERT', 'REVERT', 'EMAIL_CHECK']);
+const DIFF_ACTIONS: ReadonlySet<AuditAction> = new Set(['UPDATE', 'STATUS_CHANGE', 'FOLLOW_UP', 'CONVERT', 'REVERT', 'EMAIL_CHECK', 'RSVP']);
 
 /** Keys inside a diff that describe the entry rather than a changed field. */
 const NON_FIELD_KEYS = new Set(['_meta', 'followUp']);
@@ -228,6 +235,8 @@ export function labelFromChanges(entityType: AuditEntityType, entityId: string, 
             return pick('ticketSubject', 'organizationName');
         case 'Contract':
             return pick('contractTitle', 'organizationName');
+        case 'Activity':
+            return pick('subject');
         case 'Product':
             return pick('productName');
         case 'PartnerCompany':

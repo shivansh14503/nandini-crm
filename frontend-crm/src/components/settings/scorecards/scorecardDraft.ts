@@ -4,7 +4,7 @@ import type { DefaultScorecard } from '@/components/common/scorecard/scorecardIt
 import { scorecardDropdownFields, suggestColor } from '@/components/common/scorecard/scorecardUtils';
 import type { CrmModuleKey, FormConfigsPayload } from '@/types/formConfig.types';
 import type { SaveScorecardPayload, ScorecardConfig, ScorecardOption } from '@/types/scorecard.types';
-import { findCategory } from '@/utils/formConfig';
+import { findCategory, optionsForModule } from '@/utils/formConfig';
 
 /**
  * Admin › List Scorecards: the module's scorecard as the admin is editing it. Nothing reaches the list screens
@@ -58,8 +58,11 @@ export function draftOptionsFor(
     const field = scorecardDropdownFields(configs, module).find((f) => f.fieldKey === fieldKey);
     const category = findCategory(configs, field?.dropdownCategoryKey);
     const prevByValue = new Map(prev.map((o) => [o.value, o]));
-    const inDropdown = (category?.options ?? [])
-        .filter((o) => o.isActive || prevByValue.has(o.value))
+    const options = category?.options ?? [];
+    // A shared dropdown offers some options to some modules only (Task / Note of Followup Type: Activities).
+    const offered = new Set(optionsForModule(category?.key, options.map((o) => o.value), module));
+    const inDropdown = options
+        .filter((o) => (o.isActive || prevByValue.has(o.value)) && offered.has(o.value))
         .sort((a, b) => a.sortOrder - b.sortOrder);
     const byValue = new Map(inDropdown.map((o) => [o.value, o]));
     const sorted =

@@ -4,10 +4,19 @@ import {
     customDataHasKey,
     describeMigration,
     filterFingerprint,
+    MODULE_TABLES,
     renameCustomDataKey,
     renameFilterCriteria,
     renamePdfFieldPaths,
 } from './fieldKeyRename.js';
+import { CRM_MODULES } from './formConfig.defaults.js';
+
+describe('MODULE_TABLES', () => {
+    it('maps every CRM module to its table and record lock', () => {
+        for (const module of CRM_MODULES) assert.ok(MODULE_TABLES[module]?.table, module);
+        assert.deepEqual(MODULE_TABLES.activities, { table: 'Activity', lock: 'activity' });
+    });
+});
 
 describe('renameCustomDataKey', () => {
     it('moves the value and keeps other keys', () => {

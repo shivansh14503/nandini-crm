@@ -188,6 +188,7 @@ model Organization {
   quotations         Quotation[]
   tickets            Ticket[]
   contracts          Contract[]
+  activities         Activity[]
   convertedLeads     Lead[]         @relation("LeadConvertedOrganization")
   billingCityRef     City?          @relation("OrganizationBillingCity", fields: [billingCityId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   shippingCityRef    City?          @relation("OrganizationShippingCity", fields: [shippingCityId], references: [id], onDelete: NoAction, onUpdate: NoAction)
@@ -270,13 +271,15 @@ model Contact {
   isDeleted Boolean   @default(false)
   deletedAt DateTime?
 
-  organization   Organization? @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  emailAddress   EntityEmail[]
-  opportunities  Opportunity[]
-  quotations     Quotation[]
-  tickets        Ticket[]
-  contracts      Contract[]
-  convertedLeads Lead[]        @relation("LeadConvertedContact")
+  organization      Organization?      @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  emailAddress      EntityEmail[]
+  opportunities     Opportunity[]
+  quotations        Quotation[]
+  tickets           Ticket[]
+  contracts         Contract[]
+  activities        Activity[]
+  activityAttendees ActivityAttendee[]
+  convertedLeads    Lead[]             @relation("LeadConvertedContact")
 
   @@index([organizationId])
   @@index([mobile])
@@ -798,6 +801,132 @@ model Contract {
   @@index([isDeleted, assignedTo, createdAt])
 }
 
+// ── Activities ──────────────────────────────────────────────────────────────────
+
+/// A call, meeting, task, note (or any Followup Type) linked to at most one CRM record.
+/// startAt / endAt are TRUE UTC instants (unlike Ticket.dueDate / Contract.renewalReminderDate, which are
+/// BUSINESS_TIMEZONE wall clocks stored as fake UTC). Notes have no times.
+model Activity {
+  id String @id @default(uuid()) @db.NVarChar(50)
+
+  // Activity details
+  /// Option of shared_followup_type (same key/label as Lead/Opportunity.followupType). 'Task' and 'Note' are system values.
+  followupType String @default("Call") @db.NVarChar(30)
+  subject      String @db.NVarChar(200)
+  /// activity_status: Planned | Completed | Cancelled (fixed).
+  status       String @default("Planned") @db.NVarChar(20)
+  /// Owner (username); row-level access is scoped on it.
+  assignedTo   String @db.NVarChar(50)
+
+  /// Linked record: CrmModuleKey (leads | opportunities | contacts | organizations | quotations | tickets | contracts).
+  relatedModule    String? @db.NVarChar(30)
+  relatedId        String? @db.NVarChar(50)
+  /// Display label of the linked record when picked (Form Builder field `relatedTo`).
+  relatedTo        String? @db.NVarChar(200)
+  /// Record number of the linked record when picked (LD-0001 …), for display and search.
+  relatedCode      String? @db.NVarChar(50)
+  /// Denormalized display names; the ids are the links (filled from the related record, editable).
+  organizationName String? @db.NVarChar(200)
+  organizationId   String? @db.NVarChar(50)
+  contact          String? @db.NVarChar(100)
+  contactId        String? @db.NVarChar(50)
+
+  // Schedule (null on Notes)
+  /// UTC instant. All-day: business-tz midnight of the first day.
+  startAt        DateTime?
+  /// UTC instant, >= startAt, at most ACTIVITY_MAX_DURATION_DAYS (31) after it. All-day: business-tz midnight after
+  /// the last day (exclusive). Defaulted from the type's option meta when omitted.
+  endAt          DateTime?
+  allDay         Boolean   @default(false)
+  /// IANA zone the activity was entered in (Phase 1: always BUSINESS_TIMEZONE). Needed for all-day and calendar sync.
+  timeZone       String    @default("Asia/Kolkata") @db.NVarChar(64)
+  location       String?   @db.NVarChar(250)
+  /// activity_reminder option, value = label ('15 minutes before'); minutes come from ACTIVITY_REMINDER_MINUTES
+  /// (activity.schedule.ts; the options are fixed system options). Null = no reminder.
+  reminder       String?   @db.NVarChar(30)
+  /// System: when the reminder is due (UTC). Null when none applies (Note, not Planned, no reminder, no start, deleted).
+  /// Recomputed on every write.
+  remindAt       DateTime?
+  /// System: set by the reminder job in the same transaction that inserts the notifications; cleared when remindAt
+  /// changes. The claim keeps updatedAt unchanged.
+  reminderSentAt DateTime?
+
+  // Outcome & notes
+  customerResponse String?   @db.NVarChar(100)
+  remarks          String?   @db.NVarChar(2000)
+  completedAt      DateTime?
+  completedBy      String?   @db.NVarChar(50)
+
+  /// Bumped on every schedule-relevant change (subject, type, times, all-day, location, owner, attendees, status).
+  /// Phase 2 iCal SEQUENCE.
+  revision Int @default(0)
+
+  /// Admin-defined custom field values `{ [fieldKey]: value }` (see FormFieldDefinition) as JSON.
+  customDataJson String? @db.NVarChar(Max)
+
+  createdBy String    @db.NVarChar(50)
+  updatedBy String?   @db.NVarChar(50)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  isDeleted Boolean   @default(false)
+  deletedAt DateTime?
+
+  organization  Organization?      @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  contactRecord Contact?           @relation(fields: [contactId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  attendees     ActivityAttendee[]
+
+  /// Calendar range (managers / all users). Queries always bound startAt from below (from − 31 days).
+  @@index([isDeleted, startAt])
+  /// Calendar range per owner.
+  @@index([isDeleted, assignedTo, startAt])
+  /// Activities tab of a record.
+  @@index([relatedModule, relatedId])
+  /// Organization / contact roll-ups and name write-through.
+  @@index([organizationId])
+  @@index([contactId])
+  @@index([status])
+  /// Reminder sweep: reminderSentAt IS NULL AND remindAt <= now (equality column first).
+  @@index([reminderSentAt, remindAt])
+  @@index([isDeleted, createdAt])
+  /// Scoped lists ("mine" / row-level access) sorted by creation date.
+  @@index([isDeleted, assignedTo, createdAt])
+}
+
+/// One attendee of an Activity: a colleague (username), a Contact, or an outside email. Synced by identity on save
+/// (only added / removed / changed rows are written), keeping responseStatus of attendees that stay.
+/// Owned by its activity, so it cascades from it (like OpportunityLineItem / EntityEmail).
+///
+/// Hand-written in migration 20261126090000_activities (Prisma can't model filtered indexes; keep them out of this
+/// file and re-check `prisma migrate diff` output after future migrations):
+///   UX_ActivityAttendee_user    UNIQUE (activityId, username)  WHERE username IS NOT NULL
+///   UX_ActivityAttendee_contact UNIQUE (activityId, contactId) WHERE contactId IS NOT NULL
+///   UX_ActivityAttendee_email   UNIQUE (activityId, email)     WHERE kind = 'email'
+model ActivityAttendee {
+  id             String    @id @default(uuid()) @db.NVarChar(50)
+  activityId     String    @db.NVarChar(50)
+  /// user | contact | email
+  kind           String    @db.NVarChar(10)
+  username       String?   @db.NVarChar(50)
+  contactId      String?   @db.NVarChar(50)
+  email          String?   @db.NVarChar(120)
+  /// Display snapshot (user full name, contact name, or the email's name part).
+  name           String    @db.NVarChar(200)
+  /// needsAction | accepted | tentative | declined (Google vocabulary; Phase 2 maps Microsoft's).
+  responseStatus String    @default("needsAction") @db.NVarChar(20)
+  respondedAt    DateTime?
+  sortOrder      Int       @default(0)
+  createdAt      DateTime  @default(now())
+
+  activity      Activity @relation(fields: [activityId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  contactRecord Contact? @relation(fields: [contactId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([activityId])
+  /// Row-level access: "activities I attend".
+  @@index([username])
+  @@index([contactId])
+  @@index([email])
+}
+
 // â”€â”€ Masters (reference data, seeded) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 /// Nature of Call master: tickets must use one of these names; `priority` suggests the ticket priority.
@@ -1088,7 +1217,8 @@ model DropdownCategory {
   id          String    @id @default(uuid()) @db.NVarChar(50)
   key         String    @unique @db.NVarChar(80)
   label       String    @db.NVarChar(120)
-  /// 'shared' | 'organizations' | 'contacts' | 'leads' | 'opportunities' | 'quotations' | 'products' | 'tickets' | 'partner-companies'
+  /// 'shared' or a CRM module key: 'leads' | 'opportunities' | 'quotations' | 'organizations' | 'contacts' | 'products' |
+  /// 'tickets' | 'contracts' | 'activities' | 'partner-companies' (CATEGORY_MODULES in formConfig.defaults.ts)
   module      String    @db.NVarChar(40)
   description String?   @db.NVarChar(300)
   isSystem    Boolean   @default(false)

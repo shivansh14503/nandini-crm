@@ -4,6 +4,7 @@ import type { AuditEntityType } from '../../services/audit.service.js';
 import type { AuthUser } from '../../types/user.types.js';
 import { HttpError } from '../../utils/httpError.js';
 import { FORM_CONFIG_ADMIN_ROLES } from '../form-configs/formConfig.routes.js';
+import { canViewActivity } from '../activities/activity.access.js';
 import { assertRecordAccess } from '../shared/accessControl.js';
 import { displayTime, displayValue, fieldLabel, isDiff, parseChanges, type AuditEntryDto, type AuditRevisionItem } from './audit.format.js';
 import { formConfigAuditService, isFormConfigsEntityType } from './formConfigAudit.service.js';
@@ -35,14 +36,24 @@ const ADMIN_ONLY: ReadonlySet<AuditEntityType> = new Set(['User', 'PdfTemplate',
 
 /**
  * Who may read one record's trail. Admins read every trail. Otherwise: row-scoped records need access to the
- * record, admin-area trails are admin-only (a user's own User trail excepted), and products / partner companies
- * stay readable by any signed-in user, like the records themselves.
+ * record (activities: also their invited colleagues), admin-area trails are admin-only (a user's own User trail
+ * excepted), and products / partner companies stay readable by any signed-in user, like the records themselves.
  */
 async function assertCanReadTrail(user: AuthUser, entityType: AuditEntityType, entityId: string): Promise<void> {
     if (isAuditAdmin(user)) return;
     if (ADMIN_ONLY.has(entityType)) {
         if (entityType === 'User' && entityId === String(user.id)) return;
         throw HttpError.forbidden();
+    }
+    if (entityType === 'Activity') {
+        // Activities extend the rule with their invited colleagues (activity.access.ts).
+        const activity = await prisma.activity.findUnique({
+            where: { id: entityId },
+            select: { ...OWNER_SELECT, attendees: { select: { username: true } } },
+        });
+        if (!activity) throw HttpError.notFound('Record not found');
+        if (!canViewActivity(user, activity)) throw HttpError.forbidden('You do not have permission to access or modify this record.');
+        return;
     }
     const loadOwner = ROW_SCOPED_OWNERS[entityType];
     if (!loadOwner) return;
@@ -69,6 +80,8 @@ const ENTITY_TYPES: Record<string, AuditEntityType> = {
     tickets: 'Ticket',
     contract: 'Contract',
     contracts: 'Contract',
+    activity: 'Activity',
+    activities: 'Activity',
     'partner-company': 'PartnerCompany',
     'partner-companies': 'PartnerCompany',
     partnercompany: 'PartnerCompany',
@@ -160,6 +173,17 @@ function toRevisions(entry: AuditEntryDto, time: string): AuditRevisionItem[] {
                 return { ...base, title: `${fieldLabel(field)} updated`, from: displayValue(diff.from), to: displayValue(diff.to), tag: 'Updated', note };
             });
         return items.length > 0 ? items : [{ ...base, title: 'Record updated', tag: 'Updated', note }];
+    }
+
+    if (entry.action === 'RSVP') {
+        // An invited colleague's reply: the attendee list before / after (activity.service.ts respond).
+        const items = Object.entries(changes)
+            .filter(([, value]) => isDiff(value))
+            .map(([field, value]) => {
+                const diff = value as { from: unknown; to: unknown };
+                return { ...base, title: `${fieldLabel(field)} updated`, from: displayValue(diff.from), to: displayValue(diff.to), tag: 'Reply' };
+            });
+        return items.length > 0 ? items : [{ ...base, title: 'Replied to invitation', tag: 'Reply' }];
     }
 
     const known = ACTION_TITLES[entry.action] ?? { title: entry.action, tag: entry.action };

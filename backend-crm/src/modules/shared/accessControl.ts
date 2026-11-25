@@ -4,11 +4,12 @@ import { HttpError } from '../../utils/httpError.js';
 
 /**
  * Row-level access for the core CRM entities (organizations, contacts, leads, opportunities, quotations, tickets,
- * contracts).
+ * contracts, activities).
  *
  * Global roles see and change every record. Every other role is scoped to the records it owns (assignee) or
- * created. Role names are matched case-insensitively with any dash style, so "Director - Operations" typed with a
- * hyphen is the same role as the seeded "Director – Operations" (en dash).
+ * created. Activities extend this rule with their attendees: an invited colleague sees the activity but may only
+ * reply to it (see activities/activity.access.ts). Role names are matched case-insensitively with any dash style,
+ * so "Director - Operations" typed with a hyphen is the same role as the seeded "Director – Operations" (en dash).
  */
 export const GLOBAL_ACCESS_ROLES = [
     'Admin',

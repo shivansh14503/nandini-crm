@@ -23,6 +23,7 @@ import { commissionIssues, documentationIssues, opportunityFormSchema } from '..
 import type { OpportunityFormData } from '@/types/opportunity.types';
 import { opportunityService } from '../../services/opportunity.service';
 import type { RecordAuditStamp } from '../common/Drawer/RecordAuditFooter';
+import { activityOnlyTypeIssues } from '@/utils/followupTypes';
 
 // Modular Opportunity Form Sections
 import {
@@ -148,6 +149,8 @@ export default function OpportunityForm({
     const setFollowUpPending = useCallback((pending: boolean) => {
         followUpDecisionPending.current = pending;
     }, []);
+    // The saved Followup Type: a stored Task / Note (Activities-only) stays, but an edit can't change to one.
+    const savedFollowupType = useRef('');
     const { methods, toast, showToast, closeToast, createSubmitHandler, stepwise } =
         useRhfForm<OpportunityFormData>({
             schema: opportunityFormSchema,
@@ -157,6 +160,7 @@ export default function OpportunityForm({
                 ...documentationIssues(values),
                 ...leadSourceDetailIssues(values),
                 ...(mode === 'edit' ? followUpEditIssues(values, followUpDecisionPending.current) : []),
+                ...activityOnlyTypeIssues(values.followupType, mode === 'edit' ? savedFollowupType.current : undefined),
             ],
             module: 'opportunities',
             defaultValues: { ...DEFAULT_OPPORTUNITY_FORM, ...initialData },
@@ -193,6 +197,7 @@ export default function OpportunityForm({
                 if (active && found) {
                     // Every edit records a fresh customer response, so the edit form starts without one.
                     reset(mode === 'edit' ? { ...found, customerResponse: '', remarks: '' } : found);
+                    savedFollowupType.current = found.followupType ?? '';
                     setRecordCode(found.opportunityCode ?? '');
                     setAudit({ createdAt: found.createdAt, createdBy: found.createdBy, updatedAt: found.updatedAt, updatedBy: found.updatedBy });
                 }

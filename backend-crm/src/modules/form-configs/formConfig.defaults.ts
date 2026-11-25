@@ -1,3 +1,5 @@
+import { ACTIVITY_REMINDERS, ACTIVITY_STATUSES } from '../activities/activity.schedule.js';
+
 /**
  * Default dropdown categories / options and built-in form field definitions, seeded by `formConfig.seed.ts`.
  *
@@ -20,6 +22,7 @@ export const CRM_MODULES = [
     'products',
     'tickets',
     'contracts',
+    'activities',
     'partner-companies',
 ] as const;
 export type CrmModuleKey = (typeof CRM_MODULES)[number];
@@ -75,6 +78,7 @@ export const MODULE_TABS: Record<CrmModuleKey, { key: string; label: string }[]>
         { key: 'partner_company', label: 'Partner Company' },
     ],
     contracts: [{ key: 'overview', label: 'Overview' }],
+    activities: [{ key: 'overview', label: 'Overview' }],
     'partner-companies': [
         { key: 'company_info', label: 'Company Information' },
         { key: 'address', label: 'Address Information' },
@@ -135,13 +139,33 @@ export const APP_REQUIRED_CATEGORY_KEYS: ReadonlySet<string> = new Set([
     'contact_communication_type',
     'quote_terms_template',
     'quote_payment_terms',
+    // The calendar filters and the activity drawer read them by key.
+    'activity_status',
+    'activity_reminder',
 ]);
 
 /**
  * Built-in dropdowns whose options are fixed: the records' API validates the value against exactly these options
  * (Yes / No fields). Admins can reorder them, rename how they read and pick the default, but not add options.
  */
-export const FIXED_OPTION_CATEGORY_KEYS: ReadonlySet<string> = new Set(['shared_left_job', 'product_contract_create', 'opportunity_add_document', 'opportunity_commission', 'opportunity_commission_type']);
+export const FIXED_OPTION_CATEGORY_KEYS: ReadonlySet<string> = new Set([
+    'shared_left_job',
+    'product_contract_create',
+    'opportunity_add_document',
+    'opportunity_commission',
+    'opportunity_commission_type',
+    'activity_status',
+    'activity_reminder',
+]);
+
+/**
+ * System options of shared_followup_type offered only on Activities: Lead/Opportunity/Convert forms hide them, they
+ * can't be the dropdown default, and their APIs refuse them. Mirrors frontend-crm/src/types/activity.types.ts.
+ */
+export const ACTIVITY_ONLY_FOLLOWUP_TYPES = ['Task', 'Note'] as const;
+
+/** The Followup Type dropdown, shared by Leads, Opportunities and Activities. */
+export const FOLLOWUP_TYPE_CATEGORY_KEY = 'shared_followup_type';
 
 const yesNo = (first: 'No' | 'Yes'): DefaultOption[] => withSystem(first === 'No' ? ['No', 'Yes'] : ['Yes', 'No'], ['Yes', 'No']);
 
@@ -199,8 +223,19 @@ export const DEFAULT_CATEGORIES: DefaultCategory[] = [
         key: 'shared_followup_type',
         label: 'Followup Type',
         module: 'shared',
-        description: 'How the next follow-up happens (Leads, Opportunities).',
-        options: ['Call', 'Meeting', 'Demo / Presentation', 'Email', 'WhatsApp', 'Site Visit'],
+        description: 'How the follow-up or activity happens (Leads, Opportunities, Activities). Task and Note are offered on Activities only.',
+        // Option meta: the activity's default length in minutes and its icon (kept on the option, so a rename keeps
+        // them). Task and Note are system options: activities give them code-level rules (activity.schedule.ts).
+        options: [
+            { value: 'Call', meta: { durationMinutes: 15, icon: 'call' } },
+            { value: 'Meeting', meta: { durationMinutes: 60, icon: 'meeting' } },
+            { value: 'Demo / Presentation', meta: { durationMinutes: 60, icon: 'presentation' } },
+            { value: 'Email', meta: { durationMinutes: 0, icon: 'email' } },
+            { value: 'WhatsApp', meta: { durationMinutes: 0, icon: 'whatsapp' } },
+            { value: 'Site Visit', meta: { durationMinutes: 120, icon: 'visit' } },
+            { value: 'Task', isSystem: true, meta: { durationMinutes: 0, icon: 'task' } },
+            { value: 'Note', isSystem: true, meta: { icon: 'note' } },
+        ],
     },
     {
         key: 'shared_customer_response',
@@ -598,6 +633,22 @@ export const DEFAULT_CATEGORIES: DefaultCategory[] = [
     },
     { key: 'contract_type', label: 'Contract Type', module: 'contracts', options: ['No of Visit', 'Remote Support'] },
 
+    // ── Activities ──
+    {
+        key: 'activity_status',
+        label: 'Activity Status',
+        module: 'activities',
+        description: "'Planned' activities get reminders and can be overdue; 'Completed' and 'Cancelled' close them. Fixed options.",
+        options: withSystem([...ACTIVITY_STATUSES], [...ACTIVITY_STATUSES]),
+    },
+    {
+        key: 'activity_reminder',
+        label: 'Reminder',
+        module: 'activities',
+        description: 'When the owner and invited colleagues get an in-app reminder before the start. Fixed options.',
+        options: withSystem([...ACTIVITY_REMINDERS], [...ACTIVITY_REMINDERS]),
+    },
+
     // ── Partner companies ──
     {
         key: 'partner_nature',
@@ -641,6 +692,8 @@ export const DEFAULT_SELECTED_OPTIONS: Readonly<Record<string, readonly string[]
     ticket_support_type: ['Free'],
     ticket_support_mode: ['Offsite Support'],
     contract_status: ['Not Started'],
+    activity_status: ['Planned'],
+    activity_reminder: ['15 minutes before'],
 };
 
 // ── Built-in field definitions ───────────────────────────────────────────────
@@ -970,6 +1023,34 @@ const RAW_DEFAULT_FIELDS: DefaultField[] = [
         t('billDate', 'Bill Date', { type: 'date', soft: true }),
         t('billAmount', 'Bill Amount', { type: 'amount', soft: true }),
         t('description', 'Description', { type: 'textarea' }),
+    ]),
+
+    // ── Activities ──
+    ...section('activities', 'overview', 'Activity Details', [
+        // Same field, key, label and list as the Lead / Opportunity Followup Type (Task and Note offered here only).
+        sel('followupType', 'Followup Type', 'shared_followup_type', { req: true }),
+        t('subject', 'Subject', { req: true }),
+        sel('status', 'Status', 'activity_status', { req: true }),
+        t('assignedTo', 'Assigned to', { type: 'lookup', req: true }),
+        // The linked record (type + record picker); the Activities tabs depend on it, so it can't be hidden.
+        t('relatedTo', 'Related To', { type: 'lookup', lock: true }),
+        t('organizationName', 'Organization Name', { type: 'lookup' }),
+        t('contact', 'Contact', { type: 'lookup' }),
+    ]),
+    ...section('activities', 'overview', 'Schedule', [
+        // Required for every type but Note (the API enforces it): locked so it can't be hidden.
+        // All-day activities send startDay / endDay instead; the form binds both modes to these two fields.
+        t('startAt', 'Start', { type: 'datetime', lock: true }),
+        t('endAt', 'End', { type: 'datetime' }),
+        t('allDay', 'All Day', { type: 'checkbox' }),
+        sel('reminder', 'Reminder', 'activity_reminder'),
+        t('location', 'Location'),
+        // Colleagues, contacts and outside emails (custom control).
+        t('attendees', 'Attendees', { type: 'lookup' }),
+    ]),
+    ...section('activities', 'overview', 'Outcome & Notes', [
+        sel('customerResponse', 'Customer Response', 'shared_customer_response'),
+        t('remarks', 'Remarks', { type: 'textarea' }),
     ]),
 
     // ── Partner companies ──

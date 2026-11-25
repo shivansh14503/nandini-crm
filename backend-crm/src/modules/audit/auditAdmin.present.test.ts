@@ -146,6 +146,7 @@ describe('summarize', () => {
         assert.equal(summarize('UPDATE', 'leads', many, labeler), 'Changed A1, B2, C3 +2 more');
         assert.equal(summarize('UPDATE', 'form-customization', { reordered: 4 }, labeler), 'Reordered 4 items');
         assert.equal(summarize('FOLLOW_UP', 'leads', { status: { from: 'New', to: 'Won' }, followUp: {} }, labeler), 'Follow-up recorded: Status');
+        assert.equal(summarize('RSVP', 'activities', { attendees: { from: [], to: [] } }, labeler), 'Replied to invitation');
     });
 
     it('describes events', () => {

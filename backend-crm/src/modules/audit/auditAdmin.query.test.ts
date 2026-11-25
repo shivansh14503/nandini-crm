@@ -108,7 +108,7 @@ describe('auditListQuerySchema', () => {
             category: 'security',
             severity: ['warning'],
             source: 'ui,job',
-            entityType: 'partner-companies,Lead,contracts',
+            entityType: 'partner-companies,Lead,contracts,activities',
             user: 'asha',
         });
         assert.deepEqual(parsed.module, ['leads', 'contacts']);
@@ -116,7 +116,7 @@ describe('auditListQuerySchema', () => {
         assert.deepEqual(parsed.category, ['SECURITY']);
         assert.deepEqual(parsed.severity, ['WARNING']);
         assert.deepEqual(parsed.source, ['UI', 'JOB']);
-        assert.deepEqual(parsed.entityType, ['PartnerCompany', 'Lead', 'Contract']);
+        assert.deepEqual(parsed.entityType, ['PartnerCompany', 'Lead', 'Contract', 'Activity']);
         assert.deepEqual(parsed.user, ['asha']);
     });
 

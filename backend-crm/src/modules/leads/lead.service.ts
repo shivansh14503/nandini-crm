@@ -8,7 +8,7 @@ import { generateEntityCode } from '../../utils/codeGenerator.js';
 import { HttpError } from '../../utils/httpError.js';
 import { daysAgo, fromDateOnly } from '../../utils/mappers.js';
 import { parsePagination } from '../../utils/pagination.js';
-import { asPayload, checkModulePayload, loadModuleFieldConfig, validateModulePayload } from '../form-configs/customFieldValidator.js';
+import { asPayload, checkModulePayload, loadModuleFieldConfig, throwFieldIssues, validateModulePayload } from '../form-configs/customFieldValidator.js';
 import { assertAssigneeValid, assertRecordAccess, buildAccessScopeWhere } from '../shared/accessControl.js';
 import { emailsInclude, normalizeEmails, replaceEmails } from '../shared/entityEmails.js';
 import { assertEmailsDeliverable, queueEmailVerification } from '../email-verification/emailVerification.service.js';
@@ -19,6 +19,7 @@ import { codeSearchPrefix, phoneSearch, phoneVariants, phoneWhere } from '../sha
 import { assertDeletedRow, lockRecords, restoreData, runInTransaction, softDeleteData, type BulkDeleteResult } from '../shared/transactions.js';
 import { assertTaxIdsUnique } from '../shared/taxIdentifiers.js';
 import { assertLeadSourceDetails, LEAD_SOURCE_DETAIL_KEYS } from '../shared/leadSource.js';
+import { activityOnlyTypeIssues } from '../shared/followupTypes.js';
 import { toLeadData, toLeadDto, type LeadDto } from './lead.mapper.js';
 import { resolveAddressPlaces } from '../cities/cityAddresses.js';
 import {
@@ -165,6 +166,8 @@ export const leadService = {
         const input = leadInputSchema.parse(body);
         input.customFields = await validateModulePayload('leads', asPayload(body), input.customFields);
         assertLeadSourceDetails(input);
+        // Task and Note are Followup Types of Activities only.
+        throwFieldIssues(activityOnlyTypeIssues(input.followupType));
         assertStatusTransition(null, input.status);
         // Every new lead needs its first follow-up, date and time, later than now (checked at save time).
         const now = businessNow();
@@ -207,6 +210,8 @@ export const leadService = {
             assertStatusTransition(existing.status, input.status);
             // Re-checked when the edit touches them, so other edits of an older record aren't refused.
             if (LEAD_SOURCE_DETAIL_KEYS.some((key) => key in patch)) assertLeadSourceDetails(input);
+            // Task / Note are Activities-only: refused when the value changes to one (a stored one stays editable).
+            throwFieldIssues(activityOnlyTypeIssues(input.followupType, before.followupType));
             const plan = planLeadEdit({
                 state: existing,
                 response,

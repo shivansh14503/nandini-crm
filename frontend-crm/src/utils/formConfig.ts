@@ -5,6 +5,7 @@ import type {
     FormConfigsPayload,
     FormFieldDefinitionDto,
 } from '@/types/formConfig.types';
+import { isActivityOnlyFollowupType } from '@/utils/followupTypes';
 
 /**
  * Pure helpers over the admin form configuration, shared by hooks, the FormConfig context, form resolvers and
@@ -29,6 +30,19 @@ export function activeOptionValues(category: DropdownCategoryDto | undefined, fa
         .filter((o) => o.isActive)
         .sort((a, b) => a.sortOrder - b.sortOrder)
         .map((o) => o.value);
+}
+
+/** The Followup Type list leads, opportunities and activities share. */
+export const FOLLOWUP_TYPE_CATEGORY_KEY = 'shared_followup_type';
+
+/**
+ * The options a module's form offers from a dropdown. Task and Note of the shared Followup Type list are offered on
+ * Activities only: leads and opportunities share the list but not those two (their APIs refuse them too). Every
+ * other list, and every list when no module is given, is returned unchanged.
+ */
+export function optionsForModule(categoryKey: string | null | undefined, values: string[], module: CrmModuleKey | null | undefined): string[] {
+    if (categoryKey !== FOLLOWUP_TYPE_CATEGORY_KEY || !module || module === 'activities') return values;
+    return values.filter((value) => !isActivityOnlyFollowupType(value));
 }
 
 /** Values an admin marked as default (active options only, in admin order). Empty → the field starts empty. */

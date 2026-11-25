@@ -12,6 +12,7 @@ import { resolveScorecard } from '@/components/common/scorecard/scorecardUtils';
 import { leadStatusSummaryItems } from '@/components/leads/master/leadStatusCards';
 import { ROUTES } from '@/config/constants';
 import {
+    useActivities,
     useContacts,
     useContracts,
     useLeads,
@@ -37,6 +38,7 @@ const LIST_ROUTE: Record<CrmModuleKey, string> = {
     tickets: ROUTES.TICKETS,
     'partner-companies': ROUTES.PARTNER_COMPANIES,
     contracts: ROUTES.CONTRACTS,
+    activities: ROUTES.ACTIVITIES,
 };
 
 const NO_ROWS: readonly unknown[] = [];
@@ -44,11 +46,23 @@ const NO_ROWS: readonly unknown[] = [];
 /** "opportunities" → "opportunity", "leads" → "lead". */
 const singular = (noun: string) => (noun.endsWith('ies') ? `${noun.slice(0, -3)}y` : noun.replace(/s$/, ''));
 
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * Activities grow fastest of all modules, so the preview loads a window around today (30 days back, 60 ahead)
+ * rather than every activity. Fixed for the life of the preview so the query key stays stable.
+ */
+function activityPreviewWindow(): { from: string; to: string } {
+    const now = Date.now();
+    return { from: new Date(now - 30 * DAY_MS).toISOString(), to: new Date(now + 60 * DAY_MS).toISOString() };
+}
+
 /**
  * The module's records, from the same cache as its list screen. Every hook runs (so the hook order never
  * changes), but only the selected module's list is fetched.
  */
 function usePreviewRecords(module: CrmModuleKey): { rows: readonly unknown[]; loading: boolean; failed: boolean } {
+    const [activityWindow] = useState(activityPreviewWindow);
     const queries = {
         leads: useLeads(undefined, { enabled: module === 'leads' }),
         opportunities: useOpportunities(undefined, { enabled: module === 'opportunities' }),
@@ -59,6 +73,7 @@ function usePreviewRecords(module: CrmModuleKey): { rows: readonly unknown[]; lo
         tickets: useTickets(undefined, { enabled: module === 'tickets' }),
         'partner-companies': usePartnerCompanies(undefined, { enabled: module === 'partner-companies' }),
         contracts: useContracts(undefined, { enabled: module === 'contracts' }),
+        activities: useActivities(activityWindow, { enabled: module === 'activities' }),
     } satisfies Record<CrmModuleKey, unknown>;
     const query = queries[module];
     return { rows: (query.data as readonly unknown[] | undefined) ?? NO_ROWS, loading: query.isPending, failed: query.isError };
