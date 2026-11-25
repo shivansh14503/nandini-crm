@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import { useDropdownOptions } from '@/hooks/queries/useFormConfigs';
-import type { DefaultScorecard, ScorecardAmount } from './useModuleScorecard';
+import type { DefaultScorecard, ScorecardAmount } from './scorecardItems';
 import { SCORECARD_PALETTE, scorecardPaletteHex } from './scorecardUtils';
 
 /** A stored money value as a number (Decimal columns can arrive as strings; missing ones count as 0). */

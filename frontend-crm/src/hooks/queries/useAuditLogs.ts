@@ -14,7 +14,9 @@ export type AuditEntityType =
     | 'tickets'
     | 'partner-companies'
     /** Form Customization admin trail: the id is a module key, `shared`, or `all`. */
-    | 'form-configs';
+    | 'form-configs'
+    /** Admin › List Scorecards trail: the id is a module key. */
+    | 'scorecards';
 
 /** One stored audit row: `changes` is a `{ field: { from, to } }` diff for updates and a record snapshot on create. */
 export interface AuditEntry {

@@ -1,5 +1,5 @@
 import { OPPORTUNITY_SALES_STAGES, type Opportunity } from '@/types/opportunity.types';
-import type { DefaultScorecard, ScorecardAmount } from '../../common/scorecard/useModuleScorecard';
+import type { DefaultScorecard, ScorecardAmount } from '../../common/scorecard/scorecardItems';
 import { LINE_ITEM_CARD_AMOUNTS, scorecardNumber as num, useDropdownScorecard } from '../../common/scorecard/stageScorecard';
 
 /** Dropdown category of the Sales Stage field. */
