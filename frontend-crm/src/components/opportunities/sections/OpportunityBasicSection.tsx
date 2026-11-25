@@ -491,7 +491,7 @@ export function OpportunityBasicSection({ notify, onDecisionPendingChange }: Opp
                 )}
 
                 {addDocument === 'Yes' && (
-                    <RhfTextField<F> name="documentDate" label="Document Date" hint="Date on the document" type="date" fieldSize="sm" />
+                    <RhfTextField<F> name="documentDate" label="Document Date" hint="Date on the document" type="date" fieldSize="sm" allowPastDates />
                 )}
             </FormGrid>
 

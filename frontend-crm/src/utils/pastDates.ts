@@ -3,7 +3,8 @@ import type { ConfigValidationIssue } from './formConfig';
 /**
  * Dates and times can't be set in the past anywhere in the CRM. Pickers grey out past days (`min`), and forms
  * reject a past value before submit. Values a record already holds pass unchanged, so an old record can still be
- * edited. The API enforces the same rule (backend-crm/src/validators/notInPast.ts).
+ * edited. The API enforces the same rule (backend-crm/src/validators/notInPast.ts). Fields that record a past date
+ * (an opportunity's Document Date) opt out with RhfTextField's `allowPastDates`.
  */
 
 const pad = (n: number) => String(n).padStart(2, '0');
