@@ -7,6 +7,8 @@ export const CACHE_KEYS = {
     addressMaster: 'cache:address-master',
     dashboard: (name: string) => `cache:dashboard:${name}`,
     search: (query: string) => `cache:search:${query}`,
+    /** A user's unread notification count (navbar bell); dropped by every write to their notifications. */
+    notificationsUnread: (username: string) => `cache:notifications:unread:${username.trim().toLowerCase()}`,
 } as const;
 
 const SCAN_BATCH_SIZE = 200;

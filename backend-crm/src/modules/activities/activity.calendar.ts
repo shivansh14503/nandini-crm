@@ -136,12 +136,22 @@ export function activityCalendarWhere(user: AuthUser, filters: CalendarFilters, 
     return { AND: and };
 }
 
+/**
+ * Bounds on a lead / opportunity `nextFollowupDate` (DATE): the calendar passes a window (`gte` / `lte`), the morning
+ * summary one day or "before today" (`lt`).
+ */
+export interface FollowupDayFilter {
+    gte?: Date;
+    lte?: Date;
+    lt?: Date;
+}
+
 /** Open leads (no closing status: Converted and every "Closes the lead" status) with a follow-up in the window. */
 export function leadFollowupWhere(
     user: AuthUser,
     filters: Pick<CalendarFilters, 'users' | 'types'>,
     closingStatuses: ReadonlySet<string>,
-    days: { gte: Date; lte: Date },
+    days: FollowupDayFilter,
 ): Prisma.LeadWhereInput {
     const and: Prisma.LeadWhereInput[] = [
         { isDeleted: false },
@@ -155,7 +165,7 @@ export function leadFollowupWhere(
 }
 
 /** Open opportunities (not Closed Won / Lost) with a follow-up in the window. */
-export function opportunityFollowupWhere(user: AuthUser, filters: Pick<CalendarFilters, 'users' | 'types'>, days: { gte: Date; lte: Date }): Prisma.OpportunityWhereInput {
+export function opportunityFollowupWhere(user: AuthUser, filters: Pick<CalendarFilters, 'users' | 'types'>, days: FollowupDayFilter): Prisma.OpportunityWhereInput {
     const and: Prisma.OpportunityWhereInput[] = [
         { isDeleted: false },
         buildAccessScopeWhere(user, 'assignedTo'),

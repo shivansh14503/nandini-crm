@@ -1,4 +1,5 @@
 import { ENV } from '../../config/env.js';
+import { logger } from '../../config/logger.js';
 import { prisma, type TransactionClient } from '../../config/prisma.js';
 import type { Prisma } from '../../generated/prisma/client.js';
 import { auditService, diffRecords } from '../../services/audit.service.js';
@@ -17,6 +18,7 @@ import {
 } from '../form-configs/customFieldValidator.js';
 import { FOLLOWUP_TYPE_CATEGORY_KEY } from '../form-configs/formConfig.defaults.js';
 import type { DropdownCategoryDto } from '../form-configs/formConfig.service.js';
+import { notifyActivityParticipants, scheduleActivityReminder } from '../notifications/notification.reminders.js';
 import { assertAssigneeValid } from '../shared/accessControl.js';
 import { assertDeletedRow, lockRecords, restoreData, runInTransaction, softDeleteData, type BulkDeleteResult } from '../shared/transactions.js';
 import { activityScopeWhere, canEditActivity, canViewActivity, myResponseOf, type ActivityAccessRow } from './activity.access.js';
@@ -197,10 +199,28 @@ function submittedKeys(patch: Record<string, unknown>): Set<string> {
 // ── Writes ───────────────────────────────────────────────────────────────────
 
 /**
- * Inserts an activity inside the caller's transaction (used by `create`); cache invalidation is the caller's job.
- * Activities are unnumbered (no document series).
+ * After a committed save (never inside its transaction): arms the reminder's delayed job and tells a new owner /
+ * newly invited colleagues (notification.reminders.ts). Failures are logged, never thrown: the save has happened, and
+ * the reminder sweep re-delivers anything missed.
  */
-export async function createActivityRecord(tx: TransactionClient, input: ActivityInput, schedule: Schedule, user: AuthUser, now = new Date()): Promise<ActivityView> {
+async function afterActivityCommit(before: ActivityRow | null, after: ActivityRow, user: AuthUser): Promise<void> {
+    try {
+        await scheduleActivityReminder(after);
+    } catch (err) {
+        logger.warn({ err: (err as Error).message, activityId: after.id }, 'Could not schedule the activity reminder; the reminder sweep covers it');
+    }
+    try {
+        await notifyActivityParticipants(before, after, user);
+    } catch (err) {
+        logger.warn({ err: (err as Error).message, activityId: after.id }, 'Could not notify the activity owner / invitees');
+    }
+}
+
+/**
+ * Inserts an activity inside the caller's transaction and returns the stored row (attendees included); cache
+ * invalidation and `afterActivityCommit` are the caller's job. Activities are unnumbered (no document series).
+ */
+async function insertActivityRow(tx: TransactionClient, input: ActivityInput, schedule: Schedule, user: AuthUser, now: Date): Promise<ActivityRow> {
     const assignedTo = (await assertAssigneeValid(tx, input.assignedTo)) ?? user.username;
     const links = await resolveActivityLinks(tx, input, undefined, user);
     const attendees = await normalizeAttendees(tx, input.attendees, assignedTo);
@@ -218,7 +238,15 @@ export async function createActivityRecord(tx: TransactionClient, input: Activit
         include: WITH_ATTENDEES,
     });
     await auditService.record(tx, { entityType: 'Activity', entityId: row.id, action: 'CREATE', changedBy: user.username, changes: toActivityDto(row) });
-    return toActivityView(row, user);
+    return row;
+}
+
+/**
+ * Inserts an activity inside the caller's transaction; cache invalidation and notifications are the caller's job.
+ * Activities are unnumbered (no document series).
+ */
+export async function createActivityRecord(tx: TransactionClient, input: ActivityInput, schedule: Schedule, user: AuthUser, now = new Date()): Promise<ActivityView> {
+    return toActivityView(await insertActivityRow(tx, input, schedule, user, now), user);
 }
 
 function listWhere(filters: ReturnType<typeof activityListQuerySchema.parse>, search: string | undefined, user: AuthUser, now: Date): Prisma.ActivityWhereInput {
@@ -324,14 +352,15 @@ export const activityService = {
         const schedule = scheduleOf(input, config);
         const now = new Date();
         throwFieldIssues(activityPastIssues({ ...input, ...schedule }, undefined, now, ENV.BUSINESS_TIMEZONE));
-        const created = await runInTransaction((tx) => createActivityRecord(tx, input, schedule, user, now));
+        const row = await runInTransaction((tx) => insertActivityRow(tx, input, schedule, user, now));
         await cacheService.invalidateEntityCaches('activities');
-        return created;
+        await afterActivityCommit(null, row, user);
+        return toActivityView(row, user);
     },
 
     async update(id: string, patch: Record<string, unknown>, user: AuthUser): Promise<ActivityView> {
         const config = await loadActivityConfig();
-        const updated = await runInTransaction(async (tx) => {
+        const { existing, row } = await runInTransaction(async (tx) => {
             await lockRecords(tx, 'activity', [id]);
             const existing = await tx.activity.findFirst({ where: { id, isDeleted: false }, include: WITH_ATTENDEES });
             if (!existing) throw notFound();
@@ -379,11 +408,12 @@ export const activityService = {
             if (Object.keys(changes).length > 0) {
                 await auditService.record(tx, { entityType: 'Activity', entityId: id, action: 'UPDATE', changedBy: user.username, changes });
             }
-            return toActivityView(row, user);
+            return { existing, row };
         });
 
         await cacheService.invalidateEntityCaches('activities');
-        return updated;
+        await afterActivityCommit(existing, row, user);
+        return toActivityView(row, user);
     },
 
     async remove(id: string, user: AuthUser): Promise<void> {
@@ -407,19 +437,23 @@ export const activityService = {
      * already passed is not re-armed). Writes a RESTORE entry pointing at the DELETE it reverses (`revertsId`).
      */
     async restore(id: string, user: AuthUser, revertsId?: string): Promise<void> {
-        await runInTransaction(async (tx) => {
+        const { before, after } = await runInTransaction(async (tx) => {
             await lockRecords(tx, 'activity', [id]);
-            const row = assertDeletedRow(await tx.activity.findUnique({ where: { id } }), 'Activity');
+            const row = assertDeletedRow(await tx.activity.findUnique({ where: { id }, include: WITH_ATTENDEES }), 'Activity');
             const now = new Date();
             const due = computeRemindAt({ ...row, isDeleted: false }, row.timeZone);
             const remindAt = due && due > now ? due : null;
-            await tx.activity.update({
+            const restored = await tx.activity.update({
                 where: { id },
                 data: { ...restoreData(user), remindAt, reminderSentAt: nextReminderSentAt(row, remindAt) },
+                include: WITH_ATTENDEES,
             });
             await auditService.record(tx, { entityType: 'Activity', entityId: id, action: 'RESTORE', changedBy: user.username, revertsId });
+            return { before: row, after: restored };
         });
         await cacheService.invalidateEntityCaches('activities');
+        // Re-arms the reminder; owner and attendees are unchanged, so nobody is told again.
+        await afterActivityCommit(before, after, user);
     },
 
     async bulkRemove(ids: string[], user: AuthUser): Promise<BulkDeleteResult> {
@@ -451,7 +485,7 @@ export const activityService = {
      */
     async respond(id: string, body: unknown, user: AuthUser): Promise<ActivityView> {
         const { responseStatus } = respondSchema.parse(body);
-        const updated = await runInTransaction(async (tx) => {
+        const { existing, row } = await runInTransaction(async (tx) => {
             await lockRecords(tx, 'activity', [id]);
             const existing = await tx.activity.findFirst({ where: { id, isDeleted: false }, include: WITH_ATTENDEES });
             if (!existing) throw notFound();
@@ -465,10 +499,12 @@ export const activityService = {
             if (Object.keys(changes).length > 0) {
                 await auditService.record(tx, { entityType: 'Activity', entityId: id, action: 'RSVP', changedBy: user.username, changes });
             }
-            return toActivityView(row, user);
+            return { existing, row };
         });
         await cacheService.invalidateEntityCaches('activities');
-        return updated;
+        // A reply changes no owner or invitation; this only re-arms the reminder (a no-op for a pending one).
+        await afterActivityCommit(existing, row, user);
+        return toActivityView(row, user);
     },
 
     /** `GET /meta`: what the calendar and the form need before any activity is loaded. */

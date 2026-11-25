@@ -7,6 +7,11 @@ import { resolveDatabaseUrl } from './databaseUrl.js';
 /** Used only outside production so local dev starts without a secret; production must set JWT_SECRET. */
 const DEV_JWT_SECRET = 'dev-only-insecure-jwt-secret-do-not-use-in-production';
 
+/** `KEY=` (blank in .env) reads as not set. */
+const blankToUndefined = (value: unknown) => (typeof value === 'string' && value.trim() === '' ? undefined : value);
+/** Optional text setting; blank = not set. */
+const optionalText = z.preprocess(blankToUndefined, z.string().trim().optional());
+
 const envSchema = z
     .object({
         NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
@@ -75,6 +80,49 @@ const envSchema = z
         AUDIT_DIGEST_DIR: z.string().trim().min(1).optional(),
         /** Longest a "Verify integrity" run may take; it reads the whole ledger (~100 s per million entries). */
         AUDIT_VERIFY_TIMEOUT_MS: z.coerce.number().int().min(60_000).max(6 * 60 * 60 * 1000).default(30 * 60 * 1000),
+
+        /** Notifications (navbar bell): read rows older than this many days are deleted nightly, any row after twice that. */
+        NOTIFICATION_RETENTION_DAYS: z.coerce.number().int().min(1).max(3650).default(90),
+        /** The 9 AM morning summary email (it also needs MAIL_ENABLED and SMTP_HOST). */
+        MORNING_SUMMARY_ENABLED: z
+            .enum(['true', 'false'])
+            .default('true')
+            .transform((value) => value === 'true'),
+        /** When the morning summary goes out, in BUSINESS_TIMEZONE (cron: minute hour day-of-month month day-of-week). */
+        MORNING_SUMMARY_CRON: z
+            .string()
+            .trim()
+            .default('0 9 * * 1-6')
+            .refine((pattern) => [5, 6].includes(pattern.split(/\s+/).length), 'MORNING_SUMMARY_CRON must be a cron pattern such as "0 9 * * 1-6".'),
+        /** Users with nothing due get no morning summary. */
+        MORNING_SUMMARY_SKIP_EMPTY: z
+            .enum(['true', 'false'])
+            .default('true')
+            .transform((value) => value === 'true'),
+
+        /** Outgoing email (src/services/mail.service.ts). Off by default: nothing is sent until this is true and SMTP_HOST is set. */
+        MAIL_ENABLED: z
+            .enum(['true', 'false'])
+            .default('false')
+            .transform((value) => value === 'true'),
+        /** SMTP server, e.g. smtp-relay.gmail.com (Google Workspace SMTP relay) or smtp.gmail.com (a mailbox + app password). */
+        SMTP_HOST: optionalText,
+        SMTP_PORT: z.coerce.number().int().min(1).max(65_535).default(587),
+        /** true = TLS from the first byte (port 465); false = STARTTLS upgrade (port 587). */
+        SMTP_SECURE: z
+            .enum(['true', 'false'])
+            .default('false')
+            .transform((value) => value === 'true'),
+        /** Optional: the relay authenticates the server by its IP address; a mailbox needs both. */
+        SMTP_USER: optionalText,
+        SMTP_PASS: optionalText,
+        /** Host name sent in EHLO (Google's relay refuses a bare `localhost`), e.g. crm.nandiniinfosys.com. */
+        SMTP_EHLO_NAME: optionalText,
+        MAIL_FROM: z.string().trim().min(3).default('Nandini CRM <crm@nandiniinfosys.com>'),
+        /** Address of the web app as users open it, for links in emails. Defaults to CLIENT_ORIGIN. */
+        APP_PUBLIC_URL: z.preprocess(blankToUndefined, z.url().optional()),
+        /** EmailLog rows older than this many days are deleted nightly. */
+        EMAIL_LOG_RETENTION_DAYS: z.coerce.number().int().min(1).max(3650).default(180),
     })
     .superRefine((env, ctx) => {
         if (env.NODE_ENV === 'production' && (!env.JWT_SECRET || env.JWT_SECRET.length < 32)) {
@@ -136,5 +184,26 @@ export const ENV = {
     COOKIE: {
         NAME: 'token',
         MAX_AGE_MS: env.SESSION_TTL_SECONDS * 1000,
+    },
+    /** In-app notifications and the morning summary email (src/modules/notifications). */
+    NOTIFICATIONS: {
+        RETENTION_DAYS: env.NOTIFICATION_RETENTION_DAYS,
+        MORNING_SUMMARY_ENABLED: env.MORNING_SUMMARY_ENABLED,
+        MORNING_SUMMARY_CRON: env.MORNING_SUMMARY_CRON,
+        MORNING_SUMMARY_SKIP_EMPTY: env.MORNING_SUMMARY_SKIP_EMPTY,
+    },
+    /** Outgoing email (src/services/mail.service.ts). */
+    MAIL: {
+        ENABLED: env.MAIL_ENABLED,
+        SMTP_HOST: env.SMTP_HOST,
+        SMTP_PORT: env.SMTP_PORT,
+        SMTP_SECURE: env.SMTP_SECURE,
+        SMTP_USER: env.SMTP_USER,
+        SMTP_PASS: env.SMTP_PASS,
+        SMTP_EHLO_NAME: env.SMTP_EHLO_NAME,
+        FROM: env.MAIL_FROM,
+        /** Base of links in emails, without a trailing slash. */
+        APP_PUBLIC_URL: (env.APP_PUBLIC_URL ?? env.CLIENT_ORIGIN).replace(/\/+$/, ''),
+        LOG_RETENTION_DAYS: env.EMAIL_LOG_RETENTION_DAYS,
     },
 } as const;
