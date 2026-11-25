@@ -1163,7 +1163,8 @@ model TableFilter {
 
 /// Scorecard of a module's list screen (the summary cards above the table): the dropdown field the cards count by,
 /// an optional amount field each card totals, a colour per option value, and whether those colours also mark the
-/// field in the list column / record drawer. One row per module (no row = the screen's built-in cards); admins edit.
+/// field in the list column / record drawer. One row per module (no row = the screen's built-in cards); admins edit
+/// it under Admin › List Scorecards.
 model ModuleScorecard {
   /// CrmModuleKey, e.g. leads.
   module           String   @id @db.NVarChar(40)
@@ -1176,6 +1177,13 @@ model ModuleScorecard {
   listViewColor    Boolean  @default(false)
   /// Colors also mark the field in the record drawer.
   drawerViewColor  Boolean  @default(false)
+  /// false = an admin switched the module's cards off (settings kept): the list shows no cards. The list column and
+  /// drawer colors follow their own switches.
+  enabled          Boolean  @default(true)
+  /// Wording of the "All" card; null = the screen's own ("All Leads").
+  allLabel         String?  @db.NVarChar(60)
+  /// Optimistic-concurrency counter; bumped on every save.
+  version          Int      @default(1)
   updatedBy        String?  @db.NVarChar(50)
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt

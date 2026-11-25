@@ -64,6 +64,18 @@ export const saveScorecardSchema = z.object({
     ),
     listViewColor: z.boolean(),
     drawerViewColor: z.boolean(),
+    /** false = no cards on the list screen (the settings are kept). */
+    enabled: z.boolean().default(true),
+    /** Wording of the "All" card; empty / null = the screen's own ("All Leads"). */
+    allLabel: z
+        .string()
+        .trim()
+        .max(60, 'The "All" card label can be at most 60 characters.')
+        .nullable()
+        .optional()
+        .transform((v) => v || null),
+    /** Version the admin edited (null when nothing was saved yet); a newer saved version is a 409. */
+    version: z.number().int().min(1).nullable(),
 });
 
 export type SaveScorecardInput = z.infer<typeof saveScorecardSchema>;

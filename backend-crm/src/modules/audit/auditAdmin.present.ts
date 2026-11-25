@@ -143,6 +143,7 @@ const MODULE_LABELS: Record<string, string> = {
     'pdf-templates': 'PDF Templates',
     'form-customization': 'Form Customization',
     'document-series': 'Document Series',
+    'list-scorecards': 'List Scorecards',
     'audit-log': 'Audit Log',
 };
 /** `partner-companies` → `Partner Companies`. */

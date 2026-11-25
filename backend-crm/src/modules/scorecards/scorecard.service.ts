@@ -15,10 +15,11 @@ import {
 } from './scorecard.validator.js';
 
 /**
- * Scorecards: the summary cards above a module's list screen. The admin picks a single-choice dropdown field (one
- * card per option, plus "All"), an optional amount field (or one of the list's built-in totals, `builtin.…`) each
- * card totals, and a color per option; the colors can
- * also mark that field in the list column and the record view. Counting runs in the browser over the loaded list.
+ * Scorecards: the summary cards above a module's list screen, set up under Admin › List Scorecards. The admin picks
+ * a single-choice dropdown field (one card per option, plus "All"), an optional amount field (or one of the list's
+ * built-in totals, `builtin.…`) each card totals, and a color per option (in card order); the colors can also mark
+ * that field in the list column and the record view. A scorecard can be switched off (no cards) and keep its
+ * settings. Counting runs in the browser over the loaded list.
  */
 
 /** Field types a scorecard can count by / total. */
@@ -32,6 +33,11 @@ export interface ScorecardDto {
     options: ScorecardOption[];
     listViewColor: boolean;
     drawerViewColor: boolean;
+    /** false = the list shows no cards (the settings are kept). */
+    enabled: boolean;
+    /** Wording of the "All" card; null = the screen's own. */
+    allLabel: string | null;
+    version: number;
     updatedBy: string | null;
     updatedAt: string;
 }
@@ -51,13 +57,16 @@ function toDto(row: ModuleScorecard): ScorecardDto {
         options,
         listViewColor: row.listViewColor,
         drawerViewColor: row.drawerViewColor,
+        enabled: row.enabled,
+        allLabel: row.allLabel,
+        version: row.version,
         updatedBy: row.updatedBy,
         updatedAt: toIso(row.updatedAt),
     };
 }
 
 /** The settings an audit entry records (who / when are on the entry itself). */
-const auditView = ({ updatedBy: _by, updatedAt: _at, module: _module, ...settings }: ScorecardDto) => settings;
+const auditView = ({ updatedBy: _by, updatedAt: _at, module: _module, version: _version, ...settings }: ScorecardDto) => settings;
 
 /** An active form field of the module with one of the given types, or a 400 naming the problem. */
 async function requireField(module: string, fieldKey: string, types: Set<string>, what: string) {
@@ -108,11 +117,23 @@ export const scorecardService = {
             optionsJson: JSON.stringify(input.options),
             listViewColor: input.listViewColor,
             drawerViewColor: input.drawerViewColor,
+            enabled: input.enabled,
+            allLabel: input.allLabel,
             updatedBy: user.username,
         };
         return runInTransaction(async (tx) => {
             const existing = await tx.moduleScorecard.findUnique({ where: { module } });
-            const row = await tx.moduleScorecard.upsert({ where: { module }, create: { module, ...data }, update: data });
+            if (existing && existing.version !== input.version) {
+                throw HttpError.conflict(
+                    `${existing.updatedBy ?? 'Another admin'} saved this scorecard after you opened it. Reload to see their version, then make your changes again.`
+                );
+            }
+            if (!existing && input.version !== null) {
+                throw HttpError.conflict('This scorecard was reset to its default after you opened it. Reload, then make your changes again.');
+            }
+            const row = existing
+                ? await tx.moduleScorecard.update({ where: { module }, data: { ...data, version: existing.version + 1 } })
+                : await tx.moduleScorecard.create({ data: { module, ...data, version: 1 } });
             const after = auditView(toDto(row));
             await auditService.record(tx, {
                 entityType: 'Scorecard',
