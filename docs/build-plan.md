@@ -1,7 +1,8 @@
 # Nandini CRM — Build Plan
 
 > **Status:** living document. Part 1 records what has been built (reconstructed from git history, 115 commits
-> from 2026-10-15 to 2026-11-18). Part 2 is the roadmap. Tick items off and add new ones as work lands.
+> from 2026-10-15 to 2026-11-18; the snapshot as of 2026-11-25, Calendar Phase 1 PR3). Part 2 is the roadmap. Tick
+> items off and add new ones as work lands.
 > Related: [System design](system-design.md) · [Database design](database-design.md) · [API plan](api-plan.md)
 
 ---
@@ -25,7 +26,7 @@
 | Tickets, Products, Partner Companies | ✅ CRUD, import |
 | Contracts | ✅ CRUD, list filters, status cards, row-level access, audit (no import) |
 | Referrals | ✅ CRUD, Active / Inactive status, audit, drawer layout, Form Builder (no import); Referred By on leads, opportunities and Convert Lead is picked from the active referrals (2026-11-25) |
-| Activities & calendar | ⚠️ data model, API, Form Builder fields; Activities list, form, quick create, drawer, record Activities tabs and the Calendar page (FullCalendar v7, business timezone, drag to reschedule); reminders and notifications to come (Phase 14 PR3) |
+| Activities & calendar | ✅ data model, API, Form Builder fields; Activities list, form, quick create, drawer, record Activities tabs and the Calendar page (FullCalendar v7, business timezone, drag to reschedule); reminders, assignment / invitation and contract renewal notifications in the navbar bell; 9 AM morning summary email (off until SMTP is set up). Google / Microsoft 365 sync is Phase 2 |
 | Documents | ✅ read-only list (filters, export / file download), drawer and detail page of the opportunities' documents |
 | Quotation PDF | ✅ templates, builder, preview, cached render |
 | Admin: forms, dropdowns, document series, cities, PDF templates | ✅ |
@@ -33,7 +34,7 @@
 | Audit log | ✅ ledger table with who / where / how per entry, Admin › Audit Log screen (`/api/admin/audit-logs`), undo / restore, CSV / Excel export, ledger integrity checks; alert rules later (Phase 11 E) |
 | Users admin | ❌ seed / DB only |
 | Dashboard | ❌ static page, no data |
-| Tests | ⚠️ 51 backend unit test files (`node:test`); no API integration, no frontend, no E2E |
+| Tests | ⚠️ 59 backend unit test files (`node:test`); no API integration, no frontend, no E2E |
 | CI/CD, containers | ❌ none in repo |
 
 ## Part 2 — Roadmap
@@ -91,10 +92,13 @@ Exit: the critical flows above run in CI.
       the list column / drawer colors, with a live preview over the list's records. Saves are refused (409) when
       another admin saved first. Contacts, Organizations, Products, Tickets and Partner Companies can now have cards
       too (off until an admin switches them on). On the lists, admins get a gear on the "All" card that opens the page.
-- [ ] Activities / follow-ups (calls, meetings, notes) linked to any record, with reminders — now
-      [Phase 14](#phase-14--activities--calendar-p2-started-2026-11-25).
+- [x] Activities / follow-ups (calls, meetings, notes) linked to any record, with reminders (2026-11-25) — built as
+      [Phase 14](#phase-14--activities--calendar-p2-started-2026-11-25) (Calendar Phase 1, PR1–PR3).
 - [ ] PDFs for Opportunities (and later Tickets) via the module adapter pattern.
-- [ ] Email quotation PDF to the contact (needs an SMTP/provider decision).
+- [ ] Email quotation PDF to the contact. The mail layer now exists (Phase 14 PR3): `sendMail` in
+      `backend-crm/src/services/mail.service.ts` over the Google Workspace SMTP relay, with an `EmailLog` row per send
+      (add a `quotation` kind and a dedupe key per send); it still needs the attachment, the compose dialog and the
+      decision on who may send.
 - [ ] Quotation import (currently excluded).
 
 ### Phase 10 — Scale & operations (P3)
@@ -230,8 +234,10 @@ only (not the full record page); Save goes live straight away; Leads first.
       The list has one card per contract status (plus "All Contracts") totalling Contract Value, and My Contracts /
       Expiring in 30 Days pills. The form moves End Date with Start Date and the period, and the reminder to 15 days
       before the end at 11:00, until the user types their own.
-- [ ] Renewal reminders: notify the Contract Manager on the Renewal Reminder Date (with Phase 14's reminders, PR3).
-      Renewal reminders already show on the calendar feed (Phase 14 PR1).
+- [x] **Renewal reminders** (2026-11-25, Phase 14 PR3) — the reminder sweep (every 15 minutes, 07:00–21:45) notifies
+      the Contract Manager in the navbar bell once the Renewal Reminder Date has come (window of 7 days, not for
+      Expired contracts; a changed date notifies again), and the morning summary email lists contracts whose
+      reminder is today or that end within 30 days. Renewal reminders also show on the calendar feed (PR1).
 - [ ] Left out of the first version: contract import, contract PDF, creating a contract from an opportunity or product.
 
 ### Phase 14 — Activities & Calendar (P2, started 2026-11-25)
@@ -263,13 +269,25 @@ keeps wall-clock times); all-day activities are entered as business-timezone day
       related-records panels, nav items (the Activities menu keeps its Documents entry, Phase 15), Quick Create entry,
       Form Builder coded defaults, audit log links. Contract tests keep the frontend time-zone and schedule rules
       equal to the API's.
-- [ ] **PR3: notifications + reminders** — `Notification` table, `/api/notifications`, BullMQ `crm-reminders` worker
-      (delayed jobs plus a sweep; idempotent claims on `reminderSentAt`), invitation / assignment notifications, the
-      navbar bell.
+- [x] **PR3: notifications, reminders and the morning email** (2026-11-25) — `Notification` and `EmailLog` tables
+      (migration `20261126120000_notifications`, unique dedupe keys, nightly retention), `/api/notifications` (list
+      with keyset cursor, unread count cached in Redis, read / read all, morning summary preview and admin test send),
+      BullMQ `crm-reminders` worker: a delayed job per activity reminder (claim on `reminderSentAt` and insert in one
+      transaction), a 15-minute business-hours sweep (missed reminders, contract renewals), nightly purge + re-arm,
+      catch-up on every Redis `ready` and a one-minute fallback while Redis is down. Assignment / invitation
+      notifications after activity saves (never blocking the save). Mail layer on nodemailer 10.6.1 (Google Workspace
+      SMTP relay or an app-password mailbox; off until `MAIL_ENABLED=true`) and the 9 AM morning summary email (today's
+      schedule with "Add to Google Calendar" links, overdue activities, follow-ups due / overdue, contract renewals;
+      a missed run made up before noon). Frontend: the navbar `NotificationBell` replaces the sample notifications
+      (badge polled every minute while the tab is visible, module-tinted rows, mark read and open, mark all read,
+      cross-tab refresh) and "Preview morning email" (sandboxed preview, "Send me a test" for admins). Docs: system
+      design §4–§5, §8.4, §9 (worker and SMTP relay setup). Unit tests for recipients, stale policy, keys, texts,
+      producer chunking, delivery claims, EmailLog claims, cron catch-up, summary sections, Google links and escaping.
 - [ ] **Phase 2: calendar sync** (Google / Microsoft 365) — needs the app on HTTPS under a nandiniinfosys.com hostname
       (`PUBLIC_API_URL`), unique company emails on users, `CalendarConnection` and `ActivityExternalLink` tables, Admin ›
       API Integrations with encrypted credentials, `Activity.iCalUid` + organizer fields for inbound events, recurring
-      series materialized as occurrence rows, and inbound events clamped to the 31-day limit.
+      series materialized as occurrence rows, and inbound events clamped to the 31-day limit. The morning email's
+      "Add to Google Calendar" links (one-time copies) are then hidden for users who connected their calendar.
 
 ### Phase 15 — Documents (P2, 2026-11-25)
 

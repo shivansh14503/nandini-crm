@@ -42,6 +42,11 @@ export function QueryProvider({ children }: { children: React.ReactNode }) {
                     return;
                 }
                 const key = queryEntityFromSync(entity);
+                // The bell's own writes (read / read all) aren't audited and show nowhere else.
+                if (key === 'notifications') {
+                    queryClient.invalidateQueries({ queryKey: queryKeys.notifications.all });
+                    return;
+                }
                 queryClient.invalidateQueries(key ? { queryKey: queryKeys[key].all } : undefined);
                 if (key) queryClient.invalidateQueries({ queryKey: auditLogKeys.all });
                 // Opportunities write their document (Documentation section): the Documents list follows them.

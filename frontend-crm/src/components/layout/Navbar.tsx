@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect, useCallback, useId } from 'react';
+import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
 import Link from 'next/link';
@@ -28,17 +28,17 @@ import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown';
 import LogoutIcon from '@mui/icons-material/Logout';
 import PersonIcon from '@mui/icons-material/Person';
 import AddIcon from '@mui/icons-material/Add';
-import NotificationsIcon from '@mui/icons-material/Notifications';
 import AdminPanelSettingsOutlinedIcon from '@mui/icons-material/AdminPanelSettingsOutlined';
 import MenuIcon from '@mui/icons-material/Menu';
 import { getModuleColor, moduleForPath } from '@/theme/moduleColors';
-import Badge from '@mui/material/Badge';
 import { useAuth } from '../../context/AuthContext';
 import { GlobalSearch } from './GlobalSearch';
 import { ThemeModeToggle } from './ThemeModeToggle';
 import { APP_CONFIG, ROUTES } from '@/config/constants';
 import { NAV_ITEMS, ModuleDot, type NavGroup } from './navItems';
 import { MobileNavDrawer } from './MobileNavDrawer';
+import { NotificationBell } from './NotificationBell';
+import { useDropdown } from './useDropdown';
 
 /**
  * Narrowest viewport (px) where the pills fit beside the full search box, Create button and user name. From `lg`
@@ -46,75 +46,6 @@ import { MobileNavDrawer } from './MobileNavDrawer';
  * the pills move into the menu drawer.
  */
 const FULL_NAVBAR_MIN_WIDTH = 1420;
-
-/* ─── Shared hover + click/tap dropdown behaviour ───────── */
-const CLOSE_DELAY_MS = 150;
-
-function useDropdown() {
-    const menuId = useId();
-    const [open, setOpen] = useState(false);
-    const [anchorEl, setAnchorEl] = useState<HTMLElement | null>(null);
-    const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-    const clearCloseTimer = useCallback(() => {
-        if (closeTimer.current) {
-            clearTimeout(closeTimer.current);
-            closeTimer.current = null;
-        }
-    }, []);
-
-    // Clear any pending close timeout on unmount
-    useEffect(() => clearCloseTimer, [clearCloseTimer]);
-
-    const close = useCallback(() => {
-        clearCloseTimer();
-        setOpen(false);
-    }, [clearCloseTimer]);
-
-    // Close on Escape while open
-    useEffect(() => {
-        if (!open) return;
-        const onKeyDown = (e: KeyboardEvent) => {
-            if (e.key === 'Escape') close();
-        };
-        document.addEventListener('keydown', onKeyDown);
-        return () => document.removeEventListener('keydown', onKeyDown);
-    }, [open, close]);
-
-    // Hover is mouse-only: touch/pen taps also emit pointerenter, which would
-    // open the menu and then have the click handler toggle it straight shut.
-    const hoverProps = {
-        onPointerEnter: (e: React.PointerEvent) => {
-            if (e.pointerType !== 'mouse') return;
-            clearCloseTimer();
-            setOpen(true);
-        },
-        onPointerLeave: (e: React.PointerEvent) => {
-            if (e.pointerType !== 'mouse') return;
-            clearCloseTimer();
-            closeTimer.current = setTimeout(() => setOpen(false), CLOSE_DELAY_MS);
-        },
-    };
-
-    const triggerProps = {
-        'aria-haspopup': 'true' as const,
-        'aria-expanded': open,
-        'aria-controls': open ? menuId : undefined,
-        onClick: () => {
-            clearCloseTimer();
-            setOpen((prev) => !prev);
-        },
-    };
-
-    // The popper is portaled outside the trigger, so a click on the trigger
-    // reaches ClickAwayListener too; ignore it and let onClick toggle.
-    const handleClickAway = (event: MouseEvent | TouchEvent) => {
-        if (anchorEl && anchorEl.contains(event.target as Node)) return;
-        close();
-    };
-
-    return { open, close, menuId, setAnchorEl, anchorEl, hoverProps, triggerProps, handleClickAway };
-}
 
 /* ─── Hover/click-dropdown pill ─────────────────────────── */
 function NavPill({ item }: { item: NavGroup }) {
@@ -380,152 +311,6 @@ function UserMenu({
                                             Sign Out
                                         </MenuItem>
                                     </MenuList>
-                                </Box>
-                            </ClickAwayListener>
-                        </Paper>
-                    </Grow>
-                )}
-            </Popper>
-        </Box>
-    );
-}
-
-/* ─── Notification bell ────────────────────────────────── */
-const SAMPLE_NOTIFICATIONS = [
-    { id: 1, title: 'New lead assigned', desc: 'Bhanu assigned a new lead to you', time: 'Just now', unread: true },
-    { id: 2, title: 'Contract expiring soon', desc: 'GMR Enterprises contract expires in 7 days', time: '2h ago', unread: true },
-    { id: 3, title: 'Opportunity won', desc: 'Alsorg Interiors moved to Closed Won', time: '5h ago', unread: false },
-];
-
-function NotificationBell() {
-    const { open, menuId, setAnchorEl, anchorEl, hoverProps, triggerProps, handleClickAway } = useDropdown();
-    const unreadCount = SAMPLE_NOTIFICATIONS.filter((n) => n.unread).length;
-
-    return (
-        <Box {...hoverProps} sx={{ position: 'relative' }}>
-            <Box
-                component="button"
-                type="button"
-                ref={setAnchorEl}
-                id="notification-btn"
-                aria-label="Notifications"
-                {...triggerProps}
-                sx={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    width: 36,
-                    height: 36,
-                    borderRadius: '8px',
-                    border: open ? '1px solid var(--mui-palette-primary-softBorder)' : '1px solid transparent',
-                    backgroundColor: open ? 'var(--mui-palette-primary-soft)' : 'transparent',
-                    color: open ? 'var(--mui-palette-primary-main)' : 'var(--crm-gray-500)',
-                    cursor: 'pointer',
-                    transition: 'all 0.15s ease',
-                    '&:hover': {
-                        backgroundColor: 'var(--mui-palette-primary-soft)',
-                        borderColor: 'var(--mui-palette-primary-softBorder)',
-                        color: 'var(--mui-palette-primary-main)',
-                    },
-                }}
-            >
-                <Badge
-                    badgeContent={unreadCount}
-                    sx={{
-                        '& .MuiBadge-badge': {
-                            backgroundColor: '#EF4444',
-                            color: '#fff',
-                            fontSize: '0.6rem',
-                            minWidth: 16,
-                            height: 16,
-                            padding: '0 4px',
-                        },
-                    }}
-                >
-                    <NotificationsIcon sx={{ fontSize: 20, color: 'inherit' }} />
-                </Badge>
-            </Box>
-
-            <Popper
-                open={open}
-                anchorEl={anchorEl}
-                placement="bottom-end"
-                transition
-                style={{ zIndex: 1400 }}
-                modifiers={[{ name: 'offset', options: { offset: [0, 4] } }]}
-            >
-                {({ TransitionProps }) => (
-                    <Grow {...TransitionProps} timeout={150}>
-                        <Paper
-                            id={menuId}
-                            elevation={8}
-                            {...hoverProps}
-                            sx={{
-                                width: `min(320px, calc(100vw - ${FLOAT_INSET * 2}px))`,
-                                borderRadius: '12px',
-                                overflow: 'hidden',
-                                border: '1px solid var(--crm-gray-200)',
-                                boxShadow: '0 8px 30px rgba(0,0,0,0.12)',
-                            }}
-                        >
-                            <ClickAwayListener onClickAway={handleClickAway}>
-                                <Box>
-                                    {/* Header */}
-                                    <Box sx={{ px: 2, py: 1.5, display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid var(--crm-gray-200)', backgroundColor: 'var(--crm-gray-50)' }}>
-                                        <Typography sx={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--crm-gray-900)' }}>
-                                            Notifications
-                                        </Typography>
-                                        <Badge badgeContent={unreadCount} sx={{ '& .MuiBadge-badge': { backgroundColor: 'var(--mui-palette-primary-main)', color: '#fff', fontSize: '0.6rem' } }}>
-                                            <Box />
-                                        </Badge>
-                                    </Box>
-                                    {/* Notification items */}
-                                    {SAMPLE_NOTIFICATIONS.map((notif, i) => (
-                                        <Box key={notif.id}>
-                                            <Box
-                                                sx={{
-                                                    px: 2,
-                                                    py: 1.5,
-                                                    display: 'flex',
-                                                    gap: 1.5,
-                                                    alignItems: 'flex-start',
-                                                    backgroundColor: notif.unread ? 'var(--mui-palette-primary-soft)' : 'var(--mui-palette-background-paper)',
-                                                    cursor: 'pointer',
-                                                    '&:hover': { backgroundColor: 'var(--mui-palette-primary-soft)' },
-                                                    transition: 'background 0.12s',
-                                                }}
-                                            >
-                                                <Box
-                                                    sx={{
-                                                        width: 8,
-                                                        height: 8,
-                                                        borderRadius: '50%',
-                                                        backgroundColor: notif.unread ? 'var(--mui-palette-primary-main)' : 'transparent',
-                                                        flexShrink: 0,
-                                                        mt: 0.8,
-                                                    }}
-                                                />
-                                                <Box sx={{ flex: 1, minWidth: 0 }}>
-                                                    <Typography sx={{ fontSize: '0.82rem', fontWeight: notif.unread ? 700 : 500, color: 'var(--crm-gray-900)', lineHeight: 1.3 }}>
-                                                        {notif.title}
-                                                    </Typography>
-                                                    <Typography sx={{ fontSize: '0.75rem', color: 'var(--crm-gray-500)', mt: 0.3, lineHeight: 1.4 }}>
-                                                        {notif.desc}
-                                                    </Typography>
-                                                    <Typography sx={{ fontSize: '0.7rem', color: 'var(--crm-gray-400)', mt: 0.4 }}>
-                                                        {notif.time}
-                                                    </Typography>
-                                                </Box>
-                                            </Box>
-                                            {i < SAMPLE_NOTIFICATIONS.length - 1 && <Divider />}
-                                        </Box>
-                                    ))}
-                                    {/* Footer */}
-                                    <Box sx={{ px: 2, py: 1, borderTop: '1px solid var(--crm-gray-200)', textAlign: 'center' }}>
-                                        <Typography sx={{ fontSize: '0.78rem', color: 'var(--mui-palette-primary-main)', fontWeight: 600, cursor: 'pointer', '&:hover': { textDecoration: 'underline' } }}>
-                                            See all notifications
-                                        </Typography>
-                                    </Box>
                                 </Box>
                             </ClickAwayListener>
                         </Paper>

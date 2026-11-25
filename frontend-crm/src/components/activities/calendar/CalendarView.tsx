@@ -193,6 +193,14 @@ export default function CalendarView() {
     const [range, setRange] = useState<ShownRange | null>(null);
     const [filters, setFilters] = useState<CalendarFilterValues>(() => filtersFromQuery(searchParams));
     const [activityId, setActivityId] = useState<string | null>(initial.activity);
+    // A link to `/calendar?activity=<id>` followed while the calendar is already open (the notification bell) opens
+    // that activity too: the query string is otherwise read only once.
+    const activityParam = searchParams?.get('activity') || null;
+    const [seenActivityParam, setSeenActivityParam] = useState(activityParam);
+    if (activityParam !== seenActivityParam) {
+        setSeenActivityParam(activityParam);
+        if (activityParam) setActivityId(activityParam);
+    }
     const [related, setRelated] = useState<{ module: ActivityRelatedModule; id: string } | null>(null);
     const [quickCreate, setQuickCreate] = useState<{ open: boolean; prefill?: Partial<ActivityFormValues> }>({ open: false });
     const [filtersOpen, setFiltersOpen] = useState(false);

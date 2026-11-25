@@ -1,6 +1,7 @@
 # Nandini CRM — API Plan
 
-> **Status:** living document. Lists every endpoint of `backend-crm` as of 2026-11-25 plus the planned ones.
+> **Status:** living document. Lists every endpoint of `backend-crm` as of 2026-11-25 (through Calendar Phase 1 PR3:
+> `/api/notifications` and the morning summary email preview / test) plus the planned ones.
 > When you add, change or remove a route, update this file in the same change (the route files'
 > header comments are the per-module source of truth; keep them in step too).
 > Related: [System design](system-design.md) · [Database design](database-design.md) · [Build plan](build-plan.md)
@@ -151,6 +152,29 @@ for anyone who can view the activity. Admin › Audit Log can undo updates and r
 | POST | `/table-filters/recent` | `{ module, criteria }` — record an applied filter |
 | POST | `/table-filters/saved` | `{ module, name, criteria }` — same name overwrites |
 | DELETE | `/table-filters/:id` | Hard delete one of the caller's filters |
+
+**Notifications** (`/notifications`, `backend-crm/src/modules/notifications`, route header comment = source of truth;
+Calendar Phase 1 PR3). The navbar bell's rows: personal (every query is limited to the caller's username), not
+audited, deleted by the nightly retention job. Written by the reminders worker and after activity saves
+([system design §5.1](system-design.md#51-reminders-and-notifications-crm-reminders)); there is no endpoint to create
+one.
+
+`NotificationDto` (empty values are `''`, never `null`):
+`{ id, kind: 'activity_reminder' | 'activity_assigned' | 'activity_invited' | 'contract_renewal', title, body,
+entityModule: 'activities' | 'contracts' | '', entityId, dueAt (ISO or ''), actor (username, 'system' or ''),
+readAt (ISO, '' while unread), createdAt (ISO), href }`. `href` is the app route to open: activities
+`/calendar?activity=<id>` (the calendar opens the activity drawer), contracts `/contracts/<id>`, otherwise `''`.
+Titles: `Reminder: <subject>`, `Assigned to you: <subject>`, `Invitation: <subject>`, `Contract renewal due: <title>`;
+bodies say when and what it is related to (e.g. "Starts at 10:30 AM (in 15 min) · Related to LD-0012 Ramesh").
+
+| Method | Path | Description |
+| --- | --- | --- |
+| GET | `/notifications?unreadOnly&limit&before` | `{ success, data: NotificationDto[], nextCursor, unreadCount }`, newest first (keyset on `createdAt`, `id`). `unreadOnly`: `true` / `false` / `1` / `0`; `limit`: whole number 1–50 (default 20); `before`: the previous page's `nextCursor` (`<createdAt ISO>\|<id>`; `null` on the last page). `400 VALIDATION_ERROR` "limit must be a whole number from 1 to 50." / "before must be a cursor returned as nextCursor (<createdAt ISO>\|<id>)." / "Must be true or false." |
+| GET | `/notifications/unread-count` | `{ count }`. Served from Redis for up to an hour (`cache:notifications:unread:{username}`); every write to the user's notifications clears it; reads SQL while Redis is down. The bell polls it every minute |
+| POST | `/notifications/:id/read` | `{ id, readAt }`. Idempotent (an already-read row keeps its first read time). `404 NOT_FOUND` "Notification not found" when it doesn't exist or isn't the caller's; `400 VALIDATION_ERROR` for an empty id or one over 50 characters |
+| POST | `/notifications/read-all` | `{ updated }` (rows marked read) |
+| GET | `/notifications/morning-summary/preview` | The caller's morning summary email for today, sent nowhere (works while mail is off): `{ subject, html, text, counts: { todayActivities, overdueActivities, followupsToday, overdueFollowups, contracts }, empty, mailEnabled, email }`. `empty`: nothing is due (by default no email goes out then); `mailEnabled`: outgoing email is on; `email`: the caller's address (`''` = they get no email). `404` "User not found" |
+| POST | `/notifications/morning-summary/test` 🔐 | Sends the caller's summary to their own address now (EmailLog `kind = 'morning_summary_test'`, no dedupe) → `{ success, data: { status: 'sent' \| 'failed' \| 'skipped' \| 'duplicate', error?, email, message }, message }`; `message` is "Test email sent to <email>." or "The test email could not be sent: <SMTP error>" (a failed send is still a 200). `403 FORBIDDEN` for non-admin roles; `400 BAD_REQUEST` "Email is turned off on the server (MAIL_ENABLED is false or SMTP_HOST is empty), so nothing can be sent yet." or "Your user account has no email address, so a test email has nowhere to go. Ask an admin to add one." |
 
 ### 2.5a Scorecards (list-screen summary cards)
 
@@ -341,6 +365,9 @@ Limited responses carry `RateLimit-Limit`, `RateLimit-Remaining`, `RateLimit-Res
   `deleteBulk`. Every write calls `notifyCrmUpdate(endpoint)` for cross-tab cache invalidation.
 - React Query hooks in `hooks/queries/` wrap those services; query keys in `queryKeys.ts`.
 - DTO types live in `frontend-crm/src/types/*.types.ts`; the backend mappers must return exactly those shapes.
+- Notifications are not a CRUD module: `services/notification.service.ts` (list, unread count, read, read all,
+  morning summary preview / test), hooks in `hooks/queries/useNotifications.ts`, `CrmNotification` and the preview
+  types in `types/notification.types.ts`. Read / read all broadcast `notifyCrmUpdate('/api/notifications')`.
 
 ## 6. Adding an endpoint — checklist
 
