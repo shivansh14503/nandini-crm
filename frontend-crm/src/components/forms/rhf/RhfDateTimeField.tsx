@@ -5,7 +5,6 @@ import { Box, FormHelperText, TextField } from '@mui/material';
 import { useController, type FieldPath, type FieldValues } from 'react-hook-form';
 import { FormField, fieldSx } from '../FormField';
 import { useFormMode } from '@/context/FormModeContext';
-import { ReadOnlyField } from '../ReadOnlyField';
 import type { FieldSize } from '../fieldSizing';
 import { DATE_TIME_COLUMNS, TimePicker } from '../TimePicker';
 import { localNow, localToday } from '@/utils/pastDates';
@@ -63,7 +62,8 @@ export function RhfDateTimeField<T extends FieldValues>({
                 parsed && !Number.isNaN(parsed.getTime())
                     ? parsed.toLocaleString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: 'numeric', minute: '2-digit' })
                     : raw;
-            return <ReadOnlyField label={label} value={text} hideWhenEmpty sx={{ mb: 2 }} />;
+            // Through FormField so the form builder's label / hidden overrides apply on the view page too.
+            return <FormField name={dateName} label={label} viewValue={text}>{null}</FormField>;
         }
         // Date + time pickers side by side, both writing the one `YYYY-MM-DDTHH:mm` value.
         const datePart = /^\d{4}-\d{2}-\d{2}/.test(raw) ? raw.slice(0, 10) : '';
@@ -111,7 +111,7 @@ export function RhfDateTimeField<T extends FieldValues>({
             ? parsed.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
             : rawDate;
         const timeText = timeName && typeof time.field.value === 'string' ? time.field.value : '';
-        return <ReadOnlyField label={label} value={[dateText, timeText].filter(Boolean).join(' • ')} hideWhenEmpty sx={{ mb: 2 }} />;
+        return <FormField name={dateName} label={label} viewValue={[dateText, timeText].filter(Boolean).join(' • ')}>{null}</FormField>;
     }
 
     return (

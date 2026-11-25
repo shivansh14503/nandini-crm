@@ -582,26 +582,28 @@ export function CrmLineItemsEditor({ value, onChange, error }: CrmLineItemsEdito
                     )}
                 </Box>
 
-                {/* + ADD PRODUCT LINE Button */}
-                <Button
-                    variant="contained"
-                    startIcon={<AddIcon />}
-                    onClick={handleAddLineItem}
-                    sx={{
-                        backgroundColor: 'var(--crm-fill-blue-600)',
-                        color: '#ffffff',
-                        textTransform: 'uppercase',
-                        fontWeight: 700,
-                        fontSize: '0.76rem',
-                        letterSpacing: '0.04em',
-                        px: 2.2,
-                        py: 0.8,
-                        borderRadius: '4px',
-                        '&:hover': { backgroundColor: 'var(--crm-fill-blue-700)' },
-                    }}
-                >
-                    ADD PRODUCT LINE
-                </Button>
+                {/* + ADD PRODUCT LINE Button (the empty state above has its own, so it only shows below existing lines) */}
+                {lineItems.length > 0 && (
+                    <Button
+                        variant="contained"
+                        startIcon={<AddIcon />}
+                        onClick={handleAddLineItem}
+                        sx={{
+                            backgroundColor: 'var(--crm-fill-blue-600)',
+                            color: '#ffffff',
+                            textTransform: 'uppercase',
+                            fontWeight: 700,
+                            fontSize: '0.76rem',
+                            letterSpacing: '0.04em',
+                            px: 2.2,
+                            py: 0.8,
+                            borderRadius: '4px',
+                            '&:hover': { backgroundColor: 'var(--crm-fill-blue-700)' },
+                        }}
+                    >
+                        ADD PRODUCT LINE
+                    </Button>
+                )}
             </Paper>
 
             {/* ════════════ SUMMARY & FINANCIAL TOTALS ════════════ */}

@@ -102,6 +102,22 @@ const DEFAULT_OPPORTUNITY_FORM: OpportunityFormData = {
     grandTotal: 0,
 };
 
+const sameText = (a?: string, b?: string) => (a ?? '').trim().toLowerCase() === (b ?? '').trim().toLowerCase();
+
+/**
+ * Drops the saved organization / contact ids once their names change on an edit, so the server links the
+ * record to the newly picked (or typed) organization and contact by name instead of keeping the old ones.
+ */
+function withFreshLinks(values: OpportunityFormData, saved: { organizationName?: string; contact?: string }): OpportunityFormData {
+    const organizationChanged = !sameText(values.organizationName, saved.organizationName);
+    const contactChanged = organizationChanged || !sameText(values.contact, saved.contact);
+    return {
+        ...values,
+        organizationId: organizationChanged ? '' : values.organizationId,
+        contactId: contactChanged ? '' : values.contactId,
+    };
+}
+
 export default function OpportunityForm({
     mode = 'create',
     initialData,
@@ -184,7 +200,7 @@ export default function OpportunityForm({
                 saved = await opportunityService.create(values);
                 message = 'Opportunity created successfully! Added to your sales pipeline.';
             } else if (mode === 'edit' && opportunityId) {
-                saved = await opportunityService.update(opportunityId, values);
+                saved = await opportunityService.update(opportunityId, withFreshLinks(values, formState.defaultValues ?? {}));
                 message = 'Opportunity details updated successfully!';
             }
 

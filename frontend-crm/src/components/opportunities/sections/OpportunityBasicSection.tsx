@@ -106,8 +106,11 @@ export function OpportunityBasicSection({ notify, onDecisionPendingChange }: Opp
         if (match?.organizationName && !sameName(match.organizationName, org.organizationName)) clearContactFields();
     };
 
-    // Picking a contact fills in their number, email and organization.
-    const handleContactPicked = (contact: Contact) => {
+    // Picking a contact fills in their number, email and organization. When people at several companies share the
+    // name, the one at the organization already chosen wins (the suggestions only list that organization's people).
+    const handleContactPicked = (picked: Contact) => {
+        const org = getValues('organizationName')?.trim();
+        const contact = (org && contacts.find((c) => sameName(c.name, picked.name) && sameName(c.organizationName ?? '', org))) || picked;
         setValue('contactNumber', contact.mobile || '', touch);
         setValue('contactEmail', primaryEmail(contact), touch);
         if (contact.organizationName) setValue('organizationName', contact.organizationName, touch);
@@ -139,6 +142,7 @@ export function OpportunityBasicSection({ notify, onDecisionPendingChange }: Opp
                     options={organizationNames}
                     onSelectRecord={handleOrganizationPicked}
                     placeholder="Enter legal / trading organization name"
+                    maxLength={FIELD_MAX_LENGTH.organizationName}
                 />
 
                 <RhfLookup<F, 'contact'>
@@ -151,6 +155,7 @@ export function OpportunityBasicSection({ notify, onDecisionPendingChange }: Opp
                     onSelectRecord={handleContactPicked}
                     onClearRecord={handleContactCleared}
                     placeholder="Type or select contact..."
+                    maxLength={FIELD_MAX_LENGTH.personName}
                 />
 
                 <RhfPhoneField<F>
@@ -168,13 +173,15 @@ export function OpportunityBasicSection({ notify, onDecisionPendingChange }: Opp
                     placeholder="corporate.contact@company.com"
                 />
 
-                {/* Picks from the CRM's contacts (as on the Lead form); a partner or campaign can still be typed. */}
+                {/* Picks from the CRM's contacts (as on the Lead form); a partner or campaign can still be typed, as typed. */}
                 <RhfLookup<F, 'contact'>
                     name="referredBy"
                     label="Referred By"
                     hint="Partner, agent, or client"
                     lookupType="contact"
                     placeholder="Referred by partner or person..."
+                    nameCase={false}
+                    maxLength={FIELD_MAX_LENGTH.organizationName}
                 />
 
                 {/* Starts empty. Picks the CRM user who brought the deal in (stored by username, like Assigned to); an outside referrer can still be typed. */}
@@ -184,7 +191,9 @@ export function OpportunityBasicSection({ notify, onDecisionPendingChange }: Opp
                     required
                     hint="Referrer or internal sponsor"
                     lookupType="user"
+                    freeText
                     placeholder="Internal sponsor or external referrer..."
+                    maxLength={FIELD_MAX_LENGTH.organizationName}
                 />
 
                 {/* ── Pipeline ── */}
