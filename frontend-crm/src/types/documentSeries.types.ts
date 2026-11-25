@@ -1,6 +1,6 @@
 /** Mirrors backend-crm/src/modules/document-series (GET / PUT /api/document-series). */
 
-export const SERIES_MODULES = ['lead', 'opportunity', 'quotation', 'organization', 'contact', 'ticket', 'product'] as const;
+export const SERIES_MODULES = ['lead', 'opportunity', 'quotation', 'organization', 'contact', 'ticket', 'contract', 'product'] as const;
 export type SeriesModule = (typeof SERIES_MODULES)[number];
 
 export const SEPARATORS = ['/', '-', '_', '.', ''] as const;

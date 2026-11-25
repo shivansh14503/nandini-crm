@@ -423,6 +423,11 @@
   --crm-module-tickets-text: #0E7490;
   --crm-module-tickets-soft: #ECFEFF;
   --crm-module-tickets-border: #A5F3FC;
+  /* contracts: Rose */
+  --crm-module-contracts-main: #E11D48;
+  --crm-module-contracts-text: #BE123C;
+  --crm-module-contracts-soft: #FFF1F2;
+  --crm-module-contracts-border: #FECDD3;
   /* products: Gold */
   --crm-module-products-main: #CA8A04;
   --crm-module-products-text: #A16207;
@@ -466,6 +471,10 @@
   --crm-module-tickets-text: #67E8F9;
   --crm-module-tickets-soft: color-mix(in srgb, #0891B2 16%, #151E2E);
   --crm-module-tickets-border: color-mix(in srgb, #0891B2 42%, #151E2E);
+  --crm-module-contracts-main: #FB7185;
+  --crm-module-contracts-text: #FDA4AF;
+  --crm-module-contracts-soft: color-mix(in srgb, #E11D48 16%, #151E2E);
+  --crm-module-contracts-border: color-mix(in srgb, #E11D48 42%, #151E2E);
   --crm-module-products-main: #FACC15;
   --crm-module-products-text: #FDE047;
   --crm-module-products-soft: color-mix(in srgb, #CA8A04 16%, #151E2E);

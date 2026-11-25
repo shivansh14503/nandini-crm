@@ -4,6 +4,7 @@ export { createEntityHooks } from './createEntityHooks';
 export * from './useOrganizations';
 export * from './useContacts';
 export * from './useTickets';
+export * from './useContracts';
 export * from './useLeads';
 export * from './useOpportunities';
 export * from './useQuotations';

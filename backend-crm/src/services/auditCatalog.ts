@@ -12,6 +12,7 @@ export type AuditEntityType =
     | 'Quotation'
     | 'Product'
     | 'Ticket'
+    | 'Contract'
     | 'PartnerCompany'
     | 'User'
     | 'Import'
@@ -73,6 +74,7 @@ const MODULE_BY_ENTITY: Record<AuditEntityType, string> = {
     Quotation: 'quotations',
     Product: 'products',
     Ticket: 'tickets',
+    Contract: 'contracts',
     PartnerCompany: 'partner-companies',
     User: 'users',
     Import: 'imports',
@@ -221,6 +223,8 @@ export function labelFromChanges(entityType: AuditEntityType, entityId: string, 
             return pick('quotationTitle');
         case 'Ticket':
             return pick('ticketSubject', 'organizationName');
+        case 'Contract':
+            return pick('contractTitle', 'organizationName');
         case 'Product':
             return pick('productName');
         case 'PartnerCompany':

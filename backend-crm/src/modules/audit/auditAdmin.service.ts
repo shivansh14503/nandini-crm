@@ -67,6 +67,7 @@ const SERIES_BY_MODULE: Readonly<Record<string, SeriesModule>> = {
     organizations: 'organization',
     contacts: 'contact',
     tickets: 'ticket',
+    contracts: 'contract',
     products: 'product',
 };
 
@@ -82,6 +83,7 @@ const STATUS_LOADERS: Readonly<Record<string, StatusLoader>> = {
     Opportunity: (ids) => prisma.opportunity.findMany(inIds(ids)),
     Quotation: (ids) => prisma.quotation.findMany(inIds(ids)),
     Ticket: (ids) => prisma.ticket.findMany(inIds(ids)),
+    Contract: (ids) => prisma.contract.findMany(inIds(ids)),
     Product: (ids) => prisma.product.findMany(inIds(ids)),
     PartnerCompany: (ids) => prisma.partnerCompany.findMany(inIds(ids)),
 };

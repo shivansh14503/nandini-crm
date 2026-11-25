@@ -121,7 +121,7 @@ export interface ScorecardSettingsDialogProps {
      * Totals the screen works out itself, offered above the form's amount fields. The first is what the cards
      * total when nothing is picked (saved as no currency field). Unset = "None (counts only)".
      */
-    builtInAmounts?: readonly { key: string; label: string }[];
+    builtInAmounts?: readonly { key: string; label: string; fieldKey?: string }[];
 }
 
 /**
@@ -162,7 +162,11 @@ function ScorecardSettingsBody({ module, onClose, onSaved, defaultScorecard, bui
     const [colorAnchor, setColorAnchor] = useState<{ el: HTMLElement; value: string } | null>(null);
 
     const dropdownFields = useMemo(() => scorecardDropdownFields(configs, module), [configs, module]);
-    const currencyFields = useMemo(() => scorecardCurrencyFields(configs, module), [configs, module]);
+    // A form field a built-in total already reads is offered once, as that total.
+    const currencyFields = useMemo(() => {
+        const covered = new Set(builtInAmounts?.map((a) => a.fieldKey).filter(Boolean));
+        return scorecardCurrencyFields(configs, module).filter((f) => !covered.has(f.fieldKey));
+    }, [configs, module, builtInAmounts]);
     const [defaultBuiltIn, ...otherBuiltIns] = builtInAmounts ?? [];
     const busy = saveMutation.isPending || resetMutation.isPending;
     const shownCount = draft.options.filter((o) => !o.hidden).length;

@@ -57,6 +57,12 @@ export const NO_PAST_DATES = {
         { name: 'invoiceDate', label: 'Invoice Date', kind: 'date' },
     ],
     ticket: [{ name: 'dueDate', label: 'Due Date', kind: 'dateTime' }],
+    contract: [
+        { name: 'startDate', label: 'Contract Start Date', kind: 'date' },
+        { name: 'endDate', label: 'Contract End Date', kind: 'date' },
+        { name: 'billDate', label: 'Bill Date', kind: 'date' },
+        { name: 'renewalReminderDate', label: 'Renewal Reminder Date', kind: 'dateTime' },
+    ],
     quotation: [
         { name: 'quotationDate', label: 'Quotation Date', kind: 'date' },
         { name: 'validUntil', label: 'Valid Until', kind: 'date' },

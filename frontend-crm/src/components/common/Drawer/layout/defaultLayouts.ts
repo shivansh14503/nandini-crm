@@ -519,6 +519,49 @@ function ticketsLayout(): DrawerLayoutDocument {
     };
 }
 
+function contractsLayout(): DrawerLayoutDocument {
+    return {
+        version: DRAWER_LAYOUT_VERSION,
+        header: {
+            titleField: 'contractTitle',
+            subtitleFields: ['contractNumber', 'organizationName'],
+            avatar: { kind: 'icon', icon: 'contract' },
+            hotAvatar: false,
+            badges: [
+                { id: 'g-status', field: 'status', prefix: '', style: 'auto', hideEmpty: true },
+                { id: 'g-period', field: 'contractPeriod', prefix: '', style: 'neutral', hideEmpty: true },
+            ],
+        },
+        tabs: {
+            overview: [
+                sec('s-contract', 'CONTRACT', 'subtle', 2, [
+                    f('b-value', 'contractValue', 'large'),
+                    f('b-status', 'status', 'chip'),
+                    f('b-owner', 'assignedTo', 'person', full),
+                    f('b-org', 'organizationName', 'standard', { label: 'Organization' }),
+                    f('b-contact', 'contact', 'standard'),
+                    f('b-opp', 'opportunity', 'standard'),
+                    f('b-tally', 'tallySerialNo', 'standard', { copy: true }),
+                    f('b-type', 'contractType', 'chips', full),
+                ]),
+                sec('s-term', 'TERM & RENEWAL', 'attention', 2, [
+                    f('b-start', 'startDate', 'standard'),
+                    f('b-end', 'endDate', 'standard'),
+                    f('b-period', 'contractPeriod', 'standard'),
+                    f('b-renewal', 'renewalReminderDate', 'standard'),
+                ]),
+                sec('s-billing', 'BILLING', 'card', 2, [
+                    f('b-bill', 'billNumber', 'standard'),
+                    f('b-billdate', 'billDate', 'standard'),
+                    f('b-billamount', 'billAmount', 'standard'),
+                ]),
+                custom('s-custom'),
+                sec('s-desc', 'DESCRIPTION', 'card', 1, [f('b-desc', 'description', 'quote', bare)]),
+            ],
+        },
+    };
+}
+
 function partnerCompaniesLayout(): DrawerLayoutDocument {
     return {
         version: DRAWER_LAYOUT_VERSION,
@@ -573,6 +616,7 @@ const DEFAULT_LAYOUTS: Record<DrawerLayoutModule, () => DrawerLayoutDocument> = 
     quotations: quotationsLayout,
     products: productsLayout,
     tickets: ticketsLayout,
+    contracts: contractsLayout,
     'partner-companies': partnerCompaniesLayout,
 };
 

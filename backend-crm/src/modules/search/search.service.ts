@@ -16,6 +16,7 @@ import { partnerCompanyService } from '../partner-companies/partnerCompany.servi
 import { productService } from '../products/product.service.js';
 import { quotationService } from '../quotations/quotation.service.js';
 import { ticketService } from '../tickets/ticket.service.js';
+import { contractService } from '../contracts/contract.service.js';
 
 /**
  * Global search: one query across every module, matched on record numbers (Document Series), names, emails,
@@ -32,6 +33,7 @@ export const GLOBAL_SEARCH_CATEGORIES = [
     'organizations',
     'contacts',
     'tickets',
+    'contracts',
     'products',
     'partnerCompanies',
 ] as const;
@@ -655,6 +657,74 @@ const MODULES: Record<GlobalSearchCategory, (ctx: Context) => Promise<Found>> = 
         );
     },
 
+    contracts: (ctx) => {
+        const { t } = ctx;
+        const shown = ctx.shown.has('contract');
+        const clauses: Prisma.ContractWhereInput[] | null = t.code
+            ? ownCode(ctx, 'CTR', 'contract', { contractNumber: { startsWith: t.code.code } })
+            : t.gst || t.pan
+              ? null
+              : nonEmpty<Prisma.ContractWhereInput>([
+                    ...(t.text
+                        ? [
+                              { contractTitle: { contains: t.q } },
+                              { organizationName: { contains: t.q } },
+                              { contact: { contains: t.q } },
+                              { opportunity: { contains: t.q } },
+                              { tallySerialNo: { contains: t.q } },
+                              { billNumber: { contains: t.q } },
+                          ]
+                        : []),
+                    ...numbered(ctx, 'contract', { contractNumber: { contains: t.q } }),
+                    // Tally serial and bill numbers are often all digits, which read as a phone number rather than text.
+                    ...(!t.text && t.digits ? [{ tallySerialNo: { contains: t.digits } }, { billNumber: { contains: t.digits } }] : []),
+                ]);
+        const where = clauses && { isDeleted: false, OR: clauses };
+        return collect(
+            ctx,
+            where,
+            (w) =>
+                prisma.contract.findMany({
+                    where: w,
+                    select: {
+                        id: true,
+                        contractNumber: true,
+                        contractTitle: true,
+                        organizationName: true,
+                        contact: true,
+                        opportunity: true,
+                        tallySerialNo: true,
+                        billNumber: true,
+                        status: true,
+                    },
+                    orderBy: recent,
+                    skip: ctx.skip,
+                    take: ctx.take,
+                }),
+            (w) => prisma.contract.count({ where: w }),
+            (w) => prisma.contract.findMany({ where: w, select: { id: true }, orderBy: recent, take: MAX_IDS_PER_MODULE }),
+            (c) => {
+                const { title, subtitle } = shown
+                    ? { title: c.contractNumber, subtitle: joinParts(c.contractTitle, c.organizationName) }
+                    : { title: c.contractTitle, subtitle: c.organizationName };
+                return {
+                    id: c.id,
+                    category: 'contracts',
+                    title,
+                    subtitle,
+                    meta: c.status,
+                    match: findMatch(t, [title, subtitle], [
+                        ['Contact', c.contact],
+                        ['Opportunity', c.opportunity],
+                        ['Tally Serial No', c.tallySerialNo],
+                        ['Bill No', c.billNumber],
+                    ]),
+                    href: `/contracts/${c.id}`,
+                };
+            },
+        );
+    },
+
     products: (ctx) => {
         const { t } = ctx;
         const shown = ctx.shown.has('product');
@@ -859,6 +929,7 @@ const RECORD_LOADERS: Record<GlobalSearchCategory, (ids: string[], user: AuthUse
     organizations: (ids, user) => organizationService.listByIds(ids, user),
     contacts: (ids) => contactService.listByIds(ids),
     tickets: (ids) => ticketService.listByIds(ids),
+    contracts: (ids) => contractService.listByIds(ids),
     products: (ids) => productService.listByIds(ids),
     partnerCompanies: (ids) => partnerCompanyService.listByIds(ids),
 };

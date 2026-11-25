@@ -27,6 +27,7 @@ const ROW_SCOPED_OWNERS: Partial<Record<AuditEntityType, (id: string) => Promise
     Opportunity: (id) => prisma.opportunity.findUnique({ where: { id }, select: OWNER_SELECT }),
     Quotation: (id) => prisma.quotation.findUnique({ where: { id }, select: OWNER_SELECT }),
     Ticket: (id) => prisma.ticket.findUnique({ where: { id }, select: OWNER_SELECT }),
+    Contract: (id) => prisma.contract.findUnique({ where: { id }, select: OWNER_SELECT }),
 };
 
 /** Admin-area trails (sign-ins carry IP addresses; templates are admin-managed). A user may read their own. */
@@ -66,6 +67,8 @@ const ENTITY_TYPES: Record<string, AuditEntityType> = {
     products: 'Product',
     ticket: 'Ticket',
     tickets: 'Ticket',
+    contract: 'Contract',
+    contracts: 'Contract',
     'partner-company': 'PartnerCompany',
     'partner-companies': 'PartnerCompany',
     partnercompany: 'PartnerCompany',

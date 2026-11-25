@@ -2,6 +2,7 @@ import type React from 'react';
 import type { CrmUser } from './user.types';
 import type { ExtendedOrganization } from './organization.types';
 import type { Contact } from './contact.types';
+import type { Opportunity } from './opportunity.types';
 import type { NatureOfCallItem } from './ticket.types';
 import type { PartnerCompany, PartnerCompanyContact } from './partner.types';
 
@@ -51,6 +52,7 @@ export interface LookupRecordMap {
     user: CrmUser;
     organization: ExtendedOrganization;
     contact: Contact;
+    opportunity: Opportunity;
     natureOfCall: NatureOfCallItem;
     partnerCompany: PartnerCompany;
     partnerCompanyContact: PartnerCompanyContact;
@@ -68,4 +70,9 @@ export interface EntityLookupModalProps<T> {
     onSelect: (record: T) => void;
     /** Current field value; the matching record is highlighted. */
     selectedValue?: string;
+    /**
+     * Filter values the picker opens with, e.g. the organization already chosen on the form. Pickers without
+     * those filter fields ignore them.
+     */
+    initialFilterValues?: LookupFilterValues;
 }

@@ -2,7 +2,7 @@ import React, { useMemo } from 'react';
 import AssignmentOutlinedIcon from '@mui/icons-material/AssignmentOutlined';
 import ConfirmationNumberOutlinedIcon from '@mui/icons-material/ConfirmationNumberOutlined';
 import PeopleOutlinedIcon from '@mui/icons-material/PeopleOutlined';
-import DescriptionOutlinedIcon from '@mui/icons-material/DescriptionOutlined';
+import HistoryEduOutlinedIcon from '@mui/icons-material/HistoryEduOutlined';
 import HistoryOutlinedIcon from '@mui/icons-material/HistoryOutlined';
 import PersonAddAlt1OutlinedIcon from '@mui/icons-material/PersonAddAlt1Outlined';
 import GroupsOutlinedIcon from '@mui/icons-material/GroupsOutlined';
@@ -29,6 +29,8 @@ import {
     useTickets,
     type AuditEntityType,
 } from '@/hooks/queries';
+import { useContracts } from '@/hooks/queries/useContracts';
+import type { Contract } from '@/types/contract.types';
 import type { Contact } from '@/types/contact.types';
 import type { Lead } from '@/types/lead.types';
 import type { Opportunity } from '@/types/opportunity.types';
@@ -44,7 +46,8 @@ export type CrmEntityType =
     | 'opportunity'
     | 'product'
     | 'quotation'
-    | 'ticket';
+    | 'ticket'
+    | 'contract';
 
 export type RelatedRecordRow = Record<string, unknown>;
 
@@ -56,6 +59,7 @@ export interface RelatedRecordDatasets {
     organizations?: ExtendedOrganization[];
     products?: Product[];
     tickets?: Ticket[];
+    contracts?: Contract[];
     auditRevisions?: AuditRevisionItem[];
 }
 
@@ -74,6 +78,7 @@ const AUDIT_ENTITY_MAP: Record<CrmEntityType, AuditEntityType> = {
     product: 'products',
     quotation: 'quotations',
     ticket: 'tickets',
+    contract: 'contracts',
 };
 
 interface ExtractedEntityContext {
@@ -183,7 +188,8 @@ export function resolveRelatedRecordsForModule(
                     if (
                         ctx.entityType === 'opportunity' ||
                         ctx.entityType === 'quotation' ||
-                        ctx.entityType === 'ticket'
+                        ctx.entityType === 'ticket' ||
+                        ctx.entityType === 'contract'
                     ) {
                         if (ctx.contactId && c.id === ctx.contactId) return true;
                         if (ctx.contactName && c.name.trim().toLowerCase() === ctx.contactName) return true;
@@ -205,7 +211,7 @@ export function resolveRelatedRecordsForModule(
             const opps = datasets.opportunities ?? [];
             return opps
                 .filter((o) => {
-                    if (ctx.entityType === 'quotation' && ctx.oppId && o.id === ctx.oppId) return true;
+                    if ((ctx.entityType === 'quotation' || ctx.entityType === 'contract') && ctx.oppId && o.id === ctx.oppId) return true;
                     if (
                         ctx.entityType === 'quotation' &&
                         ctx.oppCode &&
@@ -440,6 +446,27 @@ export function resolveRelatedRecordsForModule(
                 }));
         }
 
+        case 'contracts': {
+            const sameText = (a: string | undefined, b: string) =>
+                Boolean(b) && (a || '').trim().toLowerCase() === b;
+            return (datasets.contracts ?? [])
+                .filter((c) => {
+                    // A contract stores the opportunity's label, not its code, so only the link matches.
+                    if (ctx.entityType === 'opportunity') return Boolean(ctx.recordId) && c.opportunityId === ctx.recordId;
+                    if (ctx.entityType === 'contact') {
+                        return (
+                            (ctx.contactId && c.contactId === ctx.contactId) ||
+                            sameText(c.contact, ctx.contactName)
+                        );
+                    }
+                    return (
+                        (ctx.orgId && c.organizationId === ctx.orgId) ||
+                        sameText(c.organizationName, ctx.orgName)
+                    );
+                })
+                .map((c) => ({ ...c }));
+        }
+
         case 'history':
         case 'conversion_audit': {
             const revisions = datasets.auditRevisions ?? [];
@@ -456,7 +483,6 @@ export function resolveRelatedRecordsForModule(
         }
 
         case 'activities':
-        case 'contracts':
         case 'partner_contacts':
         case 'member_organizations':
         case 'documents':
@@ -505,18 +531,26 @@ export function useRelatedDatasets(
         return undefined;
     }, [entityType, ctx.contactId, ctx.orgId]);
 
+    const contractFilter = useMemo(() => {
+        if (entityType === 'opportunity' && ctx.recordId) return { opportunityId: ctx.recordId };
+        if (entityType === 'contact' && ctx.contactId) return { contactId: ctx.contactId };
+        if (ctx.orgId) return { organizationId: ctx.orgId };
+        return undefined;
+    }, [entityType, ctx.recordId, ctx.contactId, ctx.orgId]);
+
     const leadFilter = useMemo(
         () => (ctx.title && entityType === 'organization' ? { organizationName: ctx.title } : undefined),
         [entityType, ctx.title]
     );
 
-    const needsContacts = active && ['organization', 'opportunity', 'quotation', 'ticket'].includes(entityType);
-    const needsOpps = active && ['organization', 'contact', 'quotation', 'product'].includes(entityType);
+    const needsContacts = active && ['organization', 'opportunity', 'quotation', 'ticket', 'contract'].includes(entityType);
+    const needsOpps = active && ['organization', 'contact', 'quotation', 'product', 'contract'].includes(entityType);
     const needsQuotes = active && ['organization', 'contact', 'opportunity', 'product'].includes(entityType);
     const needsLeads = active && entityType === 'organization';
-    const needsOrgs = active && ['contact', 'opportunity', 'quotation', 'ticket', 'product'].includes(entityType);
+    const needsOrgs = active && ['contact', 'opportunity', 'quotation', 'ticket', 'product', 'contract'].includes(entityType);
     const needsProducts = active && ['organization', 'opportunity', 'quotation'].includes(entityType);
     const needsTickets = active && ['organization', 'contact'].includes(entityType);
+    const needsContracts = active && ['organization', 'contact', 'opportunity'].includes(entityType);
 
     const { data: contacts } = useContacts(contactFilter, { enabled: needsContacts });
     const { data: opportunities } = useOpportunities(oppFilter, { enabled: needsOpps });
@@ -525,6 +559,7 @@ export function useRelatedDatasets(
     const { data: organizations } = useOrganizations(undefined, { enabled: needsOrgs });
     const { data: products } = useProducts(undefined, { enabled: needsProducts });
     const { data: tickets } = useTickets(ticketFilter, { enabled: needsTickets });
+    const { data: contracts } = useContracts(contractFilter, { enabled: needsContracts });
     const { data: auditRevisions } = useEntityAuditLogs(
         AUDIT_ENTITY_MAP[entityType],
         active && ctx.recordId ? ctx.recordId : undefined
@@ -539,9 +574,10 @@ export function useRelatedDatasets(
             organizations,
             products,
             tickets,
+            contracts,
             auditRevisions,
         }),
-        [contacts, opportunities, quotations, leads, organizations, products, tickets, auditRevisions]
+        [contacts, opportunities, quotations, leads, organizations, products, tickets, contracts, auditRevisions]
     );
 }
 
@@ -580,7 +616,7 @@ export function getRelatedModulesForEntity(
                 { id: 'activities', label: 'Activities', icon: <AssignmentOutlinedIcon /> },
                 { id: 'tickets', label: 'Tickets', icon: <ConfirmationNumberOutlinedIcon /> },
                 { id: 'contacts', label: 'Contacts', icon: <PeopleOutlinedIcon /> },
-                { id: 'contracts', label: 'Contracts', icon: <DescriptionOutlinedIcon /> },
+                { id: 'contracts', label: 'Contracts', icon: <HistoryEduOutlinedIcon /> },
                 { id: 'history', label: 'History', icon: <HistoryOutlinedIcon /> },
                 { id: 'leads', label: 'Leads', icon: <PersonAddAlt1OutlinedIcon /> },
                 { id: 'partner-contacts', label: 'Partner Contacts', icon: <GroupsOutlinedIcon /> },
@@ -597,6 +633,7 @@ export function getRelatedModulesForEntity(
             return withClick([
                 { id: 'activities', label: 'Activities', icon: <AssignmentOutlinedIcon /> },
                 { id: 'tickets', label: 'Tickets', icon: <ConfirmationNumberOutlinedIcon /> },
+                { id: 'contracts', label: 'Contracts', icon: <HistoryEduOutlinedIcon /> },
                 { id: 'organizations', label: 'Organizations', icon: <ApartmentOutlinedIcon /> },
                 { id: 'opportunities', label: 'Opportunities', icon: <TrendingUpOutlinedIcon /> },
                 { id: 'quotations', label: 'Quotations', icon: <RequestQuoteOutlinedIcon /> },
@@ -615,6 +652,7 @@ export function getRelatedModulesForEntity(
             return withClick([
                 { id: 'activities', label: 'Activities', icon: <AssignmentOutlinedIcon /> },
                 { id: 'quotes', label: 'Quotes', icon: <RequestQuoteOutlinedIcon /> },
+                { id: 'contracts', label: 'Contracts', icon: <HistoryEduOutlinedIcon /> },
                 { id: 'contacts', label: 'Contacts', icon: <PeopleOutlinedIcon /> },
                 { id: 'organizations', label: 'Organizations', icon: <ApartmentOutlinedIcon /> },
                 { id: 'products', label: 'Products/Line Items', icon: <Inventory2OutlinedIcon /> },
@@ -635,6 +673,15 @@ export function getRelatedModulesForEntity(
                 { id: 'activities', label: 'Activities', icon: <AssignmentOutlinedIcon /> },
                 { id: 'organizations', label: 'Organizations', icon: <ApartmentOutlinedIcon /> },
                 { id: 'contacts', label: 'Contacts', icon: <PeopleOutlinedIcon /> },
+                { id: 'history', label: 'History', icon: <HistoryOutlinedIcon /> },
+            ]);
+
+        case 'contract':
+            return withClick([
+                { id: 'activities', label: 'Activities', icon: <AssignmentOutlinedIcon /> },
+                { id: 'organizations', label: 'Organizations', icon: <ApartmentOutlinedIcon /> },
+                { id: 'contacts', label: 'Contacts', icon: <PeopleOutlinedIcon /> },
+                { id: 'opportunities', label: 'Opportunities', icon: <TrendingUpOutlinedIcon /> },
                 { id: 'history', label: 'History', icon: <HistoryOutlinedIcon /> },
             ]);
 

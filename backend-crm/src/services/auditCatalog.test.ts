@@ -15,6 +15,7 @@ describe('moduleFor', () => {
     it('maps records to their CRM module and admin rows to their admin area', () => {
         assert.equal(moduleFor('Lead'), 'leads');
         assert.equal(moduleFor('PartnerCompany'), 'partner-companies');
+        assert.equal(moduleFor('Contract'), 'contracts');
         assert.equal(moduleFor('DropdownOption'), 'form-customization');
         assert.equal(moduleFor('PdfAsset'), 'pdf-templates');
         assert.equal(moduleFor('User'), 'users');
@@ -104,6 +105,8 @@ describe('labelFromChanges', () => {
         assert.equal(labelFromChanges('Organization', 'id', { organizationName: 'ACME PVT LTD' }), 'ACME PVT LTD');
         assert.equal(labelFromChanges('City', '7', { cityName: { from: 'Old', to: 'New' } }), 'New');
         assert.equal(labelFromChanges('Ticket', 'id', { organizationName: 'Org' }), 'Org');
+        assert.equal(labelFromChanges('Contract', 'id', { contractTitle: 'Tally TSS', organizationName: 'Org' }), 'Tally TSS');
+        assert.equal(labelFromChanges('Contract', 'id', { organizationName: 'Org' }), 'Org');
     });
     it('names form-customization entries by module and field, or the whole form', () => {
         assert.equal(labelFromChanges('FormField', 'f1', { _meta: { module: 'leads', fieldLabel: 'Phone 3' } }), 'Leads › Phone 3');

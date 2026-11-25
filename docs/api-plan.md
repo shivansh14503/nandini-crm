@@ -1,6 +1,6 @@
 # Nandini CRM — API Plan
 
-> **Status:** living document. Lists every endpoint of `backend-crm` as of 2026-11-23 plus the planned ones.
+> **Status:** living document. Lists every endpoint of `backend-crm` as of 2026-11-25 plus the planned ones.
 > When you add, change or remove a route, update this file in the same change (the route files'
 > header comments are the per-module source of truth; keep them in step too).
 > Related: [System design](system-design.md) · [Database design](database-design.md) · [Build plan](build-plan.md)
@@ -20,7 +20,7 @@
 | IDs | UUID strings (users: integer) |
 | Deletes | Soft deletes for business records (`isDeleted`), hard deletes only for personal / config data where noted |
 | Updates | `PUT /:id` takes a **partial** record merged onto the stored one; `PATCH /:id` is an alias |
-| Time zone | Wall-clock inputs (ticket due dates) and audit display times use `BUSINESS_TIMEZONE` (default `Asia/Kolkata`) |
+| Time zone | Wall-clock inputs (ticket due dates, contract renewal reminders) and audit display times use `BUSINESS_TIMEZONE` (default `Asia/Kolkata`) |
 | Request id | Every response carries `X-Request-Id` (exposed to the browser); the same id is the log line's `req.id` and every audit entry the request wrote |
 | Audit headers | The web app sends `X-CRM-Client: web` (audit `source` = `UI`, otherwise `API`) and `X-CRM-Page: <screen path>` (audit `page`; path only, no query string) |
 
@@ -94,6 +94,7 @@ The auth endpoints use the older `{ status: 'ok', … }` envelope rather than `{
 | Base | Type | Notes | List filters |
 | --- | --- | --- | --- |
 | `/tickets` | CRUD | Nature of Call must exist in the master | `ticketStatus`, `excludeStatus`, `ticketPriority`, `supportType`, `supportMode`, `organizationId`, `contactId`, `assignedTo`, `overdue` |
+| `/contracts` | CRUD | Required: `contractTitle`, `assignedTo` (Contract Manager: an active user, else the caller), `organizationName`, `contact`; `status` defaults to `Not Started`. Organization by `organizationId`, else by name; contact by `contactId`, else by name within that organization; opportunity by `opportunityId`, else the typed label is kept unlinked (unknown / deleted id → 400 on `organizationName` / `contact` / `opportunity`). Dates `YYYY-MM-DD`, `renewalReminderDate` wall clock `YYYY-MM-DDTHH:mm`; start / end / bill dates and the reminder can't be in the past unless unchanged, and `endDate` can't be before `startDate` (400 on that field). `contractValue` / `billAmount` ≥ 0 with ≤ 2 decimals, returned as strings (`''` when empty); `contractType` is a string array. Search: a `CTR-` / series number by prefix, else number, title, organization, contact, opportunity, Tally serial no., bill number. Sort: `createdAt`, `updatedAt`, `contractNumber`, `contractTitle`, `status`, `organizationName`, `assignedTo`, `startDate`, `endDate`, `renewalReminderDate`, `contractValue` | `status`, `excludeStatus`, `organizationId`, `contactId`, `opportunityId`, `assignedTo` |
 | `/products` | CRUD | Not row-scoped | `category`, `type`, `isActive` |
 | `/partner-companies` | CRUD | Company name globally unique | `natureOfPartner`, `assignedTo` |
 
@@ -101,7 +102,7 @@ The auth endpoints use the older `{ status: 'ok', … }` envelope rather than `{
 
 | Method | Path | Cache | Description |
 | --- | --- | --- | --- |
-| GET | `/search?q&limit=5` | 30 s, per access scope | `{ organizations, contacts, leads, opportunities }`, each `[{ id, category, title, subtitle, meta?, href }]` |
+| GET | `/search?q&limit=5` | 30 s, per access scope | `results: { leads, opportunities, quotations, organizations, contacts, tickets, contracts, products, partnerCompanies }`, each `[{ id, category, title, subtitle, meta?, href }]` |
 | GET | `/lookups/users?includeInactive` | 5 min | User pickers |
 | GET | `/lookups/organizations?search&limit` | 5 min (no search) | Compact organization list |
 | GET | `/lookups/contacts?search&limit&organizationId` | 5 min (no search/filter) | |
@@ -114,7 +115,7 @@ The auth endpoints use the older `{ status: 'ok', … }` envelope rather than `{
 | GET | `/lookups/form-configs?includeInactive` | 1 h | Same payload as `GET /form-configs` |
 | GET | `/lookups/tax-id-holders?owner&gstNumber&panNumber&excludeId` | never | "Is this GSTIN / PAN already used?" |
 | GET | `/lookups/email-check?email` | never (DB is the record) | Form's on-blur check → `{ email, status, reason, message, suggestion }`. An address already saved on any record returns its stored result (no provider call); otherwise free checks, then the provider. Rate limited per user |
-| GET | `/audit-logs/:entityType/:entityId?limit=100` | – | `{ entries, revisions }` newest first (entry `id` is a string). `entityType` ∈ organizations, contacts, leads, opportunities, quotations, products, tickets, partner-companies, users, pdf-templates, form-configs (`entityId` = module key, `shared` or `all`; includes drawer layout and drawer piece changes). **Access:** admins read every trail. Others: organizations / contacts / leads / opportunities / quotations / tickets need access to the record (403; 404 if it doesn't exist); `users` only their own trail; `pdf-templates` and `form-configs` admin-only (403); products and partner companies any signed-in user |
+| GET | `/audit-logs/:entityType/:entityId?limit=100` | – | `{ entries, revisions }` newest first (entry `id` is a string). `entityType` ∈ organizations, contacts, leads, opportunities, quotations, products, tickets, contracts, partner-companies, users, pdf-templates, form-configs (`entityId` = module key, `shared` or `all`; includes drawer layout and drawer piece changes). **Access:** admins read every trail. Others: organizations / contacts / leads / opportunities / quotations / tickets / contracts need access to the record (403; 404 if it doesn't exist); `users` only their own trail; `pdf-templates` and `form-configs` admin-only (403); products and partner companies any signed-in user |
 
 ### 2.5 Personal state
 
@@ -130,7 +131,7 @@ The auth endpoints use the older `{ status: 'ok', … }` envelope rather than `{
 | Method | Path | Description |
 | --- | --- | --- |
 | GET | `/scorecards` | `{ [module]: { module, fieldKey, currencyFieldKey, options: [{ value, color, hidden? }], listViewColor, drawerViewColor, updatedBy, updatedAt } }` for configured modules (any signed-in user) |
-| PUT | `/scorecards/:module` | Admin only. `{ fieldKey, currencyFieldKey?, options, listViewColor, drawerViewColor }`. **400** when `fieldKey` isn't an active `select` field of the module, `currencyFieldKey` isn't an active `amount` / `number` field or one of the module's built-in totals, an option isn't in the field's dropdown, or a color isn't `#RRGGBB`. Built-in totals are `builtin.*` keys the list works out from its line items (`BUILT_IN_SCORECARD_AMOUNTS` in `scorecard.validator.ts`; Opportunities: `builtin.totalAmount`, `builtin.subtotal`, `builtin.totalDiscount`, `builtin.totalTax`, `builtin.grandTotal`, `builtin.subtotalPlusTax`, `builtin.commissionAmount`, `builtin.lumpSumDiscount`; Quotations: the same without `builtin.grandTotal` and `builtin.commissionAmount`). No `currencyFieldKey` = the screen's default total (Opportunities: Actual (Before Tax); Quotations: Grand Total) |
+| PUT | `/scorecards/:module` | Admin only. `{ fieldKey, currencyFieldKey?, options, listViewColor, drawerViewColor }`. **400** when `fieldKey` isn't an active `select` field of the module, `currencyFieldKey` isn't an active `amount` / `number` field or one of the module's built-in totals, an option isn't in the field's dropdown, or a color isn't `#RRGGBB`. Built-in totals are `builtin.*` keys the list works out from its line items (`BUILT_IN_SCORECARD_AMOUNTS` in `scorecard.validator.ts`; Opportunities: `builtin.totalAmount`, `builtin.subtotal`, `builtin.totalDiscount`, `builtin.totalTax`, `builtin.grandTotal`, `builtin.subtotalPlusTax`, `builtin.commissionAmount`, `builtin.lumpSumDiscount`; Quotations: the same without `builtin.grandTotal` and `builtin.commissionAmount`). No `currencyFieldKey` = the screen's default total (Opportunities: Actual (Before Tax); Quotations: Grand Total; Contracts: Contract Value, which has no `builtin.*` keys) |
 | DELETE | `/scorecards/:module` | Admin only. Back to the screen's built-in cards |
 
 ### 2.5b Record drawer layouts (Form Customization › Drawer Layout)
@@ -138,7 +139,7 @@ The auth endpoints use the older `{ status: 'ok', … }` envelope rather than `{
 `/drawer-layouts` (`GET /` any signed-in user; changes admin only) and `/drawer-pieces` (admin only). The layout
 document schema is `backend-crm/src/modules/drawer-layouts/document/schema.ts` (copied to the frontend by
 `npm run sync:drawer-layout`). Modules: `leads`, `contacts`, `organizations`, `opportunities`, `quotations`, `products`,
-`tickets`, `partner-companies`. The `lineItems` and `totals` blocks are allowed only on `opportunities` and
+`tickets`, `contracts`, `partner-companies`. The `lineItems` and `totals` blocks are allowed only on `opportunities` and
 `quotations` (**400** elsewhere, also for pieces).
 
 | Method | Path | Description |
@@ -252,7 +253,7 @@ read-only on the lead DTO (a `rating` sent by a client is ignored).
 | GET | `/facets?from&to` | Filter options with counts for the range (default the last 30 days, max 366): `{ from, to, total, users, modules, actions, categories, severities, sources }`, each `[{ value, label, count }]`, most used first (`users[].label` = full name) |
 | GET | `/stats?from&to` | Summary strip: `{ from, to, today, failedSignIns24h, accessDenied24h, deletes7d, total, mostActiveUsers: [{ username, label, count }] (top 5, jobs left out), eventsPerDay: [{ date, total, data, config, security }] }`. `today` / `24h` / `7d` are fixed windows; the rest follow the range (default the last 30 days, max 366); every day of the range is listed, empty ones as 0 |
 | GET | `/:id` | `{ entry, changes, fields, details, related, relatedCount }`: `entry` = list item plus `sessionId`, `httpMethod`, `route`, `userAgent`; `changes` = the stored JSON; `fields` = `[{ key, label, before, after }]` labelled from the form configuration (custom fields included; `before` null for a create, `after` null for a delete); `details` = `[{ key, label, value }]` for everything else the entry recorded (sign-in IP, refused path, import counts, reason, follow-up); `related` = the first 100 other entries of the same request (`relatedCount` = all of them; filter `requestId` for the rest); `actions` = `{ undo, restore }`, each `{ available, reason? }` or null when the entry doesn't offer it; `reversedBy` / `reverses` = the REVERT / RESTORE entry that undid this one, or the entry this one undid (list items, or null). 404 when there's no such entry |
-| GET | `/:id/undo` | Undo preview of an UPDATE / STATUS_CHANGE of a CRM record (the 8 record modules): `{ id, canUndo, fields: [{ key, label, from, to, current, status }] }` (values as shown on screen). `status`: `ready` (still holds the entry's `to`, can be put back), `conflict` (changed again since), `already` (already holds the earlier value), `blocked` (not editable through the record's update, e.g. a system field). 409 `NOT_UNDOABLE` (any other entry, incl. CONVERT, IMPORT and Form Customization) or `ALREADY_REVERSED`; 404 when the record is deleted or gone |
+| GET | `/:id/undo` | Undo preview of an UPDATE / STATUS_CHANGE of a CRM record (the 9 record modules): `{ id, canUndo, fields: [{ key, label, from, to, current, status }] }` (values as shown on screen). `status`: `ready` (still holds the entry's `to`, can be put back), `conflict` (changed again since), `already` (already holds the earlier value), `blocked` (not editable through the record's update, e.g. a system field). 409 `NOT_UNDOABLE` (any other entry, incl. CONVERT, IMPORT and Form Customization) or `ALREADY_REVERSED`; 404 when the record is deleted or gone |
 | POST | `/:id/undo` | `{ fields?: string[] }` (default: every `ready` field) → `{ id, revertId, undone, conflicts, notReverted }` (same field shape). Puts the `from` values back through the module's own update (validation, field locking, name write-through); the module's UPDATE entry is written as `REVERT` with `revertsId` = this entry. An entry can be undone once (409 `ALREADY_REVERSED`); 409 `CONFLICT` with one `errors[]` item per field when none can be put back; the module's own `400 VALIDATION_ERROR` / `DUPLICATE_RECORD` pass through |
 | POST | `/:id/restore` | Brings back the soft-deleted record of a DELETE entry → `{ id, restoreId, entityType, entityId, module }`; writes `RESTORE` with `revertsId`. Name / tax-id uniqueness is checked again (409 `DUPLICATE_RECORD`); 409 `NOT_RESTORABLE` (not a record delete), `ALREADY_REVERSED`, or `CONFLICT` (the record isn't deleted any more) |
 | POST | `/exports` | `{ format: 'csv' \| 'xlsx', filters }` (`filters` = the `GET /` query, without `cursor` / `limit`) → `AuditExport { id, format, status: queued\|running\|completed\|failed\|expired, rowCount, truncated, cap, fileName, fileSize, message, createdAt, finishedAt, expiresAt }`. Up to 5,000 entries the file is written at once and the export comes back `completed`; larger ones run in the `crm-audit-export` queue (in-process when Redis is off): poll `GET /exports/:id`. Newest first, capped at 1,000,000 entries (CSV) / 500,000 (Excel) with `truncated: true`. 25 columns (time in the business timezone and UTC, user, role, category, action, severity, module, record type / id / number / name, summary, changes, details, source, IP, screen, route, request id, session id, browser, undoes entry). CSV: UTF-8 BOM, CRLF, cells starting `= + - @` prefixed with `'`. Every export writes an `EXPORT` entry (filters, format, row count) |

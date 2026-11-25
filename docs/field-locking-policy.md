@@ -121,6 +121,23 @@ Fields not listed are ○ Free today and stay ○ Free.
 | Due Date | 🔒R | 🔒 | Logic: overdue / SLA |
 | Assigned to | 🔒R | 🔒 | Ownership |
 
+### Contracts
+
+New module (2026-11-25), shipped with these tiers (no "Current" column). Fields not listed are ○ Free: Opportunity,
+Tally Serial Number, Contract Start / End Date, Renewal Reminder Date, Description.
+
+| Field | Tier | Why |
+|---|---|---|
+| Contract Title | 🔒 required | Identity: the list and drawer title |
+| Status | 🔒 required | Logic: status cards and Expiring in 30 Days; defaults to `Not Started` when omitted |
+| Contract Manager (Assigned to) | 🔒 required | Ownership / access scope |
+| Organization Name | 🔒 required | Relation |
+| Contact Person | 🔒 required | Relation |
+| Contract Value | ⭐ | Business preference; the status cards total it (blank adds nothing) |
+| Contract Period | ⭐ | Business preference; a length such as `1 Year` also fills End Date in the form |
+| Contract Type | ⭐ | Classification |
+| Bill Number / Bill Date / Bill Amount | ⭐ | Billing completeness |
+
 ### Partner companies
 
 | Field | Current | Final | Why |
@@ -134,6 +151,7 @@ Fields not listed are ○ Free today and stay ○ Free.
 
 - Locked today: **~73** fields (every required field is locked: `isCoreLocked = req || lock`).
 - Final: **37 🔒 Locked**, **34 ⭐ Default required**, and Mailing Name / Account Status move to ○ Free.
+- Contracts (2026-11-25) added 5 🔒 and 6 ⭐ fields.
 
 ## Implementation steps
 

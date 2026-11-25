@@ -9,6 +9,7 @@ export const GLOBAL_SEARCH_CATEGORIES = [
     'organizations',
     'contacts',
     'tickets',
+    'contracts',
     'products',
     'partnerCompanies',
 ] as const;

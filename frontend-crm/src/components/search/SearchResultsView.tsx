@@ -14,6 +14,7 @@ import { QuotationsMasterView } from '@/components/quotations';
 import { OrganizationsMasterView } from '@/components/organizations/OrganizationsMasterView';
 import { ContactsMasterView } from '@/components/contacts';
 import { TicketsMasterView } from '@/components/tickets';
+import { ContractsMasterView } from '@/components/contracts';
 import { ProductsMasterView } from '@/components/products';
 import { PartnerCompaniesMasterView } from '@/components/partner-companies';
 import { useQuery } from '@tanstack/react-query';
@@ -40,6 +41,7 @@ const MODULE_VIEWS: Record<GlobalSearchCategory, React.ComponentType> = {
     organizations: OrganizationsMasterView,
     contacts: ContactsMasterView,
     tickets: TicketsMasterView,
+    contracts: ContractsMasterView,
     products: ProductsMasterView,
     partnerCompanies: PartnerCompaniesMasterView,
 };
@@ -398,7 +400,7 @@ function EmptyPrompt() {
             <SearchIcon sx={{ fontSize: 40, color: 'var(--mui-palette-text-muted)' }} />
             <Typography sx={{ mt: 1, fontSize: '1rem', fontWeight: 700, color: 'var(--crm-slate-900)' }}>Search across every module</Typography>
             <Typography sx={{ mt: 0.5, mb: 2, fontSize: '0.85rem', color: 'var(--mui-palette-text-secondary)' }}>
-                Leads, opportunities, quotations, organizations, contacts, tickets, products and partner companies. You can search by:
+                Leads, opportunities, quotations, organizations, contacts, tickets, contracts, products and partner companies. You can search by:
             </Typography>
             <Box sx={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: 0.75 }}>
                 {SEARCHABLE_FIELDS.map((field) => (

@@ -121,6 +121,7 @@ describe('entryActions', () => {
         assert.equal(entryActions({ action: 'DELETE', entityType: 'Lead' }, null, 'deleted', true).restore?.available, false);
         assert.equal(entryActions({ action: 'DELETE', entityType: 'Lead' }, null, 'live', false).restore?.available, false);
         assert.equal(entryActions({ action: 'DELETE', entityType: 'Lead' }, null, 'missing', false).restore?.available, false);
+        assert.deepEqual(entryActions({ action: 'DELETE', entityType: 'Contract' }, null, 'deleted', false), { undo: null, restore: { available: true } });
     });
 
     it('offers undo on field and status changes of a live CRM record, once', () => {

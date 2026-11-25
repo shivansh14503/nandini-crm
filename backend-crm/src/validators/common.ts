@@ -225,20 +225,33 @@ export const optionalDate = (field: string) =>
 
 const WALL_CLOCK_PATTERN = /^(\d{4}-\d{2}-\d{2})T(\d{2}):(\d{2})$/;
 
+/** Drops seconds / milliseconds (and a trailing Z) so `2026-11-25T11:00:00.000Z` reads as `2026-11-25T11:00`. */
+const trimWallClock = (value: string) => value.trim().replace(/^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2})(:\d{2}(\.\d+)?)?Z?$/, '$1');
+
+const isWallClock = (value: string): boolean => {
+    const match = WALL_CLOCK_PATTERN.exec(value);
+    return Boolean(match && isCalendarDate(match[1]) && Number(match[2]) < 24 && Number(match[3]) < 60);
+};
+
 /**
  * Local date-time from a `datetime-local` input (`YYYY-MM-DDTHH:mm`); seconds / milliseconds are dropped.
  * The value is a wall-clock time with no timezone.
  */
 export const requiredWallClock = (field: string) =>
     z.preprocess(
-        (value) => (typeof value === 'string' ? value.trim().replace(/^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2})(:\d{2}(\.\d+)?)?Z?$/, '$1') : value),
-        z.string({ error: `${field} is required.` }).refine(
-            (value) => {
-                const match = WALL_CLOCK_PATTERN.exec(value);
-                return Boolean(match && isCalendarDate(match[1]) && Number(match[2]) < 24 && Number(match[3]) < 60);
-            },
-            { message: `${field} must be a valid date and time.` },
-        ),
+        (value) => (typeof value === 'string' ? trimWallClock(value) : value),
+        z.string({ error: `${field} is required.` }).refine(isWallClock, { message: `${field} must be a valid date and time.` }),
+    );
+
+/** `requiredWallClock` for an optional date-time: blank / null / missing → undefined. */
+export const optionalWallClock = (field: string) =>
+    z.preprocess(
+        (value) => {
+            if (value === null) return undefined;
+            if (typeof value !== 'string') return value;
+            return value.trim() === '' ? undefined : trimWallClock(value);
+        },
+        z.string().refine(isWallClock, { message: `${field} must be a valid date and time.` }).optional(),
     );
 
 /** Optional array of trimmed option strings (e.g. product categories), each bounded. */

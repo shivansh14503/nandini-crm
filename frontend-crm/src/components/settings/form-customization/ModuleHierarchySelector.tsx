@@ -12,6 +12,7 @@ import LightbulbOutlinedIcon from '@mui/icons-material/LightbulbOutlined';
 import MonetizationOnOutlinedIcon from '@mui/icons-material/MonetizationOnOutlined';
 import RequestQuoteOutlinedIcon from '@mui/icons-material/RequestQuoteOutlined';
 import ConfirmationNumberOutlinedIcon from '@mui/icons-material/ConfirmationNumberOutlined';
+import HistoryEduOutlinedIcon from '@mui/icons-material/HistoryEduOutlined';
 import CategoryOutlinedIcon from '@mui/icons-material/CategoryOutlined';
 import HandshakeOutlinedIcon from '@mui/icons-material/HandshakeOutlined';
 import PublishedWithChangesIcon from '@mui/icons-material/PublishedWithChanges';
@@ -34,6 +35,7 @@ export const MODULE_ICONS: Record<CrmModuleKey, React.ReactNode> = {
     opportunities: <MonetizationOnOutlinedIcon sx={ICON_SX} />,
     quotations: <RequestQuoteOutlinedIcon sx={ICON_SX} />,
     tickets: <ConfirmationNumberOutlinedIcon sx={ICON_SX} />,
+    contracts: <HistoryEduOutlinedIcon sx={ICON_SX} />,
     products: <CategoryOutlinedIcon sx={ICON_SX} />,
     'partner-companies': <HandshakeOutlinedIcon sx={ICON_SX} />,
 };

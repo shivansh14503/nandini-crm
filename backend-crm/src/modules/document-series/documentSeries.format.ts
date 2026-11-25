@@ -9,7 +9,7 @@
  */
 
 /** Modules whose records get a generated number, in the order the admin page lists them. */
-export const SERIES_MODULES = ['lead', 'opportunity', 'quotation', 'organization', 'contact', 'ticket', 'product'] as const;
+export const SERIES_MODULES = ['lead', 'opportunity', 'quotation', 'organization', 'contact', 'ticket', 'contract', 'product'] as const;
 export type SeriesModule = (typeof SERIES_MODULES)[number];
 
 export const SERIES_MODULE_LABELS: Record<SeriesModule, string> = {
@@ -19,6 +19,7 @@ export const SERIES_MODULE_LABELS: Record<SeriesModule, string> = {
     organization: 'Organizations',
     contact: 'Contacts',
     ticket: 'Tickets',
+    contract: 'Contracts',
     product: 'Products',
 };
 
@@ -33,6 +34,7 @@ export const LEGACY_PREFIX: Record<SeriesModule, string> = {
     organization: 'ORG',
     contact: 'CON',
     ticket: 'TKT',
+    contract: 'CTR',
     product: 'PRD',
 };
 
@@ -92,6 +94,7 @@ export const SUGGESTED_PREFIX: Record<SeriesModule, string> = {
     organization: 'ORG',
     contact: 'CON',
     ticket: 'T',
+    contract: 'C',
     product: 'P',
 };
 

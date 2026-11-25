@@ -19,6 +19,8 @@ import { ProductDetailDrawer } from '@/components/products/ProductDetailDrawer';
 import { OrganizationDetailDrawer } from '@/components/organizations/OrganizationDetailDrawer';
 import { TicketDetailDrawer } from '@/components/tickets/TicketDetailDrawer';
 import type { Ticket } from '@/types/ticket.types';
+import { ContractDetailDrawer } from '@/components/contracts/ContractDetailDrawer';
+import type { Contract } from '@/types/contract.types';
 import {
     EntityDetailDrawer,
     DrawerSectionCard,
@@ -64,6 +66,16 @@ export function RelatedSecondaryDrawer({
 
         case 'tickets':
             return <TicketDetailDrawer ticket={data as unknown as Ticket} open onClose={onClose} />;
+
+        case 'contracts':
+            return (
+                <ContractDetailDrawer
+                    contract={data as unknown as Contract}
+                    open
+                    onClose={onClose}
+                    onEdit={(id) => router.push(ROUTES.CONTRACT_EDIT(id))}
+                />
+            );
 
         case 'leads':
             return (
@@ -112,7 +124,6 @@ export function RelatedSecondaryDrawer({
             const recordTitle = String(
                 data.subject ||
                     data.name ||
-                    data.contractTitle ||
                     data.partnerName ||
                     (showNumber('ticket') ? data.ticketNumber : '') ||
                     moduleLabel

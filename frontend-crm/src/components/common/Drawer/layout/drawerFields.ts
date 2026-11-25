@@ -39,6 +39,7 @@ const SYSTEM_FIELD_DEFS: Record<string, { label: string; type: FieldType }> = {
     grandTotal: { label: 'Grand Total', type: 'amount' },
     productCode: { label: 'Product Code', type: 'text' },
     ticketNumber: { label: 'Ticket Number', type: 'text' },
+    contractNumber: { label: 'Contract Number', type: 'text' },
     amcFlag: { label: 'AMC', type: 'checkbox' },
     cloudFlag: { label: 'Cloud', type: 'checkbox' },
     description: { label: 'Detailed Scope / Notes', type: 'textarea' },
@@ -135,8 +136,10 @@ export function fieldDisplayValues(record: AnyRecord | null | undefined, def: Dr
         if (def.form && isBuiltInCountryField(def.form)) return getCountryNameByCode(text) || text;
         if (def.type === 'date') return formatDay(text);
         if (def.type === 'datetime') {
-            const time = record?.[def.key.replace(/Date$/, 'Time')];
-            return [formatDay(text), typeof time === 'string' && time.trim() ? formatClock(time) : ''].filter(Boolean).join(', ');
+            // The time is either a paired field (nextFollowupTime) or part of the value itself (dueDate, renewalReminderDate: 'YYYY-MM-DDTHH:mm').
+            const paired = record?.[def.key.replace(/Date$/, 'Time')];
+            const time = typeof paired === 'string' && paired.trim() ? paired : (/^\d{4}-\d{2}-\d{2}T(\d{2}:\d{2})/.exec(text)?.[1] ?? '');
+            return [formatDay(text), time ? formatClock(time) : ''].filter(Boolean).join(', ');
         }
         // Users are stored by username: show their name.
         if (def.key === 'assignedTo') return findCrmUser(text)?.name || text;

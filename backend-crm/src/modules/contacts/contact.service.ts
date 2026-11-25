@@ -212,7 +212,7 @@ export const contactService = {
                 await replaceEmails(tx, { contactId: id }, normalizeEmails(input.emailAddress));
             }
             if (input.isPrimaryContact) await demoteOtherPrimaries(tx, id, organization.id, user);
-            // Opportunities, quotations and tickets show the contact's name; keep them in step.
+            // Opportunities, quotations, tickets and contracts show the contact's name; keep them in step.
             if (input.name !== existing.name) synced = await propagateContactName(tx, id, input.name, user);
 
             const after = toContactDto(await tx.contact.findUniqueOrThrow({ where: { id }, include }));

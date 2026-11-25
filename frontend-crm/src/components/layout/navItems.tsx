@@ -39,6 +39,7 @@ export const NAV_ITEMS: readonly NavGroup[] = [
         label: 'Support',
         items: [
             { label: 'Tickets', href: ROUTES.TICKETS },
+            { label: 'Contracts', href: ROUTES.CONTRACTS },
             { label: 'SLA Policies', href: '/dashboard' },
             { label: 'Helpdesk Teams', href: '/dashboard' },
         ],
