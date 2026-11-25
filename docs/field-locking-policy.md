@@ -193,7 +193,8 @@ leaves them out through `relaxedFields`. Only the system types hide fields; an a
 - Final: **37 🔒 Locked**, **34 ⭐ Default required**, and Mailing Name / Account Status move to ○ Free.
 - Contracts (2026-11-25) added 5 🔒 and 6 ⭐ fields.
 - Referrals (2026-11-25) added 9 fields: 5 locked today (required: Name, Mobile, Organization Name, Status, Assigned
-  to), final 4 🔒 and 1 ⭐ (Status), and 4 ○ Free (Office Phone, Email Address, Designation, Department).
+  to) and 1 ⭐ (Email Address); final 4 🔒, 2 ⭐ (Status, Email Address), and 3 ○ Free (Office Phone, Designation,
+  Department).
 - Activities (2026-11-25) added 15 fields: 6 🔒 (4 required, 2 not) and 9 ○ Free.
 
 ## Implementation steps
