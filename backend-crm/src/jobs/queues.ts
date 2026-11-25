@@ -10,6 +10,7 @@ export const QUEUE_NAMES = {
     auditExport: 'crm-audit-export',
     auditLedger: 'crm-audit-ledger',
     reminders: 'crm-reminders',
+    mail: 'crm-mail',
 } as const;
 
 /** How long a producer waits for Redis before falling back to synchronous processing. */
@@ -80,8 +81,8 @@ export const auditLedgerQueue = () =>
 
 /**
  * Reminders and notifications (src/jobs/workers/reminders.worker.ts): a delayed job per activity reminder (`remind`),
- * the business-hours sweep (`sweep`), nightly purge + re-arm (`nightly`) and the morning summary email (`morning`).
- * Every job is idempotent (claim columns and unique dedupe keys), so retries are safe.
+ * the business-hours sweep (`sweep`) and nightly purge + re-arm (`nightly`). Every job is idempotent (claim columns
+ * and unique dedupe keys), so retries are safe.
  */
 export const remindersQueue = () =>
     getQueue(QUEUE_NAMES.reminders, {
@@ -89,6 +90,19 @@ export const remindersQueue = () =>
         backoff: { type: 'exponential', delay: 30_000 },
         removeOnComplete: { age: 24 * 60 * 60, count: 1_000 },
         removeOnFail: { age: 7 * 24 * 60 * 60 },
+    });
+
+/**
+ * Outgoing email (src/jobs/workers/mail.worker.ts): the morning summary (`morning`). Its own queue and worker, so a
+ * slow or unreachable SMTP server never holds back reminders. Sends are deduplicated in EmailLog, so retries only
+ * re-send what failed.
+ */
+export const mailQueue = () =>
+    getQueue(QUEUE_NAMES.mail, {
+        attempts: 3,
+        backoff: { type: 'exponential', delay: 30_000 },
+        removeOnComplete: { age: 7 * 24 * 60 * 60, count: 100 },
+        removeOnFail: { age: 30 * 24 * 60 * 60 },
     });
 
 /** Background jobs are usable only while Redis is reachable (checked on the shared client). */

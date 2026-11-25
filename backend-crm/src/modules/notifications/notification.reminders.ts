@@ -3,7 +3,6 @@ import { logger } from '../../config/logger.js';
 import { prisma } from '../../config/prisma.js';
 import type { Prisma } from '../../generated/prisma/client.js';
 import { isQueueAvailable, remindersQueue, tryEnqueue } from '../../jobs/queues.js';
-import { CACHE_KEYS, cacheService } from '../../services/cache.service.js';
 import type { AuthUser } from '../../types/user.types.js';
 import { fromWallClock, toWallClock } from '../../utils/mappers.js';
 import { fakeUtcToInstant, instantToZonedWallClock, zonedDayOf } from '../../utils/zonedTime.js';
@@ -11,7 +10,7 @@ import { allDayRange } from '../activities/activity.mapper.js';
 import { NOTE_TYPE, PLANNED_STATUS, TASK_TYPE } from '../activities/activity.schedule.js';
 import { CONTRACT_EXPIRED_STATUS } from '../activities/activity.calendar.js';
 import { formatDay, formatTime, joinParts, onDay, relatedLabel, relativeDayWord, relativeTime } from './notification.format.js';
-import { insertMissingNotifications, invalidateUnreadCounts, notify, type NotificationInput } from './notification.producer.js';
+import { insertMissingNotifications, invalidateAllUnreadCounts, invalidateUnreadCounts, notify, type NotificationInput } from './notification.producer.js';
 
 /**
  * Activity reminders, assignment / invitation notices and contract renewal reminders (docs/system-design.md §5).
@@ -571,7 +570,8 @@ async function deleteInBatches(
 
 /**
  * Nightly retention: notifications read more than NOTIFICATION_RETENTION_DAYS ago (any older than twice that) and
- * EmailLog rows older than EMAIL_LOG_RETENTION_DAYS. Hard deletes; neither table is audited.
+ * EmailLog rows older than EMAIL_LOG_RETENTION_DAYS. Hard deletes; neither table is audited. Then drops every cached
+ * unread count.
  */
 export async function purgeNotifications(now = new Date(), db: ReminderDb = prisma): Promise<{ notifications: number; emailLogs: number }> {
     const where = notificationPurgeWhere(now, ENV.NOTIFICATIONS.RETENTION_DAYS);
@@ -584,8 +584,9 @@ export async function purgeNotifications(now = new Date(), db: ReminderDb = pris
         () => db.emailLog.findMany({ where: { createdAt: { lt: emailCutoff } }, select: { id: true }, take: PURGE_BATCH }),
         (ids) => db.emailLog.deleteMany({ where: { id: { in: ids } } }),
     );
-    // Unread rows past twice the retention may have gone: drop every cached count.
-    if (notifications > 0) await cacheService.invalidatePattern(CACHE_KEYS.notificationsUnread('*'));
+    // Unread rows past twice the retention may have gone, and an invalidation may have been lost: drop every cached
+    // count while the database is awake for this job (open tabs re-read it within a minute, not in the night).
+    await invalidateAllUnreadCounts();
     if (notifications > 0 || emailLogs > 0) logger.info({ notifications, emailLogs }, 'Old notifications and email log rows deleted');
     return { notifications, emailLogs };
 }

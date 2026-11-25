@@ -48,7 +48,7 @@ export const MORNING_SUMMARY_KIND = 'morning_summary';
 export const MORNING_SUMMARY_TEST_KIND = 'morning_summary_test';
 /** Users built and mailed at the same time. */
 export const SUMMARY_USER_CONCURRENCY = 3;
-/** Today's schedule lists at most this many activities (the rest are counted). */
+/** Today's schedule, today's follow-ups (per module) and contracts list at most this many rows (the rest are counted). */
 const TODAY_CAP = 50;
 const FOLLOWUPS_TODAY_CAP = 50;
 const CONTRACTS_CAP = 50;
@@ -136,17 +136,19 @@ export function attendingWhere(username: string): Prisma.ActivityWhereInput {
 }
 
 /**
- * The user's overdue activities: Planned (not Notes), owned by them, started before today and ended before now.
- * Today's past activities stay in today's schedule rather than being listed twice.
+ * The user's overdue activities: Planned (not Notes), owned by them, over by the start of today (started before it and
+ * ended at or before it, or without an end). The exact complement of today's overlap rule (`activityRangeWhere`:
+ * `endAt > dayStart` or `startAt >= dayStart`), so an activity is never in both sections: one that runs past
+ * midnight, and today's past activities, stay in today's schedule.
  */
-export function overdueActivitiesWhere(username: string, dayStart: Date, now: Date): Prisma.ActivityWhereInput {
+export function overdueActivitiesWhere(username: string, dayStart: Date): Prisma.ActivityWhereInput {
     return {
         isDeleted: false,
         assignedTo: username,
         status: PLANNED_STATUS,
         followupType: { not: NOTE_TYPE },
         startAt: { lt: dayStart },
-        OR: [{ endAt: { lt: now } }, { endAt: null }],
+        OR: [{ endAt: { lte: dayStart } }, { endAt: null }],
     };
 }
 
@@ -163,14 +165,18 @@ export function contractsEndingWhere(user: AuthUser, today: string): Prisma.Cont
     };
 }
 
-/** Loads one user's rows (about ten small indexed queries). */
+/** The full count of a capped list: only queried when the list came back full. */
+const totalOf = (rows: readonly unknown[], cap: number, count: () => Promise<number>): Promise<number> =>
+    rows.length < cap ? Promise.resolve(rows.length) : count();
+
+/** Loads one user's rows (about ten small indexed queries, plus a count for each list that came back full). */
 export async function loadMorningSummaryInput(recipient: SummaryRecipient, ctx: SummaryContext): Promise<MorningSummaryInput> {
     const user: AuthUser = { id: recipient.id, username: recipient.username, role: recipient.role };
     const users = [recipient.username];
     const todayWhere: Prisma.ActivityWhereInput = {
         AND: [activityCalendarWhere(user, { users, statuses: [PLANNED_STATUS] }, ctx.dayStart, ctx.dayEnd), attendingWhere(recipient.username)],
     };
-    const overdueWhere = overdueActivitiesWhere(recipient.username, ctx.dayStart, ctx.now);
+    const overdueWhere = overdueActivitiesWhere(recipient.username, ctx.dayStart);
     const today = fromDateOnly(ctx.day);
     const leadsToday = leadFollowupWhere(user, { users }, ctx.closingStatuses, { gte: today, lte: today });
     const opportunitiesToday = opportunityFollowupWhere(user, { users }, { gte: today, lte: today });
@@ -201,6 +207,12 @@ export async function loadMorningSummaryInput(recipient: SummaryRecipient, ctx: 
             }),
         ]);
 
+    const [leadTodayTotal, oppTodayTotal, contractTotal] = await Promise.all([
+        totalOf(leadRows, FOLLOWUPS_TODAY_CAP, () => prisma.lead.count({ where: leadsToday })),
+        totalOf(opportunityRows, FOLLOWUPS_TODAY_CAP, () => prisma.opportunity.count({ where: opportunitiesToday })),
+        totalOf(contracts, CONTRACTS_CAP, () => prisma.contract.count({ where: contractsWhere })),
+    ]);
+
     const leadItem = (row: (typeof leadRows)[number]) => leadFollowupToCalendarItem(row, ctx.timeZone, ctx.now);
     const opportunityItem = (row: (typeof opportunityRows)[number]) => opportunityFollowupToCalendarItem(row, ctx.timeZone, ctx.now);
     const overdueFollowups = [...leadOverdueRows.map(leadItem), ...oppOverdueRows.map(opportunityItem)]
@@ -215,9 +227,9 @@ export async function loadMorningSummaryInput(recipient: SummaryRecipient, ctx: 
         typeIcons: ctx.typeIcons,
         today: { total: todayTotal, rows: todayRows },
         overdue: { total: overdueTotal, rows: overdueRows },
-        followupsToday: [...leadRows.map(leadItem), ...opportunityRows.map(opportunityItem)],
+        followupsToday: { leads: leadTodayTotal, opportunities: oppTodayTotal, rows: [...leadRows.map(leadItem), ...opportunityRows.map(opportunityItem)] },
         overdueFollowups: { leads: leadOverdueTotal, opportunities: oppOverdueTotal, rows: overdueFollowups },
-        contracts,
+        contracts: { total: contractTotal, rows: contracts },
     };
 }
 

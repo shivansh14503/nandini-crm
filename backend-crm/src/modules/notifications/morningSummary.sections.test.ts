@@ -61,9 +61,9 @@ const input = (overrides: Partial<MorningSummaryInput> = {}): MorningSummaryInpu
     typeIcons: { Meeting: 'meeting', Call: 'call' },
     today: { total: 0, rows: [] },
     overdue: { total: 0, rows: [] },
-    followupsToday: [],
+    followupsToday: { leads: 0, opportunities: 0, rows: [] },
     overdueFollowups: { leads: 0, opportunities: 0, rows: [] },
-    contracts: [],
+    contracts: { total: 0, rows: [] },
     ...overrides,
 });
 
@@ -147,7 +147,7 @@ describe('follow-ups', () => {
             followup('late', { start: '2026-11-25T10:00:00.000Z' }),
             followup('early', { module: 'opportunities', start: '2026-11-25T04:00:00.000Z', relatedTo: 'OP-0003' }),
         ];
-        const today = section(buildMorningSummary(input({ followupsToday: rows })), 'followupsToday');
+        const today = section(buildMorningSummary(input({ followupsToday: { leads: 2, opportunities: 1, rows } })), 'followupsToday');
         assert.deepEqual(
             today.items.map((item) => [item.when, item.title, item.detail, item.href]),
             [
@@ -157,6 +157,19 @@ describe('follow-ups', () => {
             ],
         );
         assert.equal(today.items[0].badge, '📞 Call');
+        assert.equal(today.total, 3);
+        assert.deepEqual(today.more, []);
+    });
+
+    it('counts follow-ups due today beyond the listed ones and links the rest per module', () => {
+        const rows = [followup('l1'), followup('l2'), followup('o1', { module: 'opportunities' })];
+        const summary = buildMorningSummary(input({ followupsToday: { leads: 70, opportunities: 1, rows } }));
+        const today = section(summary, 'followupsToday');
+        assert.equal(today.total, 71);
+        assert.equal(today.items.length, 3);
+        assert.deepEqual(today.more, [{ label: 'and 68 more leads', href: `${APP}/leads` }]);
+        assert.equal(summary.counts.followupsToday, 71);
+        assert.equal(summary.headline, '71 follow-ups due');
     });
 
     it('shows how overdue each one is and links the rest per module', () => {
@@ -183,7 +196,7 @@ describe('contract renewals', () => {
             contract('0007', { renewalReminderDate: new Date('2026-11-25T10:00:00.000Z'), endDate: new Date('2026-12-18T00:00:00.000Z') }),
             contract('0009', { renewalReminderDate: new Date('2026-11-25T09:00:00.000Z') }),
         ];
-        const contracts = section(buildMorningSummary(input({ contracts: [...rows, rows[1]] })), 'contracts');
+        const contracts = section(buildMorningSummary(input({ contracts: { total: 3, rows: [...rows, rows[1]] } })), 'contracts');
         assert.deepEqual(
             contracts.items.map((item) => [item.when, item.title, item.detail, item.href]),
             [
@@ -193,6 +206,16 @@ describe('contract renewals', () => {
             ],
         );
         assert.equal(contracts.total, 3);
+        assert.deepEqual(contracts.more, []);
+    });
+
+    it('counts contracts beyond the listed ones', () => {
+        const rows = [contract('0008', { endDate: new Date('2026-12-01T00:00:00.000Z') })];
+        const summary = buildMorningSummary(input({ contracts: { total: 52, rows } }));
+        const contracts = section(summary, 'contracts');
+        assert.equal(contracts.total, 52);
+        assert.deepEqual(contracts.more, [{ label: 'and 51 more', href: `${APP}/contracts` }]);
+        assert.equal(summary.counts.contracts, 52);
     });
 });
 
@@ -202,9 +225,9 @@ describe('summary', () => {
             input({
                 today: { total: 2, rows: [activity('a1'), activity('a2')] },
                 overdue: { total: 3, rows: [activity('o1', { startAt: new Date('2026-11-20T05:00:00.000Z'), endAt: null })] },
-                followupsToday: [followup('f1')],
+                followupsToday: { leads: 1, opportunities: 0, rows: [followup('f1')] },
                 overdueFollowups: { leads: 1, opportunities: 0, rows: [followup('f2', { start: '2026-11-20T05:00:00.000Z' })] },
-                contracts: [contract('c1', { endDate: new Date('2026-12-01T00:00:00.000Z') })],
+                contracts: { total: 1, rows: [contract('c1', { endDate: new Date('2026-12-01T00:00:00.000Z') })] },
             }),
         );
         assert.deepEqual(summary.counts, { todayActivities: 2, overdueActivities: 3, followupsToday: 1, overdueFollowups: 1, contracts: 1 });

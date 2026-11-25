@@ -1,5 +1,6 @@
 import { logger } from '../../config/logger.js';
 import { prisma, type TransactionClient } from '../../config/prisma.js';
+import { redis } from '../../config/redis.js';
 import type { Prisma } from '../../generated/prisma/client.js';
 import { CACHE_KEYS, cacheService } from '../../services/cache.service.js';
 import { isUniqueViolation } from '../../utils/prismaErrors.js';
@@ -111,6 +112,24 @@ export async function insertMissingNotifications(db: NotificationDb, rows: reado
 export async function invalidateUnreadCounts(usernames: Iterable<string>): Promise<void> {
     const keys = [...new Set([...usernames].map((username) => CACHE_KEYS.notificationsUnread(username)))];
     if (keys.length > 0) await cacheService.invalidate(...keys);
+}
+
+/** Drops every user's cached unread count (nightly job; Redis reconnect). */
+export function invalidateAllUnreadCounts(): Promise<void> {
+    return cacheService.invalidatePattern(CACHE_KEYS.notificationsUnread('*'));
+}
+
+let watchingReconnects = false;
+
+/**
+ * Invalidations made while Redis was unreachable are lost (`cacheService.invalidate` does nothing then), so on every
+ * `ready` of the shared client (start-up and each reconnect) every cached unread count is dropped. Call once per
+ * process: the API (`app.ts`) and the standalone worker (`jobs/worker.ts`), since both write notifications.
+ */
+export function dropUnreadCountsOnRedisReady(): void {
+    if (watchingReconnects) return;
+    watchingReconnects = true;
+    redis.on('ready', () => void invalidateAllUnreadCounts());
 }
 
 /**

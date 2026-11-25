@@ -275,14 +275,18 @@ keeps wall-clock times); all-day activities are entered as business-timezone day
       BullMQ `crm-reminders` worker: a delayed job per activity reminder (claim on `reminderSentAt` and insert in one
       transaction), a 15-minute business-hours sweep (missed reminders, contract renewals), nightly purge + re-arm,
       catch-up on every Redis `ready` and a one-minute fallback while Redis is down. Assignment / invitation
-      notifications after activity saves (never blocking the save). Mail layer on nodemailer 10.6.1 (Google Workspace
-      SMTP relay or an app-password mailbox; off until `MAIL_ENABLED=true`) and the 9 AM morning summary email (today's
-      schedule with "Add to Google Calendar" links, overdue activities, follow-ups due / overdue, contract renewals;
-      a missed run made up before noon). Frontend: the navbar `NotificationBell` replaces the sample notifications
-      (badge polled every minute while the tab is visible, module-tinted rows, mark read and open, mark all read,
+      notifications after activity saves (never blocking the save). Unread count cache that never keeps a count read
+      during a write (placeholder + compare-and-set) and is dropped on every Redis reconnect and nightly. Mail layer on
+      nodemailer 10.6.1 (Google Workspace SMTP relay or an app-password mailbox, STARTTLS required; off until
+      `MAIL_ENABLED=true`) and the 9 AM morning summary email on its own `crm-mail` queue and worker (today's
+      schedule with "Add to Google Calendar" links, overdue activities, follow-ups due / overdue, contract renewals,
+      full counts with "and N more" links; a missed run made up before noon). Frontend: the navbar
+      `NotificationBell` replaces the sample notifications (badge polled every minute while the tab is visible,
+      module-tinted rows, mark read and open, mark all read,
       cross-tab refresh) and "Preview morning email" (sandboxed preview, "Send me a test" for admins). Docs: system
       design §4–§5, §8.4, §9 (worker and SMTP relay setup). Unit tests for recipients, stale policy, keys, texts,
-      producer chunking, delivery claims, EmailLog claims, cron catch-up, summary sections, Google links and escaping.
+      producer chunking, delivery claims, EmailLog claims, cron catch-up, summary sections, Google links and escaping,
+      STARTTLS enforcement (fake SMTP server), the guarded cache and the overdue / today split.
 - [ ] **Phase 2: calendar sync** (Google / Microsoft 365) — needs the app on HTTPS under a nandiniinfosys.com hostname
       (`PUBLIC_API_URL`), unique company emails on users, `CalendarConnection` and `ActivityExternalLink` tables, Admin ›
       API Integrations with encrypted credentials, `Activity.iCalUid` + organizer fields for inbound events, recurring

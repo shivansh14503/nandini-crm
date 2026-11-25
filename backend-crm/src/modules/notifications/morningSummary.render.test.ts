@@ -92,9 +92,9 @@ const input = (overrides: Partial<MorningSummaryInput> = {}): MorningSummaryInpu
         ],
     },
     overdue: { total: 0, rows: [] },
-    followupsToday: [],
+    followupsToday: { leads: 0, opportunities: 0, rows: [] },
     overdueFollowups: { leads: 0, opportunities: 0, rows: [] },
-    contracts: [],
+    contracts: { total: 0, rows: [] },
     ...overrides,
 });
 

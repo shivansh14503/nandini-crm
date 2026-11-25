@@ -2,22 +2,20 @@ import { Worker, type Job } from 'bullmq';
 import { ENV } from '../../config/env.js';
 import { logger } from '../../config/logger.js';
 import { redis } from '../../config/redis.js';
-import { catchUpMorningSummary, runMorningSummary } from '../../modules/notifications/morningSummary.service.js';
 import { armPendingReminders, deliverActivityReminder, runNightlyMaintenance, runReminderSweep } from '../../modules/notifications/notification.reminders.js';
 import { runWithAuditOrigin } from '../../services/auditContext.js';
 import { createQueueConnection, isQueueAvailable, QUEUE_NAMES, remindersQueue } from '../queues.js';
 import { throttledLogger } from './throttledLogger.js';
 
 /**
- * Reminders and notifications (docs/system-design.md §5): the `crm-reminders` queue.
+ * Reminders and notifications (docs/system-design.md §5.1): the `crm-reminders` queue.
  *   remind   delayed job per activity reminder, fires at `remindAt` (added after every committed activity save)
  *   sweep    scheduler 'reminder-sweep', every 15 minutes 07:00–21:45: missed reminders + contract renewals
  *   nightly  scheduler 'reminder-nightly', 00:20: notification / email log retention + re-arm pending reminders
- *   morning  scheduler 'morning-summary', MORNING_SUMMARY_CRON (09:00 Mon–Sat): the morning summary email
  * All in the business timezone. Every Redis `ready` (start-up and each reconnect) upserts the schedulers, re-arms
- * pending reminders, runs one sweep and makes up a missed morning summary. While Redis is down a one-minute in-process
- * tick does the sweep (and the morning catch-up) instead; it does nothing while Redis is up, so the database is only
- * queried when something is due.
+ * pending reminders and runs one sweep. While Redis is down a one-minute in-process tick does the sweep instead; it
+ * does nothing while Redis is up, so the database is only queried when something is due. The morning summary email
+ * has its own queue and worker (mail.worker.ts), so SMTP trouble never delays a reminder.
  */
 
 /** Every 15 minutes from 07:00 to 21:45. */
@@ -26,7 +24,6 @@ export const SWEEP_PATTERN = '*/15 7-21 * * *';
 export const NIGHTLY_PATTERN = '20 0 * * *';
 const SWEEP_SCHEDULER = 'reminder-sweep';
 const NIGHTLY_SCHEDULER = 'reminder-nightly';
-const MORNING_SCHEDULER = 'morning-summary';
 /** The no-Redis fallback checks this often. */
 const FALLBACK_TICK_MS = 60_000;
 
@@ -43,12 +40,6 @@ async function processJob(job: Job): Promise<unknown> {
                 return runReminderSweep();
             case 'nightly':
                 return runNightlyMaintenance();
-            case 'morning': {
-                const result = await runMorningSummary();
-                // Failed sends are retried by the job's next attempt (EmailLog lets a failed row be re-claimed < 3 times).
-                if (result.failed > 0) throw new Error(`${result.failed} morning summary email(s) failed; retrying`);
-                return result;
-            }
             default:
                 logger.warn({ job: job.name }, 'Unknown reminders job');
                 return null;
@@ -62,11 +53,6 @@ async function scheduleJobs(): Promise<void> {
     const tz = ENV.BUSINESS_TIMEZONE;
     await queue.upsertJobScheduler(SWEEP_SCHEDULER, { pattern: SWEEP_PATTERN, tz }, { name: 'sweep' });
     await queue.upsertJobScheduler(NIGHTLY_SCHEDULER, { pattern: NIGHTLY_PATTERN, tz }, { name: 'nightly' });
-    if (ENV.NOTIFICATIONS.MORNING_SUMMARY_ENABLED) {
-        await queue.upsertJobScheduler(MORNING_SCHEDULER, { pattern: ENV.NOTIFICATIONS.MORNING_SUMMARY_CRON, tz }, { name: 'morning' });
-    } else {
-        await queue.removeJobScheduler(MORNING_SCHEDULER);
-    }
 }
 
 const step = async (label: string, fn: () => Promise<unknown>) => {
@@ -79,7 +65,7 @@ const step = async (label: string, fn: () => Promise<unknown>) => {
 
 let recovering = false;
 
-/** On every Redis `ready`: schedulers, re-arm, one catch-up sweep, missed morning summary. */
+/** On every Redis `ready`: schedulers, re-arm, one catch-up sweep. */
 async function recover(): Promise<void> {
     if (recovering) return;
     recovering = true;
@@ -88,7 +74,6 @@ async function recover(): Promise<void> {
             await step('Could not schedule the reminder jobs', scheduleJobs);
             await step('Could not re-arm pending reminders', () => armPendingReminders());
             await step('Catch-up reminder sweep failed', () => runReminderSweep());
-            await step('Morning summary catch-up failed', () => catchUpMorningSummary());
         });
     } finally {
         recovering = false;
@@ -97,14 +82,13 @@ async function recover(): Promise<void> {
 
 let ticking = false;
 
-/** Without Redis: sweep every minute (and make up a missed morning summary); with Redis: nothing. */
+/** Without Redis: sweep every minute; with Redis: nothing. */
 async function fallbackTick(): Promise<void> {
     if (ticking || isQueueAvailable()) return;
     ticking = true;
     try {
         await runWithAuditOrigin(ORIGIN, async () => {
             await step('Reminder sweep (Redis unavailable) failed', () => runReminderSweep());
-            await step('Morning summary catch-up failed', () => catchUpMorningSummary());
         });
     } finally {
         ticking = false;

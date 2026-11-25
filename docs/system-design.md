@@ -1,6 +1,6 @@
 # Nandini CRM — System Design
 
-> **Status:** living document. Describes the system as built (code as of 2026-11-25; audit context + ledger audit table, admin audit query API and screen, Users tab; Contracts module; Referrals module; Documents module; Activities data model and API, Calendar Phase 1 PR1; Activities screens and Calendar, PR2; notifications, reminders worker, navbar bell and the morning summary email, PR3).
+> **Status:** living document. Describes the system as built (code as of 2026-11-25; audit context + ledger audit table, admin audit query API and screen, Users tab; Contracts module; Referrals module; Documents module; Activities data model and API, Calendar Phase 1 PR1; Activities screens and Calendar, PR2; notifications, reminders and mail workers, navbar bell and the morning summary email, PR3, with its review fixes).
 > Update it in the same change that alters architecture, infrastructure, Redis usage, queues or security.
 > Related: [Database design](database-design.md) · [API plan](api-plan.md) · [Build plan](build-plan.md)
 
@@ -23,7 +23,7 @@ flowchart LR
 
     subgraph Node["Node.js API process (backend-crm)"]
         EX["Express 5<br/>routes → controllers → services"]
-        WK["BullMQ workers<br/>(import, audit, lead rating,<br/>audit export, audit ledger,<br/>reminders)<br/>RUN_WORKERS=true"]
+        WK["BullMQ workers<br/>(import, audit, lead rating,<br/>audit export, audit ledger,<br/>reminders, mail)<br/>RUN_WORKERS=true"]
         PDF["PDF renderer<br/>Puppeteer + semaphore"]
     end
 
@@ -37,7 +37,7 @@ flowchart LR
     EX -- "ioredis" --> RD
     WK -- "blocking job fetch" --> RD
     WK --> SQL
-    WK -- "nodemailer, STARTTLS 587" --> SMTP
+    WK -- "nodemailer, 587, STARTTLS required" --> SMTP
     EX --> PDF --> CH
 ```
 
@@ -49,7 +49,7 @@ flowchart LR
 | Cache / queue broker | Redis (ioredis 6, BullMQ 6) | external, **optional** in dev |
 | PDF | Puppeteer 25 → headless Chromium | spawned by the API |
 | Background jobs | BullMQ workers | inside the API (`RUN_WORKERS=true`) or a separate `npm run worker` process |
-| Outgoing email | nodemailer 10 (MIT-0) → Google Workspace SMTP relay (or a mailbox with an app password) | the reminders worker (morning summary); the API for an admin's test send. Off until `MAIL_ENABLED=true` (§5.2) |
+| Outgoing email | nodemailer 10 (MIT-0) → Google Workspace SMTP relay (or a mailbox with an app password) | the mail worker (morning summary); the API for an admin's test send. Off until `MAIL_ENABLED=true` (§5.2) |
 
 The two apps are deployed independently. The frontend calls the API directly from the browser (no Next.js
 API routes / BFF). It resolves the API URL as `NEXT_PUBLIC_API_URL`, or else
@@ -144,7 +144,8 @@ comes from these places instead:
 | BullMQ audit worker | Same | **concurrency 5** |
 | BullMQ lead rating worker | Same; one run a night (plus a catch-up at start-up) | **concurrency 1** |
 | BullMQ audit export / audit ledger workers | Same; an export streams entries 1,000 at a time to a file, a ledger check holds one long SQL call on its own connection | **concurrency 1** each |
-| BullMQ reminders worker | Same; one job at a time (reminder, sweep, nightly, morning summary). The morning summary builds and sends 3 users' emails at a time | **concurrency 1**; 3 SMTP sends in flight |
+| BullMQ reminders worker | Same; one job at a time (reminder, sweep, nightly) | **concurrency 1** |
+| BullMQ mail worker | Same; the morning summary, on its own queue so slow SMTP never delays a reminder. It builds and sends 3 users' emails at a time | **concurrency 1**; 3 SMTP sends in flight |
 | PDF rendering | Separate **Chromium processes**; one shared browser, a fresh incognito context + page per job | `PDF_MAX_CONCURRENCY` (default 3) via an in-process FIFO `Semaphore` |
 
 Because the import worker shares the event loop with HTTP handling when `RUN_WORKERS=true`, production should run
@@ -239,7 +240,7 @@ commands fail immediately instead of hanging, and reconnects in the background (
 | `cache:lookups:form-configs:{all\|active}` | JSON | 1 h | `formConfig.service` | Whole form/dropdown configuration |
 | `cache:address-master…` | JSON | 24 h | lookups | Countries, states, cities by state |
 | `cache:search:{limit}:{sha256}` | JSON | 30 s | global search | Search results; hash covers the user's access scope + query |
-| `cache:notifications:unread:{username}` | number | 1 h | `GET /api/notifications/unread-count` and the list | The bell's unread count (username lowercased), so a minute's polling from every open tab doesn't wake SQL Server; dropped by every write to that user's notifications |
+| `cache:notifications:unread:{username}` | number (briefly a `pending:<uuid>` placeholder while it is read) | 24 h (a safety net: it is dropped long before) | `GET /api/notifications/unread-count`; the list reads SQL and re-caches it | The bell's unread count (username lowercased), so a minute's polling from every open tab doesn't wake SQL Server; dropped by every write to that user's notifications, by the 00:20 nightly job and on every Redis reconnect (§4.2) |
 | `pdf:{MODULE}:{sha256}` | binary (PDF) | `PDF_CACHE_TTL_SECONDS` (600 s) | PDF render | Rendered PDFs; key covers template id + version, record id + `updatedAt`, custom-field definitions |
 | `recent:{userId}:{entity}` | sorted set (score = view time) | 30 days | `GET /api/organizations/:id` | "Recently viewed" (max 20 per user per entity) |
 | `bull:crm-import:*` | BullMQ internals | 1 day (completed) / 7 days (failed) | import queue | Import jobs, progress, results |
@@ -247,7 +248,8 @@ commands fail immediately instead of hanging, and reconnects in the background (
 | `bull:crm-lead-rating:*` | BullMQ internals (job scheduler + runs) | 7 days (completed) / 30 days (failed) | lead rating worker | Nightly Rating ageing |
 | `bull:crm-audit-export:*` | BullMQ internals | 1 day (completed) / 7 days (failed) | audit export queue | Audit log exports over 5,000 entries |
 | `bull:crm-audit-ledger:*` | BullMQ internals (job scheduler + runs) | removed when done | audit ledger worker | Nightly ledger digest; "Verify integrity" (job id `ledger-verify`: present = running) |
-| `bull:crm-reminders:*` | BullMQ internals (3 job schedulers, delayed jobs, runs) | 1 day / 1000 jobs (completed) / 7 days (failed) | activity saves, reminders worker | Delayed job per activity reminder (job id `reminder-<activityId>-<remindAtMs>`), schedulers `reminder-sweep`, `reminder-nightly`, `morning-summary` (§5.1) |
+| `bull:crm-reminders:*` | BullMQ internals (2 job schedulers, delayed jobs, runs) | 1 day / 1000 jobs (completed) / 7 days (failed) | activity saves, reminders worker | Delayed job per activity reminder (job id `reminder-<activityId>-<remindAtMs>`), schedulers `reminder-sweep`, `reminder-nightly` (§5.1) |
+| `bull:crm-mail:*` | BullMQ internals (job scheduler + runs) | 7 days / 100 jobs (completed) / 30 days (failed) | mail worker | Scheduler `morning-summary` (§5.2) |
 
 `cache:dashboard:*` is defined and invalidated but nothing writes it yet (no dashboard API).
 
@@ -258,7 +260,13 @@ Caches are read-through (`cacheService.getOrSet`). After a write **commits**, th
 every `cache:dashboard:*` using `SCAN` + `UNLINK` (never `KEYS`, so Redis isn't blocked). Form-config writes drop
 `cache:lookups:form-configs*`. PDF cache entries never need invalidation: any change to the template or the record
 changes the key. A user's `cache:notifications:unread:{username}` is deleted whenever notifications are written for
-them (producer), they read one or all, or the nightly purge removes rows (then every `cache:notifications:unread:*`).
+them (producer) and whenever they mark one or all read (even when nothing changed, so a user can always clear a wrong
+badge); every `cache:notifications:unread:*` is deleted by the 00:20 nightly job and on every `ready` of the shared
+Redis client in each API and worker process (`dropUnreadCountsOnRedisReady`), because an invalidation made while
+Redis was unreachable is lost. The count is read with `cacheService.getOrSetGuarded`: on a miss it first writes a
+`pending:<uuid>` placeholder (`SET NX`, 90 s), counts in SQL, then swaps the placeholder for the count only if it is
+still there (Lua compare-and-set), so a count read just before a new notification and its invalidation is never
+cached. The list (`GET /api/notifications`, when the bell opens) always counts in SQL and re-caches that the same way.
 
 ### 4.3 Degraded mode (Redis down)
 
@@ -272,9 +280,9 @@ them (producer), they read one or all, or the nightly purge removes rows (then e
 | Import status polling | `503` |
 | Audit log export / Verify integrity | Run in the API process instead (the export after its response; one check at a time per process); the nightly digest doesn't run |
 | Recently viewed | Not recorded, lists report none |
-| Activity reminders, contract renewals | Delayed reminder jobs can't be queued and the schedulers don't fire. Each worker process runs a one-minute in-process tick instead: while `isQueueAvailable()` is false it runs the reminder sweep (missed reminders + renewals) and the morning summary catch-up, so **the database is queried every minute while Redis is down**. Duplicates across processes are harmless (claims and unique dedupe keys). The check is made on every tick, not once at start-up |
-| Redis comes back | On every `ready` of the shared client (start-up and each reconnect) the reminders worker upserts its three schedulers, re-arms every pending reminder (`armPendingReminders`, batches of 500, same job ids), runs one sweep and makes up a missed morning summary |
-| Notification bell | Unread count read from SQL on every poll (no cache); assignment / invitation notifications are still written after activity saves |
+| Activity reminders, contract renewals, morning email | Delayed reminder jobs can't be queued and the schedulers don't fire. Each worker process runs one-minute in-process ticks instead: while `isQueueAvailable()` is false the reminders worker runs the reminder sweep (missed reminders + renewals), so **the database is queried every minute while Redis is down**, and the mail worker makes up a missed morning summary (between its time and noon). Duplicates across processes are harmless (claims and unique dedupe keys). The check is made on every tick, not once at start-up |
+| Redis comes back | On every `ready` of the shared client (start-up and each reconnect) the reminders worker upserts its two schedulers, re-arms every pending reminder (`armPendingReminders`, batches of 500, same job ids) and runs one sweep; the mail worker upserts `morning-summary` and makes up a missed morning summary; every API and worker process drops all cached unread counts |
+| Notification bell | Unread count read from SQL on every poll (no cache); assignment / invitation notifications are still written after activity saves. Counts cached before the outage are dropped when Redis comes back |
 | `/api/health` | Reports `redis: "unavailable"` |
 
 ## 5. Background jobs (BullMQ)
@@ -294,7 +302,8 @@ flowchart LR
 | `crm-audit-export` | `POST /api/admin/audit-logs/exports` over 5,000 entries (job id = export id) | 1 | 1 | done 1 day / 200 jobs; failed 7 days | Streams the matching entries newest first, 1,000 per query, to a CSV or a streaming Excel writer (`utils/xlsxWriter.ts`: constant memory; peak heap ~120 MB on a 169 k-entry export) under `AUDIT_EXPORT_DIR`; writes the `EXPORT` entry with the requesting admin's origin; files deleted after 24 h by the nightly ledger job |
 | `crm-audit-ledger` | Job scheduler `audit-ledger-digest`, cron `15 0 * * *` in `BUSINESS_TIMEZONE`; `POST /api/admin/audit-logs/integrity/verify` (job id `ledger-verify`) | 1 | 1 | removed when done | Nightly: saves a ledger digest outside the database (`AUDIT_DIGEST_DIR` + `AuditDigest`) and tidies old exports. Verify: `sys.sp_verify_database_ledger` against every digest file on a separate SQL connection with a long timeout (`AUDIT_VERIFY_TIMEOUT_MS`, default 30 min; ~100 s per million entries) and writes a `LEDGER_VERIFY` entry |
 | `crm-lead-rating` | Job scheduler `lead-rating-ageing`, cron `5 0 * * *` in `BUSINESS_TIMEZONE` (upserted when the worker starts) | 1 | 1 (the next night catches up) | done 7 days / 30 jobs; failed 30 days | `ageLeadRatings`: re-rates leads ageing under a "Days since response" rule, writing only changed rows (history by `system`). The worker also runs it once at start-up, so a night missed while nothing ran (or Redis was down) is made up; runs are idempotent ([lead-rating-rules.md](lead-rating-rules.md)) |
-| `crm-reminders` | Activity saves (`remind`, delayed to `remindAt`); job schedulers `reminder-sweep` (`*/15 7-21 * * *`), `reminder-nightly` (`20 0 * * *`) and `morning-summary` (`MORNING_SUMMARY_CRON`, default `0 9 * * 1-6`), all in `BUSINESS_TIMEZONE`, upserted on every Redis `ready` | 1 | 3, exponential backoff from 30 s (every job is idempotent) | done 1 day / 1000 jobs; failed 7 days | In-app notifications (activity reminders, assignments, invitations, contract renewals) and the morning summary email; see §5.1 and §5.2 |
+| `crm-reminders` | Activity saves (`remind`, delayed to `remindAt`); job schedulers `reminder-sweep` (`*/15 7-21 * * *`) and `reminder-nightly` (`20 0 * * *`), both in `BUSINESS_TIMEZONE`, upserted on every Redis `ready` | 1 | 3, exponential backoff from 30 s (every job is idempotent) | done 1 day / 1000 jobs; failed 7 days | In-app notifications (activity reminders, assignments, invitations, contract renewals); see §5.1 |
+| `crm-mail` | Job scheduler `morning-summary` (`MORNING_SUMMARY_CRON`, default `0 9 * * 1-6`, `BUSINESS_TIMEZONE`), upserted on every Redis `ready` (removed while `MORNING_SUMMARY_ENABLED=false`) | 1 | 3, exponential backoff from 30 s (sends are deduplicated in `EmailLog`, so a retry re-sends only what failed) | done 7 days / 100 jobs; failed 30 days | The morning summary email (§5.2). Its own queue so a slow or unreachable SMTP server (20 s timeouts per send, retries) never delays a reminder; later mail jobs (quotation emails) belong here too |
 
 **Import flow:** the frontend wizard parses the CSV/XLSX in the browser (papaparse / xlsx), maps columns, validates
 rows client-side, then posts up to 5,000 mapped rows. The worker validates each row with the same Zod schema and
@@ -358,13 +367,13 @@ one per event and recipient, made unique by `dedupeKey`, never audited.
   therefore delivered within 15 minutes in those hours; a reminder time outside them is delivered at 07:00.
 - **Nightly** (`reminder-nightly`, 00:20, after the 00:05 Lead Rating ageing and the 00:15 ledger digest): deletes
   read notifications older than `NOTIFICATION_RETENTION_DAYS` (90) and any older than twice that, and `EmailLog`
-  rows older than `EMAIL_LOG_RETENTION_DAYS` (180), 1000 at a time; then re-arms every pending reminder
+  rows older than `EMAIL_LOG_RETENTION_DAYS` (180), 1000 at a time, and drops every cached unread count (open tabs
+  re-read it within a minute, while the database is awake for these jobs); then re-arms every pending reminder
   (`armPendingReminders`: live, Planned, unsent, `remindAt` in the future, batches of 500, same job ids, so BullMQ
   ignores those it already holds). This recovers jobs lost to a Redis flush or added while Redis was down.
 - **Start-up and Redis recovery:** `src/jobs/worker.ts` doesn't wait for Redis, so the worker never decides degraded
   mode once at boot. On every `ready` of the shared Redis client it upserts the schedulers, re-arms pending
-  reminders, runs one sweep and makes up a missed morning summary; without Redis the one-minute fallback tick of §4.3
-  runs the sweep instead.
+  reminders and runs one sweep; without Redis the one-minute fallback tick of §4.3 runs the sweep instead.
 - **First deploy:** contracts whose renewal reminder fell in the 7 days before the deploy get one notification at the
   first sweep.
 - **Worker needed:** nothing is delivered unless a worker runs, `RUN_WORKERS=true` in the API or `npm run worker`
@@ -379,10 +388,10 @@ where-builders and access rules (`morningSummary.service.ts` / `.sections.ts` / 
 | Section | Rows |
 | --- | --- |
 | Today's schedule | Planned activities (not Notes) the user owns or attends (not declined) that overlap today, all-day first, then by start; each Meeting / Call / other non-Task row has an **Add to Google Calendar** link |
-| Overdue activities | The user's Planned activities (not Notes) that ended (or started, without an end) before now and started before today; count + the 10 oldest + "and N more" |
-| Follow-ups due today | Open leads and opportunities assigned to the user with `nextFollowupDate` today, with the time when set |
+| Overdue activities | The user's Planned activities (not Notes) that were over by the start of today: started before it and ended at or before it, or without an end. The exact complement of today's overlap rule, so an activity is never in both (one running past midnight stays in today's schedule); count + the 10 oldest + "and N more" |
+| Follow-ups due today | Open leads and opportunities assigned to the user with `nextFollowupDate` today, with the time when set; at most 50 per module listed, the full counts in the headline and "and N more leads / opportunities" links |
 | Overdue follow-ups | The same with `nextFollowupDate` before today; count + the 10 oldest + "and N more" |
-| Contract renewals | The user's contracts (not Expired) whose renewal reminder is today or whose end date is within 30 days, one row each |
+| Contract renewals | The user's contracts (not Expired) whose renewal reminder is today or whose end date is within 30 days, one row each; at most 50 listed, the full count in the headline and "and N more" |
 
 - **Email:** a headline with the counts ("3 meetings today · 5 follow-ups due · 2 overdue"), an "Open the CRM" button
   (`${APP_PUBLIC_URL}/calendar`), rows linking to their record pages (activities `/activities/<id>`), and a footer
@@ -394,10 +403,13 @@ where-builders and access rules (`morningSummary.service.ts` / `.sections.ts` / 
   with the exclusive end; details = related record, remarks (≤ 500 characters) and the CRM link.
 - **Who gets none:** users with nothing in any section (`MORNING_SUMMARY_SKIP_EMPTY=true`, the default), users without
   an email address, and everyone while `MORNING_SUMMARY_ENABLED=false` or mail is off (the run then reads no table).
-- **Run** (`runMorningSummary`): the business day is computed once; users are built and sent 3 at a time, each in its
+- **Run** (`runMorningSummary`, job `morning` on the `crm-mail` queue, worker `src/jobs/workers/mail.worker.ts`, audit
+  origin `JOB` / `job:mail`): the business day is computed once; users are built and sent 3 at a time, each in its
   own `try/catch`; the result is `{ sent, skipped, failed, empty }`. A run with failed sends throws, so BullMQ retries
-  the job (3 attempts); already-sent users are skipped by their dedupe key.
-- **Missed run:** BullMQ's scheduler doesn't backfill. On worker start / Redis `ready`, and on each fallback tick
+  the job (3 attempts); already-sent users are skipped by their dedupe key. With SMTP unreachable a run takes about
+  ⌈users / 3⌉ × 20 s per attempt; that only holds the mail queue, never the reminders. Lists that come back full (50)
+  are counted (one `COUNT` each), so a user's query count stays about eleven.
+- **Missed run:** BullMQ's scheduler doesn't backfill. On mail worker start / Redis `ready`, and on each fallback tick
   while Redis is down, `catchUpMorningSummary` sends it once when today is a cron day, the time is between the
   scheduled time and 12:00, and no `morning_summary:<today>:*` row is in `EmailLog` yet (pure helper
   `shouldCatchUpMorningSummary`, unit-tested).
@@ -406,8 +418,12 @@ where-builders and access rules (`morningSummary.service.ts` / `.sections.ts` / 
   now (`kind = 'morning_summary_test'`, no dedupe).
 
 **Mail layer** (`src/services/mail.service.ts`, reusable for quotation emails): one lazily created nodemailer
-transport from the `SMTP_*` settings, with 20 s connection / greeting / socket timeouts so a blocked port can't hang
-the worker, and `name: SMTP_EHLO_NAME` (Google's relay refuses a bare `localhost` greeting).
+transport from the `SMTP_*` settings (`smtpTransportOptions`), with 20 s connection / greeting / socket timeouts so a
+blocked port can't hang the worker, and `name: SMTP_EHLO_NAME` (Google's relay refuses a bare `localhost` greeting).
+Never plaintext: `SMTP_SECURE=true` is TLS from the first byte (465); otherwise `requireTLS` makes STARTTLS mandatory on
+587, so if the server (or someone in between) leaves STARTTLS out of its EHLO reply the send fails instead of sending
+AUTH and the message unencrypted (nodemailer's default would carry on in plaintext; unit-tested against a fake SMTP
+server).
 `sendMail({ to, toUsername, subject, html, text, kind, dedupeKey })` never throws for a failed or disabled send; it
 returns `sent`, `failed` (with the SMTP error), `skipped` (mail off) or `duplicate`. Every send is recorded in
 `EmailLog`, claimed first: insert the row as `sending` (unique `dedupeKey`, e.g. `morning_summary:2026-11-26:palak`);
@@ -428,13 +444,15 @@ The same list is next to `DB_KEEPALIVE_INTERVAL_MS` in `.env.example`.
 | 00:05 | Lead Rating ageing |
 | 00:15 | Audit ledger digest |
 | 00:20 | Notification / email log purge + reminder re-arm |
-| 09:00 Mon–Sat | Morning summary email (only while mail is on) |
+| 09:00 Mon–Sat | Morning summary email (only while mail is on; `crm-mail`) |
 | Every 15 min, 07:00–21:45 | Reminder sweep (contract renewals, missed reminders) |
 | At each due reminder | Its delayed job |
 | Every minute, **only while Redis is down** | The workers' fallback tick |
 
-The navbar bell's unread count is served from Redis, so open browser tabs polling it don't keep the database awake
-(with Redis down every poll reads SQL).
+The navbar bell's unread count is served from Redis, so open browser tabs polling it don't keep the database awake:
+the key lives 24 h and is dropped only by a change to the user's notifications (which already used the database), by
+the 00:20 job (tabs re-read it at about 00:21, while the database is awake for the nightly jobs) and when Redis comes
+back. With Redis down every poll reads SQL. Opening the bell reads the count from SQL (user-initiated, not polled).
 
 ## 6. PDF generation
 
@@ -562,7 +580,8 @@ frontend-crm/src/
   no WebSocket / SSE infrastructure and the app may sit behind an Azure App Service proxy; at about 50 users this is
   under one request a second. SSE through Redis pub/sub can come later with the same endpoints.
 - **List:** loaded when the popover opens (`useNotifications`, an infinite query of 20 per page, newest first,
-  "Show older" for the next cursor); each page also refreshes the badge. Rows: an icon tile in the record's module tint
+  "Show older" for the next cursor); each page also refreshes the badge with an unread count read from SQL (not the
+  cache), so opening the bell corrects a wrong badge and re-caches the right count. Rows: an icon tile in the record's module tint
   (activities olive, contracts their own colour), title, body, time relative to now in the business timezone (exact
   time on hover), unread dot and tinted background. A click marks the row read (optimistic) and opens `href`
   (activities `/calendar?activity=<id>`, which opens the activity drawer even when the calendar is already open;
@@ -604,8 +623,8 @@ flowchart TB
 
 ### 9.1 Workers: reminders and the morning email need one
 
-Activity reminders, contract renewal notifications, the nightly purge and the morning summary are all run by the
-reminders worker. Run **either** `RUN_WORKERS=true` in the API **or** `npm run worker:prod` as its own process
+Activity reminders, contract renewal notifications and the nightly purge are run by the reminders worker, and the
+morning summary by the mail worker; both start together. Run **either** `RUN_WORKERS=true` in the API **or** `npm run worker:prod` as its own process
 (recommended in production, with `RUN_WORKERS=false` on the API). With neither, assignment and invitation
 notifications (written by the API after a save) still appear, but reminders, renewals and the email never do. Several
 processes are safe: claims and unique dedupe keys stop double delivery. Without Redis the worker falls back to a
@@ -634,7 +653,8 @@ the Google Workspace admin:
 9. Make sure the sender address exists in the domain (e.g. a `crm@nandiniinfosys.com` user or group), so replies
    and bounces have somewhere to go.
 10. On the server set, in `backend-crm/.env`: `MAIL_ENABLED=true`, `SMTP_HOST=smtp-relay.gmail.com`,
-    `SMTP_PORT=587`, `SMTP_SECURE=false` (STARTTLS), `SMTP_USER=` and `SMTP_PASS=` empty, `SMTP_EHLO_NAME` = the
+    `SMTP_PORT=587`, `SMTP_SECURE=false` (STARTTLS, which the CRM requires: it never sends in plaintext),
+    `SMTP_USER=` and `SMTP_PASS=` empty, `SMTP_EHLO_NAME` = the
     server's host name (e.g. `crm.nandiniinfosys.com`; the relay refuses a bare `localhost` greeting), `MAIL_FROM`
     and `APP_PUBLIC_URL`; then restart the API and the worker.
 11. Check outbound port 587 is open in the server's firewall / cloud network rules.
@@ -645,8 +665,8 @@ the Google Workspace admin:
 **Alternative: a mailbox with an app password** (when the server has no fixed IP): create or pick the
 `crm@nandiniinfosys.com` mailbox, turn on 2-Step Verification for it, create an **App password**
 (myaccount.google.com › Security › App passwords; the Workspace admin must allow 2-Step Verification for that user),
-then set `SMTP_HOST=smtp.gmail.com`, `SMTP_PORT=587`, `SMTP_SECURE=false`, `SMTP_USER=crm@nandiniinfosys.com`,
-`SMTP_PASS=<16-character app password>`. Gmail's sending limits for one mailbox (about 2,000 messages a day) are far
+then set `SMTP_HOST=smtp.gmail.com`, `SMTP_PORT=587`, `SMTP_SECURE=false` (STARTTLS required, so the app password
+never crosses the network unencrypted), `SMTP_USER=crm@nandiniinfosys.com`, `SMTP_PASS=<16-character app password>`. Gmail's sending limits for one mailbox (about 2,000 messages a day) are far
 above one email per user per day.
 
 The morning summary's schedule and behaviour: `MORNING_SUMMARY_ENABLED` (default true; still needs mail on),
@@ -659,10 +679,10 @@ Retention: `NOTIFICATION_RETENTION_DAYS` (90), `EMAIL_LOG_RETENTION_DAYS` (180).
 | --- | --- |
 | No user management API/UI | Users come from the seed or direct DB edits. `ROUTES.ADMIN_USERS` exists in the frontend but has no page. `sessionService.revokeAll` is ready for deactivation / password change. |
 | Dashboard has no data API | The dashboard page is static; `cache:dashboard:*` is reserved. |
-| No automated frontend tests | Backend has 59 `node:test` files (pure logic: validators, numbering, PDF document, access control, audit, time zones, activities, referrals, documents, notifications, mail). No integration/E2E tests. |
+| No automated frontend tests | Backend has 61 `node:test` files (pure logic: validators, numbering, PDF document, access control, audit, time zones, activities, referrals, documents, notifications, mail, cache). No integration/E2E tests. |
 | Notifications are polled, not pushed | The bell asks every minute (§8.4), so a reminder can show up to a minute late; background tabs don't poll. SSE through Redis pub/sub is the upgrade path. There are no browser / push notifications and no notification preferences yet. |
 | Reminders depend on a worker | No worker running = no reminders, renewals or morning email (§9.1). Off-hours contract renewals wait for the 07:00 sweep. With Redis down the fallback polls the database every minute. |
-| Morning email not yet proven against the relay | The mail layer, EmailLog claims and the summary are unit-tested, but no real SMTP send, Redis scheduler or SQL Server run has been done yet; the first real send should be an admin's "Send me a test". `MORNING_SUMMARY_CRON` is read with a small cron subset for the catch-up check (numbers, names, ranges, lists, steps). |
+| Morning email not yet proven against the relay | The mail layer, EmailLog claims and the summary are unit-tested (STARTTLS enforcement against a fake SMTP server), and the job schedulers and the guarded unread-count cache were checked against a local Redis, but no real SMTP send or SQL Server run has been done yet; the first real send should be an admin's "Send me a test". `MORNING_SUMMARY_CRON` is read with a small cron subset for the catch-up check (numbers, names, ranges, lists, steps). |
 | "Add to Google Calendar" is a one-time copy | Moving the meeting in the CRM doesn't update the copy; real Google / Microsoft 365 sync is Calendar Phase 2 (needs HTTPS on a nandiniinfosys.com hostname). |
 | Workers inside the API by default | Long imports share the event loop with requests unless `RUN_WORKERS=false` + separate worker. |
 | Rate limits fail open | Intentional for availability; brute-force protection disappears while Redis is down. |

@@ -7,8 +7,8 @@ import { isUniqueViolation } from '../utils/prismaErrors.js';
 
 /**
  * Outgoing email (docs/system-design.md › Email). One lazily created SMTP transport from the MAIL_* / SMTP_*
- * settings: the Google Workspace SMTP relay (smtp-relay.gmail.com:587, STARTTLS, the server allowed by its IP, so no
- * user / password) or a mailbox with an app password (smtp.gmail.com). Every send is recorded in EmailLog and claimed
+ * settings: the Google Workspace SMTP relay (smtp-relay.gmail.com:587, STARTTLS required, the server allowed by its
+ * IP, so no user / password) or a mailbox with an app password (smtp.gmail.com). Every send is recorded in EmailLog and claimed
  * first by its dedupe key, so a retried job or a second worker process never mails twice. While mail is turned off
  * (MAIL_ENABLED false or SMTP_HOST empty) nothing is sent and nothing throws: the send is logged as `skipped`.
  * Logs name the kind, the recipient's username / domain and the outcome, never credentials or message bodies.
@@ -35,19 +35,30 @@ export const MAIL_DISABLED_MESSAGE =
 
 let transport: Transporter | undefined;
 
-function getTransport(): Transporter {
-    transport ??= nodemailer.createTransport({
-        host: ENV.MAIL.SMTP_HOST,
-        port: ENV.MAIL.SMTP_PORT,
-        // false = plain connect then STARTTLS (587); true = TLS from the first byte (465).
-        secure: ENV.MAIL.SMTP_SECURE,
+type MailSettings = Pick<typeof ENV.MAIL, 'SMTP_HOST' | 'SMTP_PORT' | 'SMTP_SECURE' | 'SMTP_USER' | 'SMTP_PASS' | 'SMTP_EHLO_NAME'>;
+
+/**
+ * The nodemailer SMTP options for these settings. Never plaintext: `secure` = TLS from the first byte (465); otherwise
+ * `requireTLS`, so on 587 the connection fails unless the STARTTLS upgrade succeeds (without it nodemailer carries on
+ * unencrypted, AUTH included, when a server or a man in the middle leaves STARTTLS out of the EHLO reply).
+ */
+export function smtpTransportOptions(mail: MailSettings = ENV.MAIL) {
+    return {
+        host: mail.SMTP_HOST,
+        port: mail.SMTP_PORT,
+        secure: mail.SMTP_SECURE,
+        requireTLS: !mail.SMTP_SECURE,
         // Google's relay refuses a bare `localhost` greeting.
-        ...(ENV.MAIL.SMTP_EHLO_NAME ? { name: ENV.MAIL.SMTP_EHLO_NAME } : {}),
-        ...(ENV.MAIL.SMTP_USER ? { auth: { user: ENV.MAIL.SMTP_USER, pass: ENV.MAIL.SMTP_PASS ?? '' } } : {}),
+        ...(mail.SMTP_EHLO_NAME ? { name: mail.SMTP_EHLO_NAME } : {}),
+        ...(mail.SMTP_USER ? { auth: { user: mail.SMTP_USER, pass: mail.SMTP_PASS ?? '' } } : {}),
         connectionTimeout: SMTP_TIMEOUT_MS,
         greetingTimeout: SMTP_TIMEOUT_MS,
         socketTimeout: SMTP_TIMEOUT_MS,
-    });
+    };
+}
+
+function getTransport(): Transporter {
+    transport ??= nodemailer.createTransport(smtpTransportOptions());
     return transport;
 }
 

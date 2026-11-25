@@ -575,7 +575,8 @@ row then becomes `sent` or `failed`.
   that end after `from`, so `(isDeleted, startAt)` / `(isDeleted, assignedTo, startAt)` seek instead of scanning.
 - **Reminder sweep** `(reminderSentAt, remindAt)`: the equality column (`reminderSentAt IS NULL`) comes first, then the
   range on `remindAt`.
-- **Notifications** `(username, readAt)` answers the bell's unread count (cached in Redis for an hour on top), and
+- **Notifications** `(username, readAt)` answers the bell's unread count (cached in Redis on top, dropped on every
+  change), and
   `(username, createdAt)` its newest-first list; unique `dedupeKey`s on `Notification` and `EmailLog` make deliveries
   idempotent.
 

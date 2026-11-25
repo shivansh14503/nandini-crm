@@ -10,11 +10,17 @@ import { formatNotificationCursor, notificationListQuerySchema } from './notific
 /**
  * The signed-in user's notifications (navbar bell). Personal rows: every query is limited to `username =` the caller,
  * nothing is audited. The unread count is cached in Redis (an open tab polls it every minute, which must not keep
- * Azure SQL Serverless awake); every write to a user's notifications drops their cached count.
+ * Azure SQL Serverless awake). Every write to a user's notifications drops their cached count, the nightly job and
+ * every Redis reconnect drop them all, and a count read from SQL is cached only if no write dropped the key meanwhile
+ * (`cacheService.getOrSetGuarded`). Opening the bell reads the count from SQL and caches that, and marking read
+ * always drops the caller's count, so a user can always bring a wrong badge back in line.
  */
 
-/** Seconds the unread count stays cached (writes invalidate it sooner). */
-export const UNREAD_COUNT_TTL_SECONDS = 60 * 60;
+/**
+ * Seconds the unread count stays cached. Long on purpose: writes, the 00:20 nightly job and Redis reconnects drop it,
+ * so the TTL is only a safety net, and a polled count never expires (and wakes the database) in the night.
+ */
+export const UNREAD_COUNT_TTL_SECONDS = 24 * 60 * 60;
 
 /** `Notification` in frontend-crm/src/types: empty values are '' (not null). */
 export interface NotificationDto {
@@ -69,15 +75,21 @@ export function toNotificationDto(row: Notification): NotificationDto {
     };
 }
 
-/** The user's unread count, from Redis when cached (falls through to SQL while Redis is down). */
-function unreadCountOf(username: string): Promise<number> {
-    return cacheService.getOrSet(CACHE_KEYS.notificationsUnread(username), UNREAD_COUNT_TTL_SECONDS, () =>
-        prisma.notification.count({ where: { username, readAt: null } }),
+/**
+ * The user's unread count, from Redis when cached (falls through to SQL while Redis is down). `refresh` reads SQL
+ * whatever is cached and caches that (the list: opening the bell corrects a wrong badge).
+ */
+function unreadCountOf(username: string, refresh = false): Promise<number> {
+    return cacheService.getOrSetGuarded(
+        CACHE_KEYS.notificationsUnread(username),
+        UNREAD_COUNT_TTL_SECONDS,
+        () => prisma.notification.count({ where: { username, readAt: null } }),
+        { refresh },
     );
 }
 
 export const notificationService = {
-    /** `GET /`: newest first, keyset-paged by (createdAt, id). */
+    /** `GET /`: newest first, keyset-paged by (createdAt, id). Its `unreadCount` is read from SQL (not polled). */
     async list(query: unknown, user: AuthUser): Promise<NotificationPage> {
         const { unreadOnly, limit, before } = notificationListQuerySchema.parse(query ?? {});
         const and: Prisma.NotificationWhereInput[] = [{ username: user.username }];
@@ -85,7 +97,7 @@ export const notificationService = {
         if (before) and.push({ OR: [{ createdAt: { lt: before.createdAt } }, { createdAt: before.createdAt, id: { lt: before.id } }] });
         const [rows, unreadCount] = await Promise.all([
             prisma.notification.findMany({ where: { AND: and }, orderBy: [{ createdAt: 'desc' }, { id: 'desc' }], take: limit + 1 }),
-            unreadCountOf(user.username),
+            unreadCountOf(user.username, true),
         ]);
         const page = rows.slice(0, limit);
         return {
@@ -100,26 +112,32 @@ export const notificationService = {
         return { count: await unreadCountOf(user.username) };
     },
 
-    /** `POST /:id/read`: idempotent; an already-read notification keeps its first read time. */
+    /**
+     * `POST /:id/read`: idempotent; an already-read notification keeps its first read time. Drops the caller's cached
+     * count even when nothing changed (it may have missed an invalidation while Redis was unreachable).
+     */
     async markRead(id: string, user: AuthUser): Promise<{ id: string; readAt: string }> {
         const row = await prisma.notification.findFirst({ where: { id, username: user.username }, select: { id: true, readAt: true } });
         if (!row) throw HttpError.notFound('Notification not found');
-        if (row.readAt) return { id: row.id, readAt: toIso(row.readAt) };
+        if (row.readAt) {
+            await invalidateUnreadCounts([user.username]);
+            return { id: row.id, readAt: toIso(row.readAt) };
+        }
         const now = new Date();
         const { count } = await prisma.notification.updateMany({ where: { id, username: user.username, readAt: null }, data: { readAt: now } });
+        await invalidateUnreadCounts([user.username]);
         if (count === 0) {
             // Read in another tab in the meantime.
             const again = await prisma.notification.findFirst({ where: { id, username: user.username }, select: { readAt: true } });
             return { id, readAt: again?.readAt ? toIso(again.readAt) : toIso(now) };
         }
-        await invalidateUnreadCounts([user.username]);
         return { id, readAt: toIso(now) };
     },
 
-    /** `POST /read-all` */
+    /** `POST /read-all`: drops the caller's cached count even when no row was unread (see markRead). */
     async markAllRead(user: AuthUser): Promise<{ updated: number }> {
         const { count } = await prisma.notification.updateMany({ where: { username: user.username, readAt: null }, data: { readAt: new Date() } });
-        if (count > 0) await invalidateUnreadCounts([user.username]);
+        await invalidateUnreadCounts([user.username]);
         return { updated: count };
     },
 };

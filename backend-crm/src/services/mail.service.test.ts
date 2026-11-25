@@ -1,6 +1,18 @@
 import assert from 'node:assert/strict';
+import { createServer, type AddressInfo } from 'node:net';
 import { describe, it } from 'node:test';
-import { claimEmailLog, isMailConfigured, isRetryableEmail, MAX_SEND_ATTEMPTS, recipientForLog, sendMail, type EmailLogDb, type EmailLogRow } from './mail.service.js';
+import nodemailer from 'nodemailer';
+import {
+    claimEmailLog,
+    isMailConfigured,
+    isRetryableEmail,
+    MAX_SEND_ATTEMPTS,
+    recipientForLog,
+    sendMail,
+    smtpTransportOptions,
+    type EmailLogDb,
+    type EmailLogRow,
+} from './mail.service.js';
 
 /** EmailLog double: rows by dedupe key, a unique index on the key, conditional updates. */
 function fakeDb(existing?: { status: string; attempts: number }) {
@@ -117,5 +129,65 @@ describe('sendMail with mail turned off', () => {
         await sendMail({ to: 'a@b.co', subject: 'Test', html: '', text: '', kind: 'morning_summary_test' }, db);
         assert.equal(rows.size, 2);
         assert.ok([...rows.keys()].every((key) => key.startsWith('morning_summary_test:')));
+    });
+});
+
+describe('smtpTransportOptions', () => {
+    const settings = { SMTP_HOST: 'smtp-relay.gmail.com', SMTP_PORT: 587, SMTP_SECURE: false, SMTP_USER: undefined, SMTP_PASS: undefined, SMTP_EHLO_NAME: 'crm.example.com' };
+
+    it('requires STARTTLS on 587 and TLS from the first byte on 465', () => {
+        assert.deepEqual(
+            { ...smtpTransportOptions(settings) },
+            {
+                host: 'smtp-relay.gmail.com',
+                port: 587,
+                secure: false,
+                requireTLS: true,
+                name: 'crm.example.com',
+                connectionTimeout: 20_000,
+                greetingTimeout: 20_000,
+                socketTimeout: 20_000,
+            },
+        );
+        const implicit = smtpTransportOptions({ ...settings, SMTP_PORT: 465, SMTP_SECURE: true, SMTP_USER: 'crm@example.com', SMTP_PASS: 'secret' });
+        assert.equal(implicit.secure, true);
+        assert.equal(implicit.requireTLS, false);
+        assert.deepEqual(implicit.auth, { user: 'crm@example.com', pass: 'secret' });
+    });
+
+    it('never sends AUTH or the message in plaintext when the server leaves STARTTLS out of its EHLO reply', async () => {
+        // A server (or a man in the middle) that offers AUTH but no STARTTLS, and refuses the STARTTLS command.
+        const commands: string[] = [];
+        const server = createServer((socket) => {
+            socket.write('220 test ESMTP\r\n');
+            let buffer = '';
+            socket.on('data', (chunk) => {
+                buffer += chunk.toString('utf8');
+                let end: number;
+                while ((end = buffer.indexOf('\r\n')) >= 0) {
+                    const line = buffer.slice(0, end);
+                    buffer = buffer.slice(end + 2);
+                    commands.push(line.split(' ')[0].toUpperCase());
+                    if (/^EHLO/i.test(line)) socket.write('250-test\r\n250 AUTH PLAIN LOGIN\r\n');
+                    else if (/^QUIT/i.test(line)) socket.end('221 bye\r\n');
+                    else if (/^STARTTLS/i.test(line)) socket.write('502 not implemented\r\n');
+                    else socket.write('250 ok\r\n');
+                }
+            });
+            socket.on('error', () => undefined);
+        });
+        await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+        try {
+            const { port } = server.address() as AddressInfo;
+            const transport = nodemailer.createTransport(
+                smtpTransportOptions({ ...settings, SMTP_HOST: '127.0.0.1', SMTP_PORT: port, SMTP_USER: 'crm@example.com', SMTP_PASS: 'secret' }),
+            );
+            await assert.rejects(transport.sendMail({ from: 'crm@example.com', to: 'palak@example.com', subject: 'Hi', text: 'Hi' }));
+            transport.close();
+            assert.ok(!commands.includes('AUTH'), `commands sent: ${commands.join(', ')}`);
+            assert.ok(!commands.includes('MAIL') && !commands.includes('DATA'));
+        } finally {
+            await new Promise<void>((resolve) => server.close(() => resolve()));
+        }
     });
 });

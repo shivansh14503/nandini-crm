@@ -55,13 +55,24 @@ export interface MorningSummaryInput {
     typeIcons?: Readonly<Record<string, string>>;
     /** Activities of today (owner, or invited and not declined), with the total when capped. */
     today: { total: number; rows: SummaryActivityRow[] };
-    /** The user's Planned activities that ended before now and started before today, oldest first. */
+    /** The user's Planned activities that ended by the start of today, oldest first (not in today's schedule). */
     overdue: { total: number; rows: SummaryActivityRow[] };
-    followupsToday: SummaryFollowup[];
+    /** Totals per module (the lists are capped) for the headline and the "and N more" links. */
+    followupsToday: FollowupRows;
     /** Oldest first; totals per module for the "and N more" links. */
-    overdueFollowups: { leads: number; opportunities: number; rows: SummaryFollowup[] };
-    /** Renewal reminder today, or ending within ENDING_SOON_DAYS (a contract may be in both: listed once). */
-    contracts: SummaryContractRow[];
+    overdueFollowups: FollowupRows;
+    /**
+     * Renewal reminder today, or ending within ENDING_SOON_DAYS (a contract may be in both: listed once), with the
+     * total when capped.
+     */
+    contracts: { total: number; rows: SummaryContractRow[] };
+}
+
+/** Follow-up rows of one section, with each module's full count. */
+export interface FollowupRows {
+    leads: number;
+    opportunities: number;
+    rows: SummaryFollowup[];
 }
 
 export type SummarySectionKey = 'today' | 'overdueActivities' | 'followupsToday' | 'overdueFollowups' | 'contracts';
@@ -220,6 +231,23 @@ export function compareFollowupsToday(a: SummaryFollowup, b: SummaryFollowup): n
 
 const followupDay = (item: SummaryFollowup, timeZone: string) => item.startDay ?? zonedDayOf(new Date(item.start), timeZone);
 
+/** A follow-up section's total and its "and N more leads / opportunities" links (lists are capped per module). */
+function followupTotals(followups: FollowupRows, shown: readonly SummaryFollowup[], appUrl: string): { total: number; more: SummaryMoreLink[] } {
+    const shownLeads = shown.filter((item) => item.module === 'leads').length;
+    const shownOpportunities = shown.length - shownLeads;
+    const more: SummaryMoreLink[] = [];
+    if (followups.leads > shownLeads) {
+        more.push({ label: `and ${plural(followups.leads - shownLeads, 'more lead')}`, href: crmUrl(appUrl, '/leads') });
+    }
+    if (followups.opportunities > shownOpportunities) {
+        more.push({
+            label: `and ${plural(followups.opportunities - shownOpportunities, 'more opportunity', 'more opportunities')}`,
+            href: crmUrl(appUrl, '/opportunities'),
+        });
+    }
+    return { total: Math.max(followups.leads + followups.opportunities, shown.length), more };
+}
+
 /** Contracts: renewal reminders today first (by time), then by end date; one row per contract. */
 function contractItems(rows: readonly SummaryContractRow[], input: MorningSummaryInput, day: string): SummaryItem[] {
     // Fake-UTC wall clock and DATE columns: their UTC reading is the business-timezone value.
@@ -286,55 +314,51 @@ export function buildMorningSummary(input: MorningSummaryInput): MorningSummary 
         });
     }
 
-    const followups = [...input.followupsToday].sort(compareFollowupsToday);
-    if (followups.length > 0) {
+    const followups = [...input.followupsToday.rows].sort(compareFollowupsToday);
+    const followupsToday = followupTotals(input.followupsToday, followups, appUrl);
+    if (followupsToday.total > 0) {
         sections.push({
             key: 'followupsToday',
             title: 'Follow-ups due today',
-            total: followups.length,
+            total: followupsToday.total,
             items: followups.map((item) => followupItem(item, input, item.allDay ? 'Any time' : formatTime(new Date(item.start), timeZone))),
-            more: [],
+            more: followupsToday.more,
         });
     }
 
     const overdueFollowups = input.overdueFollowups.rows.slice(0, SUMMARY_LIST_MAX);
-    const overdueFollowupTotal = Math.max(input.overdueFollowups.leads + input.overdueFollowups.opportunities, overdueFollowups.length);
-    if (overdueFollowupTotal > 0) {
-        const shownLeads = overdueFollowups.filter((item) => item.module === 'leads').length;
-        const shownOpportunities = overdueFollowups.length - shownLeads;
-        const more: SummaryMoreLink[] = [];
-        if (input.overdueFollowups.leads > shownLeads) {
-            more.push({ label: `and ${plural(input.overdueFollowups.leads - shownLeads, 'more lead')}`, href: crmUrl(appUrl, '/leads') });
-        }
-        if (input.overdueFollowups.opportunities > shownOpportunities) {
-            more.push({
-                label: `and ${plural(input.overdueFollowups.opportunities - shownOpportunities, 'more opportunity', 'more opportunities')}`,
-                href: crmUrl(appUrl, '/opportunities'),
-            });
-        }
+    const overdueFollowupTotals = followupTotals(input.overdueFollowups, overdueFollowups, appUrl);
+    if (overdueFollowupTotals.total > 0) {
         sections.push({
             key: 'overdueFollowups',
             title: 'Overdue follow-ups',
-            total: overdueFollowupTotal,
+            total: overdueFollowupTotals.total,
             items: overdueFollowups.map((item) => {
                 const due = followupDay(item, timeZone);
                 return followupItem(item, input, `Due ${formatDay(due)}`, `${dayCount(daysOverdue(due, day))} overdue`);
             }),
-            more,
+            more: overdueFollowupTotals.more,
         });
     }
 
-    const contracts = contractItems(input.contracts, input, day);
-    if (contracts.length > 0) {
-        sections.push({ key: 'contracts', title: 'Contract renewals', total: contracts.length, items: contracts, more: [] });
+    const contracts = contractItems(input.contracts.rows, input, day);
+    const contractTotal = Math.max(input.contracts.total, contracts.length);
+    if (contractTotal > 0) {
+        sections.push({
+            key: 'contracts',
+            title: 'Contract renewals',
+            total: contractTotal,
+            items: contracts,
+            more: contractTotal > contracts.length ? [{ label: `and ${contractTotal - contracts.length} more`, href: crmUrl(appUrl, '/contracts') }] : [],
+        });
     }
 
     const counts: SummaryCounts = {
         todayActivities: todayTotal,
         overdueActivities: overdueTotal,
-        followupsToday: followups.length,
-        overdueFollowups: overdueFollowupTotal,
-        contracts: contracts.length,
+        followupsToday: followupsToday.total,
+        overdueFollowups: overdueFollowupTotals.total,
+        contracts: contractTotal,
     };
     return {
         day,

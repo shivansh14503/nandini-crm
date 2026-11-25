@@ -36,6 +36,7 @@ import { resumeEmailValidationRuns } from './modules/email-verification/emailVal
 import tableFilterRouter from './modules/table-filters/tableFilter.routes.js';
 import scorecardRouter from './modules/scorecards/scorecard.routes.js';
 import notificationRouter from './modules/notifications/notification.routes.js';
+import { dropUnreadCountsOnRedisReady } from './modules/notifications/notification.producer.js';
 import { drawerLayoutRouter, drawerPieceRouter } from './modules/drawer-layouts/drawerLayout.routes.js';
 import { seedFormConfigsSafely } from './modules/form-configs/formConfig.seed.js';
 import { pdfAssetRouter, pdfSavedItemRouter, pdfTemplateRouter } from './modules/pdf/pdf.routes.js';
@@ -141,6 +142,8 @@ async function start(): Promise<Server> {
     // labels): drop them once Redis is up so a restart always serves what the database now holds. Only the
     // `cache:*` namespace; sessions and rate limits stay.
     redis.once('ready', () => void cacheService.invalidatePattern('cache:*'));
+    // Unread notification counts invalidated while Redis was unreachable: dropped on every reconnect.
+    dropUnreadCountsOnRedisReady();
     connectRedis();
     await connectDatabase();
     startDatabaseKeepAlive();
