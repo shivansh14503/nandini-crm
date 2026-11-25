@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useMemo } from 'react';
+import React, { createContext, useContext, useMemo } from 'react';
 import { Box } from '@mui/material';
 import { useTheme } from '@mui/material/styles';
 import DefaultPropsProvider from '@mui/material/DefaultPropsProvider';
@@ -23,6 +23,12 @@ const LOCKED_COMPONENTS = [
     'MuiFormControlLabel',
 ] as const;
 
+/** True inside DisabledFields: controls that draw their own buttons (a lookup's search and clear) hide them. */
+const FieldsLockedContext = createContext(false);
+
+/** Whether this field is locked (inside DisabledFields / LockedInputs). */
+export const useFieldsLocked = (): boolean => useContext(FieldsLockedContext);
+
 /** Renders its fields as disabled inputs that keep their values. */
 export function DisabledFields({ children }: { children: React.ReactNode }) {
     const theme = useTheme();
@@ -33,7 +39,11 @@ export function DisabledFields({ children }: { children: React.ReactNode }) {
         }
         return components;
     }, [theme.components]);
-    return <DefaultPropsProvider value={value as React.ComponentProps<typeof DefaultPropsProvider>['value']}>{children}</DefaultPropsProvider>;
+    return (
+        <FieldsLockedContext.Provider value>
+            <DefaultPropsProvider value={value as React.ComponentProps<typeof DefaultPropsProvider>['value']}>{children}</DefaultPropsProvider>
+        </FieldsLockedContext.Provider>
+    );
 }
 
 /**

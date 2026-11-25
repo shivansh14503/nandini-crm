@@ -71,7 +71,7 @@ export const IMPORT_CONFIGS: Record<ImportEntityType, ImportEntityConfig> = {
         fields: [
             { key: 'organizationName', label: 'Organization Name', required: true, aliases: ['organization', 'company', 'company name', 'account'], sample: ['Acme Traders Pvt Ltd', 'Bright Tech Solutions'] },
             { key: 'contact', label: 'Contact', required: true, aliases: ['contact', 'contact person', 'person name'], sample: ['Rahul Sharma', 'Priya Verma'] },
-            { key: 'contactNumber', label: 'Contact Number', required: true, aliases: ['mobile', 'phone', 'contact mobile', 'mobile no', 'telephone'], sample: ['9876543210', '9123456780'] },
+            { key: 'contactNumber', label: 'Contact Number', required: false, aliases: ['mobile', 'phone', 'contact mobile', 'mobile no', 'telephone'], sample: ['9876543210', '9123456780'] },
             { key: 'contactEmail', label: 'Contact Email', required: false, aliases: ['email address', 'contact email', 'e-mail'], sample: ['rahul@example.com', 'priya@example.com'] },
             { key: 'productCategory', label: 'Product Category', required: false, aliases: ['product', 'category', 'products'], sample: ['TallyPrime', 'Biz Analyst'] },
             { key: 'type', label: 'Type', required: false, aliases: ['type', 'opportunity type', 'deal type'], sample: ['New Business', 'Existing Business'] },

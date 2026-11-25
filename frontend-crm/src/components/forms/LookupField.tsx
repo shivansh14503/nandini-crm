@@ -15,6 +15,7 @@ import { fieldSx } from './FormField';
 import { fieldSizeSx, type FieldSize } from './fieldSizing';
 import { compareOrganizationNames } from '@/utils/organizationName';
 import { useTabSelect } from './useTabSelect';
+import { useFieldsLocked } from './LockedInputs';
 import { rewriteValueKeepingCaret, upperCase, useUndoSafeSanitizer } from './undoSafeInput';
 
 export interface LookupFieldProps {
@@ -99,6 +100,9 @@ export function LookupField({
     maxLength,
 }: LookupFieldProps) {
     const handleLookup = onLookupClick ?? onSelectClick;
+    // A locked field (e.g. Organization Name filled from the picked contact) can't be searched or cleared: no buttons.
+    const locked = useFieldsLocked();
+    const inputDisabled = disabled || locked;
     const sanitizerRef = useUndoSafeSanitizer(uppercase ? upperCase : undefined);
     // Typed names are allowed: Tab keeps the typed text unless the user arrowed to a suggestion.
     const tabSelect = useTabSelect({
@@ -128,7 +132,7 @@ export function LookupField({
                 freeSolo
                 // The separate [X] button already clears the field; hide the Autocomplete's built-in clear icon.
                 disableClearable
-                disabled={disabled}
+                disabled={inputDisabled}
                 options={options}
                 value={value || ''}
                 // Controlled by `value` so selections made from the lookup modal show up immediately.
@@ -160,38 +164,42 @@ export function LookupField({
 
 
             {/* Select / Search Action Button */}
-            <Tooltip title={lookupTooltip}>
-                <span>
-                    <IconButton
-                        size="small"
-                        aria-label={lookupTooltip}
-                        onClick={handleLookup}
-                        disabled={disabled || loading}
-                        sx={actionButtonSx}
-                    >
-                        {loading ? (
-                            <CircularProgress size={14} sx={{ color: 'var(--mui-palette-text-muted)' }} />
-                        ) : (
-                            <ArrowForwardIosIcon sx={{ fontSize: 13 }} />
-                        )}
-                    </IconButton>
-                </span>
-            </Tooltip>
+            {!locked && (
+                <Tooltip title={lookupTooltip}>
+                    <span>
+                        <IconButton
+                            size="small"
+                            aria-label={lookupTooltip}
+                            onClick={handleLookup}
+                            disabled={disabled || loading}
+                            sx={actionButtonSx}
+                        >
+                            {loading ? (
+                                <CircularProgress size={14} sx={{ color: 'var(--mui-palette-text-muted)' }} />
+                            ) : (
+                                <ArrowForwardIosIcon sx={{ fontSize: 13 }} />
+                            )}
+                        </IconButton>
+                    </span>
+                </Tooltip>
+            )}
 
             {/* Clear Action Button */}
-            <Tooltip title="Clear selection">
-                <span>
-                    <IconButton
-                        size="small"
-                        aria-label="Clear selection"
-                        onClick={handleClear}
-                        disabled={disabled || !value}
-                        sx={actionButtonSx}
-                    >
-                        <ClearIcon sx={{ fontSize: 14 }} />
-                    </IconButton>
-                </span>
-            </Tooltip>
+            {!locked && (
+                <Tooltip title="Clear selection">
+                    <span>
+                        <IconButton
+                            size="small"
+                            aria-label="Clear selection"
+                            onClick={handleClear}
+                            disabled={disabled || !value}
+                            sx={actionButtonSx}
+                        >
+                            <ClearIcon sx={{ fontSize: 14 }} />
+                        </IconButton>
+                    </span>
+                </Tooltip>
+            )}
         </Box>
     );
 }
