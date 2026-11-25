@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { DEFAULT_CATEGORIES, DEFAULT_FIELDS, DEFAULT_SELECTED_OPTIONS, MODULE_TABS } from './formConfig.defaults.js';
+import { ratingRuleFromMeta } from '../leads/lead.rating.js';
 
 /** docs/field-locking-policy.md: which built-in fields the form builder may relax. */
 const byKey = (module: string, fieldKey: string) => {
@@ -98,5 +99,30 @@ describe('contracts defaults', () => {
         const system = categories.get('contract_status')!.options.filter((o) => typeof o !== 'string' && o.isSystem);
         assert.deepEqual(system.map((o) => (typeof o === 'string' ? o : o.value)), ['Not Started', 'Expired']);
         assert.deepEqual(DEFAULT_SELECTED_OPTIONS.contract_status, ['Not Started']);
+    });
+});
+
+describe('Customer Response lists', () => {
+    const lead = DEFAULT_CATEGORIES.find((c) => c.key === 'lead_customer_response');
+    const options = (lead?.options ?? []).map((o) => (typeof o === 'string' ? { value: o, meta: undefined } : o));
+
+    it('links the same field (key and label) to a list of its own on leads and opportunities', () => {
+        assert.equal(byKey('leads', 'customerResponse').dropdownCategoryKey, 'lead_customer_response');
+        assert.equal(byKey('opportunities', 'customerResponse').dropdownCategoryKey, 'shared_customer_response');
+        assert.equal(byKey('leads', 'customerResponse').label, byKey('opportunities', 'customerResponse').label);
+    });
+
+    it('gives every lead option a valid starting Rating rule', () => {
+        assert.equal(options.length, 15);
+        for (const option of options) assert.ok(ratingRuleFromMeta(option.meta), `${option.value} has a valid ratingRule`);
+    });
+
+    it('rates the dead ends Cold and shares the unanswered-call counter between No Response and Not Reachable', () => {
+        const rule = (value: string) => ratingRuleFromMeta(options.find((o) => o.value === value)?.meta);
+        for (const value of ['Not Interested', 'Using Other Software', 'No Requirement', 'Wrong Number', 'Do Not Contact']) {
+            assert.deepEqual(rule(value), { rule: 'always', rating: 'Cold' }, value);
+        }
+        assert.deepEqual(rule('No Response'), rule('Not Reachable'));
+        assert.equal(rule('No Response')?.rule, 'unansweredCalls');
     });
 });

@@ -49,7 +49,7 @@ import {
 import { useDropdownOptionsGetter } from '@/hooks/queries/useFormConfigs';
 import { NATURE_OF_PARTNER_OPTIONS } from '@/types/partner.types';
 import { useFormMode } from '@/context/FormModeContext';
-import { CUSTOMER_RESPONSE_CATEGORY, CUSTOMER_RESPONSES, FieldGlow, useFollowUpDecision } from '@/components/forms/FollowUpDecision';
+import { FieldGlow, OPPORTUNITY_CUSTOMER_RESPONSE_CATEGORY, OPPORTUNITY_CUSTOMER_RESPONSES, useFollowUpDecision } from '@/components/forms/FollowUpDecision';
 
 type F = OpportunityFormData;
 
@@ -92,7 +92,7 @@ export function OpportunityBasicSection({ notify, onDecisionPendingChange }: Opp
         notify,
         onPendingChange: onDecisionPendingChange,
     });
-    const customerResponseOptions = getOptions(CUSTOMER_RESPONSE_CATEGORY, CUSTOMER_RESPONSES);
+    const customerResponseOptions = getOptions(OPPORTUNITY_CUSTOMER_RESPONSE_CATEGORY, OPPORTUNITY_CUSTOMER_RESPONSES);
     const productCategory = useWatch({ control, name: 'productCategory' }) ?? [];
 
     // Organizations and contacts from the CRM (as on the Ticket form). Contact suggestions narrow to the chosen
