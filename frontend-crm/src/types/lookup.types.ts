@@ -78,4 +78,9 @@ export interface EntityLookupModalProps<T> {
      * those filter fields ignore them.
      */
     initialFilterValues?: LookupFilterValues;
+    /**
+     * Filters fixed for this picker (e.g. Customer Type = Partner for a Partner Company): applied, shown locked and
+     * kept by "Clear". Pickers without those filter fields ignore them.
+     */
+    lockedFilterValues?: LookupFilterValues;
 }

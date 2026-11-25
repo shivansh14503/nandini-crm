@@ -36,7 +36,7 @@ Fields not listed are ○ Free today and stay ○ Free.
 | GST Number | 🔒 | 🔒 | Conditional (registration type) |
 | Lead Source | 🔒R | ⭐ | Reporting preference |
 | Referred By | 🔒 | 🔒 | Conditional: shown, and required, only when Lead Source is CA or Reference (system options). Relation: an active Referral, picked in the Referral Search popup |
-| Partner Company | 🔒 | 🔒 | Conditional: shown, and required, only when Lead Source is Partner (organization picker opened on Customer Type = Partner) |
+| Partner Company | 🔒 | 🔒 | Conditional: shown, and required, only when Lead Source is Partner (organization picker with its Customer Type filter locked to Partner) |
 | Lead Type | 🔒R | ⭐ | Classification preference (Inbound / Outbound / …; not the Rating) |
 | Status | — | ○ (list fixed) | Defaults to `New` when omitted; Convert sets `Converted` |
 | Next Followup Date | 🔒R | 🔒R | Locked again (2026-11-21): every open lead is rated from its next follow-up, date and time ([lead-rating-rules.md](lead-rating-rules.md)); a closing status clears it |
@@ -79,7 +79,7 @@ Fields not listed are ○ Free today and stay ○ Free.
 | Type | 🔒R | ⭐ | Classification |
 | Lead Source | 🔒R | ⭐ | Reporting |
 | Referred By | 🔒 | 🔒 | Conditional: shown, and required, only when Lead Source is CA or Reference (system options). Relation: an active Referral, picked in the Referral Search popup |
-| Partner Company | 🔒 | 🔒 | Conditional: shown, and required, only when Lead Source is Partner (organization picker opened on Customer Type = Partner) |
+| Partner Company | 🔒 | 🔒 | Conditional: shown, and required, only when Lead Source is Partner (organization picker with its Customer Type filter locked to Partner) |
 | Sales Stage | 🔒R | 🔒 | Logic: pipeline stage, filters, conversion sets it |
 | Next Followup Date | 🔒R | ⭐ | Same as leads |
 | Assigned to | 🔒R | 🔒 | Ownership |

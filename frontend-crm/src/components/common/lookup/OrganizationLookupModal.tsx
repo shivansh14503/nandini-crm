@@ -10,7 +10,14 @@ import { ORGANIZATION_LOOKUP_PRESET } from './lookupConfigs';
 
 const NO_ORGANIZATIONS: ExtendedOrganization[] = [];
 
-export function OrganizationLookupModal({ open, onClose, onSelect, selectedValue, initialFilterValues }: EntityLookupModalProps<ExtendedOrganization>) {
+export function OrganizationLookupModal({
+    open,
+    onClose,
+    onSelect,
+    selectedValue,
+    initialFilterValues,
+    lockedFilterValues,
+}: EntityLookupModalProps<ExtendedOrganization>) {
     // Shared, cache-invalidated query: organizations created elsewhere show up without reopening.
     const { data: organizations = NO_ORGANIZATIONS, isLoading } = useOrganizations();
     // The user directory loads after module import, so "Assigned to" options are built from it here, not in the preset.
@@ -24,7 +31,7 @@ export function OrganizationLookupModal({ open, onClose, onSelect, selectedValue
 
     const selectedId = organizations.find((o) => o.organizationName === selectedValue)?.id;
     // Text already typed in the field seeds the name filter; an exact pick just highlights its row instead. The field's
-    // own filters (e.g. Customer Type = Partner for a Partner Company) apply on top.
+    // own filters apply on top; locked ones (Customer Type = Partner for a Partner Company) can't be changed.
     const typed = selectedId ? '' : (selectedValue ?? '').trim();
     const startFilters = typed || initialFilterValues ? { ...initialFilterValues, ...(typed ? { organizationName: typed } : {}) } : undefined;
     return (
@@ -38,6 +45,7 @@ export function OrganizationLookupModal({ open, onClose, onSelect, selectedValue
             {...ORGANIZATION_LOOKUP_PRESET}
             filterFields={filterFields}
             initialFilterValues={startFilters}
+            lockedFilterValues={lockedFilterValues}
         />
     );
 }
