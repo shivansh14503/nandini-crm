@@ -6,6 +6,7 @@ import { useFormContext, useWatch } from 'react-hook-form';
 import ArticleOutlinedIcon from '@mui/icons-material/ArticleOutlined';
 import ReceiptLongOutlinedIcon from '@mui/icons-material/ReceiptLongOutlined';
 import MonetizationOnOutlinedIcon from '@mui/icons-material/MonetizationOnOutlined';
+import FolderOutlinedIcon from '@mui/icons-material/FolderOutlined';
 
 import {
     FIELD_MAX_LENGTH,
@@ -15,6 +16,7 @@ import {
     RhfAmountField,
     RhfDateTimeField,
     RhfEmailField,
+    RhfFileUpload,
     RhfLookup,
     RhfMultiAutocomplete,
     RhfPhoneField,
@@ -35,6 +37,7 @@ import {
     OPPORTUNITY_COMMISSIONS,
     OPPORTUNITY_COMMISSION_TYPES,
     OPPORTUNITY_DOCUMENT_OPTIONS,
+    PO_SALES_STAGE,
 } from '@/types/opportunity.types';
 import { defaultCommissionType, hasCommission } from '@/validations/opportunity.schema';
 import {
@@ -95,6 +98,10 @@ export function OpportunityBasicSection({ notify, onDecisionPendingChange }: Opp
     const commissionType = useWatch({ control, name: 'commissionType' });
     const showCommissionType = hasCommission({ commission, commissionAmount });
     const showPayeeBank = showCommissionType && commissionType === 'Other';
+    // Documentation: Add Document Yes asks for the document; Sales Stage PO needs one.
+    const salesStage = useWatch({ control, name: 'salesStage' });
+    const addDocument = useWatch({ control, name: 'addDocument' });
+    const needsDocument = salesStage === PO_SALES_STAGE;
     // Commission Type follows the amount: Self up to ₹1,000, Other above. It is set when it is empty, and when the
     // user's own amount edit crosses ₹1,000; a type picked by hand stays until then, and a loaded record keeps its own.
     const typeForAmount = showCommissionType ? defaultCommissionType(commissionAmount) : '';
@@ -255,6 +262,10 @@ export function OpportunityBasicSection({ notify, onDecisionPendingChange }: Opp
                     hint="Pipeline phase"
                     options={getOptions('opportunity_sales_stage', OPPORTUNITY_SALES_STAGES)}
                     placeholder="Select Sales Stage"
+                    onValueChange={(next) => {
+                        // A PO needs its document: Add Document turns Yes so its fields open.
+                        if (next === PO_SALES_STAGE && getValues('addDocument') !== 'Yes') setValue('addDocument', 'Yes', touch);
+                    }}
                 />
 
                 {/* ── Follow-up & ownership ── */}
@@ -369,12 +380,12 @@ export function OpportunityBasicSection({ notify, onDecisionPendingChange }: Opp
             </FormGrid>
 
             {/* ══════════════════════════════════════════════════════════════════════ */}
-            {/* COMMISSION & DOCUMENTATION                                            */}
+            {/* COMMISSION                                                            */}
             {/* ══════════════════════════════════════════════════════════════════════ */}
             <Divider sx={sectionDividerSx} />
             <SectionLabel
                 icon={<MonetizationOnOutlinedIcon sx={{ fontSize: 18 }} />}
-                label="Commission & Documentation"
+                label="Commission"
                 sx={{ mb: 2.5 }}
             />
             <FormGrid columns={3}>
@@ -413,20 +424,11 @@ export function OpportunityBasicSection({ notify, onDecisionPendingChange }: Opp
                         fieldSize="sm"
                     />
                 )}
-
-                <RhfSelect<F>
-                    name="addDocument"
-                    label="Add Document"
-                    hint="Documents / PO attached"
-                    options={getOptions('opportunity_add_document', OPPORTUNITY_DOCUMENT_OPTIONS)}
-                    placeholder="Select"
-                    fieldSize="sm"
-                />
             </FormGrid>
 
             {/* The commission payee's bank details (Commission Type Other), the same fields as on the Organization form. */}
             {showPayeeBank && (
-                <FormGrid columns={3}>
+                <FormGrid columns={3} sx={{ mt: 2.5 }}>
                     <RhfTextField<F>
                         name="accountName"
                         label="Account Name"
@@ -454,6 +456,59 @@ export function OpportunityBasicSection({ notify, onDecisionPendingChange }: Opp
                         hint="10-character PAN"
                         placeholder="e.g. ABCDE1234F"
                         maxLength={FIELD_MAX_LENGTH.pan}
+                    />
+                </FormGrid>
+            )}
+
+            {/* ══════════════════════════════════════════════════════════════════════ */}
+            {/* DOCUMENTATION                                                         */}
+            {/* ══════════════════════════════════════════════════════════════════════ */}
+            <Divider sx={sectionDividerSx} />
+            <SectionLabel
+                icon={<FolderOutlinedIcon sx={{ fontSize: 18 }} />}
+                label="Documentation"
+                sx={{ mb: 2.5 }}
+            />
+            <FormGrid columns={3}>
+                <RhfSelect<F>
+                    name="addDocument"
+                    label="Add Document"
+                    required={needsDocument}
+                    hint={needsDocument ? 'Required at Sales Stage PO' : 'Documents / PO attached'}
+                    options={getOptions('opportunity_add_document', OPPORTUNITY_DOCUMENT_OPTIONS)}
+                    placeholder="Select"
+                    fieldSize="sm"
+                />
+
+                {addDocument === 'Yes' && (
+                    <RhfTextField<F>
+                        name="documentNo"
+                        label="Document No"
+                        hint="PO / document reference"
+                        placeholder="e.g. PO-2026-0188"
+                        fieldSize="sm"
+                        maxLength={FIELD_MAX_LENGTH.shortCode}
+                    />
+                )}
+
+                {addDocument === 'Yes' && (
+                    <RhfTextField<F> name="documentDate" label="Document Date" hint="Date on the document" type="date" fieldSize="sm" />
+                )}
+            </FormGrid>
+
+            {addDocument === 'Yes' && (
+                <FormGrid columns={3} sx={{ mt: 2.5 }}>
+                    <RhfFileUpload<F> name="documentFile" label="Upload Doc" module="opportunities" required hint="PDF, image, Word or Excel" />
+                    <RhfTextField<F>
+                        name="documentRemarks"
+                        label="Remarks"
+                        hint="About this document"
+                        placeholder="e.g. Signed purchase order from the client"
+                        multiline
+                        minRows={3}
+                        maxRows={6}
+                        fieldSize="full"
+                        maxLength={FIELD_MAX_LENGTH.longText}
                     />
                 </FormGrid>
             )}

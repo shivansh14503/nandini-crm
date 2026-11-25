@@ -13,6 +13,8 @@ export type AuditEntityType =
     | 'Product'
     | 'Ticket'
     | 'Contract'
+    /** A file uploaded to a record field (an opportunity's Upload Doc); `changes.module` is its module. */
+    | 'RecordFile'
     | 'PartnerCompany'
     | 'User'
     | 'Import'
@@ -75,6 +77,7 @@ const MODULE_BY_ENTITY: Record<AuditEntityType, string> = {
     Product: 'products',
     Ticket: 'tickets',
     Contract: 'contracts',
+    RecordFile: 'files',
     PartnerCompany: 'partner-companies',
     User: 'users',
     Import: 'imports',
@@ -122,7 +125,7 @@ const asObject = (value: unknown): Record<string, unknown> | undefined =>
 
 export function moduleFor(entityType: AuditEntityType, changes?: unknown): string {
     // An import belongs to the module it filled (`leads`, `contacts` …).
-    if (entityType === 'Import') {
+    if (entityType === 'Import' || entityType === 'RecordFile') {
         const entity = asObject(changes)?.entity;
         if (typeof entity === 'string' && entity) return entity;
     }
@@ -252,6 +255,7 @@ export function labelFromChanges(entityType: AuditEntityType, entityId: string, 
         case 'DocumentSeries':
             return 'Document Series';
         case 'Import':
+        case 'RecordFile':
         case 'PdfAsset':
         case 'AuditExport':
             return pick('fileName');

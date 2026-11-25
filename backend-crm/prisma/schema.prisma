@@ -475,6 +475,11 @@ model Opportunity {
   ifscCode         String?  @db.NVarChar(11)
   panNumber        String?  @db.NVarChar(10)
   addDocument      String?  @default("No") @db.NVarChar(3)
+  /// The document's details and file, kept only while Add Document is Yes (required at Sales Stage PO).
+  documentNo       String?   @db.NVarChar(30)
+  documentDate     DateTime? @db.Date
+  documentRemarks  String?   @db.NVarChar(2000)
+  documentFileId   String?   @db.NVarChar(50)
 
   // Line-item totals (verified server-side)
   /// No DB default: Prisma writes SQL Server string defaults without the N prefix (â‚¹ â†’ ?). The API always sets it.
@@ -499,6 +504,7 @@ model Opportunity {
 
   organization   Organization?         @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   contactRecord  Contact?              @relation(fields: [contactId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  documentFile   RecordFile?           @relation(fields: [documentFileId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   lineItems      OpportunityLineItem[]
   quotations     Quotation[]
   contracts      Contract[]
@@ -509,6 +515,7 @@ model Opportunity {
   @@index([salesStage])
   @@index([assignedTo])
   @@index([nextFollowupDate])
+  @@index([documentFileId])
   @@index([isDeleted, createdAt])
   /// Scoped lists ("mine" / row-level access) sorted by creation date.
   @@index([isDeleted, assignedTo, createdAt])
@@ -1200,6 +1207,23 @@ model PdfAsset {
   data      Bytes    @db.VarBinary(Max)
   createdBy String   @db.NVarChar(50)
   createdAt DateTime @default(now())
+}
+
+/// A file uploaded to a record field (an opportunity's Upload Doc). Uploaded first, then linked when the record saves.
+model RecordFile {
+  id        String   @id @default(uuid()) @db.NVarChar(50)
+  /// CRM module the file was uploaded for (`opportunities`).
+  module    String   @db.NVarChar(30)
+  fileName  String   @db.NVarChar(200)
+  mimeType  String   @db.NVarChar(100)
+  sizeBytes Int
+  data      Bytes    @db.VarBinary(Max)
+  createdBy String   @db.NVarChar(50)
+  createdAt DateTime @default(now())
+
+  opportunities Opportunity[]
+
+  @@index([module, createdAt])
 }
 
 /// Builder library: a section or block saved by an admin, shared by every template of the module and inserted as a copy.

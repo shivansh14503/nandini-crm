@@ -18,14 +18,16 @@ import { tallySerialIssue } from '../../validators/tallySerial.js';
 import { codeSearchPrefix, phoneSearch, phoneWhere } from '../shared/searchTerms.js';
 import { assertDeletedRow, lockRecords, restoreData, runInTransaction, softDeleteData, type BulkDeleteResult } from '../shared/transactions.js';
 import { toOpportunityData, toOpportunityDto, type OpportunityDto } from './opportunity.mapper.js';
+import { assertRecordFile, RECORD_FILE_SELECT } from '../files/recordFile.service.js';
 import {
+    documentationIssues,
     OPPORTUNITY_SORT_FIELDS,
     opportunityInputSchema,
     opportunityListQuerySchema,
     type OpportunityInput,
 } from './opportunity.validator.js';
 
-const include = { lineItems: lineItemsInclude } as const;
+const include = { lineItems: lineItemsInclude, documentFile: { select: RECORD_FILE_SELECT } } as const;
 
 /** Columns `assertRecordAccess` reads. */
 const OWNER_SELECT = { assignedTo: true, createdBy: true } as const;
@@ -98,6 +100,12 @@ const opportunityPastChecks = (input: OpportunityInput, before?: OpportunityDto)
     { kind: 'date', path: 'invoiceDate', label: 'Invoice Date', value: input.invoiceDate, previous: before?.invoiceDate },
 ];
 
+/** Add Document Yes at Sales Stage PO, and a file whenever it is Yes (documentationIssues). */
+function assertDocumentation(input: OpportunityInput): void {
+    const issues = documentationIssues(input);
+    if (issues.length) throw HttpError.badRequest(issues[0].message, issues);
+}
+
 export async function createOpportunityRecord(
     tx: TransactionClient,
     input: OpportunityInput,
@@ -108,6 +116,7 @@ export async function createOpportunityRecord(
     const opportunityCode = await generateEntityCode(tx, 'OPP');
     const assignedTo = (await assertAssigneeValid(tx, input.assignedTo, { activeUsernames: lookups.activeUsernames })) ?? user.username;
     const links = await resolveLinks(tx, input, undefined, lookups);
+    await assertRecordFile(tx, 'opportunities', input.documentFile, 'documentFile');
     const computed = calculateLineItems(input.lineItems, input.lumpSumDiscount);
 
     const row = await tx.opportunity.create({
@@ -180,6 +189,7 @@ export const opportunityService = {
 
     async create(body: unknown, user: AuthUser): Promise<OpportunityDto> {
         const input = opportunityInputSchema.parse(body);
+        assertDocumentation(input);
         input.customFields = await validateModulePayload('opportunities', asPayload(body), input.customFields);
         assertNotInPast(opportunityPastChecks(input));
         const created = await runInTransaction((tx) => createOpportunityRecord(tx, input, user));
@@ -205,6 +215,10 @@ export const opportunityService = {
             const keepLegacyTallySerial = !('tallySerialNo' in patch) && tallySerialIssue(before.tallySerialNo) !== null;
             if (keepLegacyTallySerial) delete merged.tallySerialNo;
             const input = opportunityInputSchema.parse(merged);
+            // Checked when the stage or the document changes, so records saved at PO before the rule existed still
+            // take unrelated edits (follow-ups, …).
+            if (['salesStage', 'addDocument', 'documentFile'].some((key) => key in patch)) assertDocumentation(input);
+            await assertRecordFile(tx, 'opportunities', input.documentFile, 'documentFile', existing.documentFileId);
             if (keepLegacyTallySerial) input.tallySerialNo = before.tallySerialNo;
             input.customFields = checkModulePayload(fieldConfig, merged, input.customFields, {
                 submittedKeys: new Set(Object.keys(patch)),

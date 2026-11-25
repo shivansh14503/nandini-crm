@@ -1,7 +1,8 @@
 import { z } from 'zod';
 import { FIELD_MAX_LENGTH as L } from '../config/fieldLimits';
 import type { ConfigValidationIssue } from '../utils/formConfig';
-import { SMALL_COMMISSION_LIMIT } from '../types/opportunity.types';
+import { PO_SALES_STAGE, SMALL_COMMISSION_LIMIT } from '../types/opportunity.types';
+import { isRecordFile } from '../types/recordFile.types';
 import {
     requiredString,
     optionalString,
@@ -77,8 +78,13 @@ export const opportunityFormSchema = z.object({
     ifscCode: zodIfscOptional,
     panNumber: zodPanOptional,
 
-    // Document
+    // Documentation: the details and file are kept while Add Document is Yes (see documentationIssues).
     addDocument: optionalString.default('No'),
+    documentNo: optionalText('Document No', L.shortCode),
+    documentDate: optionalString,
+    documentRemarks: optionalText('Remarks', L.longText),
+    // The uploaded file (`{ id, fileName, … }`), or null.
+    documentFile: z.custom<{ id: string; fileName: string; mimeType: string; sizeBytes: number; url: string } | null>((v) => v === null || v === undefined || isRecordFile(v)).nullish(),
 
     // Line Items
     currency: optionalString.default('Indian Rupee: ₹'),
@@ -121,5 +127,16 @@ export function commissionIssues(values: { commission?: string; commissionAmount
     const amount = Number(raw);
     if (!Number.isFinite(amount) || amount <= 0) return [{ path: 'commissionAmount', message: 'Enter a Commission Amount above 0.' }];
     if (!values.commissionType?.trim()) return [{ path: 'commissionType', message: 'Commission Type is required when Commission is Yes.' }];
+    return [];
+}
+
+/** Add Document must be Yes at Sales Stage PO, and needs a file (Upload Doc) whenever it is Yes. */
+export function documentationIssues(values: { salesStage?: string; addDocument?: string; documentFile?: unknown }): ConfigValidationIssue[] {
+    if (values.salesStage === PO_SALES_STAGE && values.addDocument !== 'Yes') {
+        return [{ path: 'addDocument', message: `Add Document must be Yes when Sales Stage is ${PO_SALES_STAGE}.` }];
+    }
+    if (values.addDocument === 'Yes' && !isRecordFile(values.documentFile)) {
+        return [{ path: 'documentFile', message: 'Upload Doc is required when Add Document is Yes.' }];
+    }
     return [];
 }

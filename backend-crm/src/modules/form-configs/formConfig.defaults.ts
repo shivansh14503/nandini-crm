@@ -43,7 +43,7 @@ export const CUSTOM_FIELD_TYPES = [
     'pincode',
 ] as const;
 /** Built-in fields can additionally be rendered as lookups or date + time pickers. */
-export const FIELD_TYPES = [...CUSTOM_FIELD_TYPES, 'lookup', 'datetime'] as const;
+export const FIELD_TYPES = [...CUSTOM_FIELD_TYPES, 'lookup', 'datetime', 'file'] as const;
 export type FieldType = (typeof FIELD_TYPES)[number];
 
 export const FIELD_SIZES = ['xs', 'sm', 'md', 'lg', 'full'] as const;
@@ -446,10 +446,10 @@ export const DEFAULT_CATEGORIES: DefaultCategory[] = [
         key: 'opportunity_sales_stage',
         label: 'Sales Stage',
         module: 'opportunities',
-        description: "'Proposal/Price Quote' is set when a quotation is raised; 'Closed Won' / 'Closed Lost' close the deal.",
+        description: "'Proposal/Price Quote' is set when a quotation is raised; 'Closed Won' / 'Closed Lost' close the deal; 'PO' needs a document (Add Document Yes).",
         options: withSystem(
             ['Qualification', 'Demo', 'Proposal/Price Quote', 'Negotiation', 'On Hold', 'Closed Won', 'Closed Lost', 'PO', 'Advance Received'],
-            ['Proposal/Price Quote', 'Closed Won', 'Closed Lost'],
+            ['Proposal/Price Quote', 'Closed Won', 'Closed Lost', 'PO'],
         ),
     },
     {
@@ -825,7 +825,7 @@ const RAW_DEFAULT_FIELDS: DefaultField[] = [
         t('invoiceNo', 'Invoice No'),
         t('invoiceDate', 'Invoice Date', { type: 'date' }),
     ]),
-    ...section('opportunities', 'basic', 'Commission & Documentation', [
+    ...section('opportunities', 'basic', 'Commission', [
         sel('commission', 'Commission', 'opportunity_commission', { soft: true }),
         // Shown and required only when Commission is Yes (the form and the API enforce it).
         t('commissionAmount', 'Commission Amount', { type: 'amount', lock: true }),
@@ -837,7 +837,16 @@ const RAW_DEFAULT_FIELDS: DefaultField[] = [
         t('bankName', 'Bank Name', { lock: true }),
         t('ifscCode', 'IFSC Code', { type: 'uppercase', lock: true }),
         t('panNumber', 'PAN Number', { type: 'uppercase', lock: true }),
-        sel('addDocument', 'Add Document', 'opportunity_add_document'),
+    ]),
+    // Last section of the Basic tab. Add Document must be Yes at Sales Stage PO (the form and the API enforce it).
+    ...section('opportunities', 'basic', 'Documentation', [
+        sel('addDocument', 'Add Document', 'opportunity_add_document', { lock: true }),
+        // Shown while Add Document is Yes.
+        t('documentNo', 'Document No'),
+        t('documentDate', 'Document Date', { type: 'date' }),
+        // Required while Add Document is Yes (the form and the API enforce it).
+        t('documentFile', 'Upload Doc', { type: 'file', lock: true }),
+        t('documentRemarks', 'Remarks', { type: 'textarea' }),
     ]),
 
     // ── Quotations ──
@@ -1057,7 +1066,7 @@ export function convertFieldUnavailableReason(
 ): string | null {
     if (field.isSystem && field.fieldKey in CONVERT_FIELD_NAMES[module]) return null;
     if (field.isSystem && CONVERT_FILLED_FIELDS[module].has(field.fieldKey)) return 'Filled in by the conversion';
-    if (field.fieldType === 'lookup' || field.fieldType === 'datetime') return 'Picker fields can only be set on their own form';
+    if (field.fieldType === 'lookup' || field.fieldType === 'datetime' || field.fieldType === 'file') return 'Picker fields can only be set on their own form';
     const hasList = Boolean(field.dropdownCategoryKey ?? field.dropdownCategoryId);
     if ((field.fieldType === 'select' || field.fieldType === 'multiselect') && !hasList) return 'Needs its own form (no dropdown list)';
     return null;

@@ -134,6 +134,8 @@ export function fieldDisplayValues(record: AnyRecord | null | undefined, def: Dr
     const labels = optionLabelMap(findCategory(configs, def.categoryKey));
     const one = (value: unknown): string => {
         if (value && typeof value === 'object' && 'email' in value) return String((value as { email?: unknown }).email ?? '').trim();
+        // An uploaded file (Upload Doc) shows its name.
+        if (value && typeof value === 'object' && 'fileName' in value) return String((value as { fileName?: unknown }).fileName ?? '').trim();
         const text = typeof value === 'string' ? value : String(value);
         if (def.type === 'phone') return formatPhoneDisplay(text) || text;
         if (def.form && isBuiltInCountryField(def.form)) return getCountryNameByCode(text) || text;
