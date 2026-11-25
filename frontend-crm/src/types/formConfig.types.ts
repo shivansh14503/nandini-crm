@@ -89,8 +89,8 @@ export const CUSTOM_FIELD_TYPES = [
 
 export type CustomFieldType = (typeof CUSTOM_FIELD_TYPES)[number];
 
-/** Built-in fields can also be lookups or date + time pickers. */
-export type FieldType = CustomFieldType | 'lookup' | 'datetime';
+/** Built-in fields can also be lookups, date + time pickers or file uploads. */
+export type FieldType = CustomFieldType | 'lookup' | 'datetime' | 'file';
 
 export const FIELD_TYPE_LABELS: Record<FieldType, string> = {
     text: 'Text',
@@ -108,6 +108,7 @@ export const FIELD_TYPE_LABELS: Record<FieldType, string> = {
     pincode: 'PIN Code',
     lookup: 'Lookup',
     datetime: 'Date & Time',
+    file: 'File Upload',
 };
 
 export type ConfigFieldSize = 'xs' | 'sm' | 'md' | 'lg' | 'full';

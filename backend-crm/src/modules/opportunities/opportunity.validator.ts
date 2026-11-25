@@ -37,6 +37,28 @@ export function defaultCommissionType(amount: number | undefined): (typeof COMMI
 
 export const CLOSED_SALES_STAGES = ['Closed Won', 'Closed Lost'] as const;
 export const QUOTE_SALES_STAGE = 'Proposal/Price Quote';
+/** Sales Stage that needs a document: Add Document Yes, with the file (Upload Doc). */
+export const PO_SALES_STAGE = 'PO';
+
+/** The Documentation rules: Add Document Yes at Sales Stage PO, and a file (Upload Doc) whenever it is Yes. */
+export function documentationIssues(input: { salesStage?: string; addDocument?: string; documentFile?: string | null }): { path: string[]; message: string }[] {
+    if (input.salesStage === PO_SALES_STAGE && input.addDocument !== 'Yes') {
+        return [{ path: ['addDocument'], message: `Add Document must be Yes when Sales Stage is ${PO_SALES_STAGE}.` }];
+    }
+    if (input.addDocument === 'Yes' && !input.documentFile) {
+        return [{ path: ['documentFile'], message: 'Upload Doc is required when Add Document is Yes.' }];
+    }
+    return [];
+}
+
+/** Upload Doc: the id of an uploaded RecordFile, sent as the id or as the file object the API returns (`{ id, … }`). */
+const documentFileRef = z.preprocess(
+    (v) => {
+        if (v && typeof v === 'object' && 'id' in v) v = (v as { id?: unknown }).id;
+        return v === '' || v === undefined ? null : v;
+    },
+    z.string({ error: 'Upload Doc must be an uploaded file.' }).trim().max(50).nullable(),
+);
 
 /**
  * `OpportunityFormData` rules from frontend-crm/src/validations/opportunity.schema.ts. Only locked fields
@@ -85,6 +107,11 @@ export const opportunityInputSchema = z.object({
     ifscCode: optionalIfsc,
     panNumber: optionalPan,
     addDocument: enumWithDefault('Add Document', ['Yes', 'No'], 'No'),
+    // The document's details and file, kept while Add Document is Yes (see documentationIssues).
+    documentNo: optionalText('Document No', L.shortCode),
+    documentDate: optionalDate('Document Date'),
+    documentRemarks: optionalText('Remarks', L.longText),
+    documentFile: documentFileRef.default(null),
 
     currency: optionalText('Currency', 30),
     groupName: optionalText('Group Name', L.shortText),

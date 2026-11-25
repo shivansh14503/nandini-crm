@@ -44,7 +44,8 @@ export function formatFieldCell(field: FormFieldDefinitionDto, value: unknown, c
     }
     if (!Array.isArray(value) && typeof value === 'object') {
         const obj = value as Record<string, unknown>;
-        return String(obj.label ?? obj.name ?? obj.email ?? obj.value ?? '');
+        // An uploaded file (Upload Doc) shows its name.
+        return String(obj.label ?? obj.name ?? obj.fileName ?? obj.email ?? obj.value ?? '');
     }
     if (isBuiltInCountryField(field) && typeof value === 'string') return getCountryNameByCode(value) || value;
     if (field.fieldType === 'phone' && typeof value === 'string') return formatPhoneDisplay(value) || value;

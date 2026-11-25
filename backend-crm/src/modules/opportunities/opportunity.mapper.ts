@@ -1,9 +1,13 @@
 import type { Opportunity, OpportunityLineItem, Prisma } from '../../generated/prisma/client.js';
 import { decimalToNumber, fromDateOnly, fromOptionalDateOnly, nullable, parseCustomFields, parseStringArray, serializeCustomFields, stringifyStringArray, text, toDateOnly, toIso } from '../../utils/mappers.js';
 import { toLineItemDtos, type LineItemDto, type LineItemTotals } from '../shared/lineItems.js';
+import { toRecordFileDto, type RecordFileDto } from '../files/recordFile.service.js';
 import { defaultCommissionType, hasCommission, type OpportunityInput } from './opportunity.validator.js';
 
-export type OpportunityRow = Opportunity & { lineItems?: OpportunityLineItem[] };
+export type OpportunityRow = Opportunity & {
+    lineItems?: OpportunityLineItem[];
+    documentFile?: { id: string; fileName: string; mimeType: string; sizeBytes: number } | null;
+};
 
 export const DEFAULT_CURRENCY = 'Indian Rupee: ₹';
 
@@ -46,6 +50,11 @@ export interface OpportunityDto {
     ifscCode: string;
     panNumber: string;
     addDocument: string;
+    /** The document's details and file (Upload Doc), kept only while Add Document is Yes. */
+    documentNo: string;
+    documentDate: string;
+    documentRemarks: string;
+    documentFile: RecordFileDto | null;
     currency: string;
     groupName: string;
     lineItems: LineItemDto[];
@@ -100,6 +109,10 @@ export function toOpportunityDto(row: OpportunityRow): OpportunityDto {
         ifscCode: text(row.ifscCode),
         panNumber: text(row.panNumber),
         addDocument: text(row.addDocument),
+        documentNo: text(row.documentNo),
+        documentDate: toDateOnly(row.documentDate),
+        documentRemarks: text(row.documentRemarks),
+        documentFile: row.documentFile ? toRecordFileDto(row.documentFile) : null,
         currency: row.currency,
         groupName: text(row.groupName),
         lineItems: toLineItemDtos(row.lineItems),
@@ -128,6 +141,17 @@ function commissionColumns(input: OpportunityInput) {
         bankName: bank(input.bankName),
         ifscCode: bank(input.ifscCode),
         panNumber: bank(input.panNumber),
+    };
+}
+
+/** The document's details and file, all cleared while Add Document is No. */
+function documentColumns(input: OpportunityInput) {
+    const keep = input.addDocument === 'Yes';
+    return {
+        documentNo: keep ? nullable(input.documentNo) : null,
+        documentDate: keep && input.documentDate ? fromDateOnly(input.documentDate) : null,
+        documentRemarks: keep ? nullable(input.documentRemarks) : null,
+        documentFileId: keep ? (input.documentFile ?? null) : null,
     };
 }
 
@@ -166,6 +190,7 @@ export function toOpportunityData(
         commissionAmount: input.commission === 'Yes' ? (input.commissionAmount ?? null) : null,
         ...commissionColumns(input),
         addDocument: input.addDocument,
+        ...documentColumns(input),
         currency: input.currency ?? DEFAULT_CURRENCY,
         groupName: nullable(input.groupName),
         lumpSumDiscount: input.lumpSumDiscount,

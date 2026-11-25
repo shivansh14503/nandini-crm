@@ -351,6 +351,10 @@ function opportunitiesLayout(): DrawerLayoutDocument {
                     f('b-commission-ifsc', 'ifscCode', 'standard', { copy: true }),
                     f('b-commission-pan', 'panNumber', 'standard', { copy: true }),
                     f('b-doc', 'addDocument', 'standard', { label: 'Document Attached' }),
+                    f('b-doc-no', 'documentNo', 'standard', { copy: true }),
+                    f('b-doc-date', 'documentDate', 'standard'),
+                    f('b-doc-remarks', 'documentRemarks', 'standard', { label: 'Document Remarks' }),
+                    f('b-doc-file', 'documentFile', 'standard'),
                 ]),
             ],
             line_items: [

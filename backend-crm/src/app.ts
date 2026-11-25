@@ -35,6 +35,7 @@ import scorecardRouter from './modules/scorecards/scorecard.routes.js';
 import { drawerLayoutRouter, drawerPieceRouter } from './modules/drawer-layouts/drawerLayout.routes.js';
 import { seedFormConfigsSafely } from './modules/form-configs/formConfig.seed.js';
 import { pdfAssetRouter, pdfSavedItemRouter, pdfTemplateRouter } from './modules/pdf/pdf.routes.js';
+import recordFileRouter from './modules/files/recordFile.routes.js';
 import { seedPdfTemplatesSafely } from './modules/pdf/pdfTemplate.seed.js';
 import { shutdownPdfRenderer } from './modules/pdf/renderer/puppeteerRenderer.js';
 import { closeQueues } from './jobs/queues.js';
@@ -81,6 +82,8 @@ app.use('/api/import', importRouter);
 app.use('/api/pdf-templates', pdfTemplateRouter);
 app.use('/api/pdf-assets', pdfAssetRouter);
 app.use('/api/pdf-saved-items', pdfSavedItemRouter);
+// Record field uploads (an opportunity's Upload Doc, base64) parse with their own 15 MB limit (10 MB files).
+app.use('/api/files', recordFileRouter);
 app.use(express.json({ limit: '1mb' }));
 
 // ── Health check ───────────────────────────────────────────────────────────────

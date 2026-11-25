@@ -185,7 +185,8 @@ billing (`tallySerialNo` — 9 digits starting with 7, checked by the API, `invo
 `commissionAmount` (DECIMAL(18,2), required above 0 when `Yes`, NULL when `No`), `commissionType` (fixed `Self` /
 `Other` while `Yes`; defaults to `Self` up to 1,000 and `Other` above), the commission payee's bank details kept only
 while `Other` (`accountName`, `accountNo`, `bankName`, `ifscCode`, `panNumber`: the Organization columns' sizes and
-rules), `addDocument`, totals (`currency`, `groupName`,
+rules), documentation (`addDocument` fixed `Yes` / `No`, must be `Yes` at Sales Stage `PO`; while `Yes`: `documentNo`,
+`documentDate`, `documentRemarks` and `documentFileId` → `RecordFile`, required; all cleared on `No`), totals (`currency`, `groupName`,
 `lumpSumDiscount`, `totalAmount`, `totalDiscount`, `subtotal`, `totalTax`, `grandTotal` — recomputed and verified
 server-side), `customDataJson`, audit/soft-delete.
 
@@ -319,6 +320,7 @@ out when the layout is read (the builder says so and the next save drops it).
 | --- | --- |
 | `PdfTemplate` | `name`, `module` (`QUOTATION`), `isSystem` (seeded, read-only except active/default), `isDefault`, `isActive`, `pageSize`, `orientation`, `documentJson` (block document), `version` (optimistic concurrency), audit/soft-delete. Index `(module, isActive, isDeleted)` |
 | `PdfAsset` | Logos: `key` UNIQUE, `fileName`, `mimeType` (PNG/JPEG/WebP), `sizeBytes` (≤ 1 MB), `data` VARBINARY(MAX) |
+| `RecordFile` | Files uploaded to a record field (an opportunity's Upload Doc, `Opportunity.documentFileId`): `module`, `fileName`, `mimeType` (PDF, PNG/JPEG/WebP, Word, Excel; checked against the content), `sizeBytes` (≤ 10 MB), `data` VARBINARY(MAX), `createdBy`. Uploaded before the record saves, then linked by id |
 | `PdfSavedItem` | Builder library: a saved `section` or `block` (`contentJson`) shared by a module's templates; soft delete |
 
 ### 4.16 `AuditLog`

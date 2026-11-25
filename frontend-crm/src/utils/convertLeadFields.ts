@@ -32,7 +32,7 @@ export const isConvertInput = (module: ConvertModule, field: Pick<FieldShape, 'f
 export function convertFieldUnavailableReason(module: ConvertModule, field: FieldShape): string | null {
     if (isConvertInput(module, field)) return null;
     if (field.isSystem && CONVERT_FILLED_FIELDS[module].has(field.fieldKey)) return 'Filled in by the conversion';
-    if (field.fieldType === 'lookup' || field.fieldType === 'datetime') return 'Picker fields can only be set on their own form';
+    if (field.fieldType === 'lookup' || field.fieldType === 'datetime' || field.fieldType === 'file') return 'Picker fields can only be set on their own form';
     if ((field.fieldType === 'select' || field.fieldType === 'multiselect') && !field.dropdownCategoryKey) return 'Needs its own form (no dropdown list)';
     return null;
 }

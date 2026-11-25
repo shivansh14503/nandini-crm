@@ -7,6 +7,7 @@ import { useFormConfigs } from '@/hooks/queries/useFormConfigs';
 import { useCodedFieldDefaults } from '@/context/CodedFieldDefaultsContext';
 import type { FormFieldDefinitionDto } from '@/types/formConfig.types';
 import { activeOptionValues, defaultOptionValues, fieldFormName, findCategory, optionLabelMap, parseDefaultValue } from '@/utils/formConfig';
+import type { RecordFileModule } from '@/types/recordFile.types';
 import type { FieldSize } from './fieldSizing';
 import { FieldAutoSizeProvider } from './FormField';
 import {
@@ -15,6 +16,7 @@ import {
     RhfChipGroup,
     RhfEmailField,
     RhfEmailList,
+    RhfFileUpload,
     RhfPercentageField,
     RhfPhoneField,
     RhfPinCodeField,
@@ -58,7 +60,7 @@ export function DynamicFormField({ field, required, applyDefault = true, name: n
     const { mode } = useFormMode();
     const { control: formControl, getValues, setValue, resetField } = useFormContext<FieldValues>();
     const name = nameOverride ?? fieldFormName(field);
-    const emptyValue = field.fieldType === 'multiselect' ? [] : field.fieldType === 'checkbox' ? false : '';
+    const emptyValue = field.fieldType === 'multiselect' ? [] : field.fieldType === 'checkbox' ? false : field.fieldType === 'file' ? null : '';
     // Form builder Live Preview: a built-in field without overrides shows the texts its hand-built form codes.
     const coded = useCodedFieldDefaults(field.isSystem ? field.fieldKey : undefined);
     const category = findCategory(configs, field.dropdownCategoryKey);
@@ -170,6 +172,8 @@ export function DynamicFormField({ field, required, applyDefault = true, name: n
                 return <RhfUppercaseField {...common} placeholder={placeholder} fieldSize={fieldSize} maxLength={50} />;
             case 'pincode':
                 return <RhfPinCodeField {...common} placeholder={placeholder} fieldSize={fieldSize} />;
+            case 'file':
+                return <RhfFileUpload {...common} module={field.module as RecordFileModule} fieldSize={fieldSize} />;
             case 'text':
             case 'lookup':
             case 'datetime':

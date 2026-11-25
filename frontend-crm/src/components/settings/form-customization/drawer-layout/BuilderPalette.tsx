@@ -25,6 +25,7 @@ import ArrowDropDownCircleOutlinedIcon from '@mui/icons-material/ArrowDropDownCi
 import ChecklistRoundedIcon from '@mui/icons-material/ChecklistRounded';
 import NumbersRoundedIcon from '@mui/icons-material/NumbersRounded';
 import CheckBoxOutlinedIcon from '@mui/icons-material/CheckBoxOutlined';
+import AttachFileRoundedIcon from '@mui/icons-material/AttachFileRounded';
 import type { SvgIconComponent } from '@mui/icons-material';
 import type { FieldType } from '@/types/formConfig.types';
 import type { DrawerPiece } from '@/types/drawerLayout.types';
@@ -50,6 +51,7 @@ const FIELD_ICONS: Partial<Record<FieldType, SvgIconComponent>> = {
     amount: NumbersRoundedIcon,
     percentage: NumbersRoundedIcon,
     checkbox: CheckBoxOutlinedIcon,
+    file: AttachFileRoundedIcon,
 };
 
 export type PaletteTab = 'fields' | 'blocks' | 'pieces';

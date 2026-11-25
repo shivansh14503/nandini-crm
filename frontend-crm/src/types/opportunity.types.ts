@@ -1,3 +1,5 @@
+import type { RecordFile } from './recordFile.types';
+
 export interface OpportunityLineItem {
     id: string;
     productId: string;
@@ -76,8 +78,14 @@ export interface OpportunityFormData {
     ifscCode?: string;
     panNumber?: string;
 
-    // Document
+    // Documentation
+    /** Yes / No; must be Yes at Sales Stage PO. */
     addDocument?: string;
+    /** The document's details and file (Upload Doc), kept while Add Document is Yes. */
+    documentNo?: string;
+    documentDate?: string;
+    documentRemarks?: string;
+    documentFile?: RecordFile | null;
 
     // Line Items Tab
     currency: string;
@@ -129,6 +137,8 @@ export const OPPORTUNITY_COMMISSIONS: string[] = ['No', 'Yes'];
 export const OPPORTUNITY_COMMISSION_TYPES: string[] = ['Self', 'Other'];
 /** Commission Amounts up to this default to Commission Type Self; larger ones to Other. */
 export const SMALL_COMMISSION_LIMIT = 1000;
+/** Sales Stage that needs a document: Add Document Yes, with the file (Upload Doc). */
+export const PO_SALES_STAGE = 'PO';
 
 export const OPPORTUNITY_CURRENCIES: string[] = [
     'Indian Rupee: ₹',

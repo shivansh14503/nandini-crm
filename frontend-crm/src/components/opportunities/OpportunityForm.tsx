@@ -18,7 +18,7 @@ import { CommonFormLayout } from '../common/CommonFormLayout';
 import { type FormTabDefinition } from '../common/Drawer';
 import { useRhfForm } from '../forms/rhf';
 import { ROUTES } from '@/config/constants';
-import { commissionIssues, opportunityFormSchema } from '../../validations';
+import { commissionIssues, documentationIssues, opportunityFormSchema } from '../../validations';
 import type { OpportunityFormData } from '@/types/opportunity.types';
 import { opportunityService } from '../../services/opportunity.service';
 import type { RecordAuditStamp } from '../common/Drawer/RecordAuditFooter';
@@ -94,8 +94,12 @@ const DEFAULT_OPPORTUNITY_FORM: OpportunityFormData = {
     ifscCode: '',
     panNumber: '',
 
-    // Document
+    // Documentation
     addDocument: 'No',
+    documentNo: '',
+    documentDate: '',
+    documentRemarks: '',
+    documentFile: null,
 
     // Line Items: none until the user adds a product (as on a new quotation or a converted lead).
     currency: 'Indian Rupee: ₹',
@@ -148,6 +152,7 @@ export default function OpportunityForm({
             noPastDates: NO_PAST_DATES.opportunity,
             extraRules: (values) => [
                 ...commissionIssues(values),
+                ...documentationIssues(values),
                 ...(mode === 'edit' ? followUpEditIssues(values, followUpDecisionPending.current) : []),
             ],
             module: 'opportunities',
