@@ -20,3 +20,4 @@ export * from './useTaxIdDuplicateCheck';
 export * from './RhfAddressFields';
 export * from './RhfAddressSection';
 export * from './CrmLineItemsSection';
+export * from './usePickedContactLocks';

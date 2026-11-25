@@ -1,46 +1,14 @@
 'use client';
 
-import React, { createContext, useContext, useMemo } from 'react';
-import { useTheme } from '@mui/material/styles';
-import DefaultPropsProvider from '@mui/material/DefaultPropsProvider';
+import React, { createContext, useContext } from 'react';
 import { useFormContext, useFormState } from 'react-hook-form';
+import { DisabledFields } from '@/components/forms/LockedInputs';
 
 /** Convert Lead field names (`extraFields.<module>.<key>` for extra fields) whose value came from the lead. */
 const LeadPrefilledContext = createContext<ReadonlySet<string>>(new Set());
 
 export function LeadPrefilledProvider({ fields, children }: { fields: ReadonlySet<string>; children: React.ReactNode }) {
     return <LeadPrefilledContext.Provider value={fields}>{children}</LeadPrefilledContext.Provider>;
-}
-
-/** MUI controls a locked field is made of; each starts disabled (an explicit `disabled` prop still wins). */
-const LOCKED_COMPONENTS = [
-    'MuiFormControl',
-    'MuiTextField',
-    'MuiInputBase',
-    'MuiAutocomplete',
-    'MuiSelect',
-    'MuiButtonBase',
-    'MuiButton',
-    'MuiIconButton',
-    'MuiCheckbox',
-    'MuiRadio',
-    'MuiSwitch',
-    'MuiChip',
-    'MuiToggleButton',
-    'MuiFormControlLabel',
-] as const;
-
-/** Renders its fields as disabled inputs that keep their values (like the contact section's Organization Name). */
-function DisabledFields({ children }: { children: React.ReactNode }) {
-    const theme = useTheme();
-    const value = useMemo(() => {
-        const components: Record<string, { defaultProps?: Record<string, unknown> }> = { ...(theme.components as Record<string, { defaultProps?: Record<string, unknown> }>) };
-        for (const name of LOCKED_COMPONENTS) {
-            components[name] = { ...components[name], defaultProps: { ...components[name]?.defaultProps, disabled: true } };
-        }
-        return components;
-    }, [theme.components]);
-    return <DefaultPropsProvider value={value as React.ComponentProps<typeof DefaultPropsProvider>['value']}>{children}</DefaultPropsProvider>;
 }
 
 /**
