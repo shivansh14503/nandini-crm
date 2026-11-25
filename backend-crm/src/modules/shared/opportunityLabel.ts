@@ -1,3 +1,4 @@
+import { FIELD_MAX_LENGTH } from '../../config/fieldLimits.js';
 import { parseStringArray } from '../../utils/mappers.js';
 
 /**
@@ -13,14 +14,15 @@ export function clipLabel(value: string, maxLength: number): string {
 }
 
 /**
- * What forms show for an opportunity (frontend `opportunityLabel`): its name, else its products, else its
- * organization. Used where a record links to an opportunity (contracts, activities). The product list has no
- * length bound (up to 30 categories), so a caller that stores the label passes its column width as `maxLength`.
+ * What forms show for an opportunity (frontend `opportunityLabel`, which cuts the same way): its name, else its
+ * products, else its organization. Used where a record links to an opportunity (contracts, activities). The product
+ * list has no length bound (up to 30 categories), so the label is cut to the 200-character label columns
+ * (`Contract.opportunity`, `Activity.relatedTo`) by default.
  */
 export function opportunityLabel(
     opportunity: { opportunityName: string | null; productCategoryJson: string | null; organizationName: string },
-    maxLength?: number,
+    maxLength: number = FIELD_MAX_LENGTH.title,
 ): string {
     const label = opportunity.opportunityName || parseStringArray(opportunity.productCategoryJson).join(', ') || opportunity.organizationName;
-    return maxLength === undefined ? label : clipLabel(label, maxLength);
+    return clipLabel(label, maxLength);
 }

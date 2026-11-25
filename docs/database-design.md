@@ -434,7 +434,7 @@ not these rows. Index `(createdAt)`.
 Support contracts (Support › Contracts, migration `20261125042148_contracts`). `contractNumber` (UNIQUE, series
 module `contract`, legacy prefix `CTR`), `contractTitle`, `status` (default `Not Started`), `contractValue`,
 `assignedTo` (the Contract Manager; row-level scope), `organizationName` (uppercase) + `organizationId`, `contact` +
-`contactId`, `opportunity` (the opportunity's label when picked, or typed text) + `opportunityId` → `Opportunity`,
+`contactId`, `opportunity` (the opportunity's label when picked, cut to 200 characters with "…" when its product list runs longer, or typed text) + `opportunityId` → `Opportunity`,
 `tallySerialNo` (9 digits starting with 7, checked by the API), term (`startDate`, `endDate` DATE, `contractPeriod`, `renewalReminderDate` wall-clock DATETIME2),
 `contractTypeJson`, billing (`billNumber`, `billDate`, `billAmount`), `description`, `customDataJson`,
 audit/soft-delete. `contractValue` / `billAmount` are DECIMAL(18,2), returned as strings by the API. All three links
