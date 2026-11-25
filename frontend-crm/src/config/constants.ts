@@ -56,6 +56,9 @@ export const ROUTES = {
     DOCUMENT_SERIES: '/admin/document-series',
     EMAIL_VALIDATION: '/admin/email-validation',
     AUDIT_LOG: '/admin/audit-log',
+    LIST_SCORECARDS: '/admin/scorecards',
+    /** List Scorecards with a module's settings open. */
+    LIST_SCORECARDS_FOR: (module: string) => `/admin/scorecards?module=${encodeURIComponent(module)}`,
     PDF_TEMPLATES: '/admin/pdf-templates',
     PDF_TEMPLATE_NEW: '/admin/pdf-templates/new',
     PDF_TEMPLATE_EDIT: (id: string) => `/admin/pdf-templates/${id}`,

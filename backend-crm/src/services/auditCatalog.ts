@@ -80,7 +80,7 @@ const MODULE_BY_ENTITY: Record<AuditEntityType, string> = {
     DropdownOption: 'form-customization',
     FormField: 'form-customization',
     ModuleSetting: 'form-customization',
-    Scorecard: 'form-customization',
+    Scorecard: 'list-scorecards',
     DrawerLayout: 'form-customization',
     DrawerPiece: 'form-customization',
     PdfTemplate: 'pdf-templates',

@@ -26,6 +26,23 @@ test('a built-in total passes the save schema as the currency field', () => {
         options: [{ value: 'Demo', color: '#EAB308' }],
         listViewColor: true,
         drawerViewColor: false,
+        version: null,
     });
     assert.equal(parsed.currencyFieldKey, 'builtin.totalTax');
+    // Older saves send no switch or label: the scorecard stays on with the screen's own "All" wording.
+    assert.equal(parsed.enabled, true);
+    assert.equal(parsed.allLabel, null);
+});
+
+test('the on/off switch, "All" label and version are kept', () => {
+    const base = { fieldKey: 'ticketStatus', options: [], listViewColor: false, drawerViewColor: false };
+    const off = saveScorecardSchema.parse({ ...base, enabled: false, allLabel: '  Every Ticket ', version: 3 });
+    assert.equal(off.enabled, false);
+    assert.equal(off.allLabel, 'Every Ticket');
+    assert.equal(off.version, 3);
+    // A blank label means the screen's own wording.
+    assert.equal(saveScorecardSchema.parse({ ...base, allLabel: '   ', version: null }).allLabel, null);
+    assert.throws(() => saveScorecardSchema.parse({ ...base, allLabel: 'x'.repeat(61), version: null }));
+    // The version the admin edited is required, so a stale screen can't overwrite a newer save.
+    assert.throws(() => saveScorecardSchema.parse(base));
 });

@@ -81,6 +81,12 @@ Exit: the critical flows above run in CI.
       Quotations") with its count, share and Grand Total, in one row that scrolls sideways. The old Draft / Sent /
       Accepted / Rejected pills (a status the quote form never sets) gave way to High Value (₹1L+) and My Quotes,
       which toggle off on re-click.
+- [x] **List Scorecards admin page** (2026-11-25) — the scorecard settings moved from a dialog on each list to
+      Admin › List Scorecards (`/admin/scorecards`): pick a list, switch its cards on or off, choose the dropdown it
+      counts by, the "All" card's wording, card order (drag or move up / down), shown cards and colors, the total and
+      the list column / drawer colors, with a live preview over the list's records. Saves are refused (409) when
+      another admin saved first. Contacts, Organizations, Products, Tickets and Partner Companies can now have cards
+      too (off until an admin switches them on). On the lists, admins get a gear on the "All" card that opens the page.
 - [ ] Activities / follow-ups (calls, meetings, notes) linked to any record, with reminders.
 - [ ] PDFs for Opportunities (and later Tickets) via the module adapter pattern.
 - [ ] Email quotation PDF to the contact (needs an SMTP/provider decision).

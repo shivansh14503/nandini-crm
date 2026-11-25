@@ -30,7 +30,7 @@ const ROW_SCOPED_OWNERS: Partial<Record<AuditEntityType, (id: string) => Promise
 };
 
 /** Admin-area trails (sign-ins carry IP addresses; templates are admin-managed). A user may read their own. */
-const ADMIN_ONLY: ReadonlySet<AuditEntityType> = new Set(['User', 'PdfTemplate']);
+const ADMIN_ONLY: ReadonlySet<AuditEntityType> = new Set(['User', 'PdfTemplate', 'Scorecard']);
 
 /**
  * Who may read one record's trail. Admins read every trail. Otherwise: row-scoped records need access to the
@@ -74,6 +74,9 @@ const ENTITY_TYPES: Record<string, AuditEntityType> = {
     users: 'User',
     'pdf-template': 'PdfTemplate',
     'pdf-templates': 'PdfTemplate',
+    /** Admin › List Scorecards: the id is a module key. */
+    scorecard: 'Scorecard',
+    scorecards: 'Scorecard',
 };
 
 export const auditParamsSchema = z.object({

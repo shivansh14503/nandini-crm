@@ -3,12 +3,10 @@
 import React, { useState, useMemo, useCallback } from 'react';
 import { useResetTab } from '@/hooks/useResetTab';
 import { useRouter } from 'next/navigation';
-import RequestQuoteOutlinedIcon from '@mui/icons-material/RequestQuoteOutlined';
 import AccountCircleOutlinedIcon from '@mui/icons-material/AccountCircleOutlined';
 import WorkspacePremiumOutlinedIcon from '@mui/icons-material/WorkspacePremiumOutlined';
 
-import { StatusSummaryCards, StatusSummaryCardsSkeleton } from '../common/StatusSummaryCards';
-import { useModuleScorecard } from '../common/scorecard/useModuleScorecard';
+import { ModuleScorecardSummary, useModuleScorecard } from '../common/scorecard/useModuleScorecard';
 import { CommonMasterView } from '../common/CommonMasterView';
 import { useTableFilter } from '../common/TableFilter';
 import { MasterHeaderActions } from '../common/MasterHeaderActions';
@@ -24,7 +22,6 @@ import { useShowRecordNumber } from '@/hooks/queries/useDocumentSeries';
 import { QuotationDetailDrawer } from './QuotationDetailDrawer';
 import { useSearchScope, useSearchScopedRows } from '../search/SearchScope';
 import { useQuotationColumns } from './quotationColumns';
-import { QUOTATION_CARD_AMOUNTS, useQuoteStageScorecard } from './quoteStageScorecard';
 
 /** Quick-view pills ('all' = none picked); the quote stage lives on the stage cards. */
 export type QuotationFilterTab = 'all' | 'high_value' | 'my_quotes';
@@ -165,22 +162,10 @@ export function QuotationsMasterView() {
     }, [quotations, activeTab, isMine]);
 
     // ── Stage Cards ───────────────────────────────────────────────────────────
-    // One card per quote stage with its count and Grand Total. From the pencil on "All Quotations" an admin can
-    // recolor / hide stages, count by another dropdown or total another value (the same settings as Opportunities).
+    // One card per quote stage with its count and Grand Total, until an admin sets up other cards (or switches them
+    // off) under Admin › List Scorecards.
     const goToFirstPage = useCallback(() => setPage(0), []);
-    const showSavedToast = useCallback((message: string) => setToast({ open: true, message, severity: 'success' }), []);
-    const quotationsIcon = useMemo(() => <RequestQuoteOutlinedIcon />, []);
-    const stageScorecard = useQuoteStageScorecard();
-    const scorecard = useModuleScorecard<Quotation>({
-        module: 'quotations',
-        rows: tabQuotations,
-        allLabel: 'All Quotations',
-        allIcon: quotationsIcon,
-        onActiveChange: goToFirstPage,
-        onSaved: showSavedToast,
-        defaultScorecard: stageScorecard,
-        amounts: QUOTATION_CARD_AMOUNTS,
-    });
+    const scorecard = useModuleScorecard<Quotation>({ module: 'quotations', rows: tabQuotations, onActiveChange: goToFirstPage });
 
     // ── Filtering Logic ───────────────────────────────────────────────────────
     const showNumber = useShowRecordNumber();
@@ -240,19 +225,7 @@ export function QuotationsMasterView() {
                 { label: 'Sales' },
                 { label: 'Quotations' },
             ]}
-            summary={
-                listLoading || scorecard.loading ? (
-                    <StatusSummaryCardsSkeleton count={stageScorecard.options.length + 1} singleRow withAmount />
-                ) : scorecard.configured ? (
-                    <StatusSummaryCards<string>
-                        items={scorecard.items}
-                        activeId={scorecard.activeId}
-                        onChange={scorecard.setActiveId}
-                        onEdit={scorecard.onEdit}
-                        singleRow
-                    />
-                ) : null
-            }
+            summary={<ModuleScorecardSummary state={scorecard} loading={listLoading} />}
             filterConfig={{
                 filters: filterItems,
                 activeFilter: activeTab,
@@ -356,7 +329,6 @@ export function QuotationsMasterView() {
                 />
             }
         >
-            {scorecard.dialog}
         </CommonMasterView>
     );
 }

@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import { Alert, Box, Button, CircularProgress, Dialog, DialogActions, DialogContent, DialogTitle, Tooltip, Typography } from '@mui/material';
 import TuneOutlinedIcon from '@mui/icons-material/TuneOutlined';
 import ListAltOutlinedIcon from '@mui/icons-material/ListAltOutlined';
@@ -39,6 +39,7 @@ import { CodedFieldDefaultsProvider, type CodedFieldDefaultsMap } from '@/contex
 import { CodedDefaultsHarvester } from './CodedDefaultsHarvester';
 import { DrawerLayoutPanel } from './drawer-layout/DrawerLayoutPanel';
 import { DRAWER_LAYOUT_MODULES, type DrawerLayoutModule } from '@/lib/drawer-layout';
+import { useLeaveGuard } from '../useLeaveGuard';
 
 const NO_CODED_DEFAULTS: CodedFieldDefaultsMap = {};
 
@@ -59,34 +60,6 @@ const VIEWS = [
     { key: 'drawer' as const, label: 'Drawer Layout', icon: <ViewSidebarOutlinedIcon sx={{ fontSize: 17 }} /> },
 ];
 
-/** Asks before leaving the page (reload, close, or an in-app link) while there are unsaved changes. */
-function useLeaveGuard(active: boolean) {
-    useEffect(() => {
-        if (!active) return;
-        const message = 'You have unsaved form customization changes. Leave without saving?';
-        const onBeforeUnload = (e: BeforeUnloadEvent) => {
-            e.preventDefault();
-            e.returnValue = message;
-        };
-        const onClick = (e: MouseEvent) => {
-            if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
-            const anchor = (e.target as Element | null)?.closest?.('a[href]') as HTMLAnchorElement | null;
-            if (!anchor || anchor.target === '_blank' || anchor.origin !== window.location.origin) return;
-            if (anchor.pathname === window.location.pathname) return;
-            if (!window.confirm(message)) {
-                e.preventDefault();
-                e.stopPropagation();
-            }
-        };
-        window.addEventListener('beforeunload', onBeforeUnload);
-        document.addEventListener('click', onClick, true);
-        return () => {
-            window.removeEventListener('beforeunload', onBeforeUnload);
-            document.removeEventListener('click', onClick, true);
-        };
-    }, [active]);
-}
-
 /**
  * Form Customization: per-module dropdown options, form fields / sections and a live preview. Edits are staged
  * in a draft (shown everywhere on this page, the Live Preview included) and applied for all users on "Save Changes".
@@ -100,7 +73,7 @@ export function FormCustomizationView() {
     const [discardOpen, setDiscardOpen] = useState(false);
     /** The Drawer Layout builder has unsaved edits (they are saved separately from the form draft). */
     const [drawerDirty, setDrawerDirty] = useState(false);
-    useLeaveGuard(dirty || drawerDirty);
+    useLeaveGuard(dirty || drawerDirty, 'You have unsaved form customization changes. Leave without saving?');
 
     /** No form is open until the admin picks one in the selector. */
     const [module, setModule] = useState<CrmModuleKey | null>(null);

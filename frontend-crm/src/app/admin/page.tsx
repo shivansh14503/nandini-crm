@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { Box, Container, Typography } from '@mui/material';
 import AdminPanelSettingsOutlinedIcon from '@mui/icons-material/AdminPanelSettingsOutlined';
 import TuneOutlinedIcon from '@mui/icons-material/TuneOutlined';
+import DashboardCustomizeOutlinedIcon from '@mui/icons-material/DashboardCustomizeOutlined';
 import PictureAsPdfOutlinedIcon from '@mui/icons-material/PictureAsPdfOutlined';
 import AccountTreeOutlinedIcon from '@mui/icons-material/AccountTreeOutlined';
 import FormatListNumberedOutlinedIcon from '@mui/icons-material/FormatListNumberedOutlined';
@@ -47,6 +48,16 @@ const ADMIN_MODULES: AdminModule[] = [
         href: ROUTES.FORM_CUSTOMIZATION,
         badge: BADGES.available,
         highlights: ['Dropdowns', 'Built-in fields', 'Custom fields', 'Audit trail'],
+    },
+    {
+        key: 'list-scorecards',
+        title: 'List Scorecards',
+        description:
+            'Choose which lists show summary cards above their records, the dropdown each list counts by, the order and colors of its cards and what they total, with a live preview over real records.',
+        icon: <DashboardCustomizeOutlinedIcon />,
+        href: ROUTES.LIST_SCORECARDS,
+        badge: BADGES.available,
+        highlights: ['On / off per list', 'Card order', 'Colors', 'Totals'],
     },
     {
         key: 'pdf-templates',

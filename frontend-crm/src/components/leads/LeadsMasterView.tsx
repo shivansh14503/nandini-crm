@@ -7,16 +7,11 @@ import EventBusyOutlinedIcon from '@mui/icons-material/EventBusyOutlined';
 import { localToday } from '@/utils/pastDates';
 import { isFollowUpExpired } from '../forms/FollowUpDecision';
 import { useLeadRatingConfig } from '@/utils/leadRating';
-import GroupOutlinedIcon from '@mui/icons-material/GroupOutlined';
 import LocalFireDepartmentOutlinedIcon from '@mui/icons-material/LocalFireDepartmentOutlined';
-import PersonAddAltOutlinedIcon from '@mui/icons-material/PersonAddAltOutlined';
 import TodayOutlinedIcon from '@mui/icons-material/TodayOutlined';
 import AccountCircleOutlinedIcon from '@mui/icons-material/AccountCircleOutlined';
 import PersonOutlinedIcon from '@mui/icons-material/PersonOutlined';
-import AutorenewOutlinedIcon from '@mui/icons-material/AutorenewOutlined';
-import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutlineOutlined';
-import HighlightOffOutlinedIcon from '@mui/icons-material/HighlightOffOutlined';
-import { StatusSummaryCards, StatusSummaryCardsSkeleton, type StatusSummaryItem } from '../common/StatusSummaryCards';
+import { StatusSummaryCards, type StatusSummaryItem } from '../common/StatusSummaryCards';
 import { CommonMasterView } from '../common/CommonMasterView';
 import { useTableFilter } from '../common/TableFilter';
 import { MasterHeaderActions } from '../common/MasterHeaderActions';
@@ -31,9 +26,10 @@ import type { Lead } from '@/types/lead.types';
 import { useLeads, useBulkDeleteLeads, useDropdownOptionLabel } from '@/hooks/queries';
 import { useShowRecordNumber } from '@/hooks/queries/useDocumentSeries';
 import { getLeadStatusBucket, type LeadFilterTab, type LeadStatusBucket } from './master';
+import { leadStatusSummaryItems } from './master/leadStatusCards';
 import { LeadDetailDrawer } from './LeadDetailDrawer';
 import { useSearchScope, useSearchScopedRows } from '../search/SearchScope';
-import { useModuleScorecard } from '../common/scorecard/useModuleScorecard';
+import { ModuleScorecardSummary, useModuleScorecard } from '../common/scorecard/useModuleScorecard';
 import { useLeadColumns } from './leadColumns';
 
 /** Stable empty list while the first page loads (keeps memoized filters from recomputing). */
@@ -155,46 +151,21 @@ export function LeadsMasterView() {
     }, [baseLeads, activeTab, todayStr, currentUsername, isOverdue]);
 
     // ── Scorecard ─────────────────────────────────────────────────────────────
-    // An admin-configured scorecard (pencil on "All Leads") replaces the built-in status buckets below.
+    // A scorecard set up under Admin › List Scorecards replaces the built-in status buckets below (or, switched
+    // off, hides both).
     const goToFirstPage = useCallback(() => setPage(0), []);
-    const showSavedToast = useCallback((message: string) => setToast({ open: true, message, severity: 'success' }), []);
-    const leadsIcon = useMemo(() => <GroupOutlinedIcon />, []);
-    const scorecard = useModuleScorecard<Lead>({
-        module: 'leads',
-        rows: tabLeads,
-        allLabel: 'All Leads',
-        allIcon: leadsIcon,
-        onActiveChange: goToFirstPage,
-        onSaved: showSavedToast,
-    });
+    const scorecard = useModuleScorecard<Lead>({ module: 'leads', rows: tabLeads, onActiveChange: goToFirstPage });
 
     // ── Status Summary Cards (built-in, until a scorecard is configured) ───────
-    const statusSummaryItems: StatusSummaryItem<LeadStatusBucket>[] = useMemo(() => {
-        const counts = { new: 0, in_process: 0, converted: 0, lost: 0 };
-        for (const lead of tabLeads) counts[getLeadStatusBucket(lead.status)] += 1;
-        return [
-            { id: 'all', label: 'All Leads', count: tabLeads.length, tone: 'brand', icon: <GroupOutlinedIcon />, hint: 'Every status' },
-            { id: 'new', label: 'New', count: counts.new, tone: 'brand', icon: <PersonAddAltOutlinedIcon />, hint: 'Not contacted yet' },
-            {
-                id: 'in_process',
-                label: 'In Process',
-                count: counts.in_process,
-                tone: 'warning',
-                icon: <AutorenewOutlinedIcon />,
-                hint: 'Contacted to Negotiation',
-            },
-            { id: 'converted', label: 'Converted', count: counts.converted, tone: 'success', icon: <CheckCircleOutlineIcon />, hint: 'Won' },
-            { id: 'lost', label: 'Lost', count: counts.lost, tone: 'error', icon: <HighlightOffOutlinedIcon />, hint: 'Unqualified / Lost' },
-        ];
-    }, [tabLeads]);
+    const statusSummaryItems: StatusSummaryItem<LeadStatusBucket>[] = useMemo(() => leadStatusSummaryItems(tabLeads), [tabLeads]);
 
     const showNumber = useShowRecordNumber();
-    const { configured: scorecardConfigured, matches: matchesScorecard } = scorecard;
+    const { configured: scorecardConfigured, hidden: scorecardHidden, matches: matchesScorecard } = scorecard;
     const filteredLeads = useMemo(() => {
         return tabLeads.filter((lead) => {
             if (scorecardConfigured) {
                 if (!matchesScorecard(lead)) return false;
-            } else if (statusBucket !== 'all' && getLeadStatusBucket(lead.status) !== statusBucket) return false;
+            } else if (!scorecardHidden && statusBucket !== 'all' && getLeadStatusBucket(lead.status) !== statusBucket) return false;
 
             if (searchQuery.trim()) {
                 const q = searchQuery.toLowerCase().trim();
@@ -223,7 +194,7 @@ export function LeadsMasterView() {
 
             return true;
         });
-    }, [tabLeads, statusBucket, searchQuery, leadSourceLabel, showNumber, scorecardConfigured, matchesScorecard]);
+    }, [tabLeads, statusBucket, searchQuery, leadSourceLabel, showNumber, scorecardConfigured, scorecardHidden, matchesScorecard]);
 
     // ── Sort Logic ────────────────────────────────────────────────────────────
     const sortedLeads = useMemo(() => {
@@ -295,26 +266,22 @@ export function LeadsMasterView() {
             ]}
             loading={leadsLoading}
             summary={
-                leadsLoading || scorecard.loading ? (
-                    <StatusSummaryCardsSkeleton count={scorecard.configured ? scorecard.items.length : statusSummaryItems.length} />
-                ) : scorecard.configured ? (
-                    <StatusSummaryCards<string>
-                        items={scorecard.items}
-                        activeId={scorecard.activeId}
-                        onChange={scorecard.setActiveId}
-                        onEdit={scorecard.onEdit}
-                    />
-                ) : (
-                    <StatusSummaryCards<LeadStatusBucket>
-                        items={statusSummaryItems}
-                        activeId={statusBucket}
-                        onChange={(bucket) => {
-                            setStatusBucket(bucket);
-                            setPage(0);
-                        }}
-                        onEdit={scorecard.onEdit}
-                    />
-                )
+                <ModuleScorecardSummary
+                    state={scorecard}
+                    loading={leadsLoading}
+                    fallbackCount={statusSummaryItems.length}
+                    fallback={
+                        <StatusSummaryCards<LeadStatusBucket>
+                            items={statusSummaryItems}
+                            activeId={statusBucket}
+                            onChange={(bucket) => {
+                                setStatusBucket(bucket);
+                                setPage(0);
+                            }}
+                            settingsHref={scorecard.settingsHref}
+                        />
+                    }
+                />
             }
             filterConfig={{
                 filters: filterItems,
@@ -411,7 +378,6 @@ export function LeadsMasterView() {
                 />
             }
         >
-            {scorecard.dialog}
             <DataImportModal
                 open={importOpen}
                 entity="leads"

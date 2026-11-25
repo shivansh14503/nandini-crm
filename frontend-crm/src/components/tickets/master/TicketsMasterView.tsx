@@ -26,6 +26,7 @@ import type { TicketFilterTab, TicketSortField } from './types';
 import { TicketDetailDrawer } from '../TicketDetailDrawer';
 import { useSearchScope, useSearchScopedRows } from '../../search/SearchScope';
 import { useTicketColumns } from './ticketColumns';
+import { ModuleScorecardSummary, useModuleScorecard } from '../../common/scorecard/useModuleScorecard';
 
 const RECENTLY_ADDED_DAYS = 7;
 const DAY_MS = 86400000;
@@ -124,10 +125,18 @@ export function TicketsMasterView() {
     const showNumber = useShowRecordNumber();
 
     // ── Filter Logic ──────────────────────────────────────────────────────────
+    /** Tickets in the active pill view: the scorecard counts these. */
+    const tabTickets = useMemo(() => tickets.filter((t) => matchesTab(t, activeTab)), [tickets, activeTab, matchesTab]);
+
+    // Summary cards, once an admin switches them on under Admin › List Scorecards.
+    const goToFirstPage = useCallback(() => setPage(0), []);
+    const scorecard = useModuleScorecard<Ticket>({ module: 'tickets', rows: tabTickets, onActiveChange: goToFirstPage });
+    const { matches: matchesScorecard } = scorecard;
+
     const filteredTickets = useMemo(() => {
         const q = searchQuery.toLowerCase().trim();
-        return tickets.filter((t) => {
-            if (!matchesTab(t, activeTab)) return false;
+        return tabTickets.filter((t) => {
+            if (!matchesScorecard(t)) return false;
             if (!q) return true;
             return [
                 showNumber('ticket') ? t.ticketNumber : '',
@@ -141,7 +150,7 @@ export function TicketsMasterView() {
                 assigneeName(t.assignedTo),
             ].some((v) => (v || '').toLowerCase().includes(q));
         });
-    }, [tickets, activeTab, searchQuery, matchesTab, showNumber]);
+    }, [tabTickets, matchesScorecard, searchQuery, showNumber]);
 
     // ── Sort Logic ────────────────────────────────────────────────────────────
     const sortedTickets = useMemo(() => {
@@ -214,6 +223,7 @@ export function TicketsMasterView() {
     return (
         <CommonMasterView<Ticket, TicketFilterTab>
             loading={listLoading}
+            summary={<ModuleScorecardSummary state={scorecard} loading={listLoading} />}
             filterConfig={{
                 filters: filterItems,
                 activeFilter: activeTab,
