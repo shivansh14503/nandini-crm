@@ -118,6 +118,7 @@ export function buildConvertLeadDefaults(lead: Lead): ConvertLeadFormValues {
         natureOfBusiness: '',
         typeOfEntity: '',
         customerType: '',
+        natureOfPartner: '',
         leadSource: lead.leadSource ?? '',
         memberOf: '',
         organizationDescription: '',

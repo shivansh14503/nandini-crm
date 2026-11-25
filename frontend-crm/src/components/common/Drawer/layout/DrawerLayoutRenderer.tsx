@@ -23,6 +23,7 @@ import { findCrmUser } from '@/services/masterData.store';
 import { TICKET_PRIORITY_COLORS, TICKET_STATUS_COLORS } from '@/components/tickets/TicketBadges';
 import type { TicketPriority, TicketStatus } from '@/types/ticket.types';
 import { DrawerChannelRow, DrawerCopyButton, DrawerSectionCard } from '../DrawerPrimitives';
+import { formatAddressLine } from '@/utils/address';
 import type { DrawerBadgeItem } from '../types';
 import { avatarBackground, avatarContent } from './avatar';
 import { defaultLayoutFor } from './defaultLayouts';
@@ -433,32 +434,18 @@ function rawPhone(ctx: LayoutCtx, key: string, index: number): unknown {
     return Array.isArray(raw) ? raw[index] : raw;
 }
 
+/** The address on one line (street, city, state, PIN, country), as the record's detail view shows it. */
 function AddressBlockBody({ block, ctx }: { block: Extract<DrawerBlock, { type: 'address' }>; ctx: LayoutCtx }) {
     const a = addressParts(ctx, block.prefix);
     if (!a.street && !a.city && !a.state && !a.pin) return <EmptyValue text={block.emptyText || 'No address'} />;
-    const meta = [
-        { label: 'CITY / STATE', value: [a.city, a.state].filter(Boolean).join(', ') },
-        { label: 'POSTAL PIN', value: a.pin },
-        { label: 'COUNTRY', value: a.country },
-    ].filter((m) => m.value);
+    const line = formatAddressLine({ street: a.street, city: a.city, state: a.state, postalCode: a.pin, country: a.country });
     return (
-        <Box>
-            <Box sx={{ display: 'flex', gap: 1, alignItems: 'flex-start' }}>
-                <PlaceOutlinedIcon sx={{ fontSize: 16, mt: 0.2, color: 'var(--crm-text-blue-600)' }} />
-                <Typography sx={{ fontSize: '0.84rem', color: 'var(--mui-palette-text-primary)', fontWeight: 500, lineHeight: 1.4, whiteSpace: 'pre-wrap' }}>
-                    {a.street || <Box component="span" sx={{ color: 'var(--mui-palette-text-muted)', fontStyle: 'italic' }}>No street given</Box>}
-                </Typography>
-            </Box>
-            {meta.length > 0 && (
-                <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2, mt: 1.2, pt: 1, borderTop: '1px solid var(--mui-palette-border-light)' }}>
-                    {meta.map((m) => (
-                        <Box key={m.label}>
-                            <Typography sx={{ fontSize: '0.68rem', color: 'var(--mui-palette-text-secondary)', fontWeight: 700 }}>{m.label}</Typography>
-                            <Typography sx={{ fontSize: '0.8rem', color: 'var(--crm-slate-700)' }}>{m.value}</Typography>
-                        </Box>
-                    ))}
-                </Box>
-            )}
+        <Box sx={{ display: 'flex', gap: 1, alignItems: 'flex-start', minWidth: 0 }}>
+            <PlaceOutlinedIcon sx={{ fontSize: 16, mt: 0.2, flexShrink: 0, color: 'var(--crm-text-blue-600)' }} />
+            <Typography sx={{ flex: 1, minWidth: 0, fontSize: '0.84rem', color: 'var(--mui-palette-text-primary)', fontWeight: 500, lineHeight: 1.45, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+                {line}
+            </Typography>
+            <DrawerCopyButton text={line} title="Copy address" iconColor="var(--mui-palette-text-secondary)" />
         </Box>
     );
 }

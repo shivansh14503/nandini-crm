@@ -134,7 +134,7 @@ Indexes: `email`, `isActive`.
 | Group | Columns |
 | --- | --- |
 | Identity | `id`, `accountCode` (UNIQUE), `organizationName` (stored UPPERCASE), `mailingName`, `tradeName` |
-| Overview | `natureOfBusiness`, `accountStatus` (`Active`/`Inactive`), `inactivityReason`, `typeOfEntity`, `customerType`, `sapCodeTallyId`, `showroomBranchCode`, `leadSource`, `memberOf`, `parentOrganizationId` → `Organization`, `numberOfEmployees`, `annualTurnover`, `addDescriptionAndScope`, `accountVerified`/`verifiedAt`/`verifiedBy`, `activeAmc`, `activeCloud`, `provideSupport`, `assignedTo` (owner) |
+| Overview | `natureOfBusiness`, `accountStatus` (`Active`/`Inactive`), `inactivityReason`, `typeOfEntity`, `customerType`, `natureOfPartner` (partner organizations only: set, and required, when `customerType` is Partner; same `partner_nature` list as partner companies, now a shared dropdown; migration `20261125160000_org_nature_of_partner`, which also removes the organization form's Partner Company field while keeping `partnerCompaniesJson`), `sapCodeTallyId`, `showroomBranchCode`, `leadSource`, `memberOf`, `parentOrganizationId` → `Organization`, `numberOfEmployees`, `annualTurnover`, `addDescriptionAndScope`, `accountVerified`/`verifiedAt`/`verifiedBy`, `activeAmc`, `activeCloud`, `provideSupport`, `assignedTo` (owner) |
 | Billing address | `billingAddress`, `billingStreet`, `billingCityId` → `City`, `billingCity`, `billingState`, `billingPostalCode`, `billingCountry`, `billingLatitude` |
 | Shipping address | same set with `shipping*`, `shippingLongitude`, `copyAddressFromBilling` |
 | Tax & bank | `registrationType`, `panNumber`, `msmeRegnNumber`, `gstNumber`, `cinNo`, `tanNumber`, `accountName`, `bankName`, `ifscCode`, `accountNo`, `typeOfAccount`, `bankAddress` |

@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { FIELD_MAX_LENGTH as L } from '../config/fieldLimits';
-import { isGstRegistrationType } from '../config/constants';
+import { isGstRegistrationType, isPartnerCustomerType, NATURE_OF_PARTNER_REQUIRED_MESSAGE } from '../config/constants';
 import {
     requiredString,
     optionalString,
@@ -43,6 +43,8 @@ export const organizationFieldsSchema = z.object({
         inactivityReason: optionalString,
         typeOfEntity: optionalString,
         customerType: optionalString,
+        // Required when Customer Type is Partner (below).
+        natureOfPartner: optionalString,
         sapCodeTallyId: optionalText('SAP Code / Tally ID', L.shortCode),
         showroomBranchCode: optionalText('Showroom / Branch Code', L.shortCode),
         leadSource: optionalString,
@@ -105,6 +107,11 @@ export const organizationFormSchema = organizationFieldsSchema
     .superRefine((data, ctx) => {
         refinePostalCodeForCountry(ctx, 'billingPostalCode', data.billingPostalCode, data.billingCountry);
         refinePostalCodeForCountry(ctx, 'shippingPostalCode', data.shippingPostalCode, data.shippingCountry);
+
+        // Partner organizations give their Nature of Partner (the field shows beside Customer Type only for them).
+        if (isPartnerCustomerType(data.customerType) && !data.natureOfPartner?.trim()) {
+            ctx.addIssue({ code: z.ZodIssueCode.custom, message: NATURE_OF_PARTNER_REQUIRED_MESSAGE, path: ['natureOfPartner'] });
+        }
 
         // GSTIN is only collected (and then required) for 'Registered' / SEZ organizations.
         if (isGstRegistrationType(data.registrationType)) {

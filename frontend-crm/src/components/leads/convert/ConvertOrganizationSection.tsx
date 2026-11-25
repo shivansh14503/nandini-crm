@@ -20,6 +20,8 @@ import type { ExtendedOrganization } from '@/types/organization.types';
 import { CONVERT_FIELD_NAMES, type ConvertLeadFormValues } from '@/validations';
 import { useDropdownOptionsGetter, useFormConfigs } from '@/hooks/queries/useFormConfigs';
 import { extraValuesFrom } from '@/utils/convertLeadFields';
+import { isPartnerCustomerType } from '@/config/constants';
+import { NATURE_OF_PARTNER_OPTIONS } from '@/types/partner.types';
 
 const NO_ORGANIZATIONS: ExtendedOrganization[] = [];
 
@@ -30,6 +32,7 @@ const ORGANIZATION_FIELDS = [
     'natureOfBusiness',
     'typeOfEntity',
     'customerType',
+    'natureOfPartner',
     'leadSource',
     'memberOf',
     'organizationDescription',
@@ -46,6 +49,7 @@ export function ConvertOrganizationSection() {
     const configs = useFormConfigs();
     const { control, setValue, getValues, formState } = useFormContext<F>();
     const organizationName = useWatch({ control, name: 'organizationName' });
+    const isPartner = isPartnerCustomerType(useWatch({ control, name: 'customerType' }));
 
     const { data: organizations = NO_ORGANIZATIONS } = useOrganizations();
     const organizationNames = useMemo(() => organizations.map((o) => o.organizationName), [organizations]);
@@ -83,6 +87,7 @@ export function ConvertOrganizationSection() {
         setValue('natureOfBusiness', existing.natureOfBusiness || '', opts);
         setValue('typeOfEntity', existing.typeOfEntity || '', opts);
         setValue('customerType', existing.customerType || '', opts);
+        setValue('natureOfPartner', existing.natureOfPartner || '', opts);
         // An organization without a source of its own takes the lead's Lead Source.
         setValue('leadSource', existing.leadSource || getValues('opportunityLeadSource') || '', opts);
         setValue('memberOf', existing.memberOf ?? '', opts);
@@ -93,6 +98,11 @@ export function ConvertOrganizationSection() {
         if ('tradeName' in extras) extras.tradeName = existing.tradeName || existing.organizationName;
         setValue('extraFields.organizations', extras, opts);
     }, [existing, defaultValues, setValue, getValues, configs]);
+
+    // Nature of Partner belongs to partner organizations: cleared when a new organization's Customer Type stops being Partner.
+    useEffect(() => {
+        if (!isPartner && !existing && getValues('natureOfPartner')) setValue('natureOfPartner', '', { shouldDirty: true });
+    }, [isPartner, existing, getValues, setValue]);
 
     // Trade Name starts as the organization name and follows it while the two match, as on the Organization form.
     // A linked organization shows its own trade name (above).
@@ -164,6 +174,10 @@ export function ConvertOrganizationSection() {
                             customerType: (
                                 <RhfSelect<F> name="customerType" label="Customer Type" required options={getOptions('org_customer_type', CUSTOMER_TYPES)} placeholder="Select Customer Type" />
                             ),
+                            // Partner organizations only (Customer Type = Partner), as on the Organization form.
+                            natureOfPartner: isPartner ? (
+                                <RhfSelect<F> name="natureOfPartner" label="Nature of Partner" required options={getOptions('partner_nature', [...NATURE_OF_PARTNER_OPTIONS])} placeholder="Select Nature of Partner" />
+                            ) : null,
                             leadSource: (
                                 <RhfSelect<F> name="leadSource" label="Lead Source" options={getOptions('shared_lead_source', ORG_LEAD_SOURCES)} placeholder="Select Lead Source" />
                             ),

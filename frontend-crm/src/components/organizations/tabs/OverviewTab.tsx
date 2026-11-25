@@ -37,6 +37,8 @@ import {
     RhfLookup,
     RhfToggleGroupCard,
 } from '@/components/forms';
+import { isPartnerCustomerType } from '@/config/constants';
+import { NATURE_OF_PARTNER_OPTIONS } from '@/types/partner.types';
 import {
     NATURE_OF_BUSINESS,
     ACCOUNT_STATUSES,
@@ -117,25 +119,30 @@ function OverviewTabInner({
         }
     }, [watchedCustomerType, set, form?.customerType]);
 
+    // Nature of Partner belongs to partner organizations: it shows (required) beside Customer Type when that is
+    // Partner, and is cleared when Customer Type changes from Partner to something else.
+    const isPartner = isPartnerCustomerType(watchedCustomerType ?? form?.customerType);
+    const watchedNatureOfPartner = useWatch({ control, name: 'natureOfPartner' });
+    React.useEffect(() => {
+        if (set && watchedNatureOfPartner !== undefined && watchedNatureOfPartner !== form?.natureOfPartner) {
+            set('natureOfPartner', watchedNatureOfPartner);
+        }
+    }, [watchedNatureOfPartner, set, form?.natureOfPartner]);
+    const wasPartner = React.useRef(isPartner);
+    React.useEffect(() => {
+        if (wasPartner.current && !isPartner && !isView) {
+            setValue('natureOfPartner', '', { shouldDirty: true });
+            clearErrors('natureOfPartner');
+        }
+        wasPartner.current = isPartner;
+    }, [isPartner, isView, setValue, clearErrors]);
+
     // Mirror the lookup fields into the parent form state.
     React.useEffect(() => {
         if (set && watchedParentCorp !== undefined && watchedParentCorp !== form?.memberOf) {
             set('memberOf', watchedParentCorp);
         }
     }, [watchedParentCorp, set, form?.memberOf]);
-
-    // The lookup edits one partner; `partnerCompanies` (the API shape) keeps it first, followed by any other saved partners.
-    const watchedPartnerCompany = useWatch({ control, name: 'partnerCompany' });
-    React.useEffect(() => {
-        if (!set || watchedPartnerCompany === undefined) return;
-        const current = form?.partnerCompanies ?? [];
-        if ((current[0] ?? '') === watchedPartnerCompany && (form?.partnerCompany ?? '') === watchedPartnerCompany) return;
-        set('partnerCompany', watchedPartnerCompany);
-        set(
-            'partnerCompanies',
-            watchedPartnerCompany ? [watchedPartnerCompany, ...current.slice(1).filter((p) => p !== watchedPartnerCompany)] : []
-        );
-    }, [watchedPartnerCompany, set, form?.partnerCompanies, form?.partnerCompany]);
 
     React.useEffect(() => {
         if (set && watchedAssignedUser !== undefined && watchedAssignedUser !== form?.assignedTo) {
@@ -445,6 +452,16 @@ function OverviewTabInner({
                     required
                 />
 
+                {isPartner && (
+                    <RhfSelect<OrganizationFormData>
+                        name="natureOfPartner"
+                        label="Nature of Partner"
+                        placeholder="Select Nature of Partner"
+                        options={[...NATURE_OF_PARTNER_OPTIONS]}
+                        required
+                    />
+                )}
+
                 {/* ── Status & ERP codes ── */}
                 <FormField
                     name="accountStatus"
@@ -579,13 +596,6 @@ function OverviewTabInner({
                     lookupType="organization"
                     excludeValues={organizationName ? [organizationName] : undefined}
                     placeholder="e.g. Apex Holdings Conglomerate Ltd."
-                />
-
-                <RhfLookup<OrganizationFormData>
-                    name="partnerCompany"
-                    label="Partner Company"
-                    lookupType="partnerCompany"
-                    placeholder="Search or select partner company..."
                 />
 
                 {/* Assigned to (Account Executive) */}

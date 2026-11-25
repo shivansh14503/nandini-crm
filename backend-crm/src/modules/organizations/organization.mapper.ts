@@ -22,6 +22,7 @@ export interface OrganizationDto extends OrganizationViewerFlags {
     inactivityReason: string;
     typeOfEntity: string;
     customerType: string;
+    natureOfPartner: string;
     sapCodeTallyId: string;
     showroomBranchCode: string;
     leadSource: string;
@@ -95,6 +96,7 @@ export function toOrganizationDto(
         inactivityReason: text(row.inactivityReason),
         typeOfEntity: text(row.typeOfEntity),
         customerType: text(row.customerType),
+        natureOfPartner: text(row.natureOfPartner),
         sapCodeTallyId: text(row.sapCodeTallyId),
         showroomBranchCode: text(row.showroomBranchCode),
         leadSource: text(row.leadSource),

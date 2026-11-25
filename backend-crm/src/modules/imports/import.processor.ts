@@ -156,6 +156,7 @@ const rowBuilders: Record<ImportEntity, (v: Record<string, string>, user: AuthUs
             organizationName: v.organizationName,
             natureOfBusiness: v.natureOfBusiness,
             customerType: v.customerType,
+            natureOfPartner: v.natureOfPartner,
             accountStatus: v.accountStatus || 'Active',
             billingAddress: v.billingStreet,
             billingCity: v.billingCity,

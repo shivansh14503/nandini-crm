@@ -78,6 +78,7 @@ const DEFAULT_FORM: OrganizationFormData = {
     tradeName: '',
     typeOfEntity: '',
     customerType: '',
+    natureOfPartner: '',
     sapCodeTallyId: '',
     showroomBranchCode: '',
     leadSource: '',
@@ -125,9 +126,8 @@ const DEFAULT_FORM: OrganizationFormData = {
     typeOfAccount: '',
     bankAddress: '',
 
-    // Partner Company
+    // Partner companies saved before the field was removed are kept as they are.
     partnerCompanies: [],
-    partnerCompany: '',
 };
 
 type TabKey = 'overview' | 'address' | 'tax_bank';
@@ -141,6 +141,7 @@ const FIELD_TAB_MAP: Record<string, TabKey> = {
     inactivityReason: 'overview',
     typeOfEntity: 'overview',
     customerType: 'overview',
+    natureOfPartner: 'overview',
     sapCodeTallyId: 'overview',
     showroomBranchCode: 'overview',
     leadSource: 'overview',
@@ -172,8 +173,6 @@ const FIELD_TAB_MAP: Record<string, TabKey> = {
     accountNo: 'tax_bank',
     typeOfAccount: 'tax_bank',
     bankAddress: 'tax_bank',
-    partnerCompanies: 'overview',
-    partnerCompany: 'overview',
 };
 
 const FIELD_ORDER = Object.keys(FIELD_TAB_MAP);
@@ -334,7 +333,6 @@ export default function OrganizationForm({
                         // Mailing name always mirrors the organization name; older records may lack a trade name.
                         mailingName: found.organizationName,
                         tradeName: found.tradeName || found.organizationName,
-                        partnerCompany: found.partnerCompanies?.[0] || '',
                     }, ORGANIZATION_ADDRESS_PAIRS);
                     setAudit({
                         createdAt: found.createdAt,
@@ -430,10 +428,6 @@ export default function OrganizationForm({
         if (!currentData.shippingStreet && currentData.shippingAddress) {
             currentData.shippingStreet = currentData.shippingAddress;
         }
-        // The single Partner Company lookup owns the first entry; any further saved partners are kept behind it.
-        const partner = currentData.partnerCompany?.trim() ?? '';
-        const otherPartners = (currentData.partnerCompanies ?? []).slice(1).filter((p) => p !== partner);
-        currentData.partnerCompanies = partner ? [partner, ...otherPartners] : [];
         return currentData;
     };
 

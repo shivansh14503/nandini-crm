@@ -64,6 +64,7 @@ Fields not listed are ○ Free today and stay ○ Free.
 | Assigned to (Account Executive) | 🔒R | 🔒 | Ownership |
 | Registration Type | 🔒R | 🔒 | Drives GST requirement |
 | GST Number | 🔒 | 🔒 | Conditional |
+| Nature of Partner | 🔒 | 🔒 | Conditional: shown, and required, only when Customer Type is Partner (list `partner_nature`, shared with partner companies) |
 | Billing Street / City / State / PIN / Country | 🔒R | ⭐ | Address completeness; quotations keep their own required billing address |
 
 ### Opportunities

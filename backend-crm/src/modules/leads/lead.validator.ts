@@ -137,6 +137,8 @@ export const convertLeadSchema = z.object({
     natureOfBusiness: optionalText('Nature of Business', L.option),
     typeOfEntity: optionalText('Type of Entity', L.option),
     customerType: optionalText('Customer Type', L.option),
+    // Required when Customer Type is Partner (checked by the conversion for a new organization).
+    natureOfPartner: optionalText('Nature of Partner', L.option),
     leadSource: optionalText('Lead Source', L.option),
     memberOf: optionalText('Member of', L.organizationName),
     organizationDescription: optionalText('Organization Description', L.longText),

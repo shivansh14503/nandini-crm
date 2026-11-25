@@ -21,6 +21,7 @@ import {
 import { parsePagination } from '../../utils/pagination.js';
 import { assertTaxIdsUnique } from '../shared/taxIdentifiers.js';
 import { isGstRegistrationType } from '../shared/registrationType.js';
+import { assertNatureOfPartner, isPartnerCustomerType } from '../shared/customerType.js';
 import { asPayload, checkModulePayload, loadModuleFieldConfig, validateModulePayload } from '../form-configs/customFieldValidator.js';
 import { assertAssigneeValid, assertRecordAccess, buildAccessScopeWhere } from '../shared/accessControl.js';
 import { emailsInclude, normalizeEmails, replaceEmails } from '../shared/entityEmails.js';
@@ -303,6 +304,8 @@ function toOrganizationData(
         inactivityReason: input.accountStatus === 'Active' ? null : nullable(input.inactivityReason),
         typeOfEntity: nullable(input.typeOfEntity),
         customerType: nullable(input.customerType),
+        // Only partner organizations keep one.
+        natureOfPartner: isPartnerCustomerType(input.customerType) ? nullable(input.natureOfPartner) : null,
         sapCodeTallyId: nullable(input.sapCodeTallyId),
         showroomBranchCode: nullable(input.showroomBranchCode),
         leadSource: nullable(input.leadSource),
@@ -535,6 +538,7 @@ export const organizationService = {
 
     async create(body: unknown, user: AuthUser): Promise<OrganizationDto> {
         const input = organizationInputSchema.parse(body);
+        assertNatureOfPartner(input);
         input.customFields = await validateModulePayload('organizations', asPayload(body), input.customFields);
         await assertEmailsDeliverable(input.corporateEmails, 'corporateEmails');
 
@@ -560,6 +564,9 @@ export const organizationService = {
             const before = toOrganizationDto(existing, flagsFor(existing));
             const merged: Record<string, unknown> = mergePatch(before, patch);
             const input = organizationInputSchema.parse(merged);
+            // Checked when the edit touches either field, so an older partner organization without one can still be
+            // edited elsewhere (e.g. its status) until its form is saved.
+            if ('customerType' in patch || 'natureOfPartner' in patch) assertNatureOfPartner(input);
             input.customFields = checkModulePayload(fieldConfig, merged, input.customFields, {
                 submittedKeys: new Set(Object.keys(patch)),
                 previousCustomFields: before.customFields,

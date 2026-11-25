@@ -258,9 +258,9 @@ function organizationsLayout(): DrawerLayoutDocument {
                     f('b-nature', 'natureOfBusiness', 'standard'),
                     f('b-entity', 'typeOfEntity', 'standard'),
                     f('b-ctype', 'customerType', 'standard'),
+                    f('b-npartner', 'natureOfPartner', 'standard'),
                     f('b-member', 'memberOf', 'standard'),
                     f('b-source', 'leadSource', 'standard'),
-                    f('b-partner', 'partnerCompany', 'standard', full),
                 ]),
                 sec('s-ids', 'ACCOUNT IDENTIFIERS', 'subtle', 1, [
                     f('b-account', 'accountCode', 'code'),

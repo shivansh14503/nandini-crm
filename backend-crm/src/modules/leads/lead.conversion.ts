@@ -15,6 +15,7 @@ import type { ApiFieldError } from '../../utils/httpError.js';
 import { createOrganizationRecord, findLiveOrganization } from '../organizations/organization.service.js';
 import { organizationConversionSchema } from '../organizations/organization.validator.js';
 import { assertRecordAccess } from '../shared/accessControl.js';
+import { isPartnerCustomerType, NATURE_OF_PARTNER_REQUIRED_MESSAGE } from '../shared/customerType.js';
 import { normalizeEmails } from '../shared/entityEmails.js';
 import { lockRecords, runSerializable } from '../shared/transactions.js';
 import { leadInclude, leadNotFound } from './lead.service.js';
@@ -116,6 +117,7 @@ function organizationPayload(values: ConvertLeadInput, lead: LeadRow) {
         accountStatus: 'Active',
         typeOfEntity: values.typeOfEntity,
         customerType: values.customerType,
+        natureOfPartner: values.natureOfPartner,
         leadSource: values.leadSource,
         memberOf: values.memberOf,
         addDescriptionAndScope: values.organizationDescription,
@@ -226,7 +228,12 @@ export async function convertLead(leadId: string, body: unknown, user: AuthUser)
                   withExtraFields(opportunityPayload(values, lead, null, null), opportunityConfig, 'opportunities', extras.opportunities),
               )
             : null;
-        throwFieldIssues([...(contactCheck?.issues ?? []), ...(organizationCheck?.issues ?? []), ...(opportunityCheck?.issues ?? [])]);
+        // A new partner organization gives its Nature of Partner, as on the Organization form.
+        const partnerIssues: ApiFieldError[] =
+            !existingOrganization && isPartnerCustomerType(values.customerType) && !values.natureOfPartner
+                ? [{ message: NATURE_OF_PARTNER_REQUIRED_MESSAGE, path: ['natureOfPartner'] }]
+                : [];
+        throwFieldIssues([...(contactCheck?.issues ?? []), ...(organizationCheck?.issues ?? []), ...partnerIssues, ...(opportunityCheck?.issues ?? [])]);
 
         const organization = existingOrganization
             ? toOrganizationDto(existingOrganization, { isMyAccount: existingOrganization.assignedTo === user.username, isRecentlyViewed: false })

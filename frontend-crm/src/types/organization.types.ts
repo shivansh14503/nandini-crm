@@ -126,6 +126,8 @@ export interface OrganizationFormData {
     inactivityReason?: string;
     typeOfEntity: TypeOfEntity | '';
     customerType: CustomerType | '';
+    /** Partner organizations only (Customer Type = Partner): the Partner Company form's Nature of Partner list. */
+    natureOfPartner: string;
     sapCodeTallyId: string;
     showroomBranchCode: string;
     leadSource: SourceOfLead | '';

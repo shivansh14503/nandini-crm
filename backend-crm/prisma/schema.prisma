@@ -110,6 +110,8 @@ model Organization {
   inactivityReason       String?   @db.NVarChar(500)
   typeOfEntity           String?   @db.NVarChar(50)
   customerType           String?   @db.NVarChar(50)
+  /// Partner organizations only (customerType = Partner): the Partner Company form's Nature of Partner list (partner_nature).
+  natureOfPartner        String?   @db.NVarChar(100)
   sapCodeTallyId         String?   @db.NVarChar(30)
   showroomBranchCode     String?   @db.NVarChar(30)
   leadSource             String?   @db.NVarChar(50)

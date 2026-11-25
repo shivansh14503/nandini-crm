@@ -101,6 +101,7 @@ export function QuickCreateDrawer({ open, onClose, onSave }: QuickCreateDrawerPr
             mailingName: formData.organizationName.trim(),
             natureOfBusiness: formData.natureOfBusiness as ExtendedOrganization['natureOfBusiness'],
             customerType: formData.customerType as ExtendedOrganization['customerType'],
+            natureOfPartner: '',
             accountStatus: formData.accountStatus as ExtendedOrganization['accountStatus'],
             typeOfEntity: 'Private Limited',
             sapCodeTallyId: `TALLY-${formData.organizationName.slice(0, 3).toUpperCase()}-${Math.floor(10 + Math.random() * 90)}`,

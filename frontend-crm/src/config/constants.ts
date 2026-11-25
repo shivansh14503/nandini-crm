@@ -106,6 +106,20 @@ export const isGstRegistrationType = (registrationType?: string | null): boolean
     return value === 'registered' || value === 'sez' || value.includes('(sez)') || value === 'special economic zone';
 };
 
+/** The Customer Type of partner organizations (org_customer_type). */
+export const PARTNER_CUSTOMER_TYPE = 'Partner';
+
+/**
+ * Whether an organization's Customer Type is Partner. Partner organizations give their Nature of Partner (shown
+ * beside Customer Type, and then required) on the Organization and Convert Lead forms. Mirrors
+ * `isPartnerCustomerType` in backend-crm/src/modules/shared/customerType.ts.
+ */
+export const isPartnerCustomerType = (customerType?: string | null): boolean =>
+    (customerType ?? '').trim().toLowerCase() === PARTNER_CUSTOMER_TYPE.toLowerCase();
+
+/** Shown when a partner organization is saved without its Nature of Partner. */
+export const NATURE_OF_PARTNER_REQUIRED_MESSAGE = 'Nature of Partner is required when Customer Type is Partner.';
+
 export const ACCOUNT_TYPES: string[] = [
     'Current Account',
     'Savings Account',
