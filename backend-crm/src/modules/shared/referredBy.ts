@@ -8,7 +8,7 @@ import { ACTIVE_REFERRAL_STATUS } from '../referrals/referral.validator.js';
  * renamed (nameSync.ts). The form picks it from the active referrals.
  *
  * Values typed before the Referrals module existed have no link. They are kept as they are (migration
- * 20261125220000_referrals) and an edit keeps such a value while it is sent unchanged; any other value must name an
+ * 20261125230000_referrals) and an edit keeps such a value while it is sent unchanged; any other value must name an
  * Active referral. A referral that later went Inactive or was deleted also stays on the records that already have it.
  */
 export interface ReferredByValue {

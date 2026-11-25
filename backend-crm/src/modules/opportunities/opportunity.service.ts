@@ -13,7 +13,8 @@ import { asPayload, checkModulePayload, loadModuleFieldConfig, validateModulePay
 import { assertAssigneeValid, assertRecordAccess, buildAccessScopeWhere } from '../shared/accessControl.js';
 import { findOrganizationByName, type PrefetchedLookups } from '../shared/prefetch.js';
 import { assertReference } from '../shared/references.js';
-import { assertNotInPast, nextFollowupCheck, type PastCheck } from '../../validators/notInPast.js';
+import { assertNotInPast, businessNow, nextFollowupCheck, type PastCheck } from '../../validators/notInPast.js';
+import { CLOSED_STAGES, loadResponseRules, planOpportunityFollowUp, type FollowUpPlan } from './opportunity.followUp.js';
 import { tallySerialIssue } from '../../validators/tallySerial.js';
 import { codeSearchPrefix, phoneSearch, phoneWhere } from '../shared/searchTerms.js';
 import { assertDeletedRow, lockRecords, restoreData, runInTransaction, softDeleteData, type BulkDeleteResult } from '../shared/transactions.js';
@@ -35,6 +36,18 @@ const include = { lineItems: lineItemsInclude, documentFile: { select: RECORD_FI
 const OWNER_SELECT = { assignedTo: true, createdBy: true } as const;
 
 const notFound = () => HttpError.notFound('Opportunity not found');
+
+/** Keys a save leaves empty on purpose (closed stage / "no follow-up" response), so they aren't required. */
+const FOLLOW_UP_KEYS = ['nextFollowupDate', 'nextFollowupTime'] as const;
+const clearedKeys = (plan: FollowUpPlan, salesStage: string): Set<string> =>
+    new Set(plan.followUpCleared ? [...FOLLOW_UP_KEYS, ...(CLOSED_STAGES.has(salesStage.trim()) ? ['customerResponse'] : [])] : []);
+
+/** Puts the planned response and follow-up on the parsed input. */
+function applyFollowUpPlan(input: OpportunityInput, plan: FollowUpPlan): void {
+    input.customerResponse = plan.customerResponse;
+    input.nextFollowupDate = plan.nextFollowupDate ?? undefined;
+    input.nextFollowupTime = plan.nextFollowupTime;
+}
 
 interface Link {
     id: string | null;
@@ -197,7 +210,12 @@ export const opportunityService = {
         const input = opportunityInputSchema.parse(body);
         assertDocumentation(input);
         assertLeadSourceDetails(input);
-        input.customFields = await validateModulePayload('opportunities', asPayload(body), input.customFields);
+        // Sales Stage → Customer Response → follow-up (opportunity.followUp.ts): a closed stage stores neither.
+        const plan = planOpportunityFollowUp(input, Boolean(input.customerResponse?.trim()), await loadResponseRules(prisma), businessNow());
+        applyFollowUpPlan(input, plan);
+        input.customFields = await validateModulePayload('opportunities', { ...asPayload(body), ...plan }, input.customFields, {
+            notRequired: clearedKeys(plan, input.salesStage),
+        });
         assertNotInPast(opportunityPastChecks(input));
         const created = await runInTransaction((tx) => createOpportunityRecord(tx, input, user));
         await cacheService.invalidateEntityCaches('opportunities');
@@ -230,8 +248,14 @@ export const opportunityService = {
             if (LEAD_SOURCE_DETAIL_KEYS.some((key) => key in patch)) assertLeadSourceDetails(input);
             await assertRecordFile(tx, 'opportunities', input.documentFile, 'documentFile', existing.documentFileId);
             if (keepLegacyTallySerial) input.tallySerialNo = before.tallySerialNo;
-            input.customFields = checkModulePayload(fieldConfig, merged, input.customFields, {
+            // A Customer Response sent with the edit records a follow-up: it must fit the Sales Stage and (unless it
+            // takes no follow-up) come with a next follow-up later than now. A closed stage clears both.
+            const responseRecorded = typeof patch.customerResponse === 'string' && patch.customerResponse.trim() !== '';
+            const plan = planOpportunityFollowUp(input, responseRecorded, await loadResponseRules(tx), businessNow());
+            applyFollowUpPlan(input, plan);
+            input.customFields = checkModulePayload(fieldConfig, { ...merged, ...plan }, input.customFields, {
                 submittedKeys: new Set(Object.keys(patch)),
+                notRequired: clearedKeys(plan, input.salesStage),
                 previousCustomFields: before.customFields,
             });
             assertNotInPast(opportunityPastChecks(input, before));

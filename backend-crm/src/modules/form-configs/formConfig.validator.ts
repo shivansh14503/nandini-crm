@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { booleanQuery } from '../../validators/common.js';
 import { CATEGORY_MODULES, CRM_MODULES, CUSTOM_FIELD_TYPES, FIELD_SIZES } from './formConfig.defaults.js';
 import { CLOSES_LEAD_META_KEY, RATING_RULE_META_KEY, ratingLimitsSchema, ratingRuleSchema } from '../leads/lead.rating.js';
+import { NO_FOLLOW_UP_META_KEY, OPPORTUNITY_STAGES_META_KEY, opportunityStagesSchema } from '../opportunities/opportunity.followUp.js';
 
 /**
  * Request schemas for /api/form-configs. Rules that depend on the stored row (system options can't be renamed or
@@ -35,8 +36,9 @@ const label = (field: string, max: number) =>
     z.string({ error: `${field} is required.` }).trim().min(1, { message: `${field} is required.` }).max(max, { message: `${field} cannot exceed ${max} characters.` });
 
 /**
- * Free-form option meta, except the keys the app reads: a Customer Response option's Rating rule (`ratingRule`) and
- * a Status option's "Closes the lead" switch (`closesLead`), docs/lead-rating-rules.md.
+ * Free-form option meta, except the keys the app reads: a Customer Response option's Rating rule (`ratingRule`),
+ * Sales Stages (`opportunityStages`) and "No follow-up" switch (`noFollowUp`), and a Status option's "Closes the
+ * lead" switch (`closesLead`). docs/lead-rating-rules.md, docs/api-plan.md (Opportunities).
  */
 const metaSchema = z
     .record(z.string(), z.unknown())
@@ -50,6 +52,12 @@ const metaSchema = z
         }
         if (CLOSES_LEAD_META_KEY in meta && typeof meta[CLOSES_LEAD_META_KEY] !== 'boolean') {
             ctx.addIssue({ code: 'custom', path: [CLOSES_LEAD_META_KEY], message: '"Closes the lead" must be on or off.' });
+        }
+        if (OPPORTUNITY_STAGES_META_KEY in meta && !opportunityStagesSchema.safeParse(meta[OPPORTUNITY_STAGES_META_KEY]).success) {
+            ctx.addIssue({ code: 'custom', path: [OPPORTUNITY_STAGES_META_KEY], message: 'Sales Stages must be a list of stage names.' });
+        }
+        if (NO_FOLLOW_UP_META_KEY in meta && typeof meta[NO_FOLLOW_UP_META_KEY] !== 'boolean') {
+            ctx.addIssue({ code: 'custom', path: [NO_FOLLOW_UP_META_KEY], message: '"No follow-up" must be on or off.' });
         }
     });
 

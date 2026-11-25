@@ -47,7 +47,7 @@ import { OrganizationNameAutocomplete } from '@/components/organizations/Organiz
 import { useOrganizationNameCheck } from '@/components/organizations/useOrganizationNameCheck';
 import { useFormMode } from '@/context/FormModeContext';
 import { upperCase, useUndoSafeSanitizer } from '@/components/forms/undoSafeInput';
-import { FieldGlow, LEAD_CUSTOMER_RESPONSES, useFollowUpDecision, type FollowUpDecision } from '@/components/forms/FollowUpDecision';
+import { CUSTOMER_RESPONSES, FieldGlow, useFollowUpDecision, type FollowUpDecision } from '@/components/forms/FollowUpDecision';
 import { useLeadRatingConfig } from '@/utils/leadRating';
 import { activeOptionValues } from '@/utils/formConfig';
 import { Typography } from '@mui/material';
@@ -120,7 +120,7 @@ export function LeadOverviewSection({ leadId, notify, onDecisionPendingChange, o
         suspended: closing,
     });
     // The list the leads field is linked to (its options carry the Rating rules), not a hard-coded key.
-    const customerResponseOptions = activeOptionValues(responseCategory, LEAD_CUSTOMER_RESPONSES);
+    const customerResponseOptions = activeOptionValues(responseCategory, CUSTOMER_RESPONSES);
     const followUpLocked = isEdit && !response.trim();
 
     // Informational only: lists (and links to) the records that already use the mobile / email; never blocks the save.
