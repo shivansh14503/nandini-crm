@@ -18,6 +18,7 @@ import { ReadOnlyField } from '@/components/forms/ReadOnlyField';
 import { EmailActions, PhoneActions } from '@/components/common/ContactActions';
 import { DoubleClickCopyText } from '@/components/common/useDoubleClickCopy';
 import { useScorecardBadge } from '@/components/common/scorecard/scorecardDisplay';
+import { scorecardPaletteHex, scorecardTextColor } from '@/components/common/scorecard/scorecardUtils';
 import { findCrmUser } from '@/services/masterData.store';
 import { TICKET_PRIORITY_COLORS, TICKET_STATUS_COLORS } from '@/components/tickets/TicketBadges';
 import type { TicketPriority, TicketStatus } from '@/types/ticket.types';
@@ -664,8 +665,22 @@ export const BADGE_STYLE_LABELS: Record<DrawerBadge['style'], string> = {
 type Tone = Pick<DrawerBadgeItem, 'color' | 'backgroundColor' | 'borderColor'>;
 const pill = (c: { bg: string; color: string; border: string }): Tone => ({ color: c.color, backgroundColor: c.bg, borderColor: c.border });
 
+/** Contract status in the colours of its default score cards (palette names), so drawer and list agree. */
+const CONTRACT_STATUS_PALETTE: Record<string, string> = { 'Not Started': 'Sky', 'In Progress': 'Yellow', Signed: 'Teal', Expired: 'Red' };
+
+/** The tinted pill a scorecard colour gets (same mix as the scorecard drawer badge). */
+const paletteTone = (color: string): Tone => ({
+    color: scorecardTextColor(color),
+    backgroundColor: `color-mix(in srgb, ${color} 14%, var(--mui-palette-background-paper))`,
+    borderColor: `color-mix(in srgb, ${color} 38%, transparent)`,
+});
+
 /** Colours of an "auto" badge from what the value means (stages, statuses, priorities, money). */
-function autoTone(field: string, value: string): Tone {
+function autoTone(module: DrawerLayoutModule, field: string, value: string): Tone {
+    if (module === 'contracts' && field === 'status') {
+        const name = CONTRACT_STATUS_PALETTE[value];
+        return name ? paletteTone(scorecardPaletteHex(name)) : BADGE_TONES.neutral;
+    }
     switch (field) {
         case 'status':
         case 'grandTotal':
@@ -737,7 +752,7 @@ export function useLayoutHeader(layout: DrawerLayoutDocument, ctx: LayoutCtx, sh
         const label = `${badge.prefix}${values.join(', ') || '—'}`;
         if (badge.style !== 'auto') return { badge, item: { label, ...BADGE_TONES[badge.style] } };
         if (scorecardBadge && scorecardBadge.fieldKey === badge.field) return { badge, item: { ...scorecardBadge, label: `${badge.prefix}${scorecardBadge.label}` } };
-        return { badge, item: { label, ...autoTone(badge.field, String(def ? (rawFieldValue(ctx.record, def) ?? '') : '')) } };
+        return { badge, item: { label, ...autoTone(ctx.module, badge.field, String(def ? (rawFieldValue(ctx.record, def) ?? '') : '')) } };
     });
 
     return { title, subtitle, avatarIcon: avatarContent(header.avatar), avatarBg: avatarBackground(header.avatar, hot), badges, rating };

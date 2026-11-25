@@ -3,6 +3,7 @@ import { runAsRevertOf } from '../../services/auditContext.js';
 import type { AuthUser } from '../../types/user.types.js';
 import { HttpError } from '../../utils/httpError.js';
 import { contactService } from '../contacts/contact.service.js';
+import { contractService } from '../contracts/contract.service.js';
 import { leadService } from '../leads/lead.service.js';
 import { opportunityService } from '../opportunities/opportunity.service.js';
 import { organizationService } from '../organizations/organization.service.js';
@@ -38,6 +39,7 @@ const RECORD_SERVICES: Readonly<Record<string, RecordService>> = {
     Quotation: quotationService,
     Product: productService,
     Ticket: ticketService,
+    Contract: contractService,
     PartnerCompany: partnerCompanyService,
 };
 

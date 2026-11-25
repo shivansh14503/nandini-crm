@@ -18,6 +18,8 @@ export interface ScorecardAmount<T> {
     /** Shown above each total and in the currency dropdown, e.g. "Actual (Before Tax)". */
     label: string;
     of: (row: T) => number;
+    /** The form field this total reads (e.g. `contractValue`); the currency dropdown doesn't list that field again. */
+    fieldKey?: string;
 }
 
 /**

@@ -54,6 +54,11 @@ const LOADERS: Partial<Record<AuditEntityType, Loader>> = {
             r.id,
             { code: r.ticketNumber, label: str(r.ticketSubject) ?? r.organizationName },
         ]),
+    Contract: async (c, ids) =>
+        (await c.contract.findMany({ ...inIds(ids), select: { id: true, contractNumber: true, contractTitle: true, organizationName: true } })).map((r) => [
+            r.id,
+            { code: r.contractNumber, label: str(r.contractTitle) ?? r.organizationName },
+        ]),
     Product: async (c, ids) =>
         (await c.product.findMany({ ...inIds(ids), select: { id: true, productCode: true, productName: true } })).map((r) => [
             r.id,

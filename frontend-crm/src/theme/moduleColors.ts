@@ -12,6 +12,7 @@ export type ModuleKey =
     | 'organizations'
     | 'contacts'
     | 'tickets'
+    | 'contracts'
     | 'products'
     | 'partnerCompanies';
 
@@ -33,6 +34,7 @@ const CSS_NAME: Record<ModuleKey, string> = {
     organizations: 'organizations',
     contacts: 'contacts',
     tickets: 'tickets',
+    contracts: 'contracts',
     products: 'products',
     partnerCompanies: 'partner-companies',
 };
@@ -83,6 +85,7 @@ const ROUTE_PREFIX: [string, ModuleKey][] = [
     ['/organizations', 'organizations'],
     ['/contacts', 'contacts'],
     ['/tickets', 'tickets'],
+    ['/contracts', 'contracts'],
     ['/products', 'products'],
     ['/partner-companies', 'partnerCompanies'],
 ];

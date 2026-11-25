@@ -4,12 +4,18 @@ import React from 'react';
 import { getNatureOfCalls } from '@/services/masterData.store';
 import { getPartnerContacts } from '@/services/masterData.store';
 import { useMasterData } from '@/hooks/queries/useMasterData';
+import { useOpportunities } from '@/hooks/queries/useOpportunities';
+import { useDropdownOptions } from '@/hooks/queries/useFormConfigs';
+import { useShowRecordNumber } from '@/hooks/queries/useDocumentSeries';
 import type { NatureOfCallItem } from '@/types/ticket.types';
+import { OPPORTUNITY_SALES_STAGES, type Opportunity } from '@/types/opportunity.types';
+import { opportunityLabel } from '@/utils/opportunityLabel';
 import type { PartnerCompany, PartnerCompanyContact } from '@/types/partner.types';
 import type { EntityLookupModalProps } from '@/types/lookup.types';
 import { GenericLookupModal } from './GenericLookupModal';
 import {
     NATURE_OF_CALL_LOOKUP_PRESET,
+    OPPORTUNITY_LOOKUP_PRESET,
     PARTNER_COMPANY_LOOKUP_PRESET,
     PARTNER_COMPANY_CONTACT_LOOKUP_PRESET,
     type LookupPreset,
@@ -88,3 +94,60 @@ export const PartnerCompanyContactLookupModal = createPresetLookupModal<PartnerC
     (c) => c.name,
     'PartnerCompanyContactLookupModal'
 );
+
+const NO_OPPORTUNITIES: Opportunity[] = [];
+
+export function OpportunityLookupModal({ open, onClose, onSelect, selectedValue, initialFilterValues }: EntityLookupModalProps<Opportunity>) {
+    // Shared, cache-invalidated query: opportunities created elsewhere show up without reopening.
+    const { data: opportunities, isLoading } = useOpportunities(undefined, { enabled: open });
+    const stages = useDropdownOptions('opportunity_sales_stage', OPPORTUNITY_SALES_STAGES);
+    const { users } = useMasterData();
+    const showNumber = useShowRecordNumber()('opportunity');
+
+    // Sales stages and owners load after module import, so their options are built here, not in the preset.
+    const filterFields = React.useMemo(() => {
+        const owners = users
+            .filter((u) => u.status === 'Active')
+            .map((u) => ({ value: u.username, label: u.name || u.username }))
+            .sort((a, b) => a.label.localeCompare(b.label));
+        return OPPORTUNITY_LOOKUP_PRESET.filterFields.map((f) =>
+            f.key === 'salesStage'
+                ? { ...f, options: stages.map((s) => ({ value: s, label: s })) }
+                : f.key === 'assignedTo'
+                  ? { ...f, options: owners }
+                  : f
+        );
+    }, [stages, users]);
+
+    // Numbers stay hidden (and unsearchable) until an admin adds the opportunity series, like everywhere else.
+    const columns = React.useMemo(
+        () => (showNumber ? OPPORTUNITY_LOOKUP_PRESET.columns : OPPORTUNITY_LOOKUP_PRESET.columns.filter((c) => c.id !== 'opportunityCode')),
+        [showNumber]
+    );
+    const searchPredicate = React.useMemo<typeof OPPORTUNITY_LOOKUP_PRESET.searchPredicate>(
+        () =>
+            showNumber
+                ? OPPORTUNITY_LOOKUP_PRESET.searchPredicate
+                : (o, f, q) => OPPORTUNITY_LOOKUP_PRESET.searchPredicate({ ...o, opportunityCode: '' }, f, q),
+        [showNumber]
+    );
+
+    const rows = opportunities ?? NO_OPPORTUNITIES;
+    const selected = selectedValue?.trim().toLowerCase();
+    const selectedId = selected ? rows.find((o) => opportunityLabel(o).trim().toLowerCase() === selected)?.id : undefined;
+    return (
+        <GenericLookupModal<Opportunity>
+            open={open}
+            onClose={onClose}
+            onSelect={onSelect}
+            data={open ? rows : NO_OPPORTUNITIES}
+            loading={open && isLoading}
+            selectedId={selectedId}
+            {...OPPORTUNITY_LOOKUP_PRESET}
+            columns={columns}
+            searchPredicate={searchPredicate}
+            filterFields={filterFields}
+            initialFilterValues={initialFilterValues}
+        />
+    );
+}

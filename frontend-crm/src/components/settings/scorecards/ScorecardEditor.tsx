@@ -522,8 +522,13 @@ function ColorPicker({
 }
 
 function TotalsPanel({ module, configs, draft, edit, disabled, saved }: ScorecardEditorProps) {
-    const currencyFields = useMemo(() => scorecardCurrencyFields(configs, module), [configs, module]);
-    const [defaultAmount, ...otherAmounts] = SCORECARD_MODULES[module].amounts ?? [];
+    const builtInAmounts = SCORECARD_MODULES[module].amounts;
+    // A form field a built-in total already reads (Contracts' Contract Value) is offered once, as that total.
+    const currencyFields = useMemo(() => {
+        const covered = new Set(builtInAmounts?.map((a) => a.fieldKey).filter(Boolean));
+        return scorecardCurrencyFields(configs, module).filter((f) => !covered.has(f.fieldKey));
+    }, [configs, module, builtInAmounts]);
+    const [defaultAmount, ...otherAmounts] = builtInAmounts ?? [];
     const offered =
         !draft.currencyFieldKey ||
         otherAmounts.some((a) => a.key === draft.currencyFieldKey) ||

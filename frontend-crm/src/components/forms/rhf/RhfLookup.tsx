@@ -9,9 +9,10 @@ import { LookupField } from '../LookupField';
 import { LOOKUP_FIELD_SIZE, resolveFieldSize, type FieldSize } from '../fieldSizing';
 import { RecordLookupModal, LOOKUP_DISPLAY_VALUE, findLookupRecord } from '@/components/common/lookup';
 import { findCrmUser, formatCrmUserDisplay, getAssignableUserNames, getPartnerCompanies } from '@/services/masterData.store';
-import { useContacts, useOrganizations } from '@/hooks/queries';
+import { useContacts, useOpportunities, useOrganizations } from '@/hooks/queries';
 import { useMasterData } from '@/hooks/queries/useMasterData';
-import type { LookupKind, LookupRecordMap } from '@/types/lookup.types';
+import type { LookupFilterValues, LookupKind, LookupRecordMap } from '@/types/lookup.types';
+import { opportunityLabel } from '@/utils/opportunityLabel';
 import { useConfiguredPlaceholder } from '@/context/FormConfigContext';
 
 export interface RhfLookupProps<T extends FieldValues, K extends LookupKind = LookupKind> {
@@ -55,6 +56,11 @@ export interface RhfLookupProps<T extends FieldValues, K extends LookupKind = Lo
      * username isn't turned into that user part-way.
      */
     freeText?: boolean;
+    /**
+     * Filter values the picker opens with. For `opportunity`, an `organizationName` also narrows the suggestions
+     * to that organization's opportunities and is preferred when a typed label matches several.
+     */
+    lookupFilters?: LookupFilterValues;
 }
 
 /** React Hook Form bound lookup/autocomplete built on the shared {@link LookupField}. */
@@ -76,6 +82,7 @@ export function RhfLookup<T extends FieldValues, K extends LookupKind = LookupKi
     maxLength,
     nameCase,
     freeText = false,
+    lookupFilters,
 }: RhfLookupProps<T, K>) {
     const { field, fieldState } = useController<T>({ name });
     const placeholder = useConfiguredPlaceholder(name, codedPlaceholder);
@@ -103,6 +110,17 @@ export function RhfLookup<T extends FieldValues, K extends LookupKind = LookupKi
     const { data: contacts } = useContacts(undefined, {
         enabled: kind === 'contact' && (!options || Boolean(onSelectRecord)),
     });
+    const { data: allOpportunities } = useOpportunities(undefined, {
+        enabled: kind === 'opportunity' && (!options || Boolean(onSelectRecord)),
+    });
+    // The chosen organization's opportunities first (same "contains" match as the picker's filter), so a label
+    // that several organizations share resolves to the one on this form.
+    const opportunityOrg = lookupFilters?.organizationName?.trim().toLowerCase() ?? '';
+    const opportunities = useMemo(() => {
+        if (!allOpportunities || !opportunityOrg) return allOpportunities;
+        const ofOrg = (o: LookupRecordMap['opportunity']) => (o.organizationName ?? '').toLowerCase().includes(opportunityOrg);
+        return [...allOpportunities.filter(ofOrg), ...allOpportunities.filter((o) => !ofOrg(o))];
+    }, [allOpportunities, opportunityOrg]);
     const excludeKey = excludeValues?.map((v) => v.trim().toLowerCase()).join('\u0000') ?? '';
     const suggestions = useMemo(() => {
         // User fields always suggest active users by full name; caller-supplied username lists are ignored.
@@ -114,7 +132,11 @@ export function RhfLookup<T extends FieldValues, K extends LookupKind = LookupKi
                 ? (organizations ?? []).map((o) => o.organizationName)
                 : kind === 'contact'
                   ? (contacts ?? []).map((c) => c.name)
-                  : undefined;
+                  : kind === 'opportunity'
+                    ? (allOpportunities ?? [])
+                          .filter((o) => !opportunityOrg || (o.organizationName ?? '').toLowerCase().includes(opportunityOrg))
+                          .map(opportunityLabel)
+                    : undefined;
         if (!names) return undefined;
         const excluded = new Set(excludeKey ? excludeKey.split('\u0000') : []);
         const seen = new Set<string>();
@@ -126,7 +148,7 @@ export function RhfLookup<T extends FieldValues, K extends LookupKind = LookupKi
         });
         // `users` is the re-render trigger for user suggestions; getAssignableUsernames reads the same directory.
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [options, kind, users, partnerCompanies, organizations, contacts, excludeKey]);
+    }, [options, kind, users, partnerCompanies, organizations, contacts, allOpportunities, opportunityOrg, excludeKey]);
 
     const handleSelect = (record: LookupRecordMap[K]) => {
         if (!kind) return;
@@ -151,7 +173,7 @@ export function RhfLookup<T extends FieldValues, K extends LookupKind = LookupKi
             return;
         }
         if (!kind || !onSelectRecord || next === displayValue) return;
-        const match = findLookupRecord(kind, next, { organizations, contacts });
+        const match = findLookupRecord(kind, next, { organizations, contacts, opportunities });
         if (match) onSelectRecord(match);
     };
 
@@ -182,6 +204,7 @@ export function RhfLookup<T extends FieldValues, K extends LookupKind = LookupKi
                     onClose={() => setModalOpen(false)}
                     onSelect={handleSelect}
                     selectedValue={value}
+                    initialFilterValues={lookupFilters}
                 />
             )}
         </FormField>

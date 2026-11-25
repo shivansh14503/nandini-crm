@@ -23,6 +23,7 @@
 | --- | --- |
 | Leads, Opportunities, Quotations, Organizations, Contacts | ✅ CRUD, list filters, row-level access, audit, import (not quotations), lead conversion |
 | Tickets, Products, Partner Companies | ✅ CRUD, import |
+| Contracts | ✅ CRUD, list filters, status cards, row-level access, audit (no import) |
 | Quotation PDF | ✅ templates, builder, preview, cached render |
 | Admin: forms, dropdowns, document series, cities, PDF templates | ✅ |
 | Responsive layout | ✅ phones (from 320 px), tablets and desktops: menu drawer below 1200 px, icon-only navbar controls up to 1420 px, related records as a button on phones, no sideways page scroll |
@@ -213,6 +214,20 @@ only (not the full record page); Save goes live straight away; Leads first.
       footers show only buttons
       (each needs its system values, address prefixes, built-in layout and pieces).
 - [ ] Footer actions in the layout.
+
+### Phase 13 — Support contracts (P2, 2026-11-25)
+
+- [x] **Contracts module** (2026-11-25) — Support › Contracts, next to Tickets (modelled on the old CRM's AOS
+      Contracts): title, status, value, Contract Manager, organization / contact / opportunity links, Tally serial no.,
+      term (start / end date, period, renewal reminder), contract types and billing. Built like the other modules: form
+      builder config (one Overview tab, dropdowns `contract_title` / `contract_status` / `contract_period` /
+      `contract_type`), drawer layout, document series (`contract`, `CTR-0001` until a series is set), audit with undo /
+      restore, row-level access on the Contract Manager, organization / contact name write-through, global search.
+      The list has one card per contract status (plus "All Contracts") totalling Contract Value, and My Contracts /
+      Expiring in 30 Days pills. The form moves End Date with Start Date and the period, and the reminder to 15 days
+      before the end at 11:00, until the user types their own.
+- [ ] Renewal reminders: notify the Contract Manager on the Renewal Reminder Date (with Phase 9's activities and reminders).
+- [ ] Left out of the first version: contract import, contract PDF, creating a contract from an opportunity or product.
 
 ## Part 3 — Keeping these documents current
 

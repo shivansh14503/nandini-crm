@@ -51,7 +51,12 @@ export const opportunityInputSchema = z.object({
     tallySerialNo: optionalTallySerialNo('Tally Serial No'),
     invoiceNo: optionalText('Invoice No', L.shortCode),
     invoiceDate: optionalDate('Invoice Date'),
-    commission: optionalText('Commission', L.option),
+    commission: enumWithDefault('Commission', ['Yes', 'No'], 'No'),
+    /** Required (above 0) when Commission is Yes; dropped when No. */
+    commissionAmount: z.preprocess(
+        (v) => (v === '' || v === null || v === undefined ? undefined : v),
+        z.coerce.number({ error: 'Commission Amount must be a number.' }).min(0, { message: 'Commission Amount cannot be negative.' }).optional(),
+    ),
     addDocument: enumWithDefault('Add Document', ['Yes', 'No'], 'No'),
 
     currency: optionalText('Currency', 30),
@@ -60,6 +65,10 @@ export const opportunityInputSchema = z.object({
     lumpSumDiscount: z.coerce.number({ error: 'Lump Sum Discount must be a number.' }).min(0, { message: 'Lump Sum Discount cannot be negative.' }).default(0),
 
     customFields: customFieldsSchema,
+}).superRefine((input, ctx) => {
+    if (input.commission === 'Yes' && !(Number(input.commissionAmount) > 0)) {
+        ctx.addIssue({ code: 'custom', path: ['commissionAmount'], message: 'Commission Amount is required when Commission is Yes.' });
+    }
 });
 
 export type OpportunityInput = z.infer<typeof opportunityInputSchema>;

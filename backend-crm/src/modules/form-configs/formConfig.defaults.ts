@@ -5,7 +5,7 @@
  * (the frontend keeps them as fallbacks while the configuration loads). Field definitions mirror the fields the
  * hand-built forms render; `fieldKey` is the React Hook Form name, so overrides apply to the matching control.
  *
- * Yes / No dropdowns (Left Job, Contract Create, Add Document) have built-in lists like every other dropdown, but
+ * Yes / No dropdowns (Left Job, Contract Create, Add Document, Commission) have built-in lists like every other dropdown, but
  * with fixed options (FIXED_OPTION_CATEGORY_KEYS): the API only accepts those values. The organization's Provide
  * Support switch stays a fixed toggle.
  */
@@ -19,6 +19,7 @@ export const CRM_MODULES = [
     'contacts',
     'products',
     'tickets',
+    'contracts',
     'partner-companies',
 ] as const;
 export type CrmModuleKey = (typeof CRM_MODULES)[number];
@@ -73,6 +74,7 @@ export const MODULE_TABS: Record<CrmModuleKey, { key: string; label: string }[]>
         { key: 'overview', label: 'Overview' },
         { key: 'partner_company', label: 'Partner Company' },
     ],
+    contracts: [{ key: 'overview', label: 'Overview' }],
     'partner-companies': [
         { key: 'company_info', label: 'Company Information' },
         { key: 'address', label: 'Address Information' },
@@ -137,7 +139,7 @@ export const APP_REQUIRED_CATEGORY_KEYS: ReadonlySet<string> = new Set([
  * Built-in dropdowns whose options are fixed: the records' API validates the value against exactly these options
  * (Yes / No fields). Admins can reorder them, rename how they read and pick the default, but not add options.
  */
-export const FIXED_OPTION_CATEGORY_KEYS: ReadonlySet<string> = new Set(['shared_left_job', 'product_contract_create', 'opportunity_add_document']);
+export const FIXED_OPTION_CATEGORY_KEYS: ReadonlySet<string> = new Set(['shared_left_job', 'product_contract_create', 'opportunity_add_document', 'opportunity_commission']);
 
 const yesNo = (first: 'No' | 'Yes'): DefaultOption[] => withSystem(first === 'No' ? ['No', 'Yes'] : ['Yes', 'No'], ['Yes', 'No']);
 
@@ -459,7 +461,8 @@ export const DEFAULT_CATEGORIES: DefaultCategory[] = [
         key: 'opportunity_commission',
         label: 'Commission',
         module: 'opportunities',
-        options: ['Standard (10%)', 'Executive (15%)', 'Partner Split (20%)', 'Direct (5%)', 'Nil / Direct (0%)'],
+        description: 'Whether the opportunity pays a commission; Yes asks for the Commission Amount. Fixed options: No / Yes.',
+        options: yesNo('No'),
     },
     { key: 'opportunity_add_document', label: 'Add Document', module: 'opportunities', description: 'Fixed options: No / Yes.', options: yesNo('No') },
 
@@ -564,6 +567,24 @@ export const DEFAULT_CATEGORIES: DefaultCategory[] = [
         options: ['Offsite Support', 'Onsite Support', 'Remote Support (AnyDesk/TeamViewer)', 'Phone Consultation'],
     },
 
+    // ── Contracts ──
+    { key: 'contract_title', label: 'Contract Title', module: 'contracts', options: ['Tally TSS', 'Tally On Cloud', 'Tally On AWS', 'Other'] },
+    {
+        key: 'contract_status',
+        label: 'Contract Status',
+        module: 'contracts',
+        description: "'Not Started' is the starting status; 'Expired' contracts are left out of Expiring Soon.",
+        options: withSystem(['Not Started', 'In Progress', 'Signed', 'Expired'], ['Not Started', 'Expired']),
+    },
+    {
+        key: 'contract_period',
+        label: 'Contract Period',
+        module: 'contracts',
+        description: "A period such as '2 Years' or '6 Months' sets the End Date from the Start Date.",
+        options: ['1 Year', '13 Months', 'Other'],
+    },
+    { key: 'contract_type', label: 'Contract Type', module: 'contracts', options: ['No of Visit', 'Remote Support'] },
+
     // ── Partner companies ──
     {
         key: 'partner_nature',
@@ -592,7 +613,7 @@ export const DEFAULT_SELECTED_OPTIONS: Readonly<Record<string, readonly string[]
     org_account_status: ['Active'],
     opportunity_type: ['New Business'],
     opportunity_sales_stage: ['Qualification'],
-    opportunity_commission: ['Standard (10%)'],
+    opportunity_commission: ['No'],
     quote_stage: ['Draft'],
     quote_company: ['Nandini Infosystems'],
     quote_validation_period: ['30 Days'],
@@ -604,6 +625,7 @@ export const DEFAULT_SELECTED_OPTIONS: Readonly<Record<string, readonly string[]
     ticket_source: ['Call'],
     ticket_support_type: ['Free'],
     ticket_support_mode: ['Offsite Support'],
+    contract_status: ['Not Started'],
 };
 
 // ── Built-in field definitions ───────────────────────────────────────────────
@@ -796,6 +818,8 @@ const RAW_DEFAULT_FIELDS: DefaultField[] = [
     ]),
     ...section('opportunities', 'basic', 'Commission & Documentation', [
         sel('commission', 'Commission', 'opportunity_commission', { soft: true }),
+        // Shown and required only when Commission is Yes (the form and the API enforce it).
+        t('commissionAmount', 'Commission Amount', { type: 'amount', lock: true }),
         sel('addDocument', 'Add Document', 'opportunity_add_document'),
     ]),
 
@@ -883,6 +907,31 @@ const RAW_DEFAULT_FIELDS: DefaultField[] = [
     ...section('tickets', 'partner_company', 'Partner Company', [
         t('partnerCompany', 'Partner Company', { type: 'lookup' }),
         t('partnerCompanyContact', 'Partner Company Contact', { type: 'lookup' }),
+    ]),
+
+    // ── Contracts ──
+    ...section('contracts', 'overview', 'Contract Details', [
+        sel('contractTitle', 'Contract Title', 'contract_title', { req: true }),
+        sel('status', 'Status', 'contract_status', { req: true }),
+        t('contractValue', 'Contract Value', { type: 'amount', soft: true }),
+        t('assignedTo', 'Contract Manager', { type: 'lookup', req: true }),
+        t('organizationName', 'Organization Name', { type: 'lookup', req: true }),
+        t('contact', 'Contact Person', { type: 'lookup', req: true }),
+        t('opportunity', 'Opportunity', { type: 'lookup' }),
+        t('tallySerialNo', 'Tally Serial Number'),
+    ]),
+    ...section('contracts', 'overview', 'Term & Renewal', [
+        t('startDate', 'Contract Start Date', { type: 'date' }),
+        t('endDate', 'Contract End Date', { type: 'date' }),
+        sel('contractPeriod', 'Contract Period', 'contract_period', { soft: true }),
+        t('renewalReminderDate', 'Renewal Reminder Date', { type: 'datetime' }),
+        { key: 'contractType', label: 'Contract Type', type: 'multiselect', cat: 'contract_type', soft: true },
+    ]),
+    ...section('contracts', 'overview', 'Billing', [
+        t('billNumber', 'Bill Number', { soft: true }),
+        t('billDate', 'Bill Date', { type: 'date', soft: true }),
+        t('billAmount', 'Bill Amount', { type: 'amount', soft: true }),
+        t('description', 'Description', { type: 'textarea' }),
     ]),
 
     // ── Partner companies ──

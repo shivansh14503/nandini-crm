@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { FIELD_MAX_LENGTH as L } from '../config/fieldLimits';
+import type { ConfigValidationIssue } from '../utils/formConfig';
 import {
     requiredString,
     optionalString,
@@ -63,6 +64,8 @@ export const opportunityFormSchema = z.object({
 
     // Commission Details
     commission: optionalString,
+    // Typed as text; required (above 0) when Commission is Yes, see commissionIssues.
+    commissionAmount: z.preprocess((v) => (v === null || v === undefined ? '' : String(v)), z.string().trim()).optional(),
 
     // Document
     addDocument: optionalString.default('No'),
@@ -83,3 +86,13 @@ export const opportunityFormSchema = z.object({
 });
 
 export type OpportunityFormSchemaType = z.infer<typeof opportunityFormSchema>;
+
+/** Commission Amount is required, and above 0, when Commission is Yes. */
+export function commissionIssues(values: { commission?: string; commissionAmount?: number | string | null }): ConfigValidationIssue[] {
+    if (values.commission !== 'Yes') return [];
+    const raw = values.commissionAmount === null || values.commissionAmount === undefined ? '' : String(values.commissionAmount).trim();
+    if (!raw) return [{ path: 'commissionAmount', message: 'Commission Amount is required when Commission is Yes.' }];
+    const amount = Number(raw);
+    if (!Number.isFinite(amount) || amount <= 0) return [{ path: 'commissionAmount', message: 'Enter a Commission Amount above 0.' }];
+    return [];
+}

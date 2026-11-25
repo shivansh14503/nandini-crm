@@ -27,6 +27,8 @@ export function recordHref(module: string, entityId: string): string | null {
             return ROUTES.PRODUCT_DETAIL(entityId);
         case 'tickets':
             return ROUTES.TICKET_DETAIL(entityId);
+        case 'contracts':
+            return ROUTES.CONTRACT_DETAIL(entityId);
         case 'partner-companies':
             return ROUTES.PARTNER_COMPANY_DETAIL(entityId);
         default:

@@ -12,6 +12,7 @@ import {
     FormGrid,
     FormGridItem,
     SectionLabel,
+    RhfAmountField,
     RhfDateTimeField,
     RhfEmailField,
     RhfLookup,
@@ -83,6 +84,7 @@ export function OpportunityBasicSection({ notify, onDecisionPendingChange }: Opp
     const { data: organizations = EMPTY_ORGANIZATIONS } = useOrganizations(undefined, { enabled: editable });
     const { data: contacts = EMPTY_CONTACTS } = useContacts(undefined, { enabled: editable });
     const organizationName = useWatch({ control, name: 'organizationName' }) ?? '';
+    const commission = useWatch({ control, name: 'commission' });
     const organizationNames = useMemo(() => organizations.map((o) => o.organizationName), [organizations]);
     const contactNames = useMemo(() => {
         const org = organizationName.trim().toLowerCase();
@@ -351,7 +353,22 @@ export function OpportunityBasicSection({ notify, onDecisionPendingChange }: Opp
                     hint="Sales / partner commission"
                     options={getOptions('opportunity_commission', OPPORTUNITY_COMMISSIONS)}
                     placeholder="Select Commission"
+                    fieldSize="sm"
+                    onValueChange={(next) => {
+                        // No commission, no amount: a value typed before switching back to No isn't kept.
+                        if (next !== 'Yes') setValue('commissionAmount', '', { shouldDirty: true, shouldValidate: true });
+                    }}
                 />
+
+                {commission === 'Yes' && (
+                    <RhfAmountField<F>
+                        name="commissionAmount"
+                        label="Commission Amount"
+                        required
+                        hint="Commission payable on this deal (₹)"
+                        fieldSize="sm"
+                    />
+                )}
 
                 <RhfSelect<F>
                     name="addDocument"

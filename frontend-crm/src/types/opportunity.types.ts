@@ -63,7 +63,10 @@ export interface OpportunityFormData {
     invoiceDate?: string;
 
     // Commission Details
+    /** Yes / No. */
     commission: string;
+    /** Required when Commission is Yes; empty (null from the API) when No. */
+    commissionAmount?: number | string | null;
 
     // Document
     addDocument?: string;
@@ -111,13 +114,8 @@ export const OPPORTUNITY_TYPES: string[] = [
     'Customization & Training',
 ];
 
-export const OPPORTUNITY_COMMISSIONS: string[] = [
-    'Standard (10%)',
-    'Executive (15%)',
-    'Partner Split (20%)',
-    'Direct (5%)',
-    'Nil / Direct (0%)',
-];
+/** Fixed options (the API accepts only these); Yes asks for the Commission Amount. */
+export const OPPORTUNITY_COMMISSIONS: string[] = ['No', 'Yes'];
 
 export const OPPORTUNITY_CURRENCIES: string[] = [
     'Indian Rupee: ₹',

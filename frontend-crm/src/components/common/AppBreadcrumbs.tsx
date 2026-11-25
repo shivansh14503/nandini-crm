@@ -43,6 +43,7 @@ const ROUTE_MODULE_MAP: Record<string, string> = {
 
     // Support
     tickets: 'Support',
+    contracts: 'Support',
     cases: 'Support',
     sla: 'Support',
     helpdesk: 'Support',

@@ -3,7 +3,8 @@ import type { AuthUser } from '../../types/user.types.js';
 import { HttpError } from '../../utils/httpError.js';
 
 /**
- * Row-level access for the core CRM entities (organizations, contacts, leads, opportunities, quotations, tickets).
+ * Row-level access for the core CRM entities (organizations, contacts, leads, opportunities, quotations, tickets,
+ * contracts).
  *
  * Global roles see and change every record. Every other role is scoped to the records it owns (assignee) or
  * created. Role names are matched case-insensitively with any dash style, so "Director - Operations" typed with a
