@@ -5,6 +5,8 @@ import { getNatureOfCalls } from '@/services/masterData.store';
 import { getPartnerContacts } from '@/services/masterData.store';
 import { useMasterData } from '@/hooks/queries/useMasterData';
 import { useOpportunities } from '@/hooks/queries/useOpportunities';
+import { useProducts } from '@/hooks/queries/useProducts';
+import type { Product } from '@/types/product.types';
 import { useDropdownOptions } from '@/hooks/queries/useFormConfigs';
 import { useShowRecordNumber } from '@/hooks/queries/useDocumentSeries';
 import type { NatureOfCallItem } from '@/types/ticket.types';
@@ -18,6 +20,7 @@ import {
     OPPORTUNITY_LOOKUP_PRESET,
     PARTNER_COMPANY_LOOKUP_PRESET,
     PARTNER_COMPANY_CONTACT_LOOKUP_PRESET,
+    PRODUCT_LOOKUP_PRESET,
     type LookupPreset,
 } from './lookupConfigs';
 
@@ -148,6 +151,34 @@ export function OpportunityLookupModal({ open, onClose, onSelect, selectedValue,
             searchPredicate={searchPredicate}
             filterFields={filterFields}
             initialFilterValues={initialFilterValues}
+        />
+    );
+}
+
+const NO_PRODUCTS: Product[] = [];
+
+/** The product catalog (active products) for picking a line item's product. */
+export function ProductLookupModal({ open, onClose, onSelect, selectedValue }: EntityLookupModalProps<Product>) {
+    // Shared, cache-invalidated query: products added elsewhere show up without reopening.
+    const { data, isLoading } = useProducts(undefined, { enabled: open });
+    const products = React.useMemo(() => (data ?? NO_PRODUCTS).filter((p) => p.isActive !== false), [data]);
+    const filterFields = React.useMemo(() => {
+        const categories = [...new Set(products.map((p) => p.category).filter(Boolean))].sort((a, b) => a.localeCompare(b));
+        return PRODUCT_LOOKUP_PRESET.filterFields.map((f) => (f.key === 'category' ? { ...f, options: categories.map((c) => ({ value: c, label: c })) } : f));
+    }, [products]);
+
+    const selected = selectedValue?.trim().toLowerCase();
+    const selectedId = selected ? products.find((p) => p.productName.trim().toLowerCase() === selected)?.id : undefined;
+    return (
+        <GenericLookupModal<Product>
+            open={open}
+            onClose={onClose}
+            onSelect={onSelect}
+            data={open ? products : NO_PRODUCTS}
+            loading={open && isLoading}
+            selectedId={selectedId}
+            {...PRODUCT_LOOKUP_PRESET}
+            filterFields={filterFields}
         />
     );
 }

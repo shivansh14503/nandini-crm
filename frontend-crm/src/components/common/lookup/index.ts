@@ -8,6 +8,7 @@ export {
     OpportunityLookupModal,
     PartnerCompanyLookupModal,
     PartnerCompanyContactLookupModal,
+    ProductLookupModal,
 } from './PresetLookupModals';
 export { RecordLookupModal, LOOKUP_DISPLAY_VALUE, findLookupRecord } from './RecordLookupModal';
 export type { RecordLookupModalProps, LookupRecordPools } from './RecordLookupModal';

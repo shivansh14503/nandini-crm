@@ -13,6 +13,7 @@ import type { Contact } from '@/types/contact.types';
 import type { Opportunity } from '@/types/opportunity.types';
 import type { NatureOfCallItem } from '@/types/ticket.types';
 import type { PartnerCompany, PartnerCompanyContact } from '@/types/partner.types';
+import type { Product } from '@/types/product.types';
 import { CUSTOMER_TYPES, ENTITY_TYPES, NATURE_OF_BUSINESS } from '@/components/organizations/constants';
 import { findCrmUser } from '@/services/masterData.store';
 import { getCountryNameByCode } from '@/data/addressMaster';
@@ -402,5 +403,50 @@ export const PARTNER_COMPANY_CONTACT_LOOKUP_PRESET: LookupPreset<PartnerCompanyC
     searchPredicate: (c, f, q) => {
         if (!containsText(c.partnerCompany, f.partnerCompany)) return false;
         return includesQuery(q, c.name, c.mobile, c.officePhone, c.email);
+    },
+};
+
+// ─── Products (line items) ────────────────────────────────────────────────────
+
+/** A product's MRP as the catalog shows it (₹27,000.00); empty when it has none. */
+export function formatProductMrp(mrp: string | number | undefined): string {
+    const n = Number(mrp);
+    return mrp === '' || mrp === undefined || !Number.isFinite(n)
+        ? ''
+        : `₹${n.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+
+export const PRODUCT_LOOKUP_PRESET: LookupPreset<Product> = {
+    title: 'Product Catalog',
+    subtitle: 'Search by category or product name. Click a row to add it to the line.',
+    searchPlaceholder: '',
+    showSearchBox: false,
+    rowsPerPage: 10,
+    emptyMessage: 'No products found matching search criteria',
+    columns: [
+        { id: 'productName', label: 'Name', minWidth: 240, sortable: true, render: (p) => <PrimaryText>{p.productName}</PrimaryText> },
+        { id: 'category', label: 'Category', minWidth: 150, sortable: true },
+        { id: 'hsnCode', label: 'HSN Code', minWidth: 100, sortable: true },
+        { id: 'mrp', label: 'MRP', minWidth: 120, align: 'right', sortable: true, getValue: (p) => formatProductMrp(p.mrp) },
+        {
+            id: 'description',
+            label: 'Description',
+            minWidth: 220,
+            render: (p) => (
+                <Typography sx={{ fontSize: '0.8rem', color: 'var(--mui-palette-text-secondary)', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
+                    {p.description}
+                </Typography>
+            ),
+        },
+    ],
+    filterFields: [
+        // Options are the categories of the loaded products; ProductLookupModal fills them in.
+        { key: 'category', label: 'Category', type: 'multiselect', width: 6, options: [] },
+        { key: 'productName', label: 'Product Name', type: 'text', width: 6, placeholder: 'Type product name...' },
+    ],
+    searchPredicate: (p, f) => {
+        const categories = splitMulti(f.category);
+        if (categories.length && !categories.includes(p.category)) return false;
+        return containsText(p.productName, f.productName?.trim());
     },
 };
