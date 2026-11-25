@@ -185,6 +185,34 @@ export const ORGANIZATION_LOOKUP_PRESET: LookupPreset<ExtendedOrganization> = {
     },
 };
 
+/**
+ * The organization picker when it offers partner organizations only (its Customer Type locked to Partner, as for a
+ * Partner Company): Nature of Partner, the partner's own kind, takes Nature of Business's place as filter and column.
+ */
+export function partnerOrganizationPreset(
+    preset: LookupPreset<ExtendedOrganization>,
+    natureOptions: readonly { value: string; label: string }[],
+    natureLabel: (value: string) => string = (v) => v
+): LookupPreset<ExtendedOrganization> {
+    return {
+        ...preset,
+        filterFields: preset.filterFields.map((f) =>
+            f.key === 'natureOfBusiness' ? { key: 'natureOfPartner', label: 'Nature of Partner', type: 'multiselect', width: f.width, options: [...natureOptions] } : f
+        ),
+        columns: preset.columns.map((c) =>
+            c.id === 'natureOfBusiness'
+                ? { id: 'natureOfPartner', label: 'Nature of Partner', minWidth: c.minWidth, sortable: true, getValue: (o: ExtendedOrganization) => natureLabel(o.natureOfPartner ?? '') }
+                : c
+        ),
+        searchPredicate: (o, f, q) => {
+            const natures = splitMulti(f.natureOfPartner);
+            if (natures.length && !natures.includes(o.natureOfPartner ?? '')) return false;
+            if (q && !includesQuery(q, o.organizationName, o.customerType, natureLabel(o.natureOfPartner ?? ''), o.typeOfEntity, userName(o.assignedTo))) return false;
+            return preset.searchPredicate(o, { ...f, natureOfBusiness: '' }, '');
+        },
+    };
+}
+
 // ─── Contacts ─────────────────────────────────────────────────────────────────
 
 /** A contact row in the picker: the contact plus its organization's Customer Type (looked up by the modal). */
