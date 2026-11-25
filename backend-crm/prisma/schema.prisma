@@ -535,12 +535,8 @@ model Opportunity {
   bankName         String?   @db.NVarChar(100)
   ifscCode         String?   @db.NVarChar(11)
   panNumber        String?   @db.NVarChar(10)
+  /// Yes while the opportunity has a document (its Document row); required at Sales Stage PO.
   addDocument      String?   @default("No") @db.NVarChar(3)
-  /// The document's details and file, kept only while Add Document is Yes (required at Sales Stage PO).
-  documentNo       String?   @db.NVarChar(30)
-  documentDate     DateTime? @db.Date
-  documentRemarks  String?   @db.NVarChar(2000)
-  documentFileId   String?   @db.NVarChar(50)
 
   // Line-item totals (verified server-side)
   /// No DB default: Prisma writes SQL Server string defaults without the N prefix (â‚¹ â†’ ?). The API always sets it.
@@ -565,7 +561,8 @@ model Opportunity {
 
   organization     Organization?         @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   contactRecord    Contact?              @relation(fields: [contactId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  documentFile     RecordFile?           @relation(fields: [documentFileId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  /// The Documentation section's document (Documents module), present while Add Document is Yes.
+  document         Document?
   lineItems        OpportunityLineItem[]
   quotations       Quotation[]
   contracts        Contract[]
@@ -578,7 +575,6 @@ model Opportunity {
   @@index([salesStage])
   @@index([assignedTo])
   @@index([nextFollowupDate])
-  @@index([documentFileId])
   @@index([isDeleted, createdAt])
   /// Scoped lists ("mine" / row-level access) sorted by creation date.
   @@index([isDeleted, assignedTo, createdAt])
@@ -1284,9 +1280,35 @@ model RecordFile {
   createdBy String   @db.NVarChar(50)
   createdAt DateTime @default(now())
 
-  opportunities Opportunity[]
+  documents Document[]
 
   @@index([module, createdAt])
+}
+
+// ── Documents ──────────────────────────────────────────────────────────────────
+
+/// Documents module (Activities › Documents): the document an opportunity records in its Documentation section
+/// (Add Document Yes: Document No, Document Date, Remarks, Upload Doc). Written only by the opportunity form, one per
+/// opportunity; switching Add Document to No deletes it. Listed while its opportunity is live.
+model Document {
+  id              String    @id @default(uuid()) @db.NVarChar(50)
+  opportunityId   String    @unique @db.NVarChar(50)
+  documentNo      String?   @db.NVarChar(30)
+  documentDate    DateTime? @db.Date
+  documentRemarks String?   @db.NVarChar(2000)
+  /// Upload Doc (RecordFile). Required by the form; NULL only on documents migrated without a file.
+  documentFileId  String?   @db.NVarChar(50)
+
+  createdBy String   @db.NVarChar(50)
+  updatedBy String?  @db.NVarChar(50)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  opportunity  Opportunity @relation(fields: [opportunityId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  documentFile RecordFile? @relation(fields: [documentFileId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([documentFileId])
+  @@index([createdAt])
 }
 
 /// Builder library: a section or block saved by an admin, shared by every template of the module and inserted as a copy.

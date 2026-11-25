@@ -51,6 +51,7 @@ export const NAV_ITEMS: readonly NavGroup[] = [
             { label: 'Calls', href: '/dashboard' },
             { label: 'Meetings', href: '/dashboard' },
             { label: 'Emails', href: '/dashboard' },
+            { label: 'Documents', href: ROUTES.DOCUMENTS },
         ],
     },
     {

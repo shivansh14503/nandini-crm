@@ -21,7 +21,8 @@ import { assertDeletedRow, lockRecords, restoreData, runInTransaction, softDelet
 import { assertLeadSourceDetails, LEAD_SOURCE_DETAIL_KEYS } from '../shared/leadSource.js';
 import { resolveReferredBy, type ReferredByValue } from '../shared/referredBy.js';
 import { toOpportunityData, toOpportunityDto, type OpportunityDto } from './opportunity.mapper.js';
-import { assertRecordFile, RECORD_FILE_SELECT } from '../files/recordFile.service.js';
+import { assertRecordFile } from '../files/recordFile.service.js';
+import { OPPORTUNITY_DOCUMENT_INCLUDE, syncOpportunityDocument } from '../documents/document.sync.js';
 import {
     documentationIssues,
     OPPORTUNITY_SORT_FIELDS,
@@ -30,7 +31,7 @@ import {
     type OpportunityInput,
 } from './opportunity.validator.js';
 
-const include = { lineItems: lineItemsInclude, documentFile: { select: RECORD_FILE_SELECT } } as const;
+const include = { lineItems: lineItemsInclude, document: OPPORTUNITY_DOCUMENT_INCLUDE } as const;
 
 /** Columns `assertRecordAccess` reads. */
 const OWNER_SELECT = { assignedTo: true, createdBy: true } as const;
@@ -142,6 +143,7 @@ export async function createOpportunityRecord(
         data: { ...toOpportunityData({ ...input, assignedTo }, links, computed.totals), opportunityCode, createdBy: user.username },
     });
     await replaceLineItems(tx, row.id, input, computed);
+    await syncOpportunityDocument(tx, row.id, input, user);
 
     const dto = toOpportunityDto(await tx.opportunity.findUniqueOrThrow({ where: { id: row.id }, include }));
     await auditService.record(tx, { entityType: 'Opportunity', entityId: row.id, action: 'CREATE', changedBy: user.username, changes: dto });
@@ -246,7 +248,7 @@ export const opportunityService = {
             if (['salesStage', 'addDocument', 'documentFile'].some((key) => key in patch)) assertDocumentation(input);
             // Likewise the Lead Source's follow-up field (Referred By / Partner Company), when the edit touches them.
             if (LEAD_SOURCE_DETAIL_KEYS.some((key) => key in patch)) assertLeadSourceDetails(input);
-            await assertRecordFile(tx, 'opportunities', input.documentFile, 'documentFile', existing.documentFileId);
+            await assertRecordFile(tx, 'opportunities', input.documentFile, 'documentFile', existing.document?.documentFileId);
             if (keepLegacyTallySerial) input.tallySerialNo = before.tallySerialNo;
             // A Customer Response sent with the edit records a follow-up: it must fit the Sales Stage and (unless it
             // takes no follow-up) come with a next follow-up later than now. A closed stage clears both.
@@ -270,6 +272,7 @@ export const opportunityService = {
                 data: { ...toOpportunityData({ ...input, assignedTo }, links, computed.totals), updatedBy: user.username },
             });
             if ('lineItems' in patch) await replaceLineItems(tx, id, input, computed);
+            await syncOpportunityDocument(tx, id, input, user);
 
             const after = toOpportunityDto(await tx.opportunity.findUniqueOrThrow({ where: { id }, include }));
             const changes = diffRecords(before, after);

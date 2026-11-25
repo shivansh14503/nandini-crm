@@ -25,6 +25,7 @@
 | Tickets, Products, Partner Companies | ✅ CRUD, import |
 | Contracts | ✅ CRUD, list filters, status cards, row-level access, audit (no import) |
 | Referrals | ✅ CRUD, Active / Inactive status, audit, drawer layout, Form Builder (no import); Referred By on leads, opportunities and Convert Lead is picked from the active referrals (2026-11-25) |
+| Documents | ✅ read-only list (filters, export / file download), drawer and detail page of the opportunities' documents |
 | Quotation PDF | ✅ templates, builder, preview, cached render |
 | Admin: forms, dropdowns, document series, cities, PDF templates | ✅ |
 | Responsive layout | ✅ phones (from 320 px), tablets and desktops: menu drawer below 1200 px, icon-only navbar controls up to 1420 px, related records as a button on phones, no sideways page scroll |
@@ -229,6 +230,18 @@ only (not the full record page); Save goes live straight away; Leads first.
       before the end at 11:00, until the user types their own.
 - [ ] Renewal reminders: notify the Contract Manager on the Renewal Reminder Date (with Phase 9's activities and reminders).
 - [ ] Left out of the first version: contract import, contract PDF, creating a contract from an opportunity or product.
+
+### Phase 14 — Documents (P2, 2026-11-25)
+
+- [x] **Documents module** (2026-11-25) — Activities › Documents (modelled on the old CRM's Documents list): the
+      documents added on opportunities (Documentation section: Document No, Document Date, Remarks, Upload Doc), now
+      kept in their own `Document` table (one per opportunity; existing ones migrated). Read-only: no create form,
+      documents are added and changed from the opportunity form. Table with Document No, Upload Doc (opens the file),
+      Document Date, Opportunity, Sales Stage, Organization Name, Remarks, Assigned to, Added By and Date Created; search,
+      the Filter dialog, My Documents / Added in 7 Days pills, bulk Export to CSV and Download Selected Files,
+      pagination; row → side drawer, eye → detail page with an inline preview of PDFs and images.
+- [ ] Not in the first version: Category / Sub Category / Expiration Date (the opportunity form doesn't ask for them),
+      several documents per opportunity, a Documents tab on the opportunity's related records, global search.
 
 ## Part 3 — Keeping these documents current
 
