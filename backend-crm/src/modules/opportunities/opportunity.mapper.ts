@@ -1,7 +1,7 @@
 import type { Opportunity, OpportunityLineItem, Prisma } from '../../generated/prisma/client.js';
 import { decimalToNumber, fromDateOnly, fromOptionalDateOnly, nullable, parseCustomFields, parseStringArray, serializeCustomFields, stringifyStringArray, text, toDateOnly, toIso } from '../../utils/mappers.js';
 import { toLineItemDtos, type LineItemDto, type LineItemTotals } from '../shared/lineItems.js';
-import type { OpportunityInput } from './opportunity.validator.js';
+import { defaultCommissionType, hasCommission, type OpportunityInput } from './opportunity.validator.js';
 
 export type OpportunityRow = Opportunity & { lineItems?: OpportunityLineItem[] };
 
@@ -37,6 +37,14 @@ export interface OpportunityDto {
     commission: string;
     /** Set only when Commission is Yes. */
     commissionAmount: number | null;
+    /** Self / Other while Commission is Yes; empty otherwise. */
+    commissionType: string;
+    /** The commission payee's bank details (Commission Type Other only). */
+    accountName: string;
+    accountNo: string;
+    bankName: string;
+    ifscCode: string;
+    panNumber: string;
     addDocument: string;
     currency: string;
     groupName: string;
@@ -85,6 +93,12 @@ export function toOpportunityDto(row: OpportunityRow): OpportunityDto {
         invoiceDate: toDateOnly(row.invoiceDate),
         commission: text(row.commission),
         commissionAmount: row.commissionAmount === null ? null : decimalToNumber(row.commissionAmount),
+        commissionType: text(row.commissionType),
+        accountName: text(row.accountName),
+        accountNo: text(row.accountNo),
+        bankName: text(row.bankName),
+        ifscCode: text(row.ifscCode),
+        panNumber: text(row.panNumber),
         addDocument: text(row.addDocument),
         currency: row.currency,
         groupName: text(row.groupName),
@@ -100,6 +114,20 @@ export function toOpportunityDto(row: OpportunityRow): OpportunityDto {
         createdBy: row.createdBy,
         updatedBy: row.updatedBy ?? '',
         customFields: parseCustomFields(row.customDataJson),
+    };
+}
+
+/** Commission Type (default by amount) and, for Other, the payee's bank details; all cleared without a commission. */
+function commissionColumns(input: OpportunityInput) {
+    const type = hasCommission(input) ? (input.commissionType ?? defaultCommissionType(input.commissionAmount)) : null;
+    const bank = (value: string | undefined) => (type === 'Other' ? nullable(value) : null);
+    return {
+        commissionType: type,
+        accountName: bank(input.accountName),
+        accountNo: bank(input.accountNo),
+        bankName: bank(input.bankName),
+        ifscCode: bank(input.ifscCode),
+        panNumber: bank(input.panNumber),
     };
 }
 
@@ -136,6 +164,7 @@ export function toOpportunityData(
         invoiceDate: input.invoiceDate ? fromDateOnly(input.invoiceDate) : null,
         commission: input.commission,
         commissionAmount: input.commission === 'Yes' ? (input.commissionAmount ?? null) : null,
+        ...commissionColumns(input),
         addDocument: input.addDocument,
         currency: input.currency ?? DEFAULT_CURRENCY,
         groupName: nullable(input.groupName),

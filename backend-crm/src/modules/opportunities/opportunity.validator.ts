@@ -9,6 +9,8 @@ import {
     optionalDate,
     optionalDescription,
     optionalEmail,
+    optionalIfsc,
+    optionalPan,
     optionalTallySerialNo,
     optionalText,
     phone,
@@ -18,6 +20,20 @@ import {
     stringList,
 } from '../../validators/common.js';
 import { lineItemListSchema } from '../shared/lineItems.js';
+
+/** Commission Amounts up to this default to Commission Type Self; larger ones to Other. */
+export const SMALL_COMMISSION_LIMIT = 1000;
+export const COMMISSION_TYPES = ['Self', 'Other'] as const;
+
+/** Whether these values take a Commission Type: Commission Yes with an amount. */
+export function hasCommission(input: { commission?: string; commissionAmount?: number }): boolean {
+    return input.commission === 'Yes' && Number(input.commissionAmount) > 0;
+}
+
+/** Commission Type a commission of this amount starts on: Self up to 1,000, Other above. */
+export function defaultCommissionType(amount: number | undefined): (typeof COMMISSION_TYPES)[number] {
+    return Number(amount) > SMALL_COMMISSION_LIMIT ? 'Other' : 'Self';
+}
 
 export const CLOSED_SALES_STAGES = ['Closed Won', 'Closed Lost'] as const;
 export const QUOTE_SALES_STAGE = 'Proposal/Price Quote';
@@ -57,6 +73,17 @@ export const opportunityInputSchema = z.object({
         (v) => (v === '' || v === null || v === undefined ? undefined : v),
         z.coerce.number({ error: 'Commission Amount must be a number.' }).min(0, { message: 'Commission Amount cannot be negative.' }).optional(),
     ),
+    /** Self / Other while Commission is Yes; empty takes the amount's default (defaultCommissionType). */
+    commissionType: z.preprocess(
+        (v) => (typeof v === 'string' && v.trim() === '' ? undefined : v),
+        z.enum(COMMISSION_TYPES, { error: 'Commission Type must be Self or Other.' }).optional(),
+    ),
+    // The commission payee's bank details (Commission Type Other), with the Organization form's rules.
+    accountName: optionalText('Account Name', L.organizationName),
+    accountNo: optionalText('Account No', L.bankAccount),
+    bankName: optionalText('Bank Name', L.personName),
+    ifscCode: optionalIfsc,
+    panNumber: optionalPan,
     addDocument: enumWithDefault('Add Document', ['Yes', 'No'], 'No'),
 
     currency: optionalText('Currency', 30),

@@ -87,6 +87,12 @@ const DEFAULT_OPPORTUNITY_FORM: OpportunityFormData = {
     // Commission Details
     commission: 'No',
     commissionAmount: '',
+    commissionType: '',
+    accountName: '',
+    accountNo: '',
+    bankName: '',
+    ifscCode: '',
+    panNumber: '',
 
     // Document
     addDocument: 'No',

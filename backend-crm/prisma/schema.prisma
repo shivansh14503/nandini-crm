@@ -466,6 +466,14 @@ model Opportunity {
   /// Yes / No (fixed options). Commission Amount is required when Yes and cleared when No.
   commission       String?  @db.NVarChar(50)
   commissionAmount Decimal? @db.Decimal(18, 2)
+  /// Self / Other, set when Commission is Yes (Self up to 1,000, Other above by default); NULL otherwise.
+  commissionType   String?  @db.NVarChar(50)
+  /// Bank details of the commission's payee, kept only while Commission Type is Other (same fields as Organization).
+  accountName      String?  @db.NVarChar(200)
+  accountNo        String?  @db.NVarChar(18)
+  bankName         String?  @db.NVarChar(100)
+  ifscCode         String?  @db.NVarChar(11)
+  panNumber        String?  @db.NVarChar(10)
   addDocument      String?  @default("No") @db.NVarChar(3)
 
   // Line-item totals (verified server-side)

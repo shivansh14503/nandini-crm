@@ -182,7 +182,10 @@ required field for leads (closed leads have none).
 `organizationName`/`organizationId`, `contactNumber`, `contactEmail`, `referredBy`, `type`, `salesStage`, `leadSource`,
 `leadGivenBy`, `nextFollowupDate`/`Time`, `followupType`, `customerResponse` (as on leads), `remarks`, `description`, `assignedTo`,
 billing (`tallySerialNo` — 9 digits starting with 7, checked by the API, `invoiceNo`, `invoiceDate`), `commission` (fixed `Yes` / `No`, default `No`) with
-`commissionAmount` (DECIMAL(18,2), required above 0 when `Yes`, NULL when `No`), `addDocument`, totals (`currency`, `groupName`,
+`commissionAmount` (DECIMAL(18,2), required above 0 when `Yes`, NULL when `No`), `commissionType` (fixed `Self` /
+`Other` while `Yes`; defaults to `Self` up to 1,000 and `Other` above), the commission payee's bank details kept only
+while `Other` (`accountName`, `accountNo`, `bankName`, `ifscCode`, `panNumber`: the Organization columns' sizes and
+rules), `addDocument`, totals (`currency`, `groupName`,
 `lumpSumDiscount`, `totalAmount`, `totalDiscount`, `subtotal`, `totalTax`, `grandTotal` — recomputed and verified
 server-side), `customDataJson`, audit/soft-delete.
 

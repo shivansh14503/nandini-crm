@@ -125,6 +125,7 @@ export const APP_REQUIRED_CATEGORY_KEYS: ReadonlySet<string> = new Set([
     'shared_followup_type',
     'shared_customer_response',
     'opportunity_type',
+    'opportunity_commission_type',
     'org_nature_of_business',
     'org_type_of_entity',
     'org_customer_type',
@@ -139,7 +140,7 @@ export const APP_REQUIRED_CATEGORY_KEYS: ReadonlySet<string> = new Set([
  * Built-in dropdowns whose options are fixed: the records' API validates the value against exactly these options
  * (Yes / No fields). Admins can reorder them, rename how they read and pick the default, but not add options.
  */
-export const FIXED_OPTION_CATEGORY_KEYS: ReadonlySet<string> = new Set(['shared_left_job', 'product_contract_create', 'opportunity_add_document', 'opportunity_commission']);
+export const FIXED_OPTION_CATEGORY_KEYS: ReadonlySet<string> = new Set(['shared_left_job', 'product_contract_create', 'opportunity_add_document', 'opportunity_commission', 'opportunity_commission_type']);
 
 const yesNo = (first: 'No' | 'Yes'): DefaultOption[] => withSystem(first === 'No' ? ['No', 'Yes'] : ['Yes', 'No'], ['Yes', 'No']);
 
@@ -464,6 +465,13 @@ export const DEFAULT_CATEGORIES: DefaultCategory[] = [
         description: 'Whether the opportunity pays a commission; Yes asks for the Commission Amount. Fixed options: No / Yes.',
         options: yesNo('No'),
     },
+    {
+        key: 'opportunity_commission_type',
+        label: 'Commission Type',
+        module: 'opportunities',
+        description: 'Who the commission is paid to. Self up to a Commission Amount of 1,000, Other above it (asks for bank details). Fixed options: Self / Other.',
+        options: withSystem(['Self', 'Other'], ['Self', 'Other']),
+    },
     { key: 'opportunity_add_document', label: 'Add Document', module: 'opportunities', description: 'Fixed options: No / Yes.', options: yesNo('No') },
 
     // ── Quotations ──
@@ -614,6 +622,7 @@ export const DEFAULT_SELECTED_OPTIONS: Readonly<Record<string, readonly string[]
     opportunity_type: ['New Business'],
     opportunity_sales_stage: ['Qualification'],
     opportunity_commission: ['No'],
+    opportunity_commission_type: ['Self'],
     quote_stage: ['Draft'],
     quote_company: ['Nandini Infosystems'],
     quote_validation_period: ['30 Days'],
@@ -820,6 +829,14 @@ const RAW_DEFAULT_FIELDS: DefaultField[] = [
         sel('commission', 'Commission', 'opportunity_commission', { soft: true }),
         // Shown and required only when Commission is Yes (the form and the API enforce it).
         t('commissionAmount', 'Commission Amount', { type: 'amount', lock: true }),
+        // Shown when Commission is Yes: Self up to 1,000, Other above (the form and the API enforce it).
+        sel('commissionType', 'Commission Type', 'opportunity_commission_type', { lock: true }),
+        // The payee's bank details, shown and required while Commission Type is Other (as on the Organization form).
+        t('accountName', 'Account Name', { lock: true }),
+        t('accountNo', 'Account No', { lock: true }),
+        t('bankName', 'Bank Name', { lock: true }),
+        t('ifscCode', 'IFSC Code', { type: 'uppercase', lock: true }),
+        t('panNumber', 'PAN Number', { type: 'uppercase', lock: true }),
         sel('addDocument', 'Add Document', 'opportunity_add_document'),
     ]),
 
