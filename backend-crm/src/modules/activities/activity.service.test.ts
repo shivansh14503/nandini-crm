@@ -62,6 +62,27 @@ describe('mergeActivityPatch', () => {
         assert.equal(same.organizationId, 'org1');
     });
 
+    it('keeps the organization and contact when the related record is cleared', () => {
+        const stored = { organizationId: 'org1', organizationName: 'ACME', contactId: 'c1', contact: 'Asha' };
+        for (const patch of [
+            { relatedModule: null, relatedId: null, relatedTo: null },
+            { relatedModule: '', relatedId: '', relatedTo: '' },
+            { relatedModule: null, relatedId: null },
+        ]) {
+            const merged = mergeActivityPatch(before, patch);
+            assert.deepEqual(
+                { organizationId: merged.organizationId, organizationName: merged.organizationName, contactId: merged.contactId, contact: merged.contact },
+                stored,
+                JSON.stringify(patch),
+            );
+            assert.equal(merged.relatedId ?? null, patch.relatedId);
+        }
+        // Clearing it while retyping the organization still drops only the organization's id.
+        const retyped = mergeActivityPatch(before, { relatedModule: null, relatedId: null, organizationName: 'Globex' });
+        assert.equal('organizationId' in retyped, false);
+        assert.equal(retyped.contactId, 'c1');
+    });
+
     it('switches between timed and all-day', () => {
         const allDay = { ...before, allDay: true, startDay: '2026-11-26', endDay: '2026-11-27' };
         const timed = mergeActivityPatch(allDay, { allDay: false, startAt: '2026-11-26T04:30:00.000Z' });

@@ -148,8 +148,9 @@ const renamesLink = (patch: Record<string, unknown>, before: ActivityDto, key: '
 
 /**
  * The stored record merged with a patch, ready to parse. Retyping a name without picking a record drops the old
- * link; picking another related record lets it fill the organization and contact unless the patch sends them; and
- * leaving all-day drops the days (switching to it without days keeps the day of the timed start).
+ * link; picking another related record lets it fill the organization and contact unless the patch sends them
+ * (clearing the related record keeps them, as there is nothing to fill them from); and leaving all-day drops the
+ * days (switching to it without days keeps the day of the timed start).
  */
 export function mergeActivityPatch(before: ActivityDto, patch: Record<string, unknown>): Record<string, unknown> {
     const merged: Record<string, unknown> = { ...before, ...patch };
@@ -159,10 +160,11 @@ export function mergeActivityPatch(before: ActivityDto, patch: Record<string, un
         delete merged.relatedId;
         if (!('relatedModule' in patch)) delete merged.relatedModule;
     }
-    const relinked =
+    const pickedAnother =
         ('relatedId' in patch || 'relatedModule' in patch) &&
+        nameKey(merged.relatedId) !== '' &&
         (nameKey(merged.relatedId) !== nameKey(before.relatedId) || nameKey(merged.relatedModule) !== nameKey(before.relatedModule));
-    if (relinked) {
+    if (pickedAnother) {
         if (!('organizationId' in patch)) {
             delete merged.organizationId;
             if (!('organizationName' in patch)) delete merged.organizationName;

@@ -4,6 +4,7 @@ import type { TransactionClient } from '../../config/prisma.js';
 import type { AuthUser } from '../../types/user.types.js';
 import { HttpError } from '../../utils/httpError.js';
 import { LINK_FORBIDDEN_MESSAGE, linksFromTarget, relatedChanged, resolveActivityLinks, TARGET_MAPPERS, toLinkTarget } from './activity.links.js';
+import { clipLabel } from '../shared/opportunityLabel.js';
 import { activityInputSchema } from './activity.validator.js';
 
 const owned = { id: 'r1', assignedTo: 'palak', createdBy: 'palak', isDeleted: false };
@@ -50,6 +51,26 @@ describe('TARGET_MAPPERS', () => {
         assert.equal(TARGET_MAPPERS.tickets({ ...owned, ...linked, ticketNumber: 'TKT-1', ticketSubject: 'Login fails' }).label, 'Login fails');
         assert.equal(TARGET_MAPPERS.contracts({ ...owned, ...linked, contractNumber: 'CTR-1', contractTitle: '' }).label, 'ACME');
         assert.equal(TARGET_MAPPERS.contracts({ ...owned, ...linked, contractNumber: 'CTR-1', contractTitle: 'AMC' }).module, 'contracts');
+    });
+
+    it("clips a nameless opportunity's product list to the Related To column", () => {
+        const products = Array.from({ length: 12 }, (_, i) => `Product category number ${String(i + 1).padStart(2, '0')}`);
+        const row = { ...owned, ...linked, opportunityCode: 'OPP-0002', opportunityName: null, productCategoryJson: JSON.stringify(products) };
+        const label = TARGET_MAPPERS.opportunities(row).label;
+        assert.ok(products.join(', ').length > 200);
+        assert.equal(label.length, 200);
+        assert.ok(label.startsWith('Product category number 01, Product category number 02'));
+        assert.ok(label.endsWith('…'));
+        // A name or a short list is kept as it is.
+        assert.equal(TARGET_MAPPERS.opportunities({ ...row, opportunityName: 'Renewal 2026' }).label, 'Renewal 2026');
+        assert.equal(TARGET_MAPPERS.opportunities({ ...row, productCategoryJson: '["CRM"]' }).label, 'CRM');
+    });
+
+    it('clips labels without splitting a surrogate pair', () => {
+        assert.equal(clipLabel('abcdef', 6), 'abcdef');
+        assert.equal(clipLabel('abcdefg', 6), 'abcde…');
+        assert.equal(clipLabel('abc  defg', 6), 'abc…');
+        assert.equal(clipLabel('abcd😀ef', 6), 'abcd…');
     });
 
     it('drops the check-only fields for the picker', () => {

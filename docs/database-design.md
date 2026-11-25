@@ -452,13 +452,14 @@ Calls, meetings, tasks, notes and every other Followup Type (migration `20261126
 
 `Activity`: `followupType` (option of `shared_followup_type`, default `Call`), `subject`, `status` (`activity_status`,
 default `Planned`), `assignedTo` (the owner; row-level scope), the linked record (`relatedModule` + `relatedId`, with
-its label `relatedTo` and number `relatedCode` kept for display and search; no foreign key), `organizationName` +
-`organizationId` → `Organization` and `contact` + `contactId` → `Contact` (filled from the linked record, editable;
-both `NO ACTION`, renames written through), schedule (`startAt`, `endAt`, `allDay`, `timeZone` default
-`Asia/Kolkata`, `location`), `reminder` (`activity_reminder` label) with the system columns `remindAt` (UTC, null when
-no reminder applies) and `reminderSentAt` (set by the reminder job, Phase 1 PR3; cleared when `remindAt` changes),
-outcome (`customerResponse`, `remarks`, `completedAt`, `completedBy`), `revision` (+1 on every schedule-relevant
-change: subject, type, times, all-day, location, owner, status, attendees added or removed), `customDataJson`,
+its label `relatedTo` (at most 200 characters, cut with `…`) and number `relatedCode` kept for display and search; no
+foreign key), `organizationName` + `organizationId` → `Organization` and `contact` + `contactId` → `Contact` (filled
+from the linked record, editable, kept when the link is cleared; both `NO ACTION`, renames written through),
+schedule (`startAt`, `endAt`, `allDay`, `timeZone` default `Asia/Kolkata`, `location`), `reminder`
+(`activity_reminder` label) with the system columns `remindAt` (UTC, null when no reminder applies) and
+`reminderSentAt` (set by the reminder job, Phase 1 PR3; cleared when `remindAt` changes), outcome
+(`customerResponse`, `remarks`, `completedAt`, `completedBy`), `revision` (+1 on every schedule-relevant change:
+subject, type, times, all-day, location, owner, status, attendees added or removed), `customDataJson`,
 audit/soft-delete.
 
 Schedule rules (API): `startAt` / `endAt` are UTC instants; `endAt` ≥ `startAt` and at most 31 days after it; a Note

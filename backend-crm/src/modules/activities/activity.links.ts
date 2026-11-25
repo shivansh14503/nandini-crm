@@ -1,3 +1,4 @@
+import { FIELD_MAX_LENGTH } from '../../config/fieldLimits.js';
 import { prisma, type TransactionClient } from '../../config/prisma.js';
 import type { AuthUser } from '../../types/user.types.js';
 import type { EntityCodePrefix } from '../../utils/codeGenerator.js';
@@ -104,7 +105,9 @@ export const TARGET_MAPPERS = {
             contact: string;
             contactId: string | null;
         },
-    ) => target('opportunities', row, { ...row, code: row.opportunityCode, label: opportunityLabel(row) }),
+    ) =>
+        // A nameless opportunity's label lists its products, which can exceed `Activity.relatedTo` (NVARCHAR(200)).
+        target('opportunities', row, { ...row, code: row.opportunityCode, label: opportunityLabel(row, FIELD_MAX_LENGTH.title) }),
     contacts: (row: Owned & { contactCode: string; name: string; organizationName: string; organizationId: string | null }) =>
         target('contacts', row, { ...row, code: row.contactCode, label: row.name, contact: row.name, contactId: row.id }),
     organizations: (row: Owned & { accountCode: string; organizationName: string }) =>
