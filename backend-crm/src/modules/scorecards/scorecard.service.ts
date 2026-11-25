@@ -6,6 +6,8 @@ import { runInTransaction } from '../shared/transactions.js';
 import { HttpError } from '../../utils/httpError.js';
 import { toIso } from '../../utils/mappers.js';
 import {
+    isBuiltInAmountKey,
+    moduleHasBuiltInAmount,
     saveScorecardSchema,
     scorecardModuleParamSchema,
     scorecardOptionsSchema,
@@ -14,7 +16,8 @@ import {
 
 /**
  * Scorecards: the summary cards above a module's list screen. The admin picks a single-choice dropdown field (one
- * card per option, plus "All"), an optional amount field each card totals, and a color per option; the colors can
+ * card per option, plus "All"), an optional amount field (or one of the list's built-in totals, `builtin.…`) each
+ * card totals, and a color per option; the colors can
  * also mark that field in the list column and the record view. Counting runs in the browser over the loaded list.
  */
 
@@ -77,7 +80,16 @@ export const scorecardService = {
         const input = saveScorecardSchema.parse(body);
 
         const field = await requireField(module, input.fieldKey, DROPDOWN_FIELD_TYPES, 'dropdown field');
-        if (input.currencyFieldKey) await requireField(module, input.currencyFieldKey, CURRENCY_FIELD_TYPES, 'currency field');
+        if (input.currencyFieldKey) {
+            // A built-in total (Grand Total, Tax, …) the module's list works out itself, else an amount form field.
+            if (isBuiltInAmountKey(input.currencyFieldKey)) {
+                if (!moduleHasBuiltInAmount(module, input.currencyFieldKey)) {
+                    throw HttpError.badRequest("The selected currency field is not available on this module's list.");
+                }
+            } else {
+                await requireField(module, input.currencyFieldKey, CURRENCY_FIELD_TYPES, 'currency field');
+            }
+        }
 
         // Only values of the field's dropdown (archived ones included, so old records keep their color).
         if (field.dropdownCategoryId && input.options.length > 0) {

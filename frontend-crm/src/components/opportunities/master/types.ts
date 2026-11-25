@@ -1,8 +1,8 @@
+/** Quick view pills ('all' = none); the sales stage is picked on the stage cards. */
 export type OpportunityFilterTab =
     | 'all'
     | 'open'
-    | 'closing_soon'
-    | 'won'
+    | 'followup_today'
     | 'my_deals'
     | 'high_value';
 

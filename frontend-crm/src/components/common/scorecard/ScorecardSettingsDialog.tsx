@@ -13,6 +13,7 @@ import {
     DialogContent,
     DialogTitle,
     IconButton,
+    ListSubheader,
     MenuItem,
     Popover,
     Switch,
@@ -74,18 +75,30 @@ function optionsFor(
         });
 }
 
-/** Saved scorecard, or a starting point: the module's status / stage dropdown with suggested colors. */
-function initialDraft(configs: FormConfigsPayload | null, module: CrmModuleKey, config: ScorecardConfig | null): Draft {
+/** The screen's cards before an admin saves a scorecard (see `useModuleScorecard`'s `defaultScorecard`). */
+type DefaultScorecard = Pick<ScorecardConfig, 'fieldKey' | 'options'>;
+
+/**
+ * Saved scorecard, else the screen's default cards, else a starting point: the module's status / stage dropdown
+ * with suggested colors.
+ */
+function initialDraft(
+    configs: FormConfigsPayload | null,
+    module: CrmModuleKey,
+    config: ScorecardConfig | DefaultScorecard | null
+): Draft {
     const fields = scorecardDropdownFields(configs, module);
     const savedField = config && fields.some((f) => f.fieldKey === config.fieldKey) ? config.fieldKey : '';
     const fieldKey = savedField || (fields.find((f) => /status|stage/i.test(f.fieldKey)) ?? fields[0])?.fieldKey || '';
     const saved = savedField ? config?.options ?? [] : [];
+    // Only a saved scorecard has these; the default cards start with both colors on, like a new scorecard.
+    const savedConfig = config && 'listViewColor' in config ? config : null;
     return {
         fieldKey,
-        currencyFieldKey: (savedField && config?.currencyFieldKey) || '',
+        currencyFieldKey: (savedField && savedConfig?.currencyFieldKey) || '',
         options: fieldKey ? optionsFor(configs, module, fieldKey, saved) : [],
-        listViewColor: config?.listViewColor ?? true,
-        drawerViewColor: config?.drawerViewColor ?? true,
+        listViewColor: savedConfig?.listViewColor ?? true,
+        drawerViewColor: savedConfig?.drawerViewColor ?? true,
     };
 }
 
@@ -102,6 +115,13 @@ export interface ScorecardSettingsDialogProps {
     onClose: () => void;
     /** After a save or reset, e.g. to show a toast. */
     onSaved?: (message: string) => void;
+    /** The screen's own cards while nothing is saved: the dialog starts from them. */
+    defaultScorecard?: DefaultScorecard | null;
+    /**
+     * Totals the screen works out itself, offered above the form's amount fields. The first is what the cards
+     * total when nothing is picked (saved as no currency field). Unset = "None (counts only)".
+     */
+    builtInAmounts?: readonly { key: string; label: string }[];
 }
 
 /**
@@ -132,17 +152,18 @@ export function ScorecardSettingsDialog(props: ScorecardSettingsDialogProps) {
     );
 }
 
-function ScorecardSettingsBody({ module, onClose, onSaved }: ScorecardSettingsDialogProps) {
+function ScorecardSettingsBody({ module, onClose, onSaved, defaultScorecard, builtInAmounts }: ScorecardSettingsDialogProps) {
     const configs = useFormConfigs();
     const config = useScorecard(module);
     const saveMutation = useSaveScorecard(module);
     const resetMutation = useResetScorecard(module);
-    const [draft, setDraft] = useState<Draft>(() => initialDraft(configs, module, config));
+    const [draft, setDraft] = useState<Draft>(() => initialDraft(configs, module, config ?? defaultScorecard ?? null));
     const [error, setError] = useState<string | null>(null);
     const [colorAnchor, setColorAnchor] = useState<{ el: HTMLElement; value: string } | null>(null);
 
     const dropdownFields = useMemo(() => scorecardDropdownFields(configs, module), [configs, module]);
     const currencyFields = useMemo(() => scorecardCurrencyFields(configs, module), [configs, module]);
+    const [defaultBuiltIn, ...otherBuiltIns] = builtInAmounts ?? [];
     const busy = saveMutation.isPending || resetMutation.isPending;
     const shownCount = draft.options.filter((o) => !o.hidden).length;
 
@@ -338,24 +359,53 @@ function ScorecardSettingsBody({ module, onClose, onSaved }: ScorecardSettingsDi
                             size="small"
                             value={draft.currencyFieldKey}
                             onChange={(e) => setDraft((prev) => ({ ...prev, currencyFieldKey: e.target.value }))}
-                            disabled={busy || currencyFields.length === 0}
+                            disabled={busy || (currencyFields.length === 0 && otherBuiltIns.length === 0)}
                             helperText={
-                                currencyFields.length === 0
-                                    ? 'Add an Amount field to this module’s form to total it on the cards.'
-                                    : 'Each card also shows the total of this field.'
+                                defaultBuiltIn
+                                    ? 'Each card also shows the total of this value.'
+                                    : currencyFields.length === 0
+                                      ? 'Add an Amount field to this module’s form to total it on the cards.'
+                                      : 'Each card also shows the total of this field.'
                             }
-                            slotProps={{ select: { displayEmpty: true } }}
+                            slotProps={{ select: { displayEmpty: true, MenuProps: { slotProps: { paper: { sx: { maxHeight: 360 } } } } } }}
                         >
                             <MenuItem value="">
-                                <Typography component="span" sx={{ color: 'var(--mui-palette-text-muted)', fontSize: 'inherit' }}>
-                                    None (counts only)
-                                </Typography>
+                                {defaultBuiltIn ? (
+                                    <>
+                                        {defaultBuiltIn.label}
+                                        <Typography component="span" sx={{ ml: 0.75, color: 'var(--mui-palette-text-muted)', fontSize: 'inherit' }}>
+                                            (default)
+                                        </Typography>
+                                    </>
+                                ) : (
+                                    <Typography component="span" sx={{ color: 'var(--mui-palette-text-muted)', fontSize: 'inherit' }}>
+                                        None (counts only)
+                                    </Typography>
+                                )}
                             </MenuItem>
+                            {otherBuiltIns.map((a) => (
+                                <MenuItem key={a.key} value={a.key}>
+                                    {a.label}
+                                </MenuItem>
+                            ))}
+                            {otherBuiltIns.length > 0 && currencyFields.length > 0 && (
+                                <ListSubheader sx={{ lineHeight: '32px', fontSize: '0.72rem', fontWeight: 700, color: 'var(--mui-palette-text-secondary)', backgroundColor: 'var(--mui-palette-background-paper)' }}>
+                                    Form fields
+                                </ListSubheader>
+                            )}
                             {currencyFields.map((f) => (
                                 <MenuItem key={f.fieldKey} value={f.fieldKey}>
                                     {f.label}
                                 </MenuItem>
                             ))}
+                            {/* A saved pick that is no longer offered still shows (and can be changed). */}
+                            {draft.currencyFieldKey &&
+                                !otherBuiltIns.some((a) => a.key === draft.currencyFieldKey) &&
+                                !currencyFields.some((f) => f.fieldKey === draft.currencyFieldKey) && (
+                                    <MenuItem value={draft.currencyFieldKey} sx={{ display: 'none' }}>
+                                        {draft.currencyFieldKey}
+                                    </MenuItem>
+                                )}
                         </TextField>
 
                         <Typography sx={{ ...sectionLabelSx, mt: 2.25 }}>Options</Typography>

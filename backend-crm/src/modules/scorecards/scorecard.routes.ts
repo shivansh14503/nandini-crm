@@ -10,6 +10,7 @@ import { scorecardService } from './scorecard.service.js';
  *   GET    /           { [module]: ScorecardDto } for every configured module (any signed-in user)
  *   ── Admin only ──
  *   PUT    /:module    { fieldKey, currencyFieldKey?, options: [{ value, color, hidden? }], listViewColor, drawerViewColor }
+ *                      (currencyFieldKey: an amount / number form field, or a built-in total of the list such as builtin.grandTotal)
  *   DELETE /:module    back to the screen's built-in cards
  */
 const router = Router();

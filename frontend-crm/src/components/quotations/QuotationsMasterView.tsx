@@ -4,11 +4,11 @@ import React, { useState, useMemo, useCallback } from 'react';
 import { useResetTab } from '@/hooks/useResetTab';
 import { useRouter } from 'next/navigation';
 import RequestQuoteOutlinedIcon from '@mui/icons-material/RequestQuoteOutlined';
-import DraftsOutlinedIcon from '@mui/icons-material/DraftsOutlined';
-import SendOutlinedIcon from '@mui/icons-material/SendOutlined';
-import CheckCircleOutlinedIcon from '@mui/icons-material/CheckCircleOutlined';
-import CancelOutlinedIcon from '@mui/icons-material/CancelOutlined';
+import AccountCircleOutlinedIcon from '@mui/icons-material/AccountCircleOutlined';
+import WorkspacePremiumOutlinedIcon from '@mui/icons-material/WorkspacePremiumOutlined';
 
+import { StatusSummaryCards, StatusSummaryCardsSkeleton } from '../common/StatusSummaryCards';
+import { useModuleScorecard } from '../common/scorecard/useModuleScorecard';
 import { CommonMasterView } from '../common/CommonMasterView';
 import { useTableFilter } from '../common/TableFilter';
 import { MasterHeaderActions } from '../common/MasterHeaderActions';
@@ -17,21 +17,28 @@ import { AppToast } from '../common/AppToast';
 import { useSaveFlash } from '@/utils/saveFlash';
 import { type DataTableFilterItem } from '../common/DataTable';
 import { ROUTES } from '@/config/constants';
+import { useAuth } from '@/context/AuthContext';
 import type { Quotation } from '@/types/quotation.types';
 import { useQuotations, useDeleteQuotation, useBulkDeleteQuotations } from '@/hooks/queries';
 import { useShowRecordNumber } from '@/hooks/queries/useDocumentSeries';
 import { QuotationDetailDrawer } from './QuotationDetailDrawer';
 import { useSearchScope, useSearchScopedRows } from '../search/SearchScope';
 import { useQuotationColumns } from './quotationColumns';
+import { QUOTATION_CARD_AMOUNTS, useQuoteStageScorecard } from './quoteStageScorecard';
 
-export type QuotationFilterTab = 'all' | 'draft' | 'sent' | 'accepted' | 'rejected';
+/** Quick-view pills ('all' = none picked); the quote stage lives on the stage cards. */
+export type QuotationFilterTab = 'all' | 'high_value' | 'my_quotes';
 /** Any column's field key: the table sorts on `row[sortField]`, including columns added from the form. */
 export type QuotationSortField = string;
 
 /** Stable empty list while the first page loads (keeps memoized filters from recomputing). */
 const NO_RECORDS: Quotation[] = [];
+/** "High Value" pill: Grand Total of ₹1 lakh or more, as on Opportunities. */
+const HIGH_VALUE = 100000;
 export function QuotationsMasterView() {
     const router = useRouter();
+    const { user } = useAuth();
+    const currentUsername = user?.username || '';
 
     // On the global search results page the table shows the matched records (any owner) instead of this list.
     const embeddedInSearch = Boolean(useSearchScope());
@@ -125,60 +132,61 @@ export function QuotationsMasterView() {
         }
     };
 
-    // ── Filter Tabs Configuration ─────────────────────────────────────────────
+    // ── Quick View Pills ──────────────────────────────────────────────────────
+    // The quote stage (All / Draft / ...) lives on the stage cards; the pills are other views and toggle off on
+    // re-click, as on Opportunities.
+    const isMine = useCallback(
+        (q: Quotation) => Boolean(currentUsername) && (q.assignedTo || '').includes(currentUsername),
+        [currentUsername]
+    );
     const filterItems: DataTableFilterItem<QuotationFilterTab>[] = useMemo(() => {
         return [
             {
-                id: 'all',
-                label: 'All Quotations',
-                icon: <RequestQuoteOutlinedIcon sx={{ fontSize: 16 }} />,
-                count: quotations.length,
+                id: 'high_value',
+                label: 'High Value (₹1L+)',
+                icon: <WorkspacePremiumOutlinedIcon sx={{ fontSize: 16 }} />,
+                count: quotations.filter((q) => (Number(q.grandTotal) || 0) >= HIGH_VALUE).length,
+                activeColor: 'var(--crm-violet-600)',
             },
             {
-                id: 'draft',
-                label: 'Draft',
-                icon: <DraftsOutlinedIcon sx={{ fontSize: 16 }} />,
-                count: quotations.filter((q) => q.status === 'Draft').length,
-                activeColor: 'var(--mui-palette-text-secondary)',
-            },
-            {
-                id: 'sent',
-                label: 'Sent',
-                icon: <SendOutlinedIcon sx={{ fontSize: 16 }} />,
-                count: quotations.filter((q) => q.status === 'Sent').length,
-                activeColor: 'var(--mui-palette-primary-main)',
-            },
-            {
-                id: 'accepted',
-                label: 'Accepted',
-                icon: <CheckCircleOutlinedIcon sx={{ fontSize: 16 }} />,
-                count: quotations.filter((q) => q.status === 'Accepted').length,
-                activeColor: 'var(--crm-emerald-600)',
-            },
-            {
-                id: 'rejected',
-                label: 'Rejected',
-                icon: <CancelOutlinedIcon sx={{ fontSize: 16 }} />,
-                count: quotations.filter((q) => q.status === 'Rejected').length,
-                activeColor: 'var(--mui-palette-error-main)',
+                id: 'my_quotes',
+                label: 'My Quotes',
+                icon: <AccountCircleOutlinedIcon sx={{ fontSize: 16 }} />,
+                count: quotations.filter(isMine).length,
             },
         ];
-    }, [quotations]);
+    }, [quotations, isMine]);
+
+    /** Quotations in the active pill view: the stage cards count these, so "My Quotes" shows my quotes by stage. */
+    const tabQuotations = useMemo(() => {
+        if (activeTab === 'high_value') return quotations.filter((q) => (Number(q.grandTotal) || 0) >= HIGH_VALUE);
+        if (activeTab === 'my_quotes') return quotations.filter(isMine);
+        return quotations;
+    }, [quotations, activeTab, isMine]);
+
+    // ── Stage Cards ───────────────────────────────────────────────────────────
+    // One card per quote stage with its count and Grand Total. From the pencil on "All Quotations" an admin can
+    // recolor / hide stages, count by another dropdown or total another value (the same settings as Opportunities).
+    const goToFirstPage = useCallback(() => setPage(0), []);
+    const showSavedToast = useCallback((message: string) => setToast({ open: true, message, severity: 'success' }), []);
+    const quotationsIcon = useMemo(() => <RequestQuoteOutlinedIcon />, []);
+    const stageScorecard = useQuoteStageScorecard();
+    const scorecard = useModuleScorecard<Quotation>({
+        module: 'quotations',
+        rows: tabQuotations,
+        allLabel: 'All Quotations',
+        allIcon: quotationsIcon,
+        onActiveChange: goToFirstPage,
+        onSaved: showSavedToast,
+        defaultScorecard: stageScorecard,
+        amounts: QUOTATION_CARD_AMOUNTS,
+    });
 
     // ── Filtering Logic ───────────────────────────────────────────────────────
     const showNumber = useShowRecordNumber();
+    const { matches: matchesScorecard } = scorecard;
     const filteredQuotations = useMemo(() => {
-        let result = [...quotations];
-
-        if (activeTab === 'draft') {
-            result = result.filter((q) => q.status === 'Draft');
-        } else if (activeTab === 'sent') {
-            result = result.filter((q) => q.status === 'Sent');
-        } else if (activeTab === 'accepted') {
-            result = result.filter((q) => q.status === 'Accepted');
-        } else if (activeTab === 'rejected') {
-            result = result.filter((q) => q.status === 'Rejected');
-        }
+        let result = tabQuotations.filter(matchesScorecard);
 
         if (searchQuery.trim()) {
             const q = searchQuery.toLowerCase().trim();
@@ -208,7 +216,7 @@ export function QuotationsMasterView() {
         });
 
         return result;
-    }, [quotations, activeTab, searchQuery, sortField, sortOrder, showNumber]);
+    }, [tabQuotations, matchesScorecard, searchQuery, sortField, sortOrder, showNumber]);
 
     const paginatedQuotations = useMemo(() => {
         const start = page * rowsPerPage;
@@ -232,14 +240,26 @@ export function QuotationsMasterView() {
                 { label: 'Sales' },
                 { label: 'Quotations' },
             ]}
+            summary={
+                listLoading || scorecard.loading ? (
+                    <StatusSummaryCardsSkeleton count={stageScorecard.options.length + 1} singleRow withAmount />
+                ) : scorecard.configured ? (
+                    <StatusSummaryCards<string>
+                        items={scorecard.items}
+                        activeId={scorecard.activeId}
+                        onChange={scorecard.setActiveId}
+                        onEdit={scorecard.onEdit}
+                        singleRow
+                    />
+                ) : null
+            }
             filterConfig={{
                 filters: filterItems,
                 activeFilter: activeTab,
                 onFilterChange: (tab) => {
-                    setActiveTab(tab);
+                    setActiveTab((prev) => (prev === tab ? 'all' : tab));
                     setPage(0);
                 },
-                variant: 'pill',
             }}
             tableId="quotations"
             tableFilter={tableFilter}
@@ -335,6 +355,8 @@ export function QuotationsMasterView() {
                     onClose={() => setToast((prev) => ({ ...prev, open: false }))}
                 />
             }
-        />
+        >
+            {scorecard.dialog}
+        </CommonMasterView>
     );
 }
