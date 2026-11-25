@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useCallback } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import {
     Box,
     Typography,
@@ -20,6 +20,10 @@ import ClearIcon from '@mui/icons-material/Clear';
 import { useFormContext, useWatch, type Path, type PathValue } from 'react-hook-form';
 
 import { FormField, fieldSx } from '../FormField';
+import { LookupField } from '../LookupField';
+import { ProductLookupModal } from '@/components/common/lookup/PresetLookupModals';
+import { useProducts } from '@/hooks/queries/useProducts';
+import type { Product } from '@/types/product.types';
 import { FIELD_MAX_LENGTH, FIELD_SIZE_WIDTH } from '../fieldSizing';
 import { useFormMode } from '@/context/FormModeContext';
 import { CrmLineItemsReadOnly } from './CrmLineItemsReadOnly';
@@ -60,19 +64,14 @@ export interface CrmLineItemsSectionProps {
     error?: string;
 }
 
-// Product catalog for quick autocomplete / selection in the line items
-export const PRODUCT_CATALOG: { name: string; defaultPrice: number; category: string }[] = [
-    { name: 'TallyPrime Silver (Single User)', defaultPrice: 22500, category: 'Tally' },
-    { name: 'TallyPrime Gold (Multi User)', defaultPrice: 67500, category: 'Tally' },
-    { name: 'Tally Software Services (TSS) Renewal - Gold', defaultPrice: 15750, category: 'Tally' },
-    { name: 'Tally Software Services (TSS) Renewal - Silver', defaultPrice: 5250, category: 'Tally' },
-    { name: 'Biz Analyst Mobile App (Annual - 5 Users)', defaultPrice: 12000, category: 'Biz Analyst' },
-    { name: 'CredFlow Credit Management Cloud Platform', defaultPrice: 36000, category: 'CredFlow' },
-    { name: 'Acronis Cyber Protect Cloud Standard (500GB)', defaultPrice: 42000, category: 'Acronis' },
-    { name: 'Connect 21 Multi-Branch Sync Engine', defaultPrice: 18500, category: 'Connect 21' },
-    { name: 'WhatsApp Automation for Tally Invoicing', defaultPrice: 14500, category: 'Automation' },
-    { name: 'Implementation & Custom Workflow Engineering', defaultPrice: 35000, category: 'Services' },
-];
+/** The line's tax rate for a catalog product (`GST 18%`, or `--None--` when it carries no tax). */
+function productTaxRate(product: Product): string {
+    if (product.taxType === 'None') return '--None--';
+    const rate = product.taxRate ? `GST ${product.taxRate}` : '';
+    return OPPORTUNITY_TAX_RATES.includes(rate) ? rate : 'GST 18%';
+}
+
+const NO_PRODUCTS: Product[] = [];
 
 export function parseTaxRate(taxRateStr: string): number {
     if (!taxRateStr || taxRateStr === '--None--' || taxRateStr === 'GST 0%') return 0;
@@ -152,7 +151,7 @@ export function CrmLineItemsEditor({ value, onChange, error }: CrmLineItemsEdito
     const handleAddLineItem = () => {
         const newItem: OpportunityLineItem = {
             id: `line-${Date.now()}`,
-            productId: 'prod-tally',
+            productId: '',
             productName: '',
             quantity: 1,
             amount: 0,
@@ -206,16 +205,31 @@ export function CrmLineItemsEditor({ value, onChange, error }: CrmLineItemsEdito
         recalculateTotals(updated, lumpSumDiscount);
     };
 
-    // ── Select product from catalog ─────────────────────────────────────────────
-    const handleSelectProduct = (index: number, productName: string) => {
-        const found = PRODUCT_CATALOG.find((p) => p.name === productName);
-        const amount = found ? found.defaultPrice : 0;
+    // ── Select product from the catalog (Product Catalog popup or a typed name) ─
+    const { data: productData } = useProducts();
+    const products = useMemo(() => (productData ?? NO_PRODUCTS).filter((p) => p.isActive !== false), [productData]);
+    const productNames = useMemo(() => products.map((p) => p.productName), [products]);
+    // Line whose Product Catalog popup is open.
+    const [catalogLine, setCatalogLine] = useState<number | null>(null);
+
+    /** Fills the line from a catalog product: name, MRP as the unit price, tax rate and (when empty) description. */
+    const handleSelectProduct = (index: number, product: Product) => {
+        const amount = Math.max(0, Number(product.mrp) || 0);
         handleUpdateLineItem(index, {
-            productName,
+            productId: product.id,
+            productName: product.productName,
             amount,
             salePrice: amount,
-            taxRate: 'GST 18%',
+            taxRate: productTaxRate(product),
+            ...(lineItems[index]?.description?.trim() ? {} : { description: product.description || '' }),
         });
+    };
+
+    /** A typed name: a catalog product's exact name fills the line from it; anything else is kept as a custom item. */
+    const handleProductNameChange = (index: number, name: string) => {
+        const match = products.find((p) => p.productName.trim().toLowerCase() === name.trim().toLowerCase());
+        if (match && name === match.productName) handleSelectProduct(index, match);
+        else handleUpdateLineItem(index, { productName: name, productId: '' });
     };
 
     // ── Handle lump sum discount update ─────────────────────────────────────────
@@ -228,6 +242,15 @@ export function CrmLineItemsEditor({ value, onChange, error }: CrmLineItemsEdito
 
     return (
         <Box sx={{ p: { xs: 2, md: 3 } }}>
+            <ProductLookupModal
+                open={catalogLine !== null}
+                onClose={() => setCatalogLine(null)}
+                selectedValue={catalogLine !== null ? lineItems[catalogLine]?.productName : undefined}
+                onSelect={(product) => {
+                    if (catalogLine !== null) handleSelectProduct(catalogLine, product);
+                    setCatalogLine(null);
+                }}
+            />
             {error && (
                 <Alert severity="error" sx={{ mb: 3 }}>
                     {error}
@@ -381,25 +404,17 @@ export function CrmLineItemsEditor({ value, onChange, error }: CrmLineItemsEdito
                                             sx={fieldSx}
                                         />
 
-                                        {/* Product Lookup / Select */}
-                                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                                            <FormControl size="small" fullWidth sx={fieldSx}>
-                                                <Select
-                                                    value={item.productName || ''}
-                                                    displayEmpty
-                                                    onChange={(e) => handleSelectProduct(idx, e.target.value)}
-                                                >
-                                                    <MenuItem value="" disabled>
-                                                        -- Select Product --
-                                                    </MenuItem>
-                                                    {PRODUCT_CATALOG.map((p) => (
-                                                        <MenuItem key={p.name} value={p.name}>
-                                                            {p.name}
-                                                        </MenuItem>
-                                                    ))}
-                                                </Select>
-                                            </FormControl>
-                                        </Box>
+                                        {/* Product: type a name or pick from the Product Catalog popup */}
+                                        <LookupField
+                                            value={item.productName || ''}
+                                            onChange={(name) => handleProductNameChange(idx, name)}
+                                            options={productNames}
+                                            placeholder="Type or pick a product"
+                                            onLookupClick={() => setCatalogLine(idx)}
+                                            lookupTooltip="Open Product Catalog"
+                                            onClear={() => handleUpdateLineItem(idx, { productName: '', productId: '' })}
+                                            maxLength={FIELD_MAX_LENGTH.organizationName}
+                                        />
 
                                         {/* Amount (Unit price) */}
                                         <TextField
