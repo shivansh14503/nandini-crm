@@ -1,6 +1,6 @@
 # Nandini CRM — System Design
 
-> **Status:** living document. Describes the system as built (code as of 2026-11-25; audit context + ledger audit table, admin audit query API and screen, Users tab; Contracts module; Referrals module; Activities data model and API, Calendar Phase 1 PR1).
+> **Status:** living document. Describes the system as built (code as of 2026-11-25; audit context + ledger audit table, admin audit query API and screen, Users tab; Contracts module; Referrals module; Documents module; Activities data model and API, Calendar Phase 1 PR1).
 > Update it in the same change that alters architecture, infrastructure, Redis usage, queues or security.
 > Related: [Database design](database-design.md) · [API plan](api-plan.md) · [Build plan](build-plan.md)
 
@@ -10,7 +10,7 @@
 
 An internal sales and support CRM for Nandini Infosystems. Sales staff move work through
 **Leads → Opportunities → Quotations**, keep **Organizations** and **Contacts** as the customer master, log support
-**Tickets** and **Contracts**, and manage **Products**, **Partner Companies** and **Referrals**. Admins customise forms and dropdowns, number
+**Tickets** and **Contracts**, browse the **Documents** added on opportunities, and manage **Products**, **Partner Companies** and **Referrals**. Admins customise forms and dropdowns, number
 documents, maintain the city list and design printable PDF templates.
 
 ## 2. High-level architecture
@@ -421,7 +421,7 @@ flowchart TB
 | --- | --- |
 | No user management API/UI | Users come from the seed or direct DB edits. `ROUTES.ADMIN_USERS` exists in the frontend but has no page. `sessionService.revokeAll` is ready for deactivation / password change. |
 | Dashboard has no data API | The dashboard page is static; `cache:dashboard:*` is reserved. |
-| No automated frontend tests | Backend has 50 `node:test` files (pure logic: validators, numbering, PDF document, access control, audit, time zones, activities, referrals). No integration/E2E tests. |
+| No automated frontend tests | Backend has 51 `node:test` files (pure logic: validators, numbering, PDF document, access control, audit, time zones, activities, referrals, documents). No integration/E2E tests. |
 | Workers inside the API by default | Long imports share the event loop with requests unless `RUN_WORKERS=false` + separate worker. |
 | Rate limits fail open | Intentional for availability; brute-force protection disappears while Redis is down. |
 | Stale README PDF section | Describes the removed Handlebars engine. |

@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useDeferredValue, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useDeferredValue, useMemo, useRef, useState } from 'react';
 import {
     Box,
     Button,
@@ -28,6 +28,7 @@ import SearchIcon from '@mui/icons-material/Search';
 import AddIcon from '@mui/icons-material/Add';
 import RestartAltIcon from '@mui/icons-material/RestartAlt';
 import SearchOffIcon from '@mui/icons-material/SearchOff';
+import LockOutlinedIcon from '@mui/icons-material/LockOutlined';
 import { splitMulti, joinMulti } from '@/types/lookup.types';
 import type {
     LookupColumn,
@@ -47,6 +48,8 @@ export interface GenericLookupModalProps<T extends { id: string }> {
     filterFields?: LookupFilterField[];
     /** Filter values the dialog opens with (e.g. the text already typed in the field); "Clear" still resets to blank. */
     initialFilterValues?: LookupFilterValues;
+    /** Filters fixed at these values: always applied, shown locked (disabled, lock icon) and kept by "Clear". */
+    lockedFilterValues?: LookupFilterValues;
     /** Receives the filter values and the main search text. Defaults to text match + exact filter match. */
     searchPredicate?: LookupSearchPredicate<T>;
     selectedId?: string;
@@ -57,6 +60,8 @@ export interface GenericLookupModalProps<T extends { id: string }> {
     /** Shows a spinner instead of the empty state while data is being fetched. */
     loading?: boolean;
     emptyMessage?: string;
+    /** What the count beside the title counts (default "record" / "records"). */
+    recordLabel?: { one: string; other: string };
     /** Optional button beside Search / Clear, e.g. "Create Contact" when the record isn't there yet. */
     createAction?: { label: string; onClick: () => void };
 }
@@ -72,6 +77,23 @@ const inputSx = {
     },
     '& .MuiInputLabel-root': { fontSize: '0.8rem' },
 } as const;
+
+/** A locked filter: the soft fill of a locked form input, its value kept readable, a lock in place of the arrow. */
+const lockedFilterSx = {
+    '& .MuiOutlinedInput-root.Mui-disabled': {
+        backgroundColor: 'var(--mui-palette-background-subtle)',
+        '& .MuiOutlinedInput-notchedOutline': { borderColor: 'var(--mui-palette-border-main)' },
+    },
+    '& .MuiInputBase-input.Mui-disabled': { WebkitTextFillColor: 'var(--crm-slate-600)', color: 'var(--crm-slate-600)' },
+    '& .MuiInputLabel-root.Mui-disabled': { color: 'var(--mui-palette-text-secondary)' },
+    '& .MuiSelect-icon': { display: 'none' },
+} as const;
+
+const lockAdornment = (
+    <InputAdornment position="end" sx={{ mr: 0.5 }}>
+        <LockOutlinedIcon sx={{ fontSize: 16, color: 'var(--mui-palette-text-muted)' }} />
+    </InputAdornment>
+);
 
 const headCellSx = {
     fontSize: '0.68rem',
@@ -112,6 +134,7 @@ function LookupDialog<T extends { id: string }>({
     data,
     filterFields = [],
     initialFilterValues,
+    lockedFilterValues,
     searchPredicate,
     selectedId,
     searchPlaceholder = 'Search…',
@@ -119,37 +142,52 @@ function LookupDialog<T extends { id: string }>({
     showSearchBox = true,
     loading = false,
     emptyMessage,
+    recordLabel = { one: 'record', other: 'records' },
     createAction,
 }: GenericLookupModalProps<T>) {
     const [query, setQuery] = useState('');
     const [filters, setFilters] = useState<LookupFilterValues>(() => ({
         ...initialFilters(filterFields),
         ...initialFilterValues,
+        ...lockedFilterValues,
     }));
+    const isLocked = (key: string) => lockedFilterValues?.[key] !== undefined;
     const [page, setPage] = useState(0);
     const firstRowRef = useRef<HTMLTableRowElement>(null);
     const [sort, setSort] = useState<{ id: string; dir: 'asc' | 'desc' } | null>(null);
     const deferredQuery = useDeferredValue(query);
 
-    const filtered = useMemo(() => {
-        const q = deferredQuery.trim().toLowerCase();
-        const rows = data.filter((item) => {
-            if (searchPredicate) return searchPredicate(item, filters, q);
+    const matches = useCallback(
+        (item: T, values: LookupFilterValues, q: string) => {
+            if (searchPredicate) return searchPredicate(item, values, q);
             const filtersMatch = filterFields.every((f) => {
-                if (!filters[f.key]) return true;
-                if (f.type === 'multiselect') return splitMulti(filters[f.key]).includes(fieldValue(item, f.key));
-                return fieldValue(item, f.key) === filters[f.key];
+                if (!values[f.key]) return true;
+                if (f.type === 'multiselect') return splitMulti(values[f.key]).includes(fieldValue(item, f.key));
+                return fieldValue(item, f.key) === values[f.key];
             });
             if (!filtersMatch) return false;
             return !q || columns.some((c) => cellText(item, c).toLowerCase().includes(q));
-        });
+        },
+        [searchPredicate, filterFields, columns]
+    );
+
+    // The count beside the title: every record this picker can offer (its locked filters applied).
+    const recordCount = useMemo(() => {
+        if (!lockedFilterValues) return data.length;
+        const locked = { ...Object.fromEntries(filterFields.map((f) => [f.key, ''])), ...lockedFilterValues };
+        return data.filter((item) => matches(item, locked, '')).length;
+    }, [data, lockedFilterValues, filterFields, matches]);
+
+    const filtered = useMemo(() => {
+        const q = deferredQuery.trim().toLowerCase();
+        const rows = data.filter((item) => matches(item, filters, q));
         const sortCol = sort && columns.find((c) => c.id === sort.id);
         if (!sort || !sortCol) return rows;
         const dir = sort.dir === 'asc' ? 1 : -1;
         return [...rows].sort(
             (a, b) => dir * cellText(a, sortCol).localeCompare(cellText(b, sortCol), undefined, { sensitivity: 'base' })
         );
-    }, [data, deferredQuery, filters, filterFields, columns, searchPredicate, sort]);
+    }, [data, deferredQuery, filters, columns, matches, sort]);
 
     const pageCount = Math.max(1, Math.ceil(filtered.length / rowsPerPage));
     const safePage = Math.min(page, pageCount - 1);
@@ -158,6 +196,7 @@ function LookupDialog<T extends { id: string }>({
     const rangeEnd = safePage * rowsPerPage + pageRows.length;
 
     const updateFilter = (key: string, value: string) => {
+        if (isLocked(key)) return;
         setFilters((prev) => ({ ...prev, [key]: value }));
         setPage(0);
     };
@@ -169,7 +208,7 @@ function LookupDialog<T extends { id: string }>({
 
     const handleReset = () => {
         setQuery('');
-        setFilters(initialFilters(filterFields));
+        setFilters({ ...initialFilters(filterFields), ...lockedFilterValues });
         setPage(0);
     };
 
@@ -208,7 +247,7 @@ function LookupDialog<T extends { id: string }>({
                                 border: '1px solid var(--mui-palette-primary-softBorder)',
                             }}
                         >
-                            {data.length} records
+                            {recordCount} {recordCount === 1 ? recordLabel.one : recordLabel.other}
                         </Box>
                     </Box>
                     {subtitle && <Typography sx={{ fontSize: '0.78rem', color: 'var(--mui-palette-text-secondary)', mt: 0.3 }}>{subtitle}</Typography>}
@@ -268,8 +307,10 @@ function LookupDialog<T extends { id: string }>({
                                             const v = e.target.value as unknown as string | string[];
                                             updateFilter(f.key, joinMulti(typeof v === 'string' ? splitMulti(v) : v));
                                         }}
-                                        sx={inputSx}
+                                        disabled={isLocked(f.key)}
+                                        sx={isLocked(f.key) ? [inputSx, lockedFilterSx] : inputSx}
                                         slotProps={{
+                                            input: isLocked(f.key) ? { endAdornment: lockAdornment } : undefined,
                                             select: {
                                                 multiple: true,
                                                 renderValue: (v) => (v as string[]).join(', '),
@@ -291,7 +332,9 @@ function LookupDialog<T extends { id: string }>({
                                         label={f.label}
                                         value={filters[f.key] ?? ''}
                                         onChange={(e) => updateFilter(f.key, e.target.value)}
-                                        sx={inputSx}
+                                        disabled={isLocked(f.key)}
+                                        sx={isLocked(f.key) ? [inputSx, lockedFilterSx] : inputSx}
+                                        slotProps={isLocked(f.key) ? { input: { endAdornment: lockAdornment } } : undefined}
                                     >
                                         {(f.options ?? []).map((o) => (
                                             <MenuItem key={o.value} value={o.value} sx={{ fontSize: '0.82rem' }}>
@@ -307,7 +350,9 @@ function LookupDialog<T extends { id: string }>({
                                         placeholder={f.placeholder}
                                         value={filters[f.key] ?? ''}
                                         onChange={(e) => updateFilter(f.key, e.target.value)}
-                                        sx={inputSx}
+                                        disabled={isLocked(f.key)}
+                                        sx={isLocked(f.key) ? [inputSx, lockedFilterSx] : inputSx}
+                                        slotProps={isLocked(f.key) ? { input: { endAdornment: lockAdornment } } : undefined}
                                     />
                                 )}
                             </Grid>

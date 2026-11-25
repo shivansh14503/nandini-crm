@@ -57,6 +57,8 @@ export const ROUTES = {
     ACTIVITY_DETAIL: (id: string | number) => `/activities/${id}`,
     ACTIVITY_EDIT: (id: string | number) => `/activities/${id}/edit`,
     CALENDAR: '/calendar',
+    DOCUMENTS: '/documents',
+    DOCUMENT_DETAIL: (id: string | number) => `/documents/${id}`,
     REFERRALS: '/referrals',
     REFERRAL_NEW: '/referrals/new',
     REFERRAL_DETAIL: (id: string | number) => `/referrals/${id}`,

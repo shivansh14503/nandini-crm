@@ -26,6 +26,7 @@ export const queryKeys = {
         /** Business timezone, durations and reminders (GET /api/activities/meta). */
         meta: () => ['activities', 'meta'] as const,
     },
+    documents: createEntityKeys('documents'),
     leads: createEntityKeys('leads'),
     opportunities: createEntityKeys('opportunities'),
     quotations: createEntityKeys('quotations'),

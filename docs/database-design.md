@@ -1,6 +1,6 @@
 # Nandini CRM — Database Design
 
-> **Status:** living document, generated from `backend-crm/prisma/schema.prisma` and `prisma/migrations/` (73 migrations,
+> **Status:** living document, generated from `backend-crm/prisma/schema.prisma` and `prisma/migrations/` (74 migrations,
 > latest `20261126090000_activities`). Update it in the same change as any schema migration.
 > Related: [System design](system-design.md) · [API plan](api-plan.md) · [Build plan](build-plan.md)
 
@@ -12,7 +12,7 @@
 | --- | --- |
 | Engine | Microsoft SQL Server / Azure SQL (schema `dbo`) |
 | Access | Prisma 7 ORM through `@prisma/adapter-mssql`; a few raw SQL statements (`MERGE` for counters, `sp_getapplock` for locks, `OPENJSON`) |
-| Tables | **40** application tables + Prisma's `_prisma_migrations` |
+| Tables | **41** application tables + Prisma's `_prisma_migrations` |
 | Owned child tables ("sub tables") | 6: `EntityEmail`, `OpportunityLineItem`, `QuotationLineItem`, `PartnerCompanyContact`, `DropdownOption`, `ActivityAttendee` |
 | Migrations | `backend-crm/prisma/migrations/` (`npm run db:migrate` in dev, `npm run db:deploy` in prod) |
 | Seed | `backend-crm/prisma/seed.ts` (`npm run seed`) |
@@ -22,7 +22,7 @@
 | Domain | Tables |
 | --- | --- |
 | Identity | `Users` (model `User`) |
-| CRM core | `Organization`, `Contact`, `Lead`, `Opportunity`, `Quotation`, `Ticket`, `Contract`, `Product` |
+| CRM core | `Organization`, `Contact`, `Lead`, `Opportunity`, `Quotation`, `Ticket`, `Contract`, `Document`, `Product` |
 | Activities & calendar | `Activity`, `ActivityAttendee` |
 | Owned children | `EntityEmail`, `OpportunityLineItem`, `QuotationLineItem` |
 | Partner master | `PartnerCompany`, `PartnerCompanyContact` |
@@ -100,6 +100,8 @@ erDiagram
     Opportunity ||--o{ OpportunityLineItem : lineItems
     Opportunity ||--o{ Quotation : quotes
     Opportunity ||--o{ Contract : "contracted as"
+    Opportunity ||--o| Document : "documented by"
+    RecordFile ||--o{ Document : "file of"
     Quotation ||--o{ QuotationLineItem : lineItems
     Product ||--o{ OpportunityLineItem : "priced in"
     Product ||--o{ QuotationLineItem : "priced in"
@@ -200,8 +202,9 @@ billing (`tallySerialNo` — 9 digits starting with 7, checked by the API, `invo
 `commissionAmount` (DECIMAL(18,2), required above 0 when `Yes`, NULL when `No`), `commissionType` (fixed `Self` /
 `Other` while `Yes`; defaults to `Self` up to 1,000 and `Other` above), the commission payee's bank details kept only
 while `Other` (`accountName`, `accountNo`, `bankName`, `ifscCode`, `panNumber`: the Organization columns' sizes and
-rules), documentation (`addDocument` fixed `Yes` / `No`, must be `Yes` at Sales Stage `PO`; while `Yes`: `documentNo`,
-`documentDate`, `documentRemarks` and `documentFileId` → `RecordFile`, required; all cleared on `No`), totals (`currency`, `groupName`,
+rules), documentation (`addDocument` fixed `Yes` / `No`, must be `Yes` at Sales Stage `PO`; while `Yes` the opportunity
+has a `Document` row (§4.24) with Document No, Document Date, Remarks and the file, which the API returns on the
+opportunity as `documentNo`, `documentDate`, `documentRemarks`, `documentFile`; `No` deletes it), totals (`currency`, `groupName`,
 `lumpSumDiscount`, `totalAmount`, `totalDiscount`, `subtotal`, `totalTax`, `grandTotal` — recomputed and verified
 server-side), `customDataJson`, audit/soft-delete.
 
@@ -317,7 +320,7 @@ kept across a rename; an option without them falls back to 30 minutes and the ge
 `shared_followup_type` (Leads, Opportunities, Activities) has two system options, `Task` and `Note`, offered on
 Activities only: the Lead / Opportunity / Convert Lead forms hide them, their APIs refuse a change to one (a record
 already storing one keeps it), and neither can be the dropdown's default. Activities also have `activity_status` and
-`activity_reminder` (§4.24).
+`activity_reminder` (§4.25).
 
 `ModuleSetting` — module-level settings edited in Form Builder outside the fields: PK `(module, key)`, `valueJson`,
 `updatedBy`, timestamps. Today `leads` / `ratingNewLead` = `{ hot, warm }` (no row = default Hot 0–5 days, then Warm),
@@ -344,7 +347,7 @@ out when the layout is read (the builder says so and the next save drops it).
 | --- | --- |
 | `PdfTemplate` | `name`, `module` (`QUOTATION`), `isSystem` (seeded, read-only except active/default), `isDefault`, `isActive`, `pageSize`, `orientation`, `documentJson` (block document), `version` (optimistic concurrency), audit/soft-delete. Index `(module, isActive, isDeleted)` |
 | `PdfAsset` | Logos: `key` UNIQUE, `fileName`, `mimeType` (PNG/JPEG/WebP), `sizeBytes` (≤ 1 MB), `data` VARBINARY(MAX) |
-| `RecordFile` | Files uploaded to a record field (an opportunity's Upload Doc, `Opportunity.documentFileId`): `module`, `fileName`, `mimeType` (PDF, PNG/JPEG/WebP, Word, Excel; checked against the content), `sizeBytes` (≤ 10 MB), `data` VARBINARY(MAX), `createdBy`. Uploaded before the record saves, then linked by id |
+| `RecordFile` | Files uploaded to a record field (an opportunity's Upload Doc, `Document.documentFileId`): `module`, `fileName`, `mimeType` (PDF, PNG/JPEG/WebP, Word, Excel; checked against the content), `sizeBytes` (≤ 10 MB), `data` VARBINARY(MAX), `createdBy`. Uploaded before the record saves, then linked by id |
 | `PdfSavedItem` | Builder library: a saved `section` or `block` (`contentJson`) shared by a module's templates; soft delete |
 
 ### 4.16 `AuditLog`
@@ -468,7 +471,20 @@ their free-text `referredBy` with `referredById` NULL (`modules/shared/referredB
 
 Indexes: `organizationId`, `mobile`, `name`, `assignedTo`, `status`, `(isDeleted, createdAt)`.
 
-### 4.24 `Activity` and `ActivityAttendee` (activities & calendar)
+### 4.24 `Document` (Activities › Documents)
+
+The document an opportunity records in its Documentation section (migration `20261125233000_documents_module`, which
+moved it here from columns on `Opportunity` and copied the existing ones). Written only by opportunity saves
+(`modules/documents/document.sync.ts`): created when Add Document turns `Yes`, updated when its details change,
+deleted when it turns `No`. `opportunityId` (UNIQUE: one per opportunity) → `Opportunity`, `documentNo`,
+`documentDate` (DATE), `documentRemarks`, `documentFileId` → `RecordFile` (required by the API; NULL only on a
+migrated document that had no file), `createdBy` (who added it; on migrated rows the file's uploader), `updatedBy`,
+`createdAt`, `updatedAt`. No soft delete of its own: it is listed while its opportunity is live, under the
+opportunity's row-level access, and comes back with a restored opportunity. Both links are `NO ACTION`.
+
+Indexes: `opportunityId` (unique), `documentFileId`, `createdAt`.
+
+### 4.25 `Activity` and `ActivityAttendee` (activities & calendar)
 
 Calls, meetings, tasks, notes and every other Followup Type (migration `20261126090000_activities`; module
 `backend-crm/src/modules/activities`). Unnumbered (no document series).

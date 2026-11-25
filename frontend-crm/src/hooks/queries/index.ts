@@ -6,6 +6,7 @@ export * from './useContacts';
 export * from './useTickets';
 export * from './useContracts';
 export * from './useActivities';
+export * from './useDocuments';
 export * from './useReferrals';
 export * from './useLeads';
 export * from './useOpportunities';

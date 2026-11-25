@@ -428,11 +428,16 @@
   --crm-module-contracts-text: #BE123C;
   --crm-module-contracts-soft: #FFF1F2;
   --crm-module-contracts-border: #FECDD3;
-  /* activities: Brown */
-  --crm-module-activities-main: #9A5B34;
-  --crm-module-activities-text: #7C4A2A;
-  --crm-module-activities-soft: #FBF5F0;
-  --crm-module-activities-border: #E8D3C2;
+  /* activities: Olive */
+  --crm-module-activities-main: #807D1E;
+  --crm-module-activities-text: #615F14;
+  --crm-module-activities-soft: #F8F8ED;
+  --crm-module-activities-border: #E4E3BE;
+  /* documents: Brown */
+  --crm-module-documents-main: #A16B3A;
+  --crm-module-documents-text: #7C4F27;
+  --crm-module-documents-soft: #FBF6F1;
+  --crm-module-documents-border: #E9D5C1;
   /* products: Gold */
   --crm-module-products-main: #CA8A04;
   --crm-module-products-text: #A16207;
@@ -485,10 +490,14 @@
   --crm-module-contracts-text: #FDA4AF;
   --crm-module-contracts-soft: color-mix(in srgb, #E11D48 16%, #151E2E);
   --crm-module-contracts-border: color-mix(in srgb, #E11D48 42%, #151E2E);
-  --crm-module-activities-main: #C99272;
-  --crm-module-activities-text: #DDB49A;
-  --crm-module-activities-soft: color-mix(in srgb, #9A5B34 16%, #151E2E);
-  --crm-module-activities-border: color-mix(in srgb, #9A5B34 42%, #151E2E);
+  --crm-module-activities-main: #CAC77D;
+  --crm-module-activities-text: #E1DFA8;
+  --crm-module-activities-soft: color-mix(in srgb, #807D1E 16%, #151E2E);
+  --crm-module-activities-border: color-mix(in srgb, #807D1E 42%, #151E2E);
+  --crm-module-documents-main: #D4A373;
+  --crm-module-documents-text: #E6C29E;
+  --crm-module-documents-soft: color-mix(in srgb, #A16B3A 16%, #151E2E);
+  --crm-module-documents-border: color-mix(in srgb, #A16B3A 42%, #151E2E);
   --crm-module-products-main: #FACC15;
   --crm-module-products-text: #FDE047;
   --crm-module-products-soft: color-mix(in srgb, #CA8A04 16%, #151E2E);
