@@ -18,6 +18,7 @@ import { CommonFormLayout } from '../common/CommonFormLayout';
 import { type FormTabDefinition } from '../common/Drawer';
 import { useRhfForm } from '../forms/rhf';
 import { ROUTES } from '@/config/constants';
+import { leadSourceDetailIssues } from '@/utils/leadSource';
 import { commissionIssues, documentationIssues, opportunityFormSchema } from '../../validations';
 import type { OpportunityFormData } from '@/types/opportunity.types';
 import { opportunityService } from '../../services/opportunity.service';
@@ -66,6 +67,7 @@ const DEFAULT_OPPORTUNITY_FORM: OpportunityFormData = {
     contactNumber: '',
     contactEmail: '',
     referredBy: '',
+    natureOfPartner: '',
     type: 'New Business',
     salesStage: 'Qualification',
     leadSource: 'Website Enquiry',
@@ -153,6 +155,7 @@ export default function OpportunityForm({
             extraRules: (values) => [
                 ...commissionIssues(values),
                 ...documentationIssues(values),
+                ...leadSourceDetailIssues(values),
                 ...(mode === 'edit' ? followUpEditIssues(values, followUpDecisionPending.current) : []),
             ],
             module: 'opportunities',

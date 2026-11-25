@@ -57,7 +57,10 @@ export const IMPORT_CONFIGS: Record<ImportEntityType, ImportEntityConfig> = {
             { key: 'mobile', label: 'Mobile', required: false, aliases: ['phone', 'mobile no', 'mobile_no', 'telephone', 'contact number'], sample: ['9988776655', '9090909090'] },
             { key: 'email', label: 'Email', required: false, aliases: ['email address', 'e-mail', 'mail', 'email id'], sample: ['amit@example.com', 'neha@example.com'] },
             { key: 'organizationName', label: 'Organization', required: false, aliases: ['organization', 'company', 'company name'], sample: ['Patel Enterprises', 'Gupta & Co'] },
-            { key: 'leadSource', label: 'Lead Source', required: false, aliases: ['source'], sample: ['Website', 'Referral'] },
+            { key: 'leadSource', label: 'Lead Source', required: false, aliases: ['source'], sample: ['Website Enquiry', 'CA'] },
+            // Required when Lead Source is CA / Reference (Referred By) or Partner (Nature of Partner).
+            { key: 'referredBy', label: 'Referred By', required: false, aliases: ['referred by', 'reference by', 'referrer'], sample: ['', 'Rajesh Kumar'] },
+            { key: 'natureOfPartner', label: 'Nature of Partner', required: false, aliases: ['partner type', 'nature of partner'], sample: ['', ''] },
             { key: 'leadType', label: 'Lead Type', required: false, aliases: ['type'], sample: ['Inbound', 'Outbound'] },
             { key: 'status', label: 'Status', required: false, aliases: ['lead status', 'stage'], sample: ['New', 'Contacted'] },
             { key: 'primaryCity', label: 'City', required: false, aliases: ['city'], sample: ['Pune', 'Delhi'] },
@@ -77,7 +80,10 @@ export const IMPORT_CONFIGS: Record<ImportEntityType, ImportEntityConfig> = {
             { key: 'productCategory', label: 'Product Category', required: false, aliases: ['product', 'category', 'products'], sample: ['TallyPrime', 'Biz Analyst'] },
             { key: 'type', label: 'Type', required: false, aliases: ['type', 'opportunity type', 'deal type'], sample: ['New Business', 'Existing Business'] },
             { key: 'salesStage', label: 'Sales Stage', required: false, aliases: ['stage', 'status', 'pipeline stage'], sample: ['Qualification', 'Proposal/Price Quote'] },
-            { key: 'leadSource', label: 'Lead Source', required: false, aliases: ['source'], sample: ['Website Enquiry', 'Client Referral'] },
+            { key: 'leadSource', label: 'Lead Source', required: false, aliases: ['source'], sample: ['Website Enquiry', 'Partner'] },
+            // Required when Lead Source is CA / Reference (Referred By) or Partner (Nature of Partner).
+            { key: 'referredBy', label: 'Referred By', required: false, aliases: ['reference by', 'referrer'], sample: ['', ''] },
+            { key: 'natureOfPartner', label: 'Nature of Partner', required: false, aliases: ['partner type', 'nature of partner'], sample: ['', 'TALLY-3STAR PARTNER'] },
             { key: 'leadGivenBy', label: 'Lead Given By', required: false, aliases: ['given by', 'referred by'], sample: ['Direct', 'Partner Network'] },
             { key: 'remarks', label: 'Remarks', required: false, aliases: ['notes', 'follow up remarks', 'requirement', 'add description'], sample: ['Requirement for 5 TallyPrime Silver licenses', 'Annual cloud renewal discussion'] },
         ],

@@ -16,6 +16,7 @@ import { createOrganizationRecord, findLiveOrganization } from '../organizations
 import { organizationConversionSchema } from '../organizations/organization.validator.js';
 import { assertRecordAccess } from '../shared/accessControl.js';
 import { isPartnerCustomerType, NATURE_OF_PARTNER_REQUIRED_MESSAGE } from '../shared/customerType.js';
+import { leadSourceDetailIssues } from '../shared/leadSource.js';
 import { normalizeEmails } from '../shared/entityEmails.js';
 import { lockRecords, runSerializable } from '../shared/transactions.js';
 import { leadInclude, leadNotFound } from './lead.service.js';
@@ -172,6 +173,7 @@ function opportunityPayload(values: ConvertLeadInput, lead: LeadRow, organizatio
         contactNumber: contact?.mobile,
         contactEmail: primaryEmail,
         referredBy: values.referredBy,
+        natureOfPartner: values.opportunityNatureOfPartner,
         type: values.type,
         salesStage: NEW_OPPORTUNITY_STAGE,
         leadSource: values.opportunityLeadSource,
@@ -233,7 +235,20 @@ export async function convertLead(leadId: string, body: unknown, user: AuthUser)
             !existingOrganization && isPartnerCustomerType(values.customerType) && !values.natureOfPartner
                 ? [{ message: NATURE_OF_PARTNER_REQUIRED_MESSAGE, path: ['natureOfPartner'] }]
                 : [];
-        throwFieldIssues([...(contactCheck?.issues ?? []), ...(organizationCheck?.issues ?? []), ...partnerIssues, ...(opportunityCheck?.issues ?? [])]);
+        // The opportunity's Lead Source asks for its Referred By (CA, Reference) or Nature of Partner (Partner), as on its form.
+        const leadSourceIssues: ApiFieldError[] = values.createOpportunity
+            ? leadSourceDetailIssues(
+                  { leadSource: values.opportunityLeadSource, referredBy: values.referredBy, natureOfPartner: values.opportunityNatureOfPartner },
+                  { natureOfPartner: 'opportunityNatureOfPartner' },
+              )
+            : [];
+        throwFieldIssues([
+            ...(contactCheck?.issues ?? []),
+            ...(organizationCheck?.issues ?? []),
+            ...partnerIssues,
+            ...(opportunityCheck?.issues ?? []),
+            ...leadSourceIssues,
+        ]);
 
         const organization = existingOrganization
             ? toOrganizationDto(existingOrganization, { isMyAccount: existingOrganization.assignedTo === user.username, isRecentlyViewed: false })

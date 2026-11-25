@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { FIELD_MAX_LENGTH as L } from '../config/fieldLimits';
 import { isGstRegistrationType } from '../config/constants';
+import { leadSourceDetailIssues } from '../utils/leadSource';
 import {
     requiredString,
     optionalString,
@@ -49,7 +50,9 @@ export const leadFormSchema = z.object({
     nextFollowupTime: optionalString,
     description: optionalText('Description', L.longText),
     noOfEmployee: optionalString,
+    // Required for Lead Source CA / Reference; Nature of Partner for Lead Source Partner (below).
     referredBy: optionalString,
+    natureOfPartner: optionalString,
 
     // Billing Address
     primaryAddress: optionalText('Billing Street', L.address),
@@ -73,6 +76,11 @@ export const leadFormSchema = z.object({
 }).superRefine((data, ctx) => {
     refinePostalCodeForCountry(ctx, 'primaryPostalCode', data.primaryPostalCode, data.primaryCountry);
     refinePostalCodeForCountry(ctx, 'otherPostalCode', data.otherPostalCode, data.otherCountry);
+
+    // The Lead Source's follow-up field: Referred By (CA, Reference) or Nature of Partner (Partner).
+    for (const issue of leadSourceDetailIssues(data)) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, message: issue.message, path: [issue.path] });
+    }
 
     // GSTIN is only collected (and then required) for 'Registered' / SEZ leads; matches organization.schema.ts.
     if (isGstRegistrationType(data.registrationType)) {

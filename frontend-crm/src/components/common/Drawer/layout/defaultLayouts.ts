@@ -140,7 +140,13 @@ function leadsLayout(): DrawerLayoutDocument {
                     columns: 2,
                     hideEmpty: true,
                     piece: 'Source & Owner',
-                    blocks: [f('b-source', 'leadSource', 'standard'), f('b-owner', 'assignedTo', 'standard'), f('b-referred', 'referredBy', 'standard')],
+                    blocks: [
+                        f('b-source', 'leadSource', 'standard'),
+                        f('b-owner', 'assignedTo', 'standard'),
+                        f('b-referred', 'referredBy', 'standard'),
+                        // Lead Source Partner only (empty otherwise, so hidden).
+                        f('b-npartner', 'natureOfPartner', 'standard'),
+                    ],
                 },
                 {
                     id: 's-custom',
@@ -336,6 +342,8 @@ function opportunitiesLayout(): DrawerLayoutDocument {
                 sec('s-source', 'SOURCE & OWNER', 'subtle', 2, [
                     f('b-source', 'leadSource', 'standard'),
                     f('b-referred', 'referredBy', 'standard'),
+                    // Lead Source Partner only (empty otherwise, so hidden).
+                    f('b-npartner', 'natureOfPartner', 'standard'),
                     f('b-owner', 'assignedTo', 'standard'),
                 ]),
                 sec('s-billing', 'BILLING & COMMISSION', 'subtle', 2, [

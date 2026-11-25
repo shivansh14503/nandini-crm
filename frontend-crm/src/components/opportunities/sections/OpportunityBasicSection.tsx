@@ -26,6 +26,7 @@ import {
     LockedInputs,
     PICKED_CONTACT_HINT,
     usePickedContactLocks,
+    useLeadSourceDetails,
 } from '@/components/forms';
 import { useContacts, useOrganizations } from '@/hooks/queries';
 import type { Contact } from '@/types/contact.types';
@@ -46,6 +47,7 @@ import {
     FOLLOWUP_TYPES,
 } from '@/types/lead.types';
 import { useDropdownOptionsGetter } from '@/hooks/queries/useFormConfigs';
+import { NATURE_OF_PARTNER_OPTIONS } from '@/types/partner.types';
 import { useFormMode } from '@/context/FormModeContext';
 import { CUSTOMER_RESPONSE_CATEGORY, CUSTOMER_RESPONSES, FieldGlow, useFollowUpDecision } from '@/components/forms/FollowUpDecision';
 
@@ -78,6 +80,11 @@ export function OpportunityBasicSection({ notify, onDecisionPendingChange }: Opp
     const { mode } = useFormMode();
     const isEdit = mode === 'edit';
     const editable = mode !== 'view';
+    // Lead Source CA / Reference asks who referred the deal, Partner for the partner's Nature of Partner (as on leads).
+    const { needsReferredBy, showReferredBy, showNatureOfPartner } = useLeadSourceDetails<F>(
+        { leadSource: 'leadSource', referredBy: 'referredBy', natureOfPartner: 'natureOfPartner' },
+        { readOnly: !editable },
+    );
 
     // Customer Response → keep or reschedule the next follow-up (see FollowUpDecision).
     const { setAnchor: setResponseAnchor, onResponseChange, glow: followUpGlow, popper: followUpPopper } = useFollowUpDecision({
@@ -213,16 +220,31 @@ export function OpportunityBasicSection({ notify, onDecisionPendingChange }: Opp
                     />
                 </LockedInputs>
 
-                {/* Picks from the CRM's contacts (as on the Lead form); a partner or campaign can still be typed, as typed. */}
-                <RhfLookup<F, 'contact'>
-                    name="referredBy"
-                    label="Referred By"
-                    hint="Partner, agent, or client"
-                    lookupType="contact"
-                    placeholder="Referred by partner or person..."
-                    nameCase={false}
-                    maxLength={FIELD_MAX_LENGTH.organizationName}
-                />
+                {/* Lead Source CA / Reference only, and then required (as on the Lead form). Picks from the CRM's
+                    contacts; a partner or campaign can still be typed, as typed. */}
+                {showReferredBy && (
+                    <RhfLookup<F, 'contact'>
+                        name="referredBy"
+                        label="Referred By"
+                        required={needsReferredBy}
+                        hint="Partner, agent, or client"
+                        lookupType="contact"
+                        placeholder="Referred by partner or person..."
+                        nameCase={false}
+                        maxLength={FIELD_MAX_LENGTH.organizationName}
+                    />
+                )}
+
+                {/* Lead Source Partner only, and then required: the Organization form's Nature of Partner list. */}
+                {showNatureOfPartner && (
+                    <RhfSelect<F>
+                        name="natureOfPartner"
+                        label="Nature of Partner"
+                        required
+                        options={getOptions('partner_nature', [...NATURE_OF_PARTNER_OPTIONS])}
+                        placeholder="Select Nature of Partner"
+                    />
+                )}
 
                 {/* Starts empty. Picks the CRM user who brought the deal in (stored by username, like Assigned to); an outside referrer can still be typed. */}
                 <RhfLookup<F, 'user'>

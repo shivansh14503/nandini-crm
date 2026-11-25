@@ -56,6 +56,7 @@ const LEAD_CARRIED_FIELDS: readonly (keyof ConvertLeadFormValues)[] = [
     'department',
     'leadSource',
     'opportunityLeadSource',
+    'opportunityNatureOfPartner',
     'productCategory',
     'followupType',
 ];
@@ -102,6 +103,7 @@ export function leadPrefilledFields(lead: Lead): Set<string> {
         opportunityLeadSource: lead.leadSource,
         productCategory: lead.productCategory?.length ? 'yes' : '',
         referredBy: lead.referredBy,
+        opportunityNatureOfPartner: lead.natureOfPartner,
         followupType: lead.followupType,
         opportunityDescription: lead.remarks,
     };
@@ -140,6 +142,7 @@ export function buildConvertLeadDefaults(lead: Lead): ConvertLeadFormValues {
         createOpportunity: true,
         productCategory: lead.productCategory ?? [],
         referredBy: lead.referredBy ?? '',
+        opportunityNatureOfPartner: lead.natureOfPartner ?? '',
         type: 'New Business',
         nextFollowupDate: lead.nextFollowupDate,
         nextFollowupTime: lead.nextFollowupTime ?? '',

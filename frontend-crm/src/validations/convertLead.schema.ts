@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { optionalString } from './common';
 import { isPartnerCustomerType, NATURE_OF_PARTNER_REQUIRED_MESSAGE } from '../config/constants';
+import { leadSourceDetailIssues } from '../utils/leadSource';
 import { contactFormSchema } from './contact.schema';
 import { organizationFieldsSchema } from './organization.schema';
 import { opportunityFormSchema } from './opportunity.schema';
@@ -13,6 +14,7 @@ const opportunity = opportunityFormSchema.shape;
 const opportunityRules = z.object({
     productCategory: opportunity.productCategory,
     referredBy: opportunity.referredBy,
+    opportunityNatureOfPartner: opportunity.natureOfPartner,
     type: opportunity.type,
     nextFollowupDate: opportunity.nextFollowupDate,
     nextFollowupTime: opportunity.nextFollowupTime,
@@ -63,7 +65,9 @@ export const convertLeadFormSchema = z.object({
     // Off when the deal already has an opportunity: the lead converts into the contact and organization only.
     createOpportunity: z.boolean(),
     productCategory: deferred<'productCategory'>(),
+    // Shown, and required, by the opportunity's Lead Source: CA / Reference → Referred By, Partner → Nature of Partner.
     referredBy: deferred<'referredBy'>(),
+    opportunityNatureOfPartner: deferred<'opportunityNatureOfPartner'>(),
     type: deferred<'type'>(),
     nextFollowupDate: deferred<'nextFollowupDate'>(),
     nextFollowupTime: deferred<'nextFollowupTime'>(),
@@ -87,6 +91,11 @@ export const convertLeadFormSchema = z.object({
         if (!values.createOpportunity) return;
         const parsed = opportunityRules.safeParse(values);
         for (const issue of parsed.error?.issues ?? []) ctx.addIssue({ code: 'custom', message: issue.message, path: issue.path });
+        const sourceIssues = leadSourceDetailIssues(
+            { leadSource: values.opportunityLeadSource, referredBy: values.referredBy, natureOfPartner: values.opportunityNatureOfPartner },
+            { natureOfPartner: 'opportunityNatureOfPartner' },
+        );
+        for (const issue of sourceIssues) ctx.addIssue({ code: 'custom', message: issue.message, path: [issue.path] });
     },
     // Checked alongside the other sections' errors, not only once those are fixed.
     { when: () => true },
@@ -131,6 +140,7 @@ export const CONVERT_FIELD_NAMES = {
         productCategory: 'productCategory',
         organizationName: 'organizationName',
         referredBy: 'referredBy',
+        natureOfPartner: 'opportunityNatureOfPartner',
         type: 'type',
         leadSource: 'opportunityLeadSource',
         nextFollowupDate: 'nextFollowupDate',
