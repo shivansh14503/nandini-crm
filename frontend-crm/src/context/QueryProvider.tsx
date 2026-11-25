@@ -44,6 +44,8 @@ export function QueryProvider({ children }: { children: React.ReactNode }) {
                 const key = queryEntityFromSync(entity);
                 queryClient.invalidateQueries(key ? { queryKey: queryKeys[key].all } : undefined);
                 if (key) queryClient.invalidateQueries({ queryKey: auditLogKeys.all });
+                // Opportunities write their document (Documentation section): the Documents list follows them.
+                if (key === 'opportunities') queryClient.invalidateQueries({ queryKey: queryKeys.documents.all });
                 // Partner companies also feed the master data behind the Partner Company lookups.
                 if (key === 'partnerCompanies') queryClient.invalidateQueries({ queryKey: MASTER_DATA_QUERY_KEY });
             }),

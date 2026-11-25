@@ -1,7 +1,10 @@
 import type { CrmModuleKey } from '@/types/formConfig.types';
 
-/** Screens with a Filter dialog: the CRM module lists, plus Admin › Audit Log (its filter runs on the server). */
-export type TableFilterScope = CrmModuleKey | 'audit-log';
+/**
+ * Screens with a Filter dialog: the CRM module lists, Activities › Documents (no form of its own, so its fields are
+ * built by the list) and Admin › Audit Log (its filter runs on the server).
+ */
+export type TableFilterScope = CrmModuleKey | 'documents' | 'audit-log';
 
 /**
  * Operators of a filter condition. Mirrors FILTER_OPERATORS in

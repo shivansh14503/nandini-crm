@@ -19,3 +19,4 @@ export * from './import.service';
 export const authApi = authService;
 export * from './formConfig.service';
 export * from './recordFile.service';
+export * from './document.service';

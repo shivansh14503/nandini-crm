@@ -19,6 +19,7 @@ export const queryKeys = {
     contacts: createEntityKeys('contacts'),
     tickets: createEntityKeys('tickets'),
     contracts: createEntityKeys('contracts'),
+    documents: createEntityKeys('documents'),
     leads: createEntityKeys('leads'),
     opportunities: createEntityKeys('opportunities'),
     quotations: createEntityKeys('quotations'),

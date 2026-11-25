@@ -12,3 +12,4 @@ export * from './ticket.types';
 export * from './contract.types';
 export * from './partner.types';
 export * from './formConfig.types';
+export * from './document.types';

@@ -1,6 +1,6 @@
 # Nandini CRM — System Design
 
-> **Status:** living document. Describes the system as built (code as of 2026-11-25; audit context + ledger audit table, admin audit query API and screen, Users tab; Contracts module).
+> **Status:** living document. Describes the system as built (code as of 2026-11-25; audit context + ledger audit table, admin audit query API and screen, Users tab; Contracts module; Documents module).
 > Update it in the same change that alters architecture, infrastructure, Redis usage, queues or security.
 > Related: [Database design](database-design.md) · [API plan](api-plan.md) · [Build plan](build-plan.md)
 
@@ -10,7 +10,7 @@
 
 An internal sales and support CRM for Nandini Infosystems. Sales staff move work through
 **Leads → Opportunities → Quotations**, keep **Organizations** and **Contacts** as the customer master, log support
-**Tickets** and **Contracts**, and manage **Products** and **Partner Companies**. Admins customise forms and dropdowns, number
+**Tickets** and **Contracts**, browse the **Documents** added on opportunities, and manage **Products** and **Partner Companies**. Admins customise forms and dropdowns, number
 documents, maintain the city list and design printable PDF templates.
 
 ## 2. High-level architecture

@@ -44,25 +44,8 @@ export const recordFileUploadSchema = z.object({
         .max(Math.ceil((RECORD_FILE_MAX_BYTES * 4) / 3) + 128, { message: `Files cannot exceed ${RECORD_FILE_MAX_LABEL}.` }),
 });
 
-export interface RecordFileDto {
-    id: string;
-    fileName: string;
-    mimeType: string;
-    sizeBytes: number;
-    /** API path of the file (`/api/files/<id>`). */
-    url: string;
-}
-
-export const toRecordFileDto = (row: { id: string; fileName: string; mimeType: string; sizeBytes: number }): RecordFileDto => ({
-    id: row.id,
-    fileName: row.fileName,
-    mimeType: row.mimeType,
-    sizeBytes: row.sizeBytes,
-    url: `/api/files/${encodeURIComponent(row.id)}`,
-});
-
-/** Columns of a linked file a record returns. */
-export const RECORD_FILE_SELECT = { id: true, fileName: true, mimeType: true, sizeBytes: true } as const;
+export { RECORD_FILE_SELECT, toRecordFileDto, type RecordFileDto } from './recordFile.dto.js';
+import { RECORD_FILE_SELECT, toRecordFileDto, type RecordFileDto } from './recordFile.dto.js';
 
 function familyOf(data: Buffer): keyof typeof FILE_FAMILIES | null {
     if (data.subarray(0, 5).toString('latin1') === '%PDF-') return 'pdf';

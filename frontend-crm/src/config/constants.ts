@@ -51,6 +51,8 @@ export const ROUTES = {
     CONTRACT_NEW: '/contracts/new',
     CONTRACT_DETAIL: (id: string | number) => `/contracts/${id}`,
     CONTRACT_EDIT: (id: string | number) => `/contracts/${id}/edit`,
+    DOCUMENTS: '/documents',
+    DOCUMENT_DETAIL: (id: string | number) => `/documents/${id}`,
     PARTNER_COMPANIES: '/partner-companies',
     PARTNER_COMPANY_NEW: '/partner-companies/new',
     PARTNER_COMPANY_DETAIL: (id: string | number) => `/partner-companies/${id}`,

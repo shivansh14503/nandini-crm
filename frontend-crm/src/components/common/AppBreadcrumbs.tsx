@@ -56,6 +56,7 @@ const ROUTE_MODULE_MAP: Record<string, string> = {
     calls: 'Activities',
     meetings: 'Activities',
     emails: 'Activities',
+    documents: 'Activities',
     calendar: 'Activities',
 
     // Inventory

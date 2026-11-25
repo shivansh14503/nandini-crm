@@ -3,11 +3,13 @@ import { decimalToNumber, fromDateOnly, fromOptionalDateOnly, nullable, parseCus
 import { partnerCompanyFor } from '../shared/leadSource.js';
 import { toLineItemDtos, type LineItemDto, type LineItemTotals } from '../shared/lineItems.js';
 import { toRecordFileDto, type RecordFileDto } from '../files/recordFile.service.js';
+import type { OpportunityDocumentRow } from '../documents/document.sync.js';
 import { defaultCommissionType, hasCommission, type OpportunityInput } from './opportunity.validator.js';
 
 export type OpportunityRow = Opportunity & {
     lineItems?: OpportunityLineItem[];
-    documentFile?: { id: string; fileName: string; mimeType: string; sizeBytes: number } | null;
+    /** The Documentation section's document (Document table), loaded with `OPPORTUNITY_DOCUMENT_INCLUDE`. */
+    document?: OpportunityDocumentRow | null;
 };
 
 export const DEFAULT_CURRENCY = 'Indian Rupee: ₹';
@@ -112,10 +114,10 @@ export function toOpportunityDto(row: OpportunityRow): OpportunityDto {
         ifscCode: text(row.ifscCode),
         panNumber: text(row.panNumber),
         addDocument: text(row.addDocument),
-        documentNo: text(row.documentNo),
-        documentDate: toDateOnly(row.documentDate),
-        documentRemarks: text(row.documentRemarks),
-        documentFile: row.documentFile ? toRecordFileDto(row.documentFile) : null,
+        documentNo: text(row.document?.documentNo),
+        documentDate: toDateOnly(row.document?.documentDate ?? null),
+        documentRemarks: text(row.document?.documentRemarks),
+        documentFile: row.document?.documentFile ? toRecordFileDto(row.document.documentFile) : null,
         currency: row.currency,
         groupName: text(row.groupName),
         lineItems: toLineItemDtos(row.lineItems),
@@ -144,17 +146,6 @@ function commissionColumns(input: OpportunityInput) {
         bankName: bank(input.bankName),
         ifscCode: bank(input.ifscCode),
         panNumber: bank(input.panNumber),
-    };
-}
-
-/** The document's details and file, all cleared while Add Document is No. */
-function documentColumns(input: OpportunityInput) {
-    const keep = input.addDocument === 'Yes';
-    return {
-        documentNo: keep ? nullable(input.documentNo) : null,
-        documentDate: keep && input.documentDate ? fromDateOnly(input.documentDate) : null,
-        documentRemarks: keep ? nullable(input.documentRemarks) : null,
-        documentFileId: keep ? (input.documentFile ?? null) : null,
     };
 }
 
@@ -194,8 +185,8 @@ export function toOpportunityData(
         commission: input.commission,
         commissionAmount: input.commission === 'Yes' ? (input.commissionAmount ?? null) : null,
         ...commissionColumns(input),
+        // The document itself is written to the Document table (syncOpportunityDocument).
         addDocument: input.addDocument,
-        ...documentColumns(input),
         currency: input.currency ?? DEFAULT_CURRENCY,
         groupName: nullable(input.groupName),
         lumpSumDiscount: input.lumpSumDiscount,

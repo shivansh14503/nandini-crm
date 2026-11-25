@@ -39,8 +39,8 @@ export const criteriaSchema = z.object({
 
 export type TableFilterCriteria = z.infer<typeof criteriaSchema>;
 
-/** Screens with a Filter dialog: the CRM module lists, plus Admin › Audit Log (`audit-log`). */
-export const TABLE_FILTER_SCREENS = [...CRM_MODULES, 'audit-log'] as const;
+/** Screens with a Filter dialog: the CRM module lists, Activities › Documents (`documents`, no form of its own) and Admin › Audit Log (`audit-log`). */
+export const TABLE_FILTER_SCREENS = [...CRM_MODULES, 'documents', 'audit-log'] as const;
 const moduleSchema = z.enum(TABLE_FILTER_SCREENS, { error: `module must be one of: ${TABLE_FILTER_SCREENS.join(', ')}.` });
 
 export const listQuerySchema = z.object({ module: moduleSchema });
