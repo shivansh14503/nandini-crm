@@ -14,6 +14,7 @@ import {
     optionLabelMap,
 } from '@/utils/formConfig';
 import { formatPhoneDisplay } from '@/utils/phone';
+import { primaryFirst } from '@/utils/primaryFirst';
 import { getCountryNameByCode } from '@/data/addressMaster';
 import type { DataTableColumn } from './types';
 
@@ -32,8 +33,8 @@ export function readFieldValue(row: unknown, field: FormFieldDefinitionDto): unk
 export function formatFieldCell(field: FormFieldDefinitionDto, value: unknown, configs: FormConfigsPayload | null): string {
     if (value === undefined || value === null || value === '') return '';
     if (Array.isArray(value) && value.some((item) => item && typeof item === 'object')) {
-        // Repeatable lists such as emailAddress: [{ email, isPrimary, … }]
-        return value
+        // Repeatable lists such as emailAddress: [{ email, isPrimary, … }], the primary entry first.
+        return primaryFirst(value)
             .map((item) => {
                 if (!item || typeof item !== 'object') return String(item ?? '');
                 const obj = item as Record<string, unknown>;

@@ -4,6 +4,7 @@ import type { FieldType, FormConfigsPayload, FormFieldDefinitionDto } from '@/ty
 import { distinctFieldLabels, findCategory, formatCustomValue, isBuiltInCountryField, isEmptyValue, moduleFields, optionLabelMap } from '@/utils/formConfig';
 import { formatPhoneDisplay } from '@/utils/phone';
 import { findCrmUser } from '@/services/masterData.store';
+import { isPrimaryEntry, primaryFirst } from '@/utils/primaryFirst';
 
 /**
  * The values a drawer layout can show for a module: the form's active fields (built-in and custom, labelled so no
@@ -124,9 +125,20 @@ export function formatClock(value: string): string {
 /**
  * A record's value of the field as display strings: one per entry for lists (emails, multi-selects), dropdown
  * labels instead of stored values, phones formatted, countries named, dates as dd-MMM-yyyy (with the paired time
- * for date + time fields, e.g. nextFollowupDate + nextFollowupTime). Empty → [].
+ * for date + time fields, e.g. nextFollowupDate + nextFollowupTime). The primary email comes first. Empty → [].
  */
 export function fieldDisplayValues(record: AnyRecord | null | undefined, def: DrawerFieldDef, configs: FormConfigsPayload | null | undefined): string[] {
+    return fieldDisplayEntries(record, def, configs).map((entry) => entry.text);
+}
+
+export interface FieldDisplayEntry {
+    text: string;
+    /** The list's primary entry (the primary email address). */
+    primary: boolean;
+}
+
+/** `fieldDisplayValues` with each entry's primary flag, primary entry first (e.g. to tag the primary email). */
+export function fieldDisplayEntries(record: AnyRecord | null | undefined, def: DrawerFieldDef, configs: FormConfigsPayload | null | undefined): FieldDisplayEntry[] {
     const raw = rawFieldValue(record, def);
     if (isEmptyValue(raw)) return [];
     // A yes / no value counts as empty while it is off, so "hide when empty" hides it.
@@ -153,5 +165,7 @@ export function fieldDisplayValues(record: AnyRecord | null | undefined, def: Dr
         if (def.type === 'amount' && !Number.isNaN(Number(value))) return formatRupees(Number(value));
         return labels?.[text] ?? text;
     };
-    return (Array.isArray(raw) ? raw : [raw]).map(one).filter((v) => v !== '');
+    return primaryFirst(Array.isArray(raw) ? raw : [raw])
+        .map((value) => ({ text: one(value), primary: isPrimaryEntry(value) }))
+        .filter((entry) => entry.text !== '');
 }

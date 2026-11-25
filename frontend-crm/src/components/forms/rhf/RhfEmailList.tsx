@@ -5,6 +5,7 @@ import { Box, Button, FormHelperText, Typography } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
 import { useController, type FieldValues } from 'react-hook-form';
 import { EmailRow } from '../EmailRow';
+import { primaryFirst } from '@/utils/primaryFirst';
 import { fieldSizeSx, type FieldSize } from '../fieldSizing';
 import { useFormMode } from '@/context/FormModeContext';
 import { useFieldOverride } from '@/context/FormConfigContext';
@@ -157,7 +158,8 @@ export function RhfEmailList({
                 )}
             </Box>
 
-            {rows.map((row, index) => (
+            {/* Read-only views list the primary address first; the form keeps the entered order. */}
+            {(isView ? primaryFirst(rows.map((row, index) => ({ ...row, index }))) : rows.map((row, index) => ({ ...row, index }))).map(({ index, ...row }) => (
                 <EmailRow
                     key={row.id}
                     email={row}
