@@ -409,8 +409,10 @@ export default function ContractForm({ mode = 'create', contractId, initialData 
                         <RhfTextField<ContractFormData>
                             name="tallySerialNo"
                             label="Tally Serial Number"
+                            hint="9 digits, starts with 7"
                             placeholder="e.g. 765432109"
-                            maxLength={FIELD_MAX_LENGTH.shortCode}
+                            numericOnly
+                            maxLength={FIELD_MAX_LENGTH.tallySerialNo}
                             fieldSize="sm"
                         />
                     </FormGrid>

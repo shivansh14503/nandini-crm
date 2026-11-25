@@ -7,6 +7,7 @@ import {
     optionalText,
     configurableOption,
     customFieldsSchema,
+    tallySerialNoOptional,
 } from './common';
 
 // Same shapes the API accepts (backend-crm/src/validators/common.ts optionalAmountString / optionalDate / optionalWallClock).
@@ -49,7 +50,7 @@ export const contractFormSchema = z
         contactId: optionalString,
         opportunity: optionalText('Opportunity', L.organizationName),
         opportunityId: optionalString,
-        tallySerialNo: optionalText('Tally Serial Number', L.shortCode),
+        tallySerialNo: tallySerialNoOptional('Tally Serial Number'),
 
         // Term & Renewal
         startDate: optionalDate('Contract Start Date'),

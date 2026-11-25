@@ -17,6 +17,7 @@ import { codeSearchPrefix } from '../shared/searchTerms.js';
 import { assertDeletedRow, lockRecords, restoreData, runInTransaction, softDeleteData, type BulkDeleteResult } from '../shared/transactions.js';
 import { toContractData, toContractDto, type ContractDto, type ContractLink, type ContractLinks } from './contract.mapper.js';
 import { CONTRACT_SORT_FIELDS, contractInputSchema, contractListQuerySchema, contractPastChecks, type ContractInput } from './contract.validator.js';
+import { tallySerialIssue } from '../../validators/tallySerial.js';
 
 /** Columns `assertRecordAccess` reads. */
 const OWNER_SELECT = { assignedTo: true, createdBy: true } as const;
@@ -185,7 +186,11 @@ export const contractService = {
             if (renamesLink(patch, before, 'organizationName') && !('organizationId' in patch)) delete merged.organizationId;
             if (renamesLink(patch, before, 'contact') && !('contactId' in patch)) delete merged.contactId;
             if (renamesLink(patch, before, 'opportunity') && !('opportunityId' in patch)) delete merged.opportunityId;
+            // A Tally Serial Number saved before the 9-digit rule existed is kept until someone edits that field.
+            const keepLegacyTallySerial = !('tallySerialNo' in patch) && tallySerialIssue(before.tallySerialNo) !== null;
+            if (keepLegacyTallySerial) delete merged.tallySerialNo;
             const input = contractInputSchema.parse(merged);
+            if (keepLegacyTallySerial) input.tallySerialNo = before.tallySerialNo;
             input.customFields = checkModulePayload(fieldConfig, merged, input.customFields, {
                 submittedKeys: new Set(Object.keys(patch)),
                 previousCustomFields: before.customFields,

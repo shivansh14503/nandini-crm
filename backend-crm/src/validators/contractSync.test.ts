@@ -6,6 +6,7 @@ import { pathToFileURL } from 'node:url';
 import { DOCUMENT_DEST, expectedFrontendFiles } from '../../scripts/syncPdfDocument.js';
 import { DRAWER_LAYOUT_DEST, expectedDrawerLayoutFiles } from '../../scripts/syncDrawerLayout.js';
 import { FIELD_MAX_LENGTH } from '../config/fieldLimits.js';
+import { TALLY_SERIAL_LENGTH, tallySerialIssue } from './tallySerial.js';
 import {
     CRM_MODULES,
     CUSTOM_FIELD_TYPES,
@@ -29,6 +30,11 @@ const skip = existsSync(FRONTEND_SRC) ? false : `frontend-crm/src not found at $
 
 interface FrontendFieldLimits {
     FIELD_MAX_LENGTH: Record<string, number>;
+}
+
+interface FrontendTallySerial {
+    TALLY_SERIAL_LENGTH: number;
+    tallySerialIssue(value: string | null | undefined, field?: string): string | null;
 }
 
 interface FrontendFormConfigTypes {
@@ -64,6 +70,16 @@ describe('backend ↔ frontend contract', { skip }, () => {
         const frontend = await loadFrontend<FrontendFieldLimits>('config/fieldLimits.ts');
         const sorted = (limits: Record<string, number>) => Object.fromEntries(Object.entries(limits).sort(([a], [b]) => a.localeCompare(b)));
         assert.deepEqual(sorted(frontend.FIELD_MAX_LENGTH), sorted(FIELD_MAX_LENGTH));
+    });
+
+    it('Tally Serial No rule and messages match', async () => {
+        const frontend = await loadFrontend<FrontendTallySerial>('utils/tallySerial.ts');
+        assert.equal(frontend.TALLY_SERIAL_LENGTH, TALLY_SERIAL_LENGTH);
+        assert.equal(FIELD_MAX_LENGTH.tallySerialNo, TALLY_SERIAL_LENGTH);
+        const samples = ['', '   ', '712345678', ' 712345678 ', '612345678', '71234567', '7123456789', '71234A678', '7-1234567', null, undefined];
+        for (const value of samples) {
+            assert.equal(frontend.tallySerialIssue(value), tallySerialIssue(value), `value: ${JSON.stringify(value)}`);
+        }
     });
 
     it('CRM modules match, in the same (navbar) order', async () => {

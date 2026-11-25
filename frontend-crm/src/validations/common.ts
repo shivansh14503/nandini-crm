@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { E164_REGEX, normalizeToE164, phoneIssue } from '../utils/phone';
 import { DEFAULT_COUNTRY_CODE, resolveCountryIso2 } from '../data/addressMaster';
 import { FIELD_MAX_LENGTH } from '../config/fieldLimits';
+import { tallySerialIssue } from '../utils/tallySerial';
 
 /**
  * Extracts the first human-readable validation error message from a ZodError
@@ -269,6 +270,18 @@ export const zodIfscOptional = z
     })
     .optional()
     .or(z.literal(''));
+
+/** Optional Tally Serial No: blank, or exactly 9 digits starting with 7 (same rule and messages as the API). */
+export const tallySerialNoOptional = (fieldName: string = 'Tally Serial No') =>
+    z
+        .string()
+        .trim()
+        .superRefine((val, ctx) => {
+            const message = tallySerialIssue(val, fieldName);
+            if (message) ctx.addIssue({ code: 'custom', message });
+        })
+        .optional()
+        .or(z.literal(''));
 
 /** Standard email validation, trimmed, lowercased */
 export const zodEmail = z

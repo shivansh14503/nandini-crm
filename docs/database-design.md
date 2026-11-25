@@ -181,7 +181,7 @@ required field for leads (closed leads have none).
 `Opportunity`: `opportunityCode` (UNIQUE), `opportunityName`, `productCategoryJson`, `contact`/`contactId`,
 `organizationName`/`organizationId`, `contactNumber`, `contactEmail`, `referredBy`, `type`, `salesStage`, `leadSource`,
 `leadGivenBy`, `nextFollowupDate`/`Time`, `followupType`, `customerResponse` (as on leads), `remarks`, `description`, `assignedTo`,
-billing (`tallySerialNo`, `invoiceNo`, `invoiceDate`), `commission` (fixed `Yes` / `No`, default `No`) with
+billing (`tallySerialNo` — 9 digits starting with 7, checked by the API, `invoiceNo`, `invoiceDate`), `commission` (fixed `Yes` / `No`, default `No`) with
 `commissionAmount` (DECIMAL(18,2), required above 0 when `Yes`, NULL when `No`), `addDocument`, totals (`currency`, `groupName`,
 `lumpSumDiscount`, `totalAmount`, `totalDiscount`, `subtotal`, `totalTax`, `grandTotal` — recomputed and verified
 server-side), `customDataJson`, audit/soft-delete.
@@ -411,7 +411,7 @@ Support contracts (Support › Contracts, migration `20261125042148_contracts`).
 module `contract`, legacy prefix `CTR`), `contractTitle`, `status` (default `Not Started`), `contractValue`,
 `assignedTo` (the Contract Manager; row-level scope), `organizationName` (uppercase) + `organizationId`, `contact` +
 `contactId`, `opportunity` (the opportunity's label when picked, or typed text) + `opportunityId` → `Opportunity`,
-`tallySerialNo`, term (`startDate`, `endDate` DATE, `contractPeriod`, `renewalReminderDate` wall-clock DATETIME2),
+`tallySerialNo` (9 digits starting with 7, checked by the API), term (`startDate`, `endDate` DATE, `contractPeriod`, `renewalReminderDate` wall-clock DATETIME2),
 `contractTypeJson`, billing (`billNumber`, `billDate`, `billAmount`), `description`, `customDataJson`,
 audit/soft-delete. `contractValue` / `billAmount` are DECIMAL(18,2), returned as strings by the API. All three links
 are `NO ACTION`; organization and contact renames are written through.

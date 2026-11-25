@@ -7,6 +7,7 @@ import {
     customFieldsSchema,
     optionalAmountString,
     optionalDate,
+    optionalTallySerialNo,
     optionalText,
     optionalWallClock,
     requiredPersonName,
@@ -37,7 +38,7 @@ export const contractInputSchema = z
         contactId: optionalText('Contact', 50),
         opportunity: optionalText('Opportunity', L.organizationName),
         opportunityId: optionalText('Opportunity', 50),
-        tallySerialNo: optionalText('Tally Serial Number', L.shortCode),
+        tallySerialNo: optionalTallySerialNo('Tally Serial Number'),
 
         startDate: optionalDate('Contract Start Date'),
         endDate: optionalDate('Contract End Date'),

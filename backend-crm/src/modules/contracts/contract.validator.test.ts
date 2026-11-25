@@ -85,7 +85,9 @@ describe('contract input', () => {
     });
 
     it('enforces the column widths', () => {
-        assert.equal(issues({ ...minimal, tallySerialNo: 'x'.repeat(31) }).tallySerialNo, 'Tally Serial Number cannot exceed 30 characters.');
+        assert.equal(issues({ ...minimal, tallySerialNo: '7'.repeat(10) }).tallySerialNo, 'Tally Serial Number must be exactly 9 digits (you entered 10).');
+        assert.equal(issues({ ...minimal, tallySerialNo: '612345678' }).tallySerialNo, 'Tally Serial Number must start with 7.');
+        assert.equal(contractInputSchema.safeParse({ ...minimal, tallySerialNo: '712345678' }).success, true);
         assert.equal(issues({ ...minimal, billNumber: 'x'.repeat(31) }).billNumber, 'Bill Number cannot exceed 30 characters.');
         assert.equal(issues({ ...minimal, contractTitle: 'x'.repeat(101) }).contractTitle, 'Contract Title cannot exceed 100 characters.');
     });
