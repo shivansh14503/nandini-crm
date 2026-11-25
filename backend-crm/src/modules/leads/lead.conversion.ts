@@ -98,7 +98,7 @@ function checkConvertRecord(
 }
 
 const NEW_OPPORTUNITY_STAGE = 'Qualification';
-const NEW_OPPORTUNITY_COMMISSION = 'Nil / Direct (0%)';
+const NEW_OPPORTUNITY_COMMISSION = 'No';
 
 /** Leads and organizations share one Registration Type dropdown (shared_registration_type): carried over as-is. */
 function registrationTypeFor(lead: LeadRow): string | undefined {

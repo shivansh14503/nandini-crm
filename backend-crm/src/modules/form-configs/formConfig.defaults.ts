@@ -5,7 +5,7 @@
  * (the frontend keeps them as fallbacks while the configuration loads). Field definitions mirror the fields the
  * hand-built forms render; `fieldKey` is the React Hook Form name, so overrides apply to the matching control.
  *
- * Yes / No dropdowns (Left Job, Contract Create, Add Document) have built-in lists like every other dropdown, but
+ * Yes / No dropdowns (Left Job, Contract Create, Add Document, Commission) have built-in lists like every other dropdown, but
  * with fixed options (FIXED_OPTION_CATEGORY_KEYS): the API only accepts those values. The organization's Provide
  * Support switch stays a fixed toggle.
  */
@@ -137,7 +137,7 @@ export const APP_REQUIRED_CATEGORY_KEYS: ReadonlySet<string> = new Set([
  * Built-in dropdowns whose options are fixed: the records' API validates the value against exactly these options
  * (Yes / No fields). Admins can reorder them, rename how they read and pick the default, but not add options.
  */
-export const FIXED_OPTION_CATEGORY_KEYS: ReadonlySet<string> = new Set(['shared_left_job', 'product_contract_create', 'opportunity_add_document']);
+export const FIXED_OPTION_CATEGORY_KEYS: ReadonlySet<string> = new Set(['shared_left_job', 'product_contract_create', 'opportunity_add_document', 'opportunity_commission']);
 
 const yesNo = (first: 'No' | 'Yes'): DefaultOption[] => withSystem(first === 'No' ? ['No', 'Yes'] : ['Yes', 'No'], ['Yes', 'No']);
 
@@ -459,7 +459,8 @@ export const DEFAULT_CATEGORIES: DefaultCategory[] = [
         key: 'opportunity_commission',
         label: 'Commission',
         module: 'opportunities',
-        options: ['Standard (10%)', 'Executive (15%)', 'Partner Split (20%)', 'Direct (5%)', 'Nil / Direct (0%)'],
+        description: 'Whether the opportunity pays a commission; Yes asks for the Commission Amount. Fixed options: No / Yes.',
+        options: yesNo('No'),
     },
     { key: 'opportunity_add_document', label: 'Add Document', module: 'opportunities', description: 'Fixed options: No / Yes.', options: yesNo('No') },
 
@@ -592,7 +593,7 @@ export const DEFAULT_SELECTED_OPTIONS: Readonly<Record<string, readonly string[]
     org_account_status: ['Active'],
     opportunity_type: ['New Business'],
     opportunity_sales_stage: ['Qualification'],
-    opportunity_commission: ['Standard (10%)'],
+    opportunity_commission: ['No'],
     quote_stage: ['Draft'],
     quote_company: ['Nandini Infosystems'],
     quote_validation_period: ['30 Days'],
@@ -796,6 +797,8 @@ const RAW_DEFAULT_FIELDS: DefaultField[] = [
     ]),
     ...section('opportunities', 'basic', 'Commission & Documentation', [
         sel('commission', 'Commission', 'opportunity_commission', { soft: true }),
+        // Shown and required only when Commission is Yes (the form and the API enforce it).
+        t('commissionAmount', 'Commission Amount', { type: 'amount', lock: true }),
         sel('addDocument', 'Add Document', 'opportunity_add_document'),
     ]),
 

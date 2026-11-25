@@ -80,7 +80,8 @@ Fields not listed are ○ Free today and stay ○ Free.
 | Assigned to | 🔒R | 🔒 | Ownership |
 | Product Category | 🔒R | ⭐ | Classification |
 | Add Description | 🔒R | ⭐ | Notes |
-| Commission | 🔒R | ⭐ | Business preference |
+| Commission | 🔒R | ⭐ | Business preference. Fixed Yes / No options, default No |
+| Commission Amount | 🔒 | 🔒 | Conditional: shown and required (above 0) only when Commission is Yes |
 
 ### Quotations
 

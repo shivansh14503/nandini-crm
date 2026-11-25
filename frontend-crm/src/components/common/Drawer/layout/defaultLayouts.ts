@@ -343,6 +343,7 @@ function opportunitiesLayout(): DrawerLayoutDocument {
                     f('b-invoice', 'invoiceNo', 'standard'),
                     f('b-invdate', 'invoiceDate', 'standard'),
                     f('b-commission', 'commission', 'standard'),
+                    f('b-commission-amount', 'commissionAmount', 'standard'),
                     f('b-doc', 'addDocument', 'standard', { label: 'Document Attached' }),
                 ]),
             ],

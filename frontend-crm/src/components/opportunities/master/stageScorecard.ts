@@ -26,10 +26,9 @@ export function opportunityAmountBeforeTax(o: Opportunity): number {
     return o.subtotal !== undefined && o.subtotal !== null ? num(o.subtotal) : num(o.grandTotal) - num(o.totalTax);
 }
 
-/** The percentage in a Commission option ("Standard (10%)" → 10); 0 when it names none. */
-export function commissionPercent(commission: string | undefined): number {
-    const match = (commission ?? '').match(/(\d+(?:\.\d+)?)\s*%/);
-    return match ? Number(match[1]) : 0;
+/** The deal's Commission Amount: what was entered when Commission is Yes, else 0. */
+export function opportunityCommissionAmount(o: Opportunity): number {
+    return o.commission === 'Yes' ? num(o.commissionAmount) : 0;
 }
 
 /**
@@ -48,8 +47,7 @@ export const OPPORTUNITY_CARD_AMOUNTS: readonly ScorecardAmount<Opportunity>[] =
     {
         key: 'builtin.commissionAmount',
         label: 'Commission Amount',
-        // The deal's value before tax × the percentage in its Commission option.
-        of: (o) => Math.round((opportunityAmountBeforeTax(o) * commissionPercent(o.commission)) / 100),
+        of: opportunityCommissionAmount,
     },
     LINE_ITEM_CARD_AMOUNTS.lumpSumDiscount,
 ];

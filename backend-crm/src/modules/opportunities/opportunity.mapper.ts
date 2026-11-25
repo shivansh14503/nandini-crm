@@ -35,6 +35,8 @@ export interface OpportunityDto {
     invoiceNo: string;
     invoiceDate: string;
     commission: string;
+    /** Set only when Commission is Yes. */
+    commissionAmount: number | null;
     addDocument: string;
     currency: string;
     groupName: string;
@@ -82,6 +84,7 @@ export function toOpportunityDto(row: OpportunityRow): OpportunityDto {
         invoiceNo: text(row.invoiceNo),
         invoiceDate: toDateOnly(row.invoiceDate),
         commission: text(row.commission),
+        commissionAmount: row.commissionAmount === null ? null : decimalToNumber(row.commissionAmount),
         addDocument: text(row.addDocument),
         currency: row.currency,
         groupName: text(row.groupName),
@@ -131,7 +134,8 @@ export function toOpportunityData(
         tallySerialNo: nullable(input.tallySerialNo),
         invoiceNo: nullable(input.invoiceNo),
         invoiceDate: input.invoiceDate ? fromDateOnly(input.invoiceDate) : null,
-        commission: nullable(input.commission),
+        commission: input.commission,
+        commissionAmount: input.commission === 'Yes' ? (input.commissionAmount ?? null) : null,
         addDocument: input.addDocument,
         currency: input.currency ?? DEFAULT_CURRENCY,
         groupName: nullable(input.groupName),

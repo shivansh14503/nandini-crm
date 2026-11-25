@@ -83,7 +83,7 @@ const OPPORTUNITY_IMPORT_DEFAULTS = {
     followupType: 'Call',
     remarks: 'Imported via bulk import',
     // Same "no commission" option lead conversion uses for new opportunities.
-    commission: 'Nil / Direct (0%)',
+    commission: 'No',
 } as const;
 /** Ticket fields the template doesn't offer (or left blank) but the record requires. */
 const TICKET_IMPORT_DEFAULTS = {
