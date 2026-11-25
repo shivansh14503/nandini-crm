@@ -15,6 +15,7 @@ import ConfirmationNumberOutlinedIcon from '@mui/icons-material/ConfirmationNumb
 import HistoryEduOutlinedIcon from '@mui/icons-material/HistoryEduOutlined';
 import CategoryOutlinedIcon from '@mui/icons-material/CategoryOutlined';
 import HandshakeOutlinedIcon from '@mui/icons-material/HandshakeOutlined';
+import ConnectWithoutContactOutlinedIcon from '@mui/icons-material/ConnectWithoutContactOutlined';
 import PublishedWithChangesIcon from '@mui/icons-material/PublishedWithChanges';
 import { CRM_MODULE_GROUPS, type CrmModuleGroupKey, type CrmModuleKey } from '@/types/formConfig.types';
 import { CONVERT_TINT } from './ConvertLeadFieldsPanel';
@@ -38,6 +39,7 @@ export const MODULE_ICONS: Record<CrmModuleKey, React.ReactNode> = {
     contracts: <HistoryEduOutlinedIcon sx={ICON_SX} />,
     products: <CategoryOutlinedIcon sx={ICON_SX} />,
     'partner-companies': <HandshakeOutlinedIcon sx={ICON_SX} />,
+    referrals: <ConnectWithoutContactOutlinedIcon sx={ICON_SX} />,
 };
 
 /** Same green convert icon as the Convert Lead action in the lead's side drawer and on the Convert Lead form. */

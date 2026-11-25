@@ -31,6 +31,8 @@ export function recordHref(module: string, entityId: string): string | null {
             return ROUTES.CONTRACT_DETAIL(entityId);
         case 'partner-companies':
             return ROUTES.PARTNER_COMPANY_DETAIL(entityId);
+        case 'referrals':
+            return ROUTES.REFERRAL_DETAIL(entityId);
         default:
             return null;
     }

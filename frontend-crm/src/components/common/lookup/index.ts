@@ -9,6 +9,8 @@ export {
     PartnerCompanyLookupModal,
     PartnerCompanyContactLookupModal,
     ProductLookupModal,
+    ReferralLookupModal,
+    useActiveReferrals,
 } from './PresetLookupModals';
 export { RecordLookupModal, LOOKUP_DISPLAY_VALUE, findLookupRecord } from './RecordLookupModal';
 export type { RecordLookupModalProps, LookupRecordPools } from './RecordLookupModal';

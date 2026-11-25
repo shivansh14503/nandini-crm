@@ -24,6 +24,7 @@ export const queryKeys = {
     quotations: createEntityKeys('quotations'),
     products: createEntityKeys('products'),
     partnerCompanies: createEntityKeys('partner-companies'),
+    referrals: createEntityKeys('referrals'),
     pdfTemplates: {
         ...createEntityKeys('pdf-templates'),
         /** Field registry + line-item columns of a module (custom fields included). */

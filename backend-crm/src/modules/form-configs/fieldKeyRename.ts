@@ -23,6 +23,7 @@ export const MODULE_TABLES: Record<CrmModuleKey, { table: string; lock: LockedEn
     tickets: { table: 'Ticket', lock: 'ticket' },
     contracts: { table: 'Contract', lock: 'contract' },
     'partner-companies': { table: 'PartnerCompany', lock: 'partnerCompany' },
+    referrals: { table: 'Referral', lock: 'referral' },
 };
 
 /** Modules whose records PDF templates render (PDF_MODULES in modules/pdf/pdf.types.ts). */

@@ -25,6 +25,8 @@ export interface OpportunityDto {
     contactNumber: string;
     contactEmail: string;
     referredBy: string;
+    /** The Referral picked as Referred By; absent for a legacy free-text value. */
+    referredById?: string;
     partnerCompany: string;
     type: string;
     salesStage: string;
@@ -88,6 +90,7 @@ export function toOpportunityDto(row: OpportunityRow): OpportunityDto {
         contactNumber: text(row.contactNumber),
         contactEmail: text(row.contactEmail),
         referredBy: text(row.referredBy),
+        referredById: row.referredById ?? undefined,
         partnerCompany: text(row.partnerCompany),
         type: text(row.type),
         salesStage: row.salesStage,
@@ -175,6 +178,7 @@ export function toOpportunityData(
         contactNumber: nullable(input.contactNumber),
         contactEmail: input.contactEmail ?? null,
         referredBy: nullable(input.referredBy),
+        referredById: nullable(input.referredById),
         // Kept only for Lead Source Partner (the form shows the field only then).
         partnerCompany: partnerCompanyFor(input),
         type: nullable(input.type),

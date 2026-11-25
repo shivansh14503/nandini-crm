@@ -5,6 +5,7 @@ import type { Contact } from './contact.types';
 import type { Opportunity } from './opportunity.types';
 import type { NatureOfCallItem } from './ticket.types';
 import type { PartnerCompany, PartnerCompanyContact } from './partner.types';
+import type { Referral } from './referral.types';
 
 // ─── Generic Lookup / Record Picker Types ─────────────────────────────────────
 
@@ -56,6 +57,8 @@ export interface LookupRecordMap {
     natureOfCall: NatureOfCallItem;
     partnerCompany: PartnerCompany;
     partnerCompanyContact: PartnerCompanyContact;
+    /** Active referrals only (Referred By of leads and opportunities). */
+    referral: Referral;
 }
 
 export type LookupKind = keyof LookupRecordMap;

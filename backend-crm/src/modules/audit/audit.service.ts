@@ -35,8 +35,8 @@ const ADMIN_ONLY: ReadonlySet<AuditEntityType> = new Set(['User', 'PdfTemplate',
 
 /**
  * Who may read one record's trail. Admins read every trail. Otherwise: row-scoped records need access to the
- * record, admin-area trails are admin-only (a user's own User trail excepted), and products / partner companies
- * stay readable by any signed-in user, like the records themselves.
+ * record, admin-area trails are admin-only (a user's own User trail excepted), and products / partner companies /
+ * referrals stay readable by any signed-in user, like the records themselves.
  */
 async function assertCanReadTrail(user: AuthUser, entityType: AuditEntityType, entityId: string): Promise<void> {
     if (isAuditAdmin(user)) return;
@@ -73,6 +73,8 @@ const ENTITY_TYPES: Record<string, AuditEntityType> = {
     'partner-companies': 'PartnerCompany',
     partnercompany: 'PartnerCompany',
     partnercompanies: 'PartnerCompany',
+    referral: 'Referral',
+    referrals: 'Referral',
     user: 'User',
     users: 'User',
     'pdf-template': 'PdfTemplate',

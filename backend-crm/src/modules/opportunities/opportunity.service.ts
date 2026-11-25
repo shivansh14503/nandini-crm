@@ -18,6 +18,7 @@ import { tallySerialIssue } from '../../validators/tallySerial.js';
 import { codeSearchPrefix, phoneSearch, phoneWhere } from '../shared/searchTerms.js';
 import { assertDeletedRow, lockRecords, restoreData, runInTransaction, softDeleteData, type BulkDeleteResult } from '../shared/transactions.js';
 import { assertLeadSourceDetails, LEAD_SOURCE_DETAIL_KEYS } from '../shared/leadSource.js';
+import { resolveReferredBy, type ReferredByValue } from '../shared/referredBy.js';
 import { toOpportunityData, toOpportunityDto, type OpportunityDto } from './opportunity.mapper.js';
 import { assertRecordFile, RECORD_FILE_SELECT } from '../files/recordFile.service.js';
 import {
@@ -112,11 +113,15 @@ export async function createOpportunityRecord(
     input: OpportunityInput,
     user: AuthUser,
     lookups: PrefetchedLookups = {},
+    /** Convert Lead: the lead's own Referred By, which carries over even when it is a legacy typed name. */
+    referredByFrom?: ReferredByValue,
 ): Promise<OpportunityDto> {
     // Code first: its counter row lock queues concurrent creates before they take any other lock.
     const opportunityCode = await generateEntityCode(tx, 'OPP');
     const assignedTo = (await assertAssigneeValid(tx, input.assignedTo, { activeUsernames: lookups.activeUsernames })) ?? user.username;
     const links = await resolveLinks(tx, input, undefined, lookups);
+    // Referred By must be an active referral (imports and Convert Lead name one; the form picks one).
+    Object.assign(input, await resolveReferredBy(tx, input, referredByFrom));
     await assertRecordFile(tx, 'opportunities', input.documentFile, 'documentFile');
     const computed = calculateLineItems(input.lineItems, input.lumpSumDiscount);
 
@@ -212,6 +217,7 @@ export const opportunityService = {
             // Retyping a name without picking a record means "re-link by name", not "keep the old id".
             if ('organizationName' in patch && !('organizationId' in patch)) delete merged.organizationId;
             if ('contact' in patch && !('contactId' in patch)) delete merged.contactId;
+            if ('referredBy' in patch && !('referredById' in patch)) delete merged.referredById;
             // A Tally Serial No saved before the 9-digit rule existed is kept as is until someone edits that field,
             // so it doesn't block unrelated edits (stage changes, follow-ups, …) on the record.
             const keepLegacyTallySerial = !('tallySerialNo' in patch) && tallySerialIssue(before.tallySerialNo) !== null;
@@ -220,7 +226,7 @@ export const opportunityService = {
             // Checked when the stage or the document changes, so records saved at PO before the rule existed still
             // take unrelated edits (follow-ups, …).
             if (['salesStage', 'addDocument', 'documentFile'].some((key) => key in patch)) assertDocumentation(input);
-            // Likewise the Lead Source's follow-up field (Referred By / Nature of Partner), when the edit touches them.
+            // Likewise the Lead Source's follow-up field (Referred By / Partner Company), when the edit touches them.
             if (LEAD_SOURCE_DETAIL_KEYS.some((key) => key in patch)) assertLeadSourceDetails(input);
             await assertRecordFile(tx, 'opportunities', input.documentFile, 'documentFile', existing.documentFileId);
             if (keepLegacyTallySerial) input.tallySerialNo = before.tallySerialNo;
@@ -231,6 +237,8 @@ export const opportunityService = {
             assertNotInPast(opportunityPastChecks(input, before));
 
             const links = await resolveLinks(tx, input, existing);
+            // A Referred By the opportunity already has (a legacy typed name, or a referral since made Inactive) stays.
+            Object.assign(input, await resolveReferredBy(tx, input, existing));
             const assignedTo = (await assertAssigneeValid(tx, input.assignedTo, { previous: existing.assignedTo })) ?? existing.assignedTo;
             const computed = calculateLineItems(input.lineItems, input.lumpSumDiscount);
             await tx.opportunity.update({

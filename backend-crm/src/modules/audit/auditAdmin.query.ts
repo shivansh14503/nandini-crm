@@ -166,6 +166,7 @@ const ENTITY_TYPE_ROUTES: Readonly<Record<string, string>> = {
     tickets: 'Ticket',
     contracts: 'Contract',
     'partner-companies': 'PartnerCompany',
+    referrals: 'Referral',
     users: 'User',
     'pdf-templates': 'PdfTemplate',
 };

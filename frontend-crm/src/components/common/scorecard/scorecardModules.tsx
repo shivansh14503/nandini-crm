@@ -10,6 +10,7 @@ import CategoryOutlinedIcon from '@mui/icons-material/CategoryOutlined';
 import ConfirmationNumberOutlinedIcon from '@mui/icons-material/ConfirmationNumberOutlined';
 import HandshakeOutlinedIcon from '@mui/icons-material/HandshakeOutlined';
 import HistoryEduOutlinedIcon from '@mui/icons-material/HistoryEduOutlined';
+import ConnectWithoutContactOutlinedIcon from '@mui/icons-material/ConnectWithoutContactOutlined';
 import type { CrmModuleKey } from '@/types/formConfig.types';
 // Straight from the files (not the module barrels), so the registry never pulls in a list screen.
 import { OPPORTUNITY_CARD_AMOUNTS, useStageScorecard } from '../../opportunities/master/stageScorecard';
@@ -62,6 +63,7 @@ export const SCORECARD_MODULES: Readonly<Record<CrmModuleKey, ScorecardModuleInf
     products: { allLabel: 'All Products', allIcon: <CategoryOutlinedIcon />, builtInCards: false, singleRow: false },
     tickets: { allLabel: 'All Tickets', allIcon: <ConfirmationNumberOutlinedIcon />, builtInCards: false, singleRow: false },
     'partner-companies': { allLabel: 'All Partner Companies', allIcon: <HandshakeOutlinedIcon />, builtInCards: false, singleRow: false },
+    referrals: { allLabel: 'All Referrals', allIcon: <ConnectWithoutContactOutlinedIcon />, builtInCards: false, singleRow: false },
     contracts: {
         allLabel: 'All Contracts',
         allIcon: <HistoryEduOutlinedIcon />,

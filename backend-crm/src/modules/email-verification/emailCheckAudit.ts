@@ -13,6 +13,7 @@ export const CHECKED_ROW_SELECT = {
     leadId: true,
     contactId: true,
     organizationId: true,
+    referralId: true,
     verificationStatus: true,
     verificationReason: true,
     verifiedAt: true,
@@ -32,6 +33,7 @@ function ownerOf(row: CheckedRow): [AuditEntityType, string] | null {
     if (row.leadId) return ['Lead', row.leadId];
     if (row.contactId) return ['Contact', row.contactId];
     if (row.organizationId) return ['Organization', row.organizationId];
+    if (row.referralId) return ['Referral', row.referralId];
     return null;
 }
 
