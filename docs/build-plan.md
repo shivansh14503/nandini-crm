@@ -169,9 +169,23 @@ access decided later); log **all changes** plus sign-ins and refused access; **k
       `20261123120000_audit_snapshot_isolation`). 1 M entries verified in 95–97 s.
 - [x] Unit tests: `auditUndo.test.ts`, `auditExport.format.test.ts`, `auditLedger.test.ts`, `xlsxWriter.test.ts`.
 
-**E. Later**
-- [ ] Alert rules (e.g. > 50 deletes in 10 min, 5 failed sign-ins from one IP) shown in-app; per-user activity tab once
-      User Management exists; wider (manager) access if decided; optional record-view logging.
+**E. Users tab** ✅ (2026-11-25, owner's request: a user's own log and report for admins)
+- [x] `GET /api/admin/audit-logs/users`: every user (inactive ones too), the background jobs and any other username
+      with entries, each with entries in the period per category, sign-ins, failed sign-ins, newest entry (any time)
+      and last sign-in ([API plan §2.7](api-plan.md#27-administration-)). Newest entry = one `TOP 1` seek per user on
+      `(changedBy, createdAt)`. `npm run perf:audit` (1 M entries, 167 k in the window, ~90 usernames): 30 days
+      **249 ms**, 366 days 1.3 s.
+- [x] "Users" tab after Security: searchable list (status filter, sort by activity / recently active / name / last
+      sign-in; the period follows the date choice), each user with entries and their Data / Configuration / Security
+      split, failed sign-ins, last active and last sign-in. A click opens the user's activity log: who they are, last
+      active / sign-in, category chips with counts, then the normal search, date, filter, entries table and drawer; Export
+      (CSV / Excel) downloads that user's report, named `audit-log-<username>-<date>-<time>`. Phones: two-row cards; the
+      tabs wrap.
+- [x] Unit tests: `auditUsers.test.ts`, per-user file names in `auditExport.format.test.ts`.
+
+**F. Later**
+- [ ] Alert rules (e.g. > 50 deletes in 10 min, 5 failed sign-ins from one IP) shown in-app; wider (manager) access if
+      decided; optional record-view logging.
 
 Exit: an admin can answer "who changed this lead's Assigned To last week, from which screen and IP?" in under a
 minute, undo it, and prove the log hasn't been altered.

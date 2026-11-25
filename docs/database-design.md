@@ -389,7 +389,7 @@ One CSV / Excel export of the audit log (migration `20261123120100_audit_export_
 BullMQ job id and the file name on disk under `AUDIT_EXPORT_DIR`), `requestedBy` (username; only they can poll or
 download it), `format` (`csv` | `xlsx`), `filtersJson` (the list filters at the time), `status` (`queued` | `running` |
 `completed` | `failed` | `expired`), `rowCount`, `truncated` (hit the cap: 1,000,000 CSV / 500,000 Excel), `fileName`
-(`audit-log-YYYY-MM-DD-HHmm.csv`), `fileSize`, `message` (why it failed), `createdAt`, `finishedAt`. Files are deleted
+(`audit-log-YYYY-MM-DD-HHmm.csv`, or `audit-log-<username>-…` for one user's activity), `fileSize`, `message` (why it failed), `createdAt`, `finishedAt`. Files are deleted
 after 24 h (row → `expired`); an export still `running` after 6 h (a crashed worker) is marked `failed`. Kept as
 history. Indexes `(requestedBy, createdAt)`, `(createdAt)`. The export itself is an `AuditLog` `EXPORT` entry.
 
