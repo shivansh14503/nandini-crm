@@ -44,6 +44,8 @@ export interface LookupFieldProps {
     uppercase?: boolean;
     /** Re-formats the whole typed value, e.g. name-casing a person's name (must keep the length). */
     formatValue?: (value: string) => string;
+    /** Most characters the input accepts (typed or pasted), e.g. the field's schema limit. */
+    maxLength?: number;
 }
 
 const MAX_VISIBLE_OPTIONS = 50;
@@ -94,6 +96,7 @@ export function LookupField({
     matchMode = 'substring',
     uppercase = false,
     formatValue,
+    maxLength,
 }: LookupFieldProps) {
     const handleLookup = onLookupClick ?? onSelectClick;
     const sanitizerRef = useUndoSafeSanitizer(uppercase ? upperCase : undefined);
@@ -146,6 +149,11 @@ export function LookupField({
                         placeholder={placeholder}
                         required={required}
                         inputRef={sanitizerRef}
+                        slotProps={
+                            maxLength
+                                ? { ...params.slotProps, htmlInput: { ...params.slotProps.htmlInput, maxLength } }
+                                : params.slotProps
+                        }
                     />
                 )}
             />
