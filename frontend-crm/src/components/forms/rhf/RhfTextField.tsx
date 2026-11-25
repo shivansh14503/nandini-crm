@@ -41,6 +41,8 @@ export interface RhfTextFieldProps<T extends FieldValues>
     lowercase?: boolean;
     maxLength?: number;
     min?: number | string;
+    /** Date pickers start at today unless set: for dates that record the past (e.g. the date on a document). */
+    allowPastDates?: boolean;
     max?: number | string;
     step?: number | string;
     /** Width token; inferred from `name` / `fieldType` when omitted. */
@@ -66,6 +68,7 @@ export function RhfTextField<T extends FieldValues>({
     lowercase,
     maxLength,
     min,
+    allowPastDates,
     max,
     step,
     fieldSize,
@@ -153,8 +156,9 @@ export function RhfTextField<T extends FieldValues>({
         inputProps.onChange?.(e);
     };
 
-    // Date pickers start at today: past days can't be picked anywhere in the CRM (forms also reject typed ones).
-    const pickerMin = inputProps.type === 'date' ? localToday() : inputProps.type === 'datetime-local' ? localNow() : undefined;
+    // Date pickers start at today: past days can't be picked in the CRM (forms also reject typed ones), except on
+    // fields that record a past date (`allowPastDates`).
+    const pickerMin = allowPastDates ? undefined : inputProps.type === 'date' ? localToday() : inputProps.type === 'datetime-local' ? localNow() : undefined;
     const resolvedMin = min ?? (existingHtmlInput.min as string | number | undefined) ?? pickerMin;
 
     const mergedSlotProps = {
