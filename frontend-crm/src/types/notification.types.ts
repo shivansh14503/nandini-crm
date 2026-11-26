@@ -27,7 +27,7 @@ export interface CrmNotification {
     readAt: string;
     /** ISO instant. */
     createdAt: string;
-    /** App route to open: `/calendar?activity=<id>`, `/contracts/<id>`, `/connected-calendars`, or '' when nowhere. */
+    /** App route to open: `/calendar?activity=<id>`, `/contracts/<id>`, `/profile?tab=connected-accounts`, or '' when nowhere. */
     href: string;
 }
 

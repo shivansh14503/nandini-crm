@@ -25,9 +25,10 @@ import { callbackLocation, callbackSessionOf, completeConnect, oauthCookieClearO
  *                                       409 PROVIDER_DISABLED, 409 CALENDAR_ALREADY_CONNECTED, 403 FORBIDDEN (shared /
  *                                       inactive login), 400 (fake provider without a company email), 429 RATE_LIMITED.
  *   GET  /oauth/:provider/callback    the provider's redirect (not behind `authenticate`: it checks the session itself).
- *                                       Always 302 to <origin>/connected-calendars?calendar=connected&provider=<key> or
- *                                       ?calendar=error&reason=<fixed code>&provider=<key>; no session (or one that must
- *                                       change its password, the mcp claim) → APP_PUBLIC_URL/login?next=/connected-calendars.
+ *                                       Always 302 to <origin>/profile?tab=connected-accounts&calendar=connected&provider=<key>
+ *                                       or …&calendar=error&reason=<fixed code>&provider=<key> (My Profile › Connected
+ *                                       accounts); no session (or one that must change its password, the mcp claim) →
+ *                                       APP_PUBLIC_URL/login?next=%2Fprofile%3Ftab%3Dconnected-accounts.
  *                                       Clears crm_oauth. Start is behind `authenticate`, so an mcp token gets 403
  *                                       PASSWORD_CHANGE_REQUIRED there.
  *   POST /:id/disconnect              → 204 (own connection; 404 otherwise). Revokes the grant at Google (Microsoft has

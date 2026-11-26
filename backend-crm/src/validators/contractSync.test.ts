@@ -488,19 +488,26 @@ describe('backend ↔ frontend contract', { skip }, () => {
         assert.deepEqual(Object.keys(frontend.CALLBACK_REASON_MESSAGES).sort(), [...CALLBACK_REASONS].sort(), 'every callback reason has a sentence');
     });
 
-    it('frontend notification kinds and the Connected calendars route match', async () => {
+    it('frontend notification kinds and the Connected accounts route match', async () => {
         const frontend = await loadFrontend<{ NOTIFICATION_KINDS: readonly string[] }>('types/notification.types.ts');
         assert.deepEqual([...frontend.NOTIFICATION_KINDS], [...NOTIFICATION_KINDS]);
         const constants = readFileSync(path.join(FRONTEND_SRC, 'config/constants.ts'), 'utf8');
-        assert.match(constants, new RegExp(`CONNECTED_CALENDARS: '${CALENDAR_CONNECTIONS_PAGE}'`));
-        assert.ok(existsSync(path.join(FRONTEND_SRC, `app${CALENDAR_CONNECTIONS_PAGE}/page.tsx`)), 'the page the callback redirects to exists');
+        assert.ok(constants.includes(`PROFILE_CONNECTED_ACCOUNTS: '${CALENDAR_CONNECTIONS_PAGE}'`), 'ROUTES.PROFILE_CONNECTED_ACCOUNTS');
+        const target = new URL(CALENDAR_CONNECTIONS_PAGE, 'http://crm.invalid');
+        assert.ok(existsSync(path.join(FRONTEND_SRC, `app${target.pathname}/page.tsx`)), 'the page the callback redirects to exists');
+        const tab = target.searchParams.get('tab');
+        assert.ok(tab, 'the callback opens a My Profile tab');
+        const profileView = readFileSync(path.join(FRONTEND_SRC, 'components/profile/ProfileView.tsx'), 'utf8');
+        assert.ok(profileView.includes(`key: '${tab}'`), `My Profile has a '${tab}' tab`);
+        // Old bookmarks and in-flight callbacks still land somewhere.
+        assert.ok(existsSync(path.join(FRONTEND_SRC, 'app/connected-calendars/page.tsx')), 'the old /connected-calendars redirect exists');
     });
 
-    it('the login page follows the callback\'s ?next= back to Connected calendars, and only to CRM paths', async () => {
+    it('the login page follows the callback\'s ?next= back to Connected accounts, and only to CRM paths', async () => {
         const { safeNextPath } = await loadFrontend<FrontendSafeNextPath>('utils/safeNextPath.ts');
         const next = new URL(loginLocation()).searchParams.get('next');
         assert.equal(safeNextPath(next, '/dashboard'), CALENDAR_CONNECTIONS_PAGE);
-        assert.equal(safeNextPath('/connected-calendars?calendar=connected', '/d'), '/connected-calendars?calendar=connected');
+        assert.equal(safeNextPath('/profile?tab=connected-accounts&calendar=connected', '/d'), '/profile?tab=connected-accounts&calendar=connected');
         for (const bad of ['//evil.example', '/\\evil.example', 'https://evil.example', 'javascript:alert(1)', '/login', '', null, '/a\nb']) {
             assert.equal(safeNextPath(bad, '/d'), '/d', String(bad));
         }

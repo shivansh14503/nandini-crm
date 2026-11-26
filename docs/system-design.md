@@ -295,7 +295,8 @@ which see every record (`modules/user-admin/roles.ts`, mirrored and contract-tes
   `email_verified` and an `hd` claim in the company domains; Microsoft needs the configured tenant (`tid`, when the
   tenant is a GUID) and reads the address from Graph `/me` (`mail`, else UPN). Granted scopes are compared with the
   requested ones (`scope_denied`). The address must equal the user's company email, or fills an empty one when it is
-  a company address held by nobody else. It always answers with a **302** to `/connected-calendars?calendar=…` on the
+  a company address held by nobody else. It always answers with a **302** to
+  `/profile?tab=connected-accounts&calendar=…` (My Profile › Connected accounts) on the
   CRM origin that started the flow (`isAppOrigin`, `config/origins.ts`, also used by CORS), never to another site,
   with a fixed reason code (no provider text is reflected). A refused grant is revoked at Google unless it is live
   for another user. Tokens are sealed per row and column (AAD `CalendarConnection:<id>:accessToken|refreshToken`);
@@ -798,28 +799,34 @@ settings or option meta back; a company email change also notifies `MASTER_DATA_
 failed background refetch keeps the cards (and their unsaved drafts) on screen with an inline "Try again" warning;
 the full-page error shows only when nothing has loaded yet.
 
-### 8.6 Connected calendars (`/connected-calendars`, P2-2)
+### 8.6 Calendar connections (My Profile › Connected accounts, P2-2)
 
-As of 2026-11-26. A temporary page (`app/connected-calendars/page.tsx`, any signed-in user) hosting the
-self-contained `components/integrations/CalendarConnectionsCard` (own service, hooks with query key
-`calendarConnections`, and types contract-tested against the API), so the card can later move into My Profile
-unchanged. Reached from "Connected calendars" in the navbar user menu and the mobile drawer (My Profile is not
-changed), from `calendar_reconnect` notifications, and from the OAuth callback redirect. The card lists the live
+As of 2026-11-26. The self-contained `components/integrations/CalendarConnectionsCard` (own service, hooks with query
+key `calendarConnections`, and types contract-tested against the API) lives in My Profile's **Connected accounts** tab
+(`/profile?tab=connected-accounts`, `ROUTES.PROFILE_CONNECTED_ACCOUNTS` = the API's `CALENDAR_CONNECTIONS_PAGE`, §8.7;
+Profile Phase 4). Reached from "Connected accounts" in the navbar user menu and the mobile drawer, from
+`calendar_reconnect` notifications, the calendar's reconnect banner, and the OAuth callback redirect. The old
+temporary page `/connected-calendars` (`app/connected-calendars/page.tsx`) is now only a client redirect to the tab
+that keeps the query string (old bookmarks, callbacks already in flight). The card lists the live
 connection (provider, account, status, connected / access-ends dates) with Reconnect and Disconnect (a confirm dialog;
 Microsoft also points to myapps.microsoft.com because it has no per-app revoke), or one Connect button per provider an
 admin switched on ("Connect" leaves for the provider's consent screen via `window.location.assign`). It reads the
 callback's `?calendar=connected|error&reason=` itself (or takes it as a prop), shows a toast or a fixed sentence per
-reason, then drops the params with `router.replace`. Until P2-3 it says the calendar is connected and sync arrives in
-the next update. The CRM calendar shows `CalendarReconnectAlert` when the connection needs a reconnect; Admin › API
+reason, then drops only those params with `router.replace` (`?tab=` stays). Until P2-3 it says the calendar is
+connected and sync arrives in the next update. The CRM calendar shows `CalendarReconnectAlert` when the connection needs a reconnect; Admin › API
 Integrations › People shows each person's connection with an admin Disconnect (optional note, audited). Login honours
-`?next=` for CRM paths only (`utils/safeNextPath.ts`), so a callback without a session returns here after sign-in.
+`?next=` for CRM paths only (`utils/safeNextPath.ts`), so a callback without a session returns here after sign-in;
+`/profile` sends a signed-out visitor to `/login?next=<its path and query>` the same way (so does `/connected-calendars`,
+through its redirect), keeping the tab and any `?calendar=` result.
 
 ### 8.7 My Profile (`/profile`)
 
 - **Page:** `app/profile/page.tsx` (signed-in only), content in `components/profile/` (`ProfileView`,
   `PhotoCropDialog`). Reached from the navbar user menu's "My Profile" and the mobile drawer's account block. A header
-  card (large `UserAvatar` with change / remove photo, name, role, department, username, last sign-in) and three pill
-  tabs, **Profile**, **Notifications** and **Security**, kept in the URL (`?tab=notifications`, `?tab=security`).
+  card (large `UserAvatar` with change / remove photo, name, role, department, username, last sign-in) and four pill
+  tabs, **Profile**, **Notifications**, **Connected accounts** and **Security**, kept in the URL
+  (`?tab=notifications`, `?tab=connected-accounts`, `?tab=security`; anything else opens Profile). A tab switch keeps
+  the other query params.
 - **Profile tab:** "Personal details" (first name, last name, mobile, office phone; `PATCH /api/me/profile`, field
   errors mapped back to the inputs) and read-only "Work details" (username, work email, role, department, member
   since: admin-managed). User fields are not in Form Builder (they are treated like admin settings).
@@ -832,6 +839,10 @@ Integrations › People shows each person's connection with an admin Disconnect 
   While out of office (or on leave) the user gets no morning summary and pickers, the assigned-user card and Admin ›
   Users show "Out of office until <date>" / "On leave" next to them (labelled, not hidden); bell notifications keep
   arriving. The user list carries the dates and the client compares them with the business day.
+- **Connected accounts tab** (Profile Phase 4, as of 2026-11-26; hidden while the user must change their password):
+  `CalendarConnectionsCard` unchanged (§8.6), connect / reconnect / disconnect Google or Microsoft 365. The OAuth
+  callback lands on `?tab=connected-accounts&calendar=connected|error&reason=&provider=`; the card reads and then drops
+  the `calendar` / `reason` / `provider` params itself. Also in the navbar user menu and the mobile drawer.
 - **Security tab:** "Change password" (current / new / confirm, live checklist from `utils/passwordPolicy.ts`, the same
   rules as the API) and "Where you're signed in" (`GET /api/me/sessions`: device, IP, signed-in time, "This device"
   for the current one, Sign out per other row, "Sign out of all other sessions").
