@@ -1,9 +1,11 @@
+import type { BusyKind } from '../busy.constants.js';
+
 /**
  * Calendar provider adapters (Calendar Phase 2 spec §7.2; admin-managed connections: addendum §2, §8.1). Thin `fetch`
  * clients behind one interface, no SDKs (D1). Access tokens are minted per call from the company credentials
  * (tokenSource.ts) and handed to the adapter inside a `CallCtx`; minting is not on the adapter. P2-2b ships
- * `probeCalendar` (the per-row health check); the event operations (create / patch / cancel / get) join this interface
- * with the push engine (P2-3b), pull / free-busy / watch with P2-5…P2-7. The engine never imports an adapter
+ * `probeCalendar` (the per-row health check), P2-6 `freeBusy`; the event operations (create / patch / cancel / get) join
+ * this interface with the push engine (P2-3b), pull / watch with P2-5 / P2-7. The engine never imports an adapter
  * directly: it goes through `getAdapter()` (providers/registry.ts), which tests replace with the in-memory fake.
  *
  * Nothing here is ever logged with its values: tokens stay inside these objects.
@@ -38,6 +40,23 @@ export interface CallCtx {
  * The adapter interface. P2-3b adds `createEvent`, `patchEvent`, `cancelEvent`, `getEvent` and `undeleteEvent?`
  * (its `CallCtx` gains nothing more: Graph URLs use `ctx.mailbox`).
  */
+/** One busy block of a calendar (times only: subjects, locations and privacy flags are never read into the CRM). */
+export interface ProviderBusyBlock {
+    start: Date;
+    end: Date;
+    kind: BusyKind;
+}
+
+/** Free/busy of one calendar: its blocks, or why the provider wouldn't give them (a fixed code, never provider text). */
+export type FreeBusyResult = { busy: ProviderBusyBlock[] } | { error: string };
+
+export interface FreeBusyRequest {
+    /** Lower-cased company emails (≤ 50 Google, ≤ 20 Graph per call). */
+    emails: readonly string[];
+    start: Date;
+    end: Date;
+}
+
 export interface CalendarProviderAdapter {
     readonly key: CalendarProviderKey;
     /**
@@ -46,4 +65,12 @@ export interface CalendarProviderAdapter {
      * rejects with a `ProviderError` (classified by `classifyApiError`).
      */
     probeCalendar(ctx: CallCtx): Promise<void>;
+    /**
+     * Busy times of `emails` in `[start, end)`, read **as `ctx`'s person** (P2-6; addendum §8.5): Google
+     * `POST /freeBusy` with the impersonated token (`calendar.events.freebusy`), Graph
+     * `POST /users/{mailbox}/calendar/getSchedule` with the app token. One interactive try, 5 s timeout. Every requested
+     * email is in the answer (a calendar the provider left out is `{ error: 'missing' }`). Rejects with a
+     * `ProviderError` when the whole call fails.
+     */
+    freeBusy(ctx: CallCtx, request: FreeBusyRequest): Promise<Map<string, FreeBusyResult>>;
 }

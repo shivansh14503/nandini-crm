@@ -232,6 +232,66 @@ export interface CalendarFeedParams {
     status?: ActivityStatus[];
 }
 
+// ─── Busy times (Calendar Phase 2, P2-6: GET /api/activities/busy) ───────────
+
+/** What a block means: a meeting, a maybe, out of office (or an all-day Site Visit). */
+export const BUSY_KINDS = ['busy', 'tentative', 'away'] as const;
+export type BusyKind = (typeof BUSY_KINDS)[number];
+/**
+ * How much the CRM knows about a person: `ok` CRM + their company calendar; `not_connected` / `error` / `unavailable`
+ * CRM activities only (not synced, sync problem, calendar didn't answer); `unknown` not an active user.
+ */
+export const BUSY_PERSON_STATUSES = ['ok', 'not_connected', 'error', 'unavailable', 'unknown'] as const;
+export type BusyPersonStatus = (typeof BUSY_PERSON_STATUSES)[number];
+/** People per request. */
+export const BUSY_MAX_USERS = 20;
+/** Longest window (days). */
+export const BUSY_MAX_RANGE_DAYS = 31;
+/** "Find a free time" slot length bounds (minutes). */
+export const BUSY_SUGGEST_MIN_MINUTES = 5;
+export const BUSY_SUGGEST_MAX_MINUTES = 1440;
+/** Business hours and look-ahead the server searches for "Find a free time". */
+export const BUSY_WORKING_HOURS = '09:00-19:00';
+export const BUSY_SUGGEST_DAYS = 7;
+
+export interface BusyBlock {
+    /** ISO instants. */
+    start: string;
+    end: string;
+    kind: BusyKind;
+}
+
+export interface BusyPerson {
+    username: string;
+    name: string;
+    provider: 'google' | 'microsoft' | 'fake' | null;
+    status: BusyPersonStatus;
+    sources: string[];
+    busy: BusyBlock[];
+}
+
+export interface BusyTimes {
+    timeZone: string;
+    from: string;
+    to: string;
+    generatedAt: string;
+    people: BusyPerson[];
+    /** Only when `suggest` was sent: the first common free slot, or null when none fits. */
+    suggestion?: { start: string; end: string } | null;
+}
+
+export interface BusyTimesParams {
+    /** 1–20 usernames. */
+    users: string[];
+    /** ISO instants with a zone; `to` exclusive, at most 31 days after `from`. */
+    from: string;
+    to: string;
+    /** The activity being edited (its own block doesn't count). */
+    exclude?: string;
+    /** Ask for the first common free slot of this many minutes (5–1440). */
+    suggest?: number;
+}
+
 /** One record of GET /api/activities/link-targets (the "Related To" picker). */
 export interface ActivityLinkTarget {
     module: ActivityRelatedModule;

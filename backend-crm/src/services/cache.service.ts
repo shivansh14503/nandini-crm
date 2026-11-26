@@ -11,6 +11,13 @@ export const CACHE_KEYS = {
     search: (query: string) => `cache:search:${query}`,
     /** A user's unread notification count (navbar bell), read with `getOrSetGuarded`; dropped by every write to their notifications. */
     notificationsUnread: (username: string) => `cache:notifications:unread:${username.trim().toLowerCase()}`,
+    /** Busy times (P2-6): one person's company-calendar busy blocks in `[fromMs, toMs)` (60 s, TTL only: the CRM never writes them). */
+    calendarBusy: (username: string, fromMs: number, toMs: number) => `cache:calendar:busy:${username.trim().toLowerCase()}:${fromMs}:${toMs}`,
+    /**
+     * Busy times (P2-6): the CRM activities of a set of people (`peopleHash`) in `[fromMs, toMs)`. Under the activities
+     * lookup namespace on purpose, so every activity write's `invalidateEntityCaches('activities')` drops it (guarded read).
+     */
+    activityBusy: (peopleHash: string, fromMs: number, toMs: number) => `cache:lookups:activities:busy:${peopleHash}:${fromMs}:${toMs}`,
 } as const;
 
 const SCAN_BATCH_SIZE = 200;
