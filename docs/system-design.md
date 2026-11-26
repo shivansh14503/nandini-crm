@@ -804,7 +804,8 @@ the full-page error shows only when nothing has loaded yet.
 As of 2026-11-26. The self-contained `components/integrations/CalendarConnectionsCard` (own service, hooks with query
 key `calendarConnections`, and types contract-tested against the API) lives in My Profile's **Connected accounts** tab
 (`/profile?tab=connected-accounts`, `ROUTES.PROFILE_CONNECTED_ACCOUNTS` = the API's `CALENDAR_CONNECTIONS_PAGE`, §8.7;
-Profile Phase 4). Reached from "Connected accounts" in the navbar user menu and the mobile drawer, from
+Profile Phase 4). Reached from My Profile (no separate menu item: the navbar user menu and mobile drawer link only
+My Profile), from
 `calendar_reconnect` notifications, the calendar's reconnect banner, and the OAuth callback redirect. The old
 temporary page `/connected-calendars` (`app/connected-calendars/page.tsx`) is now only a client redirect to the tab
 that keeps the query string (old bookmarks, callbacks already in flight). The card lists the live

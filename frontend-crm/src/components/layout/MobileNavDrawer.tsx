@@ -18,7 +18,6 @@ import CloseIcon from '@mui/icons-material/Close';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import LogoutIcon from '@mui/icons-material/Logout';
 import AdminPanelSettingsOutlinedIcon from '@mui/icons-material/AdminPanelSettingsOutlined';
-import LinkRoundedIcon from '@mui/icons-material/LinkRounded';
 import PersonOutlineRoundedIcon from '@mui/icons-material/PersonOutlineRounded';
 import ChevronRightRoundedIcon from '@mui/icons-material/ChevronRightRounded';
 import { UserAvatar, displayName } from '@/components/common/UserAvatar';
@@ -108,7 +107,7 @@ export interface MobileNavDrawerProps {
 
 /**
  * Phone / tablet navigation: the navbar pills don't fit below `lg`, so the menu button opens this panel with the
- * same groups (collapsible), My Profile, Connected accounts (My Profile's tab), the admin link, the light/dark switch (hidden from the bar on phones) and
+ * same groups (collapsible), My Profile, the admin link, the light/dark switch (hidden from the bar on phones) and
  * Sign Out.
  */
 export function MobileNavDrawer({ open, onClose, groups, currentPath, user, onLogout }: MobileNavDrawerProps) {
@@ -385,10 +384,6 @@ export function MobileNavDrawer({ open, onClose, groups, currentPath, user, onLo
                 <ListItemButton component={Link} href={ROUTES.PROFILE} onClick={onClose} sx={rowSx}>
                     <PersonOutlineRoundedIcon sx={{ fontSize: 19 }} />
                     My Profile
-                </ListItemButton>
-                <ListItemButton component={Link} href={ROUTES.PROFILE_CONNECTED_ACCOUNTS} onClick={onClose} sx={rowSx}>
-                    <LinkRoundedIcon sx={{ fontSize: 19 }} />
-                    Connected accounts
                 </ListItemButton>
                 <ListItemButton component={Link} href={ROUTES.ADMIN} onClick={onClose} sx={rowSx}>
                     <AdminPanelSettingsOutlinedIcon sx={{ fontSize: 19 }} />
