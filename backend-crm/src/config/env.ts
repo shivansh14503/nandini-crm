@@ -143,6 +143,14 @@ const envSchema = z
          * production → integrations "not ready". Production: https://crm.nandiniinfosys.com.
          */
         PUBLIC_API_URL: z.preprocess(blankToUndefined, z.url().optional()),
+        /**
+         * Dev-only in-memory calendar provider `fake` (Connected calendars works end to end without Google). Ignored,
+         * with a start-up warning, when NODE_ENV=production. Never set it on the shared server.
+         */
+        CALENDAR_FAKE_PROVIDER: z
+            .enum(['true', 'false'])
+            .default('false')
+            .transform((value) => value === 'true'),
     })
     .superRefine((env, ctx) => {
         if (env.NODE_ENV === 'production' && (!env.JWT_SECRET || env.JWT_SECRET.length < 32)) {
@@ -246,5 +254,9 @@ export const ENV = {
         /** True when PUBLIC_API_URL came from the environment rather than the localhost default. */
         PUBLIC_API_URL_CONFIGURED: Boolean(env.PUBLIC_API_URL),
         READY_REASON: integrationsReadyReason,
+        /** The dev-only `fake` calendar provider is offered (CALENDAR_FAKE_PROVIDER=true outside production). */
+        FAKE_PROVIDER: env.CALENDAR_FAKE_PROVIDER && env.NODE_ENV !== 'production',
+        /** CALENDAR_FAKE_PROVIDER=true was set in production and is ignored (start-up warning). */
+        FAKE_PROVIDER_IGNORED: env.CALENDAR_FAKE_PROVIDER && env.NODE_ENV === 'production',
     },
 } as const;

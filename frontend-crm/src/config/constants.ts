@@ -70,6 +70,8 @@ export const ROUTES = {
     /** My Profile (any signed-in user); `?tab=security` opens the Security tab. */
     PROFILE: '/profile',
     PROFILE_SECURITY: '/profile?tab=security',
+    /** Connected calendars (any signed-in user): connect / disconnect Google or Microsoft 365. Temporary home until it moves into My Profile. */
+    CONNECTED_CALENDARS: '/connected-calendars',
     ADMIN: '/admin',
     FORM_CUSTOMIZATION: '/admin/form-customization',
     DOCUMENT_SERIES: '/admin/document-series',

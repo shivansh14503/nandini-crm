@@ -37,7 +37,9 @@ model User {
   /// bcrypt hash. Legacy plain-text values are re-hashed on the user's next successful login.
   passwordHash       String    @map("Password") @db.NVarChar(255)
   role               String    @default("Sales Executive") @map("Role") @db.NVarChar(50)
-  /// Not @unique: SQL Server unique constraints allow a single NULL. Uniqueness is enforced in the service.
+  /// Company email, stored trimmed and lower-cased. Unique among active, non-group users (hand-written filtered
+  /// index UX_Users_email, migration 20261127090000_calendar_connections; users/userEmail.service.ts is the one
+  /// write path). Not @unique: SQL Server unique constraints allow a single NULL, and group logins may share one.
   email              String?   @db.NVarChar(120)
   /// Display name, always `trim(firstName + ' ' + lastName)` when the user edits their profile (My Profile). Read
   /// everywhere a user's name is shown (lookups, audit log, quotation PDFs), so it stays a real column.
@@ -1742,4 +1744,78 @@ model IntegrationProvider {
   updatedBy       String?   @db.NVarChar(50)
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @default(now()) @updatedAt
+}
+
+/// One employee's OAuth grant: kind 'calendar' (Google or Microsoft) or, from Phase 3, kind 'video' (Zoom). Tokens are
+/// AES-256-GCM sealed (src/services/secretBox.ts, AAD "CalendarConnection:<id>:accessToken|refreshToken") and never
+/// returned by the API or logged. Rows are kept after a disconnect (tokens nulled, status 'disconnected') so a
+/// reconnect of the same account re-activates the row (and, from P2-3, its links keep their history).
+/// Usernames are strings, as everywhere (no FK to Users).
+///
+/// Hand-written filtered unique indexes in migration 20261127090000_calendar_connections (Prisma can't model filtered
+/// indexes; keep them out of this file and re-check `prisma migrate diff` output after future migrations):
+///   UX_CalendarConnection_user_kind (username, kind)      WHERE status IN ('active','reauth_required','error')
+///   UX_CalendarConnection_account   (provider, accountId) WHERE status IN ('active','reauth_required','error')
+model CalendarConnection {
+  /// Generated in code (randomUUID) before the insert, so the token AAD can name the row.
+  id                    String    @id @default(uuid()) @db.NVarChar(50)
+  username              String    @db.NVarChar(50)
+  /// google | microsoft | zoom (Phase 3) | fake (dev-only test provider, CALENDAR_FAKE_PROVIDER)
+  provider              String    @db.NVarChar(30)
+  /// calendar | video
+  kind                  String    @default("calendar") @db.NVarChar(20)
+  /// Lower-cased verified account email.
+  accountEmail          String    @db.NVarChar(254)
+  /// Google `sub`, Entra `oid`, Zoom user id.
+  accountId             String    @db.NVarChar(200)
+  /// Entra `tid` / Google `hd`.
+  tenantId              String?   @db.NVarChar(100)
+  /// active | reauth_required | error | disconnected
+  status                String    @default("active") @db.NVarChar(20)
+  /// Fixed code: invalid_grant, client_changed, grant_expired, key_error, user_inactive, by_user, by_admin, …
+  statusReason          String?   @db.NVarChar(50)
+  /// Granted scopes as the token response listed them (space separated).
+  grantedScopes         String    @db.NVarChar(1000)
+  /// IntegrationProvider.clientVersion at connect time; a mismatch means "reconnect".
+  clientVersion         Int
+  accessTokenEnc        String?   @db.NVarChar(Max)
+  accessTokenExpiresAt  DateTime?
+  refreshTokenEnc       String?   @db.NVarChar(Max)
+  /// Google time-limited grants (`refresh_token_expires_in`); null = no known end.
+  refreshTokenExpiresAt DateTime?
+  /// Key id of the sealed tokens (rotation: npm run integrations:reencrypt).
+  keyId                 String?   @db.NVarChar(8)
+  /// Compare-and-set guard for token refresh races (API and worker processes).
+  tokenVersion          Int       @default(0)
+  /// 'primary' (Google) / '' = default calendar (Graph).
+  calendarId            String    @default("primary") @db.NVarChar(200)
+  /// The user opted in to bringing customer meetings into the CRM (P2-8; needs the admin switch).
+  importMeetings        Boolean   @default(false)
+  /// Google nextSyncToken / Graph @odata.deltaLink (P2-5). Not a credential, but never logged. Null = full sync next.
+  syncCursor            String?   @db.NVarChar(Max)
+  /// Graph calendarView window of the delta link (re-baselined monthly).
+  syncWindowStart       DateTime?
+  syncWindowEnd         DateTime?
+  fullSyncAt            DateTime?
+  /// Connect backfill (P2-3c): when it ran and how many activities it copied.
+  backfilledAt          DateTime?
+  backfillCount         Int?
+  lastPulledAt          DateTime?
+  lastPushedAt          DateTime?
+  lastSuccessAt         DateTime?
+  lastErrorAt           DateTime?
+  lastErrorCode         String?   @db.NVarChar(100)
+  consecutiveFailures   Int       @default(0)
+  /// Per-connection mutex for push / pull / rsvp / channel jobs (P2-3).
+  leaseId               String?   @db.NVarChar(50)
+  leaseUntil            DateTime?
+  connectedAt           DateTime  @default(now())
+  disconnectedAt        DateTime?
+  disconnectedBy        String?   @db.NVarChar(50)
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @default(now()) @updatedAt
+
+  @@index([username, status])
+  @@index([provider, status])
+  @@index([keyId])
 }

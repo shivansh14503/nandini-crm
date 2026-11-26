@@ -1,9 +1,9 @@
 # Nandini CRM — API Plan
 
-> **Status:** living document. Lists every endpoint of `backend-crm` as of 2026-11-26 (through Calendar Phase 2 P2-1:
-> `/api/admin/integrations`, Admin › API Integrations, Profile Phase 1: `/api/me` (My Profile), `/api/user-photos` and
-> `POST /api/auth/change-password`, and Profile Phase 2: `/api/admin/users` (Admin › Users) with the must-change-password
-> claim) plus the planned ones.
+> **Status:** living document. Lists every endpoint of `backend-crm` as of 2026-11-26 (through Calendar Phase 2 P2-2:
+> `/api/calendar-connections` and the admin connection routes; P2-1: `/api/admin/integrations`, Admin › API
+> Integrations; Profile Phase 1: `/api/me` (My Profile), `/api/user-photos` and `POST /api/auth/change-password`; and
+> Profile Phase 2: `/api/admin/users` (Admin › Users) with the must-change-password claim) plus the planned ones.
 > When you add, change or remove a route, update this file in the same change (the route files'
 > header comments are the per-module source of truth; keep them in step too).
 > Related: [System design](system-design.md) · [Database design](database-design.md) · [Build plan](build-plan.md)
@@ -194,10 +194,17 @@ audited, deleted by the nightly retention job. Written by the reminders worker a
 one.
 
 `NotificationDto` (empty values are `''`, never `null`):
-`{ id, kind: 'activity_reminder' | 'activity_assigned' | 'activity_invited' | 'contract_renewal', title, body,
-entityModule: 'activities' | 'contracts' | '', entityId, dueAt (ISO or ''), actor (username, 'system' or ''),
-readAt (ISO, '' while unread), createdAt (ISO), href }`. `href` is the app route to open: activities
-`/calendar?activity=<id>` (the calendar opens the activity drawer), contracts `/contracts/<id>`, otherwise `''`.
+`{ id, kind: 'activity_reminder' | 'activity_assigned' | 'activity_invited' | 'contract_renewal' | 'calendar_reconnect',
+title, body, entityModule: 'activities' | 'contracts' | 'calendar-connections' | '', entityId, dueAt (ISO or ''), actor
+(username, 'system' or ''), readAt (ISO, '' while unread), createdAt (ISO), href }`. `href` is the app route to open:
+activities `/calendar?activity=<id>` (the calendar opens the activity drawer), contracts `/contracts/<id>`,
+`calendar-connections` (entityId = the connection id) `/connected-calendars`, otherwise `''`.
+`calendar_reconnect` (as of 2026-11-26, P2-2; actor `system`): "Reconnect your <provider>" when a refresh is refused
+(`invalid_grant`), the company app changed (`client_changed`) or a time-limited grant ended (`grant_expired`), dedupe
+`calendar_reconnect:<connectionId>:<connectedAt ms>:<ISO week>`; "Your <provider> access ends soon" 3 days before a
+time-limited Google grant ends, dedupe `calendar_reconnect:<connectionId>:<connectedAt ms>:expiring`. `connectedAt`
+is set again by every (re)connect and never by a token refresh, so a reconnect of the same account (same row id) re-arms
+both keys.
 Titles: `Reminder: <subject>`, `Assigned to you: <subject>`, `Invitation: <subject>`, `Contract renewal due: <title>`;
 bodies say when and what it is related to (e.g. "Starts at 10:30 AM (in 15 min) · Related to LD-0012 Ramesh").
 
@@ -313,8 +320,10 @@ expiresOn, expiresSoon }`).
 | POST | `/providers/:provider/test` | → `{ ok, code, message, testedAt }` with the **saved** credentials (no user involved): Google = a dummy code exchange (`invalid_grant` means the client is accepted), Microsoft = a client-credentials token request (AADSTS codes mapped). `code`: `credentials_ok`, `invalid_client`, `redirect_uri_mismatch`, `secret_expired`, `app_not_in_tenant`, `tenant_not_found`, `not_configured`, `not_available` (zoom), `network`, `provider_error`, `credentials_changed` (the credentials were saved or removed while the probe ran: the result is not stored, test again). Saved as `lastTest` only while the tested client id / secret / `clientVersion` are still the saved ones. 6 / min per admin (§3) |
 | PUT | `/settings` | Partial `{ companyDomains (1–10), followUpReminder (activity reminder label \| null), backfillDays: 30\|60\|90, eventVisibility: private\|default, followUpActivities, allowMeetingImport, importFollowupType }` → the whole settings. Stored as the module setting `activities/calendarSync` through Form Customization (validated, audited `ModuleSetting UPDATE`, form-config cache dropped) |
 | PUT | `/sync-types` | `{ "<Followup Type>": boolean }` → `syncTypes`. Option meta `calendarSync` on `shared_followup_type` (missing = on); Task / Note refused (400). Audited as option updates |
-| GET | `/people` | `?search&issue=any\|missing\|duplicate\|not_company` → active, non-group users `[{ username, fullName, department, role, email, emailIssue: missing\|duplicate\|not_company\|null, connection: null (P2-2) }]` |
-| PUT | `/people/:username/email` | `{ email (required; `''` or `null` clears), allowOtherDomain? }` → the person row; a body without `email` is 400 `VALIDATION_ERROR`. `modules/users/userEmail.service.ts` (also used by Admin › Users): trimmed and lower-cased; unique among active non-group users (409 `DUPLICATE_RECORD` on `email`, naming the holder); a company domain unless `allowOtherDomain` (400 on `email`); audited `User UPDATE`; drops `cache:lookups:users*` |
+| GET | `/people` | `?search&issue=any\|missing\|duplicate\|not_company` → active, non-group users `[{ username, fullName, department, role, email, emailIssue: missing\|duplicate\|not_company\|null, connection: { id, provider, status: active\|reauth_required\|error, statusReason, accountEmail, connectedAt, accessEndsAt } \| null }]` (the live calendar connection, never a token; as of 2026-11-26, P2-2) |
+| PUT | `/people/:username/email` | `{ email (required; `''` or `null` clears), allowOtherDomain? }` → the person row; a body without `email` is 400 `VALIDATION_ERROR`. `modules/users/userEmail.service.ts` (also used by Admin › Users): trimmed and lower-cased; unique among active non-group users (409 `DUPLICATE_RECORD` on `email`, naming the holder); a company domain unless `allowOtherDomain` (400 on `email`); audited `User UPDATE`; drops `cache:lookups:users*`. 409 `EMAIL_CONNECTED` while the person has a live calendar connection on another address (or the email is being cleared): disconnect it first (P2-2; the write takes the user's `calendar-connection:user:<username>` lock, the one the connect takes, also when clearing) |
+| GET | `/connections` | `?provider=google\|microsoft\|fake&status=live (default: active + reauth_required + error)\|all\|active\|reauth_required\|error\|disconnected&search` (unknown values fall back to the default) → `AdminConnectionDto[]` (≤ 1,000): `{ id, username, fullName, provider, kind, accountEmail, status, statusReason, connectedAt, disconnectedAt, disconnectedBy, lastPulledAt, lastPushedAt, lastErrorCode, consecutiveFailures, pendingPushes (0 until P2-3), failedPushes (0), accessEndsAt, webhook: null (until P2-7) }`. Never a token, cursor or lease (as of 2026-11-26, P2-2) |
+| POST | `/connections/:id/disconnect` | `{ reason? (≤ 200, any other key → 400) }` → 204. Same as the employee's own disconnect (tokens dropped, Google grant revoked after commit) with `disconnectedBy` = the admin, `statusReason` `by_admin`, audited `CalendarConnection DISCONNECT` with the note. Already disconnected → 204, nothing changes; unknown id → 404 |
 
 **Users** — `/admin/users` 🔐 (Admin › Users, Profile Phase 2; `backend-crm/src/modules/user-admin/userAdmin.routes.ts`,
 route header comment = source of truth). Admin roles only (`FORM_CONFIG_ADMIN_ROLES`). Bodies are strict (an unknown
@@ -342,10 +351,25 @@ lastLoginAt, passwordChangedAt, createdAt, createdBy, deactivatedAt, emailIssue:
 | GET | `/meta` | `{ roles: [{ name, access, adminPanel, allRecords, userCount, inactiveUserCount }], departments: [{ name, userCount }], managers: [{ id, name, username, photoUrl }], companyDomains }`. Roles = every stored role (grouped case-insensitively, most-used spelling) plus the admin and global-access roles nobody holds yet; departments = every stored one; `userCount` counts active users, `inactiveUserCount` (roles only) inactive ones (the list's Role filter offers the roles held in the chosen status). `managers` = active non-group users. `adminPanel` / `allRecords` are separate because "Administrator" and "Super Admin" open the admin panel but see only their own records |
 | GET | `/:id` | `AdminUserDto`; `404` "User not found." |
 | POST | `/` | `{ username, firstName, lastName?, email?, allowOtherDomain?, role, department?, jobTitle?, reportsToId?, mobile?, officePhone?, isGroupUser?, password? }` → `201 { user: AdminUserDto, temporaryPassword: string \| null }`. `username` trimmed and lower-cased, 3–50, `^[a-z0-9][a-z0-9._-]*$`, not a reserved name (`system`, the actor background jobs and seeds write) (`modules/user-admin/username.ts`, contract-tested with `frontend-crm/src/utils/username.ts`), unique case-insensitively (`409 DUPLICATE_RECORD` on `username`), never changes afterwards. Names / phones as My Profile (`formatPersonName`, E.164, "First and last name together cannot exceed 99 characters."). `role` ≤ 50 (required), `department` ≤ 50, `jobTitle` ≤ 100 (inner spaces collapsed). Email: the company email rule (`users/userEmail.service.ts`): company domain unless `allowOtherDomain` (400 on `email`), unique among active non-group users (409 on `email`). `password` omitted → a temporary one is generated and returned; typed → the password rules with the username (`400 WEAK_PASSWORD` on `password`). The user is active with `mustChangePassword: true`, `createdBy` = the admin |
-| PATCH | `/:id` | `{ firstName?, lastName?, email?, allowOtherDomain?, role?, department?, jobTitle?, reportsToId?, mobile?, officePhone?, isGroupUser?, onLeave? }` → `AdminUserDto` (keys left out stay; `''` / `null` clears an optional one; no change → no audit entry). `reportsToId`: an existing, active, non-group user, not the user, not anyone below them (chain walked up to 50 levels) → else `400 INVALID_MANAGER` on `reportsToId`; an unchanged manager is kept even if inactive. Taking admin access away: `400 SELF_LOCKOUT` (your own) / `400 LAST_ADMIN` (the only active admin), on `role`. A changed email (or a group login becoming a normal user) goes through the email rule. A **role change signs the user out** of every tracked session (their token carries the role) and the answer adds `signedOutSessions` (`null` when Redis is down); the acting admin's own sessions are left alone (their new role applies at next sign-in) |
+| PATCH | `/:id` | `{ firstName?, lastName?, email?, allowOtherDomain?, role?, department?, jobTitle?, reportsToId?, mobile?, officePhone?, isGroupUser?, onLeave? }` → `AdminUserDto` (keys left out stay; `''` / `null` clears an optional one; no change → no audit entry). `reportsToId`: an existing, active, non-group user, not the user, not anyone below them (chain walked up to 50 levels) → else `400 INVALID_MANAGER` on `reportsToId`; an unchanged manager is kept even if inactive. Taking admin access away: `400 SELF_LOCKOUT` (your own) / `400 LAST_ADMIN` (the only active admin), on `role`. A changed email (or a group login becoming a normal user) goes through the email rule; a changed email of a user with a live calendar connection on another address is `409 EMAIL_CONNECTED` on `email` (disconnect the calendar first; Calendar P2-2, as of 2026-11-26). A **role change signs the user out** of every tracked session (their token carries the role) and the answer adds `signedOutSessions` (`null` when Redis is down); the acting admin's own sessions are left alone (their new role applies at next sign-in) |
 | POST | `/:id/deactivate` | → `AdminUserDto & { signedOutSessions }`: `isActive = false`, `deactivatedAt` = now, every tracked session revoked (`null` when Redis is down). Records, username and direct reports stay (their `reportsTo.isActive` turns false). `400 SELF_LOCKOUT` (your own account) / `400 LAST_ADMIN`. Already inactive: no change, no audit entry, but the sessions are revoked again (the UI's **Sign out all sessions** for an inactive user, to retry a revocation that failed while Redis was down) |
 | POST | `/:id/activate` | → `AdminUserDto & { signedOutSessions: null }`: `isActive = true`, `deactivatedAt = null`. `409 DUPLICATE_RECORD` on `email` when another active non-group user took the address meanwhile. Already active: no change |
 | POST | `/:id/reset-password` | `{ password? }` → `{ temporaryPassword: string \| null, signedOutSessions }`: new hash (typed password checked with the rules and the username, else generated), `mustChangePassword = true` (`passwordChangedAt` unchanged), every tracked session revoked. `400 BAD_REQUEST` for your own account ("Change your own password from My Profile › Security."); `400 WEAK_PASSWORD` on `password`; 20 / 10 min per admin (§3) |
+
+**Calendar connections** — `/calendar-connections` (any signed-in user, own rows only; Calendar Phase 2 P2-2, as of
+2026-11-26; `backend-crm/src/modules/calendar-sync/connection.routes.ts`, route header comment = source of truth).
+OAuth authorization code + PKCE (S256) + `state` + `nonce`; tokens are sealed in `CalendarConnection` and **never**
+leave the server or reach a log. Providers stay off until an admin switches one on (the `fake` provider exists only with
+`CALENDAR_FAKE_PROVIDER=true` outside production). One calendar per person.
+
+| Method | Path | Description |
+| --- | --- | --- |
+| GET | `/` | `{ ready, providers: [{ provider: google\|microsoft\|fake, label, kind: 'calendar', available, canRevoke }], connections: OwnConnectionDto[], email, publicApiUrl, webhooksActive: false, syncHours: null (P2-5), syncActive: false (P2-3) }`; `Cache-Control: no-store`. A provider that is not available is left out unless the user is connected with it. `OwnConnectionDto`: `{ id, provider, kind, accountEmail, status: active\|reauth_required\|error, statusReason, connectedAt, lastPulledAt, lastPushedAt, backfilledAt, backfillCount, importMeetings, importAllowed: false, pendingPushes: 0, failedPushes: 0, accessEndsAt }` (live rows only) |
+| POST | `/:provider/start` | → `{ authUrl }` and the sealed httpOnly cookie `crm_oauth` (AES-GCM, AAD `oauth:<provider>:<userId>`, 10 min, `SameSite=Lax`, path `/api/calendar-connections/oauth`; holds state, PKCE verifier, nonce and the CRM origin to return to). `503 INTEGRATIONS_NOT_READY` (no key / no `PUBLIC_API_URL`); `409 PROVIDER_DISABLED`; `409 CALENDAR_ALREADY_CONNECTED` (another provider is live: disconnect it first; reconnecting the same provider is allowed); `403 FORBIDDEN` for a group / shared or inactive login; `400` the fake provider without a company email; 10 / min per user (§3) |
+| GET | `/oauth/:provider/callback` | The provider's redirect (not behind `authenticate`; it reads the session cookie itself). Always a **302**: `<origin>/connected-calendars?calendar=connected&provider=<key>` or `?calendar=error&reason=<code>&provider=<key>`, where `<origin>` is the CRM origin that started the flow (from the cookie, checked with `isAppOrigin`, else `APP_PUBLIC_URL`); no session, or one that must change its password first (the `mcp` claim) → `APP_PUBLIC_URL/login?next=%2Fconnected-calendars` (start answers such a token `403 PASSWORD_CHANGE_REQUIRED`, like every route outside the allow-list). `reason` is a fixed code: `denied`, `expired` (no / old / other user's cookie), `invalid` (state, id_token or account checks), `scope_denied`, `email_mismatch`, `email_too_long`, `domain_not_allowed` (not a company Google Workspace `hd` / another Entra tenant), `account_in_use` (that account is connected for another CRM user), `provider_error`, `not_configured`, `already_connected`, `server_error`. Clears `crm_oauth`; `Cache-Control: no-store`, `Referrer-Policy: no-referrer`. On a refusal the new grant is revoked at Google unless it is live for someone. An empty CRM email is filled from the verified company account (audited `User UPDATE`; `cache:lookups:users*` dropped after commit, as every email write does). Audited `CalendarConnection CONNECT` `{ provider, accountEmail, by, reconnected?, emailFilled?, replaced? }` |
+| POST | `/:id/disconnect` | → 204 (own connection; another user's id → 404; already disconnected → 204). Tokens dropped, `status = disconnected`, `statusReason = by_user`; the Google grant is revoked after commit (5 s, never fails the request; Microsoft has no per-app revoke: remove the app at myapps.microsoft.com). Events already in the calendar stay. Audited `CalendarConnection DISCONNECT` |
+
+Planned: `POST /sync` (P2-5), `PATCH /:id { importMeetings }` (P2-8).
 
 **Email validation** — `/email-validation` 🔐 (Settings › Email Validation)
 
@@ -428,6 +452,7 @@ scans the whole range: send a date range with it.
 | Template preview | 20 / 60 s | user | 429 |
 | Change password (`ratelimit:change-password`) | 10 / 15 min (every request) | user | 429 "Too many password attempts. Please wait a few minutes." |
 | Sign out sessions (`ratelimit:session-revoke`, both `DELETE /me/sessions` routes) | 30 / 10 min | user | 429 |
+| Calendar connect start (`ratelimit:calendar-connect`) | 10 / 60 s | user | 429 "Too many connect attempts. Wait a minute and try again." |
 | Admin password reset (`ratelimit:admin-password-reset`) | 20 / 10 min (every request) | admin | 429 "Too many password resets. Please wait a few minutes." |
 | Integration connection test | 6 / 60 s | admin | 429 `RATE_LIMITED` + `Retry-After` (in-memory per process whenever Redis can't count it: down, or a command failing while it reports ready; this one never fails open) |
 
@@ -459,12 +484,15 @@ Limited responses carry `RateLimit-Limit`, `RateLimit-Remaining`, `RateLimit-Res
 | 409 | `DUPLICATE_HOLIDAY` | Holidays: that occasion is already a holiday on that date |
 | 409 | `INTEGRATION_NOT_CONFIGURED` | API Integrations: enabling a provider without a client id or a readable secret (Microsoft without a tenant is 400 `VALIDATION_ERROR` on `settings.tenantId`) |
 | 409 | `INTEGRATION_NOT_AVAILABLE` | API Integrations: Zoom before video meetings ship (Phase 3) |
+| 409 | `PROVIDER_DISABLED` | Calendar connect: the provider is switched off or not configured |
+| 409 | `CALENDAR_ALREADY_CONNECTED` | Calendar connect: another calendar provider is connected (one per person) |
+| 409 | `EMAIL_CONNECTED` | Company email change / clear while the person has a live calendar connection on another address |
 | 409 | `NOT_UNDOABLE`, `NOT_RESTORABLE`, `ALREADY_REVERSED` | Audit log: the entry can't be undone / restored, or was already |
 | 410 | `EXPORT_EXPIRED` | Audit log export older than 24 h |
 | 413 | – | Body over its limit |
 | 429 | `RATE_LIMITED` | See §3 |
 | 503 | `SERVER_BUSY` | Lock timeout / DB couldn't start a transaction (`Retry-After: 2`) |
-| 503 | `INTEGRATIONS_NOT_READY` | API Integrations: storing a secret while `INTEGRATIONS_ENCRYPTION_KEY` is not set |
+| 503 | `INTEGRATIONS_NOT_READY` | API Integrations: storing a secret while `INTEGRATIONS_ENCRYPTION_KEY` is not set; calendar connect without the key or `PUBLIC_API_URL` |
 | 503 | `IMPORT_QUEUE_UNAVAILABLE` | Large import or status poll without Redis |
 | 503 | `SESSIONS_UNAVAILABLE` | Signing out one session while Redis is down |
 | 503 | `PDF_RENDERER_UNAVAILABLE`, `SHUTTING_DOWN` | Chromium can't start; server stopping |
@@ -487,6 +515,12 @@ Limited responses carry `RateLimit-Limit`, `RateLimit-Remaining`, `RateLimit-Res
 - Notifications are not a CRUD module: `services/notification.service.ts` (list, unread count, read, read all,
   morning summary preview / test), hooks in `hooks/queries/useNotifications.ts`, `CrmNotification` and the preview
   types in `types/notification.types.ts`. Read / read all broadcast `notifyCrmUpdate('/api/notifications')`.
+- Calendar connections are self-contained in `components/integrations/` (as of 2026-11-26, P2-2):
+  `calendarConnections.service.ts`, `useCalendarConnections.ts` (query key `calendarConnections`),
+  `calendarConnections.types.ts` (contract-tested against the API constants), `CalendarConnectionsCard.tsx` and
+  `CalendarReconnectAlert.tsx`, so the card can move into My Profile unchanged. Disconnect broadcasts
+  `notifyCrmUpdate('/api/calendar-connections')`; QueryProvider also refreshes the `integrations` keys on it (and the
+  `calendarConnections` keys on admin integration writes).
 
 ## 6. Adding an endpoint — checklist
 

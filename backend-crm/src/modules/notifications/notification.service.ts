@@ -6,6 +6,7 @@ import { HttpError } from '../../utils/httpError.js';
 import { text, toIso } from '../../utils/mappers.js';
 import { invalidateUnreadCounts } from './notification.producer.js';
 import { formatNotificationCursor, notificationListQuerySchema } from './notification.validator.js';
+import { CALENDAR_CONNECTIONS_ENTITY_MODULE, CALENDAR_CONNECTIONS_PAGE } from '../calendar-sync/connection.constants.js';
 
 /**
  * The signed-in user's notifications (navbar bell). Personal rows: every query is limited to `username =` the caller,
@@ -25,7 +26,7 @@ export const UNREAD_COUNT_TTL_SECONDS = 24 * 60 * 60;
 /** `Notification` in frontend-crm/src/types: empty values are '' (not null). */
 export interface NotificationDto {
     id: string;
-    /** activity_reminder | activity_assigned | activity_invited | contract_renewal */
+    /** activity_reminder | activity_assigned | activity_invited | contract_renewal | calendar_reconnect */
     kind: string;
     title: string;
     body: string;
@@ -50,8 +51,12 @@ export interface NotificationPage {
     unreadCount: number;
 }
 
-/** App route of the record a notification is about: activities open in the calendar's drawer. */
+/**
+ * App route of the record a notification is about: activities open in the calendar's drawer. Page-level targets come
+ * first (they need no record id): `calendar-connections` → the Connected calendars page (calendar_reconnect).
+ */
 export function notificationHref(entityModule: string | null, entityId: string | null): string {
+    if (entityModule === CALENDAR_CONNECTIONS_ENTITY_MODULE) return CALENDAR_CONNECTIONS_PAGE;
     if (!entityId) return '';
     const id = encodeURIComponent(entityId);
     if (entityModule === 'activities') return `/calendar?activity=${id}`;

@@ -1,7 +1,7 @@
 # Nandini CRM — Database Design
 
 > **Status:** living document, generated from `backend-crm/prisma/schema.prisma` and `prisma/migrations/` (83 migrations,
-> latest `20261126235000_user_admin`, as of 2026-11-26). Update it in the same change as any schema migration.
+> latest `20261127090000_calendar_connections`, as of 2026-11-26). Update it in the same change as any schema migration.
 > Related: [System design](system-design.md) · [API plan](api-plan.md) · [Build plan](build-plan.md)
 
 ---
@@ -35,7 +35,7 @@
 | Audit & UI state | `AuditLog`, `AuditExport`, `AuditDigest`, `TableFilter`, `ModuleScorecard` |
 | Notifications & outgoing mail | `Notification` (navbar bell), `EmailLog` (every email the CRM sends) |
 | Email checks | `EmailValidationRun` |
-| Integrations | `IntegrationProvider` (Admin › API Integrations; calendar connections arrive in P2-2) |
+| Integrations | `IntegrationProvider` (Admin › API Integrations), `CalendarConnection` (an employee's connected calendar, P2-2) |
 
 ## 2. Design conventions
 
@@ -148,7 +148,7 @@ Pre-existing table kept for compatibility (columns `Id`, `Username`, `Password`,
 | `Username` | NVARCHAR(50) UNIQUE | Used everywhere as the owner/creator identifier |
 | `Password` | NVARCHAR(255) | bcrypt hash; legacy plain-text values are re-hashed on next login |
 | `Role` | NVARCHAR(50) | Default `Sales Executive`; drives admin access and row-level scope **by name** (`FORM_CONFIG_ADMIN_ROLES` = admin panel, `GLOBAL_ACCESS_ROLES` = every record; `modules/user-admin/roles.ts`). Set in Admin › Users from the roles in use or a new one (a typed role matching an existing one by `normalizeRole` keeps its spelling) |
-| `email`, `department` (NVARCHAR(50)) | | `email` is unique in code only (SQL Server allows one NULL in a unique key). Since P2-1 the CRM writes it through `modules/users/userEmail.service.ts` (Admin › API Integrations › People, and Admin › Users through its in-transaction checks `assertCompanyEmailAllowed` / `assertUserEmailFree`): trimmed and lower-cased, unique among **active non-group** users (writers serialise on an application lock), a company domain (`activities/calendarSync` `companyDomains`) unless the admin allows another, audited `User UPDATE`. The filtered unique index `UX_Users_email` follows in P2-2. Both admin-managed (read-only on My Profile) |
+| `email`, `department` (NVARCHAR(50)) | | `email` is unique in code only (SQL Server allows one NULL in a unique key). Since P2-1 the CRM writes it through `modules/users/userEmail.service.ts` (Admin › API Integrations › People, Admin › Users through its in-transaction checks `assertCompanyEmailAllowed` / `assertEmailKeepsConnection` / `assertUserEmailFree`, and the calendar connect auto-fill): trimmed and lower-cased, unique among **active non-group** users (writers serialise on an application lock), a company domain (`activities/calendarSync` `companyDomains`) unless the admin allows another, audited `User UPDATE`. As of 2026-11-26 (P2-2) the database enforces it too: filtered unique index `UX_Users_email` (`WHERE email IS NOT NULL AND isActive = 1 AND isGroupUser = 0`; the migration lower-cases stored emails first and stops on duplicates, pre-check `npm run calendar:check-emails`). While the user has a live calendar connection the address can't be changed or cleared (409 `EMAIL_CONNECTED`; every email writer also takes the user's `calendar-connection:user:<username>` lock, the one the connect takes, so the two can't both pass on stale data); an empty one is filled from the verified company account at connect. Both admin-managed (read-only on My Profile) |
 | `fullName` | NVARCHAR(100), default `''` | Display name read everywhere (lookups, audit log, quotation PDFs). A profile write that changes a name sets it to `trim(firstName + ' ' + lastName)` |
 | `firstName`, `lastName` | NVARCHAR(100) NULL | Edited on My Profile (name-cased like other person names; together ≤ 99 characters so `fullName` fits). NULL or stale for users created or renamed outside the app: the API then shows them split from `fullName` (`resolveNameParts`) |
 | `phone` | NVARCHAR(20) NULL | The **mobile** number (E.164); My Profile calls it Mobile, quotation PDFs print it as the sales person's phone |
@@ -650,6 +650,45 @@ category CONFIG) with `secretChanged` / `webhookSecretChanged` / `secretCleared`
 calendar settings are not here: they are the module setting `ModuleSetting (activities, calendarSync)`; which
 Followup Types sync is option meta `calendarSync` on `shared_followup_type` options (missing = on; Task / Note never).
 
+### 4.29 `CalendarConnection` (an employee's connected calendar)
+
+Migration `20261127090000_calendar_connections` (Calendar Phase 2 P2-2, as of 2026-11-26). Module
+`backend-crm/src/modules/calendar-sync`. One row per connect; a disconnect keeps the row (tokens nulled, status
+`disconnected`) for the history and the audit trail, and reconnecting the same account re-activates its newest row.
+No FK to `Users` (usernames, like every owner column).
+
+| Column | Type | Notes |
+| --- | --- | --- |
+| `id` | NVARCHAR(50) PK | `randomUUID()` made in code before the insert, so the token AAD can name the row |
+| `username` | NVARCHAR(50) | The CRM user |
+| `provider` | NVARCHAR(30) | `google` \| `microsoft` \| `fake` (dev-only, `CALENDAR_FAKE_PROVIDER`) \| `zoom` (Phase 3) |
+| `kind` | NVARCHAR(20), default `calendar` | `calendar` \| `video` |
+| `accountEmail` | NVARCHAR(254) | Lower-cased verified account address |
+| `accountId` | NVARCHAR(200) | Google `sub`, Entra `oid` |
+| `tenantId` | NVARCHAR(100) NULL | Google `hd` / Entra `tid` |
+| `status` | NVARCHAR(20), default `active` | `active` \| `reauth_required` \| `error` \| `disconnected` |
+| `statusReason` | NVARCHAR(50) NULL | Fixed code: `invalid_grant`, `client_changed`, `grant_expired`, `key_error`, `user_inactive`, `by_user`, `by_admin`, `switched_account` |
+| `grantedScopes` | NVARCHAR(1000) | As the token response listed them |
+| `clientVersion` | INT | `IntegrationProvider.clientVersion` at connect; a mismatch → `reauth_required` (`client_changed`) |
+| `accessTokenEnc`, `refreshTokenEnc` | NVARCHAR(MAX) NULL | Sealed (AES-256-GCM, AAD `CalendarConnection:<id>:accessToken\|refreshToken`); never returned, logged or audited |
+| `accessTokenExpiresAt`, `refreshTokenExpiresAt` | DATETIME2 NULL | `refreshTokenExpiresAt`: Google time-limited grants (`refresh_token_expires_in`), null = no known end |
+| `keyId` | NVARCHAR(8) NULL | Key of the sealed tokens (`npm run integrations:reencrypt` re-seals them too) |
+| `tokenVersion` | INT, default 0 | Compare-and-set guard of token refresh (API and worker processes) |
+| `calendarId` | NVARCHAR(200), default `primary` | |
+| `importMeetings` | BIT, default 0 | P2-8 |
+| `syncCursor`, `syncWindowStart`, `syncWindowEnd`, `fullSyncAt` | | P2-5 (Google sync token / Graph delta link: never logged) |
+| `backfilledAt`, `backfillCount` | | P2-3c |
+| `lastPulledAt`, `lastPushedAt`, `lastSuccessAt`, `lastErrorAt`, `lastErrorCode`, `consecutiveFailures` | | Sync health (P2-3 on; `lastErrorCode` is also set by a reauth) |
+| `leaseId`, `leaseUntil` | | Per-connection job mutex (P2-3) |
+| `connectedAt`, `disconnectedAt`, `disconnectedBy`, `createdAt`, `updatedAt` | | `disconnectedBy`: the user, an admin or `system` |
+
+Indexes: `(username, status)`, `(provider, status)`, `(keyId)`, and two hand-written **filtered unique** indexes on the
+live statuses (`WHERE status IN ('active','reauth_required','error')`): `UX_CalendarConnection_user_kind
+(username, kind)` (one calendar per person) and `UX_CalendarConnection_account (provider, accountId)` (one CRM user per
+provider account). Connect / disconnect take application locks on the user, the provider account and the email, and
+are audited as entity `CalendarConnection` (audit module `calendar`, `auditCatalog.moduleFor`; the notification `entityModule` is `calendar-connections`) with actions `CONNECT` / `DISCONNECT`
+(`{ provider, accountEmail, by, reason?, note?, reconnected?, emailFilled?, replaced? }`, never a token).
+
 ## 5. Index strategy
 
 - **Scoped list composites** `(isDeleted, assignedTo, createdAt)` match the most common query: "live records I own or
@@ -669,6 +708,9 @@ Followup Types sync is option meta `calendarSync` on `shared_followup_type` opti
   change), and
   `(username, createdAt)` its newest-first list; unique `dedupeKey`s on `Notification` and `EmailLog` make deliveries
   idempotent.
+- **Calendar connections** (as of 2026-11-26): `(username, status)` serves the user's own list and the People table,
+  `(provider, status)` the admin counts, `(keyId)` key rotation; the filtered unique indexes enforce one live
+  connection per person and per provider account.
 
 ## 6. Data lifecycle
 
@@ -686,15 +728,20 @@ Followup Types sync is option meta `calendarSync` on `shared_followup_type` opti
 | Profile edit / photo (My Profile) | App lock on the user → UPDATE `Users` (or replace the `UserPhoto` row) → `AuditLog` UPDATE; user lookup caches dropped after commit |
 | User added / edited (Admin › Users) | App locks (username, email address, reports-to chain, admin roster as needed; the per-user lock on edits) → checks → INSERT / UPDATE `Users` → `AuditLog` CREATE / UPDATE; user lookup caches dropped after commit |
 | User deactivated / reset (Admin › Users) | App lock on the user → `isActive = 0, deactivatedAt = now` (or new hash + `mustChangePassword = 1`) → `AuditLog` STATUS_CHANGE / PASSWORD_RESET; after commit every Redis session of the user is deleted |
-| Nightly retention (00:20) | Hard delete of old `Notification` and `EmailLog` rows (see §4.26) |
+| Nightly retention (00:20) | Hard delete of old `Notification` and `EmailLog` rows (see §4.26); then live `CalendarConnection` rows of inactive / group users are disconnected (`user_inactive`, revoked) and `calendar_reconnect` "access ends soon" notifications written (as of 2026-11-26) |
+| Calendar connect / disconnect | Locks → INSERT or re-activate the `CalendarConnection` row (+ fill an empty `Users.email`) → `AuditLog` CONNECT; disconnect nulls the tokens, sets `disconnected`, `AuditLog` DISCONNECT, then revokes at Google after commit |
 
 ## 7. Migrations and seeding
 
 - Migration history starts with `0_baseline` (the pre-existing `Users` table) and `20261030043331_init`.
 - Several migrations are **data migrations** written by hand (e.g. uppercasing organization names, aligning dropdown
   labels with stored values, linking addresses to city ids). Read them before squashing.
-- Prisma can't express filtered unique indexes; they live only in migration SQL (live organization names, `20261031000000_organization_name_unique_live`, and the three
-  `UX_ActivityAttendee_*` indexes of `20261126090000_activities`).
+- Prisma can't express filtered unique indexes; they live only in migration SQL (live organization names, `20261031000000_organization_name_unique_live`, the three
+  `UX_ActivityAttendee_*` indexes of `20261126090000_activities`, and `UX_CalendarConnection_user_kind`,
+  `UX_CalendarConnection_account` and `UX_Users_email` of `20261127090000_calendar_connections`). That last migration
+  also lower-cases `Users.email` and stops (THROW 50001, rolled back) when two active non-group users share an
+  address: run `npm run calendar:check-emails` before deploying; after a stop, fix the users, run
+  `npx prisma migrate resolve --rolled-back 20261127090000_calendar_connections` and deploy again.
 - `npm run seed` is idempotent: admin user, Nature of Call and partner masters, address master, city master, address→city
   links; demo data (`seed-data/demo/*.json`) only into an empty CRM and only outside production unless
   `SEED_DEMO_DATA=true`.

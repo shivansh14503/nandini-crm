@@ -8,9 +8,18 @@ import { HttpError } from '../../utils/httpError.js';
 import { requireUser } from '../../utils/requestContext.js';
 import { FORM_CONFIG_ADMIN_ROLES } from '../form-configs/formConfig.routes.js';
 import type { IntegrationProviderKey } from './integration.constants.js';
+import { connectionService } from '../calendar-sync/connection.service.js';
 import { integrationService } from './integration.service.js';
 import { saveCalendarSettings } from './integration.settings.js';
-import { peopleQuerySchema, personEmailBodySchema, providerParamSchema, settingsBodySchema, syncTypesBodySchema, usernameParamSchema } from './integration.validator.js';
+import {
+    connectionIdParamSchema,
+    peopleQuerySchema,
+    personEmailBodySchema,
+    providerParamSchema,
+    settingsBodySchema,
+    syncTypesBodySchema,
+    usernameParamSchema,
+} from './integration.validator.js';
 
 /**
  * /api/admin/integrations (Admin › API Integrations; admin roles only). Secrets are write-only: no response carries
@@ -36,7 +45,16 @@ import { peopleQuerySchema, personEmailBodySchema, providerParamSchema, settings
  *                                        [{ username, fullName, department, role, email, emailIssue, connection }]
  *   PUT    /people/:username/email     { email (required; '' / null clears), allowOtherDomain? } → person row
  *                                        (users/userEmail.service.ts: lower-cased, unique among active non-group users,
- *                                        company domain unless allowOtherDomain; audited User UPDATE)
+ *                                        company domain unless allowOtherDomain; audited User UPDATE). 409 EMAIL_CONNECTED
+ *                                        while the person's live calendar connection has another address.
+ *   GET    /connections                ?provider=google|microsoft|fake&status=live|all|active|reauth_required|error|disconnected
+ *                                        &search → [{ id, username, fullName, provider, kind, accountEmail, status,
+ *                                        statusReason, connectedAt, disconnectedAt, disconnectedBy, lastPulledAt, lastPushedAt,
+ *                                        lastErrorCode, consecutiveFailures, pendingPushes, failedPushes, accessEndsAt, webhook }]
+ *                                        (default live only; no token ever; pending / failed / webhook arrive with sync)
+ *   POST   /connections/:id/disconnect { reason? (≤ 200) } → 204. Same path as the employee's own disconnect (revoke at
+ *                                        Google, tokens deleted, events stay); audited CalendarConnection DISCONNECT with
+ *                                        the admin as actor and the reason as a note.
  */
 const router = Router();
 router.use(authenticate, requireRole(...FORM_CONFIG_ADMIN_ROLES));
@@ -108,6 +126,16 @@ router.put('/sync-types', validateRequest({ body: syncTypesBodySchema }), async 
 
 router.get('/people', validateRequest({ query: peopleQuerySchema }), async (req: Request, res: Response) => {
     sendSuccess(res, await integrationService.listPeople(req.query));
+});
+
+router.get('/connections', async (req: Request, res: Response) => {
+    res.setHeader('Cache-Control', 'no-store');
+    sendSuccess(res, await connectionService.adminList(req.query));
+});
+
+router.post('/connections/:id/disconnect', validateRequest({ params: connectionIdParamSchema }), async (req: Request, res: Response) => {
+    await connectionService.adminDisconnect(String(req.params.id), req.body, requireUser(req));
+    res.status(StatusCodes.NO_CONTENT).end();
 });
 
 router.put('/people/:username/email', validateRequest({ params: usernameParamSchema, body: personEmailBodySchema }), async (req: Request, res: Response) => {

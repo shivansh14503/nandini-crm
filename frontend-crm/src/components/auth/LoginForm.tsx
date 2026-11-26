@@ -19,6 +19,7 @@ import {
 } from '@mui/icons-material';
 import { useAuth, SESSION_EXPIRED_KEY } from '../../context/AuthContext';
 import { ROUTES } from '@/config/constants';
+import { nextPathFromLocation } from '@/utils/safeNextPath';
 import { ErrorAlert } from '../common/ErrorAlert';
 import { AppToast } from '../common/AppToast';
 import { FIELD_MAX_LENGTH } from '../forms/fieldSizing';
@@ -70,8 +71,9 @@ export function LoginForm() {
         setLoading(true);
         try {
             const signedIn = await login({ username: trimmedUsername, password });
-            // A temporary password (new user, admin reset) must be changed before anything else.
-            router.push(signedIn.mustChangePassword ? ROUTES.PROFILE_SECURITY : ROUTES.DASHBOARD);
+            // A temporary password (new user, admin reset) must be changed before anything else; otherwise back to the
+            // page that sent the user here (`?next=`, CRM paths only), else the dashboard.
+            router.push(signedIn.mustChangePassword ? ROUTES.PROFILE_SECURITY : nextPathFromLocation(ROUTES.DASHBOARD));
         } catch (err: unknown) {
             const message = err instanceof Error ? err.message : 'Login failed. Please try again.';
             setError(message);

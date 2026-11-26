@@ -52,4 +52,9 @@ describe('notificationHref', () => {
         assert.equal(notificationHref('leads', 'l1'), '');
         assert.equal(notificationHref('activities', null), '');
     });
+
+    it('opens calendar_reconnect notifications on the Connected calendars page (whatever the connection id)', () => {
+        assert.equal(notificationHref('calendar-connections', 'conn-1'), '/connected-calendars');
+        assert.equal(notificationHref('calendar-connections', null), '/connected-calendars');
+    });
 });
