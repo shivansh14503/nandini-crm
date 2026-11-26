@@ -14,6 +14,7 @@ import { NOTE_TYPE, type Activity } from '@/types/activity.types';
 import type { ActivityFormValues } from '@/validations/activity.schema';
 import { ActivityFormFields, useActivityForm } from './ActivityFormFields';
 import { ActivityTypeIcon, useActivityTypeLabel } from './ActivityBadges';
+import { ActivityRepeatField, useActivityRepeat } from './ActivityRepeatField';
 import { newActivityHref } from './activityLinks';
 import { timeZoneAbbr } from './activityTime';
 
@@ -66,12 +67,16 @@ function QuickCreateContent({ prefill, onClose, onSaved }: Omit<ActivityQuickCre
     const { methods, toast, showToast, closeToast, createSubmitHandler, clock, durationOf, save } = useActivityForm({ mode: 'create', prefill });
     const { control, getValues, formState } = methods;
     const followupType = useWatch({ control, name: 'followupType' }) ?? '';
+    // Recurring activities (Calendar Phase 4): Repeat for any type but Note.
+    const startAt = useWatch({ control, name: 'startAt' }) ?? '';
+    const repeatState = useActivityRepeat(undefined, startAt.slice(0, 10));
     const typeLabel = useActivityTypeLabel()(followupType);
     const color = getModuleColor('activities');
 
     const submit = createSubmitHandler(async (values) => {
         try {
-            const saved = await save(values);
+            const repeat = followupType !== NOTE_TYPE ? repeatState.repeat : null;
+            const saved = await save(values, repeat ? { repeat } : undefined);
             onSaved?.(saved);
             onClose();
         } catch (err: unknown) {
@@ -176,7 +181,12 @@ function QuickCreateContent({ prefill, onClose, onSaved }: Omit<ActivityQuickCre
                     </Tooltip>
                 </DialogTitle>
                 <DialogContent sx={{ px: { xs: 2, sm: 3 }, pt: '20px !important', pb: 2 }}>
-                    <ActivityFormFields clock={clock} durationOf={durationOf} compact />
+                    <ActivityFormFields
+                        clock={clock}
+                        durationOf={durationOf}
+                        compact
+                        repeatSlot={<ActivityRepeatField value={repeatState.repeat} onChange={repeatState.setRepeat} startDay={startAt.slice(0, 10)} />}
+                    />
                 </DialogContent>
                 <DialogActions sx={{ px: { xs: 2, sm: 3 }, py: 1.5, gap: 1, borderTop: '1px solid var(--mui-palette-border-light)', flexWrap: 'wrap' }}>
                     <Button onClick={onClose} sx={outlinedButtonSx}>

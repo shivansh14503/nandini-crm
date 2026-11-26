@@ -3,6 +3,7 @@ import { nullable, parseCustomFields, serializeCustomFields, text, toIso } from 
 import { zonedDayOf } from '../../utils/zonedTime.js';
 import { canRetryConference, parseConferenceError } from '../calendar-sync/conference.rules.js';
 import type { ActivityInput } from './activity.validator.js';
+import type { ActivitySeriesView } from './activity.seriesView.js';
 
 /**
  * `Activity` from frontend-crm/src/types/activity.types.ts. Times are true UTC instants (`…Z`); all-day activities
@@ -59,6 +60,8 @@ export interface ActivityDto {
      * `calendar` (imported, P2-8). Read only (set by the system write path).
      */
     origin: string;
+    /** The recurring series this occurrence belongs to (Calendar Phase 4), '' for a single activity. Read only. */
+    seriesId: string;
     createdBy: string;
     /** Username of the last editor; empty until the record is first modified. */
     updatedBy: string;
@@ -140,6 +143,12 @@ export interface ActivityConferenceView {
     canRetry: boolean;
     /** A Teams link exists: its owner can't remove or change it (409 VIDEO_MEETING_LOCKED); a new owner may. */
     locked: boolean;
+    /**
+     * Requested, but the activity has no calendar copy yet because it is an occurrence of a recurring activity that
+     * isn't pushed until SERIES_SYNC_WINDOW_DAYS before it starts (Calendar Phase 4): the link is created then, so
+     * screens show a note instead of "Creating…" and don't poll.
+     */
+    waitingForCalendar: boolean;
 }
 
 export type ActivityView = ActivityDto & {
@@ -153,6 +162,8 @@ export type ActivityView = ActivityDto & {
      * activity's schedule, type, status, owner and related record. `[]` when nothing is locked.
      */
     lockedFields: string[];
+    /** The series this occurrence belongs to (rule, summary, position; Calendar Phase 4); null for a single activity. */
+    series: ActivitySeriesView | null;
 };
 
 export type ActivityRow = Activity & { attendees: ActivityAttendee[] };
@@ -208,6 +219,7 @@ export function toActivityDto(row: ActivityRow): ActivityDto {
         completedBy: text(row.completedBy),
         customFields: parseCustomFields(row.customDataJson),
         origin: row.origin,
+        seriesId: row.seriesId ?? '',
         createdBy: row.createdBy,
         updatedBy: row.updatedBy ?? '',
         createdAt: toIso(row.createdAt),
@@ -217,8 +229,9 @@ export function toActivityDto(row: ActivityRow): ActivityDto {
 
 /** `ActivityView.conference` (pure). */
 export function conferenceViewOf(
-    row: Pick<Activity, 'conferenceProvider' | 'conferenceState' | 'conferenceJoinUrl' | 'conferenceError' | 'status' | 'isDeleted'>,
+    row: Pick<Activity, 'conferenceProvider' | 'conferenceState' | 'conferenceJoinUrl' | 'conferenceError' | 'status' | 'isDeleted' | 'seriesId'>,
     viewerCanEdit: boolean,
+    hasCalendarCopy = false,
 ): ActivityConferenceView | null {
     if (!row.conferenceProvider) return null;
     const state = row.conferenceState ?? 'requested';
@@ -231,6 +244,7 @@ export function conferenceViewOf(
         errorMessage: error?.message ?? null,
         canRetry: viewerCanEdit && canRetryConference(row),
         locked: row.conferenceProvider === 'teams' && state === 'ready',
+        waitingForCalendar: state === 'requested' && Boolean(row.seriesId) && !hasCalendarCopy,
     };
 }
 

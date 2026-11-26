@@ -78,6 +78,8 @@ export interface CalendarItem {
      * aren't synced and viewers who may not change the activity.
      */
     syncState: string | null;
+    /** The recurring series of an activity item (Calendar Phase 4: the calendar shows a repeat icon); absent otherwise. */
+    seriesId?: string | null;
 }
 
 export interface CalendarFeed {
@@ -261,6 +263,7 @@ export const ACTIVITY_CALENDAR_SELECT = {
     relatedCode: true,
     location: true,
     origin: true,
+    seriesId: true,
     conferenceState: true,
     conferenceJoinUrl: true,
     attendees: { select: { kind: true, username: true, responseStatus: true } },
@@ -283,6 +286,8 @@ export interface ActivityCalendarRow {
     relatedCode: string | null;
     location: string | null;
     origin: string;
+    /** Calendar Phase 4 (optional so older test rows still type-check). */
+    seriesId?: string | null;
     /** P3-1 (optional so callers building rows by hand needn't list them). */
     conferenceState?: string | null;
     conferenceJoinUrl?: string | null;
@@ -327,6 +332,7 @@ export function activityToCalendarItem(row: ActivityCalendarRow, user: AuthUser,
         origin: row.origin,
         conferenceJoinUrl: row.conferenceState === 'ready' ? (row.conferenceJoinUrl ?? null) : null,
         syncState: null,
+        ...(row.seriesId ? { seriesId: row.seriesId } : {}),
     };
 }
 

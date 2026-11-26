@@ -4,6 +4,7 @@ import { logger } from '../../config/logger.js';
 import { redis } from '../../config/redis.js';
 import { armPendingReminders, deliverActivityReminder, runNightlyMaintenance, runReminderSweep } from '../../modules/notifications/notification.reminders.js';
 import { runWithAuditOrigin } from '../../services/auditContext.js';
+import { activitySeriesService } from '../../modules/activities/activity.series.js';
 import { createQueueConnection, isQueueAvailable, QUEUE_NAMES, remindersQueue } from '../queues.js';
 import { throttledLogger } from './throttledLogger.js';
 
@@ -13,7 +14,9 @@ import { throttledLogger } from './throttledLogger.js';
  *   sweep    scheduler 'reminder-sweep', every 15 minutes 07:00–21:45: missed reminders + contract renewals
  *   nightly  scheduler 'reminder-nightly', 00:20: notification / email log retention + re-arm pending reminders (the
  *            calendar steps and the follow-up activity backfill it ran until P2-3b moved to the calendar sync worker's
- *            'calendar-nightly' at 00:25, calendarSync.worker.ts)
+ *            'calendar-nightly' at 00:25, calendarSync.worker.ts); then recurring activities (Calendar Phase 4,
+ *            activity.series.ts `runNightly`): extend the series horizons and mark occurrences entering the calendar
+ *            sync window. Rides the same 00:20 database wake (one indexed read each when nothing is due)
  * All in the business timezone. Every Redis `ready` (start-up and each reconnect) upserts the schedulers, re-arms
  * pending reminders and runs one sweep. While Redis is down a one-minute in-process tick does the sweep instead; it
  * does nothing while Redis is up, so the database is only queried when something is due. The morning summary email
@@ -40,8 +43,15 @@ async function processJob(job: Job): Promise<unknown> {
             }
             case 'sweep':
                 return runReminderSweep();
-            case 'nightly':
-                return runNightlyMaintenance();
+            case 'nightly': {
+                const maintenance = await runNightlyMaintenance();
+                // Recurring activities ride the same wake; a failure here never undoes the maintenance above.
+                const series = await activitySeriesService.runNightly().catch((err: Error) => {
+                    logger.warn({ err: err.message }, 'Recurring activities nightly step failed; the next night tries again');
+                    return null;
+                });
+                return { ...maintenance, series };
+            }
             default:
                 logger.warn({ job: job.name }, 'Unknown reminders job');
                 return null;

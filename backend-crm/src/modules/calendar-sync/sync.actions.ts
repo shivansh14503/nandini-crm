@@ -16,6 +16,7 @@ import { parseHeld } from './sync.attendees.js';
 import { requestedIdFor } from './sync.keys.js';
 import { isCreateEligible, type HeldNotice } from './sync.outbox.js';
 import { loadOwnerCalendarLinks } from './sync.view.js';
+import { loadSeriesViews } from '../activities/activity.seriesView.js';
 import { notifyHeldInvites, wakePushes } from './sync.wake.js';
 
 /**
@@ -88,7 +89,7 @@ const GONE_STATES = new Set(['cancelled', 'removed_remote']);
 async function viewOf(id: string, user: AuthUser): Promise<ActivityView> {
     const row = (await prisma.activity.findFirst({ where: { id, isDeleted: false }, include: WITH_ATTENDEES })) as ActivityRow | null;
     if (!row) throw HttpError.notFound('Activity not found');
-    return toActivityView(row, user, await loadOwnerCalendarLinks([row]));
+    return toActivityView(row, user, await loadOwnerCalendarLinks([row]), await loadSeriesViews([row]));
 }
 
 async function afterCommit(id: string, link: { id: string; dirtyAt: Date } | null, user: AuthUser, notice: HeldNotice | null = null): Promise<ActivityView> {

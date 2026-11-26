@@ -5,6 +5,7 @@ import { Alert, Box, Button, CircularProgress, FormHelperText, Typography, type 
 import { useController, type FieldPath, type FieldValues } from 'react-hook-form';
 import { useQueryClient } from '@tanstack/react-query';
 import VideocamOutlinedIcon from '@mui/icons-material/VideocamOutlined';
+import ScheduleOutlinedIcon from '@mui/icons-material/ScheduleOutlined';
 import { FormField } from '@/components/forms/FormField';
 import { StyledSelect } from '@/components/forms/StyledSelect';
 import { DrawerCopyButton } from '@/components/common/Drawer/DrawerPrimitives';
@@ -205,13 +206,17 @@ const POLL_TRIES = 12;
 
 /**
  * The drawer's video meeting: Join + copy when ready; "Creating Meet link…" while the calendar makes it (the activity
- * is re-read every 5 s for a minute); the error with Retry when it failed. Nothing when the activity has none.
+ * is re-read every 5 s for a minute); a note when a recurring occurrence isn't in the calendar yet (no polling); the
+ * error with Retry when it failed. Nothing when the activity has none.
  */
 export function VideoMeetingPanel({ activity, onMessage }: { activity: Activity; onMessage: (message: string, error?: boolean) => void }) {
     const conference = activity.conference;
     const queryClient = useQueryClient();
     const [retrying, setRetrying] = useState(false);
-    const requested = conference?.state === 'requested';
+    // An occurrence of a recurring activity not yet in its owner's calendar gets its link about two weeks before it
+    // starts: a note, no spinner and no polling until then.
+    const waiting = conference?.state === 'requested' && Boolean(conference.waitingForCalendar);
+    const requested = conference?.state === 'requested' && !waiting;
 
     useEffect(() => {
         if (!requested) return;
@@ -251,6 +256,14 @@ export function VideoMeetingPanel({ activity, onMessage }: { activity: Activity;
                     <Box role="status" sx={{ display: 'inline-flex', alignItems: 'center', gap: 1, color: 'var(--mui-palette-text-secondary)', fontSize: '0.85rem' }}>
                         <CircularProgress size={14} thickness={5} sx={{ color: 'var(--crm-text-blue-600)' }} />
                         {`Creating ${short} link…`}
+                    </Box>
+                )}
+                {waiting && (
+                    <Box role="status" sx={{ display: 'inline-flex', alignItems: 'flex-start', gap: 1, color: 'var(--mui-palette-text-secondary)', fontSize: '0.85rem', minWidth: 0 }}>
+                        <ScheduleOutlinedIcon sx={{ fontSize: 16, mt: '2px', color: 'var(--mui-palette-text-muted)', flexShrink: 0 }} />
+                        <Box component="span" sx={{ minWidth: 0, overflowWrap: 'anywhere' }}>
+                            {`The ${short} link is created when this event goes to the calendar, about two weeks before it starts.`}
+                        </Box>
                     </Box>
                 )}
                 {conference.state === 'failed' && (

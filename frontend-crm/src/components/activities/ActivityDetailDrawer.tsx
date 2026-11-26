@@ -40,12 +40,14 @@ import { AppToast } from '@/components/common/AppToast';
 import { NestedDrawerLayer, RaisedLayer } from '@/components/common/RaisedLayer';
 import { fieldSx } from '@/components/forms/FormField';
 import { CUSTOMER_RESPONSE_CATEGORY, CUSTOMER_RESPONSES } from '@/components/forms/FollowUpDecision';
-import { useActivity, useDeleteActivity } from '@/hooks/queries/useActivities';
+import { useActivity, useDeleteActivity, useDeleteActivityScoped } from '@/hooks/queries/useActivities';
 import { useDropdownOptionLabel, useModuleFormConfig } from '@/hooks/queries/useFormConfigs';
 import { activityService } from '@/services/activity.service';
 import { ActivityBusyTimes } from './ActivityBusyTimes';
 import { ActivityCalendarNotes } from './ActivityCalendarNotes';
 import { ActivitySyncStatus, calendarRemovalNote, showsSyncStatus } from './ActivitySyncStatus';
+import { ActivitySeriesInfo } from './ActivitySeriesInfo';
+import { useSeriesScopePrompt } from './SeriesScopeDialog';
 import { useAuth } from '@/context/AuthContext';
 import { findCrmUser } from '@/services/masterData.store';
 import { UserAvatar } from '@/components/common/UserAvatar';
@@ -383,10 +385,13 @@ export function ActivityDetailDrawer({ activity, activityId, open, onClose, onEd
     const typeLabel = useActivityTypeLabel();
     const responseLabel = useDropdownOptionLabel(CUSTOMER_RESPONSE_CATEGORY);
     const deleteMutation = useDeleteActivity();
+    const deleteScopedMutation = useDeleteActivityScoped();
     const [dialog, setDialog] = useState<ActivityDialog>(null);
     const [related, setRelated] = useState<{ module: ActivityRelatedModule; id: string } | null>(null);
     const [busy, setBusy] = useState(false);
     const [toast, setToast] = useState<{ open: boolean; message: string; severity: 'success' | 'error' }>({ open: false, message: '', severity: 'success' });
+    // Recurring activities (Calendar Phase 4): cancel / delete of an occurrence ask this / following / all.
+    const scopePrompt = useSeriesScopePrompt();
 
     if (!a) return null;
 
@@ -424,14 +429,24 @@ export function ActivityDetailDrawer({ activity, activityId, open, onClose, onEd
         }
     };
     const cancelActivity = () => {
+        if (a.seriesId) {
+            void (async () => {
+                const scope = await scopePrompt.ask({ action: 'cancel', calendarNote: calendarRemovalNote(a, user?.username, 'cancel').trim() });
+                if (scope) await run(() => activityService.updateScoped(a.id, { status: CANCELLED_STATUS }, scope), 'Cancelled.', 'Failed to cancel the activity.');
+            })();
+            return;
+        }
         if (!window.confirm(`Cancel "${a.subject}"? It stays in the list as Cancelled.${calendarRemovalNote(a, user?.username, 'cancel')}`)) return;
         void run(() => activityService.update(a.id, { status: CANCELLED_STATUS }), 'Activity cancelled.', 'Failed to cancel the activity.');
     };
     const deleteActivity = () => {
-        if (!window.confirm(`Delete "${a.subject}"? This can't be undone.${calendarRemovalNote(a, user?.username, 'delete')}`)) return;
         void (async () => {
+            const scope = a.seriesId ? await scopePrompt.ask({ action: 'delete', calendarNote: calendarRemovalNote(a, user?.username, 'delete').trim() }) : 'this';
+            if (!scope) return;
+            if (!a.seriesId && !window.confirm(`Delete "${a.subject}"? This can't be undone.${calendarRemovalNote(a, user?.username, 'delete')}`)) return;
             try {
-                await deleteMutation.mutateAsync(a.id);
+                if (a.seriesId) await deleteScopedMutation.mutateAsync({ id: a.id, scope });
+                else await deleteMutation.mutateAsync(a.id);
                 onClose();
             } catch (err: unknown) {
                 notify(err instanceof Error ? err.message : 'Failed to delete the activity.', true);
@@ -464,6 +479,7 @@ export function ActivityDetailDrawer({ activity, activityId, open, onClose, onEd
                         Overdue: still Planned after its time
                     </Typography>
                 )}
+                <ActivitySeriesInfo activity={a} canEdit={canEdit} onEditSeries={handleEdit} />
                 {followUp && (
                     <Typography sx={{ fontSize: '0.78rem', color: 'var(--mui-palette-text-secondary)', mt: 0.6 }}>
                         {planned
@@ -752,6 +768,7 @@ export function ActivityDetailDrawer({ activity, activityId, open, onClose, onEd
                 {dialog === 'reschedule' && <RescheduleDialog activity={a} clock={clock} onClose={() => setDialog(null)} onDone={notify} />}
                 <AppToast open={toast.open} message={toast.message} severity={toast.severity} onClose={() => setToast((t) => ({ ...t, open: false }))} />
             </RaisedLayer>
+            {scopePrompt.dialog}
             {related && open && (
                 <NestedDrawerLayer>
                     <RelatedRecordDrawer module={related.module} id={related.id} onClose={() => setRelated(null)} />

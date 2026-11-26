@@ -1,7 +1,7 @@
 # Nandini CRM — Build Plan
 
 > **Status:** living document. Part 1 records what has been built (reconstructed from git history, 115 commits
-> from 2026-10-15 to 2026-11-18; the snapshot as of 2026-11-26, Calendar Phase 2 P2-1, P2-2, P2-2b (admin-managed calendar connections), P2-3a, P2-3b (calendar push engine), P2-3c (backfill, send invitations, sync status), P2-4, P2-5 (calendar → CRM pull), P2-6 (busy times) and P2-7 (webhooks), Calendar Phase 4 booking links, Profile Phase 1: My Profile, Profile Phase 2: Admin › Users, Profile Phase 3: notifications & preferences, Profile Phase 4: connected accounts and Profile Phase 5 PR5a + PR5b: company formats, which completes Phase 17; Calendar Phase 3 P3-1: Google Meet and Microsoft Teams links). Part 2
+> from 2026-10-15 to 2026-11-18; the snapshot as of 2026-11-26, Calendar Phase 2 P2-1, P2-2, P2-2b (admin-managed calendar connections), P2-3a, P2-3b (calendar push engine), P2-3c (backfill, send invitations, sync status), P2-4, P2-5 (calendar → CRM pull), P2-6 (busy times) and P2-7 (calendar webhooks), Calendar Phase 4 booking links and recurring activities, Profile Phase 1: My Profile, Profile Phase 2: Admin › Users, Profile Phase 3: notifications & preferences, Profile Phase 4: connected accounts and Profile Phase 5 PR5a + PR5b: company formats, which completes Phase 17; Calendar Phase 3 P3-1: Google Meet and Microsoft Teams links). Part 2
 > is the roadmap. Tick
 > items off and add new ones as work lands.
 > Related: [System design](system-design.md) · [Database design](database-design.md) · [API plan](api-plan.md)
@@ -554,7 +554,7 @@ keeps wall-clock times); all-day activities are entered as business-timezone day
         details, hides another duration's times while loading and retries after network errors. Not run against a
         real SQL Server, Google or Microsoft (doubles only). Later: email confirmations and visitor cancel /
         reschedule (mail layer), team / round-robin links, custom questions.
-  - [ ] Recurring activities (CRM-authored series, R12 occurrence rows).
+  - [x] Recurring activities (CRM-authored series, R12 occurrence rows). Done 2026-11-26 (migration `20261215110000_recurring_activities`): an `ActivitySeries` rule (daily / weekly on weekdays / monthly on a day or the nth weekday, every N, ends on a date or after a count, business timezone) with one `Activity` row per occurrence (`seriesId` + `originalStartAt`, filtered unique index) over a rolling 90-day horizon extended by the 00:20 nightly job; a Repeat control on the activity form and quick create (not Notes, not follow-ups); "This event / This and following / All events" for saves, cancels and deletes; occurrences pushed to calendars as single events inside a 14-day window; "Repeats …" in the drawer and a repeat mark on the calendar. Tested with in-memory doubles only, not against a real SQL Server, Google or Microsoft.
   - [ ] Email logging.
 
 ### Phase 15 — Documents (P2, 2026-11-25)
