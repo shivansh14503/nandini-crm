@@ -51,6 +51,7 @@ import {
 } from '@/types/lead.types';
 import { useDropdownOptionsGetter } from '@/hooks/queries/useFormConfigs';
 import { useFormMode } from '@/context/FormModeContext';
+import { useIsCodedDefaultsHarvest } from '@/context/CodedFieldDefaultsContext';
 import { CUSTOMER_RESPONSES, FieldGlow, useFollowUpDecision } from '@/components/forms/FollowUpDecision';
 import { CLOSED_STAGES, useOpportunityResponseConfig } from '@/utils/opportunityResponseRules';
 
@@ -140,6 +141,9 @@ export function OpportunityBasicSection({ notify, onDecisionPendingChange }: Opp
     const commissionType = useWatch({ control, name: 'commissionType' });
     const showCommissionType = hasCommission({ commission, commissionAmount });
     const showPayeeBank = showCommissionType && commissionType === 'Other';
+    // The form builder's hidden copy shows the conditional commission and document fields anyway, so their coded
+    // hints / placeholders reach the builder like every other field's.
+    const harvest = useIsCodedDefaultsHarvest();
     // Documentation: Add Document Yes asks for the document; Sales Stage PO needs one.
     const salesStage = useWatch({ control, name: 'salesStage' });
     const addDocument = useWatch({ control, name: 'addDocument' });
@@ -440,7 +444,7 @@ export function OpportunityBasicSection({ notify, onDecisionPendingChange }: Opp
                     }}
                 />
 
-                {commission === 'Yes' && (
+                {(commission === 'Yes' || harvest) && (
                     <RhfAmountField<F>
                         name="commissionAmount"
                         label="Commission Amount"
@@ -451,7 +455,7 @@ export function OpportunityBasicSection({ notify, onDecisionPendingChange }: Opp
                 )}
 
                 {/* Set from the amount, never by hand. */}
-                {showCommissionType && (
+                {(showCommissionType || harvest) && (
                     <LockedInputs locked>
                         <RhfSelect<F>
                             name="commissionType"
@@ -467,7 +471,7 @@ export function OpportunityBasicSection({ notify, onDecisionPendingChange }: Opp
             </FormGrid>
 
             {/* The commission payee's bank details (Commission Type Other, an amount above ₹1,000): all required. Same fields as on the Organization form. */}
-            {showPayeeBank && (
+            {(showPayeeBank || harvest) && (
                 <FormGrid columns={3} sx={{ mt: 2.5 }}>
                     <RhfTextField<F>
                         name="accountName"
@@ -524,7 +528,7 @@ export function OpportunityBasicSection({ notify, onDecisionPendingChange }: Opp
                     fieldSize="sm"
                 />
 
-                {addDocument === 'Yes' && (
+                {(addDocument === 'Yes' || harvest) && (
                     <RhfTextField<F>
                         name="documentNo"
                         label="Document No"
@@ -535,12 +539,12 @@ export function OpportunityBasicSection({ notify, onDecisionPendingChange }: Opp
                     />
                 )}
 
-                {addDocument === 'Yes' && (
+                {(addDocument === 'Yes' || harvest) && (
                     <RhfTextField<F> name="documentDate" label="Document Date" hint="Date on the document" type="date" fieldSize="sm" allowPastDates />
                 )}
             </FormGrid>
 
-            {addDocument === 'Yes' && (
+            {(addDocument === 'Yes' || harvest) && (
                 <FormGrid columns={3} sx={{ mt: 2.5 }}>
                     <RhfFileUpload<F> name="documentFile" label="Upload Doc" module="opportunities" required hint="PDF, image, Word or Excel" />
                 </FormGrid>

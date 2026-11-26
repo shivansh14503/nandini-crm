@@ -3,6 +3,7 @@
 import React from 'react';
 import { useFormContext, useWatch, type FieldValues, type Path, type PathValue } from 'react-hook-form';
 import { isPartnerLeadSource, leadSourceNeedsReferredBy } from '@/utils/leadSource';
+import { useIsCodedDefaultsHarvest } from '@/context/CodedFieldDefaultsContext';
 
 interface LeadSourceDetailNames<F extends FieldValues> {
     leadSource: Path<F>;
@@ -14,7 +15,8 @@ interface LeadSourceDetailNames<F extends FieldValues> {
  * The follow-up field a Lead Source asks for, on the Lead, Opportunity and Convert Lead forms: Referred By for CA /
  * Reference, Partner Company for Partner (both then required, see `leadSourceDetailIssues`). When the Lead Source
  * moves off those options the field is cleared, as on the Organization form's Partner Company. A Referred By a
- * record already holds under another Lead Source stays shown, so it isn't kept out of sight.
+ * record already holds under another Lead Source stays shown, so it isn't kept out of sight. In the form builder's
+ * hidden harvest copy both are shown, so their coded hints reach the builder.
  */
 export function useLeadSourceDetails<F extends FieldValues>(names: LeadSourceDetailNames<F>, { readOnly = false } = {}) {
     const { control, getValues, setValue, clearErrors } = useFormContext<F>();
@@ -22,6 +24,7 @@ export function useLeadSourceDetails<F extends FieldValues>(names: LeadSourceDet
     const referredBy = useWatch({ control, name: names.referredBy }) as string | undefined;
     const needsReferredBy = leadSourceNeedsReferredBy(leadSource);
     const isPartner = isPartnerLeadSource(leadSource);
+    const harvest = useIsCodedDefaultsHarvest();
 
     const previous = React.useRef({ needsReferredBy, isPartner });
     React.useEffect(() => {
@@ -38,7 +41,7 @@ export function useLeadSourceDetails<F extends FieldValues>(names: LeadSourceDet
 
     return {
         needsReferredBy,
-        showReferredBy: needsReferredBy || Boolean(referredBy?.trim()),
-        showPartnerCompany: isPartner,
+        showReferredBy: harvest || needsReferredBy || Boolean(referredBy?.trim()),
+        showPartnerCompany: harvest || isPartner,
     };
 }
