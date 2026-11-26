@@ -3,6 +3,7 @@ import type { ActivityExternalLink } from '../../generated/prisma/client.js';
 import type { ActivityCalendarView, ActivityRow } from '../activities/activity.mapper.js';
 import { LIVE_CONNECTION_STATUSES } from './connection.constants.js';
 import { parseHeld } from './sync.attendees.js';
+import { FOLLOW_UP_NOTE_DAYS, FOLLOW_UP_TIME_KEPT_PREFIX } from './sync.constants.js';
 
 /**
  * `ActivityView.calendar` (Calendar Phase 2 spec §4.4, §14.5; the drawer's ActivitySyncStatus, the list's Calendar
@@ -49,12 +50,23 @@ export async function loadOwnerCalendarLinks(rows: readonly Pick<ActivityRow, 'i
 /** Guests of an activity (attendees other than its owner). */
 const guestCount = (row: Pick<ActivityRow, 'assignedTo' | 'attendees'>) => row.attendees.filter((a) => !(a.kind === 'user' && lc(a.username) === lc(row.assignedTo))).length;
 
-/** The view of one activity's link for `viewer` (pure). */
+/**
+ * The link note as screens show it: the follow-up "keeps a time" note (P2-5, §11.5) only for FOLLOW_UP_NOTE_DAYS after
+ * the calendar change (the same rule as `keptFollowUpNote`, which pushes apply when they rewrite the link).
+ */
+export function shownWarning(warning: string | null, externalUpdatedAt: Date | null | undefined, now: Date): string | null {
+    if (!warning?.startsWith(FOLLOW_UP_TIME_KEPT_PREFIX)) return warning;
+    if (!externalUpdatedAt) return null;
+    return now.getTime() - externalUpdatedAt.getTime() <= FOLLOW_UP_NOTE_DAYS * 24 * 60 * 60_000 ? warning : null;
+}
+
+/** The view of one activity's link for `viewer` (pure apart from the clock). */
 export function calendarViewOf(
     row: Pick<ActivityRow, 'assignedTo' | 'attendees' | 'externalUpdatedAt'>,
     link: OwnerCalendarLink | undefined,
     viewer: string,
     viewerCanEdit: boolean,
+    now: Date = new Date(),
 ): ActivityCalendarView | null {
     if (!link) return null;
     const isOwner = lc(viewer) !== '' && lc(viewer) === lc(row.assignedTo);
@@ -78,7 +90,7 @@ export function calendarViewOf(
         htmlLink: privileged ? link.htmlLink : null,
         errorCode: link.lastErrorCode,
         errorMessage: privileged ? link.lastErrorMessage : null,
-        warning: link.lastWarning,
+        warning: shownWarning(link.lastWarning, row.externalUpdatedAt, now),
         conflictAt: iso(link.lastConflictAt),
         externalUpdatedAt: iso(row.externalUpdatedAt),
     };

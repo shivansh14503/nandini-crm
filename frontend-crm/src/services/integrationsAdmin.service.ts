@@ -1,4 +1,5 @@
 /** Mirrors backend-crm/src/modules/integrations/integration.routes.ts (/api/admin/integrations, admin roles only). */
+import type { PullRequestResult } from '../components/integrations/calendarConnections.types';
 import type { ApiResponse } from '../types/api.types';
 import type {
     CalendarSyncSettings,
@@ -77,6 +78,12 @@ export const integrationsAdminService = {
     /** "Check now": one health check of the person's calendar sync (409 CALENDAR_NOT_SYNCED when they have none). */
     async checkPersonCalendar(username: string): Promise<Person & { check: CalendarCheckOutcome }> {
         const res = await apiClient.post<ApiResponse<Person & { check: CalendarCheckOutcome }>>(`${BASE}/people/${enc(username)}/calendar/check`);
+        notifyCrmUpdate(BASE);
+        return res.data;
+    },
+    /** "Sync now": pulls the person's calendar changes now (409 CALENDAR_NOT_SYNCED when they have none; 6 a minute per admin). */
+    async syncPersonCalendar(username: string): Promise<Person & { sync: PullRequestResult }> {
+        const res = await apiClient.post<ApiResponse<Person & { sync: PullRequestResult }>>(`${BASE}/people/${enc(username)}/calendar/sync`);
         notifyCrmUpdate(BASE);
         return res.data;
     },

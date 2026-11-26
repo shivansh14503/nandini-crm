@@ -2,8 +2,8 @@ import { randomBytes } from 'node:crypto';
 import { TokenError, type SyncFailure } from '../syncErrors.js';
 import { toGoogleEvent, toGooglePatch } from '../sync.mapping.google.js';
 import { normalizeGoogle } from '../sync.shapes.js';
-import { classifyFailure, ProviderAuthError, ProviderBadRequestError, type ProviderError, ProviderNotFoundError, ProviderPreconditionError, RequestedIdTakenError } from './http.js';
-import type { AccessGrant, CalendarProviderAdapter, CallCtx, CreateEventInput, FreeBusyRequest, FreeBusyResult, ProviderBusyBlock } from './types.js';
+import { classifyFailure, CursorExpiredError, ProviderAuthError, ProviderBadRequestError, type ProviderError, ProviderNotFoundError, ProviderPreconditionError, RequestedIdTakenError } from './http.js';
+import type { AccessGrant, CalendarProviderAdapter, CallCtx, ChangePage, CreateEventInput, FreeBusyRequest, FreeBusyResult, ListChangesRequest, ProviderBusyBlock } from './types.js';
 import type { GoogleEventWire } from './wire.js';
 
 /**
@@ -18,6 +18,11 @@ import type { GoogleEventWire } from './wire.js';
  * read back through `normalizeGoogle`, with etags (412 on a stale `If-Match`), the 409 → adopt / taken rule, deletion
  * as `status: 'cancelled'` (so undelete works) and one-shot failure injection (`failNext`). Every event call checks
  * the token like the probe does (401 when it isn't the mailbox's).
+ *
+ * Pull (P2-5): every write bumps a change counter, `listChanges` answers a full sync (live events of the mailbox from
+ * the window start) or the changes since a `fake-seq-<n>` cursor (deleted events included), in pages of
+ * `listPageSize`; `cursorExpired` makes the next incremental listing answer 410. `fakeAddEvent` / `fakeDeleteEvent`
+ * play someone changing the calendar directly.
  */
 
 const ACCESS_TTL_MS = 60 * 60 * 1000;
@@ -53,6 +58,17 @@ export interface FakeProviderState {
     freeBusyFailures: Map<string, number>;
     /** Free/busy calls made, newest last: as whom, for which calendars. */
     freeBusyCalls: { mailbox: string; emails: string[] }[];
+    /** Pull (P2-5): change counter and the counter value of each event's last change (cursor = `fake-seq-<n>`). */
+    changeSeq: number;
+    changeOf: Map<string, number>;
+    /** Lower-cased mailboxes whose next incremental listing answers 410 (cursor expired) once. */
+    cursorExpired: Set<string>;
+    /** Events per listed page (pagination tests). */
+    listPageSize: number;
+    /** The next `listChanges` throws this error (then clears). */
+    failNextList: ProviderError | null;
+    /** `listChanges` calls made, oldest first. */
+    listCalls: { mailbox: string; cursor: string | null; pageToken?: string }[];
 }
 
 export type FakeEventOp = 'create' | 'patch' | 'cancel' | 'get' | 'undelete';
@@ -73,6 +89,12 @@ export const fakeProviderState: FakeProviderState = {
     freeBusyPrivate: new Set(),
     freeBusyFailures: new Map(),
     freeBusyCalls: [],
+    changeSeq: 0,
+    changeOf: new Map(),
+    cursorExpired: new Set(),
+    listPageSize: 50,
+    failNextList: null,
+    listCalls: [],
 };
 
 export function resetFakeProvider(): void {
@@ -91,6 +113,18 @@ export function resetFakeProvider(): void {
     fakeProviderState.freeBusyPrivate.clear();
     fakeProviderState.freeBusyFailures.clear();
     fakeProviderState.freeBusyCalls = [];
+    fakeProviderState.changeSeq = 0;
+    fakeProviderState.changeOf.clear();
+    fakeProviderState.cursorExpired.clear();
+    fakeProviderState.listPageSize = 50;
+    fakeProviderState.failNextList = null;
+    fakeProviderState.listCalls = [];
+}
+
+/** Records a change of an event for the pull's change stream. */
+function bumpChange(id: string): void {
+    fakeProviderState.changeSeq += 1;
+    fakeProviderState.changeOf.set(id, fakeProviderState.changeSeq);
 }
 
 let etagCounter = 0;
@@ -101,6 +135,66 @@ export function fakeEditEvent(id: string, changes: Partial<GoogleEventWire>, at:
     const event = fakeProviderState.events.get(id);
     if (!event) throw new Error(`fakeEditEvent: no event ${id}`);
     fakeProviderState.events.set(id, { ...event, ...changes, etag: nextEtag(), updated: at.toISOString() });
+    bumpChange(id);
+}
+
+/** Tests: the event is deleted in the calendar (Google keeps it as `status: 'cancelled'`); `purge` forgets it entirely. */
+export function fakeDeleteEvent(id: string, at: Date = new Date(), purge = false): void {
+    if (purge) {
+        fakeProviderState.events.delete(id);
+        bumpChange(id);
+        return;
+    }
+    fakeEditEvent(id, { status: 'cancelled' }, at);
+}
+
+/** Tests: an event the CRM didn't write appears in someone's calendar (Google wire shape). */
+export function fakeAddEvent(event: GoogleEventWire, at: Date = new Date()): void {
+    fakeProviderState.events.set(event.id, { status: 'confirmed', iCalUID: `${event.id}@fake.calendar`, ...event, etag: nextEtag(), updated: at.toISOString() });
+    bumpChange(event.id);
+}
+
+const FAKE_CURSOR_PREFIX = 'fake-seq-';
+
+/** Whether a stored fake event is in `mailbox`'s calendar (its organizer, or invited). */
+const inCalendarOf = (event: GoogleEventWire, mailbox: string) =>
+    (event.organizer?.email ?? '').toLowerCase() === mailbox || (event.attendees ?? []).some((a) => (a.email ?? '').toLowerCase() === mailbox);
+
+/** The fake's change stream: a full sync lists live events from the window start, a cursor lists what changed since. */
+function fakeListChanges(ctx: CallCtx, request: ListChangesRequest): ChangePage {
+    const state = fakeProviderState;
+    const mailbox = ctx.mailbox.toLowerCase();
+    state.listCalls.push({ mailbox, cursor: request.cursor, ...(request.pageToken ? { pageToken: request.pageToken } : {}) });
+    checkToken(ctx, 'list-changes');
+    if (state.failNextList) {
+        const error = state.failNextList;
+        state.failNextList = null;
+        throw error;
+    }
+    let since: number | null = null;
+    if (request.cursor) {
+        if (!request.cursor.startsWith(FAKE_CURSOR_PREFIX) || state.cursorExpired.delete(mailbox)) {
+            throw new CursorExpiredError({ provider: 'fake', operation: 'list-changes', status: 410, code: 'fullSyncRequired' });
+        }
+        since = Number(request.cursor.slice(FAKE_CURSOR_PREFIX.length));
+    }
+    const all = [...state.events.values()]
+        .filter((e) => inCalendarOf(e, mailbox))
+        .filter((e) =>
+            since === null
+                ? e.status !== 'cancelled' && Date.parse(e.end?.dateTime ?? (e.end?.date ? `${e.end.date}T00:00:00Z` : '')) >= request.window.start.getTime()
+                : (state.changeOf.get(e.id) ?? 0) > since,
+        )
+        .sort((a, b) => (state.changeOf.get(a.id) ?? 0) - (state.changeOf.get(b.id) ?? 0));
+    const offset = Number(request.pageToken ?? 0);
+    const page = all.slice(offset, offset + state.listPageSize);
+    const more = offset + state.listPageSize < all.length;
+    return {
+        events: page.map((e) => normalizeGoogle(e, ctx.accountEmail)),
+        removedIds: [],
+        unreadable: 0,
+        ...(more ? { nextPageToken: String(offset + state.listPageSize) } : { nextCursor: `${FAKE_CURSOR_PREFIX}${state.changeSeq}` }),
+    };
 }
 
 /** 401 unless the token is a live one of this mailbox (a `revokeOnce` mailbox fails once). */
@@ -156,6 +250,10 @@ export function createFakeAdapter(options: { now?: () => Date } = {}): CalendarP
         },
 
         ...fakeEventOps(now),
+
+        async listChanges(ctx, request) {
+            return fakeListChanges(ctx, request);
+        },
     };
 }
 
@@ -186,6 +284,7 @@ function fakeEventOps(now: () => Date): Pick<CalendarProviderAdapter, 'createEve
             htmlLink: `https://calendar.fake.test/event?eid=${id}`,
         };
         state.events.set(id, event);
+        bumpChange(id);
         return event;
     };
     const rewrite = (ctx: CallCtx, input: CreateEventInput, id: string) => {

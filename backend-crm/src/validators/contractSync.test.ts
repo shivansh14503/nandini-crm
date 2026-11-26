@@ -63,7 +63,7 @@ import {
     NOT_SYNCED_REASONS,
     OWN_CALENDAR_STATUSES,
 } from '../modules/calendar-sync/connection.constants.js';
-import { LINK_INVITES, LINK_STATES } from '../modules/calendar-sync/sync.constants.js';
+import { LINK_INVITES, LINK_STATES, PULL_REQUEST_STATUSES } from '../modules/calendar-sync/sync.constants.js';
 import { CALENDAR_NOT_SYNCED, CALENDAR_SYNC_NOT_RETRYABLE } from '../modules/calendar-sync/sync.actions.js';
 import { WORKER_STATUSES } from '../modules/calendar-sync/workerHeartbeat.js';
 import { NOTIFICATION_KINDS } from '../modules/notifications/notification.producer.js';
@@ -223,6 +223,7 @@ interface FrontendCalendarConnectionTypes {
     OWN_CALENDAR_STATUSES: readonly string[];
     NOT_SYNCED_REASONS: readonly string[];
     NOT_SYNCED_REASON_MESSAGES: Record<string, string>;
+    PULL_REQUEST_STATUSES: readonly string[];
 }
 
 interface FrontendSafeNextPath {
@@ -565,6 +566,7 @@ describe('backend ↔ frontend contract', { skip }, () => {
         assert.deepEqual([...frontend.OWN_CALENDAR_STATUSES], [...OWN_CALENDAR_STATUSES]);
         assert.deepEqual([...frontend.NOT_SYNCED_REASONS], [...NOT_SYNCED_REASONS]);
         assert.deepEqual(Object.keys(frontend.NOT_SYNCED_REASON_MESSAGES).sort(), [...NOT_SYNCED_REASONS].sort(), 'every reason has a sentence');
+        assert.deepEqual([...frontend.PULL_REQUEST_STATUSES], [...PULL_REQUEST_STATUSES]);
     });
 
     it('frontend notification kinds, the Connected accounts route and the admin page match', async () => {

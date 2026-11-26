@@ -7,7 +7,7 @@ import type { CrmShape, FieldGroup, ProviderAttendee, ProviderEvent } from '../s
  * clients behind one interface, no SDKs (D1). Access tokens are minted per call from the company credentials
  * (tokenSource.ts) and handed to the adapter inside a `CallCtx`; minting is not on the adapter. P2-2b shipped
  * `probeCalendar` (the per-row health check); P2-3b adds the event operations (create / patch / cancel / get /
- * undelete) of the push engine, P2-6 `freeBusy`; pull / watch join with P2-5 / P2-7. The engine never imports an
+ * undelete) of the push engine, P2-6 `freeBusy`, P2-5 `listChanges` (pull); watch joins with P2-7. The engine never imports an
  * adapter directly: it goes through `getAdapter()` (providers/registry.ts), which tests replace with the in-memory fake.
  *
  * Nothing here is ever logged with its values: tokens stay inside these objects.
@@ -83,8 +83,35 @@ export interface FreeBusyRequest {
 }
 
 /**
+ * One page of "what changed" in a calendar (P2-5 pull, spec §8.7): Google `events.list` with a sync token, Graph
+ * `/users/{mailbox}/calendarView/delta`. A request carries a cursor (incremental), or nothing (a full sync of
+ * `window`), or the `pageToken` of the page before.
+ */
+export interface ListChangesRequest {
+    /** The stored sync cursor (Google `nextSyncToken`, Graph `@odata.deltaLink`); null = full sync. */
+    cursor: string | null;
+    /** The previous page's `nextPageToken` (Google page token, Graph `@odata.nextLink`). */
+    pageToken?: string;
+    /** Full sync only: Google uses `start` (`timeMin`); Graph both ends (the delta window is fixed until a re-baseline). */
+    window: { start: Date; end: Date };
+}
+
+export interface ChangePage {
+    /** Changed events (deleted Google events come back with `status: 'cancelled'`). */
+    events: ProviderEvent[];
+    /** Graph `@removed` entries (deleted, or moved out of the window): ids only. */
+    removedIds: string[];
+    /** Entries the CRM couldn't read (counted, never stored or logged with content). */
+    unreadable: number;
+    /** More pages follow. */
+    nextPageToken?: string;
+    /** Last page: the cursor to store once every item is applied. */
+    nextCursor?: string;
+}
+
+/**
  * The adapter interface: the health probe (P2-2b), the event operations of the push engine (P2-3b) and free/busy
- * (P2-6). Pull (`listChanges`), watch and RSVP join with P2-5, P2-7 and P2-8. Graph URLs use `ctx.mailbox` (`/users/{mailbox}`).
+ * (P2-6) and the pull (`listChanges`, P2-5). Watch and RSVP join with P2-7 and P2-8. Graph URLs use `ctx.mailbox` (`/users/{mailbox}`).
  */
 export interface CalendarProviderAdapter {
     readonly key: CalendarProviderKey;
@@ -115,4 +142,9 @@ export interface CalendarProviderAdapter {
      * `ProviderError` when the whole call fails.
      */
     freeBusy(ctx: CallCtx, request: FreeBusyRequest): Promise<Map<string, FreeBusyResult>>;
+    /**
+     * One page of changes since `cursor` (P2-5). Rejects with `CursorExpiredError` when the provider no longer accepts
+     * the cursor (Google 410, Graph 410 / syncStateNotFound): the pull starts a full sync.
+     */
+    listChanges(ctx: CallCtx, request: ListChangesRequest): Promise<ChangePage>;
 }

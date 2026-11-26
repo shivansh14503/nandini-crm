@@ -38,6 +38,7 @@ import {
 } from './sync.constants.js';
 import { eventKeyOf, requestedIdFor, syncKeyOf } from './sync.keys.js';
 import { invitationsOf, type EventContext } from './sync.mapping.google.js';
+import { capInboundAttendees, keptFollowUpNote } from './sync.inbound.js';
 import { planMerge, systemPatchOf } from './sync.merge.js';
 import { syncErrorNotification } from './sync.notifications.js';
 import { isCreateEligible, isTypeSyncable } from './sync.outbox.js';
@@ -279,7 +280,10 @@ class LinkPush {
 
     private async act(round: Round): Promise<PushResult> {
         const { plan, link } = round;
-        const warning = skippedWarning(round.resolved.skipped);
+        // P2-5: a follow-up's "keeps a time" note (sync.inbound.ts) survives the push that re-times the event.
+        const warning =
+            skippedWarning(round.resolved.skipped) ??
+            keptFollowUpNote(link.lastWarning, round.activity.externalUpdatedAt, this.clock(), { base: round.base?.crm.when, crmNow: round.crmNow.when });
         switch (plan.action) {
             case 'noop':
                 return this.settle(round, plan.state, { lastWarning: warning });
@@ -449,7 +453,16 @@ class LinkPush {
                 // Held guests (D41) aren't on the event but stay in the CRM.
                 const target = { ...merge.merged.attendees };
                 for (const email of heldEmailsOf(link.heldAttendeesJson, activity.attendees, round.resolved.emailOf)) if (!(email in target) && round.resolved.attendees[email]) target[email] = round.resolved.attendees[email];
-                patch.attendees = await attendeeInputsFromProvider(prisma, activity.attendees, round.resolved.emailOf, target, activity.assignedTo);
+                const inputs = await attendeeInputsFromProvider(prisma, activity.attendees, round.resolved.emailOf, target, activity.assignedTo);
+                // §8.10, as the pull does: at most 50 CRM rows (colleagues first). Guests past the cap stay on the event
+                // only: the agreed CRM side of the base lists just the addresses the CRM holds, so the push that follows
+                // keeps the others on the event and the next pull doesn't read them as removed in the CRM.
+                const capped = await capInboundAttendees(prisma, inputs, activity.attendees, round.resolved.emailOf);
+                if (capped.kept) {
+                    const kept = capped.kept;
+                    merge.base.crm.attendees = Object.fromEntries(Object.entries(merge.base.crm.attendees).filter(([email]) => kept.has(email)));
+                }
+                if (!capped.unchanged) patch.attendees = capped.inputs;
             }
             if (Object.keys(patch).length > 0) await this.applyInbound(activity.id, patch);
         }

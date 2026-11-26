@@ -13,6 +13,9 @@ const blankToUndefined = (value: unknown) => (typeof value === 'string' && value
 /** Optional text setting; blank = not set. */
 const optionalText = z.preprocess(blankToUndefined, z.string().trim().optional());
 
+/** CALENDAR_POLL_MINUTES values: the ones that divide 60, so the poll cron's ticks are evenly spaced. */
+export const POLL_MINUTE_STEPS: readonly number[] = [1, 2, 3, 4, 5, 6, 10, 12, 15, 20, 30, 60];
+
 const envSchema = z
     .object({
         NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
@@ -161,6 +164,28 @@ const envSchema = z
             .enum(['true', 'false'])
             .default('true')
             .transform((value) => value === 'true'),
+        /**
+         * Office hours of the calendar poll (Calendar Phase 2 P2-5), business timezone, `HH:MM-HH:MM` (start before end,
+         * same day). Background pulls and the Redis-down fallback run only inside them, so Azure SQL serverless can
+         * pause overnight; changes made in the calendar outside them arrive at the next start (or on Sync now).
+         */
+        CALENDAR_SYNC_HOURS: z
+            .preprocess(blankToUndefined, z.string().trim().default('07:00-22:00'))
+            .refine((value) => {
+                const match = /^([01]\d|2[0-3]):([0-5]\d)-([01]\d|2[0-4]):([0-5]\d)$/.exec(value);
+                if (!match) return false;
+                const end = Number(match[3]) * 60 + Number(match[4]);
+                return end <= 24 * 60 && Number(match[1]) * 60 + Number(match[2]) < end;
+            }, 'CALENDAR_SYNC_HOURS must look like 07:00-22:00 (start before end, same day).'),
+        /**
+         * Minutes between calendar polls inside CALENDAR_SYNC_HOURS (P2-5), default 5. Only values that divide 60: the
+         * cron's minute step restarts at :00 each hour, so 45 would poll 45 and 15 minutes apart.
+         */
+        CALENDAR_POLL_MINUTES: z.coerce
+            .number()
+            .int()
+            .refine((value) => POLL_MINUTE_STEPS.includes(value), `CALENDAR_POLL_MINUTES must be one of ${POLL_MINUTE_STEPS.join(', ')} (a value that divides 60).`)
+            .default(5),
 
         /**
          * Booking links (Calendar Phase 4): the key that signs the times a public booking page offers (slot tokens,
@@ -286,5 +311,9 @@ export const ENV = {
         FAKE_PROVIDER_IGNORED: env.CALENDAR_FAKE_PROVIDER && env.NODE_ENV === 'production',
         /** CALENDAR_SYNC_ENABLED: the push engine runs (P2-3b). */
         SYNC_ENABLED: env.CALENDAR_SYNC_ENABLED,
+        /** CALENDAR_SYNC_HOURS (`HH:MM-HH:MM`, business timezone; parsed by calendar-sync/syncHours.ts). */
+        SYNC_HOURS: env.CALENDAR_SYNC_HOURS,
+        /** CALENDAR_POLL_MINUTES: minutes between polls inside the sync hours. */
+        POLL_MINUTES: env.CALENDAR_POLL_MINUTES,
     },
 } as const;

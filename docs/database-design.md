@@ -1,7 +1,7 @@
 # Nandini CRM — Database Design
 
-> **Status:** living document, generated from `backend-crm/prisma/schema.prisma` and `prisma/migrations/` (90 migrations,
-> latest `20261128120000_booking_links`, Calendar Phase 4 booking links, as of 2026-11-26; before it `20261128100000_activity_calendar_sync`, Calendar Phase 2 P2-3b; P2-6 busy times needed no migration: it reads `Activity` through the existing `[isDeleted, startAt]` index and stores nothing). Update it in the same change as any schema migration.
+> **Status:** living document, generated from `backend-crm/prisma/schema.prisma` and `prisma/migrations/` (91 migrations,
+> latest `20261128120000_booking_links`, Calendar Phase 4 booking links, as of 2026-11-26; before it `20261128100000_activity_calendar_sync`, Calendar Phase 2 P2-3b, whose columns P2-3c (first-sync backfill) and P2-5 (calendar → CRM pull) use without a migration of their own; P2-6 busy times needed no migration: it reads `Activity` through the existing `[isDeleted, startAt]` index and stores nothing). Update it in the same change as any schema migration.
 > Related: [System design](system-design.md) · [API plan](api-plan.md) · [Build plan](build-plan.md)
 
 ---
@@ -564,7 +564,7 @@ Calendar columns (migration `20261128100000_activity_calendar_sync`, as of 2026-
 rows): `iCalUid` (NVARCHAR(1024), the event's calendar identity), `syncKey` (NVARCHAR(64), sha256 hex of
 `iCalUid + '|'`, the indexed key), `organizerEmail` (NVARCHAR(254)), `organizerName` (NVARCHAR(200)),
 `externalOrganizer` (BIT, default 0: a meeting someone outside the CRM organizes; the organizer columns are filled
-from P2-8), `externalUpdatedAt` (DATETIME2, the last calendar-side change applied). Set by the sync engine only (system
+from P2-8), `externalUpdatedAt` (DATETIME2, the last calendar-side change applied; set by the P2-5 pull, as of 2026-11-26, without moving `updatedAt`). Set by the sync engine only (system
 write path), never by a form; not in the audited DTO yet.
 
 **Follow-up activities** (P2-4, `activities/activity.followUp.ts`): every open lead / opportunity with a next
@@ -621,7 +621,7 @@ sync-made activity changes are audited under route `job:calendar-sync:<provider>
 | `baseJson`, `crmSyncedAt` | NVARCHAR(MAX) / DATETIME2 | `{ crm, provider }`: the last state both sides agreed on (three-way merge on a 412) |
 | `dirtyAt` | DATETIME2 NULL | **Outbox**: set inside the activity write's own transaction, cleared by the push with compare-and-set |
 | `nextAttemptAt`, `attempts` | | Backoff after a failure / gate (null = now) |
-| `lastErrorCode`, `lastErrorMessage` (≤ 300), `lastWarning` (≤ 500), `lastConflictAt`, `lastSyncedAt` | | Status shown in `ActivityView.calendar`; the message to the owner / editors only |
+| `lastErrorCode`, `lastErrorMessage` (≤ 300), `lastWarning` (≤ 500), `lastConflictAt`, `lastSyncedAt` | | Status shown in `ActivityView.calendar`; the message to the owner / editors only. P2-5 (as of 2026-11-26): `lastErrorCode = 'too_long'` on a `synced` link whose event is longer than 31 days in the calendar (its time isn't taken); `lastWarning` starting `Follow-ups keep a time` after a follow-up was made all-day there (shown for 7 days after `Activity.externalUpdatedAt`; a push drops it once older, or at once when the CRM moved the follow-up itself) |
 | `createdAt`, `updatedAt` | | A link made by the first-sync backfill has `createdAt` = its connection's `backfilledAt` (the run stamp, the same across runs; P2-3c: how the drawer says "copied when your calendar was connected") |
 
 Indexes: unique `(activityId, connectionId)`, `(connectionId, state)`, `(dirtyAt, nextAttemptAt)` (the outbox sweep:
@@ -738,7 +738,7 @@ to `Users`.
 | `statusReason` | NVARCHAR(50) NULL | `error`: `user_not_found`, `user_unavailable`, `calendar_unavailable`, `mailbox_out_of_scope`, `no_mailbox`; `stopped`: `excluded`, `user_inactive`, `email_changed`, `provider_changed`, `provider_removed`, `no_email`, `oauth_retired` (P2-2's OAuth rows; never reactivated) |
 | `source` | NVARCHAR(10), default `domain` | How the provider was chosen: `domain` \| `override` |
 | `calendarId` | NVARCHAR(200), default `primary` | `primary` (Google) / `''` = default calendar (Graph) |
-| `syncCursor`, `syncWindowStart`, `syncWindowEnd`, `fullSyncAt` | | P2-5 (Google sync token / Graph delta link: never logged) |
+| `syncCursor`, `syncWindowStart`, `syncWindowEnd`, `fullSyncAt` | | The pull (P2-5, as of 2026-11-26): Google sync token / Graph delta link (never logged; stored only when every change of the run applied; null = the next pull is a full sync), the full sync's window (now − 7 days … now + 400 days; an Outlook window is re-baselined nightly 30 days after its full sync, i.e. once `syncWindowStart` is older than 37 days), the last full sync |
 | `backfilledAt`, `backfillCount` | | The first-sync backfill (as of 2026-11-26, P2-3c): `backfilledAt` = its run stamp, claimed when the first run starts (`WHERE backfilledAt IS NULL`) and reused by a run started again; `backfillCount` = how many activities it copied (links on the row carrying the stamp), written last (`WHERE backfillCount IS NULL`). `backfillCount` null = not done (the `enrolled` job and the poll re-queue it). Never reset, so it runs once per row |
 | `lastPulledAt`, `lastPushedAt`, `lastSuccessAt`, `lastCheckedAt` | | Sync health |
 | `nextCheckAt` | DATETIME2 NULL | Earliest next health check after a user-level error (backoff 15 min → 1 h → 6 h → 24 h) |
