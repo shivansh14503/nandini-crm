@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { afterEach, beforeEach, describe, it } from 'node:test';
+import { ENV } from '../../config/env.js';
 import type { AuthUser } from '../../types/user.types.js';
 import { toDateOnly } from '../../utils/mappers.js';
 import { addDays, zonedDayOf, zonedWallClockToInstant } from '../../utils/zonedTime.js';
@@ -10,7 +11,7 @@ import { resetProviderPauses } from './providers/http.js';
 import { setFakeHealth, setFakeProviderEnabledForTests } from './providers/registry.js';
 import { requestedIdFor, syncKeyOf } from './sync.keys.js';
 import { localPullRequestLimit, requestPull, resetPullRequestsForTests } from './pull.requests.js';
-import { pullDueInline, rebaselineGraphWindows } from './sync.maintenance.js';
+import { pullDueInline, rebaselineGraphWindows, resetInlinePullsForTests, runCalendarPoll } from './sync.maintenance.js';
 import { pullConnection, resetPullStateForTests, type PullResult } from './sync.pull.js';
 import { parseBase, pushLink } from './sync.push.js';
 import { setInlinePushForTests } from './sync.wake.js';
@@ -78,6 +79,7 @@ beforeEach(() => {
     resetProviderPauses();
     resetPullStateForTests();
     resetPullRequestsForTests();
+    resetInlinePullsForTests();
     setFakeHealth('unknown', null);
     setFakeProviderEnabledForTests(true);
     setTokenSourceForTests(null);
@@ -444,6 +446,30 @@ describe('pullConnection: lead / opportunity follow-up activities (§11.5)', () 
         assert.ok(linkOf('a-fu').dirtyAt);
     });
 
+    it('an older follow-up (Completed when a response was recorded) moved in the calendar: neither it nor the lead moves', async () => {
+        const eventId = await pushedFollowUp();
+        Object.assign(activityOf('a-fu'), { status: 'Completed' });
+        const slot = activityOf('a-fu').startAt?.getTime();
+        const next = addDays(day, 2);
+        fakeEditEvent(eventId, { start: { dateTime: rfc(at(next, '15:00')), timeZone: TZ }, end: { dateTime: rfc(at(next, '15:30')), timeZone: TZ } }, new Date(Date.now() + 60_000));
+        done(await pullConnection('c1', 'poll'));
+        assert.equal(activityOf('a-fu').startAt?.getTime(), slot);
+        assert.equal(toDateOnly(state.leads[0].nextFollowupDate ?? null), day);
+        assert.equal(state.leads[0].nextFollowupTime, '11:00 AM');
+        assert.equal(state.audits.find((a) => a.entityType === 'Lead'), undefined);
+        assert.equal(linkOf('a-fu').dirtyAt, null, 'completion never moves the event, so nothing goes back either');
+    });
+
+    it('a Converted lead keeps its follow-up date when its activity is moved in the calendar', async () => {
+        const eventId = await pushedFollowUp();
+        state.leads[0].status = 'Converted';
+        const next = addDays(day, 1);
+        fakeEditEvent(eventId, { start: { dateTime: rfc(at(next, '15:30')), timeZone: TZ }, end: { dateTime: rfc(at(next, '16:00')), timeZone: TZ } }, new Date(Date.now() + 60_000));
+        done(await pullConnection('c1', 'poll'));
+        assert.equal(toDateOnly(state.leads[0].nextFollowupDate ?? null), day);
+        assert.equal(state.audits.find((a) => a.entityType === 'Lead'), undefined);
+    });
+
     it('deleted in the calendar: the follow-up stays Planned, the link removed_remote', async () => {
         const eventId = await pushedFollowUp();
         fakeDeleteEvent(eventId, new Date(Date.now() + 60_000));
@@ -470,6 +496,36 @@ describe('pullConnection: attendee rows', () => {
         assert.equal(rows.length, 2);
         assert.ok(rows.some((a) => a.contactId === 'ct-none'));
         assert.ok(rows.some((a) => a.email === 'guest@acme.com'));
+    });
+
+    it('more than 50 guests: the CRM keeps 50, the others stay on the event through later pulls and pushes (§8.10)', async () => {
+        install();
+        const own = [0, 1, 2].map((i) => ({ kind: 'email' as const, email: `crm${i}@acme.com` }));
+        const { id, eventId } = await pushedMeeting({ attendees: own });
+        const extra = Array.from({ length: 52 }, (_, i) => ({ email: `g${String(i).padStart(2, '0')}@acme.com`, responseStatus: 'needsAction' }));
+        fakeEditEvent(eventId, { attendees: [...(fakeProviderState.events.get(eventId)?.attendees ?? []), ...extra] }, new Date(Date.now() + 60_000));
+        const onEvent = () => (fakeProviderState.events.get(eventId)?.attendees ?? []).map((a) => a.email ?? '').sort();
+        const before = onEvent();
+        assert.equal(before.filter((email) => email.endsWith('@acme.com')).length, 55);
+
+        done(await pullConnection('c1', 'poll'));
+        assert.equal(state.attendees.filter((a) => a.activityId === id).length, 50);
+        const base = parseBase(linkOf(id).baseJson);
+        assert.equal(Object.keys(base?.crm.attendees ?? {}).length, 50, 'the agreed CRM side lists only what the CRM holds');
+        assert.equal(linkOf(id).dirtyAt, null);
+
+        // A guest left out of the CRM replies: nothing is read as removed in the CRM.
+        const event = fakeProviderState.events.get(eventId)!;
+        fakeEditEvent(eventId, { attendees: (event.attendees ?? []).map((a) => (a.email === 'g51@acme.com' ? { ...a, responseStatus: 'accepted' } : a)) }, new Date(Date.now() + 120_000));
+        done(await pullConnection('c1', 'poll'));
+        assert.equal(linkOf(id).dirtyAt, null, 'nothing to send back');
+        assert.equal(state.attendees.filter((a) => a.activityId === id).length, 50);
+
+        // A CRM edit pushes: every guest stays on the event.
+        await activityService.update(id, { subject: 'Demo with ACME (all hands)' }, PALAK);
+        await pushLink(linkOf(id).id);
+        assert.equal(fakeProviderState.events.get(eventId)?.summary, 'Demo with ACME (all hands)');
+        assert.deepEqual(onEvent(), before);
     });
 });
 
@@ -517,14 +573,35 @@ describe('scheduled pulls (poll fallback, nightly re-baseline)', () => {
         assert.equal(state.connections.find((c) => c.id === 'c1')?.lastPulledAt?.getTime(), now.getTime() - 60_000);
     });
 
+    it('Redis down: a row that keeps failing does not take every slot (the next tick moves on to the others)', async () => {
+        const now = new Date();
+        install([
+            conn({ id: 'c1', lastPulledAt: null, leaseId: 'other', leaseUntil: new Date(now.getTime() + 3_600_000) }),
+            conn({ id: 'c2', username: 'asha', accountEmail: 'asha@nandiniinfosys.com', lastPulledAt: new Date(now.getTime() - 3_600_000) }),
+        ]);
+        assert.equal(await pullDueInline(now, 1), 0, 'c1 waited longest but its lease is held (busy)');
+        assert.equal(await pullDueInline(new Date(now.getTime() + 60_000), 1), 1, 'the next tick pulls c2');
+        assert.ok((state.connections.find((c) => c.id === 'c2')?.lastPulledAt?.getTime() ?? 0) > now.getTime() - 3_600_000);
+    });
+
+    it('the poll tick does nothing outside the sync hours (a cron tick before a start minute that falls mid-hour)', async () => {
+        install([conn()]);
+        const night = zonedWallClockToInstant(`${zonedDayOf(new Date(), ENV.BUSINESS_TIMEZONE)}T03:00`, ENV.BUSINESS_TIMEZONE);
+        assert.deepEqual(await runCalendarPoll(night), { pulls: 0, queued: 0, checks: 0 });
+        assert.deepEqual(state.calls, []);
+    });
+
     it('nightly: an Outlook window older than 30 days drops its cursor (the next pull is a full sync)', async () => {
         const now = new Date();
         install([
             conn({ id: 'm-old', provider: 'microsoft', syncCursor: 'https://graph.microsoft.com/v1.0/x?$deltatoken=a', syncWindowStart: new Date(now.getTime() - 40 * DAY) }),
             conn({ id: 'm-new', username: 'asha', provider: 'microsoft', syncCursor: 'https://graph.microsoft.com/v1.0/x?$deltatoken=b', syncWindowStart: new Date(now.getTime() - 3 * DAY) }),
             conn({ id: 'g-old', username: 'ravi', provider: 'google', syncCursor: 'tok', syncWindowStart: new Date(now.getTime() - 40 * DAY) }),
+            // Full sync 26 days ago: its window starts 7 days before that (33 days ago), still kept.
+            conn({ id: 'm-26', username: 'meena', provider: 'microsoft', syncCursor: 'https://graph.microsoft.com/v1.0/x?$deltatoken=c', syncWindowStart: new Date(now.getTime() - 33 * DAY) }),
         ]);
         assert.equal(await rebaselineGraphWindows(now), 1);
+        assert.ok(state.connections.find((c) => c.id === 'm-26')?.syncCursor, 'a full sync 26 days old is not re-baselined yet');
         assert.equal(state.connections.find((c) => c.id === 'm-old')?.syncCursor, null);
         assert.ok(state.connections.find((c) => c.id === 'm-new')?.syncCursor);
         assert.equal(state.connections.find((c) => c.id === 'g-old')?.syncCursor, 'tok');

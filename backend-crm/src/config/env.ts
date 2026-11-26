@@ -13,6 +13,9 @@ const blankToUndefined = (value: unknown) => (typeof value === 'string' && value
 /** Optional text setting; blank = not set. */
 const optionalText = z.preprocess(blankToUndefined, z.string().trim().optional());
 
+/** CALENDAR_POLL_MINUTES values: the ones that divide 60, so the poll cron's ticks are evenly spaced. */
+export const POLL_MINUTE_STEPS: readonly number[] = [1, 2, 3, 4, 5, 6, 10, 12, 15, 20, 30, 60];
+
 const envSchema = z
     .object({
         NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
@@ -174,8 +177,15 @@ const envSchema = z
                 const end = Number(match[3]) * 60 + Number(match[4]);
                 return end <= 24 * 60 && Number(match[1]) * 60 + Number(match[2]) < end;
             }, 'CALENDAR_SYNC_HOURS must look like 07:00-22:00 (start before end, same day).'),
-        /** Minutes between calendar polls inside CALENDAR_SYNC_HOURS (P2-5): 1–60, default 5. */
-        CALENDAR_POLL_MINUTES: z.coerce.number().int().min(1).max(60).default(5),
+        /**
+         * Minutes between calendar polls inside CALENDAR_SYNC_HOURS (P2-5), default 5. Only values that divide 60: the
+         * cron's minute step restarts at :00 each hour, so 45 would poll 45 and 15 minutes apart.
+         */
+        CALENDAR_POLL_MINUTES: z.coerce
+            .number()
+            .int()
+            .refine((value) => POLL_MINUTE_STEPS.includes(value), `CALENDAR_POLL_MINUTES must be one of ${POLL_MINUTE_STEPS.join(', ')} (a value that divides 60).`)
+            .default(5),
     })
     .superRefine((env, ctx) => {
         if (env.NODE_ENV === 'production' && (!env.JWT_SECRET || env.JWT_SECRET.length < 32)) {

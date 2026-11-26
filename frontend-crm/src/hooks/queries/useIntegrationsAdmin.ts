@@ -43,9 +43,7 @@ export function useSyncPersonCalendar() {
     const queryClient = useQueryClient();
     return useMutation({
         mutationFn: (username: string) => integrationsAdminService.syncPersonCalendar(username),
-        onSuccess: (person) => {
-            void queryClient.invalidateQueries({ queryKey: queryKeys.integrations.all });
-            refreshAfterPull(queryClient, person.sync);
-        },
+        // refreshAfterPull re-reads the People rows too (again after a queued pull has had time to run).
+        onSuccess: (person) => refreshAfterPull(queryClient, person.sync),
     });
 }

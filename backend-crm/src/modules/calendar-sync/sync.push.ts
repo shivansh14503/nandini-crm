@@ -281,7 +281,9 @@ class LinkPush {
     private async act(round: Round): Promise<PushResult> {
         const { plan, link } = round;
         // P2-5: a follow-up's "keeps a time" note (sync.inbound.ts) survives the push that re-times the event.
-        const warning = skippedWarning(round.resolved.skipped) ?? keptFollowUpNote(link.lastWarning, round.activity.externalUpdatedAt, this.clock());
+        const warning =
+            skippedWarning(round.resolved.skipped) ??
+            keptFollowUpNote(link.lastWarning, round.activity.externalUpdatedAt, this.clock(), { base: round.base?.crm.when, crmNow: round.crmNow.when });
         switch (plan.action) {
             case 'noop':
                 return this.settle(round, plan.state, { lastWarning: warning });

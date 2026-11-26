@@ -1,13 +1,14 @@
-import { ENV } from '../../config/env.js';
+import { ENV, POLL_MINUTE_STEPS } from '../../config/env.js';
 import { instantToZonedWallClock } from '../../utils/zonedTime.js';
 
 /**
  * Office hours of calendar sync (Calendar Phase 2 spec D24, §10.1, §10.4; P2-5). Pure apart from reading ENV.
  *
  * `CALENDAR_SYNC_HOURS` (`HH:MM-HH:MM`, business timezone, default 07:00-22:00) bounds every background pull, the
- * outbox sweep and the Redis-down fallback tick, so Azure SQL serverless can pause overnight. `CALENDAR_POLL_MINUTES`
- * (default 5) is the poll interval inside them. The cron pattern covers whole hours (`*\/5 7-21 * * *`); a tick that
- * falls before a start minute or after an end minute (e.g. 07:30-21:45) is dropped by `isInsideSyncHours`.
+ * outbox sweep, due connection checks and the Redis-down fallback tick, so Azure SQL serverless can pause overnight.
+ * `CALENDAR_POLL_MINUTES` (default 5; a value that divides 60, so ticks are evenly spaced) is the poll interval inside
+ * them. The cron pattern covers whole hours (`*\/5 7-21 * * *`); a tick that falls before a start minute or after an
+ * end minute (e.g. 07:30-21:45) does nothing (`runCalendarPoll` / `runFallbackTick` check `isInsideSyncHours` first).
  */
 
 export interface SyncHours {
@@ -37,7 +38,7 @@ export function syncHours(): SyncHours {
 
 export function pollMinutes(): number {
     const value = ENV.INTEGRATIONS.POLL_MINUTES;
-    return Number.isInteger(value) && value >= 1 && value <= 60 ? value : DEFAULT_POLL_MINUTES;
+    return POLL_MINUTE_STEPS.includes(value) ? value : DEFAULT_POLL_MINUTES;
 }
 
 /** Inside the hours at `now` (business timezone). */

@@ -17,6 +17,7 @@ import {
     GRAPH_REBASELINE_DAYS,
     OUTBOX_SWEEP_GRACE_MS,
     OUTBOX_SWEEP_LIMIT,
+    PULL_PAST_DAYS,
 } from './sync.constants.js';
 import { sweepPushJobId } from './sync.keys.js';
 import { secretExpiringNotifications } from './sync.notifications.js';
@@ -75,17 +76,29 @@ export async function enqueuePulls(now: Date = new Date()): Promise<number> {
     return queued;
 }
 
+/**
+ * When this process last tried each row in the fallback (whatever the result): `lastPulledAt` moves only when a pull
+ * ends `done`, so without this a few rows that keep failing would take every slot of every tick.
+ */
+const inlineTriedAt = new Map<string, number>();
+
+export function resetInlinePullsForTests(): void {
+    inlineTriedAt.clear();
+}
+
 /** Redis down (§10.2): the longest-waiting synced people pulled in-process, one after another, ≤ 5 per tick. */
 export async function pullDueInline(now: Date = new Date(), limit: number = FALLBACK_PULL_LIMIT): Promise<number> {
     if (!ENV.INTEGRATIONS.SYNC_ENABLED) return 0;
     const dueBefore = now.getTime() - pollMinutes() * 60_000;
+    const lastTry = (row: { id: string; lastPulledAt: Date | null }) => Math.max(row.lastPulledAt?.getTime() ?? 0, inlineTriedAt.get(row.id) ?? 0);
     const due = (await pullableConnections())
-        .filter((r) => !r.lastPulledAt || r.lastPulledAt.getTime() <= dueBefore)
-        .sort((a, b) => (a.lastPulledAt?.getTime() ?? 0) - (b.lastPulledAt?.getTime() ?? 0))
+        .filter((r) => lastTry(r) <= dueBefore)
+        .sort((a, b) => lastTry(a) - lastTry(b))
         .slice(0, limit);
     let pulled = 0;
     const { pullConnection } = await import('./sync.pull.js');
     for (const row of due) {
+        inlineTriedAt.set(row.id, now.getTime());
         try {
             if ((await pullConnection(row.id, 'poll')).status === 'done') pulled += 1;
         } catch (err) {
@@ -96,13 +109,14 @@ export async function pullDueInline(now: Date = new Date(), limit: number = FALL
 }
 
 /**
- * Nightly (§10.1 step 4): Outlook delta windows are fixed at the first full sync (now − 7 days … + 400 days), so
- * windows older than 30 days start over: the cursor is dropped and a full pull queued (inside the nightly wake; without
- * Redis the first poll of the morning does it).
+ * Nightly (§10.1 step 4): Outlook delta windows are fixed at the full sync (now − 7 days … + 400 days), so a window
+ * whose full sync is 30 days old starts over: the cursor is dropped and a full pull queued (inside the nightly wake;
+ * without Redis the first poll of the morning does it). The stored window starts 7 days before its full sync, hence
+ * the 30 + 7 days.
  */
 export async function rebaselineGraphWindows(now: Date): Promise<number> {
     if (!ENV.INTEGRATIONS.SYNC_ENABLED) return 0;
-    const before = new Date(now.getTime() - GRAPH_REBASELINE_DAYS * 24 * 60 * 60_000);
+    const before = new Date(now.getTime() - (GRAPH_REBASELINE_DAYS + PULL_PAST_DAYS) * 24 * 60 * 60_000);
     const rows = await prisma.calendarConnection.findMany({
         where: { provider: 'microsoft', status: 'ok', syncCursor: { not: null }, OR: [{ syncWindowStart: null }, { syncWindowStart: { lt: before } }] },
         select: { id: true },
@@ -302,8 +316,12 @@ export async function runCalendarNightly(now: Date = new Date()) {
     return result;
 }
 
-/** The `calendar-poll` tick: pulls of every synced person (P2-5), the outbox sweep and due connection checks. */
+/**
+ * The `calendar-poll` tick: pulls of every synced person (P2-5), the outbox sweep and due connection checks. The cron
+ * covers whole hours, so a tick before a start minute or after an end minute (e.g. 08:30-18:00) does nothing at all.
+ */
 export async function runCalendarPoll(now: Date = new Date()) {
+    if (!isInsideSyncWindow(now)) return { pulls: 0, queued: 0, checks: 0 };
     const pulls = await step('pulls', () => enqueuePulls(now), 0);
     const queued = await step('outbox-sweep', () => sweepOutbox(now), 0);
     const checks = await step('due-checks', () => enqueueDueChecks(now), 0);

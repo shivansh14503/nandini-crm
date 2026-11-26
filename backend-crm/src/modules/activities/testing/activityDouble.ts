@@ -67,6 +67,8 @@ export interface LeadRow {
     nextFollowupDate?: Date | null;
     nextFollowupTime?: string | null;
     updatedBy?: string | null;
+    /** A Converted lead keeps its follow-up date (rescheduleRecordFromCalendar). */
+    status?: string | null;
 }
 
 export interface OpportunityRow {

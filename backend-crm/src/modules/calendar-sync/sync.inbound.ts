@@ -3,8 +3,17 @@ import { instantToZonedWallClock, zonedDayOf, zonedStartOfDay, zonedWallClockToI
 import type { ActivityRow } from '../activities/activity.mapper.js';
 import type { SystemActivityFields } from '../activities/activity.system.js';
 import type { AttendeeInput } from '../activities/activity.validator.js';
-import { MAX_ATTENDEES } from '../activities/activity.validator.js';
-import { parseHeld, patchAttendees, resolveAttendeeEmails, withoutHeld, type AttendeeDb, type ResolvedAttendees } from './sync.attendees.js';
+import { attendeeIdentity, MAX_ATTENDEES } from '../activities/activity.validator.js';
+import {
+    parseHeld,
+    patchAttendees,
+    resolveAttendeeEmails,
+    withoutHeld,
+    type AttendeeDb,
+    type PushAttendeeRow,
+    type ResolvedAttendees,
+    type StoredAttendeeRow,
+} from './sync.attendees.js';
 import { FOLLOW_UP_NOTE_DAYS, FOLLOW_UP_TIME_KEPT_PREFIX } from './sync.constants.js';
 import { planMerge, systemPatchOf, type MergePlan } from './sync.merge.js';
 import { allInternal, crmShapeOf, internalDescription, isCompanyAddress, peopleOf, sameWhen, type CrmShape, type CrmWhen, type ProviderEvent, type SyncBase } from './sync.shapes.js';
@@ -17,11 +26,12 @@ import { allInternal, crmShapeOf, internalDescription, isCompanyAddress, peopleO
  * - Only the organizer copy gets here (sync.classify.ts).
  * - Provider wins for subject / time / location / attendee edits made in the calendar unless the CRM changed the same
  *   group since the last agreed base (then the later write wins, a tie goes to the calendar).
- * - Lead / opportunity follow-up activities (P2-4): the CRM wins every `when` conflict (the slot is locked in the
+ * - The record's open lead / opportunity follow-up activity (P2-4): the CRM wins every `when` conflict (the slot is locked in the
  *   CRM); a calendar-only move is applied and written back to the record (`rescheduleRecordFromCalendar`). Timed →
  *   all-day in the calendar writes the date only: the activity keeps its time of day on the new day, the base keeps
  *   the calendar's all-day value so the next push puts the timed slot back, and the link says so.
- * - Longer than 31 days (D20): every group but `when` merges; the CRM keeps its times (never clamped).
+ * - Longer than 31 days (D20): every group but `when` merges; the CRM keeps its times (never clamped). The same for a
+ *   follow-up activity that is no longer the record's open one: its time is follow-up history, never moved inbound.
  * - Reminder and description are never applied inbound; type, status (except deletions), related record, remarks,
  *   customer response and custom fields never change.
  * - The link becomes dirty when the CRM still has something to send (pending groups), or when a guest added in the
@@ -55,9 +65,14 @@ export interface InboundPlanInput {
     crmChangedAt: Date;
     /** link.invites === 'send' (a private copy's attendees say nothing about the CRM's). */
     invitesSent: boolean;
-    /** origin = 'followup'. */
+    /** The record's open follow-up activity (origin 'followup', Planned): its calendar moves write back to the record. */
     followUp: boolean;
     tooLong: boolean;
+    /**
+     * The CRM keeps its time and the calendar's move is not applied (as for `tooLong`): a follow-up activity that is
+     * no longer the record's open one (Completed when a response was recorded). Default false.
+     */
+    keepCrmWhen?: boolean;
     activity: Pick<ActivityRow, 'startAt' | 'endAt' | 'allDay' | 'timeZone'>;
     companyDomains: readonly string[];
 }
@@ -108,7 +123,8 @@ const removeGroup = <T extends string>(list: T[], group: T) => {
 };
 
 export function planInbound(input: InboundPlanInput): InboundPlan {
-    const { crmNow, event, followUp, tooLong, companyDomains } = input;
+    const { crmNow, event, followUp, companyDomains } = input;
+    const tooLong = input.tooLong || Boolean(input.keepCrmWhen);
     const providerNow = event.shape;
     const base: SyncBase = input.base ?? { crm: crmNow, provider: providerNow };
     const crmChangedWhen = !sameWhen(crmNow.when, base.crm.when);
@@ -180,11 +196,71 @@ export function capAttendees(inputs: readonly AttendeeInput[], max: number = MAX
         .map((entry) => entry.input);
 }
 
+export interface CappedAttendees {
+    /** The CRM rows to write (at most MAX_ATTENDEES). */
+    inputs: AttendeeInput[];
+    /** Addresses the written rows stand for; null when nothing was left out. */
+    kept: Set<string> | null;
+    /** True when rows were left out and the rows written would be the stored ones (nothing to write). */
+    unchanged: boolean;
+}
+
+const lower = (value: string | null | undefined) => (value ?? '').trim().toLowerCase();
+
+/**
+ * §8.10 cap on the inbound attendee rows, plus what the caller needs to keep the overflow on the provider only: the
+ * addresses the kept rows stand for (the agreed CRM side of the base lists only those, so neither a later pull nor a
+ * push takes the left-out guests off the event) and whether the stored rows already are the capped ones.
+ */
+export async function capInboundAttendees(
+    db: Pick<AttendeeDb, 'user'>,
+    inputs: readonly AttendeeInput[],
+    stored: readonly StoredAttendeeRow[],
+    emailOf: ReadonlyMap<PushAttendeeRow, string>,
+    max: number = MAX_ATTENDEES,
+): Promise<CappedAttendees> {
+    const capped = capAttendees(inputs, max);
+    if (capped.length === inputs.length) return { inputs: capped, kept: null, unchanged: false };
+
+    const emailByIdentity = new Map<string, string>();
+    for (const row of stored) {
+        const email = emailOf.get(row);
+        if (email) emailByIdentity.set(attendeeIdentity(row), email);
+    }
+    const usernames = capped.filter((input) => input.kind === 'user' && !emailByIdentity.has(attendeeIdentity(input))).map((input) => (input as { username: string }).username);
+    if (usernames.length > 0) {
+        const users = await db.user.findMany({ where: { username: { in: usernames } }, select: { username: true, email: true } });
+        for (const user of users) if (lower(user.email)) emailByIdentity.set(attendeeIdentity({ kind: 'user', username: user.username }), lower(user.email));
+    }
+    const kept = new Set<string>();
+    for (const input of capped) {
+        const email = emailByIdentity.get(attendeeIdentity(input)) ?? (input.kind === 'user' ? '' : lower(input.email));
+        if (email) kept.add(email);
+    }
+
+    const storedByIdentity = new Map(stored.map((row) => [attendeeIdentity(row), row]));
+    const unchanged =
+        storedByIdentity.size === capped.length &&
+        capped.every((input) => {
+            const row = storedByIdentity.get(attendeeIdentity(input));
+            return Boolean(row) && (input.kind === 'user' || (input.responseStatus ?? 'needsAction') === row?.responseStatus);
+        });
+    return { inputs: capped, kept, unchanged };
+}
+
 /**
  * The follow-up time note a push keeps on the link (§11.5): the push re-times the calendar event right after the
- * inbound apply, and the note explaining why stays for a week after the calendar change (then pushes drop it).
+ * inbound apply, and the note explaining why stays for a week after the calendar change (then pushes drop it). With
+ * `when` (the push's agreed CRM time and the CRM's time now): a push that sends a time the CRM chose itself (the base
+ * was already timed, so this is not the re-timing of the calendar's all-day move) drops it at once.
  */
-export function keptFollowUpNote(lastWarning: string | null | undefined, externalUpdatedAt: Date | null | undefined, now: Date): string | null {
+export function keptFollowUpNote(
+    lastWarning: string | null | undefined,
+    externalUpdatedAt: Date | null | undefined,
+    now: Date,
+    when?: { base: CrmWhen | null | undefined; crmNow: CrmWhen },
+): string | null {
     if (!lastWarning?.startsWith(FOLLOW_UP_TIME_KEPT_PREFIX) || !externalUpdatedAt) return null;
+    if (when?.base && !when.base.allDay && !sameWhen(when.base, when.crmNow)) return null;
     return now.getTime() - externalUpdatedAt.getTime() <= FOLLOW_UP_NOTE_DAYS * 24 * 60 * 60_000 ? lastWarning : null;
 }

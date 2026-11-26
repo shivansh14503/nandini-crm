@@ -149,7 +149,7 @@ export type PullReason = (typeof PULL_REASONS)[number];
 export const PULL_PAST_DAYS = 7;
 /** … to now + 400 days (Graph `endDateTime`; Google lists without an end). */
 export const PULL_FUTURE_DAYS = 400;
-/** Graph delta windows older than this are re-baselined by the nightly job (a new full sync). */
+/** Graph delta windows are re-baselined by the nightly job (a new full sync) this many days after their full sync. */
 export const GRAPH_REBASELINE_DAYS = 30;
 /** Full sync safety (§8.11): unseen synced links are read back one by one, at most this many per run. */
 export const VERIFY_MISSING_LIMIT = 50;

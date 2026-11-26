@@ -619,7 +619,7 @@ sync-made activity changes are audited under route `job:calendar-sync:<provider>
 | `baseJson`, `crmSyncedAt` | NVARCHAR(MAX) / DATETIME2 | `{ crm, provider }`: the last state both sides agreed on (three-way merge on a 412) |
 | `dirtyAt` | DATETIME2 NULL | **Outbox**: set inside the activity write's own transaction, cleared by the push with compare-and-set |
 | `nextAttemptAt`, `attempts` | | Backoff after a failure / gate (null = now) |
-| `lastErrorCode`, `lastErrorMessage` (≤ 300), `lastWarning` (≤ 500), `lastConflictAt`, `lastSyncedAt` | | Status shown in `ActivityView.calendar`; the message to the owner / editors only. P2-5 (as of 2026-11-26): `lastErrorCode = 'too_long'` on a `synced` link whose event is longer than 31 days in the calendar (its time isn't taken); `lastWarning` starting `Follow-ups keep a time` after a follow-up was made all-day there (kept 7 days) |
+| `lastErrorCode`, `lastErrorMessage` (≤ 300), `lastWarning` (≤ 500), `lastConflictAt`, `lastSyncedAt` | | Status shown in `ActivityView.calendar`; the message to the owner / editors only. P2-5 (as of 2026-11-26): `lastErrorCode = 'too_long'` on a `synced` link whose event is longer than 31 days in the calendar (its time isn't taken); `lastWarning` starting `Follow-ups keep a time` after a follow-up was made all-day there (shown for 7 days after `Activity.externalUpdatedAt`; a push drops it once older, or at once when the CRM moved the follow-up itself) |
 | `createdAt`, `updatedAt` | | |
 
 Indexes: unique `(activityId, connectionId)`, `(connectionId, state)`, `(dirtyAt, nextAttemptAt)` (the outbox sweep:
@@ -735,7 +735,7 @@ to `Users`.
 | `statusReason` | NVARCHAR(50) NULL | `error`: `user_not_found`, `user_unavailable`, `calendar_unavailable`, `mailbox_out_of_scope`, `no_mailbox`; `stopped`: `excluded`, `user_inactive`, `email_changed`, `provider_changed`, `provider_removed`, `no_email`, `oauth_retired` (P2-2's OAuth rows; never reactivated) |
 | `source` | NVARCHAR(10), default `domain` | How the provider was chosen: `domain` \| `override` |
 | `calendarId` | NVARCHAR(200), default `primary` | `primary` (Google) / `''` = default calendar (Graph) |
-| `syncCursor`, `syncWindowStart`, `syncWindowEnd`, `fullSyncAt` | | The pull (P2-5, as of 2026-11-26): Google sync token / Graph delta link (never logged; stored only when every change of the run applied; null = the next pull is a full sync), the full sync's window (now − 7 days … now + 400 days; Outlook windows older than 30 days are re-baselined nightly), the last full sync |
+| `syncCursor`, `syncWindowStart`, `syncWindowEnd`, `fullSyncAt` | | The pull (P2-5, as of 2026-11-26): Google sync token / Graph delta link (never logged; stored only when every change of the run applied; null = the next pull is a full sync), the full sync's window (now − 7 days … now + 400 days; an Outlook window is re-baselined nightly 30 days after its full sync, i.e. once `syncWindowStart` is older than 37 days), the last full sync |
 | `backfilledAt`, `backfillCount` | | P2-3c |
 | `lastPulledAt`, `lastPushedAt`, `lastSuccessAt`, `lastCheckedAt` | | Sync health |
 | `nextCheckAt` | DATETIME2 NULL | Earliest next health check after a user-level error (backoff 15 min → 1 h → 6 h → 24 h) |

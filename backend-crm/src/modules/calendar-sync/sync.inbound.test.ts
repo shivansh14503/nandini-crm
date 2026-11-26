@@ -1,11 +1,13 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
+import { POLL_MINUTE_STEPS } from '../../config/env.js';
 import { pullRetryDelay } from '../../jobs/workers/calendarSync.worker.js';
 import { emptyPullCounts } from './sync.classify.js';
 import { FOLLOW_UP_TIME_KEPT_PREFIX } from './sync.constants.js';
 import { classifyInbound, isTooLong, type ClassifyInput } from './sync.classify.js';
 import { capAttendees, keepTimeOnDay, keptFollowUpNote, planInbound, slotLabel, type InboundPlanInput } from './sync.inbound.js';
 import type { CrmShape, ProviderEvent, ProviderShape } from './sync.shapes.js';
+import { shownWarning } from './sync.view.js';
 import { isInsideSyncHours, parseSyncHours, pollCron, syncHoursLabel } from './syncHours.js';
 
 /**
@@ -212,6 +214,23 @@ describe('inbound helpers', () => {
         assert.equal(keptFollowUpNote(note, changed, new Date('2026-11-28T00:00:00Z')), null);
         assert.equal(keptFollowUpNote('Something else', changed, new Date('2026-11-21T00:00:00Z')), null);
         assert.equal(keptFollowUpNote(note, null, new Date()), null);
+        // The push re-timing the calendar's all-day move keeps it; a push of a time the CRM chose drops it.
+        const allDay = { allDay: true, start: '2026-12-03', end: '2026-12-04' };
+        const kept = { allDay: false, start: '2026-12-03T05:30:00.000Z', end: '2026-12-03T06:00:00.000Z' };
+        const moved = { allDay: false, start: '2026-12-05T09:30:00.000Z', end: '2026-12-05T10:00:00.000Z' };
+        const soon = new Date('2026-11-21T00:00:00Z');
+        assert.equal(keptFollowUpNote(note, changed, soon, { base: allDay, crmNow: kept }), note);
+        assert.equal(keptFollowUpNote(note, changed, soon, { base: kept, crmNow: kept }), note);
+        assert.equal(keptFollowUpNote(note, changed, soon, { base: kept, crmNow: moved }), null);
+        // Screens show it for 7 days only, whether or not a push rewrote the link since.
+        assert.equal(shownWarning(note, changed, new Date('2026-11-26T00:00:00Z')), note);
+        assert.equal(shownWarning(note, changed, new Date('2026-12-20T00:00:00Z')), null);
+        assert.equal(shownWarning('2 attendees have no email address', null, new Date()), '2 attendees have no email address');
+    });
+
+    it('CALENDAR_POLL_MINUTES takes only values that divide 60 (evenly spaced cron ticks)', () => {
+        for (const minutes of POLL_MINUTE_STEPS) assert.equal(60 % minutes, 0, String(minutes));
+        assert.ok(!POLL_MINUTE_STEPS.includes(45));
     });
 
     it('caps attendees at 50: colleagues, then contacts, then outside emails, order kept', () => {

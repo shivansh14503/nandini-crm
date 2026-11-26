@@ -8,6 +8,7 @@ import { isUniqueViolation } from '../../utils/prismaErrors.js';
 import { FOLLOW_UP_ORIGIN } from '../activities/activity.access.js';
 import { FOLLOW_UP_LOCK_ENTITY, rescheduleRecordFromCalendar, type FollowUpModule } from '../activities/activity.followUp.js';
 import type { ActivityRow } from '../activities/activity.mapper.js';
+import { PLANNED_STATUS } from '../activities/activity.schedule.js';
 import { loadActivityConfig, runActivityPostCommit, WITH_ATTENDEES, type ActivityCommitRow, type ActivityConfig } from '../activities/activity.service.js';
 import { applySystemPatch, type SystemActivityFields } from '../activities/activity.system.js';
 import type { CalendarSyncSettings } from '../integrations/calendarSyncSettings.js';
@@ -33,7 +34,7 @@ import {
     VERIFY_MISSING_LIMIT,
     type PullReason,
 } from './sync.constants.js';
-import { capAttendees, inboundCrmNow, planInbound } from './sync.inbound.js';
+import { capInboundAttendees, inboundCrmNow, planInbound } from './sync.inbound.js';
 import { eventKeyOf, requestedIdFor, syncKeyOf } from './sync.keys.js';
 import { claimLease, type Lease } from './sync.lease.js';
 import type { DirtyLink } from './sync.outbox.js';
@@ -395,6 +396,16 @@ class ConnectionPull {
         });
     }
 
+    /** The record's open follow-up activity is this one: Planned, live, and the one a record lookup finds (§11.5). */
+    private async isOpenFollowUp(tx: TransactionClient, activity: ActivityRow): Promise<boolean> {
+        if (activity.status !== PLANNED_STATUS) return false;
+        const open = await tx.activity.findFirst({
+            where: { origin: FOLLOW_UP_ORIGIN, status: PLANNED_STATUS, isDeleted: false, relatedModule: activity.relatedModule, relatedId: activity.relatedId },
+            select: { id: true },
+        });
+        return open?.id === activity.id;
+    }
+
     /** `Activity.externalUpdatedAt` ("Updated from Google Calendar 10:42"), written with `updatedAt` kept (§4.4). */
     private async stampExternal(tx: TransactionClient, activityId: string, updatedAt: Date, now: Date): Promise<void> {
         await tx.activity.updateMany({ where: { id: activityId, updatedAt }, data: { externalUpdatedAt: now, updatedAt } });
@@ -413,14 +424,18 @@ class ConnectionPull {
     ): Promise<Applied> {
         const head = await prisma.activity.findUnique({ where: { id: activityId }, select: { relatedModule: true, relatedId: true, origin: true } });
         if (!head) return NOTHING;
-        const followUp = head.origin === FOLLOW_UP_ORIGIN && isFollowUpModule(head.relatedModule) && Boolean(head.relatedId);
+        const followUpRecord = head.origin === FOLLOW_UP_ORIGIN && isFollowUpModule(head.relatedModule) && Boolean(head.relatedId);
         const now = this.clock();
 
         return runInTransaction(async (tx) => {
-            if (followUp) await lockRecords(tx, FOLLOW_UP_LOCK_ENTITY[head.relatedModule as FollowUpModule], [head.relatedId as string]);
+            if (followUpRecord) await lockRecords(tx, FOLLOW_UP_LOCK_ENTITY[head.relatedModule as FollowUpModule], [head.relatedId as string]);
             await lockRecords(tx, 'activity', [activityId]);
             const activity = (await tx.activity.findUnique({ where: { id: activityId }, include: WITH_ATTENDEES })) as ActivityRow | null;
             if (!activity || activity.isDeleted) return NOTHING;
+            // §11.5: only the record's open follow-up activity (Planned) moves with the calendar and writes back. An
+            // older one (Completed when a response was recorded) keeps its time: its event never moves from the CRM
+            // again (completion never moves an event), and a calendar move of it changes neither it nor the record.
+            const followUp = followUpRecord && (await this.isOpenFollowUp(tx, activity));
 
             let current: ActivityExternalLink | null;
             if (mode.relink) {
@@ -452,6 +467,7 @@ class ConnectionPull {
                 invitesSent: invites === 'send',
                 followUp,
                 tooLong: mode.tooLong,
+                keepCrmWhen: followUpRecord && !followUp,
                 activity,
                 companyDomains: this.settings.companyDomains,
             });
@@ -462,7 +478,16 @@ class ConnectionPull {
                 const target = { ...plan.merge.merged.attendees };
                 // Held guests (D41) aren't on the event but stay in the CRM.
                 for (const email of parseHeld(current?.heldAttendeesJson)) if (!(email in target) && resolved.attendees[email]) target[email] = resolved.attendees[email];
-                patch.attendees = capAttendees(await attendeeInputsFromProvider(tx, activity.attendees, resolved.emailOf, target, activity.assignedTo));
+                const inputs = await attendeeInputsFromProvider(tx, activity.attendees, resolved.emailOf, target, activity.assignedTo);
+                const capped = await capInboundAttendees(tx, inputs, activity.attendees, resolved.emailOf);
+                if (capped.kept) {
+                    // §8.10: guests past the 50 cap stay on the provider only. The agreed CRM side lists just the
+                    // addresses the CRM holds, so the push keeps the others on the event and the next pull doesn't
+                    // read them as removed in the CRM.
+                    const kept = capped.kept;
+                    plan.merge.base.crm.attendees = Object.fromEntries(Object.entries(plan.merge.base.crm.attendees).filter(([email]) => kept.has(email)));
+                }
+                if (!capped.unchanged) patch.attendees = capped.inputs;
             }
 
             const records: FollowUpModule[] = [];

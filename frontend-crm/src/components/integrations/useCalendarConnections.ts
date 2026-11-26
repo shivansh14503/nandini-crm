@@ -13,18 +13,28 @@ export function useOwnCalendarSync(enabled = true) {
 const QUEUED_REFRESH_MS = 8_000;
 
 /**
- * After a pull request: the status card refreshes, and activities (plus the lead / opportunity follow-ups a calendar
- * move writes back) are re-read when the pull changed something, or a little later when it was queued.
+ * After a pull request: the status card (and the admin's People rows) refresh, and activities (plus the lead /
+ * opportunity follow-ups a calendar move writes back) are re-read when the pull changed something. A queued pull hasn't
+ * run yet, so all of it is read again a little later ("Last synced" moves once the job is done).
  */
 export function refreshAfterPull(queryClient: QueryClient, result: PullRequestResult): void {
-    void queryClient.invalidateQueries({ queryKey: queryKeys.calendarConnections.all });
-    const refresh = () => {
+    const refreshStatus = () => {
+        void queryClient.invalidateQueries({ queryKey: queryKeys.calendarConnections.all });
+        void queryClient.invalidateQueries({ queryKey: queryKeys.integrations.all });
+    };
+    const refreshRecords = () => {
         void queryClient.invalidateQueries({ queryKey: queryKeys.activities.all });
         void queryClient.invalidateQueries({ queryKey: queryKeys.leads.all });
         void queryClient.invalidateQueries({ queryKey: queryKeys.opportunities.all });
     };
-    if (result.status === 'done' && result.changed) refresh();
-    else if (result.status === 'queued') setTimeout(refresh, QUEUED_REFRESH_MS);
+    refreshStatus();
+    if (result.status === 'done' && result.changed) refreshRecords();
+    else if (result.status === 'queued') {
+        setTimeout(() => {
+            refreshStatus();
+            refreshRecords();
+        }, QUEUED_REFRESH_MS);
+    }
 }
 
 /** "Sync now" (and the silent pull when the calendar page opens): brings changes made in the calendar back. */

@@ -129,7 +129,7 @@ the audited record; `null` when the activity has no calendar copy): the owner's 
 connection), `{ provider: google|microsoft|fake, state: pending|synced|error|cancelled|removed_remote|unsupported|detached,
 pending (a push is waiting), invites: send|withhold, heldCount (guests held until the owner sends invitations, D41),
 canSendInvites (owner only), lastSyncedAt, htmlLink, errorCode, errorMessage, warning, conflictAt, externalUpdatedAt }`
-(ISO times or `null`; `htmlLink` and `errorMessage` only for the owner and users who can edit the activity, else `null`). Read only: saves never take it, and no endpoint changes it yet (the send-invites action and the UI
+(ISO times or `null`; `htmlLink` and `errorMessage` only for the owner and users who can edit the activity, else `null`; the follow-up note `warning` "Follow-ups keep a time: …" only within 7 days of `externalUpdatedAt`, as of 2026-11-26, P2-5). Read only: saves never take it, and no endpoint changes it yet (the send-invites action and the UI
 are P2-3c). A save of an enrolled owner's activity pushes it to their calendar after commit
 ([system design §5.4](system-design.md#54-calendar-sync-crm-calendar-sync)); the response doesn't wait for the push.
 A `PUT` / `PATCH` that **changes** one of them is `409 FOLLOW_UP_ACTIVITY_LOCKED` ("This is the lead's next
