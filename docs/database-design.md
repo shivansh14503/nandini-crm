@@ -567,7 +567,7 @@ rows): `iCalUid` (NVARCHAR(1024), the event's calendar identity), `syncKey` (NVA
 `externalOrganizer` (BIT, default 0: a meeting someone outside the CRM organizes; the organizer columns are filled
 from P2-8), `externalUpdatedAt` (DATETIME2, the last calendar-side change applied; set by the P2-5 pull, as of 2026-11-26, without moving `updatedAt`). Set by the sync engine only (system
 write path), never by a form; not in the audited DTO yet.
-Video meeting columns (migration `20261128150000_activity_conference`, as of 2026-11-26, Calendar Phase 3 P3-1; NULL /
+Video meeting columns (migration `20261215100000_activity_conference`, as of 2026-11-26, Calendar Phase 3 P3-1; NULL /
 0 on existing rows): `conferenceProvider` (NVARCHAR(20): `meet` / `teams` / `zoom` / NULL, the form's Video meeting
 choice; the DTO key is `videoMeeting`), `conferenceState` (NVARCHAR(20): `requested` / `ready` / `failed`),
 `conferenceJoinUrl` (NVARCHAR(1000): https only, host allow-list `meet.google.com`, `teams.microsoft.com`,

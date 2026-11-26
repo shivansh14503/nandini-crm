@@ -5,10 +5,11 @@ import { activityService } from '../activities/activity.service.js';
 import { installActivityDouble, restoreActivityDouble, type ActivityDoubleState } from '../activities/testing/activityDouble.js';
 import { NEVER_REQUIRED_FIELDS } from '../form-configs/formConfig.defaults.js';
 import type { FormConfigsPayload } from '../form-configs/formConfig.service.js';
-import { fakeFinishConference, fakeMeetUrl, fakeProviderState, resetFakeProvider } from './providers/fake.js';
+import { fakeEditEvent, fakeFinishConference, fakeMeetUrl, fakeProviderState, resetFakeProvider } from './providers/fake.js';
 import { ProviderBadRequestError, ProviderTransientError, resetProviderPauses } from './providers/http.js';
 import { setFakeHealth, setFakeProviderEnabledForTests } from './providers/registry.js';
 import { checkConference, failStaleConferences, markConferenceExhausted, setInlineConferenceCheckForTests, STALE_CONFERENCE_MS, type ConferenceJobData } from './sync.conference.js';
+import { pullConnection, resetPullStateForTests } from './sync.pull.js';
 import { parseBase, pushLink } from './sync.push.js';
 import { setInlinePushForTests } from './sync.wake.js';
 import { blankConnection, type ConnectionRowState } from './testing/connectionDouble.js';
@@ -398,5 +399,73 @@ describe('Teams lock', () => {
         assert.equal(moved.conference?.locked, false);
         await activityService.update(view.id, { videoMeeting: null }, PALAK);
         assert.equal(rowOf(view.id).conferenceProvider, null);
+    });
+});
+
+describe('Video meeting through the pull (P2-5 organizer copies)', () => {
+    const later = (ms = 60_000) => new Date(Date.now() + ms);
+    const meetData = (conferenceId: string, url: string) => ({
+        hangoutLink: url,
+        conferenceData: { conferenceId, conferenceSolution: { key: { type: 'hangoutsMeet' } }, entryPoints: [{ entryPointType: 'video', uri: url }] },
+    });
+
+    beforeEach(() => resetPullStateForTests());
+
+    it('a Meet added in the calendar is taken over read only (allow-listed URL); the join details go out without a new Meet', async () => {
+        install();
+        const view = await activityService.create(meeting(), PALAK);
+        await pushLink(linkOf(view.id).id);
+        const eventId = linkOf(view.id).externalEventId as string;
+        fakeEditEvent(eventId, meetData('aaa-bbbb-ccc', fakeMeetUrl('aaa-bbbb-ccc')), later());
+        assert.equal((await pullConnection('c1', 'poll')).status, 'done');
+        const row = rowOf(view.id);
+        assert.equal(row.conferenceProvider, 'meet');
+        assert.equal(row.conferenceState, 'ready');
+        assert.equal(row.conferenceJoinUrl, fakeMeetUrl('aaa-bbbb-ccc'));
+        assert.equal(row.conferenceRequest, 0);
+        assert.deepEqual(parseBase(linkOf(view.id).baseJson)?.crm.conference, { provider: 'meet', request: 0 }, 'the base records it: no new Meet is asked for');
+        assert.ok(linkOf(view.id).dirtyAt, 'one more push for the join details');
+
+        await pushLink(linkOf(view.id).id);
+        assert.equal(eventOf(view.id).conferenceData?.createRequest, undefined);
+        assert.equal(eventOf(view.id).conferenceData?.conferenceId, 'aaa-bbbb-ccc');
+        assert.ok(eventOf(view.id).description?.endsWith(`Join with Google Meet: ${fakeMeetUrl('aaa-bbbb-ccc')}`));
+        assert.equal(linkOf(view.id).state, 'synced');
+    });
+
+    it('a link whose URL fails the allow-list is not taken over', async () => {
+        install();
+        const view = await activityService.create(meeting(), PALAK);
+        await pushLink(linkOf(view.id).id);
+        fakeEditEvent(linkOf(view.id).externalEventId as string, meetData('evil', 'https://meet.example.com/evil'), later());
+        assert.equal((await pullConnection('c1', 'poll')).status, 'done');
+        assert.equal(rowOf(view.id).conferenceProvider, null);
+        assert.equal(rowOf(view.id).conferenceJoinUrl, null);
+    });
+
+    it('a requested Meet: pending stays requested, ready is recorded, and a Meet removed in the calendar stays in the CRM', async () => {
+        install();
+        fakeProviderState.conferenceMode = 'pending';
+        const view = await activityService.create(meeting({ videoMeeting: 'meet' }), PALAK);
+        await pushLink(linkOf(view.id).id);
+        const eventId = linkOf(view.id).externalEventId as string;
+        fakeEditEvent(eventId, { location: 'Room 4' }, later());
+        assert.equal((await pullConnection('c1', 'poll')).status, 'done');
+        assert.equal(rowOf(view.id).location, 'Room 4');
+        assert.equal(rowOf(view.id).conferenceState, 'requested', 'still waiting: the pull never fails or clears it');
+        assert.equal(checks.length, 1, 'no second check queued by the pull');
+
+        fakeFinishConference(eventId, 'success', later(120_000));
+        assert.equal((await pullConnection('c1', 'poll')).status, 'done');
+        const ready = rowOf(view.id);
+        assert.equal(ready.conferenceState, 'ready');
+        assert.equal(ready.conferenceJoinUrl, eventOf(view.id).hangoutLink);
+        assert.equal(ready.conferenceRequest, 1);
+
+        fakeEditEvent(eventId, { hangoutLink: null, conferenceData: null }, later(180_000));
+        assert.equal((await pullConnection('c1', 'poll')).status, 'done');
+        assert.equal(rowOf(view.id).conferenceProvider, 'meet');
+        assert.equal(rowOf(view.id).conferenceState, 'ready');
+        assert.equal(rowOf(view.id).conferenceJoinUrl, ready.conferenceJoinUrl);
     });
 });

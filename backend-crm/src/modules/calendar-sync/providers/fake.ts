@@ -59,8 +59,10 @@ export interface FakeProviderState {
     freeBusyFailures: Map<string, number>;
     /** Free/busy calls made, newest last: as whom, for which calendars. */
     freeBusyCalls: { mailbox: string; emails: string[] }[];
-    /** How a Meet createRequest ends (P3-1): `success` at once (default), `pending` (until `fakeFinishConference`) or `failure`. */
-    /** How Google answers a Meet createRequest; `refused`: 400 'Invalid conference type value' (Meet off for the org). */
+    /**
+     * How a Meet createRequest ends (P3-1): `success` at once (default), `pending` (until `fakeFinishConference`),
+     * `failure`, or `refused`: 400 'Invalid conference type value' (Meet off for the org).
+     */
     conferenceMode: 'success' | 'pending' | 'failure' | 'refused';
     /** Pull (P2-5): change counter and the counter value of each event's last change (cursor = `fake-seq-<n>`). */
     changeSeq: number;

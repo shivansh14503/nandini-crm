@@ -507,7 +507,7 @@ keeps wall-clock times); all-day activities are entered as business-timezone day
         call.
   - [ ] **P2-8: customer meetings from the calendar + replies both ways** (optional, off by default)
 - [ ] **Calendar Phase 3: video meetings** (spec §16, adapted to admin-managed connections)
-  - [x] **P3-1: Google Meet + Microsoft Teams links** (2026-11-26) — migration `20261128150000_activity_conference`
+  - [x] **P3-1: Google Meet + Microsoft Teams links** (2026-11-26) — migration `20261215100000_activity_conference`
         (`Activity.conferenceProvider` / `conferenceState` / `conferenceJoinUrl` / `conferenceId` / `conferenceError` /
         `conferenceRequest`; option meta `videoMeeting: true` on Meeting and Demo / Presentation). Built-in form field
         `videoMeeting` (Activities › Schedule, after Location; hidden for Task / Note); Admin › API Integrations › What
@@ -516,7 +516,8 @@ keeps wall-clock times); all-day activities are entered as business-timezone day
         (`conferenceDataVersion=1`, `createRequest` `<requestedId>-c<n>`, `pending` → `conference` job, 5 s × 5),
         Teams with Microsoft 365 (`isOnlineMeeting`, `onlineMeeting.joinUrl`; locked once ready, `409
         VIDEO_MEETING_LOCKED`). `409 VIDEO_PROVIDER_NOT_CONNECTED`, `GET /api/activities/video-options`,
-        `POST /api/activities/:id/conference/retry`; inbound Meet / Teams links on push answers taken over read only;
+        `POST /api/activities/:id/conference/retry`; inbound Meet / Teams links on push answers and on P2-5 pulls of organizer copies taken over read only (a pull
+        records `ready` links only, never clears a requested one);
         join details in the event description (one extra quiet push once ready). Review fixes: every wait ends in
         `ready` or `failed` (400 refusal → event synced without the link, `not_created` / `no_event` /
         `event_refused`, worker last attempt, nightly sweep of links `requested` > 1 h); owner changes never blocked

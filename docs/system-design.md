@@ -1015,7 +1015,10 @@ job and the sweep (connection checks and the nightly connection steps still run)
   syncs; Graph answering a Teams request without a Teams meeting (no licence) is `not_created` at once. A new event
   (restore, recreated copy) that asks for a new Meet while an old link shows goes back to `requested`; a Google restore
   without a wanted Meet sends `conferenceData: null`, so the deleted copy's old Meet isn't taken over again. A link
-  made in Google / Outlook directly is taken over read only when a push answer carries it (no pull needed). Join
+  made in Google / Outlook directly is taken over read only when a push answer carries it, or (merged with P2-5) when
+  the pull reads the organizer copy: the same allow-listed reader (`normalizeGoogle` / `normalizeGraph`), `ready` links
+  only, so a pull never fails, clears or re-requests the CRM's video meeting (a requested Meet that became ready is
+  recorded; a link removed in the calendar stays in the CRM). Join
   details ("Join with Google Meet: <url>" / "Join Microsoft Teams meeting: <url>", also for external guests) go into
   the event description once the link is `ready`: the base keeps what was actually sent and the link is marked dirty
   for one more description-only push (no invitations re-sent). Owner changes: on a Planned activity the new owner's

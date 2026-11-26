@@ -156,7 +156,7 @@ A new choice, such an owner change and Retry set `conferenceState = requested` w
 calendar push creates the link (Google:
 `conferenceDataVersion=1` + `conferenceData.createRequest { requestId: '<requestedId>-c<n>', conferenceSolutionKey:
 hangoutsMeet }`; Graph: `isOnlineMeeting: true`, `onlineMeetingProvider: 'teamsForBusiness'`, `onlineMeeting.joinUrl`
-read). A Meet / Teams link added in Google / Outlook directly is taken over read only when a push answer carries it.
+read). A Meet / Teams link added in Google / Outlook directly is taken over read only when a push answer or a pull of the organizer copy (P2-5) carries it; a pull only ever records a `ready` link (never fails, clears or re-requests one).
 Once ready, the event description gets "Join with Google Meet: <url>" / "Join Microsoft Teams meeting: <url>" with one
 more quiet push (also for external guests). A wait always ends: `failed` codes `conference_failed` (Google failed it),
 `not_created` (the calendar refused or ignored the request: Meet off for the organisation answers 400, and the event is

@@ -10,8 +10,8 @@
 -- isn't valid JSON is left alone; one that already has the key keeps its value.
 --
 -- Index: Activity_conferenceState_updatedAt_idx serves the nightly sweep that gives up on links still `requested` an hour
--- after the last save (calendar-nightly, 00:25). Must sort after every migration on main (20261128120000_booking_links)
--- and after those of the open calendar PRs (P2-3c 20261128130000, P2-5 20261128140000).
+-- after the last save (calendar-nightly, 00:25). Must sort after every migration on main (latest
+-- 20261215090000_calendar_watch_channels, Calendar Phase 2 P2-7).
 BEGIN TRY
 
 BEGIN TRAN;

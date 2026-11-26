@@ -40,8 +40,9 @@ import { wakePushes } from './sync.wake.js';
  * - Join details: once the link is `ready` the event's description gets "Join with Google Meet: <url>" / "Join
  *   Microsoft Teams meeting: <url>" (spec §16.3, also for external guests). The base stores what was actually sent, and
  *   the link is marked dirty for one more quiet push (a description-only patch never re-sends invitations).
- * - Inbound (no P2-5 pull needed): a Meet / Teams link on the answer that the CRM didn't ask for (added in Google /
- *   Outlook directly) is taken over read only, and the base records it so it isn't asked for again.
+ * - Inbound: a Meet / Teams link on the answer that the CRM didn't ask for (added in Google / Outlook directly) is
+ *   taken over read only, and the base records it so it isn't asked for again. P2-5's pull does the same for the
+ *   organizer copies it reads (sync.pull.ts, `settleConference` + `recordConference`), writing `ready` links only.
  * - Redis down: the job's reads run in-process on a timer (same tries).
  */
 
