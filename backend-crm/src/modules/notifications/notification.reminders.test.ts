@@ -265,6 +265,11 @@ describe('notifyActivityParticipants', () => {
                     ];
                 },
             },
+            userPreference: {
+                async findMany() {
+                    return [];
+                },
+            },
             notification: {
                 async findMany() {
                     return [];

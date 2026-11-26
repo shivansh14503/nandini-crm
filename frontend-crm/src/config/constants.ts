@@ -67,9 +67,10 @@ export const ROUTES = {
     PARTNER_COMPANY_NEW: '/partner-companies/new',
     PARTNER_COMPANY_DETAIL: (id: string | number) => `/partner-companies/${id}`,
     PARTNER_COMPANY_EDIT: (id: string | number) => `/partner-companies/${id}/edit`,
-    /** My Profile (any signed-in user); `?tab=security` opens the Security tab. */
+    /** My Profile (any signed-in user); `?tab=notifications` / `?tab=security` open those tabs. */
     PROFILE: '/profile',
     PROFILE_SECURITY: '/profile?tab=security',
+    PROFILE_NOTIFICATIONS: '/profile?tab=notifications',
     /** Connected calendars (any signed-in user): connect / disconnect Google or Microsoft 365. Temporary home until it moves into My Profile. */
     CONNECTED_CALENDARS: '/connected-calendars',
     ADMIN: '/admin',

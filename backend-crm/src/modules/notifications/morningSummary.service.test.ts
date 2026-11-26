@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { activityRangeWhere } from '../activities/activity.calendar.js';
-import { overdueActivitiesWhere } from './morningSummary.service.js';
+import { morningSummarySkipReason, overdueActivitiesWhere } from './morningSummary.service.js';
 
 type TimeRow = { startAt: Date; endAt: Date | null };
 type Bounds = { lt?: Date; lte?: Date; gt?: Date; gte?: Date };
@@ -55,5 +55,36 @@ describe('overdueActivitiesWhere', () => {
                 assert.ok(!(found.overdue && found.today), `${startAt.toISOString()} – ${endAt?.toISOString() ?? 'no end'}`);
             }
         }
+    });
+});
+
+describe('morningSummarySkipReason', () => {
+    const day = '2026-12-03';
+    const preference = (overrides: Partial<{ emailMorningSummary: boolean; outOfOfficeFrom: Date | null; outOfOfficeTo: Date | null }> = {}) => ({
+        emailMorningSummary: true,
+        outOfOfficeFrom: null,
+        outOfOfficeTo: null,
+        ...overrides,
+    });
+    const away = { outOfOfficeFrom: new Date('2026-12-01T00:00:00.000Z'), outOfOfficeTo: new Date('2026-12-05T00:00:00.000Z') };
+
+    it('sends to a user without preferences, or with the summary on and not away', () => {
+        assert.equal(morningSummarySkipReason({ onLeave: false, preference: null }, day), null);
+        assert.equal(morningSummarySkipReason({ onLeave: false, preference: preference() }, day), null);
+    });
+
+    it('applies on leave, then out of office, then opted out', () => {
+        const everything = preference({ emailMorningSummary: false, ...away });
+        assert.equal(morningSummarySkipReason({ onLeave: true, preference: everything }, day), 'on_leave');
+        assert.equal(morningSummarySkipReason({ onLeave: false, preference: everything }, day), 'out_of_office');
+        assert.equal(morningSummarySkipReason({ onLeave: false, preference: preference({ emailMorningSummary: false }) }, day), 'opted_out');
+    });
+
+    it('counts both ends of the out-of-office range and nothing outside it', () => {
+        const user = { onLeave: false, preference: preference(away) };
+        assert.equal(morningSummarySkipReason(user, '2026-11-30'), null);
+        assert.equal(morningSummarySkipReason(user, '2026-12-01'), 'out_of_office');
+        assert.equal(morningSummarySkipReason(user, '2026-12-05'), 'out_of_office');
+        assert.equal(morningSummarySkipReason(user, '2026-12-06'), null);
     });
 });

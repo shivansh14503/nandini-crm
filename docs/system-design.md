@@ -1,6 +1,6 @@
 # Nandini CRM — System Design
 
-> **Status:** living document. Describes the system as built (code as of 2026-11-26; audit context + ledger audit table, admin audit query API and screen, Users tab; Contracts module; Referrals module; Documents module; Activities data model and API, Calendar Phase 1 PR1; Activities screens and Calendar, PR2; notifications, reminders and mail workers, navbar bell and the morning summary email, PR3, with its review fixes; guarded cache reads for lookups, form configs and search, with its review fixes; Calendar Phase 2 P2-1, Admin › API Integrations foundation: encrypted provider credentials, connection tests, calendar sync settings, company emails, with its review fixes; My Profile (Profile Phase 1): profile, photo, change password, signed-in sessions; Admin › Users (Profile Phase 2, 2026-11-26): user management, the must-change-password claim, sessions revoked on deactivation / reset / role change; Calendar Phase 2 P2-2, employees connect / disconnect Google or Microsoft 365 calendars: OAuth with PKCE, sealed tokens, refresh, reconnect notifications; Calendar Phase 2 P2-3a: one activity write path (system writes, write hook, lock seam, shared post-commit step), no behaviour change).
+> **Status:** living document. Describes the system as built (code as of 2026-11-26; audit context + ledger audit table, admin audit query API and screen, Users tab; Contracts module; Referrals module; Documents module; Activities data model and API, Calendar Phase 1 PR1; Activities screens and Calendar, PR2; notifications, reminders and mail workers, navbar bell and the morning summary email, PR3, with its review fixes; guarded cache reads for lookups, form configs and search, with its review fixes; Calendar Phase 2 P2-1, Admin › API Integrations foundation: encrypted provider credentials, connection tests, calendar sync settings, company emails, with its review fixes; My Profile (Profile Phase 1): profile, photo, change password, signed-in sessions; Admin › Users (Profile Phase 2, 2026-11-26): user management, the must-change-password claim, sessions revoked on deactivation / reset / role change; Calendar Phase 2 P2-2, employees connect / disconnect Google or Microsoft 365 calendars: OAuth with PKCE, sealed tokens, refresh, reconnect notifications; My Profile › Notifications (Profile Phase 3): bell kinds a user can turn off, the morning summary opt-out, a personal default reminder and out-of-office dates; Calendar Phase 2 P2-3a: one activity write path (system writes, write hook, lock seam, shared post-commit step), no behaviour change).
 > Update it in the same change that alters architecture, infrastructure, Redis usage, queues or security.
 > Related: [Database design](database-design.md) · [API plan](api-plan.md) · [Build plan](build-plan.md)
 
@@ -510,6 +510,14 @@ one per event and recipient, made unique by `dedupeKey`, never audited.
   `skipDuplicates` on SQL Server), treats a P2002 race as "already sent", and drops the recipients' unread-count cache.
   The chunks are not one transaction, so when one fails the earlier ones stay and a retry skips their keys: on any
   failure every recipient of the rows it tried has their count dropped before the error is thrown.
+- **Muted kinds** (Profile Phase 3, as of 2026-11-26): every row, on every path (`notify` and
+  `insertMissingNotifications`, so reminders, assignments, invitations and renewals alike), first goes through
+  `withoutMutedRecipients` (`notification.preferences.ts`): one batched read of the recipients' `UserPreference`
+  switches (500 usernames per query, compared lower-cased) drops the rows of kinds a recipient turned off in My Profile
+  › Notifications. Only `activity_reminder`, `activity_assigned`, `activity_invited` and `contract_renewal` are
+  configurable (`preferences.constants.ts`); any other kind (`calendar_reconnect`) always delivers and costs no query.
+  Inside the reminder claim the read uses the transaction, and a reminder whose recipients all muted it is still
+  claimed (`delivered`, nothing inserted), so it is not retried. Out of office never stops bell rows.
 - **Delayed job per reminder** (`scheduleActivityReminder`): when `remindAt` is set and `reminderSentAt` is null,
   `tryEnqueue(remindersQueue, 'remind', { activityId }, { delay: remindAt − now, jobId: 'reminder-<activityId>-<remindAtMs>' })`.
   A reschedule enqueues a new id; the old job then finds `remindAt` changed and does nothing.
@@ -542,7 +550,8 @@ one per event and recipient, made unique by `dedupeKey`, never audited.
 ### 5.2 Morning summary email and the mail layer
 
 At 09:00 Monday–Saturday (`MORNING_SUMMARY_CRON`, business timezone) every active user with an email address
-(`isActive`, not a group user, not `onLeave`) gets one email about their day, built with the calendar feed's
+(`isActive`, not a group user, not `onLeave`, not out of office today, and who hasn't turned it off in My Profile ›
+Notifications) gets one email about their day, built with the calendar feed's
 where-builders and access rules (`morningSummary.service.ts` / `.sections.ts` / `.render.ts` / `.links.ts`):
 
 | Section | Rows |
@@ -562,10 +571,17 @@ where-builders and access rules (`morningSummary.service.ts` / `.sections.ts` / 
   no API or sign-in: timed `YYYYMMDDTHHMMSSZ/…` (an event without an end gets 30 minutes), all-day `YYYYMMDD/YYYYMMDD`
   with the exclusive end; details = related record, remarks (≤ 500 characters) and the CRM link.
 - **Who gets none:** users with nothing in any section (`MORNING_SUMMARY_SKIP_EMPTY=true`, the default), users without
-  an email address, and everyone while `MORNING_SUMMARY_ENABLED=false` or mail is off (the run then reads no table).
+  an email address, users on leave (`onLeave`, filtered in the query), users out of office today (their
+  `UserPreference` range covers the business day, both ends included) and users who turned it off
+  (`emailMorningSummary = 0`), and everyone while `MORNING_SUMMARY_ENABLED=false` or mail is off (the run then reads no
+  table). The recipient query reads each user's preference columns with them (no extra query); the pure
+  `morningSummarySkipReason` applies them in the order on leave, out of office, opted out. The admin test send
+  ignores them. **Preferences are applied where recipients are chosen, not in `sendMail`** (a guard there would cost a
+  query per send): an email kind added later must filter its recipients the same way.
 - **Run** (`runMorningSummary`, job `morning` on the `crm-mail` queue, worker `src/jobs/workers/mail.worker.ts`, audit
   origin `JOB` / `job:mail`): the business day is computed once; users are built and sent 3 at a time, each in its
-  own `try/catch`; the result is `{ sent, skipped, failed, empty }`. A run with failed sends throws, so BullMQ retries
+  own `try/catch`; the result is `{ users, sent, skipped, failed, empty, optedOut, outOfOffice }` (`users` = users
+considered; each lands in exactly one of the others). A run with failed sends throws, so BullMQ retries
   the job (3 attempts); already-sent users are skipped by their dedupe key. With SMTP unreachable a run takes about
   ⌈users / 3⌉ × 20 s per attempt; that only holds the mail queue, never the reminders. Lists that come back full (50)
   are counted (one `COUNT` each), so a user's query count stays about eleven.
@@ -578,8 +594,9 @@ where-builders and access rules (`morningSummary.service.ts` / `.sections.ts` / 
   midnight is skipped (it would mail the next day's summary). While Redis is down the fallback tick runs it inline
   instead (`catchUpMorningSummary`): no retries, and a shutdown doesn't wait for it.
 - **Preview / test** (`/api/notifications/morning-summary/*`, [API plan §2.5](api-plan.md#25-personal-state)): any
-  user can preview their own email for today (works while mail is off); admin roles can send it to their own address
-  now (`kind = 'morning_summary_test'`, no dedupe).
+  user can preview their own email for today (works while mail is off; `notSentReason` says when they won't get it:
+  on leave, out of office or opted out); admin roles can send it to their own address now
+  (`kind = 'morning_summary_test'`, no dedupe, ignoring their own preferences).
 
 **Mail layer** (`src/services/mail.service.ts`, reusable for quotation emails): one lazily created nodemailer
 transport from the `SMTP_*` settings (`smtpTransportOptions`), with 20 s connection / greeting / socket timeouts so a
@@ -759,8 +776,11 @@ frontend-crm/src/
 - **Morning email preview:** the popover footer's "Preview morning email" opens `MorningSummaryPreviewDialog`, which
   fetches `GET /api/notifications/morning-summary/preview` on every opening and renders the email's HTML in a
   sandboxed `<iframe srcDoc sandbox="">` (no scripts, links inert), full screen on phones, with notes when mail is
-  off, the user has no address or nothing is due. Admin roles also get "Send me a test"
+  off, the user has no address or nothing is due, and when they won't get it (`notSentReason`: turned off, out of
+  office, on leave). Admin roles also get "Send me a test"
   (`POST …/morning-summary/test`); the API's message shows in a toast.
+- **Notification settings:** a second footer link, "Notification settings", closes the popover and opens My Profile ›
+  Notifications (`/profile?tab=notifications`), where each bell kind can be turned off (Profile Phase 3).
 
 ### 8.5 Admin › API Integrations (P2-1)
 
@@ -798,11 +818,20 @@ Integrations › People shows each person's connection with an admin Disconnect 
 
 - **Page:** `app/profile/page.tsx` (signed-in only), content in `components/profile/` (`ProfileView`,
   `PhotoCropDialog`). Reached from the navbar user menu's "My Profile" and the mobile drawer's account block. A header
-  card (large `UserAvatar` with change / remove photo, name, role, department, username, last sign-in) and two pill
-  tabs, **Profile** and **Security**, kept in the URL (`?tab=security`).
+  card (large `UserAvatar` with change / remove photo, name, role, department, username, last sign-in) and three pill
+  tabs, **Profile**, **Notifications** and **Security**, kept in the URL (`?tab=notifications`, `?tab=security`).
 - **Profile tab:** "Personal details" (first name, last name, mobile, office phone; `PATCH /api/me/profile`, field
   errors mapped back to the inputs) and read-only "Work details" (username, work email, role, department, member
   since: admin-managed). User fields are not in Form Builder (they are treated like admin settings).
+- **Notifications tab** (Profile Phase 3, as of 2026-11-26; `GET` / `PATCH /api/me/preferences`, hidden while the
+  user must change their password): cards with their own Save — which bell kinds appear (one "In app" switch per
+  kind; an Email column appears only once a kind can email), the morning summary email switch with its preview,
+  the **default reminder** for activities the user creates (company default, No reminder or a reminder label; it only
+  pre-fills the activity form's Reminder, client side, on top of the admin default and below a prefill), and **out of
+  office** (start / end date, optional message, checked with `utils/notificationPreferences.ts`, the API's rules).
+  While out of office (or on leave) the user gets no morning summary and pickers, the assigned-user card and Admin ›
+  Users show "Out of office until <date>" / "On leave" next to them (labelled, not hidden); bell notifications keep
+  arriving. The user list carries the dates and the client compares them with the business day.
 - **Security tab:** "Change password" (current / new / confirm, live checklist from `utils/passwordPolicy.ts`, the same
   rules as the API) and "Where you're signed in" (`GET /api/me/sessions`: device, IP, signed-in time, "This device"
   for the current one, Sign out per other row, "Sign out of all other sessions").
@@ -938,8 +967,8 @@ Retention: `NOTIFICATION_RETENTION_DAYS` (90), `EMAIL_LOG_RETENTION_DAYS` (180).
 | Deactivation / role changes vs untracked tokens | Admin › Users revokes a user's Redis sessions on deactivation, a password reset or a role change, but an untracked token (Redis down at sign-in) or any token while Redis is down is trusted until it expires (8 h by default): the request path doesn't read `Users.isActive` / `role`. A revocation that failed because Redis was unreachable at that moment isn't recorded, so the tracked sessions survive the outage too (retry from Admin › Users). A per-request database check, or a durable `sessionsValidAfter` timestamp checked against the token's `iat` (or a short token TTL with refresh) would close it. |
 | Sessions opened while Redis was down | They are untracked: not in the My Profile list and not signed out by a password change; they last until their JWT expires (8 h by default). |
 | Dashboard has no data API | The dashboard page is static; `cache:dashboard:*` is reserved. |
-| No automated frontend tests | Backend has 94 `node:test` files (pure logic: validators, numbering, PDF document, access control, audit, time zones, activities, referrals, documents, notifications, mail, cache, integrations: secret box, URL redaction, probes against recorded provider answers, a fake Prisma for the integrations service; profile, password rules, sessions; Admin › Users: username and role rules, reports-to cycles, admin guards, temporary passwords, the must-change-password allow-list; calendar connections: the connect → callback → refresh → disconnect flow against the fake provider and replayed Google / Microsoft answers, token refresh races, `providerFetch`). The guarded cache read's Redis tests (Lua compare-and-set, `SCAN` + `UNLINK`, placeholder expiry, 2 MB values) run only with `REDIS_TEST_URL` set. No integration/E2E tests. |
-| Notifications are polled, not pushed | The bell asks every minute (§8.4), so a reminder can show up to a minute late; background tabs don't poll. SSE through Redis pub/sub is the upgrade path. There are no browser / push notifications and no notification preferences yet. |
+| No automated frontend tests | Backend has 100 `node:test` files (pure logic: validators, numbering, PDF document, access control, audit, time zones, activities, referrals, documents, notifications, mail, cache, integrations: secret box, URL redaction, probes against recorded provider answers, a fake Prisma for the integrations service; profile, password rules, sessions; Admin › Users: username and role rules, reports-to cycles, admin guards, temporary passwords, the must-change-password allow-list; calendar connections: the connect → callback → refresh → disconnect flow against the fake provider and replayed Google / Microsoft answers, token refresh races, `providerFetch`; My Profile › Notifications: preference validation, out-of-office rules (contract-tested against the frontend mirror), the preferences DTO and service, per-kind muting in the producer, morning-summary skip reasons; user lookups' away fields). The guarded cache read's Redis tests (Lua compare-and-set, `SCAN` + `UNLINK`, placeholder expiry, 2 MB values) run only with `REDIS_TEST_URL` set. No integration/E2E tests. |
+| Notifications are polled, not pushed | The bell asks every minute (§8.4), so a reminder can show up to a minute late; background tabs don't poll. SSE through Redis pub/sub is the upgrade path. There are no browser / push notifications. |
 | Reminders depend on a worker | No worker running = no reminders, renewals or morning email (§9.1). Off-hours contract renewals wait for the 07:00 sweep. With Redis down the fallback polls the database every minute. |
 | Morning email not yet proven against the relay | The mail layer, EmailLog claims and the summary are unit-tested (STARTTLS enforcement against a fake SMTP server), and the job schedulers and the guarded unread-count cache were checked against a local Redis, but no real SMTP send or SQL Server run has been done yet; the first real send should be an admin's "Send me a test". `MORNING_SUMMARY_CRON` is read with a small cron subset for the catch-up check (numbers, names, ranges, lists, steps). |
 | "Add to Google Calendar" is a one-time copy | Moving the meeting in the CRM doesn't update the copy; real Google / Microsoft 365 sync is Calendar Phase 2 (needs HTTPS on a nandiniinfosys.com hostname). |

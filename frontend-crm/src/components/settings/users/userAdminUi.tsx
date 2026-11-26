@@ -12,6 +12,8 @@ import type { UserEmailIssue } from '@/types/integration.types';
 import type { AdminUserDto } from '@/types/userAdmin.types';
 import { PASSWORD_MAX_LENGTH, PASSWORD_RULES, type PasswordPolicyContext } from '@/utils/passwordPolicy';
 import { hasGlobalAccessRole, isAdminAccessRole } from '@/utils/roleAccess';
+import { isOutOfOfficeOn } from '@/utils/notificationPreferences';
+import { shortDayLabel, useBusinessToday } from '@/utils/userAvailability';
 
 /** Shared pieces of Admin › Users: role badges, status chips, the password checklist, error helpers. */
 
@@ -54,8 +56,10 @@ export function roleAccessHint(role: string): string {
     return 'Sees only the records they own or created. No admin panel.';
 }
 
-/** Status chips of a user row: Inactive, On leave, Group, Must change password, an email issue. */
+/** Status chips of a user row: Inactive, On leave, Out of office (today), Group, Must change password, an email issue. */
 export function UserStatusChips({ user }: { user: AdminUserDto }) {
+    const today = useBusinessToday();
+    const outOfOffice = user.outOfOffice && isOutOfOfficeOn(user.outOfOffice, today) ? user.outOfOffice : null;
     const issue = user.emailIssue && user.isActive && !user.isGroupUser ? EMAIL_ISSUE_CHIP[user.emailIssue] : null;
     const chips: React.ReactNode[] = [];
     if (!user.isActive) {
@@ -67,8 +71,15 @@ export function UserStatusChips({ user }: { user: AdminUserDto }) {
     }
     if (user.onLeave) {
         chips.push(
-            <StatusChip key="leave" tone="warning" title="On leave: not offered as an assignee.">
+            <StatusChip key="leave" tone="warning" title="On leave: shown when picked; no morning summary email.">
                 On leave
+            </StatusChip>,
+        );
+    }
+    if (outOfOffice) {
+        chips.push(
+            <StatusChip key="ooo" tone="warning" title={outOfOffice.message?.trim() || 'Out of office (set by the user in My Profile).'}>
+                Out of office until {shortDayLabel(outOfOffice.to, today)}
             </StatusChip>,
         );
     }

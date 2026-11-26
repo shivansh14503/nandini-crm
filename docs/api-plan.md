@@ -3,7 +3,8 @@
 > **Status:** living document. Lists every endpoint of `backend-crm` as of 2026-11-26 (through Calendar Phase 2 P2-2:
 > `/api/calendar-connections` and the admin connection routes; P2-1: `/api/admin/integrations`, Admin › API
 > Integrations; Profile Phase 1: `/api/me` (My Profile), `/api/user-photos` and `POST /api/auth/change-password`; and
-> Profile Phase 2: `/api/admin/users` (Admin › Users) with the must-change-password claim) plus the planned ones.
+> Profile Phase 2: `/api/admin/users` (Admin › Users) with the must-change-password claim; Profile Phase 3:
+> `/api/me/preferences` (My Profile › Notifications)) plus the planned ones.
 > When you add, change or remove a route, update this file in the same change (the route files'
 > header comments are the per-module source of truth; keep them in step too).
 > Related: [System design](system-design.md) · [Database design](database-design.md) · [Build plan](build-plan.md)
@@ -88,7 +89,9 @@ The auth endpoints use the older `{ status: 'ok', … }` envelope rather than `{
 `POST /auth/change-password`, `GET /me/profile`, `GET /me/sessions`, `GET /user-photos/:id` (method + whole path,
 case-insensitive, query string and a trailing slash ignored). Everything else is `403 PASSWORD_CHANGE_REQUIRED`
 "Change your password to continue." (not audited as `ACCESS_DENIED`); the frontend sends the user to
-My Profile › Security. Tokens issued before the claim existed stay valid (no claim = not flagged).
+My Profile › Security. Tokens issued before the claim existed stay valid (no claim = not flagged). The preference
+routes (`/me/preferences`) are not on the list: they answer `403 PASSWORD_CHANGE_REQUIRED` while locked (the UI hides
+the Notifications tab then).
 
 ### 2.2 Sales & customer records
 
@@ -140,7 +143,7 @@ for anyone who can view the activity. Admin › Audit Log can undo updates and r
 | Method | Path | Cache | Description |
 | --- | --- | --- | --- |
 | GET | `/search?q&limit=5` | 30 s, per access scope | `results: { leads, opportunities, quotations, organizations, contacts, tickets, contracts, products, partnerCompanies }`, each `[{ id, category, title, subtitle, meta?, href }]` |
-| GET | `/lookups/users?includeInactive` | 5 min | User pickers: `[{ id, name, username, department, role, email, status, isGroupUser, onLeave, photoUrl }]` (`photoUrl` = `/api/user-photos/<id>` or null; only the photo id is read). Dropped by profile name / photo changes and user writes (`cache:lookups:users*`) |
+| GET | `/lookups/users?includeInactive` | 5 min | User pickers: `[{ id, name, username, department, role, email, status, isGroupUser, onLeave, photoUrl, outOfOffice }]` (`photoUrl` = `/api/user-photos/<id>` or null; only the photo id is read; `outOfOffice` = `{ from, to, message }` (`YYYY-MM-DD`, inclusive) or null when unset or ended when the list was read: the client decides "active" against the business day). Dropped by profile name / photo / out-of-office changes and user writes (`cache:lookups:users*`) |
 | GET | `/lookups/organizations?search&limit` | 5 min (no search) | Compact organization list |
 | GET | `/lookups/contacts?search&limit&organizationId` | 5 min (no search/filter) | |
 | GET | `/lookups/products?search&limit&category` | 5 min (no search/filter) | Active products |
@@ -163,9 +166,10 @@ for anyone who can view the activity. Admin › Audit Log can undo updates and r
 | POST | `/table-filters/saved` | `{ module, name, criteria }` — same name overwrites |
 | DELETE | `/table-filters/:id` | Hard delete one of the caller's filters |
 
-**My Profile** (`/me`, `backend-crm/src/modules/profile`, route header comment = source of truth; Profile Phase 1).
-The signed-in user's own profile, photo and sessions: every route acts on the caller (there is no user id in any
-request). Role, department, work email and username are admin-managed and read-only here. Profile and photo changes
+**My Profile** (`/me`, `backend-crm/src/modules/profile`, route header comment = source of truth; Profile Phase 1;
+preferences Profile Phase 3, `backend-crm/src/modules/preferences`).
+The signed-in user's own profile, photo, sessions and notification preferences: every route acts on the caller (there
+is no user id in any request). Role, department, work email and username are admin-managed and read-only here. Profile and photo changes
 are audited as a User `UPDATE` (category DATA, module `users`, not undoable); signing out sessions as
 `SESSION_REVOKE` (SECURITY, NOTICE). Profile and photo writes drop the user lookup caches (`cache:lookups:users:*`).
 
@@ -185,7 +189,47 @@ ISO). `SessionDto`: `{ id (the session's JWT id), current, ip, userAgent, device
 | GET | `/me/sessions` | `{ tracked, sessions: SessionDto[] }`, the current session first, then newest sign-in. From the Redis rows `session:{userId}:*`; `{ tracked: false, sessions: [] }` while Redis is down; `tracked: false` with a list when the caller's own session was opened while Redis was down |
 | DELETE | `/me/sessions/:id` | Signs out one other session → `{ id }`. `id` must be a UUID (`400 VALIDATION_ERROR`). `400 CURRENT_SESSION` "Use Sign out to end this session."; `404 NOT_FOUND` "This session has already ended."; `503 SESSIONS_UNAVAILABLE` while Redis is down. 30 / 10 min per user (with the route below) |
 | DELETE | `/me/sessions` | Signs out every other session → `{ signedOutSessions }`. `503 SESSIONS_UNAVAILABLE` (and no audit entry) while Redis is down or when it fails partway |
+| GET | `/me/preferences` | `PreferencesDto` (below). `401` "Your account was not found. Please sign in again." when the account no longer exists |
+| PATCH | `/me/preferences` | `PreferencesPatch` (below) → `{ success, data: PreferencesDto, message: 'Preferences saved' }`. Rules and errors below |
 | GET | `/user-photos/:id` | Any signed-in user. The image bytes with `Content-Type` (detected), `Content-Length`, `Cache-Control: private, max-age=31536000, immutable`, `X-Content-Type-Options: nosniff`, `Cross-Origin-Resource-Policy: cross-origin` and an inline `Content-Disposition`. `id` must be a UUID; `404` "Photo not found" |
+
+**My Profile › Notifications** (as of 2026-11-26, Profile Phase 3). One `UserPreference` row per user, written on the
+first save that changes something; no row = every default (the behaviour before Phase 3).
+
+```ts
+type InAppNotificationKind = 'activity_reminder' | 'activity_assigned' | 'activity_invited' | 'contract_renewal';
+interface PreferencesDto {
+  inApp: Record<InAppNotificationKind, boolean>;               // false = no bell row of that kind is created
+  morningSummaryEmail: boolean;
+  defaultReminder: ActivityReminder | 'none' | null;          // null = company default (pre-fills new activities only)
+  outOfOffice: { from: string; to: string; message: string | null; active: boolean } | null; // null when none or ended
+  onLeave: boolean;                                            // the admin switch, read-only here
+  email: string;                                               // '' when the account has none
+  mail: { summaryEnabled: boolean; mailEnabled: boolean };     // MORNING_SUMMARY_ENABLED; SMTP configured
+  updatedAt: string | null;                                    // null = never saved
+}
+interface PreferencesPatch {                                   // every key optional; {} changes nothing
+  inApp?: Partial<Record<InAppNotificationKind, boolean>>;
+  morningSummaryEmail?: boolean;
+  defaultReminder?: ActivityReminder | 'none' | null;
+  outOfOffice?: { from: string; to: string; message?: string | null } | null; // null clears all three columns
+}
+```
+
+- Unknown keys (top-level or nested) → `400 VALIDATION_ERROR`. Switches: `"<Row label>" must be on or off.` (row
+  labels Activity reminders, Assignments, Invitations, Contract renewals, Morning summary email). `defaultReminder`:
+  one of the 8 reminder labels, `'none'` or `null`, else "Pick a reminder from the list.".
+- `outOfOffice`: `from` / `to` are `YYYY-MM-DD` ("Start Date must be a valid date (YYYY-MM-DD).", "End Date is
+  required."), inclusive business-timezone days; `message` trimmed, ≤ 200 ("Message cannot exceed 200 characters."),
+  `''` / `null` clears it, left out keeps the stored one. Then, in order, at most one error per field, path
+  `['outOfOffice', 'from' | 'to']`: "End Date cannot be before the Start Date."; "Out of office can be at most 365
+  days."; and only when the range differs from the stored one: "End Date cannot be in the past." (a start in the past
+  is fine while the end is today or later), "Start Date must be within the next 365 days." (`preferences.rules.ts`,
+  contract-tested with `frontend-crm/src/utils/notificationPreferences.ts`).
+- Kinds without a switch (`calendar_reconnect`) are not configurable and always deliver. Bell notifications keep
+  arriving while out of office; muting a kind stops new rows only (ones already in the bell stay).
+- Saves take the per-user lock `user:id:<id>` and are audited as User `UPDATE` with the changed columns (dates as
+  `YYYY-MM-DD`); no change → nothing written, no audit entry. An out-of-office change drops `cache:lookups:users:*`.
 
 **Notifications** (`/notifications`, `backend-crm/src/modules/notifications`, route header comment = source of truth;
 Calendar Phase 1 PR3). The navbar bell's rows: personal (every query is limited to the caller's username), not
@@ -214,8 +258,8 @@ bodies say when and what it is related to (e.g. "Starts at 10:30 AM (in 15 min) 
 | GET | `/notifications/unread-count` | `{ count }`. Served from Redis (`cache:notifications:unread:{username}`, 24 h); every write to the user's notifications, marking read, the nightly job and a Redis reconnect clear it, and a count read during a write is never cached ([system design §4.2](system-design.md#42-cache-invalidation)); reads SQL while Redis is down. The bell polls it every minute |
 | POST | `/notifications/:id/read` | `{ id, readAt }`. Idempotent (an already-read row keeps its first read time); always clears the caller's cached unread count. `404 NOT_FOUND` "Notification not found" when it doesn't exist or isn't the caller's; `400 VALIDATION_ERROR` for an empty id or one over 50 characters |
 | POST | `/notifications/read-all` | `{ updated }` (rows marked read); always clears the caller's cached unread count, even when `updated` is 0 |
-| GET | `/notifications/morning-summary/preview` | The caller's morning summary email for today, sent nowhere (works while mail is off): `{ subject, html, text, counts: { todayActivities, overdueActivities, followupsToday, overdueFollowups, contracts }, empty, mailEnabled, email }`. `counts` are full totals, also where the email lists only the first rows. `empty`: nothing is due (by default no email goes out then); `mailEnabled`: outgoing email is on; `email`: the caller's address (`''` = they get no email). `404` "User not found" |
-| POST | `/notifications/morning-summary/test` 🔐 | Sends the caller's summary to their own address now (EmailLog `kind = 'morning_summary_test'`, no dedupe) → `{ success, data: { status: 'sent' \| 'failed' \| 'skipped' \| 'duplicate', error?, email, message }, message }`; `message` is "Test email sent to <email>." or "The test email could not be sent: <SMTP error>" (a failed send is still a 200). `403 FORBIDDEN` for non-admin roles; `400 BAD_REQUEST` "Email is turned off on the server (MAIL_ENABLED is false or SMTP_HOST is empty), so nothing can be sent yet." or "Your user account has no email address, so a test email has nowhere to go. Ask an admin to add one." |
+| GET | `/notifications/morning-summary/preview` | The caller's morning summary email for today, sent nowhere (works while mail is off): `{ subject, html, text, counts: { todayActivities, overdueActivities, followupsToday, overdueFollowups, contracts }, empty, mailEnabled, email, notSentReason }`. `counts` are full totals, also where the email lists only the first rows. `empty`: nothing is due (by default no email goes out then); `mailEnabled`: outgoing email is on; `email`: the caller's address (`''` = they get no email); `notSentReason`: `'on_leave'` \| `'out_of_office'` \| `'opted_out'` \| `null`, why the caller gets no summary today (in that precedence; null = they get one). `404` "User not found" |
+| POST | `/notifications/morning-summary/test` 🔐 | Sends the caller's summary to their own address now (EmailLog `kind = 'morning_summary_test'`, no dedupe; ignores the caller's own opt-out, out of office and on leave) → `{ success, data: { status: 'sent' \| 'failed' \| 'skipped' \| 'duplicate', error?, email, message }, message }`; `message` is "Test email sent to <email>." or "The test email could not be sent: <SMTP error>" (a failed send is still a 200). `403 FORBIDDEN` for non-admin roles; `400 BAD_REQUEST` "Email is turned off on the server (MAIL_ENABLED is false or SMTP_HOST is empty), so nothing can be sent yet." or "Your user account has no email address, so a test email has nowhere to go. Ask an admin to add one." |
 
 ### 2.5a Scorecards (list-screen summary cards)
 
@@ -341,9 +385,10 @@ logged or audited.
 
 `AdminUserDto`: `{ id, username, fullName, firstName, lastName, email, role, roleAccess: admin\|all-records\|own-records
 (admin panel first, then "sees all records"), department, jobTitle, reportsTo: { id, name, isActive } \| null,
-directReportsCount (active), mobile, officePhone, photoUrl, isActive, isGroupUser, onLeave, mustChangePassword,
-lastLoginAt, passwordChangedAt, createdAt, createdBy, deactivatedAt, emailIssue: missing\|duplicate\|not_company\|null }`
-(`emailIssue` as on the People table, only for active non-group users; `null` for the others).
+directReportsCount (active), mobile, officePhone, photoUrl, isActive, isGroupUser, onLeave, outOfOffice: { from, to,
+message } \| null, mustChangePassword, lastLoginAt, passwordChangedAt, createdAt, createdBy, deactivatedAt, emailIssue:
+missing\|duplicate\|not_company\|null }` (`emailIssue` as on the People table, only for active non-group users; `null` for
+the others; `outOfOffice` is set by the user in My Profile, read-only here, `null` when unset or ended).
 
 | Method | Path | Description |
 | --- | --- | --- |
@@ -509,9 +554,10 @@ Limited responses carry `RateLimit-Limit`, `RateLimit-Remaining`, `RateLimit-Res
   live in `utils/username.ts` and `utils/roleAccess.ts`, contract-tested against `modules/user-admin/username.ts` and
   `roles.ts` (`backend-crm/src/validators/contractSync.test.ts`). The frontend handles `403 PASSWORD_CHANGE_REQUIRED`
   from any call by sending the user to My Profile › Security.
-- My Profile is not a CRUD module: `services/profile.service.ts` (profile, photo, sessions) and
+- My Profile is not a CRUD module: `services/profile.service.ts` (profile, photo, sessions, preferences) and
   `auth.service.ts` `changePassword`, hooks in `hooks/queries/useProfile.ts`, types in `types/profile.types.ts`; the
-  password rules in `utils/passwordPolicy.ts` are contract-tested against the API's copy.
+  password rules in `utils/passwordPolicy.ts` and the out-of-office rules in `utils/notificationPreferences.ts` are
+  contract-tested against the API's copies.
 - Notifications are not a CRUD module: `services/notification.service.ts` (list, unread count, read, read all,
   morning summary preview / test), hooks in `hooks/queries/useNotifications.ts`, `CrmNotification` and the preview
   types in `types/notification.types.ts`. Read / read all broadcast `notifyCrmUpdate('/api/notifications')`.

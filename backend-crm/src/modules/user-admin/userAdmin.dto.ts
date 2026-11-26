@@ -1,3 +1,4 @@
+import { OUT_OF_OFFICE_SELECT, outOfOfficeOf, type OutOfOfficeColumns, type OutOfOfficeDto } from '../preferences/preferences.dto.js';
 import { isoOrNull, photoUrlOf, resolveNameParts, USER_REF_SELECT } from '../profile/profile.dto.js';
 import { emailIssueFor, holdsAddress, type UserEmailIssue } from '../users/userEmail.service.js';
 import { roleAccess, type RoleAccess } from './roles.js';
@@ -31,6 +32,8 @@ export const ADMIN_USER_SELECT = {
     createdBy: true,
     deactivatedAt: true,
     photo: { select: { id: true } },
+    // Shown, never edited, here: the user sets it in My Profile › Notifications.
+    preference: { select: OUT_OF_OFFICE_SELECT },
     reportsTo: { select: { ...USER_REF_SELECT, isActive: true } },
     // Active direct reports (an inactive one no longer reports to anybody in practice).
     _count: { select: { directReports: { where: { isActive: true } } } },
@@ -59,6 +62,7 @@ export interface AdminUserRow {
     createdBy: string | null;
     deactivatedAt: Date | null;
     photo: { id: string } | null;
+    preference: OutOfOfficeColumns | null;
     reportsTo: { id: number; fullName: string; username: string; isActive: boolean } | null;
     _count: { directReports: number };
 }
@@ -90,6 +94,8 @@ export interface AdminUserDto {
     isActive: boolean;
     isGroupUser: boolean;
     onLeave: boolean;
+    /** Set by the user in My Profile (read-only here); null when unset or ended before today (business timezone). */
+    outOfOffice: OutOfOfficeDto | null;
     mustChangePassword: boolean;
     lastLoginAt: string | null;
     passwordChangedAt: string | null;
@@ -109,7 +115,8 @@ export interface EmailRuleContext {
     companyDomains: readonly string[];
 }
 
-export function toAdminUserDto(row: AdminUserRow, emailRule: EmailRuleContext): AdminUserDto {
+/** `today`: the business day (`YYYY-MM-DD`), for `outOfOffice`. */
+export function toAdminUserDto(row: AdminUserRow, emailRule: EmailRuleContext, today: string): AdminUserDto {
     return {
         id: row.id,
         username: row.username,
@@ -130,6 +137,7 @@ export function toAdminUserDto(row: AdminUserRow, emailRule: EmailRuleContext): 
         isActive: row.isActive,
         isGroupUser: row.isGroupUser,
         onLeave: row.onLeave,
+        outOfOffice: outOfOfficeOf(row.preference, today),
         mustChangePassword: row.mustChangePassword,
         lastLoginAt: isoOrNull(row.lastLoginAt),
         passwordChangedAt: isoOrNull(row.passwordChangedAt),

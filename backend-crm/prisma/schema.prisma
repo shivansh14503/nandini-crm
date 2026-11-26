@@ -75,8 +75,9 @@ model User {
   updatedAt          DateTime  @default(now()) @updatedAt
 
   photo         UserPhoto?
-  reportsTo     User?      @relation("UserReportsTo", fields: [reportsToId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  directReports User[]     @relation("UserReportsTo")
+  preference    UserPreference?
+  reportsTo     User?           @relation("UserReportsTo", fields: [reportsToId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  directReports User[]          @relation("UserReportsTo")
 
   @@index([email])
   @@index([isActive])
@@ -95,6 +96,29 @@ model UserPhoto {
   sizeBytes Int
   data      Bytes    @db.VarBinary(Max)
   createdAt DateTime @default(now())
+}
+
+/// A user's own notification and availability preferences (My Profile › Notifications). One row per user, created on
+/// the first save; no row = every default below (= behaviour before Profile Phase 3). Deleting a user deletes it.
+model UserPreference {
+  userId                Int       @id
+  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  /// Bell (in-app) notifications per kind; false = that kind is not created for this user. Kinds without a column
+  /// (calendar_reconnect) always deliver. notifications/notification.preferences.ts applies them.
+  inAppActivityReminder Boolean   @default(true)
+  inAppActivityAssigned Boolean   @default(true)
+  inAppActivityInvited  Boolean   @default(true)
+  inAppContractRenewal  Boolean   @default(true)
+  /// The 9 AM morning summary email.
+  emailMorningSummary   Boolean   @default(true)
+  /// Pre-fills Reminder on activities the user creates: an ACTIVITY_REMINDERS label, 'none' (No reminder), NULL = company default.
+  defaultReminder       String?   @db.NVarChar(30)
+  /// Out of office, inclusive business-timezone days (UTC midnight, like Holiday / Contract dates). Both set or both NULL.
+  outOfOfficeFrom       DateTime? @db.Date
+  outOfOfficeTo         DateTime? @db.Date
+  outOfOfficeMessage    String?   @db.NVarChar(200)
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @default(now()) @updatedAt
 }
 
 /// Atomic counters behind document numbers (see src/modules/document-series/documentSeries.sequence.ts).

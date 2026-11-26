@@ -27,14 +27,16 @@ const row: AdminUserRow = {
     createdBy: 'admin',
     deactivatedAt: null,
     photo: { id: 'p-1' },
+    preference: null,
     reportsTo: { id: 3, fullName: 'Rahul Mehta', username: 'rahul', isActive: false },
     _count: { directReports: 4 },
 };
 const emailRule = { duplicates: new Set<string>(), companyDomains: ['nandiniinfosys.com'] };
+const today = '2026-11-26';
 
 describe('toAdminUserDto', () => {
     it('maps every field, with role access, the manager and ISO dates', () => {
-        assert.deepEqual(toAdminUserDto(row, emailRule), {
+        assert.deepEqual(toAdminUserDto(row, emailRule, today), {
             id: 12,
             username: 'asha.k',
             fullName: 'Asha Kapoor',
@@ -53,6 +55,7 @@ describe('toAdminUserDto', () => {
             isActive: true,
             isGroupUser: false,
             onLeave: false,
+            outOfOffice: null,
             mustChangePassword: true,
             lastLoginAt: null,
             passwordChangedAt: '2026-11-01T10:00:00.000Z',
@@ -63,25 +66,37 @@ describe('toAdminUserDto', () => {
         });
     });
     it('never exposes a password hash or the raw reportsToId', () => {
-        const dto = toAdminUserDto({ ...row, passwordHash: 'x' } as AdminUserRow, emailRule) as unknown as Record<string, unknown>;
+        const dto = toAdminUserDto({ ...row, passwordHash: 'x' } as AdminUserRow, emailRule, today) as unknown as Record<string, unknown>;
         assert.equal('passwordHash' in dto, false);
         assert.equal('reportsToId' in dto, false);
         assert.equal('_count' in dto, false);
     });
     it('flags email issues only for users who hold an address', () => {
-        assert.equal(toAdminUserDto({ ...row, email: null }, emailRule).emailIssue, 'missing');
-        assert.equal(toAdminUserDto({ ...row, email: 'asha@gmail.com' }, emailRule).emailIssue, 'not_company');
-        assert.equal(toAdminUserDto(row, { ...emailRule, duplicates: new Set(['asha@nandiniinfosys.com']) }).emailIssue, 'duplicate');
-        assert.equal(toAdminUserDto({ ...row, email: null, isActive: false }, emailRule).emailIssue, null);
-        assert.equal(toAdminUserDto({ ...row, email: null, isGroupUser: true }, emailRule).emailIssue, null);
+        assert.equal(toAdminUserDto({ ...row, email: null }, emailRule, today).emailIssue, 'missing');
+        assert.equal(toAdminUserDto({ ...row, email: 'asha@gmail.com' }, emailRule, today).emailIssue, 'not_company');
+        assert.equal(toAdminUserDto(row, { ...emailRule, duplicates: new Set(['asha@nandiniinfosys.com']) }, today).emailIssue, 'duplicate');
+        assert.equal(toAdminUserDto({ ...row, email: null, isActive: false }, emailRule, today).emailIssue, null);
+        assert.equal(toAdminUserDto({ ...row, email: null, isGroupUser: true }, emailRule, today).emailIssue, null);
     });
     it('splits a stale or missing name from fullName and falls back to the manager username', () => {
-        const dto = toAdminUserDto({ ...row, firstName: null, lastName: null, reportsTo: { id: 3, fullName: '', username: 'rahul', isActive: true } }, emailRule);
+        const dto = toAdminUserDto({ ...row, firstName: null, lastName: null, reportsTo: { id: 3, fullName: '', username: 'rahul', isActive: true } }, emailRule, today);
         assert.equal(dto.firstName, 'Asha');
         assert.equal(dto.lastName, 'Kapoor');
         assert.deepEqual(dto.reportsTo, { id: 3, name: 'rahul', isActive: true });
-        assert.equal(toAdminUserDto({ ...row, reportsTo: null }, emailRule).reportsTo, null);
-        assert.equal(toAdminUserDto({ ...row, role: 'Super Admin' }, emailRule).roleAccess, 'admin');
+        assert.equal(toAdminUserDto({ ...row, reportsTo: null }, emailRule, today).reportsTo, null);
+        assert.equal(toAdminUserDto({ ...row, role: 'Super Admin' }, emailRule, today).roleAccess, 'admin');
+    });
+    it('shows the user’s out-of-office until its last day, then null', () => {
+        const preference = {
+            outOfOfficeFrom: new Date('2026-12-01T00:00:00.000Z'),
+            outOfOfficeTo: new Date('2026-12-05T00:00:00.000Z'),
+            outOfOfficeMessage: 'At the Pune office',
+        };
+        const expected = { from: '2026-12-01', to: '2026-12-05', message: 'At the Pune office' };
+        assert.deepEqual(toAdminUserDto({ ...row, preference }, emailRule, today).outOfOffice, expected);
+        assert.deepEqual(toAdminUserDto({ ...row, preference }, emailRule, '2026-12-05').outOfOffice, expected);
+        assert.equal(toAdminUserDto({ ...row, preference }, emailRule, '2026-12-06').outOfOffice, null);
+        assert.equal(toAdminUserDto({ ...row, preference: { outOfOfficeFrom: null, outOfOfficeTo: null, outOfOfficeMessage: null } }, emailRule, today).outOfOffice, null);
     });
 });
 

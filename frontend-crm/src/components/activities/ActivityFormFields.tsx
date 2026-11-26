@@ -24,6 +24,7 @@ import { getFormConfigs } from '@/services/masterData.store';
 import { DynamicModuleCustomFields } from '@/components/forms/DynamicModuleCustomFields';
 import { CUSTOMER_RESPONSE_CATEGORY, CUSTOMER_RESPONSES } from '@/components/forms/FollowUpDecision';
 import { useDropdownOptionMeta, useModuleFormConfig } from '@/hooks/queries/useFormConfigs';
+import { useMyPreferences } from '@/hooks/queries/useProfile';
 import { activityService } from '@/services/activity.service';
 import {
     ACTIVITY_NOT_APPLICABLE,
@@ -42,6 +43,7 @@ import type { Contact } from '@/types/contact.types';
 import { activityFormRules, activityFormSchema, type ActivityFormValues } from '@/validations/activity.schema';
 import { durationMinutesFor, nextQuarterHour, switchScheduleMode } from '@/utils/activitySchedule';
 import { FOLLOWUP_TYPE_CATEGORY_KEY } from '@/utils/formConfig';
+import { DEFAULT_REMINDER_NONE } from '@/utils/notificationPreferences';
 import {
     addDays,
     addMinutesToWallClock,
@@ -161,6 +163,13 @@ export interface UseActivityFormOptions {
 export function useActivityForm({ mode, activityId, prefill }: UseActivityFormOptions) {
     const clock = useBusinessClock();
     const durationOf = useActivityDurations(clock);
+    // The user's own default reminder (My Profile › Notifications) for activities they create: over the admin's
+    // default, under a prefilled one (`keep`). null / not loaded = the company default.
+    const preferredReminder = useMyPreferences({ enabled: mode === 'create' }).data?.defaultReminder;
+    const personal = useMemo(
+        () => (preferredReminder == null ? undefined : { reminder: preferredReminder === DEFAULT_REMINDER_NONE ? '' : preferredReminder }),
+        [preferredReminder]
+    );
     const [initial] = useState<ActivityFormValues>(() => {
         const values = { ...DEFAULT_ACTIVITY_FORM, ...prefill };
         if (mode !== 'create') return values;
@@ -179,7 +188,7 @@ export function useActivityForm({ mode, activityId, prefill }: UseActivityFormOp
         schema: activityFormSchema,
         module: 'activities',
         defaultValues: initial,
-        dropdownDefaults: { enabled: mode === 'create', keep: prefill },
+        dropdownDefaults: { enabled: mode === 'create', keep: prefill, personal },
         assigneeField: 'assignedTo',
         relaxedFields: (values) => ACTIVITY_NOT_APPLICABLE[values.followupType] ?? [],
         extraRules,

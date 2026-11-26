@@ -1,8 +1,9 @@
 'use client';
 
 import React from 'react';
-import { Box, Typography } from '@mui/material';
-import { primaryButtonSx, surfaceSx } from '@/components/settings/form-customization/builderUi';
+import { Box, Button, CircularProgress, FormControlLabel, Switch, Typography } from '@mui/material';
+import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
+import { primaryButtonSx, secondaryButtonSx, surfaceSx } from '@/components/settings/form-customization/builderUi';
 import { relativeTime } from '@/components/settings/audit-log/auditLogUi';
 
 /** Dialog paper that fits a phone: full width minus a small margin. */
@@ -96,6 +97,124 @@ export function ProfileCard({
                 )}
             </Box>
             <Box sx={{ px: { xs: 2, md: 2.5 }, py: { xs: 2, md: 2.5 } }}>{children}</Box>
+        </Box>
+    );
+}
+
+/**
+ * A switch with its label and a hint, the whole row tappable (48 px min height). The switch takes the theme's brand
+ * track (blue / green). Same look as Admin › Users' Flags rows.
+ */
+export function SwitchRow({
+    checked,
+    onChange,
+    label,
+    hint,
+    disabled,
+}: {
+    checked: boolean;
+    onChange: (checked: boolean) => void;
+    label: string;
+    hint?: React.ReactNode;
+    disabled?: boolean;
+}) {
+    return (
+        <FormControlLabel
+            disabled={disabled}
+            control={<Switch checked={checked} onChange={(e) => onChange(e.target.checked)} />}
+            labelPlacement="start"
+            label={
+                <Box sx={{ minWidth: 0 }}>
+                    <Typography sx={{ fontSize: '0.84rem', fontWeight: 600, color: 'var(--crm-slate-900)' }}>{label}</Typography>
+                    {hint && (
+                        <Typography component="div" sx={{ fontSize: '0.75rem', color: 'var(--mui-palette-text-secondary)', lineHeight: 1.45 }}>
+                            {hint}
+                        </Typography>
+                    )}
+                </Box>
+            }
+            sx={{
+                m: 0,
+                py: 0.75,
+                px: 1.25,
+                gap: 1,
+                justifyContent: 'space-between',
+                borderRadius: '10px',
+                border: '1px solid var(--mui-palette-border-main)',
+                backgroundColor: 'var(--mui-palette-background-paper)',
+                minHeight: 48,
+                '& .MuiFormControlLabel-label': { flex: 1, minWidth: 0 },
+            }}
+        />
+    );
+}
+
+const NOTE_COLORS = {
+    info: { background: 'var(--mui-palette-primary-soft)', border: 'var(--mui-palette-primary-softBorder)', color: 'var(--crm-text-blue-900)' },
+    warning: { background: 'var(--mui-palette-warning-soft)', border: 'var(--mui-palette-warning-softBorder)', color: 'var(--crm-amber-700)' },
+} as const;
+
+/** A short tinted note inside a card (info = brand tint, warning = amber), like the morning email preview's notes. */
+export function ProfileNote({ tone = 'info', children }: { tone?: keyof typeof NOTE_COLORS; children: React.ReactNode }) {
+    const c = NOTE_COLORS[tone];
+    return (
+        <Box
+            sx={{
+                display: 'flex',
+                alignItems: 'flex-start',
+                gap: 1,
+                px: 1.5,
+                py: 1,
+                borderRadius: '8px',
+                backgroundColor: c.background,
+                border: `1px solid ${c.border}`,
+                color: c.color,
+                minWidth: 0,
+            }}
+        >
+            <InfoOutlinedIcon aria-hidden sx={{ fontSize: 18, mt: '1px', flexShrink: 0 }} />
+            <Typography component="div" sx={{ fontSize: '0.8rem', lineHeight: 1.45, color: 'inherit', minWidth: 0 }}>
+                {children}
+            </Typography>
+        </Box>
+    );
+}
+
+/**
+ * A card's explicit Cancel / Save footer (right-aligned, full-width buttons on phones). `extra` sits before Cancel,
+ * e.g. a Clear button.
+ */
+export function CardSaveFooter({
+    dirty,
+    saving,
+    onCancel,
+    saveLabel = 'Save changes',
+    extra,
+    mt = 2.5,
+}: {
+    dirty: boolean;
+    saving: boolean;
+    onCancel: () => void;
+    saveLabel?: string;
+    extra?: React.ReactNode;
+    /** Space above (theme spacing units); less inside a column that already has a gap. */
+    mt?: number;
+}) {
+    return (
+        <Box sx={{ display: 'flex', gap: 1, justifyContent: 'flex-end', flexWrap: 'wrap', mt }}>
+            {extra}
+            <Button variant="outlined" onClick={onCancel} disabled={!dirty || saving} sx={{ ...secondaryButtonSx, ...cardButtonLayoutSx }}>
+                Cancel
+            </Button>
+            <Button
+                type="submit"
+                variant="contained"
+                disabled={!dirty || saving}
+                startIcon={saving ? <CircularProgress size={14} sx={{ color: 'inherit' }} /> : undefined}
+                sx={solidButtonSx}
+            >
+                {saving ? 'Saving…' : saveLabel}
+            </Button>
         </Box>
     );
 }

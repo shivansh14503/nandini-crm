@@ -55,6 +55,8 @@ import {
     roleAccess,
 } from '../modules/user-admin/roles.js';
 import { ADMIN_USER_STATUSES, DEPARTMENT_MAX_LENGTH, JOB_TITLE_MAX_LENGTH } from '../modules/user-admin/userAdmin.validator.js';
+import { DEFAULT_REMINDER_NONE, IN_APP_NOTIFICATION_KINDS, OUT_OF_OFFICE_MAX_DAYS, OUT_OF_OFFICE_MESSAGE_MAX } from '../modules/preferences/preferences.constants.js';
+import { isOutOfOfficeOn, outOfOfficeIssues, type OutOfOfficeRange } from '../modules/preferences/preferences.rules.js';
 
 /**
  * Contract between backend-crm and frontend-crm: constants each side keeps its own copy of must agree, or the UI
@@ -205,6 +207,15 @@ interface FrontendUserAdminTypes {
     USER_STATUS_FILTERS: readonly string[];
     JOB_TITLE_MAX_LENGTH: number;
     DEPARTMENT_MAX_LENGTH: number;
+}
+
+interface FrontendNotificationPreferences {
+    IN_APP_NOTIFICATION_KINDS: readonly string[];
+    DEFAULT_REMINDER_NONE: string;
+    OUT_OF_OFFICE_MAX_DAYS: number;
+    OUT_OF_OFFICE_MESSAGE_MAX: number;
+    isOutOfOfficeOn(range: OutOfOfficeRange | null | undefined, day: string): boolean;
+    outOfOfficeIssues(next: OutOfOfficeRange, today: string, previous?: OutOfOfficeRange | null): { path: string; message: string }[];
 }
 
 async function loadFrontend<T>(relativePath: string): Promise<T> {
@@ -535,6 +546,40 @@ describe('backend ↔ frontend contract', { skip }, () => {
             assert.equal(frontend.hasGlobalAccessRole(role), hasGlobalAccessRole(role), role);
             assert.equal(frontend.roleAccess(role), roleAccess(role), role);
         }
+    });
+
+    it('frontend utils/notificationPreferences.ts matches the preference constants and out-of-office rules', async () => {
+        const frontend = await loadFrontend<FrontendNotificationPreferences>('utils/notificationPreferences.ts');
+        assert.deepEqual([...frontend.IN_APP_NOTIFICATION_KINDS], [...IN_APP_NOTIFICATION_KINDS]);
+        assert.ok(IN_APP_NOTIFICATION_KINDS.every((kind) => (NOTIFICATION_KINDS as readonly string[]).includes(kind)), 'every configurable kind is a bell kind');
+        assert.equal(frontend.DEFAULT_REMINDER_NONE, DEFAULT_REMINDER_NONE);
+        assert.equal(frontend.OUT_OF_OFFICE_MAX_DAYS, OUT_OF_OFFICE_MAX_DAYS);
+        assert.equal(frontend.OUT_OF_OFFICE_MESSAGE_MAX, OUT_OF_OFFICE_MESSAGE_MAX);
+
+        const today = '2026-11-26';
+        const cases: [OutOfOfficeRange, (OutOfOfficeRange | null)?][] = [
+            [{ from: today, to: today }],
+            [{ from: '2026-12-01', to: '2027-11-30' }], // 365 days
+            [{ from: '2026-12-01', to: '2027-12-01' }], // 366 days
+            [{ from: '2026-12-05', to: '2026-12-01' }],
+            [{ from: '2026-11-20', to: '2026-11-25' }], // past end, new
+            [{ from: '2026-11-20', to: '2026-11-25' }, { from: '2026-11-20', to: '2026-11-25' }], // past end, unchanged
+            [{ from: '2026-11-20', to: '2026-11-25' }, { from: '2026-11-20', to: '2026-11-24' }], // past end, changed
+            [{ from: '2026-11-20', to: today }], // start in the past, end today
+            [{ from: '2027-11-26', to: '2027-11-27' }], // start exactly a year ahead
+            [{ from: '2027-11-27', to: '2027-11-28' }], // start beyond a year
+            [{ from: '2028-01-10', to: '2026-11-20' }],
+            [{ from: '2026-02-30', to: '2026-03-01' }],
+            [{ from: '', to: '' }],
+        ];
+        for (const [next, previous] of cases) {
+            assert.deepEqual(frontend.outOfOfficeIssues(next, today, previous), outOfOfficeIssues(next, today, previous), JSON.stringify({ next, previous }));
+        }
+        const range = { from: '2026-12-01', to: '2026-12-05' };
+        for (const day of ['2026-11-30', '2026-12-01', '2026-12-05', '2026-12-06']) {
+            assert.equal(frontend.isOutOfOfficeOn(range, day), isOutOfOfficeOn(range, day), day);
+        }
+        assert.equal(frontend.isOutOfOfficeOn(null, today), false);
     });
 
     it('frontend types/userAdmin.types.ts matches the Admin › Users limits and status filter', async () => {
