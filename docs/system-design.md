@@ -863,8 +863,8 @@ job and the sweep (connection checks and the nightly connection steps still run)
   the longest one call can take; a push that lost it stops without storing anything and is moved back), then
   `planPush` → create (requested id `crm` + 40 hex, idempotent; Google 409 adopts our own earlier copy; a restore
   re-writes the event with its full attendee list, none on a private copy), patch (only changed field groups,
-  `If-Match`; a 412 re-reads and three-way merges with `ActivityExternalLink.baseJson`; a follow-up activity's time
-  is never taken from the calendar), cancel, or detach. Success clears `dirtyAt` only if it didn't change meanwhile
+  `If-Match`; a 412 re-reads and three-way merges with `ActivityExternalLink.baseJson`, keeping at most 50 attendee
+  rows like the pull, the rest on the event only (as of 2026-11-26); a follow-up activity's time is never taken from the calendar), cancel, or detach. Success clears `dirtyAt` only if it didn't change meanwhile
   (compare-and-set), so an edit during a push pushes again; a row stopped during the call leaves the link `detached`
   (the event id and base are kept for a re-attach, which brings back an event the CRM had deleted as `cancelled`). The event
   deleted in the calendar: a Completed or follow-up activity keeps its row (link `removed_remote`), any other activity

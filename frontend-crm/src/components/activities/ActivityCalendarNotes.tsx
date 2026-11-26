@@ -14,6 +14,8 @@ import { formatBusinessInstant } from './activityTime';
  * - Deleted there, for an activity that keeps its status (Completed, or a lead / opportunity follow-up).
  * - A follow-up moved to an all-day slot there: the CRM keeps its time of day (§11.5); the note says where it went.
  * Fixed sentences only: never provider error text. Shows nothing when there is nothing to say.
+ * `besideStatus`: the drawer's sync section (ActivitySyncStatus, P2-3c: owner and editors) is shown too and already
+ * says "Updated from …", the repeating / deleted state and the link's note, so only the 31-day note is left here.
  */
 
 /** Must match backend calendar-sync/sync.constants.ts TOO_LONG_CODE / FOLLOW_UP_TIME_KEPT_PREFIX. */
@@ -22,10 +24,18 @@ const FOLLOW_UP_TIME_KEPT_PREFIX = 'Follow-ups keep a time';
 
 const PROVIDER_LABELS: Record<string, string> = { google: 'Google Calendar', microsoft: 'Outlook', fake: 'the test calendar' };
 
-export function calendarNotesOf(calendar: ActivityCalendarState | null | undefined, timeZone: string): { updated: string | null; notes: string[] } {
+export function calendarNotesOf(
+    calendar: ActivityCalendarState | null | undefined,
+    timeZone: string,
+    besideStatus = false,
+): { updated: string | null; notes: string[] } {
     if (!calendar) return { updated: null, notes: [] };
     const provider = PROVIDER_LABELS[calendar.provider] ?? 'the calendar';
     const notes: string[] = [];
+    if (besideStatus) {
+        if (calendar.errorCode === TOO_LONG_CODE) notes.push(`Longer than 31 days in ${provider}, so the CRM keeps its own times.`);
+        return { updated: null, notes };
+    }
     if (calendar.state === 'unsupported') notes.push(`Made a repeating event in ${provider}, so it no longer syncs. The CRM keeps its own details.`);
     else if (calendar.state === 'removed_remote') notes.push(`Deleted in ${provider}. It stays here as it is.`);
     if (calendar.errorCode === TOO_LONG_CODE) notes.push(`Longer than 31 days in ${provider}, so the CRM keeps its own times.`);
@@ -34,8 +44,16 @@ export function calendarNotesOf(calendar: ActivityCalendarState | null | undefin
     return { updated: at ? `Updated from ${provider} ${at}` : null, notes };
 }
 
-export function ActivityCalendarNotes({ calendar, timeZone }: { calendar: ActivityCalendarState | null | undefined; timeZone: string }) {
-    const { updated, notes } = calendarNotesOf(calendar, timeZone);
+export function ActivityCalendarNotes({
+    calendar,
+    timeZone,
+    besideStatus = false,
+}: {
+    calendar: ActivityCalendarState | null | undefined;
+    timeZone: string;
+    besideStatus?: boolean;
+}) {
+    const { updated, notes } = calendarNotesOf(calendar, timeZone, besideStatus);
     if (!updated && notes.length === 0) return null;
     const lineSx = { display: 'flex', alignItems: 'flex-start', gap: 0.6, minWidth: 0 } as const;
     const textSx = { fontSize: '0.76rem', color: 'var(--mui-palette-text-secondary)', overflowWrap: 'anywhere', minWidth: 0 } as const;

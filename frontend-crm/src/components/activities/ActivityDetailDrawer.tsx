@@ -45,7 +45,7 @@ import { useDropdownOptionLabel, useModuleFormConfig } from '@/hooks/queries/use
 import { activityService } from '@/services/activity.service';
 import { ActivityBusyTimes } from './ActivityBusyTimes';
 import { ActivityCalendarNotes } from './ActivityCalendarNotes';
-import { ActivitySyncStatus, calendarRemovalNote } from './ActivitySyncStatus';
+import { ActivitySyncStatus, calendarRemovalNote, showsSyncStatus } from './ActivitySyncStatus';
 import { useAuth } from '@/context/AuthContext';
 import { findCrmUser } from '@/services/masterData.store';
 import { UserAvatar } from '@/components/common/UserAvatar';
@@ -470,7 +470,7 @@ export function ActivityDetailDrawer({ activity, activityId, open, onClose, onEd
                             : `Follow-up history of ${a.relatedCode || `this ${followUpRecord}`}: kept with the ${followUpRecord}.`}
                     </Typography>
                 )}
-                <ActivityCalendarNotes calendar={a.calendar} timeZone={timeZone} />
+                <ActivityCalendarNotes calendar={a.calendar} timeZone={timeZone} besideStatus={showsSyncStatus(a, user?.username)} />
                 {(a.reminder || a.completedAt) && (
                     <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2, mt: 1.2 }}>
                         {a.reminder && (

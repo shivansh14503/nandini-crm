@@ -1,8 +1,10 @@
 import assert from 'node:assert/strict';
 import { afterEach, beforeEach, describe, it } from 'node:test';
+import { ENV } from '../../config/env.js';
 import type { Activity } from '../../generated/prisma/client.js';
 import type { AuthUser } from '../../types/user.types.js';
 import { HttpError } from '../../utils/httpError.js';
+import { zonedDayOf, zonedWallClockToInstant } from '../../utils/zonedTime.js';
 import { activityService } from '../activities/activity.service.js';
 import type { ActivityRow } from '../activities/activity.mapper.js';
 import { blankActivity, blankAttendee, blankLink, installActivityDouble, restoreActivityDouble, type ActivityDoubleState } from '../activities/testing/activityDouble.js';
@@ -12,7 +14,7 @@ import { setFakeHealth, setFakeProviderEnabledForTests } from './providers/regis
 import { calendarSyncActions } from './sync.actions.js';
 import { backfillWindow, planBackfill, runBackfill } from './sync.backfill.js';
 import { requestedIdFor } from './sync.keys.js';
-import { dueBackfillRows, runEnrolled } from './sync.maintenance.js';
+import { backfillDueInline, dueBackfillRows, enqueueDueBackfills, runEnrolled } from './sync.maintenance.js';
 import { pushLink } from './sync.push.js';
 import { setInlinePushForTests } from './sync.wake.js';
 import { blankConnection, type ConnectionRowState } from './testing/connectionDouble.js';
@@ -237,6 +239,16 @@ describe('first-sync backfill (enrolled job)', () => {
         install([fresh(), conn({ id: 'c2', username: 'asha', accountEmail: 'asha@nandiniinfosys.com', backfilledAt: null, backfillCount: null, lastSuccessAt: new Date() }), conn({ id: 'c3', username: 'ravi', backfilledAt: null, backfillCount: null, lastSuccessAt: long }), conn({ id: 'c4', username: 'asha', backfilledAt: new Date(), backfillCount: null, lastSuccessAt: long })]);
         const due = await dueBackfillRows(new Date());
         assert.deepEqual(due.map((r) => r.id).sort(), ['c1', 'c3', 'c4'], 'a run that started (stamp written) but never finished is due too');
+    });
+
+    it('the recovery runs only inside CALENDAR_SYNC_HOURS (P2-5): nothing is queued or backfilled at night', async () => {
+        const long = new Date(Date.now() - 20 * 60_000);
+        install([conn({ id: 'c3', username: 'ravi', backfilledAt: null, backfillCount: null, lastSuccessAt: long })]);
+        const night = zonedWallClockToInstant(`${zonedDayOf(new Date(), ENV.BUSINESS_TIMEZONE)}T03:00`, ENV.BUSINESS_TIMEZONE);
+        assert.equal(await enqueueDueBackfills(night), 0);
+        assert.equal(await backfillDueInline(night), 0);
+        assert.equal(state.connections.find((c) => c.id === 'c3')?.backfillCount, null, 'still due for the morning');
+        assert.deepEqual(state.calls, []);
     });
 });
 
