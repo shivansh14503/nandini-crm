@@ -14,14 +14,16 @@ import { withoutMutedRecipients } from './notification.preferences.js';
  * read first and only the missing rows are inserted, in chunks under the 2,100-parameter limit.
  *
  * Every row goes through `withoutMutedRecipients` first: a recipient who turned that kind off in My Profile ›
- * Notifications gets no row (kinds without a switch, such as `calendar_reconnect`, always deliver).
+ * Notifications gets no row (kinds without a switch, such as `calendar_sync_issue`, always deliver).
  */
 
 /**
- * `calendar_reconnect` (Calendar Phase 2 P2-2): an employee's calendar connection needs a reconnect (entityModule
- * `calendar-connections`, entityId the connection id; it opens My Profile › Connected accounts).
+ * `calendar_sync_issue` (Calendar Phase 2 P2-2b): admins only. A calendar provider can't be used (entityModule
+ * `admin-integrations`, entityId the provider), or the nightly digest of people whose calendar isn't syncing (entityId
+ * `people:calendar_problem`). It opens Admin › API Integrations. P2-2's `calendar_reconnect` is retired (its rows were
+ * deleted by migration 20261128090000_calendar_admin_connect).
  */
-export const NOTIFICATION_KINDS = ['activity_reminder', 'activity_assigned', 'activity_invited', 'contract_renewal', 'calendar_reconnect'] as const;
+export const NOTIFICATION_KINDS = ['activity_reminder', 'activity_assigned', 'activity_invited', 'contract_renewal', 'calendar_sync_issue'] as const;
 export type NotificationKind = (typeof NOTIFICATION_KINDS)[number];
 
 export interface NotificationInput {
@@ -30,7 +32,7 @@ export interface NotificationInput {
     kind: NotificationKind;
     title: string;
     body?: string | null;
-    /** CrmModuleKey of the record it is about (activities | contracts), or `calendar-connections`, and its id. */
+    /** CrmModuleKey of the record it is about (activities | contracts), or `admin-integrations`, and its id. */
     entityModule?: string | null;
     entityId?: string | null;
     /** The moment it is about (activity start, renewal reminder). */

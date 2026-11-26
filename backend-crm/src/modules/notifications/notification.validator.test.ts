@@ -53,8 +53,10 @@ describe('notificationHref', () => {
         assert.equal(notificationHref('activities', null), '');
     });
 
-    it('opens calendar_reconnect notifications on My Profile › Connected accounts (whatever the connection id)', () => {
-        assert.equal(notificationHref('calendar-connections', 'conn-1'), '/profile?tab=connected-accounts');
-        assert.equal(notificationHref('calendar-connections', null), '/profile?tab=connected-accounts');
+    it('opens calendar_sync_issue on Admin › API Integrations, or its People tab filtered to calendar problems for the digest', () => {
+        assert.equal(notificationHref('admin-integrations', 'google'), '/admin/integrations');
+        assert.equal(notificationHref('admin-integrations', null), '/admin/integrations');
+        assert.equal(notificationHref('admin-integrations', 'people:calendar_problem'), '/admin/integrations?tab=people&issue=calendar_problem');
+        assert.equal(notificationHref('calendar-connections', 'conn-1'), '', 'P2-2 reconnect links are retired');
     });
 });

@@ -1,4 +1,8 @@
+import { StatusCodes } from 'http-status-codes';
+import { prisma } from '../../config/prisma.js';
 import type { AuthUser } from '../../types/user.types.js';
+import { HttpError } from '../../utils/httpError.js';
+import { reconcileAllQuietly } from '../calendar-sync/enrolment.js';
 import { FOLLOWUP_TYPE_CATEGORY_KEY } from '../form-configs/formConfig.defaults.js';
 import { formConfigService, type FormConfigsPayload } from '../form-configs/formConfig.service.js';
 import {
@@ -15,6 +19,8 @@ import {
  * the form-config payload (`getAllConfigs`, cached for an hour and dropped by every config write), so there is no
  * second cache key; saves go through `formConfigService.updateModuleSetting`, which validates, audits
  * (`ModuleSetting UPDATE`) and drops that cache, so `loadActivityConfig` and calendar sync see the change at once.
+ * A company domain a calendar provider still serves can't be removed (409 DOMAIN_IN_USE); a change of the company
+ * domains re-runs calendar enrolment (P2-2b).
  */
 
 /** Type for imported meetings when none is stored: the active Followup Type whose meta.icon is 'meeting', else 'Meeting'. */
@@ -33,10 +39,44 @@ export async function loadCalendarSettings(): Promise<CalendarSyncSettings> {
     return calendarSettingsFrom(await formConfigService.getAllConfigs());
 }
 
-/** Merges a partial update over the stored settings and saves the whole value (audited, cache dropped). */
+/** Domains each calendar provider row serves (`settings.domains`), lower-cased. */
+export async function providerDomainsInUse(): Promise<{ provider: string; domains: string[] }[]> {
+    const rows = await prisma.integrationProvider.findMany({ where: { provider: { in: ['google', 'microsoft'] } }, select: { provider: true, settingsJson: true } });
+    return rows.map((row) => {
+        let domains: string[] = [];
+        try {
+            const settings = JSON.parse(row.settingsJson ?? '{}') as { domains?: unknown };
+            domains = Array.isArray(settings.domains) ? settings.domains.filter((d): d is string => typeof d === 'string').map((d) => d.toLowerCase()) : [];
+        } catch {
+            domains = [];
+        }
+        return { provider: row.provider, domains };
+    });
+}
+
+const PROVIDER_NAMES: Record<string, string> = { google: 'Google Workspace', microsoft: 'Microsoft 365' };
+
+/**
+ * Merges a partial update over the stored settings and saves the whole value (audited, cache dropped). Removing a
+ * company domain that a calendar provider still serves answers 409 DOMAIN_IN_USE naming the provider. A change of the
+ * company domains re-runs calendar enrolment after the save.
+ */
 export async function saveCalendarSettings(patch: unknown, user: AuthUser): Promise<CalendarSyncSettings> {
     const changes = calendarSyncSettingsPatchSchema.parse(patch);
-    const merged = calendarSyncSettingsSchema.parse({ ...(await loadCalendarSettings()), ...changes });
+    const before = await loadCalendarSettings();
+    const merged = calendarSyncSettingsSchema.parse({ ...before, ...changes });
+    const domainsChanged = changes.companyDomains !== undefined && JSON.stringify([...before.companyDomains].sort()) !== JSON.stringify([...merged.companyDomains].sort());
+    if (domainsChanged) {
+        const kept = new Set(merged.companyDomains);
+        for (const { provider, domains } of await providerDomainsInUse()) {
+            const lost = domains.find((d) => !kept.has(d));
+            if (lost) {
+                const message = `${lost} is still served by ${PROVIDER_NAMES[provider] ?? provider}. Remove it from that provider first.`;
+                throw new HttpError(message, StatusCodes.CONFLICT, { code: 'DOMAIN_IN_USE', errors: [{ message, path: ['companyDomains'] }] });
+            }
+        }
+    }
     await formConfigService.updateModuleSetting('activities', CALENDAR_SYNC_SETTING_KEY, { value: merged }, user);
+    if (domainsChanged) await reconcileAllQuietly('domains_saved', { actor: user.username });
     return merged as CalendarSyncSettings;
 }

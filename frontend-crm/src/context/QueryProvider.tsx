@@ -61,7 +61,7 @@ export function QueryProvider({ children }: { children: React.ReactNode }) {
                 if (key === 'leads' || key === 'opportunities' || key === 'contracts') {
                     queryClient.invalidateQueries({ queryKey: [...queryKeys.activities.all, 'calendar'] });
                 }
-                // Calendar connections show on Admin › API Integrations › People, and an admin disconnect changes the user's own list.
+                // Calendar sync rows show on Admin › API Integrations › People, and admin changes (provider, People choice) change the user's own status.
                 if (key === 'calendarConnections') queryClient.invalidateQueries({ queryKey: queryKeys.integrations.all });
                 if (key === 'integrations') queryClient.invalidateQueries({ queryKey: queryKeys.calendarConnections.all });
                 // Partner companies also feed the master data behind the Partner Company lookups.

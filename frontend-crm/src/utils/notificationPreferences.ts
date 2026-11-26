@@ -9,7 +9,7 @@
  */
 
 /**
- * Bell kinds a user can turn off. Kinds not listed here (e.g. `calendar_reconnect`) are not configurable and always
+ * Bell kinds a user can turn off. Kinds not listed here (e.g. `calendar_sync_issue`, admins only) are not configurable and always
  * deliver.
  */
 export const IN_APP_NOTIFICATION_KINDS = ['activity_reminder', 'activity_assigned', 'activity_invited', 'contract_renewal'] as const;

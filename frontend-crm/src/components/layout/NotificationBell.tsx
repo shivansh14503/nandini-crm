@@ -37,7 +37,7 @@ const KIND_ICONS: Record<string, SvgIconComponent> = {
     activity_assigned: AssignmentIndOutlinedIcon,
     activity_invited: GroupAddOutlinedIcon,
     contract_renewal: AutorenewOutlinedIcon,
-    calendar_reconnect: EventBusyOutlinedIcon,
+    calendar_sync_issue: EventBusyOutlinedIcon,
 };
 
 /** The icon tile takes the tint of the record's module (activities olive, contracts rose); others stay neutral. */

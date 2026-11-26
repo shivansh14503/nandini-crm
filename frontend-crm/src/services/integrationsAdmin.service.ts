@@ -1,15 +1,17 @@
 /** Mirrors backend-crm/src/modules/integrations/integration.routes.ts (/api/admin/integrations, admin roles only). */
 import type { ApiResponse } from '../types/api.types';
 import type {
-    AdminDisconnectPayload,
     CalendarSyncSettings,
     IntegrationProviderKey,
     IntegrationsAdmin,
+    CalendarCheckOutcome,
     Person,
+    PersonCalendarPayload,
     PersonEmailPayload,
     ProviderAdmin,
     SaveProviderPayload,
     SyncType,
+    TestConnectionPayload,
     TestConnectionResult,
 } from '../types/integration.types';
 import { apiClient } from './apiClient';
@@ -36,9 +38,9 @@ export const integrationsAdminService = {
         notifyCrmUpdate(BASE);
         return res.data;
     },
-    /** Checks the saved credentials with the provider (6 a minute per admin). */
-    async testProvider(provider: IntegrationProviderKey): Promise<TestConnectionResult> {
-        const res = await apiClient.post<ApiResponse<TestConnectionResult>>(`${BASE}/providers/${enc(provider)}/test`);
+    /** Checks the saved credentials (the app step), and with `asUsername` that person's calendar too (6 a minute per admin). */
+    async testProvider(provider: IntegrationProviderKey, payload: TestConnectionPayload = {}): Promise<TestConnectionResult> {
+        const res = await apiClient.post<ApiResponse<TestConnectionResult>>(`${BASE}/providers/${enc(provider)}/test`, payload);
         notifyCrmUpdate(BASE);
         return res.data;
     },
@@ -66,9 +68,16 @@ export const integrationsAdminService = {
         notifyCrmUpdate(MASTER_DATA_SYNC_ENTITY);
         return res.data;
     },
-    /** Ends a person's calendar connection (tokens dropped, Google grant revoked); the person's own page refreshes too. */
-    async disconnectConnection(id: string, payload: AdminDisconnectPayload = {}): Promise<void> {
-        await apiClient.post(`${BASE}/connections/${enc(id)}/disconnect`, payload);
+    /** The admin's calendar choice for one person (provider override, exclusion + note); the person is re-enrolled at once. */
+    async setPersonCalendar(username: string, payload: PersonCalendarPayload): Promise<Person> {
+        const res = await apiClient.put<ApiResponse<Person>>(`${BASE}/people/${enc(username)}/calendar`, payload);
         notifyCrmUpdate(BASE);
+        return res.data;
+    },
+    /** "Check now": one health check of the person's calendar sync (409 CALENDAR_NOT_SYNCED when they have none). */
+    async checkPersonCalendar(username: string): Promise<Person & { check: CalendarCheckOutcome }> {
+        const res = await apiClient.post<ApiResponse<Person & { check: CalendarCheckOutcome }>>(`${BASE}/people/${enc(username)}/calendar/check`);
+        notifyCrmUpdate(BASE);
+        return res.data;
     },
 };

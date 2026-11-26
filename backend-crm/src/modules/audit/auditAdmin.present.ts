@@ -140,6 +140,8 @@ const ACTION_LABELS: Record<string, string> = {
     PASSWORD_CHANGE: 'Password changed',
     PASSWORD_RESET: 'Password reset',
     SESSION_REVOKE: 'Session signed out',
+    ENROL: 'Calendar sync started',
+    STOP: 'Calendar sync stopped',
     CONNECT: 'Connected',
     DISCONNECT: 'Disconnected',
 };

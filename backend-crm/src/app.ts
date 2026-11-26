@@ -179,13 +179,11 @@ function logIntegrationsReadiness(): void {
     const { READY_REASON, PUBLIC_API_URL } = ENV.INTEGRATIONS;
     if (READY_REASON === 'key_missing') {
         logger.info('INTEGRATIONS_ENCRYPTION_KEY is not set: Admin › API Integrations can\'t store secrets yet');
-    } else if (READY_REASON === 'public_url_missing') {
-        logger.warn('PUBLIC_API_URL is not set: calendar connections stay off until it is');
     }
     if (ENV.INTEGRATIONS.FAKE_PROVIDER_IGNORED) {
         logger.warn('CALENDAR_FAKE_PROVIDER is ignored in production: the test calendar provider is off');
     } else if (ENV.INTEGRATIONS.FAKE_PROVIDER) {
-        logger.warn('CALENDAR_FAKE_PROVIDER is on: the in-memory test calendar provider is offered (development only)');
+        logger.warn('CALENDAR_FAKE_PROVIDER is on: the in-memory test calendar provider serves unclaimed company domains (development only)');
     }
     if (ENV.IS_PRODUCTION && PUBLIC_API_URL && !PUBLIC_API_URL.startsWith('https://')) {
         logger.warn('PUBLIC_API_URL is not https: calendar webhooks stay off (changes arrive by polling)');

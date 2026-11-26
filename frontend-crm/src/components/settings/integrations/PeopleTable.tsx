@@ -4,6 +4,7 @@ import React, { useMemo, useState } from 'react';
 import {
     Alert,
     Box,
+    Button,
     IconButton,
     InputAdornment,
     Table,
@@ -17,39 +18,42 @@ import {
     Typography,
 } from '@mui/material';
 import EditOutlinedIcon from '@mui/icons-material/EditOutlined';
-import LinkOffRoundedIcon from '@mui/icons-material/LinkOffRounded';
+import EventNoteOutlinedIcon from '@mui/icons-material/EventNoteOutlined';
 import GroupsOutlinedIcon from '@mui/icons-material/GroupsOutlined';
 import SearchRoundedIcon from '@mui/icons-material/SearchRounded';
-import { CommonActionModal } from '@/components/common/CommonActionModal';
 import { TableSkeleton } from '@/components/common/skeletons';
-import { EmptyState, errorMessage, inputSx, panelHeaderSx, surfaceSx } from '@/components/settings/form-customization/builderUi';
-import { useAdminDisconnectConnection, usePeople } from '@/hooks/queries/useIntegrationsAdmin';
-import type { Person, UserEmailIssue } from '@/types/integration.types';
+import { EmptyState, errorMessage, inputSx, panelHeaderSx, secondaryButtonSx, surfaceSx } from '@/components/settings/form-customization/builderUi';
+import { usePeople } from '@/hooks/queries/useIntegrationsAdmin';
+import type { Person, PersonCalendar, ProviderAdmin, UserEmailIssue } from '@/types/integration.types';
+import { CalendarChoiceDialog } from './CalendarChoiceDialog';
 import { CompanyEmailDialog } from './CompanyEmailDialog';
-import { StatusChip, formatDay, hintSx, type ChipTone } from './integrationUi';
+import { CALENDAR_PROVIDER_LABELS, NOT_SYNCED_LABELS, StatusChip, formatDateTime, hintSx, type ChipTone } from './integrationUi';
 
-type PeopleFilter = 'all' | 'issues' | UserEmailIssue;
+/** People filters: `calendar_problem` is also what the admins' daily digest opens (`?tab=people&issue=calendar_problem`). */
+export type PeopleFilter = 'all' | 'calendar_problem' | 'not_synced' | 'issues' | UserEmailIssue;
 
 const FILTERS: { key: PeopleFilter; label: string }[] = [
     { key: 'all', label: 'All' },
+    { key: 'calendar_problem', label: 'Calendar problems' },
+    { key: 'not_synced', label: 'Not synced' },
     { key: 'issues', label: 'Email issues' },
     { key: 'missing', label: 'Missing' },
     { key: 'duplicate', label: 'Duplicate' },
     { key: 'not_company', label: 'Other domain' },
 ];
 
+export const isPeopleFilter = (value: string | null | undefined): value is PeopleFilter => FILTERS.some((f) => f.key === value);
+
 const ISSUE_CHIP: Record<UserEmailIssue, { tone: ChipTone; label: string; title: string }> = {
-    missing: { tone: 'warning', label: 'Missing', title: 'No company email: this person can’t connect a calendar until one is set.' },
+    missing: { tone: 'warning', label: 'Missing', title: 'No company email: this person’s calendar can’t sync until one is set.' },
     duplicate: { tone: 'error', label: 'Duplicate', title: 'Another active person has the same email. Each person needs their own.' },
-    not_company: { tone: 'warning', label: 'Other domain', title: 'Not one of the company email domains.' },
+    not_company: { tone: 'warning', label: 'Other domain', title: 'Not one of the company email domains, so the calendar does not sync.' },
 };
 
-const PROVIDER_LABELS: Record<string, string> = { google: 'Google Calendar', microsoft: 'Microsoft 365', fake: 'Test calendar' };
-
-const CONNECTION_CHIP: Record<string, { tone: ChipTone; label: string }> = {
-    active: { tone: 'success', label: 'Connected' },
-    reauth_required: { tone: 'warning', label: 'Reconnect needed' },
-    error: { tone: 'error', label: 'Not working' },
+const SYNC_CHIP: Record<string, { tone: ChipTone; label: string }> = {
+    pending: { tone: 'info', label: 'Setting up' },
+    ok: { tone: 'success', label: 'Synced' },
+    error: { tone: 'error', label: 'Problem' },
 };
 
 const headCellSx = {
@@ -63,6 +67,16 @@ const headCellSx = {
     py: 1.1,
 } as const;
 const cellSx = { py: 0.9, fontSize: '0.82rem', color: 'var(--crm-slate-700)' } as const;
+
+const iconButtonSx = {
+    width: 36,
+    height: 36,
+    flexShrink: 0,
+    borderRadius: '8px',
+    color: 'var(--mui-palette-text-secondary)',
+    transition: 'all 0.15s ease',
+    '&:hover': { backgroundColor: 'var(--mui-palette-primary-soft)', color: 'var(--crm-text-blue-700)' },
+} as const;
 
 const pillSx = (active: boolean) =>
     ({
@@ -84,28 +98,91 @@ const pillSx = (active: boolean) =>
         '&:focus-visible': { outline: 'none', boxShadow: '0 0 0 3px rgb(var(--crm-accent-rgb) / 0.22)' },
     }) as const;
 
-const matches = (p: Person, filter: PeopleFilter) => (filter === 'all' ? true : filter === 'issues' ? p.emailIssue !== null : p.emailIssue === filter);
+function matches(p: Person, filter: PeopleFilter): boolean {
+    switch (filter) {
+        case 'all':
+            return true;
+        case 'calendar_problem':
+            return p.calendar.connection?.status === 'error';
+        case 'not_synced':
+            return !p.calendar.connection;
+        case 'issues':
+            return p.emailIssue !== null;
+        default:
+            return p.emailIssue === filter;
+    }
+}
 
-/** People, their company emails and their calendar connection (an admin can disconnect one, with an audited note). */
-export function PeopleTable({ companyDomains, onToast }: { companyDomains: string[]; onToast: (message: string, severity?: 'success' | 'error') => void }) {
+/** The Calendar cell: the live row (provider, status, mailbox, the admin sentence of a problem), or why not synced. */
+function CalendarCell({ calendar }: { calendar: PersonCalendar }) {
+    const c = calendar.connection;
+    if (!c) {
+        const label = calendar.reason ? NOT_SYNCED_LABELS[calendar.reason] : calendar.target ? 'Starting soon' : 'Not synced';
+        return (
+            <Box sx={{ minWidth: 0 }}>
+                <StatusChip tone={calendar.reason === 'excluded' ? 'warning' : 'neutral'}>{label}</StatusChip>
+                {calendar.choice?.note && <Typography sx={{ ...hintSx, mt: 0.25, overflowWrap: 'anywhere' }}>{calendar.choice.note}</Typography>}
+            </Box>
+        );
+    }
+    const chip = SYNC_CHIP[c.status] ?? SYNC_CHIP.error;
+    return (
+        <Box sx={{ minWidth: 0 }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, flexWrap: 'wrap' }}>
+                <Typography sx={{ fontSize: '0.78rem', fontWeight: 600, color: 'var(--crm-slate-900)' }}>{CALENDAR_PROVIDER_LABELS[c.provider] ?? c.provider}</Typography>
+                <StatusChip tone={chip.tone}>{chip.label}</StatusChip>
+                {c.source === 'override' && (
+                    <StatusChip tone="brand" title="Chosen for this person instead of the email domain's provider">
+                        Override
+                    </StatusChip>
+                )}
+            </Box>
+            <Typography sx={{ fontSize: '0.72rem', color: 'var(--mui-palette-text-secondary)', overflowWrap: 'anywhere' }}>
+                {c.accountEmail}
+                {c.lastSuccessAt ? ` · ok ${formatDateTime(c.lastSuccessAt)}` : ''}
+            </Typography>
+            {c.status === 'error' && c.lastErrorMessage && (
+                <Typography sx={{ fontSize: '0.72rem', color: 'var(--mui-palette-error-main)', overflowWrap: 'anywhere', lineHeight: 1.45, mt: 0.25 }}>{c.lastErrorMessage}</Typography>
+            )}
+        </Box>
+    );
+}
+
+/**
+ * People: company emails and each person's calendar sync (provider, status, last problem). Calendar sync is automatic
+ * for every active person with a company email on a provider's domains; per person an admin may pick another provider
+ * or exclude them (CalendarChoiceDialog), and run "Check now".
+ */
+export function PeopleTable({
+    companyDomains,
+    providers,
+    fakeProvider,
+    initialFilter = 'all',
+    onToast,
+}: {
+    companyDomains: string[];
+    providers: ProviderAdmin[];
+    fakeProvider: boolean;
+    initialFilter?: PeopleFilter;
+    onToast: (message: string, severity?: 'success' | 'error') => void;
+}) {
     const people = usePeople();
     const [search, setSearch] = useState('');
-    const [filter, setFilter] = useState<PeopleFilter>('all');
+    const [filter, setFilter] = useState<PeopleFilter>(initialFilter);
     const [editing, setEditing] = useState<Person | null>(null);
-    const [disconnecting, setDisconnecting] = useState<Person | null>(null);
-    const disconnect = useAdminDisconnectConnection();
+    const [choosing, setChoosing] = useState<string | null>(null);
 
     const all = useMemo(() => people.data ?? [], [people.data]);
     const counts = useMemo(() => Object.fromEntries(FILTERS.map((f) => [f.key, all.filter((p) => matches(p, f.key)).length])) as Record<PeopleFilter, number>, [all]);
     const rows = useMemo(() => {
         const q = search.trim().toLowerCase();
-        return all.filter(
-            (p) => matches(p, filter) && (!q || [p.fullName, p.username, p.email ?? '', p.department ?? ''].some((v) => v.toLowerCase().includes(q))),
-        );
+        return all.filter((p) => matches(p, filter) && (!q || [p.fullName, p.username, p.email ?? '', p.department ?? ''].some((v) => v.toLowerCase().includes(q))));
     }, [all, filter, search]);
+    // The dialog follows the list, so a save or check shows the fresh row.
+    const choosingPerson = choosing ? (all.find((p) => p.username === choosing) ?? null) : null;
 
     return (
-        <Box component="section" aria-labelledby="people-title" sx={{ ...surfaceSx, overflow: 'hidden', minWidth: 0 }}>
+        <Box component="section" id="people" aria-labelledby="people-title" sx={{ ...surfaceSx, overflow: 'hidden', minWidth: 0, scrollMarginTop: 80 }}>
             <Box sx={{ ...panelHeaderSx, display: 'flex', flexDirection: 'column', gap: 1.25 }}>
                 <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1, flexWrap: 'wrap' }}>
                     <Box sx={{ flex: 1, minWidth: 200 }}>
@@ -113,7 +190,8 @@ export function PeopleTable({ companyDomains, onToast }: { companyDomains: strin
                             People
                         </Typography>
                         <Typography sx={hintSx}>
-                            Each person connects a calendar with their own company email. Fix missing or duplicate emails before turning a provider on.
+                            Everyone with a company email on a switched-on provider&apos;s domains is synced automatically. Use Calendar… to pick another provider for one
+                            person or to leave them out.
                         </Typography>
                     </Box>
                     <TextField
@@ -159,61 +237,45 @@ export function PeopleTable({ companyDomains, onToast }: { companyDomains: strin
                 <EmptyState
                     icon={<GroupsOutlinedIcon />}
                     title={search || filter !== 'all' ? 'Nobody matches' : 'No active people'}
-                    description={filter === 'issues' && !search ? 'Every active person has a unique company email.' : undefined}
+                    description={
+                        filter === 'issues' && !search ? 'Every active person has a unique company email.' : filter === 'calendar_problem' && !search ? "Nobody's calendar has a problem." : undefined
+                    }
                 />
             ) : (
-                <TableContainer sx={{ overflowX: 'auto', maxHeight: { xs: 'none', md: 560 } }}>
-                    <Table size="small" stickyHeader sx={{ minWidth: 760 }}>
+                <TableContainer sx={{ overflowX: 'auto', maxHeight: { xs: 'none', md: 600 } }}>
+                    <Table size="small" stickyHeader sx={{ minWidth: 860 }}>
                         <TableHead>
                             <TableRow>
                                 <TableCell sx={headCellSx}>Person</TableCell>
-                                <TableCell sx={headCellSx}>Role</TableCell>
                                 <TableCell sx={headCellSx}>Company email</TableCell>
                                 <TableCell sx={headCellSx}>Email check</TableCell>
                                 <TableCell sx={headCellSx}>Calendar</TableCell>
+                                <TableCell sx={{ ...headCellSx, width: 1 }} aria-label="Actions" />
                             </TableRow>
                         </TableHead>
                         <TableBody>
                             {rows.map((p) => {
                                 const issue = p.emailIssue ? ISSUE_CHIP[p.emailIssue] : null;
+                                const name = p.fullName || p.username;
                                 return (
                                     <TableRow key={p.username} hover>
-                                        <TableCell sx={{ ...cellSx, maxWidth: 240 }}>
-                                            <Typography sx={{ fontSize: '0.82rem', fontWeight: 600, color: 'var(--crm-slate-900)', overflowWrap: 'anywhere' }}>{p.fullName || p.username}</Typography>
+                                        <TableCell sx={{ ...cellSx, maxWidth: 220 }}>
+                                            <Typography sx={{ fontSize: '0.82rem', fontWeight: 600, color: 'var(--crm-slate-900)', overflowWrap: 'anywhere' }}>{name}</Typography>
                                             <Typography sx={{ fontSize: '0.72rem', color: 'var(--mui-palette-text-secondary)', overflowWrap: 'anywhere' }}>
                                                 {p.username}
+                                                {p.role ? ` · ${p.role}` : ''}
                                                 {p.department ? ` · ${p.department}` : ''}
                                             </Typography>
                                         </TableCell>
-                                        <TableCell sx={{ ...cellSx, whiteSpace: 'nowrap' }}>{p.role}</TableCell>
-                                        <TableCell sx={{ ...cellSx, maxWidth: 300 }}>
+                                        <TableCell sx={{ ...cellSx, maxWidth: 280 }}>
                                             <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, minWidth: 0 }}>
                                                 <Typography
-                                                    sx={{
-                                                        fontSize: '0.82rem',
-                                                        color: p.email ? 'var(--crm-slate-900)' : 'var(--mui-palette-text-muted)',
-                                                        overflowWrap: 'anywhere',
-                                                        minWidth: 0,
-                                                        flex: 1,
-                                                    }}
+                                                    sx={{ fontSize: '0.82rem', color: p.email ? 'var(--crm-slate-900)' : 'var(--mui-palette-text-muted)', overflowWrap: 'anywhere', minWidth: 0, flex: 1 }}
                                                 >
                                                     {p.email ?? 'Not set'}
                                                 </Typography>
                                                 <Tooltip title="Edit company email">
-                                                    <IconButton
-                                                        size="small"
-                                                        aria-label={`Edit the company email of ${p.fullName || p.username}`}
-                                                        onClick={() => setEditing(p)}
-                                                        sx={{
-                                                            width: 34,
-                                                            height: 34,
-                                                            flexShrink: 0,
-                                                            borderRadius: '8px',
-                                                            color: 'var(--mui-palette-text-secondary)',
-                                                            transition: 'all 0.15s ease',
-                                                            '&:hover': { backgroundColor: 'var(--mui-palette-primary-soft)', color: 'var(--crm-text-blue-700)' },
-                                                        }}
-                                                    >
+                                                    <IconButton size="small" aria-label={`Edit the company email of ${name}`} onClick={() => setEditing(p)} sx={iconButtonSx}>
                                                         <EditOutlinedIcon sx={{ fontSize: 17 }} />
                                                     </IconButton>
                                                 </Tooltip>
@@ -228,43 +290,20 @@ export function PeopleTable({ companyDomains, onToast }: { companyDomains: strin
                                                 <StatusChip tone="success">OK</StatusChip>
                                             )}
                                         </TableCell>
-                                        <TableCell sx={{ ...cellSx, maxWidth: 300 }}>
-                                            {p.connection ? (
-                                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, minWidth: 0 }}>
-                                                    <Box sx={{ minWidth: 0, flex: 1 }}>
-                                                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, flexWrap: 'wrap' }}>
-                                                            <Typography sx={{ fontSize: '0.78rem', fontWeight: 600, color: 'var(--crm-slate-900)' }}>{PROVIDER_LABELS[p.connection.provider] ?? p.connection.provider}</Typography>
-                                                            <StatusChip tone={(CONNECTION_CHIP[p.connection.status] ?? CONNECTION_CHIP.error).tone} title={p.connection.statusReason ?? undefined}>
-                                                                {(CONNECTION_CHIP[p.connection.status] ?? CONNECTION_CHIP.error).label}
-                                                            </StatusChip>
-                                                        </Box>
-                                                        <Typography sx={{ fontSize: '0.72rem', color: 'var(--mui-palette-text-secondary)', overflowWrap: 'anywhere' }}>
-                                                            {p.connection.accountEmail}
-                                                            {p.connection.accessEndsAt ? ` · access ends ${formatDay(p.connection.accessEndsAt)}` : ''}
-                                                        </Typography>
-                                                    </Box>
-                                                    <Tooltip title="Disconnect calendar">
-                                                        <IconButton
-                                                            size="small"
-                                                            aria-label={`Disconnect the calendar of ${p.fullName || p.username}`}
-                                                            onClick={() => setDisconnecting(p)}
-                                                            sx={{
-                                                                width: 34,
-                                                                height: 34,
-                                                                flexShrink: 0,
-                                                                borderRadius: '8px',
-                                                                color: 'var(--mui-palette-text-secondary)',
-                                                                transition: 'all 0.15s ease',
-                                                                '&:hover': { color: 'var(--mui-palette-error-main)', backgroundColor: 'var(--mui-palette-error-soft)' },
-                                                            }}
-                                                        >
-                                                            <LinkOffRoundedIcon sx={{ fontSize: 17 }} />
-                                                        </IconButton>
-                                                    </Tooltip>
-                                                </Box>
-                                            ) : (
-                                                <StatusChip tone="neutral">Not connected</StatusChip>
-                                            )}
+                                        <TableCell sx={{ ...cellSx, maxWidth: 340 }}>
+                                            <CalendarCell calendar={p.calendar} />
+                                        </TableCell>
+                                        <TableCell sx={{ ...cellSx, whiteSpace: 'nowrap' }}>
+                                            <Button
+                                                size="small"
+                                                variant="outlined"
+                                                startIcon={<EventNoteOutlinedIcon sx={{ fontSize: 16 }} />}
+                                                aria-label={`Calendar settings of ${name}`}
+                                                onClick={() => setChoosing(p.username)}
+                                                sx={{ ...secondaryButtonSx, minHeight: 36 }}
+                                            >
+                                                Calendar…
+                                            </Button>
                                         </TableCell>
                                     </TableRow>
                                 );
@@ -285,33 +324,13 @@ export function PeopleTable({ companyDomains, onToast }: { companyDomains: strin
                 }}
             />
 
-            <CommonActionModal
-                key={disconnecting?.connection?.id ?? 'no-connection'}
-                open={Boolean(disconnecting?.connection)}
-                title="Disconnect calendar"
-                description={
-                    disconnecting?.connection
-                        ? `${disconnecting.fullName || disconnecting.username}'s calendar (${disconnecting.connection.accountEmail}) stops syncing and its sign-in is removed. Events already in their calendar stay. They can connect again.`
-                        : undefined
-                }
-                reasonLabel="Note (optional)"
-                reasonPlaceholder="Why, for the audit log"
-                required={false}
-                confirmLabel="Disconnect"
-                confirmColor="error"
-                loading={disconnect.isPending}
-                onClose={() => setDisconnecting(null)}
-                onConfirm={async (reason) => {
-                    const target = disconnecting;
-                    if (!target?.connection) return;
-                    try {
-                        await disconnect.mutateAsync({ id: target.connection.id, payload: reason.trim() ? { reason: reason.trim().slice(0, 200) } : {} });
-                        setDisconnecting(null);
-                        onToast(`Disconnected the calendar of ${target.fullName || target.username}.`);
-                    } catch (err) {
-                        onToast(errorMessage(err, 'Could not disconnect the calendar.'), 'error');
-                    }
-                }}
+            <CalendarChoiceDialog
+                key={choosing ?? 'none'}
+                person={choosingPerson}
+                providers={providers}
+                fakeProvider={fakeProvider}
+                onClose={() => setChoosing(null)}
+                onToast={onToast}
             />
         </Box>
     );

@@ -7,41 +7,65 @@ import { auditService } from '../../services/audit.service.js';
 import { secretBox, SecretBoxError } from '../../services/secretBox.js';
 import type { AuthUser } from '../../types/user.types.js';
 import { HttpError } from '../../utils/httpError.js';
+import { checkConnection, type CheckOutcome } from '../calendar-sync/calendarAccess.js';
+import { calendarConnectionUserLockKey, isCalendarProvider, type CalendarProvider, type NotSyncedReason } from '../calendar-sync/connection.constants.js';
+import {
+    calendarChoicesByUsername,
+    connectionCountsByProvider,
+    liveConnectionsByUsername,
+    type ConnectionCounts,
+    type PersonCalendarChoiceDto,
+    type PersonConnectionDto,
+} from '../calendar-sync/connection.queries.js';
+import { loadEnrolmentContext, NOT_SYNCED_REASON_FOR, reconcileAllQuietly, reconcileUser, resolveTarget, type EnrolmentContext } from '../calendar-sync/enrolment.js';
+import { isFakeProviderEnabled } from '../calendar-sync/providers/fakeSwitch.js';
+import { parseServiceAccountKey, ServiceAccountKeyError, type ServiceAccountKey } from '../calendar-sync/providers/googleServiceAccount.js';
+import type { FetchImpl } from '../calendar-sync/providers/types.js';
+import { ADMIN_ERROR_MESSAGES, type TokenErrorCode } from '../calendar-sync/syncErrors.js';
+import { tokenSource } from '../calendar-sync/tokenSource.js';
 import { FOLLOWUP_TYPE_CATEGORY_KEY } from '../form-configs/formConfig.defaults.js';
 import { formConfigService, invalidateFormConfigCaches, type FormConfigsPayload } from '../form-configs/formConfig.service.js';
 import { isActivityOnlyFollowupType } from '../shared/followupTypes.js';
 import { acquireLocks, runInTransaction } from '../shared/transactions.js';
 import { duplicateEmailsAmong, emailIssueFor, userEmailService, type UserEmailIssue, type UserEmailRow } from '../users/userEmail.service.js';
-import { connectionCountsByProvider, liveConnectionsByUsername, type ConnectionCounts, type PersonConnectionDto } from '../calendar-sync/connection.queries.js';
 import { CALENDAR_SYNC_META_KEY, calendarSyncFromMeta, type CalendarSyncSettings } from './calendarSyncSettings.js';
 import {
+    DOMAIN_PROVIDERS,
     ENABLEABLE_PROVIDERS,
+    GOOGLE_DWD_SCOPES,
+    GOOGLE_DWD_SCOPES_ADMIN_CONSOLE,
     INTEGRATION_PROVIDERS,
     PROVIDER_KINDS,
     PROVIDER_LABELS,
+    PROVIDERS_WITH_CLIENT_SECRET,
     PROVIDERS_WITH_SECRET_EXPIRY,
     PROVIDERS_WITH_WEBHOOK_SECRET,
     SECRET_EXPIRY_WARNING_DAYS,
-    redirectUriFor,
     webhookUrlsFor,
     type IntegrationProviderKey,
 } from './integration.constants.js';
 import { calendarSettingsFrom, loadCalendarSettings } from './integration.settings.js';
-import { probeProvider, type FetchLike, type TestResult } from './integration.test-connection.js';
+import { notAvailable, notConfigured, testGoogle, testMicrosoft, type TestResult } from './integration.test-connection.js';
 import {
     PROVIDER_SETTINGS_DEFAULTS,
+    PROVIDER_SETTINGS_KEYS,
     peopleQuerySchema,
+    personCalendarBodySchema,
     providerSettingsSchemas,
     saveProviderSchema,
     syncTypesBodySchema,
+    testProviderBodySchema,
     type PeopleQuery,
 } from './integration.validator.js';
 
 /**
- * Admin › API Integrations (Calendar Phase 2, P2-1): the company's OAuth apps for Google Workspace, Microsoft 365 and
- * Zoom (client id, sealed secrets, settings, "Test connection"), the calendar-sync settings, which Followup Types go
- * to calendars, and the People list with company emails. Secrets are write-only: no DTO, log line or audit entry
- * carries one (audits say `secretChanged: true`). Everything is off until an admin switches a provider on.
+ * Admin › API Integrations (Calendar Phase 2, P2-1; admin-managed calendar connections P2-2b): the company's
+ * credentials for Google Workspace (a service account key with domain-wide delegation), Microsoft 365 (an Entra app with
+ * application permissions) and Zoom (sealed secrets, settings, the two-step "Test connection"), the email domains each
+ * calendar provider serves, the calendar-sync settings, which Followup Types go to calendars, and the People list with
+ * company emails, each person's calendar sync and the admin's per-person choice. Secrets are write-only: no DTO, log
+ * line or audit entry carries one (audits say `secretChanged: true` / `serviceAccountKeyChanged: true`). Everything
+ * is off until an admin switches a provider on, which needs a passing app-level test since the last credentials change.
  */
 
 type ProviderRow = Prisma.IntegrationProviderGetPayload<object>;
@@ -52,11 +76,30 @@ interface SecretHint {
     updatedBy: string;
     expiresOn?: string | null;
 }
+/** Google: the facts of the uploaded key (none of them secret; the private key id is shown in full). */
+interface KeyHint {
+    clientEmail: string;
+    clientId: string;
+    projectId: string | null;
+    privateKeyId: string;
+    updatedAt: string;
+    updatedBy: string;
+}
+/** A passing app-level test for these credentials (`version` = clientVersion at the time). */
+interface AppTestHint {
+    ok: boolean;
+    version: number;
+    at: string;
+}
 interface SecretHints {
+    serviceAccountKey?: KeyHint;
     clientSecret?: SecretHint;
     webhookSecret?: SecretHint;
+    appTest?: AppTestHint;
 }
 interface ProviderSecrets {
+    /** Google: the whole key JSON as text. */
+    serviceAccountKey?: string;
     clientSecret?: string;
     webhookSecret?: string;
 }
@@ -73,6 +116,27 @@ export interface SecretSummaryDto {
     expiresSoon: boolean;
 }
 
+/** Google's uploaded service account key, as admins see it (to copy into the Admin console). */
+export interface ServiceAccountSummaryDto {
+    set: boolean;
+    readable: boolean;
+    clientEmail: string | null;
+    /** Numeric client id: paste it into Admin console › Domain-wide delegation. */
+    clientId: string | null;
+    projectId: string | null;
+    privateKeyId: string | null;
+    updatedAt: string | null;
+    updatedBy: string | null;
+}
+
+export interface ProviderHealthDto {
+    status: 'unknown' | 'ok' | 'error';
+    code: string | null;
+    /** The admin sentence for `code`. */
+    message: string | null;
+    at: string | null;
+}
+
 export interface ProviderAdminDto {
     provider: IntegrationProviderKey;
     label: string;
@@ -80,19 +144,31 @@ export interface ProviderAdminDto {
     /** False for Zoom until video meetings ship: credentials can be stored, the switch stays off. */
     available: boolean;
     enabled: boolean;
-    /** Client id and a readable client secret are stored (and, for Microsoft, a tenant). */
+    /** Google: a readable key; Microsoft: client id, readable secret and tenant; Zoom: client id and secret. */
     configured: boolean;
     clientId: string | null;
+    /** Microsoft / Zoom client secret (Google: never set). */
     secret: SecretSummaryDto;
     /** Zoom only. */
     webhookSecret: SecretSummaryDto | null;
+    /** Google only. */
+    serviceAccount: ServiceAccountSummaryDto | null;
+    /** Google only: the delegated scopes, and the exact text for the Admin console's comma-delimited box. */
+    scopes: string[] | null;
+    scopesAdminConsole: string | null;
+    /** Non-secret settings (google { domains }, microsoft { tenantId, domains }). */
     settings: Record<string, unknown>;
-    redirectUri: string | null;
+    /** Company email domains this provider serves (calendar providers; [] otherwise). */
+    domains: string[];
     webhookUrls: string[] | null;
     lastTest: { at: string; ok: boolean; message: string | null } | null;
+    /** A passing app-level test since the last credentials change (needed to switch the provider on). */
+    appTested: boolean;
     clientVersion: number;
-    /** Employees' live connections by status. */
-    counts: { active: number; reauth: number; error: number };
+    /** App-level health found while syncing. */
+    health: ProviderHealthDto;
+    /** People's live rows by status, and people excluded from this provider. */
+    counts: ConnectionCounts;
     updatedAt: string | null;
     updatedBy: string | null;
 }
@@ -108,7 +184,7 @@ export interface SyncTypeDto {
 export type KeyStatus = 'ok' | 'missing' | 'unreadable';
 
 export interface IntegrationsAdminDto {
-    ready: { ok: boolean; reason: 'key_missing' | 'public_url_missing' | null };
+    ready: { ok: boolean; reason: 'key_missing' | null };
     keyStatus: KeyStatus;
     activeKeyId: string | null;
     publicApiUrl: string | null;
@@ -116,11 +192,24 @@ export interface IntegrationsAdminDto {
     publicApiUrlConfigured: boolean;
     /** Calendar webhooks are live (Calendar Phase 2 P2-7, needs https); false until then. */
     webhooksActive: boolean;
+    /** The dev-only test calendar provider is on (CALENDAR_FAKE_PROVIDER): People may pick "Test (dev)". */
+    fakeProvider: boolean;
     /** The calendar sync worker's last heartbeat (P2-3); null until then. */
     worker: { lastSeenAt: string } | null;
     providers: ProviderAdminDto[];
     settings: CalendarSyncSettings;
     syncTypes: SyncTypeDto[];
+}
+
+/** A person's calendar sync on the People table. */
+export interface PersonCalendarDto {
+    /** The provider and mailbox the rules pick now (null = not synced, see `reason`). */
+    target: { provider: CalendarProvider; email: string; source: 'domain' | 'override' } | null;
+    reason: NotSyncedReason | null;
+    /** The live row (pending / ok / error); null until enrolment ran, or when not synced. */
+    connection: PersonConnectionDto | null;
+    /** The admin's choice (CalendarSyncUser); null = all defaults. */
+    choice: PersonCalendarChoiceDto | null;
 }
 
 export interface PersonDto {
@@ -130,8 +219,7 @@ export interface PersonDto {
     role: string;
     email: string | null;
     emailIssue: UserEmailIssue | null;
-    /** The person's live calendar connection (active, reauth_required or error); null when not connected. */
-    connection: PersonConnectionDto | null;
+    calendar: PersonCalendarDto;
 }
 
 export interface TestConnectionDto extends TestResult {
@@ -140,6 +228,8 @@ export interface TestConnectionDto extends TestResult {
 
 const SECRETS_AAD = (provider: IntegrationProviderKey) => `IntegrationProvider:${provider}:secrets`;
 const TASK_NOTE_LOCK_REASON = 'Tasks and notes never go to calendars.';
+/** Serializes provider saves that touch domain lists (a domain may belong to only one provider). */
+const DOMAINS_LOCK = 'integration-provider:domains';
 
 const notReady = () =>
     new HttpError(
@@ -170,10 +260,15 @@ function openSecrets(row: Pick<ProviderRow, 'provider' | 'secretsEnc'> | null): 
     }
 }
 
-const providerSettings = (provider: IntegrationProviderKey, row: Pick<ProviderRow, 'settingsJson'> | null): Record<string, unknown> => ({
-    ...PROVIDER_SETTINGS_DEFAULTS[provider],
-    ...parseJson<Record<string, unknown>>(row?.settingsJson, {}),
-});
+/** Defaults + the stored keys this provider still uses (P2-2's scopeProfile / pkce are dropped). */
+const providerSettings = (provider: IntegrationProviderKey, row: Pick<ProviderRow, 'settingsJson'> | null): Record<string, unknown> => {
+    const stored = parseJson<Record<string, unknown>>(row?.settingsJson, {});
+    const kept = Object.fromEntries(Object.entries(stored).filter(([key]) => PROVIDER_SETTINGS_KEYS[provider].includes(key)));
+    return { ...PROVIDER_SETTINGS_DEFAULTS[provider], ...kept };
+};
+
+const domainsIn = (settings: Record<string, unknown>): string[] =>
+    Array.isArray(settings.domains) ? settings.domains.filter((d): d is string => typeof d === 'string').map((d) => d.toLowerCase()) : [];
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -196,19 +291,49 @@ function secretSummary(hint: SecretHint | undefined, stored: boolean, readable: 
     };
 }
 
-/** Whether a provider has what Connect needs: a client id, a readable client secret, and Microsoft's tenant. */
+function serviceAccountSummary(hint: KeyHint | undefined, stored: boolean, readable: boolean): ServiceAccountSummaryDto {
+    return {
+        set: stored && Boolean(hint),
+        readable: !stored || readable,
+        clientEmail: hint?.clientEmail ?? null,
+        clientId: hint?.clientId ?? null,
+        projectId: hint?.projectId ?? null,
+        privateKeyId: hint?.privateKeyId ?? null,
+        updatedAt: hint?.updatedAt ?? null,
+        updatedBy: hint?.updatedBy ?? null,
+    };
+}
+
+/** Whether a provider's credentials are complete and readable. */
 function isConfigured(provider: IntegrationProviderKey, clientId: string | null, secrets: ProviderSecrets, readable: boolean, settings: Record<string, unknown>): boolean {
-    if (!clientId || !readable || !secrets.clientSecret) return false;
+    if (!clientId || !readable) return false;
+    if (provider === 'google') return Boolean(secrets.serviceAccountKey);
+    if (!secrets.clientSecret) return false;
     if (provider === 'microsoft' && !settings.tenantId) return false;
     return true;
 }
+
+const appTestedFor = (hints: SecretHints, clientVersion: number) => Boolean(hints.appTest?.ok && hints.appTest.version === clientVersion);
+
+const healthOf = (row: ProviderRow | null): ProviderHealthDto => {
+    const status = row?.healthStatus === 'ok' || row?.healthStatus === 'error' ? row.healthStatus : 'unknown';
+    const code = status === 'error' ? (row?.healthCode ?? null) : null;
+    return {
+        status,
+        code,
+        message: code ? (ADMIN_ERROR_MESSAGES[code as TokenErrorCode] ?? ADMIN_ERROR_MESSAGES.provider_error) : null,
+        at: row?.healthAt ? row.healthAt.toISOString() : null,
+    };
+};
+
+const EMPTY_COUNTS: ConnectionCounts = { ok: 0, pending: 0, error: 0, excluded: 0 };
 
 export function toProviderDto(provider: IntegrationProviderKey, row: ProviderRow | null, now: Date = new Date(), counts?: ConnectionCounts): ProviderAdminDto {
     const { secrets, readable } = openSecrets(row);
     const hints = parseJson<SecretHints>(row?.secretHintsJson, {});
     const settings = providerSettings(provider, row);
     const stored = Boolean(row?.secretsEnc);
-    const publicApiUrl = ENV.INTEGRATIONS.PUBLIC_API_URL;
+    const clientVersion = row?.clientVersion ?? 1;
     return {
         provider,
         label: PROVIDER_LABELS[provider],
@@ -217,14 +342,19 @@ export function toProviderDto(provider: IntegrationProviderKey, row: ProviderRow
         enabled: Boolean(row?.enabled),
         configured: isConfigured(provider, row?.clientId ?? null, secrets, readable, settings),
         clientId: row?.clientId ?? null,
-        secret: secretSummary(hints.clientSecret, stored, readable, now),
+        secret: secretSummary(PROVIDERS_WITH_CLIENT_SECRET.has(provider) ? hints.clientSecret : undefined, stored, readable, now),
         webhookSecret: PROVIDERS_WITH_WEBHOOK_SECRET.has(provider) ? secretSummary(hints.webhookSecret, stored && Boolean(hints.webhookSecret), readable, now) : null,
+        serviceAccount: provider === 'google' ? serviceAccountSummary(hints.serviceAccountKey, stored, readable) : null,
+        scopes: provider === 'google' ? [...GOOGLE_DWD_SCOPES] : null,
+        scopesAdminConsole: provider === 'google' ? GOOGLE_DWD_SCOPES_ADMIN_CONSOLE : null,
         settings,
-        redirectUri: redirectUriFor(provider, publicApiUrl),
-        webhookUrls: webhookUrlsFor(provider, publicApiUrl),
+        domains: DOMAIN_PROVIDERS.has(provider) ? domainsIn(settings) : [],
+        webhookUrls: webhookUrlsFor(provider, ENV.INTEGRATIONS.PUBLIC_API_URL),
         lastTest: row?.lastTestAt ? { at: row.lastTestAt.toISOString(), ok: Boolean(row.lastTestOk), message: row.lastTestMessage } : null,
-        clientVersion: row?.clientVersion ?? 1,
-        counts: counts ?? { active: 0, reauth: 0, error: 0 },
+        appTested: appTestedFor(hints, clientVersion),
+        clientVersion,
+        health: healthOf(row),
+        counts: counts ?? { ...EMPTY_COUNTS },
         updatedAt: row ? row.updatedAt.toISOString() : null,
         updatedBy: row?.updatedBy ?? null,
     };
@@ -241,7 +371,7 @@ export function syncTypesFrom(configs: Pick<FormConfigsPayload, 'categories'>): 
         });
 }
 
-// ── Credentials for the calendar connect flow (P2-2): in-process cache, dropped on every save ──────────────────
+// ── Credentials for calendar sync (tokenSource.ts): in-process cache, dropped on every save ────────────────────
 
 export interface ProviderCredentials {
     provider: IntegrationProviderKey;
@@ -250,26 +380,31 @@ export interface ProviderCredentials {
     clientId: string | null;
     clientSecret: string | null;
     webhookSecret: string | null;
+    /** Google: the service account key JSON text (parsed by calendar-sync/providers/registry.ts). */
+    serviceAccountKey: string | null;
     settings: Record<string, unknown>;
     clientVersion: number;
+    healthStatus: 'unknown' | 'ok' | 'error';
+    healthCode: string | null;
 }
 
 const CREDENTIALS_TTL_MS = 60_000;
 const credentialsCache = new Map<IntegrationProviderKey, { at: number; value: ProviderCredentials }>();
 
 /** Forgets cached credentials (a save in this process; other processes see it within 60 s). */
-export function dropProviderCredentialsCache(provider?: IntegrationProviderKey): void {
-    if (provider) credentialsCache.delete(provider);
+export function dropProviderCredentialsCache(provider?: IntegrationProviderKey | string): void {
+    if (provider) credentialsCache.delete(provider as IntegrationProviderKey);
     else credentialsCache.clear();
 }
 
-/** A provider's decrypted credentials for OAuth / token calls, cached for 60 s in this process. Never logged. */
+/** A provider's decrypted credentials for token calls, cached for 60 s in this process. Never logged. */
 export async function loadProviderCredentials(provider: IntegrationProviderKey, now: number = Date.now()): Promise<ProviderCredentials> {
     const cached = credentialsCache.get(provider);
     if (cached && now - cached.at < CREDENTIALS_TTL_MS) return cached.value;
     const row = await prisma.integrationProvider.findUnique({ where: { provider } });
     const { secrets, readable } = openSecrets(row);
     const settings = providerSettings(provider, row);
+    const health = healthOf(row);
     const value: ProviderCredentials = {
         provider,
         enabled: Boolean(row?.enabled) && ENABLEABLE_PROVIDERS.has(provider),
@@ -277,8 +412,11 @@ export async function loadProviderCredentials(provider: IntegrationProviderKey, 
         clientId: row?.clientId ?? null,
         clientSecret: secrets.clientSecret ?? null,
         webhookSecret: secrets.webhookSecret ?? null,
+        serviceAccountKey: secrets.serviceAccountKey ?? null,
         settings,
         clientVersion: row?.clientVersion ?? 1,
+        healthStatus: health.status,
+        healthCode: health.code,
     };
     credentialsCache.set(provider, { at: now, value });
     return value;
@@ -293,6 +431,8 @@ const auditSnapshot = (provider: IntegrationProviderKey, row: ProviderRow | null
         clientId: row?.clientId ?? null,
         settings: providerSettings(provider, row),
         clientSecretExpiresOn: hints.clientSecret?.expiresOn ?? null,
+        // Google: which key is in use (the id is not secret; the key itself never reaches an audit entry).
+        serviceAccountKeyId: hints.serviceAccountKey?.privateKeyId ?? null,
         clientVersion: row?.clientVersion ?? 1,
     };
 };
@@ -304,23 +444,63 @@ const hintFor = (secret: string, user: AuthUser, now: Date, expiresOn: string | 
     expiresOn,
 });
 
+const keyHintFor = (key: ServiceAccountKey, user: AuthUser, now: Date): KeyHint => ({
+    clientEmail: key.clientEmail,
+    clientId: key.clientId,
+    projectId: key.projectId,
+    privateKeyId: key.privateKeyId,
+    updatedAt: now.toISOString(),
+    updatedBy: user.username,
+});
+
 const conflict = (message: string, code: string, path?: string[]) =>
     new HttpError(message, StatusCodes.CONFLICT, { code, errors: path ? [{ message, path }] : undefined });
+
+const badField = (message: string, path: string[]) => new HttpError(message, StatusCodes.BAD_REQUEST, { code: 'VALIDATION_ERROR', errors: [{ message, path }] });
+
+/**
+ * The domains rule (addendum §3.2): each provider domain must be a company domain (400), and no domain may be in two
+ * providers' lists (409 DOMAIN_IN_USE). Pure.
+ */
+export function assertProviderDomains(provider: IntegrationProviderKey, domains: readonly string[], companyDomains: readonly string[], others: { provider: IntegrationProviderKey; domains: readonly string[] }[]): void {
+    const company = new Set(companyDomains.map((d) => d.toLowerCase()));
+    for (const domain of domains) {
+        if (!company.has(domain)) throw badField(`Add ${domain} to the company domains first.`, ['settings', 'domains']);
+        const owner = others.find((o) => o.provider !== provider && o.domains.includes(domain));
+        if (owner) throw conflict(`${domain} is already served by ${PROVIDER_LABELS[owner.provider]}. Remove it there first.`, 'DOMAIN_IN_USE', ['settings', 'domains']);
+    }
+}
+
+/** Every provider row's domain list (for the domains rule). */
+async function providerDomainLists(client: Pick<typeof prisma, 'integrationProvider'>): Promise<{ provider: IntegrationProviderKey; domains: string[] }[]> {
+    const rows = await client.integrationProvider.findMany();
+    return rows
+        .filter((row) => DOMAIN_PROVIDERS.has(row.provider as IntegrationProviderKey))
+        .map((row) => ({ provider: row.provider as IntegrationProviderKey, domains: domainsIn(providerSettings(row.provider as IntegrationProviderKey, row)) }));
+}
+
+/** After a provider changed: drop its grants everywhere in this process and enrol / stop people accordingly. */
+async function afterProviderChange(provider: IntegrationProviderKey, user: AuthUser): Promise<void> {
+    dropProviderCredentialsCache(provider);
+    if (isCalendarProvider(provider)) tokenSource.invalidate(provider);
+    if (DOMAIN_PROVIDERS.has(provider)) await reconcileAllQuietly('provider_saved', { actor: user.username });
+}
 
 export const integrationService = {
     async getAdmin(now: Date = new Date()): Promise<IntegrationsAdminDto> {
         const [rows, configs, counts] = await Promise.all([prisma.integrationProvider.findMany(), formConfigService.getAllConfigs(), connectionCountsByProvider()]);
         const byProvider = new Map(rows.map((row) => [row.provider, row]));
         const providers = INTEGRATION_PROVIDERS.map((p) => toProviderDto(p, byProvider.get(p) ?? null, now, counts.get(p)));
-        const anyUnreadable = providers.some((p) => !p.secret.readable);
-        const { READY_REASON, ACTIVE_KEY_ID, PUBLIC_API_URL, PUBLIC_API_URL_CONFIGURED } = ENV.INTEGRATIONS;
+        const anyUnreadable = providers.some((p) => !p.secret.readable || (p.serviceAccount && !p.serviceAccount.readable));
+        const { KEY_CONFIGURED, ACTIVE_KEY_ID, PUBLIC_API_URL, PUBLIC_API_URL_CONFIGURED } = ENV.INTEGRATIONS;
         return {
-            ready: { ok: READY_REASON === null, reason: READY_REASON },
+            ready: { ok: KEY_CONFIGURED, reason: KEY_CONFIGURED ? null : 'key_missing' },
             keyStatus: !secretBox.ready() ? 'missing' : anyUnreadable ? 'unreadable' : 'ok',
             activeKeyId: ACTIVE_KEY_ID,
             publicApiUrl: PUBLIC_API_URL,
             publicApiUrlConfigured: PUBLIC_API_URL_CONFIGURED,
             webhooksActive: false,
+            fakeProvider: isFakeProviderEnabled(),
             worker: null,
             providers,
             settings: calendarSettingsFrom(configs),
@@ -329,15 +509,24 @@ export const integrationService = {
     },
 
     async getProvider(provider: IntegrationProviderKey): Promise<ProviderAdminDto> {
-        return toProviderDto(provider, await prisma.integrationProvider.findUnique({ where: { provider } }));
+        const [row, counts] = await Promise.all([prisma.integrationProvider.findUnique({ where: { provider } }), connectionCountsByProvider()]);
+        return toProviderDto(provider, row, new Date(), counts.get(provider));
     },
 
     /**
-     * Saves a provider (partial). Secrets: write-only, an omitted one is kept, a new one needs the encryption key
-     * (503 INTEGRATIONS_NOT_READY). Enabling needs a client id + readable secret (409 INTEGRATION_NOT_CONFIGURED) and,
-     * for Microsoft, a tenant; Zoom can't be enabled yet (409 INTEGRATION_NOT_AVAILABLE). A changed client id or
-     * Microsoft tenant bumps `clientVersion` (connections made with the old app must reconnect) and clears the last
-     * test result. Audited as `IntegrationProvider CREATE / UPDATE` with `secretChanged: true`, never a value.
+     * Saves a provider (partial). Secrets are write-only: an omitted one is kept, a new one needs the encryption key
+     * (503 INTEGRATIONS_NOT_READY).
+     *   - Google: `serviceAccountKey` (the key file's text; 400 VALIDATION_ERROR when it isn't a usable service account
+     *     key). Its numeric client id becomes `clientId` (a typed client id is refused).
+     *   - Microsoft: `clientId`, `clientSecret`, `clientSecretExpiresOn`, `settings.tenantId` (required to enable).
+     *   - `settings.domains` (calendar providers): each a company domain (400) and served by one provider only (409
+     *     DOMAIN_IN_USE).
+     * Any credentials change (key, client id, secret, tenant) bumps `clientVersion` (cached tokens of the old
+     * credentials are never used again) and clears the last test and the health. Switching on needs complete
+     * credentials (409 INTEGRATION_NOT_CONFIGURED) and a passing app-level test since the last credentials change (409
+     * INTEGRATION_NOT_TESTED); Zoom can't be switched on yet (409 INTEGRATION_NOT_AVAILABLE). Audited
+     * `IntegrationProvider CREATE / UPDATE` with `secretChanged` / `serviceAccountKeyChanged: true`, never a value.
+     * After the commit, people are enrolled or stopped to match (reconcileAll).
      */
     async saveProvider(provider: IntegrationProviderKey, body: unknown, user: AuthUser, now: Date = new Date()): Promise<ProviderAdminDto> {
         const input = saveProviderSchema.parse(body);
@@ -348,23 +537,48 @@ export const integrationService = {
         if (input.clientSecretExpiresOn !== undefined && !PROVIDERS_WITH_SECRET_EXPIRY.has(provider)) {
             throw HttpError.badRequest(`${PROVIDER_LABELS[provider]} secrets have no expiry date.`, [{ message: 'Not used by this provider.', path: ['clientSecretExpiresOn'] }]);
         }
-        const newSecret = input.clientSecret !== undefined || input.webhookSecret !== undefined;
+        if (input.clientSecret !== undefined && !PROVIDERS_WITH_CLIENT_SECRET.has(provider)) {
+            throw HttpError.badRequest(`${PROVIDER_LABELS[provider]} uses a service account key, not a client secret.`, [{ message: 'Upload the service account key instead.', path: ['clientSecret'] }]);
+        }
+        if (input.serviceAccountKey !== undefined && provider !== 'google') {
+            throw HttpError.badRequest(`${PROVIDER_LABELS[provider]} has no service account key.`, [{ message: 'Not used by this provider.', path: ['serviceAccountKey'] }]);
+        }
+        if (input.clientId !== undefined && provider === 'google') {
+            throw HttpError.badRequest("Google's client ID comes from the service account key.", [{ message: 'Upload the key instead.', path: ['clientId'] }]);
+        }
+        let newKey: ServiceAccountKey | null = null;
+        if (input.serviceAccountKey !== undefined) {
+            try {
+                newKey = parseServiceAccountKey(input.serviceAccountKey);
+            } catch (err) {
+                if (err instanceof ServiceAccountKeyError) throw badField(err.message, ['serviceAccountKey']);
+                throw err;
+            }
+        }
+        const newSecret = input.clientSecret !== undefined || input.webhookSecret !== undefined || newKey !== null;
         if (newSecret && !secretBox.ready()) throw notReady();
+        const domainsTouched = settingsPatch.domains !== undefined;
+        const companyDomains = domainsTouched ? (await loadCalendarSettings()).companyDomains : [];
 
-        const after = await runInTransaction(async (tx) => {
-            await acquireLocks(tx, [`integration-provider:${provider}`]);
+        const { before, after } = await runInTransaction(async (tx) => {
+            await acquireLocks(tx, [`integration-provider:${provider}`, domainsTouched ? DOMAINS_LOCK : null]);
             const before = await tx.integrationProvider.findUnique({ where: { provider } });
             const opened = openSecrets(before);
             const hints = parseJson<SecretHints>(before?.secretHintsJson, {});
             const beforeSettings = providerSettings(provider, before);
             const settings: Record<string, unknown> = { ...beforeSettings, ...settingsPatch };
-            const clientId = input.clientId !== undefined ? input.clientId : (before?.clientId ?? null);
+            if (domainsTouched) assertProviderDomains(provider, domainsIn(settings), companyDomains, await providerDomainLists(tx));
+            const clientId = newKey ? newKey.clientId : input.clientId !== undefined ? input.clientId : (before?.clientId ?? null);
 
             // Secrets that can't be opened any more stay as they are until a new one is entered (a key mix-up between
             // processes must not wipe them); a new secret then replaces the whole sealed set.
             const replaceUnreadable = !opened.readable && newSecret;
             const secrets: ProviderSecrets = opened.readable ? { ...opened.secrets } : {};
             const nextHints: SecretHints = replaceUnreadable ? {} : { ...hints };
+            if (newKey) {
+                secrets.serviceAccountKey = input.serviceAccountKey;
+                nextHints.serviceAccountKey = keyHintFor(newKey, user, now);
+            }
             if (input.clientSecret !== undefined) {
                 secrets.clientSecret = input.clientSecret;
                 nextHints.clientSecret = hintFor(input.clientSecret, user, now, input.clientSecretExpiresOn ?? null);
@@ -376,33 +590,37 @@ export const integrationService = {
                 nextHints.webhookSecret = hintFor(input.webhookSecret, user, now);
             }
 
+            const credentialsChanged =
+                newKey !== null || input.clientSecret !== undefined || clientId !== (before?.clientId ?? null) || (settings.tenantId ?? null) !== (beforeSettings.tenantId ?? null);
+            const clientVersion = (before?.clientVersion ?? 1) + (credentialsChanged && before ? 1 : 0);
+            if (credentialsChanged) delete nextHints.appTest;
+
             const enabled = input.enabled ?? Boolean(before?.enabled);
-            if (enabled && !before?.enabled) {
-                if (!ENABLEABLE_PROVIDERS.has(provider)) {
-                    throw conflict(`${PROVIDER_LABELS[provider]} can be switched on when video meetings arrive (Phase 3). Its credentials are stored.`, 'INTEGRATION_NOT_AVAILABLE', ['enabled']);
-                }
+            if (enabled && !before?.enabled && !ENABLEABLE_PROVIDERS.has(provider)) {
+                throw conflict(`${PROVIDER_LABELS[provider]} can be switched on when video meetings arrive (Phase 3). Its credentials are stored.`, 'INTEGRATION_NOT_AVAILABLE', ['enabled']);
             }
             if (enabled) {
                 const readable = opened.readable || newSecret;
-                if (!clientId || !secrets.clientSecret || !readable) {
+                if (!isConfigured(provider, clientId, secrets, readable, settings)) {
+                    if (provider === 'microsoft' && clientId && secrets.clientSecret && readable && !settings.tenantId) {
+                        throw badField('Enter the Tenant ID before switching Microsoft 365 on.', ['settings', 'tenantId']);
+                    }
+                    const unreadable = !readable || (hints.clientSecret && !secrets.clientSecret) || (hints.serviceAccountKey && !secrets.serviceAccountKey);
                     throw conflict(
-                        !readable || (hints.clientSecret && !secrets.clientSecret)
-                            ? 'The stored client secret can\'t be read with the current key. Enter it again, then switch the provider on.'
-                            : 'Enter the client ID and client secret before switching the provider on.',
+                        unreadable
+                            ? "The stored credentials can't be read with the current key. Enter them again, then switch the provider on."
+                            : provider === 'google'
+                              ? 'Upload the service account key before switching Google Workspace on.'
+                              : 'Enter the client ID and client secret before switching the provider on.',
                         'INTEGRATION_NOT_CONFIGURED',
                         ['enabled'],
                     );
                 }
-                if (provider === 'microsoft' && !settings.tenantId) {
-                    const message = 'Enter the Tenant ID before switching Microsoft 365 on.';
-                    throw new HttpError(message, StatusCodes.BAD_REQUEST, { code: 'VALIDATION_ERROR', errors: [{ message, path: ['settings', 'tenantId'] }] });
+                if (!before?.enabled && ENABLEABLE_PROVIDERS.has(provider) && !appTestedFor(nextHints, clientVersion)) {
+                    throw conflict('Run "Test connection" with these credentials first. The provider can be switched on once the app check passes.', 'INTEGRATION_NOT_TESTED', ['enabled']);
                 }
             }
 
-            const appChanged =
-                (Boolean(before?.clientId) && clientId !== before?.clientId) ||
-                (provider === 'microsoft' && Boolean(beforeSettings.tenantId) && settings.tenantId !== beforeSettings.tenantId);
-            const credentialsChanged = appChanged || input.clientSecret !== undefined || clientId !== (before?.clientId ?? null) || settings.tenantId !== beforeSettings.tenantId;
             const secretsEnc = newSecret ? secretBox.seal(JSON.stringify(secrets), SECRETS_AAD(provider)) : (before?.secretsEnc ?? null);
             const data = {
                 enabled,
@@ -411,8 +629,8 @@ export const integrationService = {
                 keyId: secretsEnc === (before?.secretsEnc ?? null) ? (before?.keyId ?? null) : secretsEnc ? secretBox.activeKid() : null,
                 secretHintsJson: Object.keys(nextHints).length > 0 ? JSON.stringify(nextHints) : null,
                 settingsJson: JSON.stringify(settings),
-                clientVersion: (before?.clientVersion ?? 1) + (appChanged ? 1 : 0),
-                ...(credentialsChanged ? { lastTestAt: null, lastTestOk: null, lastTestMessage: null } : {}),
+                clientVersion,
+                ...(credentialsChanged ? { lastTestAt: null, lastTestOk: null, lastTestMessage: null, healthStatus: 'unknown', healthCode: null, healthAt: null } : {}),
                 updatedBy: user.username,
             };
             const row = await tx.integrationProvider.upsert({ where: { provider }, create: { provider, ...data }, update: data });
@@ -425,24 +643,42 @@ export const integrationService = {
             }
             if (input.clientSecret !== undefined) changes.secretChanged = true;
             if (input.webhookSecret !== undefined) changes.webhookSecretChanged = true;
+            if (newKey) changes.serviceAccountKeyChanged = true;
             if (Object.keys(changes).length > 0) {
                 await auditService.record(tx, { entityType: 'IntegrationProvider', entityId: provider, action: before ? 'UPDATE' : 'CREATE', changedBy: user.username, changes });
             }
-            return row;
+            return { before, after: row };
         });
-        dropProviderCredentialsCache(provider);
-        return toProviderDto(provider, after, now);
+        const wasLive = Boolean(before?.enabled);
+        const affectsPeople = wasLive !== after.enabled || domainsTouched || (after.enabled && after.clientVersion !== (before?.clientVersion ?? 1));
+        if (affectsPeople) await afterProviderChange(provider, user);
+        else dropProviderCredentialsCache(provider);
+        return integrationService.getProvider(provider);
     },
 
-    /** Removes the stored secrets and switches the provider off (connections stay; they pause with the provider). */
+    /** Removes the stored secrets (Google: the key) and switches the provider off; live rows stop (`provider_removed`). */
     async clearSecret(provider: IntegrationProviderKey, user: AuthUser): Promise<ProviderAdminDto> {
-        const after = await runInTransaction(async (tx) => {
+        await runInTransaction(async (tx) => {
             await acquireLocks(tx, [`integration-provider:${provider}`]);
             const before = await tx.integrationProvider.findUnique({ where: { provider } });
             if (!before || (!before.secretsEnc && !before.secretHintsJson && !before.enabled)) return before;
             const row = await tx.integrationProvider.update({
                 where: { provider },
-                data: { enabled: false, secretsEnc: null, keyId: null, secretHintsJson: null, lastTestAt: null, lastTestOk: null, lastTestMessage: null, updatedBy: user.username },
+                data: {
+                    enabled: false,
+                    secretsEnc: null,
+                    keyId: null,
+                    secretHintsJson: null,
+                    ...(provider === 'google' ? { clientId: null } : {}),
+                    clientVersion: before.clientVersion + 1,
+                    lastTestAt: null,
+                    lastTestOk: null,
+                    lastTestMessage: null,
+                    healthStatus: 'unknown',
+                    healthCode: null,
+                    healthAt: null,
+                    updatedBy: user.username,
+                },
             });
             await auditService.record(tx, {
                 entityType: 'IntegrationProvider',
@@ -453,48 +689,78 @@ export const integrationService = {
             });
             return row;
         });
-        dropProviderCredentialsCache(provider);
-        return toProviderDto(provider, after);
+        await afterProviderChange(provider, user);
+        return integrationService.getProvider(provider);
     },
 
     /**
-     * "Test connection" with the saved credentials; the result is stored on the row (not audited: no setting changes)
-     * unless the credentials changed while the probe ran, which answers `credentials_changed` instead.
+     * "Test connection" with the saved credentials (two steps, see integration.test-connection.ts). `asUsername`
+     * also tries that person's calendar as them. The result is stored on the row (not audited: no setting changes),
+     * and a passing app-level step is remembered for these credentials (needed to switch on), unless the credentials
+     * changed while the probe ran, which answers `credentials_changed` instead.
      */
-    async testProvider(provider: IntegrationProviderKey, fetchImpl: FetchLike = fetch as unknown as FetchLike, now: Date = new Date()): Promise<TestConnectionDto> {
+    async testProvider(provider: IntegrationProviderKey, body: unknown = {}, fetchImpl: FetchImpl = (input, init) => fetch(input, init), now: Date = new Date()): Promise<TestConnectionDto> {
+        const { asUsername } = testProviderBodySchema.parse(body);
         const row = await prisma.integrationProvider.findUnique({ where: { provider } });
         if (row?.secretsEnc && !secretBox.ready()) throw notReady();
         const { secrets, readable } = openSecrets(row);
         const settings = providerSettings(provider, row);
-        let result: TestResult;
-        if (!readable) {
-            result = { ok: false, code: 'not_configured', message: "The stored client secret can't be read with the current key. Enter it again and save." };
-        } else if (!row?.clientId || !secrets.clientSecret) {
-            result = { ok: false, code: 'not_configured', message: 'Save a client ID and client secret first.' };
-        } else {
-            result = await probeProvider(
-                provider,
-                {
-                    clientId: row.clientId,
-                    clientSecret: secrets.clientSecret,
-                    redirectUri: redirectUriFor(provider, ENV.INTEGRATIONS.PUBLIC_API_URL),
-                    tenantId: typeof settings.tenantId === 'string' ? settings.tenantId : null,
-                },
-                fetchImpl,
-            );
+        let subject: { username: string; email: string | null } | null = null;
+        if (asUsername) {
+            const person = await prisma.user.findUnique({ where: { username: asUsername }, select: { username: true, email: true } });
+            if (!person) throw HttpError.notFound(`User '${asUsername}' not found.`);
+            subject = person;
         }
+
+        let result: TestResult;
+        if (!ENABLEABLE_PROVIDERS.has(provider)) {
+            result = notAvailable(provider);
+        } else if (!readable) {
+            result = notConfigured("The stored credentials can't be read with the current key. Enter them again and save.");
+        } else if (provider === 'google') {
+            let key: ServiceAccountKey | null = null;
+            try {
+                key = secrets.serviceAccountKey ? parseServiceAccountKey(secrets.serviceAccountKey) : null;
+            } catch {
+                key = null;
+            }
+            result = key ? await testGoogle(key, subject, fetchImpl, now) : notConfigured('Upload the service account key and save first.');
+        } else if (!row?.clientId || !secrets.clientSecret) {
+            result = notConfigured('Save a client ID and client secret first.');
+        } else if (typeof settings.tenantId !== 'string' || !settings.tenantId) {
+            result = notConfigured('Enter the Tenant ID and save first.');
+        } else {
+            result = await testMicrosoft({ clientId: row.clientId, clientSecret: secrets.clientSecret, tenantId: settings.tenantId }, subject, fetchImpl, now);
+        }
+
         if (row && result.code !== 'not_available') {
+            const appStep = result.steps.find((s) => s.step === 'app');
+            const hints = parseJson<SecretHints>(row.secretHintsJson, {});
+            const nextHints: SecretHints = { ...hints };
+            if (appStep?.ok) nextHints.appTest = { ok: true, version: row.clientVersion, at: now.toISOString() };
+            else delete nextHints.appTest;
             // Only stored while the tested credentials are still the saved ones: a save (or secret removal) during the
             // probe clears lastTest*, and this result must not paint a pass / fail on credentials it never tried.
             const { count } = await prisma.integrationProvider.updateMany({
                 where: { provider, clientId: row.clientId, secretsEnc: row.secretsEnc, clientVersion: row.clientVersion },
-                data: { lastTestAt: now, lastTestOk: result.ok, lastTestMessage: result.message.slice(0, 300) },
+                data: {
+                    lastTestAt: now,
+                    lastTestOk: result.ok,
+                    lastTestMessage: result.message.slice(0, 300),
+                    secretHintsJson: Object.keys(nextHints).length > 0 ? JSON.stringify(nextHints) : null,
+                    // A passing app step clears an app-level health problem; the user step says nothing about the app.
+                    ...(appStep?.ok && row.healthStatus === 'error' ? { healthStatus: 'ok', healthCode: null, healthAt: now } : {}),
+                },
             });
             if (count === 0) {
-                result = { ok: false, code: 'credentials_changed', message: 'The credentials were changed while this test ran. Run the test again.' };
+                const message = 'The credentials were changed while this test ran. Run the test again.';
+                result = { ok: false, code: 'credentials_changed', message, steps: [{ step: 'app', ok: false, code: 'credentials_changed', message }] };
+            } else {
+                dropProviderCredentialsCache(provider);
+                if (appStep?.ok && isCalendarProvider(provider)) tokenSource.invalidate(provider);
             }
         }
-        logger.info({ provider, ok: result.ok, code: result.code }, 'Integration test connection');
+        logger.info({ provider, ok: result.ok, code: result.code, steps: result.steps.map((s) => `${s.step}:${s.code}`) }, 'Integration test connection');
         return { ...result, testedAt: now.toISOString() };
     },
 
@@ -534,28 +800,102 @@ export const integrationService = {
         return integrationService.getSyncTypes();
     },
 
-    /** Active, non-group users (the population of the email rule) with their email issue and connection. */
+    /** Active, non-group users (the population of the email rule and of calendar sync) with their email issue and calendar. */
     async listPeople(query: unknown = {}): Promise<PersonDto[]> {
         const { search, issue } = peopleQuerySchema.parse(query ?? {}) as PeopleQuery;
-        const [users, settings, connections] = await Promise.all([userEmailService.listForEmailRule(), loadCalendarSettings(), liveConnectionsByUsername()]);
-        return peopleFrom(users, settings.companyDomains, { search, issue }, connections);
+        const [users, context, connections, choices] = await Promise.all([userEmailService.listForEmailRule(), loadEnrolmentContext(), liveConnectionsByUsername(), calendarChoicesByUsername()]);
+        return peopleFrom(users, context.companyDomains, { search, issue }, { connections, choices, context });
     },
 
-    /** Sets a person's company email through the users email service (the one rule for Users.email). */
+    /** Sets a person's company email through the users email service (the one rule for Users.email; it also moves their calendar sync). */
     async setPersonEmail(username: string, body: unknown, user: AuthUser): Promise<PersonDto> {
         const settings = await loadCalendarSettings();
-        const row = await userEmailService.setEmail(username, body, { companyDomains: settings.companyDomains, actor: user });
-        const [users, connections] = await Promise.all([userEmailService.listForEmailRule(), liveConnectionsByUsername()]);
-        return toPerson(row, duplicateEmailsAmong(users), settings.companyDomains, connections);
+        await userEmailService.setEmail(username, body, { companyDomains: settings.companyDomains, actor: user });
+        return integrationService.getPerson(username);
+    },
+
+    /** One People row. */
+    async getPerson(username: string): Promise<PersonDto> {
+        const [users, context, connections, choices] = await Promise.all([userEmailService.listForEmailRule(), loadEnrolmentContext(), liveConnectionsByUsername(), calendarChoicesByUsername()]);
+        const row = users.find((u) => u.username.toLowerCase() === username.toLowerCase());
+        if (!row) throw HttpError.notFound(`User '${username}' not found.`);
+        return toPerson(row, duplicateEmailsAmong(users), context.companyDomains, { connections, choices, context });
+    },
+
+    /**
+     * PUT /people/:username/calendar: the admin's calendar choice for one person (provider override, exclusion with a
+     * note). Stored in CalendarSyncUser (a row only while something differs from the default; audited
+     * `CalendarSyncUser CREATE / UPDATE / DELETE`), then the person is reconciled at once.
+     */
+    async setPersonCalendar(username: string, body: unknown, admin: AuthUser): Promise<PersonDto> {
+        const input = personCalendarBodySchema.parse(body);
+        if (input.provider === 'fake' && !isFakeProviderEnabled()) {
+            throw badField('The test calendar is only available while CALENDAR_FAKE_PROVIDER is on (development).', ['provider']);
+        }
+        const target = await prisma.user.findUnique({ where: { username }, select: { username: true } });
+        if (!target) throw HttpError.notFound(`User '${username}' not found.`);
+        const owner = target.username;
+
+        await runInTransaction(async (tx) => {
+            await acquireLocks(tx, [calendarConnectionUserLockKey(owner)]);
+            const before = await tx.calendarSyncUser.findUnique({ where: { username: owner } });
+            const next = {
+                provider: input.provider !== undefined ? input.provider : (before?.provider ?? null),
+                excluded: input.excluded ?? before?.excluded ?? false,
+                note: input.note !== undefined ? input.note : (before?.note ?? null),
+                importMeetings: before?.importMeetings ?? false,
+            };
+            const snapshot = (v: typeof next | null) => ({ provider: v?.provider ?? null, excluded: v?.excluded ?? false, note: v?.note ?? null, importMeetings: v?.importMeetings ?? false });
+            const from = snapshot(before);
+            const to = snapshot(next);
+            const changes: Record<string, unknown> = {};
+            for (const key of Object.keys(to) as (keyof typeof to)[]) if (from[key] !== to[key]) changes[key] = { from: from[key], to: to[key] };
+            if (Object.keys(changes).length === 0) return;
+            const isDefault = !to.provider && !to.excluded && !to.note && !to.importMeetings;
+            if (isDefault) {
+                if (before) await tx.calendarSyncUser.delete({ where: { username: owner } });
+            } else {
+                await tx.calendarSyncUser.upsert({ where: { username: owner }, create: { username: owner, ...to, updatedBy: admin.username }, update: { ...to, updatedBy: admin.username } });
+            }
+            await auditService.record(tx, {
+                entityType: 'CalendarSyncUser',
+                entityId: owner,
+                action: !before ? 'CREATE' : isDefault ? 'DELETE' : 'UPDATE',
+                changedBy: admin.username,
+                changes: { username: owner, ...changes },
+            });
+        });
+        await reconcileUser(owner, 'people_choice', { actor: admin.username });
+        return integrationService.getPerson(owner);
+    },
+
+    /** POST /people/:username/calendar/check: "Check now" on the person's live row. 409 CALENDAR_NOT_SYNCED without one. */
+    async checkPersonCalendar(username: string): Promise<PersonDto & { check: CheckOutcome }> {
+        const live = await prisma.calendarConnection.findFirst({ where: { username, status: { in: ['pending', 'ok', 'error'] } }, select: { id: true } });
+        if (!live) throw conflict("This person's calendar isn't synced, so there is nothing to check.", 'CALENDAR_NOT_SYNCED');
+        const check = await checkConnection(live.id);
+        return { ...(await integrationService.getPerson(username)), check };
     },
 };
 
-function toPerson(
-    user: UserEmailRow,
-    duplicates: ReadonlySet<string>,
-    companyDomains: readonly string[],
-    connections: ReadonlyMap<string, PersonConnectionDto> = new Map(),
-): PersonDto {
+export interface PeopleCalendarData {
+    connections?: ReadonlyMap<string, PersonConnectionDto>;
+    choices?: ReadonlyMap<string, PersonCalendarChoiceDto>;
+    context?: EnrolmentContext;
+}
+
+function calendarOf(user: UserEmailRow, data: PeopleCalendarData): PersonCalendarDto {
+    const key = user.username.toLowerCase();
+    const choice = data.choices?.get(key) ?? null;
+    const connection = data.connections?.get(key) ?? null;
+    if (!data.context) return { target: null, reason: null, connection, choice };
+    const target = resolveTarget(user, choice, data.context.providers, data.context.companyDomains, data.context.fakeOn);
+    return 'none' in target
+        ? { target: null, reason: NOT_SYNCED_REASON_FOR[target.none], connection, choice }
+        : { target: { provider: target.provider, email: target.email, source: target.source }, reason: null, connection, choice };
+}
+
+function toPerson(user: UserEmailRow, duplicates: ReadonlySet<string>, companyDomains: readonly string[], data: PeopleCalendarData = {}): PersonDto {
     return {
         username: user.username,
         fullName: user.fullName || user.username,
@@ -563,22 +903,21 @@ function toPerson(
         role: user.role,
         email: user.email,
         emailIssue: emailIssueFor(user.email, duplicates, companyDomains),
-        connection: connections.get(user.username.toLowerCase()) ?? null,
+        calendar: calendarOf(user, data),
     };
 }
 
 /** The People list from every user: active non-group only, filtered by search text and issue. Pure. */
-export function peopleFrom(
-    users: readonly UserEmailRow[],
-    companyDomains: readonly string[],
-    filter: PeopleQuery = {},
-    connections: ReadonlyMap<string, PersonConnectionDto> = new Map(),
-): PersonDto[] {
+export function peopleFrom(users: readonly UserEmailRow[], companyDomains: readonly string[], filter: PeopleQuery = {}, data: PeopleCalendarData = {}): PersonDto[] {
     const duplicates = duplicateEmailsAmong(users);
     const needle = filter.search?.toLowerCase();
     return users
         .filter((u) => u.isActive && !u.isGroupUser)
-        .map((u) => toPerson(u, duplicates, companyDomains, connections))
+        .map((u) => toPerson(u, duplicates, companyDomains, data))
         .filter((p) => !needle || [p.username, p.fullName, p.email ?? '', p.department ?? ''].some((v) => v.toLowerCase().includes(needle)))
-        .filter((p) => !filter.issue || (filter.issue === 'any' ? p.emailIssue !== null : p.emailIssue === filter.issue));
+        .filter((p) => {
+            if (!filter.issue) return true;
+            if (filter.issue === 'calendar_problem') return p.calendar.connection?.status === 'error';
+            return filter.issue === 'any' ? p.emailIssue !== null : p.emailIssue === filter.issue;
+        });
 }

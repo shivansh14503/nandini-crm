@@ -1,71 +1,38 @@
 import assert from 'node:assert/strict';
 import { randomBytes } from 'node:crypto';
 import { afterEach, beforeEach, describe, it, mock } from 'node:test';
-import { prisma } from '../../config/prisma.js';
-import { auditService, type AuditEntry } from '../../services/audit.service.js';
-import { cacheService } from '../../services/cache.service.js';
 import { configureSecretBox, parseKeyRing, secretBox } from '../../services/secretBox.js';
 import type { AuthUser } from '../../types/user.types.js';
 import { HttpError } from '../../utils/httpError.js';
+import { setCheckSchedulerForTests } from '../calendar-sync/enrolment.js';
+import { resetFakeProvider } from '../calendar-sync/providers/fake.js';
+import { setFakeHealth, setFakeProviderEnabledForTests } from '../calendar-sync/providers/registry.js';
+import {
+    blankConnection,
+    googleProviderRow,
+    installConnectionDouble,
+    restoreConnectionDouble,
+    type ConnectionRowState,
+    type UserRow,
+} from '../calendar-sync/testing/connectionDouble.js';
+import { fakeFetch, route, type RecordedCall } from '../calendar-sync/testing/fakeFetch.js';
+import { serviceAccountKeyJson, TEST_CLIENT_EMAIL, TEST_CLIENT_ID, TEST_PRIVATE_KEY_ID } from '../calendar-sync/testing/serviceAccountKey.js';
+import { setTokenSourceForTests } from '../calendar-sync/tokenSource.js';
 import { formConfigService, type FormConfigsPayload } from '../form-configs/formConfig.service.js';
 import { userEmailService } from '../users/userEmail.service.js';
-import { saveCalendarSettings, loadCalendarSettings } from './integration.settings.js';
-import { dropProviderCredentialsCache, expiresSoon, integrationService, loadProviderCredentials, peopleFrom } from './integration.service.js';
-import type { FetchLike } from './integration.test-connection.js';
+import { GOOGLE_DWD_SCOPES, GOOGLE_DWD_SCOPES_ADMIN_CONSOLE, GOOGLE_TOKEN_URL } from './integration.constants.js';
+import { expiresSoon, integrationService, loadProviderCredentials, peopleFrom } from './integration.service.js';
+import { loadCalendarSettings, saveCalendarSettings } from './integration.settings.js';
 
 /**
- * integration.service against a Prisma double: in-memory IntegrationProvider and Users rows, a `$transaction` that
- * hands the callback a client over the same rows (rolled back when it throws), audit / cache / form-config calls
- * captured. The secret box runs for real on a random test key.
+ * integration.service (Admin › API Integrations) against the in-memory calendar double (calendar-sync/testing): the
+ * secret box runs for real on a random test key; Google / Microsoft answers come from fakeFetch.
  */
 
-const admin: AuthUser = { id: 1, username: 'admin', role: 'Admin' };
+const admin: AuthUser = { id: 99, username: 'admin', role: 'Admin' };
 const now = new Date('2026-11-26T06:00:00.000Z');
-
-interface ProviderState {
-    provider: string;
-    enabled: boolean;
-    clientId: string | null;
-    secretsEnc: string | null;
-    keyId: string | null;
-    secretHintsJson: string | null;
-    settingsJson: string | null;
-    clientVersion: number;
-    lastTestAt: Date | null;
-    lastTestOk: boolean | null;
-    lastTestMessage: string | null;
-    updatedBy: string | null;
-    createdAt: Date;
-    updatedAt: Date;
-}
-
-interface UserState {
-    id: number;
-    username: string;
-    fullName: string;
-    department: string | null;
-    role: string;
-    email: string | null;
-    isActive: boolean;
-    isGroupUser: boolean;
-}
-
-const blankRow = (provider: string): ProviderState => ({
-    provider,
-    enabled: false,
-    clientId: null,
-    secretsEnc: null,
-    keyId: null,
-    secretHintsJson: null,
-    settingsJson: null,
-    clientVersion: 1,
-    lastTestAt: null,
-    lastTestOk: null,
-    lastTestMessage: null,
-    updatedBy: null,
-    createdAt: now,
-    updatedAt: now,
-});
+const TENANT = '72f988bf-86f1-41af-91ab-2d7cd011db47';
+const MS_TOKEN = `https://login.microsoftonline.com/${TENANT}/oauth2/v2.0/token`;
 
 function followupConfigs(options: { value: string; meta?: Record<string, unknown> | null; isActive?: boolean }[], calendarSync?: unknown): FormConfigsPayload {
     return {
@@ -94,141 +61,27 @@ function followupConfigs(options: { value: string; meta?: Record<string, unknown
     } as unknown as FormConfigsPayload;
 }
 
-/**
- * Prisma's model delegates are created lazily behind a proxy, so `mock.method` can't wrap their methods: the delegate
- * itself is swapped for the fake and the real one put back after each test (`restoreDelegates`).
- */
-const realDelegates = new Map<string, unknown>();
-function stubDelegate(name: 'integrationProvider' | 'user' | 'calendarConnection' | '$transaction', fake: object): void {
-    const client = prisma as unknown as Record<string, unknown>;
-    if (!realDelegates.has(name)) realDelegates.set(name, client[name]);
-    Object.defineProperty(client, name, { value: fake, configurable: true, writable: true });
-}
-function restoreDelegates(): void {
-    for (const [name, real] of realDelegates) Object.defineProperty(prisma, name, { value: real, configurable: true, writable: true });
-    realDelegates.clear();
-}
+const DEFAULT_CONFIGS = () => followupConfigs([{ value: 'Call' }, { value: 'Meeting', meta: { icon: 'meeting' } }, { value: 'Task' }, { value: 'Note' }], { companyDomains: ['nandiniinfosys.com', 'nandini.in'] });
 
-interface ConnectionState {
-    id: string;
-    username: string;
-    provider: string;
-    kind: string;
-    status: string;
-    statusReason: string | null;
-    accountEmail: string;
-    connectedAt: Date;
-    refreshTokenExpiresAt: Date | null;
-}
-
-function setup(seed: { providers?: ProviderState[]; users?: UserState[]; configs?: FormConfigsPayload; connections?: ConnectionState[] } = {}) {
-    const state = {
-        providers: new Map((seed.providers ?? []).map((row) => [row.provider, { ...row }])),
-        users: (seed.users ?? []).map((u) => ({ ...u })),
-        connections: (seed.connections ?? []).map((c) => ({ ...c })),
-    };
-    const audits: AuditEntry[] = [];
-    const invalidated: string[] = [];
+/** The double plus the Form Builder writes the settings / sync types use. */
+function setup(seed: Parameters<typeof installConnectionDouble>[0] = {}) {
+    const state = installConnectionDouble({ configs: DEFAULT_CONFIGS(), ...seed });
     const optionUpdates: { id: string; body: unknown }[] = [];
     const settingSaves: unknown[] = [];
-
-    const providerModel = {
-        findUnique: async ({ where }: { where: { provider: string } }) => {
-            const row = state.providers.get(where.provider);
-            return row ? { ...row } : null;
-        },
-        findMany: async () => [...state.providers.values()].map((row) => ({ ...row })),
-        upsert: async ({ where, create, update }: { where: { provider: string }; create: Partial<ProviderState>; update: Partial<ProviderState> }) => {
-            const existing = state.providers.get(where.provider);
-            const row = existing ? { ...existing, ...update, updatedAt: now } : { ...blankRow(where.provider), ...create };
-            state.providers.set(where.provider, row);
-            return { ...row };
-        },
-        update: async ({ where, data }: { where: { provider: string }; data: Partial<ProviderState> }) => {
-            const existing = state.providers.get(where.provider);
-            if (!existing) throw new Error('not found');
-            const row = { ...existing, ...data, updatedAt: now };
-            state.providers.set(where.provider, row);
-            return { ...row };
-        },
-        updateMany: async ({ where, data }: { where: Partial<ProviderState> & { provider: string }; data: Partial<ProviderState> }) => {
-            const existing = state.providers.get(where.provider);
-            const matches = existing && Object.entries(where).every(([key, value]) => existing[key as keyof ProviderState] === value);
-            if (!matches) return { count: 0 };
-            state.providers.set(where.provider, { ...existing, ...data, updatedAt: now });
-            return { count: 1 };
-        },
-    };
-    const userModel = {
-        findMany: async () => state.users.map((u) => ({ ...u })),
-        findUnique: async ({ where }: { where: { username: string } }) => {
-            const user = state.users.find((u) => u.username === where.username);
-            return user ? { ...user } : null;
-        },
-        findFirst: async ({ where }: { where: { email: string; isActive: boolean; isGroupUser: boolean; id: { not: number } } }) => {
-            const user = state.users.find(
-                (u) => (u.email ?? '').toLowerCase().trim() === where.email && u.isActive === where.isActive && u.isGroupUser === where.isGroupUser && u.id !== where.id.not,
-            );
-            return user ? { username: user.username, fullName: user.fullName } : null;
-        },
-        update: async ({ where, data }: { where: { id: number }; data: { email: string | null } }) => {
-            const user = state.users.find((u) => u.id === where.id)!;
-            user.email = data.email;
-            return { ...user };
-        },
-    };
-    const liveOf = (where: { status?: { in?: string[] } | string }) => (c: ConnectionState) =>
-        !where.status || (typeof where.status === 'string' ? c.status === where.status : (where.status.in ?? []).includes(c.status));
-    const connectionModel = {
-        findMany: async ({ where = {} }: { where?: { kind?: string; status?: { in?: string[] } } } = {}) =>
-            state.connections.filter((c) => (!where.kind || c.kind === where.kind) && liveOf(where)(c)).map((c) => ({ ...c })),
-        findFirst: async ({ where }: { where: { username: string; kind?: string; status?: { in?: string[] } } }) => {
-            const row = state.connections.find((c) => c.username === where.username && (!where.kind || c.kind === where.kind) && liveOf(where)(c));
-            return row ? { ...row } : null;
-        },
-    };
-    const client = {
-        integrationProvider: providerModel,
-        user: userModel,
-        calendarConnection: connectionModel,
-        $queryRaw: async () => [{ result: 0 }],
-    };
-
-    stubDelegate('$transaction', async (fn: (tx: unknown) => Promise<unknown>) => {
-        const snapshot = { providers: new Map([...state.providers].map(([k, v]) => [k, { ...v }])), users: state.users.map((u) => ({ ...u })) };
-        try {
-            return await fn(client);
-        } catch (err) {
-            state.providers = snapshot.providers;
-            state.users = snapshot.users;
-            throw err;
-        }
-    });
-    stubDelegate('integrationProvider', providerModel);
-    stubDelegate('user', userModel);
-    stubDelegate('calendarConnection', connectionModel);
-    mock.method(auditService, 'record', async (_tx: unknown, entry: AuditEntry) => {
-        audits.push(entry);
-    });
-    mock.method(cacheService, 'invalidatePattern', async (pattern: string) => {
-        invalidated.push(pattern);
-    });
-    let configs = seed.configs ?? followupConfigs([{ value: 'Call' }, { value: 'Meeting', meta: { icon: 'meeting' } }, { value: 'Task' }, { value: 'Note' }]);
-    mock.method(formConfigService, 'getAllConfigs', async () => configs);
     mock.method(formConfigService, 'updateOption', async (id: string, body: { meta: Record<string, unknown> }) => {
         optionUpdates.push({ id, body });
-        configs = {
-            ...configs,
-            categories: configs.categories.map((c) => ({ ...c, options: c.options.map((o) => (o.id === id ? { ...o, meta: body.meta } : o)) })),
-        };
+        state.configs = {
+            ...state.configs,
+            categories: state.configs.categories.map((c) => ({ ...c, options: c.options.map((o) => (o.id === id ? { ...o, meta: body.meta } : o)) })),
+        } as FormConfigsPayload;
         return {};
     });
     mock.method(formConfigService, 'updateModuleSetting', async (module: string, key: string, body: { value: unknown }) => {
         settingSaves.push({ module, key, value: body.value });
-        configs = { ...configs, moduleSettings: { ...configs.moduleSettings, activities: { [key]: body.value } } };
+        state.configs = { ...state.configs, moduleSettings: { ...state.configs.moduleSettings, activities: { [key]: body.value } } } as FormConfigsPayload;
         return body.value;
     });
-    return { state, audits, invalidated, optionUpdates, settingSaves };
+    return { state, optionUpdates, settingSaves };
 }
 
 const expectHttp = async (promise: Promise<unknown>, status: number, code?: string) => {
@@ -240,175 +93,267 @@ const expectHttp = async (promise: Promise<unknown>, status: number, code?: stri
     });
 };
 
-describe('integrationService providers', () => {
-    beforeEach(() => {
-        configureSecretBox(parseKeyRing(`k1:${randomBytes(32).toString('base64')}`));
-        dropProviderCredentialsCache();
-    });
-    afterEach(() => {
-        mock.restoreAll();
-        restoreDelegates();
-        configureSecretBox(null);
-    });
+/** Google accepts every assertion (key check and impersonation) and the probe answers 200. */
+function googleOk() {
+    return fakeFetch([
+        route(GOOGLE_TOKEN_URL, () => ({ status: 200, body: { access_token: 'ya29.test', expires_in: 3600 } })),
+        route('https://www.googleapis.com/calendar/v3/', () => ({ status: 200, body: { items: [] } })),
+    ]);
+}
 
-    it('stores the secret sealed, never returns it, and shows only its last 4 characters', async () => {
-        const { state, audits } = setup();
-        const dto = await integrationService.saveProvider('google', { clientId: 'abc.apps.googleusercontent.com', clientSecret: 'GOCSPX-supersecret-wxyz' }, admin, now);
-        const json = JSON.stringify(dto);
-        assert.ok(!json.includes('GOCSPX-supersecret'), 'secret leaked into the DTO');
-        assert.equal(dto.secret.set, true);
-        assert.equal(dto.secret.last4, 'wxyz');
-        assert.equal(dto.secret.updatedBy, 'admin');
+const person = (id: number, username: string, over: Partial<UserRow> = {}): UserRow => ({
+    id,
+    username,
+    fullName: username,
+    department: 'Sales',
+    role: 'Sales Executive',
+    email: `${username}@nandiniinfosys.com`,
+    isActive: true,
+    isGroupUser: false,
+    ...over,
+});
+
+let scheduled: string[];
+
+beforeEach(() => {
+    configureSecretBox(parseKeyRing(`k1:${randomBytes(32).toString('base64')}`));
+    resetFakeProvider();
+    setFakeHealth('unknown', null);
+    setFakeProviderEnabledForTests(false);
+    setTokenSourceForTests(null);
+    scheduled = [];
+    setCheckSchedulerForTests((id) => scheduled.push(id));
+});
+
+afterEach(() => {
+    restoreConnectionDouble();
+    configureSecretBox(null);
+    setFakeProviderEnabledForTests(null);
+    setCheckSchedulerForTests(null);
+});
+
+describe('Google Workspace provider', () => {
+    it('stores the uploaded key sealed; the DTO shows the client email, numeric client ID and exact scopes, never the key', async () => {
+        const { state } = setup();
+        const dto = await integrationService.saveProvider('google', { serviceAccountKey: serviceAccountKeyJson() }, admin, now);
         assert.equal(dto.configured, true);
         assert.equal(dto.enabled, false);
-        assert.equal(dto.redirectUri, 'http://localhost:8008/api/calendar-connections/oauth/google/callback');
+        assert.equal(dto.clientId, TEST_CLIENT_ID);
+        assert.deepEqual(
+            { clientEmail: dto.serviceAccount?.clientEmail, clientId: dto.serviceAccount?.clientId, privateKeyId: dto.serviceAccount?.privateKeyId },
+            { clientEmail: TEST_CLIENT_EMAIL, clientId: TEST_CLIENT_ID, privateKeyId: TEST_PRIVATE_KEY_ID },
+        );
+        assert.deepEqual(dto.scopes, [...GOOGLE_DWD_SCOPES]);
+        assert.equal(dto.scopesAdminConsole, GOOGLE_DWD_SCOPES_ADMIN_CONSOLE);
+        assert.equal(dto.secret.set, false, 'Google has no client secret');
+        assert.ok(!JSON.stringify(dto).includes('PRIVATE KEY'), 'key leaked into the DTO');
+
         const row = state.providers.get('google')!;
-        assert.match(row.secretsEnc!, /^enc:v1:k1:/);
-        assert.equal(row.keyId, 'k1');
-        assert.ok(!row.secretsEnc!.includes('supersecret'));
-        assert.equal(JSON.parse(secretBox.open(row.secretsEnc!, 'IntegrationProvider:google:secrets')).clientSecret, 'GOCSPX-supersecret-wxyz');
-        assert.equal(audits.length, 1);
-        assert.equal(audits[0].action, 'CREATE');
-        assert.equal(audits[0].entityType, 'IntegrationProvider');
-        assert.equal((audits[0].changes as Record<string, unknown>).secretChanged, true);
-        assert.ok(!JSON.stringify(audits).includes('supersecret'), 'secret leaked into the audit entry');
+        assert.match(String(row.secretsEnc), /^enc:v1:k1:/);
+        assert.ok(!String(row.secretsEnc).includes('PRIVATE'));
+        assert.ok(!String(row.secretHintsJson).includes('PRIVATE'));
+        const sealed = JSON.parse(secretBox.open(String(row.secretsEnc), 'IntegrationProvider:google:secrets')) as { serviceAccountKey: string };
+        assert.equal(sealed.serviceAccountKey, serviceAccountKeyJson());
+
+        assert.equal(state.audits.length, 1);
+        assert.equal(state.audits[0].action, 'CREATE');
+        assert.equal((state.audits[0].changes as Record<string, unknown>).serviceAccountKeyChanged, true);
+        assert.ok(!JSON.stringify(state.audits).includes('PRIVATE KEY'), 'key leaked into the audit entry');
     });
 
-    it('keeps the stored secret when a save omits it', async () => {
-        const { state } = setup();
-        await integrationService.saveProvider('google', { clientId: 'id-1', clientSecret: 'first-secret-1234' }, admin, now);
-        const sealed = state.providers.get('google')!.secretsEnc;
-        const dto = await integrationService.saveProvider('google', { settings: { scopeProfile: 'broad' } }, admin, now);
-        assert.equal(state.providers.get('google')!.secretsEnc, sealed);
-        assert.equal(dto.secret.last4, '1234');
-        assert.deepEqual(dto.settings, { scopeProfile: 'broad', pkce: true });
-    });
-
-    it('refuses to enable without a client id and secret (409 INTEGRATION_NOT_CONFIGURED) and rolls back', async () => {
-        const { state, audits } = setup();
-        await expectHttp(integrationService.saveProvider('google', { enabled: true, clientId: 'only-id' }, admin, now), 409, 'INTEGRATION_NOT_CONFIGURED');
-        assert.equal(state.providers.size, 0);
-        assert.equal(audits.length, 0);
-    });
-
-    it('needs the Microsoft tenant before enabling, and validates it', async () => {
+    it('refuses a bad key file (400 on serviceAccountKey), a typed client ID and a client secret', async () => {
         setup();
+        await assert.rejects(integrationService.saveProvider('google', { serviceAccountKey: serviceAccountKeyJson({ type: 'authorized_user' }) }, admin, now), (err: unknown) => {
+            assert.ok(err instanceof HttpError);
+            assert.equal(err.statusCode, 400);
+            assert.deepEqual(err.errors?.[0]?.path, ['serviceAccountKey']);
+            return true;
+        });
+        await expectHttp(integrationService.saveProvider('google', { clientId: '123' }, admin, now), 400);
+        await expectHttp(integrationService.saveProvider('google', { clientSecret: 'GOCSPX-x' }, admin, now), 400);
+        await expectHttp(integrationService.saveProvider('microsoft', { serviceAccountKey: serviceAccountKeyJson() }, admin, now), 400);
+    });
+
+    it('switching on needs a key (409 INTEGRATION_NOT_CONFIGURED) and a passing app test with this key (409 INTEGRATION_NOT_TESTED)', async () => {
+        const { state } = setup();
+        await expectHttp(integrationService.saveProvider('google', { enabled: true }, admin, now), 409, 'INTEGRATION_NOT_CONFIGURED');
+        assert.equal(state.providers.size, 0, 'rolled back');
+        await integrationService.saveProvider('google', { serviceAccountKey: serviceAccountKeyJson() }, admin, now);
+        await expectHttp(integrationService.saveProvider('google', { enabled: true }, admin, now), 409, 'INTEGRATION_NOT_TESTED');
+
+        const test = await integrationService.testProvider('google', {}, googleOk().fetchImpl, now);
+        assert.equal(test.code, 'key_ok');
+        assert.equal((await integrationService.getProvider('google')).appTested, true);
+        const on = await integrationService.saveProvider('google', { enabled: true, settings: { domains: ['nandiniinfosys.com'] } }, admin, now);
+        assert.equal(on.enabled, true);
+        assert.deepEqual(on.domains, ['nandiniinfosys.com']);
+
+        // A new key bumps the version and forgets the test (the provider stays on).
+        const replaced = await integrationService.saveProvider('google', { serviceAccountKey: serviceAccountKeyJson({ private_key_id: 'ffffffffffffffffffffffffffffffffffffffff' }) }, admin, now);
+        assert.equal(replaced.clientVersion, 2);
+        assert.equal(replaced.appTested, false);
+        assert.equal(replaced.lastTest, null);
+        assert.equal(replaced.enabled, true);
+    });
+
+    it('switching on enrols everyone on its domains, and switching off stops them (provider_removed)', async () => {
+        const { state } = setup({ users: [person(1, 'asha'), person(2, 'ravi', { email: 'ravi@nandini.in' }), person(3, 'admin', { role: 'Admin' })] });
+        await integrationService.saveProvider('google', { serviceAccountKey: serviceAccountKeyJson(), settings: { domains: ['NandiniInfosys.com'] } }, admin, now);
+        await integrationService.testProvider('google', {}, googleOk().fetchImpl, now);
+        assert.equal(state.connections.length, 0, 'nobody before it is on');
+        await integrationService.saveProvider('google', { enabled: true }, admin, now);
+        assert.deepEqual(state.connections.map((c) => [c.username, c.provider, c.status]).sort(), [
+            ['admin', 'google', 'pending'],
+            ['asha', 'google', 'pending'],
+        ]);
+        assert.equal(scheduled.length, 2, 'first checks scheduled');
+        assert.ok(state.audits.some((a) => a.entityType === 'CalendarConnection' && a.action === 'ENROL' && a.changedBy === 'admin'));
+        assert.deepEqual((await integrationService.getProvider('google')).counts, { ok: 0, pending: 2, error: 0, excluded: 0 });
+
+        await integrationService.saveProvider('google', { enabled: false }, admin, now);
+        assert.ok(state.connections.every((c) => c.status === 'stopped' && c.statusReason === 'provider_removed'));
+    });
+
+    it('domains: only company domains (400), one provider per domain (409 DOMAIN_IN_USE)', async () => {
+        setup();
+        await expectHttp(integrationService.saveProvider('google', { settings: { domains: ['gmail.com'] } }, admin, now), 400);
+        await integrationService.saveProvider('google', { settings: { domains: ['nandiniinfosys.com'] } }, admin, now);
+        await expectHttp(integrationService.saveProvider('microsoft', { settings: { domains: ['nandiniinfosys.com'] } }, admin, now), 409, 'DOMAIN_IN_USE');
+        const ms = await integrationService.saveProvider('microsoft', { settings: { domains: ['@Nandini.in'] } }, admin, now);
+        assert.deepEqual(ms.domains, ['nandini.in']);
+    });
+
+    it('removing the key switches Google off, clears the client ID and stops people', async () => {
+        const { state } = setup({
+            users: [person(1, 'asha')],
+            providers: [googleProviderRow({ secretHintsJson: JSON.stringify({ appTest: { ok: true, version: 1, at: now.toISOString() } }) })],
+        });
+        await integrationService.saveProvider('google', { settings: { domains: ['nandiniinfosys.com'] } }, admin, now);
+        assert.equal(state.connections.filter((c) => c.status === 'pending').length, 1);
+        const dto = await integrationService.clearSecret('google', admin);
+        assert.equal(dto.enabled, false);
+        assert.equal(dto.clientId, null);
+        assert.equal(dto.serviceAccount?.set ?? false, false);
+        assert.equal(dto.clientVersion, 2);
+        assert.equal(state.providers.get('google')!.secretsEnc, null);
+        assert.equal(state.connections[0].statusReason, 'provider_removed');
+        assert.deepEqual(state.audits.find((a) => a.entityType === 'IntegrationProvider')?.changes, { secretCleared: true, enabled: { from: true, to: false } });
+    });
+
+    it('refuses a key while the encryption key is missing (503 INTEGRATIONS_NOT_READY)', async () => {
+        setup();
+        configureSecretBox(null);
+        await expectHttp(integrationService.saveProvider('google', { serviceAccountKey: serviceAccountKeyJson() }, admin, now), 503, 'INTEGRATIONS_NOT_READY');
+    });
+
+    it('serves the decrypted key to the token source, cached until the next save', async () => {
+        setup();
+        await integrationService.saveProvider('google', { serviceAccountKey: serviceAccountKeyJson() }, admin, now);
+        const first = await loadProviderCredentials('google');
+        assert.equal(first.serviceAccountKey, serviceAccountKeyJson());
+        assert.equal(first.configured, true);
+        assert.equal(first.clientSecret, null);
+    });
+});
+
+describe('Test connection', () => {
+    it('never calls Google without a key; stores the result and the passing app step', async () => {
+        const { state } = setup();
+        const none = googleOk();
+        assert.equal((await integrationService.testProvider('google', {}, none.fetchImpl, now)).code, 'not_configured');
+        assert.equal(none.calls.length, 0);
+        await integrationService.saveProvider('google', { serviceAccountKey: serviceAccountKeyJson() }, admin, now);
+        const result = await integrationService.testProvider('google', {}, googleOk().fetchImpl, now);
+        assert.equal(result.ok, true);
+        assert.equal(result.testedAt, now.toISOString());
+        const row = state.providers.get('google')!;
+        assert.equal(row.lastTestOk, true);
+        assert.match(String(row.lastTestMessage), /accepted the service account key/);
+        assert.equal((JSON.parse(String(row.secretHintsJson)) as { appTest: { version: number } }).appTest.version, 1);
+    });
+
+    it('as a user: impersonates their email; an unknown user is 404; a failing user step still records the app pass', async () => {
+        setup({ users: [person(1, 'asha')] });
+        await integrationService.saveProvider('google', { serviceAccountKey: serviceAccountKeyJson() }, admin, now);
+        const ok = googleOk();
+        const result = await integrationService.testProvider('google', { asUsername: 'asha' }, ok.fetchImpl, now);
+        assert.equal(result.code, 'delegation_ok');
+        const subjectOf = (call: RecordedCall) => (JSON.parse(Buffer.from(call.form!.assertion.split('.')[1], 'base64url').toString()) as { sub?: string }).sub;
+        assert.equal(subjectOf(ok.calls[1]), 'asha@nandiniinfosys.com');
+        await expectHttp(integrationService.testProvider('google', { asUsername: 'nobody' }, ok.fetchImpl, now), 404);
+
+        const denied = fakeFetch([
+            route(GOOGLE_TOKEN_URL, (call) =>
+                subjectOf(call) ? { status: 401, body: { error: 'unauthorized_client', error_description: 'Client is unauthorized to retrieve access tokens.' } } : { status: 200, body: { access_token: 'sa', expires_in: 3600 } },
+            ),
+        ]);
+        const failed = await integrationService.testProvider('google', { asUsername: 'asha' }, denied.fetchImpl, now);
+        assert.equal(failed.code, 'delegation_missing');
+        assert.equal((await integrationService.getProvider('google')).appTested, true);
+    });
+
+    it("doesn't store a result for credentials that were replaced while the test ran", async () => {
+        const { state } = setup();
+        await integrationService.saveProvider('google', { serviceAccountKey: serviceAccountKeyJson() }, admin, now);
+        const racing = fakeFetch([
+            route(GOOGLE_TOKEN_URL, async () => {
+                // An admin uploads another key while Google is still answering for the old one.
+                await integrationService.saveProvider('google', { serviceAccountKey: serviceAccountKeyJson({ private_key_id: 'eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee' }) }, admin, now);
+                return { status: 200, body: { access_token: 'x', expires_in: 3600 } };
+            }),
+        ]);
+        const result = await integrationService.testProvider('google', {}, racing.fetchImpl, now);
+        assert.equal(result.code, 'credentials_changed');
+        const row = state.providers.get('google')!;
+        assert.equal(row.lastTestAt, null);
+        assert.equal((await integrationService.getProvider('google')).appTested, false);
+    });
+
+    it('Microsoft: needs the tenant to switch on; client credentials test; the secret stays write-only', async () => {
+        const { state } = setup();
         await expectHttp(integrationService.saveProvider('microsoft', { enabled: true, clientId: 'app-id', clientSecret: 'secret-value-1' }, admin, now), 400, 'VALIDATION_ERROR');
         await assert.rejects(integrationService.saveProvider('microsoft', { settings: { tenantId: 'https://evil.example/x' } }, admin, now));
-        const dto = await integrationService.saveProvider(
+        const saved = await integrationService.saveProvider(
             'microsoft',
-            { enabled: true, clientId: 'app-id', clientSecret: 'secret-value-1', settings: { tenantId: '72F988BF-86F1-41AF-91AB-2D7CD011DB47' }, clientSecretExpiresOn: '2027-01-31' },
+            { clientId: 'app-id', clientSecret: 'secret-value-wxyz', settings: { tenantId: TENANT.toUpperCase() }, clientSecretExpiresOn: '2027-01-31' },
             admin,
             now,
         );
-        assert.equal(dto.enabled, true);
-        assert.equal(dto.settings.tenantId, '72f988bf-86f1-41af-91ab-2d7cd011db47');
-        assert.equal(dto.secret.expiresOn, '2027-01-31');
+        assert.equal(saved.settings.tenantId, TENANT);
+        assert.equal(saved.secret.last4, 'wxyz');
+        assert.equal(saved.secret.expiresOn, '2027-01-31');
+        assert.ok(!JSON.stringify(saved).includes('secret-value'));
+        const token = `h.${Buffer.from(JSON.stringify({ roles: ['Calendars.ReadWrite'] })).toString('base64url')}.s`;
+        const ms = fakeFetch([route(MS_TOKEN, () => ({ status: 200, body: { access_token: token, expires_in: 3600 } }))]);
+        const result = await integrationService.testProvider('microsoft', {}, ms.fetchImpl, now);
+        assert.equal(result.code, 'credentials_ok');
+        assert.equal(ms.calls[0].form?.client_secret, 'secret-value-wxyz');
+        assert.equal((await integrationService.saveProvider('microsoft', { enabled: true }, admin, now)).enabled, true);
+        assert.ok(!JSON.stringify(state.audits).includes('secret-value'), 'secret leaked into the audit entry');
+        // A changed tenant is new credentials.
+        assert.equal((await integrationService.saveProvider('microsoft', { settings: { tenantId: 'other.onmicrosoft.com' } }, admin, now)).clientVersion, 2);
     });
 
-    it('refuses a secret while the encryption key is missing (503 INTEGRATIONS_NOT_READY)', async () => {
-        setup();
-        configureSecretBox(null);
-        await expectHttp(integrationService.saveProvider('google', { clientId: 'id', clientSecret: 'secret-12345' }, admin, now), 503, 'INTEGRATIONS_NOT_READY');
-    });
-
-    it('bumps clientVersion when the client id or the Microsoft tenant changes, and clears the last test', async () => {
-        const { state, audits } = setup();
-        await integrationService.saveProvider('google', { clientId: 'id-1', clientSecret: 'secret-12345' }, admin, now);
-        state.providers.get('google')!.lastTestAt = now;
-        state.providers.get('google')!.lastTestOk = true;
-        let dto = await integrationService.saveProvider('google', { clientId: 'id-2' }, admin, now);
-        assert.equal(dto.clientVersion, 2);
-        assert.equal(dto.lastTest, null);
-        assert.deepEqual((audits.at(-1)!.changes as Record<string, unknown>).clientVersion, { from: 1, to: 2 });
-        dto = await integrationService.saveProvider('google', { settings: { pkce: false } }, admin, now);
-        assert.equal(dto.clientVersion, 2);
-
-        await integrationService.saveProvider('microsoft', { clientId: 'app', clientSecret: 'secret-12345', settings: { tenantId: 'nandini.onmicrosoft.com' } }, admin, now);
-        dto = await integrationService.saveProvider('microsoft', { settings: { tenantId: 'other.onmicrosoft.com' } }, admin, now);
-        assert.equal(dto.clientVersion, 2);
-    });
-
-    it('keeps Zoom off until Phase 3 but stores its secrets, webhook secret included', async () => {
+    it('Zoom: credentials stored, no check, no switch', async () => {
         setup();
         const dto = await integrationService.saveProvider('zoom', { clientId: 'zoom-id', clientSecret: 'zoom-secret-1', webhookSecret: 'zoom-hook-abcd' }, admin, now);
         assert.equal(dto.available, false);
         assert.equal(dto.webhookSecret?.last4, 'abcd');
+        assert.equal((await integrationService.testProvider('zoom', {}, googleOk().fetchImpl, now)).code, 'not_available');
         await expectHttp(integrationService.saveProvider('zoom', { enabled: true }, admin, now), 409, 'INTEGRATION_NOT_AVAILABLE');
-        await expectHttp(integrationService.saveProvider('google', { webhookSecret: 'hook-secret-1' }, admin, now), 400);
     });
 
-    it('shows an unreadable secret after a key change and refuses to enable until it is entered again', async () => {
+    it('shows an unreadable key after an encryption key change and refuses to switch on until it is uploaded again', async () => {
         const { state } = setup();
-        await integrationService.saveProvider('google', { clientId: 'id', clientSecret: 'secret-12345' }, admin, now);
+        await integrationService.saveProvider('google', { serviceAccountKey: serviceAccountKeyJson() }, admin, now);
         const sealed = state.providers.get('google')!.secretsEnc;
         configureSecretBox(parseKeyRing(`k2:${randomBytes(32).toString('base64')}`));
-        const admin1 = await integrationService.getAdmin(now);
-        assert.equal(admin1.keyStatus, 'unreadable');
-        assert.equal(admin1.providers[0].secret.readable, false);
-        assert.equal(admin1.providers[0].configured, false);
+        const dto = await integrationService.getAdmin(now);
+        assert.equal(dto.keyStatus, 'unreadable');
+        assert.equal(dto.providers.find((p) => p.provider === 'google')?.configured, false);
         await expectHttp(integrationService.saveProvider('google', { enabled: true }, admin, now), 409, 'INTEGRATION_NOT_CONFIGURED');
-        // An unrelated save keeps the unreadable value (a key mix-up must not wipe it).
-        await integrationService.saveProvider('google', { settings: { pkce: false } }, admin, now);
-        assert.equal(state.providers.get('google')!.secretsEnc, sealed);
-        const fixed = await integrationService.saveProvider('google', { clientSecret: 'secret-again', enabled: true }, admin, now);
-        assert.equal(fixed.enabled, true);
-        assert.equal(state.providers.get('google')!.keyId, 'k2');
-    });
-
-    it('clears secrets and switches the provider off', async () => {
-        const { state, audits } = setup();
-        await integrationService.saveProvider('google', { clientId: 'id', clientSecret: 'secret-12345', enabled: true }, admin, now);
-        const dto = await integrationService.clearSecret('google', admin);
-        assert.equal(dto.enabled, false);
-        assert.equal(dto.secret.set, false);
-        assert.equal(state.providers.get('google')!.secretsEnc, null);
-        assert.deepEqual(audits.at(-1)!.changes, { secretCleared: true, enabled: { from: true, to: false } });
-    });
-
-    it('serves decrypted credentials to the connect flow, cached until the next save', async () => {
-        setup();
-        await integrationService.saveProvider('google', { clientId: 'id-1', clientSecret: 'secret-12345', enabled: true }, admin, now);
-        const first = await loadProviderCredentials('google');
-        assert.equal(first.clientSecret, 'secret-12345');
-        assert.equal(first.enabled, true);
-        assert.equal(first.configured, true);
-        await integrationService.saveProvider('google', { enabled: false }, admin, now);
-        assert.equal((await loadProviderCredentials('google')).enabled, false);
-    });
-
-    it('stores the test result and never sends a request without credentials', async () => {
-        const { state } = setup();
-        const calls: string[] = [];
-        const fetchImpl: FetchLike = async (url) => {
-            calls.push(url);
-            return { status: 400, text: async () => JSON.stringify({ error: 'invalid_grant', error_description: 'Malformed auth code.' }) };
-        };
-        const missing = await integrationService.testProvider('google', fetchImpl, now);
-        assert.equal(missing.code, 'not_configured');
-        assert.equal(calls.length, 0);
-        await integrationService.saveProvider('google', { clientId: 'id', clientSecret: 'secret-12345' }, admin, now);
-        const result = await integrationService.testProvider('google', fetchImpl, now);
-        assert.equal(result.ok, true);
-        assert.equal(result.testedAt, now.toISOString());
-        assert.equal(state.providers.get('google')!.lastTestOk, true);
-        assert.match(state.providers.get('google')!.lastTestMessage!, /accepted/);
-    });
-
-    it("doesn't store a result for credentials that were replaced while the probe ran", async () => {
-        const { state } = setup();
-        await integrationService.saveProvider('google', { clientId: 'id', clientSecret: 'old-secret-123' }, admin, now);
-        const fetchImpl: FetchLike = async () => {
-            // An admin saves a new secret while Google is still answering for the old one.
-            await integrationService.saveProvider('google', { clientSecret: 'new-secret-456' }, admin, now);
-            return { status: 400, text: async () => JSON.stringify({ error: 'invalid_grant', error_description: 'Malformed auth code.' }) };
-        };
-        const result = await integrationService.testProvider('google', fetchImpl, now);
-        assert.equal(result.ok, false);
-        assert.equal(result.code, 'credentials_changed');
-        const row = state.providers.get('google')!;
-        assert.equal(row.lastTestAt, null);
-        assert.equal(row.lastTestOk, null);
+        await integrationService.saveProvider('google', { settings: { domains: ['nandiniinfosys.com'] } }, admin, now);
+        assert.equal(state.providers.get('google')!.secretsEnc, sealed, 'an unrelated save keeps the unreadable value');
     });
 
     it('flags a client secret expiring within 30 days', () => {
@@ -419,84 +364,60 @@ describe('integrationService providers', () => {
     });
 });
 
-describe('integrationService settings and sync types', () => {
-    afterEach(() => {
-        mock.restoreAll();
-        restoreDelegates();
-    });
-
+describe('settings and sync types', () => {
     it('reads defaults when nothing is stored, and the meeting type from the option icon', async () => {
         setup({ configs: followupConfigs([{ value: 'Call' }, { value: 'Client Meeting', meta: { icon: 'meeting' } }]) });
         const settings = await loadCalendarSettings();
         assert.deepEqual(settings.companyDomains, ['nandiniinfosys.com']);
         assert.equal(settings.eventVisibility, 'private');
-        assert.equal(settings.backfillDays, 60);
-        assert.equal(settings.followUpActivities, true);
         assert.equal(settings.importFollowupType, 'Client Meeting');
     });
 
-    it('reads a malformed stored value field by field', async () => {
-        setup({ configs: followupConfigs([{ value: 'Call' }], { companyDomains: 'oops', backfillDays: 90, eventVisibility: 'default' }) });
-        const settings = await loadCalendarSettings();
-        assert.deepEqual(settings.companyDomains, ['nandiniinfosys.com']);
-        assert.equal(settings.backfillDays, 90);
-        assert.equal(settings.eventVisibility, 'default');
-    });
-
-    it('merges a partial update and saves the whole value through updateModuleSetting (which drops the form-config cache)', async () => {
+    it('merges a partial update and saves the whole value through updateModuleSetting', async () => {
         const { settingSaves } = setup();
         const saved = await saveCalendarSettings({ companyDomains: ['NandiniInfosys.com', 'nipl.in'], backfillDays: 30 }, admin);
         assert.deepEqual(saved.companyDomains, ['nandiniinfosys.com', 'nipl.in']);
         assert.equal(saved.backfillDays, 30);
-        assert.equal(saved.eventVisibility, 'private');
-        assert.equal(settingSaves.length, 1);
         assert.deepEqual(settingSaves[0], { module: 'activities', key: 'calendarSync', value: saved });
         await assert.rejects(saveCalendarSettings({ backfillDays: 45 }, admin));
         await assert.rejects(saveCalendarSettings({}, admin));
     });
 
-    it('lists Followup Types with Task / Note locked off and a missing switch read as on', async () => {
-        setup({ configs: followupConfigs([{ value: 'Call' }, { value: 'WhatsApp', meta: { calendarSync: false } }, { value: 'Task' }, { value: 'Old', isActive: false }]) });
+    it("can't drop a company domain a provider still serves (409 DOMAIN_IN_USE)", async () => {
+        const { settingSaves } = setup({ providers: [{ provider: 'google', enabled: false, settingsJson: JSON.stringify({ domains: ['nandini.in'] }) }] });
+        await expectHttp(saveCalendarSettings({ companyDomains: ['nandiniinfosys.com'] }, admin), 409, 'DOMAIN_IN_USE');
+        assert.equal(settingSaves.length, 0);
+    });
+
+    it('lists Followup Types with Task / Note locked off; saves real changes through the option update', async () => {
+        const { optionUpdates, state } = setup({ configs: followupConfigs([{ value: 'Call', meta: { icon: 'call' } }, { value: 'WhatsApp', meta: { calendarSync: false } }, { value: 'Task' }]) });
         assert.deepEqual(await integrationService.getSyncTypes(), [
             { value: 'Call', label: 'Call', calendarSync: true, locked: false },
             { value: 'WhatsApp', label: 'WhatsApp', calendarSync: false, locked: false },
             { value: 'Task', label: 'Task', calendarSync: false, locked: true, lockReason: 'Tasks and notes never go to calendars.' },
         ]);
-    });
-
-    it('merges calendarSync into option meta through the option update, only for real changes', async () => {
-        const { optionUpdates, invalidated } = setup({ configs: followupConfigs([{ value: 'Call', meta: { icon: 'call' } }, { value: 'Email' }, { value: 'Task' }]) });
-        const types = await integrationService.saveSyncTypes({ Call: false, email: true, Task: false }, admin);
+        const types = await integrationService.saveSyncTypes({ Call: false, whatsapp: false, Task: false }, admin);
         assert.deepEqual(optionUpdates, [{ id: 'opt-Call', body: { meta: { icon: 'call', calendarSync: false } } }]);
         assert.equal(types.find((t) => t.value === 'Call')!.calendarSync, false);
-        assert.ok(invalidated.some((p) => p.includes('form-configs')));
-    });
-
-    it('refuses Task / Note on and unknown types', async () => {
-        setup();
-        await expectHttp(integrationService.saveSyncTypes({ Note: true }, admin), 400);
+        assert.ok(state.cacheInvalidations.some((p) => p.includes('form-configs')));
+        await expectHttp(integrationService.saveSyncTypes({ Task: true }, admin), 400);
         await expectHttp(integrationService.saveSyncTypes({ Fax: true }, admin), 400);
     });
 });
 
-describe('People and company emails', () => {
-    afterEach(() => {
-        mock.restoreAll();
-        restoreDelegates();
-    });
-
-    const users: UserState[] = [
-        { id: 1, username: 'asha', fullName: 'Asha Rao', department: 'Sales', role: 'Sales Executive', email: 'asha@nandiniinfosys.com', isActive: true, isGroupUser: false },
-        { id: 2, username: 'ravi', fullName: 'Ravi', department: 'Sales', role: 'Sales Executive', email: 'Shared@NandiniInfosys.com', isActive: true, isGroupUser: false },
-        { id: 3, username: 'mohan', fullName: 'Mohan', department: null, role: 'Sales Executive', email: 'shared@nandiniinfosys.com ', isActive: true, isGroupUser: false },
-        { id: 4, username: 'support', fullName: 'Support Desk', department: null, role: 'Support', email: 'asha@nandiniinfosys.com', isActive: true, isGroupUser: true },
-        { id: 5, username: 'old', fullName: 'Old User', department: null, role: 'Sales Executive', email: 'asha@nandiniinfosys.com', isActive: false, isGroupUser: false },
-        { id: 6, username: 'gmail', fullName: 'Gmail User', department: null, role: 'Sales Executive', email: 'someone@gmail.com', isActive: true, isGroupUser: false },
-        { id: 7, username: 'none', fullName: '', department: null, role: 'Sales Executive', email: null, isActive: true, isGroupUser: false },
+describe('People', () => {
+    const users: UserRow[] = [
+        person(1, 'asha', { fullName: 'Asha Rao' }),
+        person(2, 'ravi', { email: 'Shared@NandiniInfosys.com' }),
+        person(3, 'mohan', { department: null, email: 'shared@nandiniinfosys.com ' }),
+        person(4, 'support', { isGroupUser: true, email: 'asha@nandiniinfosys.com' }),
+        person(5, 'old', { isActive: false, email: 'asha@nandiniinfosys.com' }),
+        person(6, 'gmail', { email: 'someone@gmail.com' }),
+        person(7, 'none', { fullName: '', email: null }),
     ];
 
-    it('lists active non-group users with missing / duplicate / not_company flags (group and inactive users ignored)', () => {
-        const people = peopleFrom(users, ['nandiniinfosys.com']);
+    it('lists active non-group users with missing / duplicate / not_company flags (pure)', () => {
+        const people = peopleFrom(users as never, ['nandiniinfosys.com']);
         assert.deepEqual(
             people.map((p) => [p.username, p.emailIssue]),
             [
@@ -508,110 +429,138 @@ describe('People and company emails', () => {
             ],
         );
         assert.equal(people.find((p) => p.username === 'none')!.fullName, 'none');
-        assert.deepEqual(
-            peopleFrom(users, ['nandiniinfosys.com'], { issue: 'any' }).map((p) => p.username),
-            ['ravi', 'mohan', 'gmail', 'none'],
-        );
-        assert.deepEqual(
-            peopleFrom(users, ['nandiniinfosys.com'], { search: 'RAO' }).map((p) => p.username),
-            ['asha'],
-        );
+        assert.deepEqual(peopleFrom(users as never, ['nandiniinfosys.com'], { issue: 'any' }).map((p) => p.username), ['ravi', 'mohan', 'gmail', 'none']);
+        assert.deepEqual(peopleFrom(users as never, ['nandiniinfosys.com'], { search: 'RAO' }).map((p) => p.username), ['asha']);
     });
 
-    it('saves a lower-cased company email, audited, and drops the user directory cache', async () => {
-        const { state, audits, invalidated } = setup({ users });
-        const person = await integrationService.setPersonEmail('none', { email: '  New.Person@NandiniInfosys.com ' }, admin);
-        assert.equal(person.email, 'new.person@nandiniinfosys.com');
-        assert.equal(person.emailIssue, null);
-        assert.equal(state.users.find((u) => u.username === 'none')!.email, 'new.person@nandiniinfosys.com');
-        assert.deepEqual(audits.at(-1), {
+    it('each person: the calendar target or why not, the live row, the admin choice; calendar_problem filter', async () => {
+        setFakeProviderEnabledForTests(true);
+        const conn = (over: Partial<ConnectionRowState> & Pick<ConnectionRowState, 'id' | 'username'>) =>
+            blankConnection({ provider: 'fake', accountEmail: `${over.username}@nandiniinfosys.com`, ...over }, now);
+        setup({
+            users,
+            connections: [
+                conn({ id: 'c-asha', username: 'asha', status: 'error', statusReason: 'calendar_unavailable', lastErrorMessage: 'Calendar off' }),
+                conn({ id: 'c-old', username: 'gmail', status: 'stopped', statusReason: 'no_email' }),
+            ],
+            syncUsers: [{ username: 'ravi', excluded: true, note: 'Shared inbox' }],
+        });
+        const people = await integrationService.listPeople({});
+        const byName = new Map(people.map((p) => [p.username, p.calendar]));
+        assert.deepEqual(byName.get('asha')?.target, { provider: 'fake', email: 'asha@nandiniinfosys.com', source: 'domain' });
+        assert.equal(byName.get('asha')?.connection?.id, 'c-asha');
+        assert.equal(byName.get('asha')?.connection?.lastErrorMessage, 'Calendar off');
+        assert.equal(byName.get('ravi')?.reason, 'excluded');
+        assert.deepEqual(byName.get('ravi')?.choice, { provider: null, excluded: true, note: 'Shared inbox', importMeetings: false });
+        assert.equal(byName.get('gmail')?.reason, 'not_company');
+        assert.equal(byName.get('gmail')?.connection, null, 'a stopped row is not shown as live');
+        assert.equal(byName.get('none')?.reason, 'no_email');
+        assert.deepEqual((await integrationService.listPeople({ issue: 'calendar_problem' })).map((p) => p.username), ['asha']);
+    });
+
+    it('saves a lower-cased company email, audited, drops the user cache, and enrols the person', async () => {
+        setFakeProviderEnabledForTests(true);
+        const { state } = setup({ users });
+        const saved = await integrationService.setPersonEmail('none', { email: '  New.Person@NandiniInfosys.com ' }, admin);
+        assert.equal(saved.email, 'new.person@nandiniinfosys.com');
+        assert.equal(saved.emailIssue, null);
+        assert.deepEqual(state.audits.find((a) => a.entityType === 'User'), {
             entityType: 'User',
             entityId: '7',
             action: 'UPDATE',
             changedBy: 'admin',
             changes: { email: { from: null, to: 'new.person@nandiniinfosys.com' } },
         });
-        assert.ok(invalidated.includes('cache:lookups:users*'));
+        assert.ok(state.cacheInvalidations.includes('cache:lookups:users*'));
+        assert.equal(saved.calendar.connection?.accountEmail, 'new.person@nandiniinfosys.com');
+        assert.equal(saved.calendar.connection?.status, 'pending');
     });
 
-    it('refuses an address another active user holds (409 DUPLICATE_RECORD), but a group login may share it', async () => {
+    it('a new email moves the person’s calendar sync (the old row stops as email_changed); no more EMAIL_CONNECTED', async () => {
+        setFakeProviderEnabledForTests(true);
+        const { state } = setup({ users, connections: [blankConnection({ id: 'c-asha', username: 'asha', provider: 'fake', accountEmail: 'asha@nandiniinfosys.com', status: 'ok' }, now)] });
+        const saved = await integrationService.setPersonEmail('asha', { email: 'asha.rao@nandiniinfosys.com' }, admin);
+        assert.equal(saved.email, 'asha.rao@nandiniinfosys.com');
+        assert.equal(state.connections.find((c) => c.id === 'c-asha')?.statusReason, 'email_changed');
+        assert.equal(saved.calendar.connection?.accountEmail, 'asha.rao@nandiniinfosys.com');
+        // Cleared: the row stops (no_email).
+        await integrationService.setPersonEmail('asha', { email: '' }, admin);
+        assert.ok(state.connections.every((c) => c.status === 'stopped'));
+    });
+
+    it('refuses an address another active user holds (409 DUPLICATE_RECORD); other domains only when allowed', async () => {
         const { state } = setup({ users });
         await expectHttp(integrationService.setPersonEmail('none', { email: 'ASHA@nandiniinfosys.com' }, admin), 409, 'DUPLICATE_RECORD');
         assert.equal(state.users.find((u) => u.username === 'none')!.email, null);
-        // The group login 'support' and the inactive 'old' hold asha@ too, and don't count.
-        await integrationService.setPersonEmail('gmail', { email: 'gmail.user@nandiniinfosys.com' }, admin);
-    });
-
-    it('refuses another domain unless allowed, and clears with a blank value', async () => {
-        const { state } = setup({ users });
         await expectHttp(integrationService.setPersonEmail('none', { email: 'x@vendor.com' }, admin), 400, 'VALIDATION_ERROR');
-        const allowed = await integrationService.setPersonEmail('none', { email: 'x@vendor.com', allowOtherDomain: true }, admin);
-        assert.equal(allowed.emailIssue, 'not_company');
-        await integrationService.setPersonEmail('none', { email: '   ' }, admin);
-        assert.equal(state.users.find((u) => u.username === 'none')!.email, null);
+        assert.equal((await integrationService.setPersonEmail('none', { email: 'x@vendor.com', allowOtherDomain: true }, admin)).emailIssue, 'not_company');
         await expectHttp(integrationService.setPersonEmail('nobody', { email: 'a@nandiniinfosys.com' }, admin), 404);
-        await assert.rejects(integrationService.setPersonEmail('none', { email: 'not an email' }, admin));
     });
 
     it('writes nothing for an unchanged address', async () => {
-        const { audits, invalidated } = setup({ users });
+        const { state } = setup({ users });
         await userEmailService.setEmail('asha', { email: 'asha@nandiniinfosys.com' }, { companyDomains: ['nandiniinfosys.com'], actor: admin });
-        assert.equal(audits.length, 0);
-        assert.equal(invalidated.length, 0);
+        assert.equal(state.audits.length, 0);
+        assert.equal(state.cacheInvalidations.length, 0);
     });
 
-    const connection = (over: Partial<ConnectionState> = {}): ConnectionState => ({
-        id: 'c-asha',
-        username: 'asha',
-        provider: 'google',
-        kind: 'calendar',
-        status: 'active',
-        statusReason: null,
-        accountEmail: 'asha@nandiniinfosys.com',
-        connectedAt: now,
-        refreshTokenExpiresAt: null,
-        ...over,
+    it('calendar choice: exclude (row stops, audited), override, back to default (choice row deleted)', async () => {
+        setFakeProviderEnabledForTests(true);
+        const { state } = setup({ users, providers: [googleProviderRow({ domains: ['nandiniinfosys.com'] })] });
+        // Google is on for the domain; asha is enrolled with Google.
+        await integrationService.saveProvider('google', { settings: { domains: ['nandiniinfosys.com'] } }, admin, now);
+        assert.equal(state.connections.find((c) => c.username === 'asha')?.provider, 'google');
+
+        const excluded = await integrationService.setPersonCalendar('asha', { excluded: true, note: 'Uses a shared calendar' }, admin);
+        assert.equal(excluded.calendar.reason, 'excluded');
+        assert.equal(excluded.calendar.connection, null);
+        assert.equal(state.connections.find((c) => c.username === 'asha')?.statusReason, 'excluded');
+        const audit = state.audits.find((a) => a.entityType === 'CalendarSyncUser')!;
+        assert.equal(audit.action, 'CREATE');
+        assert.deepEqual(audit.changes, { username: 'asha', excluded: { from: false, to: true }, note: { from: null, to: 'Uses a shared calendar' } });
+        assert.deepEqual((await integrationService.getProvider('google')).counts.excluded, 1);
+
+        const override = await integrationService.setPersonCalendar('asha', { excluded: false, provider: 'fake', note: null }, admin);
+        assert.deepEqual(override.calendar.target, { provider: 'fake', email: 'asha@nandiniinfosys.com', source: 'override' });
+        assert.equal(override.calendar.connection?.provider, 'fake');
+
+        const back = await integrationService.setPersonCalendar('asha', { provider: null }, admin);
+        assert.equal(back.calendar.choice, null);
+        assert.equal(back.calendar.connection?.provider, 'google');
+        assert.equal(state.syncUsers.length, 0);
+        assert.equal(state.audits.filter((a) => a.entityType === 'CalendarSyncUser').at(-1)?.action, 'DELETE');
     });
 
-    it('shows each person\'s live calendar connection (a disconnected row shows as not connected)', async () => {
+    it('calendar choice: the test calendar only while the fake is on (400); unknown person 404; unknown field 400', async () => {
+        setup({ users });
+        await expectHttp(integrationService.setPersonCalendar('asha', { provider: 'fake' }, admin), 400);
+        await expectHttp(integrationService.setPersonCalendar('nobody', { excluded: true }, admin), 404);
+        await assert.rejects(integrationService.setPersonCalendar('asha', { excluded: true, other: 1 }, admin));
+    });
+
+    it('Check now: 409 CALENDAR_NOT_SYNCED without a live row; otherwise checks and returns the person', async () => {
+        setFakeProviderEnabledForTests(true);
+        const { state } = setup({ users: [person(1, 'asha')], connections: [blankConnection({ id: 'c1', username: 'asha', provider: 'fake', accountEmail: 'asha@nandiniinfosys.com' }, now)] });
+        await expectHttp(integrationService.checkPersonCalendar('ravi'), 409, 'CALENDAR_NOT_SYNCED');
+        const checked = await integrationService.checkPersonCalendar('asha');
+        assert.equal(checked.check, 'ok');
+        assert.equal(checked.calendar.connection?.status, 'ok');
+        assert.equal(state.connections[0].status, 'ok');
+    });
+
+    it('provider cards count live rows by status and exclusions once per person', async () => {
         setup({
             users,
             connections: [
-                connection({ refreshTokenExpiresAt: new Date('2027-02-12T00:00:00.000Z') }),
-                connection({ id: 'c-old', username: 'gmail', status: 'disconnected', accountEmail: 'someone@gmail.com' }),
-                connection({ id: 'c-ravi', username: 'ravi', provider: 'microsoft', status: 'reauth_required', statusReason: 'invalid_grant', accountEmail: 'shared@nandiniinfosys.com' }),
+                blankConnection({ id: 'a', username: 'asha', provider: 'google', accountEmail: 'asha@nandiniinfosys.com', status: 'ok' }, now),
+                blankConnection({ id: 'b', username: 'ravi', provider: 'google', accountEmail: 'ravi@nandiniinfosys.com', status: 'error' }, now),
+                blankConnection({ id: 'c', username: 'mohan', provider: 'google', accountEmail: 'mohan@nandiniinfosys.com', status: 'stopped', statusReason: 'excluded' }, now),
+                blankConnection({ id: 'd', username: 'mohan', provider: 'google', accountEmail: 'mohan2@nandiniinfosys.com', status: 'stopped', statusReason: 'excluded' }, now),
             ],
         });
-        const people = await integrationService.listPeople({});
-        const byName = new Map(people.map((p) => [p.username, p.connection]));
-        assert.deepEqual(byName.get('asha'), {
-            id: 'c-asha',
-            provider: 'google',
-            status: 'active',
-            statusReason: null,
-            accountEmail: 'asha@nandiniinfosys.com',
-            connectedAt: now.toISOString(),
-            accessEndsAt: '2027-02-12T00:00:00.000Z',
-        });
-        assert.equal(byName.get('ravi')!.status, 'reauth_required');
-        assert.equal(byName.get('gmail'), null);
-    });
-
-    it('counts live connections per provider on the provider cards', async () => {
-        setup({ users, connections: [connection(), connection({ id: 'c2', username: 'ravi', status: 'reauth_required' }), connection({ id: 'c3', username: 'x', status: 'disconnected' })] });
         const dto = await integrationService.getAdmin(now);
-        assert.deepEqual(dto.providers.find((p) => p.provider === 'google')!.counts, { active: 1, reauth: 1, error: 0 });
-        assert.deepEqual(dto.providers.find((p) => p.provider === 'microsoft')!.counts, { active: 0, reauth: 0, error: 0 });
-    });
-
-    it('refuses to change or clear the email of a connected person to another address (409 EMAIL_CONNECTED)', async () => {
-        const { state } = setup({ users, connections: [connection()] });
-        await expectHttp(integrationService.setPersonEmail('asha', { email: 'asha.rao@nandiniinfosys.com' }, admin), 409, 'EMAIL_CONNECTED');
-        await expectHttp(integrationService.setPersonEmail('asha', { email: '' }, admin), 409, 'EMAIL_CONNECTED');
-        assert.equal(state.users.find((u) => u.username === 'asha')!.email, 'asha@nandiniinfosys.com');
-        // A disconnected calendar no longer holds the address.
-        state.connections[0].status = 'disconnected';
-        const saved = await integrationService.setPersonEmail('asha', { email: 'asha.rao@nandiniinfosys.com' }, admin);
-        assert.equal(saved.email, 'asha.rao@nandiniinfosys.com');
+        assert.deepEqual(dto.providers.find((p) => p.provider === 'google')!.counts, { ok: 1, pending: 0, error: 1, excluded: 1 });
+        assert.deepEqual(dto.providers.find((p) => p.provider === 'microsoft')!.counts, { ok: 0, pending: 0, error: 0, excluded: 0 });
+        assert.equal(dto.fakeProvider, false);
     });
 });

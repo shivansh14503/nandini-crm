@@ -104,7 +104,7 @@ model UserPreference {
   userId                Int       @id
   user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
   /// Bell (in-app) notifications per kind; false = that kind is not created for this user. Kinds without a column
-  /// (calendar_reconnect) always deliver. notifications/notification.preferences.ts applies them.
+  /// (calendar_sync_issue) always deliver. notifications/notification.preferences.ts applies them.
   inAppActivityReminder Boolean   @default(true)
   inAppActivityAssigned Boolean   @default(true)
   inAppActivityInvited  Boolean   @default(true)
@@ -1746,97 +1746,112 @@ model IntegrationProvider {
   /// 'google' | 'microsoft' | 'zoom' (INTEGRATION_PROVIDERS in integration.constants.ts)
   provider        String    @id @db.NVarChar(30)
   enabled         Boolean   @default(false)
+  /// google: the service account's numeric client_id, taken from the uploaded key (never typed in);
+  /// microsoft / zoom: the app's client id.
   clientId        String?   @db.NVarChar(200)
-  /// Sealed JSON { clientSecret, webhookSecret? } (AAD "IntegrationProvider:<provider>:secrets").
+  /// Sealed JSON (AAD "IntegrationProvider:<provider>:secrets"): google { serviceAccountKey } (the whole key JSON as
+  /// text); microsoft { clientSecret }; zoom { clientSecret, webhookSecret? }.
   secretsEnc      String?   @db.NVarChar(Max)
   /// Key id of secretsEnc (rotation).
   keyId           String?   @db.NVarChar(8)
-  /// Non-secret hints { clientSecret: { last4, updatedAt, updatedBy, expiresOn? }, webhookSecret?: {…} }.
+  /// Non-secret hints: google { serviceAccountKey: { clientEmail, clientId, projectId, privateKeyId, updatedAt,
+  /// updatedBy } }; microsoft / zoom { clientSecret: { last4, updatedAt, updatedBy, expiresOn? }, webhookSecret?: {…} }.
   secretHintsJson String?   @db.NVarChar(Max)
-  /// Non-secret settings: microsoft { tenantId }; google { scopeProfile: 'narrow'|'broad', pkce: true };
-  /// zoom {} — company calendar settings live in ModuleSetting activities/calendarSync.
+  /// Non-secret settings: google { domains: string[] }; microsoft { tenantId, domains: string[] }; zoom {}.
+  /// Company calendar settings live in ModuleSetting activities/calendarSync.
   settingsJson    String?   @db.NVarChar(Max)
-  /// Bumped when clientId (or the Microsoft tenant) changes: connections made with the old app must reconnect.
+  /// Credentials version: bumped whenever the key, client id, secret or tenant changes. Part of the in-memory token
+  /// cache key, so grants minted with old credentials are never used again.
   clientVersion   Int       @default(1)
   lastTestAt      DateTime?
   lastTestOk      Boolean?
   /// Fixed code + short provider text (≤ 300) for admins.
   lastTestMessage String?   @db.NVarChar(300)
+  /// App-level health found while syncing (not by a manual test): unknown | ok | error.
+  healthStatus    String    @default("unknown") @db.NVarChar(10)
+  /// TokenErrorCode of the last app-level failure (delegation_missing, key_invalid, invalid_client, …).
+  healthCode      String?   @db.NVarChar(50)
+  healthAt        DateTime?
   updatedBy       String?   @db.NVarChar(50)
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @default(now()) @updatedAt
 }
 
-/// One employee's OAuth grant: kind 'calendar' (Google or Microsoft) or, from Phase 3, kind 'video' (Zoom). Tokens are
-/// AES-256-GCM sealed (src/services/secretBox.ts, AAD "CalendarConnection:<id>:accessToken|refreshToken") and never
-/// returned by the API or logged. Rows are kept after a disconnect (tokens nulled, status 'disconnected') so a
-/// reconnect of the same account re-activates the row (and, from P2-3, its links keep their history).
-/// Usernames are strings, as everywhere (no FK to Users).
+/// One employee's company calendar as the CRM syncs it (Calendar Phase 2, admin-managed: P2-2b). Created and stopped by
+/// the enrolment reconcile (calendar-sync/enrolment.ts), never by the employee. No tokens: access tokens are minted per
+/// call from the company credentials (IntegrationProvider) and kept only in process memory. One row per (user,
+/// provider, mailbox) identity; an email or provider change stops the old row and starts a new one. Usernames are
+/// strings, as everywhere (no FK to Users).
 ///
-/// Hand-written filtered unique indexes in migration 20261127090000_calendar_connections (Prisma can't model filtered
-/// indexes; keep them out of this file and re-check `prisma migrate diff` output after future migrations):
-///   UX_CalendarConnection_user_kind (username, kind)      WHERE status IN ('active','reauth_required','error')
-///   UX_CalendarConnection_account   (provider, accountId) WHERE status IN ('active','reauth_required','error')
+/// Hand-written filtered unique indexes (migration 20261128090000_calendar_admin_connect; Prisma can't model filtered
+/// indexes, so keep them out of this file and re-check `prisma migrate diff` output after future migrations):
+///   UX_CalendarConnection_user    (username)               WHERE status IN ('pending','ok','error')
+///   UX_CalendarConnection_mailbox (provider, accountEmail) WHERE status IN ('pending','ok','error')
 model CalendarConnection {
-  /// Generated in code (randomUUID) before the insert, so the token AAD can name the row.
-  id                    String    @id @default(uuid()) @db.NVarChar(50)
-  username              String    @db.NVarChar(50)
-  /// google | microsoft | zoom (Phase 3) | fake (dev-only test provider, CALENDAR_FAKE_PROVIDER)
-  provider              String    @db.NVarChar(30)
-  /// calendar | video
-  kind                  String    @default("calendar") @db.NVarChar(20)
-  /// Lower-cased verified account email.
-  accountEmail          String    @db.NVarChar(254)
-  /// Google `sub`, Entra `oid`, Zoom user id.
-  accountId             String    @db.NVarChar(200)
-  /// Entra `tid` / Google `hd`.
-  tenantId              String?   @db.NVarChar(100)
-  /// active | reauth_required | error | disconnected
-  status                String    @default("active") @db.NVarChar(20)
-  /// Fixed code: invalid_grant, client_changed, grant_expired, key_error, user_inactive, by_user, by_admin, …
-  statusReason          String?   @db.NVarChar(50)
-  /// Granted scopes as the token response listed them (space separated).
-  grantedScopes         String    @db.NVarChar(1000)
-  /// IntegrationProvider.clientVersion at connect time; a mismatch means "reconnect".
-  clientVersion         Int
-  accessTokenEnc        String?   @db.NVarChar(Max)
-  accessTokenExpiresAt  DateTime?
-  refreshTokenEnc       String?   @db.NVarChar(Max)
-  /// Google time-limited grants (`refresh_token_expires_in`); null = no known end.
-  refreshTokenExpiresAt DateTime?
-  /// Key id of the sealed tokens (rotation: npm run integrations:reencrypt).
-  keyId                 String?   @db.NVarChar(8)
-  /// Compare-and-set guard for token refresh races (API and worker processes).
-  tokenVersion          Int       @default(0)
+  id                  String    @id @default(uuid()) @db.NVarChar(50)
+  username            String    @db.NVarChar(50)
+  /// google | microsoft | fake (dev-only test provider, CALENDAR_FAKE_PROVIDER)
+  provider            String    @db.NVarChar(30)
+  /// The user's company email at enrolment, lower-cased (= Google `sub` / Graph /users/{mailbox}).
+  accountEmail        String    @db.NVarChar(254)
+  /// pending (enrolled, not checked yet) | ok | error (user-level problem) | stopped (row kept for link history)
+  status              String    @default("pending") @db.NVarChar(20)
+  /// error: user-level code (user_not_found, user_unavailable, calendar_unavailable, mailbox_out_of_scope, no_mailbox);
+  /// stopped: excluded | user_inactive | email_changed | provider_changed | provider_removed | no_email | oauth_retired
+  statusReason        String?   @db.NVarChar(50)
+  /// How the provider was chosen: domain | override
+  source              String    @default("domain") @db.NVarChar(10)
   /// 'primary' (Google) / '' = default calendar (Graph).
-  calendarId            String    @default("primary") @db.NVarChar(200)
-  /// The user opted in to bringing customer meetings into the CRM (P2-8; needs the admin switch).
-  importMeetings        Boolean   @default(false)
+  calendarId          String    @default("primary") @db.NVarChar(200)
   /// Google nextSyncToken / Graph @odata.deltaLink (P2-5). Not a credential, but never logged. Null = full sync next.
-  syncCursor            String?   @db.NVarChar(Max)
+  syncCursor          String?   @db.NVarChar(Max)
   /// Graph calendarView window of the delta link (re-baselined monthly).
-  syncWindowStart       DateTime?
-  syncWindowEnd         DateTime?
-  fullSyncAt            DateTime?
-  /// Connect backfill (P2-3c): when it ran and how many activities it copied.
-  backfilledAt          DateTime?
-  backfillCount         Int?
-  lastPulledAt          DateTime?
-  lastPushedAt          DateTime?
-  lastSuccessAt         DateTime?
-  lastErrorAt           DateTime?
-  lastErrorCode         String?   @db.NVarChar(100)
-  consecutiveFailures   Int       @default(0)
+  syncWindowStart     DateTime?
+  syncWindowEnd       DateTime?
+  fullSyncAt          DateTime?
+  /// First-sync backfill (P2-3c): when it ran and how many activities it copied.
+  backfilledAt        DateTime?
+  backfillCount       Int?
+  lastPulledAt        DateTime?
+  lastPushedAt        DateTime?
+  lastSuccessAt       DateTime?
+  lastCheckedAt       DateTime?
+  /// Earliest next health check after a user-level error (backoff 15 min → 1 h → 6 h → 24 h).
+  nextCheckAt         DateTime?
+  lastErrorAt         DateTime?
+  lastErrorCode       String?   @db.NVarChar(100)
+  /// Provider text for admins (≤ 300; never shown to the employee, never logged at info).
+  lastErrorMessage    String?   @db.NVarChar(300)
+  consecutiveFailures Int       @default(0)
   /// Per-connection mutex for push / pull / rsvp / channel jobs (P2-3).
-  leaseId               String?   @db.NVarChar(50)
-  leaseUntil            DateTime?
-  connectedAt           DateTime  @default(now())
-  disconnectedAt        DateTime?
-  disconnectedBy        String?   @db.NVarChar(50)
-  createdAt             DateTime  @default(now())
-  updatedAt             DateTime  @default(now()) @updatedAt
+  leaseId             String?   @db.NVarChar(50)
+  leaseUntil          DateTime?
+  /// When this identity was (re-)enrolled.
+  enrolledAt          DateTime  @default(now())
+  stoppedAt           DateTime?
+  /// Username of the admin whose change stopped it, or 'system'.
+  stoppedBy           String?   @db.NVarChar(50)
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @default(now()) @updatedAt
 
   @@index([username, status])
   @@index([provider, status])
-  @@index([keyId])
+  @@index([status, nextCheckAt])
+}
+
+/// Admin choices for one employee's calendar sync (Admin › API Integrations › People). A row exists only when something
+/// differs from the default (provider by email domain, included, no import). Audited (module admin-integrations).
+model CalendarSyncUser {
+  username       String   @id @db.NVarChar(50)
+  /// null = by email domain; google | microsoft | fake (fake only while CALENDAR_FAKE_PROVIDER is on)
+  provider       String?  @db.NVarChar(30)
+  /// true = never synced (row stopped with reason 'excluded'; events already in the calendar stay)
+  excluded       Boolean  @default(false)
+  /// Admin's note on why (≤ 200), shown on the People table.
+  note           String?  @db.NVarChar(200)
+  /// P2-8: bring this person's customer meetings into the CRM (also needs the company switch allowMeetingImport).
+  importMeetings Boolean  @default(false)
+  updatedBy      String   @db.NVarChar(50)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @default(now()) @updatedAt
 }

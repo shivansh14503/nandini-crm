@@ -89,11 +89,18 @@ export function CompanyEmailDialog({
                         }}
                         disabled={save.isPending}
                         error={Boolean(fieldError)}
-                        helperText={fieldError || 'Calendars can only be connected with this address. Leave blank to clear it.'}
+                        helperText={fieldError || 'Calendar sync uses this address. Leave blank to clear it.'}
                         autoComplete="off"
                         sx={inputSx}
                         slotProps={{ htmlInput: { maxLength: USER_EMAIL_MAX_LENGTH, spellCheck: false, autoCapitalize: 'none' } }}
                     />
+                    {person?.calendar.connection && !unchanged && (
+                        <Alert severity="warning" sx={{ fontSize: '0.78rem', py: 0.25 }}>
+                            {trimmed
+                                ? `Calendar sync moves from ${person.calendar.connection.accountEmail} to the new address. Events the CRM already put in the old calendar stay there.`
+                                : `Calendar sync for ${person.calendar.connection.accountEmail} stops. Events already in that calendar stay there.`}
+                        </Alert>
+                    )}
                     {(otherDomain || allowOther) && (
                         <Box>
                             <FormControlLabel

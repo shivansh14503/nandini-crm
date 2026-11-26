@@ -72,8 +72,8 @@ export const ROUTES = {
     PROFILE_SECURITY: '/profile?tab=security',
     PROFILE_NOTIFICATIONS: '/profile?tab=notifications',
     /**
-     * My Profile › Connected accounts: connect / disconnect Google or Microsoft 365. The OAuth callback and
-     * `calendar_reconnect` notifications land here (backend CALENDAR_CONNECTIONS_PAGE, contract-tested).
+     * My Profile › Connected accounts: the employee's company calendar sync, status only (admin-managed since P2-2b).
+     * Same value as the backend CALENDAR_CONNECTIONS_PAGE (contract-tested).
      */
     PROFILE_CONNECTED_ACCOUNTS: '/profile?tab=connected-accounts',
     ADMIN: '/admin',
@@ -81,7 +81,10 @@ export const ROUTES = {
     DOCUMENT_SERIES: '/admin/document-series',
     EMAIL_VALIDATION: '/admin/email-validation',
     HOLIDAYS: '/admin/holidays',
-    /** Admin › API Integrations: Google / Microsoft 365 / Zoom set-up, calendar sync settings, company emails. */
+    /**
+     * Admin › API Integrations: Google / Microsoft 365 / Zoom set-up, calendar sync settings, People. `calendar_sync_issue`
+     * notifications land here (backend ADMIN_INTEGRATIONS_PAGE, contract-tested); `?tab=people&issue=calendar_problem`.
+     */
     API_INTEGRATIONS: '/admin/integrations',
     AUDIT_LOG: '/admin/audit-log',
     LIST_SCORECARDS: '/admin/scorecards',

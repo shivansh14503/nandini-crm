@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Alert, AlertTitle, Box, Button, Skeleton, Typography } from '@mui/material';
 import HubOutlinedIcon from '@mui/icons-material/HubOutlined';
 import { AppToast } from '@/components/common/AppToast';
@@ -9,7 +9,7 @@ import { useLeaveGuard } from '@/components/settings/useLeaveGuard';
 import { useIntegrationsAdmin } from '@/hooks/queries/useIntegrationsAdmin';
 import type { IntegrationsAdmin } from '@/types/integration.types';
 import { CalendarSyncSettingsCard } from './CalendarSyncSettingsCard';
-import { PeopleTable } from './PeopleTable';
+import { PeopleTable, isPeopleFilter, type PeopleFilter } from './PeopleTable';
 import { ProviderCard } from './ProviderCard';
 import { SyncTypesCard } from './SyncTypesCard';
 import { CopyField, StatusChip, formatDateTime, hintSx } from './integrationUi';
@@ -42,13 +42,10 @@ function ReadinessAlerts({ data }: { data: IntegrationsAdmin }) {
                     </Typography>
                 </Alert>
             )}
-            {data.ready.reason === 'public_url_missing' && (
-                <Alert severity="error">
-                    <AlertTitle sx={{ fontSize: '0.86rem', fontWeight: 700 }}>The public API address is not set</AlertTitle>
-                    <Typography sx={{ fontSize: '0.8rem' }}>
-                        Set <code>PUBLIC_API_URL</code> on the API (the https address the browser and Google / Microsoft reach it at) and restart. Sign-in redirects and webhooks are
-                        built from it.
-                    </Typography>
+            {data.fakeProvider && (
+                <Alert severity="info" sx={{ fontSize: '0.8rem' }}>
+                    The test calendar is on (<code>CALENDAR_FAKE_PROVIDER</code>, development only): company domains no provider serves sync to it, and
+                    People can be put on it. It talks to no real calendar.
                 </Alert>
             )}
             {notHttps && data.keyStatus !== 'missing' && (
@@ -122,9 +119,23 @@ function ServerFacts({ data }: { data: IntegrationsAdmin }) {
     );
 }
 
+/** Reads `?tab=people&issue=<filter>` (links from calendar problem notifications) once, on the client. */
+function readPeopleLink(): { open: boolean; filter: PeopleFilter } {
+    if (typeof window === 'undefined') return { open: false, filter: 'all' };
+    const params = new URLSearchParams(window.location.search);
+    const issue = params.get('issue');
+    return { open: params.get('tab') === 'people', filter: isPeopleFilter(issue) ? issue : 'all' };
+}
+
+const scrollToPeople = () => {
+    if (typeof document === 'undefined') return;
+    document.getElementById('people')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+};
+
 /**
- * Admin › API Integrations: server readiness, Google / Microsoft / Zoom credentials, company calendar settings, which
- * Followup Types go to calendars, and people's company emails.
+ * Admin › API Integrations: server readiness, the company's Google / Microsoft / Zoom connections (admin-managed: one
+ * service account or app for everyone), company calendar settings, which Followup Types go to calendars, and People
+ * (company emails and each person's calendar).
  */
 export function ApiIntegrationsView() {
     const query = useIntegrationsAdmin();
@@ -139,6 +150,42 @@ export function ApiIntegrationsView() {
     const showToast = useCallback((message: string, severity: 'success' | 'error' = 'success') => setToast({ open: true, message, severity }), []);
 
     useLeaveGuard(Object.values(dirtyParts).some(Boolean), LEAVE_MESSAGE);
+
+    // People filter: from the link on first load, or "Show problems" on a provider card. The table is keyed by a
+    // counter so a new filter starts it fresh.
+    const [people, setPeople] = useState<{ filter: PeopleFilter; version: number }>({ filter: 'all', version: 0 });
+    const [scrollRequest, setScrollRequest] = useState(0);
+    useEffect(() => {
+        const link = readPeopleLink();
+        if (!link.open && link.filter === 'all') return;
+        // eslint-disable-next-line react-hooks/set-state-in-effect -- the URL is only readable after mount (no Suspense boundary for useSearchParams here)
+        setPeople((p) => ({ filter: link.filter, version: p.version + 1 }));
+        setScrollRequest((n) => n + 1);
+    }, []);
+    const hasData = Boolean(data);
+    useEffect(() => {
+        if (!scrollRequest || !hasData) return;
+        const id = window.setTimeout(scrollToPeople, 50);
+        return () => window.clearTimeout(id);
+    }, [scrollRequest, hasData]);
+    const showProblems = useCallback(() => {
+        setPeople((p) => ({ filter: 'calendar_problem', version: p.version + 1 }));
+        setScrollRequest((n) => n + 1);
+    }, []);
+
+    /** Domain → the label of the calendar provider that serves it (a domain goes to one provider only). */
+    const domainOwners = useMemo(() => {
+        const owners: Record<string, { provider: string; label: string }> = {};
+        for (const p of data?.providers ?? []) {
+            if (p.kind !== 'calendar') continue;
+            for (const d of p.domains) owners[d] = { provider: p.provider, label: p.label };
+        }
+        return owners;
+    }, [data?.providers]);
+    const takenByFor = useCallback(
+        (provider: string) => Object.fromEntries(Object.entries(domainOwners).filter(([, o]) => o.provider !== provider).map(([d, o]) => [d, o.label])),
+        [domainOwners],
+    );
 
     return (
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0 }}>
@@ -165,8 +212,9 @@ export function ApiIntegrationsView() {
                         API Integrations
                     </Typography>
                     <Typography sx={{ fontSize: '0.8rem', color: 'var(--mui-palette-text-secondary)', mt: 0.25, lineHeight: 1.55 }}>
-                        Connect the CRM to Google Workspace and Microsoft 365 so employees can sync CRM meetings and follow-ups with their own calendars. Everything stays
-                        off until you turn a provider on; employees then connect from My Profile › Connected accounts.
+                        Connect the company&apos;s Google Workspace or Microsoft 365 once, and everyone with a company email on its domains gets CRM meetings and
+                        follow-ups on their work calendar automatically. Employees have nothing to connect. Everything stays off until you test a provider and turn it
+                        on; People below shows who is synced and lets you leave someone out.
                     </Typography>
                 </Box>
             </Box>
@@ -213,7 +261,16 @@ export function ApiIntegrationsView() {
 
                     <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: 'repeat(2, minmax(0,1fr))', xl: 'repeat(3, minmax(0,1fr))' }, gap: 2, alignItems: 'start' }}>
                         {data.providers.map((p) => (
-                            <ProviderCard key={p.provider} provider={p} keyReady={data.keyStatus !== 'missing'} onDirtyChange={onProviderDirty} onToast={showToast} />
+                            <ProviderCard
+                                key={p.provider}
+                                provider={p}
+                                keyReady={data.keyStatus !== 'missing'}
+                                companyDomains={data.settings.companyDomains}
+                                takenBy={takenByFor(p.provider)}
+                                onDirtyChange={onProviderDirty}
+                                onToast={showToast}
+                                onShowProblems={p.kind === 'calendar' ? showProblems : undefined}
+                            />
                         ))}
                     </Box>
 
@@ -222,7 +279,14 @@ export function ApiIntegrationsView() {
                         <SyncTypesCard types={data.syncTypes} onDirtyChange={onSyncTypesDirty} onToast={showToast} />
                     </Box>
 
-                    <PeopleTable companyDomains={data.settings.companyDomains} onToast={showToast} />
+                    <PeopleTable
+                        key={people.version}
+                        companyDomains={data.settings.companyDomains}
+                        providers={data.providers}
+                        fakeProvider={data.fakeProvider}
+                        initialFilter={people.filter}
+                        onToast={showToast}
+                    />
                 </>
             )}
 

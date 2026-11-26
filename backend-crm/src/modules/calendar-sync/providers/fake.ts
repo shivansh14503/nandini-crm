@@ -1,146 +1,81 @@
-import { createHash, randomBytes } from 'node:crypto';
-import { ProviderAuthError } from './http.js';
-import { IdentityError } from './idToken.js';
-import type { AccountIdentity, AuthorizeUrlInput, CalendarProviderAdapter, ProviderCredentials, TokenSet } from './types.js';
+import { randomBytes } from 'node:crypto';
+import { TokenError, type SyncFailure } from '../syncErrors.js';
+import { ProviderAuthError, ProviderBadRequestError } from './http.js';
+import type { AccessGrant, CalendarProviderAdapter, CallCtx } from './types.js';
 
 /**
- * In-memory calendar provider `fake` (spec §6.1, §15.1). Two uses:
- *   - tests: the whole connect → callback → refresh → disconnect flow without Google or Microsoft;
- *   - development: with CALENDAR_FAKE_PROVIDER=true (never in production, never on the shared server) the Connected
- *     calendars card offers "Test calendar", whose "consent screen" is an immediate redirect back to the callback.
- * The account is always the CRM user's existing company email (passed as `loginHint`): the connect flow refuses a
- * user without one, and the fake never causes `User.email` to be written.
- * It honours PKCE (the verifier must match the challenge) and the nonce, so the real checks run against it.
+ * In-memory calendar provider `fake` in admin mode (addendum AC12). Two uses:
+ *   - tests: the whole enrol → check → (later) push path without Google or Microsoft;
+ *   - development: with CALENDAR_FAKE_PROVIDER=true (never in production, never on the shared server) `fake` serves
+ *     every company domain no enabled real provider claims, and admins may set it as a per-person override.
+ * Its token source mints `fake-at-…` tokens. Test controls make a given user fail with a user-level code, or the whole
+ * app fail with an app-level code.
  */
 
-export const FAKE_SCOPE = 'fake.calendar';
 const ACCESS_TTL_MS = 60 * 60 * 1000;
 
-interface FakeGrant {
-    email: string;
-    nonce: string;
-    codeChallenge?: string;
-    used: boolean;
-}
-
-interface FakeRefresh {
-    email: string;
-    revoked: boolean;
-}
-
-const b64url = (buf: Buffer) => buf.toString('base64url');
-const token = (prefix: string) => `${prefix}-${b64url(randomBytes(18))}`;
-
-/** Test controls and the in-memory state (one per process). */
 export interface FakeProviderState {
-    codes: Map<string, FakeGrant>;
-    refreshTokens: Map<string, FakeRefresh>;
-    accessTokens: Map<string, { email: string; nonce: string; expiresAt: Date }>;
-    /** Revoke calls received (tokens), newest last. */
-    revoked: string[];
-    /** The next refresh answers with this OAuth error (then clears). */
-    failNextRefresh: string | null;
-    /** The next token exchange grants this scope string instead of FAKE_SCOPE (then clears). */
-    nextScope: string | null;
-    /** Override of the account email returned by identity (tests: mismatch). */
-    identityEmail: string | null;
-    refreshCalls: number;
+    /** Lower-cased email → user-level failure of the token call (e.g. user_not_found). */
+    userFailures: Map<string, SyncFailure>;
+    /** App-level failure of every token call (e.g. delegation_missing); null = works. */
+    appFailure: SyncFailure | null;
+    /** Lower-cased email → HTTP status the probe answers with (e.g. 403 calendar off). */
+    probeFailures: Map<string, number>;
+    /** Lower-cased emails whose tokens the provider stops accepting once (next API call answers 401). */
+    revokeOnce: Set<string>;
+    /** Token calls made, newest last (subjects only). */
+    mints: string[];
+    /** Probe calls made, newest last (mailboxes). */
+    probes: string[];
+    /** Live tokens → subject. */
+    tokens: Map<string, string>;
 }
 
 export const fakeProviderState: FakeProviderState = {
-    codes: new Map(),
-    refreshTokens: new Map(),
-    accessTokens: new Map(),
-    revoked: [],
-    failNextRefresh: null,
-    nextScope: null,
-    identityEmail: null,
-    refreshCalls: 0,
+    userFailures: new Map(),
+    appFailure: null,
+    probeFailures: new Map(),
+    revokeOnce: new Set(),
+    mints: [],
+    probes: [],
+    tokens: new Map(),
 };
 
 export function resetFakeProvider(): void {
-    fakeProviderState.codes.clear();
-    fakeProviderState.refreshTokens.clear();
-    fakeProviderState.accessTokens.clear();
-    fakeProviderState.revoked = [];
-    fakeProviderState.failNextRefresh = null;
-    fakeProviderState.nextScope = null;
-    fakeProviderState.identityEmail = null;
-    fakeProviderState.refreshCalls = 0;
+    fakeProviderState.userFailures.clear();
+    fakeProviderState.appFailure = null;
+    fakeProviderState.probeFailures.clear();
+    fakeProviderState.revokeOnce.clear();
+    fakeProviderState.mints = [];
+    fakeProviderState.probes = [];
+    fakeProviderState.tokens.clear();
 }
 
-/** Credentials of the fake (it has no company app to set up). */
-export const FAKE_CREDENTIALS: ProviderCredentials = { clientId: 'fake-client', clientSecret: 'fake-secret', settings: {} };
+/** The fake's token "endpoint": one token per subject, an hour long. Throws TokenError per the test controls. */
+export async function mintFakeToken(subject: string, now: Date = new Date()): Promise<AccessGrant> {
+    const email = subject.toLowerCase();
+    fakeProviderState.mints.push(email);
+    if (fakeProviderState.appFailure) throw new TokenError('fake', fakeProviderState.appFailure);
+    const userFailure = fakeProviderState.userFailures.get(email);
+    if (userFailure) throw new TokenError('fake', userFailure);
+    const accessToken = `fake-at-${randomBytes(12).toString('base64url')}`;
+    fakeProviderState.tokens.set(accessToken, email);
+    return { accessToken, expiresAt: new Date(now.getTime() + ACCESS_TTL_MS) };
+}
 
-const authError = (operation: string, code: string) => new ProviderAuthError({ provider: 'fake', operation, status: 400, code });
-
-export function createFakeAdapter(options: { now?: () => Date } = {}): CalendarProviderAdapter {
-    const now = options.now ?? (() => new Date());
-
-    const issueAccess = (email: string, nonce: string, scope: string | null, refreshToken?: string, at: Date = now()): TokenSet => {
-        const accessToken = token('fake-at');
-        const expiresAt = new Date(at.getTime() + ACCESS_TTL_MS);
-        fakeProviderState.accessTokens.set(accessToken, { email, nonce, expiresAt });
-        return { accessToken, expiresAt, scope, ...(refreshToken ? { refreshToken } : {}), idToken: accessToken };
-    };
-
+export function createFakeAdapter(): CalendarProviderAdapter {
     return {
         key: 'fake',
-        canRevoke: true,
 
-        requestedScopes: () => [FAKE_SCOPE],
-
-        authorizeUrl(i: AuthorizeUrlInput): string {
-            const code = token('fake-code');
-            fakeProviderState.codes.set(code, { email: (i.loginHint ?? '').toLowerCase(), nonce: i.nonce, codeChallenge: i.codeChallenge, used: false });
-            const params = new URLSearchParams({ code, state: i.state });
-            return `${i.redirectUri}?${params.toString()}`;
-        },
-
-        async exchangeCode({ code, codeVerifier }): Promise<TokenSet> {
-            const grant = fakeProviderState.codes.get(code);
-            if (!grant || grant.used) throw authError('token', 'invalid_grant');
-            grant.used = true;
-            if (grant.codeChallenge) {
-                const challenge = b64url(createHash('sha256').update(codeVerifier ?? '').digest());
-                if (challenge !== grant.codeChallenge) throw authError('token', 'invalid_grant');
+        async probeCalendar(ctx: CallCtx): Promise<void> {
+            const mailbox = ctx.mailbox.toLowerCase();
+            fakeProviderState.probes.push(mailbox);
+            if (fakeProviderState.revokeOnce.delete(mailbox) || fakeProviderState.tokens.get(ctx.accessToken) !== mailbox) {
+                fakeProviderState.tokens.delete(ctx.accessToken);
+                throw new ProviderAuthError({ provider: 'fake', operation: 'probe', status: 401, code: 'http_401' });
             }
-            const refreshToken = token('fake-rt');
-            fakeProviderState.refreshTokens.set(refreshToken, { email: grant.email, revoked: false });
-            const scope = fakeProviderState.nextScope ?? FAKE_SCOPE;
-            fakeProviderState.nextScope = null;
-            return issueAccess(grant.email, grant.nonce, scope, refreshToken);
+            const status = fakeProviderState.probeFailures.get(mailbox);
+            if (status) throw new ProviderBadRequestError({ provider: 'fake', operation: 'probe', status, code: `http_${status}`, providerMessage: 'Calendar unavailable (fake).' });
         },
-
-        async identity(tokens: TokenSet, _creds, nonce: string): Promise<AccountIdentity> {
-            const access = fakeProviderState.accessTokens.get(tokens.idToken ?? '');
-            if (!access) throw new IdentityError('provider_error', 'id_token_unreadable');
-            if (access.nonce !== nonce) throw new IdentityError('invalid', 'nonce');
-            const email = (fakeProviderState.identityEmail ?? access.email).toLowerCase();
-            if (!email) throw new IdentityError('provider_error', 'email_missing');
-            return { accountId: `fake:${email}`, email, tenantId: 'fake', emailVerified: true };
-        },
-
-        async refresh({ refreshToken }): Promise<TokenSet> {
-            fakeProviderState.refreshCalls += 1;
-            const failure = fakeProviderState.failNextRefresh;
-            fakeProviderState.failNextRefresh = null;
-            if (failure) throw authError('refresh', failure);
-            const known = fakeProviderState.refreshTokens.get(refreshToken);
-            if (!known || known.revoked) throw authError('refresh', 'invalid_grant');
-            // Rotates like Microsoft: the old refresh token stops working, the new one must replace it.
-            known.revoked = true;
-            const next = token('fake-rt');
-            fakeProviderState.refreshTokens.set(next, { email: known.email, revoked: false });
-            return issueAccess(known.email, '', FAKE_SCOPE, next);
-        },
-
-        async revoke({ token: value }): Promise<void> {
-            fakeProviderState.revoked.push(value);
-            const known = fakeProviderState.refreshTokens.get(value);
-            if (known) known.revoked = true;
-        },
-
-        missingScopes: (tokens) => ((tokens.scope ?? '').split(/\s+/).includes(FAKE_SCOPE) ? [] : [FAKE_SCOPE]),
     };
 }
