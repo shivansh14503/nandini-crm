@@ -6,6 +6,12 @@ import { ROUTES } from '@/config/constants';
 export interface NavLinkItem {
     label: string;
     href: string;
+    /**
+     * Nested routes under this item. The navbar shows them in a flyout to the right (hover, or tap / click the
+     * chevron, or ArrowRight); the phone / tablet menu shows them as an inline expandable list. The item's own
+     * label still links to `href`.
+     */
+    children?: readonly NavLinkItem[];
 }
 
 export interface NavGroup {
@@ -47,11 +53,16 @@ export const NAV_ITEMS: readonly NavGroup[] = [
     {
         label: 'Activities',
         items: [
-            { label: 'All Activities', href: ROUTES.ACTIVITIES },
-            { label: 'Calls', href: `${ROUTES.ACTIVITIES}?type=Call` },
-            { label: 'Meetings', href: `${ROUTES.ACTIVITIES}?type=Meeting` },
-            { label: 'Tasks', href: `${ROUTES.ACTIVITIES}?type=Task` },
-            { label: 'Emails', href: `${ROUTES.ACTIVITIES}?type=Email` },
+            {
+                label: 'All Activities',
+                href: ROUTES.ACTIVITIES,
+                children: [
+                    { label: 'Calls', href: `${ROUTES.ACTIVITIES}?type=Call` },
+                    { label: 'Meetings', href: `${ROUTES.ACTIVITIES}?type=Meeting` },
+                    { label: 'Tasks', href: `${ROUTES.ACTIVITIES}?type=Task` },
+                    { label: 'Emails', href: `${ROUTES.ACTIVITIES}?type=Email` },
+                ],
+            },
             { label: 'Calendar', href: ROUTES.CALENDAR },
             { label: 'Documents', href: ROUTES.DOCUMENTS },
         ],
