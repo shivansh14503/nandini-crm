@@ -3,7 +3,7 @@
  * (backend-crm/src/modules/notifications, docs/api-plan.md). Empty values are `''`, never `null`.
  */
 
-export const NOTIFICATION_KINDS = ['activity_reminder', 'activity_assigned', 'activity_invited', 'contract_renewal', 'calendar_sync_issue'] as const;
+export const NOTIFICATION_KINDS = ['activity_reminder', 'activity_assigned', 'activity_invited', 'contract_renewal', 'calendar_sync_issue', 'booking_created'] as const;
 export type NotificationKind = (typeof NOTIFICATION_KINDS)[number];
 
 /** Module of the record a notification is about. */

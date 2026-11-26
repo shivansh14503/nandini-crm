@@ -23,7 +23,12 @@ import { withoutMutedRecipients } from './notification.preferences.js';
  * `people:calendar_problem`). It opens Admin › API Integrations. P2-2's `calendar_reconnect` is retired (its rows were
  * deleted by migration 20261128090000_calendar_admin_connect).
  */
-export const NOTIFICATION_KINDS = ['activity_reminder', 'activity_assigned', 'activity_invited', 'contract_renewal', 'calendar_sync_issue'] as const;
+/**
+ * `booking_created` (Calendar Phase 4, booking links): a visitor booked a time on the owner's public booking page. Sent to
+ * the link's owner (entityModule `activities`, entityId the booked activity, so it opens in the calendar). A system kind:
+ * no preference switch, always delivered.
+ */
+export const NOTIFICATION_KINDS = ['activity_reminder', 'activity_assigned', 'activity_invited', 'contract_renewal', 'calendar_sync_issue', 'booking_created'] as const;
 export type NotificationKind = (typeof NOTIFICATION_KINDS)[number];
 
 export interface NotificationInput {

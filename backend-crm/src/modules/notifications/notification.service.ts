@@ -26,7 +26,7 @@ export const UNREAD_COUNT_TTL_SECONDS = 24 * 60 * 60;
 /** `Notification` in frontend-crm/src/types: empty values are '' (not null). */
 export interface NotificationDto {
     id: string;
-    /** activity_reminder | activity_assigned | activity_invited | contract_renewal | calendar_sync_issue */
+    /** activity_reminder | activity_assigned | activity_invited | contract_renewal | calendar_sync_issue | booking_created */
     kind: string;
     title: string;
     body: string;

@@ -4,6 +4,7 @@ import { CATEGORY_MODULES, CRM_MODULES, CUSTOM_FIELD_TYPES, FIELD_SIZES } from '
 import { CLOSES_LEAD_META_KEY, RATING_RULE_META_KEY, ratingLimitsSchema, ratingRuleSchema } from '../leads/lead.rating.js';
 import { NO_FOLLOW_UP_META_KEY, OPPORTUNITY_STAGES_META_KEY, opportunityStagesSchema } from '../opportunities/opportunity.followUp.js';
 import { CALENDAR_SYNC_META_KEY, CALENDAR_SYNC_SETTING_KEY, calendarSyncSettingsSchema } from '../integrations/calendarSyncSettings.js';
+import { BOOKING_SETTING_KEY, bookingSettingsSchema } from '../booking-links/bookingLink.settings.js';
 
 /**
  * Request schemas for /api/form-configs. Rules that depend on the stored row (system options can't be renamed or
@@ -102,6 +103,8 @@ export const MODULE_SETTING_SCHEMAS: Readonly<Record<string, z.ZodType>> = {
     'opportunities:convertSections': convertSectionsSchema,
     /** Admin › API Integrations company calendar-sync settings (integrations/calendarSyncSettings.ts). */
     [`activities:${CALENDAR_SYNC_SETTING_KEY}`]: calendarSyncSettingsSchema,
+    /** Company booking-link settings: switch and who may create links (booking-links/bookingLink.settings.ts). */
+    [`activities:${BOOKING_SETTING_KEY}`]: bookingSettingsSchema,
 };
 
 export const moduleSchema = z.enum(CRM_MODULES, { error: `module must be one of: ${CRM_MODULES.join(', ')}.` });

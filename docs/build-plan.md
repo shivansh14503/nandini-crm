@@ -1,7 +1,7 @@
 # Nandini CRM — Build Plan
 
 > **Status:** living document. Part 1 records what has been built (reconstructed from git history, 115 commits
-> from 2026-10-15 to 2026-11-18; the snapshot as of 2026-11-26, Calendar Phase 2 P2-1, P2-2, P2-2b (admin-managed calendar connections), P2-3a, P2-4 and P2-6 (busy times), Profile Phase 1: My Profile, Profile Phase 2: Admin › Users, Profile Phase 3: notifications & preferences, Profile Phase 4: connected accounts and Profile Phase 5 PR5a + PR5b: company formats, which completes Phase 17). Part 2
+> from 2026-10-15 to 2026-11-18; the snapshot as of 2026-11-26, Calendar Phase 2 P2-1, P2-2, P2-2b (admin-managed calendar connections), P2-3a, P2-4 and P2-6 (busy times), Calendar Phase 4 booking links, Profile Phase 1: My Profile, Profile Phase 2: Admin › Users, Profile Phase 3: notifications & preferences, Profile Phase 4: connected accounts and Profile Phase 5 PR5a + PR5b: company formats, which completes Phase 17). Part 2
 > is the roadmap. Tick
 > items off and add new ones as work lands.
 > Related: [System design](system-design.md) · [Database design](database-design.md) · [API plan](api-plan.md)
@@ -428,6 +428,27 @@ keeps wall-clock times); all-day activities are entered as business-timezone day
         Microsoft: `getSchedule` under the Exchange RBAC scope (first-run check F7).
   - [ ] **P2-7: webhooks and HTTPS go-live**
   - [ ] **P2-8: customer meetings from the calendar + replies both ways** (optional, off by default)
+- [ ] **Phase 4 (later; spec §17)**: booking links, recurring activities, email logging.
+  - [x] **Booking links (public scheduling page on free/busy)** (2026-11-26) — migration `20261128120000_booking_links`
+        (`BookingLink`, `BookingLinkBooking`; `Activity.origin` gains `booking`, notification kind `booking_created`).
+        Company switch (default off) and "who may create links" (everyone / managers and admins / admins) on Admin ›
+        API Integrations (`ModuleSetting activities/bookingLinks`). `/booking-links` (user menu and mobile drawer):
+        an employee's links (admins: everyone's, and links for a colleague), create / edit (type, durations, location,
+        note, weekly hours in the business zone, buffers, notice, days ahead, bookings a day, reminder, phone /
+        company questions, optional related record), copy, on / off, new address, latest bookings. Public page
+        `/book/<slug>` (no sign-in, no app shell, phone first): free starts from the owner's CRM activities and
+        company calendar through P2-6 `busyTimes` (fail closed when the calendar can't be read), HMAC-signed slot
+        tokens (`BOOKING_SIGNING_KEY` or derived from `JWT_SECRET`), booking re-checked in one transaction under a
+        per-owner lock (D45), a Meeting activity through `insertSystemActivity` (actor `system`, origin `booking`,
+        the visitor as an `email` attendee, a single matching Contact linked), the owner's bell notification, an
+        on-page confirmation with an `.ics` file (no email: the mail layer stays parked). Public API: own router,
+        16 KB body, one identical 404, rate limits per IP and per link (in-process fallback, never open), honeypot,
+        audit route `public:booking`. No job, no polling (DB wakes only when a page is open). Calendar push follows
+        automatically once P2-3b's write hook is merged (invitation held for the owner under D41). Not run against a
+        real SQL Server, Google or Microsoft (doubles only). Later: email confirmations and visitor cancel /
+        reschedule (mail layer), team / round-robin links, custom questions.
+  - [ ] Recurring activities (CRM-authored series, R12 occurrence rows).
+  - [ ] Email logging.
 
 ### Phase 15 — Documents (P2, 2026-11-25)
 

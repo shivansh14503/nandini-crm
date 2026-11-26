@@ -13,6 +13,7 @@ import AutorenewOutlinedIcon from '@mui/icons-material/AutorenewOutlined';
 import DoneAllIcon from '@mui/icons-material/DoneAll';
 import MailOutlineOutlinedIcon from '@mui/icons-material/MailOutlineOutlined';
 import EventBusyOutlinedIcon from '@mui/icons-material/EventBusyOutlined';
+import EventAvailableOutlinedIcon from '@mui/icons-material/EventAvailableOutlined';
 import SettingsOutlinedIcon from '@mui/icons-material/SettingsOutlined';
 import { ROUTES } from '@/config/constants';
 import { useAuth } from '@/context/AuthContext';
@@ -39,6 +40,7 @@ const KIND_ICONS: Record<string, SvgIconComponent> = {
     activity_invited: GroupAddOutlinedIcon,
     contract_renewal: AutorenewOutlinedIcon,
     calendar_sync_issue: EventBusyOutlinedIcon,
+    booking_created: EventAvailableOutlinedIcon,
 };
 
 /** The icon tile takes the tint of the record's module (activities olive, contracts rose); others stay neutral. */

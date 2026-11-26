@@ -6,7 +6,8 @@
 > (`origin`, `lockedFields`, `409 FOLLOW_UP_ACTIVITY_LOCKED`, the follow-up side effects of lead / opportunity saves); P2-1: `/api/admin/integrations`, Admin › API
 > Integrations; Profile Phase 1: `/api/me` (My Profile), `/api/user-photos` and `POST /api/auth/change-password`; and
 > Profile Phase 2: `/api/admin/users` (Admin › Users) with the must-change-password claim; Profile Phase 3:
-> `/api/me/preferences` (My Profile › Notifications); Profile Phase 5: `/api/company-formats` (Admin › Company formats), with PR5b's audit field values in the company formats; P2-6: `GET /api/activities/busy`, colleagues' busy times)
+> `/api/me/preferences` (My Profile › Notifications); Profile Phase 5: `/api/company-formats` (Admin › Company formats), with PR5b's audit field values in the company formats; P2-6: `GET /api/activities/busy`, colleagues' busy times; Calendar Phase 4: booking links, `/api/booking-links` and the public
+> `/api/public/booking`, as of 2026-11-26)
 > plus the planned ones.
 > When you add, change or remove a route, update this file in the same change (the route files'
 > header comments are the per-module source of truth; keep them in step too).
@@ -571,6 +572,41 @@ the whole range for the list. Performance check: `npm run perf:audit` (scratch d
 [build plan Phase 11](build-plan.md)). Free text (`q`) also reads the stored values, so a search that matches nothing
 scans the whole range: send a date range with it.
 
+**Booking links** — `/booking-links` (signed in; Calendar Phase 4, as of 2026-11-26; `backend-crm/src/modules/booking-links/bookingLink.routes.ts`, route
+header comment = source of truth). An employee's public scheduling pages (`/book/<slug>`). Owner or admin only: another
+user's link is `404`. The company switch (`ModuleSetting activities/bookingLinks`, default **off**) must be on to create or
+change a link; `{ isActive: false }` alone always works. `whoCanCreate`: `everyone` | `managers` (global-access roles and
+admins) | `admins`; admins can always create a link for an active, non-group colleague (`ownerUsername`). Writes audited
+`BookingLink` CREATE / UPDATE (module `booking-links`).
+
+| Method | Path | Description |
+| --- | --- | --- |
+| GET | `/access` | `{ enabled, canCreate, isAdmin, whoCanCreate }` (the user menu shows "Booking links" when `enabled && (canCreate \|\| isAdmin)`); `Cache-Control: no-store` |
+| GET | `/` | `?scope=mine\|all` (`all`: admins, else 403) → `{ access, links: BookingLinkDto[] }`, active first, newest first, at most 500. `BookingLinkDto` = `{ id, slug, path ('/book/<slug>'), ownerUsername, ownerName, title, followupType, durations, slotStepMinutes, location, note, availability, bufferBeforeMinutes, bufferAfterMinutes, minNoticeMinutes, horizonDays, maxPerDay, reminder, askPhone, askCompany, relatedModule, relatedId, relatedCode, relatedLabel, isActive, bookings: { total, upcoming, lastBookedAt }, ownerCalendar: synced\|not_connected\|error, createdBy, createdAt, updatedAt }` |
+| POST | `/` | `{ title, ownerUsername? (admins), followupType? (an active Followup Type, not Task / Note; default Meeting), durations? (1–4 of 10–240 min in 5-min steps, first = default; [30]), slotStepMinutes? (15\|30\|60), location?, note?, availability? ({ "1".."7": [{ start: 'HH:mm', end: 'HH:mm'\|'24:00' }] }, ≤ 3 sorted non-overlapping ranges a day, ≥ 1 in the week; default Mon–Fri 10–13 and 14–18), bufferBeforeMinutes? / bufferAfterMinutes? (0–120; 0 / 10), minNoticeMinutes? (0–20160; 240), horizonDays? (1–60; 30), maxPerDay? (1–50 or null), reminder? (an activity reminder or null; '15 minutes before'), askPhone?, askCompany?, relatedModule? + relatedId? (both or neither; a record the caller can access), isActive? }` → `201 BookingLinkDto`; the slug is generated (`<first name>-<title>-<8 random chars>`, never typed, never reused). Strict body |
+| PUT | `/:id` | Any subset of the POST fields except `ownerUsername` → `BookingLinkDto`. Every save changes `updatedAt`, the link version signed into slot tokens, so times shown before the edit can no longer be booked |
+| POST | `/:id/new-address` | A new random slug; the old address answers 404 at once → `BookingLinkDto` |
+| GET | `/:id/bookings` | Latest 50 bookings, newest first: `[{ id, activityId, activityStatus (or 'Deleted'), start, end, visitorName, visitorEmail, visitorPhone, visitorCompany, contactId, createdAt }]` |
+| GET | `/settings` | Admins: `{ enabled, whoCanCreate }` |
+| PUT | `/settings` | Admins: `{ enabled?, whoCanCreate? }` → settings (written through `formConfigService.updateModuleSetting`, audited as a form-config change; the public link cache is dropped so "off" is immediate) |
+
+Errors: `409 BOOKING_LINKS_OFF`, `403 BOOKING_LINKS_NOT_ALLOWED` (role), `409 BOOKING_LINK_LIMIT` (20 links per person, active
+or not), `400 VALIDATION_ERROR` (`errors[].path` = field; `availability.<weekday>`).
+
+**Public booking page** — `/public/booking` (**no sign-in**; Calendar Phase 4, as of 2026-11-26;
+`bookingLink.public.routes.ts`). Mounted before the global body parser with its own **16 KB** JSON limit; every answer
+`Cache-Control: no-store`, `X-Robots-Tag: noindex, nofollow`. CORS, helmet and CSP are unchanged (the page `/book/<slug>`
+is served from the app's own origin). **One 404** (`NOT_FOUND`, the same message) for a malformed slug (checked before any
+read), a missing or turned-off link, the company switch off, or an owner who is inactive or a group login, so links and
+people can't be enumerated. Only the link's public fields and **free start times** leave the server: never busy blocks,
+subjects, usernames, emails or the owner's calendar status.
+
+| Method | Path | Description |
+| --- | --- | --- |
+| GET | `/:slug` | `{ slug, title, ownerName, typeLabel, durations, defaultDuration, location, note, askPhone, askCompany, timeZone, firstDay, lastDay }` (days `YYYY-MM-DD` in the business zone). 60 / min / IP |
+| GET | `/:slug/slots` | `?from=YYYY-MM-DD&days=1..14 (7)&duration=<an offered duration>` → `{ timeZone, duration, days: [{ date, slots: [{ start, token }] }], firstDay, lastDay, prevFrom, nextFrom }`. A start is offered when it is on the step grid inside a range of that weekday, after now + minimum notice, before now + horizon, not on a company holiday, the day is under `maxPerDay` (planned / completed bookings of this link), and `[start − bufferBefore, end + bufferAfter)` overlaps no busy block of the owner (P2-6 `busyTimes` with the owner as requester: CRM activities + company calendar; provider calls on the per-link budget `booking:<linkId>`). `token` = signed slot token (system design §3.6, Public booking pages), good for 30 min. `503 CALENDAR_UNAVAILABLE` when the owner's company calendar status is `error` / `unavailable` (fail closed: no times rather than a double booking); `not_connected` = CRM activities only. 60 / min / IP and 600 / min / link |
+| POST | `/:slug/book` | `{ token, name (≤ 100, no < >), email (≤ 120, lower-cased), phone? (≤ 30, phone rule), company? (≤ 200), message? (≤ 1000), website? (honeypot, must be empty) }`, strict → `201 { booking: { id, title, typeLabel, ownerName, start, end, durationMinutes, timeZone, location }, ics }`. Checks: honeypot (`400 BOOKING_REJECTED`), token signature / expiry / link version / offered duration (`409 SLOT_UNAVAILABLE`), the link's rules again (notice, horizon, holiday, hours, grid), the company calendar again (outside the transaction); then **one transaction under the per-owner lock `booking:owner:<username>`**: the token used before → the same confirmation for the same email, else 409; the owner's CRM activities re-read through the transaction (`busyActivityWhere`, buffers included) → `409 SLOT_UNAVAILABLE`; `maxPerDay` re-counted → `409 BOOKING_DAY_FULL`; a live Contact with exactly that email (exactly one) is linked when the link has no (live) related record; the **Meeting activity** (`insertSystemActivity`: owner = link owner, `createdBy` = owner, actor `system`, `origin = 'booking'`, subject "<title> with <name>", the link's type / location / reminder / related record, the visitor as an `email` attendee, remarks "Booked online through …" + phone / company / message); the `BookingLinkBooking` row (`tokenHash` unique); the owner's `booking_created` notification. A unique violation aborts and the whole booking is retried once (D45). Audit: the activity's CREATE entry with route `public:booking`, the visitor's IP and user agent. No email is sent. 10 / hour / IP and 30 / hour / link |
+
 ## 3. Rate limits
 
 | Key | Limit | Scope | On exceed |
@@ -583,9 +619,13 @@ scans the whole range: send a date range with it.
 | Admin password reset (`ratelimit:admin-password-reset`) | 20 / 10 min (every request) | admin | 429 "Too many password resets. Please wait a few minutes." |
 | Busy times (`ratelimit:activity-busy`, `GET /activities/busy`) | 60 / 60 s | user | 429 `RATE_LIMITED` + `Retry-After` (in-memory per process whenever Redis can't count it; never fails open, since Redis down also means no busy-times cache) |
 | Busy times provider calls (`ratelimit:activity-busy-calls`) | 120 Google / Microsoft calls / 60 s | user | no 429: the calendar part of people not yet read is `unavailable` and the CRM part is still returned (in-memory per process whenever Redis can't count it) |
+| Public booking page view (`ratelimit:booking-view`, `GET /public/booking/:slug`) | 60 / 60 s | IP | 429 `RATE_LIMITED` + `Retry-After` (in-memory per process whenever Redis can't count; never fails open) |
+| Public booking slots (`ratelimit:booking-slots-ip` / `-link`) | 60 / 60 s per IP; 600 / 60 s per link | IP, link | 429 (same fallback) |
+| Public booking (`ratelimit:booking-book-ip` / `-link`, `POST /public/booking/:slug/book`) | 10 / hour per IP; 30 / hour per link | IP, link | 429 (same fallback) |
+| Booking page provider calls (busy-times budget `booking:<linkId>`) | 120 Google / Microsoft calls / 60 s | link | no 429: the owner's calendar part is `unavailable`, so the page answers `503 CALENDAR_UNAVAILABLE` (no times) |
 | Integration connection test and People "Check now" | 6 / 60 s | admin | 429 `RATE_LIMITED` + `Retry-After` (in-memory per process whenever Redis can't count it: down, or a command failing while it reports ready; this one never fails open) |
 
-Limited responses carry `RateLimit-Limit`, `RateLimit-Remaining`, `RateLimit-Reset`. All limits except the integration connection test fail open when Redis is down.
+Limited responses carry `RateLimit-Limit`, `RateLimit-Remaining`, `RateLimit-Reset`. All limits except the integration connection test, busy times and the public booking page fail open when Redis is down.
 
 ## 4. Error codes
 
@@ -617,12 +657,19 @@ Limited responses carry `RateLimit-Limit`, `RateLimit-Remaining`, `RateLimit-Res
 | 409 | `CALENDAR_NOT_SYNCED` | API Integrations › People: "Check now" for a person without a live calendar row |
 | 409 | `INTEGRATION_NOT_AVAILABLE` | API Integrations: Zoom before video meetings ship (Phase 3) |
 | 409 | `FOLLOW_UP_ACTIVITY_LOCKED` | Activities: changing the type, times, status, owner or related record of a lead / opportunity follow-up activity, or deleting one (change it on the record) |
+| 400 | `BOOKING_REJECTED` | Public booking: the honeypot field was filled (no detail given) |
+| 403 | `BOOKING_LINKS_NOT_ALLOWED` | Booking links: the user's role may not create links (`whoCanCreate`) |
+| 409 | `BOOKING_LINKS_OFF` | Booking links: the company switch is off (creating or changing a link; turning one off still works) |
+| 409 | `BOOKING_LINK_LIMIT` | Booking links: the owner already has 20 links |
+| 409 | `SLOT_UNAVAILABLE` | Public booking: the time is taken, the token is invalid / expired / for an older version of the link, or the time breaks the link's rules now |
+| 409 | `BOOKING_DAY_FULL` | Public booking: that day reached the link's bookings-a-day limit |
 | 409 | `NOT_UNDOABLE`, `NOT_RESTORABLE`, `ALREADY_REVERSED` | Audit log: the entry can't be undone / restored, or was already |
 | 410 | `EXPORT_EXPIRED` | Audit log export older than 24 h |
 | 413 | – | Body over its limit |
 | 429 | `RATE_LIMITED` | See §3 |
 | 503 | `SERVER_BUSY` | Lock timeout / DB couldn't start a transaction (`Retry-After: 2`) |
 | 503 | `INTEGRATIONS_NOT_READY` | API Integrations: storing a secret or key while `INTEGRATIONS_ENCRYPTION_KEY` is not set |
+| 503 | `CALENDAR_UNAVAILABLE` | Public booking: the owner's company calendar can't be read now, so no times are offered and nothing is booked |
 | 503 | `IMPORT_QUEUE_UNAVAILABLE` | Large import or status poll without Redis |
 | 503 | `SESSIONS_UNAVAILABLE` | Signing out one session while Redis is down |
 | 503 | `PDF_RENDERER_UNAVAILABLE`, `SHUTTING_DOWN` | Chromium can't start; server stopping |

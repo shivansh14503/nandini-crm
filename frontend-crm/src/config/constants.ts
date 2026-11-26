@@ -76,6 +76,10 @@ export const ROUTES = {
      * Same value as the backend CALENDAR_CONNECTIONS_PAGE (contract-tested).
      */
     PROFILE_CONNECTED_ACCOUNTS: '/profile?tab=connected-accounts',
+    /** Booking links (Calendar Phase 4): the signed-in user's public scheduling pages (user menu › Booking links). */
+    BOOKING_LINKS: '/booking-links',
+    /** A public booking page (no sign-in, outside the app shell). Same path as the API's BookingLinkDto.path. */
+    BOOK: (slug: string) => `/book/${encodeURIComponent(slug)}`,
     ADMIN: '/admin',
     FORM_CUSTOMIZATION: '/admin/form-customization',
     DOCUMENT_SERIES: '/admin/document-series',

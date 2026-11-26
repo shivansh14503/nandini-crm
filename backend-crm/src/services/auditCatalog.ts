@@ -42,6 +42,8 @@ export type AuditEntityType =
     | 'CalendarConnection'
     /** An admin's calendar choice for one person (Admin › API Integrations › People): provider override, exclusion. */
     | 'CalendarSyncUser'
+    /** A public booking page of one employee (Calendar Phase 4, booking-links); CREATE / UPDATE (turned off = UPDATE). */
+    | 'BookingLink'
     /** An export of the audit log itself (Admin › Audit Log). */
     | 'AuditExport'
     /** The audit log's SQL Server ledger (integrity checks). */
@@ -139,6 +141,7 @@ const MODULE_BY_ENTITY: Record<AuditEntityType, string> = {
     IntegrationProvider: 'admin-integrations',
     CalendarConnection: 'calendar',
     CalendarSyncUser: 'admin-integrations',
+    BookingLink: 'booking-links',
     AuditExport: 'audit-log',
     AuditLedger: 'audit-log',
 };
@@ -346,6 +349,8 @@ export function labelFromChanges(entityType: AuditEntityType, entityId: string, 
             return pick('accountEmail');
         case 'CalendarSyncUser':
             return pick('username') ?? entityId;
+        case 'BookingLink':
+            return pick('title');
         case 'Import':
         case 'RecordFile':
         case 'PdfAsset':
