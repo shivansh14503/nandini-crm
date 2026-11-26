@@ -1,7 +1,7 @@
 # Nandini CRM — Build Plan
 
 > **Status:** living document. Part 1 records what has been built (reconstructed from git history, 115 commits
-> from 2026-10-15 to 2026-11-18; the snapshot as of 2026-11-26, Calendar Phase 2 P2-1 and P2-2, Profile Phase 1: My Profile and Profile Phase 2: Admin › Users). Part 2
+> from 2026-10-15 to 2026-11-18; the snapshot as of 2026-11-26, Calendar Phase 2 P2-1, P2-2 and P2-3a, Profile Phase 1: My Profile and Profile Phase 2: Admin › Users). Part 2
 > is the roadmap. Tick
 > items off and add new ones as work lands.
 > Related: [System design](system-design.md) · [Database design](database-design.md) · [API plan](api-plan.md)
@@ -337,7 +337,15 @@ keeps wall-clock times); all-day activities are entered as business-timezone day
         `prisma migrate diff --from-empty`; the whole connect → callback → refresh → disconnect flow runs against the
         fake provider and replayed Google / Microsoft answers in tests). The morning email only has a parked hook
         comment (`hasActiveCalendarConnection`).
-  - [ ] **P2-3a: activity write-path refactor** (no behaviour change)
+  - [x] **P2-3a: activity write-path refactor** (2026-11-26, no behaviour change) — `activity.system.ts`
+        (`insertSystemActivity` / `applySystemPatch`: owner verbatim, no past-start / admin-required / related-access /
+        lock checks; audit, revision, `remindAt`, attendee sync kept; `loadFollowUpContext()`), the write hook
+        `activity.writeHook.ts` (`activityWriteHook.onWrite`, called inside every Activity write with the acting
+        username; a no-op until P2-3b), `insertActivityRow` / `updateActivityRow` shared by CRM and system writes,
+        `runActivityPostCommit` replacing `afterActivityCommit` (now also after delete / bulk delete, where it does
+        nothing), and the lock seam (`activityLocks.lockFor` / `lockedFieldsFor` in `activity.access.ts`, returning
+        none; enforced in update, delete and bulk delete, `BulkDeleteResult.skipped` optional). No migration, no API
+        change.
   - [ ] **P2-3b: CRM → calendar push engine**
   - [ ] **P2-3c: backfill, send invitations, sync status UI**
   - [ ] **P2-4: follow-ups create activities**

@@ -137,4 +137,9 @@ export interface BulkDeleteResult {
     ids: string[];
     /** Requested ids that don't exist or were already deleted. */
     notFound: string[];
+    /**
+     * Live records left alone, with why (activities: locked ones, e.g. a lead's follow-up activity, Calendar Phase 2).
+     * Only present when something was skipped, so other modules' results are unchanged.
+     */
+    skipped?: { id: string; reason: string }[];
 }
