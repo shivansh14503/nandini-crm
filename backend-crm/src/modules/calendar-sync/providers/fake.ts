@@ -54,7 +54,8 @@ export interface FakeProviderState {
     /** Free/busy calls made, newest last: as whom, for which calendars. */
     freeBusyCalls: { mailbox: string; emails: string[] }[];
     /** How a Meet createRequest ends (P3-1): `success` at once (default), `pending` (until `fakeFinishConference`) or `failure`. */
-    conferenceMode: 'success' | 'pending' | 'failure';
+    /** How Google answers a Meet createRequest; `refused`: 400 'Invalid conference type value' (Meet off for the org). */
+    conferenceMode: 'success' | 'pending' | 'failure' | 'refused';
 }
 
 export type FakeEventOp = 'create' | 'patch' | 'cancel' | 'get' | 'undelete';
@@ -144,9 +145,11 @@ function withConferenceWrite(body: Record<string, unknown>, previous: GoogleEven
     if (conferenceData === null) return { ...rest, conferenceData: null, hangoutLink: null };
     const requestId = conferenceData?.createRequest?.requestId;
     if (!requestId) return rest;
+    const mode = fakeProviderState.conferenceMode;
+    if (mode === 'refused') throw new ProviderBadRequestError({ provider: 'fake', operation: 'event', status: 400, code: 'invalid', providerMessage: 'Invalid conference type value.' });
     // The same requestId again is a no-op (Google answers with the existing conference).
     if (previous?.conferenceData?.createRequest?.requestId === requestId) return rest;
-    return { ...rest, ...meetConference(requestId, fakeProviderState.conferenceMode, conferenceIdOf(requestId)) };
+    return { ...rest, ...meetConference(requestId, mode, conferenceIdOf(requestId)) };
 }
 
 /** 401 unless the token is a live one of this mailbox (a `revokeOnce` mailbox fails once). */

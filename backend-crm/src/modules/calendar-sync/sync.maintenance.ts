@@ -13,6 +13,7 @@ import { CALENDAR_SYNC_JOBS, CHECK_SWEEP_LIMIT, ENROLLED_PUSH_BATCH, FALLBACK_PU
 import { sweepPushJobId } from './sync.keys.js';
 import { secretExpiringNotifications } from './sync.notifications.js';
 import { markPushExhausted, pushLink } from './sync.push.js';
+import { failStaleConferences } from './sync.conference.js';
 import { enqueueCheck, type PushJobData } from './sync.wake.js';
 import { adminRecipients } from './syncIssue.notifications.js';
 
@@ -208,7 +209,8 @@ async function step<T>(name: string, fn: () => Promise<T>, fallback: T): Promise
 /**
  * `calendar-nightly` (00:25): the connection steps P2-2b ran from the reminders worker (reconcile everyone, due health
  * checks, the admins' problem digest), the follow-up activity backfill P2-4 ran there too, then P2-3b's own: error
- * links retried, client secrets expiring, expired leases cleared.
+ * links retried, client secrets expiring, expired leases cleared; P3-1: video links still `requested` an hour after
+ * the last save become `failed conference_timeout` (Retry offered).
  */
 export async function runCalendarNightly(now: Date = new Date()) {
     const connections = await step('connections', () => runCalendarConnectionNightly(now), { changed: 0, checked: 0, problems: 0 });
@@ -216,7 +218,8 @@ export async function runCalendarNightly(now: Date = new Date()) {
     const retried = await step('retry-errors', () => retryErrorLinks(now), 0);
     const secrets = await step('secret-expiring', () => notifyExpiringSecrets(now), 0);
     const leases = await step('expired-leases', () => clearExpiredLeases(now), 0);
-    const result = { connections, followUps, retried, secrets, leases };
+    const staleVideoLinks = await step('stale-video-links', () => failStaleConferences(now), 0);
+    const result = { connections, followUps, retried, secrets, leases, staleVideoLinks };
     logger.info({ ...result, followUps: followUps ? 'done' : 'failed' }, 'Calendar nightly done');
     return result;
 }

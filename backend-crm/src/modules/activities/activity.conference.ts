@@ -8,7 +8,9 @@ import {
     VIDEO_PROVIDER_LABELS,
     VIDEO_PROVIDER_NOT_CONNECTED,
     VIDEO_PROVIDERS,
+    failedConferenceColumns,
     isVideoProvider,
+    canRetryConference,
     videoMeetingFromMeta,
     videoProviderForCalendar,
     videoUnavailableMessage,
@@ -32,9 +34,9 @@ type OwnerDb = Pick<TransactionClient, 'calendarConnection' | 'integrationProvid
  * - The **owner's** company calendar decides the provider (admin-managed connections): a live Google calendar → Google
  *   Meet, Microsoft 365 → Microsoft Teams. Anything else → 409 VIDEO_PROVIDER_NOT_CONNECTED. Zoom is P3-2 (never
  *   available yet).
- * - A ready Teams link can't be removed or changed (409 VIDEO_MEETING_LOCKED).
- * - A new choice, an owner change (a new event in the new owner's calendar) and Retry ask for a new link: state
- *   `requested`, `conferenceRequest + 1` (Google's requestId '<requestedId>-c<n>').
+ * - A ready Teams link can't be removed or changed by its owner (409 VIDEO_MEETING_LOCKED); a new owner may.
+ * - A new choice, an owner change of a Planned row (a new event in the new owner's calendar) and Retry ask for a new
+ *   link: state `requested`, `conferenceRequest + 1` (Google's requestId '<requestedId>-c<n>').
  */
 
 export const VIDEO_NOT_PLANNED_MESSAGE = 'A video meeting can only be added to a planned activity.';
@@ -71,10 +73,17 @@ const requestedRow = (provider: VideoProvider, request: number): ConferenceRowDa
 /**
  * Conference columns of an insert (`existing` null) or update (pure). `{}` = unchanged. An insert that isn't Planned
  * gets none (a logged activity has no event to carry a link).
+ *
+ * An owner change with the same choice (CRM or system writes, e.g. a follow-up re-owned with its lead) asks the new
+ * owner's calendar for a new link only when one will be pushed: the row is Planned and `ownerVideo` (what the new
+ * owner's calendar creates, `ownerVideoForChange`) is the stored provider. Not Planned: the stored outcome stays (no
+ * new event). A calendar that can't create it: `failed provider_unavailable` (the user picks another option or None;
+ * no Retry), never a request nothing would answer.
  */
 export function conferenceColumnsFor(
     input: { videoMeeting?: VideoProvider | null; followupType: string; status: string; assignedTo: string },
     existing: StoredConference | null,
+    ownerVideo: CalendarVideoProvider | null = null,
 ): ConferenceRowData {
     const desired = desiredOf(input);
     if (!existing) return desired && input.status === PLANNED_STATUS ? requestedRow(desired, 1) : {};
@@ -83,7 +92,33 @@ export function conferenceColumnsFor(
     const ownerChanged = !sameUser(existing.assignedTo, input.assignedTo);
     if (next === stored && !(next && ownerChanged)) return {};
     if (!next) return CLEARED;
+    if (next === stored) {
+        if (input.status !== PLANNED_STATUS) return {};
+        if (ownerVideo !== next) return { conferenceProvider: next, ...failedConferenceColumns('provider_unavailable') };
+    }
     return requestedRow(next, (existing.conferenceRequest ?? 0) + 1);
+}
+
+/** Whether a write moves a stored video meeting to a new owner (the case `conferenceColumnsFor` needs `ownerVideo` for). */
+export function movesVideoToNewOwner(input: { videoMeeting?: VideoProvider | null; followupType: string; status: string; assignedTo: string }, existing: StoredConference): boolean {
+    const desired = desiredOf(input);
+    const stored = existing.conferenceProvider ?? null;
+    return Boolean(stored) && (desired === undefined || desired === stored) && input.status === PLANNED_STATUS && !sameUser(existing.assignedTo, input.assignedTo);
+}
+
+/**
+ * What the new owner's calendar creates, for `conferenceColumnsFor` on an owner change (null: not synced, or the type
+ * doesn't go to calendars, so no push would answer). One connection read, only when a meeting moves to a new owner.
+ */
+export async function ownerVideoForChange(
+    db: OwnerDb,
+    input: { videoMeeting?: VideoProvider | null; followupType: string; status: string; assignedTo: string },
+    existing: StoredConference,
+    config: Pick<ActivityConfig, 'followupTypes'> | null | undefined,
+): Promise<CalendarVideoProvider | null> {
+    if (!movesVideoToNewOwner(input, existing)) return null;
+    if (config && !isTypeSyncable(input.followupType, config)) return null;
+    return (await ownerVideoProvider(db, input.assignedTo)).video;
 }
 
 /** The provider the owner's live company calendar creates links for (null when the owner isn't synced). */
@@ -106,9 +141,11 @@ export const videoNotConnectedError = (message: string) =>
 
 /**
  * A CRM save's Video meeting rules (inside the save's transaction, before the write): 409 VIDEO_MEETING_LOCKED when
- * a ready Teams link would be removed or changed; for a new choice 400 when not Planned or the type doesn't offer it;
- * for a new choice or an owner change 409 VIDEO_PROVIDER_NOT_CONNECTED unless the owner's calendar creates that kind
- * of link. Re-saving what is stored passes (an admin switching a type off keeps existing meetings).
+ * a ready Teams link would be removed or changed by its owner; for a new choice 400 when not Planned or the type
+ * doesn't offer it, and 409 VIDEO_PROVIDER_NOT_CONNECTED unless the (new) owner's calendar creates that kind of link.
+ * Re-saving what is stored passes (an admin switching a type off keeps existing meetings), and so does an owner change:
+ * the old event goes, and the new owner's calendar either makes a new link or the link shows `failed
+ * provider_unavailable` (`conferenceColumnsFor`), so reassigning is never blocked by the video meeting.
  */
 export async function assertVideoMeetingAllowed(
     tx: OwnerDb,
@@ -119,15 +156,13 @@ export async function assertVideoMeetingAllowed(
     const desired = desiredOf(input);
     const stored = (existing?.conferenceProvider ?? null) as VideoProvider | null;
     const next = desired === undefined ? stored : desired;
-    if (existing && isVideoMeetingLocked(existing) && next !== 'teams') {
+    const ownerChanged = existing !== null && !sameUser(existing.assignedTo, input.assignedTo);
+    if (existing && isVideoMeetingLocked(existing) && !ownerChanged && next !== 'teams') {
         throw new HttpError(VIDEO_MEETING_LOCKED_MESSAGE, StatusCodes.CONFLICT, { code: VIDEO_MEETING_LOCKED, errors: [{ message: VIDEO_MEETING_LOCKED_MESSAGE, path: ['videoMeeting'] }] });
     }
-    if (!next) return;
-    const changedChoice = next !== stored;
-    const ownerChanged = existing !== null && !sameUser(existing.assignedTo, input.assignedTo);
-    if (!changedChoice && !ownerChanged) return;
-    if (changedChoice && input.status !== PLANNED_STATUS) throw fieldError(VIDEO_NOT_PLANNED_MESSAGE);
-    if (changedChoice && !typeOffersVideo(input.followupType, config)) throw fieldError(videoTypeNotOfferedMessage(input.followupType));
+    if (!next || next === stored) return;
+    if (input.status !== PLANNED_STATUS) throw fieldError(VIDEO_NOT_PLANNED_MESSAGE);
+    if (!typeOffersVideo(input.followupType, config)) throw fieldError(videoTypeNotOfferedMessage(input.followupType));
     await assertOwnerCanHaveVideo(tx, input.assignedTo, next);
 }
 
@@ -168,9 +203,9 @@ export async function videoOptionsFor(db: OwnerDb, owner: string): Promise<Video
 }
 
 /** Columns of a Retry (the link failed): a new request of the same provider. Throws 409 when there is nothing to retry. */
-export function retryColumnsFor(existing: StoredConference & Pick<Activity, 'status' | 'isDeleted'>): ConferenceRowData {
-    const provider = existing.conferenceProvider as VideoProvider | null;
-    if (!provider || existing.conferenceState !== 'failed' || existing.status !== PLANNED_STATUS || existing.isDeleted) {
+export function retryColumnsFor(existing: StoredConference & Pick<Activity, 'status' | 'isDeleted' | 'conferenceError'>): ConferenceRowData {
+    const provider = existing.conferenceProvider;
+    if (!isVideoProvider(provider) || !canRetryConference(existing)) {
         throw new HttpError(NOTHING_TO_RETRY_MESSAGE, StatusCodes.CONFLICT, { code: 'NOTHING_TO_RETRY' });
     }
     return requestedRow(provider, (existing.conferenceRequest ?? 0) + 1);

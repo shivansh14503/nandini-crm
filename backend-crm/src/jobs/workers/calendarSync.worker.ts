@@ -14,7 +14,7 @@ import {
 } from '../../modules/calendar-sync/sync.constants.js';
 import { runCalendarNightly, runCalendarPoll, runEnrolled, runFallbackTick, sweepOutbox } from '../../modules/calendar-sync/sync.maintenance.js';
 import { markPushExhausted, pushLink, type PushResult } from '../../modules/calendar-sync/sync.push.js';
-import { checkConference } from '../../modules/calendar-sync/sync.conference.js';
+import { checkConference, markConferenceExhausted } from '../../modules/calendar-sync/sync.conference.js';
 import { writeWorkerHeartbeat } from '../../modules/calendar-sync/workerHeartbeat.js';
 import { runWithAuditOrigin } from '../../services/auditContext.js';
 import { calendarSyncQueue, createQueueConnection, isQueueAvailable, QUEUE_NAMES } from '../queues.js';
@@ -151,6 +151,10 @@ export function startCalendarSyncWorker(): Worker {
         logger.error({ job: job?.name, jobId: job?.id, attempts: job?.attemptsMade, err: err.message }, 'Calendar sync job failed');
         if (job?.name === CALENDAR_SYNC_JOBS.push && isLastAttempt(job)) {
             void markPushExhausted(idOf(job.data, 'linkId')).catch((e: Error) => logger.warn({ err: e.message }, 'Could not mark a calendar push as failed'));
+        }
+        // P3-1: a video link check that failed on every attempt (the database, not the provider) gives up for good.
+        if (job?.name === CALENDAR_SYNC_JOBS.conference && isLastAttempt(job)) {
+            void markConferenceExhausted(job.data as { linkId?: string; request?: number }).catch((e: Error) => logger.warn({ err: e.message }, 'Could not mark a video link check as failed'));
         }
     });
     worker.on('error', (err) => warn(err.message, 'Calendar sync worker error'));

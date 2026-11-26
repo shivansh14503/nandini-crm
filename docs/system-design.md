@@ -890,11 +890,25 @@ job and the sweep (connection checks and the nightly connection steps still run)
   older request never overwrites a newer choice). A Meet still `pending` queues a **`conference` job** on
   `crm-calendar-sync` (job id `conference-<linkId>-<request>-<attempt>`, 5 s delay, up to 5 reads of the event, then
   `failed conference_timeout`; the drawer's Retry asks again with a new request number); Redis down → the same reads
-  in-process on an unref'd timer. A link made in Google / Outlook directly is taken over read only when a push answer
-  carries it (no pull needed). Join details ("Join with Google Meet: <url>" / "Join Microsoft Teams meeting: <url>")
-  go into the event description from the next description write on (the base records them, so no extra patch).
-  **DB wakes (Azure SQL serverless):** nothing scheduled; at most 5 event reads and 5 small Activity reads per link
-  request, only within ~30 s after a push that asked for a Meet; Teams links usually come on the create answer.
+  in-process on an unref'd timer. **Every wait ends** (so Retry always comes back): a read that can't be made (the
+  connection paused, a provider error) uses up a try; a gone event → `failed no_event`; a job failing on its last
+  BullMQ attempt (or an in-process check whose database call failed on the last try) → `conference_timeout`; a push
+  that fails for good → `event_refused`; the nightly run (`calendar-nightly`, 00:25) fails links still `requested` an
+  hour after the activity's last save (`failStaleConferences`, index `Activity(conferenceState, updatedAt)`, ≤ 200 rows).
+  A 400 to a write that asked for a link (Google: "Invalid conference type value" when Meet is off for the
+  organisation) marks it `failed not_created` and sends the write again without the video part, so the event still
+  syncs; Graph answering a Teams request without a Teams meeting (no licence) is `not_created` at once. A new event
+  (restore, recreated copy) that asks for a new Meet while an old link shows goes back to `requested`; a Google restore
+  without a wanted Meet sends `conferenceData: null`, so the deleted copy's old Meet isn't taken over again. A link
+  made in Google / Outlook directly is taken over read only when a push answer carries it (no pull needed). Join
+  details ("Join with Google Meet: <url>" / "Join Microsoft Teams meeting: <url>", also for external guests) go into
+  the event description once the link is `ready`: the base keeps what was actually sent and the link is marked dirty
+  for one more description-only push (no invitations re-sent). Owner changes: on a Planned activity the new owner's
+  calendar gets a new request when it can make that kind of link, else `failed provider_unavailable`
+  (`activities/activity.conference.ts`; one connection read, only when a meeting moves to a new owner).
+  **DB wakes (Azure SQL serverless):** nothing new scheduled outside the existing 00:25 nightly run (one indexed read);
+  at most 5 event reads and 5 small Activity reads per link request, only within ~30 s after a push that asked for a
+  Meet, plus one extra push per link that becomes ready; Teams links usually come on the create answer.
 
 ## 6. PDF generation
 

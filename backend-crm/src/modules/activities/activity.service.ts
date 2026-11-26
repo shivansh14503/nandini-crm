@@ -18,13 +18,13 @@ import {
     type ModuleFieldConfig,
 } from '../form-configs/customFieldValidator.js';
 import { calendarViewOf, loadOwnerCalendarLinks, NO_CALENDAR_LINKS, type CalendarLinksByActivity } from '../calendar-sync/sync.view.js';
-import { FOLLOWUP_TYPE_CATEGORY_KEY } from '../form-configs/formConfig.defaults.js';
+import { FOLLOWUP_TYPE_CATEGORY_KEY, NEVER_REQUIRED_FIELDS } from '../form-configs/formConfig.defaults.js';
 import type { DropdownCategoryDto } from '../form-configs/formConfig.service.js';
 import { notifyActivityParticipants, scheduleActivityReminder } from '../notifications/notification.reminders.js';
 import { assertAssigneeValid } from '../shared/accessControl.js';
 import { assertDeletedRow, lockRecords, restoreData, runInTransaction, softDeleteData, type BulkDeleteResult } from '../shared/transactions.js';
 import { activityLocks, activityScopeWhere, canEditActivity, canViewActivity, lockedFieldsFor, myResponseOf, type ActivityAccessRow } from './activity.access.js';
-import { assertOwnerCanHaveVideo, assertVideoMeetingAllowed, conferenceColumnsFor, retryColumnsFor, videoOptionsFor, type VideoOptions } from './activity.conference.js';
+import { assertOwnerCanHaveVideo, assertVideoMeetingAllowed, conferenceColumnsFor, ownerVideoForChange, retryColumnsFor, videoOptionsFor, type VideoOptions } from './activity.conference.js';
 import { normalizeAttendees, planAttendeeSync, syncAttendees } from './activity.attendees.js';
 import { activityRangeWhere, calendarFeed, type CalendarFeed } from './activity.calendar.js';
 import { linkTargets, resolveActivityLinks, type LinkTarget } from './activity.links.js';
@@ -67,6 +67,9 @@ const VIEW_FORBIDDEN_MESSAGE = 'You do not have permission to access or modify t
 export const WITH_ATTENDEES = { attendees: { orderBy: { sortOrder: 'asc' } } } as const satisfies Prisma.ActivityInclude;
 
 const notFound = () => HttpError.notFound('Activity not found');
+
+/** Built-in fields a save never requires (P3-1 Video meeting: depends on the type and the owner's calendar). */
+const ACTIVITY_NEVER_REQUIRED: ReadonlySet<string> = NEVER_REQUIRED_FIELDS.activities ?? new Set<string>();
 
 function assertCanView(user: AuthUser, row: ActivityAccessRow): void {
     if (!canViewActivity(user, row)) throw HttpError.forbidden(VIEW_FORBIDDEN_MESSAGE);
@@ -476,10 +479,12 @@ export async function updateActivityRow(tx: TransactionClient, existing: Activit
     const remindAt = remindAtOf(withOwner, schedule);
     const rearmed = (existing.remindAt?.getTime() ?? null) !== (remindAt?.getTime() ?? null);
     const system = writer.user === null;
+    // Video meeting (P3-1): what a new owner's calendar creates (read only when a meeting moves to a new owner).
+    const ownerVideo = await ownerVideoForChange(tx, withOwner, existing, writer.config);
     const data = {
         ...toActivityData(withOwner, links, schedule),
         // Video meeting (P3-1): a new choice or a new owner asks for a new link; none clears it.
-        ...conferenceColumnsFor(withOwner, existing),
+        ...conferenceColumnsFor(withOwner, existing, ownerVideo),
         ...(system ? writer.rowData : {}),
         ...completionData(input.status, existing, writer.actor, now),
         remindAt,
@@ -617,6 +622,7 @@ export const activityService = {
         const input = activityInputSchema.parse(body);
         input.customFields = checkModulePayload(config.fields, configPayload(asPayload(body), input), input.customFields, {
             notApplicableKeys: notApplicableFor(input.followupType),
+            notRequired: ACTIVITY_NEVER_REQUIRED,
         });
         const schedule = scheduleOf(input, config);
         const now = new Date();
@@ -645,6 +651,7 @@ export const activityService = {
                 submittedKeys: submittedKeys(patch),
                 previousCustomFields: before.customFields,
                 notApplicableKeys: notApplicableFor(input.followupType),
+                notRequired: ACTIVITY_NEVER_REQUIRED,
             });
             const schedule = scheduleOf(input, config);
             const now = new Date();

@@ -1070,6 +1070,8 @@ model Activity {
   @@index([isDeleted, createdAt])
   /// Scoped lists ("mine" / row-level access) sorted by creation date.
   @@index([isDeleted, assignedTo, createdAt])
+  /// P3-1 nightly sweep: video links still `requested` (equality column first).
+  @@index([conferenceState, updatedAt])
 }
 
 /// One attendee of an Activity: a colleague (username), a Contact, or an outside email. Synced by identity on save

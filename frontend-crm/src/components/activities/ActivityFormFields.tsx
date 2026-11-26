@@ -24,7 +24,7 @@ import { getFormConfigs } from '@/services/masterData.store';
 import { useFormMode } from '@/context/FormModeContext';
 import { DynamicModuleCustomFields } from '@/components/forms/DynamicModuleCustomFields';
 import { CUSTOMER_RESPONSE_CATEGORY, CUSTOMER_RESPONSES } from '@/components/forms/FollowUpDecision';
-import { useDropdownOptionMeta, useModuleFormConfig } from '@/hooks/queries/useFormConfigs';
+import { useDropdownOptionMeta, useFormConfigs, useModuleFormConfig } from '@/hooks/queries/useFormConfigs';
 import { useMyPreferences } from '@/hooks/queries/useProfile';
 import { activityService } from '@/services/activity.service';
 import {
@@ -43,7 +43,7 @@ import type { ExtendedOrganization } from '@/types/organization.types';
 import type { Contact } from '@/types/contact.types';
 import { activityFormRules, activityFormSchema, type ActivityFormValues } from '@/validations/activity.schema';
 import { durationMinutesFor, nextQuarterHour, switchScheduleMode } from '@/utils/activitySchedule';
-import { FOLLOWUP_TYPE_CATEGORY_KEY } from '@/utils/formConfig';
+import { FOLLOWUP_TYPE_CATEGORY_KEY, NEVER_REQUIRED_FIELDS } from '@/utils/formConfig';
 import { DEFAULT_REMINDER_NONE } from '@/utils/notificationPreferences';
 import {
     addDays,
@@ -194,7 +194,8 @@ export function useActivityForm({ mode, activityId, prefill }: UseActivityFormOp
         defaultValues: initial,
         dropdownDefaults: { enabled: mode === 'create', keep: prefill, personal },
         assigneeField: 'assignedTo',
-        relaxedFields: (values) => ACTIVITY_NOT_APPLICABLE[values.followupType] ?? [],
+        // Video meeting is never required (it depends on the type and the owner's calendar: NEVER_REQUIRED_FIELDS).
+        relaxedFields: (values) => [...(ACTIVITY_NOT_APPLICABLE[values.followupType] ?? []), ...(NEVER_REQUIRED_FIELDS.activities ?? [])],
         extraRules,
     });
     const { reset } = form.methods;
@@ -236,8 +237,6 @@ export function useActivityForm({ mode, activityId, prefill }: UseActivityFormOp
 
     return { ...form, clock, durationOf, activity, recordLoading, save };
 }
-
-const hasField = (fields: readonly string[] | undefined, key: string) => Boolean(fields?.includes(key));
 
 /**
  * A field the API won't let anyone change on this activity (`Activity.lockedFields`: a lead / opportunity follow-up
@@ -301,13 +300,16 @@ export function ActivityFormFields({ clock, durationOf, compact = false, onOpenR
     // Video meeting (P3-1): offered on types with option meta `videoMeeting`; a saved one stays shown either way.
     const typeOffersVideo = useTypeOffersVideo();
     const savedVideo = activity?.videoMeeting ?? '';
-    const videoMeetingLocked = Boolean(activity?.conference?.locked) || hasField(lockedFields, 'videoMeeting');
+    const videoMeetingLocked = Boolean(activity?.conference?.locked);
     const videoMeeting = useWatch({ control, name: 'videoMeeting' }) ?? '';
     const offersVideo = typeOffersVideo(followupType);
+    // Type meta comes with the form configuration: until it has loaded, no type "offers" video yet.
+    const configsLoaded = useFormConfigs() !== null;
     // A new choice the type (or a logged status) can't have is dropped, so the save isn't refused for a hidden field.
     useEffect(() => {
+        if (!configsLoaded) return;
         if (videoMeeting && videoMeeting !== savedVideo && (!offersVideo || status !== PLANNED_STATUS)) setValue('videoMeeting', '', { shouldDirty: true });
-    }, [videoMeeting, savedVideo, offersVideo, status, setValue]);
+    }, [configsLoaded, videoMeeting, savedVideo, offersVideo, status, setValue]);
 
     const notApplicable = useMemo(() => new Set(ACTIVITY_NOT_APPLICABLE[followupType] ?? []), [followupType]);
     const locked = useMemo(() => new Set(lockedFields ?? []), [lockedFields]);
@@ -578,6 +580,7 @@ export function ActivityFormFields({ clock, durationOf, compact = false, onOpenR
                                 name="videoMeeting"
                                 owner={assignedTo}
                                 saved={savedVideo}
+                                savedOwner={activity?.assignedTo}
                                 locked={videoMeetingLocked}
                                 planned={status === PLANNED_STATUS}
                                 joinUrl={activity?.conferenceJoinUrl || null}

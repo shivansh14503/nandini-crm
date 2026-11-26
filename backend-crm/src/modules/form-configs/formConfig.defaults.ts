@@ -1149,6 +1149,15 @@ export const DEFAULT_FIELDS: DefaultField[] = (() => {
     });
 })();
 
+/**
+ * Built-in fields an admin can't make Required: whether they can be filled in depends on the record, not the form
+ * (P3-1: Video meeting shows only on types that offer it and needs the owner's company calendar). The Form Builder
+ * refuses Required on them, and the module's save never requires them.
+ */
+export const NEVER_REQUIRED_FIELDS: Readonly<Partial<Record<CrmModuleKey, ReadonlySet<string>>>> = {
+    activities: new Set(['videoMeeting']),
+};
+
 /** The records a lead conversion creates: their fields can be shown on the Convert Lead form. */
 export const CONVERT_MODULES = ['contacts', 'organizations', 'opportunities'] as const;
 export type ConvertModuleKey = (typeof CONVERT_MODULES)[number];

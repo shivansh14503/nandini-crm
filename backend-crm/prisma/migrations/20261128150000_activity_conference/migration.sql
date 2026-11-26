@@ -9,7 +9,8 @@
 -- Integrations › What goes to calendars). Options an admin renamed keep their meta as it is; an option whose metaJson
 -- isn't valid JSON is left alone; one that already has the key keeps its value.
 --
--- No index (nothing filters on these columns). Must sort after every migration on main (20261128120000_booking_links)
+-- Index: Activity_conferenceState_updatedAt_idx serves the nightly sweep that gives up on links still `requested` an hour
+-- after the last save (calendar-nightly, 00:25). Must sort after every migration on main (20261128120000_booking_links)
 -- and after those of the open calendar PRs (P2-3c 20261128130000, P2-5 20261128140000).
 BEGIN TRY
 
@@ -22,6 +23,9 @@ ALTER TABLE [dbo].[Activity] ADD [conferenceError] NVARCHAR(300),
 [conferenceProvider] NVARCHAR(20),
 [conferenceRequest] INT NOT NULL CONSTRAINT [Activity_conferenceRequest_df] DEFAULT 0,
 [conferenceState] NVARCHAR(20);
+
+-- CreateIndex
+CREATE NONCLUSTERED INDEX [Activity_conferenceState_updatedAt_idx] ON [dbo].[Activity]([conferenceState], [updatedAt]);
 
 -- Data: offer Video meeting on the seeded meeting types.
 UPDATE o

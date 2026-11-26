@@ -65,11 +65,39 @@ export const CONFERENCE_ERROR_TEXT = {
     not_created: 'The calendar didn’t add a video link (Teams may need a licence for the owner, or Meet may be off for the organisation).',
     join_url_rejected: 'The calendar returned a link the CRM doesn’t trust.',
     conference_timeout: 'The calendar is taking too long to create the link.',
-    provider_unavailable: 'The owner’s calendar can’t create this kind of video link.',
+    provider_unavailable: 'The owner’s calendar can’t create this kind of video link. Pick another video meeting or None.',
+    no_event: 'The meeting isn’t in the owner’s calendar, so no video link was made.',
+    event_refused: 'The owner’s calendar refused the meeting, so no video link was made.',
 } as const;
 export type ConferenceErrorCode = keyof typeof CONFERENCE_ERROR_TEXT;
 
 export const conferenceErrorOf = (code: ConferenceErrorCode): string => `${code}: ${CONFERENCE_ERROR_TEXT[code]}`.slice(0, 300);
+
+/** Failures Retry can't fix (the user picks another option instead): the drawer offers no Retry for them. */
+export const NOT_RETRYABLE_CONFERENCE_ERRORS: ReadonlySet<string> = new Set<ConferenceErrorCode>(['provider_unavailable']);
+
+/**
+ * Whether Retry can help (the drawer's `canRetry` and the retry endpoint agree): a failed link of a live Planned row,
+ * except the failures in NOT_RETRYABLE_CONFERENCE_ERRORS.
+ */
+export function canRetryConference(row: {
+    conferenceProvider?: string | null;
+    conferenceState?: string | null;
+    conferenceError?: string | null;
+    status?: string | null;
+    isDeleted?: boolean | null;
+}): boolean {
+    if (!isVideoProvider(row.conferenceProvider) || row.conferenceState !== 'failed' || row.status !== 'Planned' || row.isDeleted) return false;
+    return !NOT_RETRYABLE_CONFERENCE_ERRORS.has(parseConferenceError(row.conferenceError)?.code ?? '');
+}
+
+/** The columns of a failed link (`code` says why). */
+export const failedConferenceColumns = (code: ConferenceErrorCode): ConferenceColumns => ({
+    conferenceState: 'failed',
+    conferenceJoinUrl: null,
+    conferenceId: null,
+    conferenceError: conferenceErrorOf(code),
+});
 
 /** `{ code, message }` of a stored `conferenceError` (null when none). */
 export function parseConferenceError(value: string | null | undefined): { code: string; message: string } | null {
@@ -250,6 +278,8 @@ export interface ActivityConference {
     conferenceJoinUrl: string | null;
     conferenceId: string | null;
     conferenceRequest: number;
+    /** The stored `<code>: <text>` (missing = none). */
+    conferenceError?: string | null;
 }
 
 export interface ConferenceOutcome {
@@ -269,7 +299,11 @@ const NOTHING: ConferenceOutcome = { columns: null, poll: false, adopted: false 
  * - Without a provider on the activity, a ready link of the calendar's own kind is adopted (spec §16.3 Inbound: made
  *   in Google / Outlook directly) unless this write just removed one.
  * - With one: ready → `ready` with the URL (a URL failing the allow-list → `failed join_url_rejected`); pending →
- *   poll; failure → `failed`; no conference after a request → poll (the job gives up after its tries).
+ *   poll; failure → `failed`; no conference after a Meet request → poll (the job gives up after its tries).
+ * - A write that asked for a new Meet (a new event: a restore or a recreated copy) while the activity still shows an
+ *   older outcome: pending → back to `requested` (old URL cleared) and poll; failure → `failed`.
+ * - Graph answers a Teams request at once: an answer without a Teams meeting (no licence, Teams off) → `failed
+ *   not_created`, never a poll.
  */
 export function conferenceOutcome(
     activity: ActivityConference,
@@ -288,15 +322,24 @@ export function conferenceOutcome(
         };
     }
     const failed = (code: ConferenceErrorCode): ConferenceOutcome =>
-        activity.conferenceState === 'failed' && activity.conferenceJoinUrl === null
+        activity.conferenceState === 'failed' && activity.conferenceJoinUrl === null && parseConferenceError(activity.conferenceError)?.code === code
             ? NOTHING
-            : { columns: { conferenceState: 'failed', conferenceJoinUrl: null, conferenceId: null, conferenceError: conferenceErrorOf(code) }, poll: false, adopted: false };
-    if (wanted !== supported) return activity.conferenceState === 'requested' ? failed('provider_unavailable') : NOTHING;
+            : { columns: failedConferenceColumns(code), poll: false, adopted: false };
+    const requested = activity.conferenceState === 'requested';
+    // This write asked for a new Meet (sent on every create / restore of the event, whatever the stored outcome).
+    const askedMeet = sent?.kind === 'meet';
+    if (wanted !== supported) return requested ? failed('provider_unavailable') : NOTHING;
     if (!response || response.provider !== wanted) {
-        return sent && sent.kind !== 'remove' && activity.conferenceState === 'requested' ? { columns: null, poll: true, adopted: false } : NOTHING;
+        if (sent?.kind === 'teams') return failed('not_created');
+        return askedMeet && requested ? { columns: null, poll: true, adopted: false } : NOTHING;
     }
-    if (response.status === 'pending') return activity.conferenceState === 'requested' ? { columns: null, poll: true, adopted: false } : NOTHING;
-    if (response.status === 'failed') return activity.conferenceState === 'requested' ? failed('conference_failed') : NOTHING;
+    if (response.status === 'pending') {
+        if (requested) return { columns: null, poll: true, adopted: false };
+        return askedMeet
+            ? { columns: { conferenceState: 'requested', conferenceJoinUrl: null, conferenceId: null, conferenceError: null }, poll: true, adopted: false }
+            : NOTHING;
+    }
+    if (response.status === 'failed') return requested || askedMeet ? failed('conference_failed') : NOTHING;
     if (!response.joinUrl) return failed('join_url_rejected');
     if (activity.conferenceState === 'ready' && activity.conferenceJoinUrl === response.joinUrl && activity.conferenceId === response.conferenceId) return NOTHING;
     return {

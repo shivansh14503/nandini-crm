@@ -573,13 +573,14 @@ choice; the DTO key is `videoMeeting`), `conferenceState` (NVARCHAR(20): `reques
 `conferenceJoinUrl` (NVARCHAR(1000): https only, host allow-list `meet.google.com`, `teams.microsoft.com`,
 `*.zoom.us`), `conferenceId` (NVARCHAR(200): Meet conference id / Teams online meeting id), `conferenceError`
 (NVARCHAR(300): `<code>: <text>`, codes `conference_failed`, `not_created`, `join_url_rejected`, `conference_timeout`,
-`provider_unavailable`), `conferenceRequest` (INT NOT NULL, default 0, constraint `Activity_conferenceRequest_df`: the
+`provider_unavailable`, `no_event`, `event_refused`), `conferenceRequest` (INT NOT NULL, default 0, constraint `Activity_conferenceRequest_df`: the
 request number `n`; a new choice, an owner change or Retry bumps it, and Google's `createRequest.requestId` is
 `<requestedId>-c<n>`). A CRM save writes the provider / `requested` / the counter; the push engine and the `conference`
 job write the outcome with `updatedAt` kept (never a user edit) and compare-and-set on `conferenceProvider` +
 `conferenceRequest`. The same migration sets option meta `videoMeeting: true` on the seeded Followup Types `Meeting`
 and `Demo / Presentation` (`DropdownOption.metaJson` via `JSON_MODIFY`, only where the key is missing; admins switch it
-per type in Admin › API Integrations › What goes to calendars). No new index (the columns are only read with their row).
+per type in Admin › API Integrations › What goes to calendars). Index `Activity_conferenceState_updatedAt_idx`
+(`conferenceState`, `updatedAt`): the nightly sweep that fails links still `requested` an hour after the last save.
 
 **Follow-up activities** (P2-4, `activities/activity.followUp.ts`): every open lead / opportunity with a next
 follow-up has exactly one row with `origin = 'followup'`, `status = 'Planned'`, `relatedModule` / `relatedId` = the
@@ -603,7 +604,8 @@ identity: unchanged rows aren't rewritten and replies of attendees who stay are 
 
 Indexes: `Activity` `(isDeleted, startAt)`, `(isDeleted, assignedTo, startAt)` (calendar ranges),
 `(relatedModule, relatedId)` (a record's Activities tab), `organizationId`, `contactId`, `status`,
-`(reminderSentAt, remindAt)` (reminder sweep), `(isDeleted, createdAt)`, `(isDeleted, assignedTo, createdAt)`;
+`(reminderSentAt, remindAt)` (reminder sweep), `(isDeleted, createdAt)`, `(isDeleted, assignedTo, createdAt)`,
+`(conferenceState, updatedAt)` (P3-1 nightly sweep of video links still `requested`);
 `ActivityAttendee` `activityId`, `username`, `contactId`, `email`, plus three hand-written **filtered unique** indexes
 (one row per colleague, contact and outside email of an activity): `UX_ActivityAttendee_user (activityId, username)
 WHERE username IS NOT NULL`, `UX_ActivityAttendee_contact (activityId, contactId) WHERE contactId IS NOT NULL`,

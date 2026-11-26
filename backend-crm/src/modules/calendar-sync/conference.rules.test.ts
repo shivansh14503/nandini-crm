@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import {
+    canRetryConference,
     conferenceErrorOf,
     conferenceOutcome,
     conferenceRequestId,
@@ -140,6 +141,29 @@ describe('applying an answer', () => {
         assert.equal(adopted.columns?.conferenceState, 'ready');
         assert.equal(conferenceOutcome(none, meetReady, 'google', { kind: 'remove' }).columns, null);
         assert.equal(conferenceOutcome(none, meetReady, 'microsoft', null).columns, null, 'a Meet on an Outlook event is not ours to take');
+    });
+    it('a Teams request answered without a Teams meeting → failed not_created at once (no poll)', () => {
+        const teams = requested({ conferenceProvider: 'teams' });
+        const outcome = conferenceOutcome(teams, undefined, 'microsoft', { kind: 'teams' });
+        assert.equal(outcome.poll, false);
+        assert.equal(parseConferenceError(outcome.columns?.conferenceError)?.code, 'not_created');
+    });
+    it('a new event asked for a new Meet while an old link shows: pending → requested again (old URL cleared) and poll', () => {
+        const ready = requested({ conferenceState: 'ready', conferenceJoinUrl: 'https://meet.google.com/o-l-d', conferenceId: 'o-l-d' });
+        const pending = conferenceOutcome(ready, { ...meetReady, status: 'pending', joinUrl: null }, 'google', { kind: 'meet', requestId: 'rq2-c1' });
+        assert.deepEqual(pending, { columns: { conferenceState: 'requested', conferenceJoinUrl: null, conferenceId: null, conferenceError: null }, poll: true, adopted: false });
+        assert.equal(conferenceOutcome(ready, { ...meetReady, status: 'pending', joinUrl: null }, 'google', null).columns, null, 'a patch that asked nothing changes nothing');
+    });
+});
+
+describe('Retry', () => {
+    const failed = { conferenceProvider: 'meet', conferenceState: 'failed', conferenceError: conferenceErrorOf('conference_timeout'), status: 'Planned', isDeleted: false };
+    it('only a failed link of a live Planned row, and not when the calendar cannot make it', () => {
+        assert.equal(canRetryConference(failed), true);
+        assert.equal(canRetryConference({ ...failed, status: 'Completed' }), false);
+        assert.equal(canRetryConference({ ...failed, isDeleted: true }), false);
+        assert.equal(canRetryConference({ ...failed, conferenceState: 'requested' }), false);
+        assert.equal(canRetryConference({ ...failed, conferenceError: conferenceErrorOf('provider_unavailable') }), false);
     });
 });
 

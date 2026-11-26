@@ -1,7 +1,7 @@
 import type { Activity, ActivityAttendee, Prisma } from '../../generated/prisma/client.js';
 import { nullable, parseCustomFields, serializeCustomFields, text, toIso } from '../../utils/mappers.js';
 import { zonedDayOf } from '../../utils/zonedTime.js';
-import { parseConferenceError } from '../calendar-sync/conference.rules.js';
+import { canRetryConference, parseConferenceError } from '../calendar-sync/conference.rules.js';
 import type { ActivityInput } from './activity.validator.js';
 
 /**
@@ -125,9 +125,9 @@ export interface ActivityConferenceView {
     joinUrl: string | null;
     errorCode: string | null;
     errorMessage: string | null;
-    /** The viewer may ask again (failed, and they may edit the activity). */
+    /** The viewer may ask again (failed on a live Planned row, Retry can help, and they may edit the activity). */
     canRetry: boolean;
-    /** A Teams link exists: it can't be removed or changed (409 VIDEO_MEETING_LOCKED). */
+    /** A Teams link exists: its owner can't remove or change it (409 VIDEO_MEETING_LOCKED); a new owner may. */
     locked: boolean;
 }
 
@@ -206,7 +206,7 @@ export function toActivityDto(row: ActivityRow): ActivityDto {
 
 /** `ActivityView.conference` (pure). */
 export function conferenceViewOf(
-    row: Pick<Activity, 'conferenceProvider' | 'conferenceState' | 'conferenceJoinUrl' | 'conferenceError'>,
+    row: Pick<Activity, 'conferenceProvider' | 'conferenceState' | 'conferenceJoinUrl' | 'conferenceError' | 'status' | 'isDeleted'>,
     viewerCanEdit: boolean,
 ): ActivityConferenceView | null {
     if (!row.conferenceProvider) return null;
@@ -218,7 +218,7 @@ export function conferenceViewOf(
         joinUrl: state === 'ready' ? row.conferenceJoinUrl : null,
         errorCode: error?.code ?? null,
         errorMessage: error?.message ?? null,
-        canRetry: viewerCanEdit && state === 'failed',
+        canRetry: viewerCanEdit && canRetryConference(row),
         locked: row.conferenceProvider === 'teams' && state === 'ready',
     };
 }

@@ -140,17 +140,27 @@ Every activity the API returns also carries `conference` (outside the audited re
 `{ provider, state: requested|ready|failed, joinUrl, errorCode, errorMessage, canRetry, locked }`. Saves take
 `videoMeeting` (`''` / `null` = none; left out = keep; Task / Note always none). Rules: a **new** choice needs a Planned
 activity (`400 VALIDATION_ERROR` "A video meeting can only be added to a planned activity.") and a type whose Followup
-Type option has meta `videoMeeting: true` and goes to calendars (`400`); a new choice **or an owner change** needs the
-owner's live company calendar to make that kind of link (Google → Meet, Microsoft 365 → Teams; Zoom always refused for
-now) → else `409 VIDEO_PROVIDER_NOT_CONNECTED` (on `videoMeeting`); removing or changing a **ready Teams** link →
+Type option has meta `videoMeeting: true` and goes to calendars (`400`); a new choice needs the (new) owner's live
+company calendar to make that kind of link (Google → Meet, Microsoft 365 → Teams; Zoom always refused for now) → else
+`409 VIDEO_PROVIDER_NOT_CONNECTED` (on `videoMeeting`); the owner removing or changing a **ready Teams** link →
 `409 VIDEO_MEETING_LOCKED` ("Cancel and create a new meeting to remove the Teams link."); re-saving the stored choice
-always passes (an admin switching a type off keeps existing meetings). A new choice, an owner change and Retry set
-`conferenceState = requested` with the next request number; the calendar push creates the link (Google:
+always passes (an admin switching a type off keeps existing meetings). An **owner change** is never refused for the
+video meeting (CRM and system writes, e.g. a follow-up re-owned with its lead; the Teams lock doesn't apply to a new
+owner): on a Planned activity the new owner's calendar gets a new request when it can make that kind of link, else the
+link becomes `failed provider_unavailable` (no Retry: pick another option or None); a logged activity keeps its link.
+A new choice, such an owner change and Retry set `conferenceState = requested` with the next request number; the
+calendar push creates the link (Google:
 `conferenceDataVersion=1` + `conferenceData.createRequest { requestId: '<requestedId>-c<n>', conferenceSolutionKey:
 hangoutsMeet }`; Graph: `isOnlineMeeting: true`, `onlineMeetingProvider: 'teamsForBusiness'`, `onlineMeeting.joinUrl`
 read). A Meet / Teams link added in Google / Outlook directly is taken over read only when a push answer carries it.
-Once ready, the event description carries "Join with Google Meet: <url>" / "Join Microsoft Teams meeting: <url>" from
-the next description write on.
+Once ready, the event description gets "Join with Google Meet: <url>" / "Join Microsoft Teams meeting: <url>" with one
+more quiet push (also for external guests). A wait always ends: `failed` codes `conference_failed` (Google failed it),
+`not_created` (the calendar refused or ignored the request: Meet off for the organisation answers 400, and the event is
+then sent without the video part; Teams without a licence), `join_url_rejected`, `conference_timeout` (5 reads, the
+worker's last attempt, or still `requested` an hour after the last save at the nightly run), `no_event` (the event is
+gone), `event_refused` (the push failed for good), `provider_unavailable` (the owner's calendar can't make it).
+`canRetry` is true for a failed link on a live Planned activity the viewer may edit, except `provider_unavailable`.
+Video meeting can't be made Required in the Form Builder (`400` on `isRequired: true`), and saves never require it.
 
 A `PUT` / `PATCH` that **changes** one of them is `409 FOLLOW_UP_ACTIVITY_LOCKED` ("This is the lead's next
 follow-up. Change it on the lead (LD-0012): Record a follow-up.", `errors[]` one per field; resending an unchanged
@@ -172,7 +182,7 @@ activity is written (existing ones stay), the nightly backfill re-aligns every r
 | DELETE | `/:id` | Soft delete (owner, creator or global role); the reminder is cleared. A follow-up activity: `409 FOLLOW_UP_ACTIVITY_LOCKED` ("Next follow-up of LD-0012: change it on the lead" / "Follow-up history of LD-0012: kept with the lead") |
 | POST | `/bulk-delete` | `{ ids }` → `{ deleted, ids, notFound, skipped? }` (each id needs edit rights). `skipped: [{ id, reason }]` lists locked activities left alone (follow-up activities), present only when something was skipped |
 | GET | `/video-options?owner` | Video meeting choices for `owner` (username; default the caller): `{ owner, calendarProvider: google\|microsoft\|fake\|null, options: [{ value: meet\|teams\|zoom, label, available, reason? }] }` (Meet with a live Google calendar, Teams with Microsoft 365, Zoom never yet; `reason` on the unavailable ones). P3-1, as of 2026-11-26 |
-| POST | `/:id/conference/retry` | Asks the calendar again for a video link that **failed** (owner, creator or global role) → the activity view (`conference.state = requested`, a new request number). `409 NOTHING_TO_RETRY` unless the link failed on a live Planned activity; `409 VIDEO_PROVIDER_NOT_CONNECTED` when the owner's calendar can no longer make it. P3-1, as of 2026-11-26 |
+| POST | `/:id/conference/retry` | Asks the calendar again for a video link that **failed** (owner, creator or global role) → the activity view (`conference.state = requested`, a new request number). `409 NOTHING_TO_RETRY` unless the link failed on a live Planned activity (and not `provider_unavailable`, which Retry can't fix); `409 VIDEO_PROVIDER_NOT_CONNECTED` when the owner's calendar can no longer make it. P3-1, as of 2026-11-26 |
 | POST | `/:id/response` | `{ responseStatus: 'accepted' \| 'tentative' \| 'declined' }` → the activity view. Invited colleagues only (`403` "Only invited colleagues can reply to this activity."; also for notes); `404` when missing. Audited as `RSVP` (not undoable) |
 
 Audit: `Activity` entries (`CREATE`, `UPDATE`, `DELETE`, `RESTORE`, `REVERT`, `RSVP`); `GET /audit-logs/activities/:id`
@@ -697,9 +707,9 @@ Limited responses carry `RateLimit-Limit`, `RateLimit-Remaining`, `RateLimit-Res
 | 409 | `CALENDAR_NOT_SYNCED` | API Integrations › People: "Check now" for a person without a live calendar row |
 | 409 | `INTEGRATION_NOT_AVAILABLE` | API Integrations: Zoom before video meetings ship (Phase 3) |
 | 409 | `FOLLOW_UP_ACTIVITY_LOCKED` | Activities: changing the type, times, status, owner or related record of a lead / opportunity follow-up activity, or deleting one (change it on the record) |
-| 409 | `VIDEO_PROVIDER_NOT_CONNECTED` | Activities: a Video meeting the owner's company calendar can't make (no live calendar, the other provider, or Zoom for now), on a new choice or an owner change (`errors[].path` `videoMeeting`; P3-1) |
-| 409 | `VIDEO_MEETING_LOCKED` | Activities: removing or changing a ready Microsoft Teams link ("Cancel and create a new meeting to remove the Teams link."; P3-1) |
-| 409 | `NOTHING_TO_RETRY` | Activities: Retry of a video link that hasn't failed, or on an activity that isn't live and Planned (P3-1) |
+| 409 | `VIDEO_PROVIDER_NOT_CONNECTED` | Activities: a new Video meeting choice the (new) owner's company calendar can't make (no live calendar, the other provider, or Zoom for now) (`errors[].path` `videoMeeting`; P3-1). An owner change alone is never refused: the link shows `failed provider_unavailable` instead |
+| 409 | `VIDEO_MEETING_LOCKED` | Activities: the owner removing or changing a ready Microsoft Teams link ("Cancel and create a new meeting to remove the Teams link."; P3-1); a new owner may |
+| 409 | `NOTHING_TO_RETRY` | Activities: Retry of a video link that hasn't failed, that failed with `provider_unavailable`, or on an activity that isn't live and Planned (P3-1) |
 | 400 | `BOOKING_REJECTED` | Public booking: the honeypot field was filled (no detail given) |
 | 403 | `BOOKING_LINKS_NOT_ALLOWED` | Booking links: the user's role may not create links (`whoCanCreate`) |
 | 409 | `BOOKING_LINKS_OFF` | Booking links: the company switch is off (creating or changing a link; turning one off still works) |

@@ -461,9 +461,14 @@ keeps wall-clock times); all-day activities are entered as business-timezone day
         Teams with Microsoft 365 (`isOnlineMeeting`, `onlineMeeting.joinUrl`; locked once ready, `409
         VIDEO_MEETING_LOCKED`). `409 VIDEO_PROVIDER_NOT_CONNECTED`, `GET /api/activities/video-options`,
         `POST /api/activities/:id/conference/retry`; inbound Meet / Teams links on push answers taken over read only;
-        join details in the event description. Frontend: form select (owner's options, Zoom disabled "later"),
+        join details in the event description (one extra quiet push once ready). Review fixes: every wait ends in
+        `ready` or `failed` (400 refusal → event synced without the link, `not_created` / `no_event` /
+        `event_refused`, worker last attempt, nightly sweep of links `requested` > 1 h); owner changes never blocked
+        (new request, or `failed provider_unavailable`); Teams lock out of `lockedFields`; Video meeting can't be made
+        Required. Frontend: form select (owner's options, Zoom disabled "later"),
         drawer Join / copy / "Creating Meet link…" / error + Retry, calendar chip icon and agenda Join, record
-        Activities tab icon + Join, hidden list column "Video meeting", `newActivityHref` `video=`. Not run against a
+        Activities tab icon + Join (agenda clicks on Join / copy no longer open the drawer; 32 px copy target),
+        hidden list column "Video meeting", `newActivityHref` `video=`. Not run against a
         real SQL Server, Google or Microsoft (fake provider and recorded-shape `fakeFetch` tests only). Owner steps:
         Meet on for the Workspace org, Teams licences for owners, first-run check that `calendar.events.owned` under
         domain-wide delegation accepts `createRequest` (else switch the delegated scope to `calendar.events`).

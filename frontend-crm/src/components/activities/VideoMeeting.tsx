@@ -50,7 +50,9 @@ export interface RhfVideoMeetingFieldProps<T extends FieldValues> {
     owner: string;
     /** The saved choice (edit): always listed, so an admin switching a type off keeps existing meetings. */
     saved?: VideoProvider | '';
-    /** A ready Teams link: it can't be removed or changed. */
+    /** The saved owner (edit): picking another owner asks the new owner's calendar for a new link. */
+    savedOwner?: string;
+    /** A ready Teams link: its owner can't remove or change it (a new owner may). */
     locked?: boolean;
     /** Not Planned: a new choice isn't allowed (a logged activity has no event to carry a link). */
     planned: boolean;
@@ -63,10 +65,25 @@ export interface RhfVideoMeetingFieldProps<T extends FieldValues> {
  * Video meeting select: None / Google Meet / Microsoft Teams / Zoom. Choices the owner's calendar can't make are
  * listed disabled, with the reason under the field. The API checks again (409 VIDEO_PROVIDER_NOT_CONNECTED).
  */
-export function RhfVideoMeetingField<T extends FieldValues>({ name, label = 'Video meeting', owner, saved = '', locked = false, planned, joinUrl, sx }: RhfVideoMeetingFieldProps<T>) {
+export function RhfVideoMeetingField<T extends FieldValues>({
+    name,
+    label = 'Video meeting',
+    owner,
+    saved: savedChoice = '',
+    savedOwner,
+    locked: savedLocked = false,
+    planned,
+    joinUrl,
+    sx,
+}: RhfVideoMeetingFieldProps<T>) {
     const { field, fieldState } = useController<T>({ name });
     const raw: unknown = field.value;
     const value: VideoProvider | '' = isVideoProvider(raw) ? raw : '';
+    // A new owner: the saved link goes with the old event, so the saved choice is checked like a new one and a Teams
+    // lock no longer applies (the API marks a link the new owner's calendar can't make as failed).
+    const ownerChanged = Boolean(savedOwner) && savedOwner?.trim().toLowerCase() !== owner.trim().toLowerCase();
+    const saved = ownerChanged && planned ? '' : savedChoice;
+    const locked = savedLocked && !ownerChanged;
     const { data, isLoading } = useVideoOptions(owner, { enabled: Boolean(owner) && !locked });
 
     const available = useMemo(() => new Set((data?.options ?? []).filter((o) => o.available).map((o) => o.value)), [data]);
@@ -83,7 +100,9 @@ export function RhfVideoMeetingField<T extends FieldValues>({ name, label = 'Vid
           : isLoading
             ? undefined
             : value && !available.has(value) && value !== saved
-              ? data?.options.find((o) => o.value === value)?.reason
+              ? [data?.options.find((o) => o.value === value)?.reason, value === savedChoice ? 'Pick another video meeting or None.' : '']
+                    .filter(Boolean)
+                    .join(' ') || undefined
               : !value && reason
                 ? reason
                 : undefined;
@@ -96,7 +115,7 @@ export function RhfVideoMeetingField<T extends FieldValues>({ name, label = 'Vid
             fit={null}
             sx={sx}
             viewValue={value ? VIDEO_PROVIDER_LABELS[value] : ''}
-            viewActions={value && joinUrl ? <JoinMeetingActions url={joinUrl} provider={value} compact /> : undefined}
+            viewActions={value && joinUrl && !ownerChanged ? <JoinMeetingActions url={joinUrl} provider={value} compact /> : undefined}
         >
             <StyledSelect
                 value={value || NONE}
@@ -129,10 +148,21 @@ const joinButtonSx = {
     },
 } as const;
 
-/** "Join meeting" (opens the link in a new tab) plus a copy icon. `compact` = a small button for rows. */
+/**
+ * "Join meeting" (opens the link in a new tab) plus a copy icon (32 px tap target). `compact` = a small button for
+ * rows. `data-calendar-action` tells the calendar not to open the drawer for clicks / keys inside (FullCalendar handles
+ * eventClick natively, before React's stopPropagation could stop it).
+ */
 export function JoinMeetingActions({ url, provider, compact = false }: { url: string; provider: VideoProvider; compact?: boolean }) {
     return (
-        <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5, flexWrap: 'wrap', minWidth: 0 }}>
+        <Box
+            data-calendar-action=""
+            // Enter / Space on Join or copy stay theirs (calendar entries and rows handle these keys themselves).
+            onKeyDown={(e: React.KeyboardEvent) => {
+                if (e.key === 'Enter' || e.key === ' ') e.stopPropagation();
+            }}
+            sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5, flexWrap: 'wrap', minWidth: 0 }}
+        >
             <Button
                 component="a"
                 href={url}
@@ -145,7 +175,7 @@ export function JoinMeetingActions({ url, provider, compact = false }: { url: st
             >
                 {compact ? 'Join' : 'Join meeting'}
             </Button>
-            <DrawerCopyButton text={url} title="Copy meeting link" iconColor="var(--mui-palette-text-secondary)" />
+            <DrawerCopyButton text={url} title="Copy meeting link" iconColor="var(--mui-palette-text-secondary)" minTarget={32} />
         </Box>
     );
 }
