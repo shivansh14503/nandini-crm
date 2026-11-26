@@ -573,6 +573,8 @@ everyone's calendar as amber all-day entries, and the activity Start / End field
 imported twice (the database's case-insensitive collation also treats `holi` and `Holi` as one). Index
 `(status, holidayDate)` for the calendar read. Hard delete (no soft delete or undo); every create, edit, status change
 and delete is in the audit log (entity `Holiday`, module `holidays`, category CONFIG) with the holiday's values.
+Migration `20261126170000_holidays_initial_list` loads the 21 holidays of 2024 and 2025 from the old CRM (Active,
+Public, added by `system`, skipping any already there).
 
 ## 5. Index strategy
 
