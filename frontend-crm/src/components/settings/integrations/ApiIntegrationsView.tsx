@@ -14,7 +14,7 @@ import { CalendarSyncSettingsCard } from './CalendarSyncSettingsCard';
 import { PeopleTable, isPeopleFilter, type PeopleFilter } from './PeopleTable';
 import { ProviderCard } from './ProviderCard';
 import { SyncTypesCard } from './SyncTypesCard';
-import { CopyField, StatusChip, WEBHOOKS_OFF_LABELS, formatDateTime, hintSx } from './integrationUi';
+import { CopyField, StatusChip, WEBHOOKS_OFF_LABELS, formatDateTime, hintSx, webhooksOffSentence } from './integrationUi';
 
 /** The command the owner runs once to make the key (also in backend-crm/.env.example). */
 export const KEY_GENERATE_COMMAND = `node -e "console.log('k1:'+require('crypto').randomBytes(32).toString('base64'))"`;
@@ -127,10 +127,11 @@ function WebhooksFact({ data }: { data: IntegrationsAdmin }) {
     const reason = data.webhooksOffReason ?? (notHttps ? 'needs_https' : null);
     if (!reason) return <Typography sx={hintSx}>Off</Typography>;
     const words = WEBHOOKS_OFF_LABELS[reason];
+    if (!words) return <Typography sx={hintSx}>Off</Typography>;
     return (
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5, alignItems: 'flex-start' }}>
-            <StatusChip tone={reason === 'needs_https' || reason === 'no_public_url' ? 'warning' : 'neutral'}>{words.chip}</StatusChip>
-            <Typography sx={hintSx}>{words.hint} Calendars still sync by polling.</Typography>
+            <StatusChip tone={reason === 'needs_https' || reason === 'no_public_url' || reason === 'key_missing' ? 'warning' : 'neutral'}>{words.chip}</StatusChip>
+            <Typography sx={hintSx}>{webhooksOffSentence(reason, 'Calendars still sync by polling.')}</Typography>
         </Box>
     );
 }

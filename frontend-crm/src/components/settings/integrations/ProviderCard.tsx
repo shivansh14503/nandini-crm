@@ -9,7 +9,7 @@ import CheckRoundedIcon from '@mui/icons-material/CheckRounded';
 import { ConfirmDeleteDialog, errorMessage, inputSx, panelHeaderSx, primaryButtonSx, secondaryButtonSx, surfaceSx } from '@/components/settings/form-customization/builderUi';
 import { useClearProviderSecret, usePeople, useSaveProvider, useTestProvider } from '@/hooks/queries/useIntegrationsAdmin';
 import { SERVICE_ACCOUNT_KEY_MAX_BYTES, type Person, type ProviderAdmin, type ProviderWebhook, type SaveProviderPayload, type TestConnectionResult } from '@/types/integration.types';
-import { CopyField, PROVIDER_WEBHOOK_LABELS, ProviderMark, StatusChip, WEBHOOKS_OFF_LABELS, fieldErrorsOf, fieldLabelSx, formatDateTime, formatDay, hintSx, type ChipTone } from './integrationUi';
+import { CopyField, PROVIDER_WEBHOOK_LABELS, ProviderMark, StatusChip, fieldErrorsOf, fieldLabelSx, formatDateTime, formatDay, hintSx, webhooksOffSentence, type ChipTone } from './integrationUi';
 
 /**
  * One provider on Admin › API Integrations (Calendar Phase 2, P2-2b: admin-managed calendar sync).
@@ -245,7 +245,7 @@ function ProviderWebhookLine({ webhook }: { webhook: ProviderWebhook }) {
     const words = PROVIDER_WEBHOOK_LABELS[webhook.status];
     const detail =
         webhook.status === 'unavailable'
-            ? `${webhook.reason ? WEBHOOKS_OFF_LABELS[webhook.reason].hint + ' ' : ''}Calendars sync by polling.`
+            ? webhooksOffSentence(webhook.reason, 'Calendars sync by polling.')
             : webhook.status === 'off'
               ? 'Switch the provider on to start them.'
               : [

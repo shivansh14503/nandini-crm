@@ -532,8 +532,8 @@ commands fail immediately instead of hanging, and reconnects in the background (
 | `bull:crm-audit-ledger:*` | BullMQ internals (job scheduler + runs) | removed when done | audit ledger worker | Nightly ledger digest; "Verify integrity" (job id `ledger-verify`: present = running) |
 | `bull:crm-reminders:*` | BullMQ internals (2 job schedulers, delayed jobs, runs) | 1 day / 1000 jobs (completed) / 7 days (failed) | activity saves, reminders worker | Delayed job per activity reminder (job id `reminder-<activityId>-<remindAtMs>`), schedulers `reminder-sweep`, `reminder-nightly` (§5.1) |
 | `bull:crm-mail:*` | BullMQ internals (job scheduler + runs) | 7 days / 100 jobs (completed) / 30 days (failed) | mail worker | Scheduler `morning-summary`, catch-up jobs `morning-catchup-<day>` (§5.2) |
-| `bull:crm-calendar-sync:*` | BullMQ internals (2 job schedulers, delayed jobs, runs) | 1 h / 2000 jobs (completed) / 7 days (failed) | activity saves, enrolment, calendar sync worker | Jobs `push-<linkId>-<dirtyAtMs>` (sweep: `…-s<minute>`), `enrolled-<connectionId>-<enrolledAtMs>-r<readyAtMs>` (one per time a row reaches `ok`), `check-<connectionId>-<minute>`, `pull-<connectionId>-<10 s bucket>` (P2-5; a webhook's D26 follow-up `…-n`), `watch-<connectionId>-<op>-<minute>` (P2-7); schedulers `calendar-poll`, `calendar-nightly` (§5.4; as of 2026-11-26, P2-3b / P2-5 / P2-7) |
-| `calsync:notified:{connectionId}` | string (ms time of the last verified ping) | 600 s | calendar webhooks (P2-7) | D26: a `pull` job that finishes `done` after a ping arrived while it ran queues one follow-up pull (`pull-<connectionId>-<next 10 s bucket>-n`). Without Redis no stamp: the in-process pull runs once more instead (as of 2026-11-26) |
+| `bull:crm-calendar-sync:*` | BullMQ internals (2 job schedulers, delayed jobs, runs) | 1 h / 2000 jobs (completed) / 7 days (failed) | activity saves, enrolment, calendar sync worker | Jobs `push-<linkId>-<dirtyAtMs>` (sweep: `…-s<minute>`), `enrolled-<connectionId>-<enrolledAtMs>-r<readyAtMs>` (one per time a row reaches `ok`), `check-<connectionId>-<minute>`, `pull-<connectionId>-<10 s bucket>` (P2-5; webhook pulls `pull-<connectionId>-w<10 s bucket>`, or `…-w<bucket>-<ms>` when the bucket's job already ran; the D26 follow-up `pull-<connectionId>-n<stamp ms>`), `watch-<connectionId>-<op>-<minute>` (P2-7); schedulers `calendar-poll`, `calendar-nightly` (§5.4; as of 2026-11-26, P2-3b / P2-5 / P2-7) |
+| `calsync:notified:{connectionId}` | string (ms time of the last verified ping) | 600 s | calendar webhooks (P2-7) | D26: a `pull` job that finishes `done` after a ping arrived while it ran queues one follow-up pull (`pull-<connectionId>-n<stamp ms>`, so a follow-up of a follow-up gets its own id). Without Redis no stamp: the in-process pull runs once more instead (as of 2026-11-26) |
 | `ratelimit:calendar-webhooks:ip:{ip}` | counter | 60 s | `/api/webhooks/*` (P2-7) | 600 notifications / min / IP (in-memory per process whenever Redis can't count; never fails open) |
 | `calendar:worker:heartbeat` | string (ISO time) | 120 s | calendar sync worker, every 60 s and on each Redis `ready` | Admin › API Integrations shows whether a calendar worker is running (`worker` in `GET /api/admin/integrations`) |
 
@@ -803,7 +803,7 @@ The same list is next to `DB_KEEPALIVE_INTERVAL_MS` in `.env.example`.
 | 09:00 Mon–Sat | Morning summary email (only while mail is on; `crm-mail`) |
 | Every 15 min, 07:00–21:45 | Reminder sweep (contract renewals, missed reminders) |
 | Every `CALENDAR_POLL_MINUTES` (default 5) inside `CALENDAR_SYNC_HOURS` (default 07:00–22:00) | Calendar poll: outbox sweep + due connection checks + backfill recovery (three small indexed reads, P2-3c) + one `pull` job per synced person (P2-5, as of 2026-11-26). A pull with nothing new costs, per person, one lease claim / release, the `lastPulledAt` write and one provider list call; SQL is read per changed event only. The database is awake then anyway for the reminder sweep and users. Outside the hours nothing polls, so Azure SQL Serverless can pause overnight; changes made in a calendar at night come back with the first poll of the morning |
-| Calendar webhooks (P2-7, only with an https `PUBLIC_API_URL`) | **Inside `CALENDAR_SYNC_HOURS`**: per verified notification one indexed channel lookup and one `pull` job (debounced: one pull per person per 10 s bucket). People with a healthy channel are polled only every `CALENDAR_POLL_MINUTES_WITH_WEBHOOKS` (default 30) instead of every 5 minutes, so webhooks lower the daytime pull count. **Outside the hours** change notifications are answered without any database read (a forged one is refused before it too) and nothing is queued; the first poll of the morning pulls everyone. Only Microsoft lifecycle notifications (a subscription removed / needing reauthorization / missed notifications: rare) are handled at once at night. Channel creation / renewal rides the poll ticks (≤ 20 people per tick) and the 00:25 nightly run (as of 2026-11-26) |
+| Calendar webhooks (P2-7, only with an https `PUBLIC_API_URL`) | **Inside `CALENDAR_SYNC_HOURS`**: per verified notification one indexed channel lookup and one `pull` job (debounced: pings within a 10 s bucket share one pending pull). People with a healthy channel are polled only every `CALENDAR_POLL_MINUTES_WITH_WEBHOOKS` (default 30) instead of every 5 minutes, so webhooks lower the daytime pull count. **Outside the hours** change notifications are answered without any database read (a forged one is refused before it too) and nothing is queued; the first poll of the morning pulls everyone. Only Microsoft lifecycle notifications (a subscription removed / needing reauthorization / missed notifications: rare) are handled at once at night, and only after their `clientState` HMAC verified without a read, so a forged lifecycle post can't wake the database either. Channel creation / renewal rides the poll ticks (≤ 20 people per tick) and the 00:25 nightly run (as of 2026-11-26) |
 | On demand | A person's **Sync now** (≥ 30 s apart), the silent pull when they open the calendar page (≥ 3 min apart), the admin's Sync now on People: one `pull` job each (P2-5) |
 | After each activity save | Its calendar push (a `push` job, 2 s later), only for enrolled owners |
 | When a person's calendar row first reaches `ok` | The first-sync backfill (P2-3c): keyset pages of their upcoming activities and the pushes, once per row (not periodic) |
@@ -948,17 +948,18 @@ job and the sweep (connection checks and the nightly connection steps still run)
   `providers/googleWatch.ts`, `providers/graphWatch.ts`, table `CalendarWatchChannel`): **live** only when
   `PUBLIC_API_URL` starts with `https://`, `CALENDAR_WEBHOOKS_ENABLED` (default true), `CALENDAR_SYNC_ENABLED` and the
   encryption key is set (`ENV.INTEGRATIONS.WEBHOOKS_ACTIVE` / `WEBHOOKS_OFF_REASON`: `no_public_url`, `needs_https`,
-  `disabled`, `sync_disabled`). One channel per synced person (row `ok`): Google `events.watch` on `primary` as the
+  `disabled`, `sync_disabled`, `key_missing`). One channel per synced person (row `ok`): Google `events.watch` on `primary` as the
   person (impersonated token, 7-day ttl, `token` = b64url HMAC-SHA256 of the channel id with the key ring's HKDF
   `webhook` subkey of key `tokenKeyId`), Microsoft an app-only subscription on `users/{mailbox}/events`
-  (`created,updated,deleted`, 10,000 minutes of Graph's documented 10,080, `clientState` = the HMAC of
-  `connectionId:generation`, a `lifecycleNotificationUrl`). Channel ids are `w<8 hex of sha256(PUBLIC_API_URL)>-<uuid>`,
+  (`created,updated,deleted`, 10,000 minutes of Graph's documented 10,080, `clientState` =
+  `<connectionId>.<generation>.<HMAC of connectionId:generation>`, ≤ 105 characters, a `lifecycleNotificationUrl`). Channel ids are `w<8 hex of sha256(PUBLIC_API_URL)>-<uuid>`,
   so changing the public address replaces every channel on the next run. No secret is stored: every ring key verifies
   (rotation keeps working; channels on an old key are replaced). **Created** after a row's `enrolled` job, by the poll
   tick (≤ 20 people per tick, inside the hours) and by the nightly run; **renewed** 3 days before expiry (Google has no
   renew call: a new channel first, then the old one stopped; Graph `PATCH`, 404 → re-create with `generation + 1`).
   A refused create (watch call refused, e.g. Google won't call the address) leaves a `failed` row, retried after 6 h
-  by the poll (always by the nightly run); it marks neither the person's row nor the provider (`withCalendarAccess`
+  by the poll (always by the nightly run); a refused replace / renew backs off the same 6 h while the old channel still
+  has over an hour left (it keeps delivering), so the poll tick doesn't retry it every 5 minutes; it marks neither the person's row nor the provider (`withCalendarAccess`
   read-only mode) and the person keeps the normal poll. **Stopped** best effort when the row stops (excluded,
   inactive, provider switched off or changed; `enrolment.ts` marks the channels `stopped` after commit, then calls
   Google `channels.stop` / Graph `DELETE` in the background, 5 s each) and, while webhooks are off, by the nightly
@@ -966,17 +967,23 @@ job and the sweep (connection checks and the nightly connection steps still run)
   strays and deletes `stopped` / `failed` rows 30 days after creation. **Notifications** (`/api/webhooks/*`,
   [API plan](api-plan.md) §1): Google's headers are verified against every ring key before any database read, then the
   channel row (active, Google, same key, same `X-Goog-Resource-ID`); `sync` pings are ignored. Graph: `validationToken`
-  echoed as text/plain; each item's subscription → active channel, `clientState` HMAC (row's key and generation) and
-  `tenantId` checked; duplicates in a batch collapse to one pull per person. Outside `CALENDAR_SYNC_HOURS` change
+  echoed as text/plain; each item's `clientState` HMAC is checked against every ring key before any database read
+  (the signed `connectionId:generation` travels in it), then its subscription → active Microsoft channel of that
+  connection, generation and key, and `tenantId` = the configured tenant when that is a GUID (a tenant configured by
+  domain, which P2-2b allows, can't be compared with the GUID Graph sends: the HMAC is the proof then); duplicates in a
+  batch collapse to one pull per person. Outside `CALENDAR_SYNC_HOURS` change
   notifications are dropped unread (§5.3); lifecycle ones (`reauthorizationRequired` → renew, `subscriptionRemoved` →
   re-create + pull, `missed` → pull) are handled at any hour. A verified ping of a live `ok` row of an active,
-  non-group user queues `pull-<connectionId>-<10 s bucket>` (2 s delay) and stamps `calsync:notified:<connectionId>`;
-  a pull that finishes `done` after the stamp queues one more (D26), so nothing made during a running pull is missed.
+  non-group user stamps `calsync:notified:<connectionId>` and makes sure a pull starts after it: the bucket's job
+  `pull-<connectionId>-w<10 s bucket>` (2 s delay) absorbs it while still waiting / delayed; while that job runs the
+  stamp makes it queue one more when it finishes `done` (D26, `pull-<connectionId>-n<stamp ms>`); once it has finished
+  (BullMQ keeps completed jobs an hour and silently ignores an add with the same id) the ping queues
+  `…-w<bucket>-<ms>`. So nothing changed during or just after a pull is left for the slow safety-net poll.
   Replays are harmless (a ping only causes an idempotent pull; a lifecycle event for a channel no longer active is
   ignored). **Safety-net poll**: people with an active channel that has ≥ 1 h left are pulled every
   `CALENDAR_POLL_MINUTES_WITH_WEBHOOKS` (5–120, default 30) instead of every `CALENDAR_POLL_MINUTES`; the poll's
   cron is unchanged and filters per person (`duePullConnections`), still only inside `CALENDAR_SYNC_HOURS`. Admin ›
-  API Integrations shows the server-wide state and interval, a webhook line per calendar provider (live / starting /
+  API Integrations shows the server-wide state and interval (the effective one: the larger of the two settings), a webhook line per calendar provider (live / starting /
   some refused / off / not available, with counts) and per person on People (instant / starting / polling only).
 - **Redis down**: §4.3. **Heartbeat**: `calendar:worker:heartbeat` (§4.1), shown on Admin › API Integrations as
   `workerStatus` (running / not running / unknown without Redis; P2-3c).
@@ -1505,11 +1512,16 @@ the credentials it already has.
   old key after a night has passed.
 - *A person's channel is gone at the provider* (Graph `subscriptionRemoved` / `missed`, or the nightly existence check):
   the CRM re-creates it and pulls that person's calendar; nothing to do.
+- *A provider card says "Not available"*: webhooks are off server-wide; the hint names why (no https address, switched
+  off, calendar sync switched off, or no `INTEGRATIONS_ENCRYPTION_KEY`). Only the first three still sync by polling.
+- *Microsoft tenant entered as a domain* (e.g. `contoso.onmicrosoft.com`): fine; Graph notifications carry the tenant
+  GUID, which can only be compared when the Tenant ID is the GUID, so with a domain the `clientState` HMAC alone
+  verifies them.
 - *Night-time changes*: notifications outside `CALENDAR_SYNC_HOURS` are acknowledged and not processed (so Azure SQL
   can sleep); they come in with the first poll of the morning, or at once with Sync now.
 - *Suspected abuse of the webhook URLs*: they are rate limited (600 / min / IP) and every request is HMAC-verified
-  (a forged Google ping is refused before any database read); rotating the encryption key invalidates every channel
-  token.
+  (a forged Google ping or Graph notification, lifecycle ones included, is refused before any database read, so abuse
+  can't wake Azure SQL at night); rotating the encryption key invalidates every channel token.
 
 ### 9.3 Outgoing email (Google Workspace SMTP relay)
 

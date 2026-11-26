@@ -243,9 +243,10 @@ const integrationsReadyReason: IntegrationsNotReadyReason | null = !integrations
 
 /**
  * Why calendar webhooks are off (P2-7), or null when they are live: no public address, not https, switched off with
- * CALENDAR_WEBHOOKS_ENABLED=false, or calendar sync itself switched off (CALENDAR_SYNC_ENABLED=false).
+ * CALENDAR_WEBHOOKS_ENABLED=false, calendar sync itself switched off (CALENDAR_SYNC_ENABLED=false), or no
+ * INTEGRATIONS_ENCRYPTION_KEY (channel tokens are signed with it; webhooksLive() needs it too).
  */
-export const WEBHOOKS_OFF_REASONS = ['no_public_url', 'needs_https', 'disabled', 'sync_disabled'] as const;
+export const WEBHOOKS_OFF_REASONS = ['no_public_url', 'needs_https', 'disabled', 'sync_disabled', 'key_missing'] as const;
 export type WebhooksOffReason = (typeof WEBHOOKS_OFF_REASONS)[number];
 const webhooksOffReason: WebhooksOffReason | null = !publicApiUrl
     ? 'no_public_url'
@@ -255,7 +256,9 @@ const webhooksOffReason: WebhooksOffReason | null = !publicApiUrl
         ? 'disabled'
         : !env.CALENDAR_SYNC_ENABLED
           ? 'sync_disabled'
-          : null;
+          : !integrationsKeyRing
+            ? 'key_missing'
+            : null;
 
 export const ENV = {
     NODE_ENV: env.NODE_ENV,

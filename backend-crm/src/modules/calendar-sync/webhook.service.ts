@@ -2,12 +2,12 @@ import { ENV } from '../../config/env.js';
 import { logger } from '../../config/logger.js';
 import { prisma } from '../../config/prisma.js';
 import { isRedisReady, redis } from '../../config/redis.js';
-import { calendarSyncQueue, tryEnqueue } from '../../jobs/queues.js';
+import { calendarSyncQueue, isQueueAvailable, tryEnqueue } from '../../jobs/queues.js';
 import { secretBox } from '../../services/secretBox.js';
 import { loadProviderAccess } from './providers/registry.js';
-import { channelToken, enqueueWatch, isChannelId, sameToken, webhookHmac, webhooksLive } from './sync.channels.js';
+import { enqueueWatch, isChannelId, parseClientState, sameToken, webhookHmac, webhooksLive } from './sync.channels.js';
 import { CALENDAR_SYNC_JOBS, type PullReason } from './sync.constants.js';
-import { followUpPullJobId, pullJobId } from './sync.keys.js';
+import { followUpPullJobId, freshWebhookPullJobId, webhookPullJobId } from './sync.keys.js';
 import type { PullJobData } from './sync.wake.js';
 import { isInsideSyncHours } from './syncHours.js';
 
@@ -17,17 +17,23 @@ import { isInsideSyncHours } from './syncHours.js';
  *
  * - **Verification**: Google `X-Goog-Channel-Token` = b64url HMAC(webhook subkey, channel id) is first checked against
  *   every ring key **before any database read** (a forged ping never wakes the database), then the channel row must
- *   be active, signed with that key, on Google, with the stored `X-Goog-Resource-ID`. Graph: each `subscriptionId` →
- *   active channel; `clientState` = HMAC(subkey of the row's key, `connectionId:generation`); `tenantId` = the configured
- *   tenant. Constant-time compares throughout.
+ *   be active, signed with that key, on Google, with the stored `X-Goog-Resource-ID`. Graph: `clientState` =
+ *   `<connectionId>.<generation>.<HMAC(subkey, connectionId:generation)>` is checked against every ring key **before any
+ *   database read** too (change and lifecycle notifications alike), then each `subscriptionId` → active Microsoft
+ *   channel of that connection, generation and key. `tenantId` = the configured tenant when it is a GUID (a tenant
+ *   configured by domain, e.g. contoso.onmicrosoft.com, can't be compared with the GUID Graph sends; the clientState HMAC
+ *   is the proof then). Constant-time compares throughout.
  * - **Quiet hours**: outside CALENDAR_SYNC_HOURS change notifications are acknowledged and dropped before any read, so
  *   a ping at night never wakes Azure SQL. Nothing is lost: the first poll of the morning pulls every person (their
  *   last pull is older than the safety-net interval). Graph lifecycle notifications are processed at any hour (rare;
- *   dropping one would leave a dead channel marked active).
- * - **Then**: the connection must be live in `ok` and its user active and not a group login (D43). A `pull` job
- *   (`pull-<connectionId>-<10 s bucket>`, 2 s delay, so a burst of pings is one pull, shared with polls and Sync now)
- *   and a Redis stamp `calsync:notified:<connectionId>` (D26: a pull already running when the ping came queues one more
- *   when it ends). Redis down: an in-process pull, one at a time per connection (a ping during it runs it once more).
+ *   dropping one would leave a dead channel marked active), but only once their clientState HMAC verified, so only a
+ *   genuine one can read the database at night.
+ * - **Then**: the connection must be live in `ok` and its user active and not a group login (D43). A Redis stamp
+ *   `calsync:notified:<connectionId>` and a `pull` job `pull-<connectionId>-w<10 s bucket>` with a 2 s delay, so a burst
+ *   of pings is one pull. Only a **pending** job absorbs a ping: when that id is active the stamp makes it pull once more
+ *   when it ends (D26, follow-up id `pull-<connectionId>-n<stamp ms>`); when it already finished (BullMQ keeps it an hour
+ *   and would silently ignore the same id) the ping queues `…-w<bucket>-<ms>`. Redis down: an in-process pull, one at a
+ *   time per connection (a ping during it runs it once more).
  * - Replays and duplicates are harmless: a ping only causes an idempotent pull; a lifecycle event for a channel that
  *   is no longer active is ignored, and `watch` jobs are one per connection, operation and minute.
  * Never logs a header value, a token, a clientState or a body.
@@ -96,46 +102,99 @@ export function setInlineWebhookPullForTests(runner: InlinePull | null): void {
     inlineState.clear();
 }
 
-async function stampNotified(connectionId: string, now: Date): Promise<void> {
-    if (!isRedisReady()) return;
+/**
+ * The Redis side of the ping → pull path (stamp, job state, add), replaceable in tests. `ready` false = no Redis: the
+ * caller pulls in-process.
+ */
+export interface WebhookPullQueue {
+    ready(): boolean;
+    /** Writes the D26 stamp; false when it couldn't. */
+    writeStamp(connectionId: string, ms: number): Promise<boolean>;
+    readStamp(connectionId: string): Promise<number | null>;
+    /** The state of a kept job (waiting, delayed, prioritized, active, completed, failed, …), or null when there is none. */
+    stateOf(jobId: string): Promise<string | null>;
+    /** Adds a `pull` job; the id, or null when Redis didn't take it. */
+    add(jobId: string, data: PullJobData): Promise<string | null>;
+}
+
+const REDIS_STEP_TIMEOUT_MS = 3_000;
+async function withTimeout<T>(work: Promise<T>): Promise<T> {
+    let timer: NodeJS.Timeout | undefined;
     try {
-        await redis.set(notifiedKey(connectionId), String(now.getTime()), 'EX', NOTIFIED_TTL_SECONDS);
-    } catch {
-        // Best effort: without the stamp a ping during a running pull waits for the next poll.
+        return await Promise.race([work, new Promise<never>((_, reject) => (timer = setTimeout(() => reject(new Error('Redis timed out')), REDIS_STEP_TIMEOUT_MS)))]);
+    } finally {
+        clearTimeout(timer);
     }
 }
 
-/** A verified change notification for one connection: stamp, then a `pull` job (or an in-process pull). */
+const redisPullQueue: WebhookPullQueue = {
+    ready: () => isRedisReady() && isQueueAvailable(),
+    async writeStamp(connectionId, ms) {
+        try {
+            await withTimeout(redis.set(notifiedKey(connectionId), String(ms), 'EX', NOTIFIED_TTL_SECONDS));
+            return true;
+        } catch {
+            return false;
+        }
+    },
+    async readStamp(connectionId) {
+        try {
+            const value = await withTimeout(redis.get(notifiedKey(connectionId)));
+            return value === null || !Number.isFinite(Number(value)) ? null : Number(value);
+        } catch {
+            return null;
+        }
+    },
+    async stateOf(jobId) {
+        try {
+            const job = await withTimeout(calendarSyncQueue().getJob(jobId));
+            return job ? await withTimeout(job.getState()) : null;
+        } catch {
+            // Unknown: treat as finished, so the ping gets a fresh id rather than being absorbed.
+            return 'unknown';
+        }
+    },
+    add: (jobId, data) => tryEnqueue(calendarSyncQueue, CALENDAR_SYNC_JOBS.pull, data, { jobId, delay: WEBHOOK_PULL_DELAY_MS, attempts: 1 }),
+};
+let pullQueue: WebhookPullQueue = redisPullQueue;
+
+/** Tests: replace the Redis side of the ping → pull path (null = Redis / BullMQ). */
+export function setWebhookPullQueueForTests(queue: WebhookPullQueue | null): void {
+    pullQueue = queue ?? redisPullQueue;
+}
+
+/** Job states in which a queued pull hasn't started yet, so it will read the change a ping announced. */
+const PENDING_STATES = new Set(['waiting', 'delayed', 'prioritized', 'waiting-children']);
+
+/**
+ * A verified change notification for one connection: stamp, then a pull that starts after this ping (see the file
+ * header): the bucket's pending job, the bucket's active job plus the D26 stamp, or a new job.
+ */
 export async function notePing(connectionId: string, reason: PullReason, now: Date = new Date()): Promise<'queued' | 'inline'> {
-    await stampNotified(connectionId, now);
-    const id = await tryEnqueue(calendarSyncQueue, CALENDAR_SYNC_JOBS.pull, { connectionId, reason } satisfies PullJobData, {
-        jobId: pullJobId(connectionId, now),
-        delay: WEBHOOK_PULL_DELAY_MS,
-        attempts: 1,
-    });
-    if (id !== null) return 'queued';
+    if (pullQueue.ready()) {
+        const stamped = await pullQueue.writeStamp(connectionId, now.getTime());
+        const bucketId = webhookPullJobId(connectionId, now);
+        const state = await pullQueue.stateOf(bucketId);
+        if (state !== null && PENDING_STATES.has(state)) return 'queued';
+        // Running: it pulls once more when it ends (D26), as long as the stamp was written.
+        if (state === 'active' && stamped) return 'queued';
+        const id = await pullQueue.add(state === null ? bucketId : freshWebhookPullJobId(connectionId, now), { connectionId, reason });
+        if (id !== null) return 'queued';
+    }
     inlinePull(connectionId);
     return 'inline';
 }
 
 /**
- * D26: after a pull job that started at `startedAt` finished, one more pull when a webhook came while it ran (its own
- * job of the same 10 s bucket may have been dropped as a duplicate). Returns whether it queued one.
+ * D26: after a pull job that started at `startedAt` finished, one more pull when a webhook came while it ran (that
+ * ping found the job running and relied on this). The id is keyed on the stamp, so a follow-up of a follow-up gets its
+ * own id. Returns whether it queued one.
  */
-export async function pullAgainIfNotified(connectionId: string, startedAt: Date, now: Date = new Date()): Promise<boolean> {
-    if (!isRedisReady()) return false;
-    let stamp: string | null = null;
-    try {
-        stamp = await redis.get(notifiedKey(connectionId));
-    } catch {
-        return false;
-    }
-    if (!stamp || Number(stamp) < startedAt.getTime()) return false;
-    const id = await tryEnqueue(calendarSyncQueue, CALENDAR_SYNC_JOBS.pull, { connectionId, reason: 'webhook' } satisfies PullJobData, {
-        jobId: followUpPullJobId(connectionId, now),
-        delay: WEBHOOK_PULL_DELAY_MS,
-        attempts: 1,
-    });
+export async function pullAgainIfNotified(connectionId: string, startedAt: Date): Promise<boolean> {
+    if (!pullQueue.ready()) return false;
+    const stamp = await pullQueue.readStamp(connectionId);
+    if (stamp === null || stamp < startedAt.getTime()) return false;
+    const id = await pullQueue.add(followUpPullJobId(connectionId, stamp), { connectionId, reason: 'webhook' });
     return id !== null;
 }
 
@@ -211,6 +270,7 @@ type LifecycleEvent = (typeof LIFECYCLE_EVENTS)[number];
 const isLifecycleEvent = (value: unknown): value is LifecycleEvent => typeof value === 'string' && (LIFECYCLE_EVENTS as readonly string[]).includes(value);
 
 const str = (value: unknown): string => (typeof value === 'string' ? value : '');
+const TENANT_GUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
 /** The items of a Graph notification body (`{ value: [...] }`), at most MAX_GRAPH_ITEMS. Pure. */
 export function graphItemsOf(body: unknown): GraphNotificationItem[] {
@@ -241,16 +301,30 @@ export async function handleGraphNotifications(body: unknown, now: Date = new Da
         if (!inside) ignore('quiet_hours');
         return inside;
     });
-    const usable = wanted.filter((item) => {
-        const ok = str(item.subscriptionId).length > 0 && str(item.subscriptionId).length <= 200 && str(item.clientState).length > 0 && str(item.clientState).length <= 128;
-        if (!ok) ignore('malformed');
-        return ok;
-    });
-    if (usable.length === 0) return out;
+    // The clientState HMAC against every ring key, before any read (a forged post never wakes the database).
+    const verified: { item: GraphNotificationItem; connectionId: string; generation: number; kid: string }[] = [];
+    for (const item of wanted) {
+        const subscriptionId = str(item.subscriptionId);
+        const clientState = str(item.clientState);
+        if (subscriptionId.length === 0 || subscriptionId.length > 200 || clientState.length === 0 || clientState.length > 128) {
+            ignore('malformed');
+            continue;
+        }
+        const parsed = parseClientState(clientState);
+        const kid = parsed ? matchingKeyId(`${parsed.connectionId}:${parsed.generation}`, parsed.mac) : null;
+        if (!parsed || !kid) {
+            ignore('bad_token');
+            continue;
+        }
+        verified.push({ item, connectionId: parsed.connectionId, generation: parsed.generation, kid });
+    }
+    if (verified.length === 0) return out;
 
     const access = await loadProviderAccess('microsoft');
-    const tenantId = access.creds?.kind === 'microsoft' ? access.creds.tenantId.toLowerCase() : '';
-    const ids = [...new Set(usable.map((item) => str(item.subscriptionId)))];
+    const tenantId = access.creds?.kind === 'microsoft' ? access.creds.tenantId.trim().toLowerCase() : '';
+    // Graph sends the tenant GUID; a tenant configured by its domain can't be compared (the HMAC is the proof then).
+    const tenantIsGuid = TENANT_GUID.test(tenantId);
+    const ids = [...new Set(verified.map((v) => str(v.item.subscriptionId)))];
     const channels = await prisma.calendarWatchChannel.findMany({
         where: { externalId: { in: ids }, status: 'active', provider: 'microsoft' },
         select: { id: true, connectionId: true, provider: true, externalId: true, tokenKeyId: true, generation: true },
@@ -259,24 +333,18 @@ export async function handleGraphNotifications(body: unknown, now: Date = new Da
 
     const toPull = new Set<string>();
     const lifecycle = new Map<string, { event: LifecycleEvent; channelId: string }>();
-    for (const item of usable) {
+    for (const { item, connectionId, generation, kid } of verified) {
         const channel = channelOf.get(str(item.subscriptionId));
         if (!channel) {
             ignore('unknown_channel');
             continue;
         }
-        let expected: string;
-        try {
-            expected = channelToken('microsoft', channel, channel.tokenKeyId);
-        } catch {
+        // The signed connection, generation and key must be this subscription's (an old generation is refused).
+        if (channel.connectionId !== connectionId || channel.generation !== generation || channel.tokenKeyId !== kid) {
             ignore('bad_token');
             continue;
         }
-        if (!sameToken(expected, str(item.clientState))) {
-            ignore('bad_token');
-            continue;
-        }
-        if (!tenantId || str(item.tenantId).toLowerCase() !== tenantId) {
+        if (!access.creds || (tenantIsGuid && str(item.tenantId).toLowerCase() !== tenantId)) {
             ignore('tenant');
             continue;
         }

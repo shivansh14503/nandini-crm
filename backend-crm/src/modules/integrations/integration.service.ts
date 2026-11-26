@@ -36,6 +36,7 @@ import { isFakeProviderEnabled } from '../calendar-sync/providers/fakeSwitch.js'
 import { parseServiceAccountKey, ServiceAccountKeyError, type ServiceAccountKey } from '../calendar-sync/providers/googleServiceAccount.js';
 import type { FetchImpl } from '../calendar-sync/providers/types.js';
 import { ADMIN_ERROR_MESSAGES, type TokenErrorCode } from '../calendar-sync/syncErrors.js';
+import { pollMinutes } from '../calendar-sync/syncHours.js';
 import { tokenSource } from '../calendar-sync/tokenSource.js';
 import { isHeartbeatRedisReady, readWorkerHeartbeat, workerStatusOf, type WorkerStatus } from '../calendar-sync/workerHeartbeat.js';
 import { FOLLOWUP_TYPE_CATEGORY_KEY } from '../form-configs/formConfig.defaults.js';
@@ -240,9 +241,12 @@ export interface IntegrationsAdminDto {
     publicApiUrlConfigured: boolean;
     /** Calendar webhooks are live (Calendar Phase 2 P2-7, needs https); false until then. */
     webhooksActive: boolean;
-    /** Why they aren't (null while live): no_public_url | needs_https | disabled | sync_disabled. */
+    /** Why they aren't (null while live): no_public_url | needs_https | disabled | sync_disabled | key_missing. */
     webhooksOffReason: WebhooksOffReason | null;
-    /** Safety-net poll interval of people with a healthy channel (CALENDAR_POLL_MINUTES_WITH_WEBHOOKS). */
+    /**
+     * Safety-net poll interval of people with a healthy channel, as the scheduler uses it: the larger of
+     * CALENDAR_POLL_MINUTES_WITH_WEBHOOKS and CALENDAR_POLL_MINUTES (pollIntervalMinutes in sync.channels.ts).
+     */
     pollMinutesWithWebhooks: number;
     /** The dev-only test calendar provider is on (CALENDAR_FAKE_PROVIDER): People may pick "Test (dev)". */
     fakeProvider: boolean;
@@ -628,7 +632,7 @@ export const integrationService = {
             publicApiUrlConfigured: PUBLIC_API_URL_CONFIGURED,
             webhooksActive: ENV.INTEGRATIONS.WEBHOOKS_ACTIVE,
             webhooksOffReason: ENV.INTEGRATIONS.WEBHOOKS_OFF_REASON,
-            pollMinutesWithWebhooks: ENV.INTEGRATIONS.POLL_MINUTES_WITH_WEBHOOKS,
+            pollMinutesWithWebhooks: Math.max(pollMinutes(), ENV.INTEGRATIONS.POLL_MINUTES_WITH_WEBHOOKS),
             fakeProvider: isFakeProviderEnabled(),
             worker,
             workerStatus: workerStatusOf(isHeartbeatRedisReady(), worker),

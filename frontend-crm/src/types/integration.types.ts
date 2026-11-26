@@ -94,7 +94,7 @@ export interface ProviderSettings {
  * off (provider switched off), errors (some channels refused), starting (some synced people have none yet), live.
  * Per person: active (a channel delivers until `expiresAt`), failed (the provider refused the last try), waiting.
  */
-export const WEBHOOKS_OFF_REASONS = ['no_public_url', 'needs_https', 'disabled', 'sync_disabled'] as const;
+export const WEBHOOKS_OFF_REASONS = ['no_public_url', 'needs_https', 'disabled', 'sync_disabled', 'key_missing'] as const;
 export type WebhooksOffReason = (typeof WEBHOOKS_OFF_REASONS)[number];
 export const PROVIDER_WEBHOOK_STATUSES = ['live', 'starting', 'errors', 'off', 'unavailable'] as const;
 export type ProviderWebhookStatus = (typeof PROVIDER_WEBHOOK_STATUSES)[number];

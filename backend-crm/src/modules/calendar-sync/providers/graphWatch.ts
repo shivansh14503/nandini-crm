@@ -13,7 +13,7 @@ import type { CalendarProviderAdapter, FetchImpl, WatchCreated } from './types.j
  *   lifecycleNotificationUrl, resource, expirationDateTime, clientState }`. Graph validates both URLs before it answers
  *   (webhook.routes.ts echoes `validationToken`). Outlook event subscriptions live at most 10,080 minutes ("under seven
  *   days" [V: subscription resource type, read 26 Nov 2026]); the CRM asks for 10,000 minutes and renews 3 days ahead.
- *   `clientState` ≤ 128 characters [V]; ours is a 43-character HMAC.
+ *   `clientState` ≤ 128 characters [V]; ours is `<connectionId>.<generation>.<43-character HMAC>` (≤ 105).
  * - renew: `PATCH /subscriptions/{id}` `{ expirationDateTime }` [V]; 404 → `'recreate'`.
  * - stop: `DELETE /subscriptions/{id}` [V] (404 = already gone).
  * - exists: `GET /subscriptions/{id}` (404 → false), the nightly backstop for a lost `subscriptionRemoved`.

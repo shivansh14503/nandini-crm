@@ -120,7 +120,7 @@ export interface WatchRequest {
     address: string;
     /** Graph `lifecycleNotificationUrl`. */
     lifecycleAddress?: string;
-    /** Google channel `token` (≤ 256) / Graph `clientState` (≤ 128): the HMAC the webhook route checks. */
+    /** Google channel `token` (≤ 256) / Graph `clientState` (≤ 128): carries the HMAC the webhook route checks (channelToken). */
     token: string;
     /** Requested expiry (the provider may answer an earlier one). */
     expiresAt: Date;

@@ -13,11 +13,20 @@ import { fakeWatchState, resetFakeWatch } from './providers/fakeWatch.js';
 import { resetProviderPauses } from './providers/http.js';
 import { setFakeHealth, setFakeProviderEnabledForTests } from './providers/registry.js';
 import { channelToken, ensureChannel, newChannelId, addressTag, setInlineWatchForTests, webhookHmac } from './sync.channels.js';
-import { followUpPullJobId, pullJobId } from './sync.keys.js';
+import { followUpPullJobId, freshWebhookPullJobId, pullJobId, webhookPullJobId } from './sync.keys.js';
 import { blankConnection, installConnectionDouble, microsoftProviderRow, restoreConnectionDouble, type ConnectionRowState, type DoubleState, type UserRow } from './testing/connectionDouble.js';
 import { setTokenSourceForTests } from './tokenSource.js';
 import webhookRouter, { localWebhookHit, resetWebhookLimitsForTests, setWebhookAfterAnswerForTests, WEBHOOK_RATE_LIMIT } from './webhook.routes.js';
-import { handleGoogleNotification, handleGraphNotifications, pullAgainIfNotified, setInlineWebhookPullForTests, type GoogleNotification } from './webhook.service.js';
+import {
+    handleGoogleNotification,
+    handleGraphNotifications,
+    notePing,
+    pullAgainIfNotified,
+    setInlineWebhookPullForTests,
+    setWebhookPullQueueForTests,
+    type GoogleNotification,
+    type WebhookPullQueue,
+} from './webhook.service.js';
 
 /**
  * The webhook routes over HTTP and their handlers (Calendar Phase 2 spec §3.4, D25, D26; P2-7), without Redis (pings
@@ -97,6 +106,37 @@ function graphChannel(over: Record<string, unknown> = {}) {
     return { row, clientState: channelToken('microsoft', { id, connectionId: 'c2', generation: Number(row.generation) }, String(row.tokenKeyId)) };
 }
 
+/** An in-memory stand-in for Redis + BullMQ: kept job states, stamps, added ids (an add with a kept id is ignored, as BullMQ does). */
+function fakePullQueue() {
+    const q = {
+        states: new Map<string, string>(),
+        stamps: new Map<string, number>(),
+        added: [] as string[],
+        stampWorks: true,
+        addWorks: true,
+    };
+    const port: WebhookPullQueue = {
+        ready: () => true,
+        writeStamp: async (connectionId, ms) => {
+            if (!q.stampWorks) return false;
+            q.stamps.set(connectionId, ms);
+            return true;
+        },
+        readStamp: async (connectionId) => q.stamps.get(connectionId) ?? null,
+        stateOf: async (jobId) => q.states.get(jobId) ?? null,
+        add: async (jobId) => {
+            if (!q.addWorks) return null;
+            if (!q.states.has(jobId)) {
+                q.states.set(jobId, 'delayed');
+                q.added.push(jobId);
+            }
+            return jobId;
+        },
+    };
+    setWebhookPullQueueForTests(port);
+    return q;
+}
+
 const graphItem = (clientState: string, over: Record<string, unknown> = {}) => ({ subscriptionId: 'sub-1', clientState, tenantId: TENANT, changeType: 'updated', resource: 'Users/x/Events/y', ...over });
 
 async function postGoogle(n: GoogleNotification, extra: Record<string, string> = {}) {
@@ -143,6 +183,7 @@ afterEach(() => {
     setInlineWebhookPullForTests(null);
     setInlineWatchForTests(null);
     setWebhookAfterAnswerForTests(null);
+    setWebhookPullQueueForTests(null);
     configureSecretBox(null);
 });
 
@@ -247,6 +288,35 @@ describe('Microsoft Graph notifications', () => {
         assert.deepEqual(pulls, []);
     });
 
+    it('a tenant configured by its domain: Graph’s tenant GUID can’t be compared, the clientState HMAC decides', async () => {
+        state = installConnectionDouble({
+            users: [user(1, 'palak'), user(2, 'asha')],
+            connections: [conn('c1', 'palak', 'fake'), conn('c2', 'asha', 'microsoft')],
+            providers: [microsoftProviderRow({ tenantId: 'contoso.onmicrosoft.com' })],
+        });
+        const { clientState } = graphChannel();
+        const outcome = await handleGraphNotifications({ value: [graphItem(clientState)] });
+        assert.deepEqual(outcome.ignored, {});
+        assert.deepEqual(outcome.pulled, ['c2']);
+        const forged = await handleGraphNotifications({ value: [graphItem(`c2.3.${'x'.repeat(43)}`)] });
+        assert.deepEqual(forged.ignored, { bad_token: 1 });
+    });
+
+    it('a forged lifecycle post at night is refused before any database read', async () => {
+        install();
+        graphChannel();
+        integrations.SYNC_HOURS = '07:00-22:00';
+        channelReads = 0;
+        const forged = await handleGraphNotifications(
+            { value: [graphItem('y', { lifecycleEvent: 'missed' }), graphItem(`c2.3.${'z'.repeat(43)}`, { lifecycleEvent: 'subscriptionRemoved' })] },
+            at('02:00'),
+        );
+        assert.deepEqual(forged.ignored, { bad_token: 2 });
+        assert.equal(channelReads, 0);
+        assert.deepEqual(watches, []);
+        assert.deepEqual(pulls, []);
+    });
+
     it('the clientState generation matters: an old generation’s notifications are refused', async () => {
         install();
         const { row } = graphChannel({ generation: 4 });
@@ -301,16 +371,74 @@ describe('Microsoft Graph notifications', () => {
 });
 
 describe('debounce, limits', () => {
-    it('pulls within one 10 s bucket share a job id; the D26 follow-up never equals the running job’s id', () => {
+    it('pulls within one 10 s bucket share a job id; webhook and follow-up ids never equal a poll’s or each other’s', () => {
         const t = new Date(Math.floor(Date.now() / 10_000) * 10_000);
         assert.equal(pullJobId('c1', t), pullJobId('c1', new Date(t.getTime() + 9_999)));
         assert.notEqual(pullJobId('c1', t), pullJobId('c1', new Date(t.getTime() + 10_000)));
-        assert.notEqual(followUpPullJobId('c1', t), pullJobId('c1', t));
-        assert.doesNotMatch(followUpPullJobId('c1', t), /:/, 'BullMQ ids never contain ":"');
+        assert.equal(webhookPullJobId('c1', t), webhookPullJobId('c1', new Date(t.getTime() + 9_999)));
+        assert.notEqual(webhookPullJobId('c1', t), pullJobId('c1', t));
+        assert.notEqual(freshWebhookPullJobId('c1', t), freshWebhookPullJobId('c1', new Date(t.getTime() + 1)));
+        assert.notEqual(followUpPullJobId('c1', t.getTime()), followUpPullJobId('c1', t.getTime() + 2_500));
+        for (const id of [webhookPullJobId('c1', t), freshWebhookPullJobId('c1', t), followUpPullJobId('c1', t.getTime())]) {
+            assert.doesNotMatch(id, /:/, 'BullMQ ids never contain ":"');
+        }
     });
 
     it('without Redis there is no stamp to read, so no follow-up pull is queued', async () => {
         assert.equal(await pullAgainIfNotified('c1', new Date()), false);
+    });
+
+    it('a ping after the bucket’s pull already finished queues a fresh job (BullMQ would ignore the kept id)', async () => {
+        const q = fakePullQueue();
+        const t0 = new Date(Math.floor(Date.now() / 10_000) * 10_000);
+        // The first ping queues the bucket's job.
+        assert.equal(await notePing('c1', 'webhook', t0), 'queued');
+        assert.deepEqual(q.added, [webhookPullJobId('c1', t0)]);
+        // A second ping while it is still delayed: absorbed.
+        assert.equal(await notePing('c1', 'webhook', new Date(t0.getTime() + 1_000)), 'queued');
+        assert.equal(q.added.length, 1);
+        // It ran and completed; a ping 5 s later in the same bucket gets its own job.
+        q.states.set(webhookPullJobId('c1', t0), 'completed');
+        const t5 = new Date(t0.getTime() + 5_000);
+        assert.equal(await notePing('c1', 'webhook', t5), 'queued');
+        assert.deepEqual(q.added, [webhookPullJobId('c1', t0), freshWebhookPullJobId('c1', t5)]);
+        assert.deepEqual(pulls, [], 'nothing in-process while Redis works');
+    });
+
+    it('a ping during a running pull relies on the D26 stamp; a follow-up of a follow-up gets its own id', async () => {
+        const q = fakePullQueue();
+        const t0 = new Date(Math.floor(Date.now() / 10_000) * 10_000);
+        q.states.set(webhookPullJobId('c1', t0), 'active');
+        const ping1 = new Date(t0.getTime() + 3_000);
+        assert.equal(await notePing('c1', 'webhook', ping1), 'queued');
+        assert.deepEqual(q.added, [], 'the running pull pulls again when it ends');
+        assert.equal(q.stamps.get('c1'), ping1.getTime());
+        // Pull A (started at t0) ends: one follow-up F.
+        assert.equal(await pullAgainIfNotified('c1', t0), true);
+        assert.deepEqual(q.added, [followUpPullJobId('c1', ping1.getTime())]);
+        // F runs from ping1 + 2 s; ping 2 arrives while it runs; F ends 1 s later: another follow-up, another id.
+        const fStart = new Date(ping1.getTime() + 2_000);
+        q.states.set(webhookPullJobId('c1', fStart), 'active');
+        const ping2 = new Date(fStart.getTime() + 500);
+        await notePing('c1', 'webhook', ping2);
+        assert.equal(await pullAgainIfNotified('c1', fStart), true);
+        assert.equal(q.added.length, 2);
+        assert.notEqual(q.added[1], q.added[0]);
+        assert.equal(q.added[1], followUpPullJobId('c1', ping2.getTime()));
+        // A pull that started after the newest ping queues nothing.
+        assert.equal(await pullAgainIfNotified('c1', new Date(ping2.getTime() + 1)), false);
+    });
+
+    it('a running pull without a stamp written: the ping queues its own job; Redis refusing the add → in-process', async () => {
+        const q = fakePullQueue();
+        q.stampWorks = false;
+        const t0 = new Date(Math.floor(Date.now() / 10_000) * 10_000);
+        q.states.set(webhookPullJobId('c1', t0), 'active');
+        assert.equal(await notePing('c1', 'webhook', t0), 'queued');
+        assert.deepEqual(q.added, [freshWebhookPullJobId('c1', t0)]);
+        q.addWorks = false;
+        assert.equal(await notePing('c1', 'webhook', new Date(t0.getTime() + 10_000)), 'inline');
+        assert.deepEqual(pulls, ['c1']);
     });
 
     it('the in-process rate limit allows 600 requests a minute per IP', () => {

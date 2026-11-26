@@ -28,7 +28,8 @@ import {
  *
  *   GET    /                           → { ready: { ok, reason }, keyStatus: ok|missing|unreadable, activeKeyId, publicApiUrl,
  *                                          publicApiUrlConfigured, webhooksActive, webhooksOffReason (no_public_url|needs_https|
- *                                          disabled|sync_disabled|null, P2-7), pollMinutesWithWebhooks, fakeProvider, worker,
+ *                                          disabled|sync_disabled|key_missing|null, P2-7), pollMinutesWithWebhooks (the larger of
+ *                                          CALENDAR_POLL_MINUTES_WITH_WEBHOOKS and CALENDAR_POLL_MINUTES), fakeProvider, worker,
  *                                          workerStatus (running|not_seen|no_redis), syncEnabled, providers: ProviderAdminDto[]
  *                                          (P2-7: + webhook { status: live|starting|errors|off|unavailable, reason, active,
  *                                          failed, waiting } | null),

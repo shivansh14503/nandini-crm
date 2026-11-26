@@ -494,8 +494,10 @@ keeps wall-clock times); all-day activities are entered as business-timezone day
         row retried after 6 h and never marks the person or provider. Stopped best effort when a row stops or the
         provider is switched off, and nightly while webhooks are off. `/api/webhooks/google/calendar`,
         `/microsoft/calendar`, `/microsoft/lifecycle` (no sign-in, HMAC-verified, own body limits, 600 / min / IP,
-        answer first then work; forged Google pings refused before any database read). D26: a ping queues
-        `pull-<conn>-<10 s bucket>` (2 s delay) and a Redis stamp; a pull that ends after a ping queues one more.
+        answer first then work; forged Google pings and Graph notifications refused before any database read, Graph
+        `clientState` = `<conn>.<generation>.<HMAC>`). D26: a ping stamps Redis and queues `pull-<conn>-w<10 s bucket>`
+        (2 s delay) unless that job is still pending; while it runs the stamp queues `pull-<conn>-n<stamp ms>` after
+        it, once finished a fresh `…-w<bucket>-<ms>`. A refused replace backs off 6 h while the old channel delivers.
         Outside `CALENDAR_SYNC_HOURS` change notifications are dropped unread (Azure SQL sleeps; the morning poll
         covers them), lifecycle ones handled at any hour. Safety-net poll every `CALENDAR_POLL_MINUTES_WITH_WEBHOOKS`
         (default 30) for people with a healthy channel. `CALENDAR_WEBHOOKS_ENABLED` (default true), live only with an

@@ -28,14 +28,16 @@ import { tokenSource } from './tokenSource.js';
  *   and clean-up). Lifecycle notifications queue `watch` jobs (webhook.service.ts).
  * - **Identity**: our channel id `w<8 hex>-<uuid>` (≤ 64 chars [V]); the 8 hex are sha256(PUBLIC_API_URL), so a channel
  *   made for another address is replaced like one signed with an old key. Google `token` = b64url HMAC-SHA256(webhook
- *   subkey of the ring key `tokenKeyId`, channel id); Graph `clientState` = the same HMAC over
- *   `connectionId:generation` (≤ 128 [V]). No secret column; every ring key verifies (key rotation, D25).
+ *   subkey of the ring key `tokenKeyId`, channel id); Graph `clientState` = `<connectionId>.<generation>.` + the same
+ *   HMAC over `connectionId:generation` (≤ 128 [V]; checkable before any read). No secret column; every ring key
+ *   verifies (key rotation, D25).
  * - **Renewal**: 3 days before expiry, for an old key id or another address. Google has no renew call [V]: a new channel
  *   is created first, then the old one stopped (both deliver meanwhile; pings are idempotent pulls). Graph: `PATCH`
  *   with a new expiry (404 → re-create with `generation + 1`); a new key / address re-creates too.
  * - **Failures** never touch sync itself: a refused watch call marks neither the person's row nor the provider
  *   (`withCalendarAccess` read-only mode) and leaves a `failed` row (retried after 6 hours by the poll tick, nightly
- *   always); the person keeps the normal poll interval. Transient errors are retried by the next tick.
+ *   always); the person keeps the normal poll interval. A refused replace / renew backs off the same way while the old
+ *   channel still has over an hour left (it keeps delivering). Transient errors are retried by the next tick.
  * - **Stop**: a stopped row (excluded, inactive, email / provider changed, provider switched off: enrolment.ts) stops its
  *   channels best effort (rows marked `stopped` first, so pings are ignored at once; then Google `channels.stop` / Graph
  *   `DELETE`, 5 s each). Webhooks switched off: the nightly run stops what is left. Stopped / failed rows are deleted
@@ -94,9 +96,21 @@ export function signedText(provider: string, channel: { id: string; connectionId
     return provider === 'microsoft' ? `${channel.connectionId}:${channel.generation}` : channel.id;
 }
 
-/** The token / clientState of a channel under ring key `kid` (throws when the key isn't in the ring). */
+/**
+ * The token / clientState of a channel under ring key `kid` (throws when the key isn't in the ring). Google / fake: the
+ * HMAC. Graph: `<connectionId>.<generation>.<HMAC>`, so a notification can be verified before any database read (the
+ * signed text travels with it); ≤ 50 + 1 + 10 + 1 + 43 = 105 characters, inside Graph's 128 [V].
+ */
 export function channelToken(provider: string, channel: { id: string; connectionId: string; generation: number }, kid: string): string {
-    return webhookHmac(secretBox.webhookKey(kid), signedText(provider, channel));
+    const mac = webhookHmac(secretBox.webhookKey(kid), signedText(provider, channel));
+    return provider === 'microsoft' ? `${channel.connectionId}.${channel.generation}.${mac}` : mac;
+}
+
+/** A Graph clientState split into what was signed and the HMAC; null when it isn't ours. Pure. */
+export function parseClientState(value: string): { connectionId: string; generation: number; mac: string } | null {
+    const match = /^([A-Za-z0-9-]{1,50})\.([1-9][0-9]{0,9})\.([A-Za-z0-9_-]{43})$/.exec(value);
+    if (!match) return null;
+    return { connectionId: match[1], generation: Number(match[2]), mac: match[3] };
 }
 
 /** The first 8 hex of sha256(public API URL): part of every channel id. */
@@ -153,8 +167,11 @@ export interface PlanContext {
 
 export type ChannelAction =
     | { action: 'none' }
-    /** A refused watch is backing off. */
-    | { action: 'wait' }
+    /**
+     * A refused watch is backing off (CHANNEL_FAILED_RETRY_MS). `channel`: the current channel still delivers (a refused
+     * replace / renew); without it the person has no channel.
+     */
+    | { action: 'wait'; channel?: ChannelRow }
     | { action: 'create' }
     | { action: 'renew'; channel: ChannelRow }
     /** New channel first, then the old one stopped. */
@@ -174,16 +191,19 @@ export function planChannel(rows: readonly ChannelRow[], ctx: PlanContext): Chan
     const expired = active.filter((r) => r.expiresAt.getTime() <= now);
     const healthy = active.filter((r) => r.expiresAt.getTime() > now).sort((a, b) => b.expiresAt.getTime() - a.expiresAt.getTime());
     const [current, ...duplicates] = healthy;
-    if (!current) {
-        const lastFailed = rows.filter((r) => r.status === 'failed').sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())[0];
-        const waiting = lastFailed && ctx.failedRetryMs > 0 && now - lastFailed.createdAt.getTime() < ctx.failedRetryMs;
-        return { next: waiting ? { action: 'wait' } : { action: 'create' }, expired, duplicates };
-    }
-    if (current.tokenKeyId !== ctx.activeKid) return { next: { action: 'replace', channel: current, why: 'key' }, expired, duplicates };
-    if (tagOf(current.id) !== ctx.addressTag) return { next: { action: 'replace', channel: current, why: 'address' }, expired, duplicates };
-    if (!current.externalId) return { next: { action: 'replace', channel: current, why: 'expiring' }, expired, duplicates };
+    const lastFailed = rows.filter((r) => r.status === 'failed').sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())[0];
+    const backingOff = Boolean(lastFailed && ctx.failedRetryMs > 0 && now - lastFailed.createdAt.getTime() < ctx.failedRetryMs);
+    if (!current) return { next: backingOff ? { action: 'wait' } : { action: 'create' }, expired, duplicates };
+    // A replace / renew the provider refused after this channel was made backs off too while the channel still
+    // delivers (it keeps working meanwhile); close to its expiry it is tried anyway.
+    const waitWithChannel =
+        backingOff && lastFailed.createdAt.getTime() >= current.createdAt.getTime() && current.expiresAt.getTime() - now > CHANNEL_HEALTHY_MARGIN_MS;
+    const orWait = (next: ChannelAction): ChannelAction => (waitWithChannel ? { action: 'wait', channel: current } : next);
+    if (current.tokenKeyId !== ctx.activeKid) return { next: orWait({ action: 'replace', channel: current, why: 'key' }), expired, duplicates };
+    if (tagOf(current.id) !== ctx.addressTag) return { next: orWait({ action: 'replace', channel: current, why: 'address' }), expired, duplicates };
+    if (!current.externalId) return { next: orWait({ action: 'replace', channel: current, why: 'expiring' }), expired, duplicates };
     if (ctx.forceRenew || current.expiresAt.getTime() - now < CHANNEL_RENEW_BEFORE_MS) {
-        return { next: ctx.canRenew ? { action: 'renew', channel: current } : { action: 'replace', channel: current, why: 'expiring' }, expired, duplicates };
+        return { next: orWait(ctx.canRenew ? { action: 'renew', channel: current } : { action: 'replace', channel: current, why: 'expiring' }), expired, duplicates };
     }
     return { next: { action: 'none' }, expired, duplicates };
 }
@@ -554,7 +574,7 @@ export async function maintainChannels(mode: 'poll' | 'nightly', now: Date = new
     for (const row of eligible) {
         const provider = row.provider as CalendarProvider;
         const plan = planChannel(byConnection.get(row.id) ?? [], { ...ctxBase, canRenew: provider !== 'google' && Boolean(getAdapter(provider).renewWatch) });
-        if (plan.next.action === 'create' || plan.next.action === 'wait') result.missing += 1;
+        if (plan.next.action === 'create' || (plan.next.action === 'wait' && !plan.next.channel)) result.missing += 1;
         if (!planHasWork(plan)) continue;
         if (touched.size >= limit) continue;
         touched.add(row.id);

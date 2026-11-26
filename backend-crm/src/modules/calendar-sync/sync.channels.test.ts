@@ -14,7 +14,9 @@ import {
     ensureChannel,
     maintainChannels,
     newChannelId,
+    parseClientState,
     planChannel,
+    planHasWork,
     pollIntervalMinutes,
     pullIsDue,
     runWatchJob,
@@ -126,6 +128,21 @@ describe('planChannel (pure)', () => {
         assert.deepEqual(planChannel([moved], ctx({ canRenew: true })).next, { action: 'replace', channel: moved, why: 'address' });
     });
 
+    it('a refused replace / renew backs off while the old channel still delivers; near its expiry it is tried anyway', () => {
+        const old = channel({ tokenKeyId: 'k0' });
+        const refused = channel({ status: 'failed', externalId: null, createdAt: new Date(now.getTime() - HOUR) });
+        assert.deepEqual(planChannel([old, refused], ctx()).next, { action: 'wait', channel: old });
+        assert.equal(planHasWork(planChannel([old, refused], ctx())), false);
+        assert.equal(planChannel([old, refused], ctx({ failedRetryMs: 0 })).next.action, 'replace', 'nightly tries again');
+        assert.equal(planChannel([old, { ...refused, createdAt: new Date(now.getTime() - 7 * HOUR) }], ctx()).next.action, 'replace', 'after 6 hours');
+        const olderFailure = { ...refused, createdAt: new Date(now.getTime() - 2 * DAY) };
+        assert.equal(planChannel([old, olderFailure], ctx({ failedRetryMs: 7 * DAY })).next.action, 'replace', 'a failure before this channel was made does not count');
+        const dying = channel({ expiresAt: new Date(now.getTime() + 30 * MIN), createdAt: new Date(now.getTime() - 7 * DAY) });
+        assert.equal(planChannel([dying, refused], ctx()).next.action, 'replace', 'under an hour left: tried anyway');
+        const renewable = channel({ expiresAt: new Date(now.getTime() + 2 * DAY) });
+        assert.deepEqual(planChannel([renewable, refused], ctx({ canRenew: true })).next, { action: 'wait', channel: renewable });
+    });
+
     it('expired active rows are retired; older healthy duplicates are stopped', () => {
         const expired = channel({ expiresAt: new Date(now.getTime() - MIN) });
         const newer = channel({ expiresAt: new Date(now.getTime() + 6 * DAY) });
@@ -140,8 +157,12 @@ describe('planChannel (pure)', () => {
         assert.equal(signedText('google', { id: 'w1', connectionId: 'c1', generation: 2 }), 'w1');
         assert.equal(signedText('microsoft', { id: 'w1', connectionId: 'c1', generation: 2 }), 'c1:2');
         const token = channelToken('microsoft', { id: 'w1', connectionId: 'c1', generation: 2 }, 'k1');
-        assert.equal(token, webhookHmac(secretBox.webhookKey('k1'), 'c1:2'));
-        assert.equal(token.length, 43, 'well inside Graph’s 128 characters');
+        assert.equal(token, `c1.2.${webhookHmac(secretBox.webhookKey('k1'), 'c1:2')}`, 'the signed text travels with it (checked before any read)');
+        assert.deepEqual(parseClientState(token), { connectionId: 'c1', generation: 2, mac: webhookHmac(secretBox.webhookKey('k1'), 'c1:2') });
+        const longest = channelToken('microsoft', { id: 'w1', connectionId: 'x'.repeat(50), generation: 2_000_000_000 }, 'k1');
+        assert.ok(longest.length <= 128, 'inside Graph’s 128 characters');
+        assert.equal(parseClientState('nope'), null);
+        assert.equal(channelToken('google', { id: 'w1', connectionId: 'c1', generation: 2 }, 'k1').length, 43);
         assert.match(newChannelId(TAG), new RegExp(`^w${TAG}-[0-9a-f-]{36}$`));
         assert.ok(newChannelId(TAG).length <= 64, 'Google channel ids are ≤ 64 characters');
     });
@@ -222,6 +243,24 @@ describe('ensureChannel', () => {
         assert.equal(state.connections[0].status, 'ok', 'the person’s row is untouched');
         assert.equal(await ensureChannel('c1', { now }), 'wait');
         assert.equal(await ensureChannel('c1', { now, ignoreBackoff: true }), 'created');
+    });
+
+    it('a refused replace (old key) leaves the old channel delivering and is not retried by the next poll tick', async () => {
+        install();
+        await ensureChannel('c1', { now });
+        const old = activeChannels()[0];
+        configureSecretBox(parseKeyRing(`k2:${Buffer.alloc(32, 9).toString('base64')},k1:${Buffer.alloc(32, 7).toString('base64')}`));
+        fakeWatchState.failNext.watch = new ProviderBadRequestError({ provider: 'fake', operation: 'watch', status: 400, code: 'push.webhookUrlUnauthorized' });
+        assert.equal(await ensureChannel('c1', { now }), 'failed');
+        assert.equal(old.status, 'active', 'the old channel keeps delivering');
+        const calls = fakeWatchState.calls.length;
+        const later = new Date(now.getTime() + 5 * MIN);
+        const tick = await maintainChannels('poll', later);
+        assert.equal(tick.ensured, 0, 'backing off: no provider call');
+        assert.equal(tick.missing, 0, 'the person still has a channel');
+        assert.equal(fakeWatchState.calls.length, calls);
+        assert.equal(state.channels.filter((c) => c.status === 'failed').length, 1, 'no new failed row per tick');
+        assert.equal(await ensureChannel('c1', { now: later, ignoreBackoff: true }), 'replaced', 'nightly retries');
     });
 
     it('watch jobs: renew forces a renewal, recreate ignores the backoff, stop stops', async () => {
