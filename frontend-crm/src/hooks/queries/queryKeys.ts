@@ -51,6 +51,11 @@ export const queryKeys = {
         admin: () => ['integrations', 'admin'] as const,
         people: () => ['integrations', 'people'] as const,
     },
+    /** The signed-in user's own calendar connections (`/api/calendar-connections`); `notifyCrmUpdate` on that path refreshes them. */
+    calendarConnections: {
+        all: ['calendarConnections'] as const,
+        own: () => ['calendarConnections', 'own'] as const,
+    },
     /** The signed-in user's notifications (navbar bell); `notifyCrmUpdate('/api/notifications')` refreshes them. */
     notifications: {
         all: ['notifications'] as const,

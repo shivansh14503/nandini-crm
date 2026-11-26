@@ -5,6 +5,7 @@ import { auditService } from '../../services/audit.service.js';
 import { CACHE_KEYS, cacheService } from '../../services/cache.service.js';
 import type { AuthUser } from '../../types/user.types.js';
 import { HttpError } from '../../utils/httpError.js';
+import { LIVE_CONNECTION_STATUSES } from '../calendar-sync/connection.constants.js';
 import { acquireLocks, runInTransaction } from '../shared/transactions.js';
 
 /**
@@ -15,8 +16,11 @@ import { acquireLocks, runInTransaction } from '../shared/transactions.js';
  * users (`isActive = 1 AND isGroupUser = 0`). Group (shared) logins aren't calendar identities, so they may share an
  * address with a real user; inactive users don't hold an address either. A company domain is expected
  * (`companyDomains`, Admin › API Integrations settings) unless the admin explicitly allows another one.
- * Calendar Phase 2 P2-2 adds the hand-written `UX_Users_email` index on the same rule; until then this service is
- * the only guard (writes for one address serialize on an application lock).
+ * The hand-written filtered unique index `UX_Users_email` (migration 20261127090000_calendar_connections) enforces the
+ * same rule in the database; writes for one address also serialize on an application lock (`user-email:<address>`),
+ * so a clash is answered with a clear 409 instead of a unique-index error.
+ * A user with a live calendar connection keeps the connected account's address: any other value (or clearing it)
+ * answers 409 `EMAIL_CONNECTED` until the calendar is disconnected (spec §4.6).
  */
 
 export const USER_EMAIL_MAX_LENGTH = 120;
@@ -117,8 +121,8 @@ export const userEmailService = {
      * Sets (or clears) a user's email under the rule above, audited as `User UPDATE` by the actor. 404 for an unknown
      * username; 400 (`VALIDATION_ERROR`, field `email`) outside the company domains without `allowOtherDomain`;
      * 409 (`DUPLICATE_RECORD`, field `email`) when another active, non-group user holds it. An unchanged address is a
-     * no-op (no audit entry). Calendar Phase 2 P2-2 adds 409 `EMAIL_CONNECTED` for a user whose connected calendar
-     * account has another address.
+     * no-op (no audit entry). 409 `EMAIL_CONNECTED` while the user has a live calendar connection whose account
+     * address differs from the new value ("Disconnect their calendar first").
      */
     async setEmail(username: string, body: unknown, options: SetUserEmailOptions): Promise<UserEmailRow> {
         const { email, allowOtherDomain } = userEmailBodySchema.parse(body);
@@ -132,6 +136,7 @@ export const userEmailService = {
             const user = await tx.user.findUnique({ where: { username }, select: USER_EMAIL_SELECT });
             if (!user) throw HttpError.notFound(`User '${username}' not found.`);
             if (user.email === email) return { row: user, changed: false };
+            await assertNotConnectedElsewhere(tx, user.username, email);
             if (email && holdsAddress(user)) await assertAddressFree(tx, email, user.id);
             const updated = await tx.user.update({ where: { id: user.id }, data: { email }, select: USER_EMAIL_SELECT });
             await auditService.record(tx, {
@@ -147,11 +152,53 @@ export const userEmailService = {
         return row;
     },
 
+    /**
+     * Calendar connect auto-fill (spec §3.3 step 6): gives a user **without** an email the verified address of the
+     * calendar account they just connected, inside the connect transaction (audited `User UPDATE`, changedBy the user
+     * themself). Only a company address that no other active, non-group user holds; otherwise nothing is written and
+     * the outcome says why. The caller has checked the length (`USER_EMAIL_MAX_LENGTH`).
+     */
+    async claimEmptyEmail(
+        tx: TransactionClient,
+        input: { userId: number; email: string; companyDomains: readonly string[]; actorUsername: string },
+    ): Promise<'set' | 'not_company' | 'taken' | 'not_empty'> {
+        const email = normalizeUserEmail(input.email);
+        if (!email || !isCompanyEmail(email, input.companyDomains)) return 'not_company';
+        await acquireLocks(tx, [`user-email:${email}`]);
+        const user = await tx.user.findUnique({ where: { id: input.userId }, select: USER_EMAIL_SELECT });
+        if (!user || normalizeUserEmail(user.email)) return 'not_empty';
+        const holder = await tx.user.findFirst({ where: { email, isActive: true, isGroupUser: false, id: { not: user.id } }, select: { username: true } });
+        if (holder) return 'taken';
+        await tx.user.update({ where: { id: user.id }, data: { email }, select: { id: true } });
+        await auditService.record(tx, {
+            entityType: 'User',
+            entityId: String(user.id),
+            action: 'UPDATE',
+            changedBy: input.actorUsername,
+            changes: { email: { from: user.email, to: email } },
+        });
+        return 'set';
+    },
+
     /** Every user (active or not) with the fields the email rule needs; callers filter. */
     async listForEmailRule(client: Pick<TransactionClient, 'user'> = prisma): Promise<UserEmailRow[]> {
         return client.user.findMany({ select: USER_EMAIL_SELECT, orderBy: [{ fullName: 'asc' }, { username: 'asc' }] });
     },
 };
+
+/**
+ * 409 `EMAIL_CONNECTED` when the user has a live calendar connection (Calendar Phase 2 P2-2) on another address: the
+ * CRM email and the connected account must stay the same person (attendee / organizer matching relies on it).
+ */
+async function assertNotConnectedElsewhere(tx: TransactionClient, username: string, email: string | null): Promise<void> {
+    const live = await tx.calendarConnection.findFirst({
+        where: { username, kind: 'calendar', status: { in: [...LIVE_CONNECTION_STATUSES] } },
+        select: { accountEmail: true },
+    });
+    if (!live || (email !== null && live.accountEmail.toLowerCase() === email)) return;
+    const message = `This person's calendar is connected as ${live.accountEmail}. Disconnect their calendar first.`;
+    throw new HttpError(message, StatusCodes.CONFLICT, { code: 'EMAIL_CONNECTED', errors: [{ message, path: ['email'] }] });
+}
 
 /**
  * 409 when another active, non-group user holds the address. SQL Server's default collation compares

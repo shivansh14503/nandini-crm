@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { queryKeys } from '@/hooks/queries/queryKeys';
 import { integrationsAdminService } from '@/services/integrationsAdmin.service';
-import type { CalendarSyncSettings, IntegrationProviderKey, PersonEmailPayload, SaveProviderPayload } from '@/types/integration.types';
+import type { AdminDisconnectPayload, CalendarSyncSettings, IntegrationProviderKey, PersonEmailPayload, SaveProviderPayload } from '@/types/integration.types';
 
 /** Admin › API Integrations: providers, readiness, calendar settings and Followup Types in one read. */
 export function useIntegrationsAdmin() {
@@ -32,3 +32,6 @@ export const useSaveSyncTypes = () => useIntegrationsMutation((changes: Record<s
 /** The user directory (master data) carries emails too: the service broadcasts MASTER_DATA_SYNC_ENTITY, so every tab refreshes it. */
 export const useSetPersonEmail = () =>
     useIntegrationsMutation(({ username, payload }: { username: string; payload: PersonEmailPayload }) => integrationsAdminService.setPersonEmail(username, payload));
+/** Admin disconnect of a person's calendar (QueryProvider also refreshes that person's own Connected calendars list). */
+export const useAdminDisconnectConnection = () =>
+    useIntegrationsMutation(({ id, payload }: { id: string; payload?: AdminDisconnectPayload }) => integrationsAdminService.disconnectConnection(id, payload));

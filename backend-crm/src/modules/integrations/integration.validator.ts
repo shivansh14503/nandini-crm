@@ -113,5 +113,8 @@ export type PeopleQuery = z.infer<typeof peopleQuerySchema>;
 
 export const usernameParamSchema = z.object({ username: z.string().trim().min(1).max(50) });
 
+/** POST /connections/:id/disconnect. */
+export const connectionIdParamSchema = z.object({ id: z.string().trim().min(1).max(50) });
+
 /** PUT /people/:username/email (the users email service owns the rule). */
 export const personEmailBodySchema = userEmailBodySchema;

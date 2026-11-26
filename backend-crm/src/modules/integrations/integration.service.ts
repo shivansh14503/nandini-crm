@@ -12,6 +12,7 @@ import { formConfigService, invalidateFormConfigCaches, type FormConfigsPayload 
 import { isActivityOnlyFollowupType } from '../shared/followupTypes.js';
 import { acquireLocks, runInTransaction } from '../shared/transactions.js';
 import { duplicateEmailsAmong, emailIssueFor, userEmailService, type UserEmailIssue, type UserEmailRow } from '../users/userEmail.service.js';
+import { connectionCountsByProvider, liveConnectionsByUsername, type ConnectionCounts, type PersonConnectionDto } from '../calendar-sync/connection.queries.js';
 import { CALENDAR_SYNC_META_KEY, calendarSyncFromMeta, type CalendarSyncSettings } from './calendarSyncSettings.js';
 import {
     ENABLEABLE_PROVIDERS,
@@ -90,7 +91,7 @@ export interface ProviderAdminDto {
     webhookUrls: string[] | null;
     lastTest: { at: string; ok: boolean; message: string | null } | null;
     clientVersion: number;
-    /** Employees' connections by status (Calendar Phase 2 P2-2; zeros until then). */
+    /** Employees' live connections by status. */
     counts: { active: number; reauth: number; error: number };
     updatedAt: string | null;
     updatedBy: string | null;
@@ -129,8 +130,8 @@ export interface PersonDto {
     role: string;
     email: string | null;
     emailIssue: UserEmailIssue | null;
-    /** The person's calendar connection (Calendar Phase 2 P2-2); null until then. */
-    connection: { id: string; provider: string; status: string } | null;
+    /** The person's live calendar connection (active, reauth_required or error); null when not connected. */
+    connection: PersonConnectionDto | null;
 }
 
 export interface TestConnectionDto extends TestResult {
@@ -202,7 +203,7 @@ function isConfigured(provider: IntegrationProviderKey, clientId: string | null,
     return true;
 }
 
-export function toProviderDto(provider: IntegrationProviderKey, row: ProviderRow | null, now: Date = new Date()): ProviderAdminDto {
+export function toProviderDto(provider: IntegrationProviderKey, row: ProviderRow | null, now: Date = new Date(), counts?: ConnectionCounts): ProviderAdminDto {
     const { secrets, readable } = openSecrets(row);
     const hints = parseJson<SecretHints>(row?.secretHintsJson, {});
     const settings = providerSettings(provider, row);
@@ -223,7 +224,7 @@ export function toProviderDto(provider: IntegrationProviderKey, row: ProviderRow
         webhookUrls: webhookUrlsFor(provider, publicApiUrl),
         lastTest: row?.lastTestAt ? { at: row.lastTestAt.toISOString(), ok: Boolean(row.lastTestOk), message: row.lastTestMessage } : null,
         clientVersion: row?.clientVersion ?? 1,
-        counts: { active: 0, reauth: 0, error: 0 },
+        counts: counts ?? { active: 0, reauth: 0, error: 0 },
         updatedAt: row ? row.updatedAt.toISOString() : null,
         updatedBy: row?.updatedBy ?? null,
     };
@@ -308,9 +309,9 @@ const conflict = (message: string, code: string, path?: string[]) =>
 
 export const integrationService = {
     async getAdmin(now: Date = new Date()): Promise<IntegrationsAdminDto> {
-        const [rows, configs] = await Promise.all([prisma.integrationProvider.findMany(), formConfigService.getAllConfigs()]);
+        const [rows, configs, counts] = await Promise.all([prisma.integrationProvider.findMany(), formConfigService.getAllConfigs(), connectionCountsByProvider()]);
         const byProvider = new Map(rows.map((row) => [row.provider, row]));
-        const providers = INTEGRATION_PROVIDERS.map((p) => toProviderDto(p, byProvider.get(p) ?? null, now));
+        const providers = INTEGRATION_PROVIDERS.map((p) => toProviderDto(p, byProvider.get(p) ?? null, now, counts.get(p)));
         const anyUnreadable = providers.some((p) => !p.secret.readable);
         const { READY_REASON, ACTIVE_KEY_ID, PUBLIC_API_URL, PUBLIC_API_URL_CONFIGURED } = ENV.INTEGRATIONS;
         return {
@@ -536,20 +537,25 @@ export const integrationService = {
     /** Active, non-group users (the population of the email rule) with their email issue and connection. */
     async listPeople(query: unknown = {}): Promise<PersonDto[]> {
         const { search, issue } = peopleQuerySchema.parse(query ?? {}) as PeopleQuery;
-        const [users, settings] = await Promise.all([userEmailService.listForEmailRule(), loadCalendarSettings()]);
-        return peopleFrom(users, settings.companyDomains, { search, issue });
+        const [users, settings, connections] = await Promise.all([userEmailService.listForEmailRule(), loadCalendarSettings(), liveConnectionsByUsername()]);
+        return peopleFrom(users, settings.companyDomains, { search, issue }, connections);
     },
 
     /** Sets a person's company email through the users email service (the one rule for Users.email). */
     async setPersonEmail(username: string, body: unknown, user: AuthUser): Promise<PersonDto> {
         const settings = await loadCalendarSettings();
         const row = await userEmailService.setEmail(username, body, { companyDomains: settings.companyDomains, actor: user });
-        const users = await userEmailService.listForEmailRule();
-        return toPerson(row, duplicateEmailsAmong(users), settings.companyDomains);
+        const [users, connections] = await Promise.all([userEmailService.listForEmailRule(), liveConnectionsByUsername()]);
+        return toPerson(row, duplicateEmailsAmong(users), settings.companyDomains, connections);
     },
 };
 
-function toPerson(user: UserEmailRow, duplicates: ReadonlySet<string>, companyDomains: readonly string[]): PersonDto {
+function toPerson(
+    user: UserEmailRow,
+    duplicates: ReadonlySet<string>,
+    companyDomains: readonly string[],
+    connections: ReadonlyMap<string, PersonConnectionDto> = new Map(),
+): PersonDto {
     return {
         username: user.username,
         fullName: user.fullName || user.username,
@@ -557,17 +563,22 @@ function toPerson(user: UserEmailRow, duplicates: ReadonlySet<string>, companyDo
         role: user.role,
         email: user.email,
         emailIssue: emailIssueFor(user.email, duplicates, companyDomains),
-        connection: null,
+        connection: connections.get(user.username.toLowerCase()) ?? null,
     };
 }
 
 /** The People list from every user: active non-group only, filtered by search text and issue. Pure. */
-export function peopleFrom(users: readonly UserEmailRow[], companyDomains: readonly string[], filter: PeopleQuery = {}): PersonDto[] {
+export function peopleFrom(
+    users: readonly UserEmailRow[],
+    companyDomains: readonly string[],
+    filter: PeopleQuery = {},
+    connections: ReadonlyMap<string, PersonConnectionDto> = new Map(),
+): PersonDto[] {
     const duplicates = duplicateEmailsAmong(users);
     const needle = filter.search?.toLowerCase();
     return users
         .filter((u) => u.isActive && !u.isGroupUser)
-        .map((u) => toPerson(u, duplicates, companyDomains))
+        .map((u) => toPerson(u, duplicates, companyDomains, connections))
         .filter((p) => !needle || [p.username, p.fullName, p.email ?? '', p.department ?? ''].some((v) => v.toLowerCase().includes(needle)))
         .filter((p) => !filter.issue || (filter.issue === 'any' ? p.emailIssue !== null : p.emailIssue === filter.issue));
 }

@@ -52,8 +52,8 @@ import { startWorkers, stopWorkers } from './jobs/workers/index.js';
 import { errorHandler, notFoundHandler } from './middlewares/errorHandler.js';
 import integrationRouter from './modules/integrations/integration.routes.js';
 import { serializeRequestForLog } from './utils/redactUrl.js';
-
-const LAN_ORIGIN = /^http:\/\/(localhost|127\.0\.0\.1|192\.168\.\d+\.\d+|10\.\d+\.\d+\.\d+)(:\d+)?$/;
+import { isAppOrigin } from './config/origins.js';
+import calendarConnectionRouter from './modules/calendar-sync/connection.routes.js';
 
 const app: Express = express();
 
@@ -68,7 +68,7 @@ app.use(
     cors({
         origin: (origin, callback) => {
             if (!origin) return callback(null, true);
-            if (!ENV.IS_PRODUCTION || origin === ENV.CLIENT_ORIGIN || LAN_ORIGIN.test(origin)) {
+            if (!ENV.IS_PRODUCTION || isAppOrigin(origin)) {
                 return callback(null, true);
             }
             return callback(new Error(`CORS blocked for origin: ${origin}`));
@@ -141,6 +141,7 @@ app.use('/api/notifications', notificationRouter);
 app.use('/api/me', profileRouter);
 app.use('/api/user-photos', userPhotoRouter);
 app.use('/api/admin/integrations', integrationRouter);
+app.use('/api/calendar-connections', calendarConnectionRouter);
 
 // ── 404 + global error handler ─────────────────────────────────────────────────
 app.use(notFoundHandler);
@@ -178,6 +179,11 @@ function logIntegrationsReadiness(): void {
         logger.info('INTEGRATIONS_ENCRYPTION_KEY is not set: Admin › API Integrations can\'t store secrets yet');
     } else if (READY_REASON === 'public_url_missing') {
         logger.warn('PUBLIC_API_URL is not set: calendar connections stay off until it is');
+    }
+    if (ENV.INTEGRATIONS.FAKE_PROVIDER_IGNORED) {
+        logger.warn('CALENDAR_FAKE_PROVIDER is ignored in production: the test calendar provider is off');
+    } else if (ENV.INTEGRATIONS.FAKE_PROVIDER) {
+        logger.warn('CALENDAR_FAKE_PROVIDER is on: the in-memory test calendar provider is offered (development only)');
     }
     if (ENV.IS_PRODUCTION && PUBLIC_API_URL && !PUBLIC_API_URL.startsWith('https://')) {
         logger.warn('PUBLIC_API_URL is not https: calendar webhooks stay off (changes arrive by polling)');

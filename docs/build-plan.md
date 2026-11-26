@@ -1,7 +1,7 @@
 # Nandini CRM — Build Plan
 
 > **Status:** living document. Part 1 records what has been built (reconstructed from git history, 115 commits
-> from 2026-10-15 to 2026-11-18; the snapshot as of 2026-11-26, Calendar Phase 2 P2-1 and Profile Phase 1: My Profile). Part 2
+> from 2026-10-15 to 2026-11-18; the snapshot as of 2026-11-26, Calendar Phase 2 P2-1 and P2-2 and Profile Phase 1: My Profile). Part 2
 > is the roadmap. Tick
 > items off and add new ones as work lands.
 > Related: [System design](system-design.md) · [Database design](database-design.md) · [API plan](api-plan.md)
@@ -316,8 +316,26 @@ keeps wall-clock times); all-day activities are entered as business-timezone day
         stored only if the credentials didn't change meanwhile (`credentials_changed`), the email body requires
         `email`, docs give Microsoft-without-tenant as 400, a failed refetch keeps the cards and drafts mounted, and an
         email change refreshes master data in every tab (`MASTER_DATA_SYNC_ENTITY`).
-  - [ ] **P2-2: connect / disconnect** (Google, Microsoft; Connected calendars page, `CalendarConnection`, unique
-        active emails)
+  - [x] **P2-2: connect / disconnect** (2026-11-26) — `CalendarConnection` table and the filtered unique indexes
+        `UX_CalendarConnection_user_kind`, `UX_CalendarConnection_account` and `UX_Users_email` (migration
+        `20261127090000_calendar_connections`, which lower-cases stored emails and stops on duplicates; pre-check
+        `npm run calendar:check-emails`), `modules/calendar-sync` (provider adapters for Google, Microsoft and a
+        dev-only `fake` (`CALENDAR_FAKE_PROVIDER`), `providerFetch` with retries / Retry-After / typed errors, OAuth
+        code + PKCE + state + nonce with the sealed `crm_oauth` cookie, id_token claim checks, Google `hd` / Entra
+        tenant checks, scope checks, token refresh with compare-and-set on `tokenVersion`, `calendar_reconnect`
+        notifications, revoke on disconnect), `/api/calendar-connections` (list, start, callback, disconnect) and the
+        admin `GET /connections` + `POST /connections/:id/disconnect`, People table with connection details and an
+        admin disconnect, an empty company email filled from the verified account, `EMAIL_CONNECTED` guard on email
+        edits, nightly disconnect of inactive users and a "your access ends soon" warning (from the reminders worker's
+        nightly job until the calendar worker exists), `integrations:reencrypt` also re-seals connection tokens.
+        Frontend: self-contained `components/integrations/CalendarConnectionsCard` on the temporary page
+        `/connected-calendars` (user menu and mobile drawer item "Connected calendars"; My Profile unchanged), a
+        reconnect banner on the calendar, the bell icon for `calendar_reconnect`, and login `?next=` (CRM paths only).
+        Nothing syncs yet (P2-3): the card says sync arrives in the next update. Providers stay off until an admin
+        switches one on. Not run against a real SQL Server, Google or Microsoft (migration checked with
+        `prisma migrate diff --from-empty`; the whole connect → callback → refresh → disconnect flow runs against the
+        fake provider and replayed Google / Microsoft answers in tests). The morning email only has a parked hook
+        comment (`hasActiveCalendarConnection`).
   - [ ] **P2-3a: activity write-path refactor** (no behaviour change)
   - [ ] **P2-3b: CRM → calendar push engine**
   - [ ] **P2-3c: backfill, send invitations, sync status UI**

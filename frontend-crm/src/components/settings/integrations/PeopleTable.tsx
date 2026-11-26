@@ -17,14 +17,16 @@ import {
     Typography,
 } from '@mui/material';
 import EditOutlinedIcon from '@mui/icons-material/EditOutlined';
+import LinkOffRoundedIcon from '@mui/icons-material/LinkOffRounded';
 import GroupsOutlinedIcon from '@mui/icons-material/GroupsOutlined';
 import SearchRoundedIcon from '@mui/icons-material/SearchRounded';
+import { CommonActionModal } from '@/components/common/CommonActionModal';
 import { TableSkeleton } from '@/components/common/skeletons';
 import { EmptyState, errorMessage, inputSx, panelHeaderSx, surfaceSx } from '@/components/settings/form-customization/builderUi';
-import { usePeople } from '@/hooks/queries/useIntegrationsAdmin';
+import { useAdminDisconnectConnection, usePeople } from '@/hooks/queries/useIntegrationsAdmin';
 import type { Person, UserEmailIssue } from '@/types/integration.types';
 import { CompanyEmailDialog } from './CompanyEmailDialog';
-import { StatusChip, hintSx, type ChipTone } from './integrationUi';
+import { StatusChip, formatDay, hintSx, type ChipTone } from './integrationUi';
 
 type PeopleFilter = 'all' | 'issues' | UserEmailIssue;
 
@@ -40,6 +42,14 @@ const ISSUE_CHIP: Record<UserEmailIssue, { tone: ChipTone; label: string; title:
     missing: { tone: 'warning', label: 'Missing', title: 'No company email: this person can’t connect a calendar until one is set.' },
     duplicate: { tone: 'error', label: 'Duplicate', title: 'Another active person has the same email. Each person needs their own.' },
     not_company: { tone: 'warning', label: 'Other domain', title: 'Not one of the company email domains.' },
+};
+
+const PROVIDER_LABELS: Record<string, string> = { google: 'Google Calendar', microsoft: 'Microsoft 365', fake: 'Test calendar' };
+
+const CONNECTION_CHIP: Record<string, { tone: ChipTone; label: string }> = {
+    active: { tone: 'success', label: 'Connected' },
+    reauth_required: { tone: 'warning', label: 'Reconnect needed' },
+    error: { tone: 'error', label: 'Not working' },
 };
 
 const headCellSx = {
@@ -76,12 +86,14 @@ const pillSx = (active: boolean) =>
 
 const matches = (p: Person, filter: PeopleFilter) => (filter === 'all' ? true : filter === 'issues' ? p.emailIssue !== null : p.emailIssue === filter);
 
-/** People and their company emails (calendar connections join in P2-2). */
+/** People, their company emails and their calendar connection (an admin can disconnect one, with an audited note). */
 export function PeopleTable({ companyDomains, onToast }: { companyDomains: string[]; onToast: (message: string, severity?: 'success' | 'error') => void }) {
     const people = usePeople();
     const [search, setSearch] = useState('');
     const [filter, setFilter] = useState<PeopleFilter>('all');
     const [editing, setEditing] = useState<Person | null>(null);
+    const [disconnecting, setDisconnecting] = useState<Person | null>(null);
+    const disconnect = useAdminDisconnectConnection();
 
     const all = useMemo(() => people.data ?? [], [people.data]);
     const counts = useMemo(() => Object.fromEntries(FILTERS.map((f) => [f.key, all.filter((p) => matches(p, f.key)).length])) as Record<PeopleFilter, number>, [all]);
@@ -216,9 +228,40 @@ export function PeopleTable({ companyDomains, onToast }: { companyDomains: strin
                                                 <StatusChip tone="success">OK</StatusChip>
                                             )}
                                         </TableCell>
-                                        <TableCell sx={cellSx}>
+                                        <TableCell sx={{ ...cellSx, maxWidth: 300 }}>
                                             {p.connection ? (
-                                                <StatusChip tone={p.connection.status === 'active' ? 'success' : 'warning'}>{p.connection.status === 'active' ? 'Connected' : 'Needs attention'}</StatusChip>
+                                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, minWidth: 0 }}>
+                                                    <Box sx={{ minWidth: 0, flex: 1 }}>
+                                                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, flexWrap: 'wrap' }}>
+                                                            <Typography sx={{ fontSize: '0.78rem', fontWeight: 600, color: 'var(--crm-slate-900)' }}>{PROVIDER_LABELS[p.connection.provider] ?? p.connection.provider}</Typography>
+                                                            <StatusChip tone={(CONNECTION_CHIP[p.connection.status] ?? CONNECTION_CHIP.error).tone} title={p.connection.statusReason ?? undefined}>
+                                                                {(CONNECTION_CHIP[p.connection.status] ?? CONNECTION_CHIP.error).label}
+                                                            </StatusChip>
+                                                        </Box>
+                                                        <Typography sx={{ fontSize: '0.72rem', color: 'var(--mui-palette-text-secondary)', overflowWrap: 'anywhere' }}>
+                                                            {p.connection.accountEmail}
+                                                            {p.connection.accessEndsAt ? ` · access ends ${formatDay(p.connection.accessEndsAt)}` : ''}
+                                                        </Typography>
+                                                    </Box>
+                                                    <Tooltip title="Disconnect calendar">
+                                                        <IconButton
+                                                            size="small"
+                                                            aria-label={`Disconnect the calendar of ${p.fullName || p.username}`}
+                                                            onClick={() => setDisconnecting(p)}
+                                                            sx={{
+                                                                width: 34,
+                                                                height: 34,
+                                                                flexShrink: 0,
+                                                                borderRadius: '8px',
+                                                                color: 'var(--mui-palette-text-secondary)',
+                                                                transition: 'all 0.15s ease',
+                                                                '&:hover': { color: 'var(--mui-palette-error-main)', backgroundColor: 'var(--mui-palette-error-soft)' },
+                                                            }}
+                                                        >
+                                                            <LinkOffRoundedIcon sx={{ fontSize: 17 }} />
+                                                        </IconButton>
+                                                    </Tooltip>
+                                                </Box>
                                             ) : (
                                                 <StatusChip tone="neutral">Not connected</StatusChip>
                                             )}
@@ -239,6 +282,35 @@ export function PeopleTable({ companyDomains, onToast }: { companyDomains: strin
                 onSaved={(saved) => {
                     setEditing(null);
                     onToast(saved.email ? `Saved ${saved.email} for ${saved.fullName || saved.username}.` : `Cleared the email of ${saved.fullName || saved.username}.`);
+                }}
+            />
+
+            <CommonActionModal
+                key={disconnecting?.connection?.id ?? 'no-connection'}
+                open={Boolean(disconnecting?.connection)}
+                title="Disconnect calendar"
+                description={
+                    disconnecting?.connection
+                        ? `${disconnecting.fullName || disconnecting.username}'s calendar (${disconnecting.connection.accountEmail}) stops syncing and its sign-in is removed. Events already in their calendar stay. They can connect again.`
+                        : undefined
+                }
+                reasonLabel="Note (optional)"
+                reasonPlaceholder="Why, for the audit log"
+                required={false}
+                confirmLabel="Disconnect"
+                confirmColor="error"
+                loading={disconnect.isPending}
+                onClose={() => setDisconnecting(null)}
+                onConfirm={async (reason) => {
+                    const target = disconnecting;
+                    if (!target?.connection) return;
+                    try {
+                        await disconnect.mutateAsync({ id: target.connection.id, payload: reason.trim() ? { reason: reason.trim().slice(0, 200) } : {} });
+                        setDisconnecting(null);
+                        onToast(`Disconnected the calendar of ${target.fullName || target.username}.`);
+                    } catch (err) {
+                        onToast(errorMessage(err, 'Could not disconnect the calendar.'), 'error');
+                    }
                 }}
             />
         </Box>

@@ -1,6 +1,7 @@
 /** Mirrors backend-crm/src/modules/integrations/integration.routes.ts (/api/admin/integrations, admin roles only). */
 import type { ApiResponse } from '../types/api.types';
 import type {
+    AdminDisconnectPayload,
     CalendarSyncSettings,
     IntegrationProviderKey,
     IntegrationsAdmin,
@@ -64,5 +65,10 @@ export const integrationsAdminService = {
         notifyCrmUpdate(BASE);
         notifyCrmUpdate(MASTER_DATA_SYNC_ENTITY);
         return res.data;
+    },
+    /** Ends a person's calendar connection (tokens dropped, Google grant revoked); the person's own page refreshes too. */
+    async disconnectConnection(id: string, payload: AdminDisconnectPayload = {}): Promise<void> {
+        await apiClient.post(`${BASE}/connections/${enc(id)}/disconnect`, payload);
+        notifyCrmUpdate(BASE);
     },
 };

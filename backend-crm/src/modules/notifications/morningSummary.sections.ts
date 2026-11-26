@@ -190,6 +190,9 @@ function activityItem(row: SummaryActivityRow, input: MorningSummaryInput, when:
         detail: joinParts([related, row.location]),
         href,
     };
+    // Calendar Phase 2 (parked by the owner, spec D29): once calendar sync pushes CRM meetings to Google / Outlook, a
+    // connected user (calendar-sync/connection.service.ts hasActiveCalendarConnection) may no longer need this "Add to
+    // Google Calendar" link. Nothing changes until the owner un-parks the morning email.
     if (withCalendarLink && row.startAt && row.followupType !== TASK_TYPE) {
         item.googleCalendarUrl = googleCalendarLink({
             title: row.subject,

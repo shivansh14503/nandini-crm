@@ -40,6 +40,9 @@ import { PASSWORD_MAX_LENGTH, PASSWORD_MIN_LENGTH, PASSWORD_RULES, passwordPolic
 import { GOOGLE_SCOPE_PROFILES, INTEGRATION_PROVIDERS, SECRET_EXPIRY_WARNING_DAYS } from '../modules/integrations/integration.constants.js';
 import { BACKFILL_DAY_CHOICES, EVENT_VISIBILITIES, MAX_COMPANY_DOMAINS } from '../modules/integrations/calendarSyncSettings.js';
 import { USER_EMAIL_ISSUES, USER_EMAIL_MAX_LENGTH } from '../modules/users/userEmail.service.js';
+import { CALENDAR_CONNECTIONS_PAGE, CALENDAR_PROVIDERS, CALLBACK_REASONS, CONNECTION_STATUS_REASONS, CONNECTION_STATUSES } from '../modules/calendar-sync/connection.constants.js';
+import { loginLocation } from '../modules/calendar-sync/oauth.js';
+import { NOTIFICATION_KINDS } from '../modules/notifications/notification.producer.js';
 
 /**
  * Contract between backend-crm and frontend-crm: constants each side keeps its own copy of must agree, or the UI
@@ -152,6 +155,18 @@ interface FrontendIntegrationTypes {
     SECRET_EXPIRY_WARNING_DAYS: number;
     MAX_COMPANY_DOMAINS: number;
     USER_EMAIL_MAX_LENGTH: number;
+}
+
+interface FrontendCalendarConnectionTypes {
+    CALENDAR_PROVIDERS: readonly string[];
+    CONNECTION_STATUSES: readonly string[];
+    CONNECTION_STATUS_REASONS: readonly string[];
+    CALLBACK_REASONS: readonly string[];
+    CALLBACK_REASON_MESSAGES: Record<string, string>;
+}
+
+interface FrontendSafeNextPath {
+    safeNextPath(value: string | null | undefined, fallback: string): string;
 }
 
 async function loadFrontend<T>(relativePath: string): Promise<T> {
@@ -413,5 +428,32 @@ describe('backend ↔ frontend contract', { skip }, () => {
         assert.equal(frontend.SECRET_EXPIRY_WARNING_DAYS, SECRET_EXPIRY_WARNING_DAYS);
         assert.equal(frontend.MAX_COMPANY_DOMAINS, MAX_COMPANY_DOMAINS);
         assert.equal(frontend.USER_EMAIL_MAX_LENGTH, USER_EMAIL_MAX_LENGTH);
+    });
+
+    it('frontend components/integrations/calendarConnections.types.ts matches the calendar connection constants', async () => {
+        const frontend = await loadFrontend<FrontendCalendarConnectionTypes>('components/integrations/calendarConnections.types.ts');
+        assert.deepEqual([...frontend.CALENDAR_PROVIDERS], [...CALENDAR_PROVIDERS]);
+        assert.deepEqual([...frontend.CONNECTION_STATUSES], [...CONNECTION_STATUSES]);
+        assert.deepEqual([...frontend.CONNECTION_STATUS_REASONS], [...CONNECTION_STATUS_REASONS]);
+        assert.deepEqual([...frontend.CALLBACK_REASONS], [...CALLBACK_REASONS]);
+        assert.deepEqual(Object.keys(frontend.CALLBACK_REASON_MESSAGES).sort(), [...CALLBACK_REASONS].sort(), 'every callback reason has a sentence');
+    });
+
+    it('frontend notification kinds and the Connected calendars route match', async () => {
+        const frontend = await loadFrontend<{ NOTIFICATION_KINDS: readonly string[] }>('types/notification.types.ts');
+        assert.deepEqual([...frontend.NOTIFICATION_KINDS], [...NOTIFICATION_KINDS]);
+        const constants = readFileSync(path.join(FRONTEND_SRC, 'config/constants.ts'), 'utf8');
+        assert.match(constants, new RegExp(`CONNECTED_CALENDARS: '${CALENDAR_CONNECTIONS_PAGE}'`));
+        assert.ok(existsSync(path.join(FRONTEND_SRC, `app${CALENDAR_CONNECTIONS_PAGE}/page.tsx`)), 'the page the callback redirects to exists');
+    });
+
+    it('the login page follows the callback\'s ?next= back to Connected calendars, and only to CRM paths', async () => {
+        const { safeNextPath } = await loadFrontend<FrontendSafeNextPath>('utils/safeNextPath.ts');
+        const next = new URL(loginLocation()).searchParams.get('next');
+        assert.equal(safeNextPath(next, '/dashboard'), CALENDAR_CONNECTIONS_PAGE);
+        assert.equal(safeNextPath('/connected-calendars?calendar=connected', '/d'), '/connected-calendars?calendar=connected');
+        for (const bad of ['//evil.example', '/\\evil.example', 'https://evil.example', 'javascript:alert(1)', '/login', '', null, '/a\nb']) {
+            assert.equal(safeNextPath(bad, '/d'), '/d', String(bad));
+        }
     });
 });

@@ -137,8 +137,26 @@ export interface Person {
     role: string;
     email: string | null;
     emailIssue: UserEmailIssue | null;
-    /** The person's calendar connection (arrives with Connected calendars); null until then. */
-    connection: { id: string; provider: string; status: string } | null;
+    /** The person's live calendar connection (active, reauth_required or error); null when none. Never a token. */
+    connection: PersonConnection | null;
+}
+
+export interface PersonConnection {
+    id: string;
+    /** `google` | `microsoft` | `fake` (development only). */
+    provider: string;
+    /** `active` | `reauth_required` | `error`. */
+    status: string;
+    statusReason: string | null;
+    accountEmail: string;
+    connectedAt: string;
+    /** Time-limited Google grant end; null = no known end. */
+    accessEndsAt: string | null;
+}
+
+/** `POST /api/admin/integrations/connections/:id/disconnect` body: an optional note (≤ 200), audited. */
+export interface AdminDisconnectPayload {
+    reason?: string;
 }
 
 export interface PersonEmailPayload {

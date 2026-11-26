@@ -99,7 +99,7 @@ function followupConfigs(options: { value: string; meta?: Record<string, unknown
  * itself is swapped for the fake and the real one put back after each test (`restoreDelegates`).
  */
 const realDelegates = new Map<string, unknown>();
-function stubDelegate(name: 'integrationProvider' | 'user' | '$transaction', fake: object): void {
+function stubDelegate(name: 'integrationProvider' | 'user' | 'calendarConnection' | '$transaction', fake: object): void {
     const client = prisma as unknown as Record<string, unknown>;
     if (!realDelegates.has(name)) realDelegates.set(name, client[name]);
     Object.defineProperty(client, name, { value: fake, configurable: true, writable: true });
@@ -109,10 +109,23 @@ function restoreDelegates(): void {
     realDelegates.clear();
 }
 
-function setup(seed: { providers?: ProviderState[]; users?: UserState[]; configs?: FormConfigsPayload } = {}) {
+interface ConnectionState {
+    id: string;
+    username: string;
+    provider: string;
+    kind: string;
+    status: string;
+    statusReason: string | null;
+    accountEmail: string;
+    connectedAt: Date;
+    refreshTokenExpiresAt: Date | null;
+}
+
+function setup(seed: { providers?: ProviderState[]; users?: UserState[]; configs?: FormConfigsPayload; connections?: ConnectionState[] } = {}) {
     const state = {
         providers: new Map((seed.providers ?? []).map((row) => [row.provider, { ...row }])),
         users: (seed.users ?? []).map((u) => ({ ...u })),
+        connections: (seed.connections ?? []).map((c) => ({ ...c })),
     };
     const audits: AuditEntry[] = [];
     const invalidated: string[] = [];
@@ -164,9 +177,20 @@ function setup(seed: { providers?: ProviderState[]; users?: UserState[]; configs
             return { ...user };
         },
     };
+    const liveOf = (where: { status?: { in?: string[] } | string }) => (c: ConnectionState) =>
+        !where.status || (typeof where.status === 'string' ? c.status === where.status : (where.status.in ?? []).includes(c.status));
+    const connectionModel = {
+        findMany: async ({ where = {} }: { where?: { kind?: string; status?: { in?: string[] } } } = {}) =>
+            state.connections.filter((c) => (!where.kind || c.kind === where.kind) && liveOf(where)(c)).map((c) => ({ ...c })),
+        findFirst: async ({ where }: { where: { username: string; kind?: string; status?: { in?: string[] } } }) => {
+            const row = state.connections.find((c) => c.username === where.username && (!where.kind || c.kind === where.kind) && liveOf(where)(c));
+            return row ? { ...row } : null;
+        },
+    };
     const client = {
         integrationProvider: providerModel,
         user: userModel,
+        calendarConnection: connectionModel,
         $queryRaw: async () => [{ result: 0 }],
     };
 
@@ -182,6 +206,7 @@ function setup(seed: { providers?: ProviderState[]; users?: UserState[]; configs
     });
     stubDelegate('integrationProvider', providerModel);
     stubDelegate('user', userModel);
+    stubDelegate('calendarConnection', connectionModel);
     mock.method(auditService, 'record', async (_tx: unknown, entry: AuditEntry) => {
         audits.push(entry);
     });
@@ -533,5 +558,60 @@ describe('People and company emails', () => {
         await userEmailService.setEmail('asha', { email: 'asha@nandiniinfosys.com' }, { companyDomains: ['nandiniinfosys.com'], actor: admin });
         assert.equal(audits.length, 0);
         assert.equal(invalidated.length, 0);
+    });
+
+    const connection = (over: Partial<ConnectionState> = {}): ConnectionState => ({
+        id: 'c-asha',
+        username: 'asha',
+        provider: 'google',
+        kind: 'calendar',
+        status: 'active',
+        statusReason: null,
+        accountEmail: 'asha@nandiniinfosys.com',
+        connectedAt: now,
+        refreshTokenExpiresAt: null,
+        ...over,
+    });
+
+    it('shows each person\'s live calendar connection (a disconnected row shows as not connected)', async () => {
+        setup({
+            users,
+            connections: [
+                connection({ refreshTokenExpiresAt: new Date('2027-02-12T00:00:00.000Z') }),
+                connection({ id: 'c-old', username: 'gmail', status: 'disconnected', accountEmail: 'someone@gmail.com' }),
+                connection({ id: 'c-ravi', username: 'ravi', provider: 'microsoft', status: 'reauth_required', statusReason: 'invalid_grant', accountEmail: 'shared@nandiniinfosys.com' }),
+            ],
+        });
+        const people = await integrationService.listPeople({});
+        const byName = new Map(people.map((p) => [p.username, p.connection]));
+        assert.deepEqual(byName.get('asha'), {
+            id: 'c-asha',
+            provider: 'google',
+            status: 'active',
+            statusReason: null,
+            accountEmail: 'asha@nandiniinfosys.com',
+            connectedAt: now.toISOString(),
+            accessEndsAt: '2027-02-12T00:00:00.000Z',
+        });
+        assert.equal(byName.get('ravi')!.status, 'reauth_required');
+        assert.equal(byName.get('gmail'), null);
+    });
+
+    it('counts live connections per provider on the provider cards', async () => {
+        setup({ users, connections: [connection(), connection({ id: 'c2', username: 'ravi', status: 'reauth_required' }), connection({ id: 'c3', username: 'x', status: 'disconnected' })] });
+        const dto = await integrationService.getAdmin(now);
+        assert.deepEqual(dto.providers.find((p) => p.provider === 'google')!.counts, { active: 1, reauth: 1, error: 0 });
+        assert.deepEqual(dto.providers.find((p) => p.provider === 'microsoft')!.counts, { active: 0, reauth: 0, error: 0 });
+    });
+
+    it('refuses to change or clear the email of a connected person to another address (409 EMAIL_CONNECTED)', async () => {
+        const { state } = setup({ users, connections: [connection()] });
+        await expectHttp(integrationService.setPersonEmail('asha', { email: 'asha.rao@nandiniinfosys.com' }, admin), 409, 'EMAIL_CONNECTED');
+        await expectHttp(integrationService.setPersonEmail('asha', { email: '' }, admin), 409, 'EMAIL_CONNECTED');
+        assert.equal(state.users.find((u) => u.username === 'asha')!.email, 'asha@nandiniinfosys.com');
+        // A disconnected calendar no longer holds the address.
+        state.connections[0].status = 'disconnected';
+        const saved = await integrationService.setPersonEmail('asha', { email: 'asha.rao@nandiniinfosys.com' }, admin);
+        assert.equal(saved.email, 'asha.rao@nandiniinfosys.com');
     });
 });

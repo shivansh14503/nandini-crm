@@ -13,7 +13,11 @@ import { truncate } from './notification.format.js';
  * read first and only the missing rows are inserted, in chunks under the 2,100-parameter limit.
  */
 
-export const NOTIFICATION_KINDS = ['activity_reminder', 'activity_assigned', 'activity_invited', 'contract_renewal'] as const;
+/**
+ * `calendar_reconnect` (Calendar Phase 2 P2-2): an employee's calendar connection needs a reconnect (entityModule
+ * `calendar-connections`, entityId the connection id; it opens the Connected calendars page).
+ */
+export const NOTIFICATION_KINDS = ['activity_reminder', 'activity_assigned', 'activity_invited', 'contract_renewal', 'calendar_reconnect'] as const;
 export type NotificationKind = (typeof NOTIFICATION_KINDS)[number];
 
 export interface NotificationInput {
@@ -22,7 +26,7 @@ export interface NotificationInput {
     kind: NotificationKind;
     title: string;
     body?: string | null;
-    /** CrmModuleKey of the record it is about (activities | contracts) and its id. */
+    /** CrmModuleKey of the record it is about (activities | contracts), or `calendar-connections`, and its id. */
     entityModule?: string | null;
     entityId?: string | null;
     /** The moment it is about (activity start, renewal reminder). */

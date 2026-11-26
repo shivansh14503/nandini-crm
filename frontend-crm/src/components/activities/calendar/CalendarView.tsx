@@ -64,6 +64,7 @@ import {
     type MiniMonthProps,
 } from './CalendarFilters';
 import { EventContent, HolidayEventContent } from './EventContent';
+import { CalendarReconnectAlert } from '@/components/integrations/CalendarReconnectAlert';
 
 /** FullCalendar view per calendar view. */
 const FC_VIEWS: Record<CalendarViewKey, string> = {
@@ -531,6 +532,7 @@ export default function CalendarView() {
                         {holidayEntries.length > 0 && ' · Company holidays are shaded amber.'}
                     </Typography>
                 </Box>
+                <CalendarReconnectAlert />
                 {feed.data?.truncated && (
                     <Alert severity="warning" sx={{ py: 0.25, fontSize: '0.8rem' }}>
                         This period has more entries than the calendar can show. Narrow it with the filters or a shorter view.

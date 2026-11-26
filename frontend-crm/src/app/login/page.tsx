@@ -6,6 +6,7 @@ import { AuthCard } from '@/components/auth/AuthCard';
 import { LoginForm } from '@/components/auth/LoginForm';
 import { useAuth } from '@/context/AuthContext';
 import { ROUTES } from '@/config/constants';
+import { nextPathFromLocation } from '@/utils/safeNextPath';
 
 export default function LoginPage() {
     const router = useRouter();
@@ -13,7 +14,7 @@ export default function LoginPage() {
 
     useEffect(() => {
         if (!loading && isAuthenticated) {
-            router.push(ROUTES.DASHBOARD);
+            router.push(nextPathFromLocation(ROUTES.DASHBOARD));
         }
     }, [isAuthenticated, loading, router]);
 

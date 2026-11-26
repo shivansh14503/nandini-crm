@@ -12,6 +12,7 @@ import GroupAddOutlinedIcon from '@mui/icons-material/GroupAddOutlined';
 import AutorenewOutlinedIcon from '@mui/icons-material/AutorenewOutlined';
 import DoneAllIcon from '@mui/icons-material/DoneAll';
 import MailOutlineOutlinedIcon from '@mui/icons-material/MailOutlineOutlined';
+import EventBusyOutlinedIcon from '@mui/icons-material/EventBusyOutlined';
 import { useAuth } from '@/context/AuthContext';
 import {
     useMarkAllNotificationsRead,
@@ -34,6 +35,7 @@ const KIND_ICONS: Record<string, SvgIconComponent> = {
     activity_assigned: AssignmentIndOutlinedIcon,
     activity_invited: GroupAddOutlinedIcon,
     contract_renewal: AutorenewOutlinedIcon,
+    calendar_reconnect: EventBusyOutlinedIcon,
 };
 
 /** The icon tile takes the tint of the record's module (activities olive, contracts rose); others stay neutral. */
