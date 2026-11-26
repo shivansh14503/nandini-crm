@@ -344,8 +344,9 @@ keeps wall-clock times); all-day activities are entered as business-timezone day
         username; a no-op until P2-3b), `insertActivityRow` / `updateActivityRow` shared by CRM and system writes,
         `runActivityPostCommit` replacing `afterActivityCommit` (now also after delete / bulk delete, where it does
         nothing), and the lock seam (`activityLocks.lockFor` / `lockedFieldsFor` in `activity.access.ts`, returning
-        none; enforced in update, delete and bulk delete, `BulkDeleteResult.skipped` optional). No migration, no API
-        change.
+        none; enforced in update (only for fields the request asks to change), delete and bulk delete,
+        `BulkDeleteResult.skipped` optional); system writes may also set `rowData` (columns the API can't) and
+        re-align `createdBy`. No migration, no API change.
   - [ ] **P2-3b: CRM → calendar push engine**
   - [ ] **P2-3c: backfill, send invitations, sync status UI**
   - [ ] **P2-4: follow-ups create activities**

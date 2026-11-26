@@ -7,8 +7,9 @@ import { HttpError } from '../../utils/httpError.js';
 import type { FormConfigsPayload } from '../form-configs/formConfig.service.js';
 import { runInTransaction } from '../shared/transactions.js';
 import { activityLocks, lockedFieldsFor, type ActivityLock } from './activity.access.js';
+import { toActivityDto } from './activity.mapper.js';
 import { computeRemindAt } from './activity.schedule.js';
-import { activityService, runActivityPostCommit, type ActivityConfig } from './activity.service.js';
+import { activityService, requestedChanges, runActivityPostCommit, type ActivityConfig, type ActivityRowData } from './activity.service.js';
 import { activityWriteHook, applySystemPatch, insertSystemActivity, loadFollowUpContext, type ActivityWriteEvent } from './activity.system.js';
 import { blankActivity, blankAttendee, installActivityDouble, restoreActivityDouble, type ActivityDoubleState } from './testing/activityDouble.js';
 
@@ -182,6 +183,27 @@ describe('insertSystemActivity', () => {
         assert.equal(hook[0].event.markSync, false);
     });
 
+    it('writes rowData (columns the API cannot set) with the row, so the hook sees the final row', async () => {
+        const state = installActivityDouble({ users: USERS });
+        const hook = captureHook(state);
+        // No such column yet: P2-4 adds `origin` with its migration (the double stores whatever it is given).
+        const rowData = { origin: 'followup' } as ActivityRowData;
+        const { after } = await runInTransaction((tx) =>
+            insertSystemActivity(tx, { followupType: 'Call', subject: 'x', assignedTo: 'palak', startAt: inDays(1).toISOString() }, 'palak', new Date(), {
+                activityConfig: CONFIG,
+                rowData,
+            }),
+        );
+        assert.equal((after as unknown as Record<string, unknown>).origin, 'followup');
+        assert.equal((state.activities[0] as unknown as Record<string, unknown>).origin, 'followup');
+        assert.equal((hook[0].event.after as unknown as Record<string, unknown>).origin, 'followup');
+        assert.equal(state.calls.filter((c) => c.startsWith('activity.update')).length, 0, 'one insert, no follow-up update');
+
+        // A CRM save can't set it: the API schema drops unknown keys.
+        const crm = await activityService.create({ followupType: 'Call', subject: 'y', assignedTo: 'palak', startAt: inDays(1).toISOString(), origin: 'followup' }, PALAK);
+        assert.equal((state.activities.find((a) => a.id === crm.id) as unknown as Record<string, unknown>).origin, undefined);
+    });
+
     it('is rolled back with the transaction when the write hook throws (it runs inside it)', async () => {
         const state = installActivityDouble({ users: USERS });
         mock.method(activityWriteHook, 'onWrite', async () => {
@@ -293,6 +315,28 @@ describe('applySystemPatch', () => {
         assert.equal(hook.length, 1);
     });
 
+    it('re-aligns createdBy when given (audited) and writes rowData; without them both are kept', async () => {
+        const state = installActivityDouble({ users: USERS, activities: [seedActivity()] });
+        const hook = captureHook(state);
+        const { after } = await runInTransaction((tx) =>
+            applySystemPatch(tx, 'a1', {}, 'palak', new Date(), { activityConfig: CONFIG, createdBy: 'asha', rowData: { origin: 'followup' } as ActivityRowData }),
+        );
+        assert.equal(after.createdBy, 'asha');
+        assert.equal((after as unknown as Record<string, unknown>).origin, 'followup');
+        assert.equal((hook[0].event.after as unknown as Record<string, unknown>).origin, 'followup');
+        assert.equal(after.revision, 0, 'not a calendar change');
+        assert.deepEqual(state.audits.map((a) => a.changes), [{ createdBy: { from: 'ravi', to: 'asha' } }]);
+
+        const again = await runInTransaction((tx) => applySystemPatch(tx, 'a1', { remarks: 'Spoke to the buyer' }, 'palak', new Date(), { activityConfig: CONFIG }));
+        assert.equal(again.after.createdBy, 'asha');
+        assert.equal((again.after as unknown as Record<string, unknown>).origin, 'followup');
+
+        // A CRM update never changes createdBy, even when sent.
+        mock.method(activityLocks, 'lockFor', () => null);
+        const crm = await activityService.update('a1', { createdBy: 'palak', remarks: 'Sent the brochure' }, { id: 9, username: 'admin', role: 'admin' });
+        assert.equal(crm.createdBy, 'asha');
+    });
+
     it('is not subject to locks (callers decide)', async () => {
         const state = installActivityDouble({ users: USERS, activities: [seedActivity()] });
         stubLock(FOLLOW_UP_LOCK);
@@ -353,6 +397,59 @@ describe('activity locks (seam for P2-4 / P2-8)', () => {
         const free = await activityService.update('a2', { status: 'Cancelled' }, PALAK);
         assert.equal(free.status, 'Cancelled');
         assert.equal(hook.length, 2);
+    });
+
+    it("update refuses only what the request asks to change: a related record's refreshed label passes", async () => {
+        // The lead was renamed after the activity stored its label; nothing rewrites Activity.relatedTo on a rename.
+        const lead = { ...LEAD, name: 'Sunrise Hotels Pvt Ltd' };
+        const stale = blankActivity({
+            id: 'a1',
+            subject: 'Call follow-up',
+            assignedTo: 'palak',
+            createdBy: 'palak',
+            relatedModule: 'leads',
+            relatedId: 'l1',
+            relatedTo: 'Sunrise Hotels',
+            relatedCode: 'LD-0012',
+            organizationName: 'SUNRISE HOTELS',
+            startAt: START,
+            endAt: new Date(START.getTime() + HOUR),
+        });
+        const other = { ...LEAD, id: 'l2', leadCode: 'LD-0013', name: 'Harbour Inn', organizationName: null, assignedTo: 'palak', createdBy: 'palak' };
+        const state = installActivityDouble({ users: USERS, leads: [lead, other], activities: [stale] });
+        stubLock(FOLLOW_UP_LOCK, ['a1']);
+
+        // The form sends every field back with its stored value and changes only Remarks.
+        const { id: _id, attendees: _attendees, customFields: _custom, ...form } = toActivityDto({ ...stale, attendees: [] });
+        const saved = await activityService.update('a1', { ...form, remarks: 'Called back' }, PALAK);
+        assert.equal(saved.remarks, 'Called back');
+        assert.equal(saved.relatedTo, 'Sunrise Hotels Pvt Ltd', 'the label is still refreshed');
+        assert.deepEqual(Object.keys(state.audits[0].changes as object).sort(), ['relatedTo', 'remarks'], 'and audited');
+
+        // Picking another record, or moving the activity, is asked for, so it is refused.
+        await assert.rejects(activityService.update('a1', { ...form, relatedId: 'l2' }, PALAK), (err: unknown) => {
+            rejectsWith(409, 'FOLLOW_UP_ACTIVITY_LOCKED')(err);
+            assert.deepEqual((err as HttpError).errors?.map((e) => e.path), [['relatedId'], ['relatedTo']]);
+            return true;
+        });
+        await assert.rejects(activityService.update('a1', { startAt: inDays(4).toISOString(), endAt: '' }, PALAK), rejectsWith(409, 'FOLLOW_UP_ACTIVITY_LOCKED'));
+        assert.equal(state.audits.length, 1);
+    });
+
+    it('requestedChanges: only keys sent with another value than the stored one', () => {
+        const before = toActivityDto(
+            {
+                ...blankActivity({ id: 'a1', subject: 'S', assignedTo: 'palak', createdBy: 'palak', relatedModule: 'leads', relatedId: 'l1', relatedTo: 'Sunrise', startAt: START, endAt: new Date(START.getTime() + HOUR) }),
+                attendees: [],
+            },
+        );
+        const iso = START.toISOString();
+        assert.deepEqual(
+            [...requestedChanges(before, { subject: ' S ', relatedTo: 'SUNRISE', startAt: iso.replace('.000Z', 'Z'), location: '', status: 'Planned', unknown: 1 })],
+            [],
+        );
+        assert.deepEqual([...requestedChanges(before, { subject: 's', startDay: '2026-12-01' })].sort(), ['startAt', 'startDay', 'subject']);
+        assert.deepEqual([...requestedChanges(before, { relatedId: 'l2' })].sort(), ['relatedCode', 'relatedId', 'relatedTo']);
     });
 
     it('remove refuses a locked activity that refuses deletion; a lock that allows deletion lets it go', async () => {

@@ -13,6 +13,7 @@ import {
     WITH_ATTENDEES,
     type ActivityCommitRow,
     type ActivityConfig,
+    type ActivityRowData,
     type ActivityWriter,
 } from './activity.service.js';
 import { activityInputSchema, type AttendeeInput } from './activity.validator.js';
@@ -24,7 +25,8 @@ export { activityWriteHook, type ActivityWriteEvent } from './activity.writeHook
  * than a user's form save. P2-4 creates and moves lead / opportunity follow-up activities through it, P2-5 applies
  * calendar changes, P2-8 imports customer meetings.
  *
- * Kept from a CRM save: the record lock, the schedule rules (`normalizeSchedule`), attendee checks and sync,
+ * Beyond the API's fields, a system write may set columns the API can't (`rowData`) and re-align `createdBy` on a
+ * patch. Kept from a CRM save: the record lock, the schedule rules (`normalizeSchedule`), attendee checks and sync,
  * `remindAt`, completion stamps, the `revision` bump, the audit entry (`changedBy` = `actor`) and the write hook
  * (activity.writeHook.ts, where P2-3b marks the activity for calendar sync unless `markSync` is false).
  * Skipped: the owner's active-user check (the owner is taken verbatim: a lead still owned by a deactivated user keeps
@@ -86,8 +88,16 @@ export interface SystemActivityFields {
 export interface SystemWriteOptions {
     /** Loaded before the transaction (`FollowUpContext.activityConfig`): the types' default durations. */
     activityConfig: ActivityConfig;
-    /** Insert only: `createdBy` of the new row (P2-4: the record's creator); default `actor`. */
+    /**
+     * Insert: `createdBy` of the new row (P2-4: the record's creator); default `actor`. Patch: when given, re-aligns
+     * the stored `createdBy` (spec §11.1, audited like any change); unset keeps it.
+     */
     createdBy?: string;
+    /**
+     * Columns only the system path sets, written with the row (P2-4 `origin`, P2-8 the organizer columns), so the audit
+     * entry and the write hook see the final row. Not API fields: a CRM save can't set them.
+     */
+    rowData?: ActivityRowData;
     /** False: the write hook is told not to mark the activity for calendar sync (inbound applies). Default true. */
     markSync?: boolean;
     /** Carried on the returned row for `runActivityPostCommit`: false = no owner / invitee notifications. */
@@ -98,6 +108,7 @@ const systemWriter = (actor: string, opts: SystemWriteOptions): ActivityWriter =
     actor,
     user: null,
     createdBy: opts.createdBy,
+    rowData: opts.rowData,
     markSync: opts.markSync ?? true,
     config: opts.activityConfig,
 });

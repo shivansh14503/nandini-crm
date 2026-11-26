@@ -3,10 +3,12 @@ import type { ActivityRow } from './activity.mapper.js';
 import type { ActivityConfig } from './activity.service.js';
 
 /**
- * The one point every Activity write passes through inside its transaction (Calendar Phase 2, P2-3a): CRM saves in
- * activity.service.ts (`insertActivityRow`, `update`, `remove`, `bulkRemove`, `restore`) and the system write path
- * (activity.system.ts). A no-op for now; P2-3b plugs the calendar outbox in here (`markActivityForSync`, skipped
- * when `markSync` is false), so the push engine never has to edit the write paths themselves.
+ * The point Activity writes pass through inside their transaction (Calendar Phase 2, P2-3a): inserts and updates
+ * (`insertActivityRow` / `updateActivityRow`, CRM saves and the system write path in activity.system.ts) and
+ * `remove`, `bulkRemove` and `restore` in activity.service.ts. Not called by an invitee's RSVP (`respond`, attendee
+ * row only), the organization / contact rename write-through (`shared/nameSync.ts`) or the reminder claim
+ * (notification.reminders.ts). A no-op for now; P2-3b plugs the calendar outbox in here (`markActivityForSync`,
+ * skipped when `markSync` is false), so the push engine never has to edit the write paths themselves.
  *
  * A leaf module (its imports are type-only): activity.system.ts imports activity.service.ts, so the service can't
  * import the hook from there without an import cycle. Tests replace `activityWriteHook.onWrite` with `mock.method`.
