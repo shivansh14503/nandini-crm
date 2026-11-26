@@ -8,8 +8,8 @@ import UploadFileRoundedIcon from '@mui/icons-material/UploadFileRounded';
 import CheckRoundedIcon from '@mui/icons-material/CheckRounded';
 import { ConfirmDeleteDialog, errorMessage, inputSx, panelHeaderSx, primaryButtonSx, secondaryButtonSx, surfaceSx } from '@/components/settings/form-customization/builderUi';
 import { useClearProviderSecret, usePeople, useSaveProvider, useTestProvider } from '@/hooks/queries/useIntegrationsAdmin';
-import { SERVICE_ACCOUNT_KEY_MAX_BYTES, type Person, type ProviderAdmin, type SaveProviderPayload, type TestConnectionResult } from '@/types/integration.types';
-import { CopyField, ProviderMark, StatusChip, fieldErrorsOf, fieldLabelSx, formatDateTime, formatDay, hintSx, type ChipTone } from './integrationUi';
+import { SERVICE_ACCOUNT_KEY_MAX_BYTES, type Person, type ProviderAdmin, type ProviderWebhook, type SaveProviderPayload, type TestConnectionResult } from '@/types/integration.types';
+import { CopyField, PROVIDER_WEBHOOK_LABELS, ProviderMark, StatusChip, fieldErrorsOf, fieldLabelSx, formatDateTime, formatDay, hintSx, webhooksOffSentence, type ChipTone } from './integrationUi';
 
 /**
  * One provider on Admin › API Integrations (Calendar Phase 2, P2-2b: admin-managed calendar sync).
@@ -235,6 +235,35 @@ export function peopleToSync(people: readonly Person[] | undefined, provider: Pr
         if (choice?.provider) return choice.provider === provider;
         return own.has(person.email.split('@').pop()?.trim().toLowerCase() ?? '');
     }).length;
+}
+
+/**
+ * The card's webhook line (P2-7): the CRM creates and renews the calendar channels itself (nothing to set up in the
+ * provider's console); this says whether they deliver. Counts are people with a synced calendar.
+ */
+function ProviderWebhookLine({ webhook }: { webhook: ProviderWebhook }) {
+    const words = PROVIDER_WEBHOOK_LABELS[webhook.status];
+    const detail =
+        webhook.status === 'unavailable'
+            ? webhooksOffSentence(webhook.reason, 'Calendars sync by polling.')
+            : webhook.status === 'off'
+              ? 'Switch the provider on to start them.'
+              : [
+                    `${webhook.active} instant`,
+                    webhook.waiting > 0 ? `${webhook.waiting} starting` : null,
+                    webhook.failed > 0 ? `${webhook.failed} refused (polling instead; retried every few hours)` : null,
+                ]
+                    .filter(Boolean)
+                    .join(' · ');
+    return (
+        <Box sx={{ minWidth: 0 }}>
+            <Typography sx={fieldLabelSx}>Instant updates (webhooks)</Typography>
+            <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', flexWrap: 'wrap', minWidth: 0 }}>
+                <StatusChip tone={words.tone}>{words.label}</StatusChip>
+                <Typography sx={{ ...hintSx, minWidth: 0, overflowWrap: 'anywhere' }}>{detail}</Typography>
+            </Box>
+        </Box>
+    );
 }
 
 /** One provider's credentials, domains, test and switch on Admin › API Integrations. */
@@ -698,6 +727,8 @@ export function ProviderCard({ provider, keyReady, companyDomains, takenBy, onDi
                 {p.webhookUrls?.map((url, i) => (
                     <CopyField key={url} label={p.webhookUrls && p.webhookUrls.length > 1 ? `Webhook URL ${i + 1}` : 'Webhook URL'} value={url} />
                 ))}
+
+                {p.webhook && <ProviderWebhookLine webhook={p.webhook} />}
 
                 {p.kind === 'calendar' && (
                     <DomainsField

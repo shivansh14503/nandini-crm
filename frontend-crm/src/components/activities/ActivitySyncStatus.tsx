@@ -146,6 +146,16 @@ function InfoBox({ tone, icon, children, action }: { tone: 'info' | 'error'; ico
 const POLL_MS = 5_000;
 const POLL_ROUNDS = 12;
 
+/**
+ * The sync section shows for this viewer: the activity has a calendar copy and the viewer owns it or may edit it.
+ * The drawer's ActivityCalendarNotes (P2-5) then leaves out the lines this section already shows.
+ */
+export function showsSyncStatus(activity: Pick<Activity, 'calendar' | 'assignedTo' | 'viewer'>, viewerUsername: string | null | undefined): boolean {
+    if (!activity.calendar) return false;
+    const isOwner = lc(viewerUsername) !== '' && lc(viewerUsername) === lc(activity.assignedTo);
+    return isOwner || (activity.viewer?.canEdit ?? false);
+}
+
 export function ActivitySyncStatus({ activity, onRefresh, onNotify }: ActivitySyncStatusProps) {
     const { user } = useAuth();
     const calendar = activity.calendar ?? null;
@@ -172,7 +182,7 @@ export function ActivitySyncStatus({ activity, onRefresh, onNotify }: ActivitySy
 
     const isOwner = lc(user?.username) !== '' && lc(user?.username) === lc(activity.assignedTo);
     const canEdit = activity.viewer?.canEdit ?? false;
-    if (!calendar || (!canEdit && !isOwner)) return null;
+    if (!calendar || !showsSyncStatus(activity, user?.username)) return null;
 
     const timeZone = activity.timeZone;
     const where = calendarProviderName(calendar.provider);

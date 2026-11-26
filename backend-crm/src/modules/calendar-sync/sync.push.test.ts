@@ -222,6 +222,29 @@ describe('pushLink', () => {
         assert.equal(linkOf(view.id).dirtyAt, null);
     });
 
+    it('412 with more than 50 guests added in the calendar: the CRM keeps 50 (as the pull does), the others stay on the event (§8.10)', async () => {
+        install();
+        const own = [0, 1, 2].map((i) => ({ kind: 'email' as const, email: `crm${i}@acme.com` }));
+        const view = await activityService.create(meeting({ attendees: own }), PALAK);
+        await pushLink(linkOf(view.id).id);
+        const eventId = linkOf(view.id).externalEventId as string;
+        const extra = Array.from({ length: 52 }, (_, i) => ({ email: `g${String(i).padStart(2, '0')}@acme.com`, responseStatus: 'needsAction' }));
+        fakeEditEvent(eventId, { attendees: [...(fakeProviderState.events.get(eventId)?.attendees ?? []), ...extra] }, new Date(Date.now() + 60_000));
+        const onEvent = () => (fakeProviderState.events.get(eventId)?.attendees ?? []).map((a) => a.email ?? '').sort();
+        const before = onEvent();
+        assert.equal(before.filter((email) => email.endsWith('@acme.com')).length, 55);
+
+        await activityService.update(view.id, { subject: 'Demo (agenda attached)' }, PALAK);
+        const result = await pushLink(linkOf(view.id).id);
+        assert.equal(result.status === 'done' && result.state, 'synced', 'the merge did not fail validation');
+        assert.equal(state.attendees.filter((a) => a.activityId === view.id).length, 50, 'the CRM keeps 50 rows');
+        const base = parseBase(linkOf(view.id).baseJson);
+        assert.equal(Object.keys(base?.crm.attendees ?? {}).length, 50, 'the agreed CRM side lists only what the CRM holds');
+        assert.equal(fakeProviderState.events.get(eventId)?.summary, 'Demo (agenda attached)');
+        assert.deepEqual(onEvent(), before, 'every guest stays on the event');
+        assert.equal(linkOf(view.id).dirtyAt, null);
+    });
+
     it('a follow-up activity keeps its CRM slot after a 412 (the calendar move is pushed back)', async () => {
         const start = inDays(3);
         const activity = blankActivity({ id: 'a-fu', subject: 'Call follow-up', assignedTo: 'palak', createdBy: 'palak', followupType: 'Call', origin: 'followup', startAt: start, endAt: new Date(start.getTime() + HOUR) });

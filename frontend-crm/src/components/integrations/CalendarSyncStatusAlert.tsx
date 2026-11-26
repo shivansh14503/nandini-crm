@@ -5,16 +5,18 @@ import { Alert, Button } from '@mui/material';
 import { secondaryButtonSx } from '@/components/settings/form-customization/builderUi';
 import { ROUTES } from '@/config/constants';
 import { needsAttention } from './calendarConnections.types';
-import { useOwnCalendarSync } from './useCalendarConnections';
+import { useCalendarPagePull, useOwnCalendarSync } from './useCalendarConnections';
 
 /**
  * A slim notice on the CRM calendar page while the employee's company calendar isn't syncing (status `error`, or
  * `paused` for the whole company). Calendar sync is admin-managed (P2-2b), so there is nothing to reconnect: it says
  * admins know, and links to the status card. Shows nothing otherwise, including while loading or on a read error.
+ * Also starts the silent page pull (P2-5): calendar changes come back when the page opens, debounced.
  */
 export function CalendarSyncStatusAlert() {
     const { data } = useOwnCalendarSync();
     const calendar = data?.calendar;
+    useCalendarPagePull(calendar?.status);
     if (!calendar || !needsAttention(calendar)) return null;
     const text =
         calendar.status === 'paused'

@@ -17,8 +17,8 @@ const routesOf = (router: Router) =>
 const SRC = path.resolve(import.meta.dirname, '../..');
 
 describe('removed per-user OAuth routes', () => {
-    it('/api/calendar-connections only reads the caller’s own status', () => {
-        assert.deepEqual(routesOf(connectionRouter), ['GET /']);
+    it('/api/calendar-connections reads the caller’s own status and pulls it on demand (P2-5), nothing else', () => {
+        assert.deepEqual(routesOf(connectionRouter), ['GET /', 'POST /sync']);
     });
 
     it('Admin › API Integrations has no connection list or disconnect, and has the People calendar routes', () => {
@@ -26,6 +26,7 @@ describe('removed per-user OAuth routes', () => {
         assert.ok(!routes.some((r) => r.includes('/connections')), routes.join(', '));
         assert.ok(routes.includes('PUT /people/:username/calendar'));
         assert.ok(routes.includes('POST /people/:username/calendar/check'));
+        assert.ok(routes.includes('POST /people/:username/calendar/sync'));
         assert.ok(routes.includes('POST /providers/:provider/test'));
     });
 

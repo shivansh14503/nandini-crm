@@ -63,6 +63,12 @@ export interface LeadRow {
     assignedTo: string | null;
     createdBy: string;
     isDeleted: boolean;
+    /** Calendar write-back (P2-5 rescheduleRecordFromCalendar). */
+    nextFollowupDate?: Date | null;
+    nextFollowupTime?: string | null;
+    updatedBy?: string | null;
+    /** A Converted lead keeps its follow-up date (rescheduleRecordFromCalendar). */
+    status?: string | null;
 }
 
 export interface OpportunityRow {
@@ -422,7 +428,10 @@ export function installActivityDouble(
     const user = {
         findMany: async (args: { where: Where; select?: Record<string, unknown> }) => {
             call('user.findMany');
-            return state.users.filter((u) => matches(u as unknown as Record<string, unknown>, args.where)).map((u) => pick(u, args.select));
+            return state.users
+                .map((u) => ({ isGroupUser: false, ...u }))
+                .filter((u) => matches(u as unknown as Record<string, unknown>, args.where))
+                .map((u) => pick(u, args.select));
         },
         findFirst: async (args: { where: Where; select?: Record<string, unknown> }) => {
             call('user.findFirst');
@@ -470,7 +479,14 @@ export function installActivityDouble(
         findUnique: async (args: { where: { id: string }; select?: Record<string, unknown> }) => {
             call('lead.findUnique');
             const row = state.leads.find((l) => l.id === args.where.id);
-            return row ? pick(row, args.select) : null;
+            return row ? pick({ nextFollowupDate: null, nextFollowupTime: null, ...row }, args.select) : null;
+        },
+        update: async (args: { where: { id: string }; data: Partial<LeadRow> }) => {
+            call('lead.update');
+            const row = state.leads.find((l) => l.id === args.where.id);
+            if (!row) throw Object.assign(new Error('Record to update not found'), { code: 'P2025' });
+            Object.assign(row, args.data);
+            return { ...row };
         },
     };
 
@@ -483,6 +499,13 @@ export function installActivityDouble(
         findMany: async (args: { where: Where; select?: Record<string, unknown> }) => {
             call('opportunity.findMany');
             return state.opportunities.filter((o) => matches(o as unknown as Record<string, unknown>, args.where)).map((o) => pick(o, args.select));
+        },
+        update: async (args: { where: { id: string }; data: Partial<OpportunityRow> }) => {
+            call('opportunity.update');
+            const row = state.opportunities.find((o) => o.id === args.where.id);
+            if (!row) throw Object.assign(new Error('Record to update not found'), { code: 'P2025' });
+            Object.assign(row, args.data);
+            return { ...row };
         },
     };
 

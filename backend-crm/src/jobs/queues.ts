@@ -108,7 +108,8 @@ export const mailQueue = () =>
 
 /**
  * Calendar sync (src/jobs/workers/calendarSync.worker.ts, Calendar Phase 2 spec §10.1): `push` (one link), `enrolled`
- * (a connection row first reached ok), `check` (a connection health check), and the `calendar-poll` and
+ * (a connection row first reached ok), `check` (a connection health check), `pull` (calendar → CRM changes of one
+ * connection, P2-5), and the `calendar-poll` and
  * `calendar-nightly` schedulers. Its own queue and worker, so provider latency never delays reminders or mail. Pushes
  * are idempotent (requested ids, compare-and-set on the outbox), so retries are safe; job ids use hyphens only.
  */

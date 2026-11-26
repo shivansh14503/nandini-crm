@@ -13,6 +13,9 @@ const blankToUndefined = (value: unknown) => (typeof value === 'string' && value
 /** Optional text setting; blank = not set. */
 const optionalText = z.preprocess(blankToUndefined, z.string().trim().optional());
 
+/** CALENDAR_POLL_MINUTES values: the ones that divide 60, so the poll cron's ticks are evenly spaced. */
+export const POLL_MINUTE_STEPS: readonly number[] = [1, 2, 3, 4, 5, 6, 10, 12, 15, 20, 30, 60];
+
 const envSchema = z
     .object({
         NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
@@ -161,6 +164,43 @@ const envSchema = z
             .enum(['true', 'false'])
             .default('true')
             .transform((value) => value === 'true'),
+        /**
+         * Office hours of the calendar poll (Calendar Phase 2 P2-5), business timezone, `HH:MM-HH:MM` (start before end,
+         * same day). Background pulls and the Redis-down fallback run only inside them, so Azure SQL serverless can
+         * pause overnight; changes made in the calendar outside them arrive at the next start (or on Sync now).
+         */
+        CALENDAR_SYNC_HOURS: z
+            .preprocess(blankToUndefined, z.string().trim().default('07:00-22:00'))
+            .refine((value) => {
+                const match = /^([01]\d|2[0-3]):([0-5]\d)-([01]\d|2[0-4]):([0-5]\d)$/.exec(value);
+                if (!match) return false;
+                const end = Number(match[3]) * 60 + Number(match[4]);
+                return end <= 24 * 60 && Number(match[1]) * 60 + Number(match[2]) < end;
+            }, 'CALENDAR_SYNC_HOURS must look like 07:00-22:00 (start before end, same day).'),
+        /**
+         * Minutes between calendar polls inside CALENDAR_SYNC_HOURS (P2-5), default 5. Only values that divide 60: the
+         * cron's minute step restarts at :00 each hour, so 45 would poll 45 and 15 minutes apart.
+         */
+        CALENDAR_POLL_MINUTES: z.coerce
+            .number()
+            .int()
+            .refine((value) => POLL_MINUTE_STEPS.includes(value), `CALENDAR_POLL_MINUTES must be one of ${POLL_MINUTE_STEPS.join(', ')} (a value that divides 60).`)
+            .default(5),
+        /**
+         * Calendar webhooks (Calendar Phase 2 P2-7): the safety-net poll of a person whose Google push channel / Graph
+         * subscription is healthy, in minutes (5–120, default 30). Polls of everyone else keep CALENDAR_POLL_MINUTES, and
+         * every poll stays inside CALENDAR_SYNC_HOURS.
+         */
+        CALENDAR_POLL_MINUTES_WITH_WEBHOOKS: z.coerce.number().int().min(5).max(120).default(30),
+        /**
+         * Calendar webhooks on / off (P2-7), default true. Effective only when PUBLIC_API_URL starts with https:// (Google
+         * and Microsoft only call https addresses with a valid certificate); false stops every channel at the next nightly
+         * run and polling carries on alone.
+         */
+        CALENDAR_WEBHOOKS_ENABLED: z
+            .enum(['true', 'false'])
+            .default('true')
+            .transform((value) => value === 'true'),
 
         /**
          * Booking links (Calendar Phase 4): the key that signs the times a public booking page offers (slot tokens,
@@ -200,6 +240,25 @@ const publicApiUrl = (env.PUBLIC_API_URL ?? (env.NODE_ENV === 'production' ? und
  */
 export type IntegrationsNotReadyReason = 'key_missing';
 const integrationsReadyReason: IntegrationsNotReadyReason | null = !integrationsKeyRing ? 'key_missing' : null;
+
+/**
+ * Why calendar webhooks are off (P2-7), or null when they are live: no public address, not https, switched off with
+ * CALENDAR_WEBHOOKS_ENABLED=false, calendar sync itself switched off (CALENDAR_SYNC_ENABLED=false), or no
+ * INTEGRATIONS_ENCRYPTION_KEY (channel tokens are signed with it; webhooksLive() needs it too).
+ */
+export const WEBHOOKS_OFF_REASONS = ['no_public_url', 'needs_https', 'disabled', 'sync_disabled', 'key_missing'] as const;
+export type WebhooksOffReason = (typeof WEBHOOKS_OFF_REASONS)[number];
+const webhooksOffReason: WebhooksOffReason | null = !publicApiUrl
+    ? 'no_public_url'
+    : !publicApiUrl.startsWith('https://')
+      ? 'needs_https'
+      : !env.CALENDAR_WEBHOOKS_ENABLED
+        ? 'disabled'
+        : !env.CALENDAR_SYNC_ENABLED
+          ? 'sync_disabled'
+          : !integrationsKeyRing
+            ? 'key_missing'
+            : null;
 
 export const ENV = {
     NODE_ENV: env.NODE_ENV,
@@ -286,5 +345,17 @@ export const ENV = {
         FAKE_PROVIDER_IGNORED: env.CALENDAR_FAKE_PROVIDER && env.NODE_ENV === 'production',
         /** CALENDAR_SYNC_ENABLED: the push engine runs (P2-3b). */
         SYNC_ENABLED: env.CALENDAR_SYNC_ENABLED,
+        /** CALENDAR_SYNC_HOURS (`HH:MM-HH:MM`, business timezone; parsed by calendar-sync/syncHours.ts). */
+        SYNC_HOURS: env.CALENDAR_SYNC_HOURS,
+        /** CALENDAR_POLL_MINUTES: minutes between polls inside the sync hours. */
+        POLL_MINUTES: env.CALENDAR_POLL_MINUTES,
+        /** CALENDAR_POLL_MINUTES_WITH_WEBHOOKS: safety-net poll of people whose webhook channel is healthy (P2-7). */
+        POLL_MINUTES_WITH_WEBHOOKS: env.CALENDAR_POLL_MINUTES_WITH_WEBHOOKS,
+        /** CALENDAR_WEBHOOKS_ENABLED as set (P2-7). */
+        WEBHOOKS_ENABLED: env.CALENDAR_WEBHOOKS_ENABLED,
+        /** Calendar webhooks are live: https PUBLIC_API_URL, CALENDAR_WEBHOOKS_ENABLED and CALENDAR_SYNC_ENABLED (P2-7). */
+        WEBHOOKS_ACTIVE: webhooksOffReason === null,
+        /** Why they are not (null while live). */
+        WEBHOOKS_OFF_REASON: webhooksOffReason,
     },
 } as const;

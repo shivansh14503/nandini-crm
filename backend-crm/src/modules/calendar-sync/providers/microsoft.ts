@@ -3,14 +3,16 @@ import { GRAPH_API } from '../../integrations/integration.constants.js';
 import { BUSY_PROVIDER_TIMEOUT_MS } from '../busy.constants.js';
 import { graphStatusKind } from '../busy.intervals.js';
 import type { AdapterOptions } from './google.js';
+import { graphChangeOps } from './graphChanges.js';
 import { graphEventOps } from './graphEvents.js';
+import { graphWatchOps } from './graphWatch.js';
 import { providerFetch } from './http.js';
 import type { CalendarProviderAdapter, CallCtx, FreeBusyRequest, FreeBusyResult, ProviderBusyBlock } from './types.js';
 
 /**
  * Microsoft Graph for one employee's mailbox with the tenant-wide app token (addendum AC2): every call goes to
  * `/users/{mailbox}/…` (`/me` has no meaning app-only). The event operations of the push engine (P2-3b) live in
- * graphEvents.ts and build their URLs with `graphUserUrl(ctx.mailbox)`.
+ * graphEvents.ts and build their URLs with `graphUserUrl(ctx.mailbox)`; the pull's delta reads (P2-5) in graphChanges.ts.
  */
 
 export const graphUserUrl = (mailbox: string) => `${GRAPH_API}/users/${encodeURIComponent(mailbox)}`;
@@ -97,5 +99,7 @@ export function createMicrosoftAdapter(options: AdapterOptions = {}): CalendarPr
         },
 
         ...graphEventOps(fetchImpl),
+        ...graphChangeOps(fetchImpl),
+        ...graphWatchOps(fetchImpl),
     };
 }

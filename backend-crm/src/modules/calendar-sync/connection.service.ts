@@ -8,6 +8,7 @@ import { CALENDAR_PROVIDER_LABELS, isCalendarProvider, LIVE_CONNECTION_STATUSES,
 import { loadEnrolmentContext, NOT_SYNCED_REASON_FOR, reconcileAllQuietly, resolveTarget, runDueChecks } from './enrolment.js';
 import { loadProviderAccess } from './providers/registry.js';
 import { adminRecipients, userIssuesDigest } from './syncIssue.notifications.js';
+import { syncHoursLabel } from './syncHours.js';
 
 /**
  * An employee's own calendar sync, read-only (addendum §5.2), the nightly calendar steps, and
@@ -50,6 +51,8 @@ export interface OwnCalendarSyncDto {
     /** Null = not synced (see `reason`). */
     calendar: OwnCalendarDto | null;
     reason: NotSyncedReason | null;
+    /** When changes made in the calendar come back by themselves (P2-5 poll): office hours and interval. */
+    syncHours: { start: string; end: string; everyMinutes: number };
 }
 
 const latest = (...dates: (Date | null | undefined)[]): string | null => {
@@ -71,6 +74,7 @@ export const connectionService = {
         ]);
         // A real provider needs the encryption key; the dev-only fake has no secrets (as in withCalendarAccess).
         const ready = context.providers.some((p) => p.enabled && p.configured && (p.key === 'fake' ? context.fakeOn : secretBox.ready()));
+        const syncHours = syncHoursLabel();
         if (live && isCalendarProvider(live.provider)) {
             const [access, sending] = await Promise.all([
                 loadProviderAccess(live.provider),
@@ -97,11 +101,12 @@ export const connectionService = {
                     },
                 },
                 reason: null,
+                syncHours,
             };
         }
         const target = account ? resolveTarget(account, choice, context.providers, context.companyDomains, context.fakeOn) : ({ none: 'inactive' } as const);
         // A target without a live row yet: enrolment runs after the admin's save, or tonight.
-        return { ready, calendar: null, reason: 'none' in target ? NOT_SYNCED_REASON_FOR[target.none] : null };
+        return { ready, calendar: null, reason: 'none' in target ? NOT_SYNCED_REASON_FOR[target.none] : null, syncHours };
     },
 };
 

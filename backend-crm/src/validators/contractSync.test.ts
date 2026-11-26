@@ -63,9 +63,12 @@ import {
     NOT_SYNCED_REASONS,
     OWN_CALENDAR_STATUSES,
 } from '../modules/calendar-sync/connection.constants.js';
-import { LINK_INVITES, LINK_STATES } from '../modules/calendar-sync/sync.constants.js';
+import { LINK_INVITES, LINK_STATES, PULL_REQUEST_STATUSES } from '../modules/calendar-sync/sync.constants.js';
 import { CALENDAR_NOT_SYNCED, CALENDAR_SYNC_NOT_RETRYABLE } from '../modules/calendar-sync/sync.actions.js';
 import { WORKER_STATUSES } from '../modules/calendar-sync/workerHeartbeat.js';
+import { PERSON_WEBHOOK_STATUSES } from '../modules/calendar-sync/connection.queries.js';
+import { PROVIDER_WEBHOOK_STATUSES } from '../modules/integrations/integration.service.js';
+import { WEBHOOKS_OFF_REASONS } from '../config/env.js';
 import { NOTIFICATION_KINDS } from '../modules/notifications/notification.producer.js';
 import * as bookingConstants from '../modules/booking-links/bookingLink.constants.js';
 import { normalizeUsername, RESERVED_USERNAMES, USERNAME_MAX_LENGTH, USERNAME_MIN_LENGTH, USERNAME_PATTERN, usernameIssue } from '../modules/user-admin/username.js';
@@ -216,6 +219,9 @@ interface FrontendIntegrationTypes {
     MAX_COMPANY_DOMAINS: number;
     USER_EMAIL_MAX_LENGTH: number;
     WORKER_STATUSES: readonly string[];
+    WEBHOOKS_OFF_REASONS: readonly string[];
+    PROVIDER_WEBHOOK_STATUSES: readonly string[];
+    PERSON_WEBHOOK_STATUSES: readonly string[];
 }
 
 interface FrontendCalendarConnectionTypes {
@@ -223,6 +229,7 @@ interface FrontendCalendarConnectionTypes {
     OWN_CALENDAR_STATUSES: readonly string[];
     NOT_SYNCED_REASONS: readonly string[];
     NOT_SYNCED_REASON_MESSAGES: Record<string, string>;
+    PULL_REQUEST_STATUSES: readonly string[];
 }
 
 interface FrontendSafeNextPath {
@@ -557,6 +564,9 @@ describe('backend ↔ frontend contract', { skip }, () => {
         assert.equal(frontend.MAX_COMPANY_DOMAINS, MAX_COMPANY_DOMAINS);
         assert.equal(frontend.USER_EMAIL_MAX_LENGTH, USER_EMAIL_MAX_LENGTH);
         assert.deepEqual([...frontend.WORKER_STATUSES], [...WORKER_STATUSES]);
+        assert.deepEqual([...frontend.WEBHOOKS_OFF_REASONS], [...WEBHOOKS_OFF_REASONS]);
+        assert.deepEqual([...frontend.PROVIDER_WEBHOOK_STATUSES], [...PROVIDER_WEBHOOK_STATUSES]);
+        assert.deepEqual([...frontend.PERSON_WEBHOOK_STATUSES], [...PERSON_WEBHOOK_STATUSES]);
     });
 
     it('frontend components/integrations/calendarConnections.types.ts matches the calendar connection constants', async () => {
@@ -565,6 +575,7 @@ describe('backend ↔ frontend contract', { skip }, () => {
         assert.deepEqual([...frontend.OWN_CALENDAR_STATUSES], [...OWN_CALENDAR_STATUSES]);
         assert.deepEqual([...frontend.NOT_SYNCED_REASONS], [...NOT_SYNCED_REASONS]);
         assert.deepEqual(Object.keys(frontend.NOT_SYNCED_REASON_MESSAGES).sort(), [...NOT_SYNCED_REASONS].sort(), 'every reason has a sentence');
+        assert.deepEqual([...frontend.PULL_REQUEST_STATUSES], [...PULL_REQUEST_STATUSES]);
     });
 
     it('frontend notification kinds, the Connected accounts route and the admin page match', async () => {

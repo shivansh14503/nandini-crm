@@ -58,6 +58,54 @@ export interface OwnCalendarSync {
     /** Null = not synced (see `reason`). */
     calendar: OwnCalendar | null;
     reason: NotSyncedReason | null;
+    /** When changes made in the calendar come back by themselves (office hours, business timezone, and interval). */
+    syncHours?: SyncHours;
+}
+
+export interface SyncHours {
+    /** `07:00` */
+    start: string;
+    /** `22:00` */
+    end: string;
+    everyMinutes: number;
+}
+
+/**
+ * Answer of `POST /api/calendar-connections/sync` (and of the admin's Sync now): queued (a pull job is on its way),
+ * done (pulled in-process; `changed` activities), recent (pulled moments ago), busy (a sync of this calendar is
+ * running), not_synced, not_ready (being set up or needs an admin), failed, off (calendar sync switched off).
+ */
+export const PULL_REQUEST_STATUSES = ['queued', 'done', 'recent', 'busy', 'not_synced', 'not_ready', 'failed', 'off'] as const;
+export type PullRequestStatus = (typeof PULL_REQUEST_STATUSES)[number];
+
+export interface PullRequestResult {
+    status: PullRequestStatus | (string & {});
+    changed?: number;
+    lastSyncedAt: string | null;
+}
+
+/** What a Sync now answer tells the person (fixed sentences; never provider text). */
+export function pullRequestMessage(result: Pick<PullRequestResult, 'status' | 'changed'>): { tone: 'success' | 'info' | 'warning'; text: string } {
+    switch (result.status) {
+        case 'queued':
+            return { tone: 'info', text: 'Checking the calendar for changes now. They show in the CRM within a minute.' };
+        case 'done':
+            return {
+                tone: 'success',
+                text: result.changed ? `Synced. ${result.changed} ${result.changed === 1 ? 'activity was' : 'activities were'} updated from the calendar.` : 'Synced. Nothing new in the calendar.',
+            };
+        case 'recent':
+            return { tone: 'info', text: 'Synced moments ago. Try again in a little while.' };
+        case 'busy':
+            return { tone: 'info', text: 'A sync of this calendar is already running.' };
+        case 'off':
+            return { tone: 'warning', text: 'Calendar sync is switched off for the company.' };
+        case 'not_synced':
+        case 'not_ready':
+            return { tone: 'warning', text: "This calendar can't sync right now. Admins can see why on Admin › API Integrations." };
+        default:
+            return { tone: 'warning', text: "Couldn't reach the calendar just now. It syncs again on its own in a few minutes." };
+    }
 }
 
 /** The calendar needs an admin's attention (shown as a quiet notice, never as an action for the employee). */

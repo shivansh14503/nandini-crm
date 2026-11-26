@@ -8,6 +8,7 @@ import type { AuthUser } from '../../types/user.types.js';
 import { fromDateOnly, toDateOnly } from '../../utils/mappers.js';
 import { isUniqueViolation } from '../../utils/prismaErrors.js';
 import { zonedDayOf, instantToZonedWallClock } from '../../utils/zonedTime.js';
+import { CONVERTED_STATUS } from '../leads/lead.validator.js';
 import { CLOSED_SALES_STAGES } from '../opportunities/opportunity.validator.js';
 import { isActivityOnlyFollowupType } from '../shared/followupTypes.js';
 import { lockRecords } from '../shared/transactions.js';
@@ -663,10 +664,12 @@ export function slotFromCalendar(
 }
 
 /**
- * P2-5 (inert until then: nothing calls it yet). A follow-up activity moved in Google / Outlook writes its new slot
+ * P2-5 (the pull, sync.pull.ts). The record's open follow-up activity moved in Google / Outlook writes its new slot
  * back to the record, inside the inbound apply's transaction: only `nextFollowupDate` / `nextFollowupTime`, audited
  * UPDATE on the Lead / Opportunity with `changedBy` = the owner (the caller runs it under the `job:calendar-sync`
- * audit origin). No Follow-up History row, no Rating change, and the record's reconcile isn't re-run (no loop).
+ * audit origin). No Follow-up History row, no Rating change, and the record's reconcile isn't re-run (no loop). A
+ * deleted or closed record (lead Converted, opportunity Closed Won / Lost) is left alone; the caller only passes the
+ * record's open (Planned) follow-up activity, and P2-4 cancels that one when a lead reaches any closing status.
  */
 export async function rescheduleRecordFromCalendar(
     tx: TransactionClient,
@@ -677,8 +680,13 @@ export async function rescheduleRecordFromCalendar(
 ): Promise<{ changed: boolean; keptTime: boolean }> {
     await lockRecords(tx, FOLLOW_UP_LOCK_ENTITY[module], [id]);
     const select = { nextFollowupDate: true, nextFollowupTime: true, isDeleted: true } as const;
-    const row = module === 'leads' ? await tx.lead.findUnique({ where: { id }, select }) : await tx.opportunity.findUnique({ where: { id }, select });
+    const row =
+        module === 'leads'
+            ? await tx.lead.findUnique({ where: { id }, select: { ...select, status: true } })
+            : await tx.opportunity.findUnique({ where: { id }, select: { ...select, salesStage: true } });
     if (!row || row.isDeleted) return { changed: false, keptTime: false };
+    const closed = 'status' in row ? row.status === CONVERTED_STATUS : CLOSED_STAGES.has((row.salesStage ?? '').trim());
+    if (closed) return { changed: false, keptTime: false };
     const next = slotFromCalendar(when, row);
     const before = { nextFollowupDate: toDateOnly(row.nextFollowupDate), nextFollowupTime: row.nextFollowupTime ?? '' };
     const after = { nextFollowupDate: next.nextFollowupDate, nextFollowupTime: next.nextFollowupTime ?? before.nextFollowupTime };
