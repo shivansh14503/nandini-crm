@@ -71,6 +71,7 @@ export const ROUTES = {
     FORM_CUSTOMIZATION: '/admin/form-customization',
     DOCUMENT_SERIES: '/admin/document-series',
     EMAIL_VALIDATION: '/admin/email-validation',
+    HOLIDAYS: '/admin/holidays',
     AUDIT_LOG: '/admin/audit-log',
     LIST_SCORECARDS: '/admin/scorecards',
     /** List Scorecards with a module's settings open. */

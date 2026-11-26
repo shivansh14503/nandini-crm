@@ -321,6 +321,7 @@ function RescheduleDialog({
                             allDay={allDay}
                             now={nowWall}
                             allowPast={activity.status !== PLANNED_STATUS}
+                            sameDayAs="startAt"
                         />
                     )}
                     <Typography sx={{ fontSize: '0.74rem', color: 'var(--mui-palette-text-secondary)' }}>{`Times in ${timeZoneAbbr(timeZone)} (${timeZone})`}</Typography>
