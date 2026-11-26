@@ -576,7 +576,7 @@ describe('backend ↔ frontend contract', { skip }, () => {
     it('the login page follows ?next= back to CRM paths only', async () => {
         const { safeNextPath } = await loadFrontend<FrontendSafeNextPath>('utils/safeNextPath.ts');
         assert.equal(safeNextPath(CALENDAR_CONNECTIONS_PAGE, '/dashboard'), CALENDAR_CONNECTIONS_PAGE);
-        for (const bad of ['//evil.example', '/\\evil.example', 'https://evil.example', 'javascript:alert(1)', '/login', '', null, '/a\nb']) {
+        for (const bad of ['//evil.example', '/\\evil.example', 'https://evil.example', 'javascript:alert(1)', '/login', '', null, '/a\nb', '/.//evil.example', '/%2e//evil.example', '/a/..//evil.example', '/./\\evil.example']) {
             assert.equal(safeNextPath(bad, '/d'), '/d', String(bad));
         }
     });

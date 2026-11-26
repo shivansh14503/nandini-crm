@@ -69,8 +69,31 @@ export function PdfTemplateBuilder({ templateId, module: newModule = 'QUOTATION'
     const [record, setRecord] = useState<PickedRecord | null>(null);
     const contextQuery = usePdfContext(pdfModule, record?.id);
 
-    const error = templateQuery.error ?? sourceQuery.error ?? fieldsQuery.error ?? (contextQuery.data ? null : contextQuery.error);
-    if (error) return <ErrorAlert error={errorMessage(error, 'The template could not be loaded.')} />;
+    // Full-page error only when something the builder needs never loaded. A failed background refetch keeps the cached
+    // data, so the builder (and its unsaved draft) stays mounted with a warning above it instead.
+    const failing = [templateQuery, sourceQuery, fieldsQuery, contextQuery].filter((q) => q.isError);
+    const retry = () => failing.forEach((q) => void q.refetch());
+    const retrying = failing.some((q) => q.isFetching);
+    const loadError =
+        (templateQuery.data ? null : templateQuery.error) ??
+        (sourceQuery.data ? null : sourceQuery.error) ??
+        (fieldsQuery.data ? null : fieldsQuery.error) ??
+        (contextQuery.data ? null : contextQuery.error);
+    if (loadError) {
+        return (
+            <Alert
+                severity="error"
+                sx={{ mb: 2.5, borderRadius: '10px', fontSize: '13px', alignItems: 'center' }}
+                action={
+                    <Button size="small" variant="outlined" sx={secondaryButtonSx} onClick={retry} disabled={retrying}>
+                        Try again
+                    </Button>
+                }
+            >
+                {errorMessage(loadError, 'The template could not be loaded.')}
+            </Alert>
+        );
+    }
 
     const ready = fieldsQuery.data && contextQuery.data && (templateId ? templateQuery.data : !sourceTemplateId || sourceQuery.data);
     if (!ready || !fieldsQuery.data || !contextQuery.data) {
@@ -90,19 +113,35 @@ export function PdfTemplateBuilder({ templateId, module: newModule = 'QUOTATION'
         ? { name: template.name, description: template.description, isActive: template.isActive, isDefault: template.isDefault }
         : { name: source ? `${source.name} (Custom)` : '', description: source?.description ?? '', isActive: true, isDefault: false };
 
+    // The fragment keeps the shell in the same slot whether or not the warning shows, so it never remounts.
     return (
-        <BuilderShell
-            key={templateId ?? `new:${sourceTemplateId ?? 'blank'}`}
-            module={pdfModule}
-            template={template}
-            initialDoc={initialDoc}
-            initialMeta={initialMeta}
-            registry={registry}
-            baseContext={contextQuery.data}
-            contextLoading={contextQuery.isFetching}
-            record={record}
-            onRecordChange={setRecord}
-        />
+        <>
+            {failing.length > 0 && (
+                <Alert
+                    severity="warning"
+                    sx={{ mb: 2, borderRadius: '10px', fontSize: '0.8rem', alignItems: 'center' }}
+                    action={
+                        <Button size="small" variant="outlined" sx={secondaryButtonSx} onClick={retry} disabled={retrying}>
+                            Try again
+                        </Button>
+                    }
+                >
+                    Could not refresh the template data. Showing the last loaded version; your unsaved changes are kept.
+                </Alert>
+            )}
+            <BuilderShell
+                key={templateId ?? `new:${sourceTemplateId ?? 'blank'}`}
+                module={pdfModule}
+                template={template}
+                initialDoc={initialDoc}
+                initialMeta={initialMeta}
+                registry={registry}
+                baseContext={contextQuery.data}
+                contextLoading={contextQuery.isFetching}
+                record={record}
+                onRecordChange={setRecord}
+            />
+        </>
     );
 }
 

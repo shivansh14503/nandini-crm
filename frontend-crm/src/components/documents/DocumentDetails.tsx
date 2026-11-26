@@ -11,6 +11,7 @@ import { formatDay } from '../common/Drawer/layout/drawerFields';
 import { RecordLink } from '../common/RecordLink';
 import { ROUTES } from '@/config/constants';
 import { recordFileService } from '@/services/recordFile.service';
+import { fetchWithSession } from '@/services/apiClient';
 import type { Document } from '@/types/document.types';
 import { formatFileSize, type RecordFile } from '@/types/recordFile.types';
 import { DOCUMENT_LABELS as L, FILE_KIND_LABELS, FileKindIcon, SalesStagePill, fileKind, userName } from './documentDisplay';
@@ -186,7 +187,7 @@ export function DocumentPreview({ file, sx }: { file: RecordFile | null; sx?: Sx
         if (!previewable || !fileUrl) return;
         let objectUrl: string | null = null;
         let cancelled = false;
-        fetch(fileUrl, { credentials: 'include' })
+        fetchWithSession(fileUrl)
             .then((res) => (res.ok ? res.blob() : Promise.reject(new Error(String(res.status)))))
             .then((blob) => {
                 if (cancelled) return;

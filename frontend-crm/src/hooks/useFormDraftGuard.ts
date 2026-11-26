@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
+import { holdUnsavedWork } from '@/utils/unsavedWork';
 
 /** Prefix of the localStorage keys earlier versions stored drafts under. Purged on first use; never written. */
 const LEGACY_DRAFT_PREFIX = 'crm_draft_';
@@ -92,15 +93,20 @@ export function useFormDraftGuard<T = unknown>({ isDirty, enabled = true, naviga
         setDiscardModalOpen(true);
     }, []);
 
-    // 1. Browser tab close / reload protection.
+    // 1. Browser tab close / reload protection. While dirty, the form also counts as unsaved work, so a session
+    //    that ends mid-edit (any API 401) asks the user to sign in again in place instead of unmounting the form.
     useEffect(() => {
         if (!active) return;
+        const releaseUnsavedWork = holdUnsavedWork();
         const handleBeforeUnload = (e: BeforeUnloadEvent) => {
             e.preventDefault();
             e.returnValue = '';
         };
         window.addEventListener('beforeunload', handleBeforeUnload);
-        return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+        return () => {
+            window.removeEventListener('beforeunload', handleBeforeUnload);
+            releaseUnsavedWork();
+        };
     }, [active]);
 
     // 2. Intercept clicks on in-app links (navbar, quick create, breadcrumbs, logo, search results).

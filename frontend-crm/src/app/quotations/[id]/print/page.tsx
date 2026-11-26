@@ -3,6 +3,7 @@
 import { Suspense, useCallback, useEffect, useRef, useState } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
+import { useRequireAuth } from '@/hooks/useRequireAuth';
 import { ROUTES } from '@/config/constants';
 import { LoadingScreen } from '@/components/common/LoadingScreen';
 import { PdfViewerPage } from '@/components/pdf/PdfViewerPage';
@@ -33,9 +34,7 @@ function QuotationPrintContent() {
     const [result, setResult] = useState<{ key: string; url?: string; error?: string } | null>(null);
     const requestKey = templateId ? `${templateId}:${attempt}` : null;
 
-    useEffect(() => {
-        if (!authLoading && !isAuthenticated) router.push(ROUTES.LOGIN);
-    }, [authLoading, isAuthenticated, router]);
+    useRequireAuth();
 
     // Fetch (and re-fetch on template change / retry); the previous blob URL is revoked when replaced.
     useEffect(() => {

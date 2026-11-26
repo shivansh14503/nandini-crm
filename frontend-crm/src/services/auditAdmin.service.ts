@@ -246,6 +246,11 @@ export interface AuditUserActivity {
     email: string | null;
     status: AuditUserStatus;
     onLeave: boolean;
+    /**
+     * `{ from, to, message }` (`YYYY-MM-DD`, inclusive) or null when unset or ended (always null for `system` /
+     * `unknown`); whether it applies today is decided on the client, as for Admin › Users. Absent from older payloads.
+     */
+    outOfOffice?: { from: string; to: string; message: string | null } | null;
     isGroupUser: boolean;
     /** `/api/user-photos/<id>`; null when the user has no photo (and for `system` / `unknown`). */
     photoUrl: string | null;

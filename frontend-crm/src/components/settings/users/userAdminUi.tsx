@@ -1,21 +1,18 @@
 'use client';
 
 import React from 'react';
-import { Box, Typography } from '@mui/material';
-import CheckCircleRoundedIcon from '@mui/icons-material/CheckCircleRounded';
-import RadioButtonUncheckedRoundedIcon from '@mui/icons-material/RadioButtonUncheckedRounded';
+import { Box } from '@mui/material';
 import { StatusChip, type ChipTone } from '@/components/settings/integrations/integrationUi';
 import { relativeTime } from '@/components/settings/audit-log/auditLogUi';
 export { phoneDialogPaperSx } from '@/components/profile/profileUi';
 import { ApiClientError } from '@/services/apiClient';
 import type { UserEmailIssue } from '@/types/integration.types';
 import type { AdminUserDto } from '@/types/userAdmin.types';
-import { PASSWORD_MAX_LENGTH, PASSWORD_RULES, type PasswordPolicyContext } from '@/utils/passwordPolicy';
 import { hasGlobalAccessRole, isAdminAccessRole } from '@/utils/roleAccess';
 import { isOutOfOfficeOn } from '@/utils/notificationPreferences';
 import { shortDayLabel, useBusinessToday } from '@/utils/userAvailability';
 
-/** Shared pieces of Admin › Users: role badges, status chips, the password checklist, error helpers. */
+/** Shared pieces of Admin › Users: role badges, status chips, error helpers. The password checklist is components/common/PasswordRulesChecklist. */
 
 export const EMAIL_ISSUE_CHIP: Record<UserEmailIssue, { tone: ChipTone; label: string; title: string }> = {
     missing: { tone: 'warning', label: 'No email', title: 'No company email: this person can’t connect a calendar until one is set.' },
@@ -127,81 +124,6 @@ export function apiFieldErrors(err: unknown): Record<string, string> {
 }
 
 export const apiErrorCode = (err: unknown): string | undefined => (err instanceof ApiClientError ? err.details?.code : undefined);
-
-/**
- * The password rules that apply when an admin sets someone's password: worded for the person being set up, and
- * without "different from your current password" (the admin doesn't know it; the API doesn't check it here).
- */
-export const ADMIN_PASSWORD_RULES = PASSWORD_RULES.filter((rule) => rule.key !== 'notCurrent').map((rule) =>
-    rule.key === 'notUsername' ? { ...rule, label: 'Not the username' } : rule,
-);
-
-/** The first rule a password set by an admin breaks, or null. */
-export function adminPasswordIssue(password: string, username: string): string | null {
-    const ctx: PasswordPolicyContext = { username };
-    if (password.length > PASSWORD_MAX_LENGTH) return `Password cannot exceed ${PASSWORD_MAX_LENGTH} characters.`;
-    for (const rule of ADMIN_PASSWORD_RULES) {
-        if (!rule.test(password, ctx)) return rule.message;
-    }
-    return null;
-}
-
-/** Live checklist of the password rules (met / not yet). */
-export function PasswordRulesChecklist({ password, username, id }: { password: string; username: string; id?: string }) {
-    const ctx: PasswordPolicyContext = { username };
-    return (
-        <Box
-            id={id}
-            sx={{
-                p: 1.25,
-                borderRadius: '10px',
-                backgroundColor: 'var(--mui-palette-background-subtle)',
-                border: '1px solid var(--mui-palette-border-light)',
-            }}
-        >
-            <Typography sx={{ fontSize: '0.74rem', fontWeight: 700, color: 'var(--crm-slate-700)', mb: 0.75 }}>The password needs</Typography>
-            <Box
-                component="ul"
-                sx={{ m: 0, p: 0, listStyle: 'none', display: 'grid', gridTemplateColumns: { xs: 'minmax(0, 1fr)', sm: 'repeat(2, minmax(0, 1fr))' }, gap: 0.6 }}
-            >
-                {ADMIN_PASSWORD_RULES.map((rule) => {
-                    const met = password !== '' && rule.test(password, ctx);
-                    return (
-                        <Box
-                            component="li"
-                            key={rule.key}
-                            sx={{ display: 'flex', alignItems: 'center', gap: 0.75, fontSize: '0.78rem', color: met ? 'var(--crm-slate-900)' : 'var(--mui-palette-text-secondary)' }}
-                        >
-                            {met ? (
-                                <CheckCircleRoundedIcon sx={{ fontSize: 16, color: 'var(--mui-palette-success-main)' }} />
-                            ) : (
-                                <RadioButtonUncheckedRoundedIcon sx={{ fontSize: 16, color: 'var(--mui-palette-text-muted)' }} />
-                            )}
-                            <span>
-                                {rule.label}
-                                <Box component="span" sx={visuallyHiddenSx}>
-                                    {met ? ' (done)' : ' (not yet)'}
-                                </Box>
-                            </span>
-                        </Box>
-                    );
-                })}
-            </Box>
-        </Box>
-    );
-}
-
-export const visuallyHiddenSx = {
-    position: 'absolute',
-    width: '1px',
-    height: '1px',
-    p: 0,
-    m: '-1px',
-    overflow: 'hidden',
-    clip: 'rect(0 0 0 0)',
-    whiteSpace: 'nowrap',
-    border: 0,
-} as const;
 
 /** "Asha Kulkarni" when the user has a name, else the username. */
 export const userLabel = (user: Pick<AdminUserDto, 'fullName' | 'username'>) => user.fullName?.trim() || user.username;

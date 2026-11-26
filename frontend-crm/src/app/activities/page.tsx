@@ -1,20 +1,19 @@
 'use client';
 
-import { Suspense, useEffect } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { Suspense } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { Box } from '@mui/material';
 import { useAuth } from '@/context/AuthContext';
+import { useRequireAuth } from '@/hooks/useRequireAuth';
 import { useFreshOnReturn } from '@/hooks/useFreshOnReturn';
-import { ROUTES } from '@/config/constants';
 import { Navbar } from '@/components/layout/Navbar';
 import { LoadingScreen } from '@/components/common/LoadingScreen';
 import { ErrorAlert } from '@/components/common/ErrorAlert';
 import { ActivitiesMasterView } from '@/components/activities/ActivitiesMasterView';
 
 function ActivitiesContent() {
-    const router = useRouter();
     const searchParams = useSearchParams();
-    const { user, loading, error, clearError, isAuthenticated } = useAuth();
+    const { user, loading, error, clearError } = useAuth();
     // Back from a record page (or any other page) shows the plain list, not the drawer left open before.
     const viewKey = useFreshOnReturn();
     // ?mine=1 / ?type=Call / ?status=Planned (the nav's My Activities, Calls, Meetings …).
@@ -22,11 +21,7 @@ function ActivitiesContent() {
     const type = searchParams?.get('type') ?? '';
     const status = searchParams?.get('status') ?? '';
 
-    useEffect(() => {
-        if (!loading && !isAuthenticated) {
-            router.push(ROUTES.LOGIN);
-        }
-    }, [isAuthenticated, loading, router]);
+    useRequireAuth();
 
     if (loading) return <LoadingScreen message="Loading activities..." />;
     if (!user) return null;
