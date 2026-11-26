@@ -106,7 +106,10 @@ export function pushableChanged(before: ActivityRow | null, after: ActivityRow):
         (before.relatedCode ?? '') !== (after.relatedCode ?? '') ||
         (before.relatedModule ?? '') !== (after.relatedModule ?? '') ||
         before.isDeleted !== after.isDeleted ||
-        attendeeKeys(before) !== attendeeKeys(after)
+        attendeeKeys(before) !== attendeeKeys(after) ||
+        // Calendar Phase 3 (P3-1): a new video link wanted (choice, owner change, Retry) or the meeting removed.
+        (before.conferenceProvider ?? null) !== (after.conferenceProvider ?? null) ||
+        (before.conferenceRequest ?? 0) !== (after.conferenceRequest ?? 0)
     );
 }
 
@@ -137,7 +140,7 @@ export function isCreateEligible(row: ActivityRow, config: Pick<ActivityConfig, 
 }
 
 /** The owner's live calendar connection row (§8.3 step 2), read through `tx`; null when the owner isn't synced. */
-export async function ownerConnectionOf(db: OutboxDb, owner: string): Promise<{ id: string; provider: string } | null> {
+export async function ownerConnectionOf(db: Pick<OutboxDb, 'calendarConnection' | 'integrationProvider' | 'user'>, owner: string): Promise<{ id: string; provider: string } | null> {
     const conn = await db.calendarConnection.findFirst({
         where: { username: owner, status: { in: [...LIVE_CONNECTION_STATUSES] } },
         orderBy: { enrolledAt: 'desc' },

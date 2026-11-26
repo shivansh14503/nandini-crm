@@ -1040,6 +1040,23 @@ model Activity {
   /// Changed on its own ("This event"): series edits ("All events", "This and following") leave it alone.
   seriesException Boolean   @default(false)
 
+  // Video meeting (Calendar Phase 3, P3-1): a Google Meet / Microsoft Teams link created with the owner's calendar
+  // event by the push (calendar-sync/sync.conference.ts). The API sets provider / state / request; sync jobs write the
+  // outcome (state, join URL, id, error) with `updatedAt` kept unchanged.
+  /// Requested provider: meet | teams | zoom (P3-2, not offered yet) | null (the form's Video meeting field).
+  conferenceProvider String? @db.NVarChar(20)
+  /// requested (being created) | ready (join URL known) | failed (conferenceError says why) | null (none).
+  conferenceState    String? @db.NVarChar(20)
+  /// https only, host allow-list meet.google.com / teams.microsoft.com (calendar-sync/conference.rules.ts).
+  conferenceJoinUrl  String? @db.NVarChar(1000)
+  /// Meet conference id / Teams online meeting (dial-in conference) id.
+  conferenceId       String? @db.NVarChar(200)
+  /// Fixed code + short text when the provider couldn't create the link.
+  conferenceError    String? @db.NVarChar(300)
+  /// n of the last Meet create request (Google `conferenceData.createRequest.requestId` = '<requestedId>-c<n>'),
+  /// bumped by the API whenever a new link is asked for (provider chosen, owner changed, Retry).
+  conferenceRequest  Int     @default(0)
+
   createdBy String    @db.NVarChar(50)
   updatedBy String?   @db.NVarChar(50)
   createdAt DateTime  @default(now())
@@ -1070,6 +1087,8 @@ model Activity {
   @@index([isDeleted, assignedTo, createdAt])
   /// Occurrences of a series in time order (series edits, the nightly sync window).
   @@index([seriesId, startAt])
+  /// P3-1 nightly sweep: video links still `requested` (equality column first).
+  @@index([conferenceState, updatedAt])
 }
 
 /// A CRM-authored recurring activity (Calendar Phase 4; activity.series.ts, activity.recurrence.ts). Holds the rule and

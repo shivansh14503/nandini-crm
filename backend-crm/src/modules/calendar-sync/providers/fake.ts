@@ -1,4 +1,4 @@
-import { randomBytes } from 'node:crypto';
+import { createHash, randomBytes } from 'node:crypto';
 import { TokenError, type SyncFailure } from '../syncErrors.js';
 import { toGoogleEvent, toGooglePatch } from '../sync.mapping.google.js';
 import { normalizeGoogle } from '../sync.shapes.js';
@@ -59,6 +59,11 @@ export interface FakeProviderState {
     freeBusyFailures: Map<string, number>;
     /** Free/busy calls made, newest last: as whom, for which calendars. */
     freeBusyCalls: { mailbox: string; emails: string[] }[];
+    /**
+     * How a Meet createRequest ends (P3-1): `success` at once (default), `pending` (until `fakeFinishConference`),
+     * `failure`, or `refused`: 400 'Invalid conference type value' (Meet off for the org).
+     */
+    conferenceMode: 'success' | 'pending' | 'failure' | 'refused';
     /** Pull (P2-5): change counter and the counter value of each event's last change (cursor = `fake-seq-<n>`). */
     changeSeq: number;
     changeOf: Map<string, number>;
@@ -90,6 +95,7 @@ export const fakeProviderState: FakeProviderState = {
     freeBusyPrivate: new Set(),
     freeBusyFailures: new Map(),
     freeBusyCalls: [],
+    conferenceMode: 'success',
     changeSeq: 0,
     changeOf: new Map(),
     cursorExpired: new Set(),
@@ -114,6 +120,7 @@ export function resetFakeProvider(): void {
     fakeProviderState.freeBusyPrivate.clear();
     fakeProviderState.freeBusyFailures.clear();
     fakeProviderState.freeBusyCalls = [];
+    fakeProviderState.conferenceMode = 'success';
     fakeProviderState.changeSeq = 0;
     fakeProviderState.changeOf.clear();
     fakeProviderState.cursorExpired.clear();
@@ -198,6 +205,50 @@ function fakeListChanges(ctx: CallCtx, request: ListChangesRequest): ChangePage 
     };
 }
 
+/** The Meet link the fake gives a conference id (allow-listed host, like Google's `abc-defg-hij`). */
+export const fakeMeetUrl = (conferenceId: string) => `https://meet.google.com/${conferenceId}`;
+
+function meetConference(requestId: string, statusCode: 'success' | 'pending' | 'failure', conferenceId: string): Pick<GoogleEventWire, 'conferenceData' | 'hangoutLink'> {
+    const createRequest = { requestId, conferenceSolutionKey: { type: 'hangoutsMeet' }, status: { statusCode } };
+    if (statusCode !== 'success') return { conferenceData: { createRequest, conferenceSolution: { key: { type: 'hangoutsMeet' } } }, hangoutLink: null };
+    return {
+        conferenceData: {
+            createRequest,
+            conferenceId,
+            conferenceSolution: { key: { type: 'hangoutsMeet' } },
+            entryPoints: [{ entryPointType: 'video', uri: fakeMeetUrl(conferenceId) }],
+        },
+        hangoutLink: fakeMeetUrl(conferenceId),
+    };
+}
+
+/** Tests: Google finishes (or fails) a pending Meet createRequest of this event. */
+export function fakeFinishConference(id: string, statusCode: 'success' | 'failure' = 'success', at: Date = new Date()): void {
+    const event = fakeProviderState.events.get(id);
+    const requestId = event?.conferenceData?.createRequest?.requestId;
+    if (!event || !requestId) throw new Error(`fakeFinishConference: no conference request on ${id}`);
+    fakeEditEvent(id, meetConference(requestId, statusCode, conferenceIdOf(requestId)), at);
+}
+
+const conferenceIdOf = (requestId: string) => {
+    const hex = createHash('sha256').update(requestId).digest('hex');
+    return `${hex.slice(0, 3)}-${hex.slice(3, 7)}-${hex.slice(7, 10)}`;
+};
+
+/** Applies a write's `conferenceData` like Google (`conferenceDataVersion=1`): a createRequest → a Meet, null → removed. */
+function withConferenceWrite(body: Record<string, unknown>, previous: GoogleEventWire | undefined): Record<string, unknown> {
+    if (!('conferenceData' in body)) return body;
+    const { conferenceData, ...rest } = body as { conferenceData?: { createRequest?: { requestId?: string } } | null };
+    if (conferenceData === null) return { ...rest, conferenceData: null, hangoutLink: null };
+    const requestId = conferenceData?.createRequest?.requestId;
+    if (!requestId) return rest;
+    const mode = fakeProviderState.conferenceMode;
+    if (mode === 'refused') throw new ProviderBadRequestError({ provider: 'fake', operation: 'event', status: 400, code: 'invalid', providerMessage: 'Invalid conference type value.' });
+    // The same requestId again is a no-op (Google answers with the existing conference).
+    if (previous?.conferenceData?.createRequest?.requestId === requestId) return rest;
+    return { ...rest, ...meetConference(requestId, mode, conferenceIdOf(requestId)) };
+}
+
 /** 401 unless the token is a live one of this mailbox (a `revokeOnce` mailbox fails once). */
 function checkToken(ctx: CallCtx, operation: string): void {
     const mailbox = ctx.mailbox.toLowerCase();
@@ -277,7 +328,7 @@ function fakeEventOps(now: () => Date): Pick<CalendarProviderAdapter, 'createEve
     const store = (ctx: CallCtx, id: string, body: Record<string, unknown>, previous?: GoogleEventWire): GoogleEventWire => {
         const event: GoogleEventWire = {
             ...(previous ?? {}),
-            ...(body as Partial<GoogleEventWire>),
+            ...(withConferenceWrite(body, previous) as Partial<GoogleEventWire>),
             id,
             iCalUID: previous?.iCalUID ?? `${id}@fake.calendar`,
             etag: nextEtag(),
@@ -292,7 +343,7 @@ function fakeEventOps(now: () => Date): Pick<CalendarProviderAdapter, 'createEve
     };
     const rewrite = (ctx: CallCtx, input: CreateEventInput, id: string) => {
         // Like Google's PATCH rewrite: the attendee list is always replaced (none on a private copy).
-        const { id: _id, ...body } = toGoogleEvent(input.crm, { ...input.event, requestedId: id, attendees: input.attendees });
+        const { id: _id, ...body } = toGoogleEvent(input.crm, { ...input.event, requestedId: id, attendees: input.attendees, conference: input.conference });
         return normalizeGoogle(store(ctx, id, { attendees: undefined, ...body, status: 'confirmed' }, state.events.get(id)), ctx.accountEmail);
     };
 
@@ -306,12 +357,12 @@ function fakeEventOps(now: () => Date): Pick<CalendarProviderAdapter, 'createEve
                 }
                 return rewrite(ctx, input, input.requestedId);
             }
-            const body = toGoogleEvent(input.crm, { ...input.event, requestedId: input.requestedId, attendees: input.attendees });
+            const body = toGoogleEvent(input.crm, { ...input.event, requestedId: input.requestedId, attendees: input.attendees, conference: input.conference });
             return normalizeGoogle(store(ctx, input.requestedId, body as unknown as Record<string, unknown>), ctx.accountEmail);
         },
 
         async patchEvent(ctx, id, input) {
-            const body = toGooglePatch(input.groups, input.crm, { timeZone: input.timeZone, attendees: input.attendees, description: input.description });
+            const body = toGooglePatch(input.groups, input.crm, { timeZone: input.timeZone, attendees: input.attendees, description: input.description, conference: input.conference });
             await begin(ctx, 'patch', { id, sendUpdates: input.sendUpdates, body });
             const existing = state.events.get(id);
             if (!existing || existing.status === 'cancelled') throw notFound('patch-event');

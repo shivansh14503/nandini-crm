@@ -71,6 +71,7 @@ import { attendeeKey, attendeeLabel } from './RhfAttendeesField';
 import { RhfScheduleField } from './RhfScheduleField';
 import { formatActivityWhen, formatBusinessInstant, isActivityOverdue, timeZoneAbbr, useBusinessClock, type BusinessClock } from './activityTime';
 import { relatedModuleLabel, relatedRecordEditHref, relatedRecordHref } from './activityLinks';
+import { VideoMeetingPanel } from './VideoMeeting';
 
 // Loaded on demand: the related record's drawer imports every module's drawer (which import this one).
 const RelatedRecordDrawer = dynamic(() => import('./relatedRecord').then((m) => m.RelatedRecordDrawer), { ssr: false });
@@ -585,7 +586,7 @@ export function ActivityDetailDrawer({ activity, activityId, open, onClose, onEd
                 )}
             </DrawerSectionCard>
 
-            {(a.location || a.customerResponse || a.remarks) && (
+            {(a.location || a.conference || a.customerResponse || a.remarks) && (
                 <DrawerSectionCard title={isNote ? 'Note' : 'Details'} icon={<RateReviewOutlinedIcon sx={{ fontSize: 18, color: color.main }} />}>
                     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.8 }}>
                         {a.location && (
@@ -612,6 +613,7 @@ export function ActivityDetailDrawer({ activity, activityId, open, onClose, onEd
                                 </Box>
                             </Field>
                         )}
+                        {a.conference && <VideoMeetingPanel activity={a} onMessage={notify} />}
                         {a.customerResponse && <Field label="Customer Response">{responseLabel(a.customerResponse)}</Field>}
                         {a.remarks && (
                             <Field label="Remarks">

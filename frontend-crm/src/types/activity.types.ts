@@ -23,9 +23,29 @@ export const CANCELLED_STATUS: ActivityStatus = 'Cancelled';
  * `relaxedFields`, the API's `notApplicableKeys`). Only the system types hide fields; admin-added types show all.
  */
 export const ACTIVITY_NOT_APPLICABLE: Readonly<Record<string, readonly string[]>> = {
-    Note: ['startAt', 'endAt', 'allDay', 'reminder', 'location', 'attendees', 'customerResponse', 'status'],
-    Task: ['endAt', 'location', 'attendees', 'customerResponse'],
+    Note: ['startAt', 'endAt', 'allDay', 'reminder', 'location', 'videoMeeting', 'attendees', 'customerResponse', 'status'],
+    Task: ['endAt', 'location', 'videoMeeting', 'attendees', 'customerResponse'],
 };
+
+/** Video meeting providers (backend calendar-sync/conference.rules.ts; Calendar Phase 3, P3-1). Zoom comes later. */
+export const VIDEO_PROVIDERS = ['meet', 'teams', 'zoom'] as const;
+export type VideoProvider = (typeof VIDEO_PROVIDERS)[number];
+export const VIDEO_PROVIDER_LABELS: Readonly<Record<VideoProvider, string>> = {
+    meet: 'Google Meet',
+    teams: 'Microsoft Teams',
+    zoom: 'Zoom',
+};
+export const isVideoProvider = (value: unknown): value is VideoProvider => typeof value === 'string' && (VIDEO_PROVIDERS as readonly string[]).includes(value);
+/** `requested` (the calendar is creating the link), `ready`, `failed`. */
+export const CONFERENCE_STATES = ['requested', 'ready', 'failed'] as const;
+export type ConferenceState = (typeof CONFERENCE_STATES)[number];
+/** Followup Type option meta that offers the Video meeting field on that type. */
+export const VIDEO_MEETING_META_KEY = 'videoMeeting';
+/** 409: the owner's company calendar can't create the chosen kind of link. */
+export const VIDEO_PROVIDER_NOT_CONNECTED = 'VIDEO_PROVIDER_NOT_CONNECTED';
+/** 409: a ready Teams link can't be removed or changed. */
+export const VIDEO_MEETING_LOCKED = 'VIDEO_MEETING_LOCKED';
+export const VIDEO_MEETING_LOCKED_MESSAGE = 'Cancel and create a new meeting to remove the Teams link.';
 
 /** `activity_reminder` (fixed system options; the stored value is the label). */
 export const ACTIVITY_REMINDERS = [
@@ -115,6 +135,8 @@ export interface ActivityFormData {
     endDay: string;
     reminder: ActivityReminder | '';
     location: string;
+    /** Video meeting the owner's calendar creates (P3-1): meet | teams | zoom, '' for none. */
+    videoMeeting: VideoProvider | '';
     attendees: ActivityAttendee[];
 
     // Outcome & Notes
@@ -173,8 +195,41 @@ export interface ActivityCalendarState {
     externalUpdatedAt: string | null;
 }
 
+/** The activity's video meeting (P3-1): the link, or why it isn't there yet. */
+export interface ActivityConferenceState {
+    provider: VideoProvider;
+    state: ConferenceState;
+    joinUrl: string | null;
+    errorCode: string | null;
+    errorMessage: string | null;
+    /** The viewer may ask again (failed, and they may edit the activity). */
+    canRetry: boolean;
+    /** A Teams link exists: it can't be removed or changed. */
+    locked: boolean;
+}
+
+/** One Video meeting choice for the form (GET /api/activities/video-options). */
+export interface VideoOption {
+    value: VideoProvider;
+    label: string;
+    available: boolean;
+    /** Why not (shown on the disabled option). */
+    reason?: string;
+}
+
+export interface VideoOptions {
+    owner: string;
+    /** google | microsoft | fake | null (the owner isn't synced). */
+    calendarProvider: string | null;
+    options: VideoOption[];
+}
+
 export interface Activity extends ActivityFormData {
     id: string;
+    /** The ready join link ('' while none). Read only. */
+    conferenceJoinUrl?: string;
+    /** The video meeting's progress; null when the activity has none. */
+    conference?: ActivityConferenceState | null;
     /** Record number of the linked record (LD-0001 …), '' when none. */
     relatedCode: string;
     /** IANA zone the times are entered in (the business timezone). */
@@ -298,6 +353,8 @@ export interface CalendarItem {
     relatedId: string;
     relatedTo: string;
     location: string;
+    /** The ready video meeting link of an activity (P3-1); null / absent when none. */
+    conferenceJoinUrl?: string | null;
     attendeeCount: number;
     myResponse: AttendeeResponse | null;
     editable: boolean;

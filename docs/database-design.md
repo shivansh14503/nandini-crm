@@ -1,7 +1,7 @@
 # Nandini CRM — Database Design
 
-> **Status:** living document, generated from `backend-crm/prisma/schema.prisma` and `prisma/migrations/` (93 migrations,
-> latest `20261215110000_recurring_activities`, Calendar Phase 4 recurring activities, as of 2026-11-26; before it `20261215090000_calendar_watch_channels`, Calendar Phase 2 P2-7 webhooks; before that `20261128120000_booking_links`, Calendar Phase 4 booking links; before that `20261128100000_activity_calendar_sync`, Calendar Phase 2 P2-3b, whose columns P2-3c (first-sync backfill) and P2-5 (calendar → CRM pull) use without a migration of their own; P2-6 busy times needed no migration: it reads `Activity` through the existing `[isDeleted, startAt]` index and stores nothing). Update it in the same change as any schema migration.
+> **Status:** living document, generated from `backend-crm/prisma/schema.prisma` and `prisma/migrations/` (94 migrations,
+> latest `20261215110000_recurring_activities`, Calendar Phase 4 recurring activities, as of 2026-11-26; before it `20261215100000_activity_conference`, Calendar Phase 3 P3-1 video meetings; before that `20261215090000_calendar_watch_channels`, Calendar Phase 2 P2-7 webhooks; before that `20261128120000_booking_links`, Calendar Phase 4 booking links; before that `20261128100000_activity_calendar_sync`, Calendar Phase 2 P2-3b, whose columns P2-3c (first-sync backfill) and P2-5 (calendar → CRM pull) use without a migration of their own; P2-6 busy times needed no migration: it reads `Activity` through the existing `[isDeleted, startAt]` index and stores nothing). Update it in the same change as any schema migration.
 > Related: [System design](system-design.md) · [API plan](api-plan.md) · [Build plan](build-plan.md)
 
 ---
@@ -568,6 +568,20 @@ rows): `iCalUid` (NVARCHAR(1024), the event's calendar identity), `syncKey` (NVA
 `externalOrganizer` (BIT, default 0: a meeting someone outside the CRM organizes; the organizer columns are filled
 from P2-8), `externalUpdatedAt` (DATETIME2, the last calendar-side change applied; set by the P2-5 pull, as of 2026-11-26, without moving `updatedAt`). Set by the sync engine only (system
 write path), never by a form; not in the audited DTO yet.
+Video meeting columns (migration `20261215100000_activity_conference`, as of 2026-11-26, Calendar Phase 3 P3-1; NULL /
+0 on existing rows): `conferenceProvider` (NVARCHAR(20): `meet` / `teams` / `zoom` / NULL, the form's Video meeting
+choice; the DTO key is `videoMeeting`), `conferenceState` (NVARCHAR(20): `requested` / `ready` / `failed`),
+`conferenceJoinUrl` (NVARCHAR(1000): https only, host allow-list `meet.google.com`, `teams.microsoft.com`,
+`*.zoom.us`), `conferenceId` (NVARCHAR(200): Meet conference id / Teams online meeting id), `conferenceError`
+(NVARCHAR(300): `<code>: <text>`, codes `conference_failed`, `not_created`, `join_url_rejected`, `conference_timeout`,
+`provider_unavailable`, `no_event`, `event_refused`), `conferenceRequest` (INT NOT NULL, default 0, constraint `Activity_conferenceRequest_df`: the
+request number `n`; a new choice, an owner change or Retry bumps it, and Google's `createRequest.requestId` is
+`<requestedId>-c<n>`). A CRM save writes the provider / `requested` / the counter; the push engine and the `conference`
+job write the outcome with `updatedAt` kept (never a user edit) and compare-and-set on `conferenceProvider` +
+`conferenceRequest`. The same migration sets option meta `videoMeeting: true` on the seeded Followup Types `Meeting`
+and `Demo / Presentation` (`DropdownOption.metaJson` via `JSON_MODIFY`, only where the key is missing; admins switch it
+per type in Admin › API Integrations › What goes to calendars). Index `Activity_conferenceState_updatedAt_idx`
+(`conferenceState`, `updatedAt`): the nightly sweep that fails links still `requested` an hour after the last save.
 
 **Follow-up activities** (P2-4, `activities/activity.followUp.ts`): every open lead / opportunity with a next
 follow-up has exactly one row with `origin = 'followup'`, `status = 'Planned'`, `relatedModule` / `relatedId` = the
@@ -591,7 +605,8 @@ identity: unchanged rows aren't rewritten and replies of attendees who stay are 
 
 Indexes: `Activity` `(isDeleted, startAt)`, `(isDeleted, assignedTo, startAt)` (calendar ranges),
 `(relatedModule, relatedId)` (a record's Activities tab), `organizationId`, `contactId`, `status`,
-`(reminderSentAt, remindAt)` (reminder sweep), `(isDeleted, createdAt)`, `(isDeleted, assignedTo, createdAt)`;
+`(reminderSentAt, remindAt)` (reminder sweep), `(isDeleted, createdAt)`, `(isDeleted, assignedTo, createdAt)`,
+`(conferenceState, updatedAt)` (P3-1 nightly sweep of video links still `requested`);
 `ActivityAttendee` `activityId`, `username`, `contactId`, `email`, plus three hand-written **filtered unique** indexes
 (one row per colleague, contact and outside email of an activity): `UX_ActivityAttendee_user (activityId, username)
 WHERE username IS NOT NULL`, `UX_ActivityAttendee_contact (activityId, contactId) WHERE contactId IS NOT NULL`,

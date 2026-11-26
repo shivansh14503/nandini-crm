@@ -31,7 +31,7 @@ import {
     type FormConfigsPayload,
     type FormFieldDefinitionDto,
 } from '@/types/formConfig.types';
-import { groupSections, isBuiltInCountryField, moduleFields } from '@/utils/formConfig';
+import { groupSections, isBuiltInCountryField, isNeverRequiredField, moduleFields } from '@/utils/formConfig';
 import { COUNTRY_OPTIONS, getCountryByCode, type CountryMasterItem } from '@/data/addressMaster';
 import { Badge, errorMessage, inputSx, primaryButtonSx, secondaryButtonSx } from './builderUi';
 import { useCodedFieldDefaults } from '@/context/CodedFieldDefaultsContext';
@@ -103,6 +103,8 @@ export function FieldEditorModal({ open, onClose, module, configs, field, defaul
     const tabs = configs.moduleTabs[module] ?? [];
     const isCreate = !field;
     const locked = Boolean(field?.isCoreLocked);
+    // Required can't be switched on for fields that depend on the record (e.g. an activity's Video meeting).
+    const neverRequired = Boolean(field?.isSystem && isNeverRequiredField(module, field.fieldKey));
     // The placeholder / hint the hand-built form codes for this built-in field: prefilled when not overridden.
     const coded = useCodedFieldDefaults(field?.isSystem ? field.fieldKey : undefined);
 
@@ -514,8 +516,9 @@ export function FieldEditorModal({ open, onClose, module, configs, field, defaul
 
                 <Box sx={{ mt: 2.5, display: 'flex', flexWrap: 'wrap', gap: 3 }}>
                     <FormControlLabel
-                        control={<Switch size="small" checked={locked ? true : draft.isRequired} disabled={locked} onChange={(e) => set('isRequired', e.target.checked)} />}
+                        control={<Switch size="small" checked={locked ? true : neverRequired ? false : draft.isRequired} disabled={locked || neverRequired} onChange={(e) => set('isRequired', e.target.checked)} />}
                         label={<Typography sx={{ fontSize: '0.84rem', fontWeight: 600, color: 'var(--crm-gray-700)' }}>Required</Typography>}
+                        title={neverRequired ? "Can't be required: it depends on the activity's type and the owner's company calendar." : undefined}
                     />
                     <FormControlLabel
                         control={<Switch size="small" checked={locked ? true : draft.isVisibleInForm} disabled={locked} onChange={(e) => set('isVisibleInForm', e.target.checked)} />}

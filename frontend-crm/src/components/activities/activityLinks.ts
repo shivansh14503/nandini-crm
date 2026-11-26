@@ -1,5 +1,5 @@
 import { ROUTES } from '@/config/constants';
-import { ACTIVITY_RELATED_MODULE_LABELS, isActivityRelatedModule, type ActivityLinkTarget, type ActivityRelatedModule } from '@/types/activity.types';
+import { ACTIVITY_RELATED_MODULE_LABELS, isActivityRelatedModule, type ActivityLinkTarget, type ActivityRelatedModule, type VideoProvider } from '@/types/activity.types';
 import type { RecordActivitiesContext } from '@/components/common/Drawer/types';
 import { opportunityLabel } from '@/utils/opportunityLabel';
 
@@ -50,9 +50,11 @@ export interface NewActivityQuery {
     /** Business wall clock or, all-day, the last day (inclusive). */
     end?: string;
     allDay?: boolean;
+    /** Video meeting (P3-1): meet | teams | zoom. */
+    video?: VideoProvider | '';
 }
 
-/** `/activities/new?type=…&status=…&subject=…&relatedModule=…&relatedId=…&start=…&end=…&allDay=1` (empty values left out). */
+/** `/activities/new?type=…&status=…&subject=…&relatedModule=…&relatedId=…&start=…&end=…&allDay=1&video=…` (empty values left out). */
 export function newActivityHref(query: NewActivityQuery = {}): string {
     const params = new URLSearchParams();
     if (query.type) params.set('type', query.type);
@@ -65,6 +67,7 @@ export function newActivityHref(query: NewActivityQuery = {}): string {
     if (query.start) params.set('start', query.start);
     if (query.end) params.set('end', query.end);
     if (query.allDay) params.set('allDay', '1');
+    if (query.video) params.set('video', query.video);
     const search = params.toString();
     return search ? `${ROUTES.ACTIVITY_NEW}?${search}` : ROUTES.ACTIVITY_NEW;
 }

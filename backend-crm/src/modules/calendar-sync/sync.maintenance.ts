@@ -25,6 +25,7 @@ import { sweepPushJobId } from './sync.keys.js';
 import { healthyChannelConnectionIds, maintainChannels, ensureChannel, pollIntervalMinutes, pullIsDue, webhooksLive } from './sync.channels.js';
 import { secretExpiringNotifications } from './sync.notifications.js';
 import { markPushExhausted, pushLink } from './sync.push.js';
+import { failStaleConferences } from './sync.conference.js';
 import { runBackfill } from './sync.backfill.js';
 import { enqueueCheck, enqueueEnrolled, enqueuePull, type PushJobData } from './sync.wake.js';
 import { isFakeProviderEnabled, loadProviderAccess } from './providers/registry.js';
@@ -348,8 +349,9 @@ async function step<T>(name: string, fn: () => Promise<T>, fallback: T): Promise
 /**
  * `calendar-nightly` (00:25): the connection steps P2-2b ran from the reminders worker (reconcile everyone, due health
  * checks, the admins' problem digest), the follow-up activity backfill P2-4 ran there too, then P2-3b's own: error
- * links retried, client secrets expiring, expired leases cleared; P2-5's Outlook delta re-baseline; and P2-7's webhook
- * channels (renewals, missing ones created, Graph subscriptions checked, stray ones stopped, old rows deleted).
+ * links retried, client secrets expiring, expired leases cleared; P2-5's Outlook delta re-baseline; P2-7's webhook
+ * channels (renewals, missing ones created, Graph subscriptions checked, stray ones stopped, old rows deleted); and
+ * P3-1's video links still `requested` an hour after the last save become `failed conference_timeout` (Retry offered).
  */
 export async function runCalendarNightly(now: Date = new Date()) {
     const connections = await step('connections', () => runCalendarConnectionNightly(now), { changed: 0, checked: 0, problems: 0 });
@@ -357,9 +359,10 @@ export async function runCalendarNightly(now: Date = new Date()) {
     const retried = await step('retry-errors', () => retryErrorLinks(now), 0);
     const secrets = await step('secret-expiring', () => notifyExpiringSecrets(now), 0);
     const leases = await step('expired-leases', () => clearExpiredLeases(now), 0);
+    const staleVideoLinks = await step('stale-video-links', () => failStaleConferences(now), 0);
     const rebaselined = await step('graph-rebaseline', () => rebaselineGraphWindows(now), 0);
     const channels = await step('webhook-channels', () => maintainChannels('nightly', now), null);
-    const result = { connections, followUps, retried, secrets, leases, rebaselined, channels };
+    const result = { connections, followUps, retried, secrets, leases, staleVideoLinks, rebaselined, channels };
     logger.info({ ...result, followUps: followUps ? 'done' : 'failed' }, 'Calendar nightly done');
     return result;
 }

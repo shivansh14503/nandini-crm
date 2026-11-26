@@ -182,6 +182,7 @@ export default function ActivityForm({ mode = 'create', activityId, initialData,
                         lockedFields={lockedFields}
                         lockReason={lockReason}
                         activityId={mode === 'create' ? undefined : activityId}
+                        activity={mode === 'create' ? undefined : activity}
                         calendar={mode === 'create' ? null : activity?.calendar}
                         savedOwner={mode === 'create' ? undefined : activity?.assignedTo}
                         repeatSlot={

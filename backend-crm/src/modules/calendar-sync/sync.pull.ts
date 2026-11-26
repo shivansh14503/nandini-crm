@@ -35,6 +35,7 @@ import {
     type PullReason,
 } from './sync.constants.js';
 import { capInboundAttendees, inboundCrmNow, planInbound } from './sync.inbound.js';
+import { recordConference, settleConference } from './sync.conference.js';
 import { eventKeyOf, requestedIdFor, syncKeyOf } from './sync.keys.js';
 import { claimLease, type Lease } from './sync.lease.js';
 import type { DirtyLink } from './sync.outbox.js';
@@ -503,6 +504,18 @@ class ConnectionPull {
                 rows.push(written);
             }
 
+            // P3-1: the organizer copy's video link, read the same allow-listed, read-only way as on push answers: a
+            // link added in the calendar is taken over (the base records it, so the push doesn't ask for another) and a
+            // requested Meet that became ready is recorded. Only a `ready` link is ever written here: the pull never
+            // fails, clears or re-requests the CRM's video meeting (a link removed in the calendar stays in the CRM).
+            const conference = settleConference(activity, event, this.provider, null, plan.merge.base.crm);
+            const joinReady = conference.outcome.columns?.conferenceState === 'ready' && (await recordConference(tx, activity, conference.outcome));
+            if (joinReady) {
+                plan.merge.base.crm = conference.crm;
+                // One more push puts the join details into the description (as after a push answer).
+                plan.markDirty = true;
+            }
+
             const wake: DirtyLink[] = [];
             const dirty = plan.markDirty || Boolean(current?.dirtyAt);
             const tooLongNow = mode.tooLong;
@@ -567,7 +580,7 @@ class ConnectionPull {
                 if (plan.markDirty && !target.dirtyAt) wake.push({ id: target.id, dirtyAt: now });
             }
 
-            const outcome: Applied['outcome'] = mode.relink ? 'relinked' : rows.length > 0 || records.length > 0 ? 'applied' : 'unchanged';
+            const outcome: Applied['outcome'] = mode.relink ? 'relinked' : rows.length > 0 || records.length > 0 || joinReady ? 'applied' : 'unchanged';
             return { rows, wake, records, outcome };
         });
     }

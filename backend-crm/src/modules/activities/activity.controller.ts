@@ -45,6 +45,15 @@ export const activityController = {
         sendSuccess(res, await activityService.linkTargets(req.query, requireUser(req)));
     },
 
+    /** Video meeting choices of an owner (P3-1). */
+    async videoOptions(req: Request, res: Response): Promise<void> {
+        sendSuccess(res, await activityService.videoOptions(req.query, requireUser(req)));
+    },
+
+    async retryConference(req: Request, res: Response): Promise<void> {
+        sendSuccess(res, await activityService.retryConference(String(req.params.id), requireUser(req)), 'Asking the calendar for the video link again');
+    },
+
     async respond(req: Request, res: Response): Promise<void> {
         sendSuccess(res, await activityService.respond(String(req.params.id), req.body, requireUser(req)), 'Reply saved');
     },
