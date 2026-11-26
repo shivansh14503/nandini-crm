@@ -30,7 +30,7 @@ import './calendar.css';
 import { ROUTES } from '@/config/constants';
 import { useAuth } from '@/context/AuthContext';
 import { AppToast } from '@/components/common/AppToast';
-import { useCalendarFeed, useUpdateActivity } from '@/hooks/queries/useActivities';
+import { useBusyTimes, useCalendarFeed, useUpdateActivity } from '@/hooks/queries/useActivities';
 import { useCalendarHolidays } from '@/hooks/queries/useHolidays';
 import { useModuleFormConfig } from '@/hooks/queries/useFormConfigs';
 import { FOLLOWUP_TYPE_CATEGORY_KEY } from '@/utils/formConfig';
@@ -38,12 +38,15 @@ import { addDays, instantToZonedWallClock, isDay, zonedDayOf, zonedStartOfDay } 
 import {
     ACTIVITY_STATUSES,
     ACTIVITY_TYPES,
+    BUSY_MAX_USERS,
     NOTE_TYPE,
     TASK_TYPE,
     isActivityRelatedModule,
     type ActivityFormData,
     type ActivityRelatedModule,
     type ActivityStatus,
+    type BusyKind,
+    type BusyPerson,
     type CalendarFeedParams,
     type CalendarItem,
 } from '@/types/activity.types';
@@ -209,6 +212,50 @@ function holidayEvents(holiday: CalendarHoliday): EventInput[] {
     ];
 }
 
+/** Views where colleagues' busy times show as shaded background (time grids; a month cell can't show hours). */
+const BUSY_VIEWS: readonly CalendarViewKey[] = ['week', '3day', 'day'];
+const BUSY_KIND_ORDER: readonly BusyKind[] = ['away', 'tentative', 'busy'];
+const BUSY_COLORS: Readonly<Record<BusyKind, string>> = {
+    busy: 'var(--mui-palette-text-muted)',
+    tentative: 'var(--mui-palette-text-muted)',
+    away: 'var(--mui-palette-warning-main)',
+};
+
+/**
+ * Busy times (P2-6) as FullCalendar background events: per kind, everyone's blocks joined where they overlap (the
+ * shading says "someone selected is busy"; the activity form's strip shows who). Not clickable, never dragged.
+ */
+function busyEvents(people: readonly BusyPerson[]): EventInput[] {
+    const out: EventInput[] = [];
+    for (const kind of BUSY_KIND_ORDER) {
+        const spans = people
+            .flatMap((p) => p.busy.filter((b) => b.kind === kind).map((b) => ({ start: Date.parse(b.start), end: Date.parse(b.end) })))
+            .filter((b) => b.end > b.start)
+            .sort((a, b) => a.start - b.start);
+        const joined: { start: number; end: number }[] = [];
+        for (const span of spans) {
+            const last = joined[joined.length - 1];
+            if (last && span.start <= last.end) last.end = Math.max(last.end, span.end);
+            else joined.push({ ...span });
+        }
+        for (const span of joined) {
+            out.push({
+                id: `busy:${kind}:${span.start}`,
+                start: new Date(span.start).toISOString(),
+                end: new Date(span.end).toISOString(),
+                display: 'background',
+                color: BUSY_COLORS[kind],
+                className: `crm-cal-busy crm-cal-busy-${kind}`,
+                editable: false,
+                startEditable: false,
+                durationEditable: false,
+                extendedProps: { busyKind: kind, rank: 0 },
+            });
+        }
+    }
+    return out;
+}
+
 /** Initial filters from the query string (`?users=a,b`). */
 function filtersFromQuery(searchParams: URLSearchParams | null): CalendarFilterValues {
     const users = (searchParams?.get('users') ?? '')
@@ -275,6 +322,8 @@ export default function CalendarView() {
     const [related, setRelated] = useState<{ module: ActivityRelatedModule; id: string } | null>(null);
     const [quickCreate, setQuickCreate] = useState<{ open: boolean; prefill?: Partial<ActivityFormValues> }>({ open: false });
     const [filtersOpen, setFiltersOpen] = useState(false);
+    // "Show busy times" (P2-6; `?busy=1`): colleagues' busy blocks as shaded background in the time grids.
+    const [showBusy, setShowBusy] = useState(() => searchParams?.get('busy') === '1');
     const [toast, setToast] = useState<{ open: boolean; message: string; severity: 'success' | 'error' }>({ open: false, message: '', severity: 'success' });
     /** Entries moved by drag / resize while the save is on its way (so a re-render doesn't snap them back). */
     const [moved, setMoved] = useState<Record<string, Partial<CalendarItem>>>({});
@@ -298,16 +347,31 @@ export default function CalendarView() {
     const feed = useCalendarFeed(feedParams);
     const items = useMemo(() => feed.data?.items ?? [], [feed.data]);
 
+    // Busy times of the people shown (at most 20), only with colleagues selected and in a time-grid view.
+    const busyUsers = useMemo(() => (filters.users.length > 0 ? filters.users : [me]).filter(Boolean).slice(0, BUSY_MAX_USERS), [filters.users, me]);
+    const hasColleagues = busyUsers.some((u) => u.toLowerCase() !== me.toLowerCase());
+    const busyViewOk = Boolean(range && BUSY_VIEWS.includes(range.view));
+    const busyParams = useMemo(
+        () =>
+            range && showBusy && hasColleagues && busyViewOk
+                ? { users: busyUsers, from: zonedStartOfDay(range.start, timeZone).toISOString(), to: zonedStartOfDay(range.end, timeZone).toISOString() }
+                : undefined,
+        [range, showBusy, hasColleagues, busyViewOk, busyUsers, timeZone]
+    );
+    const busy = useBusyTimes(busyParams);
+    const busyEntries = useMemo<EventInput[]>(() => (busyParams && busy.data ? busyEvents(busy.data.people) : []), [busyParams, busy.data]);
+
     // Active company holidays on the days loaded (any signed-in user may read them).
     const holidays = useCalendarHolidays(range?.start, range ? addDays(range.end, -1) : undefined);
     const holidayEntries = useMemo<EventInput[]>(() => (holidays.data ?? []).flatMap(holidayEvents), [holidays.data]);
 
     const events = useMemo<EventInput[]>(
         () => [
+            ...busyEntries,
             ...holidayEntries,
             ...items.map((item) => toEventInput(moved[item.key] ? { ...item, ...moved[item.key] } : item, timeZone, coarsePointer)),
         ],
-        [holidayEntries, items, moved, timeZone, coarsePointer]
+        [busyEntries, holidayEntries, items, moved, timeZone, coarsePointer]
     );
 
     // ── Query string ────────────────────────────────────────────────────────
@@ -317,12 +381,13 @@ export default function CalendarView() {
         params.set('view', range.view);
         params.set('date', range.date);
         if (filters.users.length > 0) params.set('users', filters.users.join(','));
+        if (showBusy) params.set('busy', '1');
         if (activityId) params.set('activity', activityId);
         const next = `${ROUTES.CALENDAR}?${params.toString()}`;
         if (typeof window !== 'undefined' && `${window.location.pathname}${window.location.search}` !== next) {
             router.replace(next, { scroll: false });
         }
-    }, [range, filters.users, activityId, router]);
+    }, [range, filters.users, showBusy, activityId, router]);
 
     // ── Types ───────────────────────────────────────────────────────────────
     const getOptions = useModuleFormConfig('activities').getOptions;
@@ -505,6 +570,7 @@ export default function CalendarView() {
             typeLabel={typeLabel}
             typeIcon={typeIcon}
             miniMonth={miniMonth}
+            busyTimes={{ checked: showBusy, available: busyViewOk, onChange: setShowBusy }}
         />
     );
 

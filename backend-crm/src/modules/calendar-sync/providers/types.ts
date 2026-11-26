@@ -1,3 +1,4 @@
+import type { BusyKind } from '../busy.constants.js';
 import type { EventContext } from '../sync.mapping.google.js';
 import type { CrmShape, FieldGroup, ProviderAttendee, ProviderEvent } from '../sync.shapes.js';
 
@@ -6,8 +7,8 @@ import type { CrmShape, FieldGroup, ProviderAttendee, ProviderEvent } from '../s
  * clients behind one interface, no SDKs (D1). Access tokens are minted per call from the company credentials
  * (tokenSource.ts) and handed to the adapter inside a `CallCtx`; minting is not on the adapter. P2-2b shipped
  * `probeCalendar` (the per-row health check); P2-3b adds the event operations (create / patch / cancel / get /
- * undelete) of the push engine; pull / free-busy / watch join with P2-5…P2-7. The engine never imports an adapter
- * directly: it goes through `getAdapter()` (providers/registry.ts), which tests replace with the in-memory fake.
+ * undelete) of the push engine, P2-6 `freeBusy`; pull / watch join with P2-5 / P2-7. The engine never imports an
+ * adapter directly: it goes through `getAdapter()` (providers/registry.ts), which tests replace with the in-memory fake.
  *
  * Nothing here is ever logged with its values: tokens stay inside these objects.
  */
@@ -64,9 +65,26 @@ export interface PatchEventInput {
     sendUpdates: boolean;
 }
 
+/** One busy block of a calendar (times only: subjects, locations and privacy flags are never read into the CRM). */
+export interface ProviderBusyBlock {
+    start: Date;
+    end: Date;
+    kind: BusyKind;
+}
+
+/** Free/busy of one calendar: its blocks, or why the provider wouldn't give them (a fixed code, never provider text). */
+export type FreeBusyResult = { busy: ProviderBusyBlock[] } | { error: string };
+
+export interface FreeBusyRequest {
+    /** Lower-cased company emails (≤ 50 Google, ≤ 20 Graph per call). */
+    emails: readonly string[];
+    start: Date;
+    end: Date;
+}
+
 /**
- * The adapter interface: the health probe (P2-2b) plus the event operations of the push engine (P2-3b). Pull
- * (`listChanges`), free/busy, watch and RSVP join with P2-5…P2-8. Graph URLs use `ctx.mailbox` (`/users/{mailbox}`).
+ * The adapter interface: the health probe (P2-2b), the event operations of the push engine (P2-3b) and free/busy
+ * (P2-6). Pull (`listChanges`), watch and RSVP join with P2-5, P2-7 and P2-8. Graph URLs use `ctx.mailbox` (`/users/{mailbox}`).
  */
 export interface CalendarProviderAdapter {
     readonly key: CalendarProviderKey;
@@ -89,4 +107,12 @@ export interface CalendarProviderAdapter {
     getEvent(ctx: CallCtx, id: string): Promise<ProviderEvent | null>;
     /** Google only [U]: brings a deleted event of ours back with the full body; null when it can't (404 / 400). */
     undeleteEvent?(ctx: CallCtx, id: string, input: CreateEventInput): Promise<ProviderEvent | null>;
+    /**
+     * Busy times of `emails` in `[start, end)`, read **as `ctx`'s person** (P2-6; addendum §8.5): Google
+     * `POST /freeBusy` with the impersonated token (`calendar.events.freebusy`), Graph
+     * `POST /users/{mailbox}/calendar/getSchedule` with the app token. One interactive try, 5 s timeout. Every requested
+     * email is in the answer (a calendar the provider left out is `{ error: 'missing' }`). Rejects with a
+     * `ProviderError` when the whole call fails.
+     */
+    freeBusy(ctx: CallCtx, request: FreeBusyRequest): Promise<Map<string, FreeBusyResult>>;
 }

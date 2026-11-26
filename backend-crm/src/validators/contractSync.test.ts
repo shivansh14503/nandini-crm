@@ -37,6 +37,16 @@ import {
 import { MAX_ATTENDEES, NOTE_REMARKS_MESSAGE, PAST_START_MESSAGE, RELATED_RECORD_MESSAGE, activityPastIssues } from '../modules/activities/activity.validator.js';
 import * as zonedTime from '../utils/zonedTime.js';
 import { FOLLOW_UP_ACTIVITY_LOCKED, FOLLOW_UP_ORIGIN } from '../modules/activities/activity.access.js';
+import {
+    BUSY_KINDS,
+    BUSY_MAX_RANGE_DAYS,
+    BUSY_MAX_USERS,
+    BUSY_PERSON_STATUSES,
+    BUSY_SUGGEST_DAYS,
+    BUSY_SUGGEST_MAX_MINUTES,
+    BUSY_SUGGEST_MIN_MINUTES,
+    BUSY_WORKING_HOURS,
+} from '../modules/calendar-sync/busy.constants.js';
 import { ACTIVITY_ONLY_TYPE_MESSAGE, activityOnlyTypeIssues, isActivityOnlyFollowupType } from '../modules/shared/followupTypes.js';
 import { PASSWORD_MAX_LENGTH, PASSWORD_MIN_LENGTH, PASSWORD_RULES, passwordPolicyIssue } from '../modules/auth/passwordPolicy.js';
 import { INTEGRATION_PROVIDERS, SECRET_EXPIRY_WARNING_DAYS } from '../modules/integrations/integration.constants.js';
@@ -117,6 +127,17 @@ interface FrontendActivityTypes {
     ACTIVITY_REMINDERS: readonly string[];
     ACTIVITY_RELATED_MODULES: readonly string[];
     ACTIVITY_MAX_DURATION_DAYS: number;
+}
+
+interface FrontendBusyContract {
+    BUSY_KINDS: readonly string[];
+    BUSY_PERSON_STATUSES: readonly string[];
+    BUSY_MAX_USERS: number;
+    BUSY_MAX_RANGE_DAYS: number;
+    BUSY_SUGGEST_MIN_MINUTES: number;
+    BUSY_SUGGEST_MAX_MINUTES: number;
+    BUSY_WORKING_HOURS: string;
+    BUSY_SUGGEST_DAYS: number;
 }
 
 interface FrontendActivityContract {
@@ -356,6 +377,16 @@ describe('backend ↔ frontend contract', { skip }, () => {
         // Calendar sync (P2-3b): ActivityView.calendar's state / invites vocabulary.
         assert.deepEqual([...contract.CALENDAR_LINK_STATES], [...LINK_STATES]);
         assert.deepEqual([...contract.CALENDAR_LINK_INVITES], [...LINK_INVITES]);
+        // Busy times (P2-6): kinds, person statuses and the request limits the form's strip works within.
+        const busy = frontend as unknown as FrontendBusyContract;
+        assert.deepEqual([...busy.BUSY_KINDS], [...BUSY_KINDS]);
+        assert.deepEqual([...busy.BUSY_PERSON_STATUSES], [...BUSY_PERSON_STATUSES]);
+        assert.equal(busy.BUSY_MAX_USERS, BUSY_MAX_USERS);
+        assert.equal(busy.BUSY_MAX_RANGE_DAYS, BUSY_MAX_RANGE_DAYS);
+        assert.equal(busy.BUSY_SUGGEST_MIN_MINUTES, BUSY_SUGGEST_MIN_MINUTES);
+        assert.equal(busy.BUSY_SUGGEST_MAX_MINUTES, BUSY_SUGGEST_MAX_MINUTES);
+        assert.equal(busy.BUSY_WORKING_HOURS, BUSY_WORKING_HOURS);
+        assert.equal(busy.BUSY_SUGGEST_DAYS, BUSY_SUGGEST_DAYS);
     });
 
     it('frontend utils/zonedTime.ts converts times exactly as the backend', async () => {

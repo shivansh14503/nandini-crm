@@ -3,6 +3,7 @@ import { authenticate } from '../../middlewares/authMiddleware.js';
 import { validateRequest } from '../../middlewares/validateRequest.js';
 import { idParamSchema } from '../../validators/common.js';
 import { registerCrudRoutes } from '../shared/crud.js';
+import { busyLimiter } from '../calendar-sync/busy.rateLimit.js';
 import { activityController } from './activity.controller.js';
 
 /**
@@ -15,6 +16,12 @@ import { activityController } from './activity.controller.js';
  *                           under the leadFollowup / opportunityFollowup sources with activityId and editable false;
  *                           a record whose open follow-up activity the caller can see isn't listed again as a derived
  *                           follow-up (switch `followUpActivities` off: Phase 1 feed)
+ *   GET    /busy          ?users (csv, 1–20 usernames)&from&to (instants with a zone, to exclusive, at most 31 days)
+ *                           &exclude (activity id)&suggest (minutes, 5–1440) → { timeZone, from, to, generatedAt,
+ *                           people: [{ username, name, provider, status, sources, busy: [{ start, end, kind }] }],
+ *                           suggestion? } — colleagues' busy times while picking a time (Calendar Phase 2, P2-6):
+ *                           CRM activities plus their company calendar's free/busy, times only (no titles, any
+ *                           signed-in user, any active colleague). 60 / min per user (429 RATE_LIMITED)
  *   GET    /link-targets  ?module&search&limit → records of one module the caller can link to
  *   GET    /              ?page&limit&search&sortBy&sortOrder&followupType&status&excludeStatus&assignedTo&mine
  *                           &attending&relatedModule&relatedId&organizationId&contactId&rollup&from&to&overdue
@@ -35,6 +42,7 @@ router.use(authenticate);
 // Before the CRUD routes so these paths aren't captured by `/:id`.
 router.get('/meta', activityController.meta);
 router.get('/calendar', activityController.calendar);
+router.get('/busy', busyLimiter, activityController.busy);
 router.get('/link-targets', activityController.linkTargets);
 router.post('/:id/response', validateRequest({ params: idParamSchema }), activityController.respond);
 registerCrudRoutes(router, activityController);

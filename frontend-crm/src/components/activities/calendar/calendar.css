@@ -117,3 +117,23 @@
         overflow-x: auto;
     }
 }
+
+/*
+ * Colleagues' busy times (Calendar Phase 2, P2-6; "Show busy times"): FullCalendar background events tinted with the
+ * event `color` (text-muted for busy / tentative, warning for away; never a module colour). Tentative is hatched.
+ * They never take clicks, so a slot under them can still be selected to create an activity.
+ */
+.crm-calendar .crm-cal-busy,
+.crm-cal-busy {
+    --fc-classic-background-event-opacity: 22%;
+    pointer-events: none;
+}
+.crm-calendar .crm-cal-busy-tentative,
+.crm-cal-busy-tentative {
+    --fc-classic-background-event-opacity: 10%;
+    background-image: repeating-linear-gradient(
+        135deg,
+        color-mix(in srgb, var(--mui-palette-text-muted) 22%, transparent) 0 4px,
+        transparent 4px 8px
+    );
+}

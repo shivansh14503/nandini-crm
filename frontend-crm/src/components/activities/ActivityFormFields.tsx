@@ -21,6 +21,7 @@ import {
     withDropdownDefaults,
 } from '@/components/forms';
 import { getFormConfigs } from '@/services/masterData.store';
+import { useFormMode } from '@/context/FormModeContext';
 import { DynamicModuleCustomFields } from '@/components/forms/DynamicModuleCustomFields';
 import { CUSTOMER_RESPONSE_CATEGORY, CUSTOMER_RESPONSES } from '@/components/forms/FollowUpDecision';
 import { useDropdownOptionMeta, useModuleFormConfig } from '@/hooks/queries/useFormConfigs';
@@ -57,6 +58,7 @@ import { activityToFormValues, formValuesToPayload, useBusinessClock, type Busin
 import { RhfScheduleField } from './RhfScheduleField';
 import { RhfRelatedRecordField } from './RhfRelatedRecordField';
 import { RhfAttendeesField } from './RhfAttendeesField';
+import { ActivityBusyTimes } from './ActivityBusyTimes';
 
 /** A blank activity (Start / End are filled in from the business clock when the form opens). */
 export const DEFAULT_ACTIVITY_FORM: ActivityFormValues = {
@@ -261,6 +263,8 @@ export interface ActivityFormFieldsProps {
     lockedFields?: readonly string[];
     /** Why they are locked (shown above the fields and on each one). */
     lockReason?: string;
+    /** The activity being edited: its own block is left out of the busy times (it is the one moving). */
+    activityId?: string;
 }
 
 /**
@@ -268,7 +272,7 @@ export interface ActivityFormFieldsProps {
  * seeded section, each control named after its field key. Fields a Followup Type doesn't use
  * (`ACTIVITY_NOT_APPLICABLE`) aren't rendered. Render inside the form's FormProvider.
  */
-export function ActivityFormFields({ clock, durationOf, compact = false, onOpenRelated, lockedFields, lockReason }: ActivityFormFieldsProps) {
+export function ActivityFormFields({ clock, durationOf, compact = false, onOpenRelated, lockedFields, lockReason, activityId }: ActivityFormFieldsProps) {
     const { control, getValues, setValue, watch, getFieldState, trigger } = useFormContext<ActivityFormValues>();
     const formConfig = useModuleFormConfig('activities');
     const { getOptions } = formConfig;
@@ -276,6 +280,16 @@ export function ActivityFormFields({ clock, durationOf, compact = false, onOpenR
     const allDay = Boolean(useWatch({ control, name: 'allDay' }));
     const status = useWatch({ control, name: 'status' }) ?? PLANNED_STATUS;
     const organizationId = useWatch({ control, name: 'organizationId' }) ?? '';
+    // Busy times (P2-6): who and when, as the form has them now.
+    const { mode: formMode } = useFormMode();
+    const assignedTo = useWatch({ control, name: 'assignedTo' }) ?? '';
+    const attendees = useWatch({ control, name: 'attendees' });
+    const startAt = useWatch({ control, name: 'startAt' }) ?? '';
+    const endAt = useWatch({ control, name: 'endAt' }) ?? '';
+    const busyPeople = useMemo(
+        () => [assignedTo, ...(attendees ?? []).filter((a) => a.kind === 'user' && a.username).map((a) => a.username as string)].filter(Boolean),
+        [assignedTo, attendees]
+    );
     const isTask = followupType === TASK_TYPE;
     const isNote = followupType === NOTE_TYPE;
 
@@ -315,6 +329,14 @@ export function ActivityFormFields({ clock, durationOf, compact = false, onOpenR
             setValue('endAt', addMinutesToWallClock(next, length, tz), touch);
         }
         revalidateEnd();
+    };
+
+    /** A start picked on the busy-times strip: set as if typed into Start (End keeps the length). */
+    const pickStart = (wall: string) => {
+        const previous = getValues('startAt') ?? '';
+        if (wall === previous) return;
+        setValue('startAt', wall, touch);
+        handleStartChange(wall, previous);
     };
 
     // The Followup Type the End's default length was worked out for (a loaded record's type is taken as is).
@@ -538,6 +560,22 @@ export function ActivityFormFields({ clock, durationOf, compact = false, onOpenR
                         {shows('attendees') && (
                             <FormGridItem span="full">
                                 <RhfAttendeesField name="attendees" label="Attendees" organizationId={organizationId} />
+                            </FormGridItem>
+                        )}
+                        {/* Busy times of the owner and invited colleagues (timed, planned meetings; not Tasks or Notes). */}
+                        {shows('startAt') && !allDay && !isTask && !isNote && status === PLANNED_STATUS && busyPeople.length > 0 && (
+                            <FormGridItem span="full">
+                                <ActivityBusyTimes
+                                    people={busyPeople}
+                                    startAt={startAt}
+                                    endAt={endAt}
+                                    timeZone={tz}
+                                    now={clock.now}
+                                    excludeId={activityId}
+                                    onPickStart={pickStart}
+                                    collapsible={compact}
+                                    readOnly={isLocked('startAt') || formMode === 'view'}
+                                />
                             </FormGridItem>
                         )}
                     </FormGrid>

@@ -1,7 +1,7 @@
 # Nandini CRM — Database Design
 
 > **Status:** living document, generated from `backend-crm/prisma/schema.prisma` and `prisma/migrations/` (90 migrations,
-> latest `20261128100000_activity_calendar_sync`, Calendar Phase 2 P2-3b, as of 2026-11-26). Update it in the same change as any schema migration.
+> latest `20261128100000_activity_calendar_sync`, Calendar Phase 2 P2-3b, as of 2026-11-26; P2-6 busy times needed no migration: it reads `Activity` through the existing `[isDeleted, startAt]` index and stores nothing). Update it in the same change as any schema migration.
 > Related: [System design](system-design.md) · [API plan](api-plan.md) · [Build plan](build-plan.md)
 
 ---

@@ -2,8 +2,8 @@ import { randomBytes } from 'node:crypto';
 import { TokenError, type SyncFailure } from '../syncErrors.js';
 import { toGoogleEvent, toGooglePatch } from '../sync.mapping.google.js';
 import { normalizeGoogle } from '../sync.shapes.js';
-import { ProviderAuthError, ProviderBadRequestError, type ProviderError, ProviderNotFoundError, ProviderPreconditionError, RequestedIdTakenError } from './http.js';
-import type { AccessGrant, CalendarProviderAdapter, CallCtx, CreateEventInput } from './types.js';
+import { classifyFailure, ProviderAuthError, ProviderBadRequestError, type ProviderError, ProviderNotFoundError, ProviderPreconditionError, RequestedIdTakenError } from './http.js';
+import type { AccessGrant, CalendarProviderAdapter, CallCtx, CreateEventInput, FreeBusyRequest, FreeBusyResult, ProviderBusyBlock } from './types.js';
 import type { GoogleEventWire } from './wire.js';
 
 /**
@@ -45,6 +45,14 @@ export interface FakeProviderState {
     failNext: Partial<Record<FakeEventOp, ProviderError>>;
     /** Tests: runs at the start of every event call (something happening while the call is in flight). */
     onCall: ((op: FakeEventOp) => void | Promise<void>) | null;
+    /** Lower-cased email → that calendar's busy blocks (free/busy, P2-6). */
+    busy: Map<string, ProviderBusyBlock[]>;
+    /** Calendars whose free/busy only their owner may read (anyone else gets `notFound`, like Workspace sharing). */
+    freeBusyPrivate: Set<string>;
+    /** Lower-cased mailbox → HTTP status every free/busy call made as that person answers with (e.g. 503). */
+    freeBusyFailures: Map<string, number>;
+    /** Free/busy calls made, newest last: as whom, for which calendars. */
+    freeBusyCalls: { mailbox: string; emails: string[] }[];
 }
 
 export type FakeEventOp = 'create' | 'patch' | 'cancel' | 'get' | 'undelete';
@@ -61,6 +69,10 @@ export const fakeProviderState: FakeProviderState = {
     eventCalls: [],
     failNext: {},
     onCall: null,
+    busy: new Map(),
+    freeBusyPrivate: new Set(),
+    freeBusyFailures: new Map(),
+    freeBusyCalls: [],
 };
 
 export function resetFakeProvider(): void {
@@ -75,6 +87,10 @@ export function resetFakeProvider(): void {
     fakeProviderState.eventCalls = [];
     fakeProviderState.failNext = {};
     fakeProviderState.onCall = null;
+    fakeProviderState.busy.clear();
+    fakeProviderState.freeBusyPrivate.clear();
+    fakeProviderState.freeBusyFailures.clear();
+    fakeProviderState.freeBusyCalls = [];
 }
 
 let etagCounter = 0;
@@ -119,6 +135,24 @@ export function createFakeAdapter(options: { now?: () => Date } = {}): CalendarP
             checkToken(ctx, 'probe');
             const status = fakeProviderState.probeFailures.get(mailbox);
             if (status) throw new ProviderBadRequestError({ provider: 'fake', operation: 'probe', status, code: `http_${status}`, providerMessage: 'Calendar unavailable (fake).' });
+        },
+
+        async freeBusy(ctx: CallCtx, request: FreeBusyRequest): Promise<Map<string, FreeBusyResult>> {
+            const mailbox = ctx.mailbox.toLowerCase();
+            const emails = [...new Set(request.emails.map((e) => e.toLowerCase()))];
+            fakeProviderState.freeBusyCalls.push({ mailbox, emails });
+            checkToken(ctx, 'freebusy');
+            const status = fakeProviderState.freeBusyFailures.get(mailbox);
+            if (status) throw classifyFailure(status, { code: '', message: '' }, { provider: 'fake', operation: 'freebusy' });
+            const start = request.start.getTime();
+            const end = request.end.getTime();
+            return new Map(
+                emails.map((email): [string, FreeBusyResult] => {
+                    if (email !== mailbox && fakeProviderState.freeBusyPrivate.has(email)) return [email, { error: 'notFound' }];
+                    const blocks = (fakeProviderState.busy.get(email) ?? []).filter((b) => b.start.getTime() < end && b.end.getTime() > start);
+                    return [email, { busy: blocks.map((b) => ({ ...b })) }];
+                }),
+            );
         },
 
         ...fakeEventOps(now),

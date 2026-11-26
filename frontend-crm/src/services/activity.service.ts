@@ -6,6 +6,8 @@ import type {
     ActivityLinkTargetParams,
     ActivityMeta,
     AttendeeResponse,
+    BusyTimes,
+    BusyTimesParams,
     CalendarFeed,
     CalendarFeedParams,
 } from '../types/activity.types';
@@ -37,6 +39,15 @@ export const activityService = {
             status: csv(params.status),
         };
         return (await apiClient.get<ApiResponse<CalendarFeed>>(`${ENDPOINT}/calendar`, { params: query })).data;
+    },
+
+    /**
+     * Colleagues' busy times in `[from, to)`: CRM activities plus their company calendar, times only. With `suggest`,
+     * the server's first common free slot of that many minutes (the client never computes one itself).
+     */
+    busy: async (params: BusyTimesParams): Promise<BusyTimes> => {
+        const query: PaginationParams = { users: csv(params.users), from: params.from, to: params.to, exclude: params.exclude, suggest: params.suggest };
+        return (await apiClient.get<ApiResponse<BusyTimes>>(`${ENDPOINT}/busy`, { params: query })).data;
     },
 
     /** Records of one module the user can link an activity to ("Related To" picker). */
