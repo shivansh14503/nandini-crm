@@ -14,13 +14,10 @@ import { useQuotations } from '@/hooks/queries';
 import { useShowRecordNumber } from '@/hooks/queries/useDocumentSeries';
 import type { Quotation } from '@/types/quotation.types';
 import { formatDateTime } from '@/utils/date';
+import { fmtMoney } from '@/utils/formats';
 
-const formatCurrency = (val: number) =>
-    new Intl.NumberFormat('en-IN', {
-        style: 'currency',
-        currency: 'INR',
-        maximumFractionDigits: 0,
-    }).format(val);
+/** ₹ without decimals, in the company number grouping. */
+const formatCurrency = (val: number) => fmtMoney(val, { maxDecimals: 0 });
 
 const plainCellSx = { fontSize: '0.78rem', color: 'var(--crm-slate-700)' } as const;
 

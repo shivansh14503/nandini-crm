@@ -29,6 +29,7 @@ import type { ExtendedPartnerCompany } from '@/types/partner.types';
 import { telHref } from '@/utils/contactLinks';
 import { downloadCsv, type CsvColumn } from '@/utils/csvExport';
 import { formatDateTime } from '@/utils/date';
+import { fmtExportDateTime } from '@/utils/formats';
 import { PartnerCompanyDetailDrawer } from './PartnerCompanyDetailDrawer';
 import { useSearchScope, useSearchScopedRows } from '../search/SearchScope';
 import { ModuleScorecardSummary, useModuleScorecard } from '../common/scorecard/useModuleScorecard';
@@ -67,7 +68,8 @@ const CSV_COLUMNS: CsvColumn<ExtendedPartnerCompany>[] = [
     { header: 'City', value: cityOf },
     { header: 'Billing Country', value: countryOf },
     { header: 'Assigned to', value: assigneeOf },
-    { header: 'Date Created', value: (p) => (p.createdAt ? formatDateTime(p.createdAt) : '') },
+    // Export cells keep one fixed format whatever the company display formats.
+    { header: 'Date Created', value: (p) => (p.createdAt ? fmtExportDateTime(p.createdAt) : '') },
 ];
 
 const cellTextSx = { fontSize: '0.8rem', color: 'var(--crm-slate-600)' } as const;

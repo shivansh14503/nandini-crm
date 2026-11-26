@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
+import { DEFAULT_DISPLAY_FORMATS, type DisplayFormats } from '../company-formats/core/displayFormats.js';
+import { summarySubject } from './morningSummary.render.js';
 import {
     buildMorningSummary,
     SUMMARY_LIST_MAX,
@@ -258,5 +260,45 @@ describe('summary', () => {
         assert.equal(summary.headline, 'Nothing due today');
         assert.equal(summary.recipientName, 'palak');
         assert.equal(summaryHeadline({ todayActivities: 1, overdueActivities: 0, followupsToday: 2, overdueFollowups: 0, contracts: 0 }), '1 activity today · 2 follow-ups due');
+    });
+});
+
+describe('saved company formats', () => {
+    const us: DisplayFormats = { ...DEFAULT_DISPLAY_FORMATS, customized: true, dateFormat: 'MM/DD/YYYY', timeFormat: '24h' };
+    const rows = {
+        today: { total: 2, rows: [activity('timed'), activity('multiday', { allDay: true, startAt: new Date('2026-11-24T18:30:00.000Z'), endAt: new Date('2026-11-27T18:30:00.000Z') })] },
+        overdue: { total: 1, rows: [activity('o1', { startAt: new Date('2026-11-20T09:00:00.000Z'), endAt: null })] },
+        followupsToday: { leads: 1, opportunities: 0, rows: [followup('f1', { start: '2026-11-25T09:00:00.000Z' })] },
+        overdueFollowups: { leads: 1, opportunities: 0, rows: [followup('f2', { start: '2026-11-20T05:00:00.000Z' })] },
+        contracts: {
+            total: 2,
+            rows: [
+                contract('0007', { renewalReminderDate: new Date('2026-11-25T15:00:00.000Z'), endDate: new Date('2026-12-18T00:00:00.000Z') }),
+                contract('0008', { endDate: new Date('2026-12-01T00:00:00.000Z') }),
+            ],
+        },
+    };
+    const whens = (summary: ReturnType<typeof buildMorningSummary>) => summary.sections.flatMap((item) => item.items.map((row) => [row.when, row.detail]));
+
+    it('keeps the email’s own style without formats or with the defaults', () => {
+        const before = buildMorningSummary(input(rows));
+        assert.deepEqual(whens(buildMorningSummary(input({ ...rows, formats: DEFAULT_DISPLAY_FORMATS }))), whens(before));
+        assert.deepEqual(before.formats, DEFAULT_DISPLAY_FORMATS);
+        assert.equal(summarySubject(before), 'Your CRM day, Wed 25 Nov: 2 activities today · 1 follow-up due · 2 overdue · 2 contracts to renew');
+    });
+
+    it('writes every time, day label, heading and the subject in the saved formats', () => {
+        const summary = buildMorningSummary(input({ ...rows, formats: us }));
+        assert.deepEqual(whens(summary), [
+            ['All day (until Fri Nov 27)', ''],
+            ['10:30 – 11:30', ''],
+            ['Fri Nov 20, 14:30', ''],
+            ['14:30', 'Lead LD-f1'],
+            ['Due Fri Nov 20', 'Lead LD-f2 · 5 days overdue'],
+            ['Renewal, 15:00', 'CON-0007 · ends Fri Dec 18 (in 23 days)'],
+            ['Ends Tue Dec 1', 'CON-0008 · in 6 days'],
+        ]);
+        assert.equal(summary.dayLabel, 'Wednesday, November 25, 2026');
+        assert.equal(summarySubject(summary), 'Your CRM day, Wed Nov 25: 2 activities today · 1 follow-up due · 2 overdue · 2 contracts to renew');
     });
 });

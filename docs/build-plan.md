@@ -1,7 +1,7 @@
 # Nandini CRM — Build Plan
 
 > **Status:** living document. Part 1 records what has been built (reconstructed from git history, 115 commits
-> from 2026-10-15 to 2026-11-18; the snapshot as of 2026-11-26, Calendar Phase 2 P2-1, P2-2 and P2-3a, Profile Phase 1: My Profile, Profile Phase 2: Admin › Users and Profile Phase 3: notifications & preferences). Part 2
+> from 2026-10-15 to 2026-11-18; the snapshot as of 2026-11-26, Calendar Phase 2 P2-1, P2-2 and P2-3a, Profile Phase 1: My Profile, Profile Phase 2: Admin › Users, Profile Phase 3: notifications & preferences and Profile Phase 5 PR5a: company formats). Part 2
 > is the roadmap. Tick
 > items off and add new ones as work lands.
 > Related: [System design](system-design.md) · [Database design](database-design.md) · [API plan](api-plan.md)
@@ -445,8 +445,36 @@ keeps wall-clock times); all-day activities are entered as business-timezone day
       has that tab. The company email editor and its unique index (`UX_Users_email`) already shipped with Calendar
       P2-1 / P2-2 (Admin › API Integrations › People, `users/userEmail.service.ts`). Only calendars are listed for now
       (no other account kinds).
-- [ ] **Profile Phase 5: Admin › Company formats** — company-wide date, time and currency formats (one setting for everyone; no
-      per-user locale).
+- [x] **Profile Phase 5: Admin › Company formats** (PR5a, 2026-11-26) — one company-wide setting on a new admin page
+      (`/admin/company-formats`, not in Form Builder; `GET` / `PUT` / `DELETE /api/company-formats`, new single-row
+      `CompanyFormatSettings` table): date format (`DD-MMM-YYYY` default, `DD MMM YYYY`, `DD/MM/YYYY`, `DD-MM-YYYY`,
+      `MM/DD/YYYY`, `YYYY-MM-DD`), 12- or 24-hour time, Indian or international number grouping, with a live preview.
+      A shared pure formatter core (`company-formats/core/displayFormats.ts`, copied to `frontend-crm/src/lib/display-formats`
+      by `npm run sync:display-formats`, guarded by `contractSync.test.ts`). **No row = not customized**: every converted
+      site keeps its own pre-Phase-5 style (legacy hints, golden "today" table in `displayFormats.test.ts`), so nothing
+      changes until an admin saves; the first save unifies the styles; "Reset to CRM defaults" deletes the row.
+      Applies to the main frontend choke points (`utils/date`, drawer fields, activity labels, form view mode, custom
+      field values, record footer, list amounts, line items, scorecards, the calendar's time labels) and on the backend
+      to quotation PDFs (dates, amounts, numbers, amount in words: million / billion for international grouping; PDF
+      cache key includes the formats), the morning summary email, new bell notification texts and audit display
+      times. Audited as `CompanyFormats UPDATE` (CONFIG). Not done, by decision: a currency choice (fixed INR; opportunities
+      and quotations keep their per-record currency), a per-user locale, the timezone (stays `BUSINESS_TIMEZONE`),
+      native date / time pickers (browser format) and exports (fixed format), and re-formatting stored text
+      (notifications already sent, lead rating reasons, saved PDFs). Exactness exceptions: `Sept` → `Sep`, `-₹5`
+      instead of `₹-5`, frontend instants in the business timezone instead of the device's.
+- [ ] **Profile Phase 5b: remaining format call sites** — move the ad-hoc formatters still outside the PR5a choke points
+      onto `utils/formats` (each with a legacy hint, then the hints can go): private date / time helpers
+      (`integrationUi.tsx`, `profileUi.tsx`, `auditLogUi.tsx`, `TableFilterModal.tsx`, `followUpEvents.ts`,
+      `FollowUpDecision.tsx`, `TicketBadges.tsx`, `contractDates.ts` + `contractColumns.tsx`, `holidayDisplay.tsx` (needs a
+      yearly `DD-MMM` pattern), `applyFilter.ts`, `EmailVerification.tsx`, `EmailValidationView.tsx`,
+      `ScorecardsAdminView.tsx`, `PdfTemplatesListView.tsx`, `DocumentSeriesView.tsx`, `AuditEventsChart.tsx`); raw ISO
+      or baked strings (`leadColumns.tsx`, `opportunityColumns.tsx`, `relatedModules.config.tsx`); record counts
+      (`DataTablePagination`, `DataTableToolbar`, `DataTableFilterPills`, `SearchResultsView`, `OrganizationsMasterView`,
+      `ActiveFilterChips`, the five audit count helpers, `AuditIntegrityPanel`, `ScorecardPreview`, `utils/documentSeries.ts`);
+      inline formats (`DrawerLayoutRenderer` %/discount, calendar titles and `CalendarFilters` for MM/DD order,
+      `TimePicker` hints under 24h); backend `auditAdmin.present.ts` `cellValue` / `namedValue` (dates and amounts in
+      audit diffs, new behaviour), `summarize()` count and the `opportunity.validator.ts` commission message (mirrored in
+      the frontend schema).
 
 ## Part 3 — Keeping these documents current
 

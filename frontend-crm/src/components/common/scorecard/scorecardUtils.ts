@@ -3,6 +3,7 @@ import type { DropdownCategoryDto, FormConfigsPayload, FormFieldDefinitionDto, C
 import type { ScorecardConfig, ScorecardOption } from '@/types/scorecard.types';
 import { findCategory, moduleFields, optionsForModule } from '@/utils/formConfig';
 import { readFieldValue } from '../DataTable/useFormFieldColumns';
+import { fmtMoney } from '@/utils/formats';
 
 /**
  * Colors an admin can pick for a scorecard option. They are data (stored per option), not brand UI, so they stay
@@ -146,5 +147,5 @@ function withNewOptions(saved: ScorecardOption[], category: DropdownCategoryDto 
     return added.length ? [...saved, ...added] : saved;
 }
 
-export const formatScorecardAmount = (amount: number) =>
-    amount.toLocaleString('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 });
+/** A card total in rupees without decimals (`₹2,28,377`), in the company number grouping. */
+export const formatScorecardAmount = (amount: number) => fmtMoney(amount, { maxDecimals: 0 });

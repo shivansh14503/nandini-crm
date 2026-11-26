@@ -92,6 +92,7 @@ describe('exportCells', () => {
         const byHeader = Object.fromEntries(EXPORT_COLUMNS.map((column, i) => [column.header, cells[i]]));
         assert.equal(byHeader['Entry ID'], '101');
         assert.equal(byHeader['Time (UTC)'], '2026-11-23T04:45:00.000Z');
+        assert.equal(byHeader.Time, '23-Nov-2026, 10:15 AM');
         assert.equal(byHeader.User, 'Name of meera');
         assert.equal(byHeader.Username, 'meera');
         assert.equal(byHeader.Category, 'Data');

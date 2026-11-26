@@ -5,6 +5,7 @@ import { distinctFieldLabels, findCategory, formatCustomValue, isBuiltInCountryF
 import { formatPhoneDisplay } from '@/utils/phone';
 import { findCrmUser } from '@/services/masterData.store';
 import { isPrimaryEntry, primaryFirst } from '@/utils/primaryFirst';
+import { fmtDay, fmtMoney, fmtTime, getDisplayFormats } from '@/utils/formats';
 
 /**
  * The values a drawer layout can show for a module: the form's active fields (built-in and custom, labelled so no
@@ -97,34 +98,33 @@ export function rawFieldValue(record: AnyRecord | null | undefined, def: DrawerF
     return record[def.key];
 }
 
-const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-
 /** Fields that store a CRM username (Assigned to, an opportunity's Lead Given By). */
 const USER_FIELD_KEYS = new Set(['assignedTo', 'leadGivenBy']);
 
-/** 125000 → '₹1,25,000'. */
-export const formatRupees = (value: number): string => `₹${value.toLocaleString('en-IN', { maximumFractionDigits: 2 })}`;
+/** 125000 → '₹1,25,000' (up to 2 decimals, company number grouping). */
+export const formatRupees = (value: number): string => fmtMoney(value, { minDecimals: 0, maxDecimals: 2 });
 
 /** Whether a yes / no value (a checkbox or a system flag) is on. */
 export const isOn = (value: unknown): boolean => value === true || value === 'true' || value === 'Yes';
 
-/** '2026-11-28' → '28-Nov-2026'; anything else unchanged. */
+/** '2026-11-28' → '28-Nov-2026' (the company date format once saved); anything else unchanged. */
 export function formatDay(value: string): string {
-    const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(value);
-    return m ? `${m[3]}-${MONTHS[Number(m[2]) - 1] ?? m[2]}-${m[1]}` : value;
+    return fmtDay(value);
 }
 
-/** '14:30' → '02:30 PM'; anything else unchanged. */
+/**
+ * '14:30' → '02:30 PM'. Once the company formats are saved every readable time (also a stored 12-hour text such as
+ * '04:15 PM') follows the company time format; anything else is unchanged.
+ */
 export function formatClock(value: string): string {
-    const m = /^(\d{1,2}):(\d{2})$/.exec(value.trim());
-    if (!m) return value;
-    const h = Number(m[1]);
-    return `${String(h % 12 || 12).padStart(2, '0')}:${m[2]} ${h < 12 ? 'AM' : 'PM'}`;
+    const text = value.trim();
+    if (/^\d{1,2}:\d{2}$/.test(text)) return fmtTime(text, { legacy: 'hh:mm A' });
+    return getDisplayFormats().customized ? fmtTime(text) : value;
 }
 
 /**
  * A record's value of the field as display strings: one per entry for lists (emails, multi-selects), dropdown
- * labels instead of stored values, phones formatted, countries named, dates as dd-MMM-yyyy (with the paired time
+ * labels instead of stored values, phones formatted, countries named, dates in the company format (with the paired time
  * for date + time fields, e.g. nextFollowupDate + nextFollowupTime). The primary email comes first. Empty → [].
  */
 export function fieldDisplayValues(record: AnyRecord | null | undefined, def: DrawerFieldDef, configs: FormConfigsPayload | null | undefined): string[] {

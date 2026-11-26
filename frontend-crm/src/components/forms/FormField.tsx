@@ -6,6 +6,7 @@ import { useStatusPillColor } from '../common/scorecard/useStatusPillColor';
 import { ReadOnlyField } from './ReadOnlyField';
 import { EmailActions, PhoneActions } from '../common/ContactActions';
 import { getCountryNameByCode } from '@/data/addressMaster';
+import { fmtDay, useDisplayFormats } from '@/utils/formats';
 import {
     COMPACT_FIT_PX,
     contentFitSx,
@@ -72,9 +73,10 @@ const COPYABLE_PATTERN = /(phone|mobile|email|code)$/i;
 
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 
+/** An ISO day in view mode: `25 Nov 2026` until the company formats are saved, then the company date format. */
 function formatViewString(text: string): string {
     if (!ISO_DATE.test(text)) return text;
-    return new Date(`${text}T00:00:00`).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+    return fmtDay(text, { legacy: 'DD MMM YYYY' });
 }
 
 /** Collects displayable values from every value-bearing control nested inside a FormField (date + time, etc.). */
@@ -227,6 +229,8 @@ function fitFromName(name: string | undefined): FieldContentFit | undefined {
 
 export function FormField({ name, viewValue, viewActions, label: baseLabel, required: baseRequired, hint: baseHint, size: baseSize, fit, children, sx }: FormFieldProps) {
     const { mode } = useFormMode();
+    // Re-renders view values when the company formats change.
+    useDisplayFormats();
     const isAuto = useFieldAutoSize(name);
     // Admin overrides for this built-in field (inside a FormConfigProvider); undefined keeps the coded props.
     const override = useFieldOverride(name, { label: baseLabel, required: baseRequired, hint: baseHint, fieldSize: baseSize });

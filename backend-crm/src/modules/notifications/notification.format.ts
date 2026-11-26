@@ -1,59 +1,47 @@
-import { addDays, daysBetween, zonedDayOf } from '../../utils/zonedTime.js';
+import { addDays, daysBetween, instantToZonedWallClock, zonedDayOf } from '../../utils/zonedTime.js';
+import {
+    DEFAULT_DISPLAY_FORMATS,
+    formatLongDay,
+    formatShortDay,
+    formatTime as formatTimeIn,
+    type DisplayFormats,
+} from '../company-formats/core/displayFormats.js';
 
 /**
  * Pure date / time wording for notification texts and the morning summary email, always in the business timezone
- * (the CRM's users are in one zone; the server's own zone never matters). Day names are spelled here rather than by
- * `Intl` so the wording doesn't change with the ICU version.
+ * (the CRM's users are in one zone; the server's own zone never matters), in the company display formats (Admin ›
+ * Company formats; the default keeps this wording's own style). Day names come from the shared formatter core, which
+ * spells them by hand so the wording doesn't change with the ICU version.
  */
-
-const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'] as const;
-const WEEKDAYS_LONG = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'] as const;
-const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'] as const;
-const MONTHS_LONG = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'] as const;
 
 const MINUTE_MS = 60_000;
 
-function dayParts(day: string): { year: number; month: number; date: number; weekday: number } {
-    const [year, month, date] = day.split('-').map(Number);
-    return { year, month, date, weekday: new Date(Date.UTC(year, month - 1, date)).getUTCDay() };
+/** `2026-11-26` → `Thu 26 Nov` (`Thu Nov 26` for a saved MM/DD/YYYY). */
+export function formatDay(day: string, formats: DisplayFormats = DEFAULT_DISPLAY_FORMATS): string {
+    return formatShortDay(day, formats, { weekday: true });
 }
 
-/** `2026-11-26` → `Thu 26 Nov`. */
-export function formatDay(day: string): string {
-    const p = dayParts(day);
-    return `${WEEKDAYS[p.weekday]} ${p.date} ${MONTHS[p.month - 1]}`;
+/** `2026-11-26` → `Thursday, 26 November 2026` (`Thursday, November 26, 2026` for a saved MM/DD/YYYY). */
+export function formatDayLong(day: string, formats: DisplayFormats = DEFAULT_DISPLAY_FORMATS): string {
+    return formatLongDay(day, formats);
 }
 
-/** `2026-11-26` → `Thursday, 26 November 2026`. */
-export function formatDayLong(day: string): string {
-    const p = dayParts(day);
-    return `${WEEKDAYS_LONG[p.weekday]}, ${p.date} ${MONTHS_LONG[p.month - 1]} ${p.year}`;
-}
-
-const timeFormatters = new Map<string, Intl.DateTimeFormat>();
-
-/** `10:30 AM` in `timeZone`. */
-export function formatTime(instant: Date, timeZone: string): string {
-    let format = timeFormatters.get(timeZone);
-    if (!format) {
-        format = new Intl.DateTimeFormat('en-US', { timeZone, hour: 'numeric', minute: '2-digit', hour12: true });
-        timeFormatters.set(timeZone, format);
-    }
-    // Newer ICU puts a narrow no-break space before AM / PM; plain text and email clients read a space better.
-    return format.format(instant).replace(/[  ]/g, ' ');
+/** `10:30 AM` (`10:30` for a saved 24-hour format) in `timeZone`. */
+export function formatTime(instant: Date, timeZone: string, formats: DisplayFormats = DEFAULT_DISPLAY_FORMATS): string {
+    return formatTimeIn(instantToZonedWallClock(instant, timeZone), formats);
 }
 
 /** `today` / `tomorrow` / `yesterday`, else `Thu 26 Nov`, for a business-timezone day seen from `today`. */
-export function relativeDayWord(day: string, today: string): string {
+export function relativeDayWord(day: string, today: string, formats: DisplayFormats = DEFAULT_DISPLAY_FORMATS): string {
     if (day === today) return 'today';
     if (day === addDays(today, 1)) return 'tomorrow';
     if (day === addDays(today, -1)) return 'yesterday';
-    return formatDay(day);
+    return formatDay(day, formats);
 }
 
 /** `on Thu 26 Nov` / `today` / `tomorrow`: the word as it follows "Starts …". */
-export function onDay(day: string, today: string): string {
-    const word = relativeDayWord(day, today);
+export function onDay(day: string, today: string, formats: DisplayFormats = DEFAULT_DISPLAY_FORMATS): string {
+    const word = relativeDayWord(day, today, formats);
     return word === 'today' || word === 'tomorrow' || word === 'yesterday' ? word : `on ${word}`;
 }
 

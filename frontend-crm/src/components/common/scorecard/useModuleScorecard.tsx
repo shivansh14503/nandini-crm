@@ -7,6 +7,7 @@ import { useFormConfigs, useFormConfigsQuery } from '@/hooks/queries/useFormConf
 import { useScorecard, useScorecards } from '@/hooks/queries/useScorecards';
 import type { CrmModuleKey } from '@/types/formConfig.types';
 import { isAdminRole } from '@/utils/adminRoles';
+import { useDisplayFormats } from '@/utils/formats';
 import { StatusSummaryCards, StatusSummaryCardsSkeleton, type StatusSummaryItem } from '../StatusSummaryCards';
 import { SCORECARD_MODULES, scorecardAmountsOf, useDefaultScorecard } from './scorecardModules';
 import { SCORECARD_ALL_ID, buildScorecardCards, defaultScorecardConfig } from './scorecardItems';
@@ -76,9 +77,12 @@ export function useModuleScorecard<T>({ module, rows, onActiveChange }: UseModul
     const [activeIdState, setActiveIdState] = useState<string>(SCORECARD_ALL_ID);
 
     const allLabel = savedConfig?.allLabel || info.allLabel;
+    // The cards carry formatted amounts: rebuilt when the company formats change.
+    const formats = useDisplayFormats();
     const cards = useMemo(
         () => (scorecard ? buildScorecardCards({ scorecard, rows, allLabel, allIcon: info.allIcon, amounts }) : null),
-        [scorecard, rows, allLabel, info.allIcon, amounts]
+        // eslint-disable-next-line react-hooks/exhaustive-deps -- `formats` is read through the display store
+        [scorecard, rows, allLabel, info.allIcon, amounts, formats]
     );
 
     // A card that disappeared (option hidden / scorecard changed) falls back to "All".

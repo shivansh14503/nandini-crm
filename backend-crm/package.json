@@ -24,6 +24,7 @@
     "db:deploy": "prisma migrate deploy",
     "sync:pdf-document": "tsx scripts/syncPdfDocument.ts",
     "sync:drawer-layout": "tsx scripts/syncDrawerLayout.ts",
+    "sync:display-formats": "tsx scripts/syncDisplayFormats.ts",
     "build:city-master": "tsx scripts/buildCityMaster.ts",
     "align:backend-names": "tsx scripts/alignBackendNames.ts",
     "perf:audit": "tsx scripts/auditPerfCheck.ts",

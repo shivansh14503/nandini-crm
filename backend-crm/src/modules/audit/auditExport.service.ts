@@ -13,6 +13,7 @@ import { currentAuditOrigin, type AuditOrigin } from '../../services/auditContex
 import type { AuthUser } from '../../types/user.types.js';
 import { HttpError } from '../../utils/httpError.js';
 import { writeXlsx } from '../../utils/xlsxWriter.js';
+import { DEFAULT_DISPLAY_FORMATS } from '../company-formats/core/displayFormats.js';
 import { auditListQuerySchema, type AuditListFilters } from './auditAdmin.query.js';
 import { entryBatches, matchingWhere, presentContext } from './auditAdmin.service.js';
 import { CSV_BOM, csvLine, EXPORT_COLUMNS, exportCells, exportFileName, type ExportContext } from './auditExport.format.js';
@@ -79,7 +80,8 @@ function parseFilters(raw: unknown): AuditListFilters {
 async function exportContext(): Promise<ExportContext> {
     const [ctx, users] = await Promise.all([presentContext([]), prisma.user.findMany({ select: { username: true, fullName: true } })]);
     const names = new Map(users.map((user) => [user.username.toLowerCase(), user.fullName.trim() || user.username]));
-    return { ...ctx, userName: (username) => (username === 'system' ? 'System' : (names.get(username.toLowerCase()) ?? username)) };
+    // The export's "Time" column keeps its fixed format whatever the company formats say (spreadsheets read it).
+    return { ...ctx, formats: DEFAULT_DISPLAY_FORMATS, userName: (username) => (username === 'system' ? 'System' : (names.get(username.toLowerCase()) ?? username)) };
 }
 
 interface Progress {

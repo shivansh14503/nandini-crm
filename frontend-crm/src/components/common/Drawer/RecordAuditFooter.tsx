@@ -4,6 +4,7 @@ import React from 'react';
 import { Box, Typography } from '@mui/material';
 import EditCalendarOutlinedIcon from '@mui/icons-material/EditCalendarOutlined';
 import EventAvailableOutlinedIcon from '@mui/icons-material/EventAvailableOutlined';
+import { fmtInstant, useDisplayFormats } from '@/utils/formats';
 
 /** System-maintained authorship stamps of a record (set by the backend on create/update). */
 export interface RecordAuditStamp {
@@ -31,18 +32,10 @@ export function wasModified(stamp: RecordAuditStamp): boolean {
     return updated - created > CREATE_STAMP_TOLERANCE_MS;
 }
 
+/** `25 Nov 2026, 01:07 pm` until the company formats are saved; missing → undefined, unreadable → as stored. */
 const formatDateTime = (iso?: string | null) => {
     if (!iso) return undefined;
-    const d = new Date(iso);
-    if (Number.isNaN(d.getTime())) return iso;
-    return d.toLocaleString('en-IN', {
-        day: '2-digit',
-        month: 'short',
-        year: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit',
-        hour12: true,
-    });
+    return fmtInstant(iso, { legacyDate: 'DD MMM YYYY', legacyTime: 'hh:mm a' }) || iso;
 };
 
 /** One stamp: label on top, date below it, "by user" under that. Everything left-aligned and read in one glance. */
@@ -73,6 +66,7 @@ function AuditItem({ icon, label, at, by }: { icon: React.ReactNode; label: stri
 
 /** Created At / Last Modified stamps, side by side as the footer of a record's overview tab (drawer and view page). */
 export function RecordAuditFooter({ audit }: { audit: RecordAuditStamp }) {
+    useDisplayFormats();
     if (!audit.createdAt && !audit.updatedAt) return null;
     // Never edited since it was created: "Last Modified" stays blank.
     const modified = wasModified(audit);
