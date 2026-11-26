@@ -72,20 +72,14 @@ export function useReferralColumns(openRecord: (record: Referral) => void): Data
                 render: (r) => <ReferralStatusChip status={r.status} />,
             },
             {
-                id: 'organizationName',
-                label: 'ORGANIZATION NAME',
+                id: 'companyName',
+                label: 'COMPANY NAME',
                 sortable: true,
                 minWidth: 180,
                 render: (r) => (
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.8 }}>
                         <ApartmentIcon sx={{ fontSize: 14, color: 'var(--mui-palette-text-secondary)' }} />
-                        {r.organizationId && r.organizationName ? (
-                            <RecordLink href={ROUTES.ORGANIZATION_DETAIL(r.organizationId)} sx={{ fontSize: '0.8rem', fontWeight: 500 }}>
-                                {r.organizationName}
-                            </RecordLink>
-                        ) : (
-                            <Typography sx={{ ...plainCellSx, fontSize: '0.8rem', fontWeight: 500 }}>{r.organizationName || '-'}</Typography>
-                        )}
+                        <Typography sx={{ ...plainCellSx, fontSize: '0.8rem', fontWeight: 500 }}>{r.companyName || '-'}</Typography>
                     </Box>
                 ),
             },

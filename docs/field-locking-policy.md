@@ -50,7 +50,7 @@ Fields not listed are ○ Free today and stay ○ Free.
 |---|---|---|---|
 | Name | 🔒R | 🔒 | Identity |
 | Mobile | 🔒R | 🔒 | Unique key: the backend rejects a second contact with the same mobile |
-| Organization Name | 🔒R | 🔒 | Relation |
+| Company Name | ○ | ○ | Free text (replaced the Organization Name picker, 2026-11-27) |
 | Assigned to | 🔒R | 🔒 | Ownership |
 
 ### Organizations
@@ -194,7 +194,7 @@ leaves them out through `relaxedFields`. Only the system types hide fields; an a
 - Contracts (2026-11-25) added 5 🔒 and 6 ⭐ fields.
 - Referrals (2026-11-25) added 9 fields: 5 locked today (required: Name, Mobile, Organization Name, Status, Assigned
   to) and 1 ⭐ (Email Address); final 4 🔒, 2 ⭐ (Status, Email Address), and 3 ○ Free (Office Phone, Designation,
-  Department).
+  Department). On 2026-11-27 Organization Name became Company Name, a free (○) text field: 4 locked today.
 - Activities (2026-11-25) added 15 fields: 6 🔒 (4 required, 2 not) and 9 ○ Free.
 
 ## Implementation steps

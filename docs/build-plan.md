@@ -26,7 +26,7 @@
 | Leads, Opportunities, Quotations, Organizations, Contacts | ✅ CRUD, list filters, row-level access, audit, import (not quotations), lead conversion |
 | Tickets, Products, Partner Companies | ✅ CRUD, import |
 | Contracts | ✅ CRUD, list filters, status cards, row-level access, audit (no import) |
-| Referrals | ✅ CRUD, Active / Inactive status, audit, drawer layout, Form Builder (no import); Referred By on leads, opportunities and Convert Lead is picked from the active referrals (2026-11-25) |
+| Referrals | ✅ CRUD, Active / Inactive status, audit, drawer layout, Form Builder (no import); Referred By on leads, opportunities and Convert Lead is picked from the active referrals (2026-11-25); free-text Company Name instead of the Organization picker, one form section, and Create Referral Contact inside the Referral Search picker, whose filters are Name, Any Number and Any Email (2026-11-26) |
 | Activities & calendar | ✅ data model, API, Form Builder fields; Activities list, form, quick create, drawer, record Activities tabs and the Calendar page (FullCalendar v7, business timezone, drag to reschedule); reminders, assignment / invitation and contract renewal notifications in the navbar bell; 9 AM morning summary email (off until SMTP is set up). Google / Microsoft 365 sync is Phase 2 |
 | Documents | ✅ read-only list (filters, export / file download), drawer and detail page of the opportunities' documents |
 | Quotation PDF | ✅ templates, builder, preview, cached render |
