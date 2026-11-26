@@ -98,6 +98,28 @@ const includesQuery = (query: string, ...values: (string | undefined)[]) =>
 const containsText = (value: string | undefined, filter: string | undefined) =>
     !filter || (value || '').toLowerCase().includes(filter.toLowerCase());
 
+/** Digits only, so "98100 12345", "+91-9810012345" and "9810012345" all match a typed "98100". */
+const phoneDigits = (value: string | undefined) => (value ?? '').replace(/\D/g, '');
+
+/**
+ * The "Any Number" filter every picker uses (key `anyNumber`): matches when any of the record's numbers (mobile,
+ * office phone, phone 3–5, …) contains the typed digits. An empty filter matches everything.
+ */
+const matchesAnyNumber = (filter: string | undefined, ...numbers: (string | undefined)[]) => {
+    const wanted = phoneDigits(filter);
+    return !wanted || numbers.some((n) => phoneDigits(n).includes(wanted));
+};
+
+/** The "Any Email" filter (key `anyEmail`): any of the record's email addresses contains the typed text. */
+const matchesAnyEmail = (filter: string | undefined, emails: readonly { email?: string }[] | undefined) => {
+    const wanted = filter?.trim();
+    return !wanted || (emails ?? []).some((e) => containsText(e.email, wanted));
+};
+
+/** Shared "Any Number" / "Any Email" filter fields: same key, label and wording in every picker. */
+const anyNumberFilter = (width: number): LookupFilterField => ({ key: 'anyNumber', label: 'Any Number', type: 'text', width, placeholder: 'Mobile, office or any phone...' });
+const anyEmailFilter = (width: number): LookupFilterField => ({ key: 'anyEmail', label: 'Any Email', type: 'text', width, placeholder: 'Any of the email addresses...' });
+
 /** Full name from the user directory, falling back to the stored username. */
 const userName = (username: string | undefined) => findCrmUser(username)?.name || username || '';
 
@@ -239,13 +261,6 @@ export function partnerOrganizationPreset(
 /** A contact row in the picker: the contact plus its organization's Customer Type (looked up by the modal). */
 export type ContactLookupRow = Contact & { customerType: string };
 
-/** Digits only, so "98100 12345", "+91-9810012345" and "9810012345" all match a typed "98100". */
-const phoneDigits = (value: string | undefined) => (value ?? '').replace(/\D/g, '');
-const containsPhone = (value: string | undefined, filter: string | undefined) => {
-    const wanted = phoneDigits(filter);
-    return !wanted || phoneDigits(value).includes(wanted);
-};
-
 /** Mobile number with call / SMS / WhatsApp shortcuts (call and SMS hidden when the contact is on Do Not Call). */
 function ContactMobileCell({ contact }: { contact: Contact }) {
     if (!contact.mobile) return <>-</>;
@@ -302,21 +317,19 @@ export const CONTACT_LOOKUP_PRESET: LookupPreset<ContactLookupRow> = {
     ],
     filterFields: [
         { key: 'name', label: 'Name', type: 'text', width: 4, placeholder: 'Contact name...' },
-        { key: 'mobile', label: 'Mobile', type: 'text', width: 4, placeholder: 'Mobile number...' },
+        anyNumberFilter(4),
         { key: 'leftJob', label: 'Left Job', type: 'multiselect', width: 4, options: toOptions(['No', 'Yes']) },
-        { key: 'officePhone', label: 'Office Phone', type: 'text', width: 4, placeholder: 'Office phone...' },
-        { key: 'email', label: 'Any Email', type: 'text', width: 4, placeholder: 'Any of the contact’s emails...' },
+        anyEmailFilter(4),
         { key: 'organizationName', label: 'Organization Name', type: 'text', width: 4, placeholder: 'Organization...' },
         // Options come from the user directory, which loads after import; ContactLookupModal fills them in.
         { key: 'assignedTo', label: 'Assigned to', type: 'multiselect', width: 4, options: [] },
     ],
     searchPredicate: (c, f) => {
         if (!containsText(c.name, f.name?.trim())) return false;
-        if (!containsPhone(c.mobile, f.mobile)) return false;
-        if (!containsPhone(c.officePhone, f.officePhone)) return false;
+        // Mobile, Office Phone and Phone 3–5.
+        if (!matchesAnyNumber(f.anyNumber, c.mobile, c.officePhone, c.phone3, c.phone4, c.phone5)) return false;
         if (!containsText(c.organizationName, f.organizationName?.trim())) return false;
-        const email = f.email?.trim();
-        if (email && !c.emailAddress.some((e) => containsText(e.email, email))) return false;
+        if (!matchesAnyEmail(f.anyEmail, c.emailAddress)) return false;
         const leftJob = splitMulti(f.leftJob);
         if (leftJob.length && !leftJob.includes(c.leftJob)) return false;
         const owners = splitMulti(f.assignedTo);
@@ -435,7 +448,7 @@ export const PARTNER_COMPANY_LOOKUP_PRESET: LookupPreset<PartnerCompany> = {
     ],
     filterFields: [
         { key: 'partnerName', label: 'Partner Name', type: 'text', width: 4, placeholder: 'Search partner name...' },
-        { key: 'phone', label: 'Any Phone', type: 'text', width: 4, placeholder: 'Search phone...' },
+        anyNumberFilter(4),
         { key: 'city', label: 'City', type: 'text', width: 4, placeholder: 'e.g. Delhi, Karnal...' },
         // Options depend on master data that loads after import; PartnerCompanyLookupModal fills them in.
         { key: 'natureOfPartner', label: 'Nature of Partner', type: 'multiselect', width: 6, options: [] },
@@ -443,7 +456,8 @@ export const PARTNER_COMPANY_LOOKUP_PRESET: LookupPreset<PartnerCompany> = {
     ],
     searchPredicate: (p, f) => {
         if (!containsText(p.partnerName, f.partnerName?.trim())) return false;
-        if (!containsText(p.officePhone, f.phone?.trim())) return false;
+        // A partner company has one number, its Office Phone.
+        if (!matchesAnyNumber(f.anyNumber, p.officePhone)) return false;
         if (!containsText(p.city, f.city?.trim())) return false;
         const natures = splitMulti(f.natureOfPartner);
         if (natures.length && !natures.includes(p.natureOfPartner)) return false;
@@ -481,11 +495,14 @@ const primaryEmail = (r: Referral) => (r.emailAddress?.find((e) => e.isPrimary) 
 export const REFERRAL_LOOKUP_PRESET: LookupPreset<Referral> = {
     title: 'Referral Search',
     subtitle: 'Select an active referral. Click a row to choose it.',
-    searchPlaceholder: 'Name, organization, mobile or email',
+    searchPlaceholder: '',
+    // Searched by its filters only: Name, Any Number, Any Email.
+    showSearchBox: false,
     rowsPerPage: 10,
+    emptyMessage: 'No referrals found matching search criteria',
     columns: [
         { id: 'name', label: 'Name', minWidth: 170, sortable: true, render: (r) => <PrimaryText>{r.name}</PrimaryText> },
-        { id: 'organizationName', label: 'Organization', minWidth: 180, sortable: true },
+        { id: 'companyName', label: 'Company Name', minWidth: 180, sortable: true },
         { id: 'mobile', label: 'Mobile', minWidth: 120, sortable: true },
         { id: 'email', label: 'Email Address', minWidth: 200, getValue: primaryEmail },
         { id: 'designation', label: 'Designation', minWidth: 130, sortable: true },
@@ -493,14 +510,13 @@ export const REFERRAL_LOOKUP_PRESET: LookupPreset<Referral> = {
     ],
     filterFields: [
         { key: 'name', label: 'Name', type: 'text', width: 4, placeholder: 'Search referral name...' },
-        { key: 'organizationName', label: 'Organization', type: 'text', width: 4, placeholder: 'Search organization...' },
-        { key: 'phone', label: 'Any Phone', type: 'text', width: 4, placeholder: 'Search phone...' },
+        anyNumberFilter(4),
+        anyEmailFilter(4),
     ],
-    searchPredicate: (r, f, q) => {
+    searchPredicate: (r, f) => {
         if (!containsText(r.name, f.name?.trim())) return false;
-        if (!containsText(r.organizationName, f.organizationName?.trim())) return false;
-        if (f.phone?.trim() && !containsPhone(r.mobile, f.phone) && !containsPhone(r.officePhone, f.phone)) return false;
-        return includesQuery(q, r.name, r.organizationName, r.mobile, r.officePhone, primaryEmail(r));
+        if (!matchesAnyNumber(f.anyNumber, r.mobile, r.officePhone)) return false;
+        return matchesAnyEmail(f.anyEmail, r.emailAddress);
     },
 };
 

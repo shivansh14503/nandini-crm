@@ -24,17 +24,17 @@ import type { FilterFieldDef, FilterOption } from './types';
  * Every other active form field can still be added from "Add field".
  */
 export const DEFAULT_FILTER_KEYS: Record<CrmModuleKey, string[]> = {
-    leads: ['nextFollowupDate', 'assignedTo', 'leadSource', 'leadType', 'status', 'productCategory', 'createdAt', 'createdBy', 'mobile', 'converted', 'ageDays', 'unmodifiedDays'],
+    leads: ['nextFollowupDate', 'assignedTo', 'leadSource', 'leadType', 'status', 'productCategory', 'createdAt', 'createdBy', 'anyNumber', 'converted', 'ageDays', 'unmodifiedDays'],
     opportunities: ['nextFollowupDate', 'assignedTo', 'leadSource', 'type', 'salesStage', 'productCategory', 'organizationName', 'createdAt', 'createdBy', 'ageDays', 'unmodifiedDays'],
     quotations: ['quotationDate', 'validUntil', 'assignedTo', 'quoteStage', 'company', 'organizationName', 'createdAt', 'createdBy', 'ageDays', 'unmodifiedDays'],
     organizations: ['assignedTo', 'accountStatus', 'customerType', 'typeOfEntity', 'natureOfBusiness', 'leadSource', 'createdAt', 'createdBy', 'ageDays', 'unmodifiedDays'],
-    contacts: ['assignedTo', 'organizationName', 'designation', 'department', 'mobile', 'createdAt', 'createdBy', 'ageDays', 'unmodifiedDays'],
+    contacts: ['assignedTo', 'organizationName', 'designation', 'department', 'anyNumber', 'createdAt', 'createdBy', 'ageDays', 'unmodifiedDays'],
     products: ['category', 'type', 'taxType', 'taxRate', 'createdAt', 'createdBy', 'ageDays', 'unmodifiedDays'],
     tickets: ['dueDate', 'assignedTo', 'ticketStatus', 'ticketPriority', 'source', 'supportType', 'supportMode', 'organizationName', 'createdAt', 'createdBy', 'ageDays', 'unmodifiedDays'],
     contracts: ['status', 'assignedTo', 'contractTitle', 'contractPeriod', 'organizationName', 'startDate', 'endDate', 'renewalReminderDate', 'createdAt', 'createdBy', 'ageDays', 'unmodifiedDays'],
     activities: ['followupType', 'status', 'assignedTo', 'startAt', 'relatedTo', 'organizationName', 'createdAt', 'createdBy', 'ageDays', 'unmodifiedDays'],
     'partner-companies': ['assignedTo', 'natureOfPartner', 'createdAt', 'createdBy', 'ageDays', 'unmodifiedDays'],
-    referrals: ['status', 'assignedTo', 'organizationName', 'designation', 'department', 'mobile', 'createdAt', 'createdBy', 'ageDays', 'unmodifiedDays'],
+    referrals: ['status', 'assignedTo', 'companyName', 'designation', 'department', 'anyNumber', 'createdAt', 'createdBy', 'ageDays', 'unmodifiedDays'],
 };
 
 /** Lookup fields that hold a CRM user. */
@@ -63,6 +63,28 @@ function daysSince(iso: unknown): number | undefined {
     return Math.round((startOf(new Date()) - startOf(then)) / 86_400_000);
 }
 
+/** A field's value on a record: built-in fields are record properties, custom ones live under customFields. */
+const fieldValueOf = (field: FormFieldDefinitionDto, row: unknown): unknown =>
+    field.isSystem ? record(row)[field.fieldKey] : (record(row)[CUSTOM_FIELDS_KEY] as Record<string, unknown> | undefined)?.[field.fieldKey];
+
+/**
+ * "Any Number" / "Any Email" (keys `anyNumber` / `anyEmail`, as in the record pickers): every phone field of the
+ * module's form (Mobile, Office Phone, Phone 3–5, custom phone fields, …) or every email field, searched at once.
+ * Only for modules whose form has such a field.
+ */
+function anyOfFields(liveFields: FormFieldDefinitionDto[]): FilterFieldDef[] {
+    const phones = liveFields.filter((f) => f.fieldType === 'phone');
+    const emails = liveFields.filter((f) => f.fieldType === 'email');
+    const out: FilterFieldDef[] = [];
+    if (phones.length > 0) {
+        out.push({ key: 'anyNumber', label: 'Any Number', kind: 'text', digitsOnly: true, getValue: (r) => phones.map((f) => fieldValueOf(f, r)) });
+    }
+    if (emails.length > 0) {
+        out.push({ key: 'anyEmail', label: 'Any Email', kind: 'text', getValue: (r) => emails.map((f) => fieldValueOf(f, r)) });
+    }
+    return out;
+}
+
 /** Built-in record fields every module has, which aren't on the forms. */
 function pseudoFields(module: CrmModuleKey, users: FilterOption[]): FilterFieldDef[] {
     const fields: FilterFieldDef[] = [
@@ -84,9 +106,7 @@ function formField(
     configs: ReturnType<typeof useFormConfigs>,
     users: FilterOption[]
 ): FilterFieldDef | null {
-    const getValue = field.isSystem
-        ? (r: unknown) => record(r)[field.fieldKey]
-        : (r: unknown) => (record(r)[CUSTOM_FIELDS_KEY] as Record<string, unknown> | undefined)?.[field.fieldKey];
+    const getValue = (r: unknown) => fieldValueOf(field, r);
     const base = { key: field.fieldKey, label, getValue };
 
     if (USER_FIELD_KEYS.has(field.fieldKey)) return { ...base, kind: 'options', options: users, normalizeValue: normalizeUser };
@@ -137,8 +157,8 @@ export function useTableFilterFields(module: CrmModuleKey): ModuleFilterFields {
             seen.add(f.key);
             all.push(f);
         };
-        const pseudo = pseudoFields(module, people);
         const liveFields = moduleFields(configs, module).filter((f) => f.isActive && f.isVisibleInForm);
+        const pseudo = [...anyOfFields(liveFields), ...pseudoFields(module, people)];
         // Repeated form labels get their section prefix (Billing City / Shipping City), so no two fields share a name.
         const labels = distinctFieldLabels(liveFields, { reserved: pseudo.map((f) => f.label) });
         for (const field of liveFields) add(formField(field, labels.get(field.fieldKey) ?? field.label, configs, people));

@@ -8,10 +8,10 @@ import {
     enumWithDefault,
     optionalPhone,
     optionalText,
+    optionalUpperText,
     phone,
     requiredPersonName,
     requiredText,
-    requiredUpperText,
 } from '../../validators/common.js';
 import { corporateEmailListSchema } from '../shared/entityEmails.js';
 
@@ -22,12 +22,12 @@ export const ACTIVE_REFERRAL_STATUS: ReferralStatus = 'Active';
 
 /**
  * `ReferralFormData` rules from frontend-crm/src/validations/referral.schema.ts: the Contact form's rules
- * (contact.validator.ts) for the fields a referral shares with a contact, plus its Status.
+ * (contact.validator.ts) for the fields a referral shares with a contact, plus a free-text Company Name and Status.
  */
 export const referralInputSchema = z.object({
     name: requiredPersonName('Name', L.personName),
-    organizationName: requiredUpperText('Organization Name', L.organizationName),
-    organizationId: optionalText('Organization', 50),
+    /** Free text, stored uppercase like other company names (not linked to an organization). */
+    companyName: optionalUpperText('Company Name', L.organizationName),
     mobile: phone('Mobile'),
     officePhone: optionalPhone('Office Phone'),
     emailAddress: corporateEmailListSchema.default([]).superRefine((emails, ctx) => {
@@ -47,7 +47,6 @@ export type ReferralInput = z.infer<typeof referralInputSchema>;
 export const referralListQuerySchema = z.object({
     /** `?status=Active` lists the referrals the Referred By picker offers. */
     status: csvQuery,
-    organizationId: z.string().trim().max(50).optional(),
     assignedTo: z.string().trim().max(L.username).optional(),
     /** Only referrals assigned to the signed-in user ("My Referrals"). */
     mine: booleanQuery,
@@ -58,7 +57,7 @@ export const REFERRAL_SORT_FIELDS = [
     'createdAt',
     'updatedAt',
     'name',
-    'organizationName',
+    'companyName',
     'designation',
     'department',
     'assignedTo',

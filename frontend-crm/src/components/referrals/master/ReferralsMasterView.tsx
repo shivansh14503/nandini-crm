@@ -104,7 +104,7 @@ export function ReferralsMasterView() {
         const q = searchQuery.toLowerCase().trim();
         if (q) {
             result = result.filter((r) =>
-                [r.name, r.organizationName, r.mobile, r.officePhone, r.designation, r.status, ...(r.emailAddress ?? []).map((e) => e.email)]
+                [r.name, r.companyName, r.mobile, r.officePhone, r.designation, r.status, ...(r.emailAddress ?? []).map((e) => e.email)]
                     .some((v) => (v || '').toLowerCase().includes(q))
             );
         }
@@ -186,7 +186,7 @@ export function ReferralsMasterView() {
                     setSearchQuery(q);
                     setPage(0);
                 },
-                searchPlaceholder: 'Search by name, organization, phone, email...',
+                searchPlaceholder: 'Search by name, company, phone, email...',
                 pageIds: paginated.map((r) => r.id),
                 allIds: filteredReferrals.map((r) => r.id),
                 selectedIds,

@@ -247,7 +247,7 @@ function referralsLayout(): DrawerLayoutDocument {
         version: DRAWER_LAYOUT_VERSION,
         header: {
             titleField: 'name',
-            subtitleFields: ['designation', 'organizationName'],
+            subtitleFields: ['designation', 'companyName'],
             avatar: { kind: 'initials' },
             hotAvatar: false,
             badges: [{ id: 'g-status', field: 'status', prefix: '', style: 'auto', hideEmpty: true }],
@@ -255,7 +255,7 @@ function referralsLayout(): DrawerLayoutDocument {
         tabs: {
             overview: [
                 sec('s-overview', 'OVERVIEW', 'card', 2, [
-                    f('b-org', 'organizationName', 'emphasis', { ...full, label: 'Organisation', copy: true }),
+                    f('b-org', 'companyName', 'emphasis', { ...full, label: 'Company Name', copy: true }),
                     f('b-designation', 'designation', 'standard'),
                     f('b-department', 'department', 'standard'),
                     f('b-status', 'status', 'chip'),
