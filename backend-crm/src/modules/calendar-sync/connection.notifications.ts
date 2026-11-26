@@ -5,8 +5,10 @@ import { CALENDAR_CONNECTIONS_ENTITY_MODULE, CALENDAR_PROVIDER_LABELS, isCalenda
  * `calendar_reconnect` notifications (spec §4.7, D38): the bell tells an employee their calendar needs a reconnect.
  * They open the Connected calendars page (notificationHref: entityModule `calendar-connections`). Pure.
  *
- * Dedupe keys: one per connection and ISO week for a refused sign-in or a changed company app (re-armed weekly from
- * P2-3b's nightly step), and one per connection for "your time-limited access ends soon".
+ * Dedupe keys are per grant: they carry the connection's `connectedAt` (set again by every connect or reconnect, never
+ * by a token refresh), because a reconnect of the same account re-activates the same row (same id). So a reconnected
+ * calendar warns again. One per grant and ISO week for a refused sign-in or a changed company app (re-armed weekly
+ * from P2-3b's nightly step), and one per grant for "your time-limited access ends soon".
  */
 
 export type ReconnectCause = 'invalid_grant' | 'client_changed' | 'grant_expired' | 'expiring';
@@ -23,12 +25,23 @@ export function isoWeekKey(date: Date): string {
 
 const labelOf = (provider: string) => (isCalendarProvider(provider) ? CALENDAR_PROVIDER_LABELS[provider] : 'calendar');
 
-export function reconnectDedupeKey(connectionId: string, cause: ReconnectCause, now: Date): string {
-    return cause === 'expiring' ? `calendar_reconnect:${connectionId}:expiring` : `calendar_reconnect:${connectionId}:${isoWeekKey(now)}`;
+/** The connection fields a `calendar_reconnect` notification needs. */
+export interface ReconnectRow {
+    id: string;
+    username: string;
+    provider: string;
+    /** When this grant was made (connect / reconnect); scopes the dedupe key to the grant. */
+    connectedAt: Date;
+}
+
+/** `calendar_reconnect:<id>:<connectedAt ms>:expiring` or `calendar_reconnect:<id>:<connectedAt ms>:<ISO week>`. Pure. */
+export function reconnectDedupeKey(row: Pick<ReconnectRow, 'id' | 'connectedAt'>, cause: ReconnectCause, now: Date): string {
+    const grant = `calendar_reconnect:${row.id}:${row.connectedAt.getTime()}`;
+    return cause === 'expiring' ? `${grant}:expiring` : `${grant}:${isoWeekKey(now)}`;
 }
 
 export function reconnectNotification(
-    row: { id: string; username: string; provider: string },
+    row: ReconnectRow,
     cause: ReconnectCause,
     now: Date,
     accessEndsAt?: Date | null,
@@ -61,6 +74,6 @@ export function reconnectNotification(
         entityId: row.id,
         dueAt: cause === 'expiring' ? (accessEndsAt ?? null) : null,
         actor: 'system',
-        dedupeKey: reconnectDedupeKey(row.id, cause, now),
+        dedupeKey: reconnectDedupeKey(row, cause, now),
     };
 }

@@ -11,7 +11,7 @@ import { requireUser } from '../../utils/requestContext.js';
 import { sessionService } from '../auth/session.service.js';
 import { CALENDAR_PROVIDERS, OAUTH_COOKIE_NAME, type CalendarProvider } from './connection.constants.js';
 import { connectionService } from './connection.service.js';
-import { callbackLocation, completeConnect, oauthCookieClearOptions, oauthCookieOptions, startConnect } from './oauth.js';
+import { callbackLocation, callbackSessionOf, completeConnect, oauthCookieClearOptions, oauthCookieOptions, startConnect } from './oauth.js';
 
 /**
  * /api/calendar-connections: an employee's own calendar connection (Calendar Phase 2 P2-2; spec §3.3, §3.5, §6.3).
@@ -26,8 +26,10 @@ import { callbackLocation, completeConnect, oauthCookieClearOptions, oauthCookie
  *                                       inactive login), 400 (fake provider without a company email), 429 RATE_LIMITED.
  *   GET  /oauth/:provider/callback    the provider's redirect (not behind `authenticate`: it checks the session itself).
  *                                       Always 302 to <origin>/connected-calendars?calendar=connected&provider=<key> or
- *                                       ?calendar=error&reason=<fixed code>&provider=<key>; no session → APP_PUBLIC_URL
- *                                       /login?next=/connected-calendars. Clears crm_oauth.
+ *                                       ?calendar=error&reason=<fixed code>&provider=<key>; no session (or one that must
+ *                                       change its password, the mcp claim) → APP_PUBLIC_URL/login?next=/connected-calendars.
+ *                                       Clears crm_oauth. Start is behind `authenticate`, so an mcp token gets 403
+ *                                       PASSWORD_CHANGE_REQUIRED there.
  *   POST /:id/disconnect              → 204 (own connection; 404 otherwise). Revokes the grant at Google (Microsoft has
  *                                       no per-app revoke: tokens are deleted). Events already in the calendar stay.
  *
@@ -56,7 +58,7 @@ router.get('/oauth/:provider/callback', async (req: Request, res: Response) => {
     let location: string;
     try {
         const verified = tryVerifyToken(readToken(req));
-        let session: { id: number; username: string } | null = verified ? { id: verified.id, username: verified.username } : null;
+        let session = callbackSessionOf(verified);
         if (verified?.tracked && (await sessionService.isActive(verified.id, verified.jti)) === false) session = null;
         location = await completeConnect({
             provider: String(req.params.provider ?? ''),

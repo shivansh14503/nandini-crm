@@ -107,7 +107,7 @@ describe('usableConnection gates', () => {
         assert.equal(state.connections[0].statusReason, 'client_changed');
         assert.deepEqual(
             state.notifications.map((n) => [n.username, n.kind, n.entityModule, n.entityId, n.dedupeKey]),
-            [['asha', 'calendar_reconnect', 'calendar-connections', ID, `calendar_reconnect:${ID}:2026-W48`]],
+            [['asha', 'calendar_reconnect', 'calendar-connections', ID, `calendar_reconnect:${ID}:${now.getTime()}:2026-W48`]],
         );
         // The row is no longer active: a second use neither marks nor notifies again.
         await assert.rejects(usableConnection(ID, now), unavailable('reauth_required'));

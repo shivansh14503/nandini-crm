@@ -7,10 +7,12 @@ import type { AuthUser } from '../../types/user.types.js';
 import { HttpError } from '../../utils/httpError.js';
 import { GOOGLE_REVOKE_URL, GOOGLE_TOKEN_URL } from '../integrations/integration.constants.js';
 import { dropProviderCredentialsCache } from '../integrations/integration.service.js';
+import { userEmailService } from '../users/userEmail.service.js';
 import { connectionService } from './connection.service.js';
 import { withAccessToken } from './connectionTokens.js';
 import {
     callbackLocation,
+    callbackSessionOf,
     checkAccountPolicy,
     completeConnect,
     loginLocation,
@@ -105,10 +107,10 @@ afterEach(() => {
 });
 
 /** start → follow the fake "consent screen" → callback. */
-async function connectFake(user: UserRow, origin: string | undefined = CRM) {
-    const { authUrl, cookie } = await startConnect(authOf(user), 'fake', origin, now);
+async function connectFake(user: UserRow, origin: string | undefined = CRM, at: Date = now) {
+    const { authUrl, cookie } = await startConnect(authOf(user), 'fake', origin, at);
     const query = Object.fromEntries(new URL(authUrl).searchParams);
-    const location = await completeConnect({ provider: 'fake', query, cookie, session: sessionOf(user), now });
+    const location = await completeConnect({ provider: 'fake', query, cookie, session: sessionOf(user), now: at });
     return { location, cookie, query };
 }
 
@@ -211,6 +213,8 @@ describe('connect → callback → refresh → disconnect (fake provider)', () =
         // The user's email is never written by the test provider.
         assert.equal(state.users.find((u) => u.id === asha.id)!.email, 'asha@nandiniinfosys.com');
         assert.ok(state.locks.some((key) => key.startsWith('calendar-connection:user:asha')));
+        // No email was written, so the user directory cache stays.
+        assert.ok(!state.cacheInvalidations.some((pattern) => pattern.startsWith('cache:lookups:users')));
     });
 
     it('PKCE: the code only exchanges with the verifier sealed in the cookie', async () => {
@@ -260,6 +264,78 @@ describe('connect → callback → refresh → disconnect (fake provider)', () =
         await expectHttp(connectionService.disconnectOwn(row.id, authOf(ravi)), 404);
     });
 
+    it('a refusal after a reconnect of the same account notifies again in the same week (dedupe key per grant)', async () => {
+        await connectFake(asha);
+        const id = state.connections[0].id;
+        const refuseRefresh = async (at: Date) => {
+            fakeClock = at;
+            fakeProviderState.failNextRefresh = 'invalid_grant';
+            await assert.rejects(withAccessToken(id, async (token) => token, () => at));
+        };
+        await refuseRefresh(new Date(now.getTime() + 56 * 60_000));
+        assert.equal(state.connections[0].status, 'reauth_required');
+        assert.equal(state.notifications.length, 1);
+
+        const reconnectAt = new Date(now.getTime() + 2 * 60 * 60_000);
+        fakeClock = reconnectAt;
+        assert.equal(params((await connectFake(asha, CRM, reconnectAt)).location).calendar, 'connected');
+        assert.equal(state.connections.length, 1, 'same row');
+        assert.equal(state.connections[0].id, id);
+        assert.equal(state.connections[0].connectedAt.getTime(), reconnectAt.getTime());
+
+        await refuseRefresh(new Date(reconnectAt.getTime() + 56 * 60_000));
+        assert.equal(state.notifications.length, 2, 'the second refusal of the new grant is not deduped away');
+        assert.deepEqual(
+            state.notifications.map((n) => n.dedupeKey),
+            [`calendar_reconnect:${id}:${now.getTime()}:2026-W48`, `calendar_reconnect:${id}:${reconnectAt.getTime()}:2026-W48`],
+        );
+    });
+
+    it('an admin email change racing a connect waits for it, then answers 409 EMAIL_CONNECTED', async () => {
+        state.holdLocks = true;
+        let admin: Promise<unknown> | null = null;
+        // The moment the connect holds the user's lock (before it reads the email or writes the row), the admin saves.
+        state.onLocked = (keys) => {
+            if (admin || !keys.includes('calendar-connection:user:asha')) return;
+            admin = userEmailService
+                .setEmail('asha', { email: 'asha.rao@nandiniinfosys.com' }, { companyDomains: ['nandiniinfosys.com'], actor: authOf(ravi) })
+                .then(
+                    () => null,
+                    (err: unknown) => err,
+                );
+        };
+        const { location } = await connectFake(asha);
+        assert.equal(params(location).calendar, 'connected');
+        const err = await admin!;
+        assert.ok(err instanceof HttpError, 'the admin save was refused');
+        assert.equal(err.statusCode, 409);
+        assert.equal(err.code, 'EMAIL_CONNECTED');
+        assert.equal(state.users.find((u) => u.id === asha.id)!.email, 'asha@nandiniinfosys.com');
+        assert.equal(state.connections[0].accountEmail, 'asha@nandiniinfosys.com');
+    });
+
+    it('a connect racing an admin email change waits for it, then refuses the old address (email_mismatch)', async () => {
+        state.holdLocks = true;
+        const { authUrl, cookie } = await startConnect(authOf(asha), 'fake', CRM, now);
+        const query = Object.fromEntries(new URL(authUrl).searchParams);
+        let connecting: Promise<string> | null = null;
+        // The admin's save holds the user's lock (also taken when clearing): the callback arrives meanwhile.
+        state.onLocked = (keys) => {
+            if (connecting || !keys.includes('user-email:asha.rao@nandiniinfosys.com')) return;
+            assert.ok(keys.includes('calendar-connection:user:asha'));
+            connecting = completeConnect({ provider: 'fake', query, cookie, session: sessionOf(asha), now });
+        };
+        await userEmailService.setEmail('asha', { email: 'asha.rao@nandiniinfosys.com' }, { companyDomains: ['nandiniinfosys.com'], actor: authOf(ravi) });
+        assert.equal(params(await connecting!).reason, 'email_mismatch');
+        assert.equal(state.connections.filter((c) => c.status === 'active').length, 0);
+        assert.equal(state.users.find((u) => u.id === asha.id)!.email, 'asha.rao@nandiniinfosys.com');
+    });
+
+    it('clearing the email takes the same lock, so it can not slip past a connect either', async () => {
+        await userEmailService.setEmail('ravi', { email: '' }, { companyDomains: ['nandiniinfosys.com'], actor: authOf(asha) });
+        assert.ok(state.locks.includes('calendar-connection:user:ravi'));
+    });
+
     it('reconnecting the same account re-activates its row; the list shows no token', async () => {
         await connectFake(asha);
         const id = state.connections[0].id;
@@ -290,6 +366,12 @@ describe('callback decision table', () => {
         const { authUrl, cookie } = await startConnect(authOf(asha), 'fake', CRM, now);
         const query = Object.fromEntries(new URL(authUrl).searchParams);
         assert.equal(await completeConnect({ provider: 'fake', query, cookie, session: null, now }), loginLocation());
+    });
+
+    it('a session that must change its password first is treated as none (sign in → My Profile › Security)', () => {
+        assert.equal(callbackSessionOf(undefined), null);
+        assert.equal(callbackSessionOf({ id: 1, username: 'asha', mustChangePassword: true }), null);
+        assert.deepEqual(callbackSessionOf({ id: 1, username: 'asha', mustChangePassword: false }), { id: 1, username: 'asha' });
     });
 
     it('missing, expired or someone else\'s cookie → expired (back to APP_PUBLIC_URL)', async () => {
@@ -457,6 +539,7 @@ describe('Google connect (replayed answers)', () => {
         const { location } = await connectGoogle(neel);
         assert.equal(params(location).calendar, 'connected');
         assert.equal(state.users.find((u) => u.id === neel.id)!.email, 'neel@nandiniinfosys.com');
+        assert.ok(state.cacheInvalidations.includes('cache:lookups:users*'), 'the user directory cache is dropped after the commit');
         assert.deepEqual(
             state.audits.map((a) => [a.entityType, a.action, a.changedBy]),
             [

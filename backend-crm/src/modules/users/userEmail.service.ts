@@ -5,7 +5,7 @@ import { auditService } from '../../services/audit.service.js';
 import { CACHE_KEYS, cacheService } from '../../services/cache.service.js';
 import type { AuthUser } from '../../types/user.types.js';
 import { HttpError } from '../../utils/httpError.js';
-import { LIVE_CONNECTION_STATUSES } from '../calendar-sync/connection.constants.js';
+import { calendarConnectionUserLockKey, LIVE_CONNECTION_STATUSES } from '../calendar-sync/connection.constants.js';
 import { acquireLocks, runInTransaction } from '../shared/transactions.js';
 
 /**
@@ -142,12 +142,14 @@ export const userEmailService = {
         const { email, allowOtherDomain } = userEmailBodySchema.parse(body);
         assertCompanyEmailAllowed(email, allowOtherDomain, options.companyDomains);
         const { row, changed } = await runInTransaction(async (tx) => {
-            // Two admins saving the same address at once: the second waits, then sees the first as a duplicate.
-            if (email) await acquireLocks(tx, [userEmailLockKey(email)]);
+            // Two admins saving the same address at once: the second waits, then sees the first as a duplicate. The user's
+            // calendar-connection lock (also when clearing) makes a calendar connect for this user wait, or wait for it,
+            // so the EMAIL_CONNECTED check below and the connect's email check never both pass on stale data.
+            await acquireLocks(tx, [email ? userEmailLockKey(email) : null, calendarConnectionUserLockKey(username)]);
             const user = await tx.user.findUnique({ where: { username }, select: USER_EMAIL_SELECT });
             if (!user) throw HttpError.notFound(`User '${username}' not found.`);
             if (user.email === email) return { row: user, changed: false };
-            await assertNotConnectedElsewhere(tx, user.username, email);
+            await assertEmailKeepsConnection(tx, user.username, email);
             if (email && holdsAddress(user)) await assertUserEmailFree(tx, email, user.id);
             const updated = await tx.user.update({ where: { id: user.id }, data: { email }, select: USER_EMAIL_SELECT });
             await auditService.record(tx, {
@@ -175,7 +177,7 @@ export const userEmailService = {
     ): Promise<'set' | 'not_company' | 'taken' | 'not_empty'> {
         const email = normalizeUserEmail(input.email);
         if (!email || !isCompanyEmail(email, input.companyDomains)) return 'not_company';
-        await acquireLocks(tx, [`user-email:${email}`]);
+        await acquireLocks(tx, [userEmailLockKey(email)]);
         const user = await tx.user.findUnique({ where: { id: input.userId }, select: USER_EMAIL_SELECT });
         if (!user || normalizeUserEmail(user.email)) return 'not_empty';
         const holder = await tx.user.findFirst({ where: { email, isActive: true, isGroupUser: false, id: { not: user.id } }, select: { username: true } });
@@ -199,9 +201,11 @@ export const userEmailService = {
 
 /**
  * 409 `EMAIL_CONNECTED` when the user has a live calendar connection (Calendar Phase 2 P2-2) on another address: the
- * CRM email and the connected account must stay the same person (attendee / organizer matching relies on it).
+ * CRM email and the connected account must stay the same person (attendee / organizer matching relies on it). Every
+ * writer of `Users.email` calls it before changing an address, holding `calendarConnectionUserLockKey(username)`
+ * (taken in the same `acquireLocks` call as `userEmailLockKey`, or before it), the lock the calendar connect takes.
  */
-async function assertNotConnectedElsewhere(tx: TransactionClient, username: string, email: string | null): Promise<void> {
+export async function assertEmailKeepsConnection(tx: TransactionClient, username: string, email: string | null): Promise<void> {
     const live = await tx.calendarConnection.findFirst({
         where: { username, kind: 'calendar', status: { in: [...LIVE_CONNECTION_STATUSES] } },
         select: { accountEmail: true },

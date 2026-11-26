@@ -12,6 +12,7 @@ import { normalizeUserEmail } from '../users/userEmail.service.js';
 import {
     CALENDAR_PROVIDER_LABELS,
     CALENDAR_PROVIDERS,
+    calendarConnectionUserLockKey,
     CONNECTION_STATUSES,
     GRANT_EXPIRY_WARNING_DAYS,
     LIVE_CONNECTION_STATUSES,
@@ -266,7 +267,7 @@ async function disconnectOne(id: string, options: DisconnectOptions & { ownerUse
         throw HttpError.notFound('Calendar connection not found.');
     }
     const task = await runInTransaction(async (tx) => {
-        await acquireLocks(tx, [`calendar-connection:user:${peek.username.toLowerCase()}`]);
+        await acquireLocks(tx, [calendarConnectionUserLockKey(peek.username)]);
         const row = await tx.calendarConnection.findUnique({ where: { id } });
         if (!row || !(LIVE_CONNECTION_STATUSES as readonly string[]).includes(row.status)) return null;
         return disconnectInTransaction(tx, row, options);
@@ -378,14 +379,14 @@ export const connectionService = {
     },
 
     /**
-     * Nightly: `calendar_reconnect` 3 days before a time-limited Google grant ends (one per connection, dedupe
-     * `calendar_reconnect:<id>:expiring`).
+     * Nightly: `calendar_reconnect` 3 days before a time-limited Google grant ends (one per grant, dedupe
+     * `calendar_reconnect:<id>:<connectedAt ms>:expiring`, so a reconnect with a new time-limited grant warns again).
      */
     async notifyExpiringGrants(now: Date = new Date()): Promise<number> {
         const horizon = new Date(now.getTime() + GRANT_EXPIRY_WARNING_DAYS * 24 * 60 * 60 * 1000);
         const rows = await prisma.calendarConnection.findMany({
             where: { status: 'active', refreshTokenExpiresAt: { not: null, gt: now, lte: horizon } },
-            select: { id: true, username: true, provider: true, refreshTokenExpiresAt: true },
+            select: { id: true, username: true, provider: true, connectedAt: true, refreshTokenExpiresAt: true },
         });
         if (rows.length === 0) return 0;
         const { created } = await notify(rows.map((row) => reconnectNotification(row, 'expiring', now, row.refreshTokenExpiresAt)));

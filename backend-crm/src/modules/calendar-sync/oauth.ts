@@ -13,10 +13,11 @@ import { isUniqueViolation } from '../../utils/prismaErrors.js';
 import { loadCalendarSettings } from '../integrations/integration.settings.js';
 import { redirectUriFor, type IntegrationProviderKey } from '../integrations/integration.constants.js';
 import { acquireLocks, runInTransaction } from '../shared/transactions.js';
-import { isCompanyEmail, normalizeUserEmail, userEmailService } from '../users/userEmail.service.js';
+import { invalidateUserCaches, isCompanyEmail, normalizeUserEmail, userEmailService } from '../users/userEmail.service.js';
 import {
     ACCOUNT_EMAIL_MAX_FOR_USER,
     CALENDAR_CONNECTIONS_PAGE,
+    calendarConnectionUserLockKey,
     CALENDAR_PROVIDER_LABELS,
     LIVE_CONNECTION_STATUSES,
     OAUTH_COOKIE_PATH,
@@ -129,6 +130,16 @@ export function callbackLocation(origin: string, outcome: CallbackOutcome): stri
 }
 
 /** Where a callback without a CRM session goes: sign in, then back to the page. */
+/**
+ * The CRM session the callback acts for, from the verified session cookie: none for a token that must change its
+ * password first (the `mcp` claim, Admin › Users), which `authenticate` would refuse everywhere else, so such a
+ * browser goes to sign-in (and from there to My Profile › Security) instead of connecting. Pure.
+ */
+export function callbackSessionOf(verified: { id: number; username: string; mustChangePassword?: boolean } | null | undefined): CallbackSession | null {
+    if (!verified || verified.mustChangePassword) return null;
+    return { id: verified.id, username: verified.username };
+}
+
 export const loginLocation = () => `${appPublicUrl()}/login?next=${encodeURIComponent(CALENDAR_CONNECTIONS_PAGE)}`;
 
 /**
@@ -227,12 +238,18 @@ class ConnectRefusal extends Error {
     }
 }
 
+/** The CRM user a callback acts for. */
+export interface CallbackSession {
+    id: number;
+    username: string;
+}
+
 export interface CallbackInput {
     provider: string;
     query: Record<string, unknown>;
     cookie: unknown;
-    /** The verified CRM session (null when the request has none or it was revoked). */
-    session: { id: number; username: string } | null;
+    /** The verified CRM session (null when the request has none, it was revoked, or must change its password). */
+    session: CallbackSession | null;
     now?: Date;
 }
 
@@ -289,7 +306,7 @@ interface SaveResult {
  */
 async function saveConnection(tx: TransactionClient, input: SaveInput): Promise<SaveResult> {
     const { session, provider, identity, now } = input;
-    await acquireLocks(tx, [`calendar-connection:user:${session.username.toLowerCase()}`, `calendar-connection:account:${provider}:${identity.accountId}`]);
+    await acquireLocks(tx, [calendarConnectionUserLockKey(session.username), `calendar-connection:account:${provider}:${identity.accountId}`]);
 
     const user = await tx.user.findUnique({ where: { id: session.id }, select: { id: true, username: true, email: true, isActive: true, isGroupUser: true } });
     if (!user || !user.isActive || user.isGroupUser || user.username !== session.username) throw new ConnectRefusal('invalid');
@@ -454,6 +471,8 @@ export async function completeConnect(input: CallbackInput): Promise<string> {
         }
     }
 
+    // An auto-filled CRM email changes the user directory (lookups carry `email`): drop its cache like every email write.
+    if (saved.emailFilled) await invalidateUserCaches();
     if (saved.displaced) await revokeQuietly(saved.displaced);
     logger.info({ provider, connectionId: saved.connectionId, emailFilled: saved.emailFilled }, 'Calendar connected');
     // P2-3 enqueues the `connect` job here (first pull + backfill); until then a connection only stores the grant.

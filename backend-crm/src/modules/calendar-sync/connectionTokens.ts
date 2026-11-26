@@ -102,7 +102,7 @@ const notifyQuietly = async (input: Parameters<typeof reconnectNotification>, co
  * `active` → `reauth_required` (conditional, so only one process notifies) and a `calendar_reconnect` notification.
  * Links stay dirty and push after the reconnect (P2-3).
  */
-export async function markReauthRequired(row: Pick<ConnectionRow, 'id' | 'username' | 'provider'>, reason: Extract<ConnectionStatusReason, 'invalid_grant' | 'client_changed' | 'grant_expired'>, now: Date = new Date()): Promise<boolean> {
+export async function markReauthRequired(row: Pick<ConnectionRow, 'id' | 'username' | 'provider' | 'connectedAt'>, reason: Extract<ConnectionStatusReason, 'invalid_grant' | 'client_changed' | 'grant_expired'>, now: Date = new Date()): Promise<boolean> {
     const { count } = await prisma.calendarConnection.updateMany({
         where: { id: row.id, status: 'active' },
         data: { status: 'reauth_required', statusReason: reason, lastErrorAt: now, lastErrorCode: reason },

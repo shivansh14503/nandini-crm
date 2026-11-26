@@ -164,6 +164,15 @@ export interface DoubleState {
     audits: AuditEntry[];
     /** Application lock keys taken (acquireLocks), in order. */
     locks: string[];
+    /** Patterns passed to cacheService.invalidatePattern, in order. */
+    cacheInvalidations: string[];
+    /**
+     * When true, application locks behave like `sp_getapplock` with a transaction owner: a key held by one open
+     * transaction makes another wait until the holder commits or rolls back (re-entrant for the holder). Off by default.
+     */
+    holdLocks: boolean;
+    /** Called after a transaction acquires its lock keys (with holdLocks on), so a test can start a concurrent writer. */
+    onLocked?: (keys: string[]) => void;
 }
 
 const DELEGATES = ['user', 'calendarConnection', 'integrationProvider', 'notification', '$transaction'] as const;
@@ -190,6 +199,8 @@ export function installConnectionDouble(seed: { users?: UserRow[]; connections?:
         notifications: [],
         audits: [],
         locks: [],
+        cacheInvalidations: [],
+        holdLocks: false,
     };
 
     const user = {
@@ -290,7 +301,15 @@ export function installConnectionDouble(seed: { users?: UserRow[]; connections?:
         },
     };
 
-    const client = {
+    /** Held application locks (holdLocks): key → the holding transaction and a promise settled when it ends. */
+    const held = new Map<string, { owner: object; release: Promise<void> }>();
+    const takeSnapshot = () => ({
+        users: state.users.map((u) => ({ ...u })),
+        connections: state.connections.map((c) => ({ ...c })),
+        audits: [...state.audits],
+    });
+
+    const transactionClient = (owner: object, tx: { snapshot: ReturnType<typeof takeSnapshot>; locked: boolean; done: Promise<void> }) => ({
         user,
         calendarConnection,
         integrationProvider,
@@ -298,27 +317,43 @@ export function installConnectionDouble(seed: { users?: UserRow[]; connections?:
         $queryRaw: async (strings: TemplateStringsArray, ...values: unknown[]) => {
             void strings;
             // acquireLocks passes its keys as one JSON array of `crm:<key>` resources.
+            const keys: string[] = [];
             for (const value of values) {
                 if (typeof value !== 'string' || !value.startsWith('[')) continue;
-                for (const key of JSON.parse(value) as string[]) state.locks.push(key.replace(/^crm:/, ''));
+                for (const key of JSON.parse(value) as string[]) keys.push(key.replace(/^crm:/, ''));
+            }
+            state.locks.push(...keys);
+            if (state.holdLocks && keys.length > 0) {
+                for (const key of keys) {
+                    for (let holder = held.get(key); holder && holder.owner !== owner; holder = held.get(key)) await holder.release;
+                    held.set(key, { owner, release: tx.done });
+                }
+                // Both code paths lock before they write: what this transaction rolls back to is the state it locked on.
+                if (!tx.locked) tx.snapshot = takeSnapshot();
+                tx.locked = true;
+                state.onLocked?.(keys);
             }
             return [{ result: 0 }];
         },
-    };
+    });
 
     stub('$transaction', async (fn: (tx: unknown) => Promise<unknown>) => {
-        const snapshot = {
-            users: state.users.map((u) => ({ ...u })),
-            connections: state.connections.map((c) => ({ ...c })),
-            audits: [...state.audits],
-        };
+        const owner = {};
+        let release = () => undefined as void;
+        const done = new Promise<void>((resolve) => {
+            release = resolve;
+        });
+        const tx = { snapshot: takeSnapshot(), locked: false, done };
         try {
-            return await fn(client);
+            return await fn(transactionClient(owner, tx));
         } catch (err) {
-            state.users = snapshot.users;
-            state.connections = snapshot.connections;
-            state.audits = snapshot.audits;
+            state.users = tx.snapshot.users;
+            state.connections = tx.snapshot.connections;
+            state.audits = tx.snapshot.audits;
             throw err;
+        } finally {
+            for (const [key, holder] of held) if (holder.owner === owner) held.delete(key);
+            release();
         }
     });
     stub('user', user);
@@ -330,7 +365,9 @@ export function installConnectionDouble(seed: { users?: UserRow[]; connections?:
         state.audits.push(entry);
     });
     mock.method(cacheService, 'invalidate', async () => undefined);
-    mock.method(cacheService, 'invalidatePattern', async () => undefined);
+    mock.method(cacheService, 'invalidatePattern', async (pattern: string) => {
+        state.cacheInvalidations.push(pattern);
+    });
     const configs = seed.configs ?? ({ categories: [], fieldsByModule: {}, moduleTabs: {}, moduleSettings: {} } as unknown as FormConfigsPayload);
     mock.method(formConfigService, 'getAllConfigs', async () => configs);
     return state;

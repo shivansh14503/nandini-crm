@@ -128,9 +128,24 @@ describe('nightly steps', () => {
         assert.equal(await connectionService.notifyExpiringGrants(now), 1);
         assert.deepEqual(
             state.notifications.map((n) => [n.username, n.entityId, n.dedupeKey, n.title]),
-            [['asha', 'soon', 'calendar_reconnect:soon:expiring', 'Your Test calendar (development only) access ends soon']],
+            [['asha', 'soon', `calendar_reconnect:soon:${now.getTime()}:expiring`, 'Your Test calendar (development only) access ends soon']],
         );
         assert.equal(await connectionService.notifyExpiringGrants(new Date(now.getTime() + DAY)), 0, 'deduped');
+    });
+
+    it('warns again after a reconnect gives a new time-limited grant (same row, new connectedAt)', async () => {
+        state = installConnectionDouble({ users: [asha], connections: [liveFake('soon', 'asha', { refreshTokenExpiresAt: new Date(now.getTime() + 2 * DAY) })] });
+        assert.equal(await connectionService.notifyExpiringGrants(now), 1);
+        // A week later the user reconnects the same account: saveConnection re-activates this row with connectedAt = now.
+        const reconnectedAt = new Date(now.getTime() + 7 * DAY);
+        Object.assign(state.connections[0], { connectedAt: reconnectedAt, refreshTokenExpiresAt: new Date(reconnectedAt.getTime() + 7 * DAY) });
+        const warnAt = new Date(reconnectedAt.getTime() + 5 * DAY);
+        assert.equal(await connectionService.notifyExpiringGrants(warnAt), 1, 'the new grant is warned about too');
+        assert.deepEqual(
+            state.notifications.map((n) => n.dedupeKey),
+            [`calendar_reconnect:soon:${now.getTime()}:expiring`, `calendar_reconnect:soon:${reconnectedAt.getTime()}:expiring`],
+        );
+        assert.equal(await connectionService.notifyExpiringGrants(new Date(warnAt.getTime() + DAY)), 0, 'still once per grant');
     });
 
     it('hasActiveCalendarConnection: an active connection of an active user only', async () => {

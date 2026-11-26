@@ -3,6 +3,13 @@
  * Mirrored by frontend-crm/src/components/integrations/calendarConnections.types.ts (contractSync.test.ts checks).
  */
 
+/**
+ * Application lock (`acquireLocks`) held by every write that must agree with one user's live calendar connection:
+ * connect, disconnect, and any change of that user's `Users.email` (People screen, Admin › Users). Keyed by the
+ * lower-cased username (SQL Server compares usernames case-insensitively).
+ */
+export const calendarConnectionUserLockKey = (username: string) => `calendar-connection:user:${username.trim().toLowerCase()}`;
+
 /** Calendar providers an employee can connect. `fake` = the dev-only test provider (CALENDAR_FAKE_PROVIDER). */
 export const CALENDAR_PROVIDERS = ['google', 'microsoft', 'fake'] as const;
 export type CalendarProvider = (typeof CALENDAR_PROVIDERS)[number];

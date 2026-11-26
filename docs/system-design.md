@@ -497,7 +497,7 @@ one per event and recipient, made unique by `dedupeKey`, never audited.
 | `activity_assigned` | a committed create / update gives the activity to someone other than the person saving | the new owner | `activity_assigned:<activityId>:<updatedAtMs>:<username>` |
 | `activity_invited` | a committed create / update adds a colleague (not the person saving or the owner) to a **Planned** activity that isn't a Note | that colleague | `activity_invited:<activityId>:<updatedAtMs>:<username>` |
 | `contract_renewal` | the sweep finds `renewalReminderDate` (wall clock) in the last 7 days, contract not Expired | the Contract Manager (`assignedTo`), if active | `contract_renewal:<contractId>:<renewalWallClock>:<username>` |
-| `calendar_reconnect` (P2-2) | a calendar refresh is refused, the company app changed or a time-limited grant ended (the connection turns `reauth_required`); or, from the nightly job, a time-limited Google grant ends within 3 days | the connection's user | `calendar_reconnect:<connectionId>:<ISO week>` / `calendar_reconnect:<connectionId>:expiring` |
+| `calendar_reconnect` (P2-2) | a calendar refresh is refused, the company app changed or a time-limited grant ended (the connection turns `reauth_required`); or, from the nightly job, a time-limited Google grant ends within 3 days | the connection's user | `calendar_reconnect:<connectionId>:<connectedAt ms>:<ISO week>` / `calendar_reconnect:<connectionId>:<connectedAt ms>:expiring` (per grant: a reconnect sets `connectedAt` again, so it re-arms) |
 
 - **After an activity save** (create, update, restore, RSVP), `activity.service.ts` calls `afterActivityCommit` once
   the transaction has committed: it schedules the reminder job and writes assignment / invitation notifications on the

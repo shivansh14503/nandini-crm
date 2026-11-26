@@ -10,8 +10,10 @@ import { sessionService } from '../auth/session.service.js';
 import { loadCalendarSettings } from '../integrations/integration.settings.js';
 import { joinFullName, photoUrlOf, resolveNameParts } from '../profile/profile.dto.js';
 import { acquireLocks, runInTransaction } from '../shared/transactions.js';
+import { calendarConnectionUserLockKey } from '../calendar-sync/connection.constants.js';
 import {
     assertCompanyEmailAllowed,
+    assertEmailKeepsConnection,
     assertUserEmailFree,
     duplicateEmailsAmong,
     holdsAddress,
@@ -328,10 +330,12 @@ export const userAdminService = {
             if (input.email !== undefined && email !== before.email) assertCompanyEmailAllowed(email, input.allowOtherDomain ?? false, companyDomains);
             // The address must be free when it changes, or when the user starts holding one (no longer a group login).
             const startsHolding = holdsAddress({ isActive: before.isActive, isGroupUser }) && (email !== before.email || before.isGroupUser);
-            if (email && startsHolding) {
-                await acquireLocks(tx, [userEmailLockKey(email)]);
-                await assertUserEmailFree(tx, email, id);
-            }
+            const emailChanges = email !== before.email;
+            // A changed address also takes the user's calendar-connection lock (before the address lock, as the calendar
+            // connect does) and keeps a live calendar connection's address (409 EMAIL_CONNECTED, Calendar P2-2).
+            await acquireLocks(tx, [emailChanges ? calendarConnectionUserLockKey(before.username) : null, email && startsHolding ? userEmailLockKey(email) : null]);
+            if (emailChanges) await assertEmailKeepsConnection(tx, before.username, email);
+            if (email && startsHolding) await assertUserEmailFree(tx, email, id);
 
             const role = input.role !== undefined ? canonicalRoleName(input.role, await knownRoles(tx)) : before.role;
             if (role !== before.role) await assertAdminsKept(tx, actor, before, { role, isActive: before.isActive }, 'role');
