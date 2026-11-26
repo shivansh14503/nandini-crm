@@ -11,9 +11,11 @@ import { activityRangeWhere } from '../activities/activity.calendar.js';
 import { NOTE_TYPE, PLANNED_STATUS, TASK_TYPE } from '../activities/activity.schedule.js';
 import {
     BUSY_BATCH_SIZE,
+    BUSY_CACHE_GRID_MINUTES,
     BUSY_CRM_CACHE_SECONDS,
     BUSY_CRM_ROW_CAP,
     BUSY_PROVIDER_CACHE_SECONDS,
+    BUSY_PROVIDER_DEADLINE_MS,
     BUSY_PROVIDER_PARALLEL,
     BUSY_PROVIDER_WINDOW_DAYS,
     BUSY_SUGGEST_DAYS,
@@ -25,6 +27,7 @@ import {
     type BusySource,
 } from './busy.constants.js';
 import { firstCommonFreeSlot, mergeByKind, splitWindows, withoutOwnCopy, type Interval, type KindInterval } from './busy.intervals.js';
+import { takeProviderCall } from './busy.rateLimit.js';
 import { busyQuerySchema, type BusyQuery } from './busy.validator.js';
 import { ConnectionUnavailableError, withCalendarAccess } from './calendarAccess.js';
 import { isCalendarProvider, LIVE_CONNECTION_STATUSES, type CalendarProvider } from './connection.constants.js';
@@ -44,14 +47,22 @@ import type { FreeBusyResult, ProviderBusyBlock } from './providers/types.js';
  *      free/busy sharing applies); a calendar that comes back with an error is then read **impersonating that
  *      colleague** (the owner decided busy blocks come from colleagues' calendars). Microsoft `getSchedule` on the
  *      requester's mailbox (or, without one, the first colleague's: the app token covers the tenant), the same
- *      per-colleague fallback. Calls: ≤ 14-day windows, ≤ 5 at once, 5 s each, one try. Cached 60 s per person and
- *      window (Redis; an in-process memo while Redis is down).
+ *      per-colleague fallback. Each colleague is also read as themselves when the requester has no usable row
+ *      (Google) or the requester's own call is refused for the requester (their token, their mailbox); a call that
+ *      fails as a whole for any other reason (timeout, 5xx, 429, the provider off or unhealthy) settles the whole
+ *      batch without per-colleague calls. Calls: ≤ 14-day windows, ≤ 5 at once, 5 s each, one try, none started after
+ *      the request's 8 s deadline, at most 120 per user per minute. Reads are `readOnly`: a refused call marks no
+ *      connection row or provider health. Cached 60 s per person and window (Redis; an in-process memo while Redis is
+ *      down).
+ * The CRM and provider windows (and cache keys) are widened to the 15-minute grid, so a window moved by a few ms or
+ * minutes hits the caches; the answer is clipped back to `[from, to)`.
  * People without a live row (not enrolled, excluded, no company email, provider off) and people whose row is in
  * `error` get CRM activities only and are marked (`status`). A provider failure never fails the request: that person's
  * calendar part is `unavailable` / `error` and the CRM part is still returned.
  *
- * `exclude` (the activity being moved, when the caller may see it) removes its own CRM block, and its calendar copy is
- * cut from the owner's and invited colleagues' calendar blocks, so a meeting being moved doesn't block itself.
+ * `exclude` (the activity being moved, when the caller may see it) removes its own CRM block, and a calendar block of
+ * the owner or an invited colleague with exactly its start and end (its calendar copy) is dropped, so a meeting being
+ * moved doesn't block itself; longer blocks around it are other meetings and stay.
  * `suggest` adds the first common free slot of that length (business hours 09:00–19:00, 15-minute grid, up to 7 days,
  * never in the past), computed here only.
  */
@@ -232,9 +243,16 @@ type CachedBusy = [number, number, BusyKind][];
 const memo = new Map<string, { value: CachedBusy; until: number }>();
 const MEMO_MAX = 1_000;
 
-/** Tests: forget the in-process memo. */
+/** Tests: forget the in-process memo (and put the provider deadline back). */
 export function resetBusyMemo(): void {
     memo.clear();
+    deadlineMs = BUSY_PROVIDER_DEADLINE_MS;
+}
+
+let deadlineMs = BUSY_PROVIDER_DEADLINE_MS;
+/** Tests: a shorter provider deadline. */
+export function setBusyDeadlineForTests(ms: number): void {
+    deadlineMs = ms;
 }
 
 async function readCached(keys: readonly string[], now: number): Promise<(CachedBusy | null)[]> {
@@ -294,9 +312,37 @@ export function outcomeOfError(err: unknown): Exclude<BusyPersonStatus, 'ok' | '
     return 'unavailable';
 }
 
-/** A failure of the requester's call that is the provider's, not the requester's: no per-colleague retry helps. */
-const providerWide = (err: unknown) =>
-    err instanceof ConnectionUnavailableError && ['provider_disabled', 'provider_unhealthy', 'key_missing', 'key_error'].includes(err.reason);
+/**
+ * A failure of the requester's whole call that is the requester's own (their row, their token, their mailbox
+ * refused): reading each colleague as themselves may work. Anything else (a timeout, 5xx, 429, the provider off,
+ * unhealthy or without its key, the request's budget or deadline) would fail the same way per colleague, so the batch
+ * settles without more calls (addendum §8.5 falls back per colleague only for calendars that come back with errors).
+ */
+export function requesterSpecific(err: unknown): boolean {
+    if (!(err instanceof ConnectionUnavailableError)) return false;
+    if (err.reason === 'call_refused') return err.failure?.level === 'user';
+    return err.reason === 'user_error' || err.reason === 'user_inactive' || err.reason === 'not_active' || err.reason === 'not_found';
+}
+
+/** The request ran out of provider calls (per-user budget) or time (deadline): the rest are `unavailable`. */
+class BusyLimitError extends Error {
+    constructor(reason: 'budget' | 'deadline') {
+        super(`Busy times provider ${reason} reached`);
+        this.name = 'BusyLimitError';
+    }
+}
+
+/** At most `parallel` calls at once, none after `deadline`, each taking one call of `userKey`'s budget. */
+function guardedRunner(parallel: number, deadline: number, userKey: string) {
+    const run = limiter(parallel);
+    return <T>(fn: () => Promise<T>): Promise<T> =>
+        run(async () => {
+            if (Date.now() >= deadline) throw new BusyLimitError('deadline');
+            if (!(await takeProviderCall(userKey))) throw new BusyLimitError('budget');
+            return fn();
+        });
+}
+type Runner = ReturnType<typeof guardedRunner>;
 
 const usable = (row: LiveRow | null): row is LiveRow => Boolean(row && (row.status === 'ok' || row.status === 'pending'));
 
@@ -309,11 +355,16 @@ async function readAs(
     provider: CalendarProvider,
     emails: readonly string[],
     windows: readonly Interval[],
-    run: ReturnType<typeof limiter>,
+    run: Runner,
 ): Promise<Map<string, FreeBusyResult>> {
+    // readOnly: a refused read marks no row and no provider health (only checks and sync jobs do).
     const parts = await Promise.all(
         windows.map((w) =>
-            run(() => withCalendarAccess(rowId, (ctx) => getAdapter(provider).freeBusy(ctx, { emails, start: new Date(w.start), end: new Date(w.end) }))),
+            run(() =>
+                withCalendarAccess(rowId, (ctx) => getAdapter(provider).freeBusy(ctx, { emails, start: new Date(w.start), end: new Date(w.end) }), {
+                    readOnly: true,
+                }),
+            ),
         ),
     );
     const out = new Map<string, FreeBusyResult>();
@@ -332,8 +383,17 @@ async function readAs(
 
 const toIntervals = (result: { busy: ProviderBusyBlock[] }): KindInterval[] => result.busy.map((b) => ({ start: b.start.getTime(), end: b.end.getTime(), kind: b.kind }));
 
-/** The calendar part of `targets` (people with a usable live row), by lower-cased username. */
-async function loadProviderBusy(targets: readonly Person[], requesterRows: readonly LiveRow[], from: Date, to: Date): Promise<Map<string, ProviderOutcome>> {
+/**
+ * The calendar part of `targets` (people with a usable live row), by lower-cased username. Never longer than the
+ * deadline (plus a cache read): people still unread then are `unavailable`.
+ */
+async function loadProviderBusy(
+    targets: readonly Person[],
+    requesterRows: readonly LiveRow[],
+    from: Date,
+    to: Date,
+    userKey: string,
+): Promise<Map<string, ProviderOutcome>> {
     const out = new Map<string, ProviderOutcome>();
     const now = Date.now();
     const cacheKeys = targets.map((p) => CACHE_KEYS.calendarBusy(p.username, from.getTime(), to.getTime()));
@@ -347,15 +407,18 @@ async function loadProviderBusy(targets: readonly Person[], requesterRows: reado
     if (misses.length === 0) return out;
 
     const windows = splitWindows(from.getTime(), to.getTime(), BUSY_PROVIDER_WINDOW_DAYS);
-    const run = limiter(BUSY_PROVIDER_PARALLEL);
+    const deadline = now + deadlineMs;
+    const run = guardedRunner(BUSY_PROVIDER_PARALLEL, deadline, userKey);
     const fresh: [string, CachedBusy][] = [];
+    let closed = false;
     const settle = (person: Person, outcome: ProviderOutcome) => {
+        if (closed || out.has(person.key)) return;
         out.set(person.key, outcome);
         if (outcome.status === 'ok') fresh.push([CACHE_KEYS.calendarBusy(person.username, from.getTime(), to.getTime()), outcome.intervals.map((i) => [i.start, i.end, i.kind])]);
     };
 
     const providers = [...new Set(misses.map((p) => p.row!.provider))].filter(isCalendarProvider);
-    await Promise.all(
+    const work = Promise.all(
         providers.map(async (provider) => {
             const group = misses.filter((p) => p.row!.provider === provider);
             const emailOf = (p: Person) => p.row!.accountEmail.toLowerCase();
@@ -384,13 +447,17 @@ async function loadProviderBusy(targets: readonly Person[], requesterRows: reado
                         } catch (err) {
                             const outcome = outcomeOfError(err);
                             failedRows.set(actor.id, outcome);
-                            if (providerWide(err)) {
+                            const reason = err instanceof ConnectionUnavailableError ? err.reason : (err as Error).name;
+                            if (requesterSpecific(err)) {
+                                logger.info({ provider, reason }, 'Busy times: requester call refused; reading each calendar as its owner');
+                            } else {
+                                // Transient (timeout, 5xx, 429), provider-wide, or out of budget / time: per-colleague
+                                // calls would fail the same way and load a provider that is already struggling.
+                                logger.info({ provider, reason }, 'Busy times: requester call failed; calendar part unavailable for the batch');
                                 for (const person of batch) {
                                     settle(person, { status: outcome });
                                     pending.delete(person);
                                 }
-                            } else {
-                                logger.info({ provider, reason: err instanceof ConnectionUnavailableError ? err.reason : (err as Error).message }, 'Busy times: requester call failed; reading each calendar as its owner');
                             }
                         }
                     }),
@@ -413,6 +480,18 @@ async function loadProviderBusy(targets: readonly Person[], requesterRows: reado
             );
         }),
     );
+    // The deadline also bounds calls already running (each has its own 5 s timeout; their answers are dropped).
+    let timer: NodeJS.Timeout | undefined;
+    const expired = new Promise<void>((resolve) => {
+        timer = setTimeout(resolve, Math.max(0, deadline - Date.now())); // cleared below once the work is done
+    });
+    try {
+        await Promise.race([work, expired]);
+    } finally {
+        clearTimeout(timer);
+    }
+    closed = true;
+    for (const person of misses) if (!out.has(person.key)) out.set(person.key, { status: 'unavailable' });
     writeCached(fresh, now);
     return out;
 }
@@ -443,6 +522,11 @@ async function loadExcluded(id: string | undefined, user: AuthUser): Promise<Exc
 // ── The answer ───────────────────────────────────────────────────────────────
 
 const iso = (ms: number) => new Date(ms).toISOString();
+const GRID_MS = BUSY_CACHE_GRID_MINUTES * MINUTE;
+/** `[from, to)` widened to the cache grid (from down, to up; epoch-aligned, so whole quarter hours in any zone). */
+export function gridWindow(from: Date, to: Date): { from: Date; to: Date } {
+    return { from: new Date(Math.floor(from.getTime() / GRID_MS) * GRID_MS), to: new Date(Math.ceil(to.getTime() / GRID_MS) * GRID_MS) };
+}
 
 export async function busyTimes(query: BusyQuery, user: AuthUser, now: Date = new Date()): Promise<BusyTimesDto> {
     const from = new Date(query.from);
@@ -450,14 +534,16 @@ export async function busyTimes(query: BusyQuery, user: AuthUser, now: Date = ne
     const { people, requesterRows } = await loadPeople(query.users, user.username);
     const known = people.filter((p) => p.known);
     const targets = known.filter((p) => usable(p.row));
+    // Read (and cache) on the grid; every block is clipped back to [from, to) below.
+    const wide = gridWindow(from, to);
 
     const [crm, calendars, excluded] = await Promise.all([
         loadCrmBlocks(
             known.map((p) => p.username),
-            from,
-            to,
+            wide.from,
+            wide.to,
         ),
-        loadProviderBusy(targets, requesterRows, from, to),
+        loadProviderBusy(targets, requesterRows, wide.from, wide.to, `user:${user.id}`),
         loadExcluded(query.exclude, user),
     ]);
 

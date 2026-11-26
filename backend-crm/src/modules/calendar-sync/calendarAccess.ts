@@ -29,11 +29,25 @@ import { tokenSource } from './tokenSource.js';
  *   - on an app-level failure: the row is not marked; provider health becomes `error`, admins are notified
  *     (`calendar_sync_issue`), and `ConnectionUnavailableError('provider_unhealthy')` is thrown;
  *   - transient failures are rethrown as they are (the job retries; nothing is marked).
+ * With `readOnly` (busy times, P2-6: a read any signed-in user can cause), a calendar call the provider refuses marks
+ * nothing: no row error, no provider health, no admin notification; `ConnectionUnavailableError('call_refused')` is
+ * thrown instead. Token failures and success are handled as above (they say the same about the connection whatever
+ * the call was).
  */
 
 export type ConnectionRow = Prisma.CalendarConnectionGetPayload<object>;
 
-export type UnavailableReason = 'not_found' | 'not_active' | 'user_inactive' | 'provider_disabled' | 'key_missing' | 'key_error' | 'provider_unhealthy' | 'user_error';
+export type UnavailableReason =
+    | 'not_found'
+    | 'not_active'
+    | 'user_inactive'
+    | 'provider_disabled'
+    | 'key_missing'
+    | 'key_error'
+    | 'provider_unhealthy'
+    | 'user_error'
+    /** `readOnly` only: the provider refused the call; nothing was marked (`failure` says how it would classify). */
+    | 'call_refused';
 
 /** The connection can't be used now (the job / request skips it; the reason is a fixed code, safe to log). */
 export class ConnectionUnavailableError extends Error {
@@ -54,6 +68,11 @@ export interface CalendarAccessOptions {
     clock?: () => Date;
     /** The call is the per-row health check: a 403 / 404 means the person can't be reached, and the row is stamped. */
     check?: boolean;
+    /**
+     * A read-only lookup (busy times): a refused calendar call (not a token failure) marks neither the row nor the
+     * provider and notifies nobody; it throws `ConnectionUnavailableError('call_refused', failure)`.
+     */
+    readOnly?: boolean;
 }
 
 /** Called once a row first reaches `ok` (P2-3b registers the `enrolled` job that runs the first-sync backfill). */
@@ -206,6 +225,7 @@ export async function withCalendarAccess<T>(connectionId: string, fn: (ctx: Call
         if (err instanceof ConnectionUnavailableError) throw err;
         const failure = err instanceof TokenError ? classifyApiError(provider, err) : classifyApiError(provider, err, { probe: options.check });
         if (!failure) throw err;
+        if (options.readOnly && !(err instanceof TokenError) && failure.level !== 'transient') throw new ConnectionUnavailableError('call_refused', failure);
         throw await handleFailure(row, failure, err, clock());
     }
 

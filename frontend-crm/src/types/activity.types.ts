@@ -239,7 +239,8 @@ export const BUSY_KINDS = ['busy', 'tentative', 'away'] as const;
 export type BusyKind = (typeof BUSY_KINDS)[number];
 /**
  * How much the CRM knows about a person: `ok` CRM + their company calendar; `not_connected` / `error` / `unavailable`
- * CRM activities only (not synced, sync problem, calendar didn't answer); `unknown` not an active user.
+ * CRM activities only (not synced, sync problem or read refused, calendar didn't answer / out of budget or time);
+ * `unknown` not an active user.
  */
 export const BUSY_PERSON_STATUSES = ['ok', 'not_connected', 'error', 'unavailable', 'unknown'] as const;
 export type BusyPersonStatus = (typeof BUSY_PERSON_STATUSES)[number];

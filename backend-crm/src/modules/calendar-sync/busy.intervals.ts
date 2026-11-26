@@ -67,21 +67,15 @@ export function mergeByKind(list: readonly KindInterval[], from: number, to: num
 }
 
 /**
- * `list` without the calendar copy of the activity being edited: the excluded window is cut out of every interval
- * that holds it entirely (the event itself, possibly joined with adjacent ones by the provider). An interval that only
- * partly overlaps it is another event and stays.
+ * `list` without the calendar copy of the activity being edited (spec §12.1 step 3): only a block with exactly the
+ * excluded window's start and end goes, and only one (a second identical block is another event). A block that holds
+ * the window, or only overlaps it, is a real meeting and stays whole: cutting the window out of it would show a busy
+ * person as free (e.g. a 09:00–12:00 review around a 10:00–11:00 CRM meeting).
  */
 export function withoutOwnCopy<T extends Interval>(list: readonly T[], own: Interval): T[] {
     if (!valid(own)) return [...list];
-    const out: T[] = [];
-    for (const i of list) {
-        if (i.start <= own.start && i.end >= own.end) {
-            for (const part of subtractInterval([i], own)) out.push({ ...i, ...part });
-        } else {
-            out.push(i);
-        }
-    }
-    return out;
+    const index = list.findIndex((i) => i.start === own.start && i.end === own.end);
+    return index < 0 ? [...list] : [...list.slice(0, index), ...list.slice(index + 1)];
 }
 
 /** `[from, to)` cut into consecutive windows of at most `maxDays` days. */

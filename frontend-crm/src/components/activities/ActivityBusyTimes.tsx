@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Alert, Box, Button, CircularProgress, Tooltip, Typography } from '@mui/material';
 import EventAvailableOutlinedIcon from '@mui/icons-material/EventAvailableOutlined';
 import ManageSearchOutlinedIcon from '@mui/icons-material/ManageSearchOutlined';
@@ -17,7 +17,7 @@ import {
     type BusyPerson,
     type BusyPersonStatus,
 } from '@/types/activity.types';
-import { addDays, instantToZonedWallClock, isWallClock, wallClockMinutesBetween, zonedStartOfDay } from '@/utils/zonedTime';
+import { addDays, instantToZonedWallClock, isWallClock, wallClockMinutesBetween, zonedDayOf, zonedStartOfDay } from '@/utils/zonedTime';
 import { formatDayLabel, formatWallTime } from './activityTime';
 
 /**
@@ -25,7 +25,9 @@ import { formatDayLabel, formatWallTime } from './activityTime';
  * invited colleagues) on an 08:00–20:00 track of the start's business day, with their CRM activities and company
  * calendar busy blocks (times only), the chosen window outlined, and clashes in red. A row "Everyone free" offers the
  * common free gaps as buttons (tap / Enter → Start there, the length kept); "Find a free time" asks the server for the
- * first common free slot (the client never computes one). Wide content scrolls inside its own box on phones.
+ * first common free slot (the client never computes one). Wide content scrolls inside its own box on phones, where
+ * the gaps are also listed as chips under the track. The query waits until the day and people stop changing and is
+ * not sent for implausible days (a year being typed); while the next answer loads the previous one is not shown.
  */
 
 const TRACK_START_MIN = 8 * 60;
@@ -33,10 +35,16 @@ const TRACK_END_MIN = 20 * 60;
 const TRACK_SPAN_MIN = TRACK_END_MIN - TRACK_START_MIN;
 const STEP_MIN = 15;
 const MINUTE = 60_000;
+/** Wait this long after the day / people stop changing before asking (typing a date sends one request). */
+const QUERY_DELAY_MS = 400;
+/** Days further than this from today are not asked about (a year half typed, e.g. 0202). */
+const PLAUSIBLE_DAYS = 366;
+/** Smallest gap button (tap target, responsive rule 4). */
+const GAP_MIN_PX = 32;
 
 const STATUS_TEXT: Readonly<Record<Exclude<BusyPersonStatus, 'ok'>, string>> = {
     not_connected: 'Not connected: CRM activities only',
-    error: 'Calendar not syncing: CRM activities only',
+    error: "Calendar can't be read: CRM activities only",
     unavailable: "Couldn't load the calendar: CRM activities only",
     unknown: 'Not an active user',
 };
@@ -86,6 +94,16 @@ function trackMinutes(iso: string, day: string, timeZone: string): number {
     return Math.min(TRACK_END_MIN, Math.max(TRACK_START_MIN, minutes));
 }
 
+/** Debounced copy of `value` (the same object back once it has stayed for `delay` ms). */
+function useDebounced<T>(value: T, delay: number): T {
+    const [debounced, setDebounced] = useState(value);
+    useEffect(() => {
+        const timer = window.setTimeout(() => setDebounced(value), delay);
+        return () => window.clearTimeout(timer);
+    }, [value, delay]);
+    return debounced;
+}
+
 const pct = (minutes: number) => `${((minutes - TRACK_START_MIN) / TRACK_SPAN_MIN) * 100}%`;
 const wallOf = (day: string, minutes: number) => `${day}T${String(Math.floor(minutes / 60)).padStart(2, '0')}:${String(minutes % 60).padStart(2, '0')}`;
 const ceilStep = (minutes: number) => Math.ceil(minutes / STEP_MIN) * STEP_MIN;
@@ -112,23 +130,38 @@ export function ActivityBusyTimes({ people, startAt, endAt, timeZone, now, exclu
     const [finding, setFinding] = useState(false);
     const [findMessage, setFindMessage] = useState<string | null>(null);
 
+    const peopleKey = people.join('\n');
     const users = useMemo(() => {
         const seen = new Set<string>();
-        return people
+        return peopleKey
+            .split('\n')
             .map((p) => p.trim())
             .filter((p) => p && !seen.has(p.toLowerCase()) && seen.add(p.toLowerCase()))
             .slice(0, BUSY_MAX_USERS);
-    }, [people]);
+    }, [peopleKey]);
     const validStart = isWallClock(startAt);
     const day = validStart ? startAt.slice(0, 10) : '';
+    const today = zonedDayOf(now(), timeZone);
+    const plausible = Boolean(day) && day >= addDays(today, -PLAUSIBLE_DAYS) && day <= addDays(today, PLAUSIBLE_DAYS);
+    // What is on screen now vs. what was last asked for (debounced): only an answer to the former is used.
+    const wanted = useMemo(() => ({ day: plausible ? day : '', users }), [day, plausible, users]);
+    const sent = useDebounced(wanted, QUERY_DELAY_MS);
     const params = useMemo(
         () =>
-            day && users.length > 0
-                ? { users, from: zonedStartOfDay(day, timeZone).toISOString(), to: zonedStartOfDay(addDays(day, 1), timeZone).toISOString(), exclude: excludeId }
+            sent.day && sent.users.length > 0
+                ? {
+                      users: sent.users,
+                      from: zonedStartOfDay(sent.day, timeZone).toISOString(),
+                      to: zonedStartOfDay(addDays(sent.day, 1), timeZone).toISOString(),
+                      exclude: excludeId,
+                  }
                 : undefined,
-        [day, users, timeZone, excludeId]
+        [sent, timeZone, excludeId]
     );
-    const { data, isFetching, isError, refetch } = useBusyTimes(params, { enabled: open });
+    const { data, isFetching, isError, isPlaceholderData, refetch } = useBusyTimes(params, { enabled: open });
+    // The previous day's / people's answer (keepPreviousData, or a request not sent yet) must not read as this one's.
+    const current = sent === wanted && !isPlaceholderData ? data : undefined;
+    const loading = plausible && !current && !isError;
 
     if (!validStart || users.length === 0) return null;
 
@@ -141,7 +174,7 @@ export function ActivityBusyTimes({ people, startAt, endAt, timeZone, now, exclu
     const chosenOnTrack = { startMin: Math.max(chosen.startMin, TRACK_START_MIN), endMin: Math.min(chosen.endMin, TRACK_END_MIN) };
     const showChosen = chosenOnTrack.endMin > chosenOnTrack.startMin;
 
-    const shown = data && data.people.length > 0 ? data.people : [];
+    const shown = current && current.people.length > 0 ? current.people : [];
     const nowWall = instantToZonedWallClock(now(), timeZone);
     const notBefore = nowWall.slice(0, 10) > day ? TRACK_END_MIN : nowWall.slice(0, 10) < day ? 0 : Number(nowWall.slice(11, 13)) * 60 + Number(nowWall.slice(14, 16));
     const gaps = freeGaps(shown, day, timeZone, notBefore);
@@ -160,7 +193,10 @@ export function ActivityBusyTimes({ people, startAt, endAt, timeZone, now, exclu
         setFindMessage(null);
         try {
             const dayStart = zonedStartOfDay(day, timeZone).getTime();
-            const from = new Date(Math.max(dayStart, now().getTime()));
+            // Down to the quarter hour, so repeated clicks ask the same window (the server's caches are keyed on it);
+            // the server never suggests a time before its own now.
+            const quarter = STEP_MIN * MINUTE;
+            const from = new Date(Math.max(dayStart, Math.floor(now().getTime() / quarter) * quarter));
             const to = new Date(from.getTime() + BUSY_SUGGEST_DAYS * 24 * 60 * MINUTE);
             const suggest = Math.min(BUSY_SUGGEST_MAX_MINUTES, Math.max(BUSY_SUGGEST_MIN_MINUTES, length || STEP_MIN));
             const answer = await activityService.busy({ users, from: from.toISOString(), to: to.toISOString(), exclude: excludeId, suggest });
@@ -226,11 +262,15 @@ export function ActivityBusyTimes({ people, startAt, endAt, timeZone, now, exclu
                 <Box sx={{ minWidth: 0, flex: '1 1 160px' }}>
                     <Typography sx={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--crm-slate-900)' }}>Availability · {formatDayLabel(day)}</Typography>
                     <Typography sx={{ fontSize: '0.72rem', color: 'var(--mui-palette-text-secondary)' }}>
-                        {clashes.length === 0
-                            ? shown.length > 0
-                                ? 'Everyone is free at the chosen time.'
-                                : 'Busy times of the owner and invited colleagues (times only).'
-                            : `${clashes.map((p) => p.name).join(', ')} ${clashes.length === 1 ? 'is' : 'are'} busy at the chosen time.`}
+                        {!plausible
+                            ? 'Busy times show for dates within a year of today.'
+                            : loading
+                              ? 'Loading busy times…'
+                              : clashes.length === 0
+                                ? shown.length > 0
+                                    ? 'Everyone is free at the chosen time.'
+                                    : 'Busy times of the owner and invited colleagues (times only).'
+                                : `${clashes.map((p) => p.name).join(', ')} ${clashes.length === 1 ? 'is' : 'are'} busy at the chosen time.`}
                     </Typography>
                 </Box>
                 {isFetching && <CircularProgress size={16} aria-label="Loading busy times" />}
@@ -256,7 +296,7 @@ export function ActivityBusyTimes({ people, startAt, endAt, timeZone, now, exclu
                     {findMessage}
                 </Typography>
             )}
-            {isError && !data && (
+            {isError && !current && (
                 <Alert
                     severity="warning"
                     sx={{ m: 1.5, fontSize: '0.8rem' }}
@@ -323,8 +363,11 @@ export function ActivityBusyTimes({ people, startAt, endAt, timeZone, now, exclu
                                                 position: 'absolute',
                                                 top: 2,
                                                 bottom: 2,
-                                                left: pct(gap.startMin),
-                                                width: `calc(${pct(TRACK_START_MIN + gap.endMin - gap.startMin)} - 2px)`,
+                                                // Centred on the gap, never narrower than a tap target (a 15-minute
+                                                // gap is ~11 px on a phone's track); phones also get the chips below.
+                                                left: pct((gap.startMin + gap.endMin) / 2),
+                                                transform: 'translateX(-50%)',
+                                                width: `max(${GAP_MIN_PX}px, calc(${pct(TRACK_START_MIN + gap.endMin - gap.startMin)} - 2px))`,
                                                 minHeight: 32,
                                                 p: 0,
                                                 border: '1px solid var(--mui-palette-success-softBorder)',
@@ -345,7 +388,7 @@ export function ActivityBusyTimes({ people, startAt, endAt, timeZone, now, exclu
                     {/* One row per person */}
                     {(shown.length > 0 ? shown : users.map((username) => ({ username, name: username, status: 'ok' as const, provider: null, busy: [], sources: [] }))).map((person) => {
                         const clash = clashes.includes(person as BusyPerson);
-                        const note = person.status === 'ok' ? (person.provider ? PROVIDER_TEXT[person.provider] : data ? 'CRM activities' : '') : STATUS_TEXT[person.status];
+                        const note = person.status === 'ok' ? (person.provider ? PROVIDER_TEXT[person.provider] : current ? 'CRM activities' : '') : STATUS_TEXT[person.status];
                         return (
                             <React.Fragment key={person.username}>
                                 <Box sx={{ minWidth: 0, alignSelf: 'center' }}>
@@ -403,6 +446,26 @@ export function ActivityBusyTimes({ people, startAt, endAt, timeZone, now, exclu
                     })}
                 </Box>
             </Box>
+
+            {/* Phones: the common gaps as wrapping chips too (the track's gap buttons are small there) */}
+            {!readOnly && shown.length > 0 && gaps.length > 0 && (
+                <Box sx={{ display: { xs: 'flex', sm: 'none' }, flexWrap: 'wrap', alignItems: 'center', gap: 0.75, px: 1.25, pb: 1.25 }}>
+                    <Typography sx={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--crm-slate-700)', width: '100%' }}>Everyone free</Typography>
+                    {gaps.map((gap) => {
+                        const label = `${formatWallTime(wallOf(day, gap.startMin))} – ${formatWallTime(wallOf(day, gap.endMin))}`;
+                        return (
+                            <Button
+                                key={gap.startMin}
+                                onClick={() => onPickStart(wallOf(day, gap.startMin))}
+                                aria-label={`Everyone free ${label}. Start at ${formatWallTime(wallOf(day, gap.startMin))}`}
+                                sx={{ ...outlinedSx, minHeight: 36, px: 1.25, py: 0.25, fontSize: '0.75rem' }}
+                            >
+                                {label}
+                            </Button>
+                        );
+                    })}
+                </Box>
+            )}
 
             {/* Legend */}
             <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1.5, px: { xs: 1.25, sm: 1.5 }, pb: 1.25 }}>

@@ -326,9 +326,19 @@ which see every record (`modules/user-admin/roles.ts`, mirrored and contract-tes
     `POST /users/{mailbox}/calendar/getSchedule` with the **app token** (`Calendars.ReadWrite` covers it; under
     Exchange RBAC the scope must include the mailboxes asked about), on the requester's mailbox or, without one, the
     first colleague's; Graph returns subjects / locations, which are dropped on read and never stored or logged.
-    Calls: one try, 5 s, ≤ 14-day windows, ≤ 5 at once per request. A person whose row is in `error` is not called
-    (CRM only); a call's failure marks rows / the provider through `withCalendarAccess` as any other call does.
-    Rate limit 60 / min / user. Nothing new is stored in SQL.
+    Calls: one try, 5 s, ≤ 14-day windows, ≤ 5 at once per request, none started after the request's 8 s deadline
+    (people still unread then are `unavailable`), and at most 120 provider calls / min / user
+    (`ratelimit:activity-busy-calls`). Per-colleague calls happen only for calendars that come back with an error,
+    when the requester has no usable row, or when the requester's own token / mailbox is refused; a call that fails as
+    a whole otherwise (timeout, 5xx, 429, provider off or unhealthy) leaves that batch `unavailable` / `error` with no
+    more calls. Reads go through `withCalendarAccess(…, { readOnly: true })` (review fix, as of 2026-11-26): a refused
+    calendar call (e.g. Graph 403 `ErrorAccessDenied`) marks **no** row, no provider health and sends no admin
+    notification (`ConnectionUnavailableError('call_refused')`; that person shows `error`, CRM only); only checks and
+    sync jobs change connection state. Token failures and successes are recorded as for any call. The asked window is
+    widened to the 15-minute grid for the SQL read, the provider calls and both cache keys, then clipped back, so a
+    window moved by milliseconds still hits the caches. `exclude` drops only a calendar block with exactly the
+    activity's start and end (its copy); a longer meeting around it stays. A person whose row is in `error` is not
+    called (CRM only). Rate limit 60 / min / user. Nothing new is stored in SQL.
   - **Enrolment** (`enrolment.ts`): pure `resolveTarget` / `planEnrolment` decide per person (active, non-group, a
     company email, a provider serving the domain or the admin's override in `CalendarSyncUser`, not excluded) and
     `reconcileUser` applies it under the per-user lock `calendar-connection:user:<username>` (create `pending`, keep,
@@ -405,6 +415,7 @@ commands fail immediately instead of hanging, and reconnects in the background (
 | `ratelimit:pdf:{module}:user:{id}` | counter | 60 s | `GET /:id/pdf` | 30 PDF renders / min / user |
 | `ratelimit:pdf-preview:user:{id}` | counter | 60 s | `POST /api/pdf-templates/preview` | 20 previews / min / user |
 | `ratelimit:activity-busy:user:{id}` | counter | 60 s | `GET /api/activities/busy` | 60 busy-time checks / min / user (in-memory per process whenever Redis can't count; never fails open) |
+| `ratelimit:activity-busy-calls:user:{id}` | counter | 60 s | `GET /api/activities/busy` (P2-6) | 120 Google / Microsoft free/busy calls / min / user, whatever the number of requests; past it the calendar part is `unavailable` (in-memory per process whenever Redis can't count; never fails open) |
 | `ratelimit:integration-test:user:{id}` | counter | 60 s | `POST /api/admin/integrations/providers/:provider/test` | 6 connection tests / min / admin (in-memory per process whenever Redis can't count) |
 | `cache:lookups:users:{all\|active}` | JSON, guarded ¹ | 5 min | lookups | User picker list; dropped by a company email change (`invalidateUserCaches`, Admin › API Integrations › People), by every Admin › Users write (`invalidateUserCaches`) and by My Profile name / photo changes (`invalidateUserLookupCaches`) |
 | `cache:lookups:organizations:{limit}` / `contacts:{limit}` / `products:{limit}` | JSON, guarded ¹ | 5 min | lookups (no search term only) | Lookup dialogs' default lists |
@@ -415,8 +426,8 @@ commands fail immediately instead of hanging, and reconnects in the background (
 | `cache:address-master` / `cache:address-master:{country}` | JSON | 24 h | lookups (plain read) | Countries and states (seeded ISO data); TTL only |
 | `cache:address-master:cities:{state}:{limit}` | JSON, guarded ¹ | 24 h | lookups | A state's biggest cities; dropped by city admin writes |
 | `cache:search:{category\|all}:{page}:{limit}:{t\|-}:{i\|-}:d{minDigits}:{sha256}` | JSON, guarded ¹ (180 s placeholder) | 30 s | global search | Search results; everyone sees the same results, so one entry per query (hashed, so user text never reaches a key or SCAN pattern) |
-| `cache:calendar:busy:{username}:{fromMs}:{toMs}` | JSON (`[[startMs, endMs, kind], …]`) | 60 s | `GET /api/activities/busy` (P2-6) | One person's company-calendar busy blocks for a window (times only); only successful reads are kept; TTL only. Read with one `MGET`, written with one `MULTI` |
-| `cache:lookups:activities:busy:{sha256(people)[:24]}:{fromMs}:{toMs}` | JSON, guarded ¹ | 30 s | `GET /api/activities/busy` (P2-6) | The CRM part (people's Planned activity blocks) for a people set and window; dropped by every activity write (`invalidateEntityCaches('activities')`, pattern `cache:lookups:activities*`) |
+| `cache:calendar:busy:{username}:{fromMs}:{toMs}` | JSON (`[[startMs, endMs, kind], …]`) | 60 s | `GET /api/activities/busy` (P2-6) | One person's company-calendar busy blocks for a window (times only; `fromMs` / `toMs` on the 15-minute grid); only successful reads are kept; TTL only. Read with one `MGET`, written with one `MULTI` |
+| `cache:lookups:activities:busy:{sha256(people)[:24]}:{fromMs}:{toMs}` | JSON, guarded ¹ | 30 s | `GET /api/activities/busy` (P2-6) | The CRM part (people's Planned activity blocks) for a people set and window (on the 15-minute grid); dropped by every activity write (`invalidateEntityCaches('activities')`, pattern `cache:lookups:activities*`) |
 | `cache:email-domain:{domain}` | JSON string (`mx`, `a_only`, `null_mx`, `not_found`) | 24 h | email checks (plain read) | DNS answer for a domain; TTL only (an `unknown` answer is dropped at once) |
 | `cache:notifications:unread:{username}` | number (briefly a `pending:<uuid>` placeholder while it is read) | 24 h (a safety net: it is dropped long before) | `GET /api/notifications/unread-count`; the list reads SQL and re-caches it | The bell's unread count (username lowercased), so a minute's polling from every open tab doesn't wake SQL Server; dropped by every write to that user's notifications, by the 00:20 nightly job and on every Redis reconnect (§4.2) |
 | `pdf:{MODULE}:{sha256}` | binary (PDF) | `PDF_CACHE_TTL_SECONDS` (600 s) | PDF render | Rendered PDFs; key (`pdfCacheKey`) covers template id + version, record id + `updatedAt`, custom-field definitions + company formats |
@@ -486,7 +497,7 @@ opens) always counts in SQL and re-caches that the same way.
 | Caching | Every read goes to SQL Server |
 | Sessions | New logins issue untracked tokens; existing tokens are trusted until they expire; logout, a password change and My Profile's Sign out can't revoke; the My Profile session list is empty |
 | Rate limiting | Disabled (requests allowed), except the integration connection test and busy times (`GET /api/activities/busy`, P2-6), which count in memory per process instead |
-| Busy times (P2-6) | The CRM part reads SQL on every request; the company-calendar part is memoised in process (60 s, at most 1,000 entries) instead of Redis |
+| Busy times (P2-6) | The CRM part reads SQL on every request; the company-calendar part is memoised in process (60 s, at most 1,000 entries) instead of Redis; the provider call budget counts in process |
 | Audit events (logins, PDF generated, import summaries) | Written directly to SQL instead of queued |
 | Imports | ≤ 500 rows run synchronously inside the request; larger imports return `503 IMPORT_QUEUE_UNAVAILABLE` |
 | Import status polling | `503` |
@@ -696,8 +707,9 @@ back. With Redis down every poll reads SQL. Opening the bell reads the count fro
 
 Busy times (P2-6, as of 2026-11-26) add **no job and no periodic query**: `GET /api/activities/busy` runs only while
 someone has an activity form, the reschedule dialog or the calendar's "Show busy times" open (React Query, 60 s stale
-time, no polling interval, no refetch on window focus). Each request reads SQL at most once per
-30 s per people set and window (the CRM part is cached in Redis and dropped by activity writes, which already woke the
+time, no polling interval, no refetch on window focus; the strip waits 400 ms after the day or people stop changing
+and skips days more than a year away, so typing a date doesn't send a request per keystroke). Each request reads SQL
+at most once per 30 s per people set and window (windows on the 15-minute grid) (the CRM part is cached in Redis and dropped by activity writes, which already woke the
 database); company-calendar reads go to Google / Microsoft, not SQL. So an idle office leaves the database asleep.
 
 ## 6. PDF generation
@@ -832,8 +844,13 @@ frontend-crm/src/
   call / meeting / visit with an owner or invited colleagues, a strip for the start's day (08:00–20:00 business time,
   scrolls sideways inside its own box on phones) shows each person's busy blocks (`busy` solid, `tentative` hatched,
   `away` amber) with a status line for people whose calendar couldn't be read ("Not connected: CRM activities only",
-  "Calendar not syncing: …", "Couldn't load the calendar: …"), the chosen window outlined and turning red on a clash, an "Everyone free" row
-  whose gaps are tap targets (≥ 32 px) that set the start, and **Find a free time** (`suggest` = the current length).
+  "Calendar can't be read: …", "Couldn't load the calendar: …"), the chosen window outlined and turning red on a clash, an "Everyone free" row
+  whose gaps are buttons (at least 32 px wide and high, however short the gap) that set the start, the same gaps as
+  wrapping chips under the track on phones, and **Find a free time** (`suggest` = the current length; `from` rounded
+  down to the quarter hour so repeated clicks hit the server caches). While the next day's or people's answer loads,
+  the previous answer is not used: rows show for the new people with no blocks, no gaps and no "everyone is free"
+  line (review fixes, as of 2026-11-26). The query waits 400 ms after the day / people stop changing and is not sent
+  for a day more than 366 days from today.
   Quick-create and the drawer's Reschedule dialog show it behind a "Check availability" button; it is read-only in
   view mode and when the start is locked (follow-up activities). Reschedule sends `exclude` so the activity doesn't
   block itself. The calendar's filters have **Show busy times** (only when other people are picked; `?busy=1`): week /

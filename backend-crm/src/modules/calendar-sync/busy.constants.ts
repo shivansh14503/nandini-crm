@@ -11,9 +11,10 @@ export type BusyKind = (typeof BUSY_KINDS)[number];
  * How much the CRM knows about one person:
  *   - `ok`: CRM activities plus their company calendar;
  *   - `not_connected`: CRM activities only (not enrolled: no company email, excluded by an admin, provider off);
- *   - `error`: CRM activities only (their calendar sync has a problem an admin has been told about, or the provider
- *     is unhealthy);
- *   - `unavailable`: CRM activities only (the calendar didn't answer in time just now);
+ *   - `error`: CRM activities only (their calendar sync has a problem an admin has been told about, the provider is
+ *     unhealthy, or the provider refused to read their calendar just now: a refusal here marks nothing);
+ *   - `unavailable`: CRM activities only (the calendar didn't answer in time just now, or the request's provider
+ *     budget or deadline ran out);
  *   - `unknown`: no active, non-group user by that name (nothing is returned for them).
  */
 export const BUSY_PERSON_STATUSES = ['ok', 'not_connected', 'error', 'unavailable', 'unknown'] as const;
@@ -43,14 +44,30 @@ export const ZERO_LENGTH_BLOCK_MINUTES = 15;
 export const BUSY_RATE_LIMIT = 60;
 export const BUSY_RATE_WINDOW_SECONDS = 60;
 
+/**
+ * Provider calls per user per minute, whatever the number of requests (Redis; an in-process counter while Redis can't
+ * count). Past it the calendar part of the people not yet read is `unavailable` (the CRM part is still returned).
+ */
+export const BUSY_PROVIDER_CALL_BUDGET = 120;
+
+/**
+ * The window the CRM and the providers are asked for (and the caches are keyed on) is widened to this grid: `from`
+ * down, `to` up; the answer is clipped back to the asked window. A window moved by a few ms or minutes hits the cache.
+ */
+export const BUSY_CACHE_GRID_MINUTES = 15;
+
 /** Provider part per person and window (Redis, or an in-process memo while Redis is down). */
 export const BUSY_PROVIDER_CACHE_SECONDS = 60;
 /** CRM part per people set and window (Redis only, guarded: every activity write drops it). */
 export const BUSY_CRM_CACHE_SECONDS = 30;
 
-/** Provider calls: at most this many at once per request, each this long at most, each covering at most 14 days. */
+/**
+ * Provider calls: at most this many at once per request, each this long at most, each covering at most 14 days; no
+ * call starts after the request's deadline, and people still unread at the deadline are `unavailable`.
+ */
 export const BUSY_PROVIDER_PARALLEL = 5;
 export const BUSY_PROVIDER_TIMEOUT_MS = 5_000;
+export const BUSY_PROVIDER_DEADLINE_MS = 8_000;
 export const BUSY_PROVIDER_WINDOW_DAYS = 14;
 /** Calendars per call: Google `freeBusy` (`calendarExpansionMax` 50), Graph `getSchedule` (20). */
 export const BUSY_BATCH_SIZE: Readonly<Record<'google' | 'microsoft' | 'fake', number>> = { google: 50, microsoft: 20, fake: 50 };

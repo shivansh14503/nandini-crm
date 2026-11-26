@@ -4,14 +4,15 @@ import { prisma } from '../../config/prisma.js';
 import { configureSecretBox } from '../../services/secretBox.js';
 import type { AuthUser } from '../../types/user.types.js';
 import { GRAPH_API } from '../integrations/integration.constants.js';
-import { busyActivityWhere, activityBusyBlock, busyService, busyTimes, outcomeOfError, resetBusyMemo } from './busy.service.js';
-import { localBusyLimit, resetLocalBusyLimit } from './busy.rateLimit.js';
+import { BUSY_PROVIDER_CALL_BUDGET } from './busy.constants.js';
+import { busyActivityWhere, activityBusyBlock, busyService, busyTimes, gridWindow, outcomeOfError, requesterSpecific, resetBusyMemo, setBusyDeadlineForTests } from './busy.service.js';
+import { localBusyLimit, localProviderCall, resetLocalBusyLimit } from './busy.rateLimit.js';
 import { busyQuerySchema } from './busy.validator.js';
 import { ConnectionUnavailableError } from './calendarAccess.js';
 import { fakeProviderState, resetFakeProvider } from './providers/fake.js';
 import { resetProviderPauses } from './providers/http.js';
 import { createMicrosoftAdapter } from './providers/microsoft.js';
-import { setAdapterForTests, setFakeHealth, setFakeProviderEnabledForTests } from './providers/registry.js';
+import { getAdapter, setAdapterForTests, setFakeHealth, setFakeProviderEnabledForTests } from './providers/registry.js';
 import { blankConnection, configsWithDomains, installConnectionDouble, microsoftProviderRow, restoreConnectionDouble, useTestSecretBox, type ConnectionRowState, type DoubleState, type UserRow } from './testing/connectionDouble.js';
 import { fakeFetch, route } from './testing/fakeFetch.js';
 import { createTokenSource, setTokenSourceForTests } from './tokenSource.js';
@@ -115,6 +116,7 @@ afterEach(() => {
     setFakeProviderEnabledForTests(null);
     setTokenSourceForTests(null);
     setAdapterForTests('microsoft', null);
+    setAdapterForTests('fake', null);
     configureSecretBox(null);
 });
 
@@ -223,15 +225,36 @@ describe('busyTimes (fake provider)', () => {
         assert.deepEqual(answer.people.map((p) => p.status), ['not_connected', 'ok', 'ok']);
     });
 
-    it('the requester’s call fails (timeout / 5xx): colleagues are read as themselves, the requester is unavailable, the CRM part stays', async () => {
-        install({ users: [person(1, 'asha'), person(2, 'ravi')], connections: [fakeRow('c1', 'asha'), fakeRow('c2', 'ravi')] });
+    it('the requester’s call fails as a whole (timeout / 5xx): the batch is unavailable, no per-colleague calls, the CRM part stays', async () => {
+        install({ users: [person(1, 'asha'), person(2, 'ravi'), person(3, 'meena')], connections: [fakeRow('c1', 'asha'), fakeRow('c2', 'ravi'), fakeRow('c3', 'meena')] });
         stubActivities([meeting('a1', 'asha', '2026-12-01T04:30:00Z', '2026-12-01T05:30:00Z')]);
         fakeProviderState.freeBusyFailures.set('asha@nandiniinfosys.com', 503);
-        const answer = await busyTimes(query(['asha', 'ravi']), asha, now);
-        assert.deepEqual(answer.people.map((p) => p.status), ['unavailable', 'ok']);
+        const answer = await busyTimes(query(['asha', 'ravi', 'meena']), asha, now);
+        assert.deepEqual(answer.people.map((p) => p.status), ['unavailable', 'unavailable', 'unavailable']);
         assert.deepEqual(blocks(personOf(answer, 'asha')), ['busy 04:30-05:30']);
         assert.deepEqual(personOf(answer, 'asha').sources, ['crm']);
-        assert.equal(fakeProviderState.freeBusyCalls.filter((c) => c.mailbox === 'asha@nandiniinfosys.com').length, 1, 'the failed requester is not asked again');
+        assert.equal(fakeProviderState.freeBusyCalls.length, 1, 'one call to a failing provider, not one more per colleague');
+        assert.deepEqual(state.connections.map((c) => c.status), ['ok', 'ok', 'ok'], 'nothing marked');
+        await busyTimes(query(['asha', 'ravi', 'meena']), asha, now);
+        assert.equal(fakeProviderState.freeBusyCalls.length, 2, 'a failure is not cached: the next request asks once more, still once');
+    });
+
+    it('the requester’s own token is refused (user-level): each colleague is read as themselves', async () => {
+        install({ users: [person(1, 'asha'), person(2, 'ravi')], connections: [fakeRow('c1', 'asha'), fakeRow('c2', 'ravi')] });
+        fakeProviderState.userFailures.set('asha@nandiniinfosys.com', { level: 'user', code: 'user_unavailable' });
+        const answer = await busyTimes(query(['asha', 'ravi']), asha, now);
+        assert.deepEqual(answer.people.map((p) => p.status), ['error', 'ok']);
+        assert.deepEqual(fakeProviderState.freeBusyCalls.map((c) => c.mailbox), ['ravi@nandiniinfosys.com']);
+    });
+
+    it('per-user provider call budget: once spent, the calendar part is unavailable and no call is made', async () => {
+        install({ users: [person(1, 'asha'), person(2, 'ravi')], connections: [fakeRow('c1', 'asha'), fakeRow('c2', 'ravi')] });
+        for (let i = 0; i < BUSY_PROVIDER_CALL_BUDGET; i += 1) localProviderCall('ratelimit:activity-busy-calls:user:1');
+        const answer = await busyTimes(query(['asha', 'ravi']), asha, now);
+        assert.deepEqual(answer.people.map((p) => p.status), ['unavailable', 'unavailable']);
+        assert.equal(fakeProviderState.freeBusyCalls.length, 0);
+        const other = await busyTimes(query(['asha', 'ravi']), { id: 2, username: 'ravi', role: 'Sales Executive' }, now);
+        assert.deepEqual(other.people.map((p) => p.status), ['ok', 'ok'], 'per user');
     });
 
     it('a provider-wide failure marks everyone on it error, without per-colleague calls', async () => {
@@ -251,6 +274,19 @@ describe('busyTimes (fake provider)', () => {
         assert.equal(state.connections.find((c) => c.id === 'c3')?.status, 'error', 'withCalendarAccess marks the row for the admins');
     });
 
+    it('the request’s provider deadline: calendars still unread then are unavailable; the CRM part is returned', async () => {
+        install({ users: [person(1, 'asha'), person(2, 'ravi')], connections: [fakeRow('c1', 'asha'), fakeRow('c2', 'ravi')] });
+        stubActivities([meeting('a1', 'ravi', '2026-12-01T04:30:00Z', '2026-12-01T05:30:00Z')]);
+        const real = getAdapter('fake');
+        setAdapterForTests('fake', { ...real, freeBusy: () => new Promise(() => undefined) }); // never answers
+        setBusyDeadlineForTests(30);
+        const started = Date.now();
+        const answer = await busyTimes(query(['asha', 'ravi']), asha, now);
+        assert.ok(Date.now() - started < 2_000);
+        assert.deepEqual(answer.people.map((p) => p.status), ['unavailable', 'unavailable']);
+        assert.deepEqual(blocks(personOf(answer, 'ravi')), ['busy 04:30-05:30']);
+    });
+
     it('cached 60 s per person and window (in-process memo while Redis is down); the CRM part is read again', async () => {
         install({ users: [person(1, 'asha')], connections: [fakeRow('c1', 'asha')] });
         await busyTimes(query(['asha']), asha, now);
@@ -259,13 +295,27 @@ describe('busyTimes (fake provider)', () => {
         assert.equal(activityQueries, 2, 'no Redis in tests: the guarded CRM cache falls through to the database');
     });
 
-    it('exclude: the moved activity’s CRM block goes, its calendar copy is cut from owner and attendees, a neighbour stays', async () => {
+    it('the window is read on the 15-minute grid: a window moved by milliseconds hits the cache, the answer is clipped back', async () => {
+        install({ users: [person(1, 'asha')], connections: [fakeRow('c1', 'asha')] });
+        fakeProviderState.busy.set('asha@nandiniinfosys.com', [{ start: at('2026-12-01T05:00:00Z'), end: at('2026-12-01T06:00:00Z'), kind: 'busy' }]);
+        const ask = (fromIso: string) => busyTimes(busyQuerySchema.parse({ users: 'asha', from: fromIso, to: '2026-12-01T12:00:00Z' }), asha, now);
+        const first = await ask('2026-12-01T05:20:00.123Z');
+        const second = await ask('2026-12-01T05:20:00.456Z');
+        assert.equal(fakeProviderState.freeBusyCalls.length, 1);
+        assert.equal(first.from, '2026-12-01T05:20:00.123Z');
+        assert.deepEqual(blocks(personOf(second, 'asha')), ['busy 05:20-06:00']);
+        assert.deepEqual(gridWindow(at('2026-12-01T05:20:00.123Z'), at('2026-12-01T06:00:00Z')), { from: at('2026-12-01T05:15:00Z'), to: at('2026-12-01T06:00:00Z') });
+        assert.deepEqual(gridWindow(at('2026-12-01T05:15:00Z'), at('2026-12-01T06:00:00.001Z')), { from: at('2026-12-01T05:15:00Z'), to: at('2026-12-01T06:15:00Z') });
+    });
+
+    it('exclude: the moved activity’s CRM block goes, an identical calendar block goes, a longer meeting around it stays whole', async () => {
         install({ users: [person(1, 'asha'), person(2, 'ravi')], connections: [fakeRow('c1', 'asha'), fakeRow('c2', 'ravi')] });
         stubActivities([meeting('a1', 'asha', '2026-12-01T04:30:00Z', '2026-12-01T05:30:00Z', { attendees: [{ kind: 'user', username: 'ravi', responseStatus: 'needsAction' }] })]);
-        fakeProviderState.busy.set('asha@nandiniinfosys.com', [{ start: at('2026-12-01T04:00:00Z'), end: at('2026-12-01T05:30:00Z'), kind: 'busy' }]);
+        // Asha: a real 3-hour review around the CRM meeting. Ravi: a block with exactly its times (its calendar copy).
+        fakeProviderState.busy.set('asha@nandiniinfosys.com', [{ start: at('2026-12-01T03:30:00Z'), end: at('2026-12-01T06:30:00Z'), kind: 'busy' }]);
         fakeProviderState.busy.set('ravi@nandiniinfosys.com', [{ start: at('2026-12-01T04:30:00Z'), end: at('2026-12-01T05:30:00Z'), kind: 'busy' }]);
         const answer = await busyTimes(query(['asha', 'ravi'], { exclude: 'a1' }), asha, now);
-        assert.deepEqual(blocks(personOf(answer, 'asha')), ['busy 04:00-04:30']);
+        assert.deepEqual(blocks(personOf(answer, 'asha')), ['busy 03:30-06:30'], 'still busy while the activity is moved');
         assert.deepEqual(personOf(answer, 'ravi').busy, []);
     });
 
@@ -315,6 +365,30 @@ describe('busyTimes (Microsoft getSchedule, app token)', () => {
         assert.deepEqual(answer.people.map((p) => [p.status, p.provider]), [['ok', 'microsoft'], ['ok', 'microsoft']]);
         assert.deepEqual(blocks(personOf(answer, 'ravi')), ['busy 05:00-06:00']);
     });
+
+    it('a refused getSchedule (403 ErrorAccessDenied) marks no row and no provider health: busy reads are read-only', async () => {
+        useTestSecretBox();
+        const checked = (id: string, username: string) => ({ ...msRow(id, username), status: 'error', lastErrorCode: 'mailbox_out_of_scope', lastCheckedAt: now });
+        install({
+            users: [person(1, 'asha'), person(2, 'ravi'), person(3, 'meena'), person(4, 'dev'), person(5, 'kiran'), person(6, 'lata')],
+            providers: [microsoftProviderRow()],
+            // No other ok row and three recent out-of-scope checks: a sync job's refusal here would escalate to the app.
+            connections: [msRow('m1', 'asha'), msRow('m2', 'ravi'), checked('m4', 'dev'), checked('m5', 'kiran'), checked('m6', 'lata')],
+        });
+        const { fetchImpl, calls } = fakeFetch([
+            route(`https://login.microsoftonline.com/${TENANT}/oauth2/v2.0/token`, () => ({ status: 200, body: { access_token: 'app-token', expires_in: 3600 } })),
+            route(`${GRAPH_API}/users/`, () => ({ status: 403, body: { error: { code: 'ErrorAccessDenied', message: 'Access is denied.' } } })),
+        ]);
+        setTokenSourceForTests(createTokenSource({ fetchImpl }));
+        setAdapterForTests('microsoft', createMicrosoftAdapter({ fetchImpl }));
+        const before = state.connections.map((c) => [c.id, c.status, c.consecutiveFailures]);
+        const answer = await busyTimes(query(['asha', 'ravi']), asha, now);
+        assert.deepEqual(answer.people.map((p) => [p.status, p.sources]), [['error', ['crm']], ['error', ['crm']]]);
+        assert.equal(calls.filter((c) => c.url.startsWith(GRAPH_API)).length, 2, 'the requester’s mailbox, then Ravi’s as himself');
+        assert.deepEqual(state.connections.map((c) => [c.id, c.status, c.consecutiveFailures]), before, 'no row marked');
+        assert.equal(state.providers.get('microsoft')?.healthStatus, 'unknown', 'provider health untouched');
+        assert.equal(state.notifications.length, 0, 'no admin notification');
+    });
 });
 
 describe('helpers', () => {
@@ -323,7 +397,18 @@ describe('helpers', () => {
         assert.equal(outcomeOfError(new ConnectionUnavailableError('user_inactive')), 'not_connected');
         assert.equal(outcomeOfError(new ConnectionUnavailableError('user_error')), 'error');
         assert.equal(outcomeOfError(new ConnectionUnavailableError('provider_unhealthy')), 'error');
+        assert.equal(outcomeOfError(new ConnectionUnavailableError('call_refused', { level: 'user', code: 'mailbox_out_of_scope' })), 'error');
         assert.equal(outcomeOfError(new Error('timeout')), 'unavailable');
+    });
+
+    it('requesterSpecific: only the requester’s own row, token or mailbox falls back per colleague', () => {
+        assert.equal(requesterSpecific(new ConnectionUnavailableError('user_error')), true);
+        assert.equal(requesterSpecific(new ConnectionUnavailableError('user_inactive')), true);
+        assert.equal(requesterSpecific(new ConnectionUnavailableError('call_refused', { level: 'user', code: 'mailbox_out_of_scope' })), true);
+        assert.equal(requesterSpecific(new ConnectionUnavailableError('call_refused', { level: 'app', code: 'provider_error' })), false);
+        assert.equal(requesterSpecific(new ConnectionUnavailableError('provider_unhealthy')), false);
+        assert.equal(requesterSpecific(new ConnectionUnavailableError('key_missing')), false);
+        assert.equal(requesterSpecific(new Error('503')), false);
     });
 
     it('rate limit fallback: 60 per minute per user while Redis can’t count', () => {

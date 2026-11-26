@@ -50,16 +50,15 @@ describe('mergeIntervals / subtractInterval / clip', () => {
         ]);
     });
 
-    it('withoutOwnCopy cuts the moved event out of blocks that hold it, not out of blocks that only overlap it', () => {
+    it('withoutOwnCopy drops only one block with exactly the excluded times; blocks that hold or overlap it stay whole', () => {
         const own = iv('2026-12-01T05:00:00Z', '2026-12-01T06:00:00Z');
-        const list = [
-            { ...iv('2026-12-01T04:00:00Z', '2026-12-01T06:00:00Z'), kind: 'busy' as const }, // joined with the meeting before it
-            { ...iv('2026-12-01T05:30:00Z', '2026-12-01T07:00:00Z'), kind: 'busy' as const }, // another meeting
-        ];
-        assert.deepEqual(withoutOwnCopy(list, own), [
-            { ...iv('2026-12-01T04:00:00Z', '2026-12-01T05:00:00Z'), kind: 'busy' },
-            { ...iv('2026-12-01T05:30:00Z', '2026-12-01T07:00:00Z'), kind: 'busy' },
-        ]);
+        const copy = { ...iv('2026-12-01T05:00:00Z', '2026-12-01T06:00:00Z'), kind: 'busy' as const };
+        const holding = { ...iv('2026-12-01T03:30:00Z', '2026-12-01T06:30:00Z'), kind: 'busy' as const }; // a 3-hour review around it
+        const overlapping = { ...iv('2026-12-01T05:30:00Z', '2026-12-01T07:00:00Z'), kind: 'tentative' as const };
+        assert.deepEqual(withoutOwnCopy([holding, overlapping], own), [holding, overlapping]);
+        assert.deepEqual(withoutOwnCopy([holding, copy, overlapping], own), [holding, overlapping]);
+        assert.deepEqual(withoutOwnCopy([copy, { ...copy }], own), [copy], 'a second identical block is another event');
+        assert.deepEqual(withoutOwnCopy([copy], iv('2026-12-01T06:00:00Z', '2026-12-01T06:00:00Z')), [copy], 'an empty window cuts nothing');
     });
 
     it('splitWindows cuts a range into ≤ 14-day windows', () => {

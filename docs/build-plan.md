@@ -416,7 +416,11 @@ keeps wall-clock times); all-day activities are entered as business-timezone day
         try, ≤ 14-day windows, ≤ 5 at once, cached 60 s per person in Redis (in-process memo while Redis is down).
         Not enrolled / excluded / row in error / provider failing → CRM only, marked by `status`. `exclude` stops an
         activity being moved from blocking itself; `suggest` returns the first common free slot (09:00–19:00, 15-min
-        grid, 7 days). Rate limit 60 / min / user with an in-memory fallback. Independent of P2-3b (no
+        grid, 7 days). Rate limit 60 / min / user with an in-memory fallback. Review fixes (2026-11-26): `exclude`
+        drops only an identical calendar block; a requester call that fails as a whole doesn't fan out per
+        colleague; busy reads are `readOnly` (a refused call marks no row / provider health); 8 s provider deadline,
+        120 provider calls / min / user, windows and cache keys on the 15-minute grid; the strip debounces, ignores
+        the previous answer while loading and keeps gap buttons ≥ 32 px (chips on phones). Independent of P2-3b (no
         `ActivityExternalLink`). Frontend: `ActivityBusyTimes` strip with "Everyone free" gaps and "Find a free
         time" in the activity form (page, quick-create behind "Check availability") and the Reschedule dialog;
         calendar "Show busy times" background bands in week / 3-day / day views. Not run against a real SQL Server,
