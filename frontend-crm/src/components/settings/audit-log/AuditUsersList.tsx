@@ -9,6 +9,7 @@ import { TableSkeleton } from '@/components/common/skeletons';
 import { EmptyState, errorMessage, inputSx } from '@/components/settings/form-customization/builderUi';
 import type { AuditUserActivity, AuditUsers } from '@/services/auditAdmin.service';
 import { CategoryBar, UserAvatar, UserBadges, relativeTime } from './auditLogUi';
+import { fmtCount } from '@/utils/formats';
 
 type StatusFilter = 'all' | 'active' | 'inactive' | 'withActivity';
 type SortKey = 'activity' | 'recent' | 'name' | 'signIn';
@@ -26,7 +27,8 @@ const SORT_CHOICES: { value: SortKey; label: string }[] = [
     { value: 'signIn', label: 'Last sign-in' },
 ];
 
-const count = (value: number) => value.toLocaleString('en-IN');
+/** A count in the company number grouping (Indian until it is changed). */
+const count = (value: number) => fmtCount(value);
 const newestFirst = (a: string | null, b: string | null) => (b ?? '').localeCompare(a ?? '');
 
 /** Desktop: one line per user under a header row. Phones and tablets: name on top, the three facts below it. */

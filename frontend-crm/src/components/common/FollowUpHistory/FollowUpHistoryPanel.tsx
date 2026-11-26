@@ -8,6 +8,7 @@ import { useEntityAuditEntries, type AuditEntityType } from '@/hooks/queries/use
 import { glassSurfaceSx, GLASS_SHADOW, GLASS_RADIUS, FLOAT_INSET } from '@/theme/glass';
 import { DOCK } from '@/components/common/Drawer/RelatedModulesSidebar';
 import { buildFollowUpEvents, formatEventTime, type FollowUpEvent } from './followUpEvents';
+import { useDisplayFormats } from '@/utils/formats';
 
 /** Width of the follow-up panel on wide screens (px). */
 export const FOLLOW_UP_PANEL_WIDTH = 320;
@@ -25,7 +26,9 @@ export interface FollowUpHistoryPanelProps {
  */
 export function FollowUpHistoryPanel({ entityType, recordId, recordLabel }: FollowUpHistoryPanelProps) {
     const { data: entries, isLoading, isError } = useEntityAuditEntries(entityType, recordId || undefined);
-    const events = useMemo(() => buildFollowUpEvents(entries ?? []), [entries]);
+    // The events carry formatted slot text, so rebuild them when an admin changes the company formats.
+    const formats = useDisplayFormats();
+    const events = useMemo(() => (formats ? buildFollowUpEvents(entries ?? []) : []), [entries, formats]);
 
     return (
         <Box

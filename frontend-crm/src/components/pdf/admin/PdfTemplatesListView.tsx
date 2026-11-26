@@ -26,6 +26,7 @@ import {
 import { PDF_MODULE_LABELS, PDF_MODULES, type PdfModule, type PdfTemplateListItem } from '@/types/pdfTemplate.types';
 import { NewTemplateDialog } from './NewTemplateDialog';
 import { StatusChip } from './PdfTemplateChips';
+import { fmtInstant } from '@/utils/formats';
 
 const actionIconSx = {
     width: 28,
@@ -35,10 +36,8 @@ const actionIconSx = {
     '&:hover': { color: 'var(--crm-blue-700)', backgroundColor: 'var(--mui-palette-primary-soft)' },
 } as const;
 
-const formatUpdated = (iso: string) => {
-    const date = new Date(iso);
-    return Number.isNaN(date.getTime()) ? '—' : date.toLocaleString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
-};
+/** `03 Dec 2026, 09:04 am` on the business clock (the company formats once saved); '—' when invalid. */
+const formatUpdated = (iso: string) => fmtInstant(iso, { legacyDate: 'DD MMM YYYY', legacyTime: 'hh:mm a' }) || '—';
 
 type ModuleFilter = PdfModule | 'ALL';
 

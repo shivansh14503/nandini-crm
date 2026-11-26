@@ -3,6 +3,7 @@ import { FIELD_MAX_LENGTH as L } from '../config/fieldLimits';
 import type { ConfigValidationIssue } from '../utils/formConfig';
 import { PO_SALES_STAGE, SMALL_COMMISSION_LIMIT } from '../types/opportunity.types';
 import { isRecordFile } from '../types/recordFile.types';
+import { fmtMoney } from '../utils/formats';
 import {
     requiredString,
     optionalString,
@@ -144,7 +145,8 @@ export function commissionIssues(
     if (defaultCommissionType(amount) !== 'Other') return [];
     return PAYEE_BANK_FIELDS.filter((f) => !values[f.key]?.trim()).map((f) => ({
         path: f.key,
-        message: `${f.label} is required when Commission Amount is above ₹${SMALL_COMMISSION_LIMIT.toLocaleString('en-IN')}.`,
+        // Same text as the API's payeeBankIssues (opportunity.validator.ts): the limit in the company grouping.
+        message: `${f.label} is required when Commission Amount is above ${fmtMoney(SMALL_COMMISSION_LIMIT, { maxDecimals: 0 })}.`,
     }));
 }
 

@@ -3,6 +3,8 @@
 import React from 'react';
 import { Box } from '@mui/material';
 import type { TicketPriority, TicketStatus } from '@/types/ticket.types';
+import { fmtInstant, fmtWallClock } from '@/utils/formats';
+import { isWallClock } from '@/utils/zonedTime';
 
 interface PillColors {
     bg: string;
@@ -63,10 +65,13 @@ export function TicketStatusPill({ status }: { status: TicketStatus }) {
     return <Pill label={status} colors={TICKET_STATUS_COLORS[status] ?? FALLBACK} rounded="12px" />;
 }
 
-/** "27 Oct 2026, 6:00 pm" from a `YYYY-MM-DDTHH:mm` / ISO value; '-' when empty or invalid. */
+/**
+ * "27 Oct 2026, 6:00 pm" (the company formats once saved) from a `YYYY-MM-DDTHH:mm` business wall clock (shown as
+ * stored) or an ISO instant (shown on the business clock); '-' when empty, the value itself when invalid.
+ */
 export function formatTicketDue(value: string | undefined): string {
     if (!value) return '-';
-    const d = new Date(value);
-    if (Number.isNaN(d.getTime())) return value;
-    return d.toLocaleString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: 'numeric', minute: '2-digit' });
+    const opts = { legacyDate: 'DD MMM YYYY', legacyTime: 'h:mm a' } as const;
+    if (isWallClock(value)) return fmtWallClock(value, opts);
+    return fmtInstant(value, opts) || value;
 }

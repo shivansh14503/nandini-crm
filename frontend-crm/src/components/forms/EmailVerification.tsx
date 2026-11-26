@@ -6,6 +6,7 @@ import VerifiedIcon from '@mui/icons-material/Verified';
 import { FieldNotice } from './FieldNotice';
 import { emailVerificationService, type EmailCheckResult } from '@/services/emailVerification.service';
 import type { CorporateEmail } from '@/types/organization.types';
+import { fmtInstantDay, getDisplayFormats, useDisplayFormats } from '@/utils/formats';
 
 /** Plain-language explanation of a stored verification reason (server and provider codes). */
 export const REASON_TEXT: Record<string, string> = {
@@ -36,14 +37,18 @@ const STATUS_STYLE = {
     invalid: { label: 'Invalid', color: 'var(--mui-palette-error-main)', bg: 'var(--mui-palette-error-soft)' },
 } as const;
 
+/** ` Checked 3 Dec 2026.`: the device's own date style until the company formats are saved, then the company's. */
 function formatCheckedAt(iso: string | null | undefined): string {
     if (!iso) return '';
     const date = new Date(iso);
-    return Number.isNaN(date.getTime()) ? '' : ` Checked ${date.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })}.`;
+    if (Number.isNaN(date.getTime())) return '';
+    const day = getDisplayFormats().customized ? fmtInstantDay(date) : date.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
+    return ` Checked ${day}.`;
 }
 
 /** Chip for the server's saved verification result; nothing when the address hasn't been decided yet. */
 export function EmailVerificationBadge({ email }: { email: CorporateEmail }) {
+    useDisplayFormats(); // the "Checked …" date follows an admin's format change
     const status = email.verificationStatus;
     if (!status || !email.email) return null;
     const style = STATUS_STYLE[status];

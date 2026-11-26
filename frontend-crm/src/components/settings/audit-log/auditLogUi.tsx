@@ -7,6 +7,7 @@ import { ROUTES } from '@/config/constants';
 import { UserAvatar as SharedUserAvatar } from '@/components/common/UserAvatar';
 import { getModuleColor, moduleKeyFrom } from '@/theme/moduleColors';
 import type { AuditListItem, AuditUserActivity } from '@/services/auditAdmin.service';
+import { businessWallClock, fmtDay, fmtShortDay } from '@/utils/formats';
 
 /** Root of every audit log query (list, counts, entries, undo previews, integrity): invalidating it refreshes the screen. */
 export const AUDIT_LOG_KEY = ['admin-audit-log'] as const;
@@ -210,8 +211,11 @@ export function relativeTime(iso: string, now = Date.now()): string {
     const days = Math.ceil((startOfToday - then.getTime()) / DAY);
     if (days <= 1) return 'Yesterday';
     if (days < 7) return `${days} days ago`;
-    const sameYear = then.getFullYear() === today.getFullYear();
-    return then.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', ...(sameYear ? {} : { year: 'numeric' }) });
+    // The date on the business clock: `12 Oct` / `12 Oct 2025` while not customized, else the company's style.
+    const wall = businessWallClock(then);
+    if (!wall) return '';
+    const sameYear = wall.slice(0, 4) === businessWallClock(today)?.slice(0, 4);
+    return sameYear ? fmtShortDay(wall.slice(0, 10)) : fmtDay(wall.slice(0, 10), { legacy: 'D MMM YYYY' });
 }
 
 /**
