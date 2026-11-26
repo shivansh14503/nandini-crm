@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Divider } from '@mui/material';
+import { Alert, Box, Divider } from '@mui/material';
 import { useFormContext, useWatch } from 'react-hook-form';
 import EventNoteOutlinedIcon from '@mui/icons-material/EventNoteOutlined';
 import ScheduleOutlinedIcon from '@mui/icons-material/ScheduleOutlined';
@@ -233,6 +233,23 @@ export function useActivityForm({ mode, activityId, prefill }: UseActivityFormOp
     return { ...form, clock, durationOf, activity, recordLoading, save };
 }
 
+/**
+ * A field the API won't let anyone change on this activity (`Activity.lockedFields`: a lead / opportunity follow-up
+ * activity's type, times, status, owner and related record move with the record). Shown greyed out and `inert`
+ * (no focus, no clicks, no typing); the title says why. Keeps `children`, so the Form Builder's field lookup still
+ * finds the control inside.
+ */
+function LockedField({ locked, reason, children }: { locked: boolean; reason?: string; children: React.ReactNode }) {
+    if (!locked) return <>{children}</>;
+    return (
+        <Box title={reason} sx={{ minWidth: 0, cursor: 'not-allowed' }}>
+            <Box inert aria-disabled sx={{ opacity: 0.6, minWidth: 0 }}>
+                {children}
+            </Box>
+        </Box>
+    );
+}
+
 export interface ActivityFormFieldsProps {
     clock: BusinessClock;
     durationOf: (type: string) => number;
@@ -240,6 +257,10 @@ export interface ActivityFormFieldsProps {
     compact?: boolean;
     /** Opens the related record (view mode) instead of following the link. */
     onOpenRelated?: (module: ActivityRelatedModule, id: string) => void;
+    /** Fields the loaded activity locks (`Activity.lockedFields`): shown read only. */
+    lockedFields?: readonly string[];
+    /** Why they are locked (shown above the fields and on each one). */
+    lockReason?: string;
 }
 
 /**
@@ -247,7 +268,7 @@ export interface ActivityFormFieldsProps {
  * seeded section, each control named after its field key. Fields a Followup Type doesn't use
  * (`ACTIVITY_NOT_APPLICABLE`) aren't rendered. Render inside the form's FormProvider.
  */
-export function ActivityFormFields({ clock, durationOf, compact = false, onOpenRelated }: ActivityFormFieldsProps) {
+export function ActivityFormFields({ clock, durationOf, compact = false, onOpenRelated, lockedFields, lockReason }: ActivityFormFieldsProps) {
     const { control, getValues, setValue, watch, getFieldState, trigger } = useFormContext<ActivityFormValues>();
     const formConfig = useModuleFormConfig('activities');
     const { getOptions } = formConfig;
@@ -259,6 +280,8 @@ export function ActivityFormFields({ clock, durationOf, compact = false, onOpenR
     const isNote = followupType === NOTE_TYPE;
 
     const notApplicable = useMemo(() => new Set(ACTIVITY_NOT_APPLICABLE[followupType] ?? []), [followupType]);
+    const locked = useMemo(() => new Set(lockedFields ?? []), [lockedFields]);
+    const isLocked = (key: string) => locked.has(key);
     /** A note in the quick-create dialog is Subject + Remarks + Related To, plus whatever an admin made required. */
     const noteCompact = compact && isNote;
     const shows = (key: string) => {
@@ -390,9 +413,16 @@ export function ActivityFormFields({ clock, durationOf, compact = false, onOpenR
     return (
         <>
             {/* ── Activity Details ── */}
+            {locked.size > 0 && lockReason && (
+                <Alert severity="info" sx={{ mb: 2, fontSize: '0.82rem', alignItems: 'center' }}>
+                    {lockReason}
+                </Alert>
+            )}
             <SectionLabel icon={<EventNoteOutlinedIcon sx={{ fontSize: 18 }} />} label="Activity Details" />
             <FormGrid columns={columns} sx={{ mt: 1 }}>
-                <RhfSelect<ActivityFormValues> name="followupType" label="Followup Type" required options={typeOptions} placeholder="Select Followup Type" />
+                <LockedField locked={isLocked('followupType')} reason={lockReason}>
+                    <RhfSelect<ActivityFormValues> name="followupType" label="Followup Type" required options={typeOptions} placeholder="Select Followup Type" />
+                </LockedField>
                 {shows('subject') && (
                     <RhfTextField<ActivityFormValues>
                         name="subject"
@@ -403,19 +433,27 @@ export function ActivityFormFields({ clock, durationOf, compact = false, onOpenR
                     />
                 )}
                 {shows('status') && (
-                    <RhfSelect<ActivityFormValues>
-                        name="status"
-                        label="Status"
-                        required
-                        options={[...ACTIVITY_STATUSES]}
-                        placeholder="Select Status"
-                        hint={status === PLANNED_STATUS ? undefined : 'Past times allowed'}
-                    />
+                    <LockedField locked={isLocked('status')} reason={lockReason}>
+                        <RhfSelect<ActivityFormValues>
+                            name="status"
+                            label="Status"
+                            required
+                            options={[...ACTIVITY_STATUSES]}
+                            placeholder="Select Status"
+                            hint={status === PLANNED_STATUS ? undefined : 'Past times allowed'}
+                        />
+                    </LockedField>
                 )}
-                {shows('assignedTo') && <RhfAssignedUserCard<ActivityFormValues> name="assignedTo" label="Assigned to" required roleBadge="" />}
+                {shows('assignedTo') && (
+                    <LockedField locked={isLocked('assignedTo')} reason={lockReason}>
+                        <RhfAssignedUserCard<ActivityFormValues> name="assignedTo" label="Assigned to" required roleBadge="" />
+                    </LockedField>
+                )}
                 {shows('relatedTo') && (
                     <FormGridItem span={compact ? 'full' : 2}>
-                        <RhfRelatedRecordField name="relatedTo" label="Related To" onPicked={handleRelatedPicked} onOpenRecord={onOpenRelated} />
+                        <LockedField locked={isLocked('relatedTo') || isLocked('relatedId')} reason={lockReason}>
+                            <RhfRelatedRecordField name="relatedTo" label="Related To" onPicked={handleRelatedPicked} onOpenRecord={onOpenRelated} />
+                        </LockedField>
                     </FormGridItem>
                 )}
                 {shows('organizationName') && (
@@ -447,31 +485,39 @@ export function ActivityFormFields({ clock, durationOf, compact = false, onOpenR
                     <SectionLabel icon={<ScheduleOutlinedIcon sx={{ fontSize: 18 }} />} label="Schedule" />
                     <FormGrid columns={columns} sx={{ mt: 1 }}>
                         {shows('startAt') && (
-                            <RhfScheduleField<ActivityFormValues>
-                                name="startAt"
-                                label="Start"
-                                required
-                                allDay={allDay}
-                                now={nowWall}
-                                allowPast={allowPast}
-                                defaultTime={defaultTime}
-                                onValueChange={handleStartChange}
-                            />
+                            <LockedField locked={isLocked('startAt')} reason={lockReason}>
+                                <RhfScheduleField<ActivityFormValues>
+                                    name="startAt"
+                                    label="Start"
+                                    required
+                                    allDay={allDay}
+                                    now={nowWall}
+                                    allowPast={allowPast || isLocked('startAt')}
+                                    defaultTime={defaultTime}
+                                    onValueChange={handleStartChange}
+                                />
+                            </LockedField>
                         )}
                         {shows('endAt') && (
-                            <RhfScheduleField<ActivityFormValues>
-                                name="endAt"
-                                label="End"
-                                allDay={allDay}
-                                now={nowWall}
-                                allowPast={allowPast}
-                                defaultTime={defaultTime}
-                                hint={allDay ? 'Last day' : undefined}
-                                onValueChange={revalidateEnd}
-                                sameDayAs="startAt"
-                            />
+                            <LockedField locked={isLocked('endAt')} reason={lockReason}>
+                                <RhfScheduleField<ActivityFormValues>
+                                    name="endAt"
+                                    label="End"
+                                    allDay={allDay}
+                                    now={nowWall}
+                                    allowPast={allowPast || isLocked('endAt')}
+                                    defaultTime={defaultTime}
+                                    hint={allDay ? 'Last day' : undefined}
+                                    onValueChange={revalidateEnd}
+                                    sameDayAs="startAt"
+                                />
+                            </LockedField>
                         )}
-                        {shows('allDay') && <RhfCheckbox<ActivityFormValues> name="allDay" label="All Day" alignWithInputs />}
+                        {shows('allDay') && (
+                            <LockedField locked={isLocked('allDay')} reason={lockReason}>
+                                <RhfCheckbox<ActivityFormValues> name="allDay" label="All Day" alignWithInputs />
+                            </LockedField>
+                        )}
                         {shows('reminder') && (
                             <RhfSelect<ActivityFormValues>
                                 name="reminder"

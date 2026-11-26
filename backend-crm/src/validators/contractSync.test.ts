@@ -5,6 +5,7 @@ import { describe, it } from 'node:test';
 import { pathToFileURL } from 'node:url';
 import { DOCUMENT_DEST, expectedFrontendFiles } from '../../scripts/syncPdfDocument.js';
 import { DRAWER_LAYOUT_DEST, expectedDrawerLayoutFiles } from '../../scripts/syncDrawerLayout.js';
+import { DISPLAY_FORMATS_DEST, expectedDisplayFormatsFiles } from '../../scripts/syncDisplayFormats.js';
 import { FIELD_MAX_LENGTH } from '../config/fieldLimits.js';
 import { TALLY_SERIAL_LENGTH, tallySerialIssue } from './tallySerial.js';
 import { leadSourceDetailIssues, PARTNER_LEAD_SOURCE, REFERRED_BY_LEAD_SOURCES } from '../modules/shared/leadSource.js';
@@ -35,6 +36,7 @@ import {
 } from '../modules/activities/activity.schedule.js';
 import { MAX_ATTENDEES, NOTE_REMARKS_MESSAGE, PAST_START_MESSAGE, RELATED_RECORD_MESSAGE, activityPastIssues } from '../modules/activities/activity.validator.js';
 import * as zonedTime from '../utils/zonedTime.js';
+import { FOLLOW_UP_ACTIVITY_LOCKED, FOLLOW_UP_ORIGIN } from '../modules/activities/activity.access.js';
 import { ACTIVITY_ONLY_TYPE_MESSAGE, activityOnlyTypeIssues, isActivityOnlyFollowupType } from '../modules/shared/followupTypes.js';
 import { PASSWORD_MAX_LENGTH, PASSWORD_MIN_LENGTH, PASSWORD_RULES, passwordPolicyIssue } from '../modules/auth/passwordPolicy.js';
 import { INTEGRATION_PROVIDERS, SECRET_EXPIRY_WARNING_DAYS } from '../modules/integrations/integration.constants.js';
@@ -117,6 +119,8 @@ interface FrontendActivityTypes {
 }
 
 interface FrontendActivityContract {
+    FOLLOW_UP_ORIGIN: string;
+    FOLLOW_UP_ACTIVITY_LOCKED: string;
     ACTIVITY_MAX_ATTENDEES: number;
     ACTIVITY_NOT_APPLICABLE: Readonly<Record<string, readonly string[]>>;
     ACTIVITY_RELATED_MODULE_LABELS: Readonly<Record<string, string>>;
@@ -251,6 +255,14 @@ describe('backend ↔ frontend contract', { skip }, () => {
         }
     });
 
+    it('frontend lib/display-formats is an exact copy of the company display formats core (run npm run sync:display-formats)', () => {
+        const expected = expectedDisplayFormatsFiles();
+        assert.deepEqual(readdirSync(DISPLAY_FORMATS_DEST).sort(), Object.keys(expected).sort());
+        for (const [name, content] of Object.entries(expected)) {
+            assert.equal(readFileSync(path.join(DISPLAY_FORMATS_DEST, name), 'utf8'), content, `${name} is out of date`);
+        }
+    });
+
     it('fieldLimits.ts has identical keys and values', async () => {
         const frontend = await loadFrontend<FrontendFieldLimits>('config/fieldLimits.ts');
         const sorted = (limits: Record<string, number>) => Object.fromEntries(Object.entries(limits).sort(([a], [b]) => a.localeCompare(b)));
@@ -335,6 +347,9 @@ describe('backend ↔ frontend contract', { skip }, () => {
         assert.deepEqual(contract.ACTIVITY_NOT_APPLICABLE, ACTIVITY_NOT_APPLICABLE);
         assert.equal(contract.ACTIVITY_MAX_ATTENDEES, MAX_ATTENDEES);
         assert.deepEqual(contract.ACTIVITY_RELATED_MODULE_LABELS, ACTIVITY_RELATED_MODULE_LABELS);
+        // Follow-up activities (P2-4): their origin and the 409 code of a locked-field write.
+        assert.equal(contract.FOLLOW_UP_ORIGIN, FOLLOW_UP_ORIGIN);
+        assert.equal(contract.FOLLOW_UP_ACTIVITY_LOCKED, FOLLOW_UP_ACTIVITY_LOCKED);
     });
 
     it('frontend utils/zonedTime.ts converts times exactly as the backend', async () => {

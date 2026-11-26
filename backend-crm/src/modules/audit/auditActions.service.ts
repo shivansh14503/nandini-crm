@@ -3,6 +3,7 @@ import { runAsRevertOf } from '../../services/auditContext.js';
 import type { AuthUser } from '../../types/user.types.js';
 import { HttpError } from '../../utils/httpError.js';
 import { activityService } from '../activities/activity.service.js';
+import { companyFormatsService } from '../company-formats/companyFormats.service.js';
 import { contactService } from '../contacts/contact.service.js';
 import { contractService } from '../contracts/contract.service.js';
 import { referralService } from '../referrals/referral.service.js';
@@ -16,7 +17,7 @@ import { ticketService } from '../tickets/ticket.service.js';
 import { parseChanges } from './audit.format.js';
 import { auditIdParamSchema, auditUndoBodySchema } from './auditAdmin.query.js';
 import { buildLabeler } from './auditAdmin.service.js';
-import { buildUndoPatch, fieldValue, planUndo, sameValue, UNDOABLE_ACTIONS, type UndoFieldPlan } from './auditUndo.js';
+import { buildUndoPatch, fieldValue, planUndo, sameValue, UNDOABLE_ACTIONS, undoBlockFor, type UndoFieldPlan } from './auditUndo.js';
 
 /**
  * Undo and Restore from Admin › Audit Log. Both go through the module's own service, so the record's normal rules
@@ -75,12 +76,13 @@ async function undoContext(params: unknown, user: AuthUser) {
     // A deleted record isn't found by getById (404): restore it first.
     const record = (await service.getById(row.entityId, user)) as Record<string, unknown>;
     const changes = parseChanges(row.changesJson);
-    return { row, service, record, plans: planUndo(changes, record) };
+    // Calendar-made record changes and a follow-up activity's locked fields can't be put back (auditUndo.ts).
+    return { row, service, record, plans: planUndo(changes, record, undoBlockFor(row, record)) };
 }
 
 /** One field of the undo preview, values as the screen shows them. */
 async function presentPlans(module: string, plans: UndoFieldPlan[]) {
-    const labeler = await buildLabeler();
+    const labeler = await buildLabeler(await companyFormatsService.load());
     const show = (key: string, value: unknown) => labeler.value(module, key, value);
     return plans.map((plan) => ({
         key: plan.key,
@@ -89,6 +91,7 @@ async function presentPlans(module: string, plans: UndoFieldPlan[]) {
         to: show(plan.key, plan.to),
         current: show(plan.key, plan.current),
         status: plan.status,
+        ...(plan.reason ? { reason: plan.reason } : {}),
     }));
 }
 

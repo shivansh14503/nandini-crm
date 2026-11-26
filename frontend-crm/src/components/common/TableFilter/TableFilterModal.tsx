@@ -36,6 +36,7 @@ import CheckBoxIcon from '@mui/icons-material/CheckBox';
 import { activeConditionCount, describeCriteria } from './applyFilter';
 import { DATE_OPERATORS, DAYS_OPERATORS, type FilterCondition, type FilterCriteria, type FilterFieldDef, type SavedTableFilter } from './types';
 import type { TableFilterController } from './useTableFilter';
+import { fmtCount, fmtInstantDay, useDisplayFormats } from '@/utils/formats';
 
 export interface FilterSortOption {
     field: string;
@@ -79,7 +80,7 @@ function relativeTime(iso: string): string {
     if (hours < 24) return `${hours} hour${hours === 1 ? '' : 's'} ago`;
     const days = Math.round(hours / 24);
     if (days < 30) return `${days} day${days === 1 ? '' : 's'} ago`;
-    return new Date(iso).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+    return fmtInstantDay(iso, { legacy: 'DD MMM YYYY' });
 }
 
 /** Mounts fresh each time it opens, starting from the applied filter. */
@@ -88,6 +89,7 @@ export function TableFilterModal(props: TableFilterModalProps) {
 }
 
 function FilterDialog({ controller, sortOptions }: TableFilterModalProps) {
+    useDisplayFormats(); // dates and counts below follow an admin's format change
     const { fields, lists } = controller;
     // null until the user picks a tab: lands on Recent when there are recents and nothing is applied (also once
     // the recents finish loading on first open), else Advanced.
@@ -440,7 +442,7 @@ function FilterDialog({ controller, sortOptions }: TableFilterModalProps) {
                             ? 'No filters set'
                             : matchCount === null
                               ? `${draftCount} filter${draftCount === 1 ? '' : 's'} set`
-                              : `${matchCount.toLocaleString('en-IN')} matching record${matchCount === 1 ? '' : 's'}`}
+                              : `${fmtCount(matchCount)} matching record${matchCount === 1 ? '' : 's'}`}
                     </Typography>
                     <Button onClick={controller.close} sx={textBtnSx}>
                         Cancel

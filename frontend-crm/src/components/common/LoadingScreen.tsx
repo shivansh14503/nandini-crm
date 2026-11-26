@@ -27,7 +27,7 @@ function variantForPath(pathname: string | null): PageSkeletonVariant | 'spinner
     if (parts[0] === 'admin') {
         // /admin/pdf-templates, /admin/document-series → list; their editors → form; the rest → page.
         if (parts.length >= 3) return 'form';
-        if (parts[1] === 'pdf-templates' || parts[1] === 'document-series' || parts[1] === 'email-validation' || parts[1] === 'holidays') return 'list';
+        if (parts[1] === 'pdf-templates' || parts[1] === 'document-series' || parts[1] === 'company-formats' || parts[1] === 'email-validation' || parts[1] === 'holidays') return 'list';
         return 'page';
     }
     if (PAGE_SECTIONS.has(parts[0])) return 'page';

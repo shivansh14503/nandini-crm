@@ -144,6 +144,20 @@ model DocumentSeriesSettings {
   updatedAt     DateTime @default(now()) @updatedAt
 }
 
+/// Company-wide display formats (Admin › Company formats). Single row, id = 1. No row = not customized: every screen keeps
+/// its pre-Phase-5 style. Formats change how values are shown, never how they are stored or sent over the API.
+model CompanyFormatSettings {
+  id             Int      @id
+  /// DD-MMM-YYYY, DD MMM YYYY, DD/MM/YYYY, DD-MM-YYYY, MM/DD/YYYY or YYYY-MM-DD (DATE_FORMATS).
+  dateFormat     String   @default("DD-MMM-YYYY") @db.NVarChar(12)
+  /// 12h or 24h.
+  timeFormat     String   @default("12h") @db.NVarChar(3)
+  /// indian (12,34,567) or international (1,234,567).
+  numberGrouping String   @default("indian") @db.NVarChar(13)
+  updatedBy      String?  @db.NVarChar(50)
+  updatedAt      DateTime @default(now()) @updatedAt
+}
+
 /// A series an admin added for a module, e.g. NIPL/L/26-27/1004. Series always include the financial year and
 /// restart every year. No row = the module keeps its original numbering (LD-0001, ...).
 model DocumentSeries {
@@ -983,6 +997,14 @@ model Activity {
 
   /// Admin-defined custom field values `{ [fieldKey]: value }` (see FormFieldDefinition) as JSON.
   customDataJson String? @db.NVarChar(Max)
+
+  /// Where the activity comes from: `crm` (made in the CRM) | `followup` (a lead / opportunity next follow-up, written
+  /// by activity.followUp.ts in the record's own transaction; schedule, type, status, owner and related record locked
+  /// in the activity UI) | `calendar` (imported from a calendar, Calendar Phase 2 P2-8). Set only by the system write
+  /// path. Hand-written filtered unique index (migration 20261127130000_followup_activities; keep it out of this file):
+  ///   UX_Activity_openFollowUp UNIQUE (relatedModule, relatedId) WHERE origin = 'followup' AND status = 'Planned' AND isDeleted = 0
+  /// = at most one open follow-up activity per lead / opportunity.
+  origin String @default("crm") @db.NVarChar(20)
 
   createdBy String    @db.NVarChar(50)
   updatedBy String?   @db.NVarChar(50)

@@ -79,6 +79,8 @@ export const ROUTES = {
     ADMIN: '/admin',
     FORM_CUSTOMIZATION: '/admin/form-customization',
     DOCUMENT_SERIES: '/admin/document-series',
+    /** Admin › Company formats: date, time and number display formats for everyone. */
+    COMPANY_FORMATS: '/admin/company-formats',
     EMAIL_VALIDATION: '/admin/email-validation',
     HOLIDAYS: '/admin/holidays',
     /**

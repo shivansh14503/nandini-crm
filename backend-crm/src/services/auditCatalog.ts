@@ -31,6 +31,8 @@ export type AuditEntityType =
     | 'PdfAsset'
     | 'PdfSavedItem'
     | 'DocumentSeries'
+    /** Company-wide display formats (Admin › Company formats); one entity, id `company-formats`, action UPDATE. */
+    | 'CompanyFormats'
     /** A company holiday (Admin › Holidays). */
     | 'Holiday'
     | 'City'
@@ -126,6 +128,7 @@ const MODULE_BY_ENTITY: Record<AuditEntityType, string> = {
     PdfAsset: 'pdf-templates',
     PdfSavedItem: 'pdf-templates',
     DocumentSeries: 'document-series',
+    CompanyFormats: 'company-formats',
     Holiday: 'holidays',
     City: 'cities',
     IntegrationProvider: 'admin-integrations',
@@ -147,6 +150,7 @@ const CONFIG_ENTITIES: ReadonlySet<AuditEntityType> = new Set([
     'PdfAsset',
     'PdfSavedItem',
     'DocumentSeries',
+    'CompanyFormats',
     'Holiday',
     'City',
     'IntegrationProvider',
@@ -326,6 +330,8 @@ export function labelFromChanges(entityType: AuditEntityType, entityId: string, 
             return entityId;
         case 'DocumentSeries':
             return 'Document Series';
+        case 'CompanyFormats':
+            return 'Company Formats';
         case 'Holiday':
             return pick('occasion');
         case 'IntegrationProvider':

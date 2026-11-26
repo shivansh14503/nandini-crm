@@ -11,18 +11,15 @@ import type { Quotation } from '@/types/quotation.types';
 import { useShowRecordNumber } from '@/hooks/queries/useDocumentSeries';
 import { wasModified } from '../common/Drawer/RecordAuditFooter';
 import { formatDateTime } from '@/utils/date';
+import { fmtMoney } from '@/utils/formats';
 import { RecordLink } from '../common/RecordLink';
 
 export type QuotationFilterTab = 'all' | 'high_value' | 'my_quotes';
 /** Any column's field key: the table sorts on `row[sortField]`, including columns added from the form. */
 export type QuotationSortField = string;
 
-const formatCurrency = (val: number = 0) =>
-    new Intl.NumberFormat('en-IN', {
-        style: 'currency',
-        currency: 'INR',
-        maximumFractionDigits: 0,
-    }).format(val);
+/** ₹ without decimals, in the company number grouping. */
+const formatCurrency = (val: number = 0) => fmtMoney(val, { maxDecimals: 0 });
 
 const plainCellSx = { fontSize: '0.78rem', color: 'var(--crm-slate-700)' } as const;
 

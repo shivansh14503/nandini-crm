@@ -294,7 +294,9 @@ export function linksFromTarget(
  *    access is checked (a follow-up activity takes the lead's record whoever saved the lead).
  *  • Organization / contact: explicit ids must reference existing records (`assertReference`); without them a newly
  *    picked record fills them; otherwise the typed organization name links to the live organization of that name
- *    and the contact name to a live contact of it, as on contracts.
+ *    and the contact name to a live contact of it, as on contracts. A system write may keep a deleted organization /
+ *    contact: it copies the links of the record it mirrors (an opportunity keeps pointing at a deleted contact, as
+ *    its own saves allow), so its id counts as unchanged.
  */
 export async function resolveActivityLinks(tx: TransactionClient, input: ActivityInput, previous: PreviousLinks | undefined, user: AuthUser | null): Promise<ActivityLinks> {
     const changed = relatedChanged(input, previous);
@@ -319,11 +321,13 @@ export async function resolveActivityLinks(tx: TransactionClient, input: Activit
     }
 
     const fromTarget = linksFromTarget(input, picked);
+    // System writes mirror a record's existing links: a deleted organization / contact it still points to is kept.
+    const keptId = (requested: string, previousId: string | null | undefined) => (user ? previousId : requested);
     const orgSelect = { id: true, organizationName: true, isDeleted: true } as const;
     let organization: ActivityLink;
     if (input.organizationId) {
         const org = await tx.organization.findUnique({ where: { id: input.organizationId }, select: orgSelect });
-        assertReference(org, input.organizationId, previous?.organizationId, 'organization', 'organizationName');
+        assertReference(org, input.organizationId, keptId(input.organizationId, previous?.organizationId), 'organization', 'organizationName');
         organization = { id: org.id, name: org.organizationName };
     } else if (fromTarget.organization?.id) {
         organization = fromTarget.organization;
@@ -338,7 +342,7 @@ export async function resolveActivityLinks(tx: TransactionClient, input: Activit
     let contact: ActivityLink;
     if (input.contactId) {
         const found = await tx.contact.findUnique({ where: { id: input.contactId }, select: contactSelect });
-        assertReference(found, input.contactId, previous?.contactId, 'contact', 'contact');
+        assertReference(found, input.contactId, keptId(input.contactId, previous?.contactId), 'contact', 'contact');
         contact = { id: found.id, name: found.name };
     } else if (fromTarget.contact) {
         contact = fromTarget.contact;

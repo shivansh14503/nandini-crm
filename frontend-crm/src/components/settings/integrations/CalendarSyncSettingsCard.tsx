@@ -8,12 +8,14 @@ import { ACTIVITY_REMINDERS, type ActivityReminder } from '@/types/activity.type
 import { BACKFILL_DAY_CHOICES, MAX_COMPANY_DOMAINS, type BackfillDays, type CalendarSyncSettings } from '@/types/integration.types';
 import { fieldErrorsOf, fieldLabelSx, hintSx } from './integrationUi';
 
-/** The fields this card edits today. Follow-up activities (P2-4) and meeting import (P2-8) join with their PRs. */
-type EditedSettings = Pick<CalendarSyncSettings, 'companyDomains' | 'followUpReminder' | 'backfillDays' | 'eventVisibility'>;
-const EDITED_KEYS: (keyof EditedSettings)[] = ['companyDomains', 'followUpReminder', 'backfillDays', 'eventVisibility'];
+/** The fields this card edits today. Meeting import (P2-8) joins with its PR. */
+type EditedSettings = Pick<CalendarSyncSettings, 'companyDomains' | 'followUpActivities' | 'followUpReminder' | 'backfillDays' | 'eventVisibility'>;
+const EDITED_KEYS: (keyof EditedSettings)[] = ['companyDomains', 'followUpActivities', 'followUpReminder', 'backfillDays', 'eventVisibility'];
 
 const pick = (s: CalendarSyncSettings): EditedSettings => ({
     companyDomains: s.companyDomains,
+    // Older stored settings have no value: on (the default).
+    followUpActivities: s.followUpActivities ?? true,
     followUpReminder: s.followUpReminder,
     backfillDays: s.backfillDays,
     eventVisibility: s.eventVisibility,
@@ -172,6 +174,31 @@ export function CalendarSyncSettingsCard({
                             Add
                         </Button>
                     </Box>
+                </Box>
+
+                <Box>
+                    <FormControlLabel
+                        control={
+                            <Switch
+                                checked={form.followUpActivities}
+                                onChange={(e) => set('followUpActivities', e.target.checked)}
+                                disabled={save.isPending}
+                                slotProps={{ input: { 'aria-describedby': 'follow-up-activities-hint' } }}
+                            />
+                        }
+                        label={<Typography sx={{ fontSize: '0.84rem', fontWeight: 600, color: 'var(--crm-slate-900)' }}>Follow-ups create activities</Typography>}
+                        sx={{ ml: 0, gap: 0.5, alignItems: 'center' }}
+                    />
+                    <Typography id="follow-up-activities-hint" sx={{ ...hintSx, mt: 0.25 }}>
+                        On (recommended): a lead or opportunity&apos;s next follow-up is also an activity of its owner, so it shows in Activities, gets a reminder and
+                        reaches their calendar. Off: follow-ups show only on the record and as calendar entries read from it; existing follow-up activities are
+                        left as they are, and turning it back on brings every record in line overnight.
+                    </Typography>
+                    {errors.followUpActivities && (
+                        <Typography role="alert" sx={{ ...hintSx, mt: 0.5, color: 'var(--mui-palette-error-main)' }}>
+                            {errors.followUpActivities}
+                        </Typography>
+                    )}
                 </Box>
 
                 <Box sx={{ display: 'grid', gridTemplateColumns: { xs: 'minmax(0,1fr)', sm: 'repeat(2, minmax(0,1fr))' }, gap: 2 }}>

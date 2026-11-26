@@ -27,6 +27,7 @@ import type { CrmNotification } from '@/types/notification.types';
 import { addDays, instantToZonedWallClock, zonedDayOf } from '@/utils/zonedTime';
 import { formatBusinessInstant, formatDayLabel, formatWallTime, timeZoneAbbr, useBusinessClock } from '@/components/activities/activityTime';
 import { MorningSummaryPreviewDialog } from './MorningSummaryPreviewDialog';
+import { useDisplayFormats } from '@/utils/formats';
 import { useDropdown } from './useDropdown';
 
 /** Gap kept between the popover and the screen edges on phones (16px each side). */
@@ -197,6 +198,8 @@ function NotificationPanel({ unreadCount, onOpen, onPreview, onSettings }: Notif
     const list = useNotifications();
     const markAll = useMarkAllNotificationsRead();
     const clock = useBusinessClock();
+    // Row times follow the company formats (activityTime helpers): re-render when they change.
+    useDisplayFormats();
     const now = clock.now();
     const rows = list.data?.pages.flatMap((page) => page.data) ?? [];
 

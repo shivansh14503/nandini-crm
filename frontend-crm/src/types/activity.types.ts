@@ -142,9 +142,29 @@ export interface Activity extends ActivityFormData {
     updatedAt: string;
     createdBy: string;
     updatedBy?: string;
+    /**
+     * Who made it: 'crm' (the CRM, any user), 'followup' (a lead / opportunity follow-up activity, which moves with
+     * its record), 'calendar' (brought in from a calendar). Read only.
+     */
+    origin?: ActivityOrigin;
     /** Sent with every activity the API returns (outside the audited record). */
     viewer?: ActivityViewer;
+    /**
+     * Fields this activity won't let anyone change (a follow-up activity's type, times, status, owner and related
+     * record: they move with the lead / opportunity). A PUT changing one gets 409 FOLLOW_UP_ACTIVITY_LOCKED.
+     */
+    lockedFields?: string[];
 }
+
+/** `Activity.origin` values. */
+export type ActivityOrigin = 'crm' | 'followup' | 'calendar' | (string & {});
+/** Origin of a lead / opportunity follow-up activity (Calendar Phase 2 P2-4). */
+export const FOLLOW_UP_ORIGIN = 'followup';
+/** Error code of a write to a locked field of a follow-up activity (409). */
+export const FOLLOW_UP_ACTIVITY_LOCKED = 'FOLLOW_UP_ACTIVITY_LOCKED';
+
+/** Whether this is a lead / opportunity follow-up activity (it moves with its record). */
+export const isFollowUpActivity = (activity: Pick<Activity, 'origin'> | null | undefined): boolean => activity?.origin === FOLLOW_UP_ORIGIN;
 
 /** GET /api/activities/meta. */
 export interface ActivityMeta {
@@ -188,6 +208,10 @@ export interface CalendarItem {
     myResponse: AttendeeResponse | null;
     editable: boolean;
     overdue: boolean;
+    /** The activity behind an `activities` item (also for follow-up activities under a follow-up source); null for derived items. */
+    activityId?: string | null;
+    /** `Activity.origin` of an activity item ('followup' for a follow-up activity); null for derived items. */
+    origin?: string | null;
 }
 
 export interface CalendarFeed {

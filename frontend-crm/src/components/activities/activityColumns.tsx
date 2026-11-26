@@ -9,8 +9,8 @@ import { findCrmUser } from '@/services/masterData.store';
 import { useDropdownOptionLabel } from '@/hooks/queries/useFormConfigs';
 import { CUSTOMER_RESPONSE_CATEGORY } from '@/components/forms/FollowUpDecision';
 import type { Activity } from '@/types/activity.types';
-import { NOTE_TYPE } from '@/types/activity.types';
-import { ActivityStatusPill, ActivityTypeChip, ActivityTypeIcon } from './ActivityBadges';
+import { isFollowUpActivity, NOTE_TYPE } from '@/types/activity.types';
+import { ActivityStatusPill, ActivityTypeChip, ActivityTypeIcon, FollowUpChip } from './ActivityBadges';
 import { attendeeLabel } from './RhfAttendeesField';
 import { formatActivityWhen, formatBusinessInstant, formatDayLabel, isActivityOverdue, useBusinessClock } from './activityTime';
 import { relatedModuleLabel, relatedRecordHref } from './activityLinks';
@@ -69,6 +69,7 @@ export function useActivityColumns(openRecord: (record: Activity) => void): Data
                         >
                             {a.subject || '-'}
                         </RecordLink>
+                        {isFollowUpActivity(a) && <FollowUpChip relatedModule={a.relatedModule} relatedCode={a.relatedCode} compact />}
                     </Box>
                 ),
             },

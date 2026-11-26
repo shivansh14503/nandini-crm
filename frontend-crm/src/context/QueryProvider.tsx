@@ -11,6 +11,8 @@ import { FORM_CONFIG_SYNC_ENTITY } from '@/services/formConfig.service';
 import { DRAWER_LAYOUT_SYNC_ENTITY } from '@/services/drawerLayout.service';
 import { DRAWER_LAYOUTS_QUERY_KEY } from '@/hooks/queries/useDrawerLayouts';
 import { MASTER_DATA_SYNC_ENTITY } from '@/services/masterData.service';
+import { COMPANY_FORMATS_SYNC_ENTITY } from '@/services/companyFormats.service';
+import { COMPANY_FORMATS_QUERY_KEY } from '@/hooks/queries/useCompanyFormats';
 
 export function QueryProvider({ children }: { children: React.ReactNode }) {
     const [queryClient] = useState(
@@ -42,6 +44,11 @@ export function QueryProvider({ children }: { children: React.ReactNode }) {
                     queryClient.invalidateQueries({ queryKey: DRAWER_LAYOUTS_QUERY_KEY });
                     return;
                 }
+                // Admin › Company formats: refetch even where nothing observes the query, so the display store updates.
+                if (entity === COMPANY_FORMATS_SYNC_ENTITY) {
+                    queryClient.invalidateQueries({ queryKey: COMPANY_FORMATS_QUERY_KEY, refetchType: 'all' });
+                    return;
+                }
                 // Writes that change the user directory / masters behind the lookups (e.g. a user's company email).
                 if (entity === MASTER_DATA_SYNC_ENTITY) {
                     queryClient.invalidateQueries({ queryKey: MASTER_DATA_QUERY_KEY });
@@ -57,8 +64,11 @@ export function QueryProvider({ children }: { children: React.ReactNode }) {
                 if (key) queryClient.invalidateQueries({ queryKey: auditLogKeys.all });
                 // Opportunities write their document (Documentation section): the Documents list follows them.
                 if (key === 'opportunities') queryClient.invalidateQueries({ queryKey: queryKeys.documents.all });
-                // The calendar feed shows lead / opportunity follow-ups and contract renewals.
-                if (key === 'leads' || key === 'opportunities' || key === 'contracts') {
+                // Lead / opportunity saves write their follow-up activity (Calendar Phase 2 P2-4): every activity
+                // query (lists, Activities tabs, calendar) follows them. The calendar also shows contract renewals.
+                if (key === 'leads' || key === 'opportunities') {
+                    queryClient.invalidateQueries({ queryKey: queryKeys.activities.all });
+                } else if (key === 'contracts') {
                     queryClient.invalidateQueries({ queryKey: [...queryKeys.activities.all, 'calendar'] });
                 }
                 // Calendar sync rows show on Admin › API Integrations › People, and admin changes (provider, People choice) change the user's own status.

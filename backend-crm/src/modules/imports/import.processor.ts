@@ -28,6 +28,9 @@ import { runInTransaction } from '../shared/transactions.js';
 import { createTicketRecord, resolveImportNatureOfCall } from '../tickets/ticket.service.js';
 import { ticketInputSchema } from '../tickets/ticket.validator.js';
 import { prisma, type TransactionClient } from '../../config/prisma.js';
+import { loadFollowUpContext, type FollowUpContext } from '../activities/activity.system.js';
+import type { ActivityCommitRow } from '../activities/activity.service.js';
+import { afterFollowUpCommit, retryOnceOnUniqueViolation } from '../activities/activity.followUp.js';
 
 /** Entities and field keys of the frontend's import wizard (frontend-crm/src/components/common/import). */
 export const IMPORT_ENTITIES = [
@@ -111,6 +114,13 @@ const normalizeTaxRate = (value: string | undefined) => (value && /^\d+$/.test(v
 
 type RowWriter = (tx: TransactionClient) => Promise<unknown>;
 
+/** What a lead / opportunity row's write returns: the follow-up activity writes to run after its commit. */
+interface FollowUpRows {
+    followUpRows: ActivityCommitRow[];
+}
+const hasFollowUpRows = (value: unknown): value is FollowUpRows =>
+    typeof value === 'object' && value !== null && Array.isArray((value as Partial<FollowUpRows>).followUpRows);
+
 /** Per-import data loaded once before the row loop. */
 interface ImportContext {
     /** The entity's admin form configuration (required fields, formats, validation rules). */
@@ -119,6 +129,11 @@ interface ImportContext {
     lookups: PrefetchedLookups;
     /** Lead imports: the Rating rules new leads are rated by. */
     ratingConfig?: RatingConfig;
+    /**
+     * Lead / opportunity imports: what their follow-up activities need (Calendar Phase 2 P2-4), loaded once here, never
+     * inside a row's transaction.
+     */
+    followUp?: FollowUpContext;
 }
 
 /** Entities whose rows link to an organization by name. */
@@ -135,7 +150,8 @@ async function loadImportContext(data: ImportJobData): Promise<ImportContext> {
         ? await prefetchOrganizationsByName(prisma, data.rows.map((row) => row.values.organizationName))
         : undefined;
     const ratingConfig = data.entity === 'leads' ? await loadRatingConfig(prisma) : undefined;
-    return { fieldConfig, lookups: { activeUsernames, organizationsByName }, ratingConfig };
+    const followUp = data.entity === 'leads' || data.entity === 'opportunities' ? await loadFollowUpContext() : undefined;
+    return { fieldConfig, lookups: { activeUsernames, organizationsByName }, ratingConfig, followUp };
 }
 
 /**
@@ -231,7 +247,15 @@ const rowBuilders: Record<ImportEntity, (v: Record<string, string>, user: AuthUs
         // Rated like any new lead: by the new-lead rule, from today to its follow-up.
         if (!ctx.ratingConfig) throw new Error('Lead import context has no Rating rules.');
         const rating = newLeadRatingColumns(ctx.ratingConfig, businessToday(), input.nextFollowupDate);
-        return (tx) => createLeadRecord(tx, input, user, rating, ctx.lookups);
+        const { closingStatuses } = ctx.ratingConfig;
+        const context = ctx.followUp;
+        if (!context) throw new Error('Lead import context has no follow-up context.');
+        // The lead's follow-up activity is created with it (no notifications for imports).
+        return async (tx): Promise<FollowUpRows> => {
+            const followUpRows: ActivityCommitRow[] = [];
+            await createLeadRecord(tx, input, user, rating, ctx.lookups, { context, notify: false, rows: followUpRows, closingStatuses });
+            return { followUpRows };
+        };
     },
     opportunities: (v, user, ctx) => {
         const productCategory = splitList(v.productCategory);
@@ -256,7 +280,13 @@ const rowBuilders: Record<ImportEntity, (v: Record<string, string>, user: AuthUs
         const input = opportunityInputSchema.parse(raw);
         assertLeadSourceDetails(input);
         checkRow(ctx, raw);
-        return (tx) => createOpportunityRecord(tx, input, user, ctx.lookups);
+        const context = ctx.followUp;
+        if (!context) throw new Error('Opportunity import context has no follow-up context.');
+        return async (tx): Promise<FollowUpRows> => {
+            const followUpRows: ActivityCommitRow[] = [];
+            await createOpportunityRecord(tx, input, user, ctx.lookups, undefined, { context, notify: false, rows: followUpRows });
+            return { followUpRows };
+        };
     },
     tickets: (v, user, ctx) => {
         // Nature Of Call is resolved against the master inside the write (blank / unknown → first active entry).
@@ -335,11 +365,14 @@ async function importRows(data: ImportJobData, onProgress?: (percent: number) =>
     const failed: ImportRowFailure[] = [];
     let created = 0;
     const ctx = await loadImportContext(data);
+    const followUpRows: ActivityCommitRow[] = [];
 
     for (const [index, row] of data.rows.entries()) {
         try {
             const write = build(row.values, data.user, ctx);
-            await runInTransaction(write);
+            // D45: a unique-index refusal (a follow-up activity race) runs the row's transaction once more.
+            const written = await retryOnceOnUniqueViolation(() => runInTransaction(write));
+            if (hasFollowUpRows(written)) followUpRows.push(...written.followUpRows);
             created++;
         } catch (err) {
             failed.push({ rowNumber: row.rowNumber, errors: describeError(err) });
@@ -350,6 +383,8 @@ async function importRows(data: ImportJobData, onProgress?: (percent: number) =>
     }
 
     if (created > 0) await (cacheInvalidators[data.entity]?.() ?? cacheService.invalidateEntityCaches(data.entity));
+    // Reminders of the imported records' follow-up activities (notify: false, so nobody is told about each row).
+    await afterFollowUpCommit(followUpRows, data.user);
     const result: ImportResult = { importId: data.importId, entity: data.entity, total: data.rows.length, created, failed };
     await auditService.enqueue({
         entityType: 'Import',

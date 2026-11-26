@@ -9,6 +9,8 @@ import { auditLedgerQueue, isQueueAvailable, tryEnqueue } from '../../jobs/queue
 import { auditService } from '../../services/audit.service.js';
 import { currentAuditOrigin, type AuditOrigin } from '../../services/auditContext.js';
 import type { AuthUser } from '../../types/user.types.js';
+import { companyFormatsService } from '../company-formats/companyFormats.service.js';
+import type { DisplayFormats } from '../company-formats/core/displayFormats.js';
 import { displayTime } from './audit.format.js';
 import { databaseFolder, digestFileName, isVerificationFailure, ledgerTime, parseDigest, sqlError, type LedgerDigest } from './auditLedger.js';
 
@@ -88,12 +90,12 @@ async function writeDigestFile(database: string, fileName: string, json: string)
     });
 }
 
-function digestDto(row: AuditDigest) {
+function digestDto(row: AuditDigest, formats: DisplayFormats) {
     return {
         id: row.id,
         blockId: String(row.blockId),
         digestTime: row.digestTime.toISOString(),
-        time: displayTime(row.digestTime),
+        time: displayTime(row.digestTime, formats),
         source: row.source as DigestSource,
         createdBy: row.createdBy,
     };
@@ -210,23 +212,24 @@ async function runningVerify(): Promise<VerifyJobData | null> {
 export const auditLedgerService = {
     /** Digests saved, the last check and whether one is running. */
     async status() {
-        const [count, latest, lastCheck, running] = await Promise.all([
+        const [count, latest, lastCheck, running, formats] = await Promise.all([
             prisma.auditDigest.count(),
             prisma.auditDigest.findFirst({ orderBy: { id: 'desc' } }),
             prisma.auditLog.findFirst({ where: { action: 'LEDGER_VERIFY' }, orderBy: { id: 'desc' } }),
             runningVerify(),
+            companyFormatsService.load(),
         ]);
         const check = lastCheck ? (JSON.parse(lastCheck.changesJson ?? '{}') as Partial<VerifyOutcome>) : null;
         return {
             digestDirConfigured: ENV.AUDIT.DIGEST_DIR_CONFIGURED,
             schedule: `Every night at 00:15 (${ENV.BUSINESS_TIMEZONE})`,
-            digests: { count, latest: latest ? digestDto(latest) : null },
+            digests: { count, latest: latest ? digestDto(latest, formats) : null },
             lastCheck:
                 lastCheck && check
                     ? {
                           entryId: String(lastCheck.id),
                           createdAt: lastCheck.createdAt.toISOString(),
-                          time: displayTime(lastCheck.createdAt),
+                          time: displayTime(lastCheck.createdAt, formats),
                           changedBy: lastCheck.changedBy,
                           result: check.result ?? 'error',
                           message: check.message ?? '',
@@ -242,7 +245,8 @@ export const auditLedgerService = {
     /** "Save a digest now". */
     async digestNow(user: AuthUser) {
         const row = await saveDigest('MANUAL', user.username);
-        return { digest: row ? digestDto(row) : null, status: await auditLedgerService.status() };
+        const [status, formats] = await Promise.all([auditLedgerService.status(), companyFormatsService.load()]);
+        return { digest: row ? digestDto(row, formats) : null, status };
     },
 
     /** Starts "Verify integrity" unless a run is already going; returns the status (the screen polls it). */

@@ -10,6 +10,7 @@ import ShieldOutlinedIcon from '@mui/icons-material/ShieldOutlined';
 import { errorMessage, secondaryButtonSx, surfaceSx } from '@/components/settings/form-customization/builderUi';
 import { auditAdminService, type AuditIntegrityStatus } from '@/services/auditAdmin.service';
 import { AUDIT_LOG_KEY } from './auditLogUi';
+import { fmtCount } from '@/utils/formats';
 
 const INTEGRITY_KEY = [...AUDIT_LOG_KEY, 'integrity'] as const;
 const POLL_MS = 3000;
@@ -103,7 +104,7 @@ export function AuditIntegrityPanel() {
                 <Typography sx={{ fontSize: '0.72rem', color: 'var(--mui-palette-text-muted)', lineHeight: 1.5 }}>
                     {data.digests.count === 0
                         ? 'No digest saved yet.'
-                        : `${data.digests.count.toLocaleString('en-IN')} digest${data.digests.count === 1 ? '' : 's'} saved, latest ${latest?.time} (block ${latest?.blockId}).`}{' '}
+                        : `${fmtCount(data.digests.count)} digest${data.digests.count === 1 ? '' : 's'} saved, latest ${latest?.time} (block ${latest?.blockId}).`}{' '}
                     {data.schedule}.
                 </Typography>
             )}

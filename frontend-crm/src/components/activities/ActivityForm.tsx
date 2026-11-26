@@ -11,7 +11,7 @@ import { ROUTES } from '@/config/constants';
 import { setSaveFlash } from '@/utils/saveFlash';
 import { CommonFormLayout, AppToast } from '@/components/forms';
 import { FormConfigProvider } from '@/context/FormConfigContext';
-import type { Activity } from '@/types/activity.types';
+import { isFollowUpActivity, PLANNED_STATUS, type Activity } from '@/types/activity.types';
 import type { ActivityFormValues } from '@/validations/activity.schema';
 import { ActivityFormFields, useActivityForm } from './ActivityFormFields';
 import { ActivityTypeIcon } from './ActivityBadges';
@@ -77,6 +77,17 @@ export default function ActivityForm({ mode = 'create', activityId, initialData,
     });
 
     const when = activity ? formatActivityWhen(activity, activity.timeZone || clock.timeZone, clock.now()) : '';
+    // A lead / opportunity follow-up activity (P2-4): its type, times, status, owner and related record move with the record.
+    const lockedFields = mode === 'create' ? undefined : activity?.lockedFields;
+    const record = activity?.relatedModule === 'opportunities' ? 'opportunity' : 'lead';
+    const lockReason =
+        activity && isFollowUpActivity(activity)
+            ? activity.status === PLANNED_STATUS
+                ? `The next follow-up of ${activity.relatedCode || `this ${record}`}. Its type, date, time, status and owner change on the ${record} (Record follow-up); the subject, location, attendees and remarks can be edited here.`
+                : `Follow-up history of ${activity.relatedCode || `this ${record}`}: its type, times, status and owner are kept with the ${record}.`
+            : lockedFields?.length
+              ? 'Some fields of this activity can only change where it came from.'
+              : undefined;
 
     return (
         <FormProvider {...methods}>
@@ -111,7 +122,7 @@ export default function ActivityForm({ mode = 'create', activityId, initialData,
                     mode={mode}
                     toast={<AppToast open={toast.open} message={toast.message} severity={toast.severity} onClose={closeToast} />}
                 >
-                    <ActivityFormFields clock={clock} durationOf={durationOf} />
+                    <ActivityFormFields clock={clock} durationOf={durationOf} lockedFields={lockedFields} lockReason={lockReason} />
                 </CommonFormLayout>
             </FormConfigProvider>
         </FormProvider>

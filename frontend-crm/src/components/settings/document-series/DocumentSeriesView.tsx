@@ -44,6 +44,7 @@ import {
     type SeriesSettings,
     type Separator,
 } from '@/types/documentSeries.types';
+import { fmtInstant, useDisplayFormats } from '@/utils/formats';
 import {
     MAX_COMPANY_PREFIX,
     MAX_MODULE_PREFIX,
@@ -190,6 +191,7 @@ function AddSeriesDialog({
 
 /** Admin → Document Series: common prefix / financial year settings plus the series added per module. */
 export function DocumentSeriesView() {
+    useDisplayFormats(); // "Last saved … on …" follows an admin's format change
     const query = useDocumentSeries();
     const save = useSaveDocumentSeries();
     const [draft, setDraft] = useState<Draft | null>(null);
@@ -606,7 +608,7 @@ export function DocumentSeriesView() {
             {config.settings.updatedAt && (
                 <Typography sx={{ fontSize: '0.72rem', color: 'var(--mui-palette-text-muted)', textAlign: 'right' }}>
                     Last saved by {config.settings.updatedBy ?? 'unknown'} on{' '}
-                    {new Date(config.settings.updatedAt).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' })}
+                    {fmtInstant(config.settings.updatedAt, { legacyDate: 'D MMM YYYY', legacyTime: 'h:mm a' })}
                 </Typography>
             )}
 

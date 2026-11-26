@@ -1,6 +1,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { defaultCommissionType, hasCommission, opportunityInputSchema, payeeBankIssues } from './opportunity.validator.js';
+import { DEFAULT_DISPLAY_FORMATS } from '../company-formats/core/displayFormats.js';
+import { defaultCommissionType, hasCommission, opportunityInputSchema, payeeBankIssues, SMALL_COMMISSION_LIMIT } from './opportunity.validator.js';
 import { toOpportunityData } from './opportunity.mapper.js';
 
 const links = { organization: { id: null, name: 'ACME TRADERS' }, contact: { id: null, name: 'Ravi Kumar' } };
@@ -73,6 +74,15 @@ describe('opportunity commission type', () => {
         const missing = payeeBankIssues({ commission: 'Yes', commissionAmount: 1000.5, ...bank, bankName: ' ', panNumber: undefined });
         assert.deepEqual(missing.map((i) => i.path[0]), ['bankName', 'panNumber']);
         assert.match(missing[0].message, /Bank Name is required when Commission Amount is above ₹1,000/);
+    });
+
+    it('writes the commission limit as before, and the same in either company grouping', () => {
+        const input = { commission: 'Yes', commissionAmount: 5000 };
+        const before = `Account Name is required when Commission Amount is above ₹${SMALL_COMMISSION_LIMIT.toLocaleString('en-IN')}.`;
+        assert.equal(payeeBankIssues(input)[0].message, before);
+        for (const numberGrouping of ['indian', 'international'] as const) {
+            assert.equal(payeeBankIssues(input, { ...DEFAULT_DISPLAY_FORMATS, numberGrouping, customized: true })[0].message, before);
+        }
     });
 
     it('rejects a type other than Self or Other and a malformed PAN', () => {

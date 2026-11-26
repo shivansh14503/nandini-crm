@@ -12,7 +12,6 @@ import { buildExtendedSearchConfig } from '../common/buildExtendedSearchConfig';
 import { AppToast } from '../common/AppToast';
 import { type DataTableFilterItem } from '../common/DataTable';
 import { useFilterController, type FilterFieldDef, type FilterOption, type ModuleFilterFields } from '../common/TableFilter';
-import { formatDay } from '../common/Drawer/layout/drawerFields';
 import { useResetTab } from '@/hooks/useResetTab';
 import { useAuth } from '@/context/AuthContext';
 import { useDocuments } from '@/hooks/queries';
@@ -23,7 +22,7 @@ import { findCrmUser } from '@/services/masterData.store';
 import { recordFileService } from '@/services/recordFile.service';
 import type { Document } from '@/types/document.types';
 import { activeOptionValues, findCategory, optionLabelMap } from '@/utils/formConfig';
-import { formatDateTime } from '@/utils/date';
+import { fmtExportDateTime, fmtExportDay } from '@/utils/formats';
 import { useDocumentColumns } from './documentColumns';
 import { DocumentDetailDrawer } from './DocumentDetailDrawer';
 import { DOCUMENT_LABELS as L, FILE_KIND_LABELS, fileKind, userName, type FileKind } from './documentDisplay';
@@ -223,7 +222,8 @@ export function DocumentsMasterView() {
             [
                 d.documentNo,
                 d.documentFile?.fileName ?? '',
-                d.documentDate ? formatDay(d.documentDate) : '',
+                // Export cells keep one fixed format whatever the company display formats.
+                d.documentDate ? fmtExportDay(d.documentDate) : '',
                 d.opportunityCode,
                 d.opportunity,
                 d.salesStage,
@@ -231,7 +231,7 @@ export function DocumentsMasterView() {
                 d.contact,
                 userName(d.assignedTo),
                 userName(d.createdBy),
-                formatDateTime(d.createdAt),
+                fmtExportDateTime(d.createdAt),
             ]
                 .map((v) => csvCell(v || ''))
                 .join(',')

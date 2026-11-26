@@ -138,9 +138,14 @@ function UndoDialog({ entry, onClose, onDone }: { entry: AuditEntryResponse['ent
                                                 <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 0.5 }}>
                                                     {field.label}
                                                     {badge && (
-                                                        <Badge tone={badge.tone} title={badge.title}>
+                                                        <Badge tone={badge.tone} title={field.reason || badge.title}>
                                                             {badge.label}
                                                         </Badge>
+                                                    )}
+                                                    {field.reason && (
+                                                        <Box component="span" sx={{ fontSize: '0.72rem', fontWeight: 500, color: 'var(--mui-palette-text-secondary)', lineHeight: 1.35 }}>
+                                                            {field.reason}
+                                                        </Box>
                                                     )}
                                                 </Box>
                                             </TableCell>

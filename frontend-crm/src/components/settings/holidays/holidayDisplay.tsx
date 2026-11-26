@@ -3,22 +3,20 @@
 import React from 'react';
 import { Box } from '@mui/material';
 import type { HolidayStatus } from '@/types/holiday.types';
+import { fmtDay, fmtYearlyDay } from '@/utils/formats';
 
-const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
 export const MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 
 /**
- * `2026-08-15` → `15-Aug-2026` (the CRM's date style); a yearly holiday's `08-15` → `15-Aug`. A calendar day, so no
- * time zone is involved.
+ * `2026-08-15` → `15-Aug-2026` (the CRM's date style); a yearly holiday's `08-15` → `15-Aug`. Once the company formats
+ * are saved, the company date format (without the year for a yearly holiday). A calendar day, so no time zone is
+ * involved; anything else comes back unchanged.
  */
 export function formatHolidayDate(day: string): string {
-    const yearly = /^(\d{2})-(\d{2})$/.exec(day);
-    if (yearly) return `${yearly[2]}-${MONTHS[Number(yearly[1]) - 1] ?? yearly[1]}`;
-    const [y, m, d] = day.split('-').map(Number);
-    if (!y || !m || !d) return day;
-    return `${String(d).padStart(2, '0')}-${MONTHS[m - 1]}-${y}`;
+    if (/^\d{2}-\d{2}$/.test(day)) return fmtYearlyDay(day);
+    return fmtDay(day, { legacy: 'DD-MMM-YYYY' });
 }
 
 /** Days in a month (1–12) in a leap year, so a yearly holiday can be on 29 Feb. */

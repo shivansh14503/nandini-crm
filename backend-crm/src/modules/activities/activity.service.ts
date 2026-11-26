@@ -22,7 +22,7 @@ import type { DropdownCategoryDto } from '../form-configs/formConfig.service.js'
 import { notifyActivityParticipants, scheduleActivityReminder } from '../notifications/notification.reminders.js';
 import { assertAssigneeValid } from '../shared/accessControl.js';
 import { assertDeletedRow, lockRecords, restoreData, runInTransaction, softDeleteData, type BulkDeleteResult } from '../shared/transactions.js';
-import { activityLocks, activityScopeWhere, canEditActivity, canViewActivity, myResponseOf, type ActivityAccessRow } from './activity.access.js';
+import { activityLocks, activityScopeWhere, canEditActivity, canViewActivity, lockedFieldsFor, myResponseOf, type ActivityAccessRow } from './activity.access.js';
 import { normalizeAttendees, planAttendeeSync, syncAttendees } from './activity.attendees.js';
 import { activityRangeWhere, calendarFeed, type CalendarFeed } from './activity.calendar.js';
 import { linkTargets, resolveActivityLinks, type LinkTarget } from './activity.links.js';
@@ -39,6 +39,7 @@ import {
     COMPLETED_STATUS,
     computeRemindAt,
     nextReminderSentAt,
+    quietPastReminderSentAt,
     normalizeSchedule,
     NOTE_TYPE,
     notApplicableFor,
@@ -75,9 +76,9 @@ function assertCanEdit(user: AuthUser, row: ActivityAccessRow): void {
     if (!canEditActivity(user, row)) throw HttpError.forbidden(EDIT_FORBIDDEN_MESSAGE);
 }
 
-/** The DTO plus what the caller may do with it (`viewer` sits outside the audited record). */
+/** The DTO plus what the caller may do with it (`viewer`, `lockedFields` sit outside the audited record). */
 export function toActivityView(row: ActivityRow, user: AuthUser): ActivityView {
-    return { ...toActivityDto(row), viewer: { canEdit: canEditActivity(user, row), myResponse: myResponseOf(user, row) } };
+    return { ...toActivityDto(row), viewer: { canEdit: canEditActivity(user, row), myResponse: myResponseOf(user, row) }, lockedFields: lockedFieldsFor(row) };
 }
 
 // ── Configuration ────────────────────────────────────────────────────────────
@@ -133,11 +134,20 @@ function completionData(status: string, before: { status: string; completedAt: D
     return { completedAt: now, completedBy: actor };
 }
 
-const remindAtOf = (input: ActivityInput, schedule: Schedule, isDeleted = false) =>
-    computeRemindAt(
-        { followupType: input.followupType, status: input.status, reminder: input.reminder, startAt: schedule.startAt, allDay: schedule.allDay, isDeleted },
-        ENV.BUSINESS_TIMEZONE,
-    );
+const reminderInputOf = (input: ActivityInput, schedule: Schedule, isDeleted = false) => ({
+    followupType: input.followupType,
+    status: input.status,
+    reminder: input.reminder,
+    startAt: schedule.startAt,
+    allDay: schedule.allDay,
+    isDeleted,
+});
+
+const remindAtOf = (input: ActivityInput, schedule: Schedule, isDeleted = false) => computeRemindAt(reminderInputOf(input, schedule, isDeleted), ENV.BUSINESS_TIMEZONE);
+
+/** `reminderSentAt` of a newly (re)armed reminder: null, or `now` for a quiet system write whose event already passed. */
+const armedReminderSentAt = (writer: ActivityWriter, input: ActivityInput, schedule: Schedule, remindAt: Date | null, now: Date): Date | null =>
+    writer.user === null && writer.quietPastReminder ? quietPastReminderSentAt(reminderInputOf(input, schedule), remindAt, now, ENV.BUSINESS_TIMEZONE) : null;
 
 /** Fields whose change makes the activity a new version for calendars (iCal SEQUENCE in Phase 2). */
 const REVISION_FIELDS = ['subject', 'followupType', 'startAt', 'endAt', 'allDay', 'location', 'assignedTo', 'status'] as const;
@@ -318,7 +328,8 @@ type ActivityManagedColumn =
 /**
  * Columns only the system write path sets, written with the row so the audit entry and the write hook see them:
  * every Activity column except the API's fields (those come through the parsed input) and the ones the write path
- * computes. None exist yet; P2-4's `origin` and P2-8's organizer columns join this type with their migrations.
+ * computes. P2-4: `origin` (`'followup'` on a lead / opportunity follow-up activity); P2-8's organizer columns join
+ * this type with their migration.
  */
 export type ActivityRowData = Partial<Omit<Prisma.ActivityUncheckedCreateInput, ActivityApiColumn | ActivityManagedColumn>>;
 
@@ -345,6 +356,11 @@ export interface ActivityWriter {
     requested?: ReadonlySet<string>;
     /** Passed to the write hook (P2-3b: whether to mark the activity for calendar sync). Default true. */
     markSync?: boolean;
+    /**
+     * System writers only: a reminder (re)armed for an event whose moment already passed is stored as sent
+     * (`quietPastReminderSentAt`), so no late reminder fires. P2-4 follow-up activities set it.
+     */
+    quietPastReminder?: boolean;
     /** Activity configuration loaded before the transaction, passed to the write hook; null when not loaded. */
     config?: ActivityConfig | null;
 }
@@ -389,12 +405,14 @@ export async function insertActivityRow(tx: TransactionClient, input: ActivityIn
     const attendees = await normalizeAttendees(tx, input.attendees, assignedTo);
     const plan = planAttendeeSync(attendees, [], writer.actor, now);
     const withOwner = { ...input, assignedTo };
+    const remindAt = remindAtOf(withOwner, schedule);
     const row = await tx.activity.create({
         data: {
             ...toActivityData(withOwner, links, schedule),
             ...(writer.user ? {} : writer.rowData),
             timeZone: ENV.BUSINESS_TIMEZONE,
-            remindAt: remindAtOf(withOwner, schedule),
+            remindAt,
+            reminderSentAt: armedReminderSentAt(writer, withOwner, schedule, remindAt, now),
             ...completionData(input.status, undefined, writer.actor, now),
             createdBy: writer.createdBy ?? writer.actor,
             attendees: { create: plan.create },
@@ -422,13 +440,15 @@ export async function updateActivityRow(tx: TransactionClient, existing: Activit
     const plan = await syncAttendees(tx, id, attendees, existing.attendees, writer.actor, now);
 
     const remindAt = remindAtOf(withOwner, schedule);
+    const rearmed = (existing.remindAt?.getTime() ?? null) !== (remindAt?.getTime() ?? null);
     const system = writer.user === null;
     const data = {
         ...toActivityData(withOwner, links, schedule),
         ...(system ? writer.rowData : {}),
         ...completionData(input.status, existing, writer.actor, now),
         remindAt,
-        reminderSentAt: nextReminderSentAt(existing, remindAt),
+        // An unchanged remindAt keeps its sent stamp (nextReminderSentAt); a reschedule re-arms it.
+        reminderSentAt: rearmed ? armedReminderSentAt(writer, withOwner, schedule, remindAt, now) : nextReminderSentAt(existing, remindAt),
         ...(system && writer.createdBy ? { createdBy: writer.createdBy } : {}),
         updatedBy: writer.actor,
     };

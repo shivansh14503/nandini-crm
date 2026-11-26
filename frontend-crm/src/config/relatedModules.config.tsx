@@ -40,6 +40,7 @@ import type { ExtendedOrganization } from '@/types/organization.types';
 import type { Product } from '@/types/product.types';
 import type { Quotation } from '@/types/quotation.types';
 import type { Ticket } from '@/types/ticket.types';
+import { fmtInstantDay, getDisplayFormats } from '@/utils/formats';
 
 export type CrmEntityType =
     | 'organization'
@@ -456,7 +457,9 @@ export function resolveRelatedRecordsForModule(
                     subject: t.ticketSubject || t.problemReported,
                     status: t.ticketStatus,
                     priority: t.ticketPriority,
-                    dateCreated: new Date(t.createdAt).toLocaleDateString('en-IN'),
+                    // Today's `5/9/2026` (device clock) until the company formats are saved, then the company date
+                    // on the business clock.
+                    dateCreated: getDisplayFormats().customized ? fmtInstantDay(t.createdAt) : new Date(t.createdAt).toLocaleDateString('en-IN'),
                     assignedTo: t.assignedTo,
                 }));
         }

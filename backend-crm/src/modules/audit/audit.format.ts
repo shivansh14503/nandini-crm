@@ -1,4 +1,6 @@
 import { ENV } from '../../config/env.js';
+import { instantToZonedWallClock } from '../../utils/zonedTime.js';
+import { DEFAULT_DISPLAY_FORMATS, formatWallClock, type DisplayFormats } from '../company-formats/core/displayFormats.js';
 
 /** One stored audit row with its `changesJson` parsed. */
 export interface AuditEntryDto {
@@ -20,20 +22,12 @@ export interface AuditRevisionItem {
     tag?: string;
 }
 
-const timeFormat = new Intl.DateTimeFormat('en-GB', {
-    timeZone: ENV.BUSINESS_TIMEZONE,
-    day: '2-digit',
-    month: 'short',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-    hour12: true,
-});
-
-/** e.g. `12-Oct-2026, 11:15 AM` in the business timezone (the timeline's existing format). */
-export function displayTime(date: Date): string {
-    const parts = Object.fromEntries(timeFormat.formatToParts(date).map((part) => [part.type, part.value]));
-    return `${parts.day}-${parts.month}-${parts.year}, ${parts.hour}:${parts.minute} ${String(parts.dayPeriod).toUpperCase()}`;
+/**
+ * When an entry was written, in the business timezone and the company display formats: `12-Oct-2026, 11:15 AM` (the
+ * timeline's own style) while not customized. Exports pass the defaults so their "Time" column never changes.
+ */
+export function displayTime(date: Date, formats: DisplayFormats = DEFAULT_DISPLAY_FORMATS): string {
+    return formatWallClock(instantToZonedWallClock(date, ENV.BUSINESS_TIMEZONE), formats, { legacyDate: 'DD-MMM-YYYY', legacyTime: 'hh:mm A' });
 }
 
 /** `salesStage` → `Sales Stage`. */

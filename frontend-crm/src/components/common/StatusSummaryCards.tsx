@@ -7,6 +7,7 @@ import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import SettingsOutlinedIcon from '@mui/icons-material/SettingsOutlined';
 import { useTableScroll } from './DataTable/useTableScroll';
+import { fmtCount, useDisplayFormats } from '@/utils/formats';
 
 /** Colour family of a card; each maps to theme tokens so light (blue) / dark (green) stay consistent. */
 export type StatusSummaryTone = 'brand' | 'warning' | 'success' | 'error' | 'neutral';
@@ -58,7 +59,7 @@ const PAPER = 'var(--mui-palette-background-paper)';
 const mix = (color: string, pct: number, base = 'transparent') => `color-mix(in srgb, ${color} ${pct}%, ${base})`;
 const tint = (color: string, pct: number) => `linear-gradient(145deg, ${mix(color, pct, PAPER)} 0%, ${PAPER} 72%)`;
 
-const formatCount = (n: number) => n.toLocaleString('en-IN');
+const formatCount = (n: number) => fmtCount(n);
 const formatShare = (share: number) => (share > 0 && share < 0.1 ? '<0.1' : share.toFixed(1).replace(/\.0$/, ''));
 
 /** Same grid as the cards, so swapping the skeleton for real cards doesn't shift the page. */
@@ -258,6 +259,7 @@ export function StatusSummaryCards<TId extends string = string>({
     settingsHref,
     singleRow,
 }: StatusSummaryCardsProps<TId>) {
+    useDisplayFormats();
     const base = total ?? items[0]?.count ?? 0;
     const resetId = allId ?? items[0]?.id;
 

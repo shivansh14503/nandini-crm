@@ -18,6 +18,7 @@ import type { Lead } from '@/types/lead.types';
 import { useDropdownOptionLabel } from '@/hooks/queries';
 import { useShowRecordNumber } from '@/hooks/queries/useDocumentSeries';
 import { formatDateTime } from '@/utils/date';
+import { fmtDayOrRaw, fmtTimeOrRaw } from '@/utils/formats';
 import { formatPhoneDisplay } from '@/utils/phone';
 
 const plainCellSx = { fontSize: '0.78rem', color: 'var(--crm-slate-700)' } as const;
@@ -273,7 +274,7 @@ export function useLeadColumns(openRecord: (record: Lead) => void): DataTableCol
                                         color: isToday ? 'var(--crm-amber-700)' : 'var(--crm-slate-700)',
                                     }}
                                 >
-                                    {l.nextFollowupDate || '-'}
+                                    {fmtDayOrRaw(l.nextFollowupDate) || '-'}
                                     {overdue ? (
                                         <Box
                                             component="span"
@@ -313,7 +314,7 @@ export function useLeadColumns(openRecord: (record: Lead) => void): DataTableCol
                                 {(l.nextFollowupTime || l.followupType) && (
                                     <Typography sx={{ fontSize: '0.7rem', color: 'var(--mui-palette-text-secondary)' }}>
                                         {l.followupType ? `${l.followupType} • ` : ''}
-                                        {l.nextFollowupTime || ''}
+                                        {fmtTimeOrRaw(l.nextFollowupTime) || ''}
                                     </Typography>
                                 )}
                             </Box>

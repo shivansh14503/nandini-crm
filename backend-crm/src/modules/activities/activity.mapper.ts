@@ -45,6 +45,12 @@ export interface ActivityDto {
     completedAt: string;
     completedBy: string;
     customFields: Record<string, unknown>;
+    /**
+     * Where it comes from: `crm` (made in the CRM), `followup` (a lead / opportunity next follow-up, Calendar Phase 2
+     * P2-4: schedule, type, status, owner and related record follow the record, see `ActivityView.lockedFields`),
+     * `calendar` (imported, P2-8). Read only (set by the system write path).
+     */
+    origin: string;
     createdBy: string;
     /** Username of the last editor; empty until the record is first modified. */
     updatedBy: string;
@@ -74,7 +80,14 @@ export interface ActivityViewer {
     myResponse: string | null;
 }
 
-export type ActivityView = ActivityDto & { viewer: ActivityViewer };
+export type ActivityView = ActivityDto & {
+    viewer: ActivityViewer;
+    /**
+     * ActivityDto keys a CRM `PUT` may not change (activity.access.ts `lockedFieldsFor`, spec §8.13): a follow-up
+     * activity's schedule, type, status, owner and related record. `[]` when nothing is locked.
+     */
+    lockedFields: string[];
+};
 
 export type ActivityRow = Activity & { attendees: ActivityAttendee[] };
 
@@ -126,6 +139,7 @@ export function toActivityDto(row: ActivityRow): ActivityDto {
         completedAt: row.completedAt ? toIso(row.completedAt) : '',
         completedBy: text(row.completedBy),
         customFields: parseCustomFields(row.customDataJson),
+        origin: row.origin,
         createdBy: row.createdBy,
         updatedBy: row.updatedBy ?? '',
         createdAt: toIso(row.createdAt),

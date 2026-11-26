@@ -5,8 +5,10 @@ import { Prisma } from '../../generated/prisma/client.js';
 import { HttpError } from '../../utils/httpError.js';
 import { shownNumberModules } from '../document-series/documentSeries.service.js';
 import type { SeriesModule } from '../document-series/documentSeries.format.js';
+import { companyFormatsService } from '../company-formats/companyFormats.service.js';
+import { DEFAULT_DISPLAY_FORMATS, type DisplayFormats } from '../company-formats/core/displayFormats.js';
 import { formConfigService } from '../form-configs/formConfig.service.js';
-import { parseChanges } from './audit.format.js';
+import { displayTime, parseChanges } from './audit.format.js';
 import {
     actionLabel,
     CATEGORY_LABELS,
@@ -117,25 +119,31 @@ async function loadRecordStatuses(rows: AuditRowLike[]): Promise<Map<string, Exc
 /**
  * Form labels per module (custom fields as `customFields.<key>`), from the cached form configuration including
  * archived and deleted fields, so old entries keep their names. Form Customization entries use the Form Builder's
- * property names. Labels are cosmetic: if the configuration can't be read, keys are shown humanized.
+ * property names. Labels are cosmetic: if the configuration can't be read, keys are shown humanized. Values follow
+ * `formats` (dates; amounts by their form type) once an admin has saved company formats.
  */
 /** Fields that hold a username: shown as the user's name. */
 const USER_FIELDS = new Set(['assignedTo', 'createdBy', 'updatedBy', 'leadGivenBy']);
 
-export async function buildLabeler(): Promise<FieldLabeler> {
+export async function buildLabeler(formats: DisplayFormats = DEFAULT_DISPLAY_FORMATS): Promise<FieldLabeler> {
     const byModule = new Map<string, Map<string, string>>();
+    /** Keys of the amount fields per module (grouped digits once formats are saved). */
+    const amountKeys = new Map<string, Set<string>>();
     // Every user (a few dozen rows) so stored usernames read as names.
     const users = await prisma.user.findMany({ select: { username: true, fullName: true } });
     const userNames = new Map(users.map((user) => [user.username.toLowerCase(), user.fullName.trim() || user.username]));
     try {
         const config = await formConfigService.getAllConfigs(true);
         for (const [module, fields] of Object.entries(config.fieldsByModule)) {
-            byModule.set(module, new Map(fields.map((field) => [field.isSystem ? field.fieldKey : `customFields.${field.fieldKey}`, field.label])));
+            const key = (field: (typeof fields)[number]) => (field.isSystem ? field.fieldKey : `customFields.${field.fieldKey}`);
+            byModule.set(module, new Map(fields.map((field) => [key(field), field.label])));
+            amountKeys.set(module, new Set(fields.filter((field) => field.fieldType === 'amount').map(key)));
         }
     } catch (err) {
         logger.warn({ err: (err as Error).message }, 'Audit log: form labels unavailable; showing field keys');
     }
     return {
+        formats,
         label(module, key) {
             if (module === 'form-customization') return propLabel(key);
             const custom = key.startsWith('customFields.');
@@ -143,16 +151,20 @@ export async function buildLabeler(): Promise<FieldLabeler> {
         },
         value(module, key, value) {
             if (module === 'form-customization') return propValue(key, value);
-            if (USER_FIELDS.has(key) && typeof value === 'string') return userNames.get(value.toLowerCase()) ?? namedValue(key, value);
-            return namedValue(key, value);
+            const format = { formats, kind: amountKeys.get(module)?.has(key) ? ('amount' as const) : undefined };
+            if (USER_FIELDS.has(key) && typeof value === 'string') return userNames.get(value.toLowerCase()) ?? namedValue(key, value, format);
+            return namedValue(key, value, format);
         },
     };
 }
 
-export async function presentContext(rows: AuditRowLike[]): Promise<PresentContext> {
-    const [labeler, shown, statuses] = await Promise.all([buildLabeler(), shownNumberModules(), loadRecordStatuses(rows)]);
+/** `pinned` formats instead of the company's (exports keep their fixed format). */
+export async function presentContext(rows: AuditRowLike[], pinned?: DisplayFormats): Promise<PresentContext> {
+    const loading = pinned ? Promise.resolve(pinned) : companyFormatsService.load();
+    const [labeler, shown, statuses, formats] = await Promise.all([loading.then(buildLabeler), shownNumberModules(), loadRecordStatuses(rows), loading]);
     return {
         labeler,
+        formats,
         showsRecordNumber: (module) => {
             const series = SERIES_BY_MODULE[module];
             return Boolean(series && shown.has(series));
@@ -468,11 +480,12 @@ export const auditAdminService = {
     async users(query: unknown) {
         const { from, to } = auditRangeQuerySchema.parse(query ?? {});
         const range = resolveAggregateRange(from, to, TZ());
-        const [directory, bounds] = await Promise.all([
+        const [directory, bounds, formats] = await Promise.all([
             prisma.user.findMany({
                 select: { username: true, fullName: true, role: true, department: true, email: true, isActive: true, isGroupUser: true, onLeave: true, lastLoginAt: true, photo: { select: { id: true } } },
             }),
             idBounds(range),
+            companyFormatsService.load(),
         ]);
         const rangeRows = bounds
             ? await prisma.$queryRaw<UserRangeRow[]>(Prisma.sql`
@@ -485,6 +498,6 @@ export const auditAdminService = {
                   GROUP BY [changedBy], [category]`)
             : [];
         const last = await lastActivity(activityUsernames(directory, rangeRows));
-        return { ...rangeDto(range), users: buildUserActivity(directory, rangeRows, last) };
+        return { ...rangeDto(range), users: buildUserActivity(directory, rangeRows, last, (date) => displayTime(date, formats)) };
     },
 };

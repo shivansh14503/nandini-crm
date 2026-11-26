@@ -2,6 +2,7 @@ import { daysBetween, zonedDayOf } from '../../utils/zonedTime.js';
 import type { CalendarItem } from '../activities/activity.calendar.js';
 import { allDayRange } from '../activities/activity.mapper.js';
 import { TASK_TYPE } from '../activities/activity.schedule.js';
+import { DEFAULT_DISPLAY_FORMATS, type DisplayFormats } from '../company-formats/core/displayFormats.js';
 import { dayCount, daysOverdue, formatDay, formatDayLong, formatTime, joinParts, relatedLabel } from './notification.format.js';
 import { calendarDayPath, CONTRACTS_EXPIRING_PATH, crmUrl, googleCalendarDetails, googleCalendarLink, recordPath } from './morningSummary.links.js';
 
@@ -53,6 +54,8 @@ export interface MorningSummaryInput {
     recipient: { username: string; fullName: string };
     /** Followup Type value → its option's `meta.icon` (call, meeting …). */
     typeIcons?: Readonly<Record<string, string>>;
+    /** Company display formats (Admin › Company formats); missing = the defaults (this email's own style). */
+    formats?: DisplayFormats;
     /** Activities of today (owner, or invited and not declined), with the total when capped. */
     today: { total: number; rows: SummaryActivityRow[] };
     /** The user's Planned activities that ended by the start of today, oldest first (not in today's schedule). */
@@ -127,6 +130,8 @@ export interface MorningSummary {
     sections: SummarySection[];
     /** True when every section is empty. */
     empty: boolean;
+    /** The display formats the texts were written in (the subject line uses them too). */
+    formats: DisplayFormats;
 }
 
 const TYPE_EMOJI: Readonly<Record<string, string>> = {
@@ -167,19 +172,25 @@ export function compareTodayRows(a: SummaryActivityRow, b: SummaryActivityRow): 
     return startOf(a) - startOf(b) || a.subject.localeCompare(b.subject);
 }
 
-function todayWhen(row: SummaryActivityRow, day: string): string {
+function todayWhen(row: SummaryActivityRow, day: string, formats: DisplayFormats): string {
     if (!row.startAt) return '';
     if (row.allDay) {
         const { startDay, endDay } = allDayRange(row.startAt, row.endAt, row.timeZone);
-        return startDay === endDay ? 'All day' : `All day (until ${formatDay(endDay)})`;
+        return startDay === endDay ? 'All day' : `All day (until ${formatDay(endDay, formats)})`;
     }
-    const start = formatTime(row.startAt, row.timeZone);
+    const start = formatTime(row.startAt, row.timeZone, formats);
     const startedEarlier = zonedDayOf(row.startAt, row.timeZone) < day;
     const hasEnd = row.endAt !== null && row.endAt.getTime() > row.startAt.getTime();
-    if (startedEarlier) return hasEnd && row.endAt ? `Until ${formatTime(row.endAt, row.timeZone)}` : start;
-    return hasEnd && row.endAt && zonedDayOf(row.endAt, row.timeZone) === day ? `${start} – ${formatTime(row.endAt, row.timeZone)}` : start;
+    if (startedEarlier) return hasEnd && row.endAt ? `Until ${formatTime(row.endAt, row.timeZone, formats)}` : start;
+    return hasEnd && row.endAt && zonedDayOf(row.endAt, row.timeZone) === day ? `${start} – ${formatTime(row.endAt, row.timeZone, formats)}` : start;
 }
 
+/*
+ * Parked by the owner (Calendar Phase 2): follow-up activities (origin 'followup', P2-4) are kept out of the activity
+ * sections by morningSummary.service.ts (NOT_FOLLOW_UP_ACTIVITY), so the email lists each follow-up once, from its
+ * lead / opportunity. When the email is picked up again: list follow-up activities here instead of the derived ones,
+ * and hide the "Add to Google Calendar" link for owners whose calendar is synced.
+ */
 function activityItem(row: SummaryActivityRow, input: MorningSummaryInput, when: string, withCalendarLink: boolean): SummaryItem {
     const related = relatedLabel(row);
     const href = crmUrl(input.appUrl, recordPath('activities', row.id));
@@ -207,10 +218,10 @@ function activityItem(row: SummaryActivityRow, input: MorningSummaryInput, when:
     return item;
 }
 
-function overdueActivityWhen(row: SummaryActivityRow): string {
+function overdueActivityWhen(row: SummaryActivityRow, formats: DisplayFormats): string {
     if (!row.startAt) return '';
-    const day = formatDay(zonedDayOf(row.startAt, row.timeZone));
-    return row.allDay ? day : `${day}, ${formatTime(row.startAt, row.timeZone)}`;
+    const day = formatDay(zonedDayOf(row.startAt, row.timeZone), formats);
+    return row.allDay ? day : `${day}, ${formatTime(row.startAt, row.timeZone, formats)}`;
 }
 
 const MODULE_NAME: Readonly<Record<string, string>> = { leads: 'Lead', opportunities: 'Opportunity' };
@@ -258,7 +269,7 @@ function followupTotals(followups: FollowupRows, shown: readonly SummaryFollowup
 }
 
 /** Contracts: renewal reminders today first (by time), then by end date; one row per contract. */
-function contractItems(rows: readonly SummaryContractRow[], input: MorningSummaryInput, day: string): SummaryItem[] {
+function contractItems(rows: readonly SummaryContractRow[], input: MorningSummaryInput, day: string, formats: DisplayFormats): SummaryItem[] {
     // Fake-UTC wall clock and DATE columns: their UTC reading is the business-timezone value.
     const renewalDay = (row: SummaryContractRow) => (row.renewalReminderDate ? row.renewalReminderDate.toISOString().slice(0, 10) : '');
     const endDay = (row: SummaryContractRow) => (row.endDate ? row.endDate.toISOString().slice(0, 10) : '');
@@ -276,10 +287,10 @@ function contractItems(rows: readonly SummaryContractRow[], input: MorningSummar
         let when: string;
         let endsText: string;
         if (remindsToday(row) && row.renewalReminderDate) {
-            when = `Renewal, ${formatTime(row.renewalReminderDate, 'UTC')}`;
-            endsText = ends ? `ends ${formatDay(ends)} (${inDays})` : '';
+            when = `Renewal, ${formatTime(row.renewalReminderDate, 'UTC', formats)}`;
+            endsText = ends ? `ends ${formatDay(ends, formats)} (${inDays})` : '';
         } else {
-            when = ends ? `Ends ${formatDay(ends)}` : '';
+            when = ends ? `Ends ${formatDay(ends, formats)}` : '';
             endsText = inDays;
         }
         return {
@@ -295,6 +306,7 @@ function contractItems(rows: readonly SummaryContractRow[], input: MorningSummar
 /** Builds the summary: sections in display order, empty ones left out. */
 export function buildMorningSummary(input: MorningSummaryInput): MorningSummary {
     const { now, timeZone, appUrl } = input;
+    const formats = input.formats ?? DEFAULT_DISPLAY_FORMATS;
     const day = zonedDayOf(now, timeZone);
     const sections: SummarySection[] = [];
     const activitiesUrl = crmUrl(appUrl, '/activities?mine=1');
@@ -308,7 +320,7 @@ export function buildMorningSummary(input: MorningSummaryInput): MorningSummary 
             key: 'today',
             title: "Today's schedule",
             total: todayTotal,
-            items: todayRows.map((row) => activityItem(row, input, todayWhen(row, day), true)),
+            items: todayRows.map((row) => activityItem(row, input, todayWhen(row, day, formats), true)),
             more: todayTotal > todayRows.length ? [{ label: `and ${todayTotal - todayRows.length} more`, href: dayAgendaUrl }] : [],
         });
     }
@@ -320,7 +332,7 @@ export function buildMorningSummary(input: MorningSummaryInput): MorningSummary 
             key: 'overdueActivities',
             title: 'Overdue activities',
             total: overdueTotal,
-            items: overdueRows.map((row) => activityItem(row, input, overdueActivityWhen(row), false)),
+            items: overdueRows.map((row) => activityItem(row, input, overdueActivityWhen(row, formats), false)),
             more: overdueTotal > overdueRows.length ? [{ label: `and ${overdueTotal - overdueRows.length} more`, href: activitiesUrl }] : [],
         });
     }
@@ -333,7 +345,7 @@ export function buildMorningSummary(input: MorningSummaryInput): MorningSummary 
             key: 'followupsToday',
             title: 'Follow-ups due today',
             total: followupsToday.total,
-            items: followups.map((item) => followupItem(item, input, item.allDay ? 'Any time' : formatTime(new Date(item.start), timeZone))),
+            items: followups.map((item) => followupItem(item, input, item.allDay ? 'Any time' : formatTime(new Date(item.start), timeZone, formats))),
             more: followupsToday.more,
         });
     }
@@ -350,13 +362,13 @@ export function buildMorningSummary(input: MorningSummaryInput): MorningSummary 
             total: overdueFollowupTotals.total,
             items: overdueFollowups.map((item) => {
                 const due = followupDay(item, timeZone);
-                return followupItem(item, input, `Due ${formatDay(due)}`, `${dayCount(daysOverdue(due, day))} overdue`);
+                return followupItem(item, input, `Due ${formatDay(due, formats)}`, `${dayCount(daysOverdue(due, day))} overdue`);
             }),
             more: overdueFollowupTotals.more,
         });
     }
 
-    const contracts = contractItems(input.contracts.rows, input, day);
+    const contracts = contractItems(input.contracts.rows, input, day, formats);
     const contractTotal = Math.max(input.contracts.total, contracts.length);
     if (contractTotal > 0) {
         sections.push({
@@ -379,7 +391,7 @@ export function buildMorningSummary(input: MorningSummaryInput): MorningSummary 
     };
     return {
         day,
-        dayLabel: formatDayLong(day),
+        dayLabel: formatDayLong(day, formats),
         recipientName: input.recipient.fullName.trim() || input.recipient.username,
         appUrl,
         calendarUrl: crmUrl(appUrl, '/calendar'),
@@ -387,5 +399,6 @@ export function buildMorningSummary(input: MorningSummaryInput): MorningSummary 
         headline: summaryHeadline(counts),
         sections,
         empty: sections.length === 0,
+        formats,
     };
 }

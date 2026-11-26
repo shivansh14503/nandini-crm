@@ -9,6 +9,8 @@ import { fakeUtcToInstant, instantToZonedWallClock, zonedDayOf } from '../../uti
 import { allDayRange } from '../activities/activity.mapper.js';
 import { NOTE_TYPE, PLANNED_STATUS, TASK_TYPE } from '../activities/activity.schedule.js';
 import { CONTRACT_EXPIRED_STATUS } from '../activities/activity.calendar.js';
+import { companyFormatsService } from '../company-formats/companyFormats.service.js';
+import { DEFAULT_DISPLAY_FORMATS, type DisplayFormats } from '../company-formats/core/displayFormats.js';
 import { formatDay, formatTime, joinParts, onDay, relatedLabel, relativeDayWord, relativeTime } from './notification.format.js';
 import { insertMissingNotifications, invalidateAllUnreadCounts, invalidateUnreadCounts, notify, type NotificationInput } from './notification.producer.js';
 
@@ -160,55 +162,55 @@ const relatedPart = (row: ActivityTextRow) => {
 };
 
 /** `Today, 10:30 AM`, `Thu 26 Nov, 10:30 AM`, `All day tomorrow`, `All day, Thu 26 Nov – Sat 28 Nov`; '' for Notes. */
-export function activityWhen(row: ActivityTextRow, now: Date): string {
+export function activityWhen(row: ActivityTextRow, now: Date, formats: DisplayFormats = DEFAULT_DISPLAY_FORMATS): string {
     if (!row.startAt) return '';
     const today = zonedDayOf(now, row.timeZone);
     if (row.allDay) {
         const { startDay, endDay } = allDayRange(row.startAt, row.endAt, row.timeZone);
         if (startDay === endDay) {
-            const word = relativeDayWord(startDay, today);
+            const word = relativeDayWord(startDay, today, formats);
             return word === 'today' || word === 'tomorrow' || word === 'yesterday' ? `All day ${word}` : `All day, ${word}`;
         }
-        return `All day, ${formatDay(startDay)} – ${formatDay(endDay)}`;
+        return `All day, ${formatDay(startDay, formats)} – ${formatDay(endDay, formats)}`;
     }
-    const word = relativeDayWord(zonedDayOf(row.startAt, row.timeZone), today);
+    const word = relativeDayWord(zonedDayOf(row.startAt, row.timeZone), today, formats);
     const day = word.charAt(0).toUpperCase() + word.slice(1);
-    return `${day}, ${formatTime(row.startAt, row.timeZone)}`;
+    return `${day}, ${formatTime(row.startAt, row.timeZone, formats)}`;
 }
 
 /**
  * `Reminder: Demo with ACME` / `Starts at 10:30 AM (in 15 min) · Office · Related to LD-0012 Ramesh`. Tasks are
  * "Due"; all-day activities say the day.
  */
-export function reminderText(row: ActivityTextRow, now: Date): NotificationText {
+export function reminderText(row: ActivityTextRow, now: Date, formats: DisplayFormats = DEFAULT_DISPLAY_FORMATS): NotificationText {
     let when = '';
     if (row.startAt) {
         const today = zonedDayOf(now, row.timeZone);
         if (row.allDay) {
-            when = `All day ${onDay(allDayRange(row.startAt, row.endAt, row.timeZone).startDay, today)}`;
+            when = `All day ${onDay(allDayRange(row.startAt, row.endAt, row.timeZone).startDay, today, formats)}`;
         } else {
             const day = zonedDayOf(row.startAt, row.timeZone);
             const verb = row.followupType === TASK_TYPE ? 'Due' : 'Starts';
-            const on = day === today ? '' : `${onDay(day, today)} `;
-            when = `${verb} ${on}at ${formatTime(row.startAt, row.timeZone)} (${relativeTime(row.startAt, now)})`;
+            const on = day === today ? '' : `${onDay(day, today, formats)} `;
+            when = `${verb} ${on}at ${formatTime(row.startAt, row.timeZone, formats)} (${relativeTime(row.startAt, now)})`;
         }
     }
     return { title: `Reminder: ${row.subject}`, body: joinParts([when, row.location, relatedPart(row)]) };
 }
 
 /** `Assigned to you: Demo with ACME` / `Meeting · Thu 26 Nov, 10:30 AM · Related to … · by Palak Sharma`. */
-export function assignmentText(row: ActivityTextRow, actorName: string, now: Date): NotificationText {
+export function assignmentText(row: ActivityTextRow, actorName: string, now: Date, formats: DisplayFormats = DEFAULT_DISPLAY_FORMATS): NotificationText {
     return {
         title: `Assigned to you: ${row.subject}`,
-        body: joinParts([row.followupType, activityWhen(row, now), relatedPart(row), actorName ? `by ${actorName}` : '']),
+        body: joinParts([row.followupType, activityWhen(row, now, formats), relatedPart(row), actorName ? `by ${actorName}` : '']),
     };
 }
 
 /** `Invitation: Demo with ACME` / `Thu 26 Nov, 10:30 AM · Office · Related to … · from Palak Sharma`. */
-export function invitationText(row: ActivityTextRow, actorName: string, now: Date): NotificationText {
+export function invitationText(row: ActivityTextRow, actorName: string, now: Date, formats: DisplayFormats = DEFAULT_DISPLAY_FORMATS): NotificationText {
     return {
         title: `Invitation: ${row.subject}`,
-        body: joinParts([activityWhen(row, now), row.location, relatedPart(row), actorName ? `from ${actorName}` : '']),
+        body: joinParts([activityWhen(row, now, formats), row.location, relatedPart(row), actorName ? `from ${actorName}` : '']),
     };
 }
 
@@ -221,14 +223,14 @@ export interface RenewalTextRow {
 }
 
 /** `Contract renewal due: Tally TSS 2026` / `CON-0007 · ACME LTD · Reminder set for Wed 25 Nov, 10:00 AM`. */
-export function contractRenewalText(row: RenewalTextRow, timeZone: string): NotificationText {
+export function contractRenewalText(row: RenewalTextRow, timeZone: string, formats: DisplayFormats = DEFAULT_DISPLAY_FORMATS): NotificationText {
     const due = row.renewalReminderDate ? fakeUtcToInstant(row.renewalReminderDate, timeZone) : null;
     return {
         title: `Contract renewal due: ${row.contractTitle}`,
         body: joinParts([
             row.contractNumber,
             row.organizationName,
-            due ? `Reminder set for ${formatDay(zonedDayOf(due, timeZone))}, ${formatTime(due, timeZone)}` : '',
+            due ? `Reminder set for ${formatDay(zonedDayOf(due, timeZone), formats)}, ${formatTime(due, timeZone, formats)}` : '',
         ]),
     };
 }
@@ -335,8 +337,13 @@ const DELIVERY_SELECT = {
 export type DeliveryOutcome = 'missing' | 'not-due' | 'stale' | 'delivered' | 'conflict';
 
 /** The reminder notification of one recipient. */
-export function reminderNotification(row: ActivityTextRow & { remindAt: Date }, username: string, now: Date): NotificationInput {
-    const text = reminderText(row, now);
+export function reminderNotification(
+    row: ActivityTextRow & { remindAt: Date },
+    username: string,
+    now: Date,
+    formats: DisplayFormats = DEFAULT_DISPLAY_FORMATS,
+): NotificationInput {
+    const text = reminderText(row, now, formats);
     return {
         username,
         kind: 'activity_reminder',
@@ -356,6 +363,7 @@ export function reminderNotification(row: ActivityTextRow & { remindAt: Date }, 
  * `updatedAt` back unchanged, so a delivered reminder doesn't count as an edit (`unmodifiedDays`, updatedAt sort).
  */
 export async function deliverActivityReminder(activityId: string, now = new Date(), db: ReminderDb = prisma): Promise<{ outcome: DeliveryOutcome; notified: number }> {
+    let formats: DisplayFormats | null = null;
     for (let attempt = 1; attempt <= CLAIM_ATTEMPTS; attempt++) {
         const row = await db.activity.findUnique({ where: { id: activityId }, select: DELIVERY_SELECT });
         if (!row) return { outcome: 'missing', notified: 0 };
@@ -364,7 +372,8 @@ export async function deliverActivityReminder(activityId: string, now = new Date
 
         const stale = isStaleReminder(row, now);
         const recipients = stale ? [] : reminderRecipients(row, await activeUsernames(db, reminderCandidates(row)));
-        const rows = recipients.map((username) => reminderNotification({ ...row, remindAt }, username, now));
+        if (recipients.length > 0) formats ??= await companyFormatsService.load(db);
+        const rows = recipients.map((username) => reminderNotification({ ...row, remindAt }, username, now, formats ?? DEFAULT_DISPLAY_FORMATS));
 
         const inserted = await db.$transaction(
             async (tx) => {
@@ -394,11 +403,16 @@ const RENEWAL_SELECT = {
 } as const satisfies Prisma.ContractSelect;
 
 /** The renewal notification of a contract's Contract Manager. */
-export function contractRenewalNotification(row: RenewalTextRow & { renewalReminderDate: Date }, username: string, timeZone: string): NotificationInput {
+export function contractRenewalNotification(
+    row: RenewalTextRow & { renewalReminderDate: Date },
+    username: string,
+    timeZone: string,
+    formats: DisplayFormats = DEFAULT_DISPLAY_FORMATS,
+): NotificationInput {
     return {
         username,
         kind: 'contract_renewal',
-        ...contractRenewalText(row, timeZone),
+        ...contractRenewalText(row, timeZone, formats),
         entityModule: 'contracts',
         entityId: row.id,
         dueAt: fakeUtcToInstant(row.renewalReminderDate, timeZone),
@@ -419,9 +433,10 @@ async function sweepContractRenewals(now: Date, db: ReminderDb): Promise<number>
     });
     if (contracts.length === 0) return 0;
     const active = new Map((await activeUsernames(db, [...new Set(contracts.map((row) => row.assignedTo))])).map((name) => [userKey(name), name]));
+    const formats = await companyFormatsService.load(db);
     const rows = contracts.flatMap((row) => {
         const owner = active.get(userKey(row.assignedTo));
-        return owner && row.renewalReminderDate ? [contractRenewalNotification({ ...row, renewalReminderDate: row.renewalReminderDate }, owner, timeZone)] : [];
+        return owner && row.renewalReminderDate ? [contractRenewalNotification({ ...row, renewalReminderDate: row.renewalReminderDate }, owner, timeZone, formats)] : [];
     });
     return (await notify(rows, db, now)).created;
 }
@@ -523,12 +538,13 @@ export async function notifyActivityParticipants(before: ParticipantRow | null, 
     };
 
     const rows: NotificationInput[] = [];
+    const formats = await companyFormatsService.load(db);
     const assignee = plan.assignee ? activeName(plan.assignee) : null;
     if (assignee) {
         rows.push({
             username: assignee,
             kind: 'activity_assigned',
-            ...assignmentText(after, actorName, now),
+            ...assignmentText(after, actorName, now, formats),
             entityModule: 'activities',
             entityId: after.id,
             dueAt: after.startAt,
@@ -542,7 +558,7 @@ export async function notifyActivityParticipants(before: ParticipantRow | null, 
         rows.push({
             username,
             kind: 'activity_invited',
-            ...invitationText(after, actorName, now),
+            ...invitationText(after, actorName, now, formats),
             entityModule: 'activities',
             entityId: after.id,
             dueAt: after.startAt,

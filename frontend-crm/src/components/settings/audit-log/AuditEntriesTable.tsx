@@ -6,6 +6,7 @@ import { secondaryButtonSx } from '@/components/settings/form-customization/buil
 import type { AuditListItem } from '@/services/auditAdmin.service';
 import { SOURCE_LABELS } from './auditLogFilter';
 import { ActionPill, ModuleDot, RecordCell, displayUser } from './auditLogUi';
+import { fmtCount } from '@/utils/formats';
 
 const headCellSx = {
     fontSize: '0.72rem',
@@ -18,7 +19,8 @@ const headCellSx = {
     py: 1.1,
 } as const;
 const cellSx = { py: 0.9, fontSize: '0.8rem', color: 'var(--crm-slate-700)', verticalAlign: 'top' } as const;
-const count = (value: number) => value.toLocaleString('en-IN');
+/** A count in the company number grouping (Indian until it is changed). */
+const count = (value: number) => fmtCount(value);
 
 /**
  * The entries table (time, user, action, module, record, summary, source) with "Load N older" paging. `hideUser`: one

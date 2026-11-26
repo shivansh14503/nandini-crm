@@ -21,6 +21,8 @@ import {
     renewalRange,
 } from '../activities/activity.calendar.js';
 import { NOTE_TYPE, PLANNED_STATUS } from '../activities/activity.schedule.js';
+import { companyFormatsService } from '../company-formats/companyFormats.service.js';
+import type { DisplayFormats } from '../company-formats/core/displayFormats.js';
 import { FOLLOWUP_TYPE_CATEGORY_KEY } from '../form-configs/formConfig.defaults.js';
 import { loadRatingConfig } from '../leads/lead.followUp.js';
 import { isOutOfOfficeToday } from '../preferences/preferences.dto.js';
@@ -70,6 +72,8 @@ export interface SummaryContext {
     closingStatuses: ReadonlySet<string>;
     typeIcons: Readonly<Record<string, string>>;
     appUrl: string;
+    /** Company display formats (Admin › Company formats), read once per run. */
+    formats: DisplayFormats;
 }
 
 /** Followup Type value → its option's `meta.icon` (survives an admin renaming the option). */
@@ -93,7 +97,7 @@ async function loadTypeIcons(): Promise<Record<string, string>> {
 export async function summaryContext(now = new Date()): Promise<SummaryContext> {
     const timeZone = ENV.BUSINESS_TIMEZONE;
     const day = zonedDayOf(now, timeZone);
-    const [{ closingStatuses }, typeIcons] = await Promise.all([loadRatingConfig(prisma), loadTypeIcons()]);
+    const [{ closingStatuses }, typeIcons, formats] = await Promise.all([loadRatingConfig(prisma), loadTypeIcons(), companyFormatsService.load()]);
     return {
         now,
         timeZone,
@@ -103,6 +107,7 @@ export async function summaryContext(now = new Date()): Promise<SummaryContext> 
         closingStatuses,
         typeIcons,
         appUrl: ENV.MAIL.APP_PUBLIC_URL,
+        formats,
     };
 }
 
@@ -170,6 +175,21 @@ export function overdueActivitiesWhere(username: string, dayStart: Date): Prisma
         followupType: { not: NOTE_TYPE },
         startAt: { lt: dayStart },
         OR: [{ endAt: { lte: dayStart } }, { endAt: null }],
+        ...NOT_FOLLOW_UP_ACTIVITY,
+    };
+}
+
+/**
+ * Lead / opportunity follow-up activities (Calendar Phase 2 P2-4) are left out of the activity sections: the email
+ * already lists those follow-ups from the records themselves, so it stays exactly as before (no follow-up twice).
+ * The morning email is parked by the owner; see the hook note at morningSummary.sections.ts `activityItem`.
+ */
+export const NOT_FOLLOW_UP_ACTIVITY = { origin: { not: 'followup' } } as const satisfies Prisma.ActivityWhereInput;
+
+/** Today's schedule: activities of the day the user owns or attends (not declined), follow-up activities left out. */
+export function todayActivitiesWhere(user: AuthUser, dayStart: Date, dayEnd: Date): Prisma.ActivityWhereInput {
+    return {
+        AND: [activityCalendarWhere(user, { users: [user.username], statuses: [PLANNED_STATUS] }, dayStart, dayEnd), attendingWhere(user.username), NOT_FOLLOW_UP_ACTIVITY],
     };
 }
 
@@ -194,9 +214,7 @@ const totalOf = (rows: readonly unknown[], cap: number, count: () => Promise<num
 export async function loadMorningSummaryInput(recipient: SummaryRecipient, ctx: SummaryContext): Promise<MorningSummaryInput> {
     const user: AuthUser = { id: recipient.id, username: recipient.username, role: recipient.role };
     const users = [recipient.username];
-    const todayWhere: Prisma.ActivityWhereInput = {
-        AND: [activityCalendarWhere(user, { users, statuses: [PLANNED_STATUS] }, ctx.dayStart, ctx.dayEnd), attendingWhere(recipient.username)],
-    };
+    const todayWhere = todayActivitiesWhere(user, ctx.dayStart, ctx.dayEnd);
     const overdueWhere = overdueActivitiesWhere(recipient.username, ctx.dayStart);
     const today = fromDateOnly(ctx.day);
     const leadsToday = leadFollowupWhere(user, { users }, ctx.closingStatuses, { gte: today, lte: today });
@@ -246,6 +264,7 @@ export async function loadMorningSummaryInput(recipient: SummaryRecipient, ctx: 
         appUrl: ctx.appUrl,
         recipient: { username: recipient.username, fullName: recipient.fullName },
         typeIcons: ctx.typeIcons,
+        formats: ctx.formats,
         today: { total: todayTotal, rows: todayRows },
         overdue: { total: overdueTotal, rows: overdueRows },
         followupsToday: { leads: leadTodayTotal, opportunities: oppTodayTotal, rows: [...leadRows.map(leadItem), ...opportunityRows.map(opportunityItem)] },

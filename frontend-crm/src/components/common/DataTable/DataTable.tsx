@@ -24,6 +24,7 @@ import { TableRowActions } from './TableRowActions';
 import { useTableScroll } from './useTableScroll';
 import { useFrozenColumns } from './useFrozenColumns';
 import { TablePageScrollContext, pageScrollHeadSx, usePageScrollHeader } from './usePageScrollHeader';
+import { useDisplayFormats } from '@/utils/formats';
 
 /**
  * Widest a cell gets (unless its column sets `width`). The table sizes columns to their content, so without
@@ -201,6 +202,8 @@ export function DataTable<T>({
     stickyHeader = true,
     loading = false,
 }: DataTableProps<T>) {
+    // Cells format dates and amounts while rendering: re-render them when the company formats change.
+    useDisplayFormats();
     const { setContainer, canScrollLeft, canScrollRight, isPanning, onPointerDown, startHold, stopHold } = useTableScroll();
 
     // List pages scroll as a whole: no vertical scrollbar here, header docked under the navbar instead.

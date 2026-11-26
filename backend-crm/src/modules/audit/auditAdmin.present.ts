@@ -1,3 +1,4 @@
+import { DEFAULT_DISPLAY_FORMATS, formatCount, formatDay, formatNumber, formatWallClock, type DisplayFormats } from '../company-formats/core/displayFormats.js';
 import { displayTime, isDiff, parseChanges } from './audit.format.js';
 
 /**
@@ -38,6 +39,20 @@ export interface AuditRowLike {
 export interface FieldLabeler {
     label(module: string, key: string): string;
     value(module: string, key: string, value: unknown): string;
+    /** Company display formats for dates, amounts and counts in the texts; missing = the defaults (not customized). */
+    formats?: DisplayFormats;
+}
+
+/**
+ * How `cellValue` shows a stored value. Until an admin saves company formats (`customized: false`, or no formats) a
+ * value is shown as stored, as before company formats existed. Once saved, `YYYY-MM-DD` days, `YYYY-MM-DDTHH:mm`
+ * wall clocks and ISO instants (business timezone) follow the company date / time formats, and amounts the company
+ * digit grouping.
+ */
+export interface ValueFormat {
+    formats?: DisplayFormats;
+    /** The field's form type when it is an amount: a stored number can't tell money from a year or a count. */
+    kind?: 'amount';
 }
 
 /** `live` / `deleted` (soft-deleted) / `missing` for CRM records; null for everything else (sign-ins, settings). */
@@ -48,6 +63,8 @@ export interface PresentContext {
     /** Record numbers are shown only for modules with a document series (Settings › Document Series). */
     showsRecordNumber(module: string): boolean;
     recordStatus(entityType: string, entityId: string): RecordStatus;
+    /** Company display formats for `time`; missing = the defaults (exports always pass them, so their column never changes). */
+    formats?: DisplayFormats;
 }
 
 export interface AuditListItem {
@@ -151,6 +168,7 @@ const MODULE_LABELS: Record<string, string> = {
     'pdf-templates': 'PDF Templates',
     'form-customization': 'Form Customization',
     'document-series': 'Document Series',
+    'company-formats': 'Company Formats',
     'list-scorecards': 'List Scorecards',
     'audit-log': 'Audit Log',
     'admin-integrations': 'API Integrations',
@@ -209,16 +227,43 @@ function itemText(item: unknown): string {
     return typeof named === 'string' ? named : JSON.stringify(item);
 }
 
-/** A stored value as text: `—` for empty, Yes / No, lists joined, `{ from, to }` as `A → B`. */
-export function cellValue(value: unknown): string {
+const DAY = /^\d{4}-\d{2}-\d{2}$/;
+const WALL_CLOCK = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/;
+const INSTANT = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:Z|[+-]\d{2}:\d{2})$/;
+const DECIMAL = /^-?\d+(?:\.\d+)?$/;
+
+/** A stored scalar as text: as stored until formats are saved; then days, date-times and amounts in the company formats. */
+function scalarText(value: unknown, { formats, kind }: ValueFormat): string {
+    const raw = String(value);
+    if (!formats?.customized) return raw;
+    if (kind === 'amount') {
+        const amount = typeof value === 'number' ? value : typeof value === 'string' && DECIMAL.test(value.trim()) ? Number(value) : NaN;
+        // 1,25,000 / 1,25,000.50: no currency symbol (opportunities and quotations keep their own currency).
+        if (Number.isFinite(amount)) return formatNumber(amount, formats, { minDecimals: Number.isInteger(amount) ? 0 : 2, maxDecimals: 2 });
+    }
+    if (typeof value !== 'string') return raw;
+    if (DAY.test(value)) return formatDay(value, formats);
+    if (WALL_CLOCK.test(value)) return formatWallClock(value, formats);
+    if (INSTANT.test(value)) {
+        const instant = new Date(value);
+        if (!Number.isNaN(instant.getTime())) return displayTime(instant, formats);
+    }
+    return raw;
+}
+
+/**
+ * A stored value as text: `—` for empty, Yes / No, lists joined, `{ from, to }` as `A → B`. Dates and amounts follow
+ * the company formats once saved (`format`); until then every value reads as stored.
+ */
+export function cellValue(value: unknown, format: ValueFormat = {}): string {
     if (value === null || value === undefined || value === '') return '—';
     if (typeof value === 'boolean') return value ? 'Yes' : 'No';
-    if (Array.isArray(value)) return value.length === 0 ? '—' : clip(value.map((item) => (item !== null && typeof item === 'object' ? itemText(item) : String(item))).join(', '));
+    if (Array.isArray(value)) return value.length === 0 ? '—' : clip(value.map((item) => (item !== null && typeof item === 'object' ? itemText(item) : scalarText(item, format))).join(', '));
     if (typeof value === 'object') {
-        if (isDiff(value)) return `${cellValue(value.from)} → ${cellValue(value.to)}`;
+        if (isDiff(value)) return `${cellValue(value.from, format)} → ${cellValue(value.to, format)}`;
         return Object.keys(value).length === 0 ? '—' : clip(JSON.stringify(value));
     }
-    return clip(String(value));
+    return clip(scalarText(value, format));
 }
 
 /** Stored codes shown by name: email check results (email-verification/emailCheckAudit.ts). */
@@ -227,9 +272,9 @@ const VALUE_NAMES: Readonly<Record<string, Readonly<Record<string, string>>>> = 
 };
 
 /** `cellValue`, with the stored codes of known keys (an email check result) by name. */
-export function namedValue(key: string, value: unknown): string {
+export function namedValue(key: string, value: unknown, format: ValueFormat = {}): string {
     const names = VALUE_NAMES[key];
-    return names && typeof value === 'string' && names[value] ? names[value] : cellValue(value);
+    return names && typeof value === 'string' && names[value] ? names[value] : cellValue(value, format);
 }
 
 const isEmpty = (value: unknown) =>
@@ -318,7 +363,7 @@ export function fieldRows(action: string, module: string, changes: unknown, labe
 /** What the entry recorded besides field changes; a nested block (a follow-up) one line per part. */
 export function detailRows(action: string, module: string, changes: unknown, labeler: FieldLabeler): AuditDetailRow[] {
     const object = asObject(changes);
-    if (!object) return changes === null || changes === undefined ? [] : [{ key: 'changes', label: 'Details', value: cellValue(changes) }];
+    if (!object) return changes === null || changes === undefined ? [] : [{ key: 'changes', label: 'Details', value: cellValue(changes, { formats: labeler.formats }) }];
     if (SNAPSHOT_AFTER.has(action) || SNAPSHOT_BEFORE.has(action)) return [];
     const diff = DIFF_ACTIONS.has(action);
     const rows: AuditDetailRow[] = [];
@@ -328,7 +373,7 @@ export function detailRows(action: string, module: string, changes: unknown, lab
         const nested = asObject(value);
         if (nested && !isDiff(nested)) {
             for (const [part, partValue] of Object.entries(nested)) {
-                if (!isEmpty(partValue)) rows.push({ key: `${key}.${part}`, label: `${label} › ${humanize(part)}`, value: cellValue(partValue) });
+                if (!isEmpty(partValue)) rows.push({ key: `${key}.${part}`, label: `${label} › ${humanize(part)}`, value: cellValue(partValue, { formats: labeler.formats }) });
             }
             continue;
         }
@@ -354,7 +399,8 @@ export function summarize(action: string, module: string, changes: unknown, labe
     if (typeof c.email === 'string' && isDiff(c.verificationStatus)) {
         const verb = c.reason === 'admin_accepted' ? 'Email accepted' : 'Email checked';
         const result = c.verificationStatus as { from?: unknown; to?: unknown };
-        return `${verb}: ${c.email} · ${namedValue('verificationStatus', result.from)} → ${namedValue('verificationStatus', result.to)}`;
+        const format = { formats: labeler.formats };
+        return `${verb}: ${c.email} · ${namedValue('verificationStatus', result.from, format)} → ${namedValue('verificationStatus', result.to, format)}`;
     }
     switch (action) {
         case 'UPDATE':
@@ -395,7 +441,8 @@ export function summarize(action: string, module: string, changes: unknown, labe
         case 'EXPORT': {
             const rows = count(c.rowCount);
             const format = text(c.format)?.toUpperCase();
-            return `Exported ${rows !== undefined ? `${rows.toLocaleString('en-IN')} ` : ''}entr${rows === 1 ? 'y' : 'ies'}${format ? ` to ${format}` : ''}`;
+            // A row count (a whole number): 12,345 in the company grouping (Indian, as before, until formats are saved).
+            return `Exported ${rows !== undefined ? `${formatCount(rows, labeler.formats ?? DEFAULT_DISPLAY_FORMATS)} ` : ''}entr${rows === 1 ? 'y' : 'ies'}${format ? ` to ${format}` : ''}`;
         }
         case 'PASSWORD_CHANGE':
             return 'Changed their password';
@@ -428,7 +475,7 @@ export function toListItem(row: AuditRowLike, ctx: PresentContext, changes: unkn
     return {
         id: String(row.id),
         createdAt: row.createdAt.toISOString(),
-        time: displayTime(row.createdAt),
+        time: displayTime(row.createdAt, ctx.formats),
         category: row.category,
         action: row.action,
         actionLabel: actionLabel(row.action),
