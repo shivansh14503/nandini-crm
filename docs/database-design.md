@@ -1,6 +1,6 @@
 # Nandini CRM — Database Design
 
-> **Status:** living document, generated from `backend-crm/prisma/schema.prisma` and `prisma/migrations/` (87 migrations,
+> **Status:** living document, generated from `backend-crm/prisma/schema.prisma` and `prisma/migrations/` (88 migrations,
 > latest `20261127130000_followup_activities`, as of 2026-11-26). Update it in the same change as any schema migration.
 > Related: [System design](system-design.md) · [API plan](api-plan.md) · [Build plan](build-plan.md)
 
