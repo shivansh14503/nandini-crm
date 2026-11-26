@@ -290,11 +290,13 @@ export function linksFromTarget(
  * Resolves the related record and the organization / contact links of a save, inside its transaction.
  *  • A newly picked record must exist, be live and be one the user can access (403 otherwise); its code and label
  *    are stored. An unchanged one is only re-read, to refresh its label (no access check, deleted is fine).
+ *    `user` null = a system write (activity.system.ts): the record must still exist and be live, but nobody's
+ *    access is checked (a follow-up activity takes the lead's record whoever saved the lead).
  *  • Organization / contact: explicit ids must reference existing records (`assertReference`); without them a newly
  *    picked record fills them; otherwise the typed organization name links to the live organization of that name
  *    and the contact name to a live contact of it, as on contracts.
  */
-export async function resolveActivityLinks(tx: TransactionClient, input: ActivityInput, previous: PreviousLinks | undefined, user: AuthUser): Promise<ActivityLinks> {
+export async function resolveActivityLinks(tx: TransactionClient, input: ActivityInput, previous: PreviousLinks | undefined, user: AuthUser | null): Promise<ActivityLinks> {
     const changed = relatedChanged(input, previous);
     let related: Pick<ActivityLinks, 'relatedModule' | 'relatedId' | 'relatedTo' | 'relatedCode'> = {
         relatedModule: null,
@@ -308,7 +310,7 @@ export async function resolveActivityLinks(tx: TransactionClient, input: Activit
         const found = await loader.find(tx, input.relatedId);
         if (changed) {
             assertReference(found, input.relatedId, undefined, loader.label, 'relatedTo');
-            if (!canAccessRecord(user, found)) throw HttpError.forbidden(LINK_FORBIDDEN_MESSAGE);
+            if (user && !canAccessRecord(user, found)) throw HttpError.forbidden(LINK_FORBIDDEN_MESSAGE);
             picked = found;
         }
         related = found
