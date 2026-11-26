@@ -60,6 +60,8 @@ interface Options {
     failInsert?: boolean;
     /** The claim loses this many times (a concurrent edit). */
     loseClaims?: number;
+    /** Users who turned activity reminders off (My Profile › Notifications). */
+    remindersOff?: string[];
 }
 
 function fakeDb(options: Options = {}) {
@@ -70,6 +72,16 @@ function fakeDb(options: Options = {}) {
     const calls = { transactions: 0, claims: [] as { where: Record<string, unknown>; data: Record<string, unknown> }[] };
     let losses = options.loseClaims ?? 0;
     const active = options.activeUsers ?? ['palak', 'ravi', 'asha'];
+
+    // Read inside the claim transaction (the producer's mute filter); users without a row have every kind on.
+    const userPreferenceModel = {
+        async findMany({ where }: { where: { user: { username: { in: string[] } } } }) {
+            const wanted = new Set(where.user.username.in.map((name) => name.toLowerCase()));
+            return (options.remindersOff ?? [])
+                .filter((name) => wanted.has(name.toLowerCase()))
+                .map((username) => ({ user: { username }, inAppActivityReminder: false, inAppActivityAssigned: true, inAppActivityInvited: true, inAppContractRenewal: true }));
+        },
+    };
 
     const notificationModel = {
         async findMany({ where }: { where: { dedupeKey: { in: string[] } } }) {
@@ -95,6 +107,7 @@ function fakeDb(options: Options = {}) {
             },
         },
         notification: notificationModel,
+        userPreference: userPreferenceModel,
         async $transaction<T>(fn: (tx: unknown) => Promise<T>): Promise<T> {
             calls.transactions++;
             const snapshot = { activity: { ...state.activity }, notifications: [...state.notifications] };
@@ -118,6 +131,7 @@ function fakeDb(options: Options = {}) {
                     },
                 },
                 notification: notificationModel,
+                userPreference: userPreferenceModel,
             };
             try {
                 return await fn(tx);
@@ -199,6 +213,18 @@ describe('deliverActivityReminder', () => {
         assert.deepEqual(await deliverActivityReminder('a1', now, always.db), { outcome: 'conflict', notified: 0 });
         assert.equal(always.state.notifications.length, 0);
         assert.equal(always.state.activity.reminderSentAt, null);
+    });
+
+    it('skips a recipient who turned reminders off; a reminder whose only recipient muted it is still claimed', async () => {
+        const muted = fakeDb({ remindersOff: ['Ravi'] });
+        assert.deepEqual(await deliverActivityReminder('a1', now, muted.db), { outcome: 'delivered', notified: 1 });
+        assert.deepEqual(muted.state.notifications.map((row) => row.username), ['palak']);
+
+        const alone = fakeDb({ activity: { attendees: [] }, remindersOff: ['palak'] });
+        assert.deepEqual(await deliverActivityReminder('a1', now, alone.db), { outcome: 'delivered', notified: 0 });
+        assert.equal(alone.state.notifications.length, 0);
+        assert.equal(alone.state.activity.reminderSentAt?.toISOString(), now.toISOString(), 'claimed, so it is not retried');
+        assert.equal(alone.calls.transactions, 1);
     });
 
     it('does not insert a notification whose key is already stored (a retried job)', async () => {

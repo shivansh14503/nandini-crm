@@ -6,11 +6,14 @@ import { sendSuccess } from '../../utils/apiResponse.js';
 import { HttpError } from '../../utils/httpError.js';
 import { requireUser } from '../../utils/requestContext.js';
 import type { AuthSession } from '../../types/user.types.js';
+import { preferencesService } from '../preferences/preferences.service.js';
+import { preferencesPatchSchema, type PreferencesPatch } from '../preferences/preferences.validator.js';
 import { profileService } from './profile.service.js';
 import { photoUploadSchema, profileUpdateSchema, sessionIdParamSchema, type PhotoUploadInput, type ProfileUpdateInput } from './profile.validator.js';
 
 /**
- * /api/me (My Profile: the signed-in user's own profile, photo and sessions; every route acts on the caller only)
+ * /api/me (My Profile: the signed-in user's own profile, photo, sessions and notification preferences; every route acts
+ * on the caller only)
  *   GET    /profile          → ProfileDto { id, username, firstName, lastName, fullName, email, role, department, jobTitle,
  *                              reportsTo: { id, name } | null, mobile, officePhone, photoUrl, mustChangePassword,
  *                              lastLoginAt, passwordChangedAt, createdAt }   (jobTitle / reportsTo are set in Admin › Users)
@@ -25,6 +28,12 @@ import { photoUploadSchema, profileUpdateSchema, sessionIdParamSchema, type Phot
  *   DELETE /sessions/:id     signs out one other session → { id }   400 CURRENT_SESSION · 404 · 503 SESSIONS_UNAVAILABLE
  *   DELETE /sessions         signs out all other sessions → { signedOutSessions }
  *   (the two DELETE /sessions routes: 30 requests / 10 min per user)
+ *   GET    /preferences      → PreferencesDto { inApp: { activity_reminder, activity_assigned, activity_invited,
+ *                              contract_renewal }, morningSummaryEmail, defaultReminder, outOfOffice: { from, to, message,
+ *                              active } | null, onLeave, email, mail: { summaryEnabled, mailEnabled }, updatedAt }
+ *   PATCH  /preferences      { inApp?: { <kind>?: boolean }, morningSummaryEmail?, defaultReminder?: <reminder> | 'none' |
+ *                              null, outOfOffice?: { from, to, message? } | null } (other keys refused) → PreferencesDto
+ *                              400 VALIDATION_ERROR (path ['outOfOffice', 'from' | 'to' | 'message'] for the date rules)
  *
  * Changing the password is POST /api/auth/change-password; photos are served by GET /api/user-photos/:id.
  */
@@ -58,6 +67,14 @@ router.put('/photo', validateRequest({ body: photoUploadSchema }), async (req: R
 
 router.delete('/photo', async (req: Request, res: Response) => {
     sendSuccess(res, await profileService.removePhoto(requireUser(req)), 'Photo removed');
+});
+
+router.get('/preferences', async (req: Request, res: Response) => {
+    sendSuccess(res, await preferencesService.get(requireUser(req)));
+});
+
+router.patch('/preferences', validateRequest({ body: preferencesPatchSchema }), async (req: Request, res: Response) => {
+    sendSuccess(res, await preferencesService.update(requireUser(req), req.body as PreferencesPatch), 'Preferences saved');
 });
 
 router.get('/sessions', async (req: Request, res: Response) => {

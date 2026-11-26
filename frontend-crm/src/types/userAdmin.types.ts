@@ -47,6 +47,8 @@ export interface AdminUserDto {
     isActive: boolean;
     isGroupUser: boolean;
     onLeave: boolean;
+    /** The user's own out-of-office range (My Profile, inclusive `YYYY-MM-DD` days); null when unset or ended. Admins only see it. */
+    outOfOffice: { from: string; to: string; message: string | null } | null;
     mustChangePassword: boolean;
     lastLoginAt: string | null;
     passwordChangedAt: string | null;

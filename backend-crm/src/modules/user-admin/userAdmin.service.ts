@@ -4,6 +4,7 @@ import type { Prisma } from '../../generated/prisma/client.js';
 import { auditService, diffRecords } from '../../services/audit.service.js';
 import type { AuthUser } from '../../types/user.types.js';
 import { HttpError, type ApiFieldError } from '../../utils/httpError.js';
+import { businessToday } from '../../validators/notInPast.js';
 import { hashPassword } from '../auth/auth.service.js';
 import { passwordPolicyIssue } from '../auth/passwordPolicy.js';
 import { sessionService } from '../auth/session.service.js';
@@ -78,7 +79,7 @@ async function emailRuleContext(): Promise<EmailRuleContext> {
 async function loadDto(id: number): Promise<AdminUserDto> {
     const [row, emailRule] = await Promise.all([prisma.user.findUnique({ where: { id }, select: ADMIN_USER_SELECT }), emailRuleContext()]);
     if (!row) throw userNotFound();
-    return toAdminUserDto(row, emailRule);
+    return toAdminUserDto(row, emailRule, businessToday());
 }
 
 /** Role names the picker offers, stored ones first (the spelling a typed role snaps to). */
@@ -214,7 +215,8 @@ export const userAdminService = {
             }),
             emailRuleContext(),
         ]);
-        return { data: rows.map((row) => toAdminUserDto(row, emailRule)), meta: { total, page: query.page, pageSize: query.pageSize } };
+        const today = businessToday();
+        return { data: rows.map((row) => toAdminUserDto(row, emailRule, today)), meta: { total, page: query.page, pageSize: query.pageSize } };
     },
 
     async meta(): Promise<AdminUsersMeta> {
@@ -293,7 +295,7 @@ export const userAdminService = {
             return created;
         });
         await invalidateUserCaches();
-        return { user: toAdminUserDto(row, await emailRuleContext()), temporaryPassword: generated ? password : null };
+        return { user: toAdminUserDto(row, await emailRuleContext(), businessToday()), temporaryPassword: generated ? password : null };
     },
 
     /**
@@ -371,7 +373,7 @@ export const userAdminService = {
         });
 
         if (outcome.changed) await invalidateUserCaches();
-        const dto = toAdminUserDto(outcome.row, await emailRuleContext());
+        const dto = toAdminUserDto(outcome.row, await emailRuleContext(), businessToday());
         if (!outcome.roleChanged || id === actor.id) return dto;
         return { ...dto, signedOutSessions: await sessionService.revokeAll(id) };
     },

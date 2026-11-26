@@ -24,7 +24,7 @@ import { AppToast } from '@/components/common/AppToast';
 import { RaisedLayer } from '@/components/common/RaisedLayer';
 import { useAuth } from '@/context/AuthContext';
 import { useMorningSummaryPreview, useSendMorningSummaryTest } from '@/hooks/queries/useNotifications';
-import type { MorningSummaryTestResult } from '@/types/notification.types';
+import type { MorningSummaryNotSentReason, MorningSummaryTestResult } from '@/types/notification.types';
 import { isAdminRole } from '@/utils/adminRoles';
 
 export interface MorningSummaryPreviewDialogProps {
@@ -106,6 +106,13 @@ function Note({ tone, children }: { tone: keyof typeof NOTE_COLORS; children: Re
         </Box>
     );
 }
+
+/** Why this user gets no morning email (`notSentReason`); their preferences live in My Profile › Notifications. */
+const NOT_SENT_NOTES: Record<MorningSummaryNotSentReason, string> = {
+    opted_out: 'You turned this email off in My Profile › Notifications.',
+    out_of_office: 'You are out of office today, so this email is paused.',
+    on_leave: 'You are marked as on leave, so this email is paused.',
+};
 
 type ToastState = { open: boolean; message: string; severity: 'success' | 'error' | 'info' | 'warning' };
 
@@ -222,6 +229,7 @@ function PreviewContent({ titleId, onClose }: { titleId: string; onClose: () => 
                         {!data.email && (
                             <Note tone="warning">Your user account has no email address, so you won&apos;t get this email. Ask an admin to add one.</Note>
                         )}
+                        {data.notSentReason && <Note tone="info">{NOT_SENT_NOTES[data.notSentReason]}</Note>}
                         {data.empty && (
                             <Note tone="info">Nothing is due for you today. Users with nothing due get no email, unless the server is set to send it anyway.</Note>
                         )}

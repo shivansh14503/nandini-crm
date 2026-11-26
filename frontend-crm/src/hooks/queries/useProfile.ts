@@ -4,11 +4,14 @@ import { authService } from '@/services/auth.service';
 import { profileService } from '@/services/profile.service';
 import type { ChangePasswordPayload } from '@/types/auth.types';
 import { MASTER_DATA_QUERY_KEY } from './useMasterData';
+import { MORNING_SUMMARY_PREVIEW_QUERY_KEY } from './useNotifications';
+import type { PreferencesDto, PreferencesPatch } from '@/types/preferences.types';
 import type { ProfileDto, ProfileUpdate } from '@/types/profile.types';
 
 export const ME_QUERY_KEY = ['me'] as const;
 export const PROFILE_QUERY_KEY = [...ME_QUERY_KEY, 'profile'] as const;
 export const SESSIONS_QUERY_KEY = [...ME_QUERY_KEY, 'sessions'] as const;
+export const PREFERENCES_QUERY_KEY = [...ME_QUERY_KEY, 'preferences'] as const;
 
 /** The signed-in user's own profile (My Profile). */
 export function useMyProfile() {
@@ -57,6 +60,31 @@ export const useRemovePhoto = () =>
         () => profileService.removePhoto(),
         (res, prev) => (prev ? { ...prev, photoUrl: res.photoUrl } : undefined),
     );
+
+/**
+ * The signed-in user's notification preferences, default reminder and out of office (My Profile › Notifications).
+ * `enabled: false` skips the request (e.g. an activity form that isn't creating a record).
+ */
+export function useMyPreferences({ enabled = true }: { enabled?: boolean } = {}) {
+    return useQuery({ queryKey: PREFERENCES_QUERY_KEY, queryFn: () => profileService.getPreferences(), staleTime: 60 * 1000, enabled });
+}
+
+/**
+ * Saves part of the preferences. The saved preferences go straight into the cache; the morning email preview is
+ * refetched (it says why no email is sent), and so is the users master data when out of office changed (pickers
+ * label away users from it).
+ */
+export function useUpdatePreferences() {
+    const queryClient = useQueryClient();
+    return useMutation({
+        mutationFn: (patch: PreferencesPatch) => profileService.updatePreferences(patch),
+        onSuccess: (saved: PreferencesDto, patch) => {
+            queryClient.setQueryData(PREFERENCES_QUERY_KEY, saved);
+            void queryClient.invalidateQueries({ queryKey: MORNING_SUMMARY_PREVIEW_QUERY_KEY });
+            if (patch.outOfOffice !== undefined) void queryClient.invalidateQueries({ queryKey: MASTER_DATA_QUERY_KEY, refetchType: 'all' });
+        },
+    });
+}
 
 function useSessionsMutation<TArgs, TResult>(fn: (args: TArgs) => Promise<TResult>) {
     const queryClient = useQueryClient();

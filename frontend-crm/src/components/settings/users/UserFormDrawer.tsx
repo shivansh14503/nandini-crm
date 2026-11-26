@@ -24,6 +24,7 @@ import KeyOutlinedIcon from '@mui/icons-material/KeyOutlined';
 import WorkOutlineRoundedIcon from '@mui/icons-material/WorkOutlineRounded';
 import PhoneOutlinedIcon from '@mui/icons-material/PhoneOutlined';
 import TuneRoundedIcon from '@mui/icons-material/TuneRounded';
+import EventBusyOutlinedIcon from '@mui/icons-material/EventBusyOutlined';
 import { FormField, FormGrid, RhfPhoneField, RhfTextField, ReadOnlyField, fieldSx } from '@/components/forms';
 import { UserAvatar } from '@/components/common/UserAvatar';
 import { UnsavedChangesModal } from '@/components/common/UnsavedChangesModal';
@@ -50,6 +51,7 @@ import { USERNAME_MAX_LENGTH } from '@/utils/username';
 import { needsOtherDomain, userFormSchema, type UserFormData, type UserFormOutput } from '@/validations/userAdmin.schema';
 import { getFirstErrorMessage } from '@/validations/common';
 import { formatPersonName } from '@/utils/personName';
+import { formatDayRange } from '@/utils/userAvailability';
 import { PasswordModeChoice } from './ResetPasswordDialog';
 import { PasswordRulesChecklist, RoleAccessBadges, adminPasswordIssue, apiErrorCode, apiFieldErrors, roleAccessHint, userLabel } from './userAdminUi';
 
@@ -749,10 +751,19 @@ export function UserFormDrawer({
                                                     onChange={field.onChange}
                                                     disabled={saving}
                                                     label="On leave"
-                                                    hint="Not offered as an assignee while on leave. They can still sign in."
+                                                    hint="Shown as on leave when someone picks them, and they get no morning summary email. They can still sign in."
                                                 />
                                             )}
                                         />
+                                    )}
+                                    {user?.outOfOffice && (
+                                        <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 0.75, px: 0.5, color: 'var(--mui-palette-text-secondary)' }}>
+                                            <EventBusyOutlinedIcon aria-hidden sx={{ fontSize: 16, mt: '2px', flexShrink: 0 }} />
+                                            <Typography sx={{ fontSize: '0.75rem', lineHeight: 1.5, color: 'inherit', minWidth: 0, overflowWrap: 'anywhere' }}>
+                                                Out of office {formatDayRange(user.outOfOffice.from, user.outOfOffice.to)} (set by the user in My Profile).
+                                                {user.outOfOffice.message ? ` “${user.outOfOffice.message}”` : ''}
+                                            </Typography>
+                                        </Box>
                                     )}
                                 </Box>
                             </Section>

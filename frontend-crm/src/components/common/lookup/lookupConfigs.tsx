@@ -17,6 +17,7 @@ import type { Product } from '@/types/product.types';
 import type { Referral } from '@/types/referral.types';
 import { CUSTOMER_TYPES, ENTITY_TYPES, NATURE_OF_BUSINESS } from '@/components/organizations/constants';
 import { findCrmUser } from '@/services/masterData.store';
+import { UserAwayChip } from '@/components/common/UserAwayChip';
 import { getCountryNameByCode } from '@/data/addressMaster';
 import { formatDateTime } from '@/utils/date';
 import { opportunityLabel } from '@/utils/opportunityLabel';
@@ -113,7 +114,18 @@ export const USER_LOOKUP_PRESET: LookupPreset<CrmUser> = {
     subtitle: 'Select the user to assign. Click a row to choose it.',
     searchPlaceholder: 'Name or username',
     columns: [
-        { id: 'name', label: 'Name', minWidth: 160, render: (u) => <PrimaryText>{u.name}</PrimaryText> },
+        {
+            id: 'name',
+            label: 'Name',
+            minWidth: 160,
+            // Away colleagues stay pickable; the chip says so (out of office until …, on leave).
+            render: (u) => (
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, flexWrap: 'wrap', minWidth: 0 }}>
+                    <PrimaryText>{u.name}</PrimaryText>
+                    <UserAwayChip user={u} />
+                </Box>
+            ),
+        },
         { id: 'username', label: 'Username', minWidth: 130 },
         { id: 'department', label: 'Department', minWidth: 110 },
         { id: 'role', label: 'Role', minWidth: 170 },

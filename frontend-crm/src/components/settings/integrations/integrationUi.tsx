@@ -20,7 +20,11 @@ const TONES: Record<ChipTone, { color: string; backgroundColor: string; borderCo
     brand: { color: 'var(--crm-text-blue-700)', backgroundColor: 'var(--mui-palette-primary-soft)', borderColor: 'var(--mui-palette-primary-softBorder)' },
 };
 
-export function StatusChip({ tone, children, title }: { tone: ChipTone; children: React.ReactNode; title?: string }) {
+/**
+ * A small tone-coloured pill. `truncate` lets it shrink to its container with an ellipsis (put the full text in
+ * `title`) where a long label would otherwise push past a narrow column on phones.
+ */
+export function StatusChip({ tone, children, title, truncate = false }: { tone: ChipTone; children: React.ReactNode; title?: string; truncate?: boolean }) {
     return (
         <Box
             component="span"
@@ -37,6 +41,7 @@ export function StatusChip({ tone, children, title }: { tone: ChipTone; children
                 border: `1px solid ${TONES[tone].borderColor}`,
                 color: TONES[tone].color,
                 backgroundColor: TONES[tone].backgroundColor,
+                ...(truncate && { display: 'inline-block', maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis', verticalAlign: 'top' }),
             }}
         >
             {children}

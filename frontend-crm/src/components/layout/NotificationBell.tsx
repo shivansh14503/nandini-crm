@@ -13,6 +13,8 @@ import AutorenewOutlinedIcon from '@mui/icons-material/AutorenewOutlined';
 import DoneAllIcon from '@mui/icons-material/DoneAll';
 import MailOutlineOutlinedIcon from '@mui/icons-material/MailOutlineOutlined';
 import EventBusyOutlinedIcon from '@mui/icons-material/EventBusyOutlined';
+import SettingsOutlinedIcon from '@mui/icons-material/SettingsOutlined';
+import { ROUTES } from '@/config/constants';
 import { useAuth } from '@/context/AuthContext';
 import {
     useMarkAllNotificationsRead,
@@ -187,10 +189,11 @@ interface NotificationPanelProps {
     unreadCount: number;
     onOpen: (row: CrmNotification) => void;
     onPreview: () => void;
+    onSettings: () => void;
 }
 
 /** The popover's content: mounted only while it is open, so the list (and the business clock) load on opening. */
-function NotificationPanel({ unreadCount, onOpen, onPreview }: NotificationPanelProps) {
+function NotificationPanel({ unreadCount, onOpen, onPreview, onSettings }: NotificationPanelProps) {
     const list = useNotifications();
     const markAll = useMarkAllNotificationsRead();
     const clock = useBusinessClock();
@@ -291,9 +294,22 @@ function NotificationPanel({ unreadCount, onOpen, onPreview }: NotificationPanel
             </Box>
 
             {/* Footer */}
-            <Box sx={{ px: 1, py: 0.5, display: 'flex', justifyContent: 'center', borderTop: '1px solid var(--mui-palette-border-main)' }}>
+            <Box
+                sx={{
+                    px: 1,
+                    py: 0.5,
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    flexWrap: 'wrap',
+                    gap: 0.5,
+                    borderTop: '1px solid var(--mui-palette-border-main)',
+                }}
+            >
                 <Button onClick={onPreview} startIcon={<MailOutlineOutlinedIcon sx={{ fontSize: '17px !important' }} />} sx={textButtonSx}>
                     Preview morning email
+                </Button>
+                <Button onClick={onSettings} startIcon={<SettingsOutlinedIcon sx={{ fontSize: '17px !important' }} />} sx={textButtonSx}>
+                    Notification settings
                 </Button>
             </Box>
         </Box>
@@ -304,7 +320,7 @@ function NotificationPanel({ unreadCount, onOpen, onPreview }: NotificationPanel
  * Navbar bell: the signed-in user's notifications (activity reminders, assignments, invitations, contract renewals).
  * The badge polls the unread count every minute while the tab is visible; the list loads when the popover opens.
  * A row marks itself read and opens its record (activities in the calendar's drawer, contracts on their page).
- * The footer opens the morning summary email preview.
+ * The footer opens the morning summary email preview and My Profile › Notifications (which kinds to get).
  */
 export function NotificationBell() {
     const router = useRouter();
@@ -325,6 +341,11 @@ export function NotificationBell() {
     const openPreview = () => {
         close();
         setPreviewOpen(true);
+    };
+
+    const openSettings = () => {
+        close();
+        router.push(ROUTES.PROFILE_NOTIFICATIONS);
     };
 
     return (
@@ -411,7 +432,7 @@ export function NotificationBell() {
                             >
                                 <ClickAwayListener onClickAway={handleClickAway}>
                                     <Box>
-                                        <NotificationPanel unreadCount={count} onOpen={openRow} onPreview={openPreview} />
+                                        <NotificationPanel unreadCount={count} onOpen={openRow} onPreview={openPreview} onSettings={openSettings} />
                                     </Box>
                                 </ClickAwayListener>
                             </Paper>

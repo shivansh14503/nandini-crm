@@ -1,7 +1,7 @@
 # Nandini CRM — Database Design
 
-> **Status:** living document, generated from `backend-crm/prisma/schema.prisma` and `prisma/migrations/` (83 migrations,
-> latest `20261127090000_calendar_connections`, as of 2026-11-26). Update it in the same change as any schema migration.
+> **Status:** living document, generated from `backend-crm/prisma/schema.prisma` and `prisma/migrations/` (84 migrations,
+> latest `20261127100000_user_preferences`, as of 2026-11-26). Update it in the same change as any schema migration.
 > Related: [System design](system-design.md) · [API plan](api-plan.md) · [Build plan](build-plan.md)
 
 ---
@@ -12,8 +12,8 @@
 | --- | --- |
 | Engine | Microsoft SQL Server / Azure SQL (schema `dbo`) |
 | Access | Prisma 7 ORM through `@prisma/adapter-mssql`; a few raw SQL statements (`MERGE` for counters, `sp_getapplock` for locks, `OPENJSON`) |
-| Tables | **45** application tables + Prisma's `_prisma_migrations` |
-| Owned child tables ("sub tables") | 7: `EntityEmail`, `OpportunityLineItem`, `QuotationLineItem`, `PartnerCompanyContact`, `DropdownOption`, `ActivityAttendee`, `UserPhoto` |
+| Tables | **46** application tables + Prisma's `_prisma_migrations` |
+| Owned child tables ("sub tables") | 8: `EntityEmail`, `OpportunityLineItem`, `QuotationLineItem`, `PartnerCompanyContact`, `DropdownOption`, `ActivityAttendee`, `UserPhoto`, `UserPreference` |
 | Migrations | `backend-crm/prisma/migrations/` (`npm run db:migrate` in dev, `npm run db:deploy` in prod) |
 | Seed | `backend-crm/prisma/seed.ts` (`npm run seed`) |
 
@@ -21,7 +21,7 @@
 
 | Domain | Tables |
 | --- | --- |
-| Identity | `Users` (model `User`), `UserPhoto` (profile photos) |
+| Identity | `Users` (model `User`), `UserPhoto` (profile photos), `UserPreference` (My Profile › Notifications) |
 | CRM core | `Organization`, `Contact`, `Lead`, `Opportunity`, `Quotation`, `Ticket`, `Contract`, `Document`, `Product` |
 | Activities & calendar | `Activity`, `ActivityAttendee` |
 | Owned children | `EntityEmail`, `OpportunityLineItem`, `QuotationLineItem` |
@@ -119,6 +119,7 @@ erDiagram
     DropdownCategory ||--o{ DropdownOption : options
     DropdownCategory ||--o{ FormFieldDefinition : "feeds select fields"
     Users ||--o| UserPhoto : "profile photo"
+    Users ||--o| UserPreference : "notification preferences"
     Users ||--o{ Users : "reports to (reportsToId)"
 ```
 
@@ -159,7 +160,7 @@ Pre-existing table kept for compatibility (columns `Id`, `Username`, `Password`,
 | `mustChangePassword` | BIT NOT NULL, default 0 | Set for a user added in Admin › Users and after an admin password reset; cleared by `POST /api/auth/change-password`. While set, the sign-in token carries `mcp` and the API answers only the change-password routes |
 | `createdBy` | NVARCHAR(50) NULL | Username of the admin who added the user in Admin › Users; NULL for older users (seed, SQL) |
 | `deactivatedAt` | DATETIME2 NULL | When an admin last deactivated the user; NULL again on activation |
-| `isActive`, `isGroupUser`, `onLeave`, `lastLoginAt` | | Inactive users can't sign in or be assigned. Set in Admin › Users (`onLeave` is a plain switch; out-of-office dates are Profile Phase 3) |
+| `isActive`, `isGroupUser`, `onLeave`, `lastLoginAt` | | Inactive users can't sign in or be assigned. Set in Admin › Users (`onLeave` is a plain switch). Out-of-office dates live in `UserPreference` (§4.30, set by the user in My Profile); a user is **effectively on leave** when `onLeave` is set or today (business timezone) is in their out-of-office range |
 
 Indexes: `email`, `isActive`, `reportsToId`.
 
@@ -689,6 +690,28 @@ provider account). Connect / disconnect take application locks on the user, the 
 are audited as entity `CalendarConnection` (audit module `calendar`, `auditCatalog.moduleFor`; the notification `entityModule` is `calendar-connections`) with actions `CONNECT` / `DISCONNECT`
 (`{ provider, accountEmail, by, reason?, note?, reconnected?, emailFilled?, replaced? }`, never a token).
 
+### 4.30 `UserPreference` (My Profile › Notifications)
+
+Migration `20261127100000_user_preferences` (Profile Phase 3, as of 2026-11-26; new table only). Module
+`backend-crm/src/modules/preferences`. A user's own notification switches, default reminder and out of office: one row
+per user, created on their first save that changes something. **No row = every default** (all switches on, company
+default reminder, not out of office), which is the behaviour before this table, so nothing is backfilled or seeded.
+
+| Column | Type | Notes |
+| --- | --- | --- |
+| `userId` | INT PK, FK → `Users.Id` (CASCADE / NO ACTION) | Deleting a user deletes the row (the app only deactivates users) |
+| `inAppActivityReminder`, `inAppActivityAssigned`, `inAppActivityInvited`, `inAppContractRenewal` | BIT NOT NULL, default 1 | Bell kinds `activity_reminder` / `activity_assigned` / `activity_invited` / `contract_renewal`; 0 = no `Notification` row of that kind is written for the user (`notifications/notification.preferences.ts`). Other kinds (`calendar_reconnect`) have no column and always deliver |
+| `emailMorningSummary` | BIT NOT NULL, default 1 | The 9 AM morning summary email |
+| `defaultReminder` | NVARCHAR(30) NULL | Pre-fills Reminder on activities the user creates (client side): an `ACTIVITY_REMINDERS` label, `none` (No reminder), NULL = company default |
+| `outOfOfficeFrom`, `outOfOfficeTo` | DATE NULL | Inclusive business-timezone days, stored at UTC midnight like `Holiday` / `Contract` dates; both set or both NULL. At most 365 days; a new or changed range can't end in the past or start more than 365 days ahead (`preferences.rules.ts`). While today is in range: no morning summary, and "Out of office until …" next to the user in pickers and Admin › Users. Bell notifications keep arriving. An ended range stays stored but reads as none |
+| `outOfOfficeMessage` | NVARCHAR(200) NULL | Optional; shown as the tooltip of the away label |
+| `createdAt`, `updatedAt` | DATETIME2 | |
+
+No extra index: reads are by primary key, by a batch of usernames through the `Users` join (the bell producer, at
+most 500 per query), or the full list with the user directory. Saves take the per-user application lock
+(`user:id:<id>`, shared with My Profile and Admin › Users) and are audited as `User UPDATE` with the changed columns
+(dates as `YYYY-MM-DD`); a save that changes nothing writes nothing.
+
 ## 5. Index strategy
 
 - **Scoped list composites** `(isDeleted, assignedTo, createdAt)` match the most common query: "live records I own or
@@ -726,6 +749,7 @@ are audited as entity `CalendarConnection` (audit module `calendar`, `auditCatal
 | Option value rename / field key rename | Stored values in records, saved filters and PDF template paths follow (`optionValueRename.ts`, `fieldKeyRename.ts`) |
 | Activity reminder due | One transaction: claim `Activity.reminderSentAt` (matching `remindAt` and `updatedAt`, writing `updatedAt` back unchanged) + insert the missing `Notification` rows |
 | Profile edit / photo (My Profile) | App lock on the user → UPDATE `Users` (or replace the `UserPhoto` row) → `AuditLog` UPDATE; user lookup caches dropped after commit |
+| Notification preferences (My Profile › Notifications) | App lock on the user → upsert the `UserPreference` row → `AuditLog` User UPDATE; user lookup caches dropped after commit when the out-of-office changed |
 | User added / edited (Admin › Users) | App locks (username, email address, reports-to chain, admin roster as needed; the per-user lock on edits) → checks → INSERT / UPDATE `Users` → `AuditLog` CREATE / UPDATE; user lookup caches dropped after commit |
 | User deactivated / reset (Admin › Users) | App lock on the user → `isActive = 0, deactivatedAt = now` (or new hash + `mustChangePassword = 1`) → `AuditLog` STATUS_CHANGE / PASSWORD_RESET; after commit every Redis session of the user is deleted |
 | Nightly retention (00:20) | Hard delete of old `Notification` and `EmailLog` rows (see §4.26); then live `CalendarConnection` rows of inactive / group users are disconnected (`user_inactive`, revoked) and `calendar_reconnect` "access ends soon" notifications written (as of 2026-11-26) |

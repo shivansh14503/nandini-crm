@@ -5,11 +5,14 @@ import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { Alert, AlertTitle, Box, Button, Skeleton } from '@mui/material';
 import PersonOutlineRoundedIcon from '@mui/icons-material/PersonOutlineRounded';
 import ShieldOutlinedIcon from '@mui/icons-material/ShieldOutlined';
+import NotificationsNoneRoundedIcon from '@mui/icons-material/NotificationsNoneRounded';
 import { AppToast } from '@/components/common/AppToast';
 import { useAuth } from '@/context/AuthContext';
 import { PillTabs, errorMessage, secondaryButtonSx, surfaceSx, type PillTabItem } from '@/components/settings/form-customization/builderUi';
 import { useMyProfile } from '@/hooks/queries/useProfile';
+import type { ProfileDto } from '@/types/profile.types';
 import { ChangePasswordCard } from './ChangePasswordCard';
+import { NotificationsPanel } from './NotificationsPanel';
 import { PersonalDetailsCard } from './PersonalDetailsCard';
 import { ProfileHeaderCard } from './ProfileHeaderCard';
 import { SessionsCard } from './SessionsCard';
@@ -19,12 +22,16 @@ export type ToastSeverity = 'success' | 'error' | 'info' | 'warning';
 /** Shows a top-right toast on the profile page. */
 export type Notify = (message: string, severity?: ToastSeverity) => void;
 
-type ProfileTab = 'profile' | 'security';
+type ProfileTab = 'profile' | 'notifications' | 'security';
 
 const TABS: PillTabItem<ProfileTab>[] = [
     { key: 'profile', label: 'Profile', icon: <PersonOutlineRoundedIcon sx={{ fontSize: 17 }} /> },
+    { key: 'notifications', label: 'Notifications', icon: <NotificationsNoneRoundedIcon sx={{ fontSize: 17 }} /> },
     { key: 'security', label: 'Security', icon: <ShieldOutlinedIcon sx={{ fontSize: 17 }} /> },
 ];
+
+/** The `?tab=` value as a tab; anything unknown opens Profile. */
+const parseTab = (value: string | null): ProfileTab => (value === 'notifications' || value === 'security' ? value : 'profile');
 
 function ProfileSkeleton() {
     return (
@@ -44,7 +51,7 @@ function ProfileSkeleton() {
 }
 
 /**
- * My Profile: header card, then the Profile and Security tabs (`?tab=security`). While an admin-set password must be
+ * My Profile: header card, then the Profile, Notifications and Security tabs (`?tab=notifications|security`). While an admin-set password must be
  * changed (`mustChangePassword`), only the change-password card shows, under a warning; everything else unlocks as
  * soon as the password is changed.
  */
@@ -54,7 +61,7 @@ export function ProfileView() {
     const searchParams = useSearchParams();
     const { user } = useAuth();
     const locked = Boolean(user?.mustChangePassword);
-    const tab: ProfileTab = locked || searchParams.get('tab') === 'security' ? 'security' : 'profile';
+    const tab: ProfileTab = locked ? 'security' : parseTab(searchParams.get('tab'));
     const { data: profile, isLoading, isError, error, refetch, isFetching } = useMyProfile();
 
     const [toast, setToast] = useState<{ open: boolean; message: string; severity: ToastSeverity }>({ open: false, message: '', severity: 'success' });
@@ -66,6 +73,31 @@ export function ProfileView() {
         else params.set('tab', next);
         const query = params.toString();
         router.replace(query ? `${pathname}?${query}` : pathname, { scroll: false });
+    };
+
+    const renderPanel = (current: ProfileTab, data: ProfileDto) => {
+        switch (current) {
+            case 'notifications':
+                return <NotificationsPanel notify={notify} />;
+            case 'security':
+                return (
+                    <Box role="tabpanel" aria-label="Security" sx={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0 }}>
+                        <ChangePasswordCard profile={data} notify={notify} />
+                        <SessionsCard notify={notify} />
+                    </Box>
+                );
+            default:
+                return (
+                    <Box
+                        role="tabpanel"
+                        aria-label="Profile"
+                        sx={{ display: 'grid', gridTemplateColumns: { xs: 'minmax(0, 1fr)', md: 'minmax(0, 3fr) minmax(0, 2fr)' }, gap: 2, alignItems: 'start' }}
+                    >
+                        <PersonalDetailsCard profile={data} notify={notify} />
+                        <WorkDetailsCard profile={data} />
+                    </Box>
+                );
+        }
     };
 
     return (
@@ -105,21 +137,7 @@ export function ProfileView() {
 
                     <PillTabs<ProfileTab> items={TABS} value={tab} onChange={changeTab} sx={{ '& [role="tab"]': { minHeight: 40 } }} />
 
-                    {tab === 'profile' ? (
-                        <Box
-                            role="tabpanel"
-                            aria-label="Profile"
-                            sx={{ display: 'grid', gridTemplateColumns: { xs: 'minmax(0, 1fr)', md: 'minmax(0, 3fr) minmax(0, 2fr)' }, gap: 2, alignItems: 'start' }}
-                        >
-                            <PersonalDetailsCard profile={profile} notify={notify} />
-                            <WorkDetailsCard profile={profile} />
-                        </Box>
-                    ) : (
-                        <Box role="tabpanel" aria-label="Security" sx={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0 }}>
-                            <ChangePasswordCard profile={profile} notify={notify} />
-                            <SessionsCard notify={notify} />
-                        </Box>
-                    )}
+                    {renderPanel(tab, profile)}
                 </>
             )}
 

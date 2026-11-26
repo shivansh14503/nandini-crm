@@ -11,6 +11,8 @@ import { UserAvatar } from '@/components/common/UserAvatar';
 import { findCrmUser } from '@/services/masterData.store';
 import { useMasterData } from '@/hooks/queries/useMasterData';
 import { useFormMode } from '@/context/FormModeContext';
+import { StatusChip } from '@/components/settings/integrations/integrationUi';
+import { useBusinessToday, userAwayStatus } from '@/utils/userAvailability';
 
 export interface RhfAssignedUserCardProps<T extends FieldValues> {
     name: FieldPath<T>;
@@ -44,6 +46,7 @@ export function RhfAssignedUserCard<T extends FieldValues>({
     const isView = useFormMode().mode === 'view';
     // Re-renders once the user directory loads (API mode), so the card shows the person, not just the username.
     useMasterData();
+    const today = useBusinessToday();
 
     const user = findCrmUser(assignedUsername);
     const displayName = user?.name || assignedUsername || 'Unassigned';
@@ -52,6 +55,9 @@ export function RhfAssignedUserCard<T extends FieldValues>({
         : assignedUsername
           ? 'Not in user directory'
           : 'No user assigned';
+
+    // Out of office / on leave: still assignable, but the person picking sees it.
+    const away = userAwayStatus(user, today);
 
     const handleSelect = (username: string) => {
         setValue(name, username as PathValue<T, FieldPath<T>>, { shouldDirty: true, shouldValidate: true });
@@ -64,7 +70,7 @@ export function RhfAssignedUserCard<T extends FieldValues>({
             label={label}
             required={required}
             hint={hint}
-            viewValue={assignedUsername ? `${displayName} • ${subtitle}` : ''}
+            viewValue={assignedUsername ? [displayName, subtitle, away?.label].filter(Boolean).join(' • ') : ''}
             size={fieldSize}
             fit={null}
             sx={{ mb: 0 }}
@@ -92,6 +98,13 @@ export function RhfAssignedUserCard<T extends FieldValues>({
                         <Typography noWrap sx={{ fontSize: '0.72rem', color: 'var(--mui-palette-text-secondary)', mt: 0.2 }}>
                             {subtitle}
                         </Typography>
+                        {away && (
+                            <Box sx={{ mt: 0.5, display: 'flex', minWidth: 0, maxWidth: '100%' }}>
+                                <StatusChip tone="warning" title={`${away.label}: ${away.title}`} truncate>
+                                    {away.label}
+                                </StatusChip>
+                            </Box>
+                        )}
                     </Box>
                 </Box>
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexShrink: 0 }}>

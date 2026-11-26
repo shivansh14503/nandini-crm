@@ -27,10 +27,13 @@ import type { PhotoUploadInput, ProfileUpdateInput } from './profile.validator.j
  * there is no user id in any request. Admin-managed fields (role, department, email, username) are read-only here.
  */
 
-const ACCOUNT_NOT_FOUND = 'Your account was not found. Please sign in again.';
+export const ACCOUNT_NOT_FOUND = 'Your account was not found. Please sign in again.';
 
-/** Serializes one user's profile / photo writes (a read-modify-write, and one photo row per user). */
-const lockUser = (tx: TransactionClient, userId: number) => acquireLocks(tx, [`user:id:${userId}`]);
+/**
+ * Serializes one user's profile / photo / preference writes (a read-modify-write, and one photo and one preference
+ * row per user). The same key as Admin › Users' edits of that user.
+ */
+export const lockUser = (tx: TransactionClient, userId: number) => acquireLocks(tx, [`user:id:${userId}`]);
 
 const sessionsUnavailable = () =>
     new HttpError('Session list is unavailable right now. Try again in a moment.', StatusCodes.SERVICE_UNAVAILABLE, { code: 'SESSIONS_UNAVAILABLE' });

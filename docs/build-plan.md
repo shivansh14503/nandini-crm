@@ -1,7 +1,7 @@
 # Nandini CRM — Build Plan
 
 > **Status:** living document. Part 1 records what has been built (reconstructed from git history, 115 commits
-> from 2026-10-15 to 2026-11-18; the snapshot as of 2026-11-26, Calendar Phase 2 P2-1 and P2-2, Profile Phase 1: My Profile and Profile Phase 2: Admin › Users). Part 2
+> from 2026-10-15 to 2026-11-18; the snapshot as of 2026-11-26, Calendar Phase 2 P2-1 and P2-2, Profile Phase 1: My Profile, Profile Phase 2: Admin › Users and Profile Phase 3: notifications & preferences). Part 2
 > is the roadmap. Tick
 > items off and add new ones as work lands.
 > Related: [System design](system-design.md) · [Database design](database-design.md) · [API plan](api-plan.md)
@@ -33,10 +33,10 @@
 | Admin: forms, dropdowns, document series, cities, PDF templates, holidays | ✅ |
 | Responsive layout | ✅ phones (from 320 px), tablets and desktops: menu drawer below 1200 px, icon-only navbar controls up to 1420 px, related records as a button on phones, no sideways page scroll |
 | Audit log | ✅ ledger table with who / where / how per entry, Admin › Audit Log screen (`/api/admin/audit-logs`), undo / restore, CSV / Excel export, ledger integrity checks; alert rules later (Phase 11 E) |
-| My Profile | ✅ own name, mobile, office phone and photo; change password (signs out other sessions); list and sign out signed-in sessions (2026-11-26) |
+| My Profile | ✅ own name, mobile, office phone and photo; change password (signs out other sessions); list and sign out signed-in sessions; notification preferences, default reminder and out of office (2026-11-26) |
 | Users admin | ✅ Admin › Users (`/admin/users`): add, edit, deactivate / activate, reset password with must-change-password at next sign-in; job title and reports to (2026-11-26) |
 | Dashboard | ❌ static page, no data |
-| Tests | ⚠️ 87 backend unit test files (`node:test`); no API integration, no frontend, no E2E |
+| Tests | ⚠️ 100 backend unit test files (`node:test`); no API integration, no frontend, no E2E |
 | CI/CD, containers | ❌ none in repo |
 
 ## Part 2 — Roadmap
@@ -410,9 +410,19 @@ keeps wall-clock times); all-day activities are entered as business-timezone day
       gains `jobTitle`, `reportsToId`, `mustChangePassword`, `createdBy`, `deactivatedAt`. Audited as the acting admin:
       User `CREATE` / `UPDATE` / `STATUS_CHANGE` and the new `PASSWORD_RESET` (SECURITY, NOTICE). Other screens'
       avatars are unchanged in this PR. Out-of-office dates are Phase 3 (only the on-leave switch here).
-- [ ] **Profile Phase 3: Notifications & preferences** — a Notifications tab on My Profile: which bell notifications and emails
-      (morning summary, reminders) a user gets, reminder defaults; out-of-office dates (Phase 2 only has the on-leave
-      switch).
+- [x] **Profile Phase 3: Notifications & preferences** (2026-11-26) — a **Notifications** tab on My Profile
+      (`/profile?tab=notifications`, not in Form Builder; `GET` / `PATCH /api/me/preferences`), stored in a new 1:1
+      `UserPreference` table (no row = defaults, so nothing is backfilled). A user can turn off each bell kind
+      (activity reminders, assignments, invitations, contract renewals; applied in the notification producer, on every
+      path; kinds added later, such as `calendar_reconnect`, always deliver) and the morning summary email; pick a
+      **default reminder** for activities they create (company default, No reminder or a reminder label; pre-fills the
+      form only); and set **out of office** dates (inclusive, at most 365 days) with an optional message: while out of
+      office (or on leave) the morning summary is skipped and pickers, the assigned-user card and Admin › Users show
+      "Out of office until <date>" / "On leave". Bell notifications keep arriving. The bell footer links to the tab and
+      the morning email preview says when and why it won't be sent. Changes audited as User `UPDATE`. The admin On
+      leave hint now says what it does (shown when picked, no morning summary). Not done, by decision: reminder emails
+      (no bell kind sends email, so the matrix shows only an In app column), per-invitee reminder offsets, admins
+      editing someone's out-of-office (they see it), and hiding away users from pickers (they are labelled).
 - [ ] **Profile Phase 4: Connected accounts** — a Connected accounts tab hosting the Calendar thread's `CalendarConnectionsCard`
       (Google / Microsoft 365 calendar sync), replacing its temporary `/connected-calendars` page; the company email
       editor and its unique index belong to that work.
