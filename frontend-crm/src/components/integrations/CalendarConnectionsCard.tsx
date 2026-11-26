@@ -4,7 +4,7 @@ import { Alert, Box, Button, Skeleton, Typography } from '@mui/material';
 import EventAvailableOutlinedIcon from '@mui/icons-material/EventAvailableOutlined';
 import { errorMessage, panelHeaderSx, secondaryButtonSx, surfaceSx } from '@/components/settings/form-customization/builderUi';
 import { formatDateTime, hintSx, ProviderMark, StatusChip, type ChipTone } from '@/components/settings/integrations/integrationUi';
-import { NOT_SYNCED_REASON_MESSAGES, type OwnCalendarStatus } from './calendarConnections.types';
+import { NOT_SYNCED_REASON_MESSAGES, type OwnCalendar, type OwnCalendarStatus } from './calendarConnections.types';
 import { useOwnCalendarSync } from './useCalendarConnections';
 
 /**
@@ -56,9 +56,26 @@ function ProviderBadge({ provider }: { provider: string }) {
     );
 }
 
+const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`;
+
+/**
+ * The first-sync copy (P2-3c): upcoming CRM meetings copied when the calendar was connected. Activities with guests
+ * become private copies (nobody is invited until the owner presses Send invitations in the activity). '' = nothing to say.
+ */
+export function backfillLine(calendar: Pick<OwnCalendar, 'status' | 'backfill'>): string {
+    const backfill = calendar.backfill;
+    if (!backfill || calendar.status !== 'ok') return '';
+    const sending = backfill.sending > 0 ? ` ${plural(backfill.sending, 'change')} still being sent.` : '';
+    if (backfill.state === 'waiting') return `Copying your upcoming CRM meetings to this calendar…${sending}`;
+    // Calendar sync is switched off on the server: nothing is being copied, so the card claims nothing.
+    if (backfill.state === 'off') return sending.trim();
+    if (!backfill.copied) return sending.trim();
+    return `Copied ${plural(backfill.copied, 'upcoming activity').replace(/activitys$/, 'activities')} when your calendar was connected. Meetings with guests are private copies: nobody was invited until you press Send invitations in the activity.${sending}`;
+}
+
 export function CalendarConnectionsCard(props: CalendarConnectionsCardProps = {}) {
     void props; // accepted for compatibility only (see above)
-    const { data, isLoading, error, refetch } = useOwnCalendarSync();
+    const { data, isLoading, error, refetch } = useOwnCalendarSync(true, true);
     const calendar = data?.calendar ?? null;
     const status = calendar ? (STATUS[calendar.status as OwnCalendarStatus] ?? STATUS.pending) : null;
 
@@ -126,6 +143,11 @@ export function CalendarConnectionsCard(props: CalendarConnectionsCardProps = {}
                             </Box>
                         </Box>
                         <Typography sx={{ fontSize: '0.82rem', color: 'var(--crm-slate-700)' }}>{status.text}</Typography>
+                        {backfillLine(calendar) && (
+                            <Typography role="status" sx={{ fontSize: '0.8rem', color: 'var(--mui-palette-text-secondary)', overflowWrap: 'anywhere' }}>
+                                {backfillLine(calendar)}
+                            </Typography>
+                        )}
                     </>
                 )}
 

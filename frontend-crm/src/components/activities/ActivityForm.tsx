@@ -16,6 +16,8 @@ import type { ActivityFormValues } from '@/validations/activity.schema';
 import { ActivityFormFields, useActivityForm } from './ActivityFormFields';
 import { ActivityTypeIcon } from './ActivityBadges';
 import { formatActivityWhen } from './activityTime';
+import { findCrmUser } from '@/services/masterData.store';
+import { useAuth } from '@/context/AuthContext';
 
 // ─── Single Source of Truth for Activity Form Tabs ────────────────────────────
 export const ACTIVITY_FORM_TABS: (FormTabDefinition & { id: 'overview' })[] = [
@@ -39,8 +41,28 @@ export interface ActivityFormProps {
     onSaved?: (activity: Activity) => void;
 }
 
+const lcName = (value: string | null | undefined) => (value ?? '').trim().toLowerCase();
+
+/**
+ * The save confirmation when a synced activity with invited guests changes owner (P2-3c, spec §14.5): the event moves
+ * to the new owner's calendar, so its guests get a cancellation and a new invitation. '' = no confirmation needed.
+ */
+export function ownerChangeNote(activity: Activity | null | undefined, values: Pick<ActivityFormValues, 'assignedTo'>, viewer: string | null | undefined): string {
+    const calendar = activity?.calendar;
+    if (!activity || !calendar || calendar.invites !== 'send' || calendar.state === 'unsupported' || calendar.state === 'removed_remote') return '';
+    if (!values.assignedTo || lcName(values.assignedTo) === lcName(activity.assignedTo)) return '';
+    const guests = (activity.attendees ?? []).filter((a) => !(a.kind === 'user' && lcName(a.username) === lcName(activity.assignedTo)));
+    if (guests.length === 0) return '';
+    const newOwner = findCrmUser(values.assignedTo)?.name || values.assignedTo;
+    // D41: invitations leave a mailbox only on its owner's action, so someone else's save holds them for the new owner.
+    return lcName(values.assignedTo) === lcName(viewer)
+        ? `Change the owner to you? The meeting moves to your calendar: attendees get a cancellation and a new invitation from you.`
+        : `Change the owner to ${newOwner}? The meeting moves to ${newOwner}'s calendar: attendees get a cancellation now, and a new invitation from ${newOwner} once ${newOwner} sends it.`;
+}
+
 export default function ActivityForm({ mode = 'create', activityId, initialData, returnTo = ROUTES.ACTIVITIES, onSaved }: ActivityFormProps) {
     const router = useRouter();
+    const { user } = useAuth();
     const { methods, toast, showToast, closeToast, createSubmitHandler, stepwise, clock, durationOf, activity, recordLoading, save } = useActivityForm({
         mode,
         activityId,
@@ -58,6 +80,8 @@ export default function ActivityForm({ mode = 'create', activityId, initialData,
     ];
 
     const submit = createSubmitHandler(async (values) => {
+        const ownerChange = ownerChangeNote(activity, values, user?.username);
+        if (ownerChange && !window.confirm(ownerChange)) return;
         try {
             const saved = await save(values);
             if (onSaved) {
@@ -122,7 +146,15 @@ export default function ActivityForm({ mode = 'create', activityId, initialData,
                     mode={mode}
                     toast={<AppToast open={toast.open} message={toast.message} severity={toast.severity} onClose={closeToast} />}
                 >
-                    <ActivityFormFields clock={clock} durationOf={durationOf} lockedFields={lockedFields} lockReason={lockReason} activityId={mode === 'create' ? undefined : activityId} />
+                    <ActivityFormFields
+                        clock={clock}
+                        durationOf={durationOf}
+                        lockedFields={lockedFields}
+                        lockReason={lockReason}
+                        activityId={mode === 'create' ? undefined : activityId}
+                        calendar={mode === 'create' ? null : activity?.calendar}
+                        savedOwner={mode === 'create' ? undefined : activity?.assignedTo}
+                    />
                 </CommonFormLayout>
             </FormConfigProvider>
         </FormProvider>

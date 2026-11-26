@@ -29,7 +29,8 @@ import { ROUTES } from '@/config/constants';
 import { useAuth } from '@/context/AuthContext';
 import { findCrmUser } from '@/services/masterData.store';
 import { isFollowUpActivity, NOTE_TYPE, TASK_TYPE, type Activity } from '@/types/activity.types';
-import { useActivities, useBulkDeleteActivities, useDeleteActivity } from '@/hooks/queries/useActivities';
+import { useActivities, useBulkDeleteActivitiesWithResult, useDeleteActivity } from '@/hooks/queries/useActivities';
+import { calendarRemovalNote } from './ActivitySyncStatus';
 import { addDays, instantToZonedWallClock, zonedStartOfDay } from '@/utils/zonedTime';
 import { useSearchScope, useSearchScopedRows } from '../search/SearchScope';
 import { ActivityDetailDrawer } from './ActivityDetailDrawer';
@@ -127,7 +128,7 @@ export function ActivitiesMasterView({ mine = false, type = '', status = '' }: A
     const listLoading = !embeddedInSearch && listPending;
     const allActivities = useSearchScopedRows(loaded);
     const deleteMutation = useDeleteActivity();
-    const bulkDeleteMutation = useBulkDeleteActivities();
+    const bulkDeleteMutation = useBulkDeleteActivitiesWithResult();
 
     // ?mine=1 / ?type=… from the nav preselect a pill.
     const initialTab: ActivityFilterTab = mine
@@ -171,7 +172,7 @@ export function ActivitiesMasterView({ mine = false, type = '', status = '' }: A
     const closeDrawer = useCallback(() => setDrawerId(null), []);
 
     const handleDelete = async (activity: Activity) => {
-        if (!window.confirm(`Are you sure you want to delete "${activity.subject}"?`)) return;
+        if (!window.confirm(`Are you sure you want to delete "${activity.subject}"?${calendarRemovalNote(activity, user?.username, 'delete')}`)) return;
         try {
             await deleteMutation.mutateAsync(activity.id);
             if (drawerId === activity.id) closeDrawer();
@@ -221,15 +222,31 @@ export function ActivitiesMasterView({ mine = false, type = '', status = '' }: A
             }
             return;
         }
-        if (!window.confirm(`Are you sure you want to delete ${count} selected ${plural(count)}?${skippedNote}`)) return;
+        // Calendar copies (P2-3c): CRM-made events are cancelled in their owners' calendars (guests are notified).
+        const inCalendars = ids.filter((id) => {
+            const row = byId.get(id);
+            return Boolean(row && row.origin !== 'calendar' && calendarRemovalNote(row, user?.username, 'delete'));
+        }).length;
+        const calendarNote =
+            inCalendars > 0
+                ? ` ${inCalendars === count ? (count === 1 ? 'It is' : 'They are') : `${inCalendars} of them are`} also cancelled in their owner's calendar, and invited attendees are notified.`
+                : '';
+        if (!window.confirm(`Are you sure you want to delete ${count} selected ${plural(count)}?${skippedNote}${calendarNote}`)) return;
         try {
-            await bulkDeleteMutation.mutateAsync(ids);
+            const result = await bulkDeleteMutation.mutateAsync(ids);
             if (drawerId && ids.includes(drawerId)) closeDrawer();
             setSelectedIds([]);
+            // The server's own skips (rows that changed since the list loaded): told with its reasons.
+            const serverSkipped = result?.skipped ?? [];
+            const kept = skipped + serverSkipped.length;
+            const deleted = typeof result?.deleted === 'number' ? result.deleted : count;
+            const serverReasons = Array.from(new Set(serverSkipped.map((s) => s.reason).filter(Boolean)));
             setToast({
                 open: true,
-                message: `${count} ${plural(count)} deleted successfully.${skipped > 0 ? ` ${skipped} kept.` : ''}`,
-                severity: 'success',
+                message:
+                    `${deleted} ${plural(deleted)} deleted successfully.${kept > 0 ? ` ${kept} kept.` : ''}` +
+                    (serverReasons.length > 0 ? ` ${serverReasons.slice(0, 2).join('; ')}${serverReasons.length > 2 ? '; …' : ''}.` : ''),
+                severity: serverSkipped.length > 0 ? 'warning' : 'success',
             });
         } catch (err: unknown) {
             setToast({ open: true, message: err instanceof Error ? err.message : 'Failed to delete activities.', severity: 'error' });

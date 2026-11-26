@@ -10,7 +10,8 @@ import { connectionService } from './connection.service.js';
  * non-group user with a company email is enrolled automatically, so there is no connect or disconnect here.
  *
  *   GET /  → { ready, calendar: null | { provider, providerLabel, accountEmail, status: pending|ok|error|paused, since,
- *              lastSyncedAt }, reason: null | no_email|not_company|no_provider|excluded|inactive|group }
+ *              lastSyncedAt, backfill: { state: waiting|done|off, at, copied, sending } }, reason: null | no_email|not_company|
+ *              no_provider|excluded|inactive|group }   (backfill: the first-sync copy of upcoming activities, P2-3c)
  *            Same for every role, only the caller. No error codes or provider text (admins see those on People).
  *
  * Removed in P2-2b: the per-user connect, OAuth callback and disconnect routes, and their state cookie

@@ -64,6 +64,8 @@ import {
     OWN_CALENDAR_STATUSES,
 } from '../modules/calendar-sync/connection.constants.js';
 import { LINK_INVITES, LINK_STATES } from '../modules/calendar-sync/sync.constants.js';
+import { CALENDAR_NOT_SYNCED, CALENDAR_SYNC_NOT_RETRYABLE } from '../modules/calendar-sync/sync.actions.js';
+import { WORKER_STATUSES } from '../modules/calendar-sync/workerHeartbeat.js';
 import { NOTIFICATION_KINDS } from '../modules/notifications/notification.producer.js';
 import * as bookingConstants from '../modules/booking-links/bookingLink.constants.js';
 import { normalizeUsername, RESERVED_USERNAMES, USERNAME_MAX_LENGTH, USERNAME_MIN_LENGTH, USERNAME_PATTERN, usernameIssue } from '../modules/user-admin/username.js';
@@ -146,6 +148,8 @@ interface FrontendActivityContract {
     CALENDAR_LINK_INVITES: readonly string[];
     FOLLOW_UP_ORIGIN: string;
     FOLLOW_UP_ACTIVITY_LOCKED: string;
+    CALENDAR_NOT_SYNCED: string;
+    CALENDAR_SYNC_NOT_RETRYABLE: string;
     ACTIVITY_MAX_ATTENDEES: number;
     ACTIVITY_NOT_APPLICABLE: Readonly<Record<string, readonly string[]>>;
     ACTIVITY_RELATED_MODULE_LABELS: Readonly<Record<string, string>>;
@@ -211,6 +215,7 @@ interface FrontendIntegrationTypes {
     SECRET_EXPIRY_WARNING_DAYS: number;
     MAX_COMPANY_DOMAINS: number;
     USER_EMAIL_MAX_LENGTH: number;
+    WORKER_STATUSES: readonly string[];
 }
 
 interface FrontendCalendarConnectionTypes {
@@ -380,6 +385,9 @@ describe('backend ↔ frontend contract', { skip }, () => {
         // Calendar sync (P2-3b): ActivityView.calendar's state / invites vocabulary.
         assert.deepEqual([...contract.CALENDAR_LINK_STATES], [...LINK_STATES]);
         assert.deepEqual([...contract.CALENDAR_LINK_INVITES], [...LINK_INVITES]);
+        // The drawer's calendar actions (P2-3c): their 409 codes.
+        assert.equal(contract.CALENDAR_NOT_SYNCED, CALENDAR_NOT_SYNCED);
+        assert.equal(contract.CALENDAR_SYNC_NOT_RETRYABLE, CALENDAR_SYNC_NOT_RETRYABLE);
         // Busy times (P2-6): kinds, person statuses and the request limits the form's strip works within.
         const busy = frontend as unknown as FrontendBusyContract;
         assert.deepEqual([...busy.BUSY_KINDS], [...BUSY_KINDS]);
@@ -548,6 +556,7 @@ describe('backend ↔ frontend contract', { skip }, () => {
         assert.equal(frontend.SECRET_EXPIRY_WARNING_DAYS, SECRET_EXPIRY_WARNING_DAYS);
         assert.equal(frontend.MAX_COMPANY_DOMAINS, MAX_COMPANY_DOMAINS);
         assert.equal(frontend.USER_EMAIL_MAX_LENGTH, USER_EMAIL_MAX_LENGTH);
+        assert.deepEqual([...frontend.WORKER_STATUSES], [...WORKER_STATUSES]);
     });
 
     it('frontend components/integrations/calendarConnections.types.ts matches the calendar connection constants', async () => {

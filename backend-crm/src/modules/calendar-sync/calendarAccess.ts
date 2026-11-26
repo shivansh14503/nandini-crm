@@ -75,13 +75,13 @@ export interface CalendarAccessOptions {
     readOnly?: boolean;
 }
 
-/** Called when a row reaches `ok` from `pending` or `error` while `backfilledAt` is still null. */
+/** Called when a row reaches `ok` from `pending` or `error` (its first `ok`, and every recovery from `error`). */
 type ReadyListener = (row: ConnectionRow) => void | Promise<void>;
 /**
- * P2-3b: the row's `enrolled` job (sync.wake.ts, imported on demand: that module sits behind this one's importers),
- * which pushes the links saved while the row was pending or in error (a job id per recovery); P2-3c adds the
- * first-sync backfill to it. Without Redis
- * nothing is queued: the worker's fallback tick pushes those links within a minute (inside 07:00–22:00).
+ * The row's `enrolled` job (sync.wake.ts, imported on demand: that module sits behind this one's importers): on the
+ * first `ok` (`backfillCount` still null) the first-sync backfill (P2-3c, sync.backfill.ts), then a push of the links
+ * saved while the row was pending or in error (a job id per recovery). Without Redis nothing is queued: the worker's
+ * fallback tick runs the backfill and pushes those links within a minute (inside 07:00–22:00).
  */
 const enqueueEnrolledJob: ReadyListener = async (row) => {
     const { enqueueEnrolled } = await import('./sync.wake.js');
@@ -241,7 +241,7 @@ export async function withCalendarAccess<T>(connectionId: string, fn: (ctx: Call
 
     const firstOk = await markSuccess(row, clock(), Boolean(options.check));
     if (access.healthStatus === 'error') await markProviderHealthy(provider, clock());
-    if (firstOk && row.backfilledAt === null) {
+    if (firstOk) {
         for (const listener of readyListeners) {
             try {
                 await listener({ ...row, status: 'ok' });

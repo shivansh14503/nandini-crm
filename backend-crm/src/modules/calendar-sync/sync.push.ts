@@ -24,7 +24,7 @@ import {
 } from './providers/http.js';
 import { getAdapter } from './providers/registry.js';
 import type { CalendarProviderAdapter, CallCtx, CreateEventInput } from './providers/types.js';
-import { attendeeInputsFromProvider, parseHeld, patchAttendees, resolveAttendeeEmails, skippedWarning, withoutHeld, type ResolvedAttendees } from './sync.attendees.js';
+import { attendeeInputsFromProvider, heldEmailsOf, patchAttendees, resolveAttendeeEmails, skippedWarning, withoutHeld, type ResolvedAttendees } from './sync.attendees.js';
 import {
     ERROR_RETRY_MAX_MS,
     ERROR_RETRY_STEP_MS,
@@ -228,7 +228,7 @@ class LinkPush {
         const owner = activity.assignedTo;
         const base = parseBase(link.baseJson);
         const resolved = await resolveAttendeeEmails(prisma, activity.attendees, owner, this.connection.accountEmail);
-        const invited = link.invites === 'withhold' ? {} : withoutHeld(resolved.attendees, parseHeld(link.heldAttendeesJson));
+        const invited = link.invites === 'withhold' ? {} : withoutHeld(resolved.attendees, heldEmailsOf(link.heldAttendeesJson, activity.attendees, resolved.emailOf));
         // D15: the internal text only while everyone on the event (after this push) is a company address.
         const onEvent = base && link.externalEventId ? peopleOf(patchAttendees(base.provider.attendees, base.crm.attendees, invited)) : invited;
         const description = allInternal(Object.keys(onEvent), this.settings.companyDomains)
@@ -448,7 +448,7 @@ class LinkPush {
             if (merge.apply.includes('attendees')) {
                 // Held guests (D41) aren't on the event but stay in the CRM.
                 const target = { ...merge.merged.attendees };
-                for (const email of parseHeld(link.heldAttendeesJson)) if (!(email in target) && round.resolved.attendees[email]) target[email] = round.resolved.attendees[email];
+                for (const email of heldEmailsOf(link.heldAttendeesJson, activity.attendees, round.resolved.emailOf)) if (!(email in target) && round.resolved.attendees[email]) target[email] = round.resolved.attendees[email];
                 patch.attendees = await attendeeInputsFromProvider(prisma, activity.attendees, round.resolved.emailOf, target, activity.assignedTo);
             }
             if (Object.keys(patch).length > 0) await this.applyInbound(activity.id, patch);

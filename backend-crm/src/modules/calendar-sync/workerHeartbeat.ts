@@ -21,3 +21,18 @@ export async function readWorkerHeartbeat(): Promise<{ lastSeenAt: string } | nu
         return null;
     }
 }
+
+/**
+ * The admin page's "Sync worker" line (P2-3c): `running` (a heartbeat within the last 2 minutes), `not_seen` (Redis is
+ * up but no worker wrote one: it isn't running, or RUN_WORKERS / `npm run worker` was not started), `no_redis` (Redis is
+ * down or not configured: there is no heartbeat to read; the API pushes in-process meanwhile).
+ */
+export const WORKER_STATUSES = ['running', 'not_seen', 'no_redis'] as const;
+export type WorkerStatus = (typeof WORKER_STATUSES)[number];
+
+export function workerStatusOf(redisReady: boolean, heartbeat: { lastSeenAt: string } | null): WorkerStatus {
+    if (!redisReady) return 'no_redis';
+    return heartbeat ? 'running' : 'not_seen';
+}
+
+export const isHeartbeatRedisReady = (): boolean => isRedisReady();

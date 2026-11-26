@@ -799,8 +799,10 @@ The same list is next to `DB_KEEPALIVE_INTERVAL_MS` in `.env.example`.
 | 00:25 | Calendar nightly: connection reconcile / checks / digest, follow-up backfill, error-link retries, secrets expiring, leases (`crm-calendar-sync`; only reads when nothing is enrolled) |
 | 09:00 Mon–Sat | Morning summary email (only while mail is on; `crm-mail`) |
 | Every 15 min, 07:00–21:45 | Reminder sweep (contract renewals, missed reminders) |
-| Every 5 min, 07:00–21:55 | Calendar poll: outbox sweep + due connection checks (two small indexed reads; the database is awake then anyway for the reminder sweep and users) |
+| Every 5 min, 07:00–21:55 | Calendar poll: outbox sweep + due connection checks + backfill recovery (three small indexed reads, as of 2026-11-26, P2-3c; the database is awake then anyway for the reminder sweep and users) |
 | After each activity save | Its calendar push (a `push` job, 2 s later), only for enrolled owners |
+| When a person's calendar row first reaches `ok` | The first-sync backfill (P2-3c): keyset pages of their upcoming activities and the pushes, once per row (not periodic) |
+| Every 15 s, only while a My Profile page is open on a row still copying | `GET /api/calendar-connections` (a connection read and a link count) for the backfill progress line; stops when the copy is done, when sync is switched off (`backfill.state = 'off'`) and at most 5 minutes after the page was opened (as of 2026-11-26, P2-3c) |
 | At each due reminder | Its delayed job |
 | Every minute, **only while Redis is down** | The workers' fallback tick (the calendar worker's only inside 07:00–22:00) |
 
@@ -826,7 +828,7 @@ guessing slugs hit the rate limit and the negative cache, not SQL.
 
 ### 5.4 Calendar sync (`crm-calendar-sync`)
 
-As of 2026-11-26 (Calendar Phase 2 P2-3b, admin-managed model). Module `backend-crm/src/modules/calendar-sync`
+As of 2026-11-26 (Calendar Phase 2 P2-3b and P2-3c, admin-managed model). Module `backend-crm/src/modules/calendar-sync`
 (`sync.*.ts`), worker `src/jobs/workers/calendarSync.worker.ts`, under audit origin `JOB` / `job:calendar-sync`
 (pushes: `job:calendar-sync:<provider>`). Nothing is pushed until an admin turns a provider on and a person has a live
 `CalendarConnection` row (`pending`, `ok` or `error`); `CALENDAR_SYNC_ENABLED=false` stops pushes, the `enrolled`
@@ -836,8 +838,10 @@ job and the sweep (connection checks and the nightly connection steps still run)
   write's transaction): when a pushable field changed, the owner's organizer link on their live connection is
   inserted or marked dirty (`ActivityExternalLink.dirtyAt`, [database design](database-design.md)). A new link
   invites (`invites = 'send'`) only when the person saving is the owner, else it is a private copy (`withhold`);
-  addresses a non-owner puts on the activity (compared by resolved address, so a contact's changed email counts) are
-  held in `heldAttendeesJson` on every link that invites, also while the provider is off or the row is stopped
+  guests a non-owner puts on the activity are held in `heldAttendeesJson` on every link that invites, **by identity**
+  (as of 2026-11-26, P2-3c: `user:<username>` / `contact:<contactId>`, a plain lower-cased address only for typed
+  emails), so a contact who had no email when held, or whose email changes, stays held; the push resolves the
+  identities to today's addresses (`heldEmailsOf`). Holds are kept also while the provider is off or the row is stopped
   (`detached` links record holds without becoming dirty). An owner change by anyone but the new owner turns the new
   owner's earlier link into a new copy: guests not already on its event are held, or it becomes `withhold` when its
   event is gone (D41). A link on another connection (owner changed) is dirtied too, so it is cancelled. Reads and
@@ -864,18 +868,40 @@ job and the sweep (connection checks and the nightly connection steps still run)
   try restores the event instead of patching a deleted one. Unique-index errors are never caught inside a transaction
   (D45).
 - **`enrolled`** (`runEnrolled`): a row reached `ok`, first time or after an error (`withCalendarAccess`'s ready
-  listener; a job id per time, `…-r<readyAtMs>`): its dirty links (saved while it was pending or in error) pushed now,
-  100 at a time, stopping at the first gate or rate limit. The first-sync backfill of activities with no link is P2-3c.
+  listener; a job id per time, `…-r<readyAtMs>`): when the row is `ok` and `backfillCount` is null the **first-sync
+  backfill** runs first (as of 2026-11-26, P2-3c, `sync.backfill.ts`; addendum §8.3, D23): the owner's Planned,
+  create-eligible activities that aren't over and start within `backfillDays` get an organizer link each, in keyset
+  pages of 200 (short transactions under the activities' record locks, re-reading existing links; a unique-index
+  race rolls the page back and runs it once more outside the transaction, D45); activities with guests become private
+  copies (`invites = 'withhold'`: no attendees, nobody mailed) until the owner presses **Send invitations**. The first
+  run claims a run stamp in `backfilledAt` (compare-and-set on `IS NULL`) before inserting; a run started again (a
+  crash, the listener's and the poll's jobs at once) reuses that stamp, and every backfilled link gets
+  `createdAt` = the stamp, which is how the drawer says "copied when your calendar was connected". No activity
+  row, audit entry or notification is written. `backfillCount` (the row's links carrying the stamp, every run's) is
+  written last and marks it done, so a crashed run simply runs again with the same stamp. Then the row's dirty links are pushed, 100 at a time (`ENROLLED_PUSH_BATCH`, the spec's
+  CONNECT_PUSH_BATCH), one provider call at a time under the lease, stopping at the first gate or rate limit: a large
+  backfill is spread over the next jobs and sweeps instead of a burst. Recovery: the poll tick re-queues `ok` rows
+  without a backfill whose last success is over 10 minutes old (50 per tick); while Redis is down the fallback tick
+  backfills one row per tick in-process.
+- **Drawer actions** (P2-3c, `sync.actions.ts`): `POST /api/activities/:id/calendar-sync/retry` (owner / editors:
+  dirty again, attempts reset; Add again for a `removed_remote` copy = a new generation and requested id, so whichever
+  push runs it creates a new event; pressed by someone other than the owner on an activity with guests, the new copy
+  is private (`withhold`) and the owner gets `calendar_invites_held`, D41) and `/send-invites` (owner only, D41:
+  `invites = 'send'`, holds released; refused with 409 while the event is gone; audited `Activity SEND_INVITES`). Both write only the link, in one short transaction under the activity's record lock, then
+  wake the push.
 - **`calendar-poll`** (every 5 minutes, 07:00–21:55): the outbox sweep (links dirty for over 2 minutes and not
   waiting, oldest first, 200 per tick, as `push` jobs) and due connection checks (`pending` rows, `error` rows past
-  their backoff, 200 per tick, as `check` jobs). Two small indexed reads per tick.
+  their backoff, 200 per tick, as `check` jobs), and the backfill recovery above (P2-3c). Three small indexed reads per tick.
 - **`calendar-nightly`** (00:25, after the 00:20 reminders nightly): connection reconcile + due checks + the admins'
   problem digest (from P2-2b), the follow-up activity backfill (from P2-4), one more try for `error` links (and
   `cancelled` / `removed_remote` links whose restore was refused) whose activity hasn't ended, `integration_secret_expiring` to admins, and expired leases cleared. Each step logs and never
   stops the others.
-- **Redis down**: §4.3. **Heartbeat**: `calendar:worker:heartbeat` (§4.1), shown on Admin › API Integrations.
+- **Redis down**: §4.3. **Heartbeat**: `calendar:worker:heartbeat` (§4.1), shown on Admin › API Integrations as
+  `workerStatus` (running / not running / unknown without Redis; P2-3c).
 - **View**: `ActivityView.calendar` ([API plan](api-plan.md)) gives the activity's calendar state (provider, state,
-  pending, invites, held count, last synced, link, error) to the owner; the send-invites action and the UI are P2-3c.
+  pending, invites, held count, whether invitations wait for the owner and why, last synced, link, error) to the owner
+  and editors; the activity drawer's `ActivitySyncStatus` shows it with Send invitations / Retry / Add again (P2-3c),
+  the list has a hidden Calendar column, and calendar items carry `syncState` for an error dot.
 
 ## 6. PDF generation
 
@@ -1389,7 +1415,7 @@ Retention: `NOTIFICATION_RETENTION_DAYS` (90), `EMAIL_LOG_RETENTION_DAYS` (180).
 | Follow-up activities not yet run against SQL Server (P2-4) | As of 2026-11-26 the `20261127130000_followup_activities` migration (the `origin` column and the hand-written filtered index `UX_Activity_openFollowUp`) was checked with `prisma migrate diff`, and the write path, planner, locks, feed and backfill with unit tests and the in-memory double, but no real SQL Server run was made. Run `npm run db:deploy` on the dev database, then `npm run followups:backfill -- --dry-run` and the real run (or wait for the nightly step) before relying on it. The morning email deliberately leaves follow-up activities out (`origin <> 'followup'` in its activity sections: it lists follow-ups from the records); a parked hook comment (`morningSummary.sections.ts`) marks where they would join. |
 | Morning email not yet proven against the relay | The mail layer, EmailLog claims and the summary are unit-tested (STARTTLS enforcement against a fake SMTP server), and the job schedulers and the guarded unread-count cache were checked against a local Redis, but no real SMTP send or SQL Server run has been done yet; the first real send should be an admin's "Send me a test". `MORNING_SUMMARY_CRON` is read with a small cron subset for the catch-up check (numbers, names, ranges, lists, steps). |
 | "Add to Google Calendar" is a one-time copy | Moving the meeting in the CRM doesn't update the copy; real Google / Microsoft 365 sync is Calendar Phase 2 (needs HTTPS on a nandiniinfosys.com hostname). |
-| Calendar sync pushes but does not pull yet (P2-1, P2-2b, P2-3b) | As of 2026-11-26 admins connect the company calendars, everyone with a company email is enrolled and health-checked, and enrolled people's activities are pushed to their calendars (P2-3b, §5.4). Not yet: the first-sync backfill of existing activities and the send-invites action / UI (P2-3c), pulling calendar changes (P2-5), webhooks (P2-7, `webhooksActive` is false), imported calendar events (P2-8). A follow-up activity moved in the calendar is moved back on the next push (P2-5 writes it to the record). Activities created while a person's row was stopped get no link until the P2-3c backfill. The P2-3b push code (`20261128100000_activity_calendar_sync`) was tested against the fake provider, recorded Google / Graph answers and in-memory doubles only; no real SQL Server, Google or Microsoft was reachable when it was built. The JWT signing, token exchanges, probes and error mapping were written against the providers' documented answers and tested with a local RSA key; no real Google / Microsoft / SQL Server call was made when P2-1, P2-2 and P2-2b were built. Each process pauses a provider by itself after a long 429 (not shared through Redis). |
+| Calendar sync pushes but does not pull yet (P2-1, P2-2b, P2-3b) | As of 2026-11-26 admins connect the company calendars, everyone with a company email is enrolled and health-checked, and enrolled people's activities are pushed to their calendars (P2-3b, §5.4). The first-sync backfill, Send invitations and the sync status UI landed in P2-3c (as of 2026-11-26). Not yet: pulling calendar changes (P2-5), webhooks (P2-7, `webhooksActive` is false), imported calendar events (P2-8). A follow-up activity moved in the calendar is moved back on the next push (P2-5 writes it to the record). Activities created while a person's row was stopped get no link (the P2-3c backfill runs once, at the row's first `ok`). The P2-3b push code (`20261128100000_activity_calendar_sync`) was tested against the fake provider, recorded Google / Graph answers and in-memory doubles only; no real SQL Server, Google or Microsoft was reachable when it was built. The JWT signing, token exchanges, probes and error mapping were written against the providers' documented answers and tested with a local RSA key; no real Google / Microsoft / SQL Server call was made when P2-1, P2-2 and P2-2b were built. Each process pauses a provider by itself after a long 429 (not shared through Redis). |
 | Integrations key is a single point of loss | Losing `INTEGRATIONS_ENCRYPTION_KEY` makes stored secrets unreadable (re-enter them); keep it in the password manager (§9.2). |
 | Workers inside the API by default | Long imports share the event loop with requests unless `RUN_WORKERS=false` + separate worker. |
 | Rate limits fail open | Intentional for availability; brute-force protection disappears while Redis is down. |

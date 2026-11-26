@@ -27,7 +27,8 @@ import {
  * 409 DUPLICATE_RECORD (email), 429 RATE_LIMITED.
  *
  *   GET    /                           → { ready: { ok, reason }, keyStatus: ok|missing|unreadable, activeKeyId, publicApiUrl,
- *                                          publicApiUrlConfigured, webhooksActive, fakeProvider, worker, providers: ProviderAdminDto[],
+ *                                          publicApiUrlConfigured, webhooksActive, fakeProvider, worker, workerStatus
+ *                                          (running|not_seen|no_redis), syncEnabled, providers: ProviderAdminDto[],
  *                                          settings: CalendarSyncSettings, syncTypes: [{ value, label, calendarSync, locked, lockReason? }] }
  *   PUT    /providers/:provider        { enabled?, serviceAccountKey? (google: the key file's text, write-only),
  *                                        clientId? (microsoft, zoom), clientSecret? (microsoft, zoom; write-only, ≥ 8 chars),

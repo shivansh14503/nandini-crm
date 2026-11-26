@@ -140,6 +140,9 @@ export interface SyncType {
 
 export type KeyStatus = 'ok' | 'missing' | 'unreadable';
 
+export const WORKER_STATUSES = ['running', 'not_seen', 'no_redis'] as const;
+export type WorkerStatus = (typeof WORKER_STATUSES)[number];
+
 export interface IntegrationsAdmin {
     ready: { ok: boolean; reason: 'key_missing' | null };
     keyStatus: KeyStatus;
@@ -150,6 +153,10 @@ export interface IntegrationsAdmin {
     /** The dev-only test calendar provider is on: People may pick "Test calendar". */
     fakeProvider: boolean;
     worker: { lastSeenAt: string } | null;
+    /** P2-3c: running | not_seen (Redis up, no heartbeat in 2 minutes) | no_redis (nothing to read). Optional for older servers. */
+    workerStatus?: WorkerStatus;
+    /** CALENDAR_SYNC_ENABLED on the API (false = the push engine is off server-wide). */
+    syncEnabled?: boolean;
     providers: ProviderAdmin[];
     settings: CalendarSyncSettings;
     syncTypes: SyncType[];
