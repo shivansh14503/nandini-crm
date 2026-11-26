@@ -52,7 +52,7 @@ export const CONNECTION_STATUS_REASONS = [
 export type ConnectionStatusReason = (typeof CONNECTION_STATUS_REASONS)[number];
 
 /**
- * Reason codes of the OAuth callback redirect (`/connected-calendars?calendar=error&reason=<code>`): fixed codes only,
+ * Reason codes of the OAuth callback redirect (`/profile?tab=connected-accounts&calendar=error&reason=<code>`): fixed codes only,
  * never provider text (no reflected content). The frontend maps each to a sentence.
  */
 export const CALLBACK_REASONS = [
@@ -72,11 +72,12 @@ export const CALLBACK_REASONS = [
 export type CallbackReason = (typeof CALLBACK_REASONS)[number];
 
 /**
- * Where the OAuth callback sends the browser back to (and where `calendar_reconnect` notifications point). A small
- * temporary page until the My Profile thread hosts CalendarConnectionsCard in its Connected accounts tab: then this
- * constant (and the frontend ROUTES.CONNECTED_CALENDARS) change in one place each.
+ * Where the OAuth callback sends the browser back to (and where `calendar_reconnect` notifications point): My Profile ›
+ * Connected accounts, which hosts CalendarConnectionsCard. It already carries a query (`?tab=`), so the callback appends
+ * its params with `&`. Same value as the frontend ROUTES.PROFILE_CONNECTED_ACCOUNTS (contract-tested). The old
+ * `/connected-calendars` page only redirects here, keeping its query string.
  */
-export const CALENDAR_CONNECTIONS_PAGE = '/connected-calendars';
+export const CALENDAR_CONNECTIONS_PAGE = '/profile?tab=connected-accounts';
 
 /** Notification `entityModule` of `calendar_reconnect` (notificationHref maps it to CALENDAR_CONNECTIONS_PAGE). */
 export const CALENDAR_CONNECTIONS_ENTITY_MODULE = 'calendar-connections';

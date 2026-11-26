@@ -46,7 +46,7 @@ import type { AccountIdentity, ProviderCredentials, TokenSet } from './providers
  * Callback: checks the CRM session itself (the route isn't behind `authenticate`, which answers JSON), the cookie,
  * `state` (constant time), exchanges the code, checks the id_token (providers/*), the account policy (Google `hd` in
  * the company domains), the granted scopes, the email rule, then saves the connection in one audited transaction.
- * Every exit is a 302 to `<origin>/connected-calendars?calendar=connected|error&reason=<fixed code>&provider=<key>`
+ * Every exit is a 302 to `<origin>/profile?tab=connected-accounts&calendar=connected|error&reason=<fixed code>&provider=<key>`
  * (no provider text is reflected). Tokens and codes are never logged or returned to the browser.
  */
 
@@ -122,11 +122,13 @@ export function returnOriginFor(origin: string | null | undefined): string {
 
 export type CallbackOutcome = { ok: true; provider: CalendarProvider } | { ok: false; reason: CallbackReason; provider?: string };
 
-/** `<origin>/connected-calendars?calendar=…` with fixed values only. */
+/** `<origin>/profile?tab=connected-accounts&calendar=…` (CALENDAR_CONNECTIONS_PAGE plus the result) with fixed values only. */
 export function callbackLocation(origin: string, outcome: CallbackOutcome): string {
     const params = new URLSearchParams(outcome.ok ? { calendar: 'connected', provider: outcome.provider } : { calendar: 'error', reason: outcome.reason });
     if (!outcome.ok && outcome.provider) params.set('provider', outcome.provider);
-    return `${origin}${CALENDAR_CONNECTIONS_PAGE}?${params.toString()}`;
+    // The page already has a query (`?tab=`).
+    const joiner = CALENDAR_CONNECTIONS_PAGE.includes('?') ? '&' : '?';
+    return `${origin}${CALENDAR_CONNECTIONS_PAGE}${joiner}${params.toString()}`;
 }
 
 /** Where a callback without a CRM session goes: sign in, then back to the page. */

@@ -3,7 +3,8 @@ import type { CorporateEmail } from './organization.types';
 // ─── Referral Types ───────────────────────────────────────────────────────────
 // Mirrors backend-crm/src/modules/referrals (ReferralDto / referralInputSchema). A referral has the Contact form's
 // fields (same keys and labels) without Left Job, Phone 3–5, Is Primary Contact, Communication Type, DND and Notes,
-// plus a Status: only Active referrals are offered as Referred By on leads and opportunities.
+// plus a free-text Company Name (not linked to an organization) and a Status: only Active referrals are offered as
+// Referred By on leads and opportunities.
 
 /** Options of the fixed `referral_status` dropdown. */
 export const REFERRAL_STATUSES = ['Active', 'Inactive'] as const;
@@ -17,8 +18,7 @@ export interface ReferralFormData {
     customFields?: Record<string, unknown>;
 
     name: string;
-    organizationName: string;
-    organizationId?: string;
+    companyName: string;
     mobile: string;
     officePhone: string;
     emailAddress: CorporateEmail[];

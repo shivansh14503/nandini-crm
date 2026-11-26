@@ -67,12 +67,15 @@ export const ROUTES = {
     PARTNER_COMPANY_NEW: '/partner-companies/new',
     PARTNER_COMPANY_DETAIL: (id: string | number) => `/partner-companies/${id}`,
     PARTNER_COMPANY_EDIT: (id: string | number) => `/partner-companies/${id}/edit`,
-    /** My Profile (any signed-in user); `?tab=notifications` / `?tab=security` open those tabs. */
+    /** My Profile (any signed-in user); `?tab=notifications` / `?tab=connected-accounts` / `?tab=security` open those tabs. */
     PROFILE: '/profile',
     PROFILE_SECURITY: '/profile?tab=security',
     PROFILE_NOTIFICATIONS: '/profile?tab=notifications',
-    /** Connected calendars (any signed-in user): connect / disconnect Google or Microsoft 365. Temporary home until it moves into My Profile. */
-    CONNECTED_CALENDARS: '/connected-calendars',
+    /**
+     * My Profile › Connected accounts: connect / disconnect Google or Microsoft 365. The OAuth callback and
+     * `calendar_reconnect` notifications land here (backend CALENDAR_CONNECTIONS_PAGE, contract-tested).
+     */
+    PROFILE_CONNECTED_ACCOUNTS: '/profile?tab=connected-accounts',
     ADMIN: '/admin',
     FORM_CUSTOMIZATION: '/admin/form-customization',
     DOCUMENT_SERIES: '/admin/document-series',

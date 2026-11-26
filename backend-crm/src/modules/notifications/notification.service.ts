@@ -53,7 +53,7 @@ export interface NotificationPage {
 
 /**
  * App route of the record a notification is about: activities open in the calendar's drawer. Page-level targets come
- * first (they need no record id): `calendar-connections` → the Connected calendars page (calendar_reconnect).
+ * first (they need no record id): `calendar-connections` → My Profile › Connected accounts (calendar_reconnect).
  */
 export function notificationHref(entityModule: string | null, entityId: string | null): string {
     if (entityModule === CALENDAR_CONNECTIONS_ENTITY_MODULE) return CALENDAR_CONNECTIONS_PAGE;

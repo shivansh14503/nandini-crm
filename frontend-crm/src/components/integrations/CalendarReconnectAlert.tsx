@@ -21,7 +21,7 @@ export function CalendarReconnectAlert() {
             severity="warning"
             sx={{ fontSize: '0.8rem', alignItems: 'center', flexWrap: 'wrap', '& .MuiAlert-action': { pl: { xs: 0, sm: 2 }, ml: { xs: 0, sm: 'auto' } } }}
             action={
-                <Button component={Link} href={ROUTES.CONNECTED_CALENDARS} size="small" variant="outlined" sx={{ ...secondaryButtonSx, minHeight: 32, backgroundColor: 'var(--mui-palette-background-paper)' }}>
+                <Button component={Link} href={ROUTES.PROFILE_CONNECTED_ACCOUNTS} size="small" variant="outlined" sx={{ ...secondaryButtonSx, minHeight: 32, backgroundColor: 'var(--mui-palette-background-paper)' }}>
                     Reconnect
                 </Button>
             }

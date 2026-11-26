@@ -31,7 +31,7 @@ describe('propagateOrganizationName: activities', () => {
         assert.equal(counts.activities, 2);
     });
 
-    it('renames the activities next to the other linked modules (referrals included)', async () => {
+    it('renames the activities next to the other linked modules (referrals have a free-text Company Name instead)', async () => {
         const { tx } = fakeTx();
         assert.deepEqual(await propagateOrganizationName(tx, 'org1', 'ACME LTD', actor), {
             contacts: 1,
@@ -40,7 +40,6 @@ describe('propagateOrganizationName: activities', () => {
             tickets: 1,
             contracts: 1,
             activities: 2,
-            referrals: 1,
         });
     });
 });

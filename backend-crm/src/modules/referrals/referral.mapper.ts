@@ -9,8 +9,7 @@ export type ReferralRow = Referral & { emailAddress?: EntityEmail[] };
 export interface ReferralDto {
     id: string;
     name: string;
-    organizationName: string;
-    organizationId?: string;
+    companyName: string;
     mobile: string;
     officePhone: string;
     emailAddress: CorporateEmailDto[];
@@ -34,8 +33,7 @@ export function toReferralDto(row: ReferralRow): ReferralDto {
     return {
         id: row.id,
         name: row.name,
-        organizationName: row.organizationName,
-        organizationId: row.organizationId ?? undefined,
+        companyName: text(row.companyName),
         mobile: row.mobile,
         officePhone: text(row.officePhone),
         emailAddress: toEmailDtos(row.emailAddress),
@@ -51,16 +49,12 @@ export function toReferralDto(row: ReferralRow): ReferralDto {
     };
 }
 
-/** Writable columns; the organization link is resolved by the service. */
-export function toReferralData(
-    input: ReferralInput,
-    organization: { id: string | null; name: string },
-): Omit<Prisma.ReferralUncheckedCreateInput, 'createdBy'> {
+/** Writable columns. */
+export function toReferralData(input: ReferralInput): Omit<Prisma.ReferralUncheckedCreateInput, 'createdBy'> {
     return {
         customDataJson: serializeCustomFields(input.customFields),
         name: input.name,
-        organizationName: organization.name,
-        organizationId: organization.id,
+        companyName: nullable(input.companyName),
         mobile: input.mobile,
         officePhone: input.officePhone ?? null,
         assignedTo: input.assignedTo,

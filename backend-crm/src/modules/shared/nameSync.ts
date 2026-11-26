@@ -4,7 +4,7 @@ import type { AuthUser } from '../../types/user.types.js';
 
 /**
  * Keeps denormalized display names in step with the record they point to. Contacts, opportunities, quotations,
- * tickets, contracts, activities and referrals store the organization / contact name next to the id, and leads and
+ * tickets, contracts and activities store the organization / contact name next to the id, and leads and
  * opportunities their Referred By referral's name (lists sort and search on it), so a rename is written through to
  * every live linked row inside the renaming transaction. Activities also keep the label of the record they are
  * related to (`relatedTo`) and their contact attendees' names.
@@ -35,7 +35,6 @@ export async function propagateOrganizationName(
         where: { relatedModule: 'organizations', relatedId: organizationId, isDeleted: false },
         data: { relatedTo: organizationName, updatedBy: actor.username },
     });
-    const referrals = await tx.referral.updateMany({ where, data });
     return compact({
         contacts: contacts.count,
         opportunities: opportunities.count,
@@ -43,7 +42,6 @@ export async function propagateOrganizationName(
         tickets: tickets.count,
         contracts: contracts.count,
         activities: activities.count + relatedActivities.count,
-        referrals: referrals.count,
     });
 }
 

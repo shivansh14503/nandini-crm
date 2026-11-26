@@ -6,7 +6,9 @@ import { Alert, AlertTitle, Box, Button, Skeleton } from '@mui/material';
 import PersonOutlineRoundedIcon from '@mui/icons-material/PersonOutlineRounded';
 import ShieldOutlinedIcon from '@mui/icons-material/ShieldOutlined';
 import NotificationsNoneRoundedIcon from '@mui/icons-material/NotificationsNoneRounded';
+import LinkRoundedIcon from '@mui/icons-material/LinkRounded';
 import { AppToast } from '@/components/common/AppToast';
+import { CalendarConnectionsCard } from '@/components/integrations/CalendarConnectionsCard';
 import { useAuth } from '@/context/AuthContext';
 import { PillTabs, errorMessage, secondaryButtonSx, surfaceSx, type PillTabItem } from '@/components/settings/form-customization/builderUi';
 import { useMyProfile } from '@/hooks/queries/useProfile';
@@ -22,16 +24,19 @@ export type ToastSeverity = 'success' | 'error' | 'info' | 'warning';
 /** Shows a top-right toast on the profile page. */
 export type Notify = (message: string, severity?: ToastSeverity) => void;
 
-type ProfileTab = 'profile' | 'notifications' | 'security';
+type ProfileTab = 'profile' | 'notifications' | 'connected-accounts' | 'security';
 
 const TABS: PillTabItem<ProfileTab>[] = [
     { key: 'profile', label: 'Profile', icon: <PersonOutlineRoundedIcon sx={{ fontSize: 17 }} /> },
     { key: 'notifications', label: 'Notifications', icon: <NotificationsNoneRoundedIcon sx={{ fontSize: 17 }} /> },
+    { key: 'connected-accounts', label: 'Connected accounts', icon: <LinkRoundedIcon sx={{ fontSize: 17 }} /> },
     { key: 'security', label: 'Security', icon: <ShieldOutlinedIcon sx={{ fontSize: 17 }} /> },
 ];
 
+const TAB_KEYS: readonly string[] = TABS.map((t) => t.key);
+
 /** The `?tab=` value as a tab; anything unknown opens Profile. */
-const parseTab = (value: string | null): ProfileTab => (value === 'notifications' || value === 'security' ? value : 'profile');
+const parseTab = (value: string | null): ProfileTab => (value && TAB_KEYS.includes(value) ? (value as ProfileTab) : 'profile');
 
 function ProfileSkeleton() {
     return (
@@ -51,9 +56,14 @@ function ProfileSkeleton() {
 }
 
 /**
- * My Profile: header card, then the Profile, Notifications and Security tabs (`?tab=notifications|security`). While an admin-set password must be
- * changed (`mustChangePassword`), only the change-password card shows, under a warning; everything else unlocks as
- * soon as the password is changed.
+ * My Profile: header card, then the Profile, Notifications, Connected accounts and Security tabs
+ * (`?tab=notifications|connected-accounts|security`). While an admin-set password must be changed
+ * (`mustChangePassword`), only the change-password card shows, under a warning; everything else unlocks as soon as
+ * the password is changed.
+ *
+ * Connected accounts hosts the self-contained CalendarConnectionsCard. The OAuth callback lands on
+ * `?tab=connected-accounts&calendar=connected|error&reason=&provider=`: the card reads those params itself and drops
+ * only them, so `?tab=` stays; a tab switch keeps every other param, as before.
  */
 export function ProfileView() {
     const router = useRouter();
@@ -79,6 +89,12 @@ export function ProfileView() {
         switch (current) {
             case 'notifications':
                 return <NotificationsPanel notify={notify} />;
+            case 'connected-accounts':
+                return (
+                    <Box role="tabpanel" aria-label="Connected accounts" sx={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0 }}>
+                        <CalendarConnectionsCard />
+                    </Box>
+                );
             case 'security':
                 return (
                     <Box role="tabpanel" aria-label="Security" sx={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0 }}>

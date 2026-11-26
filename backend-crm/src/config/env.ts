@@ -144,7 +144,7 @@ const envSchema = z
          */
         PUBLIC_API_URL: z.preprocess(blankToUndefined, z.url().optional()),
         /**
-         * Dev-only in-memory calendar provider `fake` (Connected calendars works end to end without Google). Ignored,
+         * Dev-only in-memory calendar provider `fake` (My Profile › Connected accounts works end to end without Google). Ignored,
          * with a start-up warning, when NODE_ENV=production. Never set it on the shared server.
          */
         CALENDAR_FAKE_PROVIDER: z

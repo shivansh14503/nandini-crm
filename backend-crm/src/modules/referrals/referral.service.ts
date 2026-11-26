@@ -12,7 +12,6 @@ import { assertAssigneeValid, assertRecordAccess } from '../shared/accessControl
 import { emailsInclude, normalizeEmails, replaceEmails } from '../shared/entityEmails.js';
 import { assertEmailsDeliverable, queueEmailVerification } from '../email-verification/emailVerification.service.js';
 import { invalidateSyncedCaches, propagateReferralName, type NameSyncCounts } from '../shared/nameSync.js';
-import { findOrganizationByName } from '../shared/prefetch.js';
 import { phoneSearch, phoneWhere } from '../shared/searchTerms.js';
 import { acquireLocks, assertDeletedRow, lockRecords, restoreData, runInTransaction, softDeleteData, type BulkDeleteResult } from '../shared/transactions.js';
 import { toReferralData, toReferralDto, type ReferralDto } from './referral.mapper.js';
@@ -39,27 +38,6 @@ async function assertUniqueMobile(tx: TransactionClient, mobile: string, exclude
     }
 }
 
-/**
- * An explicit `organizationId` must point at a live organization, whose name then wins. Otherwise the typed
- * organization name is linked to the live organization with that exact name, if there is one (as on contacts).
- */
-async function resolveOrganization(tx: TransactionClient, input: ReferralInput): Promise<{ id: string | null; name: string }> {
-    if (input.organizationId) {
-        const org = await tx.organization.findFirst({
-            where: { id: input.organizationId, isDeleted: false },
-            select: { id: true, organizationName: true },
-        });
-        if (!org) {
-            throw HttpError.badRequest('The selected organization no longer exists.', [
-                { message: 'Select an existing organization.', path: ['organizationName'] },
-            ]);
-        }
-        return { id: org.id, name: org.organizationName };
-    }
-    const byName = await findOrganizationByName(tx, input.organizationName);
-    return byName ? { id: byName.id, name: byName.organizationName } : { id: null, name: input.organizationName };
-}
-
 /** Referral lists feed the Referred By picker; leads and opportunities show the referral's name. */
 async function invalidateReferralCaches(synced?: NameSyncCounts): Promise<void> {
     await Promise.all([cacheService.invalidateEntityCaches('referrals'), invalidateSyncedCaches(synced)]);
@@ -78,7 +56,6 @@ export const referralService = {
 
         const where: Prisma.ReferralWhereInput = { isDeleted: false };
         if (filters.status?.length) where.status = { in: filters.status };
-        if (filters.organizationId) where.organizationId = filters.organizationId;
         if (filters.assignedTo) where.assignedTo = filters.assignedTo;
         if (filters.mine) where.assignedTo = user.username;
         if (filters.createdWithinDays) where.createdAt = { gte: daysAgo(filters.createdWithinDays) };
@@ -87,7 +64,7 @@ export const referralService = {
             if (phone) where.OR = phoneWhere(phone, ['mobile', 'officePhone'] as const);
             else where.OR = [
                 { name: { contains: page.search } },
-                { organizationName: { contains: page.search } },
+                { companyName: { contains: page.search } },
                 { mobile: { contains: page.search } },
                 { officePhone: { contains: page.search } },
                 { designation: { contains: page.search } },
@@ -116,9 +93,8 @@ export const referralService = {
         const created = await runInTransaction(async (tx) => {
             await assertUniqueMobile(tx, input.mobile);
             const assignedTo = (await assertAssigneeValid(tx, input.assignedTo)) ?? user.username;
-            const organization = await resolveOrganization(tx, input);
             const row = await tx.referral.create({
-                data: { ...toReferralData({ ...input, assignedTo }, organization), createdBy: user.username },
+                data: { ...toReferralData({ ...input, assignedTo }), createdBy: user.username },
             });
             await replaceEmails(tx, { referralId: row.id }, normalizeEmails(input.emailAddress));
 
@@ -144,8 +120,6 @@ export const referralService = {
 
             const before = toReferralDto(existing);
             const merged: Record<string, unknown> = { ...before, ...patch };
-            // Retyping the organization name without picking a record means "re-link by name", not "keep the old id".
-            if ('organizationName' in patch && !('organizationId' in patch)) delete merged.organizationId;
             const input = referralInputSchema.parse(merged);
             input.customFields = checkModulePayload(fieldConfig, merged, input.customFields, {
                 submittedKeys: new Set(Object.keys(patch)),
@@ -153,10 +127,9 @@ export const referralService = {
             });
 
             if (input.mobile !== existing.mobile) await assertUniqueMobile(tx, input.mobile, id);
-            const organization = await resolveOrganization(tx, input);
             const assignedTo = (await assertAssigneeValid(tx, input.assignedTo, { previous: existing.assignedTo })) ?? existing.assignedTo;
 
-            await tx.referral.update({ where: { id }, data: { ...toReferralData({ ...input, assignedTo }, organization), updatedBy: user.username } });
+            await tx.referral.update({ where: { id }, data: { ...toReferralData({ ...input, assignedTo }), updatedBy: user.username } });
             if ('emailAddress' in patch) {
                 await replaceEmails(tx, { referralId: id }, normalizeEmails(input.emailAddress));
             }
