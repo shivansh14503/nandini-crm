@@ -123,7 +123,7 @@ export function DrawerLayoutPanel({
     formDraftDirty: boolean;
     onDirtyChange: (dirty: boolean) => void;
 }) {
-    const { data, isLoading, error, refetch } = useDrawerLayouts();
+    const { data, isLoading, isFetching, error, refetch } = useDrawerLayouts();
     if (isLoading) {
         return (
             <Box role="status" aria-label="Loading the drawer layout" sx={{ ...surfaceSx, p: { xs: 2, md: 3 } }}>
@@ -146,17 +146,34 @@ export function DrawerLayoutPanel({
             </Alert>
         );
     }
+    // A failed background refetch keeps the loaded layout: the builder (and its unsaved edits) stay, with a warning above.
+    // The fragment keeps the builder in the same slot whether or not the warning shows, so it never remounts.
     return (
-        <LayoutBuilder
-            key={module}
-            module={module}
-            configs={configs}
-            saved={data?.[module] ?? null}
-            canEdit={canEdit}
-            notify={notify}
-            formDraftDirty={formDraftDirty}
-            onDirtyChange={onDirtyChange}
-        />
+        <>
+            {error && (
+                <Alert
+                    severity="warning"
+                    sx={{ mb: 2, borderRadius: '8px', fontSize: '0.8rem', alignItems: 'center' }}
+                    action={
+                        <Button size="small" variant="outlined" sx={secondaryButtonSx} onClick={() => void refetch()} disabled={isFetching}>
+                            Try again
+                        </Button>
+                    }
+                >
+                    Could not refresh the drawer layout. Showing the last loaded one.
+                </Alert>
+            )}
+            <LayoutBuilder
+                key={module}
+                module={module}
+                configs={configs}
+                saved={data?.[module] ?? null}
+                canEdit={canEdit}
+                notify={notify}
+                formDraftDirty={formDraftDirty}
+                onDirtyChange={onDirtyChange}
+            />
+        </>
     );
 }
 

@@ -1,14 +1,14 @@
 'use client';
 
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Alert, Autocomplete, Box, Button, CircularProgress, TextField, Tooltip, Typography, Switch } from '@mui/material';
+import { Alert, Autocomplete, Box, Button, CircularProgress, Dialog, DialogActions, DialogContent, DialogTitle, TextField, Tooltip, Typography, Switch } from '@mui/material';
 import CheckCircleOutlineRoundedIcon from '@mui/icons-material/CheckCircleOutlineRounded';
 import ErrorOutlineRoundedIcon from '@mui/icons-material/ErrorOutlineRounded';
 import UploadFileRoundedIcon from '@mui/icons-material/UploadFileRounded';
 import CheckRoundedIcon from '@mui/icons-material/CheckRounded';
 import { ConfirmDeleteDialog, errorMessage, inputSx, panelHeaderSx, primaryButtonSx, secondaryButtonSx, surfaceSx } from '@/components/settings/form-customization/builderUi';
 import { useClearProviderSecret, usePeople, useSaveProvider, useTestProvider } from '@/hooks/queries/useIntegrationsAdmin';
-import { SERVICE_ACCOUNT_KEY_MAX_BYTES, type ProviderAdmin, type SaveProviderPayload, type TestConnectionResult } from '@/types/integration.types';
+import { SERVICE_ACCOUNT_KEY_MAX_BYTES, type Person, type ProviderAdmin, type SaveProviderPayload, type TestConnectionResult } from '@/types/integration.types';
 import { CopyField, ProviderMark, StatusChip, fieldErrorsOf, fieldLabelSx, formatDateTime, formatDay, hintSx, type ChipTone } from './integrationUi';
 
 /**
@@ -201,10 +201,44 @@ export interface ProviderCardProps {
     onToast: (message: string, severity?: 'success' | 'error') => void;
     /** Opens the People list filtered to calendar problems. */
     onShowProblems?: () => void;
+    /** The company's first-sync window (Calendar settings), for the switch-on confirmation (P2-3c). */
+    backfillDays?: number;
+}
+
+/** A plain (non-destructive) confirmation, the look of builderUi's ConfirmDeleteDialog with a brand button. */
+function ConfirmDialog({ open, title, children, confirmLabel, onConfirm, onClose }: { open: boolean; title: string; children: React.ReactNode; confirmLabel: string; onConfirm: () => void; onClose: () => void }) {
+    return (
+        <Dialog open={open} onClose={onClose} maxWidth="xs" fullWidth slotProps={{ paper: { sx: { borderRadius: '12px', m: { xs: 1.5, sm: 4 }, width: { xs: 'calc(100% - 24px)', sm: undefined } } } }}>
+            <DialogTitle sx={{ fontWeight: 700, fontSize: '1rem', color: 'var(--crm-slate-900)' }}>{title}</DialogTitle>
+            <DialogContent sx={{ fontSize: '0.85rem', color: 'var(--crm-slate-600)', display: 'flex', flexDirection: 'column', gap: 1 }}>{children}</DialogContent>
+            <DialogActions sx={{ px: 3, pb: 2, flexWrap: 'wrap', gap: 1 }}>
+                <Button onClick={onClose} variant="outlined" sx={secondaryButtonSx}>
+                    Cancel
+                </Button>
+                <Button variant="contained" onClick={onConfirm} sx={{ ...primaryButtonSx, color: '#ffffff' }}>
+                    {confirmLabel}
+                </Button>
+            </DialogActions>
+        </Dialog>
+    );
+}
+
+/**
+ * People a calendar provider would start syncing when switched on (P2-3c confirmation): an email on one of its domains
+ * or an admin's choice of this provider, not excluded. An estimate from the People list (the server's rules decide).
+ */
+export function peopleToSync(people: readonly Person[] | undefined, provider: ProviderAdmin['provider'], domains: readonly string[]): number {
+    const own = new Set(domains.map((d) => d.trim().toLowerCase()).filter(Boolean));
+    return (people ?? []).filter((person) => {
+        const { choice } = person.calendar;
+        if (!person.email || choice?.excluded) return false;
+        if (choice?.provider) return choice.provider === provider;
+        return own.has(person.email.split('@').pop()?.trim().toLowerCase() ?? '');
+    }).length;
 }
 
 /** One provider's credentials, domains, test and switch on Admin › API Integrations. */
-export function ProviderCard({ provider, keyReady, companyDomains, takenBy, onDirtyChange, onToast, onShowProblems }: ProviderCardProps) {
+export function ProviderCard({ provider, keyReady, companyDomains, takenBy, onDirtyChange, onToast, onShowProblems, backfillDays }: ProviderCardProps) {
     const p = provider;
     const isGoogle = p.provider === 'google';
     const serverForm = useMemo(() => formFrom(p), [p]);
@@ -216,6 +250,7 @@ export function ProviderCard({ provider, keyReady, companyDomains, takenBy, onDi
     const [keyFileName, setKeyFileName] = useState('');
     const [errors, setErrors] = useState<Record<string, string>>({});
     const [confirmRemove, setConfirmRemove] = useState(false);
+    const [confirmEnable, setConfirmEnable] = useState(false);
     const [asUsername, setAsUsername] = useState<string | null>(null);
     const [testResult, setTestResult] = useState<TestConnectionResult | null>(null);
     const fileInput = useRef<HTMLInputElement>(null);
@@ -409,7 +444,11 @@ export function ProviderCard({ provider, keyReady, companyDomains, takenBy, onDi
                         <Switch
                             checked={p.enabled}
                             disabled={Boolean(enableBlocked) || busy}
-                            onChange={(e) => void toggleEnabled(e.target.checked)}
+                            onChange={(e) => {
+                                // Switching a calendar on copies upcoming meetings to everyone's calendar: confirmed first (P2-3c).
+                                if (e.target.checked && p.kind === 'calendar') setConfirmEnable(true);
+                                else void toggleEnabled(e.target.checked);
+                            }}
                             slotProps={{ input: { 'aria-label': `${p.label} on or off` } }}
                         />
                     </span>
@@ -796,6 +835,26 @@ export function ProviderCard({ provider, keyReady, companyDomains, takenBy, onDi
                     </Typography>
                 )}
             </Box>
+
+            <ConfirmDialog
+                open={confirmEnable}
+                title={`Turn ${p.label} on?`}
+                confirmLabel="Turn on"
+                onConfirm={() => {
+                    setConfirmEnable(false);
+                    void toggleEnabled(true);
+                }}
+                onClose={() => setConfirmEnable(false)}
+            >
+                <span>
+                    {(() => {
+                        const n = peopleToSync(people.data, p.provider, p.domains);
+                        return people.isLoading ? 'People on its domains will start syncing.' : `${n} ${n === 1 ? 'person' : 'people'} will start syncing.`;
+                    })()}{' '}
+                    Upcoming CRM meetings{backfillDays ? ` (next ${backfillDays} days)` : ''} will be copied to their calendars as private entries; invitations are sent
+                    only when each owner presses Send invitations.
+                </span>
+            </ConfirmDialog>
 
             <ConfirmDeleteDialog
                 open={confirmRemove}

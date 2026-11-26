@@ -63,6 +63,14 @@ export const queryKeys = {
         all: ['calendarConnections'] as const,
         own: () => ['calendarConnections', 'own'] as const,
     },
+    /** Booking links (`/api/booking-links`, Calendar Phase 4); `notifyCrmUpdate('/api/booking-links')` refreshes them. */
+    bookingLinks: {
+        all: ['bookingLinks'] as const,
+        access: () => ['bookingLinks', 'access'] as const,
+        list: (scope: 'mine' | 'all') => ['bookingLinks', 'list', scope] as const,
+        bookings: (id: string) => ['bookingLinks', 'bookings', id] as const,
+        settings: () => ['bookingLinks', 'settings'] as const,
+    },
     /** The signed-in user's notifications (navbar bell); `notifyCrmUpdate('/api/notifications')` refreshes them. */
     notifications: {
         all: ['notifications'] as const,

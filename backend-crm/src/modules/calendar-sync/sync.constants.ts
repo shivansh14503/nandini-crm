@@ -47,8 +47,8 @@ export const SYNC_ERROR_CODES = {
 export const CALENDAR_SYNC_JOBS = {
     /** Push one dirty link (§8.3 step 5). */
     push: 'push',
-    /** A connection row first reached `ok`: push its dirty links (admin model: replaces the per-user `connect` job;
-     * the first-sync backfill is P2-3c). */
+    /** A connection row reached `ok`: the first-sync backfill when it has none yet (P2-3c, sync.backfill.ts), then push
+     * its dirty links (admin model: replaces the per-user `connect` job). */
     enrolled: 'enrolled',
     /** Health check of one connection row (enrolment.ts `checkConnection`). */
     check: 'check',
@@ -79,8 +79,17 @@ export const OUTBOX_SWEEP_GRACE_MS = 2 * 60_000;
 export const OUTBOX_SWEEP_LIMIT = 200;
 /** Links pushed inline per fallback tick while Redis is down (§10.2). */
 export const FALLBACK_PUSH_LIMIT = 20;
-/** Dirty links of one connection pushed per `enrolled` job round (§8.12). */
+/** Dirty links of one connection pushed per `enrolled` job round (§8.12; spec's CONNECT_PUSH_BATCH). */
 export const ENROLLED_PUSH_BATCH = 100;
+/** Upcoming activities read per page by the first-sync backfill (P2-3c, sync.backfill.ts). */
+export const BACKFILL_PAGE_SIZE = 200;
+/**
+ * A row that reached `ok` this long ago without a backfill (its `enrolled` job was lost: Redis restarted, the worker
+ * was down) gets the job again from the poll tick (P2-3c; addendum §8.1 "lost-connect recovery").
+ */
+export const BACKFILL_RECOVERY_GRACE_MS = 10 * 60_000;
+/** Rows re-queued per poll tick by that recovery; one is backfilled in-process per fallback tick while Redis is down. */
+export const BACKFILL_RECOVERY_LIMIT = 50;
 /** A link whose connection can't push right now (row in error, provider off or unhealthy, user inactive) is put back
  * this long, so the sweep doesn't retry it every tick. The `enrolled` job ignores it. */
 export const GATED_RETRY_MS = 15 * 60_000;

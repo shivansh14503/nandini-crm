@@ -1,10 +1,9 @@
 'use client';
 
-import React, { useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import React from 'react';
 import { Alert, Box, Container } from '@mui/material';
 import { useAuth } from '@/context/AuthContext';
-import { ROUTES } from '@/config/constants';
+import { useRequireAuth } from '@/hooks/useRequireAuth';
 import { Navbar } from '@/components/layout/Navbar';
 import { LoadingScreen } from '@/components/common/LoadingScreen';
 import { ErrorAlert } from '@/components/common/ErrorAlert';
@@ -27,12 +26,9 @@ export function AdminPageShell({
     /** Shown instead of the page to signed-in users who aren't administrators. */
     deniedMessage?: string;
 }) {
-    const router = useRouter();
-    const { user, loading, error, clearError, isAuthenticated } = useAuth();
+    const { user, loading, error, clearError } = useAuth();
 
-    useEffect(() => {
-        if (!loading && !isAuthenticated) router.push(ROUTES.LOGIN);
-    }, [isAuthenticated, loading, router]);
+    useRequireAuth();
 
     if (loading) return <LoadingScreen message={loadingMessage} />;
     if (!user) return null;

@@ -1,6 +1,6 @@
 'use client';
 
-import React, { Suspense, useEffect } from 'react';
+import React, { Suspense } from 'react';
 import { useRouter } from 'next/navigation';
 import {
     Box,
@@ -16,6 +16,7 @@ import ApartmentIcon from '@mui/icons-material/Apartment';
 import PersonOutlinedIcon from '@mui/icons-material/PersonOutlined';
 import DashboardOutlinedIcon from '@mui/icons-material/DashboardOutlined';
 import { useAuth } from '@/context/AuthContext';
+import { useRequireAuth } from '@/hooks/useRequireAuth';
 import { Navbar } from '@/components/layout/Navbar';
 import { AppBreadcrumbs } from '@/components/common/AppBreadcrumbs';
 import { LoadingScreen } from '@/components/common/LoadingScreen';
@@ -29,13 +30,9 @@ import { ROUTES } from '@/config/constants';
  */
 function DynamicCrmPageContent() {
     const router = useRouter();
-    const { user, loading, error, clearError, isAuthenticated } = useAuth();
+    const { user, loading, error, clearError } = useAuth();
 
-    useEffect(() => {
-        if (!loading && !isAuthenticated) {
-            router.push(ROUTES.LOGIN);
-        }
-    }, [isAuthenticated, loading, router]);
+    useRequireAuth();
 
     if (loading) return <LoadingScreen message="Loading page..." />;
     if (!user) return null;

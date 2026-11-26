@@ -14,7 +14,7 @@ import type {
     PdfTemplateUpdateInput,
 } from '../types/pdfTemplate.types';
 import type { PdfDocument, SavedItemContent } from '../lib/pdf-document';
-import { ApiClientError, apiClient, setAuditHeaders } from './apiClient';
+import { ApiClientError, apiClient, assertSessionNotOnHold, notifyApiError, setAuditHeaders } from './apiClient';
 import { notifyCrmUpdate } from './crmSync';
 
 const ENDPOINT = '/api/pdf-templates';
@@ -67,6 +67,7 @@ async function parseError(response: Response): Promise<ApiClientError> {
  * errors surface as ApiClientError with the API's `{ message, code, errors }` envelope.
  */
 async function fetchBinary(endpoint: string, init: RequestInit & { accept: string }, signal?: AbortSignal): Promise<Response> {
+    assertSessionNotOnHold();
     const { accept, ...rest } = init;
     const headers = new Headers(rest.headers);
     setAuditHeaders(headers);
@@ -84,7 +85,12 @@ async function fetchBinary(endpoint: string, init: RequestInit & { accept: strin
         }
         throw new ApiClientError('Could not reach the server. Check your connection and try again.', undefined, { message: 'Network error' });
     }
-    if (!response.ok) throw await parseError(response);
+    if (!response.ok) {
+        // Same app-wide handling as apiClient (a 401 ends the session, a 403 PASSWORD_CHANGE_REQUIRED locks the app).
+        const error = await parseError(response);
+        notifyApiError(error);
+        throw error;
+    }
     return response;
 }
 

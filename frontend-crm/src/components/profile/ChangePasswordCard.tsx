@@ -5,8 +5,7 @@ import { Alert, Box, Button, CircularProgress, IconButton, InputAdornment, TextF
 import LockResetRoundedIcon from '@mui/icons-material/LockResetRounded';
 import VisibilityOutlinedIcon from '@mui/icons-material/VisibilityOutlined';
 import VisibilityOffOutlinedIcon from '@mui/icons-material/VisibilityOffOutlined';
-import CheckCircleRoundedIcon from '@mui/icons-material/CheckCircleRounded';
-import RadioButtonUncheckedRoundedIcon from '@mui/icons-material/RadioButtonUncheckedRounded';
+import { PasswordRulesChecklist } from '@/components/common/PasswordRulesChecklist';
 import { fieldSx } from '@/components/forms/FormField';
 import { secondaryButtonSx } from '@/components/settings/form-customization/builderUi';
 import { useAuth } from '@/context/AuthContext';
@@ -14,17 +13,9 @@ import { useChangePassword } from '@/hooks/queries/useProfile';
 import { ApiClientError } from '@/services/apiClient';
 import type { ProfileDto } from '@/types/profile.types';
 import { formatDateTime } from '@/utils/date';
-import { PASSWORD_MAX_LENGTH, PASSWORD_RULES, passwordPolicyIssue, passwordStrength, type PasswordStrengthLevel } from '@/utils/passwordPolicy';
+import { PASSWORD_MAX_LENGTH, passwordPolicyIssue, type PasswordPolicyContext } from '@/utils/passwordPolicy';
 import type { Notify } from './ProfileView';
 import { ProfileCard, cardButtonLayoutSx, relativeInSentence, solidButtonSx } from './profileUi';
-
-const STRENGTH_COLOR: Record<PasswordStrengthLevel, string> = {
-    empty: 'var(--mui-palette-border-main)',
-    weak: 'var(--mui-palette-error-main)',
-    fair: 'var(--mui-palette-warning-main)',
-    good: 'var(--mui-palette-success-main)',
-    strong: 'var(--mui-palette-success-main)',
-};
 
 /** Password input with a show / hide button (also used by Admin › Users to set a user's password). */
 export function PasswordInput({
@@ -117,9 +108,8 @@ export function ChangePasswordCard({ profile, notify }: { profile: ProfileDto; n
     const [formError, setFormError] = useState<string | null>(null);
     const checklistId = useId();
 
-    const ctx = { username: profile.username, currentPassword: values.currentPassword };
+    const ctx: PasswordPolicyContext = { username: profile.username, currentPassword: values.currentPassword };
     const policyIssue = passwordPolicyIssue(values.newPassword, ctx);
-    const strength = passwordStrength(values.newPassword, ctx);
     const confirmMismatch = values.confirmPassword !== '' && values.confirmPassword !== values.newPassword;
     const canSubmit = values.currentPassword !== '' && values.newPassword !== '' && !policyIssue && values.confirmPassword === values.newPassword;
     const saving = changePassword.isPending;
@@ -222,73 +212,7 @@ export function ChangePasswordCard({ profile, notify }: { profile: ProfileDto; n
                 </Box>
 
                 {/* Live policy checklist + strength hint */}
-                <Box
-                    id={checklistId}
-                    sx={{
-                        p: 1.5,
-                        borderRadius: '10px',
-                        backgroundColor: 'var(--mui-palette-background-subtle)',
-                        border: '1px solid var(--mui-palette-border-light)',
-                    }}
-                >
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1, flexWrap: 'wrap' }}>
-                        <Typography sx={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--crm-slate-700)', flex: 1, minWidth: 140 }}>
-                            Your new password needs
-                        </Typography>
-                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }} aria-live="polite">
-                            <Box sx={{ display: 'flex', gap: 0.4 }} aria-hidden>
-                                {[1, 2, 3, 4].map((segment) => (
-                                    <Box
-                                        key={segment}
-                                        sx={{
-                                            width: 22,
-                                            height: 5,
-                                            borderRadius: '3px',
-                                            backgroundColor: segment <= strength.score ? STRENGTH_COLOR[strength.level] : 'var(--mui-palette-border-main)',
-                                            transition: 'background-color 0.2s ease',
-                                        }}
-                                    />
-                                ))}
-                            </Box>
-                            <Typography sx={{ fontSize: '0.72rem', fontWeight: 600, color: 'var(--mui-palette-text-secondary)', minWidth: 44 }}>
-                                {strength.label ? `${strength.label}` : ''}
-                            </Typography>
-                        </Box>
-                    </Box>
-                    <Box
-                        component="ul"
-                        sx={{ m: 0, p: 0, listStyle: 'none', display: 'grid', gridTemplateColumns: { xs: 'minmax(0, 1fr)', sm: 'repeat(2, minmax(0, 1fr))' }, gap: 0.75 }}
-                    >
-                        {PASSWORD_RULES.map((rule) => {
-                            const met = values.newPassword !== '' && rule.test(values.newPassword, ctx);
-                            return (
-                                <Box
-                                    component="li"
-                                    key={rule.key}
-                                    sx={{
-                                        display: 'flex',
-                                        alignItems: 'center',
-                                        gap: 0.75,
-                                        fontSize: '0.78rem',
-                                        color: met ? 'var(--crm-slate-900)' : 'var(--mui-palette-text-secondary)',
-                                    }}
-                                >
-                                    {met ? (
-                                        <CheckCircleRoundedIcon sx={{ fontSize: 16, color: 'var(--mui-palette-success-main)' }} />
-                                    ) : (
-                                        <RadioButtonUncheckedRoundedIcon sx={{ fontSize: 16, color: 'var(--mui-palette-text-muted)' }} />
-                                    )}
-                                    <span>
-                                        {rule.label}
-                                        <Box component="span" sx={visuallyHidden}>
-                                            {met ? ' (done)' : ' (not yet)'}
-                                        </Box>
-                                    </span>
-                                </Box>
-                            );
-                        })}
-                    </Box>
-                </Box>
+                <PasswordRulesChecklist id={checklistId} password={values.newPassword} context={ctx} audience="self" showStrength />
 
                 {formError && (
                     <Alert severity="error" sx={{ borderRadius: '10px', fontSize: '0.8rem' }}>
@@ -319,16 +243,3 @@ export function ChangePasswordCard({ profile, notify }: { profile: ProfileDto; n
         </ProfileCard>
     );
 }
-
-const visuallyHidden = {
-    position: 'absolute',
-    // Strings, not numbers: in `sx` a width of 1 means 100%.
-    width: '1px',
-    height: '1px',
-    p: 0,
-    m: '-1px',
-    overflow: 'hidden',
-    clip: 'rect(0 0 0 0)',
-    whiteSpace: 'nowrap',
-    border: 0,
-} as const;

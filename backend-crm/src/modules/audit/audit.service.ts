@@ -130,6 +130,7 @@ const ACTION_TITLES: Record<string, { title: string; tag: string }> = {
     PASSWORD_CHANGE: { title: 'Password changed', tag: 'Security' },
     PASSWORD_RESET: { title: 'Password reset by an admin', tag: 'Security' },
     SESSION_REVOKE: { title: 'Session signed out', tag: 'Security' },
+    SEND_INVITES: { title: 'Calendar invitations sent', tag: 'Invitations' },
 };
 
 const EMAIL_RESULT_LABELS: Record<string, string> = {

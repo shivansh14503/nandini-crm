@@ -1,12 +1,15 @@
 import { useEffect } from 'react';
+import { holdUnsavedWork } from '@/utils/unsavedWork';
 
 /**
  * Asks before leaving the page (reload, close, or an in-app link to another page) while there are unsaved
- * changes. Used by the admin builders (Form Customization, List Scorecards).
+ * changes. Used by the admin builders (Form Customization, List Scorecards). While active it also counts as unsaved
+ * work, so a session that ends mid-edit (any API 401) asks the user to sign in again in place (SessionExpiredDialog).
  */
 export function useLeaveGuard(active: boolean, message: string) {
     useEffect(() => {
         if (!active) return;
+        const releaseUnsavedWork = holdUnsavedWork();
         const onBeforeUnload = (e: BeforeUnloadEvent) => {
             e.preventDefault();
             e.returnValue = message;
@@ -26,6 +29,7 @@ export function useLeaveGuard(active: boolean, message: string) {
         return () => {
             window.removeEventListener('beforeunload', onBeforeUnload);
             document.removeEventListener('click', onClick, true);
+            releaseUnsavedWork();
         };
     }, [active, message]);
 }

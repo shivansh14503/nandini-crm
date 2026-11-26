@@ -8,6 +8,7 @@ import { FormField } from '../FormField';
 import { LookupField } from '../LookupField';
 import { LOOKUP_FIELD_SIZE, resolveFieldSize, type FieldSize } from '../fieldSizing';
 import { RecordLookupModal, LOOKUP_DISPLAY_VALUE, findLookupRecord, useActiveReferrals } from '@/components/common/lookup';
+import { UserAwayChip } from '@/components/common/UserAwayChip';
 import { findCrmUser, formatCrmUserDisplay, getAssignableUserNames, getPartnerCompanies } from '@/services/masterData.store';
 import { useContacts, useOpportunities, useOrganizations } from '@/hooks/queries';
 import { useMasterData } from '@/hooks/queries/useMasterData';
@@ -200,6 +201,8 @@ export function RhfLookup<T extends FieldValues, K extends LookupKind = LookupKi
                 onLookupClick={kind ? () => setModalOpen(true) : onLookupClick}
                 matchMode={kind === 'organization' || kind === 'partnerCompany' ? 'organization' : 'substring'}
                 maxLength={maxLength}
+                // Away colleagues stay suggested; the chip says so (out of office until …, on leave), as in the picker.
+                optionAdornment={kind === 'user' ? (option) => <UserAwayChip user={findCrmUser(option)} /> : undefined}
             />
             {fieldState.error && (
                 <FormHelperText error sx={{ mx: 1.75 }}>

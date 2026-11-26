@@ -28,7 +28,8 @@ export interface NotificationDto {
     id: string;
     /**
      * activity_reminder | activity_assigned | activity_invited | contract_renewal | calendar_sync_issue |
-     * calendar_sync_error | calendar_invites_held | integration_secret_expiring (notification.producer.ts)
+     * calendar_sync_error | calendar_invites_held | integration_secret_expiring | booking_created
+     * (notification.producer.ts)
      */
     kind: string;
     title: string;

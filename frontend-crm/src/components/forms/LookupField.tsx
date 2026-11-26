@@ -47,6 +47,11 @@ export interface LookupFieldProps {
     formatValue?: (value: string) => string;
     /** Most characters the input accepts (typed or pasted), e.g. the field's schema limit. */
     maxLength?: number;
+    /**
+     * Extra content after a suggestion's text in the dropdown (e.g. a user's "Out of office until …" chip); null for
+     * none. Omit to keep the default option rendering.
+     */
+    optionAdornment?: (option: string) => React.ReactNode;
 }
 
 const MAX_VISIBLE_OPTIONS = 50;
@@ -98,6 +103,7 @@ export function LookupField({
     uppercase = false,
     formatValue,
     maxLength,
+    optionAdornment,
 }: LookupFieldProps) {
     const handleLookup = onLookupClick ?? onSelectClick;
     // A locked field (e.g. Organization Name filled from the picked contact) can't be searched or cleared: no buttons.
@@ -145,6 +151,24 @@ export function LookupField({
                     return (q ? opts.filter((o) => o.toLowerCase().includes(q)) : opts).slice(0, MAX_VISIBLE_OPTIONS);
                 }}
                 onChange={(_, newValue) => onChange(newValue || '')}
+                renderOption={
+                    optionAdornment
+                        ? (props, option) => {
+                              const { key, ...optionProps } = props;
+                              const adornment = optionAdornment(option);
+                              return (
+                                  <li key={key} {...optionProps}>
+                                      <Box component="span" sx={{ display: 'flex', alignItems: 'center', gap: 0.75, flexWrap: 'wrap', minWidth: 0 }}>
+                                          <Box component="span" sx={{ minWidth: 0, overflowWrap: 'anywhere' }}>
+                                              {option}
+                                          </Box>
+                                          {adornment}
+                                      </Box>
+                                  </li>
+                              );
+                          }
+                        : undefined
+                }
                 sx={{ flex: 1, ...fieldSx }}
                 renderInput={(params) => (
                     <TextField

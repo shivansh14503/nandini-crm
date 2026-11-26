@@ -5,10 +5,12 @@ import { calendarSyncQueue, isQueueAvailable, tryEnqueue } from '../../jobs/queu
 import { runFollowUpBackfillNightly } from '../activities/activity.followUpBackfill.js';
 import { expiresSoon } from '../integrations/integration.service.js';
 import { notify } from '../notifications/notification.producer.js';
-import { isLiveStatus } from './connection.constants.js';
+import { isCalendarProvider, isLiveStatus, type CalendarProvider } from './connection.constants.js';
 import { runCalendarConnectionNightly } from './connection.service.js';
 import { dueCheckIds, runDueChecks } from './enrolment.js';
 import {
+    BACKFILL_RECOVERY_GRACE_MS,
+    BACKFILL_RECOVERY_LIMIT,
     CALENDAR_SYNC_JOBS,
     CHECK_SWEEP_LIMIT,
     ENROLLED_PUSH_BATCH,
@@ -22,10 +24,10 @@ import {
 import { sweepPushJobId } from './sync.keys.js';
 import { secretExpiringNotifications } from './sync.notifications.js';
 import { markPushExhausted, pushLink } from './sync.push.js';
-import { enqueueCheck, enqueuePull, type PushJobData } from './sync.wake.js';
+import { runBackfill } from './sync.backfill.js';
+import { enqueueCheck, enqueueEnrolled, enqueuePull, type PushJobData } from './sync.wake.js';
 import { isFakeProviderEnabled, loadProviderAccess } from './providers/registry.js';
 import { isInsideSyncHours, pollMinutes } from './syncHours.js';
-import { isCalendarProvider, type CalendarProvider } from './connection.constants.js';
 import { adminRecipients } from './syncIssue.notifications.js';
 
 /**
@@ -35,8 +37,9 @@ import { adminRecipients } from './syncIssue.notifications.js';
  *
  * Database wake cadence (Azure SQL serverless): the poll tick (every CALENDAR_POLL_MINUTES, default 5, inside
  * CALENDAR_SYNC_HOURS, default 07:00–22:00 business time, when the 15-minute reminder sweep keeps the database awake
- * anyway) makes three small indexed reads plus one pull per synced person (P2-5: a lease claim / release and a
- * "last pulled" write each; a provider call that finds nothing changed touches nothing else); the nightly run is at
+ * anyway) makes three small indexed reads (the outbox sweep, due checks, rows `ok` without a first-sync backfill, P2-3c)
+ * plus one pull per synced person (P2-5: a lease claim / release and a "last pulled" write each; a provider call that
+ * finds nothing changed touches nothing else); the nightly run is at
  * 00:25, inside the existing 00:05–00:25 nightly wake; the fallback tick (Redis down only) reads once a minute inside
  * the sync hours. Nothing runs outside those windows, so the database can pause overnight.
  */
@@ -179,15 +182,32 @@ export async function pushDueInline(now: Date = new Date(), limit: number = FALL
 }
 
 /**
- * The `enrolled` job (§8.12, admin-managed: replaces P2-3's per-user `connect`): a row first reached `ok`, so its
- * dirty links (activities saved while it was pending or in error) are pushed now, in batches of 100, ignoring their
- * `nextAttemptAt`. Stops at the first gate (row in error again, provider off) or rate limit; the outbox sweep does the
- * rest. The first-sync backfill (copying upcoming activities that have no link yet) is P2-3c.
+ * The `enrolled` job (§8.12, admin-managed: replaces P2-3's per-user `connect`): a row reached `ok`. On its first `ok`
+ * (`backfillCount` still null) the first-sync backfill copies the person's upcoming activities as links (P2-3c,
+ * sync.backfill.ts: private copies when they have guests, D23); then its dirty links (backfilled ones, and activities
+ * saved while it was pending or in error) are pushed, in batches of 100, ignoring their `nextAttemptAt`. Stops at the
+ * first gate (row in error again, provider off) or rate limit; the outbox sweep does the rest. A failed backfill is
+ * logged and left for the poll tick's recovery (the row keeps `backfillCount` null); the push part still runs.
  */
-export async function runEnrolled(connectionId: string): Promise<{ pushed: number; stopped: string | null } | null> {
+export async function runEnrolled(connectionId: string): Promise<{ pushed: number; stopped: string | null; backfilled?: number } | null> {
     if (!ENV.INTEGRATIONS.SYNC_ENABLED) return null;
-    const connection = await prisma.calendarConnection.findUnique({ where: { id: connectionId }, select: { id: true, status: true } });
+    const connection = await prisma.calendarConnection.findUnique({ where: { id: connectionId }, select: { id: true, status: true, backfillCount: true } });
     if (!connection || !isLiveStatus(connection.status) || connection.status === 'error') return null;
+    let backfilled: number | undefined;
+    if (connection.backfillCount === null && connection.status === 'ok') {
+        try {
+            const result = await runBackfill(connectionId);
+            if (result.status === 'done') backfilled = result.created;
+        } catch (err) {
+            logger.warn({ err: (err as Error).message, connectionId }, 'Calendar first-sync backfill failed; the poll tick runs it again');
+        }
+    }
+    const done = await pushConnectionLinks(connectionId);
+    return backfilled === undefined ? done : { ...done, backfilled };
+}
+
+/** Pushes every dirty link of one connection, 100 per round, until none is left or a gate / rate limit stops it. */
+async function pushConnectionLinks(connectionId: string): Promise<{ pushed: number; stopped: string | null }> {
     let pushed = 0;
     const tried = new Set<string>();
     for (;;) {
@@ -317,22 +337,64 @@ export async function runCalendarNightly(now: Date = new Date()) {
 }
 
 /**
- * The `calendar-poll` tick: pulls of every synced person (P2-5), the outbox sweep and due connection checks. The cron
- * covers whole hours, so a tick before a start minute or after an end minute (e.g. 08:30-18:00) does nothing at all.
+/**
+ * Rows `ok` for a while without a first-sync backfill (P2-3c): their `enrolled` job was lost (Redis restarted, the
+ * worker was down when the row first reached `ok`). One small indexed read (`[status, nextCheckAt]` prefix).
+ */
+export async function dueBackfillRows(now: Date, limit: number = BACKFILL_RECOVERY_LIMIT): Promise<{ id: string; enrolledAt: Date }[]> {
+    if (!ENV.INTEGRATIONS.SYNC_ENABLED) return [];
+    return prisma.calendarConnection.findMany({
+        where: { status: 'ok', backfillCount: null, OR: [{ lastSuccessAt: null }, { lastSuccessAt: { lt: new Date(now.getTime() - BACKFILL_RECOVERY_GRACE_MS) } }] },
+        select: { id: true, enrolledAt: true },
+        orderBy: { enrolledAt: 'asc' },
+        take: limit,
+    });
+}
+
+/**
+ * Poll tick: an `enrolled` job again for each such row (one job id per row and hour, so a slow job isn't doubled).
+ * Only inside the sync hours (CALENDAR_SYNC_HOURS, P2-5), like the rest of the poll.
+ */
+export async function enqueueDueBackfills(now: Date = new Date()): Promise<number> {
+    if (!isInsideSyncWindow(now)) return 0;
+    let queued = 0;
+    const hour = new Date(Math.floor(now.getTime() / 3_600_000) * 3_600_000);
+    for (const row of await dueBackfillRows(now)) if ((await enqueueEnrolled(row.id, row.enrolledAt, hour)) !== null) queued += 1;
+    if (queued > 0) logger.info({ queued }, 'Calendar first-sync backfills re-queued');
+    return queued;
+}
+
+/** Redis down (fallback tick): one due backfill (and its pushes) in-process per tick, inside the sync hours only. */
+export async function backfillDueInline(now: Date = new Date()): Promise<number> {
+    if (!isInsideSyncWindow(now)) return 0;
+    const [row] = await dueBackfillRows(now, 1);
+    if (!row) return 0;
+    return (await runEnrolled(row.id))?.backfilled ?? 0;
+}
+
+/**
+ * The `calendar-poll` tick: pulls of every synced person (P2-5), the outbox sweep, due connection checks and lost
+ * first-sync backfills (P2-3c). The cron covers whole hours, so a tick before a start minute or after an end minute
+ * (e.g. 08:30-18:00) does nothing at all.
  */
 export async function runCalendarPoll(now: Date = new Date()) {
-    if (!isInsideSyncWindow(now)) return { pulls: 0, queued: 0, checks: 0 };
+    if (!isInsideSyncWindow(now)) return { pulls: 0, queued: 0, checks: 0, backfills: 0 };
     const pulls = await step('pulls', () => enqueuePulls(now), 0);
     const queued = await step('outbox-sweep', () => sweepOutbox(now), 0);
     const checks = await step('due-checks', () => enqueueDueChecks(now), 0);
-    return { pulls, queued, checks };
+    const backfills = await step('backfill-recovery', () => enqueueDueBackfills(now), 0);
+    return { pulls, queued, checks, backfills };
 }
 
-/** The Redis-down fallback tick (§10.2): only inside the sync hours; due checks, dirty links and due pulls in-process. */
-export async function runFallbackTick(now: Date = new Date()): Promise<{ checked: number; pushed: number; pulled: number }> {
-    if (isQueueAvailable() || !isInsideSyncWindow(now)) return { checked: 0, pushed: 0, pulled: 0 };
+/**
+ * The Redis-down fallback tick (§10.2): only inside the sync hours; due checks, a lost backfill, dirty links and due
+ * pulls in-process.
+ */
+export async function runFallbackTick(now: Date = new Date()): Promise<{ checked: number; pushed: number; backfilled: number; pulled: number }> {
+    if (isQueueAvailable() || !isInsideSyncWindow(now)) return { checked: 0, pushed: 0, backfilled: 0, pulled: 0 };
     const checked = await step('fallback-checks', async () => (await runDueChecks(now)).checked, 0);
+    const backfilled = await step('fallback-backfill', () => backfillDueInline(now), 0);
     const pushed = await step('fallback-push', () => pushDueInline(now), 0);
     const pulled = await step('fallback-pull', () => pullDueInline(now), 0);
-    return { checked, pushed, pulled };
+    return { checked, pushed, backfilled, pulled };
 }

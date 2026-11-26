@@ -8,6 +8,8 @@ import { UserAvatar as SharedUserAvatar } from '@/components/common/UserAvatar';
 import { getModuleColor, moduleKeyFrom } from '@/theme/moduleColors';
 import type { AuditListItem, AuditUserActivity } from '@/services/auditAdmin.service';
 import { businessWallClock, fmtDay, fmtShortDay } from '@/utils/formats';
+import { isOutOfOfficeOn } from '@/utils/notificationPreferences';
+import { shortDayLabel, useBusinessToday } from '@/utils/userAvailability';
 
 /** Root of every audit log query (list, counts, entries, undo previews, integrity): invalidating it refreshes the screen. */
 export const AUDIT_LOG_KEY = ['admin-audit-log'] as const;
@@ -267,12 +269,24 @@ export function UserAvatar({ user, size = 34 }: { user: Pick<AuditUserActivity, 
     );
 }
 
-/** Small pills next to a user's name: Inactive, On leave, Group account, Not a user any more. */
-export function UserBadges({ user }: { user: Pick<AuditUserActivity, 'status' | 'onLeave' | 'isGroupUser'> }) {
+/**
+ * Small pills next to a user's name: Inactive, Not a user any more, On leave, Out of office until <date> (today, in the
+ * business timezone; its message as the tooltip, as in Admin › Users), Group account.
+ */
+export function UserBadges({ user }: { user: Pick<AuditUserActivity, 'status' | 'onLeave' | 'outOfOffice' | 'isGroupUser'> }) {
+    const today = useBusinessToday();
+    const outOfOffice = user.outOfOffice && isOutOfOfficeOn(user.outOfOffice, today) ? user.outOfOffice : null;
     const badges: { label: string; title: string; tone: Tone }[] = [];
     if (user.status === 'inactive') badges.push({ label: 'Inactive', title: 'This account is deactivated and can’t sign in.', tone: TONES.neutral });
     if (user.status === 'unknown') badges.push({ label: 'Not in user list', title: 'Entries under a username that is no longer in the user list.', tone: TONES.neutral });
-    if (user.onLeave) badges.push({ label: 'On leave', title: 'Marked as on leave.', tone: TONES.warning });
+    if (user.onLeave) badges.push({ label: 'On leave', title: 'Marked as on leave by an admin.', tone: TONES.warning });
+    if (outOfOffice) {
+        badges.push({
+            label: `Out of office until ${shortDayLabel(outOfOffice.to, today)}`,
+            title: outOfOffice.message?.trim() || 'Out of office (set by the user in My Profile).',
+            tone: TONES.warning,
+        });
+    }
     if (user.isGroupUser) badges.push({ label: 'Group account', title: 'A shared account used for assignments.', tone: TONES.info });
     if (badges.length === 0) return null;
     return (

@@ -56,6 +56,8 @@ import userAdminRouter from './modules/user-admin/userAdmin.routes.js';
 import { serializeRequestForLog } from './utils/redactUrl.js';
 import { isAppOrigin } from './config/origins.js';
 import calendarConnectionRouter from './modules/calendar-sync/connection.routes.js';
+import bookingLinkRouter from './modules/booking-links/bookingLink.routes.js';
+import publicBookingRouter from './modules/booking-links/bookingLink.public.routes.js';
 
 const app: Express = express();
 
@@ -100,6 +102,8 @@ app.use('/api/pdf-assets', pdfAssetRouter);
 app.use('/api/pdf-saved-items', pdfSavedItemRouter);
 // Record field uploads (an opportunity's Upload Doc, base64) parse with their own 15 MB limit (10 MB files).
 app.use('/api/files', recordFileRouter);
+// Public booking pages (no sign-in; Calendar Phase 4): own 16 KB parser, rate limits per IP and per link.
+app.use('/api/public/booking', publicBookingRouter);
 app.use(express.json({ limit: '1mb' }));
 
 // ── Health check ───────────────────────────────────────────────────────────────
@@ -146,6 +150,7 @@ app.use('/api/user-photos', userPhotoRouter);
 app.use('/api/admin/integrations', integrationRouter);
 app.use('/api/admin/users', userAdminRouter);
 app.use('/api/calendar-connections', calendarConnectionRouter);
+app.use('/api/booking-links', bookingLinkRouter);
 
 // ── 404 + global error handler ─────────────────────────────────────────────────
 app.use(notFoundHandler);

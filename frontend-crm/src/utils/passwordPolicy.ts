@@ -1,6 +1,7 @@
 /**
- * Password rules for a new password (My Profile › Security › Change password): the live checklist under the field
- * and the check before submitting. Pure and dependency-free.
+ * Password rules for a new password (My Profile › Security › Change password, Admin › Users › set / reset password):
+ * the live checklist under the field (components/common/PasswordRulesChecklist) and the check before submitting.
+ * Pure and dependency-free.
  *
  * Mirrors backend-crm/src/modules/auth/passwordPolicy.ts, which the API enforces (400 WEAK_PASSWORD with the same
  * message); backend-crm/src/validators/contractSync.test.ts checks the two agree, so change both together.
@@ -61,13 +62,42 @@ export const PASSWORD_RULES: readonly PasswordRule[] = [
     },
 ];
 
-/** The first reason `newPassword` can't be used, or null when it passes every rule. */
-export function passwordPolicyIssue(newPassword: string, ctx: PasswordPolicyContext): string | null {
-    if (newPassword.length > PASSWORD_MAX_LENGTH) return `Password cannot exceed ${PASSWORD_MAX_LENGTH} characters.`;
-    for (const rule of PASSWORD_RULES) {
-        if (!rule.test(newPassword, ctx)) return rule.message;
+function firstIssue(rules: readonly PasswordRule[], password: string, ctx: PasswordPolicyContext): string | null {
+    if (password.length > PASSWORD_MAX_LENGTH) return `Password cannot exceed ${PASSWORD_MAX_LENGTH} characters.`;
+    for (const rule of rules) {
+        if (!rule.test(password, ctx)) return rule.message;
     }
     return null;
+}
+
+/** The first reason `newPassword` can't be used, or null when it passes every rule. */
+export function passwordPolicyIssue(newPassword: string, ctx: PasswordPolicyContext): string | null {
+    return firstIssue(PASSWORD_RULES, newPassword, ctx);
+}
+
+// ── Who sets the password (frontend only) ────────────────────────────────────────────────────────────────────────
+
+/** `self`: people changing their own password (My Profile). `admin`: an admin setting someone's (Admin › Users). */
+export type PasswordAudience = 'self' | 'admin';
+
+/**
+ * The rules that apply when an admin sets someone's password: worded for the person being set up, and without
+ * "different from your current password" (the admin doesn't know it; the API doesn't check it there).
+ */
+export const ADMIN_PASSWORD_RULES: readonly PasswordRule[] = PASSWORD_RULES.filter((rule) => rule.key !== 'notCurrent').map((rule) =>
+    rule.key === 'notUsername'
+        ? { ...rule, label: 'Not the username', message: 'Password cannot be the same as the username.' }
+        : rule,
+);
+
+/** The checklist rules for who is setting the password. */
+export function passwordRulesFor(audience: PasswordAudience): readonly PasswordRule[] {
+    return audience === 'admin' ? ADMIN_PASSWORD_RULES : PASSWORD_RULES;
+}
+
+/** The first rule a password set by an admin breaks, or null. */
+export function adminPasswordIssue(password: string, username: string): string | null {
+    return firstIssue(ADMIN_PASSWORD_RULES, password, { username });
 }
 
 // ── Strength hint (frontend only; the API enforces just the rules above) ─────────────────────────────────────────

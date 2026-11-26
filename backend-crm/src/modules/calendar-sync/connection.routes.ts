@@ -13,8 +13,9 @@ import { pullRequestLimiter, requestPull } from './pull.requests.js';
  * non-group user with a company email is enrolled automatically, so there is no connect or disconnect here.
  *
  *   GET /  → { ready, calendar: null | { provider, providerLabel, accountEmail, status: pending|ok|error|paused, since,
- *              lastSyncedAt }, reason: null | no_email|not_company|no_provider|excluded|inactive|group,
- *              syncHours: { start: 'HH:MM', end: 'HH:MM', everyMinutes } }
+ *              lastSyncedAt, backfill: { state: waiting|done|off, at, copied, sending } }, reason: null | no_email|not_company|
+ *              no_provider|excluded|inactive|group, syncHours: { start: 'HH:MM', end: 'HH:MM', everyMinutes } }
+ *              (backfill: the first-sync copy of upcoming activities, P2-3c; syncHours: the poll's office hours, P2-5)
  *            Same for every role, only the caller. No error codes or provider text (admins see those on People).
  *   POST /sync  { reason?: manual (default) | page } → { status: queued|done|recent|busy|not_synced|not_ready|failed|off,
  *              changed? (in-process pulls), lastSyncedAt }  (P2-5) The caller's own "Sync now" (manual) and the silent

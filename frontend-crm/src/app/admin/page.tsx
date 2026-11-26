@@ -1,8 +1,7 @@
 'use client';
 
-import React, { useEffect } from 'react';
+import React from 'react';
 import NextLink from 'next/link';
-import { useRouter } from 'next/navigation';
 import { Box, Container, Typography } from '@mui/material';
 import AdminPanelSettingsOutlinedIcon from '@mui/icons-material/AdminPanelSettingsOutlined';
 import TuneOutlinedIcon from '@mui/icons-material/TuneOutlined';
@@ -18,6 +17,7 @@ import ManageAccountsOutlinedIcon from '@mui/icons-material/ManageAccountsOutlin
 import SecurityOutlinedIcon from '@mui/icons-material/SecurityOutlined';
 import ArrowForwardRoundedIcon from '@mui/icons-material/ArrowForwardRounded';
 import { useAuth } from '@/context/AuthContext';
+import { useRequireAuth } from '@/hooks/useRequireAuth';
 import { ROUTES } from '@/config/constants';
 import { Navbar } from '@/components/layout/Navbar';
 import { AppBreadcrumbsBar } from '@/components/common/AppBreadcrumbsBar';
@@ -256,14 +256,9 @@ function ModuleCard({ module }: { module: AdminModule }) {
 
 /** Administration hub: entry point for admin / super-admin customization modules. */
 export default function AdminHubPage() {
-    const router = useRouter();
-    const { user, loading, error, clearError, isAuthenticated } = useAuth();
+    const { user, loading, error, clearError } = useAuth();
 
-    useEffect(() => {
-        if (!loading && !isAuthenticated) {
-            router.push(ROUTES.LOGIN);
-        }
-    }, [isAuthenticated, loading, router]);
+    useRequireAuth();
 
     if (loading) return <LoadingScreen message="Loading administration..." />;
     if (!user) return null;

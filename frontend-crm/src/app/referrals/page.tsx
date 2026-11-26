@@ -1,27 +1,20 @@
 'use client';
 
-import { useEffect } from 'react';
-import { useRouter } from 'next/navigation';
 import { Box } from '@mui/material';
 import { useAuth } from '@/context/AuthContext';
+import { useRequireAuth } from '@/hooks/useRequireAuth';
 import { useFreshOnReturn } from '@/hooks/useFreshOnReturn';
-import { ROUTES } from '@/config/constants';
 import { Navbar } from '@/components/layout/Navbar';
 import { LoadingScreen } from '@/components/common/LoadingScreen';
 import { ErrorAlert } from '@/components/common/ErrorAlert';
 import { ReferralsMasterView } from '@/components/referrals';
 
 export default function ReferralsPage() {
-    const router = useRouter();
-    const { user, loading, error, clearError, isAuthenticated } = useAuth();
+    const { user, loading, error, clearError } = useAuth();
     // Back from a record page (or any other page) shows the plain list, not the drawer left open before.
     const viewKey = useFreshOnReturn();
 
-    useEffect(() => {
-        if (!loading && !isAuthenticated) {
-            router.push(ROUTES.LOGIN);
-        }
-    }, [isAuthenticated, loading, router]);
+    useRequireAuth();
 
     if (loading) return <LoadingScreen message="Loading referrals..." />;
     if (!user) return null;

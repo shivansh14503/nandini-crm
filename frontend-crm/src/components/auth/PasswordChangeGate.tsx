@@ -8,12 +8,15 @@ import { LoadingScreen } from '@/components/common/LoadingScreen';
 
 /** Pages a user who must change their password may stay on (My Profile shows only its Security tab then). */
 const OPEN_PATHS = new Set<string>([ROUTES.PROFILE, ROUTES.LOGIN]);
+/** Public pages outside the app (Calendar Phase 4 booking pages). */
+const PUBLIC_BOOKING_PREFIX = '/book/';
 
 /** Reports whether the current page is closed to the user, and sends them to My Profile › Security when it is. */
 function PathWatcher({ onBlockedChange }: { onBlockedChange: (blocked: boolean) => void }) {
     const router = useRouter();
     const pathname = usePathname();
-    const blocked = !OPEN_PATHS.has(pathname ?? '');
+    // Public booking pages (/book/<slug>) are for visitors and never need a signed-in user.
+    const blocked = !OPEN_PATHS.has(pathname ?? '') && !(pathname ?? '').startsWith(PUBLIC_BOOKING_PREFIX);
 
     // Layout effect: a closed page is swapped for the loading screen before it is painted.
     useLayoutEffect(() => {

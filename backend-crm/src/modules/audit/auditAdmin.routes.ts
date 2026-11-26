@@ -22,9 +22,9 @@ import { auditLedgerService } from './auditLedger.service.js';
  *                   deletes7d, total, mostActiveUsers: [{ username, label, count }],
  *                   eventsPerDay: [{ date, total, data, config, security }] }
  *   GET /users    ?from&to (default: last 30 days, max 366) → { from, to, users: [{ username, name, role, department,
- *                   email, status: active|inactive|system|unknown, onLeave, isGroupUser, lastLoginAt, lastLogin,
- *                   lastActivityAt, lastActivity, lastActivityLabel, total, data, config, security, signIns,
- *                   failedSignIns }] }: every user (inactive ones too), the background jobs and any other username
+ *                   email, status: active|inactive|system|unknown, onLeave, outOfOffice: { from, to, message } | null,
+ *                   isGroupUser, photoUrl, lastLoginAt, lastLogin, lastActivityAt, lastActivity, lastActivityLabel,
+ *                   total, data, config, security, signIns, failedSignIns }] }: every user (inactive ones too), the background jobs and any other username
  *                   with entries in the range; counts follow the range, the newest entry is any time. Most active
  *                   first. A user's own entries are GET /?user=<username>, their export POST /exports with that filter.
  *   GET /:id      → { entry, changes, fields: [{ key, label, before, after }], details: [{ key, label, value }],

@@ -186,6 +186,14 @@ const envSchema = z
             .int()
             .refine((value) => POLL_MINUTE_STEPS.includes(value), `CALENDAR_POLL_MINUTES must be one of ${POLL_MINUTE_STEPS.join(', ')} (a value that divides 60).`)
             .default(5),
+
+        /**
+         * Booking links (Calendar Phase 4): the key that signs the times a public booking page offers (slot tokens,
+         * booking-links/bookingLink.token.ts). Optional: unset → a key derived from JWT_SECRET (HKDF, its own purpose).
+         * Set it (≥ 32 random characters) to rotate slot tokens without signing everyone out. Same value on every API
+         * instance. Changing it only voids times shown in the last 30 minutes.
+         */
+        BOOKING_SIGNING_KEY: z.preprocess(blankToUndefined, z.string().min(32, 'BOOKING_SIGNING_KEY must be at least 32 characters.').optional()),
     })
     .superRefine((env, ctx) => {
         if (env.NODE_ENV === 'production' && (!env.JWT_SECRET || env.JWT_SECRET.length < 32)) {
@@ -280,6 +288,11 @@ export const ENV = {
         /** Base of links in emails, without a trailing slash. */
         APP_PUBLIC_URL: (env.APP_PUBLIC_URL ?? env.CLIENT_ORIGIN).replace(/\/+$/, ''),
         LOG_RETENTION_DAYS: env.EMAIL_LOG_RETENTION_DAYS,
+    },
+    /** Booking links (Calendar Phase 4). */
+    BOOKING: {
+        /** BOOKING_SIGNING_KEY; null = derived from JWT_SECRET. */
+        SIGNING_KEY: env.BOOKING_SIGNING_KEY ?? null,
     },
     /** Admin › API Integrations and calendar sync (Calendar Phase 2). Client ids / secrets live in the database, sealed. */
     INTEGRATIONS: {

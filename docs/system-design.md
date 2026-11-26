@@ -1,6 +1,6 @@
 # Nandini CRM — System Design
 
-> **Status:** living document. Describes the system as built (code as of 2026-11-26; audit context + ledger audit table, admin audit query API and screen, Users tab; Contracts module; Referrals module; Documents module; Activities data model and API, Calendar Phase 1 PR1; Activities screens and Calendar, PR2; notifications, reminders and mail workers, navbar bell and the morning summary email, PR3, with its review fixes; guarded cache reads for lookups, form configs and search, with its review fixes; Calendar Phase 2 P2-1, Admin › API Integrations foundation: encrypted provider credentials, connection tests, calendar sync settings, company emails, with its review fixes; My Profile (Profile Phase 1): profile, photo, change password, signed-in sessions; Admin › Users (Profile Phase 2, 2026-11-26): user management, the must-change-password claim, sessions revoked on deactivation / reset / role change; Calendar Phase 2 P2-2, employees connect / disconnect Google or Microsoft 365 calendars (replaced by P2-2b); Calendar Phase 2 P2-2b, admin-managed calendar connections: a Google service account with domain-wide delegation and a Microsoft Entra app with application permissions, automatic enrolment of everyone with a company email, in-memory tokens only, admin problem notifications; My Profile › Notifications (Profile Phase 3): bell kinds a user can turn off, the morning summary opt-out, a personal default reminder and out-of-office dates; Calendar Phase 2 P2-3a: one activity write path (system writes, write hook, lock seam, shared post-commit step), no behaviour change; Admin › Company formats (Profile Phase 5, PR5a): one company-wide date / time / number display setting, a shared formatter core, legacy styles kept until an admin saves; PR5b: the remaining ad-hoc format sites and the audit log's Before / After values follow it too; Calendar Phase 2 P2-4: lead / opportunity follow-ups create activities, locked follow-up fields, the nightly follow-up backfill; Calendar Phase 2 P2-3b: the CRM → calendar push engine (outbox, `crm-calendar-sync` queue and worker, Google / Graph event writes for enrolled people); Calendar Phase 2 P2-6: colleagues' busy times when picking a time, `GET /api/activities/busy`; Calendar Phase 2 P2-5: calendar → CRM pull (Google sync tokens, Graph delta), office-hours polling, Sync now).
+> **Status:** living document. Describes the system as built (code as of 2026-11-26; audit context + ledger audit table, admin audit query API and screen, Users tab; Contracts module; Referrals module; Documents module; Activities data model and API, Calendar Phase 1 PR1; Activities screens and Calendar, PR2; notifications, reminders and mail workers, navbar bell and the morning summary email, PR3, with its review fixes; guarded cache reads for lookups, form configs and search, with its review fixes; Calendar Phase 2 P2-1, Admin › API Integrations foundation: encrypted provider credentials, connection tests, calendar sync settings, company emails, with its review fixes; My Profile (Profile Phase 1): profile, photo, change password, signed-in sessions; Admin › Users (Profile Phase 2, 2026-11-26): user management, the must-change-password claim, sessions revoked on deactivation / reset / role change; Calendar Phase 2 P2-2, employees connect / disconnect Google or Microsoft 365 calendars (replaced by P2-2b); Calendar Phase 2 P2-2b, admin-managed calendar connections: a Google service account with domain-wide delegation and a Microsoft Entra app with application permissions, automatic enrolment of everyone with a company email, in-memory tokens only, admin problem notifications; My Profile › Notifications (Profile Phase 3): bell kinds a user can turn off, the morning summary opt-out, a personal default reminder and out-of-office dates; Calendar Phase 2 P2-3a: one activity write path (system writes, write hook, lock seam, shared post-commit step), no behaviour change; Admin › Company formats (Profile Phase 5, PR5a): one company-wide date / time / number display setting, a shared formatter core, legacy styles kept until an admin saves; PR5b: the remaining ad-hoc format sites and the audit log's Before / After values follow it too; Calendar Phase 2 P2-4: lead / opportunity follow-ups create activities, locked follow-up fields, the nightly follow-up backfill; Calendar Phase 2 P2-3b: the CRM → calendar push engine (outbox, `crm-calendar-sync` queue and worker, Google / Graph event writes for enrolled people); Calendar Phase 2 P2-6: colleagues' busy times when picking a time, `GET /api/activities/busy`; Calendar Phase 2 P2-3c: the first-sync backfill, Send invitations / Retry / Add again and the sync status in the activity drawer; Calendar Phase 4: booking links, public scheduling pages `/book/<slug>` on free/busy; Calendar Phase 2 P2-5: calendar → CRM pull (Google sync tokens, Graph delta), office-hours polling, Sync now; as of 2026-11-26).
 > Update it in the same change that alters architecture, infrastructure, Redis usage, queues or security.
 > Related: [Database design](database-design.md) · [API plan](api-plan.md) · [Build plan](build-plan.md)
 
@@ -187,7 +187,34 @@ SQL Server is the only source of truth; Redis only ever holds derived or disposa
   stays `{ id, username, role }` and a profile edit shows at once; a token whose user row is gone gets 401. If the
   database can't answer (an outage, a paused Azure SQL resuming), it answers from the JWT with no name or photo and
   logs a warning, so a database blip never signs anyone out. The login response's `user` has the same shape. The
-  frontend's `refreshUser()` drops the user only on a 401.
+  frontend's `refreshUser()` treats only a 401 as the session ending (handled as below).
+- **Frontend sign-in redirects** (`hooks/useRequireAuth.ts`, `context/AuthContext.tsx`, `utils/safeNextPath.ts`): every
+  signed-in page calls `useRequireAuth()`. Signed out, it `replace`s the page with `/login?next=<path+query+hash>`
+  (`loginPathWithNext()`), and the login page / form go to `safeNextPath(next)` after sign-in (CRM paths only, no open
+  redirect: the normalized path is checked too, so dot segments like `/.//evil.example` can't become `//evil.example`; a must-change password still goes to My Profile › Security first). Any API 401 other than a wrong
+  password at sign-in (`INVALID_CREDENTIALS`), including a background poll's, means the session ended on its own
+  (expired after the 8 h TTL, revoked, signed out in another tab). What happens depends on whether unsaved edits are on
+  screen (`utils/unsavedWork.ts`: `useFormDraftGuard`, `useLeaveGuard` and Document Series hold a claim while dirty):
+  - **Unsaved edits**: `AuthContext` keeps the user and sets `sessionExpired`, so the page and its draft stay mounted,
+    and `components/auth/SessionExpiredDialog` (root layout, blocking) asks for the password of the same account and
+    signs in again in place (`reauthenticate`, which also checks the returned user id); the user then saves. Signing in
+    from another tab also clears it (checked on tab focus, same user id only). Either way every active React Query is
+    refetched (`invalidateQueries`). While the dialog is up, `apiClient` holds the session (`setSessionOnHold`): every
+    request except `POST /api/auth/login` and `GET /api/auth/me` is refused locally with a 401 (`SESSION_ON_HOLD`)
+    before it reaches the network, so a cookie from another account signed in elsewhere in the browser can neither
+    load data into this tab's cache nor save this draft (e.g. Ctrl+S behind the dialog). File and PDF fetches
+    (`fetchWithSession`, `pdfTemplate.service` `fetchBinary`) are held the same way and report their errors to the
+    same listeners (`notifyApiError`), so their 401s end the session too. If the sign-in answers with a must-change
+    password (an admin reset it), the dialog says the draft can't be saved and only continues to My Profile › Security
+    when the user confirms. If the unsaved work goes away while the dialog is up (the browser's Back button), it falls
+    through to the next case (`subscribeUnsavedWork`). **Discard changes** (`endExpiredSession`) does too.
+  - **Nothing unsaved**: `AuthContext` drops the user and sets the "session expired" note, and the guard sends the
+    user to `/login?next=<this page>`, returning them to the page after sign-in.
+
+  A 401 while nobody is signed in (the initial check, the login page, a late answer after Sign out) is ignored. An
+  explicit **Sign out** sets `signedOutByUser` in the same render as clearing the user, so guards go to plain `/login`
+  (never `?next=`), matching the navbar's own navigation. `utils/safeNextPath.ts` has no imports (its login path
+  mirrors `ROUTES.LOGIN`) because the backend contract test loads it with tsx, which can't resolve the `@/` alias.
 - **Change password** (`POST /api/auth/change-password`, My Profile › Security): the current password is checked like a
   sign-in (bcrypt, or a legacy plain-text row), the new one against `modules/auth/passwordPolicy.ts` (8–128
   characters, a letter and a digit, not the username, not the current password; the frontend's live checklist uses a
@@ -386,6 +413,57 @@ which see every record (`modules/user-admin/roles.ts`, mirrored and contract-tes
   option), so the probe can't be used to hammer the providers. A result is stored as `lastTest` only if the client
   id, sealed secret and `clientVersion` are unchanged since the probe started (conditional `updateMany`); otherwise
   the admin gets `credentials_changed` and tests again.
+- **Public booking pages** (Calendar Phase 4, as of 2026-11-26; `modules/booking-links`): the only API routes open to
+  the internet without a session, `/api/public/booking/:slug[/slots|/book]`, on their **own router** mounted before the
+  global JSON parser (16 KB limit), no `authenticate`. Design rules:
+  - **No enumeration**: slugs end in 8 random characters (32-letter alphabet, 40 bits, `crypto.randomInt`) and are
+    never reused (links are never deleted; "New address" retires a slug for good). A malformed slug, a missing or
+    turned-off link, the company switch off and an owner who is inactive or a group login all answer the same 404
+    with the same message; the rate limit runs before the lookup and misses are cached (60 s), so guessing costs the
+    database nothing.
+  - **Least data out**: the page gets the link's own public fields (title, owner's display name, type, durations,
+    location, note, which questions) and free **start times**. Never busy blocks, activity subjects, usernames,
+    emails or the owner's calendar status (an unreadable calendar is a generic "times can't be shown").
+  - **Signed slot tokens** (`bookingLink.token.ts`): each offered start carries
+    `v1.<start>.<minutes>.<expiry>.<mac>`, mac = HMAC-SHA256 truncated to 128 bits over `v1|linkId|link updatedAt|start|
+    minutes|expiry`, checked in constant time, valid 30 min. Key: `BOOKING_SIGNING_KEY` (≥ 32 chars) or HKDF-SHA256 of
+    `JWT_SECRET` (salt `nandini-crm/booking/v1`), so the session key never signs slots and production (which refuses
+    a missing / short `JWT_SECRET`) never uses a development key. Editing a link changes `updatedAt` and voids every
+    token it handed out. A token proves only that the server offered that start; the booking re-checks everything.
+  - **No double booking** (D45): the booking re-reads the company calendar outside the transaction (network never
+    inside one), then inside one transaction takes the per-owner application lock `booking:owner:<username>`,
+    re-reads the owner's CRM activities through the transaction (the busy-times rules, buffers included), re-counts
+    the day's bookings, inserts the activity (system write path) and the `BookingLinkBooking` row whose `tokenHash` is
+    unique (one booking per token). A token that already booked is looked up first (review fix, as of 2026-11-26),
+    right after its signature checks and before its expiry, the rules and the busy check (which would find the
+    visitor's own new meeting): the same email gets that booking's confirmation again (a resubmit after a lost
+    response, even past the 30 minutes), another email 409; two requests racing each other meet the same pre-read
+    inside the transaction. No unique error is caught inside the transaction: a P2002 aborts it and the booking is
+    retried once from the start. **Fail closed**: an
+    owner calendar in `error` / `unavailable` offers no times and books nothing (503 `CALENDAR_UNAVAILABLE`), so a
+    Google / Outlook meeting the CRM can't see is never double-booked.
+  - **Abuse limits**: per IP and per link (Redis fixed windows; an in-process counter whenever Redis can't count, never
+    open; API plan §3). The per-IP limits are route middleware and count every request; the per-link limits
+    (`chargeLink`, keyed by link id) are charged by the service only for real attempts (review fix, as of 2026-11-26):
+    slots once the link is live and the query valid, a booking once its token is a valid, unused one this server
+    signed. So junk (bad slug, empty body, honeypot, forged or expired token) uses up only its own IP's quota and a few
+    addresses can't lock a link's visitors out. A honeypot field (`website`, hidden from people and screen readers; filled = 400
+    `BOOKING_REJECTED` without detail), strict zod bodies (unknown keys refused, every text bounded by its column),
+    `Cache-Control: no-store`, `X-Robots-Tag: noindex, nofollow`; the page itself has `robots: noindex` and
+    `referrer: no-referrer`. **Provider budget** (review fix, as of 2026-11-26): slot pages read the owner's busy times
+    in fixed 14-day blocks aligned to Mondays (`busyBlocks`, `BOOKING_BUSY_BLOCK_DAYS`), never the visitor's own
+    `from` / `days` window, so every visitor of a link hits the same few cache keys (60 s provider cache): a link with a
+    60-day horizon has at most 6 blocks, so at most about 6 provider calls a minute however many windows are asked.
+    They share one budget (`booking:<linkId>`, 120 / min); the booking's own re-read uses a separate budget
+    (`booking-book:<linkId>`), so slot browsing can never block a confirmation.
+  - **Who and what**: the activity is written as actor `system` with the owner as owner and `createdBy`; its audit
+    entry carries route `public:booking`, the visitor's IP and user agent. Visitors are never emailed (the mail layer
+    is parked): an on-page confirmation with an `.ics` file. Once calendar sync pushes activities (P2-3b), D41 holds
+    the invitation for the owner to send (actor ≠ owner), so an anonymous form never makes an employee's mailbox
+    email an address a stranger typed. CORS, helmet and CSP are unchanged.
+  - **Who may create links**: company switch (default off) and `whoCanCreate` (everyone / managers and admins / admins)
+    in `ModuleSetting activities/bookingLinks`; owner or admin manage a link; existing links of an owner whose role
+    is no longer allowed keep answering until turned off (admins can make links for anyone).
 - **Audit log** (`AuditLog`, an append-only SQL Server ledger table — see §5 "Audit write paths"): every change,
   sign-in, failed sign-in (wrong password or deactivated account) and refused request (403, at most one per user +
   route per minute) is recorded with who / where / how. Record history (`GET /api/audit-logs/...`) follows the
@@ -425,6 +503,10 @@ commands fail immediately instead of hanging, and reconnects in the background (
 | `ratelimit:pdf-preview:user:{id}` | counter | 60 s | `POST /api/pdf-templates/preview` | 20 previews / min / user |
 | `ratelimit:activity-busy:user:{id}` | counter | 60 s | `GET /api/activities/busy` | 60 busy-time checks / min / user (in-memory per process whenever Redis can't count; never fails open) |
 | `ratelimit:activity-busy-calls:user:{id}` | counter | 60 s | `GET /api/activities/busy` (P2-6) | 120 Google / Microsoft free/busy calls / min / user, whatever the number of requests; past it the calendar part is `unavailable` (in-memory per process whenever Redis can't count; never fails open) |
+| `ratelimit:booking-view:ip:{ip}` | counter | 60 s | `GET /api/public/booking/:slug` | 60 page views / min / IP (in-memory per process whenever Redis can't count; never fails open) |
+| `ratelimit:booking-slots-ip:ip:{ip}` / `ratelimit:booking-slots-link:link:{linkId}` | counter | 60 s | `GET /api/public/booking/:slug/slots` | 60 / min / IP (every request) and 3000 / min / link (only a live link with a valid query) (same fallback) |
+| `ratelimit:booking-book-ip:ip:{ip}` / `ratelimit:booking-book-link:link:{linkId}` | counter | 1 h | `POST /api/public/booking/:slug/book` | 10 / hour / IP (every request) and 30 / hour / link (only valid, unused slot tokens) (same fallback) |
+| `ratelimit:activity-busy-calls:booking:{linkId}` / `…:booking-book:{linkId}` | counter | 60 s | booking page slots / book | 120 provider calls / min shared by all visitors of one link's slot pages; a separate 120 for its bookings' re-reads |
 | `ratelimit:integration-test:user:{id}` | counter | 60 s | `POST /api/admin/integrations/providers/:provider/test` | 6 connection tests / min / admin (in-memory per process whenever Redis can't count) |
 | `cache:lookups:users:{all\|active}` | JSON, guarded ¹ | 5 min | lookups | User picker list; dropped by a company email change (`invalidateUserCaches`, Admin › API Integrations › People), by every Admin › Users write (`invalidateUserCaches`) and by My Profile name / photo changes (`invalidateUserLookupCaches`) |
 | `cache:lookups:organizations:{limit}` / `contacts:{limit}` / `products:{limit}` | JSON, guarded ¹ | 5 min | lookups (no search term only) | Lookup dialogs' default lists |
@@ -437,6 +519,8 @@ commands fail immediately instead of hanging, and reconnects in the background (
 | `cache:search:{category\|all}:{page}:{limit}:{t\|-}:{i\|-}:d{minDigits}:{sha256}` | JSON, guarded ¹ (180 s placeholder) | 30 s | global search | Search results; everyone sees the same results, so one entry per query (hashed, so user text never reaches a key or SCAN pattern) |
 | `cache:calendar:busy:{username}:{fromMs}:{toMs}` | JSON (`[[startMs, endMs, kind], …]`) | 60 s | `GET /api/activities/busy` (P2-6) | One person's company-calendar busy blocks for a window (times only; `fromMs` / `toMs` on the 15-minute grid); only successful reads are kept; TTL only. Read with one `MGET`, written with one `MULTI` |
 | `cache:lookups:activities:busy:{sha256(people)[:24]}:{fromMs}:{toMs}` | JSON, guarded ¹ | 30 s | `GET /api/activities/busy` (P2-6) | The CRM part (people's Planned activity blocks) for a people set and window (on the 15-minute grid); dropped by every activity write (`invalidateEntityCaches('activities')`, pattern `cache:lookups:activities*`) |
+| `cache:booking-link:{slug}` | JSON (`{ row, ownerName }` or `null` = 404), guarded ¹ | 60 s | public booking page | A live link with its owner's name, or a miss; dropped by every link write and (pattern) by a booking-settings save |
+| `cache:booking-holidays:{from}:{to}` | JSON (days) | 10 min | public booking page | Company holidays in the asked days; TTL only (a holiday added meanwhile is caught by the booking's own re-check within 10 min) |
 | `cache:email-domain:{domain}` | JSON string (`mx`, `a_only`, `null_mx`, `not_found`) | 24 h | email checks (plain read) | DNS answer for a domain; TTL only (an `unknown` answer is dropped at once) |
 | `cache:notifications:unread:{username}` | number (briefly a `pending:<uuid>` placeholder while it is read) | 24 h (a safety net: it is dropped long before) | `GET /api/notifications/unread-count`; the list reads SQL and re-caches it | The bell's unread count (username lowercased), so a minute's polling from every open tab doesn't wake SQL Server; dropped by every write to that user's notifications, by the 00:20 nightly job and on every Redis reconnect (§4.2) |
 | `pdf:{MODULE}:{sha256}` | binary (PDF) | `PDF_CACHE_TTL_SECONDS` (600 s) | PDF render | Rendered PDFs; key (`pdfCacheKey`) covers template id + version, record id + `updatedAt`, custom-field definitions + company formats |
@@ -507,7 +591,8 @@ opens) always counts in SQL and re-caches that the same way.
 | --- | --- |
 | Caching | Every read goes to SQL Server |
 | Sessions | New logins issue untracked tokens; existing tokens are trusted until they expire; logout, a password change and My Profile's Sign out can't revoke; the My Profile session list is empty |
-| Rate limiting | Disabled (requests allowed), except the integration connection test and busy times (`GET /api/activities/busy`, P2-6), which count in memory per process instead |
+| Rate limiting | Disabled (requests allowed), except the integration connection test, busy times (`GET /api/activities/busy`, P2-6) and the public booking page (Phase 4), which count in memory per process instead |
+| Public booking page (Phase 4) | Link lookups, holidays and busy times read SQL on every request; rate limits count in process (never open); the booking itself is unchanged (SQL application lock) |
 | Busy times (P2-6) | The CRM part reads SQL on every request; the company-calendar part is memoised in process (60 s, at most 1,000 entries) instead of Redis; the provider call budget counts in process |
 | Audit events (logins, PDF generated, import summaries) | Written directly to SQL instead of queued |
 | Imports | ≤ 500 rows run synchronously inside the request; larger imports return `503 IMPORT_QUEUE_UNAVAILABLE` |
@@ -516,7 +601,7 @@ opens) always counts in SQL and re-caches that the same way.
 | Recently viewed | Not recorded, lists report none |
 | Activity reminders, contract renewals, morning email | Delayed reminder jobs can't be queued and the schedulers don't fire. Each worker process runs one-minute in-process ticks instead: while `isQueueAvailable()` is false the reminders worker runs the reminder sweep (missed reminders + renewals), so **the database is queried every minute while Redis is down**, and the mail worker makes up a missed morning summary (between its time and noon). Duplicates across processes are harmless (claims and unique dedupe keys). The check is made on every tick, not once at start-up |
 | Redis comes back | On every `ready` of the shared client (start-up and each reconnect) the reminders worker upserts its two schedulers, re-arms every pending reminder (`armPendingReminders`, batches of 500, same job ids) and runs one sweep; the mail worker upserts `morning-summary` and makes up a missed morning summary; every API and worker process drops all cached unread counts |
-| Calendar push (P2-3b) and pull (P2-5) | Push and pull jobs can't be queued. A Sync now / page pull runs the pull in the API process, awaited (still under the lease and the `job:calendar-sync` origin); the fallback tick also pulls up to 5 people not pulled (or tried in-process) for a poll interval, longest-waiting first, so a few people whose pulls keep failing can't take every slot. A committed activity save pushes its dirty links in-process after the response; the calendar worker's one-minute fallback tick, **only inside 07:00–22:00**, runs due connection checks and pushes up to 20 due dirty links in-process. Links stay dirty in SQL (the outbox), so nothing is lost: on Redis `ready` the worker upserts its schedulers and runs one outbox sweep. The `enrolled` job is not queued; the fallback tick and the next sweep push those links instead |
+| Calendar push (P2-3b) and pull (P2-5) | Push and pull jobs can't be queued. A Sync now / page pull runs the pull in the API process, awaited (still under the lease and the `job:calendar-sync` origin); the fallback tick also pulls up to 5 people not pulled (or tried in-process) for a poll interval, longest-waiting first, so a few people whose pulls keep failing can't take every slot. A committed activity save pushes its dirty links in-process after the response; the calendar worker's one-minute fallback tick, **only inside `CALENDAR_SYNC_HOURS`** (default 07:00–22:00), runs due connection checks, one lost first-sync backfill (P2-3c) and pushes up to 20 due dirty links in-process. Links stay dirty in SQL (the outbox), so nothing is lost: on Redis `ready` the worker upserts its schedulers and runs one outbox sweep. The `enrolled` job is not queued; the fallback tick and the next sweep push those links instead |
 | Notification bell | Unread count read from SQL on every poll (no cache); assignment / invitation notifications are still written after activity saves. Counts cached before the outage are dropped when Redis comes back |
 | `/api/health` | Reports `redis: "unavailable"` |
 
@@ -714,9 +799,11 @@ The same list is next to `DB_KEEPALIVE_INTERVAL_MS` in `.env.example`.
 | 00:25 | Calendar nightly: connection reconcile / checks / digest, follow-up backfill, error-link retries, secrets expiring, leases, Outlook delta re-baseline (P2-5: rows whose window is over 30 days old get a full pull) (`crm-calendar-sync`; only reads when nothing is enrolled) |
 | 09:00 Mon–Sat | Morning summary email (only while mail is on; `crm-mail`) |
 | Every 15 min, 07:00–21:45 | Reminder sweep (contract renewals, missed reminders) |
-| Every `CALENDAR_POLL_MINUTES` (default 5) inside `CALENDAR_SYNC_HOURS` (default 07:00–22:00) | Calendar poll: outbox sweep + due connection checks (two small indexed reads) + one `pull` job per synced person (P2-5, as of 2026-11-26). A pull with nothing new costs, per person, one lease claim / release, the `lastPulledAt` write and one provider list call; SQL is read per changed event only. The database is awake then anyway for the reminder sweep and users. Outside the hours nothing polls, so Azure SQL Serverless can pause overnight; changes made in a calendar at night come back with the first poll of the morning |
+| Every `CALENDAR_POLL_MINUTES` (default 5) inside `CALENDAR_SYNC_HOURS` (default 07:00–22:00) | Calendar poll: outbox sweep + due connection checks + backfill recovery (three small indexed reads, P2-3c) + one `pull` job per synced person (P2-5, as of 2026-11-26). A pull with nothing new costs, per person, one lease claim / release, the `lastPulledAt` write and one provider list call; SQL is read per changed event only. The database is awake then anyway for the reminder sweep and users. Outside the hours nothing polls, so Azure SQL Serverless can pause overnight; changes made in a calendar at night come back with the first poll of the morning |
 | On demand | A person's **Sync now** (≥ 30 s apart), the silent pull when they open the calendar page (≥ 3 min apart), the admin's Sync now on People: one `pull` job each (P2-5) |
 | After each activity save | Its calendar push (a `push` job, 2 s later), only for enrolled owners |
+| When a person's calendar row first reaches `ok` | The first-sync backfill (P2-3c): keyset pages of their upcoming activities and the pushes, once per row (not periodic) |
+| Every 15 s, only while a My Profile page is open on a row still copying | `GET /api/calendar-connections` (a connection read and a link count) for the backfill progress line; stops when the copy is done, when sync is switched off (`backfill.state = 'off'`) and at most 5 minutes after the page was opened (as of 2026-11-26, P2-3c) |
 | At each due reminder | Its delayed job |
 | Every minute, **only while Redis is down** | The workers' fallback tick (the calendar worker's only inside `CALENDAR_SYNC_HOURS`; since P2-5 it also pulls up to 5 people not pulled or tried for a poll interval) |
 
@@ -739,9 +826,17 @@ and skips days more than a year away, so typing a date doesn't send a request pe
 at most once per 30 s per people set and window (windows on the 15-minute grid) (the CRM part is cached in Redis and dropped by activity writes, which already woke the
 database); company-calendar reads go to Google / Microsoft, not SQL. So an idle office leaves the database asleep.
 
+Booking links (Calendar Phase 4, as of 2026-11-26) add **no job and no periodic query** either. SQL is read only
+while someone has a public booking page open or books: the link and its owner come from Redis (`cache:booking-link:*`,
+60 s, misses too), the company switch from the form-config cache (1 h), holidays from Redis (10 min) and the owner's CRM
+busy blocks from the busy-times cache (30 s per fixed 14-day block, the same keys for every visitor); a link with a bookings-a-day limit also counts that link's
+bookings per slots request. The page refetches its times every 10 minutes only while its tab is visible (React Query
+stops interval refetches in background tabs), so a forgotten tab doesn't keep the database awake overnight. Bots
+guessing slugs hit the rate limit and the negative cache, not SQL.
+
 ### 5.4 Calendar sync (`crm-calendar-sync`)
 
-As of 2026-11-26 (Calendar Phase 2 P2-3b, admin-managed model). Module `backend-crm/src/modules/calendar-sync`
+As of 2026-11-26 (Calendar Phase 2 P2-3b and P2-3c, admin-managed model). Module `backend-crm/src/modules/calendar-sync`
 (`sync.*.ts`), worker `src/jobs/workers/calendarSync.worker.ts`, under audit origin `JOB` / `job:calendar-sync`
 (pushes: `job:calendar-sync:<provider>`). Nothing is pushed until an admin turns a provider on and a person has a live
 `CalendarConnection` row (`pending`, `ok` or `error`); `CALENDAR_SYNC_ENABLED=false` stops pushes, the `enrolled`
@@ -751,8 +846,10 @@ job and the sweep (connection checks and the nightly connection steps still run)
   write's transaction): when a pushable field changed, the owner's organizer link on their live connection is
   inserted or marked dirty (`ActivityExternalLink.dirtyAt`, [database design](database-design.md)). A new link
   invites (`invites = 'send'`) only when the person saving is the owner, else it is a private copy (`withhold`);
-  addresses a non-owner puts on the activity (compared by resolved address, so a contact's changed email counts) are
-  held in `heldAttendeesJson` on every link that invites, also while the provider is off or the row is stopped
+  guests a non-owner puts on the activity are held in `heldAttendeesJson` on every link that invites, **by identity**
+  (as of 2026-11-26, P2-3c: `user:<username>` / `contact:<contactId>`, a plain lower-cased address only for typed
+  emails), so a contact who had no email when held, or whose email changes, stays held; the push resolves the
+  identities to today's addresses (`heldEmailsOf`). Holds are kept also while the provider is off or the row is stopped
   (`detached` links record holds without becoming dirty). An owner change by anyone but the new owner turns the new
   owner's earlier link into a new copy: guests not already on its event are held, or it becomes `withhold` when its
   event is gone (D41). A link on another connection (owner changed) is dirtied too, so it is cancelled. Reads and
@@ -779,15 +876,34 @@ job and the sweep (connection checks and the nightly connection steps still run)
   try restores the event instead of patching a deleted one. Unique-index errors are never caught inside a transaction
   (D45).
 - **`enrolled`** (`runEnrolled`): a row reached `ok`, first time or after an error (`withCalendarAccess`'s ready
-  listener; a job id per time, `…-r<readyAtMs>`): its dirty links (saved while it was pending or in error) pushed now,
-  100 at a time, stopping at the first gate or rate limit. The first-sync backfill of activities with no link is P2-3c.
+  listener; a job id per time, `…-r<readyAtMs>`): when the row is `ok` and `backfillCount` is null the **first-sync
+  backfill** runs first (as of 2026-11-26, P2-3c, `sync.backfill.ts`; addendum §8.3, D23): the owner's Planned,
+  create-eligible activities that aren't over and start within `backfillDays` get an organizer link each, in keyset
+  pages of 200 (short transactions under the activities' record locks, re-reading existing links; a unique-index
+  race rolls the page back and runs it once more outside the transaction, D45); activities with guests become private
+  copies (`invites = 'withhold'`: no attendees, nobody mailed) until the owner presses **Send invitations**. The first
+  run claims a run stamp in `backfilledAt` (compare-and-set on `IS NULL`) before inserting; a run started again (a
+  crash, the listener's and the poll's jobs at once) reuses that stamp, and every backfilled link gets
+  `createdAt` = the stamp, which is how the drawer says "copied when your calendar was connected". No activity
+  row, audit entry or notification is written. `backfillCount` (the row's links carrying the stamp, every run's) is
+  written last and marks it done, so a crashed run simply runs again with the same stamp. Then the row's dirty links are pushed, 100 at a time (`ENROLLED_PUSH_BATCH`, the spec's
+  CONNECT_PUSH_BATCH), one provider call at a time under the lease, stopping at the first gate or rate limit: a large
+  backfill is spread over the next jobs and sweeps instead of a burst. Recovery: the poll tick re-queues `ok` rows
+  without a backfill whose last success is over 10 minutes old (50 per tick); while Redis is down the fallback tick
+  backfills one row per tick in-process.
+- **Drawer actions** (P2-3c, `sync.actions.ts`): `POST /api/activities/:id/calendar-sync/retry` (owner / editors:
+  dirty again, attempts reset; Add again for a `removed_remote` copy = a new generation and requested id, so whichever
+  push runs it creates a new event; pressed by someone other than the owner on an activity with guests, the new copy
+  is private (`withhold`) and the owner gets `calendar_invites_held`, D41) and `/send-invites` (owner only, D41:
+  `invites = 'send'`, holds released; refused with 409 while the event is gone; audited `Activity SEND_INVITES`). Both write only the link, in one short transaction under the activity's record lock, then
+  wake the push.
 - **`calendar-poll`** (every `CALENDAR_POLL_MINUTES`, default 5, inside `CALENDAR_SYNC_HOURS`, default 07:00–22:00;
-  P2-5 adds one `pull` job per synced person): the outbox sweep (links dirty for over 2 minutes and not
+  P2-5 adds one `pull` job per synced person; the backfill recovery and the fallback tick use the same hours): the outbox sweep (links dirty for over 2 minutes and not
   waiting, oldest first, 200 per tick, as `push` jobs) and due connection checks (`pending` rows, `error` rows past
-  their backoff, 200 per tick, as `check` jobs). Two small indexed reads per tick.
+  their backoff, 200 per tick, as `check` jobs), and the backfill recovery above (P2-3c). Three small indexed reads per tick.
 - **`calendar-nightly`** (00:25, after the 00:20 reminders nightly): connection reconcile + due checks + the admins'
   problem digest (from P2-2b), the follow-up activity backfill (from P2-4), one more try for `error` links (and
-  `cancelled` / `removed_remote` links whose restore was refused) whose activity hasn't ended, `integration_secret_expiring` to admins, and expired leases cleared. Each step logs and never
+  `cancelled` / `removed_remote` links whose restore was refused) whose activity hasn't ended, `integration_secret_expiring` to admins, expired leases cleared, and Outlook delta windows re-baselined 30 days after their full sync (P2-5). Each step logs and never
   stops the others.
 - **Pull** (as of 2026-11-26, P2-5; `sync.pull.ts` `pullConnection`, `sync.classify.ts`, `sync.inbound.ts`,
   `providers/googleChanges.ts`, `providers/graphChanges.ts`): per synced person (row `ok`, user active,
@@ -824,9 +940,12 @@ job and the sweep (connection checks and the nightly connection steps still run)
   now, the page pull), the admin's `POST /api/admin/integrations/people/:username/calendar/sync`; pull jobs have
   one attempt (the next poll retries) and are moved back without an attempt when the lease is taken or the
   provider asks to wait. Webhooks (P2-7) are not used yet.
-- **Redis down**: §4.3. **Heartbeat**: `calendar:worker:heartbeat` (§4.1), shown on Admin › API Integrations.
+- **Redis down**: §4.3. **Heartbeat**: `calendar:worker:heartbeat` (§4.1), shown on Admin › API Integrations as
+  `workerStatus` (running / not running / unknown without Redis; P2-3c).
 - **View**: `ActivityView.calendar` ([API plan](api-plan.md)) gives the activity's calendar state (provider, state,
-  pending, invites, held count, last synced, link, error) to the owner; the send-invites action and the UI are P2-3c.
+  pending, invites, held count, whether invitations wait for the owner and why, last synced, link, error) to the owner
+  and editors; the activity drawer's `ActivitySyncStatus` shows it with Send invitations / Retry / Add again (P2-3c),
+  the list has a hidden Calendar column, and calendar items carry `syncState` for an error dot.
 
 ## 6. PDF generation
 
@@ -1151,6 +1270,33 @@ stays `BUSINESS_TIMEZONE`. Stored in `CompanyFormatSettings` ([database design �
   commission-limit message (`₹1,000` in both groupings; the frontend mirror formats with the live setting). With
   that, a save applies to every screen.
 
+### 8.9 Booking links (`/booking-links`, `/book/<slug>`, Calendar Phase 4)
+
+As of 2026-11-26. **Management** (`components/booking-links/`, React Query keys `['bookingLinks', …]`, refreshed by
+`notifyCrmUpdate('/api/booking-links')`): the user menu and the mobile drawer show **Booking links** when
+`GET /api/booking-links/access` says the switch is on and the user may create links or is an admin, or whenever the user
+owns a link (`ownsLinks`: one an admin made for them, or kept after their role lost the right; review fix, as of
+2026-11-26) so they can see its bookings and turn it off (`layout/useShowBookingLinks.ts`, cached 5 min). The page lists the user's links as cards (one column on phones, two on
+tablets, three on wide screens): copy link, open, on / off, edit, bookings (latest 50, links to the activities), new
+address. Admins get "Everyone's links" and an owner picker when creating. The create / edit dialog (full screen on
+phones) holds type, durations, location, note, weekly hours (`AvailabilityEditor`: each weekday on / off with up to
+three ranges, "Same for Monday to Friday"; plain buttons, no drag), buffers, notice, days ahead, bookings a day,
+reminder, phone / company questions and an optional related record. A link whose owner's company calendar is in error
+shows "Calendar problem: no times shown"; without a calendar, "CRM activities only". **Admin**: the
+`BookingLinksSettingsCard` on Admin › API Integrations (switch, who may create).
+
+**Public page** (`app/book/[slug]/page.tsx` → `components/booking/PublicBookingPage.tsx`): outside the app shell (no
+navbar, no auth redirect; `PasswordChangeGate` leaves `/book/` alone), `robots: noindex`, `referrer: no-referrer`,
+phone first. Duration picker (when several), a day strip (scrolls inside itself; previous / next week), the day's
+times as tap targets of 44 px, then name / email (+ phone / company when asked, + message) and a hidden honeypot. Times
+show in the visitor's browser time zone, or the company's on request; a time falling on another local date says so.
+A taken / expired time sends the visitor back to the refreshed times with a notice; what they typed is kept (the page
+holds the details, not the form). While another duration's times load, the previous duration's times are not shown
+(their tokens carry the old length), and the form header shows the length. Only a 404 shows "This booking page isn't
+available"; a request that got no answer (offline, API unreachable) shows a retryable "couldn't reach the booking
+service" (review fixes, as of 2026-11-26). The confirmation offers an `.ics`
+download (no email is sent). Theme tokens only (brand blue / green for selection and focus).
+
 ## 9. Deployment topology
 
 ```mermaid
@@ -1168,6 +1314,9 @@ flowchart TB
 
 - Production requires `JWT_SECRET` (≥ 32 chars) — the env schema refuses to start without it.
 - Behind a proxy (Azure App Service), `trust proxy` is set to 1 hop so rate limits see the client IP.
+- `BOOKING_SIGNING_KEY` (optional, ≥ 32 chars, same on every API instance): signs booking-page slot tokens; unset =
+  derived from `JWT_SECRET` (§3.6 Public booking pages). The public page needs the `trust proxy` setting above, or
+  every visitor shares one IP rate limit.
 - Migrations: `npm run db:deploy` (`prisma migrate deploy`). Reference data: `npm run seed`.
 - Chromium needs its system libraries and fonts on Linux; see the README's "Installing Chromium" section.
 - Health probe: `GET /api/health` (excluded from request logs).
@@ -1321,7 +1470,7 @@ Retention: `NOTIFICATION_RETENTION_DAYS` (90), `EMAIL_LOG_RETENTION_DAYS` (180).
 | Follow-up activities not yet run against SQL Server (P2-4) | As of 2026-11-26 the `20261127130000_followup_activities` migration (the `origin` column and the hand-written filtered index `UX_Activity_openFollowUp`) was checked with `prisma migrate diff`, and the write path, planner, locks, feed and backfill with unit tests and the in-memory double, but no real SQL Server run was made. Run `npm run db:deploy` on the dev database, then `npm run followups:backfill -- --dry-run` and the real run (or wait for the nightly step) before relying on it. The morning email deliberately leaves follow-up activities out (`origin <> 'followup'` in its activity sections: it lists follow-ups from the records); a parked hook comment (`morningSummary.sections.ts`) marks where they would join. |
 | Morning email not yet proven against the relay | The mail layer, EmailLog claims and the summary are unit-tested (STARTTLS enforcement against a fake SMTP server), and the job schedulers and the guarded unread-count cache were checked against a local Redis, but no real SMTP send or SQL Server run has been done yet; the first real send should be an admin's "Send me a test". `MORNING_SUMMARY_CRON` is read with a small cron subset for the catch-up check (numbers, names, ranges, lists, steps). |
 | "Add to Google Calendar" is a one-time copy | Moving the meeting in the CRM doesn't update the copy; real Google / Microsoft 365 sync is Calendar Phase 2 (needs HTTPS on a nandiniinfosys.com hostname). |
-| Calendar sync not yet complete (P2-1, P2-2b, P2-3b, P2-5) | As of 2026-11-26 admins connect the company calendars, everyone with a company email is enrolled and health-checked, enrolled people's activities are pushed to their calendars (P2-3b, §5.4), and changes made in the calendar come back by polling in office hours (P2-5, §5.4). Not yet: the first-sync backfill of existing activities and the send-invites action / UI (P2-3c), webhooks (P2-7, `webhooksActive` is false), imported calendar events (P2-8). Repeating events and events longer than 31 days are not synced back (the link says why); whether to support them is an open owner decision (R20). The P2-5 pull (Google sync tokens / 410 resync, Graph delta / re-baseline) was tested against the fake provider and hand-written provider answers only. Activities created while a person's row was stopped get no link until the P2-3c backfill. The P2-3b push code (`20261128100000_activity_calendar_sync`) was tested against the fake provider, recorded Google / Graph answers and in-memory doubles only; no real SQL Server, Google or Microsoft was reachable when it was built. The JWT signing, token exchanges, probes and error mapping were written against the providers' documented answers and tested with a local RSA key; no real Google / Microsoft / SQL Server call was made when P2-1, P2-2 and P2-2b were built. Each process pauses a provider by itself after a long 429 (not shared through Redis). |
+| Calendar sync not yet complete (P2-1, P2-2b, P2-3b, P2-3c, P2-5) | As of 2026-11-26 admins connect the company calendars, everyone with a company email is enrolled and health-checked, enrolled people's activities are pushed to their calendars (P2-3b, §5.4), the first-sync backfill, Send invitations and the sync status UI landed in P2-3c, and changes made in the calendar come back by polling in office hours (P2-5, §5.4). Not yet: webhooks (P2-7, `webhooksActive` is false), imported calendar events (P2-8). Repeating events and events longer than 31 days are not synced back (the link says why); whether to support them is an open owner decision (R20). The P2-5 pull (Google sync tokens / 410 resync, Graph delta / re-baseline) was tested against the fake provider and hand-written provider answers only. Activities created while a person's row was stopped get no link (the P2-3c backfill runs once, at the row's first `ok`). The P2-3b push code (`20261128100000_activity_calendar_sync`) was tested against the fake provider, recorded Google / Graph answers and in-memory doubles only; no real SQL Server, Google or Microsoft was reachable when it was built. The JWT signing, token exchanges, probes and error mapping were written against the providers' documented answers and tested with a local RSA key; no real Google / Microsoft / SQL Server call was made when P2-1, P2-2 and P2-2b were built. Each process pauses a provider by itself after a long 429 (not shared through Redis). |
 | Integrations key is a single point of loss | Losing `INTEGRATIONS_ENCRYPTION_KEY` makes stored secrets unreadable (re-enter them); keep it in the password manager (§9.2). |
 | Workers inside the API by default | Long imports share the event loop with requests unless `RUN_WORKERS=false` + separate worker. |
 | Rate limits fail open | Intentional for availability; brute-force protection disappears while Redis is down. |

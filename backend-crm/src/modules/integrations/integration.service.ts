@@ -35,7 +35,7 @@ import { parseServiceAccountKey, ServiceAccountKeyError, type ServiceAccountKey 
 import type { FetchImpl } from '../calendar-sync/providers/types.js';
 import { ADMIN_ERROR_MESSAGES, type TokenErrorCode } from '../calendar-sync/syncErrors.js';
 import { tokenSource } from '../calendar-sync/tokenSource.js';
-import { readWorkerHeartbeat } from '../calendar-sync/workerHeartbeat.js';
+import { isHeartbeatRedisReady, readWorkerHeartbeat, workerStatusOf, type WorkerStatus } from '../calendar-sync/workerHeartbeat.js';
 import { FOLLOWUP_TYPE_CATEGORY_KEY } from '../form-configs/formConfig.defaults.js';
 import { formConfigService, invalidateFormConfigCaches, type FormConfigsPayload } from '../form-configs/formConfig.service.js';
 import { isActivityOnlyFollowupType } from '../shared/followupTypes.js';
@@ -218,6 +218,10 @@ export interface IntegrationsAdminDto {
     fakeProvider: boolean;
     /** The calendar sync worker's last heartbeat (Redis key, P2-3b); null when no worker wrote it in the last 2 minutes or Redis is down. */
     worker: { lastSeenAt: string } | null;
+    /** The same as one word (P2-3c): running | not_seen (Redis up, no heartbeat) | no_redis (nothing to read). */
+    workerStatus: WorkerStatus;
+    /** CALENDAR_SYNC_ENABLED on this API (false = the push engine is switched off server-wide). */
+    syncEnabled: boolean;
     providers: ProviderAdminDto[];
     settings: CalendarSyncSettings;
     syncTypes: SyncTypeDto[];
@@ -583,6 +587,8 @@ export const integrationService = {
             webhooksActive: false,
             fakeProvider: isFakeProviderEnabled(),
             worker,
+            workerStatus: workerStatusOf(isHeartbeatRedisReady(), worker),
+            syncEnabled: ENV.INTEGRATIONS.SYNC_ENABLED,
             providers,
             settings: calendarSettingsFrom(configs),
             syncTypes: syncTypesFrom(configs),

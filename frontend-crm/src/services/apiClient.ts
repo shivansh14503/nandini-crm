@@ -91,6 +91,64 @@ export function subscribeApiErrors(listener: ApiErrorListener): () => void {
     };
 }
 
+/** Tells every listener about a failed request; a listener that throws is ignored. */
+export function notifyApiError(error: ApiClientError): void {
+    for (const listener of errorListeners) {
+        try {
+            listener(error);
+        } catch {
+            // A listener's own failure must not replace the request's error.
+        }
+    }
+}
+
+/**
+ * Session hold: set by AuthContext while the session-expired dialog is up (`sessionExpired`). The browser's session
+ * cookie is shared by every tab, so someone else may have signed in elsewhere in the meantime; until the user signs in
+ * again here, every request except the sign-in itself (POST /api/auth/login) and the session check (GET /api/auth/me)
+ * is refused locally with a 401, before it reaches the network. No background read can then load another account's
+ * data into this tab's cache, and no Save can write this user's draft under another account.
+ */
+let sessionOnHold = false;
+const HOLD_ALLOWED = new Set(['POST /api/auth/login', 'GET /api/auth/me']);
+const SESSION_HOLD_MESSAGE = 'Your session has ended. Sign in again to continue.';
+
+export function setSessionOnHold(onHold: boolean): void {
+    sessionOnHold = onHold;
+}
+
+/** The local 401 for a request refused by the session hold, or null when it may go out. */
+function sessionHoldError(method: string, endpoint?: string): ApiClientError | null {
+    if (!sessionOnHold) return null;
+    if (endpoint && HOLD_ALLOWED.has(`${method.toUpperCase()} ${endpoint.split('?')[0]}`)) return null;
+    return new ApiClientError(SESSION_HOLD_MESSAGE, 401, { message: SESSION_HOLD_MESSAGE, status: 401, code: 'SESSION_ON_HOLD' });
+}
+
+/**
+ * For the few callers that need `fetch` itself (files, PDFs): throws the session hold's 401 (and tells the error
+ * listeners, like apiClient does) while the session is on hold.
+ */
+export function assertSessionNotOnHold(): void {
+    const held = sessionHoldError('GET');
+    if (!held) return;
+    notifyApiError(held);
+    throw held;
+}
+
+/**
+ * `fetch` with the session cookie for a non-JSON response (a file download or preview): refused while the session is
+ * on hold, and a 401 answer is reported to the error listeners, so it ends the session like any API call. The caller
+ * still checks `response.ok`.
+ */
+export async function fetchWithSession(url: string, init: RequestInit = {}): Promise<Response> {
+    assertSessionNotOnHold();
+    const response = await fetch(url, { ...init, credentials: 'include' });
+    if (response.status === 401) {
+        notifyApiError(new ApiClientError(SESSION_HOLD_MESSAGE, 401, { message: SESSION_HOLD_MESSAGE, status: 401 }));
+    }
+    return response;
+}
+
 function buildUrl(endpoint: string, params?: PaginationParams): string {
     const cleanEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
     const base = `${ENV.API_URL}${cleanEndpoint}`;
@@ -139,6 +197,9 @@ async function request<T>(endpoint: string, options: RequestOptions = {}): Promi
     let currentOptions: RequestInit = fetchInit;
 
     try {
+        const held = sessionHoldError(fetchInit.method ?? 'GET', endpoint);
+        if (held) throw held;
+
         for (const interceptor of requestInterceptors) {
             const next = await interceptor(currentUrl, currentOptions);
             currentUrl = next.url;
@@ -180,13 +241,7 @@ async function request<T>(endpoint: string, options: RequestOptions = {}): Promi
         for (const onError of errorInterceptors) {
             await onError(normalized);
         }
-        for (const listener of errorListeners) {
-            try {
-                listener(normalized);
-            } catch {
-                // A listener's own failure must not replace the request's error.
-            }
-        }
+        notifyApiError(normalized);
         throw normalized;
     }
 }

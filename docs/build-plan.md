@@ -1,7 +1,7 @@
 # Nandini CRM — Build Plan
 
 > **Status:** living document. Part 1 records what has been built (reconstructed from git history, 115 commits
-> from 2026-10-15 to 2026-11-18; the snapshot as of 2026-11-26, Calendar Phase 2 P2-1, P2-2, P2-2b (admin-managed calendar connections), P2-3a, P2-3b (calendar push engine), P2-4 and P2-6 (busy times), Profile Phase 1: My Profile, Profile Phase 2: Admin › Users, Profile Phase 3: notifications & preferences, Profile Phase 4: connected accounts and Profile Phase 5 PR5a + PR5b: company formats, which completes Phase 17). Part 2
+> from 2026-10-15 to 2026-11-18; the snapshot as of 2026-11-26, Calendar Phase 2 P2-1, P2-2, P2-2b (admin-managed calendar connections), P2-3a, P2-3b (calendar push engine), P2-3c (backfill, send invitations, sync status), P2-4 and P2-6 (busy times), Calendar Phase 4 booking links, Profile Phase 1: My Profile, Profile Phase 2: Admin › Users, Profile Phase 3: notifications & preferences, Profile Phase 4: connected accounts and Profile Phase 5 PR5a + PR5b: company formats, which completes Phase 17). Part 2
 > is the roadmap. Tick
 > items off and add new ones as work lands.
 > Related: [System design](system-design.md) · [Database design](database-design.md) · [API plan](api-plan.md)
@@ -402,12 +402,33 @@ keeps wall-clock times); all-day activities are entered as business-timezone day
         job per recovery, a row stopped mid-push leaves the link `detached`. Notification kinds `calendar_sync_error`, `calendar_invites_held`, `integration_secret_expiring` (system,
         always deliver; bell icons). `ActivityView.calendar` (data only). `CALENDAR_SYNC_ENABLED`. Deviations: the
         `enrolled` job (replaces the per-user connect job) pushes dirty links only; the backfill of existing
-        activities is P2-3c; a follow-up activity moved in the calendar is moved back (the write-back to the record is
+        activities is P2-3c (done); a follow-up activity moved in the calendar is moved back (the write-back to the record is
         P2-5); the organizer columns stay out of the audited DTO and deleted `origin = 'calendar'` activities have no
         push rule yet (both P2-8); activities created while a row was stopped get no link until the P2-3c backfill.
         Tested against the fake provider, recorded Google / Graph answers and in-memory doubles; not run against a
         real SQL Server, Google or Microsoft.
-  - [ ] **P2-3c: backfill, send invitations, sync status UI**
+  - [x] **P2-3c: backfill, send invitations, sync status UI** (2026-11-26, admin-managed model, addendum §8.3) — no
+        migration. First-sync backfill (`sync.backfill.ts`): the `enrolled` job of a row that is `ok` with
+        `backfillCount` null copies the owner's Planned, create-eligible activities that aren't over and start within
+        `backfillDays` (keyset pages of 200, short transactions under the activity locks, D45 retry outside the
+        transaction), activities with guests as private copies (`invites='withhold'`, D23), then pushes them 100 per
+        round (`ENROLLED_PUSH_BATCH` = the spec's CONNECT_PUSH_BATCH); `backfilledAt` = a run stamp claimed first and reused by a re-run, `backfillCount` (links with the stamp) written last;
+        the poll tick re-queues rows `ok` without a backfill after a 10-minute grace, the Redis-down fallback tick
+        backfills one per tick. `POST /api/activities/:id/calendar-sync/retry` (owner / editors; Add again = a new
+        generation for an event deleted in the calendar; a non-owner's Add again on an activity with guests makes a
+        private copy, D41) and `/send-invites` (owner only, D41; refused while the event is gone; audited
+        `SEND_INVITES`). Held guests are kept by identity (`user:` / `contact:` keys), so a contact who gets an email
+        later stays held. `ActivityView.calendar.invitesWaiting` / `copyReason`, `CalendarItem.syncState`, own
+        calendar `backfill` progress, admin `workerStatus` / `syncEnabled`. UI: `ActivitySyncStatus` in the activity
+        drawer (state line, private copy / held boxes, Send invitations, Waiting for <owner>, Retry / Add again,
+        Open in Google Calendar / Outlook), calendar-aware delete / cancel / owner-change confirmations, the
+        Attendees hint, the list's hidden Calendar column, server skips in the bulk-delete toast, the calendar's
+        error dot, the admin Sync worker fact, the provider switch-on confirmation and the profile card's backfill
+        line. Deviations: Add again resets the link to a new generation (no `force` flag in job data); a backfilled
+        copy is told from others by `link.createdAt = connection.backfilledAt` (no column; done = `backfillCount` set); the `enrolled` job fires
+        on every recovery (P2-3b's push on recovery kept), the backfill runs only once; no per-activity notification
+        for backfilled private copies (the profile card shows the count). Tested with in-memory doubles and the
+        fake provider; not run against a real SQL Server, Google or Microsoft.
   - [x] **P2-4: follow-ups create activities** (2026-11-26) — migration `20261127130000_followup_activities`
         (`Activity.origin` `crm` / `followup` / `calendar`, hand-written filtered unique index
         `UX_Activity_openFollowUp`). `activity.followUp.ts`: pure planner `planFollowUpChange`,
@@ -463,6 +484,31 @@ keeps wall-clock times); all-day activities are entered as business-timezone day
         Microsoft: `getSchedule` under the Exchange RBAC scope (first-run check F7).
   - [ ] **P2-7: webhooks and HTTPS go-live**
   - [ ] **P2-8: customer meetings from the calendar + replies both ways** (optional, off by default)
+- [ ] **Phase 4 (later; spec §17)**: booking links, recurring activities, email logging.
+  - [x] **Booking links (public scheduling page on free/busy)** (2026-11-26) — migration `20261128120000_booking_links`
+        (`BookingLink`, `BookingLinkBooking`; `Activity.origin` gains `booking`, notification kind `booking_created`).
+        Company switch (default off) and "who may create links" (everyone / managers and admins / admins) on Admin ›
+        API Integrations (`ModuleSetting activities/bookingLinks`). `/booking-links` (user menu and mobile drawer):
+        an employee's links (admins: everyone's, and links for a colleague), create / edit (type, durations, location,
+        note, weekly hours in the business zone, buffers, notice, days ahead, bookings a day, reminder, phone /
+        company questions, optional related record), copy, on / off, new address, latest bookings. Public page
+        `/book/<slug>` (no sign-in, no app shell, phone first): free starts from the owner's CRM activities and
+        company calendar through P2-6 `busyTimes` (fail closed when the calendar can't be read), HMAC-signed slot
+        tokens (`BOOKING_SIGNING_KEY` or derived from `JWT_SECRET`), booking re-checked in one transaction under a
+        per-owner lock (D45), a Meeting activity through `insertSystemActivity` (actor `system`, origin `booking`,
+        the visitor as an `email` attendee, a single matching Contact linked), the owner's bell notification, an
+        on-page confirmation with an `.ics` file (no email: the mail layer stays parked). Public API: own router,
+        16 KB body, one identical 404, rate limits per IP and per link (in-process fallback, never open), honeypot,
+        audit route `public:booking`. No job, no polling (DB wakes only when a page is open). Calendar push follows
+        automatically once P2-3b's write hook is merged (invitation held for the owner under D41). Review fixes
+        (2026-11-26): per-link limits count only real attempts; slot pages read busy times in fixed 14-day blocks and
+        bookings re-read on their own provider budget; a resubmitted token gets its confirmation even after the busy
+        check or expiry would refuse it; owners of links always see the menu item (`ownsLinks`); the page keeps typed
+        details, hides another duration's times while loading and retries after network errors. Not run against a
+        real SQL Server, Google or Microsoft (doubles only). Later: email confirmations and visitor cancel /
+        reschedule (mail layer), team / round-robin links, custom questions.
+  - [ ] Recurring activities (CRM-authored series, R12 occurrence rows).
+  - [ ] Email logging.
 
 ### Phase 15 — Documents (P2, 2026-11-25)
 

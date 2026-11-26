@@ -1,23 +1,16 @@
 'use client';
 
-import { useEffect } from 'react';
-import { useRouter } from 'next/navigation';
 import { Box, Container } from '@mui/material';
 import { useAuth } from '@/context/AuthContext';
-import { ROUTES } from '@/config/constants';
+import { useRequireAuth } from '@/hooks/useRequireAuth';
 import { Navbar } from '@/components/layout/Navbar';
 import { LoadingScreen } from '@/components/common/LoadingScreen';
 import ContractForm from '@/components/contracts/ContractForm';
 
 export default function NewContractPage() {
-    const router = useRouter();
-    const { user, loading, isAuthenticated } = useAuth();
+    const { user, loading } = useAuth();
 
-    useEffect(() => {
-        if (!loading && !isAuthenticated) {
-            router.push(ROUTES.LOGIN);
-        }
-    }, [isAuthenticated, loading, router]);
+    useRequireAuth();
 
     if (loading) return <LoadingScreen message="Loading..." />;
     if (!user) return null;

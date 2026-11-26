@@ -318,9 +318,19 @@ export function EmailValidationView() {
     });
 
     if (summary.isLoading) return <TableSkeleton rows={8} columns={5} />;
-    if (summary.isError || !summary.data) {
+    // Full-page error only when nothing has loaded yet: a failed background refresh (e.g. one poll during a check) keeps
+    // the page, its selection and its inputs, with a warning below the header.
+    if (!summary.data) {
         return (
-            <Alert severity="error" sx={{ borderRadius: '10px' }}>
+            <Alert
+                severity="error"
+                sx={{ borderRadius: '10px', alignItems: 'center' }}
+                action={
+                    <Button size="small" variant="outlined" sx={secondaryButtonSx} onClick={() => void summary.refetch()} disabled={summary.isFetching}>
+                        Try again
+                    </Button>
+                }
+            >
                 {errorMessage(summary.error, 'Could not load email validation.')}
             </Alert>
         );
@@ -395,6 +405,20 @@ export function EmailValidationView() {
                     </Typography>
                 </Box>
             </Box>
+
+            {summary.isError && (
+                <Alert
+                    severity="warning"
+                    sx={{ borderRadius: '10px', fontSize: '0.8rem', alignItems: 'center' }}
+                    action={
+                        <Button size="small" variant="outlined" sx={secondaryButtonSx} onClick={() => void summary.refetch()} disabled={summary.isFetching}>
+                            Try again
+                        </Button>
+                    }
+                >
+                    Could not refresh email validation. Showing the last loaded counts.
+                </Alert>
+            )}
 
             {!enabled && <Alert severity="warning" sx={{ overflowWrap: 'anywhere' }}>Email verification is turned off on the server (EMAIL_VERIFICATION_ENABLED=false), so checks can&apos;t run.</Alert>}
             {enabled && !providerConfigured && (

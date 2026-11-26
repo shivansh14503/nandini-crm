@@ -28,6 +28,7 @@ import LogoutIcon from '@mui/icons-material/Logout';
 import PersonIcon from '@mui/icons-material/Person';
 import AddIcon from '@mui/icons-material/Add';
 import AdminPanelSettingsOutlinedIcon from '@mui/icons-material/AdminPanelSettingsOutlined';
+import EventAvailableOutlinedIcon from '@mui/icons-material/EventAvailableOutlined';
 import MenuIcon from '@mui/icons-material/Menu';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import { getModuleColor, moduleForPath } from '@/theme/moduleColors';
@@ -38,6 +39,7 @@ import { APP_CONFIG, ROUTES } from '@/config/constants';
 import { ModuleDot, navGroupsFor, type NavGroup, type NavLinkItem } from './navItems';
 import { MobileNavDrawer } from './MobileNavDrawer';
 import { NotificationBell } from './NotificationBell';
+import { useShowBookingLinks } from './useShowBookingLinks';
 import { useDropdown } from './useDropdown';
 import { UserAvatar, displayName } from '@/components/common/UserAvatar';
 import type { User } from '@/types/auth.types';
@@ -299,6 +301,7 @@ function UserMenu({
     compact?: boolean;
 }) {
     const { open, close, menuId, setAnchorEl, anchorEl, hoverProps, triggerProps, handleClickAway } = useDropdown();
+    const showBookingLinks = useShowBookingLinks();
 
     const name = displayName(user);
 
@@ -408,6 +411,26 @@ function UserMenu({
                                             <PersonIcon fontSize="small" />
                                             My Profile
                                         </MenuItem>
+                                        {showBookingLinks && (
+                                            <MenuItem
+                                                id="booking-links-btn"
+                                                component={Link}
+                                                href={ROUTES.BOOKING_LINKS}
+                                                onClick={close}
+                                                sx={{
+                                                    textDecoration: 'none',
+                                                    fontSize: '0.82rem',
+                                                    color: 'var(--crm-gray-700)',
+                                                    px: 2,
+                                                    py: 0.9,
+                                                    gap: 1.5,
+                                                    '&:hover': { backgroundColor: 'var(--mui-palette-primary-soft)', color: 'var(--mui-palette-primary-main)' },
+                                                }}
+                                            >
+                                                <EventAvailableOutlinedIcon fontSize="small" />
+                                                Booking links
+                                            </MenuItem>
+                                        )}
                                         <MenuItem
                                             id="admin-panel-btn"
                                             component={Link}
