@@ -37,6 +37,15 @@ export function activeOptionValues(category: DropdownCategoryDto | undefined, fa
 export const FOLLOWUP_TYPE_CATEGORY_KEY = 'shared_followup_type';
 
 /**
+ * Built-in fields an admin can't make Required (backend formConfig.defaults.ts NEVER_REQUIRED_FIELDS): whether they can
+ * be filled in depends on the record (P3-1 Video meeting: the activity's type and the owner's company calendar).
+ */
+export const NEVER_REQUIRED_FIELDS: Readonly<Partial<Record<string, readonly string[]>>> = {
+    activities: ['videoMeeting'],
+};
+export const isNeverRequiredField = (module: string, fieldKey: string): boolean => NEVER_REQUIRED_FIELDS[module]?.includes(fieldKey) ?? false;
+
+/**
  * The options a module's form offers from a dropdown. Task and Note of the shared Followup Type list are offered on
  * Activities only: leads and opportunities share the list but not those two (their APIs refuse them too). Every
  * other list, and every list when no module is given, is returned unchanged.

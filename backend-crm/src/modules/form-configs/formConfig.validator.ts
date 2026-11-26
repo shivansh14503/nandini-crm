@@ -4,6 +4,7 @@ import { CATEGORY_MODULES, CRM_MODULES, CUSTOM_FIELD_TYPES, FIELD_SIZES } from '
 import { CLOSES_LEAD_META_KEY, RATING_RULE_META_KEY, ratingLimitsSchema, ratingRuleSchema } from '../leads/lead.rating.js';
 import { NO_FOLLOW_UP_META_KEY, OPPORTUNITY_STAGES_META_KEY, opportunityStagesSchema } from '../opportunities/opportunity.followUp.js';
 import { CALENDAR_SYNC_META_KEY, CALENDAR_SYNC_SETTING_KEY, calendarSyncSettingsSchema } from '../integrations/calendarSyncSettings.js';
+import { VIDEO_MEETING_META_KEY } from '../calendar-sync/conference.rules.js';
 import { BOOKING_SETTING_KEY, bookingSettingsSchema } from '../booking-links/bookingLink.settings.js';
 
 /**
@@ -41,7 +42,7 @@ const label = (field: string, max: number) =>
  * Free-form option meta, except the keys the app reads: a Customer Response option's Rating rule (`ratingRule`),
  * Sales Stages (`opportunityStages`) and "No follow-up" switch (`noFollowUp`), a Status option's "Closes the
  * lead" switch (`closesLead`), and a Followup Type option's "Send to calendars" switch (`calendarSync`, Admin › API
- * Integrations). docs/lead-rating-rules.md, docs/api-plan.md (Opportunities, Integrations).
+ * Integrations) and "Video meeting" switch (`videoMeeting`, Calendar Phase 3). docs/lead-rating-rules.md, docs/api-plan.md (Opportunities, Integrations).
  */
 const metaSchema = z
     .record(z.string(), z.unknown())
@@ -64,6 +65,9 @@ const metaSchema = z
         }
         if (CALENDAR_SYNC_META_KEY in meta && typeof meta[CALENDAR_SYNC_META_KEY] !== 'boolean') {
             ctx.addIssue({ code: 'custom', path: [CALENDAR_SYNC_META_KEY], message: '"Send to calendars" must be on or off.' });
+        }
+        if (VIDEO_MEETING_META_KEY in meta && typeof meta[VIDEO_MEETING_META_KEY] !== 'boolean') {
+            ctx.addIssue({ code: 'custom', path: [VIDEO_MEETING_META_KEY], message: '"Video meeting" must be on or off.' });
         }
     });
 

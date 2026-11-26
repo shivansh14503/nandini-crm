@@ -60,9 +60,11 @@ export interface DrawerCopyButtonProps {
     text: string;
     title?: string;
     iconColor?: string;
+    /** Minimum tap target in px (e.g. 32 in touch-dense rows); default: MUI's small IconButton. */
+    minTarget?: number;
 }
 
-export function DrawerCopyButton({ text, title = 'Copy', iconColor }: DrawerCopyButtonProps) {
+export function DrawerCopyButton({ text, title = 'Copy', iconColor, minTarget }: DrawerCopyButtonProps) {
     const [status, setStatus] = React.useState<'idle' | 'copied' | 'failed'>('idle');
     React.useEffect(() => {
         if (status === 'idle') return;
@@ -79,7 +81,7 @@ export function DrawerCopyButton({ text, title = 'Copy', iconColor }: DrawerCopy
     const tooltip = status === 'copied' ? 'Copied!' : status === 'failed' ? 'Copy failed' : title;
     return (
         <Tooltip title={tooltip} open={status !== 'idle' ? true : undefined} placement="top">
-            <IconButton size="small" onClick={handleClick} aria-label={title}>
+            <IconButton size="small" onClick={handleClick} aria-label={title} sx={minTarget ? { minWidth: minTarget, minHeight: minTarget } : undefined}>
                 {status === 'copied' ? (
                     <CheckIcon sx={{ fontSize: 14, color: 'var(--mui-palette-success-main)' }} />
                 ) : (

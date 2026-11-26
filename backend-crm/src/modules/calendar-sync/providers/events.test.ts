@@ -96,6 +96,31 @@ describe('Google event operations', () => {
         assert.deepEqual(body.attendees, [], 'the old guests are cleared, not kept by the PATCH');
     });
 
+    it('Meet (P3-1): create asks with conferenceDataVersion=1 and the createRequest; the answer carries the link', async () => {
+        const meet = {
+            conferenceData: {
+                conferenceId: 'abc-defg-hij',
+                conferenceSolution: { key: { type: 'hangoutsMeet' } },
+                entryPoints: [{ entryPointType: 'video', uri: 'https://meet.google.com/abc-defg-hij' }],
+                createRequest: { requestId: 'rq-c1', status: { statusCode: 'success' } },
+            },
+            hangoutLink: 'https://meet.google.com/abc-defg-hij',
+        };
+        const { fetchImpl, calls } = fakeFetch([
+            route(eventsUrl, () => ({ status: 200, body: googleEvent(meet) }), 'POST'),
+            route(`${eventsUrl}/evt1?`, () => ({ status: 200, body: googleEvent({ id: 'evt1' }) }), 'PATCH'),
+        ]);
+        const adapter = createGoogleAdapter({ fetchImpl });
+        const event = await adapter.createEvent(ctx(), input({ conference: { kind: 'meet', requestId: 'rq-c1' } }));
+        assert.equal(calls[0].url, `${eventsUrl}?sendUpdates=all&conferenceDataVersion=1`);
+        assert.deepEqual((calls[0].json as Record<string, unknown>).conferenceData, { createRequest: { requestId: 'rq-c1', conferenceSolutionKey: { type: 'hangoutsMeet' } } });
+        assert.equal(event.conference?.status, 'ready');
+        assert.equal(event.conference?.joinUrl, 'https://meet.google.com/abc-defg-hij');
+        await adapter.patchEvent(ctx(), 'evt1', { groups: ['conference'], crm, timeZone: 'Asia/Kolkata', sendUpdates: false, conference: { kind: 'remove' } });
+        assert.equal(calls[1].url, `${eventsUrl}/evt1?sendUpdates=none&conferenceDataVersion=1`);
+        assert.deepEqual(calls[1].json, { conferenceData: null });
+    });
+
     it('patch sends only the changed groups with If-Match; cancel answers gone on 410; get answers null on 404', async () => {
         const { fetchImpl, calls } = fakeFetch([
             route(`${eventsUrl}/evt1?`, () => ({ status: 200, body: googleEvent({ id: 'evt1' }) }), 'PATCH'),
@@ -153,6 +178,18 @@ describe('Graph event operations (app-only: /users/{mailbox})', () => {
         assert.equal(event.shape.when.start, '2026-12-01T04:30:00.000Z');
         assert.equal(event.crmActivityId, 'act-1');
         assert.equal(event.etag, 'W/"DwAAABYAAAA="');
+    });
+
+    it('Teams (P3-1): create sets isOnlineMeeting / teamsForBusiness; onlineMeeting.joinUrl is read', async () => {
+        const { fetchImpl, calls } = fakeFetch([
+            route(mailboxUrl, () => ({ status: 201, body: graphEvent({ isOnlineMeeting: true, onlineMeetingProvider: 'teamsForBusiness', onlineMeeting: { joinUrl: 'https://teams.microsoft.com/l/meetup-join/19%3ameeting' } }) }), 'POST'),
+        ]);
+        const event = await createMicrosoftAdapter({ fetchImpl }).createEvent(ctx({ calendarId: '' }), input({ conference: { kind: 'teams' } }));
+        const body = calls[0].json as Record<string, unknown>;
+        assert.equal(body.isOnlineMeeting, true);
+        assert.equal(body.onlineMeetingProvider, 'teamsForBusiness');
+        assert.equal(event.conference?.provider, 'teams');
+        assert.equal(event.conference?.joinUrl, 'https://teams.microsoft.com/l/meetup-join/19%3ameeting');
     });
 
     it('patch / get / delete use the mailbox path; no /me anywhere', async () => {

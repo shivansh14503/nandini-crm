@@ -18,6 +18,7 @@ import {
     requiredText,
 } from '../../validators/common.js';
 import { pastValueIssues } from '../../validators/notInPast.js';
+import { VIDEO_PROVIDERS } from '../calendar-sync/conference.rules.js';
 import {
     ACTIVITY_DEFAULT_STATUS,
     ACTIVITY_RELATED_MODULES,
@@ -102,6 +103,16 @@ function compact<T extends object>(value: T): T {
 
 const SCHEDULE_KEYS = ['startAt', 'endAt', 'startDay', 'endDay', 'reminder', 'location', 'customerResponse'] as const;
 
+/**
+ * Video meeting (Calendar Phase 3, P3-1): `meet` | `teams` | `zoom` (P3-2: refused as not available). `''` / null =
+ * none; missing = keep what is stored (system writes that don't name it). Whether the owner can have it is checked by
+ * activity.conference.ts.
+ */
+const videoMeetingSchema = z.preprocess(
+    (value) => (value === '' ? null : value),
+    z.enum(VIDEO_PROVIDERS, { error: `Video meeting must be one of: ${VIDEO_PROVIDERS.join(', ')}.` }).nullable().optional(),
+);
+
 export const activityInputSchema = z
     .object({
         // Same list as the Lead / Opportunity Followup Type (admin-customizable, so plain text); Task / Note have rules.
@@ -124,6 +135,7 @@ export const activityInputSchema = z
         allDay: z.preprocess((value) => (value === null || value === '' ? undefined : value), z.boolean({ error: 'All Day must be true or false.' }).default(false)),
         reminder: optionalEnum('Reminder', ACTIVITY_REMINDERS),
         location: optionalText('Location', L.address),
+        videoMeeting: videoMeetingSchema,
         customerResponse: optionalText('Customer Response', L.option),
         remarks: optionalDescription('Remarks'),
         attendees: z.preprocess(
@@ -166,14 +178,16 @@ export const activityInputSchema = z
             for (const key of SCHEDULE_KEYS) cleared[key] = undefined;
             attendees = [];
             status = COMPLETED_STATUS;
-            return { ...activity, ...cleared, allDay: false, location: undefined, status, attendees };
+            return { ...activity, ...cleared, allDay: false, location: undefined, videoMeeting: null, status, attendees };
         }
+        let { videoMeeting } = activity;
         if (activity.followupType === TASK_TYPE) {
-            // A task is a to-do of its owner: no invitees, no place.
+            // A task is a to-do of its owner: no invitees, no place, no video meeting.
             attendees = [];
             location = undefined;
+            videoMeeting = null;
         }
-        return { ...activity, status, location, attendees };
+        return { ...activity, status, location, videoMeeting, attendees };
     });
 
 export type ActivityInput = z.infer<typeof activityInputSchema>;

@@ -44,8 +44,8 @@ export interface PlanInput {
 
 /** Groups a Completed activity may still change on its event (completion never moves the event, §11.2). */
 const COMPLETED_GROUPS: ReadonlySet<FieldGroup> = new Set<FieldGroup>(['subject', 'location', 'attendees', 'description']);
-/** Every group a patch can write (status changes go through cancel / create, never a patch). */
-const PATCHABLE_GROUPS: readonly FieldGroup[] = ['subject', 'when', 'location', 'attendees', 'reminder', 'description'];
+/** Every group a patch can write (status changes go through cancel / create, never a patch). `conference`: P3-1. */
+const PATCHABLE_GROUPS: readonly FieldGroup[] = ['subject', 'when', 'location', 'attendees', 'reminder', 'description', 'conference'];
 
 export function planPush(input: PlanInput): PushPlan {
     const { activity, link, crmNow } = input;

@@ -33,7 +33,7 @@ import {
  *                                          workerStatus (running|not_seen|no_redis), syncEnabled, providers: ProviderAdminDto[]
  *                                          (P2-7: + webhook { status: live|starting|errors|off|unavailable, reason, active,
  *                                          failed, waiting } | null),
- *                                          settings: CalendarSyncSettings, syncTypes: [{ value, label, calendarSync, locked, lockReason? }] }
+ *                                          settings: CalendarSyncSettings, syncTypes: [{ value, label, calendarSync, videoMeeting, locked, lockReason? }] }
  *   PUT    /providers/:provider        { enabled?, serviceAccountKey? (google: the key file's text, write-only),
  *                                        clientId? (microsoft, zoom), clientSecret? (microsoft, zoom; write-only, ≥ 8 chars),
  *                                        webhookSecret? (zoom), clientSecretExpiresOn? (YYYY-MM-DD | null; microsoft, zoom),
@@ -52,6 +52,8 @@ import {
  *   PUT    /settings                   partial CalendarSyncSettings → CalendarSyncSettings (ModuleSetting activities/calendarSync).
  *                                        409 DOMAIN_IN_USE when a removed company domain is still a provider's.
  *   PUT    /sync-types                 { "<Followup Type>": boolean } → syncTypes (option meta calendarSync; Task / Note refused)
+ *   PUT    /video-types                { "<Followup Type>": boolean } → syncTypes (option meta videoMeeting: offers a Video
+ *                                        meeting on the activity form; Task / Note refused; Calendar Phase 3, P3-1)
  *   GET    /people                     ?search&issue=any|missing|duplicate|not_company|calendar_problem → active non-group users
  *                                        [{ username, fullName, department, role, email, emailIssue,
  *                                           calendar: { target, reason, connection, choice } }]
@@ -136,6 +138,10 @@ router.put('/settings', validateRequest({ body: settingsBodySchema }), async (re
 
 router.put('/sync-types', validateRequest({ body: syncTypesBodySchema }), async (req: Request, res: Response) => {
     sendSuccess(res, await integrationService.saveSyncTypes(req.body, requireUser(req)), 'Saved');
+});
+
+router.put('/video-types', validateRequest({ body: syncTypesBodySchema }), async (req: Request, res: Response) => {
+    sendSuccess(res, await integrationService.saveVideoTypes(req.body, requireUser(req)), 'Saved');
 });
 
 router.get('/people', validateRequest({ query: peopleQuerySchema }), async (req: Request, res: Response) => {

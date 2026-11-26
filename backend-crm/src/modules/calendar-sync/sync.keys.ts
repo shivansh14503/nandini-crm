@@ -52,6 +52,11 @@ export function enrolledJobId(connectionId: string, enrolledAt: Date, readyAt: D
     return `enrolled-${connectionId}-${enrolledAt.getTime()}-r${readyAt.getTime()}`;
 }
 
+/** `conference-<linkId>-<request>-<attempt>`: one read per video-link request and try (Calendar Phase 3 P3-1). */
+export function conferenceJobId(linkId: string, request: number, attempt: number): string {
+    return `conference-${linkId}-${request}-${attempt}`;
+}
+
 /** `check-<connectionId>-<minute>`: at most one queued health check per row and minute. */
 export function checkJobId(connectionId: string, now: Date): string {
     return `check-${connectionId}-${Math.floor(now.getTime() / 60_000)}`;

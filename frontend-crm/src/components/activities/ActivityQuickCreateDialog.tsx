@@ -94,6 +94,7 @@ function QuickCreateContent({ prefill, onClose, onSaved }: Omit<ActivityQuickCre
                 start: v.followupType === NOTE_TYPE ? undefined : v.startAt,
                 end: v.followupType === NOTE_TYPE ? undefined : v.endAt,
                 allDay: v.allDay,
+                video: v.videoMeeting,
             })
         );
     };

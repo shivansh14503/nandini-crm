@@ -4,10 +4,12 @@ import React from 'react';
 import { Box, Typography } from '@mui/material';
 import type { SvgIconComponent } from '@mui/icons-material';
 import CheckCircleOutlinedIcon from '@mui/icons-material/CheckCircleOutlined';
+import VideocamOutlinedIcon from '@mui/icons-material/VideocamOutlined';
 import { getModuleColor } from '@/theme/moduleColors';
 import { CANCELLED_STATUS, COMPLETED_STATUS, type CalendarItem } from '@/types/activity.types';
 import type { CalendarHoliday } from '@/types/holiday.types';
 import { relatedModuleLabel } from '../activityLinks';
+import { JoinMeetingActions, providerOfJoinUrl } from '../VideoMeeting';
 
 export interface EventContentProps {
     item: CalendarItem;
@@ -70,6 +72,8 @@ export function EventContent({ item, Icon, timeText, list = false, compact = fal
     const completed = item.module === 'activities' && item.status === COMPLETED_STATUS;
     const cancelled = item.module === 'activities' && item.status === CANCELLED_STATUS;
     const StatusIcon = completed ? CheckCircleOutlinedIcon : null;
+    // A ready video meeting (P3-1): a camera on the chip, Join + copy on the agenda row.
+    const joinUrl = item.conferenceJoinUrl || '';
     const titleSx = {
         fontSize: 'inherit',
         fontWeight: 700,
@@ -142,6 +146,11 @@ export function EventContent({ item, Icon, timeText, list = false, compact = fal
                     )}
                 </Box>
                 {syncError && <SyncErrorDot size={8} />}
+                {joinUrl && !cancelled && (
+                    <Box sx={{ flexShrink: 0 }}>
+                        <JoinMeetingActions url={joinUrl} provider={providerOfJoinUrl(joinUrl)} compact />
+                    </Box>
+                )}
                 {StatusIcon && <StatusIcon sx={{ fontSize: 16, color: 'var(--mui-palette-success-main)', flexShrink: 0 }} />}
             </Box>
         );
@@ -183,6 +192,7 @@ export function EventContent({ item, Icon, timeText, list = false, compact = fal
         >
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, minWidth: 0 }}>
                 <Icon sx={{ fontSize: 13, color: colors.icon, flexShrink: 0 }} />
+                {joinUrl && <VideocamOutlinedIcon titleAccess="Video meeting" sx={{ fontSize: 13, color: colors.icon, flexShrink: 0 }} />}
                 {timeText && (compact || !item.allDay) && (
                     <Box component="span" sx={{ fontWeight: 600, whiteSpace: 'nowrap', flexShrink: 0 }}>
                         {timeText}

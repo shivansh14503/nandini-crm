@@ -469,6 +469,10 @@ export default function CalendarView() {
     );
 
     const onEventClick = useCallback((info: EventClickInfo) => {
+        // P3-1: Join / copy inside an agenda entry act on their own (open the meeting, copy the link), so the click
+        // (or Enter key) keeps its default and the drawer stays closed. FullCalendar runs this before React handlers.
+        const target = info.jsEvent.target;
+        if (target instanceof Element && target.closest('[data-calendar-action]')) return;
         info.jsEvent.preventDefault();
         const item = info.event.extendedProps.item as CalendarItem | undefined;
         // Holidays have no record to open.

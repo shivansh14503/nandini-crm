@@ -1,4 +1,4 @@
-import { toGoogleEvent, toGooglePatch } from '../sync.mapping.google.js';
+import { googleConferenceQuery, toGoogleEvent, toGooglePatch } from '../sync.mapping.google.js';
 import { normalizeGoogle } from '../sync.shapes.js';
 import { ProviderBadRequestError, ProviderConflictError, providerFetch, ProviderNotFoundError, RequestedIdTakenError } from './http.js';
 import { googleCalendarUrl } from './google.js';
@@ -27,7 +27,8 @@ export function googleEventOps(fetchImpl?: FetchImpl): EventOps {
         return json;
     };
 
-    const fullBody = (input: CreateEventInput) => toGoogleEvent(input.crm, { ...input.event, requestedId: input.requestedId, attendees: input.attendees });
+    const fullBody = (input: CreateEventInput) =>
+        toGoogleEvent(input.crm, { ...input.event, requestedId: input.requestedId, attendees: input.attendees, conference: input.conference });
 
     const getEvent: EventOps['getEvent'] = async (ctx, id) => {
         try {
@@ -45,7 +46,7 @@ export function googleEventOps(fetchImpl?: FetchImpl): EventOps {
      */
     const rewrite = async (ctx: CallCtx, input: CreateEventInput, operation: string) => {
         const { id: _id, ...body } = fullBody(input);
-        const json = await call(ctx, 'PATCH', `${eventUrl(ctx, input.requestedId)}?${send(input.sendUpdates)}`, operation, {
+        const json = await call(ctx, 'PATCH', `${eventUrl(ctx, input.requestedId)}?${send(input.sendUpdates)}${googleConferenceQuery(input.conference)}`, operation, {
             ...body,
             attendees: body.attendees ?? [],
             status: 'confirmed',
@@ -56,7 +57,7 @@ export function googleEventOps(fetchImpl?: FetchImpl): EventOps {
     return {
         async createEvent(ctx, input) {
             try {
-                const json = await call(ctx, 'POST', `${eventsUrl(ctx)}?${send(input.sendUpdates)}`, 'create-event', fullBody(input));
+                const json = await call(ctx, 'POST', `${eventsUrl(ctx)}?${send(input.sendUpdates)}${googleConferenceQuery(input.conference)}`, 'create-event', fullBody(input));
                 return normalizeGoogle(json, ctx.accountEmail);
             } catch (err) {
                 if (!(err instanceof ProviderConflictError)) throw err;
@@ -70,8 +71,9 @@ export function googleEventOps(fetchImpl?: FetchImpl): EventOps {
         },
 
         async patchEvent(ctx, id, input) {
-            const body = toGooglePatch(input.groups, input.crm, { timeZone: input.timeZone, attendees: input.attendees, description: input.description });
-            const json = await call(ctx, 'PATCH', `${eventUrl(ctx, id)}?${send(input.sendUpdates)}`, 'patch-event', body, input.etag ? { 'If-Match': input.etag } : {});
+            const body = toGooglePatch(input.groups, input.crm, { timeZone: input.timeZone, attendees: input.attendees, description: input.description, conference: input.conference });
+            const conferenceQuery = input.groups.includes('conference') ? googleConferenceQuery(input.conference) : '';
+            const json = await call(ctx, 'PATCH', `${eventUrl(ctx, id)}?${send(input.sendUpdates)}${conferenceQuery}`, 'patch-event', body, input.etag ? { 'If-Match': input.etag } : {});
             return normalizeGoogle(json, ctx.accountEmail);
         },
 

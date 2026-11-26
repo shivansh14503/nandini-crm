@@ -12,13 +12,14 @@ import { ROUTES } from '@/config/constants';
 import { useRecordActivities } from '@/hooks/queries/useActivities';
 import { findCrmUser } from '@/services/masterData.store';
 import { getModuleColor } from '@/theme/moduleColors';
-import { COMPLETED_STATUS, isFollowUpActivity, NOTE_TYPE, PLANNED_STATUS, TASK_TYPE, type Activity } from '@/types/activity.types';
+import { COMPLETED_STATUS, isFollowUpActivity, isVideoProvider, NOTE_TYPE, PLANNED_STATUS, TASK_TYPE, type Activity } from '@/types/activity.types';
 import type { ActivityFormValues } from '@/validations/activity.schema';
 import { instantToZonedWallClock } from '@/utils/zonedTime';
 import { useFollowUpActivitiesOn } from '@/utils/followUpActivities';
 import { ActivityDetailDrawer } from '@/components/activities/ActivityDetailDrawer';
 import { ActivityQuickCreateDialog } from '@/components/activities/ActivityQuickCreateDialog';
 import { ActivityStatusPill, ActivityTypeIcon, FollowUpChip, useActivityTypeLabel } from '@/components/activities/ActivityBadges';
+import { JoinMeetingActions, VideoMeetingIcon } from '@/components/activities/VideoMeeting';
 import { activitySortTime, formatActivityWhen, isActivityOverdue, useBusinessClock } from '@/components/activities/activityTime';
 import { formatFollowUpSlot } from '@/components/forms/FollowUpDecision';
 import { NestedDrawerLayer } from '../RaisedLayer';
@@ -75,8 +76,14 @@ function ActivityRow({ activity, now, timeZone, onOpen }: { activity: Activity; 
     const color = getModuleColor('activities');
     const when = isNote ? '' : formatActivityWhen(activity, activity.timeZone || timeZone, now);
     const secondary = [typeLabel || activity.followupType, when, userName(activity.assignedTo)].filter(Boolean).join(' · ');
+    // A ready video meeting (P3-1): a camera beside the subject, and Join + copy while it is still planned. The row is
+    // then a div (a link can't sit inside a <button>); ButtonBase keeps it focusable and Enter / Space open it.
+    const joinUrl = activity.conferenceJoinUrl || '';
+    const provider = isVideoProvider(activity.videoMeeting) ? activity.videoMeeting : undefined;
+    const showJoin = Boolean(joinUrl && provider && activity.status === PLANNED_STATUS);
     return (
         <ButtonBase
+            component={showJoin ? 'div' : 'button'}
             onClick={onOpen}
             sx={{
                 width: '100%',
@@ -110,17 +117,20 @@ function ActivityRow({ activity, now, timeZone, onOpen }: { activity: Activity; 
                 <ActivityTypeIcon type={activity.followupType} sx={{ fontSize: 17, color: color.main }} />
             </Box>
             <Box sx={{ minWidth: 0, flex: 1 }}>
-                <Typography
-                    noWrap
-                    sx={{
-                        fontSize: '0.84rem',
-                        fontWeight: 700,
-                        color: activity.status === 'Cancelled' ? 'var(--mui-palette-text-muted)' : 'var(--crm-slate-900)',
-                        textDecoration: activity.status === 'Cancelled' ? 'line-through' : 'none',
-                    }}
-                >
-                    {activity.subject || '-'}
-                </Typography>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, minWidth: 0 }}>
+                    {joinUrl && <VideoMeetingIcon provider={provider} />}
+                    <Typography
+                        noWrap
+                        sx={{
+                            fontSize: '0.84rem',
+                            fontWeight: 700,
+                            color: activity.status === 'Cancelled' ? 'var(--mui-palette-text-muted)' : 'var(--crm-slate-900)',
+                            textDecoration: activity.status === 'Cancelled' ? 'line-through' : 'none',
+                        }}
+                    >
+                        {activity.subject || '-'}
+                    </Typography>
+                </Box>
                 <Typography noWrap sx={{ fontSize: '0.72rem', color: overdue ? 'var(--mui-palette-error-main)' : 'var(--mui-palette-text-secondary)' }}>
                     {secondary}
                 </Typography>
@@ -143,6 +153,7 @@ function ActivityRow({ activity, now, timeZone, onOpen }: { activity: Activity; 
             {!isNote && (
                 <Box sx={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 0.5, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
                     {isFollowUpActivity(activity) && <FollowUpChip relatedModule={activity.relatedModule} relatedCode={activity.relatedCode} compact />}
+                    {showJoin && provider && <JoinMeetingActions url={joinUrl} provider={provider} compact />}
                     <ActivityStatusPill status={activity.status} overdue={overdue} />
                 </Box>
             )}

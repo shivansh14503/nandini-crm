@@ -73,8 +73,8 @@ export const NOTE_TYPE = 'Note';
  * `notApplicableKeys`, the form's `relaxedFields`). Only the system types hide fields; admin-added types show all.
  */
 export const ACTIVITY_NOT_APPLICABLE: Readonly<Record<string, readonly string[]>> = {
-    [NOTE_TYPE]: ['startAt', 'endAt', 'allDay', 'reminder', 'location', 'attendees', 'customerResponse', 'status'],
-    [TASK_TYPE]: ['endAt', 'location', 'attendees', 'customerResponse'],
+    [NOTE_TYPE]: ['startAt', 'endAt', 'allDay', 'reminder', 'location', 'videoMeeting', 'attendees', 'customerResponse', 'status'],
+    [TASK_TYPE]: ['endAt', 'location', 'videoMeeting', 'attendees', 'customerResponse'],
 };
 
 const NO_KEYS: ReadonlySet<string> = new Set();

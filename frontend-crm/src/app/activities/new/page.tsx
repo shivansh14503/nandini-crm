@@ -10,13 +10,13 @@ import { Navbar } from '@/components/layout/Navbar';
 import { LoadingScreen } from '@/components/common/LoadingScreen';
 import ActivityForm from '@/components/activities/ActivityForm';
 import { useRelatedRecord } from '@/components/activities/relatedRecord';
-import { ACTIVITY_STATUSES, isActivityRelatedModule } from '@/types/activity.types';
+import { ACTIVITY_STATUSES, isActivityRelatedModule, isVideoProvider } from '@/types/activity.types';
 import type { ActivityFormValues } from '@/validations/activity.schema';
 import { isDay, isWallClock } from '@/utils/zonedTime';
 
 /**
- * `/activities/new?type&status&subject&relatedModule&relatedId&start&end&allDay`: a new activity prefilled from the
- * query string (start / end are business-timezone wall clocks, or days when allDay=1). The related record is loaded
+ * `/activities/new?type&status&subject&relatedModule&relatedId&start&end&allDay&video`: a new activity prefilled from
+ * the query string (start / end are business-timezone wall clocks, or days when allDay=1; video = meet | teams | zoom). The related record is loaded
  * first so its label, organization and contact come with it.
  */
 function NewActivityContent() {
@@ -37,6 +37,8 @@ function NewActivityContent() {
     const allDay = ['1', 'true'].includes(searchParams?.get('allDay') ?? '');
     const start = searchParams?.get('start') ?? '';
     const end = searchParams?.get('end') ?? '';
+    const videoParam = (searchParams?.get('video') ?? '').toLowerCase();
+    const video = isVideoProvider(videoParam) ? videoParam : '';
     const related = useRelatedRecord(relatedModule, relatedId || undefined);
 
     const initialData = useMemo<Partial<ActivityFormValues>>(() => {
@@ -47,6 +49,7 @@ function NewActivityContent() {
             ...(status ? { status } : {}),
             ...(subject ? { subject } : {}),
             ...(allDay ? { allDay: true } : {}),
+            ...(video ? { videoMeeting: video } : {}),
             ...(valid(start) ? { startAt: allDay ? start.slice(0, 10) : start } : {}),
             ...(valid(end) ? { endAt: allDay ? end.slice(0, 10) : end } : {}),
             ...(relatedModule && relatedId
@@ -61,7 +64,7 @@ function NewActivityContent() {
                   }
                 : {}),
         };
-    }, [type, status, subject, allDay, start, end, relatedModule, relatedId, related.target]);
+    }, [type, status, subject, allDay, start, end, video, relatedModule, relatedId, related.target]);
 
     useRequireAuth();
 

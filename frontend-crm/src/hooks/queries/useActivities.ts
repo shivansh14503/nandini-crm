@@ -1,7 +1,7 @@
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { activityService } from '@/services/activity.service';
 import type { PaginationParams } from '@/types/api.types';
-import type { ActivityMeta, ActivityRelatedModule, BusyTimes, BusyTimesParams, CalendarFeed, CalendarFeedParams } from '@/types/activity.types';
+import type { ActivityMeta, ActivityRelatedModule, BusyTimes, BusyTimesParams, CalendarFeed, CalendarFeedParams, VideoOptions } from '@/types/activity.types';
 import { createEntityHooks } from './createEntityHooks';
 import { queryKeys } from './queryKeys';
 
@@ -65,6 +65,16 @@ export function useBusyTimes(params: Omit<BusyTimesParams, 'suggest'> | undefine
         enabled: Boolean(params && params.users.length > 0) && (options.enabled ?? true),
         staleTime: 60_000,
         placeholderData: keepPreviousData,
+    });
+}
+
+/** Video meeting choices of an owner (the activity form's Video meeting field). Fresh for 5 minutes. */
+export function useVideoOptions(owner: string, options: { enabled?: boolean } = {}) {
+    return useQuery<VideoOptions>({
+        queryKey: queryKeys.activities.videoOptions(owner),
+        queryFn: () => activityService.videoOptions(owner),
+        enabled: Boolean(owner) && (options.enabled ?? true),
+        staleTime: 5 * 60_000,
     });
 }
 

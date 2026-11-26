@@ -26,7 +26,7 @@ import { useOwnCalendarSync } from '@/components/integrations/useCalendarConnect
 import { useFormMode } from '@/context/FormModeContext';
 import { DynamicModuleCustomFields } from '@/components/forms/DynamicModuleCustomFields';
 import { CUSTOMER_RESPONSE_CATEGORY, CUSTOMER_RESPONSES } from '@/components/forms/FollowUpDecision';
-import { useDropdownOptionMeta, useModuleFormConfig } from '@/hooks/queries/useFormConfigs';
+import { useDropdownOptionMeta, useFormConfigs, useModuleFormConfig } from '@/hooks/queries/useFormConfigs';
 import { useMyPreferences } from '@/hooks/queries/useProfile';
 import { activityService } from '@/services/activity.service';
 import {
@@ -46,7 +46,7 @@ import type { ExtendedOrganization } from '@/types/organization.types';
 import type { Contact } from '@/types/contact.types';
 import { activityFormRules, activityFormSchema, type ActivityFormValues } from '@/validations/activity.schema';
 import { durationMinutesFor, nextQuarterHour, switchScheduleMode } from '@/utils/activitySchedule';
-import { FOLLOWUP_TYPE_CATEGORY_KEY } from '@/utils/formConfig';
+import { FOLLOWUP_TYPE_CATEGORY_KEY, NEVER_REQUIRED_FIELDS } from '@/utils/formConfig';
 import { DEFAULT_REMINDER_NONE } from '@/utils/notificationPreferences';
 import {
     addDays,
@@ -62,6 +62,7 @@ import { RhfScheduleField } from './RhfScheduleField';
 import { RhfRelatedRecordField } from './RhfRelatedRecordField';
 import { RhfAttendeesField } from './RhfAttendeesField';
 import { ActivityBusyTimes } from './ActivityBusyTimes';
+import { RhfVideoMeetingField, useTypeOffersVideo } from './VideoMeeting';
 import { calendarProviderName } from './ActivitySyncStatus';
 
 /** A blank activity (Start / End are filled in from the business clock when the form opens). */
@@ -82,6 +83,7 @@ export const DEFAULT_ACTIVITY_FORM: ActivityFormValues = {
     endAt: '',
     reminder: '',
     location: '',
+    videoMeeting: '',
     attendees: [],
     customerResponse: '',
     remarks: '',
@@ -196,7 +198,8 @@ export function useActivityForm({ mode, activityId, prefill }: UseActivityFormOp
         defaultValues: initial,
         dropdownDefaults: { enabled: mode === 'create', keep: prefill, personal },
         assigneeField: 'assignedTo',
-        relaxedFields: (values) => ACTIVITY_NOT_APPLICABLE[values.followupType] ?? [],
+        // Video meeting is never required (it depends on the type and the owner's calendar: NEVER_REQUIRED_FIELDS).
+        relaxedFields: (values) => [...(ACTIVITY_NOT_APPLICABLE[values.followupType] ?? []), ...(NEVER_REQUIRED_FIELDS.activities ?? [])],
         extraRules,
     });
     const { reset } = form.methods;
@@ -269,6 +272,8 @@ export interface ActivityFormFieldsProps {
     lockReason?: string;
     /** The activity being edited: its own block is left out of the busy times (it is the one moving). */
     activityId?: string;
+    /** The loaded activity (edit / view): its saved video meeting, the Teams lock and the join link. */
+    activity?: Activity;
     /** The loaded activity's copy in its owner's calendar (P2-3c): the Attendees field says where invitations come from. */
     calendar?: ActivityCalendarState | null;
     /** The loaded activity's saved owner (the calendar copy belongs to them). */
@@ -311,7 +316,7 @@ export function attendeesInvitationHint(args: {
  * seeded section, each control named after its field key. Fields a Followup Type doesn't use
  * (`ACTIVITY_NOT_APPLICABLE`) aren't rendered. Render inside the form's FormProvider.
  */
-export function ActivityFormFields({ clock, durationOf, compact = false, onOpenRelated, lockedFields, lockReason, activityId, calendar, savedOwner }: ActivityFormFieldsProps) {
+export function ActivityFormFields({ clock, durationOf, compact = false, onOpenRelated, lockedFields, lockReason, activityId, activity, calendar, savedOwner }: ActivityFormFieldsProps) {
     const { control, getValues, setValue, watch, getFieldState, trigger } = useFormContext<ActivityFormValues>();
     const formConfig = useModuleFormConfig('activities');
     const { getOptions } = formConfig;
@@ -331,6 +336,19 @@ export function ActivityFormFields({ clock, durationOf, compact = false, onOpenR
     );
     const isTask = followupType === TASK_TYPE;
     const isNote = followupType === NOTE_TYPE;
+    // Video meeting (P3-1): offered on types with option meta `videoMeeting`; a saved one stays shown either way.
+    const typeOffersVideo = useTypeOffersVideo();
+    const savedVideo = activity?.videoMeeting ?? '';
+    const videoMeetingLocked = Boolean(activity?.conference?.locked);
+    const videoMeeting = useWatch({ control, name: 'videoMeeting' }) ?? '';
+    const offersVideo = typeOffersVideo(followupType);
+    // Type meta comes with the form configuration: until it has loaded, no type "offers" video yet.
+    const configsLoaded = useFormConfigs() !== null;
+    // A new choice the type (or a logged status) can't have is dropped, so the save isn't refused for a hidden field.
+    useEffect(() => {
+        if (!configsLoaded) return;
+        if (videoMeeting && videoMeeting !== savedVideo && (!offersVideo || status !== PLANNED_STATUS)) setValue('videoMeeting', '', { shouldDirty: true });
+    }, [configsLoaded, videoMeeting, savedVideo, offersVideo, status, setValue]);
     // Where invitations come from (P2-3c): the saved activity's calendar copy, or (creating) the viewer's own calendar.
     const { user } = useAuth();
     const { data: ownSync } = useOwnCalendarSync(!activityId);
@@ -478,7 +496,7 @@ export function ActivityFormFields({ clock, durationOf, compact = false, onOpenR
     const defaultTime = (day: string) => (day === nowWall.slice(0, 10) ? nextQuarterHour(clock.now(), tz).slice(11, 16) : '09:00');
     const columns = compact ? 2 : 3;
     const typeOptions = getOptions(FOLLOWUP_TYPE_CATEGORY_KEY, ACTIVITY_TYPES);
-    const showSchedule = !isNote || ['startAt', 'endAt', 'allDay', 'reminder', 'location', 'attendees'].some(shows);
+    const showSchedule = !isNote || ['startAt', 'endAt', 'allDay', 'reminder', 'location', 'videoMeeting', 'attendees'].some(shows);
     const showOutcome = shows('customerResponse') || shows('remarks');
     const divider = <Divider sx={{ my: compact ? 2.5 : 3.5, borderColor: 'var(--mui-palette-border-light)' }} />;
 
@@ -605,6 +623,17 @@ export function ActivityFormFields({ clock, durationOf, compact = false, onOpenR
                                 label="Location"
                                 maxLength={FIELD_MAX_LENGTH.address}
                                 placeholder="Address, meeting room or video link"
+                            />
+                        )}
+                        {shows('videoMeeting') && (offersVideo || Boolean(savedVideo)) && (
+                            <RhfVideoMeetingField<ActivityFormValues>
+                                name="videoMeeting"
+                                owner={assignedTo}
+                                saved={savedVideo}
+                                savedOwner={activity?.assignedTo}
+                                locked={videoMeetingLocked}
+                                planned={status === PLANNED_STATUS}
+                                joinUrl={activity?.conferenceJoinUrl || null}
                             />
                         )}
                         {shows('attendees') && (

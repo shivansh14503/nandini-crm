@@ -59,6 +59,13 @@ export const integrationsAdminService = {
         notifyCrmUpdate(FORM_CONFIG_SYNC_ENTITY);
         return res.data;
     },
+    /** `{ "<Followup Type>": on }` → option meta `videoMeeting` (offers a Video meeting on the activity form). */
+    async saveVideoTypes(changes: Record<string, boolean>): Promise<SyncType[]> {
+        const res = await apiClient.put<ApiResponse<SyncType[]>>(`${BASE}/video-types`, changes);
+        notifyCrmUpdate(BASE);
+        notifyCrmUpdate(FORM_CONFIG_SYNC_ENTITY);
+        return res.data;
+    },
     async people(): Promise<Person[]> {
         return (await apiClient.get<ApiResponse<Person[]>>(`${BASE}/people`)).data;
     },

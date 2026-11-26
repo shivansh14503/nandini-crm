@@ -24,6 +24,8 @@ const before: ActivityDto = {
     endDay: '',
     timeZone: 'Asia/Kolkata',
     location: '',
+    videoMeeting: '',
+    conferenceJoinUrl: '',
     reminder: '15 minutes before',
     customerResponse: '',
     remarks: '',
