@@ -1,17 +1,20 @@
 'use client';
 
-import { Alert, Box, Button, Skeleton, Typography } from '@mui/material';
+import { useState } from 'react';
+import { Alert, Box, Button, CircularProgress, Skeleton, Typography } from '@mui/material';
+import SyncOutlinedIcon from '@mui/icons-material/SyncOutlined';
 import EventAvailableOutlinedIcon from '@mui/icons-material/EventAvailableOutlined';
 import { errorMessage, panelHeaderSx, secondaryButtonSx, surfaceSx } from '@/components/settings/form-customization/builderUi';
 import { formatDateTime, hintSx, ProviderMark, StatusChip, type ChipTone } from '@/components/settings/integrations/integrationUi';
-import { NOT_SYNCED_REASON_MESSAGES, type OwnCalendarStatus } from './calendarConnections.types';
-import { useOwnCalendarSync } from './useCalendarConnections';
+import { NOT_SYNCED_REASON_MESSAGES, pullRequestMessage, type OwnCalendarStatus } from './calendarConnections.types';
+import { useOwnCalendarSync, useSyncOwnCalendar } from './useCalendarConnections';
 
 /**
  * An employee's own company calendar sync, status only (Calendar Phase 2, P2-2b: admin-managed). Admins connect the
  * company's Google Workspace or Microsoft 365 once, and everyone with a company email is synced automatically, so
  * there is nothing to connect or disconnect here. Problems are fixed by admins, so the card never shows an error code
- * or provider text, only a calm sentence. Self-contained (own service, types and React Query hook).
+ * or provider text, only a calm sentence. "Sync now" (P2-5) brings changes made in the calendar back at once; they also
+ * come back by themselves every few minutes in office hours. Self-contained (own service, types and React Query hooks).
  */
 
 /** Kept for the profile thread's Connected accounts tab: P2-2's OAuth callback result (no longer used). */
@@ -61,6 +64,18 @@ export function CalendarConnectionsCard(props: CalendarConnectionsCardProps = {}
     const { data, isLoading, error, refetch } = useOwnCalendarSync();
     const calendar = data?.calendar ?? null;
     const status = calendar ? (STATUS[calendar.status as OwnCalendarStatus] ?? STATUS.pending) : null;
+    const syncNow = useSyncOwnCalendar();
+    const [pulled, setPulled] = useState<ReturnType<typeof pullRequestMessage> | null>(null);
+    const hours = data?.syncHours;
+
+    const runSync = async () => {
+        setPulled(null);
+        try {
+            setPulled(pullRequestMessage(await syncNow.mutateAsync('manual')));
+        } catch (err) {
+            setPulled({ tone: 'warning', text: errorMessage(err, 'Could not sync your calendar.') });
+        }
+    };
 
     return (
         <Box component="section" aria-labelledby="calendar-connections-title" sx={{ ...surfaceSx, minWidth: 0, overflow: 'hidden' }}>
@@ -126,6 +141,31 @@ export function CalendarConnectionsCard(props: CalendarConnectionsCardProps = {}
                             </Box>
                         </Box>
                         <Typography sx={{ fontSize: '0.82rem', color: 'var(--crm-slate-700)' }}>{status.text}</Typography>
+                        {calendar.status === 'ok' && (
+                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.25, flexWrap: 'wrap', minWidth: 0 }}>
+                                <Button
+                                    variant="outlined"
+                                    size="small"
+                                    sx={{ ...secondaryButtonSx, minHeight: 36 }}
+                                    onClick={() => void runSync()}
+                                    disabled={syncNow.isPending}
+                                    startIcon={syncNow.isPending ? <CircularProgress size={14} color="inherit" /> : <SyncOutlinedIcon sx={{ fontSize: 18 }} />}
+                                >
+                                    {syncNow.isPending ? 'Syncing…' : 'Sync now'}
+                                </Button>
+                                {hours && (
+                                    <Typography sx={{ ...hintSx, flex: '1 1 220px', minWidth: 0 }}>
+                                        Changes you make in your calendar come back to the CRM every {hours.everyMinutes} {hours.everyMinutes === 1 ? 'minute' : 'minutes'},{' '}
+                                        {hours.start}–{hours.end}.
+                                    </Typography>
+                                )}
+                            </Box>
+                        )}
+                        {pulled && (
+                            <Alert severity={pulled.tone} sx={{ fontSize: '0.78rem', py: 0.25 }} onClose={() => setPulled(null)}>
+                                {pulled.text}
+                            </Alert>
+                        )}
                     </>
                 )}
 
@@ -137,8 +177,8 @@ export function CalendarConnectionsCard(props: CalendarConnectionsCardProps = {}
 
                 {data && (
                     <Typography sx={hintSx}>
-                        The CRM adds your CRM meetings to your work calendar and reads busy times from it, so colleagues see when you are free. It never reads
-                        your email. Events already in your calendar stay there if sync stops.
+                        The CRM adds your CRM meetings to your work calendar and reads busy times from it, so colleagues see when you are free. Changes you make
+                        to those meetings in the calendar (time, place, guests, a cancellation) come back to the CRM. It never reads your email. Events already in your calendar stay there if sync stops.
                     </Typography>
                 )}
             </Box>

@@ -133,6 +133,9 @@ const CLIENT_OAUTH_ERRORS = new Set(['invalid_client', 'unauthorized_client']);
 /** Entra: refresh token expired (700082) / revoked by a password change or the user (50173), consent needed (65001). */
 const AUTH_AADSTS = new Set(['AADSTS700082', 'AADSTS50173', 'AADSTS65001', 'AADSTS50076', 'AADSTS50078', 'AADSTS50079']);
 
+/** Codes (lower-cased) of a sync cursor the provider no longer accepts on list-changes calls (Google, Graph delta). */
+const CURSOR_EXPIRED_CODES = new Set(['syncstatenotfound', 'syncstateinvalid', 'fullsyncrequired', 'resyncrequired']);
+
 interface ErrorBits {
     code: string;
     message: string;
@@ -168,7 +171,7 @@ export function classifyFailure(
     const base = { provider: ctx.provider, operation: ctx.operation, status, code: bits.code || `http_${status}` };
     if (CLIENT_OAUTH_ERRORS.has(bits.code)) return new ProviderClientError(base);
     if (AUTH_OAUTH_ERRORS.has(bits.code) || AUTH_AADSTS.has(bits.code)) return new ProviderAuthError(base);
-    if (ctx.cursor && (status === 410 || bits.code === 'syncStateNotFound' || bits.code === 'fullSyncRequired')) return new CursorExpiredError(base);
+    if (ctx.cursor && (status === 410 || CURSOR_EXPIRED_CODES.has(bits.code.toLowerCase()))) return new CursorExpiredError(base);
     if (status === 401) return new ProviderAuthError(base);
     if (status === 403 && bits.code === 'insufficientPermissions') return new ProviderAuthError(base);
     if (status === 429 || (status === 403 && GOOGLE_RATE_REASONS.has(bits.code))) {

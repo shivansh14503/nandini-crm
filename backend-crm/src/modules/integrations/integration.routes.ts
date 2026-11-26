@@ -58,6 +58,9 @@ import {
  *                                        (CalendarSyncUser, audited; the person is reconciled at once)
  *   POST   /people/:username/calendar/check → person row + { check: ok|user_error|provider_unhealthy|transient|skipped }
  *                                        ("Check now"; 409 CALENDAR_NOT_SYNCED without a live row; same rate limit as tests)
+ *   POST   /people/:username/calendar/sync  → person row + { sync: { status: queued|done|recent|busy|not_ready|failed|off,
+ *                                        changed?, lastSyncedAt } } (P2-5 "Sync now": pull the person's calendar changes
+ *                                        now; 409 CALENDAR_NOT_SYNCED without a live row; same rate limit as tests)
  *
  * Removed in P2-2b: GET /connections and POST /connections/:id/disconnect (the People tab covers both).
  */
@@ -143,6 +146,10 @@ router.put('/people/:username/calendar', validateRequest({ params: usernameParam
 
 router.post('/people/:username/calendar/check', validateRequest({ params: usernameParamSchema }), testLimiter, async (req: Request, res: Response) => {
     sendSuccess(res, await integrationService.checkPersonCalendar(String(req.params.username)));
+});
+
+router.post('/people/:username/calendar/sync', validateRequest({ params: usernameParamSchema }), testLimiter, async (req: Request, res: Response) => {
+    sendSuccess(res, await integrationService.syncPersonCalendar(String(req.params.username)));
 });
 
 export default router;

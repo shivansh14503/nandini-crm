@@ -38,6 +38,7 @@ import {
 } from './sync.constants.js';
 import { eventKeyOf, requestedIdFor, syncKeyOf } from './sync.keys.js';
 import { invitationsOf, type EventContext } from './sync.mapping.google.js';
+import { keptFollowUpNote } from './sync.inbound.js';
 import { planMerge, systemPatchOf } from './sync.merge.js';
 import { syncErrorNotification } from './sync.notifications.js';
 import { isCreateEligible, isTypeSyncable } from './sync.outbox.js';
@@ -279,7 +280,8 @@ class LinkPush {
 
     private async act(round: Round): Promise<PushResult> {
         const { plan, link } = round;
-        const warning = skippedWarning(round.resolved.skipped);
+        // P2-5: a follow-up's "keeps a time" note (sync.inbound.ts) survives the push that re-times the event.
+        const warning = skippedWarning(round.resolved.skipped) ?? keptFollowUpNote(link.lastWarning, round.activity.externalUpdatedAt, this.clock());
         switch (plan.action) {
             case 'noop':
                 return this.settle(round, plan.state, { lastWarning: warning });

@@ -3,8 +3,8 @@ import { logger } from '../../config/logger.js';
 import { prisma } from '../../config/prisma.js';
 import { calendarSyncQueue, tryEnqueue } from '../../jobs/queues.js';
 import { notify } from '../notifications/notification.producer.js';
-import { CALENDAR_SYNC_JOBS, PUSH_JOB_DELAY_MS } from './sync.constants.js';
-import { checkJobId, enrolledJobId, pushJobId } from './sync.keys.js';
+import { CALENDAR_SYNC_JOBS, PUSH_JOB_DELAY_MS, type PullReason } from './sync.constants.js';
+import { checkJobId, enrolledJobId, pullJobId, pushJobId } from './sync.keys.js';
 import { invitesHeldNotification } from './sync.notifications.js';
 import { takeOutboxResult, type DirtyLink, type HeldNotice } from './sync.outbox.js';
 
@@ -82,6 +82,25 @@ export function enqueueEnrolled(connectionId: string, enrolledAt: Date, readyAt:
 /** `check` job of one connection row (enrolment, the poll tick's due checks). Null without Redis. */
 export function enqueueCheck(connectionId: string, now: Date = new Date()): Promise<string | null> {
     return tryEnqueue(calendarSyncQueue, CALENDAR_SYNC_JOBS.check, { connectionId } satisfies ConnectionJobData, { jobId: checkJobId(connectionId, now) });
+}
+
+/** `pull` job data (P2-5). */
+export interface PullJobData {
+    connectionId: string;
+    reason: PullReason;
+}
+
+/**
+ * `pull` job of one connection (P2-5): the poll fan-out, Sync now, the calendar page, the nightly re-baseline. Pulls
+ * of the same connection within 10 s share one job id. Null without Redis (callers then pull in-process).
+ */
+export function enqueuePull(connectionId: string, reason: PullReason, now: Date = new Date()): Promise<string | null> {
+    if (!ENV.INTEGRATIONS.SYNC_ENABLED) return Promise.resolve(null);
+    return tryEnqueue(calendarSyncQueue, CALENDAR_SYNC_JOBS.pull, { connectionId, reason } satisfies PullJobData, {
+        jobId: pullJobId(connectionId, now),
+        // A failed pull isn't retried: the next poll (every few minutes) pulls again from the same cursor.
+        attempts: 1,
+    });
 }
 
 /** `calendar_invites_held` to each owner, naming who added the guests. */

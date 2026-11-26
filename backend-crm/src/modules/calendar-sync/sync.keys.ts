@@ -56,3 +56,8 @@ export function enrolledJobId(connectionId: string, enrolledAt: Date, readyAt: D
 export function checkJobId(connectionId: string, now: Date): string {
     return `check-${connectionId}-${Math.floor(now.getTime() / 60_000)}`;
 }
+
+/** `pull-<connectionId>-<10 s bucket>`: polls, Sync now and page opens within 10 s share one pull (spec §10.1). */
+export function pullJobId(connectionId: string, now: Date): string {
+    return `pull-${connectionId}-${Math.floor(now.getTime() / 10_000)}`;
+}

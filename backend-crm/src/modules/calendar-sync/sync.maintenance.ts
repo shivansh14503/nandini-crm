@@ -2,18 +2,29 @@ import { ENV } from '../../config/env.js';
 import { logger } from '../../config/logger.js';
 import { prisma } from '../../config/prisma.js';
 import { calendarSyncQueue, isQueueAvailable, tryEnqueue } from '../../jobs/queues.js';
-import { instantToZonedWallClock } from '../../utils/zonedTime.js';
 import { runFollowUpBackfillNightly } from '../activities/activity.followUpBackfill.js';
 import { expiresSoon } from '../integrations/integration.service.js';
 import { notify } from '../notifications/notification.producer.js';
 import { isLiveStatus } from './connection.constants.js';
 import { runCalendarConnectionNightly } from './connection.service.js';
 import { dueCheckIds, runDueChecks } from './enrolment.js';
-import { CALENDAR_SYNC_JOBS, CHECK_SWEEP_LIMIT, ENROLLED_PUSH_BATCH, FALLBACK_PUSH_LIMIT, OUTBOX_SWEEP_GRACE_MS, OUTBOX_SWEEP_LIMIT, SYNC_WINDOW } from './sync.constants.js';
+import {
+    CALENDAR_SYNC_JOBS,
+    CHECK_SWEEP_LIMIT,
+    ENROLLED_PUSH_BATCH,
+    FALLBACK_PULL_LIMIT,
+    FALLBACK_PUSH_LIMIT,
+    GRAPH_REBASELINE_DAYS,
+    OUTBOX_SWEEP_GRACE_MS,
+    OUTBOX_SWEEP_LIMIT,
+} from './sync.constants.js';
 import { sweepPushJobId } from './sync.keys.js';
 import { secretExpiringNotifications } from './sync.notifications.js';
 import { markPushExhausted, pushLink } from './sync.push.js';
-import { enqueueCheck, type PushJobData } from './sync.wake.js';
+import { enqueueCheck, enqueuePull, type PushJobData } from './sync.wake.js';
+import { isFakeProviderEnabled, loadProviderAccess } from './providers/registry.js';
+import { isInsideSyncHours, pollMinutes } from './syncHours.js';
+import { isCalendarProvider, type CalendarProvider } from './connection.constants.js';
 import { adminRecipients } from './syncIssue.notifications.js';
 
 /**
@@ -21,17 +32,86 @@ import { adminRecipients } from './syncIssue.notifications.js';
  * the outbox sweep, the `enrolled` job, due connection checks, the Redis-down fallback and the nightly steps. Every
  * step logs and never throws to its scheduler, so one failing step doesn't stop the others.
  *
- * Database wake cadence (Azure SQL serverless): the poll tick makes two small indexed reads every 5 minutes inside
- * 07:00–22:00 business time (when the 15-minute reminder sweep keeps the database awake anyway); the nightly run is at
+ * Database wake cadence (Azure SQL serverless): the poll tick (every CALENDAR_POLL_MINUTES, default 5, inside
+ * CALENDAR_SYNC_HOURS, default 07:00–22:00 business time, when the 15-minute reminder sweep keeps the database awake
+ * anyway) makes three small indexed reads plus one pull per synced person (P2-5: a lease claim / release and a
+ * "last pulled" write each; a provider call that finds nothing changed touches nothing else); the nightly run is at
  * 00:25, inside the existing 00:05–00:25 nightly wake; the fallback tick (Redis down only) reads once a minute inside
- * 07:00–22:00. Nothing runs outside those windows, so the database can pause overnight.
+ * the sync hours. Nothing runs outside those windows, so the database can pause overnight.
  */
 
-/** Inside the background sync window (07:00–22:00 business time, §10.4): polls and the fallback tick run only then. */
+/** Inside the background sync hours (CALENDAR_SYNC_HOURS, §10.4): polls and the fallback tick run only then. */
 export function isInsideSyncWindow(now: Date, timeZone: string = ENV.BUSINESS_TIMEZONE): boolean {
-    const [hh, mm] = instantToZonedWallClock(now, timeZone).slice(11, 16).split(':').map(Number);
-    const minute = hh * 60 + mm;
-    return minute >= SYNC_WINDOW.startMinute && minute < SYNC_WINDOW.endMinute;
+    return isInsideSyncHours(now, undefined, timeZone);
+}
+
+// ── Pulls (P2-5) ──────────────────────────────────────────────────────────────────────────────────────────────
+
+/** Providers a pull can use now (switched on with readable credentials; the fake only while its switch is on). */
+async function pullableProviders(providers: readonly string[]): Promise<Set<CalendarProvider>> {
+    const usable = new Set<CalendarProvider>();
+    for (const provider of new Set(providers)) {
+        if (!isCalendarProvider(provider)) continue;
+        if (provider === 'fake' && !isFakeProviderEnabled()) continue;
+        const access = await loadProviderAccess(provider);
+        if (access.enabled && access.configured) usable.add(provider);
+    }
+    return usable;
+}
+
+/** Live rows in `ok` whose provider is usable (a pull of a pending / error row waits for its check). */
+export async function pullableConnections(): Promise<{ id: string; provider: string; lastPulledAt: Date | null }[]> {
+    const rows = await prisma.calendarConnection.findMany({ where: { status: 'ok' }, select: { id: true, provider: true, lastPulledAt: true } });
+    if (rows.length === 0) return [];
+    const usable = await pullableProviders(rows.map((r) => r.provider));
+    return rows.filter((r) => usable.has(r.provider as CalendarProvider));
+}
+
+/** The poll fan-out (§10.1 `calendar-poll` step 1): one `pull` job per synced person. Returns how many were queued. */
+export async function enqueuePulls(now: Date = new Date()): Promise<number> {
+    if (!ENV.INTEGRATIONS.SYNC_ENABLED || !isInsideSyncWindow(now)) return 0;
+    let queued = 0;
+    for (const row of await pullableConnections()) if ((await enqueuePull(row.id, 'poll', now)) !== null) queued += 1;
+    return queued;
+}
+
+/** Redis down (§10.2): the longest-waiting synced people pulled in-process, one after another, ≤ 5 per tick. */
+export async function pullDueInline(now: Date = new Date(), limit: number = FALLBACK_PULL_LIMIT): Promise<number> {
+    if (!ENV.INTEGRATIONS.SYNC_ENABLED) return 0;
+    const dueBefore = now.getTime() - pollMinutes() * 60_000;
+    const due = (await pullableConnections())
+        .filter((r) => !r.lastPulledAt || r.lastPulledAt.getTime() <= dueBefore)
+        .sort((a, b) => (a.lastPulledAt?.getTime() ?? 0) - (b.lastPulledAt?.getTime() ?? 0))
+        .slice(0, limit);
+    let pulled = 0;
+    const { pullConnection } = await import('./sync.pull.js');
+    for (const row of due) {
+        try {
+            if ((await pullConnection(row.id, 'poll')).status === 'done') pulled += 1;
+        } catch (err) {
+            logger.warn({ err: (err as Error).message, connectionId: row.id }, 'In-process calendar pull failed');
+        }
+    }
+    return pulled;
+}
+
+/**
+ * Nightly (§10.1 step 4): Outlook delta windows are fixed at the first full sync (now − 7 days … + 400 days), so
+ * windows older than 30 days start over: the cursor is dropped and a full pull queued (inside the nightly wake; without
+ * Redis the first poll of the morning does it).
+ */
+export async function rebaselineGraphWindows(now: Date): Promise<number> {
+    if (!ENV.INTEGRATIONS.SYNC_ENABLED) return 0;
+    const before = new Date(now.getTime() - GRAPH_REBASELINE_DAYS * 24 * 60 * 60_000);
+    const rows = await prisma.calendarConnection.findMany({
+        where: { provider: 'microsoft', status: 'ok', syncCursor: { not: null }, OR: [{ syncWindowStart: null }, { syncWindowStart: { lt: before } }] },
+        select: { id: true },
+    });
+    for (const row of rows) {
+        await prisma.calendarConnection.updateMany({ where: { id: row.id }, data: { syncCursor: null } });
+        await enqueuePull(row.id, 'rebaseline', now);
+    }
+    return rows.length;
 }
 
 /** Dirty links due for a push: dirty for longer than the grace (the after-commit wake-up had its chance), not waiting. */
@@ -208,7 +288,7 @@ async function step<T>(name: string, fn: () => Promise<T>, fallback: T): Promise
 /**
  * `calendar-nightly` (00:25): the connection steps P2-2b ran from the reminders worker (reconcile everyone, due health
  * checks, the admins' problem digest), the follow-up activity backfill P2-4 ran there too, then P2-3b's own: error
- * links retried, client secrets expiring, expired leases cleared.
+ * links retried, client secrets expiring, expired leases cleared; and P2-5's Outlook delta re-baseline.
  */
 export async function runCalendarNightly(now: Date = new Date()) {
     const connections = await step('connections', () => runCalendarConnectionNightly(now), { changed: 0, checked: 0, problems: 0 });
@@ -216,22 +296,25 @@ export async function runCalendarNightly(now: Date = new Date()) {
     const retried = await step('retry-errors', () => retryErrorLinks(now), 0);
     const secrets = await step('secret-expiring', () => notifyExpiringSecrets(now), 0);
     const leases = await step('expired-leases', () => clearExpiredLeases(now), 0);
-    const result = { connections, followUps, retried, secrets, leases };
+    const rebaselined = await step('graph-rebaseline', () => rebaselineGraphWindows(now), 0);
+    const result = { connections, followUps, retried, secrets, leases, rebaselined };
     logger.info({ ...result, followUps: followUps ? 'done' : 'failed' }, 'Calendar nightly done');
     return result;
 }
 
-/** The `calendar-poll` tick of P2-3b: the outbox sweep and due connection checks (P2-5 adds the pulls). */
+/** The `calendar-poll` tick: pulls of every synced person (P2-5), the outbox sweep and due connection checks. */
 export async function runCalendarPoll(now: Date = new Date()) {
+    const pulls = await step('pulls', () => enqueuePulls(now), 0);
     const queued = await step('outbox-sweep', () => sweepOutbox(now), 0);
     const checks = await step('due-checks', () => enqueueDueChecks(now), 0);
-    return { queued, checks };
+    return { pulls, queued, checks };
 }
 
-/** The Redis-down fallback tick (§10.2): only inside the sync window; due checks and dirty links in-process. */
-export async function runFallbackTick(now: Date = new Date()): Promise<{ checked: number; pushed: number }> {
-    if (isQueueAvailable() || !isInsideSyncWindow(now)) return { checked: 0, pushed: 0 };
+/** The Redis-down fallback tick (§10.2): only inside the sync hours; due checks, dirty links and due pulls in-process. */
+export async function runFallbackTick(now: Date = new Date()): Promise<{ checked: number; pushed: number; pulled: number }> {
+    if (isQueueAvailable() || !isInsideSyncWindow(now)) return { checked: 0, pushed: 0, pulled: 0 };
     const checked = await step('fallback-checks', async () => (await runDueChecks(now)).checked, 0);
     const pushed = await step('fallback-push', () => pushDueInline(now), 0);
-    return { checked, pushed };
+    const pulled = await step('fallback-pull', () => pullDueInline(now), 0);
+    return { checked, pushed, pulled };
 }

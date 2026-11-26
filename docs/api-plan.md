@@ -469,6 +469,7 @@ carry summaries only (`secret: { set, readable, last4, updatedAt, updatedBy, exp
 | PUT | `/people/:username/email` | `{ email (required; `''` or `null` clears), allowOtherDomain? }` → the person row; a body without `email` is 400 `VALIDATION_ERROR`. `modules/users/userEmail.service.ts` (also used by Admin › Users): trimmed and lower-cased; unique among active non-group users (409 `DUPLICATE_RECORD` on `email`, naming the holder); a company domain unless `allowOtherDomain` (400 on `email`); audited `User UPDATE`; drops `cache:lookups:users*`. Since P2-2b the change is always allowed: after commit the person is reconciled (the old mailbox's row stops with `email_changed`, a new one is enrolled; P2-2's `EMAIL_CONNECTED` is gone) |
 | PUT | `/people/:username/calendar` | `{ provider? (google\|microsoft\|fake\|null = by email domain; fake only while `CALENDAR_FAKE_PROVIDER` is on), excluded?, note? (≤ 200, `''` / `null` clears) }` (strict) → the person row. Stored in `CalendarSyncUser` (a row only while something differs from the default; audited `CalendarSyncUser` CREATE / UPDATE / DELETE); the person is reconciled at once (excluded → live row stopped `excluded`; events already in the calendar stay). Unknown user → 404 |
 | POST | `/people/:username/calendar/check` | → the person row + `{ check: ok\|user_error\|provider_unhealthy\|transient\|skipped }` ("Check now": mints a token as the person and reads their calendar; updates the row's status). 409 `CALENDAR_NOT_SYNCED` without a live row; the test rate limit (6 / min per admin) |
+| POST | `/people/:username/calendar/sync` | → the person row + `{ sync: { status: queued\|done\|recent\|busy\|not_ready\|failed\|off, changed?, lastSyncedAt } }` ("Sync now", P2-5, as of 2026-11-26: the person's calendar changes come back now; same rules as `POST /api/calendar-connections/sync`, reason `admin`, ≥ 30 s apart). 409 `CALENDAR_NOT_SYNCED` without a live row; the test rate limit (6 / min per admin) |
 
 Removed in P2-2b: `GET /connections` and `POST /connections/:id/disconnect` (the People table covers both; to stop
 someone's sync, exclude them).
@@ -512,10 +513,11 @@ with a company email on a provider's domains is enrolled automatically. There is
 
 | Method | Path | Description |
 | --- | --- | --- |
-| GET | `/` | `{ ready (a calendar provider is on and usable), calendar: null \| { provider: google\|microsoft\|fake, providerLabel, accountEmail, status: pending\|ok\|error\|paused (the provider has an app-level problem), since, lastSyncedAt }, reason: null \| no_email\|not_company\|no_provider\|excluded\|inactive\|group }`; `Cache-Control: no-store`. Same for every role, the caller only. Never an error code or provider text (admins see those on People) |
+| GET | `/` | `{ ready (a calendar provider is on and usable), calendar: null \| { provider: google\|microsoft\|fake, providerLabel, accountEmail, status: pending\|ok\|error\|paused (the provider has an app-level problem), since, lastSyncedAt }, reason: null \| no_email\|not_company\|no_provider\|excluded\|inactive\|group, syncHours: { start: 'HH:MM', end: 'HH:MM', everyMinutes } }` (`syncHours`: when calendar changes come back by themselves, P2-5); `Cache-Control: no-store`. Same for every role, the caller only. Never an error code or provider text (admins see those on People) |
+| POST | `/sync` | `{ reason?: manual\|page }` (strict; default `manual`) → `{ status: queued\|done\|recent\|busy\|not_synced\|not_ready\|failed\|off, changed?, lastSyncedAt }` (P2-5, as of 2026-11-26): pulls the caller's own calendar changes now. Only a row in `ok` pulls; `recent` within 30 s (`manual`) / 3 min (`page`, the silent pull when the calendar page opens) of the last pull or request; `queued` = a `pull` job (Redis up), `done` = pulled in the API process while Redis is down (`changed` = activities changed). Never an error code or provider text. 429 `RATE_LIMITED` over 6 / min per user (in-process counter while Redis can't count) |
 
 Removed in P2-2b: `POST /:provider/start`, `GET /oauth/:provider/callback` (and the `crm_oauth` cookie), `POST /:id/disconnect`
-(`connection.routes.test.ts` keeps them gone). Planned: `POST /sync` (P2-5).
+(`connection.routes.test.ts` keeps them gone).
 
 **Email validation** — `/email-validation` 🔐 (Settings › Email Validation)
 

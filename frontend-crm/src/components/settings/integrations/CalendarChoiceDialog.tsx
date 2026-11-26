@@ -3,7 +3,8 @@
 import React, { useState } from 'react';
 import { Alert, Box, Button, CircularProgress, Dialog, DialogActions, DialogContent, DialogTitle, FormControlLabel, MenuItem, Switch, TextField, Typography } from '@mui/material';
 import { errorMessage, inputSx, primaryButtonSx, secondaryButtonSx } from '@/components/settings/form-customization/builderUi';
-import { useCheckPersonCalendar, useSetPersonCalendar } from '@/hooks/queries/useIntegrationsAdmin';
+import { pullRequestMessage } from '@/components/integrations/calendarConnections.types';
+import { useCheckPersonCalendar, useSetPersonCalendar, useSyncPersonCalendar } from '@/hooks/queries/useIntegrationsAdmin';
 import { PERSON_CALENDAR_NOTE_MAX, type CalendarCheckOutcome, type Person, type PersonCalendarPayload, type ProviderAdmin } from '@/types/integration.types';
 import { CALENDAR_PROVIDER_LABELS, NOT_SYNCED_LABELS, fieldErrorsOf, formatDateTime, hintSx } from './integrationUi';
 
@@ -19,8 +20,8 @@ const CHECK_MESSAGES: Record<CalendarCheckOutcome, { severity: 'success' | 'erro
 
 /**
  * One person's calendar choice (Admin › API Integrations › People): the provider (by email domain, or an override),
- * leaving them out of calendar sync with a note, and "Check now". Saved at once and audited; the person is re-enrolled
- * right after. Mount with a `key` per person so it starts fresh.
+ * leaving them out of calendar sync with a note, "Check now", and "Sync now" (their calendar changes come back now,
+ * P2-5). Saved at once and audited; the person is re-enrolled right after. Mount with a `key` per person so it starts fresh.
  */
 export function CalendarChoiceDialog({
     person,
@@ -43,6 +44,8 @@ export function CalendarChoiceDialog({
     const [checked, setChecked] = useState<CalendarCheckOutcome | null>(null);
     const save = useSetPersonCalendar();
     const check = useCheckPersonCalendar();
+    const pull = useSyncPersonCalendar();
+    const [pulled, setPulled] = useState<ReturnType<typeof pullRequestMessage> | null>(null);
 
     if (!person) return null;
     const name = person.fullName || person.username;
@@ -59,7 +62,7 @@ export function CalendarChoiceDialog({
     if (excluded !== (choice?.excluded ?? false)) payload.excluded = excluded;
     if ((note.trim() || null) !== (choice?.note ?? null)) payload.note = note.trim() || null;
     const dirty = Object.keys(payload).length > 0;
-    const busy = save.isPending || check.isPending;
+    const busy = save.isPending || check.isPending || pull.isPending;
 
     const submit = async () => {
         if (!dirty) return onClose();
@@ -83,6 +86,15 @@ export function CalendarChoiceDialog({
             setChecked((await check.mutateAsync(person.username)).check);
         } catch (err) {
             onToast(errorMessage(err, 'Could not check the calendar.'), 'error');
+        }
+    };
+
+    const runPull = async () => {
+        setPulled(null);
+        try {
+            setPulled(pullRequestMessage((await pull.mutateAsync(person.username)).sync));
+        } catch (err) {
+            onToast(errorMessage(err, 'Could not sync the calendar.'), 'error');
         }
     };
 
@@ -164,6 +176,12 @@ export function CalendarChoiceDialog({
                     slotProps={{ htmlInput: { maxLength: PERSON_CALENDAR_NOTE_MAX } }}
                 />
 
+                {pulled && (
+                    <Alert severity={pulled.tone} sx={{ fontSize: '0.78rem', py: 0.25 }}>
+                        {pulled.text}
+                    </Alert>
+                )}
+
                 {checked && (
                     <Alert severity={CHECK_MESSAGES[checked].severity} sx={{ fontSize: '0.78rem', py: 0.25 }}>
                         {CHECK_MESSAGES[checked].text}
@@ -171,17 +189,30 @@ export function CalendarChoiceDialog({
                 )}
             </DialogContent>
             <DialogActions sx={{ px: 3, pb: 2, gap: 1, flexWrap: 'wrap' }}>
-                {connection && (
-                    <Button
-                        variant="outlined"
-                        sx={{ ...secondaryButtonSx, minHeight: 36, mr: 'auto' }}
-                        onClick={() => void runCheck()}
-                        disabled={busy || dirty}
-                        startIcon={check.isPending ? <CircularProgress size={14} color="inherit" /> : undefined}
-                    >
-                        {check.isPending ? 'Checking…' : 'Check now'}
-                    </Button>
-                )}
+                <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', mr: 'auto' }}>
+                    {connection && (
+                        <Button
+                            variant="outlined"
+                            sx={{ ...secondaryButtonSx, minHeight: 36 }}
+                            onClick={() => void runCheck()}
+                            disabled={busy || dirty}
+                            startIcon={check.isPending ? <CircularProgress size={14} color="inherit" /> : undefined}
+                        >
+                            {check.isPending ? 'Checking…' : 'Check now'}
+                        </Button>
+                    )}
+                    {connection?.status === 'ok' && (
+                        <Button
+                            variant="outlined"
+                            sx={{ ...secondaryButtonSx, minHeight: 36 }}
+                            onClick={() => void runPull()}
+                            disabled={busy || dirty}
+                            startIcon={pull.isPending ? <CircularProgress size={14} color="inherit" /> : undefined}
+                        >
+                            {pull.isPending ? 'Syncing…' : 'Sync now'}
+                        </Button>
+                    )}
+                </Box>
                 <Button variant="outlined" sx={{ ...secondaryButtonSx, minHeight: 36 }} onClick={onClose} disabled={busy}>
                     {dirty ? 'Cancel' : 'Close'}
                 </Button>

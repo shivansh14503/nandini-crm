@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { queryKeys } from '@/hooks/queries/queryKeys';
+import { refreshAfterPull } from '@/components/integrations/useCalendarConnections';
 import { integrationsAdminService } from '@/services/integrationsAdmin.service';
 import type { CalendarSyncSettings, IntegrationProviderKey, PersonCalendarPayload, PersonEmailPayload, SaveProviderPayload, TestConnectionPayload } from '@/types/integration.types';
 
@@ -37,3 +38,14 @@ export const useSetPersonEmail = () =>
 export const useSetPersonCalendar = () =>
     useIntegrationsMutation(({ username, payload }: { username: string; payload: PersonCalendarPayload }) => integrationsAdminService.setPersonCalendar(username, payload));
 export const useCheckPersonCalendar = () => useIntegrationsMutation((username: string) => integrationsAdminService.checkPersonCalendar(username));
+/** "Sync now" on a person: their calendar changes come back (activities refresh when the pull changed some). */
+export function useSyncPersonCalendar() {
+    const queryClient = useQueryClient();
+    return useMutation({
+        mutationFn: (username: string) => integrationsAdminService.syncPersonCalendar(username),
+        onSuccess: (person) => {
+            void queryClient.invalidateQueries({ queryKey: queryKeys.integrations.all });
+            refreshAfterPull(queryClient, person.sync);
+        },
+    });
+}

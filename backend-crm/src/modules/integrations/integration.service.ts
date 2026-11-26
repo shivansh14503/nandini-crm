@@ -8,6 +8,7 @@ import { secretBox, SecretBoxError } from '../../services/secretBox.js';
 import type { AuthUser } from '../../types/user.types.js';
 import { HttpError } from '../../utils/httpError.js';
 import { checkConnection, type CheckOutcome } from '../calendar-sync/calendarAccess.js';
+import type { PullRequestResult } from '../calendar-sync/pull.requests.js';
 import { calendarConnectionUserLockKey, isCalendarProvider, type CalendarProvider, type NotSyncedReason } from '../calendar-sync/connection.constants.js';
 import {
     calendarChoicesByUsername,
@@ -988,6 +989,16 @@ export const integrationService = {
         if (!live) throw conflict("This person's calendar isn't synced, so there is nothing to check.", 'CALENDAR_NOT_SYNCED');
         const check = await checkConnection(live.id);
         return { ...(await integrationService.getPerson(username)), check };
+    },
+
+    /** Admin "Sync now" (P2-5): the person's calendar changes pulled now (queued when Redis is up). */
+    async syncPersonCalendar(username: string): Promise<PersonDto & { sync: PullRequestResult }> {
+        const live = await prisma.calendarConnection.findFirst({ where: { username, status: { in: ['pending', 'ok', 'error'] } }, select: { id: true } });
+        if (!live) throw conflict("This person's calendar isn't synced, so there is nothing to sync.", 'CALENDAR_NOT_SYNCED');
+        // On demand: the pull modules sit on top of the activity services (no import cycle at load time).
+        const { requestPull } = await import('../calendar-sync/pull.requests.js');
+        const sync = await requestPull(username, 'admin');
+        return { ...(await integrationService.getPerson(username)), sync };
     },
 };
 

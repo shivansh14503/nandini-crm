@@ -429,7 +429,20 @@ keeps wall-clock times); all-day activities are entered as business-timezone day
         (`renameOrganizationFollowUps`); a follow-up activity whose slot already passed is written with its reminder
         marked sent (`quietPastReminder`, no reminder burst on the deploy-day backfill); the Activities tab's Next
         follow-up box uses the record's own date while the switch is off.
-  - [ ] **P2-5: calendar → CRM (polling)**
+  - [x] **P2-5: calendar → CRM (polling)** (2026-11-26) — no migration (uses `syncCursor` / `syncWindow*` /
+        `fullSyncAt` / `lastPulledAt`, `Activity.externalUpdatedAt`, link `etag` / `baseJson`). Adapter method
+        `listChanges` (Google `events.list` + sync token, full resync on 410; Graph `calendarView/delta`, monthly
+        re-baseline), `pull` jobs on `crm-calendar-sync` (poll fan-out inside `CALENDAR_SYNC_HOURS` every
+        `CALENDAR_POLL_MINUTES`, Redis-down fallback ≤ 5 per tick, nightly Outlook re-baseline), `pullConnection`
+        (lease, classify, three-way merge, deletions / reconfirm, relinks by marker / syncKey, verify-missing on full
+        syncs, cursor held while changes fail), follow-up moves written to the lead / opportunity
+        (`rescheduleRecordFromCalendar`, timed → all-day keeps the time with a 7-day note). `POST
+        /api/calendar-connections/sync` (Sync now / page pull, 6 / min / user) and admin `POST
+        /people/:username/calendar/sync`. UI: Sync now on the Company calendar card and in the admin's calendar dialog,
+        the silent pull on opening the calendar page, "Updated from Google Calendar / Outlook" and unsupported /
+        too long / follow-up notes in the activity drawer. Recurring and > 31-day events are skipped with a reason
+        (R20, owner decision). Tested with the fake provider and hand-written provider answers; no real SQL Server,
+        Google or Microsoft call.
   - [x] **P2-6: busy times** (2026-11-26) — no migration. `GET /api/activities/busy?users&from&to&exclude&suggest`
         (`modules/calendar-sync/busy.*`): up to 20 people, ≤ 31 days, times only (D11). CRM part: Planned activities
         (owner, or invited colleague not declined; Site Visit all-day → `away`), cached 30 s and dropped by activity
