@@ -3,6 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { z } from 'zod';
 import { resolveDatabaseUrl } from './databaseUrl.js';
+import { configureSecretBox, parseKeyRing, SecretBoxError } from '../services/secretBox.js';
 
 /** Used only outside production so local dev starts without a secret; production must set JWT_SECRET. */
 const DEV_JWT_SECRET = 'dev-only-insecure-jwt-secret-do-not-use-in-production';
@@ -123,6 +124,25 @@ const envSchema = z
         APP_PUBLIC_URL: z.preprocess(blankToUndefined, z.url().optional()),
         /** EmailLog rows older than this many days are deleted nightly. */
         EMAIL_LOG_RETENTION_DAYS: z.coerce.number().int().min(1).max(3650).default(180),
+
+        /**
+         * Integrations (Admin › API Integrations, calendar sync): the key ring that seals client secrets and OAuth
+         * tokens in the database (src/services/secretBox.ts). One base64 32-byte key, or `kid:base64,…` (first =
+         * active). Unset → the app runs and integrations are "not ready"; malformed → start-up fails.
+         */
+        INTEGRATIONS_ENCRYPTION_KEY: z.preprocess(blankToUndefined, z.string().trim().optional()).superRefine((value, ctx) => {
+            try {
+                parseKeyRing(value);
+            } catch (err) {
+                ctx.addIssue({ code: 'custom', message: err instanceof SecretBoxError ? err.message : 'Invalid key ring.' });
+            }
+        }),
+        /**
+         * Public base URL of this API as browsers and Google / Microsoft reach it (no trailing slash): OAuth redirect
+         * URIs and webhook URLs are built from it. Default http://localhost:<PORT> outside production; unset in
+         * production → integrations "not ready". Production: https://crm.nandiniinfosys.com.
+         */
+        PUBLIC_API_URL: z.preprocess(blankToUndefined, z.url().optional()),
     })
     .superRefine((env, ctx) => {
         if (env.NODE_ENV === 'production' && (!env.JWT_SECRET || env.JWT_SECRET.length < 32)) {
@@ -142,6 +162,15 @@ if (!parsed.success) {
 }
 
 const env = parsed.data;
+
+/** Parsed again here (the schema only validated it): the ring the secret box seals and opens with. */
+const integrationsKeyRing = parseKeyRing(env.INTEGRATIONS_ENCRYPTION_KEY);
+configureSecretBox(integrationsKeyRing);
+const publicApiUrl = (env.PUBLIC_API_URL ?? (env.NODE_ENV === 'production' ? undefined : `http://localhost:${env.PORT}`))?.replace(/\/+$/, '');
+
+/** Why integrations can't be used yet (Admin › API Integrations shows it), or null when they can. */
+export type IntegrationsNotReadyReason = 'key_missing' | 'public_url_missing';
+const integrationsReadyReason: IntegrationsNotReadyReason | null = !integrationsKeyRing ? 'key_missing' : !publicApiUrl ? 'public_url_missing' : null;
 
 export const ENV = {
     NODE_ENV: env.NODE_ENV,
@@ -205,5 +234,17 @@ export const ENV = {
         /** Base of links in emails, without a trailing slash. */
         APP_PUBLIC_URL: (env.APP_PUBLIC_URL ?? env.CLIENT_ORIGIN).replace(/\/+$/, ''),
         LOG_RETENTION_DAYS: env.EMAIL_LOG_RETENTION_DAYS,
+    },
+    /** Admin › API Integrations and calendar sync (Calendar Phase 2). Client ids / secrets live in the database, sealed. */
+    INTEGRATIONS: {
+        /** Whether INTEGRATIONS_ENCRYPTION_KEY is set (the ring itself stays inside secretBox.ts). */
+        KEY_CONFIGURED: integrationsKeyRing !== null,
+        /** Kid new values are sealed with, e.g. `k1`; null without a key. */
+        ACTIVE_KEY_ID: integrationsKeyRing?.activeKid ?? null,
+        /** Public base URL of the API, no trailing slash; null in production until PUBLIC_API_URL is set. */
+        PUBLIC_API_URL: publicApiUrl ?? null,
+        /** True when PUBLIC_API_URL came from the environment rather than the localhost default. */
+        PUBLIC_API_URL_CONFIGURED: Boolean(env.PUBLIC_API_URL),
+        READY_REASON: integrationsReadyReason,
     },
 } as const;

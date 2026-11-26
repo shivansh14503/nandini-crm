@@ -7,6 +7,7 @@ import { formConfigService, invalidateFormConfigCaches } from '../modules/form-c
 import { lookupService } from '../modules/lookups/lookup.service.js';
 import { invalidatePartnerCaches } from '../modules/partner-companies/partnerCompany.service.js';
 import { searchService } from '../modules/search/search.service.js';
+import { invalidateUserCaches } from '../modules/users/userEmail.service.js';
 import { auditService } from './audit.service.js';
 import { CACHE_KEYS, cacheService, type GuardedReadOptions } from './cache.service.js';
 
@@ -64,6 +65,8 @@ describe('cached reads', () => {
         await formConfigService.getAllConfigs();
         await formConfigService.getAllConfigs(true);
         await searchService.search({ q: 'Acme' });
+        await lookupService.users({});
+        await lookupService.users({ includeInactive: 'true' });
 
         // Each guarded read, with the invalidator of the writes that change it (called for real, Redis stubbed).
         const expected: [key: string, writer: string, invalidate: () => Promise<void>][] = [
@@ -76,6 +79,8 @@ describe('cached reads', () => {
             ['cache:lookups:form-configs:active', 'form-config writes', invalidateFormConfigCaches],
             ['cache:lookups:form-configs:all', 'form-config writes', invalidateFormConfigCaches],
             ['cache:search:all:1:…', 'any entity write', () => cacheService.invalidateEntityCaches('leads')],
+            ['cache:lookups:users:active', 'user email edits (Admin › API Integrations)', invalidateUserCaches],
+            ['cache:lookups:users:all', 'user email edits (Admin › API Integrations)', invalidateUserCaches],
         ];
         assert.deepEqual(
             reads.map((read) => [read.method, read.key.replace(/^(cache:search:all:1:)\S+$/, '$1…')]),
@@ -110,10 +115,8 @@ describe('cached reads', () => {
         );
     });
 
-    it('leaves keys no CRM write changes on plain getOrSet (users, nature of calls, countries and states, DNS)', async () => {
+    it('leaves keys no CRM write changes on plain getOrSet (nature of calls, countries and states, DNS)', async () => {
         const reads = watchReads((key) => (key.startsWith('cache:email-domain:') ? 'mx' : key.startsWith(CACHE_KEYS.addressMaster) ? { countries: [], subdivisions: [] } : []));
-        await lookupService.users({});
-        await lookupService.users({ includeInactive: 'true' });
         await lookupService.natureOfCalls();
         await lookupService.addressMaster({});
         await lookupService.addressMaster({ country: 'in' });
@@ -122,8 +125,6 @@ describe('cached reads', () => {
         assert.deepEqual(
             reads.map((read) => [read.method, read.key]),
             [
-                ['getOrSet', 'cache:lookups:users:active'],
-                ['getOrSet', 'cache:lookups:users:all'],
                 ['getOrSet', 'cache:lookups:nature-of-calls'],
                 ['getOrSet', 'cache:address-master'],
                 ['getOrSet', 'cache:address-master:IN'],

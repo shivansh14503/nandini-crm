@@ -48,6 +48,8 @@ import { closeMail } from './services/mail.service.js';
 import { closeQueues } from './jobs/queues.js';
 import { startWorkers, stopWorkers } from './jobs/workers/index.js';
 import { errorHandler, notFoundHandler } from './middlewares/errorHandler.js';
+import integrationRouter from './modules/integrations/integration.routes.js';
+import { serializeRequestForLog } from './utils/redactUrl.js';
 
 const LAN_ORIGIN = /^http:\/\/(localhost|127\.0\.0\.1|192\.168\.\d+\.\d+|10\.\d+\.\d+\.\d+)(:\d+)?$/;
 
@@ -80,6 +82,9 @@ app.use(
         // Health probes would otherwise flood the logs.
         autoLogging: { ignore: (req) => req.url === '/api/health' },
         customLogLevel: (_req, res, err) => (err || res.statusCode >= 500 ? 'error' : res.statusCode >= 400 ? 'warn' : 'info'),
+        // OAuth codes / state, webhook validation tokens and provider sync cursors never reach a log line: the URL and
+        // the parsed query / params the standard req serializer adds are all masked (redactUrl.ts).
+        serializers: { req: serializeRequestForLog },
     }),
 );
 app.use(cookieParser());
@@ -130,6 +135,7 @@ app.use('/api/scorecards', scorecardRouter);
 app.use('/api/drawer-layouts', drawerLayoutRouter);
 app.use('/api/drawer-pieces', drawerPieceRouter);
 app.use('/api/notifications', notificationRouter);
+app.use('/api/admin/integrations', integrationRouter);
 
 // ── 404 + global error handler ─────────────────────────────────────────────────
 app.use(notFoundHandler);
@@ -140,6 +146,7 @@ async function start(): Promise<Server> {
     if (ENV.USING_DEV_JWT_SECRET) {
         logger.warn('JWT_SECRET is not set; using an insecure development secret');
     }
+    logIntegrationsReadiness();
     // Cached form configuration, lookups, search and dashboards can predate a migration (renamed field keys,
     // labels): drop them once Redis is up so a restart always serves what the database now holds. Only the
     // `cache:*` namespace; sessions and rate limits stay.
@@ -157,6 +164,19 @@ async function start(): Promise<Server> {
     resumeEmailValidationRuns();
     if (ENV.RUN_WORKERS) startWorkers();
     return app.listen(ENV.PORT, () => logger.info(`API listening on port ${ENV.PORT}`));
+}
+
+/** One start-up line on Admin › API Integrations readiness (the admin page shows the same). */
+function logIntegrationsReadiness(): void {
+    const { READY_REASON, PUBLIC_API_URL } = ENV.INTEGRATIONS;
+    if (READY_REASON === 'key_missing') {
+        logger.info('INTEGRATIONS_ENCRYPTION_KEY is not set: Admin › API Integrations can\'t store secrets yet');
+    } else if (READY_REASON === 'public_url_missing') {
+        logger.warn('PUBLIC_API_URL is not set: calendar connections stay off until it is');
+    }
+    if (ENV.IS_PRODUCTION && PUBLIC_API_URL && !PUBLIC_API_URL.startsWith('https://')) {
+        logger.warn('PUBLIC_API_URL is not https: calendar webhooks stay off (changes arrive by polling)');
+    }
 }
 
 function registerShutdown(server: Server): void {

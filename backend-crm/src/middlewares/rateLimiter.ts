@@ -51,16 +51,22 @@ export interface RateLimiterOptions {
     windowSeconds: number;
     keyGenerator?: (req: Request) => string;
     message?: string;
+    /**
+     * Runs instead of letting the request through whenever Redis can't count it (not connected, or a command
+     * failed while it reports ready), e.g. an in-process limiter for calls that must never go unlimited.
+     * Omitted = fail open, as before.
+     */
+    fallback?: (req: Request, res: Response, next: NextFunction) => void;
 }
 
-/** Generic Redis-backed limiter counting every request. Fails open (allows traffic) if Redis is down. */
+/** Generic Redis-backed limiter counting every request. Fails open (allows traffic) if Redis is down, unless `fallback` is set. */
 export function createRateLimiter(options: RateLimiterOptions) {
-    const { keyPrefix, max, windowSeconds, keyGenerator = (req) => req.ip ?? 'unknown' } = options;
+    const { keyPrefix, max, windowSeconds, keyGenerator = (req) => req.ip ?? 'unknown', fallback } = options;
     const message = options.message ?? 'Too many requests. Please try again later.';
 
     return async (req: Request, res: Response, next: NextFunction): Promise<void> => {
         const state = await hit(`${keyPrefix}:${keyGenerator(req)}`, windowSeconds);
-        if (!state) return next();
+        if (!state) return fallback ? fallback(req, res, next) : next();
 
         res.setHeader('RateLimit-Limit', String(max));
         res.setHeader('RateLimit-Remaining', String(Math.max(max - state.count, 0)));

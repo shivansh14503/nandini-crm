@@ -1,7 +1,7 @@
 # Nandini CRM — Build Plan
 
 > **Status:** living document. Part 1 records what has been built (reconstructed from git history, 115 commits
-> from 2026-10-15 to 2026-11-18; the snapshot as of 2026-11-25, Calendar Phase 1 PR3). Part 2 is the roadmap. Tick
+> from 2026-10-15 to 2026-11-18; the snapshot as of 2026-11-26, Calendar Phase 2 P2-1). Part 2 is the roadmap. Tick
 > items off and add new ones as work lands.
 > Related: [System design](system-design.md) · [Database design](database-design.md) · [API plan](api-plan.md)
 
@@ -294,6 +294,35 @@ keeps wall-clock times); all-day activities are entered as business-timezone day
       API Integrations with encrypted credentials, `Activity.iCalUid` + organizer fields for inbound events, recurring
       series materialized as occurrence rows, and inbound events clamped to the 31-day limit. The morning email's
       "Add to Google Calendar" links (one-time copies) are then hidden for users who connected their calendar.
+      Delivered in these PRs:
+  - [x] **P2-1: Admin › API Integrations (foundation)** (2026-11-26) — secret box (`services/secretBox.ts`,
+        AES-256-GCM with a key ring from `INTEGRATIONS_ENCRYPTION_KEY`, rotation script
+        `npm run integrations:reencrypt`), `PUBLIC_API_URL`, URL redaction in request / error logs, extra logger
+        redact paths, audit `SENSITIVE_KEY` exact + suffix rule, `IntegrationProvider` table (migration
+        `20261126220000_integrations`), `/api/admin/integrations` (read, save provider with write-only secrets and
+        `clientVersion`, remove secret, Google / Microsoft "Test connection" probes rate-limited 6 / min, company
+        calendar settings as the module setting `activities/calendarSync`, Followup Types that go to calendars as
+        option meta `calendarSync`, people and company emails through the reusable `users/userEmail.service.ts`),
+        Admin › API Integrations page (readiness alerts, server facts, provider cards, settings, "What goes to
+        calendars", People with the email editor), admin hub card, navbar Integrations admin-only. Every provider
+        starts off; nothing changes for users until an admin turns one on (and P2-2 ships). Not run against a real
+        SQL Server, Google or Microsoft in the build environment (migration checked with `prisma migrate diff`).
+        Owner before deploy: generate and set the key on the API and the worker, keep a copy (system design §9.2);
+        after deploy: fix company emails on the People table. Review fixes (2026-11-26): request logs mask the parsed
+        `req.query` too, the connection-test limit falls back to memory whenever Redis can't count, a test result is
+        stored only if the credentials didn't change meanwhile (`credentials_changed`), the email body requires
+        `email`, docs give Microsoft-without-tenant as 400, a failed refetch keeps the cards and drafts mounted, and an
+        email change refreshes master data in every tab (`MASTER_DATA_SYNC_ENTITY`).
+  - [ ] **P2-2: connect / disconnect** (Google, Microsoft; Connected calendars page, `CalendarConnection`, unique
+        active emails)
+  - [ ] **P2-3a: activity write-path refactor** (no behaviour change)
+  - [ ] **P2-3b: CRM → calendar push engine**
+  - [ ] **P2-3c: backfill, send invitations, sync status UI**
+  - [ ] **P2-4: follow-ups create activities**
+  - [ ] **P2-5: calendar → CRM (polling)**
+  - [ ] **P2-6: busy times**
+  - [ ] **P2-7: webhooks and HTTPS go-live**
+  - [ ] **P2-8: customer meetings from the calendar + replies both ways** (optional, off by default)
 
 ### Phase 15 — Documents (P2, 2026-11-25)
 

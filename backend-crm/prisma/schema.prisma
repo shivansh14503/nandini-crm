@@ -1672,3 +1672,32 @@ model Holiday {
   @@unique([holidayDate, occasion])
   @@index([status, holidayDate])
 }
+
+// ── Integrations (Admin › API Integrations) ────────────────────────────────────
+
+/// Company-wide set-up of one external provider (Admin › API Integrations). One row per provider, created on first
+/// save. Secrets are AES-256-GCM sealed (src/services/secretBox.ts) and never returned by the API.
+model IntegrationProvider {
+  /// 'google' | 'microsoft' | 'zoom' (INTEGRATION_PROVIDERS in integration.constants.ts)
+  provider        String    @id @db.NVarChar(30)
+  enabled         Boolean   @default(false)
+  clientId        String?   @db.NVarChar(200)
+  /// Sealed JSON { clientSecret, webhookSecret? } (AAD "IntegrationProvider:<provider>:secrets").
+  secretsEnc      String?   @db.NVarChar(Max)
+  /// Key id of secretsEnc (rotation).
+  keyId           String?   @db.NVarChar(8)
+  /// Non-secret hints { clientSecret: { last4, updatedAt, updatedBy, expiresOn? }, webhookSecret?: {…} }.
+  secretHintsJson String?   @db.NVarChar(Max)
+  /// Non-secret settings: microsoft { tenantId }; google { scopeProfile: 'narrow'|'broad', pkce: true };
+  /// zoom {} — company calendar settings live in ModuleSetting activities/calendarSync.
+  settingsJson    String?   @db.NVarChar(Max)
+  /// Bumped when clientId (or the Microsoft tenant) changes: connections made with the old app must reconnect.
+  clientVersion   Int       @default(1)
+  lastTestAt      DateTime?
+  lastTestOk      Boolean?
+  /// Fixed code + short provider text (≤ 300) for admins.
+  lastTestMessage String?   @db.NVarChar(300)
+  updatedBy       String?   @db.NVarChar(50)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @default(now()) @updatedAt
+}

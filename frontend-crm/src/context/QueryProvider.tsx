@@ -10,6 +10,7 @@ import { FORM_CONFIGS_QUERY_KEY } from '@/hooks/queries/useFormConfigs';
 import { FORM_CONFIG_SYNC_ENTITY } from '@/services/formConfig.service';
 import { DRAWER_LAYOUT_SYNC_ENTITY } from '@/services/drawerLayout.service';
 import { DRAWER_LAYOUTS_QUERY_KEY } from '@/hooks/queries/useDrawerLayouts';
+import { MASTER_DATA_SYNC_ENTITY } from '@/services/masterData.service';
 
 export function QueryProvider({ children }: { children: React.ReactNode }) {
     const [queryClient] = useState(
@@ -39,6 +40,11 @@ export function QueryProvider({ children }: { children: React.ReactNode }) {
                 }
                 if (entity === DRAWER_LAYOUT_SYNC_ENTITY) {
                     queryClient.invalidateQueries({ queryKey: DRAWER_LAYOUTS_QUERY_KEY });
+                    return;
+                }
+                // Writes that change the user directory / masters behind the lookups (e.g. a user's company email).
+                if (entity === MASTER_DATA_SYNC_ENTITY) {
+                    queryClient.invalidateQueries({ queryKey: MASTER_DATA_QUERY_KEY });
                     return;
                 }
                 const key = queryEntityFromSync(entity);
