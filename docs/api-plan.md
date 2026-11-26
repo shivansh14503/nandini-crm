@@ -253,6 +253,19 @@ read-only on the lead DTO (a `rating` sent by a client is ignored).
 | GET | `/` 🔐 | Settings, every module's rule, current FY, each module's next number |
 | PUT | `/` 🔐 | `{ companyPrefix, separator, fyStartMonth, fyFormat, series: [...] }` |
 
+**Holidays** — `/holidays` (Admin › Holidays; `backend-crm/src/modules/holidays`, route header comment = source of truth)
+
+| Method | Path | Description |
+| --- | --- | --- |
+| GET | `/calendar?from&to` | Any signed-in user: Active holidays on the days `from`–`to` (`YYYY-MM-DD`, both included, at most 400 days apart) → `[{ id, occasion, holidayDate, repeatsYearly }]`, by date. Yearly holidays appear on their day in every year of the range (29 Feb on 28 Feb in other years) with `id` = `<id>@<year>`; a one-off copy of a yearly holiday on the same day is left out. Read by the Calendar page and the activity Start / End fields |
+| GET | `/?page&limit&search&year&status&sortBy&sortOrder` 🔐 | `{ success, data: Holiday[], total, page, limit, years }`. `limit` ≤ 200 (default 50); `search` matches the occasion; `sortBy` ∈ holidayDate (default, newest first), occasion, status, updatedAt; `year` also matches every yearly holiday; sorted by `holidayDate` the yearly ones come first; `years` = every year from the earliest to the latest one-off holiday plus the current one, newest first. Holiday: `{ id, occasion, holidayDate (YYYY-MM-DD, or MM-DD when repeatsYearly), repeatsYearly, status, createdBy, updatedBy, createdAt, updatedAt }` |
+| GET | `/:id` 🔐 | One holiday |
+| POST | `/` 🔐 | `{ occasion (≤ 100), holidayDate (YYYY-MM-DD, years 2000–2100; `MM-DD` when `repeatsYearly`, where a full date is accepted and its year dropped), repeatsYearly? (boolean or Yes / No, default false), status? }` → 201. `status` ∈ Active (default), Inactive (any letter case). 409 `DUPLICATE_HOLIDAY` (on `occasion`) when that occasion is already a holiday on that date (or that yearly day), ignoring letter case, or a one-off date is already covered by a yearly holiday of that occasion. Audited `CREATE` |
+| PUT / PATCH | `/:id` 🔐 | Partial; merged onto the stored holiday and validated whole; 409 `DUPLICATE_HOLIDAY`. Audited `UPDATE` (`STATUS_CHANGE` when only the status changed) |
+| DELETE | `/:id` 🔐 | Permanent; audited `DELETE` with the holiday's values |
+| POST | `/bulk` 🔐 | `{ action: activate \| deactivate \| delete, ids (≤ 500) }` → `{ affected }` (holidays already in that status are left alone) |
+| POST | `/import` 🔐 | `{ rows: [{ rowNumber, values: { occasion, holidayDate, repeatsYearly, status } }] (≤ 1,000), fileName?, dryRun? }` → `{ dryRun, total, created, duplicates, failed, rows: [{ rowNumber, outcome: new \| duplicate \| error, occasion, holidayDate, repeatsYearly, status, messages }] }`. Dates are read day first: `15/08/2026`, `15-08-26`, `15 Aug 2026`, `Aug 15, 2026` or `2026-08-15`; a date without a year (`26/01`, `26 Jan`, `Jan 26`) makes a yearly holiday, as does Repeats Every Year = Yes (a row saying No needs a year). A row repeating a saved holiday or an earlier row is a duplicate and is skipped. `dryRun: true` only checks (the wizard's preview); otherwise the new rows are added in one transaction, each audited `CREATE` (source IMPORT) plus an `IMPORT` summary (`entity: holidays`). 409 `DUPLICATE_HOLIDAY` if someone added one of them meanwhile |
+
 **Email validation** — `/email-validation` 🔐 (Settings › Email Validation)
 
 | Method | Path | Description |
@@ -349,6 +362,7 @@ Limited responses carry `RateLimit-Limit`, `RateLimit-Remaining`, `RateLimit-Res
 | 409 | `RELATED_RECORD_CONSTRAINT` | FK violation |
 | 409 | `VERSION_CONFLICT` | Stale PDF template version |
 | 409 | `CITY_IN_USE` | Deleting a city still used by records |
+| 409 | `DUPLICATE_HOLIDAY` | Holidays: that occasion is already a holiday on that date |
 | 409 | `NOT_UNDOABLE`, `NOT_RESTORABLE`, `ALREADY_REVERSED` | Audit log: the entry can't be undone / restored, or was already |
 | 410 | `EXPORT_EXPIRED` | Audit log export older than 24 h |
 | 413 | – | Body over its limit |

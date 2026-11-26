@@ -4,9 +4,21 @@ import type { ParsedFile, RawRow } from './types';
 export const ACCEPTED_EXTENSIONS = ['.csv', '.xlsx', '.xls'];
 const MAX_FILE_BYTES = 10 * 1024 * 1024;
 
+const pad2 = (n: number) => String(n).padStart(2, '0');
+
+/**
+ * A spreadsheet date cell as `YYYY-MM-DD`. Depending on the xlsx version the Date is midnight in the browser's time
+ * zone or in UTC (give or take a few seconds); reading the local day of noon after it gives the written day either
+ * way, where `toISOString()` gave the day before east of UTC (India).
+ */
+const dateCellToDay = (value: Date): string => {
+    const noon = new Date(value.getTime() + 12 * 60 * 60 * 1000);
+    return `${noon.getFullYear()}-${pad2(noon.getMonth() + 1)}-${pad2(noon.getDate())}`;
+};
+
 const cellToString = (value: unknown): string => {
     if (value === null || value === undefined) return '';
-    if (value instanceof Date) return value.toISOString().slice(0, 10);
+    if (value instanceof Date) return Number.isNaN(value.getTime()) ? '' : dateCellToDay(value);
     return String(value).trim();
 };
 

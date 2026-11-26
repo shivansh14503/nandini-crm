@@ -560,6 +560,29 @@ row then becomes `sent` or `failed`.
 `NOTIFICATION_RETENTION_DAYS` (default 90), and any row older than twice that; `EmailLog` rows older than
 `EMAIL_LOG_RETENTION_DAYS` (default 180).
 
+### 4.27 `Holiday` (Admin › Holidays)
+
+Migration `20261126150000_holidays` (new table only). Module `backend-crm/src/modules/holidays`. The company holiday
+list an admin keeps in Admin › Holidays (added one by one or imported from a spreadsheet). Active holidays show on
+everyone's calendar as amber all-day entries, and the activity Start / End fields warn when a day is a holiday.
+
+`id` (uuid), `occasion` (≤ 100, spaces collapsed), `holidayDate` (DATE), `status` (`Active` | `Inactive`, default
+`Active`: the same Status options and label as Referrals; only Active holidays reach the calendar), `createdBy`,
+`updatedBy`, `createdAt`, `updatedAt`. **UNIQUE** `(holidayDate, occasion)`: the same holiday can't be added or
+imported twice (the database's case-insensitive collation also treats `holi` and `Holi` as one). Index
+`(status, holidayDate)` for the calendar read. Hard delete (no soft delete or undo); every create, edit, status change
+and delete is in the audit log (entity `Holiday`, module `holidays`, category CONFIG) with the holiday's values.
+Migration `20261126170000_holidays_initial_list` loads the 21 holidays of 2024 and 2025 from the old CRM (Active,
+added by `system`, skipping any already there). Migration `20261126190000_holiday_drop_type` drops the short-lived
+`holidayType` column (Public / Optional / Company) and its default: the option was removed from Admin › Holidays.
+Migration `20261126200000_holiday_repeats_yearly` adds `repeatsYearly` (BIT, default 0): the holiday falls on the same
+day and month every year. Such a row keeps its day and month in `holidayDate` with the placeholder year **1904**
+(`YEARLY_ANCHOR_YEAR`: a leap year, so 29 Feb fits, and below the 2000–2100 range of one-off holidays, so the unique
+index covers both kinds without clashing); the API shows it as `MM-DD`. The calendar read expands yearly rows onto
+each year asked for (29 Feb falls on 28 Feb in other years). A one-off holiday that a yearly one of the same occasion
+already covers is refused as a duplicate; a yearly one may be added while one-off copies exist, and the calendar
+shows such a day once.
+
 ## 5. Index strategy
 
 - **Scoped list composites** `(isDeleted, assignedTo, createdAt)` match the most common query: "live records I own or

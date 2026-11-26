@@ -17,7 +17,8 @@ export interface ImportFieldDef {
 }
 
 export interface ImportEntityConfig {
-    entity: ImportEntityType;
+    /** A module of the shared import (/api/import), or an admin list with its own import (Admin › Holidays). */
+    entity: ImportEntityType | 'holidays';
     singular: string;
     plural: string;
     fields: ImportFieldDef[];

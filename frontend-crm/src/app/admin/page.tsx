@@ -11,6 +11,7 @@ import PictureAsPdfOutlinedIcon from '@mui/icons-material/PictureAsPdfOutlined';
 import AccountTreeOutlinedIcon from '@mui/icons-material/AccountTreeOutlined';
 import FormatListNumberedOutlinedIcon from '@mui/icons-material/FormatListNumberedOutlined';
 import MarkEmailReadOutlinedIcon from '@mui/icons-material/MarkEmailReadOutlined';
+import EventBusyOutlinedIcon from '@mui/icons-material/EventBusyOutlined';
 import ManageAccountsOutlinedIcon from '@mui/icons-material/ManageAccountsOutlined';
 import SecurityOutlinedIcon from '@mui/icons-material/SecurityOutlined';
 import ArrowForwardRoundedIcon from '@mui/icons-material/ArrowForwardRounded';
@@ -88,6 +89,16 @@ const ADMIN_MODULES: AdminModule[] = [
         href: ROUTES.EMAIL_VALIDATION,
         badge: BADGES.available,
         highlights: ['Bulk check', 'Risky / invalid', 'Mark bounced', 'History'],
+    },
+    {
+        key: 'holidays',
+        title: 'Holidays',
+        description:
+            'Keep the company holiday list: add or edit holidays, import them from a spreadsheet, and switch them on or off. Active holidays show on everyone\'s calendar.',
+        icon: <EventBusyOutlinedIcon />,
+        href: ROUTES.HOLIDAYS,
+        badge: BADGES.available,
+        highlights: ['Holiday list', 'Import', 'Year filter', 'On the calendar'],
     },
     {
         key: 'roles',

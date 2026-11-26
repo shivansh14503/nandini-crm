@@ -31,6 +31,8 @@ export type AuditEntityType =
     | 'PdfAsset'
     | 'PdfSavedItem'
     | 'DocumentSeries'
+    /** A company holiday (Admin › Holidays). */
+    | 'Holiday'
     | 'City'
     /** An export of the audit log itself (Admin › Audit Log). */
     | 'AuditExport'
@@ -101,6 +103,7 @@ const MODULE_BY_ENTITY: Record<AuditEntityType, string> = {
     PdfAsset: 'pdf-templates',
     PdfSavedItem: 'pdf-templates',
     DocumentSeries: 'document-series',
+    Holiday: 'holidays',
     City: 'cities',
     AuditExport: 'audit-log',
     AuditLedger: 'audit-log',
@@ -118,6 +121,7 @@ const CONFIG_ENTITIES: ReadonlySet<AuditEntityType> = new Set([
     'PdfAsset',
     'PdfSavedItem',
     'DocumentSeries',
+    'Holiday',
     'City',
 ]);
 
@@ -266,6 +270,8 @@ export function labelFromChanges(entityType: AuditEntityType, entityId: string, 
             return entityId;
         case 'DocumentSeries':
             return 'Document Series';
+        case 'Holiday':
+            return pick('occasion');
         case 'Import':
         case 'RecordFile':
         case 'PdfAsset':

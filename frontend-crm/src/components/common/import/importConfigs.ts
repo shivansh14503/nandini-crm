@@ -128,12 +128,14 @@ export const IMPORT_CONFIGS: Record<ImportEntityType, ImportEntityConfig> = {
 
 const normalize = (s: string) => s.toLowerCase().replace(/[\s_\-./]+/g, ' ').trim();
 
+const configOf = (entity: ImportEntityType | ImportEntityConfig): ImportEntityConfig => (typeof entity === 'string' ? IMPORT_CONFIGS[entity] : entity);
+
 /** Pre-selects a file header for each entity field using exact label/key matches, then aliases. */
-export function autoMapColumns(entity: ImportEntityType, headers: string[]): ColumnMapping {
+export function autoMapColumns(entity: ImportEntityType | ImportEntityConfig, headers: string[]): ColumnMapping {
     const mapping: ColumnMapping = {};
     const used = new Set<string>();
     const normHeaders = headers.map((h) => ({ header: h, norm: normalize(h) }));
-    const fields = IMPORT_CONFIGS[entity].fields;
+    const fields = configOf(entity).fields;
 
     const claim = (fieldKey: string, candidates: string[]) => {
         const hit = normHeaders.find((h) => !used.has(h.header) && candidates.includes(h.norm));
@@ -178,8 +180,8 @@ export function mapAndValidateRows(entity: ImportEntityType, parsed: ParsedFile,
 const csvCell = (s: string) => (/[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s);
 
 /** Downloads a CSV with the exact header labels and two illustrative rows. */
-export function downloadSampleTemplate(entity: ImportEntityType): void {
-    const { fields, plural } = IMPORT_CONFIGS[entity];
+export function downloadSampleTemplate(entity: ImportEntityType | ImportEntityConfig): void {
+    const { fields, plural } = configOf(entity);
     const lines = [
         fields.map((f) => csvCell(f.label)).join(','),
         fields.map((f) => csvCell(f.sample[0])).join(','),

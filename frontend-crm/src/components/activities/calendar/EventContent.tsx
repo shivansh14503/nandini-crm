@@ -6,6 +6,7 @@ import type { SvgIconComponent } from '@mui/icons-material';
 import CheckCircleOutlinedIcon from '@mui/icons-material/CheckCircleOutlined';
 import { getModuleColor } from '@/theme/moduleColors';
 import { CANCELLED_STATUS, COMPLETED_STATUS, type CalendarItem } from '@/types/activity.types';
+import type { CalendarHoliday } from '@/types/holiday.types';
 import { relatedModuleLabel } from '../activityLinks';
 
 export interface EventContentProps {
@@ -182,6 +183,86 @@ export function EventContent({ item, Icon, timeText, list = false, compact = fal
                     {item.title}
                 </Box>
             )}
+        </Box>
+    );
+}
+
+const HOLIDAY_COLORS = {
+    soft: 'var(--mui-palette-warning-soft)',
+    border: 'var(--mui-palette-warning-softBorder)',
+    strip: 'var(--mui-palette-warning-main)',
+    text: 'var(--crm-amber-700)',
+} as const;
+
+/** A company holiday (Admin › Holidays) on the calendar: an amber all-day chip, or an agenda row. Not clickable. */
+export function HolidayEventContent({ holiday, Icon, list = false }: { holiday: CalendarHoliday; Icon: SvgIconComponent; list?: boolean }) {
+    const label = 'Holiday';
+    if (list) {
+        return (
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.25, width: '100%', minWidth: 0, minHeight: 40, py: 0.5 }}>
+                <Box sx={{ width: 3, alignSelf: 'stretch', borderRadius: 2, backgroundColor: HOLIDAY_COLORS.strip, flexShrink: 0 }} />
+                <Typography
+                    component="span"
+                    sx={{ width: { xs: 92, sm: 132 }, flexShrink: 0, fontSize: '0.78rem', fontWeight: 600, color: 'var(--mui-palette-text-secondary)' }}
+                >
+                    All day
+                </Typography>
+                <Box
+                    sx={{
+                        width: 28,
+                        height: 28,
+                        borderRadius: '8px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        backgroundColor: HOLIDAY_COLORS.soft,
+                        border: `1px solid ${HOLIDAY_COLORS.border}`,
+                        flexShrink: 0,
+                    }}
+                >
+                    <Icon sx={{ fontSize: 16, color: HOLIDAY_COLORS.text }} />
+                </Box>
+                <Box sx={{ minWidth: 0, flex: 1 }}>
+                    <Typography component="div" noWrap sx={{ fontSize: '0.84rem', fontWeight: 700, color: 'var(--crm-slate-900)' }}>
+                        {holiday.occasion}
+                    </Typography>
+                    <Typography component="div" noWrap sx={{ fontSize: '0.72rem', color: 'var(--mui-palette-text-secondary)' }}>
+                        {label}
+                    </Typography>
+                </Box>
+            </Box>
+        );
+    }
+    return (
+        <Box
+            title={`${label}: ${holiday.occasion}`}
+            sx={{
+                position: 'relative',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 0.5,
+                width: '100%',
+                minWidth: 0,
+                minHeight: 18,
+                overflow: 'hidden',
+                pl: '7px',
+                pr: 0.5,
+                py: '1px',
+                borderRadius: '5px',
+                fontSize: '0.72rem',
+                lineHeight: 1.3,
+                fontWeight: 700,
+                cursor: 'default',
+                color: HOLIDAY_COLORS.text,
+                backgroundColor: HOLIDAY_COLORS.soft,
+                border: `1px solid ${HOLIDAY_COLORS.border}`,
+                '&::before': { content: '""', position: 'absolute', left: 0, top: 0, bottom: 0, width: 3, backgroundColor: HOLIDAY_COLORS.strip },
+            }}
+        >
+            <Icon sx={{ fontSize: 13, flexShrink: 0 }} />
+            <Box component="span" sx={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {holiday.occasion}
+            </Box>
         </Box>
     );
 }
