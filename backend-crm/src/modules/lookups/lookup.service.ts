@@ -4,6 +4,8 @@ import type { Prisma } from '../../generated/prisma/client.js';
 import { CACHE_KEYS, cacheService } from '../../services/cache.service.js';
 import { normalizePlaceName } from '../../utils/cityMaster.js';
 import { booleanQuery } from '../../validators/common.js';
+import { businessToday } from '../../validators/notInPast.js';
+import { OUT_OF_OFFICE_SELECT, outOfOfficeOf, type OutOfOfficeColumns, type OutOfOfficeDto } from '../preferences/preferences.dto.js';
 import { photoUrlOf } from '../profile/profile.dto.js';
 
 /**
@@ -48,9 +50,46 @@ export interface CrmUserDto {
     onLeave: boolean;
     /** `/api/user-photos/<id>`, or null when the user has no profile photo. */
     photoUrl: string | null;
+    /**
+     * The user's out-of-office (My Profile › Notifications), null when unset or ended when the list was read. The
+     * client decides whether it is active on the business day (the list is cached for minutes and loaded once).
+     */
+    outOfOffice: OutOfOfficeDto | null;
 }
 
 export const usersQuerySchema = z.object({ includeInactive: booleanQuery });
+
+/** A Users row as the user directory reads it. */
+export interface CrmUserRow {
+    id: number;
+    username: string;
+    fullName: string;
+    department: string | null;
+    role: string;
+    email: string | null;
+    isActive: boolean;
+    isGroupUser: boolean;
+    onLeave: boolean;
+    photo: { id: string } | null;
+    preference: OutOfOfficeColumns | null;
+}
+
+/** One user of the directory; `today` is the business day (`YYYY-MM-DD`) an ended out-of-office is dropped by. Pure. */
+export function toCrmUserDto(user: CrmUserRow, today: string): CrmUserDto {
+    return {
+        id: String(user.id),
+        name: user.fullName || user.username,
+        username: user.username,
+        department: user.department ?? '',
+        role: user.role,
+        email: user.email ?? '',
+        status: user.isActive ? 'Active' : 'Inactive',
+        isGroupUser: user.isGroupUser,
+        onLeave: user.onLeave,
+        photoUrl: photoUrlOf(user.photo?.id),
+        outOfOffice: outOfOfficeOf(user.preference, today),
+    };
+}
 
 // ── Compact entity projections ───────────────────────────────────────────────
 
@@ -117,7 +156,10 @@ export interface CityLookupDto {
     subdivisionCode: string;
 }
 
-/** Drops the cached user lists (pickers, assignee names). Call after a write to a user's name or photo commits. */
+/**
+ * Drops the cached user lists (pickers, assignee names). Call after a write to a user's name, photo or out-of-office
+ * commits.
+ */
 export function invalidateUserLookupCaches(): Promise<void> {
     return cacheService.invalidatePattern(`${CACHE_KEYS.lookups('users')}:*`);
 }
@@ -125,28 +167,18 @@ export function invalidateUserLookupCaches(): Promise<void> {
 export const lookupService = {
     async users(query: unknown): Promise<CrmUserDto[]> {
         const { includeInactive } = usersQuerySchema.parse(query ?? {});
-        // Guarded: My Profile edits change a user's name and photo (invalidateUserLookupCaches), and Admin › API
+        // Guarded: My Profile edits change a user's name, photo and out-of-office (invalidateUserLookupCaches), and Admin › API
         // Integrations › People changes users' emails (users/userEmail.service.ts drops `cache:lookups:users*`), so a
         // list read while either write commits is not cached. Sign-in only sets lastLoginAt.
         return cacheService.getOrSetGuarded(CACHE_KEYS.lookups(`users:${includeInactive ? 'all' : 'active'}`), ENTITY_TTL_SECONDS, async () => {
             const rows = await prisma.user.findMany({
                 where: includeInactive ? {} : { isActive: true },
                 orderBy: [{ fullName: 'asc' }, { username: 'asc' }],
-                // Only the photo's id (for its URL), never the bytes.
-                include: { photo: { select: { id: true } } },
+                // Only the photo's id (for its URL), never the bytes; the out-of-office columns of the user's preferences.
+                include: { photo: { select: { id: true } }, preference: { select: OUT_OF_OFFICE_SELECT } },
             });
-            return rows.map((user) => ({
-                id: String(user.id),
-                name: user.fullName || user.username,
-                username: user.username,
-                department: user.department ?? '',
-                role: user.role,
-                email: user.email ?? '',
-                status: user.isActive ? 'Active' : 'Inactive',
-                isGroupUser: user.isGroupUser,
-                onLeave: user.onLeave,
-                photoUrl: photoUrlOf(user.photo?.id),
-            }));
+            const today = businessToday();
+            return rows.map((user) => toCrmUserDto(user, today));
         });
     },
 

@@ -28,18 +28,39 @@ const row = (n: number, overrides: Partial<NotificationInput> = {}): Notificatio
     ...overrides,
 });
 
+/** A UserPreference row as the mute filter reads it (only the switches it is given; the rest are on). */
+type FakePreference = { username: string } & Partial<Record<'inAppActivityReminder' | 'inAppActivityAssigned' | 'inAppActivityInvited' | 'inAppContractRenewal', boolean>>;
+
 /**
  * Records every read and insert; `stored` keys exist up front; `raceKeys` make createMany fail like a lost race;
- * `failBatches` (1-based createMany calls) fail once with another error (a dropped connection).
+ * `failBatches` (1-based createMany calls) fail once with another error (a dropped connection); `preferences` are
+ * the users' stored switches (none by default: every kind on).
  */
-function fakeDb(stored: string[] = [], raceKeys: string[] = [], failBatches: number[] = []) {
+function fakeDb(stored: string[] = [], raceKeys: string[] = [], failBatches: number[] = [], preferences: FakePreference[] = []) {
     const keys = new Set(stored);
     const reads: number[] = [];
     const batches: number[] = [];
     const singles: string[] = [];
+    const preferenceReads: string[][] = [];
     const failing = new Set(failBatches);
     let batchCalls = 0;
     const db = {
+        userPreference: {
+            async findMany({ where }: { where: { user: { username: { in: string[] } } } }) {
+                preferenceReads.push(where.user.username.in);
+                const wanted = new Set(where.user.username.in.map((name) => name.toLowerCase()));
+                return preferences
+                    .filter((pref) => wanted.has(pref.username.toLowerCase()))
+                    .map(({ username, ...columns }) => ({
+                        user: { username },
+                        inAppActivityReminder: true,
+                        inAppActivityAssigned: true,
+                        inAppActivityInvited: true,
+                        inAppContractRenewal: true,
+                        ...columns,
+                    }));
+            },
+        },
         notification: {
             async findMany({ where }: { where: { dedupeKey: { in: string[] } } }) {
                 reads.push(where.dedupeKey.in.length);
@@ -61,7 +82,7 @@ function fakeDb(stored: string[] = [], raceKeys: string[] = [], failBatches: num
             },
         },
     };
-    return { db: db as unknown as NotificationDb, keys, reads, batches, singles };
+    return { db: db as unknown as NotificationDb, keys, reads, batches, singles, preferenceReads };
 }
 
 describe('chunk', () => {
@@ -90,6 +111,18 @@ describe('insertMissingNotifications', () => {
         const { db, batches } = fakeDb(rows.map((item) => item.dedupeKey));
         assert.deepEqual(await insertMissingNotifications(db, rows, now), []);
         assert.deepEqual(batches, []);
+    });
+
+    it('writes no row for a recipient who turned the kind off; other users and kinds still get theirs', async () => {
+        const rows = [
+            row(1, { username: 'palak', dedupeKey: 'k1' }),
+            row(2, { username: 'palak', kind: 'activity_assigned', dedupeKey: 'k2' }),
+            row(3, { username: 'ravi', dedupeKey: 'k3' }),
+        ];
+        const { db, keys } = fakeDb([], [], [], [{ username: 'Palak', inAppActivityReminder: false }]);
+        const inserted = await insertMissingNotifications(db, rows, now);
+        assert.deepEqual(inserted.map((item) => item.dedupeKey), ['k2', 'k3']);
+        assert.equal(keys.has('k1'), false);
     });
 
     it('throws a unique violation instead of catching it (the transaction rolls back)', async () => {
@@ -141,6 +174,24 @@ describe('notify', () => {
         const { db, singles } = fakeDb([], [rows[1].dedupeKey]);
         assert.deepEqual(await notify(rows, db, now), { created: 2 });
         assert.deepEqual(singles, [rows[0].dedupeKey, rows[2].dedupeKey]);
+    });
+
+    it('skips muted recipients without reading their dedupe keys, and always delivers calendar_reconnect', async () => {
+        const dropped = watchInvalidations();
+        const rows = [
+            row(1, { username: 'palak', kind: 'contract_renewal', dedupeKey: 'renewal:palak' }),
+            row(2, { username: 'palak', kind: 'calendar_reconnect', dedupeKey: 'reconnect:palak' }),
+        ];
+        const { db, reads } = fakeDb([], [], [], [{ username: 'palak', inAppContractRenewal: false }]);
+        assert.deepEqual(await notify(rows, db, now), { created: 1 });
+        assert.deepEqual(reads, [1]);
+        assert.deepEqual(dropped, ['palak']);
+    });
+
+    it('makes no preference query when no row is of a configurable kind', async () => {
+        const { db, preferenceReads } = fakeDb();
+        assert.deepEqual(await notify([row(1, { kind: 'calendar_reconnect' })], db, now), { created: 1 });
+        assert.deepEqual(preferenceReads, []);
     });
 
     it('does nothing for no rows', async () => {

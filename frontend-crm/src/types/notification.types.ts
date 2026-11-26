@@ -74,7 +74,14 @@ export interface MorningSummaryPreview {
     mailEnabled: boolean;
     /** The caller's email address ('' when none: they get no email). */
     email: string;
+    /**
+     * Why the caller gets no morning email even with mail on: they turned it off (My Profile › Notifications), are
+     * out of office today, or an admin marked them on leave. null when nothing stops it.
+     */
+    notSentReason: MorningSummaryNotSentReason | null;
 }
+
+export type MorningSummaryNotSentReason = 'opted_out' | 'out_of_office' | 'on_leave';
 
 /** `POST /api/notifications/morning-summary/test` (admin roles). */
 export interface MorningSummaryTestResult {

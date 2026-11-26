@@ -1,5 +1,6 @@
 import { ENV } from '../config/env';
 import type { ApiResponse } from '../types/api.types';
+import type { PreferencesDto, PreferencesPatch } from '../types/preferences.types';
 import {
     PROFILE_PHOTO_MAX_BYTES,
     PROFILE_PHOTO_TYPES,
@@ -23,7 +24,7 @@ const readAsDataUrl = (blob: Blob) =>
         reader.readAsDataURL(blob);
     });
 
-/** The signed-in user's own profile, photo and sessions (My Profile). */
+/** The signed-in user's own profile, photo, sessions and notification preferences (My Profile). */
 export const profileService = {
     async getProfile(): Promise<ProfileDto> {
         const res = await apiClient.get<ApiResponse<ProfileDto>>(`${BASE}/profile`);
@@ -56,6 +57,15 @@ export const profileService = {
     },
     async revokeOtherSessions(): Promise<{ signedOutSessions: number }> {
         const res = await apiClient.delete<ApiResponse<{ signedOutSessions: number }>>(`${BASE}/sessions`);
+        return res.data;
+    },
+    async getPreferences(): Promise<PreferencesDto> {
+        const res = await apiClient.get<ApiResponse<PreferencesDto>>(`${BASE}/preferences`);
+        return res.data;
+    },
+    /** Saves only the keys present in `patch`; answers with every preference as saved. */
+    async updatePreferences(patch: PreferencesPatch): Promise<PreferencesDto> {
+        const res = await apiClient.patch<ApiResponse<PreferencesDto>>(`${BASE}/preferences`, patch);
         return res.data;
     },
 };

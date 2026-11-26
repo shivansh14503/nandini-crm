@@ -9,7 +9,10 @@ import { LoadingScreen } from '@/components/common/LoadingScreen';
 import { ErrorAlert } from '@/components/common/ErrorAlert';
 import { ProfileView } from '@/components/profile/ProfileView';
 
-/** /profile[?tab=security]: the signed-in user's own profile, photo, password and sessions. Any signed-in user. */
+/**
+ * /profile[?tab=notifications|security]: the signed-in user's own profile, photo, notification preferences, out of
+ * office, password and sessions. Any signed-in user.
+ */
 export default function ProfilePage() {
     const router = useRouter();
     const { user, loading, error, clearError, isAuthenticated } = useAuth();

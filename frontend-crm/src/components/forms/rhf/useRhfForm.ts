@@ -105,7 +105,7 @@ export function useRhfForm<T extends FieldValues>({
     // Read once, like useForm's own defaultValues. A configuration loading later is applied by useDropdownDefaults.
     const [initialValues] = useState(() => {
         if (!dropdownDefaults?.enabled) return defaultValues;
-        const withDropdowns = module ? withDropdownDefaults(getFormConfigs(), module, defaultValues, dropdownDefaults.keep) : defaultValues;
+        const withDropdowns = module ? withDropdownDefaults(getFormConfigs(), module, defaultValues, dropdownDefaults.keep, dropdownDefaults.personal) : defaultValues;
         return withDefaultAssignee(withDropdowns, assigneeField, user?.username);
     });
     // The resolver reads the form's current defaults (updated by `reset` when an existing record loads), so an
@@ -125,7 +125,7 @@ export function useRhfForm<T extends FieldValues>({
     useEffect(() => {
         formRef.current = methods;
     }, [methods]);
-    useDropdownDefaults(methods, module, { enabled: Boolean(dropdownDefaults?.enabled), keep: dropdownDefaults?.keep });
+    useDropdownDefaults(methods, module, { enabled: Boolean(dropdownDefaults?.enabled), keep: dropdownDefaults?.keep, personal: dropdownDefaults?.personal });
 
     const [toast, setToast] = useState<FormToastState>(CLOSED_TOAST);
 

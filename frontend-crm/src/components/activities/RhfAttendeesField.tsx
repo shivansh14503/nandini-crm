@@ -13,6 +13,7 @@ import { useFormMode } from '@/context/FormModeContext';
 import { apiClient } from '@/services/apiClient';
 import { findCrmUser, getActiveUsers } from '@/services/masterData.store';
 import { useMasterData } from '@/hooks/queries/useMasterData';
+import { useBusinessToday, userAwayStatus } from '@/utils/userAvailability';
 import type { ApiResponse } from '@/types/api.types';
 import type { ActivityAttendee } from '@/types/activity.types';
 import { MAX_ACTIVITY_ATTENDEES, type ActivityFormValues } from '@/validations/activity.schema';
@@ -131,17 +132,19 @@ export function RhfAttendeesField({ name, label, required, hint, organizationId 
 
     // Re-renders when the user directory loads.
     const masters = useMasterData();
+    const today = useBusinessToday();
     const colleagues = useMemo<AttendeeOption[]>(
         () =>
             getActiveUsers().map((u) => ({
                 key: `user:${u.username.toLowerCase()}`,
                 group: 'Colleagues' as const,
                 label: u.name || u.username,
-                secondary: [u.role, u.department].filter(Boolean).join(' • '),
+                // "Sales Manager • Sales · Out of office until 5 Dec": away colleagues can still be invited.
+                secondary: [[u.role, u.department].filter(Boolean).join(' • '), userAwayStatus(u, today)?.label].filter(Boolean).join(' · '),
                 attendee: { kind: 'user' as const, username: u.username },
             })),
         // eslint-disable-next-line react-hooks/exhaustive-deps -- getActiveUsers reads the directory `masters` holds
-        [masters]
+        [masters, today]
     );
 
     // The organization's contacts until something is typed, then every contact matching it.

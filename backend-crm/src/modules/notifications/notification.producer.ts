@@ -5,12 +5,16 @@ import type { Prisma } from '../../generated/prisma/client.js';
 import { CACHE_KEYS, cacheService } from '../../services/cache.service.js';
 import { isUniqueViolation } from '../../utils/prismaErrors.js';
 import { truncate } from './notification.format.js';
+import { withoutMutedRecipients } from './notification.preferences.js';
 
 /**
  * Writes Notification rows (the navbar bell). Every row carries a dedupe key, one per event and recipient
  * (notification.reminders.ts builds them), so producing the same event twice (a retried job, two worker processes,
  * a sweep after the delayed job) never notifies twice. SQL Server has no `skipDuplicates`: the keys already stored are
  * read first and only the missing rows are inserted, in chunks under the 2,100-parameter limit.
+ *
+ * Every row goes through `withoutMutedRecipients` first: a recipient who turned that kind off in My Profile ›
+ * Notifications gets no row (kinds without a switch, such as `calendar_reconnect`, always deliver).
  */
 
 /**
@@ -84,7 +88,7 @@ export function toNotificationData(row: NotificationInput, now: Date): Prisma.No
 }
 
 /** What the producer needs from Prisma: the root client or an interactive transaction. */
-export type NotificationDb = Pick<TransactionClient, 'notification'>;
+export type NotificationDb = Pick<TransactionClient, 'notification' | 'userPreference'>;
 
 /** The dedupe keys (lowercased) among `keys` that are already stored. */
 export async function storedKeys(db: NotificationDb, keys: readonly string[]): Promise<Set<string>> {
@@ -104,8 +108,10 @@ export async function storedKeys(db: NotificationDb, keys: readonly string[]): P
 export async function insertMissingNotifications(db: NotificationDb, rows: readonly NotificationInput[], now = new Date()): Promise<NotificationInput[]> {
     const unique = uniqueByKey(rows);
     if (unique.length === 0) return [];
-    const stored = await storedKeys(db, unique.map((row) => row.dedupeKey));
-    const missing = unique.filter((row) => !stored.has(keyOf(row.dedupeKey)));
+    const allowed = await withoutMutedRecipients(db, unique);
+    if (allowed.length === 0) return [];
+    const stored = await storedKeys(db, allowed.map((row) => row.dedupeKey));
+    const missing = allowed.filter((row) => !stored.has(keyOf(row.dedupeKey)));
     for (const part of chunk(missing, NOTIFICATION_INSERT_CHUNK)) {
         await db.notification.createMany({ data: part.map((row) => toNotificationData(row, now)) });
     }
@@ -148,8 +154,10 @@ export function dropUnreadCountsOnRedisReady(): void {
 export async function notify(rows: readonly NotificationInput[], db: NotificationDb = prisma, now = new Date()): Promise<{ created: number }> {
     const unique = uniqueByKey(rows);
     if (unique.length === 0) return { created: 0 };
-    const stored = await storedKeys(db, unique.map((row) => row.dedupeKey));
-    const missing = unique.filter((row) => !stored.has(keyOf(row.dedupeKey)));
+    const allowed = await withoutMutedRecipients(db, unique);
+    if (allowed.length === 0) return { created: 0 };
+    const stored = await storedKeys(db, allowed.map((row) => row.dedupeKey));
+    const missing = allowed.filter((row) => !stored.has(keyOf(row.dedupeKey)));
     const created: NotificationInput[] = [];
 
     try {

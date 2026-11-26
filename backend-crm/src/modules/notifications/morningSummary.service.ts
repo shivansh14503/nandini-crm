@@ -23,6 +23,7 @@ import {
 import { NOTE_TYPE, PLANNED_STATUS } from '../activities/activity.schedule.js';
 import { FOLLOWUP_TYPE_CATEGORY_KEY } from '../form-configs/formConfig.defaults.js';
 import { loadRatingConfig } from '../leads/lead.followUp.js';
+import { isOutOfOfficeToday } from '../preferences/preferences.dto.js';
 import { buildAccessScopeWhere } from '../shared/accessControl.js';
 import { renderMorningSummary } from './morningSummary.render.js';
 import { shouldCatchUpMorningSummary } from './morningSummary.schedule.js';
@@ -37,8 +38,8 @@ import {
 import { DECLINED } from './notification.reminders.js';
 
 /**
- * The morning summary email (about 9 AM, MORNING_SUMMARY_CRON): one email per active user with an email address,
- * listing today's activities, overdue activities, follow-ups due today and overdue, and contract renewals. The rows
+ * The morning summary email (about 9 AM, MORNING_SUMMARY_CRON): one email per active user with an email address who
+ * is not on leave, not out of office today and hasn't turned it off (My Profile › Notifications), listing today's activities, overdue activities, follow-ups due today and overdue, and contract renewals. The rows
  * come from the calendar feed's where-builders (activity.calendar.ts), so open leads / opportunities and the access
  * rules are the calendar's. Each send is deduplicated per business day and user (EmailLog), so a retry, a catch-up
  * run or a second worker process never mails a user twice.
@@ -115,6 +116,26 @@ export interface SummaryRecipient {
 }
 
 const RECIPIENT_SELECT = { id: true, username: true, role: true, fullName: true, email: true } as const satisfies Prisma.UserSelect;
+
+/** The user's own say over the summary (UserPreference; null = no row = defaults: wanted, not out of office). */
+const SUMMARY_PREFERENCE_SELECT = { emailMorningSummary: true, outOfOfficeFrom: true, outOfOfficeTo: true } as const satisfies Prisma.UserPreferenceSelect;
+
+/** Why a user gets no morning summary today, in this order: the admin On leave switch, out of office, opted out. */
+export type MorningSummarySkipReason = 'on_leave' | 'out_of_office' | 'opted_out';
+
+/**
+ * Why `user` gets no summary on `day` (`YYYY-MM-DD`, business timezone), or null when they get one. Out of office
+ * covers `day` when it lies in the stored range, both ends included. Pure.
+ */
+export function morningSummarySkipReason(
+    user: { onLeave: boolean; preference: { emailMorningSummary: boolean; outOfOfficeFrom: Date | null; outOfOfficeTo: Date | null } | null },
+    day: string,
+): MorningSummarySkipReason | null {
+    if (user.onLeave) return 'on_leave';
+    if (isOutOfOfficeToday(user.preference, day)) return 'out_of_office';
+    if (user.preference && !user.preference.emailMorningSummary) return 'opted_out';
+    return null;
+}
 
 const SUMMARY_ACTIVITY_SELECT = {
     id: true,
@@ -248,7 +269,10 @@ export async function forEachLimited<T>(items: readonly T[], limit: number, fn: 
 
 export interface MorningSummaryRunResult {
     day: string;
-    /** Users considered (active, not a group user, not on leave, with an email address). */
+    /**
+     * Users considered (active, not a group user, not on leave, with an email address). Each is counted once more in
+     * exactly one of sent / skipped / failed / empty / optedOut / outOfOffice.
+     */
     users: number;
     sent: number;
     /** Already sent today (another run / process), or mail turned off meanwhile. */
@@ -256,6 +280,10 @@ export interface MorningSummaryRunResult {
     failed: number;
     /** Users with nothing due (no email, MORNING_SUMMARY_SKIP_EMPTY). */
     empty: number;
+    /** Users who turned the morning summary off (My Profile › Notifications): nothing built or sent. */
+    optedOut: number;
+    /** Users out of office today (My Profile › Notifications): nothing built or sent. */
+    outOfOffice: number;
     /** Set when the run did nothing because the summary or mail is turned off. */
     disabled?: 'summary' | 'mail';
 }
@@ -269,13 +297,21 @@ async function runFor(now: Date): Promise<MorningSummaryRunResult> {
     const ctx = await summaryContext(now);
     const recipients = await prisma.user.findMany({
         where: { isActive: true, isGroupUser: false, onLeave: false, email: { not: null } },
-        select: RECIPIENT_SELECT,
+        select: { ...RECIPIENT_SELECT, onLeave: true, preference: { select: SUMMARY_PREFERENCE_SELECT } },
         orderBy: { username: 'asc' },
     });
     const withEmail = recipients.filter((row) => (row.email ?? '').trim() !== '');
-    const result: MorningSummaryRunResult = { day: ctx.day, users: withEmail.length, sent: 0, skipped: 0, failed: 0, empty: 0 };
+    const result: MorningSummaryRunResult = { day: ctx.day, users: withEmail.length, sent: 0, skipped: 0, failed: 0, empty: 0, optedOut: 0, outOfOffice: 0 };
+    // Preferences are applied here, where recipients are chosen (sendMail has no per-user guard): an email kind added
+    // later must filter its recipients the same way.
+    const wanted = withEmail.filter((row) => {
+        const reason = morningSummarySkipReason(row, ctx.day);
+        if (reason === 'opted_out') result.optedOut++;
+        else if (reason === 'out_of_office') result.outOfOffice++;
+        return reason === null;
+    });
 
-    await forEachLimited(withEmail, SUMMARY_USER_CONCURRENCY, async (recipient) => {
+    await forEachLimited(wanted, SUMMARY_USER_CONCURRENCY, async (recipient) => {
         try {
             const summary = await buildMorningSummaryFor(recipient, ctx);
             if (summary.empty && ENV.NOTIFICATIONS.MORNING_SUMMARY_SKIP_EMPTY) {
@@ -314,14 +350,14 @@ async function runFor(now: Date): Promise<MorningSummaryRunResult> {
 export function runMorningSummary(now = new Date()): Promise<MorningSummaryRunResult> {
     const day = zonedDayOf(now, ENV.BUSINESS_TIMEZONE);
     if (!ENV.NOTIFICATIONS.MORNING_SUMMARY_ENABLED) {
-        return Promise.resolve({ day, users: 0, sent: 0, skipped: 0, failed: 0, empty: 0, disabled: 'summary' });
+        return Promise.resolve({ day, users: 0, sent: 0, skipped: 0, failed: 0, empty: 0, optedOut: 0, outOfOffice: 0, disabled: 'summary' });
     }
     if (!isMailConfigured()) {
         if (!loggedMailOff) {
             loggedMailOff = true;
             logger.warn('Morning summary emails are not sent: outgoing email is turned off (MAIL_ENABLED / SMTP_HOST)');
         }
-        return Promise.resolve({ day, users: 0, sent: 0, skipped: 0, failed: 0, empty: 0, disabled: 'mail' });
+        return Promise.resolve({ day, users: 0, sent: 0, skipped: 0, failed: 0, empty: 0, optedOut: 0, outOfOffice: 0, disabled: 'mail' });
     }
     running ??= runFor(now).finally(() => {
         running = null;
@@ -377,14 +413,29 @@ export interface MorningSummaryPreview {
     mailEnabled: boolean;
     /** The caller's email address ('' when none: they would get no email). */
     email: string;
+    /** Why the caller gets no summary today (the preview still works), or null when they get one. */
+    notSentReason: MorningSummarySkipReason | null;
 }
 
 /** `GET /api/notifications/morning-summary/preview`: the caller's email for today, sent nowhere. */
 export async function previewMorningSummary(user: AuthUser, now = new Date()): Promise<MorningSummaryPreview> {
-    const recipient = await loadRecipient(user);
-    const summary = await buildMorningSummaryFor(recipient, await summaryContext(now));
+    const row = await prisma.user.findUnique({
+        where: { username: user.username },
+        select: { ...RECIPIENT_SELECT, onLeave: true, preference: { select: SUMMARY_PREFERENCE_SELECT } },
+    });
+    if (!row) throw HttpError.notFound('User not found');
+    const { onLeave, preference, ...recipient } = row;
+    const ctx = await summaryContext(now);
+    const summary = await buildMorningSummaryFor(recipient, ctx);
     const email = renderMorningSummary(summary);
-    return { ...email, counts: summary.counts, empty: summary.empty, mailEnabled: isMailConfigured(), email: (recipient.email ?? '').trim() };
+    return {
+        ...email,
+        counts: summary.counts,
+        empty: summary.empty,
+        mailEnabled: isMailConfigured(),
+        email: (recipient.email ?? '').trim(),
+        notSentReason: morningSummarySkipReason({ onLeave, preference }, ctx.day),
+    };
 }
 
 export interface MorningSummaryTestResult {
@@ -398,7 +449,8 @@ export interface MorningSummaryTestResult {
 
 /**
  * `POST /api/notifications/morning-summary/test` (admins): builds the caller's summary and sends it to their own
- * address now, with no dedupe (EmailLog kind `morning_summary_test`). 400 when mail is off or they have no address.
+ * address now, with no dedupe (EmailLog kind `morning_summary_test`). An explicit admin action, so it ignores the
+ * caller's own preferences (opted out, out of office, on leave). 400 when mail is off or they have no address.
  */
 export async function sendTestMorningSummary(user: AuthUser, now = new Date()): Promise<MorningSummaryTestResult> {
     if (!isMailConfigured()) throw HttpError.badRequest(MAIL_DISABLED_MESSAGE);
