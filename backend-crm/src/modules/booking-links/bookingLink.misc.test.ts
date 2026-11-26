@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { bookingAccessOf, roleMayOwnLinks } from './bookingLink.access.js';
 import { buildIcs, escapeIcsText, foldIcsLine } from './bookingLink.ics.js';
-import { localHit } from './bookingLink.rateLimit.js';
+import { BookingRateLimitError, chargeLink, localHit, resetLocalBookingLimits } from './bookingLink.rateLimit.js';
 import { newSlug, parseAvailability, parseDurations, slugPart } from './bookingLink.service.js';
 import { bookingSettingsSchema, readBookingSettings } from './bookingLink.settings.js';
 import { availabilitySchema, bookBodySchema, createLinkSchema, SLUG_PATTERN, slotsQuerySchema, updateLinkSchema } from './bookingLink.validator.js';
@@ -26,7 +26,8 @@ describe('booking links: settings and access', () => {
         assert.equal(roleMayOwnLinks(manager, 'managers'), true);
         assert.equal(roleMayOwnLinks(manager, 'admins'), false);
         assert.equal(roleMayOwnLinks(admin, 'admins'), true);
-        assert.deepEqual(bookingAccessOf(exec, { enabled: false, whoCanCreate: 'everyone' }), { enabled: false, canCreate: false, isAdmin: false, whoCanCreate: 'everyone' });
+        assert.deepEqual(bookingAccessOf(exec, { enabled: false, whoCanCreate: 'everyone' }), { enabled: false, canCreate: false, isAdmin: false, whoCanCreate: 'everyone', ownsLinks: false });
+        assert.equal(bookingAccessOf(exec, { enabled: false, whoCanCreate: 'admins' }, true).ownsLinks, true);
         assert.equal(bookingAccessOf(admin, { enabled: true, whoCanCreate: 'admins' }).isAdmin, true);
     });
 });
@@ -137,5 +138,20 @@ describe('booking links: in-process rate limit', () => {
         assert.equal(refused.retryAfterSeconds, 59);
         assert.equal(localHit('other', 3, 60, t).allowed, true);
         assert.equal(localHit('k', 3, 60, t + 61_000).allowed, true);
+    });
+
+    it('per-link charges: 30 booking attempts an hour per link (in process without Redis), then 429 with a retry time', async () => {
+        resetLocalBookingLimits();
+        for (let i = 0; i < 30; i += 1) await chargeLink('book', 'link-x');
+        await assert.rejects(chargeLink('book', 'link-x'), (err: unknown) => {
+            assert.ok(err instanceof BookingRateLimitError);
+            assert.equal(err.statusCode, 429);
+            assert.equal(err.code, 'RATE_LIMITED');
+            assert.ok(err.retryAfterSeconds > 0);
+            return true;
+        });
+        await chargeLink('book', 'link-y');
+        await chargeLink('slots', 'link-x');
+        resetLocalBookingLimits();
     });
 });

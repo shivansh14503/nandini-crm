@@ -1,6 +1,6 @@
 import type { NextFunction, Request, Response } from 'express';
 import { StatusCodes } from 'http-status-codes';
-import { createRateLimiter } from '../../middlewares/rateLimiter.js';
+import { createRateLimiter, rateLimitHit } from '../../middlewares/rateLimiter.js';
 import { HttpError } from '../../utils/httpError.js';
 import { BOOKING_RATE_LIMITS } from './bookingLink.constants.js';
 
@@ -9,6 +9,11 @@ import { BOOKING_RATE_LIMITS } from './bookingLink.constants.js';
  * whenever Redis can't count (down, or a command failing), an in-process counter takes over instead of letting the
  * request through: these routes are open to the internet, read calendars and write activities. Per process, so with N
  * API instances the fallback allows up to N times the limit.
+ *
+ * The per-IP limits are route middleware and count every request. The per-link limits (`chargeLink`) are charged by
+ * the service only once a request is a real attempt: a live link and a valid query (slots), or a valid, unused slot
+ * token this server signed (book). So junk requests (bad slug, empty body, honeypot, forged or expired token) only use
+ * up their own IP's quota and can't lock a link's visitors out.
  */
 
 const MESSAGE = 'Too many requests. Please wait a little and try again.';
@@ -37,7 +42,6 @@ export function resetLocalBookingLimits(): void {
 }
 
 const byIp = (req: Request) => `ip:${req.ip ?? 'unknown'}`;
-const byLink = (req: Request) => `link:${String(req.params.slug ?? '').slice(0, 60)}`;
 
 function limiter(name: string, limit: { max: number; windowSeconds: number }, keyGenerator: (req: Request) => string) {
     const keyPrefix = `ratelimit:booking-${name}`;
@@ -53,7 +57,33 @@ function limiter(name: string, limit: { max: number; windowSeconds: number }, ke
 export const bookingLimiters = {
     view: limiter('view', BOOKING_RATE_LIMITS.view, byIp),
     slotsPerIp: limiter('slots-ip', BOOKING_RATE_LIMITS.slotsPerIp, byIp),
-    slotsPerLink: limiter('slots-link', BOOKING_RATE_LIMITS.slotsPerLink, byLink),
     bookPerIp: limiter('book-ip', BOOKING_RATE_LIMITS.bookPerIp, byIp),
-    bookPerLink: limiter('book-link', BOOKING_RATE_LIMITS.bookPerLink, byLink),
 };
+
+/** A per-link limit was reached (429 RATE_LIMITED; the public router adds `Retry-After`). */
+export class BookingRateLimitError extends HttpError {
+    readonly retryAfterSeconds: number;
+    constructor(retryAfterSeconds: number) {
+        super(MESSAGE, StatusCodes.TOO_MANY_REQUESTS, { code: 'RATE_LIMITED' });
+        this.retryAfterSeconds = retryAfterSeconds;
+    }
+}
+
+/** Per-link limits, keyed by the link's id (not the slug text a request names). */
+const LINK_LIMITS = {
+    slots: { name: 'slots-link', ...BOOKING_RATE_LIMITS.slotsPerLink },
+    book: { name: 'book-link', ...BOOKING_RATE_LIMITS.bookPerLink },
+} as const;
+
+/** One hit on link `linkId`'s `kind` counter; throws BookingRateLimitError past the limit. */
+export async function chargeLink(kind: keyof typeof LINK_LIMITS, linkId: string): Promise<void> {
+    const { name, max, windowSeconds } = LINK_LIMITS[kind];
+    const key = `ratelimit:booking-${name}:link:${linkId}`;
+    const state = await rateLimitHit(key, windowSeconds);
+    if (state) {
+        if (state.count > max) throw new BookingRateLimitError(state.ttl);
+        return;
+    }
+    const local = localHit(key, max, windowSeconds);
+    if (!local.allowed) throw new BookingRateLimitError(local.retryAfterSeconds);
+}

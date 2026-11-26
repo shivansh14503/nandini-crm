@@ -820,7 +820,8 @@ with route `public:booking`, IP and user agent). `id`, `bookingLinkId` (FK → `
 activity created; no FK, activities are soft-deleted), `ownerUsername`, `startAt` / `endAt`, `visitorName` (≤ 100),
 `visitorEmail` (≤ 120, lower-cased), `visitorPhone` (≤ 30), `visitorCompany` (≤ 200), `contactId` (the Contact matched by
 email, if exactly one live contact had it), `tokenHash` (NVARCHAR(64), sha256 hex of the slot token, **UNIQUE**
-`BookingLinkBooking_tokenHash_key`: a token books once; a resubmit gets the same confirmation), `createdAt`. Indexes
+`BookingLinkBooking_tokenHash_key`: a token books once; a resubmit by the same email gets the same confirmation, looked up by this hash before the
+token's expiry and the busy check, as of 2026-11-26), `createdAt`. Indexes
 `(bookingLinkId, startAt)` (bookings per day for `maxPerDay`, counting only activities still live and not cancelled) and
 `(bookingLinkId, createdAt)` (the management list, newest first). Kept with the link (no purge yet; visitor details are
 also on the activity as an attendee and in its remarks).

@@ -1,6 +1,6 @@
-import { addDays, zonedDayOf, zonedWallClockToInstant } from '../../utils/zonedTime.js';
+import { addDays, daysBetween, zonedDayOf, zonedWallClockToInstant } from '../../utils/zonedTime.js';
 import { mergeIntervals, type Interval } from '../calendar-sync/busy.intervals.js';
-import { BOOKING_WEEKDAYS, type BookingWeekday } from './bookingLink.constants.js';
+import { BOOKING_BUSY_BLOCK_DAYS, BOOKING_WEEKDAYS, type BookingWeekday } from './bookingLink.constants.js';
 
 /**
  * Free start times of a booking link (pure, tested in bookingLink.slots.test.ts). Times are epoch milliseconds or
@@ -158,4 +158,23 @@ export function computeSlots(q: SlotQuery): SlotDay[] {
 /** `[from, to)` instants covering the business days `first … last` (inclusive). */
 export function daysRange(first: string, last: string, tz: string): Interval {
     return { start: zonedWallClockToInstant(`${first}T00:00`, tz).getTime(), end: zonedWallClockToInstant(`${addDays(last, 1)}T00:00`, tz).getTime() };
+}
+
+/** The Monday the busy-time blocks count from (BOOKING_BUSY_BLOCK_DAYS). */
+const BLOCK_EPOCH = '1970-01-05';
+
+/**
+ * The fixed busy-time blocks (`{ first, last }` days, BOOKING_BUSY_BLOCK_DAYS long, aligned to BLOCK_EPOCH) that cover
+ * `[fromDay, lastDay]`. Whatever window a visitor asks for, the reads (and their cache keys) are always these blocks.
+ */
+export function busyBlocks(fromDay: string, lastDay: string, blockDays: number = BOOKING_BUSY_BLOCK_DAYS): { first: string; last: string }[] {
+    const out: { first: string; last: string }[] = [];
+    let index = Math.floor(daysBetween(BLOCK_EPOCH, fromDay) / blockDays);
+    for (;;) {
+        const first = addDays(BLOCK_EPOCH, index * blockDays);
+        if (first > lastDay) break;
+        out.push({ first, last: addDays(first, blockDays - 1) });
+        index += 1;
+    }
+    return out;
 }

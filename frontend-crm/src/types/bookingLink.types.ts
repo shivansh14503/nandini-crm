@@ -74,6 +74,8 @@ export interface BookingAccess extends BookingSettings {
     canCreate: boolean;
     /** May see everyone's links and make one for a colleague. */
     isAdmin: boolean;
+    /** Owns at least one booking link (active or not): may always see its bookings and turn it off. */
+    ownsLinks: boolean;
 }
 
 /** Whether visitors can be offered times checked against the owner's company calendar. */

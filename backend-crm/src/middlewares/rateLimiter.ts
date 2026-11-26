@@ -5,7 +5,7 @@ import { logger } from '../config/logger.js';
 import { isRedisReady, redis } from '../config/redis.js';
 import { HttpError } from '../utils/httpError.js';
 
-interface WindowState {
+export interface WindowState {
     count: number;
     /** Seconds until the window resets. */
     ttl: number;
@@ -15,7 +15,7 @@ interface WindowState {
  * Fixed-window counter: the first hit creates the key with its expiry (SET … NX EX), later hits only INCR,
  * so the window never extends. Returns null when Redis is unavailable (callers fail open).
  */
-async function hit(key: string, windowSeconds: number): Promise<WindowState | null> {
+export async function rateLimitHit(key: string, windowSeconds: number): Promise<WindowState | null> {
     if (!isRedisReady()) return null;
     try {
         const results = await redis.multi().set(key, 0, 'EX', windowSeconds, 'NX').incr(key).ttl(key).exec();
@@ -65,7 +65,7 @@ export function createRateLimiter(options: RateLimiterOptions) {
     const message = options.message ?? 'Too many requests. Please try again later.';
 
     return async (req: Request, res: Response, next: NextFunction): Promise<void> => {
-        const state = await hit(`${keyPrefix}:${keyGenerator(req)}`, windowSeconds);
+        const state = await rateLimitHit(`${keyPrefix}:${keyGenerator(req)}`, windowSeconds);
         if (!state) return fallback ? fallback(req, res, next) : next();
 
         res.setHeader('RateLimit-Limit', String(max));
@@ -95,7 +95,7 @@ export const loginRateLimit = {
     },
 
     async recordFailure(ip: string | undefined): Promise<void> {
-        await hit(loginKey(ip), ENV.RATE_LIMIT.LOGIN_WINDOW_SECONDS);
+        await rateLimitHit(loginKey(ip), ENV.RATE_LIMIT.LOGIN_WINDOW_SECONDS);
     },
 
     async reset(ip: string | undefined): Promise<void> {

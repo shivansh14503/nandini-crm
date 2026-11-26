@@ -52,6 +52,14 @@ export const BOOKING_DEFAULTS = Object.freeze({
 /** Days the public page asks for at once (a week strip). */
 export const BOOKING_SLOT_PAGE_DAYS = 7;
 
+/**
+ * The public page reads the owner's busy times in fixed 14-day blocks aligned to Mondays (from 1970-01-05), whatever
+ * `from` / `days` a visitor asks for, so one link has only a handful of distinct reads (and cache keys) across its
+ * horizon: slot browsing can't use up the provider-call budget with made-up windows. 14 = BUSY_PROVIDER_WINDOW_DAYS,
+ * one provider call per block on a cache miss.
+ */
+export const BOOKING_BUSY_BLOCK_DAYS = 14;
+
 /** A slot token is good for this long after the times were shown (the visitor fills the form meanwhile). */
 export const BOOKING_TOKEN_TTL_SECONDS = 30 * 60;
 
@@ -73,11 +81,16 @@ export const BOOKING_ERROR_CODES = {
     calendarUnavailable: 'CALENDAR_UNAVAILABLE',
 } as const;
 
-/** Rate limits of the public routes (Redis fixed windows; an in-process counter while Redis can't count). */
+/**
+ * Rate limits of the public routes (Redis fixed windows; an in-process counter while Redis can't count). Per IP:
+ * every request. Per link: only real attempts (a live link with a valid query; a valid, unused slot token). The slots
+ * per-link limit is a high backstop: slot pages read the owner's busy times in aligned windows from short caches, so
+ * many visitors cost few provider calls (BOOKING_BUSY_BLOCK_DAYS).
+ */
 export const BOOKING_RATE_LIMITS = Object.freeze({
     view: { max: 60, windowSeconds: 60 },
     slotsPerIp: { max: 60, windowSeconds: 60 },
-    slotsPerLink: { max: 600, windowSeconds: 60 },
+    slotsPerLink: { max: 3000, windowSeconds: 60 },
     bookPerIp: { max: 10, windowSeconds: 60 * 60 },
     bookPerLink: { max: 30, windowSeconds: 60 * 60 },
 });

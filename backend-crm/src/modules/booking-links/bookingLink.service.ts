@@ -425,19 +425,25 @@ const DEFAULT_AVAILABILITY: WeeklyAvailability = Object.fromEntries(
 
 export const bookingLinkService = {
     async access(user: AuthUser): Promise<BookingAccess> {
-        return bookingAccessOf(user, await loadBookingSettings());
+        const [settings, owned] = await Promise.all([
+            loadBookingSettings(),
+            prisma.bookingLink.findFirst({ where: { ownerUsername: user.username }, select: { id: true } }),
+        ]);
+        return bookingAccessOf(user, settings, owned !== null);
     },
 
     async list(query: unknown, user: AuthUser): Promise<{ access: BookingAccess; links: BookingLinkDto[] }> {
         const { scope } = linkListQuerySchema.parse(query ?? {});
-        const access = bookingAccessOf(user, await loadBookingSettings());
-        if (scope === 'all' && !access.isAdmin) throw HttpError.forbidden();
+        const settings = await loadBookingSettings();
+        if (scope === 'all' && !isBookingAdmin(user)) throw HttpError.forbidden();
         const rows = await prisma.bookingLink.findMany({
             where: scope === 'all' ? {} : { ownerUsername: user.username },
             orderBy: [{ isActive: 'desc' }, { createdAt: 'desc' }],
             take: 500,
         });
-        return { access, links: await decorate(rows, new Date()) };
+        const ownsLinks = rows.some((r) => r.ownerUsername.toLowerCase() === user.username.toLowerCase());
+        const owned = ownsLinks || scope === 'mine' ? ownsLinks : (await prisma.bookingLink.findFirst({ where: { ownerUsername: user.username }, select: { id: true } })) !== null;
+        return { access: bookingAccessOf(user, settings, owned), links: await decorate(rows, new Date()) };
     },
 
     async create(body: unknown, user: AuthUser): Promise<BookingLinkDto> {

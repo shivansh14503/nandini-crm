@@ -6,7 +6,7 @@ import express from 'express';
 import { errorHandler, notFoundHandler } from '../../middlewares/errorHandler.js';
 import { bookingDeps } from './bookingLink.public.js';
 import publicBookingRouter from './bookingLink.public.routes.js';
-import { resetLocalBookingLimits } from './bookingLink.rateLimit.js';
+import { BookingRateLimitError, resetLocalBookingLimits } from './bookingLink.rateLimit.js';
 
 /**
  * The public router over HTTP (no Redis: the in-process rate limit counts): no sign-in, the response headers, one 404
@@ -70,6 +70,16 @@ describe('public booking routes', () => {
             body: JSON.stringify({ token: 'x', name: 'a', email: 'a@b.co', message: 'x'.repeat(20_000) }),
         });
         assert.equal(res.status, 413);
+    });
+
+    it('a per-link limit from the service answers 429 with Retry-After', async () => {
+        mock.method(bookingDeps, 'loadBookingSettings', async () => {
+            throw new BookingRateLimitError(42);
+        });
+        const res = await fetch(`${base}/priya-demo-abcdefgh/slots`);
+        assert.equal(res.status, 429);
+        assert.equal(res.headers.get('retry-after'), '42');
+        assert.equal(((await res.json()) as { code?: string }).code, 'RATE_LIMITED');
     });
 
     it('rate limits page views per IP (in process without Redis)', async () => {

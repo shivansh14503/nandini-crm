@@ -444,7 +444,11 @@ keeps wall-clock times); all-day activities are entered as business-timezone day
         on-page confirmation with an `.ics` file (no email: the mail layer stays parked). Public API: own router,
         16 KB body, one identical 404, rate limits per IP and per link (in-process fallback, never open), honeypot,
         audit route `public:booking`. No job, no polling (DB wakes only when a page is open). Calendar push follows
-        automatically once P2-3b's write hook is merged (invitation held for the owner under D41). Not run against a
+        automatically once P2-3b's write hook is merged (invitation held for the owner under D41). Review fixes
+        (2026-11-26): per-link limits count only real attempts; slot pages read busy times in fixed 14-day blocks and
+        bookings re-read on their own provider budget; a resubmitted token gets its confirmation even after the busy
+        check or expiry would refuse it; owners of links always see the menu item (`ownsLinks`); the page keeps typed
+        details, hides another duration's times while loading and retries after network errors. Not run against a
         real SQL Server, Google or Microsoft (doubles only). Later: email confirmations and visitor cancel /
         reschedule (mail layer), team / round-robin links, custom questions.
   - [ ] Recurring activities (CRM-authored series, R12 occurrence rows).

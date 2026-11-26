@@ -29,7 +29,8 @@ import {
 } from './bookingLink.constants.js';
 import { buildIcs } from './bookingLink.ics.js';
 import { findPublicLink, loadBookingSettings, type LinkConfig, type PublicLink } from './bookingLink.service.js';
-import { bookableDays, clashes, computeSlots, daysRange, slotRuleProblem } from './bookingLink.slots.js';
+import { chargeLink } from './bookingLink.rateLimit.js';
+import { bookableDays, busyBlocks, clashes, computeSlots, daysRange, slotRuleProblem } from './bookingLink.slots.js';
 import { signSlot, tokenHashOf, verifySlot } from './bookingLink.token.js';
 import { bookBodySchema, slotsQuerySchema, type BookBody } from './bookingLink.validator.js';
 
@@ -40,8 +41,16 @@ import { bookBodySchema, slotsQuerySchema, type BookBody } from './bookingLink.v
  * or a shared login), so the API can't be used to find links or people. Only the link's own public fields and free
  * start times leave the server: never busy blocks, subjects, usernames, emails or the owner's calendar status.
  *
- * Booking (`book`): the slot token must be one this server signed for this version of the link; the hours, notice,
- * horizon and holidays are checked again; the company calendar is read again (outside the transaction); then, inside
+ * Slots (`slots`): the owner's busy times are read in fixed, Monday-aligned BOOKING_BUSY_BLOCK_DAYS blocks covering the
+ * asked days (never the visitor's own window), so made-up `from` / `days` values hit the same few cache keys and can't
+ * use up the link's provider-call budget (`booking:<linkId>`).
+ *
+ * Booking (`book`): the slot token must be one this server signed for this version of the link. A token that already
+ * booked (its hash is on a BookingLinkBooking row of this link) answers that booking's confirmation when the email
+ * matches, even after the token expired (a resubmit after a lost response), and 409 otherwise; this is checked before
+ * expiry and before the busy check, which would otherwise find the visitor's own meeting. Then the hours, notice,
+ * horizon and holidays are checked again; the company calendar is read again (outside the transaction, on its own budget `booking-book:<linkId>`, so slot
+ * browsing can't block confirmations); then, inside
  * one transaction under a per-owner lock (D45: pre-read under the lock, never a caught unique error), the CRM
  * activities are read again through `tx`, the daily cap is counted again, the meeting activity is inserted through
  * the system write path, the booking row and the owner's `booking_created` notification are written. A unique
@@ -58,6 +67,12 @@ export const bookingDeps = {
     loadCalendarSettings,
     insertSystemActivity,
     runActivityPostCommit,
+    chargeLink,
+    /** The booking of this link that used token hash `tokenHash`, if any (a resubmit). */
+    async bookingByToken(linkId: string, tokenHash: string): Promise<{ id: string; startAt: Date; endAt: Date; visitorEmail: string } | null> {
+        const row = await prisma.bookingLinkBooking.findUnique({ where: { tokenHash }, select: { id: true, startAt: true, endAt: true, visitorEmail: true, bookingLinkId: true } });
+        return row && row.bookingLinkId === linkId ? { id: row.id, startAt: row.startAt, endAt: row.endAt, visitorEmail: row.visitorEmail } : null;
+    },
     /** Active holidays `[from, to]` (inclusive days), cached 10 minutes. */
     async holidays(from: string, to: string): Promise<Set<string>> {
         const days = await cacheService.getOrSet(`cache:booking-holidays:${from}:${to}`, 600, async () =>
@@ -121,12 +136,12 @@ const ownerAsRequester = (link: LinkConfig): AuthUser => ({ id: 0, username: lin
  * a time the CRM can't check against Google / Outlook would double-book. `not_connected` = CRM only. An owner that
  * busy times no longer knows (inactive since the link was cached) is the 404.
  */
-async function ownerBusy(link: LinkConfig, range: Interval, now: Date): Promise<Interval[]> {
+async function ownerBusy(link: LinkConfig, range: Interval, now: Date, budget: 'slots' | 'book'): Promise<Interval[]> {
     const answer = await bookingDeps.busyTimes(
         { users: [link.ownerUsername], from: new Date(range.start).toISOString(), to: new Date(range.end).toISOString(), exclude: undefined },
         ownerAsRequester(link),
         now,
-        { budgetKey: `booking:${link.id}` },
+        { budgetKey: budget === 'slots' ? `booking:${link.id}` : `booking-book:${link.id}` },
     );
     const person = answer.people[0];
     if (!person || person.status === 'unknown') throw notFound();
@@ -265,7 +280,7 @@ async function bookOnce(a: Attempt): Promise<AttemptResult> {
     return runInTransaction(async (tx) => {
         await acquireLocks(tx, [`booking:owner:${link.ownerUsername.trim().toLowerCase()}`]);
 
-        // The same token again (a double click, a retried request): one booking.
+        // The same token again, racing the first (two requests in flight at once): one booking.
         const used = await tx.bookingLinkBooking.findUnique({ where: { tokenHash: a.tokenHash }, select: { id: true, startAt: true, endAt: true, visitorEmail: true } });
         if (used) {
             if (used.visitorEmail.toLowerCase() === body.email.toLowerCase()) return { kind: 'existing', booking: used };
@@ -413,11 +428,16 @@ export const bookingPublicService = {
         const lastAsked = addDays(fromDay, query.days - 1);
         const lastDay = lastAsked > bounds.last ? bounds.last : lastAsked;
         const range = daysRange(fromDay, lastDay, tz);
-        const [busy, holidays, bookedPerDay] = await Promise.all([
-            ownerBusy(link, range, now),
+        // Counted per link only now: a live link and a valid query (junk only uses up its own IP's quota).
+        await bookingDeps.chargeLink('slots', link.id);
+        // Busy times in fixed blocks (BOOKING_BUSY_BLOCK_DAYS), never the asked window itself.
+        const blockReads = busyBlocks(fromDay, lastDay).map((b) => ownerBusy(link, daysRange(b.first, b.last, tz), now, 'slots'));
+        const [busyParts, holidays, bookedPerDay] = await Promise.all([
+            Promise.all(blockReads),
             bookingDeps.holidays(fromDay, lastDay),
             link.rules.maxPerDay !== null ? bookingDeps.bookedPerDay(prisma, link.id, range, tz) : Promise.resolve(new Map<string, number>()),
         ]);
+        const busy = busyParts.flat();
         const days = computeSlots({ rules: link.rules, durationMinutes: duration, fromDay, days: query.days, now, tz, busy, holidays, bookedPerDay });
         const version = { id: link.id, updatedAt: link.updatedAt };
         const prev = addDays(fromDay, -query.days);
@@ -443,7 +463,20 @@ export const bookingPublicService = {
         const now = bookingDeps.now();
         const tz = ENV.BUSINESS_TIMEZONE;
         const verified = verifySlot({ id: link.id, updatedAt: link.updatedAt }, body.token, now);
-        if (!verified.ok) throw slotUnavailable(verified.problem === 'expired' ? 'Those times were shown a while ago. Please pick a time again.' : undefined);
+        if (!verified.ok && verified.problem !== 'expired') throw slotUnavailable();
+        const tokenHash = tokenHashOf(body.token);
+
+        // A token that already booked (a resubmit after a lost response, a second click): the same confirmation for the
+        // same visitor, before expiry and the busy check (which would find the visitor's own new meeting).
+        const used = await bookingDeps.bookingByToken(link.id, tokenHash);
+        if (used) {
+            if (used.visitorEmail.toLowerCase() !== body.email.toLowerCase()) throw slotUnavailable();
+            const config = await bookingDeps.loadActivityConfig().catch(() => null);
+            return confirmation(link, ownerName, used, now, typeLabelOf(config, link.followupType));
+        }
+        if (!verified.ok) throw slotUnavailable('Those times were shown a while ago. Please pick a time again.');
+        // Counted per link only now: a valid, unused token this server signed (junk only uses up its own IP's quota).
+        await bookingDeps.chargeLink('book', link.id);
         const { start, durationMinutes } = verified.claim;
         if (!link.durations.includes(durationMinutes)) throw slotUnavailable();
         const day = zonedDayOf(start, tz);
@@ -451,11 +484,11 @@ export const bookingPublicService = {
         const end = new Date(start.getTime() + durationMinutes * MINUTE);
 
         // The company calendar again (network: outside the transaction). The CRM part is re-read inside it.
-        const busy = await ownerBusy(link, { start: start.getTime() - link.rules.bufferBeforeMinutes * MINUTE, end: end.getTime() + link.rules.bufferAfterMinutes * MINUTE }, now);
+        const busy = await ownerBusy(link, { start: start.getTime() - link.rules.bufferBeforeMinutes * MINUTE, end: end.getTime() + link.rules.bufferAfterMinutes * MINUTE }, now, 'book');
         if (clashes(start.getTime(), end.getTime(), link.rules, busy)) throw slotUnavailable('That time was just taken. Please pick another time.');
 
         const [config, calendarSettings] = await Promise.all([bookingDeps.loadActivityConfig(), bookingDeps.loadCalendarSettings()]);
-        const attempt: Attempt = { link, ownerName, body, start, end, tokenHash: tokenHashOf(body.token), config, followUpActivities: calendarSettings.followUpActivities, now };
+        const attempt: Attempt = { link, ownerName, body, start, end, tokenHash, config, followUpActivities: calendarSettings.followUpActivities, now };
 
         // Audit entries carry where this came from: the public page, the visitor's IP and browser.
         const result = await runWithAuditOrigin(

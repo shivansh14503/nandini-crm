@@ -11,7 +11,8 @@ import { linkIdParamSchema } from './bookingLink.validator.js';
  * /api/booking-links (Calendar Phase 4; signed in). A user's own booking links; admins also everyone's and the company
  * settings. The public page's API is bookingLink.public.routes.ts (/api/public/booking).
  *
- *   GET  /access             → { enabled, canCreate, isAdmin, whoCanCreate } (the user menu shows "Booking links")
+ *   GET  /access             → { enabled, canCreate, isAdmin, whoCanCreate, ownsLinks } (the user menu shows "Booking
+ *                              links" when enabled and (canCreate or isAdmin), or whenever ownsLinks)
  *   GET  /                   ?scope=mine|all (all: admins) → { access, links: BookingLinkDto[] }
  *   POST /                   { title, ownerUsername? (admins: a colleague), followupType?, durations?, slotStepMinutes?,
  *                              location?, note?, availability?, bufferBeforeMinutes?, bufferAfterMinutes?, minNoticeMinutes?,

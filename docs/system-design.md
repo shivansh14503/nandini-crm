@@ -398,15 +398,28 @@ which see every record (`modules/user-admin/roles.ts`, mirrored and contract-tes
     inside one), then inside one transaction takes the per-owner application lock `booking:owner:<username>`,
     re-reads the owner's CRM activities through the transaction (the busy-times rules, buffers included), re-counts
     the day's bookings, inserts the activity (system write path) and the `BookingLinkBooking` row whose `tokenHash` is
-    unique (one booking per token; a resubmit by the same email gets the same confirmation). No unique error is caught
-    inside the transaction: a P2002 aborts it and the booking is retried once from the start. **Fail closed**: an
+    unique (one booking per token). A token that already booked is looked up first (review fix, as of 2026-11-26),
+    right after its signature checks and before its expiry, the rules and the busy check (which would find the
+    visitor's own new meeting): the same email gets that booking's confirmation again (a resubmit after a lost
+    response, even past the 30 minutes), another email 409; two requests racing each other meet the same pre-read
+    inside the transaction. No unique error is caught inside the transaction: a P2002 aborts it and the booking is
+    retried once from the start. **Fail closed**: an
     owner calendar in `error` / `unavailable` offers no times and books nothing (503 `CALENDAR_UNAVAILABLE`), so a
     Google / Outlook meeting the CRM can't see is never double-booked.
   - **Abuse limits**: per IP and per link (Redis fixed windows; an in-process counter whenever Redis can't count, never
-    open; API plan §3), a honeypot field (`website`, hidden from people and screen readers; filled = 400
+    open; API plan §3). The per-IP limits are route middleware and count every request; the per-link limits
+    (`chargeLink`, keyed by link id) are charged by the service only for real attempts (review fix, as of 2026-11-26):
+    slots once the link is live and the query valid, a booking once its token is a valid, unused one this server
+    signed. So junk (bad slug, empty body, honeypot, forged or expired token) uses up only its own IP's quota and a few
+    addresses can't lock a link's visitors out. A honeypot field (`website`, hidden from people and screen readers; filled = 400
     `BOOKING_REJECTED` without detail), strict zod bodies (unknown keys refused, every text bounded by its column),
     `Cache-Control: no-store`, `X-Robots-Tag: noindex, nofollow`; the page itself has `robots: noindex` and
-    `referrer: no-referrer`. Provider calls of one page share one budget (`booking:<linkId>`, 120 / min).
+    `referrer: no-referrer`. **Provider budget** (review fix, as of 2026-11-26): slot pages read the owner's busy times
+    in fixed 14-day blocks aligned to Mondays (`busyBlocks`, `BOOKING_BUSY_BLOCK_DAYS`), never the visitor's own
+    `from` / `days` window, so every visitor of a link hits the same few cache keys (60 s provider cache): a link with a
+    60-day horizon has at most 6 blocks, so at most about 6 provider calls a minute however many windows are asked.
+    They share one budget (`booking:<linkId>`, 120 / min); the booking's own re-read uses a separate budget
+    (`booking-book:<linkId>`), so slot browsing can never block a confirmation.
   - **Who and what**: the activity is written as actor `system` with the owner as owner and `createdBy`; its audit
     entry carries route `public:booking`, the visitor's IP and user agent. Visitors are never emailed (the mail layer
     is parked): an on-page confirmation with an `.ics` file. Once calendar sync pushes activities (P2-3b), D41 holds
@@ -455,9 +468,9 @@ commands fail immediately instead of hanging, and reconnects in the background (
 | `ratelimit:activity-busy:user:{id}` | counter | 60 s | `GET /api/activities/busy` | 60 busy-time checks / min / user (in-memory per process whenever Redis can't count; never fails open) |
 | `ratelimit:activity-busy-calls:user:{id}` | counter | 60 s | `GET /api/activities/busy` (P2-6) | 120 Google / Microsoft free/busy calls / min / user, whatever the number of requests; past it the calendar part is `unavailable` (in-memory per process whenever Redis can't count; never fails open) |
 | `ratelimit:booking-view:ip:{ip}` | counter | 60 s | `GET /api/public/booking/:slug` | 60 page views / min / IP (in-memory per process whenever Redis can't count; never fails open) |
-| `ratelimit:booking-slots-ip:ip:{ip}` / `ratelimit:booking-slots-link:link:{slug}` | counter | 60 s | `GET /api/public/booking/:slug/slots` | 60 / min / IP and 600 / min / link (same fallback) |
-| `ratelimit:booking-book-ip:ip:{ip}` / `ratelimit:booking-book-link:link:{slug}` | counter | 1 h | `POST /api/public/booking/:slug/book` | 10 bookings / hour / IP and 30 / hour / link (same fallback) |
-| `ratelimit:activity-busy-calls:booking:{linkId}` | counter | 60 s | booking page slots / book | 120 provider calls / min shared by all visitors of one link |
+| `ratelimit:booking-slots-ip:ip:{ip}` / `ratelimit:booking-slots-link:link:{linkId}` | counter | 60 s | `GET /api/public/booking/:slug/slots` | 60 / min / IP (every request) and 3000 / min / link (only a live link with a valid query) (same fallback) |
+| `ratelimit:booking-book-ip:ip:{ip}` / `ratelimit:booking-book-link:link:{linkId}` | counter | 1 h | `POST /api/public/booking/:slug/book` | 10 / hour / IP (every request) and 30 / hour / link (only valid, unused slot tokens) (same fallback) |
+| `ratelimit:activity-busy-calls:booking:{linkId}` / `…:booking-book:{linkId}` | counter | 60 s | booking page slots / book | 120 provider calls / min shared by all visitors of one link's slot pages; a separate 120 for its bookings' re-reads |
 | `ratelimit:integration-test:user:{id}` | counter | 60 s | `POST /api/admin/integrations/providers/:provider/test` | 6 connection tests / min / admin (in-memory per process whenever Redis can't count) |
 | `cache:lookups:users:{all\|active}` | JSON, guarded ¹ | 5 min | lookups | User picker list; dropped by a company email change (`invalidateUserCaches`, Admin › API Integrations › People), by every Admin › Users write (`invalidateUserCaches`) and by My Profile name / photo changes (`invalidateUserLookupCaches`) |
 | `cache:lookups:organizations:{limit}` / `contacts:{limit}` / `products:{limit}` | JSON, guarded ¹ | 5 min | lookups (no search term only) | Lookup dialogs' default lists |
@@ -760,7 +773,7 @@ database); company-calendar reads go to Google / Microsoft, not SQL. So an idle 
 Booking links (Calendar Phase 4, as of 2026-11-26) add **no job and no periodic query** either. SQL is read only
 while someone has a public booking page open or books: the link and its owner come from Redis (`cache:booking-link:*`,
 60 s, misses too), the company switch from the form-config cache (1 h), holidays from Redis (10 min) and the owner's CRM
-busy blocks from the busy-times cache (30 s per window); a link with a bookings-a-day limit also counts that link's
+busy blocks from the busy-times cache (30 s per fixed 14-day block, the same keys for every visitor); a link with a bookings-a-day limit also counts that link's
 bookings per slots request. The page refetches its times every 10 minutes only while its tab is visible (React Query
 stops interval refetches in background tabs), so a forgotten tab doesn't keep the database awake overnight. Bots
 guessing slugs hit the rate limit and the negative cache, not SQL.
@@ -1081,8 +1094,9 @@ stays `BUSINESS_TIMEZONE`. Stored in `CompanyFormatSettings` ([database design �
 
 As of 2026-11-26. **Management** (`components/booking-links/`, React Query keys `['bookingLinks', …]`, refreshed by
 `notifyCrmUpdate('/api/booking-links')`): the user menu and the mobile drawer show **Booking links** when
-`GET /api/booking-links/access` says the switch is on and the user may create links or is an admin
-(`layout/useShowBookingLinks.ts`, cached 5 min). The page lists the user's links as cards (one column on phones, two on
+`GET /api/booking-links/access` says the switch is on and the user may create links or is an admin, or whenever the user
+owns a link (`ownsLinks`: one an admin made for them, or kept after their role lost the right; review fix, as of
+2026-11-26) so they can see its bookings and turn it off (`layout/useShowBookingLinks.ts`, cached 5 min). The page lists the user's links as cards (one column on phones, two on
 tablets, three on wide screens): copy link, open, on / off, edit, bookings (latest 50, links to the activities), new
 address. Admins get "Everyone's links" and an owner picker when creating. The create / edit dialog (full screen on
 phones) holds type, durations, location, note, weekly hours (`AvailabilityEditor`: each weekday on / off with up to
@@ -1096,7 +1110,11 @@ navbar, no auth redirect; `PasswordChangeGate` leaves `/book/` alone), `robots: 
 phone first. Duration picker (when several), a day strip (scrolls inside itself; previous / next week), the day's
 times as tap targets of 44 px, then name / email (+ phone / company when asked, + message) and a hidden honeypot. Times
 show in the visitor's browser time zone, or the company's on request; a time falling on another local date says so.
-A taken / expired time sends the visitor back to the refreshed times with a notice. The confirmation offers an `.ics`
+A taken / expired time sends the visitor back to the refreshed times with a notice; what they typed is kept (the page
+holds the details, not the form). While another duration's times load, the previous duration's times are not shown
+(their tokens carry the old length), and the form header shows the length. Only a 404 shows "This booking page isn't
+available"; a request that got no answer (offline, API unreachable) shows a retryable "couldn't reach the booking
+service" (review fixes, as of 2026-11-26). The confirmation offers an `.ics`
 download (no email is sent). Theme tokens only (brand blue / green for selection and focus).
 
 ## 9. Deployment topology

@@ -32,7 +32,7 @@ describe('booking slot tokens', () => {
     it('expires after the TTL', () => {
         const token = signSlot(LINK, { start: START, durationMinutes: 30 }, NOW);
         const later = new Date(NOW.getTime() + BOOKING_TOKEN_TTL_SECONDS * 1000 + 1000);
-        assert.deepEqual(verifySlot(LINK, token, later), { ok: false, problem: 'expired' });
+        assert.deepEqual(verifySlot(LINK, token, later), { ok: false, problem: 'expired', claim: { start: START, durationMinutes: 30 } }, 'the claim comes back for the resubmit check');
         const extended = token.replace(/\.([0-9a-z]+)\.([^.]+)$/, (_m, exp: string, mac: string) => `.${(parseInt(exp, 36) + 3600).toString(36)}.${mac}`);
         assert.deepEqual(verifySlot(LINK, extended, later), { ok: false, problem: 'bad_signature' }, 'the expiry is signed');
     });

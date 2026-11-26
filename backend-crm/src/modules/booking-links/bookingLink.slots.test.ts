@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { bookableDays, clashes, computeSlots, daysRange, minutesOf, slotRuleProblem, weekdayOf, windowOn, type SlotRules } from './bookingLink.slots.js';
+import { bookableDays, busyBlocks, clashes, computeSlots, daysRange, minutesOf, slotRuleProblem, weekdayOf, windowOn, type SlotRules } from './bookingLink.slots.js';
 
 const TZ = 'Asia/Kolkata';
 /** Monday 30 Nov 2026, 09:00 IST. */
@@ -108,5 +108,17 @@ describe('booking slots: slotRuleProblem', () => {
         assert.equal(slotRuleProblem(RULES, ist('2026-12-01', '10:00'), 30, NOW, TZ, none), 'outside_hours');
         assert.equal(slotRuleProblem(RULES, ist('2026-11-30', '12:45'), 30, NOW, TZ, none), 'outside_hours', 'runs past the window');
         assert.equal(slotRuleProblem(RULES, ist('2026-11-30', '10:15'), 30, NOW, TZ, none), 'off_grid');
+    });
+});
+
+describe('busyBlocks', () => {
+    it('covers any asked window with the same fixed, Monday-aligned 14-day blocks', () => {
+        assert.deepEqual(busyBlocks('2026-12-02', '2026-12-05'), [{ first: '2026-11-23', last: '2026-12-06' }]);
+        assert.deepEqual(busyBlocks('2026-11-23', '2026-12-06'), [{ first: '2026-11-23', last: '2026-12-06' }]);
+        assert.deepEqual(busyBlocks('2026-12-05', '2026-12-18'), [
+            { first: '2026-11-23', last: '2026-12-06' },
+            { first: '2026-12-07', last: '2026-12-20' },
+        ]);
+        assert.equal(weekdayOf(busyBlocks('2027-03-10', '2027-03-10')[0].first), '1', 'blocks start on a Monday');
     });
 });

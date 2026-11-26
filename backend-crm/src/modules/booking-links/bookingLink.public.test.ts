@@ -5,6 +5,8 @@ import type { ActivityConfig } from '../activities/activity.service.js';
 import type { BusyTimesDto } from '../calendar-sync/busy.service.js';
 import { bookingDeps, bookingPublicService } from './bookingLink.public.js';
 import type { LinkConfig, PublicLink } from './bookingLink.service.js';
+import { addDays } from '../../utils/zonedTime.js';
+import { busyBlocks } from './bookingLink.slots.js';
 import { signSlot } from './bookingLink.token.js';
 
 /**
@@ -72,6 +74,10 @@ interface World {
     /** Throw a P2002 from the booking insert this many times. */
     raceOnce: number;
     transactions: number;
+    /** Per-link rate limit charges (`kind:linkId`). */
+    charges: string[];
+    /** busyTimes calls: the window and the budget key. */
+    busyCalls: { from: string; to: string; budgetKey?: string }[];
 }
 
 let world: World;
@@ -154,22 +160,36 @@ beforeEach(() => {
         afterCommit: 0,
         raceOnce: 0,
         transactions: 0,
+        charges: [],
+        busyCalls: [],
     };
     installTransaction();
     mock.method(bookingDeps, 'now', () => NOW);
     mock.method(bookingDeps, 'loadBookingSettings', async () => ({ enabled: world.enabled, whoCanCreate: 'everyone' }));
     mock.method(bookingDeps, 'findPublicLink', async (slug: string) => (world.link && world.link.link.slug === slug ? world.link : null));
     mock.method(bookingDeps, 'holidays', async () => world.holidays);
-    mock.method(bookingDeps, 'busyTimes', async (): Promise<BusyTimesDto> => ({
-        timeZone: 'Asia/Kolkata',
-        from: '',
-        to: '',
-        generatedAt: NOW.toISOString(),
-        people:
-            world.calendarStatus === 'unknown'
-                ? [{ username: 'priya', name: 'priya', provider: null, status: 'unknown', sources: [], busy: [] }]
-                : [{ username: 'priya', name: 'Priya Sharma', provider: 'google', status: world.calendarStatus, sources: [], busy: world.providerBusy.map((b) => ({ ...b, kind: 'busy' as const })) }],
-    }));
+    mock.method(bookingDeps, 'chargeLink', async (kind: string, linkId: string) => {
+        world.charges.push(`${kind}:${linkId}`);
+    });
+    mock.method(bookingDeps, 'bookingByToken', async (linkId: string, tokenHash: string) => world.bookings.find((b) => b.bookingLinkId === linkId && b.tokenHash === tokenHash) ?? null);
+    // Like the real busy times: the owner's CRM activities (always) plus the company calendar part when readable.
+    mock.method(bookingDeps, 'busyTimes', async (query: { from: string; to: string }, _user: unknown, _now: Date, opts: { budgetKey?: string } = {}): Promise<BusyTimesDto> => {
+        world.busyCalls.push({ from: query.from, to: query.to, budgetKey: opts.budgetKey });
+        const from = new Date(query.from);
+        const to = new Date(query.to);
+        const crm = world.activities.filter((a) => overlaps(a, from, to)).map((a) => ({ start: a.startAt.toISOString(), end: a.endAt.toISOString(), kind: 'busy' as const }));
+        const provider = world.calendarStatus === 'ok' ? world.providerBusy.map((b) => ({ ...b, kind: 'busy' as const })) : [];
+        return {
+            timeZone: 'Asia/Kolkata',
+            from: query.from,
+            to: query.to,
+            generatedAt: NOW.toISOString(),
+            people:
+                world.calendarStatus === 'unknown'
+                    ? [{ username: 'priya', name: 'priya', provider: null, status: 'unknown', sources: [], busy: [] }]
+                    : [{ username: 'priya', name: 'Priya Sharma', provider: 'google', status: world.calendarStatus, sources: [], busy: [...crm, ...provider] }],
+        };
+    });
     mock.method(bookingDeps, 'loadActivityConfig', async () => ({ followupTypes: { options: [] } }) as unknown as ActivityConfig);
     mock.method(bookingDeps, 'loadCalendarSettings', async () => ({ followUpActivities: false }) as never);
     mock.method(bookingDeps, 'insertSystemActivity', async (_tx: unknown, fields: Record<string, unknown>, actor: string, _now: Date, opts: Record<string, unknown>) => {
@@ -253,6 +273,24 @@ describe('public booking: slots', () => {
         await rejects(bookingPublicService.slots(LINK.slug, {}), 503, 'CALENDAR_UNAVAILABLE');
     });
 
+    it('reads busy times in the fixed blocks, whatever window is asked; counts the link only for valid asks', async () => {
+        await bookingPublicService.slots(LINK.slug, { from: '2026-12-02', days: '2' });
+        const first = world.busyCalls.map((c) => `${c.from}/${c.to}`);
+        world.busyCalls = [];
+        await bookingPublicService.slots(LINK.slug, { from: '2026-12-03', days: '3' });
+        assert.deepEqual(world.busyCalls.map((c) => `${c.from}/${c.to}`), first, 'the same reads (and cache keys)');
+        const block = busyBlocks('2026-12-02', '2026-12-02')[0];
+        assert.equal(first.length, 1);
+        assert.equal(block.last >= '2026-12-05' && block.first <= '2026-12-02', true, 'one block covers both asks');
+        assert.equal(first[0], `${ist(block.first, '00:00').toISOString()}/${ist(addDays(block.last, 1), '00:00').toISOString()}`);
+        assert.ok(world.busyCalls.every((c) => c.budgetKey === 'booking:link-1'));
+        assert.deepEqual(world.charges, ['slots:link-1', 'slots:link-1']);
+        await rejects(bookingPublicService.slots(LINK.slug, { duration: '45' }), 400);
+        world.link = null;
+        await rejects(bookingPublicService.slots(LINK.slug, {}), 404);
+        assert.equal(world.charges.length, 2, 'a bad query or a missing link is not counted per link');
+    });
+
     it('not connected = CRM activities only', async () => {
         world.calendarStatus = 'not_connected';
         const page = await bookingPublicService.slots(LINK.slug, { days: '1' });
@@ -287,11 +325,36 @@ describe('public booking: book', () => {
     it('the same token twice is one booking (same visitor) or a conflict (someone else)', async () => {
         const token = tokenFor(ist('2026-11-30', '11:00'));
         const first = await bookingPublicService.book(LINK.slug, visitor(token));
-        const again = await bookingPublicService.book(LINK.slug, visitor(token));
+        // The busy times now include the visitor's own meeting: the resubmit must still get its confirmation.
+        const again = await bookingPublicService.book(LINK.slug, visitor(token, { email: 'ASHA@example.com' }));
         assert.equal(again.booking.id, first.booking.id);
+        assert.equal(again.booking.start, first.booking.start);
         assert.equal(world.inserted.length, 1);
         assert.equal(world.afterCommit, 1);
         await rejects(bookingPublicService.book(LINK.slug, visitor(token, { email: 'other@example.com' })), 409, 'SLOT_UNAVAILABLE');
+    });
+
+    it('a resubmit after the token expired (a lost response) still gets the same confirmation', async () => {
+        const token = tokenFor(ist('2026-11-30', '11:00'));
+        const first = await bookingPublicService.book(LINK.slug, visitor(token));
+        mock.method(bookingDeps, 'now', () => new Date(NOW.getTime() + 45 * 60_000));
+        const again = await bookingPublicService.book(LINK.slug, visitor(token));
+        assert.equal(again.booking.id, first.booking.id);
+        assert.equal(world.inserted.length, 1);
+        // An expired token that never booked is refused.
+        await rejects(bookingPublicService.book(LINK.slug, visitor(tokenFor(ist('2026-11-30', '12:00')))), 409, 'SLOT_UNAVAILABLE');
+    });
+
+    it('counts the link only for valid, unused tokens; the confirmation read uses its own budget', async () => {
+        await assert.rejects(bookingPublicService.book(LINK.slug, {}));
+        await rejects(bookingPublicService.book(LINK.slug, visitor(tokenFor(ist('2026-11-30', '11:00')), { website: 'http://spam' })), 400, 'BOOKING_REJECTED');
+        await rejects(bookingPublicService.book(LINK.slug, visitor(tokenFor(ist('2026-11-30', '11:00'), 30, { ...LINK, id: 'link-2' }))), 409, 'SLOT_UNAVAILABLE');
+        assert.deepEqual(world.charges, [], 'junk is not counted per link');
+        const token = tokenFor(ist('2026-11-30', '11:00'));
+        await bookingPublicService.book(LINK.slug, visitor(token));
+        await bookingPublicService.book(LINK.slug, visitor(token));
+        assert.deepEqual(world.charges, ['book:link-1'], 'one real attempt; the resubmit is free');
+        assert.ok(world.busyCalls.length > 0 && world.busyCalls.every((c) => c.budgetKey === 'booking-book:link-1'));
     });
 
     it('a CRM activity in the slot (or its buffer) wins', async () => {

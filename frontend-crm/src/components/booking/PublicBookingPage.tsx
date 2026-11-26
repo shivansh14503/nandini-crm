@@ -35,7 +35,10 @@ import {
 
 const codeOf = (err: unknown): string | undefined => (err instanceof ApiClientError ? err.details?.code : undefined);
 const statusOf = (err: unknown): number | undefined => (err instanceof ApiClientError ? err.status : undefined);
-const messageOf = (err: unknown, fallback: string) => (err instanceof Error && err.message ? err.message : fallback);
+const NETWORK_TEXT = "We couldn't reach the booking service. Check your connection and try again.";
+/** The server's message; a request that never got an answer (offline, unreachable API) has no status. */
+const messageOf = (err: unknown, fallback: string) =>
+    err instanceof ApiClientError && err.status === undefined ? NETWORK_TEXT : err instanceof Error && err.message ? err.message : fallback;
 
 function browserTimeZone(): string {
     try {
@@ -179,13 +182,30 @@ function Confirmed({ confirmation, timeZone, onAnother }: { confirmation: Bookin
 interface Picked {
     start: string;
     token: string;
+    /** The length the token was signed for (the slots page's duration). */
+    duration: number;
 }
+
+/** What the visitor typed (kept by the page, so picking another time doesn't clear it). */
+interface VisitorDetails {
+    name: string;
+    email: string;
+    phone: string;
+    company: string;
+    message: string;
+    /** Honeypot. */
+    website: string;
+}
+
+const EMPTY_DETAILS: VisitorDetails = { name: '', email: '', phone: '', company: '', message: '', website: '' };
 
 function BookingForm({
     link,
     slug,
     picked,
     timeZone,
+    values,
+    setValues,
     onBack,
     onBooked,
     onSlotGone,
@@ -194,15 +214,16 @@ function BookingForm({
     slug: string;
     picked: Picked;
     timeZone: string;
+    values: VisitorDetails;
+    setValues: React.Dispatch<React.SetStateAction<VisitorDetails>>;
     onBack: () => void;
     onBooked: (c: BookingConfirmation) => void;
     onSlotGone: (message: string) => void;
 }) {
-    const [values, setValues] = useState({ name: '', email: '', phone: '', company: '', message: '', website: '' });
     const [errors, setErrors] = useState<Record<string, string>>({});
     const [formError, setFormError] = useState('');
     const [sending, setSending] = useState(false);
-    const set = (key: keyof typeof values) => (e: React.ChangeEvent<HTMLInputElement>) => setValues((v) => ({ ...v, [key]: e.target.value }));
+    const set = (key: keyof VisitorDetails) => (e: React.ChangeEvent<HTMLInputElement>) => setValues((v) => ({ ...v, [key]: e.target.value }));
 
     const submit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -247,7 +268,9 @@ function BookingForm({
                 </IconButton>
                 <Box sx={{ minWidth: 0 }}>
                     <Typography sx={{ fontWeight: 700, fontSize: '0.95rem', color: 'var(--crm-slate-900)' }}>{longWhen(picked.start, timeZone)}</Typography>
-                    <Typography sx={{ fontSize: '0.78rem', color: 'var(--mui-palette-text-secondary)' }}>{timeZone}</Typography>
+                    <Typography sx={{ fontSize: '0.78rem', color: 'var(--mui-palette-text-secondary)' }}>
+                        {durationLabel(picked.duration)} · {timeZone}
+                    </Typography>
                 </Box>
             </Box>
             {formError && <Alert severity="error">{formError}</Alert>}
@@ -282,6 +305,7 @@ export function PublicBookingPage({ slug }: { slug: string }) {
     const [from, setFrom] = useState<string | undefined>(undefined);
     const [day, setDay] = useState<string | null>(null);
     const [picked, setPicked] = useState<Picked | null>(null);
+    const [details, setDetails] = useState<VisitorDetails>(EMPTY_DETAILS);
     const [confirmation, setConfirmation] = useState<BookingConfirmation | null>(null);
     const [notice, setNotice] = useState('');
 
@@ -300,7 +324,10 @@ export function PublicBookingPage({ slug }: { slug: string }) {
     });
 
     const timeZone = zoneChoice === 'company' && link ? link.timeZone : localZone;
-    const days = slots.data?.days ?? [];
+    // While another duration's times load, the previous page (kept as placeholder) must not be clickable: its tokens
+    // are signed for the old length.
+    const slotsData = slots.data && slots.data.duration === activeDuration ? slots.data : undefined;
+    const days = slotsData?.days ?? [];
     // The chosen day while it still has times, else the first day of the page with times.
     const selectedDay = days.find((d) => d.date === day && d.slots.length > 0) ?? days.find((d) => d.slots.length > 0) ?? null;
 
@@ -318,7 +345,7 @@ export function PublicBookingPage({ slug }: { slug: string }) {
         const status = statusOf(view.error);
         return (
             <PageFrame>
-                {status === 404 || status === undefined ? (
+                {status === 404 ? (
                     <NotAvailable />
                 ) : (
                     <Alert severity="error" action={<Button onClick={() => void view.refetch()} sx={outlinedSx}>Try again</Button>}>
@@ -384,6 +411,8 @@ export function PublicBookingPage({ slug }: { slug: string }) {
                         slug={slug}
                         picked={picked}
                         timeZone={timeZone}
+                        values={details}
+                        setValues={setDetails}
                         onBack={() => setPicked(null)}
                         onBooked={setConfirmation}
                         onSlotGone={(message) => {
@@ -437,7 +466,7 @@ export function PublicBookingPage({ slug }: { slug: string }) {
                             <Alert severity="warning" action={<Button onClick={refreshSlots} sx={outlinedSx}>Try again</Button>}>
                                 {slotsErrorText}
                             </Alert>
-                        ) : !slots.data ? (
+                        ) : !slotsData ? (
                             <Skeleton variant="rounded" height={220} sx={{ borderRadius: '10px' }} />
                         ) : (
                             <>
@@ -445,8 +474,8 @@ export function PublicBookingPage({ slug }: { slug: string }) {
                                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, minWidth: 0 }}>
                                     <IconButton
                                         aria-label="Earlier days"
-                                        disabled={!slots.data.prevFrom || slots.isFetching}
-                                        onClick={() => setFrom(slots.data?.prevFrom ?? undefined)}
+                                        disabled={!slotsData.prevFrom || slots.isFetching}
+                                        onClick={() => setFrom(slotsData.prevFrom ?? undefined)}
                                         sx={{ width: 40, height: 40, flexShrink: 0, border: '1px solid var(--mui-palette-border-main)', borderRadius: '10px', '&:hover': { borderColor: 'var(--crm-blue-300)', backgroundColor: 'var(--mui-palette-primary-soft)', color: 'var(--crm-text-blue-700)' } }}
                                     >
                                         <ChevronLeftRoundedIcon />
@@ -496,8 +525,8 @@ export function PublicBookingPage({ slug }: { slug: string }) {
                                     </Box>
                                     <IconButton
                                         aria-label="Later days"
-                                        disabled={!slots.data.nextFrom || slots.isFetching}
-                                        onClick={() => setFrom(slots.data?.nextFrom ?? undefined)}
+                                        disabled={!slotsData.nextFrom || slots.isFetching}
+                                        onClick={() => setFrom(slotsData.nextFrom ?? undefined)}
                                         sx={{ width: 40, height: 40, flexShrink: 0, border: '1px solid var(--mui-palette-border-main)', borderRadius: '10px', '&:hover': { borderColor: 'var(--crm-blue-300)', backgroundColor: 'var(--mui-palette-primary-soft)', color: 'var(--crm-text-blue-700)' } }}
                                     >
                                         <ChevronRightRoundedIcon />
@@ -519,7 +548,7 @@ export function PublicBookingPage({ slug }: { slug: string }) {
                                                         variant="outlined"
                                                         onClick={() => {
                                                             setNotice('');
-                                                            setPicked(s);
+                                                            setPicked({ ...s, duration: slotsData.duration });
                                                         }}
                                                         sx={{ ...outlinedSx, flexDirection: 'column', lineHeight: 1.2, px: 1 }}
                                                     >
@@ -536,7 +565,7 @@ export function PublicBookingPage({ slug }: { slug: string }) {
                                     </Box>
                                 ) : (
                                     <Typography sx={{ fontSize: '0.88rem', color: 'var(--mui-palette-text-secondary)', py: 2, textAlign: 'center' }}>
-                                        {slots.data.nextFrom ? 'No free times these days. Try later days.' : 'No free times right now. Please check again later.'}
+                                        {slotsData.nextFrom ? 'No free times these days. Try later days.' : 'No free times right now. Please check again later.'}
                                     </Typography>
                                 )}
                                 <Typography sx={{ fontSize: '0.76rem', color: 'var(--mui-palette-text-muted)' }}>Times shown in {timeZone}.</Typography>

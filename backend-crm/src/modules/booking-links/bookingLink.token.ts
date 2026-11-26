@@ -64,8 +64,14 @@ export function signSlot(link: LinkVersion, claim: SlotClaim, now: Date = new Da
 
 export type SlotTokenProblem = 'malformed' | 'bad_signature' | 'expired';
 
+export type SlotVerification =
+    | { ok: true; claim: SlotClaim }
+    /** Signed by this server for this link version, but too old to book with (the claim, for a resubmit check). */
+    | { ok: false; problem: 'expired'; claim: SlotClaim }
+    | { ok: false; problem: 'malformed' | 'bad_signature' };
+
 /** The claim of a token this server signed for this link version, or why not. */
-export function verifySlot(link: LinkVersion, token: string, now: Date = new Date()): { ok: true; claim: SlotClaim } | { ok: false; problem: SlotTokenProblem } {
+export function verifySlot(link: LinkVersion, token: string, now: Date = new Date()): SlotVerification {
     const parts = typeof token === 'string' ? token.split('.') : [];
     if (parts.length !== 5 || parts[0] !== VERSION) return { ok: false, problem: 'malformed' };
     const [, startText, minutesText, expText, given] = parts;
@@ -78,8 +84,9 @@ export function verifySlot(link: LinkVersion, token: string, now: Date = new Dat
     const expected = Buffer.from(mac(link, startSec, minutes, expSec));
     const actual = Buffer.from(given);
     if (expected.length !== actual.length || !timingSafeEqual(expected, actual)) return { ok: false, problem: 'bad_signature' };
-    if (expSec * 1000 <= now.getTime()) return { ok: false, problem: 'expired' };
-    return { ok: true, claim: { start: new Date(startSec * 1000), durationMinutes: minutes } };
+    const claim: SlotClaim = { start: new Date(startSec * 1000), durationMinutes: minutes };
+    if (expSec * 1000 <= now.getTime()) return { ok: false, problem: 'expired', claim };
+    return { ok: true, claim };
 }
 
 /** sha256 hex of a token (`BookingLinkBooking.tokenHash`: a token books once). */
