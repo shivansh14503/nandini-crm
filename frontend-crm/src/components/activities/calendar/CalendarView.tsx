@@ -54,6 +54,7 @@ import { ActivityQuickCreateDialog } from '../ActivityQuickCreateDialog';
 import { useActivityTypeIcon, useActivityTypeLabel } from '../ActivityBadges';
 import { RelatedRecordDrawer } from '../relatedRecord';
 import { timeZoneAbbr, useBusinessClock } from '../activityTime';
+import { useDisplayFormats } from '@/utils/formats';
 import { CalendarToolbar, type CalendarViewKey } from './CalendarToolbar';
 import {
     CalendarFilters,
@@ -92,6 +93,8 @@ const CUSTOM_VIEWS = { timeGrid3Day: { type: 'timeGrid', duration: { days: 3 } }
 const MONTH_HEADER_FORMAT: FormatterInput = { weekday: 'short' };
 const DAY_HEADER_FORMAT: FormatterInput = { weekday: 'short', day: 'numeric' };
 const EVENT_TIME_FORMAT: FormatterInput = { hour: 'numeric', minute: '2-digit', meridiem: 'short' };
+/** Event times and time-grid labels once the company formats are saved as 24-hour (`13:07`). */
+const TIME_24H_FORMAT: FormatterInput = { hour: '2-digit', minute: '2-digit', hour12: false };
 const LIST_DAY_FORMAT: FormatterInput = { weekday: 'long', day: 'numeric', month: 'short' };
 const noEventsContent = () => 'Nothing scheduled in this period.';
 /** Holidays first in a day, then FullCalendar's usual order. `rank` is an extended prop (holidays 0, the rest 1). */
@@ -213,6 +216,9 @@ export default function CalendarView() {
     const me = user?.username ?? '';
     const clock = useBusinessClock();
     const timeZone = clock.timeZone;
+    // A saved 24-hour company time format switches the calendar's own times; otherwise FullCalendar's 12-hour defaults.
+    const displayFormats = useDisplayFormats();
+    const use24h = displayFormats.customized && displayFormats.timeFormat === '24h';
     const today = zonedDayOf(clock.now(), timeZone);
 
     const calendarRef = useRef<CalendarRef>(null);
@@ -591,7 +597,8 @@ export default function CalendarView() {
                         defaultTimedEventDuration="00:30:00"
                         eventMinHeight={20}
                         dayHeaderFormat={currentView === 'month' ? MONTH_HEADER_FORMAT : DAY_HEADER_FORMAT}
-                        eventTimeFormat={EVENT_TIME_FORMAT}
+                        eventTimeFormat={use24h ? TIME_24H_FORMAT : EVENT_TIME_FORMAT}
+                        slotHeaderFormat={use24h ? TIME_24H_FORMAT : undefined}
                         listDayFormat={LIST_DAY_FORMAT}
                         noEventsContent={noEventsContent}
                         events={events}

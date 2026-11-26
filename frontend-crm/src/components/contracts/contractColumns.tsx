@@ -10,16 +10,17 @@ import { findCrmUser } from '@/services/masterData.store';
 import type { Contract } from '@/types/contract.types';
 import { useShowRecordNumber } from '@/hooks/queries/useDocumentSeries';
 import { formatDateTime } from '@/utils/date';
+import { fmtMoney } from '@/utils/formats';
 import { ContractStatusPill } from './ContractBadges';
 import { formatContractDate } from './contractDates';
 
 const userName = (username: string | undefined) => (username ? findCrmUser(username)?.name || username : '');
 
-/** ₹ in Indian grouping (as on Quotations); '-' when no amount is set. */
+/** ₹ without decimals in the company number grouping (as on Quotations); '-' when no amount is set. */
 const formatAmount = (value: string) => {
     const amount = value ? Number(value) : NaN;
     if (!Number.isFinite(amount)) return '-';
-    return new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(amount);
+    return fmtMoney(amount, { maxDecimals: 0 });
 };
 
 const plainCellSx = { fontSize: '0.78rem', color: 'var(--crm-slate-600)' } as const;

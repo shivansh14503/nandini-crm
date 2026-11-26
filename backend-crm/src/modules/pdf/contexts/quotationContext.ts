@@ -5,6 +5,7 @@ import type { AuthUser } from '../../../types/user.types.js';
 import { assertRecordAccess } from '../../shared/accessControl.js';
 import { lineItemsInclude } from '../../shared/lineItems.js';
 import { shownNumberModules } from '../../document-series/documentSeries.service.js';
+import type { DisplayFormats } from '../../company-formats/core/displayFormats.js';
 import type { CustomFieldMeta } from '../fieldRegistry.js';
 import { amountInWords, formatCurrency, formatDate, formatDateTime, formatNumber, slugify } from '../format.js';
 import type { PdfAddress, PdfContext, PdfLineItem } from '../pdf.types.js';
@@ -68,21 +69,23 @@ function buildAddress(parts: Omit<PdfAddress, 'full'>): PdfAddress {
     return { ...parts, full };
 }
 
-function formatCustomValue(value: unknown, fieldType: string, currency: string): string {
+function formatCustomValue(value: unknown, fieldType: string, currency: string, formats: DisplayFormats): string {
     if (value === null || value === undefined) return '';
     if (Array.isArray(value)) return value.map((v) => String(v)).join(', ');
     if (typeof value === 'boolean') return value ? 'Yes' : 'No';
-    if (fieldType === 'date') return formatDate(value);
-    if (fieldType === 'amount') return formatCurrency(value, currency);
-    if (fieldType === 'number') return formatNumber(value);
-    if (fieldType === 'percentage') return `${formatNumber(value)}%`;
+    if (fieldType === 'date') return formatDate(value, formats);
+    if (fieldType === 'amount') return formatCurrency(value, currency, formats);
+    if (fieldType === 'number') return formatNumber(value, 2, formats);
+    if (fieldType === 'percentage') return `${formatNumber(value, 2, formats)}%`;
     if (fieldType === 'checkbox') return value === 'true' || value === 1 ? 'Yes' : 'No';
     return typeof value === 'object' ? JSON.stringify(value) : String(value);
 }
 
 export function assembleQuotationContext(source: QuotationSource, input: ContextBuildInput): PdfContext {
     const currency = source.currency;
-    const money = (value: number) => formatCurrency(value, currency);
+    const { formats } = input;
+    const money = (value: number) => formatCurrency(value, currency, formats);
+    const number = (value: number) => formatNumber(value, 2, formats);
 
     const lineItems: PdfLineItem[] = source.lineItems.map((item, index) => ({
         srNo: index + 1,
@@ -90,12 +93,12 @@ export function assembleQuotationContext(source: QuotationSource, input: Context
         description: item.description,
         note: item.note,
         quantity: item.quantity,
-        quantityFormatted: formatNumber(item.quantity),
+        quantityFormatted: number(item.quantity),
         amount: item.amount,
         amountFormatted: money(item.amount),
         discount: item.discount,
         discountType: item.discountType,
-        discountFormatted: item.discount ? (item.discountType === 'percentage' ? `${formatNumber(item.discount)}%` : money(item.discount)) : '-',
+        discountFormatted: item.discount ? (item.discountType === 'percentage' ? `${number(item.discount)}%` : money(item.discount)) : '-',
         salePrice: item.salePrice,
         salePriceFormatted: money(item.salePrice),
         taxRate: item.taxRate,
@@ -114,7 +117,7 @@ export function assembleQuotationContext(source: QuotationSource, input: Context
         subtotalFormatted: money(t.subtotal),
         totalTaxFormatted: money(t.totalTax),
         grandTotalFormatted: money(t.grandTotal),
-        amountInWords: amountInWords(t.grandTotal, currency),
+        amountInWords: amountInWords(t.grandTotal, currency, formats),
         hasDiscount: t.totalDiscount > 0,
         hasLumpSumDiscount: t.lumpSumDiscount > 0,
     };
@@ -122,7 +125,7 @@ export function assembleQuotationContext(source: QuotationSource, input: Context
     const custom: Record<string, string> = {};
     const customList: PdfContext['customList'] = [];
     for (const field of input.customFields) {
-        const value = formatCustomValue(source.customValues[field.fieldKey], field.fieldType, currency);
+        const value = formatCustomValue(source.customValues[field.fieldKey], field.fieldType, currency, formats);
         custom[field.fieldKey] = value;
         if (value) customList.push({ key: field.fieldKey, label: field.label, value });
     }
@@ -132,8 +135,8 @@ export function assembleQuotationContext(source: QuotationSource, input: Context
         code: source.code,
         title: source.title,
         subject: source.subject || source.title,
-        date: formatDate(source.date),
-        validUntil: formatDate(source.validUntil),
+        date: formatDate(source.date, formats),
+        validUntil: formatDate(source.validUntil, formats),
         stage: source.stage,
         opportunityName: source.opportunityName,
         opportunityCode: source.opportunityCode,
@@ -178,7 +181,7 @@ export function assembleQuotationContext(source: QuotationSource, input: Context
         custom,
         customList,
         currency,
-        meta: { generatedAt: formatDateTime(new Date(), input.timeZone), generatedBy: input.generatedBy },
+        meta: { generatedAt: formatDateTime(new Date(), input.timeZone, formats), generatedBy: input.generatedBy },
     };
 }
 

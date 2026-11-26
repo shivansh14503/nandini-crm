@@ -8,6 +8,7 @@ import { useFormMode } from '@/context/FormModeContext';
 import type { FieldSize } from '../fieldSizing';
 import { DATE_TIME_COLUMNS, TimePicker } from '../TimePicker';
 import { localNow, localToday } from '@/utils/pastDates';
+import { fmtDay, fmtTime, fmtWallClock, getDisplayFormats, useDisplayFormats } from '@/utils/formats';
 
 const pad = (n: number) => String(n).padStart(2, '0');
 
@@ -54,14 +55,13 @@ export function RhfDateTimeField<T extends FieldValues>({
     const error = date.fieldState.error?.message ?? (timeName && !combined ? time.fieldState.error?.message : undefined);
 
     const { mode } = useFormMode();
+    // View text is built here, so re-render when the company formats change.
+    useDisplayFormats();
     if (combined) {
         const raw = typeof date.field.value === 'string' ? date.field.value : '';
         if (mode === 'view') {
-            const parsed = raw ? new Date(raw) : null;
-            const text =
-                parsed && !Number.isNaN(parsed.getTime())
-                    ? parsed.toLocaleString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: 'numeric', minute: '2-digit' })
-                    : raw;
+            // `25 Nov 2026, 1:07 pm` until the company formats are saved; anything that isn't a wall clock shows as stored.
+            const text = fmtWallClock(raw, { legacyDate: 'DD MMM YYYY', legacyTime: 'h:mm a' });
             // Through FormField so the form builder's label / hidden overrides apply on the view page too.
             return <FormField name={dateName} label={label} viewValue={text}>{null}</FormField>;
         }
@@ -106,11 +106,10 @@ export function RhfDateTimeField<T extends FieldValues>({
 
     if (mode === 'view') {
         const rawDate = typeof date.field.value === 'string' ? date.field.value : '';
-        const parsed = /^\d{4}-\d{2}-\d{2}$/.test(rawDate) ? new Date(`${rawDate}T00:00:00`) : null;
-        const dateText = parsed
-            ? parsed.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
-            : rawDate;
-        const timeText = timeName && typeof time.field.value === 'string' ? time.field.value : '';
+        const dateText = /^\d{4}-\d{2}-\d{2}$/.test(rawDate) ? fmtDay(rawDate, { legacy: 'DD MMM YYYY' }) : rawDate;
+        // The stored time text (`04:15 PM`) shows as stored until the company formats are saved.
+        const rawTime = timeName && typeof time.field.value === 'string' ? time.field.value : '';
+        const timeText = rawTime && getDisplayFormats().customized ? fmtTime(rawTime) : rawTime;
         return <FormField name={dateName} label={label} viewValue={[dateText, timeText].filter(Boolean).join(' • ')}>{null}</FormField>;
     }
 

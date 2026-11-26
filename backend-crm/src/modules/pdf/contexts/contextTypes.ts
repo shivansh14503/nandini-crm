@@ -1,5 +1,6 @@
 import type { AuditEntityType } from '../../../services/audit.service.js';
 import type { AuthUser } from '../../../types/user.types.js';
+import type { DisplayFormats } from '../../company-formats/core/displayFormats.js';
 import type { CustomFieldMeta } from '../fieldRegistry.js';
 import type { Theme } from '../document/schema.js';
 import type { PdfContext, PdfFieldRegistry } from '../pdf.types.js';
@@ -14,6 +15,8 @@ export interface ContextBuildInput {
     customFields: CustomFieldMeta[];
     generatedBy: string;
     timeZone: string;
+    /** Company display formats (Admin › Company formats) every date, amount and number is written in. */
+    formats: DisplayFormats;
 }
 
 /** Cheap per-record facts used for the cache key and file name before the full context is built. */

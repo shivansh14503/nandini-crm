@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { isDiff } from './audit.format.js';
+import { DEFAULT_DISPLAY_FORMATS } from '../company-formats/core/displayFormats.js';
+import { displayTime, isDiff } from './audit.format.js';
 import {
     cellValue,
     detailRows,
@@ -205,5 +206,25 @@ describe('toListItem', () => {
 
     it('hides record numbers until the module has a document series', () => {
         assert.equal(toListItem(row, ctx(false)).entityCode, null);
+    });
+
+    it('writes the time in the saved company formats', () => {
+        const formats = { ...DEFAULT_DISPLAY_FORMATS, customized: true, dateFormat: 'YYYY-MM-DD', timeFormat: '24h' } as const;
+        assert.equal(toListItem(row, { ...ctx(true), formats }).time, '2026-11-21, 11:15');
+        assert.equal(toListItem(row, { ...ctx(true), formats: DEFAULT_DISPLAY_FORMATS }).time, '21-Nov-2026, 11:15 AM');
+    });
+});
+
+describe('displayTime', () => {
+    it('keeps the timeline style (business timezone, Sep not Sept) while not customized', () => {
+        assert.equal(displayTime(new Date('2026-10-12T05:45:00Z')), '12-Oct-2026, 11:15 AM');
+        assert.equal(displayTime(new Date('2026-09-05T18:35:00Z')), '06-Sep-2026, 12:05 AM');
+        assert.equal(displayTime(new Date('2026-09-05T06:30:00Z'), DEFAULT_DISPLAY_FORMATS), '05-Sep-2026, 12:00 PM');
+    });
+
+    it('follows a saved format', () => {
+        const formats = { ...DEFAULT_DISPLAY_FORMATS, customized: true, dateFormat: 'MM/DD/YYYY', timeFormat: '12h' } as const;
+        assert.equal(displayTime(new Date('2026-10-12T05:45:00Z'), formats), '10/12/2026, 11:15 AM');
+        assert.equal(displayTime(new Date('2026-10-12T13:45:00Z'), { ...formats, timeFormat: '24h' }), '10/12/2026, 19:15');
     });
 });

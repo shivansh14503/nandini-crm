@@ -5,8 +5,9 @@ import { Prisma } from '../../generated/prisma/client.js';
 import { HttpError } from '../../utils/httpError.js';
 import { shownNumberModules } from '../document-series/documentSeries.service.js';
 import type { SeriesModule } from '../document-series/documentSeries.format.js';
+import { companyFormatsService } from '../company-formats/companyFormats.service.js';
 import { formConfigService } from '../form-configs/formConfig.service.js';
-import { parseChanges } from './audit.format.js';
+import { displayTime, parseChanges } from './audit.format.js';
 import {
     actionLabel,
     CATEGORY_LABELS,
@@ -150,9 +151,10 @@ export async function buildLabeler(): Promise<FieldLabeler> {
 }
 
 export async function presentContext(rows: AuditRowLike[]): Promise<PresentContext> {
-    const [labeler, shown, statuses] = await Promise.all([buildLabeler(), shownNumberModules(), loadRecordStatuses(rows)]);
+    const [labeler, shown, statuses, formats] = await Promise.all([buildLabeler(), shownNumberModules(), loadRecordStatuses(rows), companyFormatsService.load()]);
     return {
         labeler,
+        formats,
         showsRecordNumber: (module) => {
             const series = SERIES_BY_MODULE[module];
             return Boolean(series && shown.has(series));
@@ -468,11 +470,12 @@ export const auditAdminService = {
     async users(query: unknown) {
         const { from, to } = auditRangeQuerySchema.parse(query ?? {});
         const range = resolveAggregateRange(from, to, TZ());
-        const [directory, bounds] = await Promise.all([
+        const [directory, bounds, formats] = await Promise.all([
             prisma.user.findMany({
                 select: { username: true, fullName: true, role: true, department: true, email: true, isActive: true, isGroupUser: true, onLeave: true, lastLoginAt: true, photo: { select: { id: true } } },
             }),
             idBounds(range),
+            companyFormatsService.load(),
         ]);
         const rangeRows = bounds
             ? await prisma.$queryRaw<UserRangeRow[]>(Prisma.sql`
@@ -485,6 +488,6 @@ export const auditAdminService = {
                   GROUP BY [changedBy], [category]`)
             : [];
         const last = await lastActivity(activityUsernames(directory, rangeRows));
-        return { ...rangeDto(range), users: buildUserActivity(directory, rangeRows, last) };
+        return { ...rangeDto(range), users: buildUserActivity(directory, rangeRows, last, (date) => displayTime(date, formats)) };
     },
 };

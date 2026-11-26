@@ -1,3 +1,4 @@
+import type { DisplayFormats } from '../company-formats/core/displayFormats.js';
 import { displayTime, isDiff, parseChanges } from './audit.format.js';
 
 /**
@@ -48,6 +49,8 @@ export interface PresentContext {
     /** Record numbers are shown only for modules with a document series (Settings › Document Series). */
     showsRecordNumber(module: string): boolean;
     recordStatus(entityType: string, entityId: string): RecordStatus;
+    /** Company display formats for `time`; missing = the defaults (exports always pass them, so their column never changes). */
+    formats?: DisplayFormats;
 }
 
 export interface AuditListItem {
@@ -149,6 +152,7 @@ const MODULE_LABELS: Record<string, string> = {
     'pdf-templates': 'PDF Templates',
     'form-customization': 'Form Customization',
     'document-series': 'Document Series',
+    'company-formats': 'Company Formats',
     'list-scorecards': 'List Scorecards',
     'audit-log': 'Audit Log',
     'admin-integrations': 'API Integrations',
@@ -426,7 +430,7 @@ export function toListItem(row: AuditRowLike, ctx: PresentContext, changes: unkn
     return {
         id: String(row.id),
         createdAt: row.createdAt.toISOString(),
-        time: displayTime(row.createdAt),
+        time: displayTime(row.createdAt, ctx.formats),
         category: row.category,
         action: row.action,
         actionLabel: actionLabel(row.action),

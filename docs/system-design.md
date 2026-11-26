@@ -1,6 +1,6 @@
 # Nandini CRM — System Design
 
-> **Status:** living document. Describes the system as built (code as of 2026-11-26; audit context + ledger audit table, admin audit query API and screen, Users tab; Contracts module; Referrals module; Documents module; Activities data model and API, Calendar Phase 1 PR1; Activities screens and Calendar, PR2; notifications, reminders and mail workers, navbar bell and the morning summary email, PR3, with its review fixes; guarded cache reads for lookups, form configs and search, with its review fixes; Calendar Phase 2 P2-1, Admin › API Integrations foundation: encrypted provider credentials, connection tests, calendar sync settings, company emails, with its review fixes; My Profile (Profile Phase 1): profile, photo, change password, signed-in sessions; Admin › Users (Profile Phase 2, 2026-11-26): user management, the must-change-password claim, sessions revoked on deactivation / reset / role change; Calendar Phase 2 P2-2, employees connect / disconnect Google or Microsoft 365 calendars: OAuth with PKCE, sealed tokens, refresh, reconnect notifications; My Profile › Notifications (Profile Phase 3): bell kinds a user can turn off, the morning summary opt-out, a personal default reminder and out-of-office dates; Calendar Phase 2 P2-3a: one activity write path (system writes, write hook, lock seam, shared post-commit step), no behaviour change).
+> **Status:** living document. Describes the system as built (code as of 2026-11-26; audit context + ledger audit table, admin audit query API and screen, Users tab; Contracts module; Referrals module; Documents module; Activities data model and API, Calendar Phase 1 PR1; Activities screens and Calendar, PR2; notifications, reminders and mail workers, navbar bell and the morning summary email, PR3, with its review fixes; guarded cache reads for lookups, form configs and search, with its review fixes; Calendar Phase 2 P2-1, Admin › API Integrations foundation: encrypted provider credentials, connection tests, calendar sync settings, company emails, with its review fixes; My Profile (Profile Phase 1): profile, photo, change password, signed-in sessions; Admin › Users (Profile Phase 2, 2026-11-26): user management, the must-change-password claim, sessions revoked on deactivation / reset / role change; Calendar Phase 2 P2-2, employees connect / disconnect Google or Microsoft 365 calendars: OAuth with PKCE, sealed tokens, refresh, reconnect notifications; My Profile › Notifications (Profile Phase 3): bell kinds a user can turn off, the morning summary opt-out, a personal default reminder and out-of-office dates; Calendar Phase 2 P2-3a: one activity write path (system writes, write hook, lock seam, shared post-commit step), no behaviour change; Admin › Company formats (Profile Phase 5, PR5a): one company-wide date / time / number display setting, a shared formatter core, legacy styles kept until an admin saves).
 > Update it in the same change that alters architecture, infrastructure, Redis usage, queues or security.
 > Related: [Database design](database-design.md) · [API plan](api-plan.md) · [Build plan](build-plan.md)
 
@@ -361,12 +361,13 @@ commands fail immediately instead of hanging, and reconnects in the background (
 | `cache:lookups:partner-companies` / `partner-contacts` | JSON, guarded ¹ | 1 h | lookups | Partner master lists; dropped by partner company writes |
 | `cache:lookups:nature-of-calls` | JSON | 1 h | lookups (plain read) | Seeded master list; TTL only |
 | `cache:lookups:form-configs:{all\|active}` | JSON, guarded ¹ | 1 h | `formConfig.service` | Whole form/dropdown configuration |
+| `cache:lookups:company-formats` | JSON (the `CompanyFormatSettings` row, or `null` = not customized), guarded ¹ | 1 h | `companyFormats.service` (API, PDF render, BullMQ workers) | Company display formats; dropped after a save or reset commits. Read through Redis rather than memoised in process, so a worker in another process sees a change on its next job |
 | `cache:address-master` / `cache:address-master:{country}` | JSON | 24 h | lookups (plain read) | Countries and states (seeded ISO data); TTL only |
 | `cache:address-master:cities:{state}:{limit}` | JSON, guarded ¹ | 24 h | lookups | A state's biggest cities; dropped by city admin writes |
 | `cache:search:{category\|all}:{page}:{limit}:{t\|-}:{i\|-}:d{minDigits}:{sha256}` | JSON, guarded ¹ (180 s placeholder) | 30 s | global search | Search results; everyone sees the same results, so one entry per query (hashed, so user text never reaches a key or SCAN pattern) |
 | `cache:email-domain:{domain}` | JSON string (`mx`, `a_only`, `null_mx`, `not_found`) | 24 h | email checks (plain read) | DNS answer for a domain; TTL only (an `unknown` answer is dropped at once) |
 | `cache:notifications:unread:{username}` | number (briefly a `pending:<uuid>` placeholder while it is read) | 24 h (a safety net: it is dropped long before) | `GET /api/notifications/unread-count`; the list reads SQL and re-caches it | The bell's unread count (username lowercased), so a minute's polling from every open tab doesn't wake SQL Server; dropped by every write to that user's notifications, by the 00:20 nightly job and on every Redis reconnect (§4.2) |
-| `pdf:{MODULE}:{sha256}` | binary (PDF) | `PDF_CACHE_TTL_SECONDS` (600 s) | PDF render | Rendered PDFs; key covers template id + version, record id + `updatedAt`, custom-field definitions |
+| `pdf:{MODULE}:{sha256}` | binary (PDF) | `PDF_CACHE_TTL_SECONDS` (600 s) | PDF render | Rendered PDFs; key (`pdfCacheKey`) covers template id + version, record id + `updatedAt`, custom-field definitions + company formats |
 | `recent:{userId}:{entity}` | sorted set (score = view time) | 30 days | `GET /api/organizations/:id` | "Recently viewed" (max 20 per user per entity) |
 | `bull:crm-import:*` | BullMQ internals | 1 day (completed) / 7 days (failed) | import queue | Import jobs, progress, results |
 | `bull:crm-audit:*` | BullMQ internals | 1 h (completed) / 7 days (failed) | audit queue | Async audit events |
@@ -391,7 +392,8 @@ stored value follows, e.g. every organization's Customer Type or product's Categ
 held the old value) and renaming a custom field's key. The one-off `npm run align:backend-names -- --apply` drops the
 same keys; the shared Redis client connects lazily, so the script connects it first (waiting up to 5 s) and, when
 Redis can't be reached, tells the operator to restart the API. PDF cache entries never need invalidation: any change
-to the template or the record changes the key.
+to the template, the record or the company formats changes the key. A company formats save or reset drops
+`cache:lookups:company-formats` after its transaction commits.
 
 Every key a CRM write invalidates is read with **`cacheService.getOrSetGuarded`** (lookups of users,
 organizations, contacts, products, partner companies and partner contacts, cities, form configs, global search, unread counts). A
@@ -642,7 +644,7 @@ back. With Redis down every poll reads SQL. Opening the bell reads the count fro
 flowchart LR
     REQ["GET /api/quotations/:id/pdf"] --> RL["rate limit 30/min"]
     RL --> RES["resolve template<br/>(explicit or module default)"]
-    RES --> KEY["cache key = sha256(template id+version,<br/>record id+updatedAt, custom fields)"]
+    RES --> KEY["cache key = sha256(template id+version,<br/>record id+updatedAt, custom fields,<br/>company formats)"]
     KEY -->|hit| OUT["PDF bytes"]
     KEY -->|miss| CTX["module adapter builds plain context<br/>(quotationContext.ts)"]
     CTX --> REN["renderDocument → header/body/footer HTML"]
@@ -871,6 +873,43 @@ through its redirect), keeping the tab and any `?calendar=` result.
 - **Must change password (app-wide):** while the auth user has `mustChangePassword`, every page redirects to
   `/profile?tab=security`, which shows "Choose a new password to continue"; a `403 PASSWORD_CHANGE_REQUIRED` from any
   call does the same. After the change the auth user is updated and navigation is allowed again.
+
+### 8.8 Display formats (Admin › Company formats, Profile Phase 5)
+
+One company-wide setting for how dates, times and numbers are **shown** (no per-user locale): date format (six
+patterns, default `DD-MMM-YYYY`), 12- or 24-hour time, Indian or international digit grouping. The currency is fixed
+(INR, `₹`, 2 decimals in documents; opportunities and quotations keep their own per-record currency) and the timezone
+stays `BUSINESS_TIMEZONE`. Stored in `CompanyFormatSettings` ([database design §4.31](database-design.md)), served by
+`/api/company-formats` ([API plan §2.7](api-plan.md)).
+
+- **One formatter core.** `backend-crm/src/modules/company-formats/core/displayFormats.ts` is pure and dependency-free
+  (month and weekday names spelled by hand, so output never depends on the ICU version; `Intl.NumberFormat` only for
+  digits). `npm run sync:display-formats` copies it to `frontend-crm/src/lib/display-formats/` (generated, never edited
+  there); `validators/contractSync.test.ts` fails while the copies differ, like the PDF and drawer-layout models.
+- **Legacy styles until an admin saves.** No row = `customized: false`. Each converted call site passes its own
+  pre-Phase-5 pattern as a `legacy` hint (`24-Oct-2026, 01:07 PM` in lists and audit times, `25 Nov 2026` in forms and
+  PDFs, `05 Nov 2026, 14:30` for "generated at", `Wed 25 Nov` in the bell and the morning email), so nothing changes
+  until the first save, which then applies one format everywhere. "Reset to CRM defaults" deletes the row. Known
+  exact-reproduction exceptions: `Sept` → `Sep`; `-₹5` instead of `₹-5` on sites that built the sign by hand; the
+  frontend instant formatters show the business timezone instead of the device's (the same for devices in IST).
+- **Backend users** read `companyFormatsService.load()` (through `cache:lookups:company-formats`; Redis down → the
+  database; a failed read → the defaults with a warning, so a PDF, a reminder or a timeline never fails over it):
+  quotation PDFs (dates, amounts, numbers, amount in words: lakh / crore for Indian grouping, million / billion for
+  international; the PDF cache key includes the formats), the morning summary email (once per run), new bell
+  notification texts (once per delivery, sweep or participant notice) and audit display times (record timeline, Form
+  Builder trail, Admin › Audit Log, ledger status). Formatters take the formats as their last argument, defaulting to
+  "not customized".
+- **Frontend** (`utils/formats.ts`): a module-level store seeded from a `localStorage` snapshot (`crm.companyFormats`)
+  so a returning device renders the right formats before `GET /api/company-formats` returns; `CrmDataBootstrap`
+  keeps it fresh (TanStack Query, stale 30 min and refetched every 30 min while the tab is visible, so other users
+  see a change within 30 min or on reload) and a save fires `notifyCrmUpdate('company-formats')` so other tabs
+  refetch. Frontend instant formatters convert to `BUSINESS_TIMEZONE`.
+- **Never re-formatted:** stored values and API JSON (ISO dates, plain numbers), native date / time pickers (the
+  browser decides), exports (the frontend CSVs and the audit CSV / XLSX "Time" column stay on their fixed format),
+  and text formatted when it was written (`Notification.title` / `body`, `Lead.ratingReason`, audit `changesJson`,
+  saved PDFs).
+- **PR5b** moves the remaining ad-hoc call sites onto the same adapters (build plan "Profile Phase 5b"); until then
+  those keep their old style even after a save.
 
 ## 9. Deployment topology
 

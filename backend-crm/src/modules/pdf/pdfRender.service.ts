@@ -4,6 +4,8 @@ import { logger } from '../../config/logger.js';
 import { isRedisReady, redis } from '../../config/redis.js';
 import { auditService } from '../../services/audit.service.js';
 import type { AuthUser } from '../../types/user.types.js';
+import { companyFormatsService } from '../company-formats/companyFormats.service.js';
+import type { DisplayFormats } from '../company-formats/core/displayFormats.js';
 import type { ContextBuildInput } from './contexts/contextTypes.js';
 import { collectDocumentAssetKeys, renderDocument, type PdfDocument } from './document/index.js';
 import { buildHtmlDocument, wrapHeaderFooter } from './document.js';
@@ -33,8 +35,16 @@ export function contentDisposition(disposition: 'inline' | 'attachment', fileNam
 
 const sha256 = (value: string) => createHash('sha256').update(value).digest('hex');
 
+/**
+ * Redis key of a rendered PDF: `pdf:{MODULE}:{sha256}` of everything the bytes depend on (template version, record
+ * version, custom fields, company formats), so a change to any of them misses the cache instead of serving old bytes.
+ */
+export function pdfCacheKey(module: PdfModule, parts: readonly unknown[]): string {
+    return `pdf:${module}:${sha256(JSON.stringify(parts))}`;
+}
+
 /** Context input + the data: URIs of every image the document uses. */
-async function prepareInput(module: PdfModule, document: PdfDocument, user: AuthUser, customFields: CustomFieldMeta[]) {
+async function prepareInput(module: PdfModule, document: PdfDocument, user: AuthUser, customFields: CustomFieldMeta[], formats: DisplayFormats) {
     const keys = collectDocumentAssetKeys(document);
     const assets = keys.length ? await pdfAssetService.loadDataUris(keys) : {};
     const input: ContextBuildInput = {
@@ -44,6 +54,7 @@ async function prepareInput(module: PdfModule, document: PdfDocument, user: Auth
         customFields,
         generatedBy: user.username,
         timeZone: ENV.BUSINESS_TIMEZONE,
+        formats,
     };
     return { input, assets };
 }
@@ -88,24 +99,30 @@ export const pdfRenderService = {
     async renderRecordPdf(params: { module: PdfModule; recordId: string; templateId?: string; user: AuthUser }): Promise<RenderedPdf> {
         const { module, recordId, user } = params;
         const adapter = PDF_MODULE_ADAPTERS[module];
-        const [row, meta, customFields] = await Promise.all([
+        const [row, meta, customFields, formats] = await Promise.all([
             pdfTemplateService.resolveTemplate(module, params.templateId),
             adapter.loadRecordMeta(recordId, user),
             loadCustomFieldMeta(module),
+            companyFormatsService.load(),
         ]);
         const document = documentOf(row);
         const fileName = `${meta.fileBaseName}.pdf`;
 
-        const cacheKey = `pdf:${module}:${sha256(
-            JSON.stringify([row.id, row.version, recordId, meta.updatedAt.toISOString(), customFields.map((c) => `${c.fieldKey}:${c.label}:${c.fieldType}`)]),
-        )}`;
+        const cacheKey = pdfCacheKey(module, [
+            row.id,
+            row.version,
+            recordId,
+            meta.updatedAt.toISOString(),
+            customFields.map((c) => `${c.fieldKey}:${c.label}:${c.fieldType}`),
+            formats,
+        ]);
         const cached = await cacheGet(cacheKey);
         let buffer: Buffer;
         if (cached) {
             buffer = cached;
             logger.info({ templateId: row.id, recordId, bytes: buffer.length }, 'PDF served from cache');
         } else {
-            const { input, assets } = await prepareInput(module, document, user, customFields);
+            const { input, assets } = await prepareInput(module, document, user, customFields, formats);
             const context = await adapter.buildContext(recordId, input);
             buffer = await renderToPdf(document, context, assets, meta.fileBaseName, { templateId: row.id, recordId });
             await cacheSet(cacheKey, buffer);
@@ -129,7 +146,7 @@ export const pdfRenderService = {
         const adapter = PDF_MODULE_ADAPTERS[module];
         // Previewing against a real record reads it, so it gets the same 404 / 403 checks as a download.
         if (recordId) await adapter.loadRecordMeta(recordId, user);
-        const { input, assets } = await prepareInput(module, document, user, customFields);
+        const { input, assets } = await prepareInput(module, document, user, customFields, await companyFormatsService.load());
         const context = recordId ? await adapter.buildContext(recordId, input) : adapter.buildSampleContext(input);
         return renderToPdf(document, context, assets, 'Preview', { templateId: 'preview', ...(recordId ? { recordId } : {}) });
     },
@@ -150,6 +167,7 @@ export const pdfRenderService = {
             customFields,
             generatedBy: user.username,
             timeZone: ENV.BUSINESS_TIMEZONE,
+            formats: await companyFormatsService.load(),
         };
         return recordId ? adapter.buildContext(recordId, input) : adapter.buildSampleContext(input);
     },

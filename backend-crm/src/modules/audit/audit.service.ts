@@ -3,6 +3,7 @@ import { prisma } from '../../config/prisma.js';
 import type { AuditEntityType } from '../../services/audit.service.js';
 import type { AuthUser } from '../../types/user.types.js';
 import { HttpError } from '../../utils/httpError.js';
+import { companyFormatsService } from '../company-formats/companyFormats.service.js';
 import { FORM_CONFIG_ADMIN_ROLES } from '../form-configs/formConfig.routes.js';
 import { canViewActivity } from '../activities/activity.access.js';
 import { assertRecordAccess } from '../shared/accessControl.js';
@@ -224,12 +225,15 @@ export const auditLogService = {
 
         const { entityType, entityId } = auditParamsSchema.parse(params);
         await assertCanReadTrail(user, entityType, entityId);
-        const rows = await prisma.auditLog.findMany({
-            where: { entityType, entityId },
-            // id is write order; served by the (entityType, entityId, id) index.
-            orderBy: { id: 'desc' },
-            take: limit,
-        });
+        const [rows, formats] = await Promise.all([
+            prisma.auditLog.findMany({
+                where: { entityType, entityId },
+                // id is write order; served by the (entityType, entityId, id) index.
+                orderBy: { id: 'desc' },
+                take: limit,
+            }),
+            companyFormatsService.load(),
+        ]);
 
         const entries: AuditEntryDto[] = rows.map((row) => ({
             id: String(row.id),
@@ -243,7 +247,7 @@ export const auditLogService = {
             entityType,
             entityId,
             entries,
-            revisions: entries.flatMap((entry, index) => toRevisions(entry, displayTime(rows[index].createdAt))),
+            revisions: entries.flatMap((entry, index) => toRevisions(entry, displayTime(rows[index].createdAt, formats))),
         };
     },
 };

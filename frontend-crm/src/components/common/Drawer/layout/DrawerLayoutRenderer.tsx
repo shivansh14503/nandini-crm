@@ -26,6 +26,7 @@ import type { TicketPriority, TicketStatus } from '@/types/ticket.types';
 import { DrawerChannelRow, DrawerCopyButton, DrawerSectionCard } from '../DrawerPrimitives';
 import { PrimaryTag } from '@/components/common/PrimaryTag';
 import { formatAddressLine } from '@/utils/address';
+import { useDisplayFormats } from '@/utils/formats';
 import type { DrawerBadgeItem } from '../types';
 import { avatarBackground, avatarContent } from './avatar';
 import { defaultLayoutFor } from './defaultLayouts';
@@ -65,6 +66,8 @@ export function useLayoutCtx(
     configsOverride?: FormConfigsPayload | null,
 ): LayoutCtx {
     const loaded = useFormConfigs();
+    // Field values are formatted while rendering: every drawer using this context re-renders on a formats change.
+    useDisplayFormats();
     const configs = configsOverride ?? loaded;
     const fields = useMemo(() => new Map(drawerFieldsFor(configs, module).map((f) => [f.key, f])), [configs, module]);
     const addresses = useMemo(() => drawerAddressesFor(configs, module), [configs, module]);

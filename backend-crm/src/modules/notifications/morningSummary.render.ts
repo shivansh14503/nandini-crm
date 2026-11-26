@@ -41,7 +41,7 @@ export interface RenderedEmail {
 
 /** `Your CRM day, Wed 25 Nov: 3 activities today · 2 overdue` (at most 200 characters). */
 export function summarySubject(summary: MorningSummary): string {
-    return truncate(`Your CRM day, ${formatDay(summary.day)}: ${summary.headline}`, SUBJECT_MAX);
+    return truncate(`Your CRM day, ${formatDay(summary.day, summary.formats)}: ${summary.headline}`, SUBJECT_MAX);
 }
 
 const link = (href: string, label: string, style: string) => `<a href="${escapeHtml(href)}" style="${style}" target="_blank" rel="noopener">${escapeHtml(label)}</a>`;

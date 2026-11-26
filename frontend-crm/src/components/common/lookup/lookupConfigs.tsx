@@ -20,6 +20,7 @@ import { findCrmUser } from '@/services/masterData.store';
 import { UserAwayChip } from '@/components/common/UserAwayChip';
 import { getCountryNameByCode } from '@/data/addressMaster';
 import { formatDateTime } from '@/utils/date';
+import { fmtMoney } from '@/utils/formats';
 import { opportunityLabel } from '@/utils/opportunityLabel';
 import { splitMulti } from '@/types/lookup.types';
 import type { LookupColumn, LookupCopy, LookupFilterField, LookupSearchPredicate } from '@/types/lookup.types';
@@ -506,12 +507,10 @@ export const REFERRAL_LOOKUP_PRESET: LookupPreset<Referral> = {
 
 // ─── Products (line items) ────────────────────────────────────────────────────
 
-/** A product's MRP as the catalog shows it (₹27,000.00); empty when it has none. */
+/** A product's MRP as the catalog shows it (₹27,000.00, company number grouping); empty when it has none. */
 export function formatProductMrp(mrp: string | number | undefined): string {
     const n = Number(mrp);
-    return mrp === '' || mrp === undefined || !Number.isFinite(n)
-        ? ''
-        : `₹${n.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    return mrp === '' || mrp === undefined || !Number.isFinite(n) ? '' : fmtMoney(n);
 }
 
 export const PRODUCT_LOOKUP_PRESET: LookupPreset<Product> = {

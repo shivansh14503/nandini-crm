@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
+import { DEFAULT_DISPLAY_FORMATS } from '../../company-formats/core/displayFormats.js';
 import type { ContextBuildInput } from '../contexts/contextTypes.js';
 import { buildFieldRegistry } from '../fieldRegistry.js';
 import { registryRefs } from '../pdfTemplate.service.js';
@@ -36,6 +37,7 @@ const input = (overrides: Partial<ContextBuildInput> = {}): ContextBuildInput =>
     customFields,
     generatedBy: 'tester',
     timeZone: 'Asia/Kolkata',
+    formats: DEFAULT_DISPLAY_FORMATS,
     ...overrides,
 });
 

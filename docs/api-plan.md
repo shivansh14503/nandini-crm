@@ -4,7 +4,8 @@
 > `/api/calendar-connections` and the admin connection routes; P2-1: `/api/admin/integrations`, Admin › API
 > Integrations; Profile Phase 1: `/api/me` (My Profile), `/api/user-photos` and `POST /api/auth/change-password`; and
 > Profile Phase 2: `/api/admin/users` (Admin › Users) with the must-change-password claim; Profile Phase 3:
-> `/api/me/preferences` (My Profile › Notifications)) plus the planned ones.
+> `/api/me/preferences` (My Profile › Notifications); Profile Phase 5: `/api/company-formats` (Admin › Company formats))
+> plus the planned ones.
 > When you add, change or remove a route, update this file in the same change (the route files'
 > header comments are the per-module source of truth; keep them in step too).
 > Related: [System design](system-design.md) · [Database design](database-design.md) · [Build plan](build-plan.md)
@@ -338,6 +339,38 @@ read-only on the lead DTO (a `rating` sent by a client is ignored).
 | GET | `/shown-modules` | Any user: `{ modules }` whose numbers the UI shows |
 | GET | `/` 🔐 | Settings, every module's rule, current FY, each module's next number |
 | PUT | `/` 🔐 | `{ companyPrefix, separator, fyStartMonth, fyFormat, series: [...] }` |
+
+**Company formats** — `/company-formats` (Admin › Company formats, Profile Phase 5;
+`backend-crm/src/modules/company-formats/companyFormats.routes.ts`, route header comment = source of truth). How dates,
+times and numbers are **shown** across the CRM, its quotation PDFs, the morning email, new bell notification texts and
+audit times. Display only: stored values and every API field (ISO dates, plain numbers) never change format, nor do
+exports. All three routes sit behind the must-change-password gate (403 `PASSWORD_CHANGE_REQUIRED`; the frontend
+bootstrap skips the read while the claim is set).
+
+| Method | Path | Description |
+| --- | --- | --- |
+| GET | `/` | Any signed-in user: `CompanyFormatsDto` (below). No saved setting → the defaults with `customized: false` |
+| PUT | `/` 🔐 | `{ dateFormat, timeFormat, numberGrouping }` (all three required, unknown keys refused) → `{ success, data: CompanyFormatsDto, message: 'Company formats saved' }`. Saving the stored values writes and audits nothing. Otherwise upserts the single row and audits `CompanyFormats UPDATE` (the first save records `customized: false → true`) |
+| DELETE | `/` 🔐 | Reset to the CRM defaults: deletes the row (screens go back to their pre-Phase-5 styles) → `{ success, data: CompanyFormatsDto, message: 'Company formats reset to the CRM defaults' }`; audited `CompanyFormats UPDATE` (`customized: true → false`). Nothing saved → no write, no audit |
+
+```ts
+interface CompanyFormatsDto {
+  dateFormat: 'DD-MMM-YYYY' | 'DD MMM YYYY' | 'DD/MM/YYYY' | 'DD-MM-YYYY' | 'MM/DD/YYYY' | 'YYYY-MM-DD';
+  timeFormat: '12h' | '24h';
+  numberGrouping: 'indian' | 'international';
+  customized: boolean;          // false = never saved / reset: every screen keeps its pre-Phase-5 style
+  currency: { code: 'INR'; symbol: '₹'; name: 'Indian Rupee'; decimals: 2 }; // informational, not a setting
+  timeZone: string;             // BUSINESS_TIMEZONE
+  updatedAt: string | null;     // ISO; null while not customized
+  updatedBy: string | null;     // username; null while not customized
+}
+```
+
+Errors: 400 `VALIDATION_ERROR` (`errors[].path` `['dateFormat']` "Pick a date format from the list.", `['timeFormat']`
+"Pick 12-hour or 24-hour time.", `['numberGrouping']` "Pick Indian or International number grouping.", or an unknown
+key); 401; 403 `FORBIDDEN` (PUT / DELETE by a non-admin role); 403 `PASSWORD_CHANGE_REQUIRED`. The value lists and
+formatters are `backend-crm/src/modules/company-formats/core/displayFormats.ts`, copied to
+`frontend-crm/src/lib/display-formats` by `npm run sync:display-formats` (checked by `contractSync.test.ts`).
 
 **Holidays** — `/holidays` (Admin › Holidays; `backend-crm/src/modules/holidays`, route header comment = source of truth)
 
