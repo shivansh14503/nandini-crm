@@ -95,7 +95,12 @@ export type AuditAction =
     /** P2-2 (retired): an employee connected their own calendar. Kept so older audit entries still type-check. */
     | 'CONNECT'
     /** P2-2 (retired): an employee's own calendar connection was ended. */
-    | 'DISCONNECT';
+    | 'DISCONNECT'
+    /**
+     * An admin's "Test connection" acted as one person on their company calendar (P2-2b): `{ asUsername, ok, code,
+     * userStep }`, never a token. SECURITY: the CRM signed in as someone else.
+     */
+    | 'TEST_AS_USER';
 
 /** DATA = a CRM record changed; CONFIG = an admin setting changed; SECURITY = sign-ins and refused access. */
 export type AuditCategory = 'DATA' | 'CONFIG' | 'SECURITY';
@@ -171,6 +176,7 @@ const SECURITY_ACTIONS: ReadonlySet<AuditAction> = new Set([
     'STOP',
     'CONNECT',
     'DISCONNECT',
+    'TEST_AS_USER',
 ]);
 
 /** Actions whose `changes` are a `{ field: { from, to } }` diff. */
@@ -203,7 +209,7 @@ export function categoryFor(entityType: AuditEntityType, action: AuditAction): A
  */
 export function severityFor(action: AuditAction, category: AuditCategory): AuditSeverity {
     if (action === 'LOGIN_FAILED' || action === 'ACCESS_DENIED') return 'WARNING';
-    if (['DELETE', 'RESTORE', 'REVERT', 'CONVERT', 'IMPORT', 'EXPORT', 'PASSWORD_CHANGE', 'PASSWORD_RESET', 'SESSION_REVOKE', 'ENROL', 'STOP', 'CONNECT', 'DISCONNECT'].includes(action) || category === 'CONFIG') {
+    if (['DELETE', 'RESTORE', 'REVERT', 'CONVERT', 'IMPORT', 'EXPORT', 'PASSWORD_CHANGE', 'PASSWORD_RESET', 'SESSION_REVOKE', 'ENROL', 'STOP', 'CONNECT', 'DISCONNECT', 'TEST_AS_USER'].includes(action) || category === 'CONFIG') {
         return 'NOTICE';
     }
     return 'INFO';

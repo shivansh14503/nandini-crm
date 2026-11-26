@@ -3,7 +3,7 @@ import { prisma } from '../../config/prisma.js';
 import type { Prisma } from '../../generated/prisma/client.js';
 import { secretBox } from '../../services/secretBox.js';
 import { dropProviderCredentialsCache } from '../integrations/integration.service.js';
-import { isLiveStatus, nextCheckDelayMs, type CalendarProvider } from './connection.constants.js';
+import { isLiveStatus, LIVE_CONNECTION_STATUSES, nextCheckDelayMs, type CalendarProvider } from './connection.constants.js';
 import { ProviderError } from './providers/http.js';
 import { getAdapter, loadProviderAccess, setFakeHealth } from './providers/registry.js';
 import type { CallCtx } from './providers/types.js';
@@ -135,14 +135,19 @@ async function markSuccess(row: ConnectionRow, now: Date, check: boolean): Promi
 }
 
 /**
- * Microsoft: a 403 `ErrorAccessDenied` hits one person. If the provider's other recent checks (up to 10, at least 3)
- * all failed the same way with no success in between, the app itself has no calendar permission (a missing grant,
- * not one person outside the RBAC scope): app-level `no_application_permission`.
+ * Microsoft: a 403 `ErrorAccessDenied` hits one person. It is the app itself that has no calendar permission (a
+ * missing grant, not one person outside the RBAC scope: app-level `no_application_permission`) only when no other
+ * live row on the provider is `ok`, and the provider's other recent checks of live rows (up to 10, at least 3) all
+ * failed the same way. A tenant that scopes the app with RBAC for Applications keeps its people outside the scope in
+ * `error` forever, and only those rows are re-checked (the nightly due checks never re-check an `ok` row), so the
+ * newest checks alone would read a few out-of-scope people as the whole app failing.
  */
 async function escalatesToApp(row: ConnectionRow, failure: SyncFailure): Promise<boolean> {
     if (row.provider !== 'microsoft' || failure.code !== 'mailbox_out_of_scope') return false;
+    const others = { provider: row.provider, id: { not: row.id } };
+    if ((await prisma.calendarConnection.count({ where: { ...others, status: 'ok' } })) > 0) return false;
     const recent = await prisma.calendarConnection.findMany({
-        where: { provider: row.provider, id: { not: row.id }, lastCheckedAt: { not: null } },
+        where: { ...others, status: { in: [...LIVE_CONNECTION_STATUSES] }, lastCheckedAt: { not: null } },
         select: { status: true, lastErrorCode: true },
         orderBy: { lastCheckedAt: 'desc' },
         take: 10,

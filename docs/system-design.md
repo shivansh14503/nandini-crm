@@ -305,7 +305,10 @@ which see every record (`modules/user-admin/roles.ts`, mirrored and contract-tes
     60 s credentials cache.
   - **Errors** (`syncErrors.ts`): every token / API answer maps to a fixed code at one of three levels: **user**
     (`user_not_found`, `user_unavailable`, `calendar_unavailable`, `mailbox_out_of_scope`, `no_mailbox`: that person's
-    row turns `error`, rechecked with backoff 15 min → 1 h → 6 h → 24 h), **app** (`delegation_missing`,
+    row turns `error`, rechecked with backoff 15 min → 1 h → 6 h → 24 h; a Microsoft `mailbox_out_of_scope` counts as
+    the app's `no_application_permission` only when no other live Microsoft row is `ok` and the provider's last 3–10
+    other checked live rows all failed the same way, so people left outside an RBAC scope never read as the whole
+    app), **app** (`delegation_missing`,
     `delegation_wrong_id`, `scopes_not_authorised`, `admin_policy`, `key_invalid`, `clock_skew`, `invalid_client`,
     `secret_expired`, `app_not_in_tenant`, `tenant_not_found`, `no_application_permission`, `provider_error`: the
     provider's health turns `error`, rows are left alone and employees see "paused") or **transient** (`rate_limited`,
@@ -341,7 +344,11 @@ which see every record (`modules/user-admin/roles.ts`, mirrored and contract-tes
 - **Connection tests** (`POST /api/admin/integrations/providers/:provider/test`, P2-2b: two steps) call Google /
   Microsoft with the saved credentials: step `app` (Google: a token for the service account itself; Microsoft: a
   client-credentials token and its `roles`), then, when the admin names a person, step `user` (a token as that person
-  and a read of their primary calendar, which proves delegation / the app's mailbox scope). A provider can be switched
+  and a read of their primary calendar, which proves delegation / the app's mailbox scope). The person must be someone
+  the provider would sync (active, non-group, not excluded, a company email not on the other provider; else 409
+  `CALENDAR_TEST_NOT_ALLOWED`), and each such run is audited `IntegrationProvider TEST_AS_USER` with the acting admin
+  (as of 2026-11-26, P2-2b review fixes). A test clears the provider's health `error` only when it proves that problem
+  fixed (a passing user step; the app step alone only for key / client codes). A provider can be switched
   on only after a passing app step since its credentials last changed. Tests and People "Check now" share the limit: 6 per minute per admin in Redis, with an in-memory per-process limit whenever
   Redis can't count a test (down, or a command failing while it reports ready: `createRateLimiter`'s `fallback`
   option), so the probe can't be used to hammer the providers. A result is stored as `lastTest` only if the client
@@ -845,7 +852,9 @@ an optional "Also test as" person; the switch stays disabled until a passing tes
 card, "What goes to calendars" (Followup Types) and the People table (`integrations.people`) with the company email
 editor and, per person, the calendar column (provider, status, last error, override / left-out chip) and a
 "Calendar…" dialog (`CalendarChoiceDialog`: provider by email domain or an override, leave out of sync with a note,
-"Check now"). `?tab=people&issue=<filter>` (the admin notification links) scrolls to People with that filter. Each card keeps its own draft; the view joins
+"Check now"). `?tab=people&issue=<filter>` (the admin notification links) scrolls to People with that filter, on first load and
+whenever the bell pushes the link while the page is open (`useSearchParams` in a small Suspense-wrapped listener).
+"Also test as" lists only people the provider would sync. Each card keeps its own draft; the view joins
 their dirty flags into one `useLeaveGuard`. Writes call `notifyCrmUpdate('/api/admin/integrations')`; settings and
 sync-type saves also notify `FORM_CONFIG_SYNC_ENTITY`, so an open Form Builder reloads instead of saving stale module
 settings or option meta back; a company email change also notifies `MASTER_DATA_SYNC_ENTITY` (`'master-data'`), which

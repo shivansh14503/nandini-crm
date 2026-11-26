@@ -192,4 +192,48 @@ describe('Microsoft: 403 ErrorAccessDenied', () => {
         assert.equal(provider.healthCode, 'no_application_permission');
         assert.equal(state.notifications.length, 1);
     });
+
+    it('RBAC-scoped tenant: 12 people outside the scope next to synced people never read as the whole app (nightly re-checks)', async () => {
+        useTestSecretBox();
+        const outside = Array.from({ length: 12 }, (_, i) => `out${i}`);
+        const inside = ['in1', 'in2'];
+        state = installConnectionDouble({
+            users: [...[...outside, ...inside].map((name, i) => user(i + 20, name)), admin],
+            providers: [microsoftProviderRow()],
+            connections: [
+                ...outside.map((name, i) =>
+                    msRow(`o${i}`, name, {
+                        status: 'error',
+                        statusReason: 'mailbox_out_of_scope',
+                        lastErrorCode: 'mailbox_out_of_scope',
+                        consecutiveFailures: 4,
+                        // Checked last night; the ok rows were last checked when they first synced, days ago.
+                        lastCheckedAt: new Date(now.getTime() - 3_600_000 + i),
+                        nextCheckAt: new Date(now.getTime() - 1000),
+                    }),
+                ),
+                ...inside.map((name, i) => msRow(`i${i}`, name, { status: 'ok', lastSuccessAt: new Date(now.getTime() - 5 * 86_400_000), lastCheckedAt: new Date(now.getTime() - 5 * 86_400_000) })),
+            ],
+        });
+        wire();
+        // The nightly run re-checks every due out-of-scope row, one after another.
+        for (let i = 0; i < outside.length; i++) assert.equal(await checkConnection(`o${i}`, clock), 'user_error', `row o${i}`);
+        assert.equal(state.providers.get('microsoft')?.healthStatus, 'unknown');
+        assert.equal(state.notifications.length, 0);
+        assert.ok(state.connections.filter((c) => c.id.startsWith('i')).every((c) => c.status === 'ok'));
+    });
+
+    it('stopped rows and their old errors do not count towards the app rule', async () => {
+        useTestSecretBox();
+        const stoppedFailed = (id: string, username: string) =>
+            msRow(id, username, { status: 'stopped', statusReason: 'excluded', lastErrorCode: 'mailbox_out_of_scope', lastCheckedAt: new Date(now.getTime() - 60_000) });
+        state = installConnectionDouble({
+            users: [user(1, 'asha'), user(2, 'b'), user(3, 'c'), user(4, 'd'), admin],
+            providers: [microsoftProviderRow()],
+            connections: [msRow('m1', 'asha'), stoppedFailed('m2', 'b'), stoppedFailed('m3', 'c'), stoppedFailed('m4', 'd')],
+        });
+        wire();
+        assert.equal(await checkConnection('m1', clock), 'user_error');
+        assert.equal(state.providers.get('microsoft')?.healthStatus, 'unknown');
+    });
 });

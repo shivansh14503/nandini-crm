@@ -359,7 +359,17 @@ export function ProviderCard({ provider, keyReady, companyDomains, takenBy, onDi
     const changedBy = (s: { updatedAt: string | null; updatedBy: string | null }) =>
         [s.updatedAt ? `changed ${formatDay(s.updatedAt)}` : '', s.updatedBy ? `by ${s.updatedBy}` : ''].filter(Boolean).join(' ');
     const hasStoredSecret = p.secret.set || Boolean(p.webhookSecret?.set) || Boolean(p.serviceAccount?.set);
-    const testPeople = useMemo(() => (people.data ?? []).filter((person) => person.email), [people.data]);
+    // Only people this provider would sync: the server refuses anyone else (409 CALENDAR_TEST_NOT_ALLOWED).
+    const testPeople = useMemo(
+        () =>
+            (people.data ?? []).filter((person) => {
+                const { choice, target, reason } = person.calendar;
+                if (!person.email || choice?.excluded || reason === 'not_company') return false;
+                if (choice?.provider && choice.provider !== p.provider) return false;
+                return !target || target.provider === p.provider;
+            }),
+        [people.data, p.provider],
+    );
     const selectedPerson = testPeople.find((person) => person.username === asUsername) ?? null;
     const counts = p.counts;
 
@@ -670,7 +680,25 @@ export function ProviderCard({ provider, keyReady, companyDomains, takenBy, onDi
                         {counts.pending > 0 && <StatusChip tone="info">{counts.pending} setting up</StatusChip>}
                         {counts.error > 0 &&
                             (onShowProblems ? (
-                                <Box component="button" type="button" onClick={onShowProblems} sx={{ p: 0, border: 0, background: 'none', cursor: 'pointer', borderRadius: '999px', '&:focus-visible': { outline: 'none', boxShadow: '0 0 0 3px rgb(var(--crm-accent-rgb) / 0.22)' } }} aria-label={`Show the ${counts.error} people with calendar problems`}>
+                                <Box
+                                    component="button"
+                                    type="button"
+                                    onClick={onShowProblems}
+                                    // A 32 px tap target around the small chip (responsive-ui rule 4).
+                                    sx={{
+                                        display: 'inline-flex',
+                                        alignItems: 'center',
+                                        minHeight: 32,
+                                        px: 0.25,
+                                        py: 0,
+                                        border: 0,
+                                        background: 'none',
+                                        cursor: 'pointer',
+                                        borderRadius: '999px',
+                                        '&:focus-visible': { outline: 'none', boxShadow: '0 0 0 3px rgb(var(--crm-accent-rgb) / 0.22)' },
+                                    }}
+                                    aria-label={`Show the ${counts.error} people with calendar problems`}
+                                >
                                     <StatusChip tone="error">{counts.error} with problems</StatusChip>
                                 </Box>
                             ) : (

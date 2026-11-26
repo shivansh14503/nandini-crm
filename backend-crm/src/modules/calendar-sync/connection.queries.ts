@@ -82,11 +82,20 @@ export async function calendarChoicesByUsername(): Promise<Map<string, PersonCal
 
 export type ConnectionCounts = { ok: number; pending: number; error: number; excluded: number };
 
-/** Live rows per provider and status, plus exclusions (provider cards). */
-export async function connectionCountsByProvider(): Promise<Map<string, ConnectionCounts>> {
-    const [rows, excluded] = await Promise.all([
+/** Which provider an excluded person belongs to (null = none); the caller knows the providers and domains. */
+export type ExcludedProviderOf = (person: { email: string | null; provider: string | null }) => string | null;
+
+const IN_CHUNK = 1000;
+
+/**
+ * Live rows per provider and status (provider cards), plus the people an admin excluded (CalendarSyncUser.excluded,
+ * active and not a group login), each counted once on the provider `providerOf` gives them, whether or not they ever
+ * had a row.
+ */
+export async function connectionCountsByProvider(providerOf: ExcludedProviderOf): Promise<Map<string, ConnectionCounts>> {
+    const [rows, exclusions] = await Promise.all([
         prisma.calendarConnection.findMany({ where: { status: { in: [...LIVE_CONNECTION_STATUSES] } }, select: { provider: true, status: true } }),
-        prisma.calendarConnection.findMany({ where: { status: 'stopped', statusReason: 'excluded' }, select: { provider: true, username: true } }),
+        prisma.calendarSyncUser.findMany({ where: { excluded: true }, select: { username: true, provider: true } }),
     ]);
     const counts = new Map<string, ConnectionCounts>();
     const entry = (provider: string) => {
@@ -100,13 +109,17 @@ export async function connectionCountsByProvider(): Promise<Map<string, Connecti
         else if (row.status === 'pending') e.pending += 1;
         else e.error += 1;
     }
-    // A person excluded more than once still counts once per provider.
-    const seen = new Set<string>();
-    for (const row of excluded) {
-        const key = `${row.provider}:${row.username.toLowerCase()}`;
-        if (seen.has(key)) continue;
-        seen.add(key);
-        entry(row.provider).excluded += 1;
+    const emailOf = new Map<string, string | null>();
+    for (let i = 0; i < exclusions.length; i += IN_CHUNK) {
+        const names = exclusions.slice(i, i + IN_CHUNK).map((e) => e.username);
+        const people = await prisma.user.findMany({ where: { username: { in: names }, isActive: true, isGroupUser: false }, select: { username: true, email: true } });
+        for (const person of people) emailOf.set(person.username.toLowerCase(), person.email);
+    }
+    for (const exclusion of exclusions) {
+        const key = exclusion.username.toLowerCase();
+        if (!emailOf.has(key)) continue;
+        const provider = providerOf({ email: emailOf.get(key) ?? null, provider: exclusion.provider });
+        if (provider) entry(provider).excluded += 1;
     }
     return counts;
 }

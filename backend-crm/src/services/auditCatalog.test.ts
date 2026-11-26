@@ -175,6 +175,8 @@ describe('integration audit entities', () => {
         assert.equal(categoryFor('CalendarConnection', 'DISCONNECT'), 'SECURITY');
         assert.equal(severityFor('CONNECT', 'SECURITY'), 'NOTICE');
         assert.equal(severityFor('DISCONNECT', 'SECURITY'), 'NOTICE');
+        assert.equal(categoryFor('IntegrationProvider', 'TEST_AS_USER'), 'SECURITY');
+        assert.equal(severityFor('TEST_AS_USER', 'SECURITY'), 'NOTICE');
         assert.equal(changedFieldsOf('CONNECT', { provider: { from: null, to: 'google' } }), null);
     });
 });

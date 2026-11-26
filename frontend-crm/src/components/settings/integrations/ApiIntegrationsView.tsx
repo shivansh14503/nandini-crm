@@ -1,6 +1,7 @@
 'use client';
 
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { Suspense, useCallback, useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { Alert, AlertTitle, Box, Button, Skeleton, Typography } from '@mui/material';
 import HubOutlinedIcon from '@mui/icons-material/HubOutlined';
 import { AppToast } from '@/components/common/AppToast';
@@ -119,12 +120,28 @@ function ServerFacts({ data }: { data: IntegrationsAdmin }) {
     );
 }
 
-/** Reads `?tab=people&issue=<filter>` (links from calendar problem notifications) once, on the client. */
-function readPeopleLink(): { open: boolean; filter: PeopleFilter } {
-    if (typeof window === 'undefined') return { open: false, filter: 'all' };
-    const params = new URLSearchParams(window.location.search);
+type PeopleLink = { open: boolean; filter: PeopleFilter };
+
+/** `?tab=people&issue=<filter>` (links from calendar problem notifications). Pure. */
+function peopleLinkOf(tab: string | null, issue: string | null): PeopleLink {
+    return { open: tab === 'people', filter: isPeopleFilter(issue) ? issue : 'all' };
+}
+
+/**
+ * Follows the People link on first load and on every later navigation to it: the notification bell pushes the link
+ * while this page stays mounted (App Router keeps the page when only the search params change). Renders nothing; it
+ * sits in its own Suspense boundary because it reads useSearchParams.
+ */
+function PeopleLinkListener({ onLink }: { onLink: (link: PeopleLink) => void }) {
+    const params = useSearchParams();
+    const tab = params.get('tab');
     const issue = params.get('issue');
-    return { open: params.get('tab') === 'people', filter: isPeopleFilter(issue) ? issue : 'all' };
+    useEffect(() => {
+        const link = peopleLinkOf(tab, issue);
+        if (!link.open && link.filter === 'all') return;
+        onLink(link);
+    }, [tab, issue, onLink]);
+    return null;
 }
 
 const scrollToPeople = () => {
@@ -151,14 +168,11 @@ export function ApiIntegrationsView() {
 
     useLeaveGuard(Object.values(dirtyParts).some(Boolean), LEAVE_MESSAGE);
 
-    // People filter: from the link on first load, or "Show problems" on a provider card. The table is keyed by a
-    // counter so a new filter starts it fresh.
+    // People filter: from the link (on load or when the bell pushes it), or "Show problems" on a provider card. The
+    // table is keyed by a counter so a new filter starts it fresh.
     const [people, setPeople] = useState<{ filter: PeopleFilter; version: number }>({ filter: 'all', version: 0 });
     const [scrollRequest, setScrollRequest] = useState(0);
-    useEffect(() => {
-        const link = readPeopleLink();
-        if (!link.open && link.filter === 'all') return;
-        // eslint-disable-next-line react-hooks/set-state-in-effect -- the URL is only readable after mount (no Suspense boundary for useSearchParams here)
+    const applyPeopleLink = useCallback((link: PeopleLink) => {
         setPeople((p) => ({ filter: link.filter, version: p.version + 1 }));
         setScrollRequest((n) => n + 1);
     }, []);
@@ -189,6 +203,9 @@ export function ApiIntegrationsView() {
 
     return (
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0 }}>
+            <Suspense fallback={null}>
+                <PeopleLinkListener onLink={applyPeopleLink} />
+            </Suspense>
             {/* Header */}
             <Box sx={{ ...surfaceSx, p: { xs: 2, md: 2.5 }, display: 'flex', gap: 1.5, alignItems: 'flex-start' }}>
                 <Box

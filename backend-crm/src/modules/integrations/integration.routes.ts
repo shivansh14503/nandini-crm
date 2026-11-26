@@ -42,7 +42,8 @@ import {
  *   POST   /providers/:provider/test   { asUsername? } → { ok, code, message, steps: [{ step: app|user, ok, code, message }],
  *                                        testedAt } (saved credentials; 6 / min per admin, in memory whenever Redis can't
  *                                        count). Stored as lastTest only if the credentials are unchanged since the probe
- *                                        began, else code credentials_changed.
+ *                                        began, else code credentials_changed. asUsername: only someone this provider
+ *                                        would sync (else 409 CALENDAR_TEST_NOT_ALLOWED); audited TEST_AS_USER.
  *   PUT    /settings                   partial CalendarSyncSettings → CalendarSyncSettings (ModuleSetting activities/calendarSync).
  *                                        409 DOMAIN_IN_USE when a removed company domain is still a provider's.
  *   PUT    /sync-types                 { "<Followup Type>": boolean } → syncTypes (option meta calendarSync; Task / Note refused)
@@ -117,7 +118,7 @@ router.delete('/providers/:provider/secret', validateRequest({ params: providerP
 });
 
 router.post('/providers/:provider/test', validateRequest({ params: providerParamSchema }), testLimiter, async (req: Request, res: Response) => {
-    sendSuccess(res, await integrationService.testProvider(providerOf(req), req.body ?? {}));
+    sendSuccess(res, await integrationService.testProvider(providerOf(req), req.body ?? {}, requireUser(req)));
 });
 
 router.put('/settings', validateRequest({ body: settingsBodySchema }), async (req: Request, res: Response) => {

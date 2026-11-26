@@ -85,6 +85,22 @@ export function resolveTarget(
     return { none: 'no_provider' };
 }
 
+/**
+ * The provider whose people a person belongs to, whether or not it is switched on (provider card counts, e.g. who is
+ * excluded): their override, else the real provider that claims their domain, else the dev-only fake while it is on.
+ * Null when the email isn't a company email or no provider claims it. Pure.
+ */
+export function providerServing(email: string | null, overrideProvider: string | null, context: EnrolmentContext): CalendarProvider | null {
+    const normalized = normalizeUserEmail(email);
+    if (!normalized || !isCompanyEmail(normalized, context.companyDomains)) return null;
+    if (overrideProvider && isCalendarProvider(overrideProvider)) return overrideProvider;
+    const domain = emailDomainOf(normalized);
+    const owner = context.providers.find((p) => p.key !== 'fake' && p.domains.some((d) => d.toLowerCase() === domain));
+    if (owner) return owner.key;
+    const fake = context.providers.find((p) => p.key === 'fake');
+    return context.fakeOn && fake?.enabled ? 'fake' : null;
+}
+
 /** The stop reason of a row whose person has no target any more. */
 export const STOP_REASON_FOR: Readonly<Record<NoTargetReason, StopReason>> = {
     excluded: 'excluded',

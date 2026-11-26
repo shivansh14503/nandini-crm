@@ -161,6 +161,7 @@ const ACTION_LABELS: Record<string, string> = {
     STOP: 'Calendar sync stopped',
     CONNECT: 'Connected',
     DISCONNECT: 'Disconnected',
+    TEST_AS_USER: 'Calendar test as a person',
 };
 export const actionLabel = (action: string) => ACTION_LABELS[action] ?? humanize(action.toLowerCase());
 

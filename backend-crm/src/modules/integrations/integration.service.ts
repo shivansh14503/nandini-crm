@@ -17,7 +17,18 @@ import {
     type PersonCalendarChoiceDto,
     type PersonConnectionDto,
 } from '../calendar-sync/connection.queries.js';
-import { loadEnrolmentContext, NOT_SYNCED_REASON_FOR, reconcileAllQuietly, reconcileUser, resolveTarget, type EnrolmentContext } from '../calendar-sync/enrolment.js';
+import {
+    loadEnrolmentContext,
+    NOT_SYNCED_REASON_FOR,
+    providerServing,
+    reconcileAllQuietly,
+    reconcileUser,
+    resolveTarget,
+    type EnrolmentContext,
+    type TargetChoice,
+    type TargetProvider,
+    type TargetUser,
+} from '../calendar-sync/enrolment.js';
 import { isFakeProviderEnabled } from '../calendar-sync/providers/fakeSwitch.js';
 import { parseServiceAccountKey, ServiceAccountKeyError, type ServiceAccountKey } from '../calendar-sync/providers/googleServiceAccount.js';
 import type { FetchImpl } from '../calendar-sync/providers/types.js';
@@ -27,7 +38,16 @@ import { FOLLOWUP_TYPE_CATEGORY_KEY } from '../form-configs/formConfig.defaults.
 import { formConfigService, invalidateFormConfigCaches, type FormConfigsPayload } from '../form-configs/formConfig.service.js';
 import { isActivityOnlyFollowupType } from '../shared/followupTypes.js';
 import { acquireLocks, runInTransaction } from '../shared/transactions.js';
-import { duplicateEmailsAmong, emailIssueFor, userEmailService, type UserEmailIssue, type UserEmailRow } from '../users/userEmail.service.js';
+import {
+    duplicateEmailsAmong,
+    emailDomainOf,
+    emailIssueFor,
+    isCompanyEmail,
+    normalizeUserEmail,
+    userEmailService,
+    type UserEmailIssue,
+    type UserEmailRow,
+} from '../users/userEmail.service.js';
 import { CALENDAR_SYNC_META_KEY, calendarSyncFromMeta, type CalendarSyncSettings } from './calendarSyncSettings.js';
 import {
     DOMAIN_PROVIDERS,
@@ -456,6 +476,59 @@ const keyHintFor = (key: ServiceAccountKey, user: AuthUser, now: Date): KeyHint 
 const conflict = (message: string, code: string, path?: string[]) =>
     new HttpError(message, StatusCodes.CONFLICT, { code, errors: path ? [{ message, path }] : undefined });
 
+export type TestSubjectRefusal = 'inactive' | 'group' | 'excluded' | 'not_company' | 'other_provider';
+
+/**
+ * Whether "Test connection" may act as this person on `provider`: only someone the provider would sync (the
+ * impersonation is the same one sync uses, so it never reaches people sync leaves alone). A person with no email
+ * passes here and the user step answers `no_email` without calling the provider. A domain no provider claims yet is
+ * allowed, so an admin can test before saving the domains. Pure.
+ */
+export function testSubjectRefusal(
+    provider: CalendarProvider,
+    user: TargetUser,
+    choice: TargetChoice | null,
+    providers: readonly TargetProvider[],
+    companyDomains: readonly string[],
+): TestSubjectRefusal | null {
+    if (!user.isActive) return 'inactive';
+    if (user.isGroupUser) return 'group';
+    if (choice?.excluded) return 'excluded';
+    const email = normalizeUserEmail(user.email);
+    if (!email) return null;
+    if (!isCompanyEmail(email, companyDomains)) return 'not_company';
+    const override = choice?.provider && isCalendarProvider(choice.provider) ? choice.provider : null;
+    if (override) return override === provider ? null : 'other_provider';
+    const domain = emailDomainOf(email);
+    const owner = providers.find((p) => p.key !== 'fake' && p.domains.some((d) => d.toLowerCase() === domain));
+    return owner && owner.key !== provider ? 'other_provider' : null;
+}
+
+const TEST_SUBJECT_REFUSALS: Readonly<Record<TestSubjectRefusal, (username: string, provider: CalendarProvider) => string>> = {
+    inactive: (u) => `${u} is not active, so the CRM doesn't use their calendar.`,
+    group: (u) => `${u} is a group login, so the CRM doesn't use its calendar.`,
+    excluded: (u) => `${u} is excluded from calendar sync, so the CRM never acts on their calendar.`,
+    not_company: (u) => `${u}'s email is not on a company domain.`,
+    other_provider: (u, p) => `${u}'s calendar is not synced through ${p === 'fake' ? 'the test calendar' : PROVIDER_LABELS[p]}.`,
+};
+
+/** Health codes the app step alone proves fixed (the key / client credentials); every other one needs the user step. */
+const APP_STEP_PROVES: Readonly<Partial<Record<IntegrationProviderKey, ReadonlySet<string>>>> = {
+    google: new Set(['key_invalid', 'clock_skew', 'not_configured']),
+    microsoft: new Set(['invalid_client', 'secret_expired', 'tenant_not_found', 'app_not_in_tenant', 'not_configured']),
+};
+
+/**
+ * Whether a test's steps prove the provider's stored health problem fixed. A passing user step (impersonation or the
+ * mailbox, plus one read) proves everything; a passing app step only the key / client codes. Google's app step mints
+ * for the service account itself, so it says nothing about delegation, scopes or policies. Pure.
+ */
+export function healthClearedBy(provider: IntegrationProviderKey, healthCode: string | null, steps: readonly { step: string; ok: boolean }[]): boolean {
+    if (steps.some((s) => s.step === 'user' && s.ok)) return true;
+    const appOk = steps.some((s) => s.step === 'app' && s.ok);
+    return appOk && healthCode !== null && Boolean(APP_STEP_PROVES[provider]?.has(healthCode));
+}
+
 const badField = (message: string, path: string[]) => new HttpError(message, StatusCodes.BAD_REQUEST, { code: 'VALIDATION_ERROR', errors: [{ message, path }] });
 
 /**
@@ -480,6 +553,12 @@ async function providerDomainLists(client: Pick<typeof prisma, 'integrationProvi
 }
 
 /** After a provider changed: drop its grants everywhere in this process and enrol / stop people accordingly. */
+/** Provider card counts: live rows by status, and excluded people on the provider their address belongs to. */
+async function providerCounts(): Promise<Map<string, ConnectionCounts>> {
+    const context = await loadEnrolmentContext();
+    return connectionCountsByProvider((person) => providerServing(person.email, person.provider, context));
+}
+
 async function afterProviderChange(provider: IntegrationProviderKey, user: AuthUser): Promise<void> {
     dropProviderCredentialsCache(provider);
     if (isCalendarProvider(provider)) tokenSource.invalidate(provider);
@@ -488,7 +567,7 @@ async function afterProviderChange(provider: IntegrationProviderKey, user: AuthU
 
 export const integrationService = {
     async getAdmin(now: Date = new Date()): Promise<IntegrationsAdminDto> {
-        const [rows, configs, counts] = await Promise.all([prisma.integrationProvider.findMany(), formConfigService.getAllConfigs(), connectionCountsByProvider()]);
+        const [rows, configs, counts] = await Promise.all([prisma.integrationProvider.findMany(), formConfigService.getAllConfigs(), providerCounts()]);
         const byProvider = new Map(rows.map((row) => [row.provider, row]));
         const providers = INTEGRATION_PROVIDERS.map((p) => toProviderDto(p, byProvider.get(p) ?? null, now, counts.get(p)));
         const anyUnreadable = providers.some((p) => !p.secret.readable || (p.serviceAccount && !p.serviceAccount.readable));
@@ -509,7 +588,7 @@ export const integrationService = {
     },
 
     async getProvider(provider: IntegrationProviderKey): Promise<ProviderAdminDto> {
-        const [row, counts] = await Promise.all([prisma.integrationProvider.findUnique({ where: { provider } }), connectionCountsByProvider()]);
+        const [row, counts] = await Promise.all([prisma.integrationProvider.findUnique({ where: { provider } }), providerCounts()]);
         return toProviderDto(provider, row, new Date(), counts.get(provider));
     },
 
@@ -695,21 +774,38 @@ export const integrationService = {
 
     /**
      * "Test connection" with the saved credentials (two steps, see integration.test-connection.ts). `asUsername`
-     * also tries that person's calendar as them. The result is stored on the row (not audited: no setting changes),
-     * and a passing app-level step is remembered for these credentials (needed to switch on), unless the credentials
-     * changed while the probe ran, which answers `credentials_changed` instead.
+     * also tries that person's calendar as them: only someone the provider would sync (active, not a group login, not
+     * excluded, a company email not served by the other provider; else 409 CALENDAR_TEST_NOT_ALLOWED), and every such
+     * run is audited (`IntegrationProvider TEST_AS_USER`: who acted as whom, the result code, never a token). The result
+     * is stored on the row, and a passing app-level step is remembered for these credentials (needed to switch on),
+     * unless the credentials changed while the probe ran, which answers `credentials_changed` instead. Provider health
+     * goes back to ok only for a problem the test proved fixed (`healthClearedBy`).
      */
-    async testProvider(provider: IntegrationProviderKey, body: unknown = {}, fetchImpl: FetchImpl = (input, init) => fetch(input, init), now: Date = new Date()): Promise<TestConnectionDto> {
-        const { asUsername } = testProviderBodySchema.parse(body);
+    async testProvider(
+        provider: IntegrationProviderKey,
+        body: unknown,
+        actor: AuthUser,
+        fetchImpl: FetchImpl = (input, init) => fetch(input, init),
+        now: Date = new Date(),
+    ): Promise<TestConnectionDto> {
+        const { asUsername } = testProviderBodySchema.parse(body ?? {});
         const row = await prisma.integrationProvider.findUnique({ where: { provider } });
         if (row?.secretsEnc && !secretBox.ready()) throw notReady();
         const { secrets, readable } = openSecrets(row);
         const settings = providerSettings(provider, row);
         let subject: { username: string; email: string | null } | null = null;
         if (asUsername) {
-            const person = await prisma.user.findUnique({ where: { username: asUsername }, select: { username: true, email: true } });
+            const [person, choice] = await Promise.all([
+                prisma.user.findUnique({ where: { username: asUsername }, select: { username: true, email: true, isActive: true, isGroupUser: true } }),
+                prisma.calendarSyncUser.findUnique({ where: { username: asUsername }, select: { provider: true, excluded: true } }),
+            ]);
             if (!person) throw HttpError.notFound(`User '${asUsername}' not found.`);
-            subject = person;
+            if (isCalendarProvider(provider)) {
+                const context = await loadEnrolmentContext();
+                const refusal = testSubjectRefusal(provider, person, choice, context.providers, context.companyDomains);
+                if (refusal) throw conflict(TEST_SUBJECT_REFUSALS[refusal](person.username, provider), 'CALENDAR_TEST_NOT_ALLOWED', ['asUsername']);
+            }
+            subject = { username: person.username, email: person.email };
         }
 
         let result: TestResult;
@@ -739,6 +835,7 @@ export const integrationService = {
             const nextHints: SecretHints = { ...hints };
             if (appStep?.ok) nextHints.appTest = { ok: true, version: row.clientVersion, at: now.toISOString() };
             else delete nextHints.appTest;
+            const clearHealth = row.healthStatus === 'error' && healthClearedBy(provider, row.healthCode, result.steps);
             // Only stored while the tested credentials are still the saved ones: a save (or secret removal) during the
             // probe clears lastTest*, and this result must not paint a pass / fail on credentials it never tried.
             const { count } = await prisma.integrationProvider.updateMany({
@@ -748,8 +845,7 @@ export const integrationService = {
                     lastTestOk: result.ok,
                     lastTestMessage: result.message.slice(0, 300),
                     secretHintsJson: Object.keys(nextHints).length > 0 ? JSON.stringify(nextHints) : null,
-                    // A passing app step clears an app-level health problem; the user step says nothing about the app.
-                    ...(appStep?.ok && row.healthStatus === 'error' ? { healthStatus: 'ok', healthCode: null, healthAt: now } : {}),
+                    ...(clearHealth ? { healthStatus: 'ok', healthCode: null, healthAt: now } : {}),
                 },
             });
             if (count === 0) {
@@ -757,10 +853,26 @@ export const integrationService = {
                 result = { ok: false, code: 'credentials_changed', message, steps: [{ step: 'app', ok: false, code: 'credentials_changed', message }] };
             } else {
                 dropProviderCredentialsCache(provider);
-                if (appStep?.ok && isCalendarProvider(provider)) tokenSource.invalidate(provider);
+                // The app-level negative cache stays while health keeps a problem this test didn't prove fixed.
+                if (appStep?.ok && isCalendarProvider(provider) && (row.healthStatus !== 'error' || clearHealth)) tokenSource.invalidate(provider);
             }
         }
-        logger.info({ provider, ok: result.ok, code: result.code, steps: result.steps.map((s) => `${s.step}:${s.code}`) }, 'Integration test connection');
+        if (subject) {
+            const userStep = result.steps.find((s) => s.step === 'user');
+            await runInTransaction(async (tx) => {
+                await auditService.record(tx, {
+                    entityType: 'IntegrationProvider',
+                    entityId: provider,
+                    action: 'TEST_AS_USER',
+                    changedBy: actor.username,
+                    changes: { asUsername: subject.username, ok: result.ok, code: result.code, userStep: userStep ? userStep.code : null },
+                });
+            });
+        }
+        logger.info(
+            { provider, by: actor.username, asUsername: subject?.username, ok: result.ok, code: result.code, steps: result.steps.map((s) => `${s.step}:${s.code}`) },
+            'Integration test connection',
+        );
         return { ...result, testedAt: now.toISOString() };
     },
 

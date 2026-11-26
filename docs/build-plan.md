@@ -368,7 +368,12 @@ keeps wall-clock times); all-day activities are entered as business-timezone day
         `CalendarConnectionsCard` (props kept, ignored), `CalendarSyncStatusAlert` on the calendar instead of the
         reconnect banner, the bell icon for `calendar_sync_issue`. Tests: JWT header / claims / signature against a local
         RSA key, token cache, error classification, enrolment rules and reconcile, People API, test connection, no dead
-        routes. Not run against a real SQL Server, Google or Microsoft. Owner setup: system design §9.2.1.
+        routes. Not run against a real SQL Server, Google or Microsoft. Owner setup: system design §9.2.1. Review
+        fixes (2026-11-26): "Test connection" as a person is audited `TEST_AS_USER` and limited to people the provider
+        would sync (409 `CALENDAR_TEST_NOT_ALLOWED`); a test clears provider health only for problems it proves fixed;
+        the Microsoft 403 escalation needs no `ok` row on the provider (RBAC-scoped tenants); card `excluded` counts
+        come from `CalendarSyncUser`; the People link follows bell navigation on the open page; a 32 px tap target on
+        "N with problems".
   - [x] **P2-3a: activity write-path refactor** (2026-11-26, no behaviour change) — `activity.system.ts`
         (`insertSystemActivity` / `applySystemPatch`: owner verbatim, no past-start / admin-required / related-access /
         lock checks; audit, revision, `remindAt`, attendee sync kept; `loadFollowUpContext()`), the write hook
