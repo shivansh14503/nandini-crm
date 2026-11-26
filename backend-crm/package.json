@@ -26,7 +26,8 @@
     "sync:drawer-layout": "tsx scripts/syncDrawerLayout.ts",
     "build:city-master": "tsx scripts/buildCityMaster.ts",
     "align:backend-names": "tsx scripts/alignBackendNames.ts",
-    "perf:audit": "tsx scripts/auditPerfCheck.ts"
+    "perf:audit": "tsx scripts/auditPerfCheck.ts",
+    "integrations:reencrypt": "tsx scripts/reencryptIntegrations.ts"
   },
   "dependencies": {
     "@fontsource/noto-sans": "^5.3.0",

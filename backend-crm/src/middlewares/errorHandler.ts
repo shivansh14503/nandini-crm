@@ -7,6 +7,7 @@ import { logger } from '../config/logger.js';
 import { auditService } from '../services/audit.service.js';
 import { HttpError, type ApiFieldError } from '../utils/httpError.js';
 import { isTransactionUnavailableError, isWriteConflictError } from '../utils/prismaErrors.js';
+import { redactUrl } from '../utils/redactUrl.js';
 
 // Re-exported so existing imports from this module keep working.
 export { HttpError } from '../utils/httpError.js';
@@ -137,11 +138,11 @@ export function errorHandler(err: unknown, req: Request, res: Response, _next: N
     if (statusCode === StatusCodes.FORBIDDEN) auditAccessDenied(req, body.message);
 
     if (statusCode >= StatusCodes.INTERNAL_SERVER_ERROR) {
-        logger.error({ err, method: req.method, url: req.originalUrl }, 'Unhandled error');
+        logger.error({ err, method: req.method, url: redactUrl(req.originalUrl) }, 'Unhandled error');
         // Internals stay out of production responses; development keeps the real message for debugging.
         if (!ENV.IS_PRODUCTION && err instanceof Error && !(err instanceof HttpError)) body.message = err.message;
     } else {
-        logger.debug({ statusCode, code: body.code, url: req.originalUrl }, body.message);
+        logger.debug({ statusCode, code: body.code, url: redactUrl(req.originalUrl) }, body.message);
     }
 
     res.status(statusCode).json(body);
@@ -149,5 +150,5 @@ export function errorHandler(err: unknown, req: Request, res: Response, _next: N
 
 /** 404 for unmatched routes, in the same error shape. */
 export function notFoundHandler(req: Request, _res: Response, next: NextFunction): void {
-    next(HttpError.notFound(`Route not found: ${req.method} ${req.originalUrl}`));
+    next(HttpError.notFound(`Route not found: ${req.method} ${redactUrl(req.originalUrl)}`));
 }

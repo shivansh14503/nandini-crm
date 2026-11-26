@@ -36,6 +36,9 @@ import {
 import { MAX_ATTENDEES, NOTE_REMARKS_MESSAGE, PAST_START_MESSAGE, RELATED_RECORD_MESSAGE, activityPastIssues } from '../modules/activities/activity.validator.js';
 import * as zonedTime from '../utils/zonedTime.js';
 import { ACTIVITY_ONLY_TYPE_MESSAGE, activityOnlyTypeIssues, isActivityOnlyFollowupType } from '../modules/shared/followupTypes.js';
+import { GOOGLE_SCOPE_PROFILES, INTEGRATION_PROVIDERS, SECRET_EXPIRY_WARNING_DAYS } from '../modules/integrations/integration.constants.js';
+import { BACKFILL_DAY_CHOICES, EVENT_VISIBILITIES, MAX_COMPANY_DOMAINS } from '../modules/integrations/calendarSyncSettings.js';
+import { USER_EMAIL_ISSUES, USER_EMAIL_MAX_LENGTH } from '../modules/users/userEmail.service.js';
 
 /**
  * Contract between backend-crm and frontend-crm: constants each side keeps its own copy of must agree, or the UI
@@ -130,6 +133,17 @@ interface FrontendFollowupTypes {
     ACTIVITY_ONLY_TYPE_MESSAGE: string;
     isActivityOnlyFollowupType(value: string | null | undefined): boolean;
     activityOnlyTypeIssues(value: string | null | undefined, previous?: string | null, path?: string): { path: string; message: string }[];
+}
+
+interface FrontendIntegrationTypes {
+    INTEGRATION_PROVIDERS: readonly string[];
+    BACKFILL_DAY_CHOICES: readonly number[];
+    EVENT_VISIBILITIES: readonly string[];
+    GOOGLE_SCOPE_PROFILES: readonly string[];
+    USER_EMAIL_ISSUES: readonly string[];
+    SECRET_EXPIRY_WARNING_DAYS: number;
+    MAX_COMPANY_DOMAINS: number;
+    USER_EMAIL_MAX_LENGTH: number;
 }
 
 async function loadFrontend<T>(relativePath: string): Promise<T> {
@@ -351,5 +365,17 @@ describe('backend ↔ frontend contract', { skip }, () => {
             const expected = activityOnlyTypeIssues(value, previous).map((issue) => ({ path: issue.path.join('.'), message: issue.message }));
             assert.deepEqual(frontend.activityOnlyTypeIssues(value, previous), expected, JSON.stringify([value, previous]));
         }
+    });
+
+    it('frontend types/integration.types.ts matches the integrations constants', async () => {
+        const frontend = await loadFrontend<FrontendIntegrationTypes>('types/integration.types.ts');
+        assert.deepEqual([...frontend.INTEGRATION_PROVIDERS], [...INTEGRATION_PROVIDERS]);
+        assert.deepEqual([...frontend.BACKFILL_DAY_CHOICES], [...BACKFILL_DAY_CHOICES]);
+        assert.deepEqual([...frontend.EVENT_VISIBILITIES], [...EVENT_VISIBILITIES]);
+        assert.deepEqual([...frontend.GOOGLE_SCOPE_PROFILES], [...GOOGLE_SCOPE_PROFILES]);
+        assert.deepEqual([...frontend.USER_EMAIL_ISSUES], [...USER_EMAIL_ISSUES]);
+        assert.equal(frontend.SECRET_EXPIRY_WARNING_DAYS, SECRET_EXPIRY_WARNING_DAYS);
+        assert.equal(frontend.MAX_COMPANY_DOMAINS, MAX_COMPANY_DOMAINS);
+        assert.equal(frontend.USER_EMAIL_MAX_LENGTH, USER_EMAIL_MAX_LENGTH);
     });
 });

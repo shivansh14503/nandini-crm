@@ -36,7 +36,7 @@ import { useAuth } from '../../context/AuthContext';
 import { GlobalSearch } from './GlobalSearch';
 import { ThemeModeToggle } from './ThemeModeToggle';
 import { APP_CONFIG, ROUTES } from '@/config/constants';
-import { NAV_ITEMS, ModuleDot, type NavGroup, type NavLinkItem } from './navItems';
+import { ModuleDot, navGroupsFor, type NavGroup, type NavLinkItem } from './navItems';
 import { MobileNavDrawer } from './MobileNavDrawer';
 import { NotificationBell } from './NotificationBell';
 import { useDropdown } from './useDropdown';
@@ -590,6 +590,8 @@ const SCROLL_BACKDROP_HEIGHT = FLOAT_INSET + NAVBAR_HEIGHT + 20;
 export function Navbar() {
     const router = useRouter();
     const { user, logout } = useAuth();
+    // Admin-only items (Integrations) are left out for everyone else.
+    const navGroups = navGroupsFor(user?.role);
     // A docked detail drawer: end the bar 12px short of it and switch the right-side controls to icons.
     const panelWidth = useRightPanelWidth();
     const docked = panelWidth > 0;
@@ -749,7 +751,7 @@ export function Navbar() {
 
                     {/* Nav pills (the menu drawer below `lg`) */}
                     <Box sx={{ display: { xs: 'none', lg: 'flex' }, alignItems: 'center', gap: 0.5 }}>
-                        {NAV_ITEMS.map((item) => (
+                        {navGroups.map((item) => (
                             <NavPill key={item.label} item={item} />
                         ))}
                     </Box>
@@ -791,7 +793,7 @@ export function Navbar() {
         <MobileNavDrawer
             open={menuOpen}
             onClose={() => setMenuOpen(false)}
-            groups={NAV_ITEMS}
+            groups={navGroups}
             currentPath={menuPath}
             user={user}
             onLogout={handleLogout}

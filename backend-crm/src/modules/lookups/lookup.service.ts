@@ -10,8 +10,8 @@ import { booleanQuery } from '../../validators/common.js';
  * entities (search + limit) and full lists of the small masters. Cached in Redis. Lists that CRM writes change
  * (organizations, contacts, products, partner companies and their contacts, cities) are dropped by those writes
  * (`cache:lookups:<entity>*`, `cache:address-master:cities:*`) and read with `getOrSetGuarded`, so a list read while
- * a write commits is never cached. Lists the CRM never writes (users, nature of calls, countries and states) only
- * expire by TTL and use plain `getOrSet`.
+ * a write commits is never cached; so does the user directory (company emails are edited on Admin › API Integrations).
+ * Lists the CRM never writes (nature of calls, countries and states) only expire by TTL and use plain `getOrSet`.
  */
 
 const ENTITY_TTL_SECONDS = 5 * 60;
@@ -117,9 +117,9 @@ export interface CityLookupDto {
 export const lookupService = {
     async users(query: unknown): Promise<CrmUserDto[]> {
         const { includeInactive } = usersQuerySchema.parse(query ?? {});
-        // Plain getOrSet: no CRM write changes these fields (users are maintained outside the app; sign-in only sets
-        // lastLoginAt), so nothing invalidates the key and there is no write to race. Guard it if a write path is added.
-        return cacheService.getOrSet(CACHE_KEYS.lookups(`users:${includeInactive ? 'all' : 'active'}`), ENTITY_TTL_SECONDS, async () => {
+        // Guarded: Admin › API Integrations › People changes users' emails (users/userEmail.service.ts drops
+        // `cache:lookups:users*`), so a list read while that write commits is not cached. Sign-in only sets lastLoginAt.
+        return cacheService.getOrSetGuarded(CACHE_KEYS.lookups(`users:${includeInactive ? 'all' : 'active'}`), ENTITY_TTL_SECONDS, async () => {
             const rows = await prisma.user.findMany({
                 where: includeInactive ? {} : { isActive: true },
                 orderBy: [{ fullName: 'asc' }, { username: 'asc' }],

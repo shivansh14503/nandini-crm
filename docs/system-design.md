@@ -1,6 +1,6 @@
 # Nandini CRM — System Design
 
-> **Status:** living document. Describes the system as built (code as of 2026-11-26; audit context + ledger audit table, admin audit query API and screen, Users tab; Contracts module; Referrals module; Documents module; Activities data model and API, Calendar Phase 1 PR1; Activities screens and Calendar, PR2; notifications, reminders and mail workers, navbar bell and the morning summary email, PR3, with its review fixes; guarded cache reads for lookups, form configs and search, with its review fixes).
+> **Status:** living document. Describes the system as built (code as of 2026-11-26; audit context + ledger audit table, admin audit query API and screen, Users tab; Contracts module; Referrals module; Documents module; Activities data model and API, Calendar Phase 1 PR1; Activities screens and Calendar, PR2; notifications, reminders and mail workers, navbar bell and the morning summary email, PR3, with its review fixes; guarded cache reads for lookups, form configs and search, with its review fixes; Calendar Phase 2 P2-1, Admin › API Integrations foundation: encrypted provider credentials, connection tests, calendar sync settings, company emails).
 > Update it in the same change that alters architecture, infrastructure, Redis usage, queues or security.
 > Related: [Database design](database-design.md) · [API plan](api-plan.md) · [Build plan](build-plan.md)
 
@@ -184,7 +184,7 @@ SQL Server is the only source of truth; Redis only ever holds derived or disposa
 
 | Level | Rule |
 | --- | --- |
-| Admin features | `requireRole('Admin', 'Administrator', 'Super Admin')` — form customisation, document series, cities, PDF template management |
+| Admin features | `requireRole('Admin', 'Administrator', 'Super Admin')` — form customisation, document series, cities, PDF template management, API Integrations (`/api/admin/integrations`) |
 | Global data roles | Admin, Director – Operations, Regional Sales Head, Sales Manager, System Administrator, Accounts Manager see **all** records |
 | Everyone else | Row-level scope: only records where they are the owner (`assignedTo`) **or** the creator (`createdBy`). Lists add this as a Prisma `where`; single-record reads/writes call `assertRecordAccess` (403) |
 | Activities (`modules/activities/activity.access.ts`) | The same rule **plus attendees**: a colleague invited to an activity (`ActivityAttendee.username`) can see it (lists, calendar, record, its audit trail) and reply to it (`POST /api/activities/:id/response`), but only the owner, the creator or a global role can change or delete it. Linking an activity to a record (Related To, and the `link-targets` picker) needs access to that record under its own module's rule (403 otherwise); an unchanged link is kept even if the editor can't see the record. The calendar's lead / opportunity follow-ups and contract renewals follow their modules' rules. Activities are not in global search |
@@ -199,7 +199,31 @@ Role names are compared case-insensitively and with any dash style.
 - Admin form configuration (required fields, option lists, formats) is re-enforced server-side by
   `customFieldValidator.ts`, so API clients and stale tabs can't bypass it.
 - Rate limits in Redis (fail-open): failed logins per IP, PDF renders per user, PDF previews per user.
-- Logger redacts passwords, auth headers and cookies. 5xx responses hide internals in production.
+- Logger redacts passwords, auth headers and cookies, and (P2-1) every token / secret / verifier / `secretsEnc` /
+  `syncCursor` field and the `x-goog-channel-token` header (`LOG_REDACT_PATHS` in `config/logger.ts`). Request URLs
+  are logged through `utils/redactUrl.ts` (pino-http `req` serializer, error-handler log lines, the 404 message): the
+  values of `code`, `state`, `id_token`, `session_state`, `validationToken`, `token`, `syncToken`, `pageToken`,
+  `$deltatoken` and `$skiptoken` become `[redacted]`, and a URL fragment carrying one of them is dropped. 5xx
+  responses hide internals in production.
+- **Integration secrets (secret box, `services/secretBox.ts`, P2-1).** Client secrets and webhook secrets of
+  Google / Microsoft / Zoom (`IntegrationProvider.secretsEnc`) are sealed with **AES-256-GCM**: format
+  `enc:v1:<keyId>:<iv>:<tag>:<ciphertext>` (base64url), a fresh 12-byte IV per seal, AAD
+  `IntegrationProvider:<provider>:secrets` so a value copied to another row doesn't open. The key ring comes from
+  `INTEGRATIONS_ENCRYPTION_KEY` (`k2:<base64 32 bytes>,k1:<…>`; the first key seals, every key opens; a bare base64
+  key means `k1`), validated at start-up (a malformed value stops the process); it is not exposed through `ENV`.
+  Secrets are **write-only**: no API response, log line or audit entry carries one (the DTO shows `set`, `last4`,
+  who / when; audit entries say `secretChanged: true`). Without a key the API runs normally and API Integrations
+  shows the setup steps; saving a secret answers 503 `INTEGRATIONS_NOT_READY`. A stored secret the ring can't open
+  (key replaced without keeping the old one) shows as "Needs attention" and is kept until a new one is entered.
+  Rotation: put the new key first (`k2:…,k1:…`) on the API and the worker, restart, run
+  `npm run integrations:reencrypt` (compare-and-set per row; `--dry-run` reports), then drop the old key. HKDF
+  subkeys (`subkey(purpose)`) are reserved for webhook channel tokens (P2-7).
+- **Audit redaction** (`services/auditCatalog.ts` `isSensitiveKey`): an exact, case-insensitive list (password,
+  token, secret, clientSecret, refreshToken, accessToken, …) plus a case-sensitive camelCase suffix rule
+  `(Secret|Secrets|Token|Password)(Enc)?$`, applied to **every** entity's before / after values.
+- **Connection tests** (`POST /api/admin/integrations/providers/:provider/test`) call Google / Microsoft with the
+  saved credentials only (no user): 6 per minute per admin in Redis, with an in-memory per-process limit while Redis
+  is down, so the probe can't be used to hammer the providers.
 - **Audit log** (`AuditLog`, an append-only SQL Server ledger table — see §5 "Audit write paths"): every change,
   sign-in, failed sign-in (wrong password or deactivated account) and refused request (403, at most one per user +
   route per minute) is recorded with who / where / how. Record history (`GET /api/audit-logs/...`) follows the
@@ -234,7 +258,8 @@ commands fail immediately instead of hanging, and reconnects in the background (
 | `ratelimit:login:{ip}` | counter | `LOGIN_RATE_LIMIT_WINDOW_SECONDS` (15 min) | failed logins only | Brute-force protection (default 10 failures / window); reset on success |
 | `ratelimit:pdf:{module}:user:{id}` | counter | 60 s | `GET /:id/pdf` | 30 PDF renders / min / user |
 | `ratelimit:pdf-preview:user:{id}` | counter | 60 s | `POST /api/pdf-templates/preview` | 20 previews / min / user |
-| `cache:lookups:users:{all\|active}` | JSON | 5 min | lookups (plain read) | User picker list; TTL only (no CRM write changes users) |
+| `ratelimit:integration-test:user:{id}` | counter | 60 s | `POST /api/admin/integrations/providers/:provider/test` | 6 connection tests / min / admin (in-memory per process while Redis is down) |
+| `cache:lookups:users:{all\|active}` | JSON, guarded ¹ | 5 min | lookups | User picker list; dropped by a company email change (`invalidateUserCaches`, Admin › API Integrations › People) |
 | `cache:lookups:organizations:{limit}` / `contacts:{limit}` / `products:{limit}` | JSON, guarded ¹ | 5 min | lookups (no search term only) | Lookup dialogs' default lists |
 | `cache:lookups:partner-companies` / `partner-contacts` | JSON, guarded ¹ | 1 h | lookups | Partner master lists; dropped by partner company writes |
 | `cache:lookups:nature-of-calls` | JSON | 1 h | lookups (plain read) | Seeded master list; TTL only |
@@ -286,8 +311,9 @@ takes up to a minute to resume); search's live 180 s, because a search runs a do
 queries on a 10-connection pool. A placeholder left behind by a crash only keeps that key uncached, never stale,
 until it expires. Cost: one more round trip on a miss; a hit is the same single `GET`. Values are JSON (`null` and
 empty lists are cached; `undefined` is not). Redis down or a failed Redis call: the source, uncached, no error.
-Keys only their TTL expires stay on the plain `cacheService.getOrSet`: users, nature of calls and countries/states
-(no CRM write changes them; the seed drops `cache:*`), and DNS answers. A key is read one way only: a plain read of a
+Keys only their TTL expires stay on the plain `cacheService.getOrSet`: nature of calls and countries/states
+(no CRM write changes them; the seed drops `cache:*`), and DNS answers. Users moved to the guarded read in P2-1,
+when the company email editor became a CRM write path for them. A key is read one way only: a plain read of a
 guarded key would overwrite its placeholder.
 
 Invalidations made while a process cannot reach Redis are lost, so a value cached before an outage can outlive a write
@@ -636,6 +662,19 @@ frontend-crm/src/
   off, the user has no address or nothing is due. Admin roles also get "Send me a test"
   (`POST …/morning-summary/test`); the API's message shows in a toast.
 
+### 8.5 Admin › API Integrations (P2-1)
+
+`/admin/integrations` (`components/settings/integrations/ApiIntegrationsView.tsx` in `AdminPageShell`; the navbar
+"Integrations" item is shown to admin roles only, `navGroupsFor(role)`). One read
+(`GET /api/admin/integrations`, query key `integrations.admin`) feeds: readiness alerts (no key, unreadable secret,
+no public address, not HTTPS), the server facts row, one `ProviderCard` per provider (switch, client ID, write-only
+secret with "Replace", expiry date, Microsoft tenant, Google permission profile / PKCE, redirect URI and webhook URLs
+to copy, "Test connection"), the company calendar settings card, "What goes to calendars" (Followup Types) and the
+People table with the company email editor (`integrations.people`). Each card keeps its own draft; the view joins
+their dirty flags into one `useLeaveGuard`. Writes call `notifyCrmUpdate('/api/admin/integrations')`; settings and
+sync-type saves also notify `FORM_CONFIG_SYNC_ENTITY`, so an open Form Builder reloads instead of saving stale module
+settings or option meta back.
+
 ## 9. Deployment topology
 
 ```mermaid
@@ -670,7 +709,20 @@ notifications (written by the API after a save) still appear, but reminders, ren
 processes are safe: claims and unique dedupe keys stop double delivery. Without Redis the worker falls back to a
 one-minute database check (§4.3); off-hours contract renewals wait for the 07:00 sweep.
 
-### 9.2 Outgoing email (Google Workspace SMTP relay)
+### 9.2 Integrations key and public address (before Calendar sync is used)
+
+1. Generate a key **per environment** (laptop, server):
+   `node -e "console.log('k1:'+require('crypto').randomBytes(32).toString('base64'))"`.
+2. Set it as `INTEGRATIONS_ENCRYPTION_KEY` in `backend-crm/.env` for **both** the API and the worker, and restart both.
+3. Keep a copy in the company password manager. Losing it means re-entering the client secrets (and, from P2-2,
+   everyone reconnecting their calendar).
+4. Set `PUBLIC_API_URL` to the https address the browser, Google and Microsoft reach the API at (e.g.
+   `https://crm.nandiniinfosys.com`). Redirect URIs and webhook URLs are built from it; outside production it defaults
+   to `http://localhost:<PORT>`. Production without it: API Integrations shows an error and nobody can connect. Not
+   https: calendar webhooks stay off (changes from calendars arrive by polling); the API logs a warning at start-up.
+5. Rotation: §3.6.
+
+### 9.3 Outgoing email (Google Workspace SMTP relay)
 
 Email is off until `MAIL_ENABLED=true` and `SMTP_HOST` is set; until then the morning summary can still be previewed
 from the bell. The CRM sends from `MAIL_FROM` (default `Nandini CRM <crm@nandiniinfosys.com>`); links in emails use
@@ -719,11 +771,13 @@ Retention: `NOTIFICATION_RETENTION_DAYS` (90), `EMAIL_LOG_RETENTION_DAYS` (180).
 | --- | --- |
 | No user management API/UI | Users come from the seed or direct DB edits. `ROUTES.ADMIN_USERS` exists in the frontend but has no page. `sessionService.revokeAll` is ready for deactivation / password change. |
 | Dashboard has no data API | The dashboard page is static; `cache:dashboard:*` is reserved. |
-| No automated frontend tests | Backend has 63 `node:test` files (pure logic: validators, numbering, PDF document, access control, audit, time zones, activities, referrals, documents, notifications, mail, cache). The guarded cache read's Redis tests (Lua compare-and-set, `SCAN` + `UNLINK`, placeholder expiry, 2 MB values) run only with `REDIS_TEST_URL` set. No integration/E2E tests. |
+| No automated frontend tests | Backend has 73 `node:test` files (pure logic: validators, numbering, PDF document, access control, audit, time zones, activities, referrals, documents, notifications, mail, cache, integrations: secret box, URL redaction, probes against recorded provider answers, a fake Prisma for the integrations service). The guarded cache read's Redis tests (Lua compare-and-set, `SCAN` + `UNLINK`, placeholder expiry, 2 MB values) run only with `REDIS_TEST_URL` set. No integration/E2E tests. |
 | Notifications are polled, not pushed | The bell asks every minute (§8.4), so a reminder can show up to a minute late; background tabs don't poll. SSE through Redis pub/sub is the upgrade path. There are no browser / push notifications and no notification preferences yet. |
 | Reminders depend on a worker | No worker running = no reminders, renewals or morning email (§9.1). Off-hours contract renewals wait for the 07:00 sweep. With Redis down the fallback polls the database every minute. |
 | Morning email not yet proven against the relay | The mail layer, EmailLog claims and the summary are unit-tested (STARTTLS enforcement against a fake SMTP server), and the job schedulers and the guarded unread-count cache were checked against a local Redis, but no real SMTP send or SQL Server run has been done yet; the first real send should be an admin's "Send me a test". `MORNING_SUMMARY_CRON` is read with a small cron subset for the catch-up check (numbers, names, ranges, lists, steps). |
 | "Add to Google Calendar" is a one-time copy | Moving the meeting in the CRM doesn't update the copy; real Google / Microsoft 365 sync is Calendar Phase 2 (needs HTTPS on a nandiniinfosys.com hostname). |
+| Calendar sync is foundation only (P2-1) | Credentials, tests, settings and company emails exist; connecting calendars (P2-2), pushing activities (P2-3) and webhooks (P2-7) are later PRs. `webhooksActive` is always false and `worker` null in the admin read until then. The probes were written against the providers' documented error answers; no real Google / Microsoft / SQL Server call was made when P2-1 was built. |
+| Integrations key is a single point of loss | Losing `INTEGRATIONS_ENCRYPTION_KEY` makes stored secrets unreadable (re-enter them); keep it in the password manager (§9.2). |
 | Workers inside the API by default | Long imports share the event loop with requests unless `RUN_WORKERS=false` + separate worker. |
 | Rate limits fail open | Intentional for availability; brute-force protection disappears while Redis is down. |
 | Stale README PDF section | Describes the removed Handlebars engine. |

@@ -45,6 +45,12 @@ export const queryKeys = {
     users: {
         all: ['users'] as const,
     },
+    /** Admin › API Integrations (`/api/admin/integrations`); `notifyCrmUpdate('/api/admin/integrations')` refreshes it. */
+    integrations: {
+        all: ['integrations'] as const,
+        admin: () => ['integrations', 'admin'] as const,
+        people: () => ['integrations', 'people'] as const,
+    },
     /** The signed-in user's notifications (navbar bell); `notifyCrmUpdate('/api/notifications')` refreshes them. */
     notifications: {
         all: ['notifications'] as const,

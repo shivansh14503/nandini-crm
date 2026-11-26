@@ -72,6 +72,8 @@ export const ROUTES = {
     DOCUMENT_SERIES: '/admin/document-series',
     EMAIL_VALIDATION: '/admin/email-validation',
     HOLIDAYS: '/admin/holidays',
+    /** Admin › API Integrations: Google / Microsoft 365 / Zoom set-up, calendar sync settings, company emails. */
+    API_INTEGRATIONS: '/admin/integrations',
     AUDIT_LOG: '/admin/audit-log',
     LIST_SCORECARDS: '/admin/scorecards',
     /** List Scorecards with a module's settings open. */

@@ -1,7 +1,7 @@
 # Nandini CRM — Database Design
 
-> **Status:** living document, generated from `backend-crm/prisma/schema.prisma` and `prisma/migrations/` (75 migrations,
-> latest `20261126120000_notifications`, as of 2026-11-25). Update it in the same change as any schema migration.
+> **Status:** living document, generated from `backend-crm/prisma/schema.prisma` and `prisma/migrations/` (80 migrations,
+> latest `20261126210000_integrations`, as of 2026-11-26). Update it in the same change as any schema migration.
 > Related: [System design](system-design.md) · [API plan](api-plan.md) · [Build plan](build-plan.md)
 
 ---
@@ -34,6 +34,7 @@
 | Audit & UI state | `AuditLog`, `AuditExport`, `AuditDigest`, `TableFilter`, `ModuleScorecard` |
 | Notifications & outgoing mail | `Notification` (navbar bell), `EmailLog` (every email the CRM sends) |
 | Email checks | `EmailValidationRun` |
+| Integrations | `IntegrationProvider` (Admin › API Integrations; calendar connections arrive in P2-2) |
 
 ## 2. Design conventions
 
@@ -144,7 +145,7 @@ Pre-existing table kept for compatibility (columns `Id`, `Username`, `Password`,
 | `Username` | NVARCHAR(50) UNIQUE | Used everywhere as the owner/creator identifier |
 | `Password` | NVARCHAR(255) | bcrypt hash; legacy plain-text values are re-hashed on next login |
 | `Role` | NVARCHAR(50) | Default `Sales Executive`; drives admin access and row-level scope |
-| `email`, `fullName`, `phone`, `department` | | `email` is unique in code only (SQL Server allows one NULL in a unique key) |
+| `email`, `fullName`, `phone`, `department` | | `email` is unique in code only (SQL Server allows one NULL in a unique key). Since P2-1 the CRM writes it through `modules/users/userEmail.service.ts` (Admin › API Integrations › People; the later Admin › Users reuses it): trimmed and lower-cased, unique among **active non-group** users (writers serialise on an application lock), a company domain (`activities/calendarSync` `companyDomains`) unless the admin allows another, audited `User UPDATE`. The filtered unique index `UX_Users_email` follows in P2-2 |
 | `isActive`, `isGroupUser`, `onLeave`, `lastLoginAt` | | Inactive users can't sign in or be assigned |
 
 Indexes: `email`, `isActive`.
@@ -582,6 +583,30 @@ index covers both kinds without clashing); the API shows it as `MM-DD`. The cale
 each year asked for (29 Feb falls on 28 Feb in other years). A one-off holiday that a yearly one of the same occasion
 already covers is refused as a duplicate; a yearly one may be added while one-off copies exist, and the calendar
 shows such a day once.
+
+### 4.28 `IntegrationProvider` (Admin › API Integrations)
+
+Migration `20261126210000_integrations` (new table only; Calendar Phase 2 P2-1). Module
+`backend-crm/src/modules/integrations`. One row per external provider an admin has saved; no row = not set up, and
+every provider starts switched off.
+
+| Column | Type | Notes |
+| --- | --- | --- |
+| `provider` | NVARCHAR(30) PK | `google` \| `microsoft` \| `zoom` |
+| `enabled` | BIT, default 0 | Employees can connect only while on; Zoom stays off until Phase 3 |
+| `clientId` | NVARCHAR(200) NULL | OAuth client (application) id; not secret |
+| `secretsEnc` | NVARCHAR(MAX) NULL | Sealed JSON `{ clientSecret, webhookSecret? }`: `enc:v1:<keyId>:<iv>:<tag>:<ct>`, AES-256-GCM, AAD `IntegrationProvider:<provider>:secrets` ([system design §3.6](system-design.md#36-security-model)). Never returned, logged or audited |
+| `keyId` | NVARCHAR(8) NULL | Key that sealed `secretsEnc` (`npm run integrations:reencrypt` moves rows to the active key) |
+| `secretHintsJson` | NVARCHAR(MAX) NULL | Non-secret hints: `{ clientSecret: { last4, updatedAt, updatedBy, expiresOn? }, webhookSecret?: {…} }` |
+| `settingsJson` | NVARCHAR(MAX) NULL | Google `{ scopeProfile, pkce }`, Microsoft `{ tenantId }`, Zoom `{}` |
+| `clientVersion` | INT, default 1 | Bumped when the client id or the Microsoft tenant changes (connections made with the old app must reconnect, P2-2) |
+| `lastTestAt`, `lastTestOk`, `lastTestMessage` (≤ 300) | | Last "Test connection" result; cleared when credentials change |
+| `updatedBy`, `createdAt`, `updatedAt` | | |
+
+Saves lock the row (`acquireLocks`) and are audited as entity `IntegrationProvider` (module `admin-integrations`,
+category CONFIG) with `secretChanged` / `webhookSecretChanged` / `secretCleared` flags instead of values. Company
+calendar settings are not here: they are the module setting `ModuleSetting (activities, calendarSync)`; which
+Followup Types sync is option meta `calendarSync` on `shared_followup_type` options (missing = on; Task / Note never).
 
 ## 5. Index strategy
 
