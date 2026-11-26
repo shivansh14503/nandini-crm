@@ -28,29 +28,56 @@ datasource db {
 // â”€â”€ Identity â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 /// Mapped onto the pre-existing `Users` table (Id, Username, Password, Role) so current accounts keep working.
-/// Every column added beyond those four has a default, so existing rows migrate without manual backfill.
+/// Every column added beyond those four has a default or is nullable, so existing rows migrate without manual
+/// backfill (the user_profile migration also splits `fullName` into `firstName` / `lastName` once).
 model User {
   // Int keeps the existing auth contract (frontend `User.id: number`).
-  id           Int       @id @default(autoincrement()) @map("Id")
-  username     String    @unique @map("Username") @db.NVarChar(50)
+  id                Int       @id @default(autoincrement()) @map("Id")
+  username          String    @unique @map("Username") @db.NVarChar(50)
   /// bcrypt hash. Legacy plain-text values are re-hashed on the user's next successful login.
-  passwordHash String    @map("Password") @db.NVarChar(255)
-  role         String    @default("Sales Executive") @map("Role") @db.NVarChar(50)
+  passwordHash      String    @map("Password") @db.NVarChar(255)
+  role              String    @default("Sales Executive") @map("Role") @db.NVarChar(50)
   /// Not @unique: SQL Server unique constraints allow a single NULL. Uniqueness is enforced in the service.
-  email        String?   @db.NVarChar(120)
-  fullName     String    @default("") @db.NVarChar(100)
-  phone        String?   @db.NVarChar(20)
-  department   String?   @db.NVarChar(50)
-  isActive     Boolean   @default(true)
-  isGroupUser  Boolean   @default(false)
-  onLeave      Boolean   @default(false)
-  lastLoginAt  DateTime?
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @default(now()) @updatedAt
+  email             String?   @db.NVarChar(120)
+  /// Display name, always `trim(firstName + ' ' + lastName)` when the user edits their profile (My Profile). Read
+  /// everywhere a user's name is shown (lookups, audit log, quotation PDFs), so it stays a real column.
+  fullName          String    @default("") @db.NVarChar(100)
+  /// Given name (My Profile). Backfilled from `fullName` (text before the first space) by the user_profile migration.
+  firstName         String?   @db.NVarChar(100)
+  /// Family name (My Profile); the rest of `fullName` after the first space. NULL when the user has none.
+  lastName          String?   @db.NVarChar(100)
+  /// Mobile number, E.164 (My Profile "Mobile"). Quotation PDFs print it as the sales person's phone.
+  phone             String?   @db.NVarChar(20)
+  /// Desk / landline number, E.164 (My Profile "Office Phone").
+  officePhone       String?   @db.NVarChar(20)
+  department        String?   @db.NVarChar(50)
+  isActive          Boolean   @default(true)
+  isGroupUser       Boolean   @default(false)
+  onLeave           Boolean   @default(false)
+  lastLoginAt       DateTime?
+  /// Set when the user changes their own password (POST /api/auth/change-password). NULL = never changed in this CRM.
+  passwordChangedAt DateTime?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @default(now()) @updatedAt
+
+  photo UserPhoto?
 
   @@index([email])
   @@index([isActive])
   @@map("Users")
+}
+
+/// A user's profile photo (bytes in the DB like RecordFile / PdfAsset). A new row (new id) per upload, so the URL
+/// /api/user-photos/:id never changes content and can be cached forever. One row per user.
+model UserPhoto {
+  id        String   @id @default(uuid()) @db.NVarChar(50)
+  userId    Int      @unique
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// Detected from the bytes (PNG, JPEG or WebP), not taken from the upload's declared type.
+  mimeType  String   @db.NVarChar(50)
+  sizeBytes Int
+  data      Bytes    @db.VarBinary(Max)
+  createdAt DateTime @default(now())
 }
 
 /// Atomic counters behind document numbers (see src/modules/document-series/documentSeries.sequence.ts).

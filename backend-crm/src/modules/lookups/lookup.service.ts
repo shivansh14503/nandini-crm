@@ -114,11 +114,17 @@ export interface CityLookupDto {
     subdivisionCode: string;
 }
 
+/** Drops the cached user lists (pickers, assignee names). Call after a write to a user's name or photo commits. */
+export function invalidateUserLookupCaches(): Promise<void> {
+    return cacheService.invalidatePattern(`${CACHE_KEYS.lookups('users')}:*`);
+}
+
 export const lookupService = {
     async users(query: unknown): Promise<CrmUserDto[]> {
         const { includeInactive } = usersQuerySchema.parse(query ?? {});
-        // Guarded: Admin › API Integrations › People changes users' emails (users/userEmail.service.ts drops
-        // `cache:lookups:users*`), so a list read while that write commits is not cached. Sign-in only sets lastLoginAt.
+        // Guarded: My Profile edits change a user's name and photo (invalidateUserLookupCaches), and Admin › API
+        // Integrations › People changes users' emails (users/userEmail.service.ts drops `cache:lookups:users*`), so a
+        // list read while either write commits is not cached. Sign-in only sets lastLoginAt.
         return cacheService.getOrSetGuarded(CACHE_KEYS.lookups(`users:${includeInactive ? 'all' : 'active'}`), ENTITY_TTL_SECONDS, async () => {
             const rows = await prisma.user.findMany({
                 where: includeInactive ? {} : { isActive: true },

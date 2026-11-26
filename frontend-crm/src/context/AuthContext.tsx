@@ -2,6 +2,7 @@
 
 import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
 import { authService } from '../services/auth.service';
+import { ApiClientError } from '../services/apiClient';
 import type { User, LoginPayload } from '../types/auth.types';
 
 interface AuthContextType {
@@ -11,7 +12,10 @@ interface AuthContextType {
     isAuthenticated: boolean;
     login: (credentials: LoginPayload) => Promise<void>;
     logout: () => Promise<void>;
+    /** Re-reads the user from GET /api/auth/me; only a 401 signs the user out (other errors keep the current user). */
     refreshUser: () => Promise<void>;
+    /** Merges fields the app already has (a saved name or photo) into the signed-in user, without a request. */
+    updateUser: (patch: Partial<User>) => void;
     clearError: () => void;
 }
 
@@ -55,12 +59,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             setUser(res.user);
             setError(null);
             markSignedIn();
-        } catch {
-            setUser(null);
-            markExpiredIfHadSession();
+        } catch (err) {
+            // A 5xx, timeout or network blip says nothing about the session: keep the user signed in.
+            if (err instanceof ApiClientError && err.status === 401) {
+                setUser(null);
+                markExpiredIfHadSession();
+            }
         } finally {
             setLoading(false);
         }
+    }, []);
+
+    const updateUser = useCallback((patch: Partial<User>) => {
+        setUser((current) => (current ? { ...current, ...patch } : current));
     }, []);
 
     useEffect(() => {
@@ -90,6 +101,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         };
     }, []);
 
+    // The login response's user has the /me shape (name and photo included), so the navbar is complete at once.
     const login = async (credentials: LoginPayload) => {
         const res = await authService.login(credentials);
         setUser(res.user);
@@ -117,6 +129,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 login,
                 logout,
                 refreshUser,
+                updateUser,
                 clearError,
             }}
         >

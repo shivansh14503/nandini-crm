@@ -1,7 +1,8 @@
 # Nandini CRM — API Plan
 
 > **Status:** living document. Lists every endpoint of `backend-crm` as of 2026-11-26 (through Calendar Phase 2 P2-1:
-> `/api/admin/integrations`, Admin › API Integrations, with its review fixes) plus the planned ones.
+> `/api/admin/integrations`, Admin › API Integrations, and Profile Phase 1: `/api/me` (My Profile), `/api/user-photos` and
+> `POST /api/auth/change-password`) plus the planned ones.
 > When you add, change or remove a route, update this file in the same change (the route files'
 > header comments are the per-module source of truth; keep them in step too).
 > Related: [System design](system-design.md) · [Database design](database-design.md) · [Build plan](build-plan.md)
@@ -73,12 +74,13 @@ Modules marked **CRUD** expose (`modules/shared/crud.ts` → `registerCrudRoutes
 | Method | Path | Auth | Description |
 | --- | --- | --- | --- |
 | GET | `/health` | – | `{ status: 'ok', redis: 'connected' \| 'unavailable' }` |
-| POST | `/auth/login` | – | `{ username, password }` → `{ status: 'ok', message, user }` + sets cookie. 429 after `LOGIN_RATE_LIMIT_MAX` failures per IP per window |
+| POST | `/auth/login` | – | `{ username, password }` → `{ status: 'ok', message, user }` + sets cookie. `user` has the same shape as `/auth/me` (`{ id, username, role, fullName, firstName, lastName, photoUrl }`); the JWT itself stays `{ id, username, role }`. 429 after `LOGIN_RATE_LIMIT_MAX` failures per IP per window |
 | POST | `/auth/logout` | – | Revokes the Redis session (if tracked), clears cookie → `{ status: 'ok', message }` |
-| GET | `/auth/me` | ✔ | `{ status: 'ok', user: { id, username, role } }` |
+| GET | `/auth/me` | ✔ | `{ status: 'ok', user: { id, username, role, fullName, firstName, lastName, photoUrl } }`, read from the database (not the JWT) so a name or photo change shows at once; `photoUrl` is `/api/user-photos/<id>` or `null`. `firstName` / `lastName` are split from `fullName` when the stored parts are missing or out of date (users created or renamed outside the app). `401` when the account no longer exists; when the database can't answer, `200` with the token's `{ id, username, role }` and `fullName: ''`, `firstName` / `lastName` / `photoUrl` `null` (a database outage never signs the user out) |
+| POST | `/auth/change-password` | ✔ | `{ currentPassword, newPassword }` (strings, ≤ 128) → `{ success, data: { passwordChangedAt, signedOutSessions }, message }`; `signedOutSessions` is `null` when the other sessions could not be signed out (Redis down or failing; the password is still changed, and the UI asks the user to sign them out from My Profile). Checks the current password (bcrypt or a legacy plain-text row), then the password rules (`modules/auth/passwordPolicy.ts`: 8–128 characters, a letter and a digit, not the username in any case, not the current password), stores the bcrypt hash and `passwordChangedAt` under the per-user lock `user:id:<id>` (the stored hash is re-checked inside it, so two concurrent changes from the same old password can't both succeed: the second gets `WRONG_PASSWORD`), audits `PASSWORD_CHANGE` (only the timestamp), then signs out every **other** session of the user (this one stays). `400 WRONG_PASSWORD` "Current password is incorrect." (path `currentPassword`); `400 WEAK_PASSWORD` with the rule's message (path `newPassword`); 429 after 10 requests per 15 min per user ("Too many password attempts. Please wait a few minutes.") |
 
 The auth endpoints use the older `{ status: 'ok', … }` envelope rather than `{ success, data }`; the frontend's
-`auth.service.ts` expects it.
+`auth.service.ts` expects it. `change-password` is the exception: it is newer and uses `{ success, data }`.
 
 ### 2.2 Sales & customer records
 
@@ -152,6 +154,28 @@ for anyone who can view the activity. Admin › Audit Log can undo updates and r
 | POST | `/table-filters/recent` | `{ module, criteria }` — record an applied filter |
 | POST | `/table-filters/saved` | `{ module, name, criteria }` — same name overwrites |
 | DELETE | `/table-filters/:id` | Hard delete one of the caller's filters |
+
+**My Profile** (`/me`, `backend-crm/src/modules/profile`, route header comment = source of truth; Profile Phase 1).
+The signed-in user's own profile, photo and sessions: every route acts on the caller (there is no user id in any
+request). Role, department, work email and username are admin-managed and read-only here. Profile and photo changes
+are audited as a User `UPDATE` (category DATA, module `users`, not undoable); signing out sessions as
+`SESSION_REVOKE` (SECURITY, NOTICE). Profile and photo writes drop the user lookup caches (`cache:lookups:users:*`).
+
+`ProfileDto`: `{ id, username, firstName, lastName, fullName, email, role, department, mobile, officePhone, photoUrl,
+lastLoginAt, passwordChangedAt, createdAt }` (`mobile` = the `phone` column; empty values and dates are `null`, dates
+ISO). `SessionDto`: `{ id (the session's JWT id), current, ip, userAgent, device ("Chrome on Windows",
+`describeUserAgent`), createdAt, expiresAt }` (ISO or `null`).
+
+| Method | Path | Description |
+| --- | --- | --- |
+| GET | `/me/profile` | `ProfileDto`. `401` when the account no longer exists |
+| PATCH | `/me/profile` | `{ firstName?, lastName?, mobile?, officePhone? }` → `ProfileDto`. Keys left out stay as they are; any other key → `400 VALIDATION_ERROR` (unrecognized key). `firstName` is required when sent (≤ 100, name-cased with `formatPersonName`); `lastName` `''` / `null` clears it; `mobile` / `officePhone` are E.164 (national Indian numbers normalized, `''` / `null` clears; "Mobile must be a valid phone number with country code (e.g. +919811234567)."). When a name actually changes, `fullName` is recomputed as `trim(firstName + ' ' + lastName)`; names equal to the ones `ProfileDto` shows (split from `fullName` when the stored parts are missing or out of date) count as unchanged, so a phone-only edit never rewrites `fullName`. `400 VALIDATION_ERROR` "First and last name together cannot exceed 99 characters." / "First Name is required." (a row with no name at all given a last name only). No change → no audit entry |
+| PUT | `/me/photo` | `{ mimeType: 'image/png' \| 'image/jpeg' \| 'image/webp', data (base64 or data: URI), fileName? }` → `{ photoUrl }`. ≤ 512 KB decoded; the bytes must be PNG, JPEG or WebP (the detected type is stored). Replaces the old photo with a new row (new id → new URL). `400 INVALID_IMAGE` "Upload a PNG, JPEG or WebP image."; `400 IMAGE_TOO_LARGE` "The photo must be 512 KB or smaller." |
+| DELETE | `/me/photo` | `{ photoUrl: null }`; nothing happens (and nothing is audited) when there is no photo |
+| GET | `/me/sessions` | `{ tracked, sessions: SessionDto[] }`, the current session first, then newest sign-in. From the Redis rows `session:{userId}:*`; `{ tracked: false, sessions: [] }` while Redis is down; `tracked: false` with a list when the caller's own session was opened while Redis was down |
+| DELETE | `/me/sessions/:id` | Signs out one other session → `{ id }`. `id` must be a UUID (`400 VALIDATION_ERROR`). `400 CURRENT_SESSION` "Use Sign out to end this session."; `404 NOT_FOUND` "This session has already ended."; `503 SESSIONS_UNAVAILABLE` while Redis is down. 30 / 10 min per user (with the route below) |
+| DELETE | `/me/sessions` | Signs out every other session → `{ signedOutSessions }`. `503 SESSIONS_UNAVAILABLE` (and no audit entry) while Redis is down or when it fails partway |
+| GET | `/user-photos/:id` | Any signed-in user. The image bytes with `Content-Type` (detected), `Content-Length`, `Cache-Control: private, max-age=31536000, immutable`, `X-Content-Type-Options: nosniff`, `Cross-Origin-Resource-Policy: cross-origin` and an inline `Content-Disposition`. `id` must be a UUID; `404` "Photo not found" |
 
 **Notifications** (`/notifications`, `backend-crm/src/modules/notifications`, route header comment = source of truth;
 Calendar Phase 1 PR3). The navbar bell's rows: personal (every query is limited to the caller's username), not
@@ -361,6 +385,8 @@ scans the whole range: send a date range with it.
 | Failed logins | `LOGIN_RATE_LIMIT_MAX` (10) per `LOGIN_RATE_LIMIT_WINDOW_SECONDS` (900 s) | IP | 429 `RATE_LIMITED` + `Retry-After` |
 | Record PDF | 30 / 60 s | user | 429 |
 | Template preview | 20 / 60 s | user | 429 |
+| Change password (`ratelimit:change-password`) | 10 / 15 min (every request) | user | 429 "Too many password attempts. Please wait a few minutes." |
+| Sign out sessions (`ratelimit:session-revoke`, both `DELETE /me/sessions` routes) | 30 / 10 min | user | 429 |
 | Integration connection test | 6 / 60 s | admin | 429 `RATE_LIMITED` + `Retry-After` (in-memory per process whenever Redis can't count it: down, or a command failing while it reports ready; this one never fails open) |
 
 Limited responses carry `RateLimit-Limit`, `RateLimit-Remaining`, `RateLimit-Reset`. All limits except the integration connection test fail open when Redis is down.
@@ -371,6 +397,10 @@ Limited responses carry `RateLimit-Limit`, `RateLimit-Remaining`, `RateLimit-Res
 | --- | --- | --- |
 | 400 | `VALIDATION_ERROR` | Zod failure; `errors[].path` points at the form field |
 | 400 | `INVALID_JSON`, `BAD_REQUEST`, `VALUE_TOO_LONG` | Malformed body / oversized value |
+| 400 | `WRONG_PASSWORD` | Change password: the current password is wrong (`errors[].path` `currentPassword`) |
+| 400 | `WEAK_PASSWORD` | Change password: the new password breaks a password rule (`errors[].path` `newPassword`, message = the rule) |
+| 400 | `INVALID_IMAGE`, `IMAGE_TOO_LARGE` | Profile photo: not a PNG / JPEG / WebP image; over 512 KB |
+| 400 | `CURRENT_SESSION` | My Profile: signing out the request's own session from the sessions list (use Sign out) |
 | 401 | (none) / `INVALID_CREDENTIALS` | Missing, invalid, expired or revoked session; wrong password |
 | 403 | `ACCOUNT_INACTIVE` / (none) | Deactivated user; role or row-level access denied |
 | 404 | `NOT_FOUND` | Missing or soft-deleted record; unknown route |
@@ -389,6 +419,7 @@ Limited responses carry `RateLimit-Limit`, `RateLimit-Remaining`, `RateLimit-Res
 | 503 | `SERVER_BUSY` | Lock timeout / DB couldn't start a transaction (`Retry-After: 2`) |
 | 503 | `INTEGRATIONS_NOT_READY` | API Integrations: storing a secret while `INTEGRATIONS_ENCRYPTION_KEY` is not set |
 | 503 | `IMPORT_QUEUE_UNAVAILABLE` | Large import or status poll without Redis |
+| 503 | `SESSIONS_UNAVAILABLE` | Signing out one session while Redis is down |
 | 503 | `PDF_RENDERER_UNAVAILABLE`, `SHUTTING_DOWN` | Chromium can't start; server stopping |
 | 500 | – | Unhandled; message hidden in production |
 
@@ -399,6 +430,9 @@ Limited responses carry `RateLimit-Limit`, `RateLimit-Remaining`, `RateLimit-Res
   `deleteBulk`. Every write calls `notifyCrmUpdate(endpoint)` for cross-tab cache invalidation.
 - React Query hooks in `hooks/queries/` wrap those services; query keys in `queryKeys.ts`.
 - DTO types live in `frontend-crm/src/types/*.types.ts`; the backend mappers must return exactly those shapes.
+- My Profile is not a CRUD module: `services/profile.service.ts` (profile, photo, sessions) and
+  `auth.service.ts` `changePassword`, hooks in `hooks/queries/useProfile.ts`, types in `types/profile.types.ts`; the
+  password rules in `utils/passwordPolicy.ts` are contract-tested against the API's copy.
 - Notifications are not a CRUD module: `services/notification.service.ts` (list, unread count, read, read all,
   morning summary preview / test), hooks in `hooks/queries/useNotifications.ts`, `CrmNotification` and the preview
   types in `types/notification.types.ts`. Read / read all broadcast `notifyCrmUpdate('/api/notifications')`.
@@ -420,8 +454,7 @@ Limited responses carry `RateLimit-Limit`, `RateLimit-Remaining`, `RateLimit-Res
 
 | Endpoint | Purpose | Notes |
 | --- | --- | --- |
-| `/users` (CRUD, 🔐) | Create, edit, deactivate users; reset password | `ROUTES.ADMIN_USERS` already reserved in the frontend. Deactivation and password change must call `sessionService.revokeAll(userId)` and invalidate `cache:lookups:users*`; switch the users lookup to `cacheService.getOrSetGuarded` then (it is TTL-only today) |
-| `POST /auth/change-password` | Self-service password change | Revoke other sessions |
+| `/users` (CRUD, 🔐) | Create, edit, deactivate users; reset password; job title, reports to, must change password (Profile Phase 2) | `ROUTES.ADMIN_USERS` already reserved in the frontend. Deactivation and an admin password reset must call `sessionService.revokeAll(userId)` and `invalidateUserLookupCaches()` (the users lookup is already read guarded) |
 | `GET /dashboard/*` | KPI aggregates (pipeline value by stage, follow-ups due, open tickets, conversion rate) | Use the reserved `cache:dashboard:*` namespace, already invalidated on every entity write; read it with `cacheService.getOrSetGuarded` |
 | `GET /opportunities/:id/pdf` etc. | PDFs for other modules | Follow the README "Adding a module" steps |
 | Export (`GET /<entity>/export`) | CSV/XLSX export of a filtered list | Stream; respect row-level scope |

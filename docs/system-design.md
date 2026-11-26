@@ -1,6 +1,6 @@
 # Nandini CRM — System Design
 
-> **Status:** living document. Describes the system as built (code as of 2026-11-26; audit context + ledger audit table, admin audit query API and screen, Users tab; Contracts module; Referrals module; Documents module; Activities data model and API, Calendar Phase 1 PR1; Activities screens and Calendar, PR2; notifications, reminders and mail workers, navbar bell and the morning summary email, PR3, with its review fixes; guarded cache reads for lookups, form configs and search, with its review fixes; Calendar Phase 2 P2-1, Admin › API Integrations foundation: encrypted provider credentials, connection tests, calendar sync settings, company emails, with its review fixes).
+> **Status:** living document. Describes the system as built (code as of 2026-11-26; audit context + ledger audit table, admin audit query API and screen, Users tab; Contracts module; Referrals module; Documents module; Activities data model and API, Calendar Phase 1 PR1; Activities screens and Calendar, PR2; notifications, reminders and mail workers, navbar bell and the morning summary email, PR3, with its review fixes; guarded cache reads for lookups, form configs and search, with its review fixes; Calendar Phase 2 P2-1, Admin › API Integrations foundation: encrypted provider credentials, connection tests, calendar sync settings, company emails, with its review fixes; My Profile (Profile Phase 1): profile, photo, change password, signed-in sessions).
 > Update it in the same change that alters architecture, infrastructure, Redis usage, queues or security.
 > Related: [Database design](database-design.md) · [API plan](api-plan.md) · [Build plan](build-plan.md)
 
@@ -176,9 +176,31 @@ SQL Server is the only source of truth; Redis only ever holds derived or disposa
   `{ id, username, role, tracked, jti }` and sets it as an **httpOnly cookie** named `token`
   (`secure` + `SameSite=None` in production, `Lax` in dev). A `Bearer` header is accepted as a fallback.
 - The session is also written to Redis as `session:{userId}:{jti}` with the same TTL. A *tracked* token whose key
-  is missing is treated as revoked (logout, deactivation, password change). If Redis is unreachable at login the
-  token is issued *untracked*; if Redis is unreachable at request time, a valid JWT is trusted so an outage doesn't
-  log everyone out.
+  is missing is treated as revoked (logout, a password change, "Sign out" on My Profile). If Redis is unreachable at
+  login the token is issued *untracked*; if Redis is unreachable at request time, a valid JWT is trusted so an outage
+  doesn't log everyone out.
+- `GET /api/auth/me` reads the user from the database on every call (name, first / last name, photo URL), so the JWT
+  stays `{ id, username, role }` and a profile edit shows at once; a token whose user row is gone gets 401. If the
+  database can't answer (an outage, a paused Azure SQL resuming), it answers from the JWT with no name or photo and
+  logs a warning, so a database blip never signs anyone out. The login response's `user` has the same shape. The
+  frontend's `refreshUser()` drops the user only on a 401.
+- **Change password** (`POST /api/auth/change-password`, My Profile › Security): the current password is checked like a
+  sign-in (bcrypt, or a legacy plain-text row), the new one against `modules/auth/passwordPolicy.ts` (8–128
+  characters, a letter and a digit, not the username, not the current password; the frontend's live checklist uses a
+  contract-tested copy). The bcrypt hash and `passwordChangedAt` are written in one transaction with a
+  `PASSWORD_CHANGE` audit entry (no password in it; `currentPassword`, `newPassword` and `confirmPassword` are
+  redacted from any audit entry anyway), under the per-user lock `user:id:<id>` with the stored hash re-checked inside
+  it, so two concurrent changes can't both succeed. After the commit `sessionService.revokeAllExcept(userId, jti)` deletes every
+  other `session:{userId}:*` key, so a stolen session can't outlive the password; the request's own session stays
+  signed in. If Redis is down or fails partway the response says `signedOutSessions: null` and the UI tells the user
+  to sign out other sessions again from My Profile. Rate limited per user (10 requests / 15 min, every request counts). An untracked session (Redis was down
+  at its sign-in) can't be revoked early and keeps working until its JWT expires.
+- **Signed-in sessions** (`/api/me/sessions`): the list is a `SCAN` of `session:{userId}:*` with `GET` + `PTTL` per key
+  in one pipeline (`sessionService.list`), shown with a device name parsed from the stored User-Agent
+  (`describeUserAgent`), IP, sign-in and expiry times. A user can sign out one other session (deletes its key) or all
+  others (`revokeAllExcept`), both audited as `SESSION_REVOKE`; the current session can only end with Sign out. With
+  Redis down the list is empty (`tracked: false`) and nothing can be revoked (both sign-out routes answer
+  `503 SESSIONS_UNAVAILABLE`).
 
 **Authorization** (`modules/shared/accessControl.ts`)
 
@@ -198,7 +220,10 @@ Role names are compared case-insensitively and with any dash style.
 - Zod validation on every body/query/param; sort fields are whitelisted so arbitrary column names never reach Prisma.
 - Admin form configuration (required fields, option lists, formats) is re-enforced server-side by
   `customFieldValidator.ts`, so API clients and stale tabs can't bypass it.
-- Rate limits in Redis (fail-open): failed logins per IP, PDF renders per user, PDF previews per user.
+- Rate limits in Redis (fail-open): failed logins per IP, PDF renders per user, PDF previews per user, password changes
+  per user, session sign-outs per user.
+- Profile photos (`/api/user-photos/:id`, any signed-in user) are served only after their bytes were recognised as
+  PNG, JPEG or WebP at upload, with `nosniff` and the detected `Content-Type` (no SVG, so no script in an image).
 - Logger redacts passwords, auth headers and cookies, and (P2-1) every token / secret / verifier / `secretsEnc` /
   `syncCursor` field and the `x-goog-channel-token` header (`LOG_REDACT_PATHS` in `config/logger.ts`). Request URLs
   are logged through `utils/redactUrl.ts` (pino-http `req` serializer `serializeRequestForLog`, error-handler log
@@ -259,12 +284,14 @@ commands fail immediately instead of hanging, and reconnects in the background (
 
 | Key pattern | Type | TTL | Written by | Purpose |
 | --- | --- | --- | --- | --- |
-| `session:{userId}:{jti}` | string (JSON: ip, userAgent, createdAt) | `SESSION_TTL_SECONDS` (8 h) | login | Revocable sessions; logout / deactivation deletes the key |
+| `session:{userId}:{jti}` | string (JSON: ip, userAgent, createdAt) | `SESSION_TTL_SECONDS` (8 h) | login | Revocable sessions; logout deletes the key; a password change deletes every other key of the user; My Profile lists them (`SCAN` + `GET` + `PTTL`) and signs out one or all others |
+| `ratelimit:change-password:user:{id}` | counter | 15 min | `POST /api/auth/change-password` | 10 password changes (right or wrong) / 15 min / user |
+| `ratelimit:session-revoke:user:{id}` | counter | 10 min | `DELETE /api/me/sessions[/:id]` | 30 session sign-outs / 10 min / user |
 | `ratelimit:login:{ip}` | counter | `LOGIN_RATE_LIMIT_WINDOW_SECONDS` (15 min) | failed logins only | Brute-force protection (default 10 failures / window); reset on success |
 | `ratelimit:pdf:{module}:user:{id}` | counter | 60 s | `GET /:id/pdf` | 30 PDF renders / min / user |
 | `ratelimit:pdf-preview:user:{id}` | counter | 60 s | `POST /api/pdf-templates/preview` | 20 previews / min / user |
 | `ratelimit:integration-test:user:{id}` | counter | 60 s | `POST /api/admin/integrations/providers/:provider/test` | 6 connection tests / min / admin (in-memory per process whenever Redis can't count) |
-| `cache:lookups:users:{all\|active}` | JSON, guarded ¹ | 5 min | lookups | User picker list; dropped by a company email change (`invalidateUserCaches`, Admin › API Integrations › People) |
+| `cache:lookups:users:{all\|active}` | JSON, guarded ¹ | 5 min | lookups | User picker list; dropped by a company email change (`invalidateUserCaches`, Admin › API Integrations › People) and by My Profile name / photo changes (`invalidateUserLookupCaches`) |
 | `cache:lookups:organizations:{limit}` / `contacts:{limit}` / `products:{limit}` | JSON, guarded ¹ | 5 min | lookups (no search term only) | Lookup dialogs' default lists |
 | `cache:lookups:partner-companies` / `partner-contacts` | JSON, guarded ¹ | 1 h | lookups | Partner master lists; dropped by partner company writes |
 | `cache:lookups:nature-of-calls` | JSON | 1 h | lookups (plain read) | Seeded master list; TTL only |
@@ -301,8 +328,8 @@ same keys; the shared Redis client connects lazily, so the script connects it fi
 Redis can't be reached, tells the operator to restart the API. PDF cache entries never need invalidation: any change
 to the template or the record changes the key.
 
-Every key a CRM write invalidates is read with **`cacheService.getOrSetGuarded`** (lookups of organizations,
-contacts, products, partner companies and partner contacts, cities, form configs, global search, unread counts). A
+Every key a CRM write invalidates is read with **`cacheService.getOrSetGuarded`** (lookups of users,
+organizations, contacts, products, partner companies and partner contacts, cities, form configs, global search, unread counts). A
 plain read-through can cache a value it read just before a write *after* that write's invalidation, and serve it until
 the TTL (an hour for form configs, a day for cities). The guarded read closes that gap: on a miss it first writes a
 `pending:<uuid>` placeholder (`SET NX`), reads the source, then swaps the placeholder for the value only if the
@@ -318,7 +345,7 @@ until it expires. Cost: one more round trip on a miss; a hit is the same single 
 empty lists are cached; `undefined` is not). Redis down or a failed Redis call: the source, uncached, no error.
 Keys only their TTL expires stay on the plain `cacheService.getOrSet`: nature of calls and countries/states
 (no CRM write changes them; the seed drops `cache:*`), and DNS answers. Users moved to the guarded read in P2-1,
-when the company email editor became a CRM write path for them. A key is read one way only: a plain read of a
+when the company email editor became a CRM write path for them (My Profile name / photo edits are another). A key is read one way only: a plain read of a
 guarded key would overwrite its placeholder.
 
 Invalidations made while a process cannot reach Redis are lost, so a value cached before an outage can outlive a write
@@ -338,7 +365,7 @@ opens) always counts in SQL and re-caches that the same way.
 | Feature | Behaviour |
 | --- | --- |
 | Caching | Every read goes to SQL Server |
-| Sessions | New logins issue untracked tokens; existing tokens are trusted until they expire; logout can't revoke |
+| Sessions | New logins issue untracked tokens; existing tokens are trusted until they expire; logout, a password change and My Profile's Sign out can't revoke; the My Profile session list is empty |
 | Rate limiting | Disabled (requests allowed) |
 | Audit events (logins, PDF generated, import summaries) | Written directly to SQL instead of queued |
 | Imports | ≤ 500 rows run synchronously inside the request; larger imports return `503 IMPORT_QUEUE_UNAVAILABLE` |
@@ -684,6 +711,27 @@ settings or option meta back; a company email change also notifies `MASTER_DATA_
 failed background refetch keeps the cards (and their unsaved drafts) on screen with an inline "Try again" warning;
 the full-page error shows only when nothing has loaded yet.
 
+### 8.6 My Profile (`/profile`)
+
+- **Page:** `app/profile/page.tsx` (signed-in only), content in `components/profile/` (`ProfileView`,
+  `PhotoCropDialog`). Reached from the navbar user menu's "My Profile" and the mobile drawer's account block. A header
+  card (large `UserAvatar` with change / remove photo, name, role, department, username, last sign-in) and two pill
+  tabs, **Profile** and **Security**, kept in the URL (`?tab=security`).
+- **Profile tab:** "Personal details" (first name, last name, mobile, office phone; `PATCH /api/me/profile`, field
+  errors mapped back to the inputs) and read-only "Work details" (username, work email, role, department, member
+  since: admin-managed). User fields are not in Form Builder (they are treated like admin settings).
+- **Security tab:** "Change password" (current / new / confirm, live checklist from `utils/passwordPolicy.ts`, the same
+  rules as the API) and "Where you're signed in" (`GET /api/me/sessions`: device, IP, signed-in time, "This device"
+  for the current one, Sign out per other row, "Sign out of all other sessions").
+- **Photo:** picked, cropped to a circle in the browser (zoom + drag / arrow keys to pan) and uploaded as a 256 × 256
+  WebP (JPEG fallback) of at most 512 KB, base64 JSON like other uploads. Shown everywhere through `UserAvatar`
+  (`src` = `${API_URL}/api/user-photos/<id>`, initials on the brand gradient as the fallback); the URL changes with
+  every upload, so the browser caches each one forever. The navbar reads name and photo from the auth user (login
+  response, then `GET /api/auth/me`); profile / photo saves merge the saved name and photo into it (`updateUser`)
+  and refresh the users master data (`['masters']`) so pickers show the new name at once.
+- **Data:** `services/profile.service.ts`, `hooks/queries/useProfile.ts` (keys `['me', 'profile']`,
+  `['me', 'sessions']`), `types/profile.types.ts`.
+
 ## 9. Deployment topology
 
 ```mermaid
@@ -778,9 +826,10 @@ Retention: `NOTIFICATION_RETENTION_DAYS` (90), `EMAIL_LOG_RETENTION_DAYS` (180).
 
 | Item | Notes |
 | --- | --- |
-| No user management API/UI | Users come from the seed or direct DB edits. `ROUTES.ADMIN_USERS` exists in the frontend but has no page. `sessionService.revokeAll` is ready for deactivation / password change. |
+| No user management API/UI | Users come from the seed or direct DB edits; each user can edit only their own name, phones and photo and change their own password (My Profile). `ROUTES.ADMIN_USERS` exists in the frontend but has no page (Profile Phase 2: job title, reports to, must change password, deactivate). `sessionService.revokeAll` is ready for deactivation. |
+| Sessions opened while Redis was down | They are untracked: not in the My Profile list and not signed out by a password change; they last until their JWT expires (8 h by default). |
 | Dashboard has no data API | The dashboard page is static; `cache:dashboard:*` is reserved. |
-| No automated frontend tests | Backend has 73 `node:test` files (pure logic: validators, numbering, PDF document, access control, audit, time zones, activities, referrals, documents, notifications, mail, cache, integrations: secret box, URL redaction, probes against recorded provider answers, a fake Prisma for the integrations service). The guarded cache read's Redis tests (Lua compare-and-set, `SCAN` + `UNLINK`, placeholder expiry, 2 MB values) run only with `REDIS_TEST_URL` set. No integration/E2E tests. |
+| No automated frontend tests | Backend has 81 `node:test` files (pure logic: validators, numbering, PDF document, access control, audit, time zones, activities, referrals, documents, notifications, mail, cache, integrations: secret box, URL redaction, probes against recorded provider answers, a fake Prisma for the integrations service; profile, password rules, sessions). The guarded cache read's Redis tests (Lua compare-and-set, `SCAN` + `UNLINK`, placeholder expiry, 2 MB values) run only with `REDIS_TEST_URL` set. No integration/E2E tests. |
 | Notifications are polled, not pushed | The bell asks every minute (§8.4), so a reminder can show up to a minute late; background tabs don't poll. SSE through Redis pub/sub is the upgrade path. There are no browser / push notifications and no notification preferences yet. |
 | Reminders depend on a worker | No worker running = no reminders, renewals or morning email (§9.1). Off-hours contract renewals wait for the 07:00 sweep. With Redis down the fallback polls the database every minute. |
 | Morning email not yet proven against the relay | The mail layer, EmailLog claims and the summary are unit-tested (STARTTLS enforcement against a fake SMTP server), and the job schedulers and the guarded unread-count cache were checked against a local Redis, but no real SMTP send or SQL Server run has been done yet; the first real send should be an admin's "Send me a test". `MORNING_SUMMARY_CRON` is read with a small cron subset for the catch-up check (numbers, names, ranges, lists, steps). |

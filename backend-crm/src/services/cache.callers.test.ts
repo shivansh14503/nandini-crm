@@ -4,7 +4,7 @@ import { prisma } from '../config/prisma.js';
 import { invalidateCityCaches } from '../modules/cities/city.service.js';
 import { domainMailStatus } from '../modules/email-verification/localChecks.js';
 import { formConfigService, invalidateFormConfigCaches } from '../modules/form-configs/formConfig.service.js';
-import { lookupService } from '../modules/lookups/lookup.service.js';
+import { invalidateUserLookupCaches, lookupService } from '../modules/lookups/lookup.service.js';
 import { invalidatePartnerCaches } from '../modules/partner-companies/partnerCompany.service.js';
 import { searchService } from '../modules/search/search.service.js';
 import { invalidateUserCaches } from '../modules/users/userEmail.service.js';
@@ -56,6 +56,8 @@ describe('cached reads', () => {
 
     it('reads every key a CRM write invalidates with getOrSetGuarded, and the writers\' invalidators cover each one', async () => {
         const reads = watchReads((key) => (key.startsWith(CACHE_KEYS.search('')) ? { results: {} } : key.includes('form-configs') ? {} : []));
+        await lookupService.users({});
+        await lookupService.users({ includeInactive: 'true' });
         await lookupService.organizations({});
         await lookupService.contacts({ limit: '20' });
         await lookupService.products({});
@@ -70,6 +72,8 @@ describe('cached reads', () => {
 
         // Each guarded read, with the invalidator of the writes that change it (called for real, Redis stubbed).
         const expected: [key: string, writer: string, invalidate: () => Promise<void>][] = [
+            ['cache:lookups:users:active', 'My Profile edits', invalidateUserLookupCaches],
+            ['cache:lookups:users:all', 'My Profile edits', invalidateUserLookupCaches],
             ['cache:lookups:organizations:50', 'organization writes', () => cacheService.invalidateEntityCaches('organizations')],
             ['cache:lookups:contacts:20', 'contact writes', () => cacheService.invalidateEntityCaches('contacts')],
             ['cache:lookups:products:50', 'product writes', () => cacheService.invalidateEntityCaches('products')],

@@ -17,7 +17,6 @@ import {
     MenuItem,
     Divider,
     Typography,
-    Avatar,
     IconButton,
     useMediaQuery,
     useTheme,
@@ -40,6 +39,8 @@ import { ModuleDot, navGroupsFor, type NavGroup, type NavLinkItem } from './navI
 import { MobileNavDrawer } from './MobileNavDrawer';
 import { NotificationBell } from './NotificationBell';
 import { useDropdown } from './useDropdown';
+import { UserAvatar, displayName } from '@/components/common/UserAvatar';
+import type { User } from '@/types/auth.types';
 
 /**
  * Narrowest viewport (px) where the pills fit beside the full search box, Create button and user name. From `lg`
@@ -293,13 +294,13 @@ function UserMenu({
     onLogout,
     compact = false,
 }: {
-    user: { username: string; role: string };
+    user: Pick<User, 'username' | 'role' | 'fullName' | 'photoUrl'>;
     onLogout: () => void;
     compact?: boolean;
 }) {
     const { open, close, menuId, setAnchorEl, anchorEl, hoverProps, triggerProps, handleClickAway } = useDropdown();
 
-    const initials = user.username.slice(0, 2).toUpperCase();
+    const name = displayName(user);
 
     return (
         <Box {...hoverProps} sx={{ position: 'relative', cursor: 'pointer' }}>
@@ -309,7 +310,7 @@ function UserMenu({
                 ref={setAnchorEl}
                 id="user-menu-btn"
                 {...triggerProps}
-                aria-label={compact ? `Account: ${user.username}` : undefined}
+                aria-label={compact ? `Account: ${name}` : undefined}
                 sx={{
                     display: 'flex',
                     alignItems: 'center',
@@ -329,22 +330,12 @@ function UserMenu({
                     },
                 }}
             >
-                <Avatar
-                    sx={{
-                        width: 32,
-                        height: 32,
-                        fontSize: '0.75rem',
-                        fontWeight: 700,
-                        background: 'linear-gradient(135deg, var(--crm-fill-blue-500), var(--crm-fill-blue-600))',
-                    }}
-                >
-                    {initials}
-                </Avatar>
+                <UserAvatar name={name} photoUrl={user.photoUrl} size={32} />
                 {!compact && (
                     <>
-                        <Box sx={{ display: { xs: 'none', md: 'block' } }}>
-                            <Typography sx={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--crm-gray-900)', lineHeight: 1.2 }}>
-                                {user.username}
+                        <Box sx={{ display: { xs: 'none', md: 'block' }, minWidth: 0, maxWidth: 180 }}>
+                            <Typography noWrap sx={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--crm-gray-900)', lineHeight: 1.2 }}>
+                                {name}
                             </Typography>
                             <Typography sx={{ fontSize: '0.7rem', color: 'var(--crm-gray-500)', lineHeight: 1.2 }}>
                                 {user.role}
@@ -386,19 +377,26 @@ function UserMenu({
                         >
                             <ClickAwayListener onClickAway={handleClickAway}>
                                 <Box>
-                                    <Box sx={{ px: 2, py: 1.5, backgroundColor: 'var(--crm-gray-50)' }}>
-                                        <Typography sx={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--crm-gray-900)' }}>
-                                            {user.username}
-                                        </Typography>
-                                        <Typography sx={{ fontSize: '0.75rem', color: 'var(--crm-gray-500)' }}>
-                                            {user.role}
-                                        </Typography>
+                                    <Box sx={{ px: 2, py: 1.5, backgroundColor: 'var(--crm-gray-50)', display: 'flex', alignItems: 'center', gap: 1.25, maxWidth: 280 }}>
+                                        <UserAvatar name={name} photoUrl={user.photoUrl} size={36} />
+                                        <Box sx={{ minWidth: 0 }}>
+                                            <Typography noWrap sx={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--crm-gray-900)' }}>
+                                                {name}
+                                            </Typography>
+                                            <Typography noWrap sx={{ fontSize: '0.75rem', color: 'var(--crm-gray-500)' }}>
+                                                {user.role}
+                                            </Typography>
+                                        </Box>
                                     </Box>
                                     <Divider />
                                     <MenuList dense sx={{ py: 0.5 }}>
                                         <MenuItem
+                                            id="my-profile-btn"
+                                            component={Link}
+                                            href={ROUTES.PROFILE}
                                             onClick={close}
                                             sx={{
+                                                textDecoration: 'none',
                                                 fontSize: '0.82rem',
                                                 color: 'var(--crm-gray-700)',
                                                 px: 2,

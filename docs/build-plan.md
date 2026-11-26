@@ -1,7 +1,8 @@
 # Nandini CRM — Build Plan
 
 > **Status:** living document. Part 1 records what has been built (reconstructed from git history, 115 commits
-> from 2026-10-15 to 2026-11-18; the snapshot as of 2026-11-26, Calendar Phase 2 P2-1). Part 2 is the roadmap. Tick
+> from 2026-10-15 to 2026-11-18; the snapshot as of 2026-11-26, Calendar Phase 2 P2-1 and Profile Phase 1: My Profile). Part 2
+> is the roadmap. Tick
 > items off and add new ones as work lands.
 > Related: [System design](system-design.md) · [Database design](database-design.md) · [API plan](api-plan.md)
 
@@ -32,9 +33,10 @@
 | Admin: forms, dropdowns, document series, cities, PDF templates, holidays | ✅ |
 | Responsive layout | ✅ phones (from 320 px), tablets and desktops: menu drawer below 1200 px, icon-only navbar controls up to 1420 px, related records as a button on phones, no sideways page scroll |
 | Audit log | ✅ ledger table with who / where / how per entry, Admin › Audit Log screen (`/api/admin/audit-logs`), undo / restore, CSV / Excel export, ledger integrity checks; alert rules later (Phase 11 E) |
-| Users admin | ❌ seed / DB only |
+| My Profile | ✅ own name, mobile, office phone and photo; change password (signs out other sessions); list and sign out signed-in sessions (2026-11-26) |
+| Users admin | ❌ seed / DB only (Profile Phase 2) |
 | Dashboard | ❌ static page, no data |
-| Tests | ⚠️ 59 backend unit test files (`node:test`); no API integration, no frontend, no E2E |
+| Tests | ⚠️ 81 backend unit test files (`node:test`); no API integration, no frontend, no E2E |
 | CI/CD, containers | ❌ none in repo |
 
 ## Part 2 — Roadmap
@@ -44,8 +46,9 @@ Each phase lists exit criteria so "done" is unambiguous.
 
 ### Phase 6 — Production hardening (P1)
 
-- [ ] **User management** — `/api/users` CRUD (admin), deactivate, reset password, `POST /auth/change-password`;
-      revoke sessions on deactivate/password change; admin page at `/admin/users`.
+- [ ] **User management** — `/api/users` CRUD (admin), deactivate, reset password; revoke sessions on deactivate /
+      reset; admin page at `/admin/users`. Planned as Phase 17, Profile Phase 2 (Admin › Users). Self-service
+      `POST /auth/change-password` with sign-out of other sessions shipped in Phase 17, Profile Phase 1.
 - [ ] **Run workers separately** — document and default production to `RUN_WORKERS=false` + `npm run worker:prod`.
 - [ ] **CI pipeline** — on every PR: `npm ci`, `prisma validate`, backend `typecheck` + `test`, frontend `lint` + `build`.
 - [ ] **Deployment artefacts** — Dockerfile for API (with Chromium, see README) and frontend; env checklist.
@@ -352,6 +355,36 @@ keeps wall-clock times); all-day activities are entered as business-timezone day
       without a year (or a Repeats Every Year column) as yearly.
 - [ ] Later, if wanted: holidays in the morning summary email, a warning on lead / opportunity Next Follow-up dates,
       per-branch holiday lists, and a "copy last year's holidays" action.
+
+### Phase 17 — User profile (P2, 2026-11-26)
+
+- [x] **Profile Phase 1 (PR1): My Profile and Security** (2026-11-26) — a `/profile` page for every signed-in user, opened from the
+      navbar user menu ("My Profile") and the mobile drawer. Header card with a large avatar (change photo: pick, crop
+      to a circle with zoom and drag / arrow keys, saved as a 256 × 256 WebP ≤ 512 KB; remove photo), name, role,
+      department, username and last sign-in. **Profile** tab: first name (required), last name, mobile and office
+      phone (E.164), saved with `PATCH /api/me/profile`; read-only work details (username, work email, role,
+      department, member since). **Security** tab: change password (current / new / confirm with a live checklist:
+      8–128 characters, a letter and a number, not the username, not the current password; the API enforces the same
+      rules) which signs out every other session; "Where you're signed in" lists the Redis sessions (device from the
+      User-Agent, IP, signed-in time, "This device") with Sign out per row and "Sign out of all other sessions"; when
+      the password was last changed. Users table gains `firstName`, `lastName` (existing names split at the first
+      space), `officePhone`, `passwordChangedAt`; `fullName` stays and is rebuilt from the names when a name changes (names are split from `fullName` when the
+      stored parts are missing or stale, e.g. users created outside the app); photos
+      in a new `UserPhoto` table served from `/api/user-photos/:id` (immutable URLs). The navbar and mobile drawer show
+      the photo (initials otherwise) and the full name, read from `GET /api/auth/me` (now from the database). Audited:
+      profile / photo edits (User `UPDATE`), `PASSWORD_CHANGE`, `SESSION_REVOKE` (SECURITY, NOTICE). User pickers'
+      cache is now read guarded and dropped by profile edits. Not in Form Builder (user fields are admin settings);
+      old-CRM fields such as Nature of Calls, Principal Company, cost and live tracking are not carried over.
+- [ ] **Profile Phase 2: Admin › Users** — `/admin/users`: create and edit users (role, department, work email, job title,
+      reports to), deactivate (revokes sessions), reset a password with **must change password** at next sign-in,
+      `/api/users` (see Phase 6 and API plan §7). Out-of-office comes here or later.
+- [ ] **Profile Phase 3: Notifications & preferences** — a Notifications tab on My Profile: which bell notifications and emails
+      (morning summary, reminders) a user gets, reminder defaults.
+- [ ] **Profile Phase 4: Connected accounts** — a Connected accounts tab hosting the Calendar thread's `CalendarConnectionsCard`
+      (Google / Microsoft 365 calendar sync), replacing its temporary `/connected-calendars` page; the company email
+      editor and its unique index belong to that work.
+- [ ] **Profile Phase 5: Admin › Company formats** — company-wide date, time and currency formats (one setting for everyone; no
+      per-user locale).
 
 ## Part 3 — Keeping these documents current
 

@@ -36,6 +36,7 @@ import {
 import { MAX_ATTENDEES, NOTE_REMARKS_MESSAGE, PAST_START_MESSAGE, RELATED_RECORD_MESSAGE, activityPastIssues } from '../modules/activities/activity.validator.js';
 import * as zonedTime from '../utils/zonedTime.js';
 import { ACTIVITY_ONLY_TYPE_MESSAGE, activityOnlyTypeIssues, isActivityOnlyFollowupType } from '../modules/shared/followupTypes.js';
+import { PASSWORD_MAX_LENGTH, PASSWORD_MIN_LENGTH, PASSWORD_RULES, passwordPolicyIssue } from '../modules/auth/passwordPolicy.js';
 import { GOOGLE_SCOPE_PROFILES, INTEGRATION_PROVIDERS, SECRET_EXPIRY_WARNING_DAYS } from '../modules/integrations/integration.constants.js';
 import { BACKFILL_DAY_CHOICES, EVENT_VISIBILITIES, MAX_COMPANY_DOMAINS } from '../modules/integrations/calendarSyncSettings.js';
 import { USER_EMAIL_ISSUES, USER_EMAIL_MAX_LENGTH } from '../modules/users/userEmail.service.js';
@@ -133,6 +134,13 @@ interface FrontendFollowupTypes {
     ACTIVITY_ONLY_TYPE_MESSAGE: string;
     isActivityOnlyFollowupType(value: string | null | undefined): boolean;
     activityOnlyTypeIssues(value: string | null | undefined, previous?: string | null, path?: string): { path: string; message: string }[];
+}
+
+interface FrontendPasswordPolicy {
+    PASSWORD_MIN_LENGTH: number;
+    PASSWORD_MAX_LENGTH: number;
+    PASSWORD_RULES: readonly { key: string; label: string; message: string; test(password: string, ctx: { username: string; currentPassword?: string }): boolean }[];
+    passwordPolicyIssue(newPassword: string, ctx: { username: string; currentPassword?: string }): string | null;
 }
 
 interface FrontendIntegrationTypes {
@@ -364,6 +372,34 @@ describe('backend ↔ frontend contract', { skip }, () => {
             assert.equal(frontend.isActivityOnlyFollowupType(value), isActivityOnlyFollowupType(value), JSON.stringify(value));
             const expected = activityOnlyTypeIssues(value, previous).map((issue) => ({ path: issue.path.join('.'), message: issue.message }));
             assert.deepEqual(frontend.activityOnlyTypeIssues(value, previous), expected, JSON.stringify([value, previous]));
+        }
+    });
+
+    it('frontend utils/passwordPolicy.ts applies the same password rules with the same messages', async () => {
+        const frontend = await loadFrontend<FrontendPasswordPolicy>('utils/passwordPolicy.ts');
+        assert.equal(frontend.PASSWORD_MIN_LENGTH, PASSWORD_MIN_LENGTH);
+        assert.equal(frontend.PASSWORD_MAX_LENGTH, PASSWORD_MAX_LENGTH);
+        const describeRules = (rules: readonly { key: string; label: string; message: string }[]) =>
+            rules.map(({ key, label, message }) => ({ key, label, message }));
+        assert.deepEqual(describeRules(frontend.PASSWORD_RULES), describeRules(PASSWORD_RULES));
+
+        const contexts = [
+            { username: 'palak' },
+            { username: 'Palak2026', currentPassword: 'OldPass123' },
+            { username: ' rahul ', currentPassword: '' },
+            { username: '' },
+        ];
+        const passwords = ['', 'abc', 'abcdefgh', '12345678', 'abcd1234', 'Palak2026', 'palak2026', 'PALAK2026', 'OldPass123', 'oldpass123', 'पासवर्ड1234', ' rahul ', 'rahul', 'a1'.repeat(64), 'a1'.repeat(65), '!!!!!!!!1'];
+        for (const ctx of contexts) {
+            for (const password of passwords) {
+                const label = JSON.stringify({ password, ctx });
+                assert.equal(frontend.passwordPolicyIssue(password, ctx), passwordPolicyIssue(password, ctx), label);
+                assert.deepEqual(
+                    frontend.PASSWORD_RULES.map((rule) => rule.test(password, ctx)),
+                    PASSWORD_RULES.map((rule) => rule.test(password, ctx)),
+                    label,
+                );
+            }
         }
     });
 
