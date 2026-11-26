@@ -12,6 +12,7 @@ import AccountBalanceOutlinedIcon from '@mui/icons-material/AccountBalanceOutlin
 import ReceiptLongOutlinedIcon from '@mui/icons-material/ReceiptLongOutlined';
 
 import { useFormContext, useWatch, FormProvider, useForm } from 'react-hook-form';
+import { useIsCodedDefaultsHarvest } from '@/context/CodedFieldDefaultsContext';
 
 import {
     FIELD_MAX_LENGTH,
@@ -35,6 +36,8 @@ function TaxBankTabInner({ form, set }: TaxBankTabProps) {
     const { control, setValue } = useFormContext<OrganizationFormData>();
     const registrationType = useWatch({ control, name: 'registrationType' }) ?? form?.registrationType ?? '';
     const gstNumber = useWatch({ control, name: 'gstNumber' }) ?? form?.gstNumber ?? '';
+    // The form builder's hidden copy shows GST Number anyway, so its coded hint reaches the builder.
+    const harvest = useIsCodedDefaultsHarvest();
 
     // Mirror into the parent state only on a real change: `set` marks the form dirty, so opening the tab must not call it.
     React.useEffect(() => {
@@ -74,7 +77,7 @@ function TaxBankTabInner({ form, set }: TaxBankTabProps) {
                         placeholder="Select Registration Type"
                     />
 
-                    {isGstRegistrationType(registrationType) && (
+                    {(isGstRegistrationType(registrationType) || harvest) && (
                         <RhfUppercaseField<OrganizationFormData>
                             name="gstNumber"
                             label="GST Number"
