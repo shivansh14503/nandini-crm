@@ -118,3 +118,15 @@ export function presetLabels(startDay: string): Record<RepeatPreset, string> {
         custom: 'Custom...',
     };
 }
+
+/**
+ * A quick choice tied to the first day (every week on its weekday, every month on its day or nth weekday) follows a
+ * new first day; any other rule (daily, weekdays, custom) stays as it is. The end (never / on / after) is kept.
+ */
+export function followStartDay(rule: RepeatRule | null, fromDay: string, toDay: string): RepeatRule | null {
+    if (!rule || fromDay === toDay || !isDay(fromDay) || !isDay(toDay)) return rule;
+    const preset = presetOf({ ...rule, ends: 'never', untilDay: undefined, count: undefined }, fromDay);
+    if (preset !== 'weekly' && preset !== 'monthlyDay' && preset !== 'monthlyWeekday') return rule;
+    const next = presetRule(preset, toDay);
+    return { ...next, interval: rule.interval, ends: rule.ends, untilDay: rule.untilDay, count: rule.count };
+}

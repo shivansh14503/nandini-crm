@@ -12,6 +12,7 @@ import {
     ruleToColumns,
     sameRule,
     setPosOf,
+    shiftRuleToDay,
     summarizeRule,
     type RepeatRule,
 } from './activity.recurrence.js';
@@ -156,5 +157,18 @@ describe('activity.recurrence: summary and columns', () => {
         }
         assert.equal(sameRule(rule({ frequency: 'daily' }, '2026-12-01'), rule({ frequency: 'daily', interval: 2 }, '2026-12-01')), false);
         assert.equal(sameRule(null, null), true);
+    });
+});
+
+describe('activity.recurrence: shiftRuleToDay', () => {
+    it('a rule tied to the old day follows the move; others stay', () => {
+        // 2026-12-02 is a Wednesday, 2026-12-03 a Thursday.
+        assert.deepEqual(shiftRuleToDay(rule({ frequency: 'weekly' }, '2026-12-02'), '2026-12-02', '2026-12-03').weekdays, [4]);
+        assert.deepEqual(shiftRuleToDay(rule({ frequency: 'weekly', weekdays: [1, 3] }, '2026-12-02'), '2026-12-02', '2026-12-03').weekdays, [1, 3]);
+        assert.equal(shiftRuleToDay(rule({ frequency: 'monthly' }, '2026-12-02'), '2026-12-02', '2026-12-03').monthDay, 3);
+        const nth = shiftRuleToDay(rule({ frequency: 'monthly', monthlyMode: 'weekday' }, '2026-12-02'), '2026-12-02', '2026-12-10');
+        assert.deepEqual([nth.setPos, nth.setWeekday], [2, 4]);
+        const daily = rule({ frequency: 'daily' }, '2026-12-02');
+        assert.equal(shiftRuleToDay(daily, '2026-12-02', '2026-12-03'), daily);
     });
 });

@@ -24,9 +24,9 @@ import { notifyActivityParticipants, scheduleActivityReminder } from '../notific
 import { assertAssigneeValid } from '../shared/accessControl.js';
 import { assertDeletedRow, lockRecords, restoreData, runInTransaction, softDeleteData, type BulkDeleteResult } from '../shared/transactions.js';
 import { activityLocks, activityScopeWhere, canEditActivity, canViewActivity, lockedFieldsFor, myResponseOf, type ActivityAccessRow } from './activity.access.js';
-import { normalizeAttendees, planAttendeeSync, syncAttendees } from './activity.attendees.js';
+import { normalizeAttendees, planAttendeeSync, syncAttendees, type StoredAttendee } from './activity.attendees.js';
 import { activityRangeWhere, calendarFeed, type CalendarFeed } from './activity.calendar.js';
-import { linkTargets, resolveActivityLinks, type LinkTarget } from './activity.links.js';
+import { linkTargets, resolveActivityLinks, type LinkTarget, type PreviousLinks } from './activity.links.js';
 import { toActivityData, toActivityDto, type ActivityDto, type ActivityRow, type ActivityView } from './activity.mapper.js';
 import {
     ACTIVITY_FALLBACK_DURATION_MINUTES,
@@ -174,6 +174,10 @@ const armedReminderSentAt = (writer: ActivityWriter, input: ActivityInput, sched
 
 /** Fields whose change makes the activity a new version for calendars (iCal SEQUENCE in Phase 2). */
 const REVISION_FIELDS = ['subject', 'followupType', 'startAt', 'endAt', 'allDay', 'location', 'assignedTo', 'status'] as const;
+/** Fields whose change by a system write makes a series occurrence an exception (status is per occurrence). */
+const SERIES_OCCURRENCE_FIELDS = ['subject', 'followupType', 'startAt', 'endAt', 'allDay', 'location', 'assignedTo'] as const;
+const sameColumn = (a: unknown, b: unknown) =>
+    a instanceof Date || b instanceof Date ? ((a as Date | null)?.getTime() ?? null) === ((b as Date | null)?.getTime() ?? null) : (a ?? null) === (b ?? null);
 
 const nameKey = (value: unknown) => (typeof value === 'string' ? value.trim().toLowerCase() : '');
 
@@ -408,6 +412,12 @@ export interface ActivityWriter {
      * write `{ subject, seriesId, originalStartAt }`; the series' own entry carries the rest).
      */
     auditCreateChanges?: Record<string, unknown>;
+    /**
+     * A system insert that copies links and attendees already accepted elsewhere (Calendar Phase 4: a series occurrence
+     * copies its series' template): the related record, organization / contact and attendees listed here count as
+     * unchanged, so one deleted or deactivated since is kept, as an existing activity keeps it.
+     */
+    keep?: { links: PreviousLinks; attendees: readonly Pick<StoredAttendee, 'kind' | 'username' | 'contactId'>[] };
 }
 
 /** Activity columns of a series occurrence (Calendar Phase 4). */
@@ -449,8 +459,9 @@ export function assertDeletable(existing: ActivityRow): void {
  */
 export async function insertActivityRow(tx: TransactionClient, input: ActivityInput, schedule: Schedule, writer: ActivityWriter, now: Date): Promise<ActivityRow> {
     const assignedTo = writer.user ? ((await assertAssigneeValid(tx, input.assignedTo)) ?? writer.user.username) : input.assignedTo;
-    const links = await resolveActivityLinks(tx, input, undefined, writer.user);
-    const attendees = await normalizeAttendees(tx, input.attendees, assignedTo);
+    const keep = writer.user ? undefined : writer.keep;
+    const links = await resolveActivityLinks(tx, input, keep?.links, writer.user);
+    const attendees = await normalizeAttendees(tx, input.attendees, assignedTo, (keep?.attendees ?? []) as readonly StoredAttendee[]);
     const plan = planAttendeeSync(attendees, [], writer.actor, now);
     const withOwner = { ...input, assignedTo };
     const remindAt = remindAtOf(withOwner, schedule);
@@ -503,6 +514,14 @@ export async function updateActivityRow(tx: TransactionClient, existing: Activit
         ...(system && writer.createdBy ? { createdBy: writer.createdBy } : {}),
         updatedBy: writer.actor,
     };
+    // Calendar Phase 4: a system write (a calendar pull or merge) that moves or changes one occurrence of a series on its
+    // own makes it an exception, so a later "All events" edit leaves it alone (series paths pass `writer.series`).
+    const changedAlone =
+        system &&
+        !writer.series &&
+        Boolean(existing.seriesId) &&
+        !existing.seriesException &&
+        (plan.setChanged || SERIES_OCCURRENCE_FIELDS.some((key) => !sameColumn(existing[key], data[key])));
     const scheduleChanged =
         plan.setChanged ||
         REVISION_FIELDS.some((key) => {
@@ -512,7 +531,7 @@ export async function updateActivityRow(tx: TransactionClient, existing: Activit
         });
     const row = await tx.activity.update({
         where: { id },
-        data: { ...data, ...(scheduleChanged ? { revision: { increment: 1 } } : {}) },
+        data: { ...data, ...(changedAlone ? { seriesException: true } : {}), ...(scheduleChanged ? { revision: { increment: 1 } } : {}) },
         include: WITH_ATTENDEES,
     });
     const changes = diffRecords(before, toActivityDto(row));
@@ -529,9 +548,16 @@ export async function updateActivityRow(tx: TransactionClient, existing: Activit
  * Soft-deletes a locked, live row inside the caller's transaction (access and locks are the caller's checks): the
  * reminder is cleared, a DELETE entry is audited and the write hook runs (the calendar push cancels its event).
  */
-export async function softDeleteActivityRow(tx: TransactionClient, existing: ActivityRow, user: AuthUser, now = new Date()): Promise<ActivityCommitRow> {
-    // A deleted activity leaves the reminder set.
-    const after = await tx.activity.update({ where: { id: existing.id }, data: { ...softDeleteData(user), remindAt: null }, include: WITH_ATTENDEES });
+export async function softDeleteActivityRow(
+    tx: TransactionClient,
+    existing: ActivityRow,
+    user: AuthUser,
+    now = new Date(),
+    series?: ActivitySeriesColumns,
+): Promise<ActivityCommitRow> {
+    // A deleted activity leaves the reminder set. `series`: Calendar Phase 4 detaches an occurrence a series rewrite
+    // removed (activity.series.ts), so its slot can come back.
+    const after = await tx.activity.update({ where: { id: existing.id }, data: { ...softDeleteData(user), remindAt: null, ...series }, include: WITH_ATTENDEES });
     await auditService.record(tx, { entityType: 'Activity', entityId: existing.id, action: 'DELETE', changedBy: user.username });
     await afterActivityWrite(tx, existing, after, crmWriter(user), now);
     return { before: existing, after };

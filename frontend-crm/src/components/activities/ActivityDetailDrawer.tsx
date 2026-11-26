@@ -429,7 +429,7 @@ export function ActivityDetailDrawer({ activity, activityId, open, onClose, onEd
     const cancelActivity = () => {
         if (a.seriesId) {
             void (async () => {
-                const scope = await scopePrompt.ask({ action: 'cancel' });
+                const scope = await scopePrompt.ask({ action: 'cancel', calendarNote: calendarRemovalNote(a, user?.username, 'cancel').trim() });
                 if (scope) await run(() => activityService.updateScoped(a.id, { status: CANCELLED_STATUS }, scope), 'Cancelled.', 'Failed to cancel the activity.');
             })();
             return;
@@ -439,7 +439,7 @@ export function ActivityDetailDrawer({ activity, activityId, open, onClose, onEd
     };
     const deleteActivity = () => {
         void (async () => {
-            const scope = a.seriesId ? await scopePrompt.ask({ action: 'delete' }) : 'this';
+            const scope = a.seriesId ? await scopePrompt.ask({ action: 'delete', calendarNote: calendarRemovalNote(a, user?.username, 'delete').trim() }) : 'this';
             if (!scope) return;
             if (!a.seriesId && !window.confirm(`Delete "${a.subject}"? This can't be undone.${calendarRemovalNote(a, user?.username, 'delete')}`)) return;
             try {

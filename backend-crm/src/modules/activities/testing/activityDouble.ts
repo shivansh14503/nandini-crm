@@ -321,10 +321,31 @@ export function installActivityDouble(
         if (!('updatedAt' in data)) row.updatedAt = touch();
     };
 
+    /** Activity `where` plus the `externalLinks: { none | some }` relation filter (Calendar Phase 4's window queries). */
+    const matchesActivity = (row: Activity, where: Where = {}) => {
+        const { externalLinks, ...rest } = where as Where & { externalLinks?: { none?: Where; some?: Where } };
+        if (!matches(row as unknown as Record<string, unknown>, rest)) return false;
+        if (!externalLinks) return true;
+        const own = state.links.filter((l) => l.activityId === row.id);
+        if (externalLinks.none) return !own.some((l) => matchesWhere(rec(l), externalLinks.none));
+        if (externalLinks.some) return own.some((l) => matchesWhere(rec(l), externalLinks.some));
+        return true;
+    };
+    /** UX_Activity_seriesOccurrence: UNIQUE (seriesId, originalStartAt) WHERE seriesId IS NOT NULL, deleted rows included. */
+    const assertSeriesSlotsUnique = () => {
+        const seen = new Set<string>();
+        for (const a of state.activities) {
+            if (!a.seriesId) continue;
+            const key = `${a.seriesId}|${a.originalStartAt?.getTime() ?? 'null'}`;
+            if (seen.has(key)) throw Object.assign(new Error('Unique constraint failed on UX_Activity_seriesOccurrence'), { code: 'P2002' });
+            seen.add(key);
+        }
+    };
+
     const activity = {
         findFirst: async (args: { where: Where; include?: unknown; select?: Record<string, unknown> }) => {
             call('activity.findFirst');
-            const row = state.activities.find((a) => matches(a as unknown as Record<string, unknown>, args.where));
+            const row = state.activities.find((a) => matchesActivity(a, args.where));
             return row ? shape(row, args) : null;
         },
         findUnique: async (args: { where: { id: string }; include?: unknown; select?: Record<string, unknown> }) => {
@@ -338,9 +359,14 @@ export function installActivityDouble(
             if (!row) throw Object.assign(new Error('No record found'), { code: 'P2025' });
             return shape(row, args);
         },
-        findMany: async (args: { where: Where; include?: unknown; select?: Record<string, unknown> }) => {
+        findMany: async (args: { where: Where; include?: unknown; select?: Record<string, unknown>; orderBy?: unknown; take?: number }) => {
             call('activity.findMany');
-            return state.activities.filter((a) => matches(a as unknown as Record<string, unknown>, args.where)).map((row) => shape(row, args));
+            return orderRows(
+                state.activities.filter((a) => matchesActivity(a, args.where)),
+                args.orderBy,
+            )
+                .slice(0, args.take ?? undefined)
+                .map((row) => shape(row, args));
         },
         create: async (args: { data: Record<string, unknown> & { attendees?: { create: Omit<ActivityAttendee, 'id' | 'activityId' | 'createdAt'>[] } }; include?: unknown }) => {
             call('activity.create');
@@ -360,12 +386,14 @@ export function installActivityDouble(
             const row = state.activities.find((a) => a.id === args.where.id);
             if (!row) throw Object.assign(new Error('Record to update not found'), { code: 'P2025' });
             applyData(row, args.data);
+            assertSeriesSlotsUnique();
             return shape(row, args);
         },
         updateMany: async (args: { where: Where; data: Record<string, unknown> }) => {
             call('activity.updateMany');
             const rows = state.activities.filter((a) => matches(a as unknown as Record<string, unknown>, args.where));
             for (const row of rows) applyData(row, args.data);
+            assertSeriesSlotsUnique();
             return { count: rows.length };
         },
     };
@@ -552,6 +580,7 @@ export function installActivityDouble(
             const row = state.providers.find((p) => p.provider === args.where.provider);
             return row ? pick(row, args.select) : null;
         },
+        findMany: async (args: FindArgs = {}) => findAll(state.providers, args),
     };
 
     const entityEmail = {

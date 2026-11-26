@@ -69,7 +69,7 @@ function QuickCreateContent({ prefill, onClose, onSaved }: Omit<ActivityQuickCre
     const followupType = useWatch({ control, name: 'followupType' }) ?? '';
     // Recurring activities (Calendar Phase 4): Repeat for any type but Note.
     const startAt = useWatch({ control, name: 'startAt' }) ?? '';
-    const repeatState = useActivityRepeat(undefined);
+    const repeatState = useActivityRepeat(undefined, startAt.slice(0, 10));
     const typeLabel = useActivityTypeLabel()(followupType);
     const color = getModuleColor('activities');
 

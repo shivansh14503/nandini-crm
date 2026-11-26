@@ -1,18 +1,24 @@
 import assert from 'node:assert/strict';
-import { afterEach, describe, it } from 'node:test';
+import { afterEach, beforeEach, describe, it } from 'node:test';
 import type { Activity } from '../../generated/prisma/client.js';
 import type { AuthUser } from '../../types/user.types.js';
 import { HttpError } from '../../utils/httpError.js';
 import { addDays, instantToZonedWallClock, zonedDayOf, zonedWallClockToInstant } from '../../utils/zonedTime.js';
+import { setFakeProviderEnabledForTests } from '../calendar-sync/providers/fakeSwitch.js';
 import { isCreateEligible } from '../calendar-sync/sync.outbox.js';
+import { setInlinePushForTests } from '../calendar-sync/sync.wake.js';
+import { blankConnection, type ConnectionRowState } from '../calendar-sync/testing/connectionDouble.js';
+import { runInTransaction } from '../shared/transactions.js';
+import { applySystemPatch } from './activity.system.js';
 import { isoWeekday } from './activity.recurrence.js';
 import { SERIES_HORIZON_DAYS, SERIES_SYNC_WINDOW_DAYS } from './activity.series.constants.js';
-import { activitySeriesService, extendSeriesHorizons, SERIES_SCOPE_REQUIRED } from './activity.series.js';
+import { activitySeriesService, extendSeriesHorizons, markSeriesSyncWindow, SERIES_SCOPE_REQUIRED } from './activity.series.js';
 import type { ActivityRow } from './activity.mapper.js';
-import { blankActivity, installActivityDouble, restoreActivityDouble, type ActivityDoubleState } from './testing/activityDouble.js';
+import { blankActivity, blankLink, installActivityDouble, restoreActivityDouble, type ActivityDoubleState } from './testing/activityDouble.js';
 
 const TZ = 'Asia/Kolkata';
 const PALAK: AuthUser = { id: 1, username: 'palak', role: 'user' };
+const ASHA: AuthUser = { id: 2, username: 'asha', role: 'user' };
 const USERS = [
     { username: 'palak', fullName: 'Palak Shah', isActive: true },
     { username: 'asha', fullName: 'Asha Rao', isActive: true },
@@ -176,8 +182,62 @@ describe('activitySeriesService.update', () => {
         assert.ok(!days.includes(addDays(monday, 2)), 'Wednesday deleted');
         assert.ok(days.includes(addDays(monday, 7)), 'Mondays kept');
         assert.equal(state.series[0].weekdays, '1,4');
-        // A deleted Wednesday row is still there (soft) and keeps its slot.
-        assert.ok(state.activities.some((a) => a.isDeleted && a.seriesId === seriesId && dayOf(a) === addDays(monday, 2)));
+        // The Wednesday row the rule dropped is soft-deleted and detached: its slot can come back.
+        const dropped = state.activities.find((a) => a.isDeleted && dayOf(a) === addDays(monday, 2));
+        assert.ok(dropped && dropped.seriesId === null && dropped.originalStartAt === null);
+    });
+
+    it('all events: a rule changed and changed back brings the dropped days back (fortnightly and back too)', async () => {
+        const state = installActivityDouble({ users: USERS });
+        const { seriesId, monday } = await createWeekly(state);
+        const total = live(state, seriesId).length;
+        const first = () => live(state, seriesId)[0];
+        await activitySeriesService.update(first().id, { repeat: { frequency: 'weekly', weekdays: [1] } }, PALAK, { scope: 'all' });
+        assert.ok(live(state, seriesId).every((a) => isoWeekday(dayOf(a)) === 1));
+        await activitySeriesService.update(first().id, { repeat: { frequency: 'weekly', weekdays: [1, 3] } }, PALAK, { scope: 'all' });
+        assert.equal(live(state, seriesId).length, total);
+        assert.ok(live(state, seriesId).some((a) => dayOf(a) === addDays(monday, 9)), 'Wednesdays are back');
+        await activitySeriesService.update(first().id, { repeat: { frequency: 'weekly', interval: 2, weekdays: [1, 3] } }, PALAK, { scope: 'all' });
+        await activitySeriesService.update(first().id, { repeat: { frequency: 'weekly', interval: 1, weekdays: [1, 3] } }, PALAK, { scope: 'all' });
+        assert.equal(live(state, seriesId).length, total);
+    });
+
+    it('all events: an occurrence whose new time has already passed today is left as it is', async (t) => {
+        const hour = Number(instantToZonedWallClock(new Date(), TZ).slice(11, 13));
+        if (hour < 2 || hour >= 21) return t.skip('needs two hours of room on both sides of now (business time zone)');
+        const state = installActivityDouble({ users: USERS });
+        const wall = (offsetMinutes: number) => instantToZonedWallClock(new Date(Date.now() + offsetMinutes * 60_000), TZ).slice(11, 16);
+        const day = today();
+        const later = wall(90);
+        const view = await activitySeriesService.create(
+            { followupType: 'Meeting', subject: 'Stand-up', assignedTo: 'palak', startAt: at(day, later).toISOString(), endAt: at(day, wall(105)).toISOString(), repeat: { frequency: 'daily' } },
+            PALAK,
+        );
+        const todays = live(state, view.seriesId)[0];
+        const tomorrow = live(state, view.seriesId)[1];
+        const earlier = wall(-60);
+        await activitySeriesService.update(tomorrow.id, { startAt: at(dayOf(tomorrow), earlier).toISOString(), endAt: at(dayOf(tomorrow), wall(-45)).toISOString() }, PALAK, { scope: 'all' });
+        const kept = state.activities.find((a) => a.id === todays.id) as Activity;
+        assert.equal(kept.isDeleted, false, "today's occurrence that hasn't started stays");
+        assert.equal(instantToZonedWallClock(kept.startAt as Date, TZ).slice(11, 16), later);
+        assert.equal(live(state, view.seriesId).filter((a) => dayOf(a) === day).length, 1);
+    });
+
+    it('all events on an occurrence moved alone keeps its own slot (no duplicate, the target day keeps its event)', async () => {
+        const state = installActivityDouble({ users: USERS, series: [] });
+        const { seriesId, monday } = await createWeekly(state, { repeat: { frequency: 'daily' } });
+        const wed = live(state, seriesId).find((a) => dayOf(a) === addDays(monday, 2)) as Activity;
+        const thu = live(state, seriesId).find((a) => dayOf(a) === addDays(monday, 3)) as Activity;
+        const thursday = addDays(monday, 3);
+        await activitySeriesService.update(wed.id, { startAt: at(thursday, '10:00').toISOString(), endAt: at(thursday, '10:45').toISOString() }, PALAK, { scope: 'this' });
+        await activitySeriesService.update(wed.id, { subject: 'Renamed' }, PALAK, { scope: 'all' });
+        const moved = state.activities.find((a) => a.id === wed.id) as Activity;
+        assert.equal(moved.seriesException, true);
+        assert.equal(dayOf({ startAt: moved.originalStartAt } as Activity), addDays(monday, 2), 'keeps its Wednesday slot');
+        const thuNow = state.activities.find((a) => a.id === thu.id) as Activity;
+        assert.equal(thuNow.isDeleted, false);
+        assert.equal(thuNow.subject, 'Renamed');
+        assert.equal(live(state, seriesId).filter((a) => dayOf(a) === addDays(monday, 2)).length, 0, 'no new Wednesday');
     });
 
     it('all events: moving the day is refused', async () => {
@@ -214,13 +274,96 @@ describe('activitySeriesService.update', () => {
         );
     });
 
-    it('cancel from here (all): future planned occurrences are cancelled and the series ends', async () => {
+    it('cancel from here (all): future planned occurrences, exceptions too, are cancelled and the series stays ended', async () => {
         const state = installActivityDouble({ users: USERS });
-        const { seriesId } = await createWeekly(state);
+        const { seriesId, monday } = await createWeekly(state);
         const rows = live(state, seriesId);
+        const tuesday = addDays(monday, 8);
+        await activitySeriesService.update(rows[3].id, { startAt: at(tuesday, '10:00').toISOString(), endAt: at(tuesday, '10:45').toISOString() }, PALAK, { scope: 'this' });
         await activitySeriesService.update(rows[0].id, { status: 'Cancelled' }, PALAK, { scope: 'all' });
         assert.ok(live(state, seriesId).every((a) => a.status === 'Cancelled'));
         assert.ok(state.series[0].endedAt);
+        assert.ok(state.series[0].untilDay, 'the rule ends too');
+        // A later "All events" edit of a cancelled occurrence doesn't bring the series back.
+        await activitySeriesService.update(rows[2].id, { subject: 'Typo fixed' }, PALAK, { scope: 'all' });
+        assert.ok(state.series[0].endedAt);
+        state.series[0].materializedThrough = today();
+        assert.equal((await extendSeriesHorizons()).created, 0);
+        assert.ok(live(state, seriesId).every((a) => a.status === 'Cancelled'));
+    });
+
+    it('this and following moving the occurrence onto another slot day: no duplicate slot, one event a day', async () => {
+        const state = installActivityDouble({ users: USERS });
+        const { seriesId, monday } = await createWeekly(state);
+        const rows = live(state, seriesId);
+        const mon = rows[2]; // Monday of week 2
+        const wed = addDays(dayOf(mon), 2);
+        const saved = await activitySeriesService.update(mon.id, { startAt: at(wed, '10:00').toISOString(), endAt: at(wed, '10:45').toISOString() }, PALAK, { scope: 'following' });
+        const fresh = saved.seriesId;
+        assert.equal(live(state, fresh).filter((a) => dayOf(a) === wed).length, 1);
+        assert.deepEqual(live(state, seriesId).map(dayOf), [monday, addDays(monday, 2)]);
+        // Weekly on Mon, Wed and moved Mon → Wed: the rule has two days, so it stays as it is.
+        assert.equal(state.series.find((s) => s.id === fresh)?.weekdays, '1,3');
+
+        // Daily series, Thursday moved to the Wednesday before ("following"): Wednesday has one event.
+        const daily = installActivityDouble({ users: USERS });
+        const created = await createWeekly(daily, { repeat: { frequency: 'daily' } });
+        const thu = live(daily, created.seriesId).find((a) => dayOf(a) === addDays(created.monday, 3)) as Activity;
+        const wednesday = addDays(created.monday, 2);
+        const split = await activitySeriesService.update(thu.id, { startAt: at(wednesday, '11:00').toISOString(), endAt: at(wednesday, '11:45').toISOString() }, PALAK, { scope: 'following' });
+        const all = daily.activities.filter((a) => !a.isDeleted && a.seriesId && dayOf(a) === wednesday);
+        assert.equal(all.length, 1);
+        assert.equal(all[0].id, thu.id);
+        assert.equal(daily.series.find((s) => s.id === created.seriesId)?.untilDay, addDays(wednesday, -1));
+        assert.ok(live(daily, split.seriesId).some((a) => dayOf(a) === addDays(created.monday, 3)), 'Thursday comes back in the new series');
+    });
+
+    it('this and following moving a weekly one-day series to another weekday moves the rule too', async () => {
+        const state = installActivityDouble({ users: USERS });
+        const { seriesId, monday } = await createWeekly(state, { repeat: { frequency: 'weekly', weekdays: [1] } });
+        const second = live(state, seriesId)[1];
+        const tuesday = addDays(dayOf(second), 1);
+        const saved = await activitySeriesService.update(second.id, { startAt: at(tuesday, '10:00').toISOString(), endAt: at(tuesday, '10:45').toISOString() }, PALAK, { scope: 'following' });
+        assert.equal(saved.series?.summary, 'Every week on Tue');
+        assert.ok(live(state, saved.seriesId).every((a) => isoWeekday(dayOf(a)) === 2));
+        assert.deepEqual(live(state, seriesId).map(dayOf), [monday]);
+    });
+
+    it('this and following keeps the count left when the days change and the total is sent back', async () => {
+        const state = installActivityDouble({ users: USERS });
+        const { seriesId } = await createWeekly(state, { repeat: { frequency: 'weekly', weekdays: [1], ends: 'after', count: 10 } });
+        const sixth = live(state, seriesId)[5];
+        const saved = await activitySeriesService.update(sixth.id, { repeat: { frequency: 'weekly', weekdays: [1, 2], ends: 'after', count: 10 } }, PALAK, { scope: 'following' });
+        assert.equal(state.series.find((s) => s.id === saved.seriesId)?.count, 5);
+        assert.equal(live(state, seriesId).length + live(state, saved.seriesId).length, 10);
+    });
+
+    it('does not repeat (all) keeps occurrences that are already over today', async () => {
+        const state = installActivityDouble({ users: USERS });
+        const { seriesId } = await createWeekly(state);
+        const rows = live(state, seriesId);
+        // As if the first occurrence had been this morning (still Planned, never marked done).
+        const past = state.activities.find((a) => a.id === rows[0].id) as Activity;
+        past.startAt = new Date(Date.now() - 3_600_000);
+        await activitySeriesService.update(rows[4].id, { repeat: null }, PALAK, { scope: 'all' });
+        assert.equal((state.activities.find((a) => a.id === rows[0].id) as Activity).isDeleted, false);
+        assert.deepEqual(
+            live(state, seriesId)
+                .map((a) => a.id)
+                .sort(),
+            [rows[0].id, rows[4].id].sort(),
+        );
+    });
+
+    it('following / all need the right to change the series, not only the clicked occurrence', async () => {
+        const state = installActivityDouble({ users: USERS });
+        const { seriesId } = await createWeekly(state);
+        const target = live(state, seriesId)[2];
+        await activitySeriesService.update(target.id, { assignedTo: 'asha' }, PALAK, { scope: 'this' });
+        await assert.rejects(activitySeriesService.remove(target.id, ASHA, { scope: 'all' }), rejectsWith(403));
+        await assert.rejects(activitySeriesService.update(target.id, { subject: 'Mine now' }, ASHA, { scope: 'all' }), rejectsWith(403));
+        await activitySeriesService.remove(target.id, ASHA, { scope: 'this' });
+        assert.ok(live(state, seriesId).length > 10);
     });
 
     it('repeat on a single activity makes it occurrence 1 of a new series; follow-up activities cannot repeat', async () => {
@@ -291,6 +434,133 @@ describe('extendSeriesHorizons', () => {
         const second = await extendSeriesHorizons();
         assert.equal(second.series, 0);
         assert.equal(second.created, 0);
+    });
+});
+
+describe('extendSeriesHorizons: a series keeps going', () => {
+    it('extends a series whose invited colleague was deactivated since (the template was checked when saved)', async () => {
+        const state = installActivityDouble({ users: USERS });
+        const { seriesId } = await createWeekly(state, { repeat: { frequency: 'daily' }, attendees: [{ kind: 'user', username: 'asha' }] });
+        (state.users.find((u) => u.username === 'asha') as { isActive: boolean }).isActive = false;
+        const cut = addDays(today(), SERIES_HORIZON_DAYS - 5);
+        state.activities = state.activities.filter((a) => !(a.seriesId === seriesId && dayOf(a) > cut));
+        state.series[0].materializedThrough = cut;
+        assert.equal((await extendSeriesHorizons()).created, 5);
+    });
+});
+
+describe('markSeriesSyncWindow', () => {
+    const DAY = 24 * 3_600_000;
+    const ASHA_ADMIN: AuthUser = { id: 2, username: 'asha', role: 'Admin' };
+    const connection = (over: Partial<ConnectionRowState> = {}) =>
+        blankConnection({ id: 'c1', username: 'palak', provider: 'fake', accountEmail: 'palak@nandiniinfosys.com', status: 'ok', backfilledAt: new Date(0), backfillCount: 0, ...over });
+    let woken: string[] = [];
+    beforeEach(() => {
+        setFakeProviderEnabledForTests(true);
+        woken = [];
+        setInlinePushForTests((ids) => woken.push(...ids));
+    });
+    afterEach(() => {
+        setFakeProviderEnabledForTests(null);
+        setInlinePushForTests(null);
+    });
+    const guest = { kind: 'email', email: 'customer@example.com' };
+    /** Drops the series' rows after `days` from today and lets the nightly create them again. */
+    async function regrow(state: ActivityDoubleState, seriesId: string, days: number) {
+        const cut = addDays(today(), days);
+        state.activities = state.activities.filter((a) => !(a.seriesId === seriesId && dayOf(a) > cut));
+        state.series.find((x) => x.id === seriesId)!.materializedThrough = cut;
+        await extendSeriesHorizons();
+        return live(state, seriesId).filter((a) => dayOf(a) > cut);
+    }
+
+    it("marks nightly occurrences as the series' last writer (D41): the owner's takeover sends, one held notice per series", async () => {
+        const state = installActivityDouble({ users: USERS, connections: [connection()] });
+        // Asha (admin) sets up Palak's series with a customer: the in-window copies are private, one notice in all.
+        const made = await activitySeriesService.create(
+            { followupType: 'Meeting', subject: 'Client call', assignedTo: 'palak', startAt: at(nextMonday(), '15:00').toISOString(), endAt: at(nextMonday(), '15:30').toISOString(), attendees: [guest], repeat: { frequency: 'daily' } },
+            ASHA_ADMIN,
+        );
+        const inWindow = state.links.filter((l) => live(state, made.seriesId).some((a) => a.id === l.activityId));
+        assert.ok(inWindow.length >= 2 && inWindow.every((l) => l.invites === 'withhold'));
+        assert.equal(state.notifications.filter((n) => n.kind === 'calendar_invites_held').length, 1);
+        // Palak takes the series over ("All events"): the series' last writer is the owner now.
+        await activitySeriesService.update(live(state, made.seriesId)[0].id, { location: 'Zoom' }, PALAK, { scope: 'all' });
+        const grown = await regrow(state, made.seriesId, 40);
+        assert.ok(grown.length > 0 && grown.every((a) => a.updatedBy === null && a.createdBy === 'asha'));
+        const target = grown[0];
+        const marked = await markSeriesSyncWindow(new Date((target.startAt as Date).getTime() - 13 * DAY));
+        assert.ok(marked > 0);
+        assert.equal(state.links.find((l) => l.activityId === target.id)?.invites, 'send');
+    });
+
+    it('a series set up by someone else stays private on the nightly mark, without a notice a night', async () => {
+        const state = installActivityDouble({ users: USERS, connections: [connection()] });
+        const made = await activitySeriesService.create(
+            { followupType: 'Meeting', subject: 'Client call', assignedTo: 'palak', startAt: at(nextMonday(), '15:00').toISOString(), endAt: at(nextMonday(), '15:30').toISOString(), attendees: [guest], repeat: { frequency: 'daily' } },
+            ASHA_ADMIN,
+        );
+        const notices = () => state.notifications.filter((n) => n.kind === 'calendar_invites_held').length;
+        const before = notices();
+        const later = live(state, made.seriesId).find((a) => !state.links.some((l) => l.activityId === a.id)) as Activity;
+        await markSeriesSyncWindow(new Date((later.startAt as Date).getTime() - 13 * DAY));
+        assert.equal(state.links.find((l) => l.activityId === later.id)?.invites, 'withhold');
+        assert.equal(notices(), before, 'the owner was told already: copies still wait');
+    });
+
+    it('skips types that never sync, so they never fill the batch', async () => {
+        const state = installActivityDouble({ users: USERS, connections: [connection()] });
+        await createWeekly(state, { followupType: 'Task', repeat: { frequency: 'daily' } });
+        assert.equal(await markSeriesSyncWindow(new Date(Date.now() + 20 * DAY)), 0);
+        assert.equal(state.links.length, 0);
+    });
+
+    it('an occurrence that existed before the first-sync backfill becomes a backfilled private copy (D23)', async () => {
+        const state = installActivityDouble({ users: USERS });
+        const { seriesId } = await createWeekly(state, { attendees: [guest] });
+        const stamp = new Date(Date.now() + 1000);
+        state.connections.push(connection({ backfilledAt: stamp }));
+        const far = live(state, seriesId).find((a) => (a.startAt as Date).getTime() > Date.now() + 30 * DAY) as Activity;
+        await markSeriesSyncWindow(new Date((far.startAt as Date).getTime() - 13 * DAY));
+        const link = state.links.find((l) => l.activityId === far.id);
+        assert.equal(link?.invites, 'withhold');
+        assert.equal(link?.createdAt.getTime(), stamp.getTime());
+    });
+
+    it('dirties a gone event again once its occurrence is back inside the window', async () => {
+        const state = installActivityDouble({ users: USERS, connections: [connection()] });
+        const { seriesId } = await createWeekly(state);
+        const rows = live(state, seriesId).filter((a) => (a.startAt as Date).getTime() > Date.now() + 30 * DAY);
+        const [stale, fresh] = rows;
+        const now = new Date((stale.startAt as Date).getTime() - 13 * DAY);
+        state.links.push(
+            blankLink({ id: 'l-stale', activityId: stale.id, connectionId: 'c1', provider: 'fake', requestedId: 'r1', state: 'cancelled', dirtyAt: null, updatedAt: new Date(now.getTime() - 30 * DAY) }),
+            blankLink({ id: 'l-fresh', activityId: fresh.id, connectionId: 'c1', provider: 'fake', requestedId: 'r2', state: 'cancelled', dirtyAt: null, updatedAt: new Date(now.getTime() - DAY) }),
+        );
+        await markSeriesSyncWindow(now);
+        assert.ok(state.links.find((l) => l.id === 'l-stale')?.dirtyAt, 'settled while outside the window: dirtied');
+        assert.ok(woken.includes('l-stale'));
+        assert.equal(state.links.find((l) => l.id === 'l-fresh')?.dirtyAt, null, 'cancelled inside the window: left alone');
+    });
+});
+
+describe('a calendar change to one occurrence', () => {
+    it('makes it an exception (a later "All events" edit leaves it alone)', async () => {
+        const state = installActivityDouble({ users: USERS });
+        const { seriesId } = await createWeekly(state);
+        const target = live(state, seriesId)[2];
+        const moved = at(dayOf(target), '15:00');
+        await runInTransaction((tx) =>
+            applySystemPatch(tx, target.id, { startAt: moved.toISOString(), endAt: new Date(moved.getTime() + 45 * 60_000).toISOString() }, 'palak', new Date(), {
+                activityConfig: { fields: { module: 'activities', fields: [], activeOptions: new Map() }, followupTypes: null },
+                markSync: false,
+            }),
+        );
+        assert.equal(state.activities.find((a) => a.id === target.id)?.seriesException, true);
+        await activitySeriesService.update(live(state, seriesId)[0].id, { location: 'Room 7' }, PALAK, { scope: 'all' });
+        const after = state.activities.find((a) => a.id === target.id) as Activity;
+        assert.equal(after.startAt?.getTime(), moved.getTime());
+        assert.equal(after.location, 'Room 1');
     });
 });
 

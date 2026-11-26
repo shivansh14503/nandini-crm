@@ -18,6 +18,7 @@ import { ActivityTypeIcon } from './ActivityBadges';
 import { activityToFormValues, formatActivityWhen } from './activityTime';
 import { ActivityRepeatField, useActivityRepeat } from './ActivityRepeatField';
 import { useSeriesScopePrompt } from './SeriesScopeDialog';
+import { calendarRemovalNote } from './ActivitySyncStatus';
 import { findCrmUser } from '@/services/masterData.store';
 import { useAuth } from '@/context/AuthContext';
 
@@ -62,6 +63,12 @@ export function ownerChangeNote(activity: Activity | null | undefined, values: P
         : `Change the owner to ${newOwner}? The meeting moves to ${newOwner}'s calendar: attendees get a cancellation now, and a new invitation from ${newOwner} once ${newOwner} sends it.`;
 }
 
+/** The line under Repeat for an occurrence of a series (how a save applies; what "after N times" counts). */
+function seriesHint(activity: Activity): string {
+    const counted = activity.series?.rule.ends === 'after' ? '. The number of times counts from the first event; "This and following" keeps the ones left' : '';
+    return `Saving asks whether the change is for this event, the following ones or all${counted}`;
+}
+
 export default function ActivityForm({ mode = 'create', activityId, initialData, returnTo = ROUTES.ACTIVITIES, onSaved }: ActivityFormProps) {
     const router = useRouter();
     const { user } = useAuth();
@@ -76,7 +83,7 @@ export default function ActivityForm({ mode = 'create', activityId, initialData,
     const followupType = useWatch({ control, name: 'followupType' });
     // Recurring activities (Calendar Phase 4): the Repeat control and, for an occurrence, the scope of a save.
     const startAt = useWatch({ control, name: 'startAt' }) ?? '';
-    const repeatState = useActivityRepeat(mode === 'create' ? undefined : activity);
+    const repeatState = useActivityRepeat(mode === 'create' ? undefined : activity, startAt.slice(0, 10));
     const scopePrompt = useSeriesScopePrompt();
     const canRepeat =
         followupType !== NOTE_TYPE && !isFollowUpActivity(activity) && (!activity || !activity.origin || activity.origin === 'crm') && !activity?.lockedFields?.includes('startAt');
@@ -95,10 +102,12 @@ export default function ActivityForm({ mode = 'create', activityId, initialData,
         if (mode === 'create') recurrence = repeat ? { repeat } : undefined;
         else if (activity?.seriesId) {
             const loadedDay = activityToFormValues(activity, activity.timeZone || clock.timeZone).startAt.slice(0, 10);
+            const cancelling = values.status === 'Cancelled' && activity.status !== 'Cancelled';
             const scope = await scopePrompt.ask({
-                action: values.status === 'Cancelled' && activity.status !== 'Cancelled' ? 'cancel' : 'save',
+                action: cancelling ? 'cancel' : 'save',
                 ruleChanged: repeatState.changed,
                 dayMoved: (values.startAt ?? '').slice(0, 10) !== loadedDay,
+                calendarNote: cancelling ? calendarRemovalNote(activity, user?.username, 'cancel').trim() : undefined,
             });
             if (!scope) return;
             recurrence = { scope, ...(repeatState.changed ? { repeat } : {}) };
@@ -182,7 +191,7 @@ export default function ActivityForm({ mode = 'create', activityId, initialData,
                                     onChange={repeatState.setRepeat}
                                     startDay={startAt.slice(0, 10)}
                                     disabled={mode === 'view' || (mode !== 'create' && !canEdit)}
-                                    hint={activity?.seriesId ? 'Saving asks whether the change is for this event, the following ones or all' : undefined}
+                                    hint={activity?.seriesId ? seriesHint(activity) : undefined}
                                 />
                             ) : undefined
                         }

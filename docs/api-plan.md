@@ -164,19 +164,30 @@ occurrence** (Phase 1 R12: rows, never an RRULE master), created through today +
   `this`: the ordinary update / delete; an occurrence changed on its own (anything but status / customer response)
   becomes an exception that series edits leave alone; a deleted occurrence is never re-created. Changing `repeat` with
   `this` → `400 SERIES_SCOPE_REQUIRED` (sending the same rule back passes). `following`: the series is split: the old
-  one ends the day before (`untilDay`), a new series starts at this occurrence with the new values (a count series keeps
-  its remaining count unless `repeat` is sent); later occurrences move to it and are rewritten. `all`: the series takes
-  the new values and its future occurrences are rewritten; moving the occurrence to another day → `400` on `startAt`
-  (change `repeat`, or use `following`). Rewrite = future (not started) Planned non-exception occurrences are paired
-  with the rule's days and updated; those off the rule are deleted; free days are created; past, Completed, Cancelled
-  and exception occurrences are never touched. `status: Cancelled` with `following` / `all` cancels those occurrences
-  and ends the series; `repeat: null` with `following` / `all` ends it after this occurrence (later / future ones
-  deleted). `PUT` with `repeat` on a single activity makes it occurrence 1 of a new series. `DELETE` `following`: the
-  series ends the day before, its non-completed occurrences from here are deleted; `all`: the series is deleted with its
-  non-completed occurrences from now (and this one); past ones stay. `409 SERIES_ENDED` when the series was deleted
-  (only `this` works). `bulk-delete` stays per occurrence (`this`).
+  one ends the day before this occurrence, or before the day it moves to when that is earlier (`untilDay`); a new
+  series starts at this occurrence with the new values; later occurrences move to it and are rewritten. A count series
+  keeps its remaining count unless `repeat` is sent with another count (a `repeat` whose count equals the series'
+  total, as the form sends it back, still counts what is left). Moved to another day without `repeat`, a rule tied to
+  the old day follows (weekly on that one weekday, monthly on that day or nth weekday). `all`: the series takes the new
+  values and its future occurrences are rewritten; moving the occurrence to another day → `400` on `startAt` (change
+  `repeat`, or use `following`); an occurrence moved alone earlier keeps its own slot (it stays an exception). Rewrite =
+  future (not started) Planned non-exception occurrences are paired with the rule's days and updated; those off the
+  rule are deleted and detached, so a day the rule drops comes back when the rule returns to it; free days are created;
+  one whose new time has already passed today is left as it is; past, Completed, Cancelled and exception occurrences
+  are never touched. When the edited occurrence takes a slot another event of the series holds: a deleted or
+  rewritable one gives it up, any other answers `400` on `startAt`. `status: Cancelled` with `following` / `all`
+  cancels those occurrences (exceptions too) and ends the series and its rule (`untilDay`, so a later `all` edit never
+  revives it); `repeat: null` with `following` / `all` ends it after this occurrence (later / future ones not started
+  yet are deleted; occurrences already over today stay). `PUT` with `repeat` on a single activity makes it occurrence 1
+  of a new series. `DELETE` `following`: the series ends the day before, its non-completed occurrences from here are
+  deleted; `all`: the series is deleted with its non-completed occurrences from now (and this one); past ones stay.
+  `following` / `all` (edit and delete) also need the right to change the series (its owner, its creator or a global
+  role): owning one occurrence reassigned alone isn't enough (`403`). `409 SERIES_ENDED` when the series was deleted
+  (only `this` works). `bulk-delete` stays per occurrence (`this`). A calendar change to one occurrence (P2-5 pull,
+  push-time merge) makes it an exception, like a `this` edit.
 - Calendar sync: each occurrence is pushed as a single event; an occurrence more than 14 days ahead gets no calendar
-  copy (and sends no invitation) until it comes within 14 days ([system design §5.4](system-design.md#54-calendar-sync-crm-calendar-sync)).
+  copy (and sends no invitation) until it comes within 14 days; the "invitations held" notice comes once a day per
+  series, not per occurrence ([system design §5.4](system-design.md#54-calendar-sync-crm-calendar-sync)).
 - Audit: `ActivitySeries` CREATE / UPDATE / DELETE (rule summary, scope, occurrence counts, `splitFrom` /
   `splitInto`); occurrences the series creates write a small `Activity CREATE` (`{ subject, seriesId,
   originalStartAt }`), updates their usual diff, deletes their usual `DELETE`.

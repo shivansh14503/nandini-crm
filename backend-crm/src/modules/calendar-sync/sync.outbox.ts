@@ -57,6 +57,8 @@ export interface HeldNotice {
     guests: number;
     /** A new private copy (`withhold`) rather than guests added to an event already sent. */
     newCopy: boolean;
+    /** Calendar Phase 4: the occurrence's recurring series (one notice per series and day, sync.notifications.ts). */
+    seriesId?: string | null;
 }
 
 export interface OutboxResult {
@@ -153,6 +155,9 @@ export async function ownerConnectionOf(db: OutboxDb, owner: string): Promise<{ 
     return conn;
 }
 
+/** The notice's series (Calendar Phase 4), only for an occurrence of one. */
+const seriesOf = (row: ActivityRow): Pick<HeldNotice, 'seriesId'> => (row.seriesId ? { seriesId: row.seriesId } : {});
+
 /** Attendees other than the owner (who could get an invitation). */
 const guestCount = (row: ActivityRow) => row.attendees.filter((a) => !(a.kind === 'user' && sameUser(a.username, row.assignedTo))).length;
 
@@ -199,7 +204,7 @@ export async function markActivityForSync(db: OutboxDb, event: ActivityWriteEven
         });
         result.links.push({ id: created.id, dirtyAt: now });
         const guests = guestCount(after);
-        if (invites === 'withhold' && guests > 0) result.notices.push({ activityId: after.id, owner, actor, subject: after.subject, guests, newCopy: true });
+        if (invites === 'withhold' && guests > 0) result.notices.push({ activityId: after.id, ...seriesOf(after), owner, actor, subject: after.subject, guests, newCopy: true });
     }
 
     const held = await heldChanges(db, links, before, after, actorIsOwner);
@@ -212,7 +217,7 @@ export async function markActivityForSync(db: OutboxDb, event: ActivityWriteEven
             // Inert until its row is re-activated, but who added which guest is still recorded (D41), so the
             // re-attach push never invites people the owner didn't.
             if (change?.changed) await db.activityExternalLink.update({ where: { id: link.id }, data: change.data });
-            if (change?.notice) result.notices.push({ activityId: after.id, owner, actor, subject: after.subject, ...change.notice });
+            if (change?.notice) result.notices.push({ activityId: after.id, ...seriesOf(after), owner, actor, subject: after.subject, ...change.notice });
             continue;
         }
         const keepState = link.state === 'cancelled' || link.state === 'removed_remote';
@@ -227,7 +232,7 @@ export async function markActivityForSync(db: OutboxDb, event: ActivityWriteEven
             },
         });
         result.links.push({ id: link.id, dirtyAt: now });
-        if (change?.notice) result.notices.push({ activityId: after.id, owner, actor, subject: after.subject, ...change.notice });
+        if (change?.notice) result.notices.push({ activityId: after.id, ...seriesOf(after), owner, actor, subject: after.subject, ...change.notice });
     }
 
     // One "invitations held" notice per write (a guest held on the old owner's link too is the same news).

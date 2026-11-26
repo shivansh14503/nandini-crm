@@ -712,9 +712,12 @@ one per event and recipient, made unique by `dedupeKey`, never audited.
   (§5.4; as of 2026-11-26, P2-3b). Last, the **recurring activities** step (Calendar Phase 4, as of 2026-11-26;
   `activitySeriesService.runNightly`, `activity.series.ts`): it extends the horizon of live, not-ended series whose
   `materializedThrough` is less than 90 days ahead (index `[isDeleted, endedAt, materializedThrough]`, 50 series per
-  run, at most 120 new occurrence rows per series per run, one short transaction per series under the series lock;
-  idempotent thanks to `UX_Activity_seriesOccurrence`), then marks occurrences that just entered the 14-day calendar
-  sync window for the push (200 per run, §5.4). It logs and never fails the job's other steps. Occurrences are written
+  run, least recently written first, at most 120 new occurrence rows per series per run, one short transaction per
+  series under the series lock; idempotent thanks to `UX_Activity_seriesOccurrence`), then marks occurrences that
+  entered the 14-day calendar sync window for the push (200 per run, §5.4). New occurrences copy the series template
+  as checked when it was saved: a related record, contact or colleague deleted or deactivated since stays on them, so
+  the series keeps going. A series that still fails is logged (error) and its `updatedAt` touched, so it goes to the
+  back of the queue and never blocks the others. It logs and never fails the job's other steps. Occurrences are written
   by the system writer (audit actor = the series' last writer, no notifications); reminders arm per occurrence.
 - **Start-up and Redis recovery:** `src/jobs/worker.ts` doesn't wait for Redis, so the worker never decides degraded
   mode once at boot. On every `ready` of the shared Redis client it upserts the schedulers, re-arms pending
@@ -834,7 +837,8 @@ guessing slugs hit the rate limit and the negative cache, not SQL.
 
 Recurring activities (Calendar Phase 4, as of 2026-11-26) add **no new wake**: their nightly step rides the 00:20
 reminders job, while the database is already awake for it. With nothing due it costs two small indexed reads (series
-needing more rows, occurrences entering the sync window). Saving a series writes its first 90 days at once (at most
+needing more rows, live calendar connections); when some owner has a usable calendar it adds up to four more (the
+provider switch, the owners' users, occurrences entering the window, gone events to re-dirty). Saving a series writes its first 90 days at once (at most
 120 rows), inside the save request. Without Redis there is no nightly job, so horizons stop growing; the 90-day
 horizon is the slack, and the next nightly run (or any edit of the series) catches up.
 
@@ -913,8 +917,18 @@ job and the sweep (connection checks and the nightly connection steps still run)
   control:** an occurrence becomes push-eligible only when it starts within 14 days (`SERIES_SYNC_WINDOW_DAYS`;
   `isCreateEligible`), so a daily series with guests sends invitations for about two weeks, not 90 days, and an
   "All events" edit updates only the events already in the calendar. The 00:20 nightly step marks occurrences that
-  enter the window (200 per run), with the series' last writer as the actor, so D41's invitation rules (owner sends,
-  others' copies are held) apply as if that person had saved it.
+  enter the window (200 per run, earliest first). Its query skips what the outbox would skip anyway, so those rows
+  never fill the batch: Task / Note and types whose `calendarSync` is off, and owners without a usable connection (the
+  latest live row already backfilled, provider switched on, user active and not a group login). The actor is the
+  occurrence's last editor, or else the series' last writer (`updatedBy ?? createdBy` of the series), so D41's
+  invitation rules (owner sends, others' copies are held) apply as if that person had saved it. An occurrence that
+  existed before its owner's first-sync backfill gets the link the backfill would have made (D23: a private copy when it
+  has guests, `createdAt` = the backfill stamp). An occurrence whose event is gone (`cancelled` / `removed_remote`,
+  settled while it was still outside the window) is dirtied again, so the push creates or restores it. "Invitations
+  held" (`calendar_invites_held`) comes once a day per series (dedupe key on the series), and not at all from the
+  nightly while another occurrence of that series still waits for its owner. A calendar change to one occurrence
+  (pull or push-time merge through the system writer) makes it an exception, so a later "All events" edit leaves it
+  alone (as of 2026-11-26, review fixes).
 - **Redis down**: §4.3. **Heartbeat**: `calendar:worker:heartbeat` (§4.1), shown on Admin › API Integrations as
   `workerStatus` (running / not running / unknown without Redis; P2-3c).
 - **View**: `ActivityView.calendar` ([API plan](api-plan.md)) gives the activity's calendar state (provider, state,

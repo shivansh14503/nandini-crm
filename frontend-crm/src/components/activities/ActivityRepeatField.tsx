@@ -1,10 +1,11 @@
 'use client';
 
 import React, { useState } from 'react';
-import { Box, Chip, MenuItem, TextField, Typography } from '@mui/material';
+import { Box, Chip, MenuItem, TextField, Typography, type SxProps, type Theme } from '@mui/material';
 import RepeatIcon from '@mui/icons-material/Repeat';
 import type { RepeatEnds, RepeatFrequency, RepeatRule } from '@/types/activity.types';
 import {
+    followStartDay,
     isoWeekday,
     normalizeRepeat,
     positionLabel,
@@ -43,6 +44,54 @@ const chipSx = (on: boolean) =>
     }) as const;
 
 const UNIT: Record<RepeatFrequency, string> = { daily: 'day', weekly: 'week', monthly: 'month' };
+
+/**
+ * A whole-number input that can be cleared while typing: the text is a local draft, committed when it is a number in
+ * range (and clamped on blur), so backspacing "1" and typing "2" gives 2, not 12.
+ */
+function WholeNumberField({
+    value,
+    min,
+    max,
+    onCommit,
+    label,
+    ariaLabel,
+    disabled,
+    sx,
+}: {
+    value: number | undefined;
+    min: number;
+    max: number;
+    onCommit: (value: number) => void;
+    label?: string;
+    ariaLabel?: string;
+    disabled?: boolean;
+    sx?: SxProps<Theme>;
+}) {
+    const [draft, setDraft] = useState<string | null>(null);
+    const parse = (text: string) => (/^\d+$/.test(text.trim()) ? Number(text.trim()) : NaN);
+    return (
+        <TextField
+            size="small"
+            type="number"
+            label={label}
+            value={draft ?? (value === undefined ? '' : String(value))}
+            onChange={(e) => {
+                setDraft(e.target.value);
+                const n = parse(e.target.value);
+                if (n >= min && n <= max) onCommit(n);
+            }}
+            onBlur={() => {
+                const n = draft === null ? NaN : parse(draft);
+                if (!Number.isNaN(n)) onCommit(Math.min(max, Math.max(min, n)));
+                setDraft(null);
+            }}
+            disabled={disabled}
+            sx={sx}
+            slotProps={{ htmlInput: { min, max, inputMode: 'numeric', ...(ariaLabel ? { 'aria-label': ariaLabel } : {}) } }}
+        />
+    );
+}
 
 export interface ActivityRepeatFieldProps {
     /** The rule, or null for "Does not repeat". */
@@ -124,14 +173,14 @@ export function ActivityRepeatField({ value, onChange, startDay, disabled = fals
                 >
                     <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, alignItems: 'center' }}>
                         <Typography sx={{ fontSize: '0.82rem', color: 'var(--mui-palette-text-secondary)' }}>Every</Typography>
-                        <TextField
-                            size="small"
-                            type="number"
+                        <WholeNumberField
                             value={rule.interval}
-                            onChange={(e) => patch({ interval: Number(e.target.value) || 1 })}
+                            min={1}
+                            max={99}
+                            onCommit={(interval) => patch({ interval })}
+                            ariaLabel="Repeat every"
                             disabled={disabled}
                             sx={{ ...inputSx, width: 84 }}
-                            slotProps={{ htmlInput: { min: 1, max: 99, 'aria-label': 'Repeat every' } }}
                         />
                         <TextField
                             select
@@ -230,15 +279,14 @@ export function ActivityRepeatField({ value, onChange, startDay, disabled = fals
                             />
                         )}
                         {rule.ends === 'after' && (
-                            <TextField
-                                size="small"
-                                type="number"
+                            <WholeNumberField
                                 label="Times"
-                                value={rule.count ?? ''}
-                                onChange={(e) => patch({ count: Math.min(366, Math.max(1, Number(e.target.value) || 1)) })}
+                                value={rule.count}
+                                min={1}
+                                max={366}
+                                onCommit={(count) => patch({ count })}
                                 disabled={disabled}
                                 sx={{ ...inputSx, width: 110 }}
-                                slotProps={{ htmlInput: { min: 1, max: 366 } }}
                             />
                         )}
                     </Box>
@@ -259,15 +307,19 @@ export function ActivityRepeatField({ value, onChange, startDay, disabled = fals
 /**
  * The Repeat state of an activity form: starts from the loaded activity's series rule (none when creating), and says
  * whether the user changed it (only a changed rule is sent, so a plain save of an occurrence doesn't ask for a series
- * rewrite).
+ * rewrite). `startDay` = the form's first day: while the activity isn't a series yet, a quick choice tied to the day
+ * ("Every week on Thursday") follows a new start; an occurrence's rule stays as loaded (the server moves a one-day rule
+ * with "This and following events").
  */
-export function useActivityRepeat(activity: { series?: { rule: RepeatRule } | null; id?: string } | undefined) {
+export function useActivityRepeat(activity: { series?: { rule: RepeatRule } | null; id?: string } | undefined, startDay = '') {
     const loaded = activity?.series?.rule ?? null;
-    const [state, setState] = useState<{ forId: string | undefined; rule: RepeatRule | null }>({ forId: activity?.id, rule: loaded });
-    // A record loaded after the first render: take its rule (React's "adjust state while rendering" pattern).
-    if (state.forId !== activity?.id) setState({ forId: activity?.id, rule: loaded });
+    const [state, setState] = useState<{ forId: string | undefined; rule: RepeatRule | null; day: string }>({ forId: activity?.id, rule: loaded, day: startDay });
+    // A record loaded after the first render: take its rule; a new start moves a day-tied quick choice (React's
+    // "adjust state while rendering" pattern).
+    if (state.forId !== activity?.id) setState({ forId: activity?.id, rule: loaded, day: startDay });
+    else if (state.day !== startDay) setState({ ...state, day: startDay, rule: loaded ? state.rule : followStartDay(state.rule, state.day, startDay) });
     const repeat = state.forId === activity?.id ? state.rule : loaded;
-    const setRepeat = (rule: RepeatRule | null) => setState({ forId: activity?.id, rule });
+    const setRepeat = (rule: RepeatRule | null) => setState({ forId: activity?.id, rule, day: startDay });
     const changed = !sameRepeat(repeat, loaded);
     return { repeat, setRepeat, loaded, changed };
 }

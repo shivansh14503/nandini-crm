@@ -13,6 +13,11 @@ export interface SeriesScopeRequest {
     ruleChanged?: boolean;
     /** The day moved: "All events" can't apply it (change the rule, or pick "This and following"). */
     dayMoved?: boolean;
+    /**
+     * What a cancel / delete does in the owner's calendar (ActivitySyncStatus `calendarRemovalNote`, trimmed), shown
+     * above the buttons; empty when the activity isn't in a calendar.
+     */
+    calendarNote?: string;
 }
 
 const TITLES: Record<SeriesScopeRequest['action'], string> = {
@@ -131,6 +136,24 @@ export function useSeriesScopePrompt() {
                             </Box>
                         ))}
                     </RadioGroup>
+                    {request?.calendarNote && (
+                        <Typography
+                            sx={{
+                                mt: 1,
+                                px: 1.5,
+                                py: 1,
+                                borderRadius: '8px',
+                                fontSize: '0.78rem',
+                                color: 'var(--mui-palette-text-secondary)',
+                                backgroundColor: 'var(--mui-palette-background-subtle)',
+                                border: '1px solid var(--mui-palette-border-main)',
+                                overflowWrap: 'anywhere',
+                            }}
+                        >
+                            {request.calendarNote}
+                            {scope !== 'this' ? ' Every other event this includes is cancelled there too.' : ''}
+                        </Typography>
+                    )}
                 </DialogContent>
                 <DialogActions sx={{ px: 3, pb: 2, gap: 1, flexWrap: 'wrap' }}>
                     <Button onClick={() => close(null)} sx={outlinedButtonSx}>

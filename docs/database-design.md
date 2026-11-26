@@ -610,7 +610,10 @@ the occurrence alone is moved), `seriesIndex` (1-based position from the series'
 (BIT, default 0: changed on its own, series edits leave it). Index `(seriesId, startAt)` (series edits, the nightly
 sync window) and the hand-written filtered unique `UX_Activity_seriesOccurrence (seriesId, originalStartAt) WHERE
 seriesId IS NOT NULL` (one row per slot, **soft-deleted rows included**, so the nightly extension never re-creates a
-deleted occurrence; created through `sp_executesql` because its columns are added in the same batch). The code pairs
+deleted occurrence; created through `sp_executesql` because its columns are added in the same batch). An occurrence a
+series rewrite removes (the rule no longer has its day, or another row fills its slot) is soft-deleted **and detached**
+(`seriesId`, `originalStartAt`, `seriesIndex` set to null), so its slot is free again if the rule returns to that day;
+a user's own delete keeps its series columns (as of 2026-11-26, review fixes). The code pairs
 occurrences by business day of `originalStartAt` (at most one row per series and day).
 
 **`ActivitySeries`**: `id`, `assignedTo` (owner of every occurrence), rule columns `frequency` (`daily` | `weekly` |
@@ -624,7 +627,8 @@ type, subject, owner, related record, organization, contact, location, reminder,
 `endedAt` (no more occurrences will be created: ended, split, cancelled, deleted or the count / until reached);
 `splitFromId` (the series a "This and following" edit split it from; no FK); `revision`; `createdBy` / `updatedBy` /
 timestamps; soft delete (`isDeleted`, `deletedAt`). Indexes `(isDeleted, endedAt, materializedThrough)` (the nightly
-extension: live series not ended, oldest horizon first) and `(assignedTo)`. Audited as `ActivitySeries` (module
+extension: live series not ended whose horizon is behind, least recently written first, so a series that fails is
+retried after the others) and `(assignedTo)`. Audited as `ActivitySeries` (module
 `activities`).
 
 **`ActivityExternalLink`** (migration `20261128100000_activity_calendar_sync`, as of 2026-11-26, Calendar Phase 2

@@ -149,6 +149,21 @@ export function sameRule(a: RepeatRule | null | undefined, b: RepeatRule | null 
     return key(a) === key(b);
 }
 
+/**
+ * The rule an occurrence moved from `fromDay` to `toDay` takes for "This and following events" when no new rule was
+ * sent: a rule tied to the old day (weekly on that one weekday, monthly on that day of the month, monthly on that
+ * nth weekday) follows the move; any other rule (daily, several weekdays, another day) stays as it is. Pure.
+ */
+export function shiftRuleToDay(rule: RepeatRule, fromDay: string, toDay: string): RepeatRule {
+    if (fromDay === toDay || !isDay(fromDay) || !isDay(toDay)) return rule;
+    if (rule.frequency === 'weekly' && rule.weekdays?.length === 1 && rule.weekdays[0] === isoWeekday(fromDay)) return { ...rule, weekdays: [isoWeekday(toDay)] };
+    if (rule.frequency === 'monthly' && rule.monthlyMode !== 'weekday' && rule.monthDay === Number(fromDay.slice(8, 10))) return { ...rule, monthDay: Number(toDay.slice(8, 10)) };
+    if (rule.frequency === 'monthly' && rule.monthlyMode === 'weekday' && rule.setPos === setPosOf(fromDay) && rule.setWeekday === isoWeekday(fromDay)) {
+        return { ...rule, setPos: setPosOf(toDay), setWeekday: isoWeekday(toDay) };
+    }
+    return rule;
+}
+
 /** One occurrence day of a series: its business-timezone day and 1-based position from the anchor. */
 export interface OccurrenceDay {
     day: string;
