@@ -77,6 +77,11 @@ export type AuditAction =
     | 'LEDGER_VERIFY'
     /** A user changed their own password (My Profile); `changes` holds only `passwordChangedAt`, never a password. */
     | 'PASSWORD_CHANGE'
+    /**
+     * An admin reset a user's password (Admin › Users); `changes` holds only `{ passwordChangeRequired: true,
+     * generated }`, never a password. Written before the user's sessions are signed out, so it holds no session count.
+     */
+    | 'PASSWORD_RESET'
     /** A user signed out one of their other sessions (`scope: 'one'`, `sessionId`) or all of them (`scope: 'others'`). */
     | 'SESSION_REVOKE'
     /** A calendar (or, from Phase 3, video) account was connected to a CRM user (Calendar Phase 2 P2-2). */
@@ -148,6 +153,7 @@ const SECURITY_ACTIONS: ReadonlySet<AuditAction> = new Set([
     'EXPORT',
     'LEDGER_VERIFY',
     'PASSWORD_CHANGE',
+    'PASSWORD_RESET',
     'SESSION_REVOKE',
     'CONNECT',
     'DISCONNECT',
@@ -178,12 +184,12 @@ export function categoryFor(entityType: AuditEntityType, action: AuditAction): A
 
 /**
  * INFO: everyday creates, edits, sign-ins. NOTICE: deletes, restores, undo, conversions, imports, any admin setting,
- * password changes and sessions signed out from My Profile.
+ * password changes and admin resets, and sessions signed out from My Profile.
  * WARNING: failed sign-ins and refused access. CRITICAL is reserved for integrity alarms.
  */
 export function severityFor(action: AuditAction, category: AuditCategory): AuditSeverity {
     if (action === 'LOGIN_FAILED' || action === 'ACCESS_DENIED') return 'WARNING';
-    if (['DELETE', 'RESTORE', 'REVERT', 'CONVERT', 'IMPORT', 'EXPORT', 'PASSWORD_CHANGE', 'SESSION_REVOKE', 'CONNECT', 'DISCONNECT'].includes(action) || category === 'CONFIG') {
+    if (['DELETE', 'RESTORE', 'REVERT', 'CONVERT', 'IMPORT', 'EXPORT', 'PASSWORD_CHANGE', 'PASSWORD_RESET', 'SESSION_REVOKE', 'CONNECT', 'DISCONNECT'].includes(action) || category === 'CONFIG') {
         return 'NOTICE';
     }
     return 'INFO';

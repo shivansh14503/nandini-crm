@@ -40,7 +40,20 @@ export function resolveNameParts(row: { firstName: string | null; lastName: stri
     return splitFullName(fullName);
 }
 
-const isoOrNull = (value: Date | null | undefined): string | null => (value ? value.toISOString() : null);
+export const isoOrNull = (value: Date | null | undefined): string | null => (value ? value.toISOString() : null);
+
+/** Another user as a profile shows them (e.g. "Reports to"): their id and display name. */
+export interface UserRefDto {
+    id: number;
+    /** `fullName`, or the username when the name is blank. */
+    name: string;
+}
+
+/** Columns a `UserRefDto` reads. */
+export const USER_REF_SELECT = { id: true, fullName: true, username: true } as const;
+
+export const toUserRef = (user: { id: number; fullName: string | null; username: string } | null | undefined): UserRefDto | null =>
+    user ? { id: user.id, name: user.fullName?.trim() || user.username } : null;
 
 /** Columns a profile reads (never the password hash or the photo bytes). */
 export const PROFILE_SELECT = {
@@ -52,12 +65,15 @@ export const PROFILE_SELECT = {
     email: true,
     role: true,
     department: true,
+    jobTitle: true,
     phone: true,
     officePhone: true,
+    mustChangePassword: true,
     lastLoginAt: true,
     passwordChangedAt: true,
     createdAt: true,
     photo: { select: { id: true } },
+    reportsTo: { select: USER_REF_SELECT },
 } as const;
 
 export interface ProfileRow {
@@ -69,12 +85,15 @@ export interface ProfileRow {
     email: string | null;
     role: string;
     department: string | null;
+    jobTitle: string | null;
     phone: string | null;
     officePhone: string | null;
+    mustChangePassword: boolean;
     lastLoginAt: Date | null;
     passwordChangedAt: Date | null;
     createdAt: Date;
     photo: { id: string } | null;
+    reportsTo: { id: number; fullName: string; username: string } | null;
 }
 
 export interface ProfileDto {
@@ -86,10 +105,16 @@ export interface ProfileDto {
     email: string | null;
     role: string;
     department: string | null;
-    /** The `phone` column. */
+    /** Set by an admin (Admin › Users); read-only here. */
+    jobTitle: string | null;
+    /** The user's manager, set by an admin; read-only here. */
+    reportsTo: UserRefDto | null;
+    /** The mobile number (the `phone` column). */
     mobile: string | null;
     officePhone: string | null;
     photoUrl: string | null;
+    /** True until the user replaces a temporary password (a new user, or after an admin reset). */
+    mustChangePassword: boolean;
     lastLoginAt: string | null;
     passwordChangedAt: string | null;
     createdAt: string;
@@ -104,9 +129,12 @@ export function toProfileDto(row: ProfileRow): ProfileDto {
         email: row.email,
         role: row.role,
         department: row.department,
+        jobTitle: row.jobTitle,
+        reportsTo: toUserRef(row.reportsTo),
         mobile: row.phone,
         officePhone: row.officePhone,
         photoUrl: photoUrlOf(row.photo?.id),
+        mustChangePassword: row.mustChangePassword,
         lastLoginAt: isoOrNull(row.lastLoginAt),
         passwordChangedAt: isoOrNull(row.passwordChangedAt),
         createdAt: row.createdAt.toISOString(),
@@ -132,6 +160,7 @@ export const AUTH_ME_SELECT = {
     fullName: true,
     firstName: true,
     lastName: true,
+    mustChangePassword: true,
     photo: { select: { id: true } },
 } as const;
 
@@ -144,6 +173,8 @@ export interface AuthMeDto {
     firstName: string | null;
     lastName: string | null;
     photoUrl: string | null;
+    /** The user must choose a new password before using the app (the frontend sends them to My Profile › Security). */
+    mustChangePassword: boolean;
 }
 
 export const toAuthMeDto = (row: Omit<AuthMeDto, 'photoUrl'> & { photo: { id: string } | null }): AuthMeDto => ({
@@ -153,6 +184,7 @@ export const toAuthMeDto = (row: Omit<AuthMeDto, 'photoUrl'> & { photo: { id: st
     fullName: row.fullName,
     ...resolveNameParts(row),
     photoUrl: photoUrlOf(row.photo?.id),
+    mustChangePassword: row.mustChangePassword,
 });
 
 // ── Sessions ─────────────────────────────────────────────────────────────────

@@ -40,6 +40,18 @@ import { PASSWORD_MAX_LENGTH, PASSWORD_MIN_LENGTH, PASSWORD_RULES, passwordPolic
 import { GOOGLE_SCOPE_PROFILES, INTEGRATION_PROVIDERS, SECRET_EXPIRY_WARNING_DAYS } from '../modules/integrations/integration.constants.js';
 import { BACKFILL_DAY_CHOICES, EVENT_VISIBILITIES, MAX_COMPANY_DOMAINS } from '../modules/integrations/calendarSyncSettings.js';
 import { USER_EMAIL_ISSUES, USER_EMAIL_MAX_LENGTH } from '../modules/users/userEmail.service.js';
+import { normalizeUsername, RESERVED_USERNAMES, USERNAME_MAX_LENGTH, USERNAME_MIN_LENGTH, USERNAME_PATTERN, usernameIssue } from '../modules/user-admin/username.js';
+import {
+    ADMIN_ROLES,
+    GLOBAL_ACCESS_ROLES,
+    hasGlobalAccessRole,
+    isAdminAccessRole,
+    normalizeRole,
+    ROLE_ACCESS_LEVELS,
+    ROLE_NAME_MAX_LENGTH,
+    roleAccess,
+} from '../modules/user-admin/roles.js';
+import { ADMIN_USER_STATUSES, DEPARTMENT_MAX_LENGTH, JOB_TITLE_MAX_LENGTH } from '../modules/user-admin/userAdmin.validator.js';
 
 /**
  * Contract between backend-crm and frontend-crm: constants each side keeps its own copy of must agree, or the UI
@@ -152,6 +164,32 @@ interface FrontendIntegrationTypes {
     SECRET_EXPIRY_WARNING_DAYS: number;
     MAX_COMPANY_DOMAINS: number;
     USER_EMAIL_MAX_LENGTH: number;
+}
+
+interface FrontendUsername {
+    USERNAME_MIN_LENGTH: number;
+    USERNAME_MAX_LENGTH: number;
+    USERNAME_PATTERN: RegExp;
+    RESERVED_USERNAMES: readonly string[];
+    normalizeUsername(value: string): string;
+    usernameIssue(value: string): string | null;
+}
+
+interface FrontendRoleAccess {
+    ROLE_ACCESS_LEVELS: readonly string[];
+    ADMIN_ROLES: readonly string[];
+    GLOBAL_ACCESS_ROLES: readonly string[];
+    ROLE_NAME_MAX_LENGTH: number;
+    normalizeRole(role: string): string;
+    isAdminAccessRole(role: string | null | undefined): boolean;
+    hasGlobalAccessRole(role: string | null | undefined): boolean;
+    roleAccess(role: string): string;
+}
+
+interface FrontendUserAdminTypes {
+    USER_STATUS_FILTERS: readonly string[];
+    JOB_TITLE_MAX_LENGTH: number;
+    DEPARTMENT_MAX_LENGTH: number;
 }
 
 async function loadFrontend<T>(relativePath: string): Promise<T> {
@@ -413,5 +451,54 @@ describe('backend ↔ frontend contract', { skip }, () => {
         assert.equal(frontend.SECRET_EXPIRY_WARNING_DAYS, SECRET_EXPIRY_WARNING_DAYS);
         assert.equal(frontend.MAX_COMPANY_DOMAINS, MAX_COMPANY_DOMAINS);
         assert.equal(frontend.USER_EMAIL_MAX_LENGTH, USER_EMAIL_MAX_LENGTH);
+    });
+
+    it('frontend utils/username.ts applies the same username rules with the same messages', async () => {
+        const frontend = await loadFrontend<FrontendUsername>('utils/username.ts');
+        assert.equal(frontend.USERNAME_MIN_LENGTH, USERNAME_MIN_LENGTH);
+        assert.equal(frontend.USERNAME_MAX_LENGTH, USERNAME_MAX_LENGTH);
+        assert.equal(frontend.USERNAME_PATTERN.source, USERNAME_PATTERN.source);
+        assert.equal(frontend.USERNAME_PATTERN.flags, USERNAME_PATTERN.flags);
+        assert.deepEqual([...frontend.RESERVED_USERNAMES], [...RESERVED_USERNAMES]);
+        const values = ['', '  ', 'ab', 'abc', ' Palak.Sharma ', 'r.k-sharma_2', '.rahul', '-x1', 'a b', 'राहुल', 'rahul@x', 'a'.repeat(50), 'a'.repeat(51), 'ABC', 'system', ' System ', 'systems'];
+        for (const value of values) {
+            assert.equal(frontend.normalizeUsername(value), normalizeUsername(value), JSON.stringify(value));
+            assert.equal(frontend.usernameIssue(value), usernameIssue(value), JSON.stringify(value));
+        }
+    });
+
+    it('frontend utils/roleAccess.ts classifies roles exactly as the API enforces them', async () => {
+        const frontend = await loadFrontend<FrontendRoleAccess>('utils/roleAccess.ts');
+        assert.deepEqual([...frontend.ROLE_ACCESS_LEVELS], [...ROLE_ACCESS_LEVELS]);
+        assert.deepEqual([...frontend.ADMIN_ROLES], [...ADMIN_ROLES]);
+        assert.deepEqual([...frontend.GLOBAL_ACCESS_ROLES], [...GLOBAL_ACCESS_ROLES]);
+        assert.equal(frontend.ROLE_NAME_MAX_LENGTH, ROLE_NAME_MAX_LENGTH);
+        const roles = [
+            ...ADMIN_ROLES,
+            ...GLOBAL_ACCESS_ROLES,
+            'admin',
+            'SUPER ADMIN',
+            'Super  Admin',
+            ' Admin',
+            'Director - Operations',
+            'director — operations',
+            'Director − Operations',
+            'Sales Executive',
+            'Field Engineer',
+            '',
+        ];
+        for (const role of roles) {
+            assert.equal(frontend.normalizeRole(role), normalizeRole(role), role);
+            assert.equal(frontend.isAdminAccessRole(role), isAdminAccessRole(role), role);
+            assert.equal(frontend.hasGlobalAccessRole(role), hasGlobalAccessRole(role), role);
+            assert.equal(frontend.roleAccess(role), roleAccess(role), role);
+        }
+    });
+
+    it('frontend types/userAdmin.types.ts matches the Admin › Users limits and status filter', async () => {
+        const frontend = await loadFrontend<FrontendUserAdminTypes>('types/userAdmin.types.ts');
+        assert.deepEqual([...frontend.USER_STATUS_FILTERS], [...ADMIN_USER_STATUSES]);
+        assert.equal(frontend.JOB_TITLE_MAX_LENGTH, JOB_TITLE_MAX_LENGTH);
+        assert.equal(frontend.DEPARTMENT_MAX_LENGTH, DEPARTMENT_MAX_LENGTH);
     });
 });

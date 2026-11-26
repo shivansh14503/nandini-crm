@@ -2,10 +2,11 @@
 
 import { useCallback, useState } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
-import { Alert, Box, Button, Skeleton } from '@mui/material';
+import { Alert, AlertTitle, Box, Button, Skeleton } from '@mui/material';
 import PersonOutlineRoundedIcon from '@mui/icons-material/PersonOutlineRounded';
 import ShieldOutlinedIcon from '@mui/icons-material/ShieldOutlined';
 import { AppToast } from '@/components/common/AppToast';
+import { useAuth } from '@/context/AuthContext';
 import { PillTabs, errorMessage, secondaryButtonSx, surfaceSx, type PillTabItem } from '@/components/settings/form-customization/builderUi';
 import { useMyProfile } from '@/hooks/queries/useProfile';
 import { ChangePasswordCard } from './ChangePasswordCard';
@@ -42,12 +43,18 @@ function ProfileSkeleton() {
     );
 }
 
-/** My Profile: header card, then the Profile and Security tabs (`?tab=security`). */
+/**
+ * My Profile: header card, then the Profile and Security tabs (`?tab=security`). While an admin-set password must be
+ * changed (`mustChangePassword`), only the change-password card shows, under a warning; everything else unlocks as
+ * soon as the password is changed.
+ */
 export function ProfileView() {
     const router = useRouter();
     const pathname = usePathname();
     const searchParams = useSearchParams();
-    const tab: ProfileTab = searchParams.get('tab') === 'security' ? 'security' : 'profile';
+    const { user } = useAuth();
+    const locked = Boolean(user?.mustChangePassword);
+    const tab: ProfileTab = locked || searchParams.get('tab') === 'security' ? 'security' : 'profile';
     const { data: profile, isLoading, isError, error, refetch, isFetching } = useMyProfile();
 
     const [toast, setToast] = useState<{ open: boolean; message: string; severity: ToastSeverity }>({ open: false, message: '', severity: 'success' });
@@ -77,6 +84,21 @@ export function ProfileView() {
                 >
                     {errorMessage(error, 'Could not load your profile.')}
                 </Alert>
+            ) : locked ? (
+                <>
+                    <Alert
+                        severity="warning"
+                        sx={{ borderRadius: '10px', fontSize: '0.84rem', alignItems: 'flex-start' }}
+                        aria-live="polite"
+                    >
+                        <AlertTitle sx={{ fontWeight: 700, fontSize: '0.9rem', mb: 0.25 }}>Choose a new password to continue</AlertTitle>
+                        An administrator set a temporary password for your account. Change it here to start using the CRM; the rest of the app opens as soon as
+                        you do. Already changed it on another device? Sign out and sign in again with the new password.
+                    </Alert>
+                    <Box role="tabpanel" aria-label="Security" sx={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0 }}>
+                        <ChangePasswordCard profile={profile} notify={notify} />
+                    </Box>
+                </>
             ) : (
                 <>
                     <ProfileHeaderCard profile={profile} notify={notify} />
