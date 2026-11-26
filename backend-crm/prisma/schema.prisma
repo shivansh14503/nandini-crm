@@ -1659,8 +1659,6 @@ model Holiday {
   id          String   @id @default(uuid()) @db.NVarChar(50)
   occasion    String   @db.NVarChar(100)
   holidayDate DateTime @db.Date
-  /// Public | Optional | Company (HOLIDAY_TYPES in holiday.validator.ts).
-  holidayType String   @default("Public") @db.NVarChar(30)
   /// Active | Inactive, the same Status options as Referrals. Only Active holidays reach the calendar.
   status      String   @default("Active") @db.NVarChar(30)
   createdBy   String   @db.NVarChar(50)

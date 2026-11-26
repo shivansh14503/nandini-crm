@@ -33,19 +33,19 @@ describe('parseImportDate', () => {
 });
 
 describe('holidayInputSchema', () => {
-    it('defaults Holiday Type and Status, and tidies the occasion', () => {
+    it('defaults Status, and tidies the occasion', () => {
         const input = holidayInputSchema.parse({ occasion: '  Raksha   Bandhan ', holidayDate: '2026-08-28' });
-        assert.deepEqual(input, { occasion: 'Raksha Bandhan', holidayDate: '2026-08-28', holidayType: 'Public', status: 'Active' });
+        assert.deepEqual(input, { occasion: 'Raksha Bandhan', holidayDate: '2026-08-28', status: 'Active' });
     });
 
-    it('accepts options in any letter case', () => {
-        const input = holidayInputSchema.parse({ occasion: 'Holi', holidayDate: '2026-03-04', holidayType: 'optional', status: 'INACTIVE' });
-        assert.equal(input.holidayType, 'Optional');
+    it('accepts Status in any letter case and drops a Holiday Type sent by an old client', () => {
+        const input = holidayInputSchema.parse({ occasion: 'Holi', holidayDate: '2026-03-04', holidayType: 'Optional', status: 'INACTIVE' });
+        assert.equal('holidayType' in input, false);
         assert.equal(input.status, 'Inactive');
     });
 
     it('rejects unknown options, missing occasion and far-off years', () => {
-        assert.equal(holidayInputSchema.safeParse({ occasion: 'Holi', holidayDate: '2026-03-04', holidayType: 'Bank' }).success, false);
+        assert.equal(holidayInputSchema.safeParse({ occasion: 'Holi', holidayDate: '2026-03-04', status: 'Pending' }).success, false);
         assert.equal(holidayInputSchema.safeParse({ occasion: ' ', holidayDate: '2026-03-04' }).success, false);
         assert.equal(holidayInputSchema.safeParse({ occasion: 'Holi', holidayDate: '1999-03-04' }).success, false);
         assert.equal(holidayInputSchema.safeParse({ occasion: 'Holi', holidayDate: '2026-02-30' }).success, false);
@@ -68,7 +68,7 @@ describe('classifyImportRows', () => {
         const results = classifyImportRows(
             [
                 row(2, { occasion: 'republic day', holidayDate: '26/01/2026' }),
-                row(3, { occasion: 'Holi', holidayDate: '04/03/2026', holidayType: 'optional' }),
+                row(3, { occasion: 'Holi', holidayDate: '04/03/2026', status: 'inactive' }),
                 row(4, { occasion: 'HOLI ', holidayDate: '2026-03-04' }),
                 row(5, { occasion: 'Diwali', holidayDate: 'soon' }),
                 row(6, { occasion: '', holidayDate: '' }),
@@ -79,7 +79,7 @@ describe('classifyImportRows', () => {
         assert.deepEqual(results.map((r) => r.outcome), ['duplicate', 'new', 'duplicate', 'error', 'error']);
         assert.deepEqual(results[0].messages, ['Already in the holiday list.']);
         assert.equal(results[1].holidayDate, '2026-03-04');
-        assert.equal(results[1].holidayType, 'Optional');
+        assert.equal(results[1].status, 'Inactive');
         assert.deepEqual(results[2].messages, ['Same as row 3.']);
         assert.match(results[3].messages[0], /"soon" is not a date/);
         assert.ok(results[4].messages.includes('Occasion is required.'));
@@ -88,20 +88,19 @@ describe('classifyImportRows', () => {
 
     it('returns the input to save only for new rows', () => {
         const [first, second] = classifyImportRows([row(2, { occasion: 'Holi', holidayDate: '2026-03-04' }), row(3, { occasion: 'Holi', holidayDate: '2026-03-04' })], new Set());
-        assert.deepEqual(first.input, { occasion: 'Holi', holidayDate: '2026-03-04', holidayType: 'Public', status: 'Active' });
+        assert.deepEqual(first.input, { occasion: 'Holi', holidayDate: '2026-03-04', status: 'Active' });
         assert.equal(second.input, undefined);
     });
 });
 
 describe('list helpers', () => {
-    it('filters by year, status, type and occasion', () => {
+    it('filters by year, status and occasion', () => {
         assert.deepEqual(listWhere({}), {});
-        const where = listWhere({ year: 2026, status: 'Active', holidayType: 'Public', search: 'holi' });
+        const where = listWhere({ year: 2026, status: 'Active', search: 'holi' });
         assert.deepEqual(where, {
             AND: [
                 { holidayDate: { gte: new Date('2026-01-01T00:00:00.000Z'), lt: new Date('2027-01-01T00:00:00.000Z') } },
                 { status: 'Active' },
-                { holidayType: 'Public' },
                 { occasion: { contains: 'holi' } },
             ],
         });

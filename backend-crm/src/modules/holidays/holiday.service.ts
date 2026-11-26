@@ -24,7 +24,6 @@ export interface HolidayDto {
     occasion: string;
     /** `YYYY-MM-DD`. */
     holidayDate: string;
-    holidayType: string;
     status: string;
     createdBy: string;
     updatedBy: string | null;
@@ -46,7 +45,6 @@ export interface CalendarHoliday {
     id: string;
     occasion: string;
     holidayDate: string;
-    holidayType: string;
 }
 
 export type HolidayImportOutcome = 'new' | 'duplicate' | 'error';
@@ -57,7 +55,6 @@ export interface HolidayImportRowResult {
     /** The row as it would be saved (blank when it couldn't be read). */
     occasion: string;
     holidayDate: string;
-    holidayType: string;
     status: string;
     /** Why a row is an error, or which holiday it duplicates. */
     messages: string[];
@@ -82,7 +79,6 @@ export const toHolidayDto = (row: HolidayRow): HolidayDto => ({
     id: row.id,
     occasion: row.occasion,
     holidayDate: toDateOnly(row.holidayDate),
-    holidayType: row.holidayType,
     status: row.status,
     createdBy: row.createdBy,
     updatedBy: row.updatedBy,
@@ -91,7 +87,7 @@ export const toHolidayDto = (row: HolidayRow): HolidayDto => ({
 });
 
 /** What the audit log keeps of a holiday (no bookkeeping columns). */
-const auditSnapshot = (dto: HolidayDto) => ({ occasion: dto.occasion, holidayDate: dto.holidayDate, holidayType: dto.holidayType, status: dto.status });
+const auditSnapshot = (dto: HolidayDto) => ({ occasion: dto.occasion, holidayDate: dto.holidayDate, status: dto.status });
 
 const duplicateError = (input: Pick<HolidayInput, 'occasion' | 'holidayDate'>) =>
     new HttpError(`"${input.occasion}" is already a holiday on ${input.holidayDate}.`, StatusCodes.CONFLICT, {
@@ -120,11 +116,10 @@ async function guardDuplicate<T>(input: HolidayInput, fn: () => Promise<T>): Pro
 
 const yearRange = (year: number) => ({ gte: fromDateOnly(`${year}-01-01`), lt: fromDateOnly(`${year + 1}-01-01`) });
 
-export function listWhere(query: Pick<HolidayListQuery, 'search' | 'year' | 'status' | 'holidayType'>): Prisma.HolidayWhereInput {
+export function listWhere(query: Pick<HolidayListQuery, 'search' | 'year' | 'status'>): Prisma.HolidayWhereInput {
     const and: Prisma.HolidayWhereInput[] = [];
     if (query.year) and.push({ holidayDate: yearRange(query.year) });
     if (query.status) and.push({ status: query.status });
-    if (query.holidayType) and.push({ holidayType: query.holidayType });
     if (query.search) and.push({ occasion: { contains: query.search } });
     return and.length ? { AND: and } : {};
 }
@@ -145,7 +140,7 @@ export function yearsBetween(min: Date | null, max: Date | null, currentYear: nu
 export function classifyImportRows(rows: HolidayImportBody['rows'], existing: ReadonlySet<string>): { result: HolidayImportRowResult; input?: HolidayInput }[] {
     const seenInFile = new Map<string, number>();
     return rows.map(({ rowNumber, values }) => {
-        const blank = { rowNumber, occasion: values.occasion ?? '', holidayDate: values.holidayDate ?? '', holidayType: values.holidayType ?? '', status: values.status ?? '' };
+        const blank = { rowNumber, occasion: values.occasion ?? '', holidayDate: values.holidayDate ?? '', status: values.status ?? '' };
         const day = parseImportDate(values.holidayDate);
         const parsed = holidayInputSchema.safeParse({ ...values, holidayDate: day ?? '' });
         if (!parsed.success || !day) {
@@ -158,7 +153,7 @@ export function classifyImportRows(rows: HolidayImportBody['rows'], existing: Re
             return { result: { ...blank, outcome: 'error', messages: [...messages] } };
         }
         const input = parsed.data;
-        const shown = { rowNumber, occasion: input.occasion, holidayDate: input.holidayDate, holidayType: input.holidayType, status: input.status };
+        const shown = { rowNumber, occasion: input.occasion, holidayDate: input.holidayDate, status: input.status };
         const key = holidayKey(input.holidayDate, input.occasion);
         if (existing.has(key)) return { result: { ...shown, outcome: 'duplicate', messages: ['Already in the holiday list.'] } };
         const earlier = seenInFile.get(key);
@@ -338,10 +333,10 @@ export const holidayService = {
     async calendar(from: string, to: string): Promise<CalendarHoliday[]> {
         const rows = await prisma.holiday.findMany({
             where: { status: 'Active', holidayDate: { gte: fromDateOnly(from), lte: fromDateOnly(to) } },
-            select: { id: true, occasion: true, holidayDate: true, holidayType: true },
+            select: { id: true, occasion: true, holidayDate: true },
             orderBy: [{ holidayDate: 'asc' }, { occasion: 'asc' }],
             take: 1000,
         });
-        return rows.map((row) => ({ id: row.id, occasion: row.occasion, holidayDate: toDateOnly(row.holidayDate), holidayType: row.holidayType }));
+        return rows.map((row) => ({ id: row.id, occasion: row.occasion, holidayDate: toDateOnly(row.holidayDate) }));
     },
 };

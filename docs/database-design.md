@@ -566,15 +566,15 @@ Migration `20261126150000_holidays` (new table only). Module `backend-crm/src/mo
 list an admin keeps in Admin › Holidays (added one by one or imported from a spreadsheet). Active holidays show on
 everyone's calendar as amber all-day entries, and the activity Start / End fields warn when a day is a holiday.
 
-`id` (uuid), `occasion` (≤ 100, spaces collapsed), `holidayDate` (DATE), `holidayType` (`Public` | `Optional` |
-`Company`, default `Public`, fixed options in `holiday.validator.ts`), `status` (`Active` | `Inactive`, default
+`id` (uuid), `occasion` (≤ 100, spaces collapsed), `holidayDate` (DATE), `status` (`Active` | `Inactive`, default
 `Active`: the same Status options and label as Referrals; only Active holidays reach the calendar), `createdBy`,
 `updatedBy`, `createdAt`, `updatedAt`. **UNIQUE** `(holidayDate, occasion)`: the same holiday can't be added or
 imported twice (the database's case-insensitive collation also treats `holi` and `Holi` as one). Index
 `(status, holidayDate)` for the calendar read. Hard delete (no soft delete or undo); every create, edit, status change
 and delete is in the audit log (entity `Holiday`, module `holidays`, category CONFIG) with the holiday's values.
 Migration `20261126170000_holidays_initial_list` loads the 21 holidays of 2024 and 2025 from the old CRM (Active,
-Public, added by `system`, skipping any already there).
+added by `system`, skipping any already there). Migration `20261126190000_holiday_drop_type` drops the short-lived
+`holidayType` column (Public / Optional / Company) and its default: the option was removed from Admin › Holidays.
 
 ## 5. Index strategy
 

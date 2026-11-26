@@ -45,7 +45,6 @@ export const HOLIDAY_IMPORT_CONFIG: ImportEntityConfig = {
     fields: [
         { key: 'occasion', label: 'Occasion', required: true, aliases: ['holiday', 'holiday name', 'name', 'festival', 'occasion name', 'description', 'title'], sample: ['Republic Day', 'Company Foundation Day'] },
         { key: 'holidayDate', label: 'Holiday Date', required: true, aliases: ['date', 'holiday date', 'day', 'on'], sample: ['26/01/2027', '01/04/2027'] },
-        { key: 'holidayType', label: 'Holiday Type', required: false, aliases: ['type', 'category', 'kind'], sample: ['Public', 'Company'] },
         { key: 'status', label: 'Status', required: false, aliases: ['active', 'state'], sample: ['Active', 'Active'] },
     ],
 };
@@ -100,7 +99,6 @@ function CheckedRows({ rows, filter }: { rows: HolidayImportRowResult[]; filter:
                         <TableCell sx={headCellSx}>RESULT</TableCell>
                         <TableCell sx={headCellSx}>OCCASION</TableCell>
                         <TableCell sx={headCellSx}>HOLIDAY DATE</TableCell>
-                        <TableCell sx={headCellSx}>TYPE</TableCell>
                         <TableCell sx={headCellSx}>STATUS</TableCell>
                         <TableCell sx={headCellSx}>NOTE</TableCell>
                     </TableRow>
@@ -114,7 +112,6 @@ function CheckedRows({ rows, filter }: { rows: HolidayImportRowResult[]; filter:
                             </TableCell>
                             <TableCell sx={{ ...cellSx, fontWeight: 600, color: 'var(--crm-slate-900)', maxWidth: 200, overflowWrap: 'anywhere' }}>{r.occasion || '-'}</TableCell>
                             <TableCell sx={{ ...cellSx, whiteSpace: 'nowrap' }}>{r.outcome === 'error' ? r.holidayDate || '-' : formatHolidayDate(r.holidayDate)}</TableCell>
-                            <TableCell sx={cellSx}>{r.holidayType || '-'}</TableCell>
                             <TableCell sx={cellSx}>{r.status || '-'}</TableCell>
                             <TableCell sx={{ ...cellSx, color: r.outcome === 'error' ? 'var(--mui-palette-error-main)' : 'var(--mui-palette-text-secondary)', minWidth: 160 }}>
                                 {r.messages.join(' · ') || '-'}
@@ -239,8 +236,7 @@ function HolidayImportWizard({ open, onClose, onImported }: HolidayImportDialogP
                             onDownloadTemplate={() => downloadSampleTemplate(HOLIDAY_IMPORT_CONFIG)}
                         />
                         <Typography sx={{ fontSize: '0.75rem', color: 'var(--mui-palette-text-secondary)', mt: 1.5, lineHeight: 1.6 }}>
-                            Write dates day first (15/08/2026, 15-Aug-2026) or as 2026-08-15; Excel date cells work too. Holiday Type is Public, Optional or Company
-                            (Public when blank) and Status is Active or Inactive (Active when blank). A holiday already in the list, with the same date and occasion,
+                            Write dates day first (15/08/2026, 15-Aug-2026) or as 2026-08-15; Excel date cells work too. Status is Active or Inactive (Active when blank). A holiday already in the list, with the same date and occasion,
                             is skipped.
                         </Typography>
                     </Box>

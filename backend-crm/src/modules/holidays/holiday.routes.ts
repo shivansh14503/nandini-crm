@@ -20,9 +20,9 @@ import {
  *   GET    /calendar   ?from=YYYY-MM-DD&to=YYYY-MM-DD   (any signed-in user) active holidays on those days, inclusive
  *
  *   (admin only)
- *   GET    /           ?page&limit&search&year&status&holidayType&sortBy&sortOrder  → { data, total, page, limit, years }
+ *   GET    /           ?page&limit&search&year&status&sortBy&sortOrder  → { data, total, page, limit, years }
  *   GET    /:id
- *   POST   /           { occasion, holidayDate, holidayType?, status? }       409 DUPLICATE_HOLIDAY when it exists
+ *   POST   /           { occasion, holidayDate, status? }                     409 DUPLICATE_HOLIDAY when it exists
  *   PUT    /:id        partial; PATCH is an alias                            409 DUPLICATE_HOLIDAY
  *   DELETE /:id
  *   POST   /bulk       { action: activate | deactivate | delete, ids }        → { affected }

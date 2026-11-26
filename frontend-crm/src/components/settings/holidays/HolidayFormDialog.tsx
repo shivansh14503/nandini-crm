@@ -4,10 +4,10 @@ import React, { useState } from 'react';
 import { Alert, Box, Button, CircularProgress, Dialog, DialogActions, DialogContent, DialogTitle, MenuItem, TextField } from '@mui/material';
 import { errorMessage, inputSx, primaryButtonSx, secondaryButtonSx } from '@/components/settings/form-customization/builderUi';
 import { useCreateHoliday, useUpdateHoliday } from '@/hooks/queries/useHolidays';
-import { HOLIDAY_STATUSES, HOLIDAY_TYPES, OCCASION_MAX_LENGTH, type Holiday, type HolidayFormData } from '@/types/holiday.types';
+import { HOLIDAY_STATUSES, OCCASION_MAX_LENGTH, type Holiday, type HolidayFormData } from '@/types/holiday.types';
 import { formatHolidayDate, holidayWeekday } from './holidayDisplay';
 
-const EMPTY: HolidayFormData = { occasion: '', holidayDate: '', holidayType: 'Public', status: 'Active' };
+const EMPTY: HolidayFormData = { occasion: '', holidayDate: '', status: 'Active' };
 
 export interface HolidayFormDialogProps {
     open: boolean;
@@ -24,7 +24,7 @@ export function HolidayFormDialog(props: HolidayFormDialogProps) {
 
 function HolidayForm({ open, holiday, onClose, onSaved }: HolidayFormDialogProps) {
     const [values, setValues] = useState<HolidayFormData>(() =>
-        holiday ? { occasion: holiday.occasion, holidayDate: holiday.holidayDate, holidayType: holiday.holidayType, status: holiday.status } : EMPTY
+        holiday ? { occasion: holiday.occasion, holidayDate: holiday.holidayDate, status: holiday.status } : EMPTY
     );
     const [touched, setTouched] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -92,22 +92,13 @@ function HolidayForm({ open, holiday, onClose, onSaved }: HolidayFormDialogProps
                         sx={inputSx}
                         slotProps={{ inputLabel: { shrink: true }, htmlInput: { min: '2000-01-01', max: '2100-12-31' } }}
                     />
-                    <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, minmax(0, 1fr))' }, gap: 2 }}>
-                        <TextField select label="Holiday Type" size="small" value={values.holidayType} onChange={(e) => set('holidayType', e.target.value as HolidayFormData['holidayType'])} sx={inputSx}>
-                            {HOLIDAY_TYPES.map((t) => (
-                                <MenuItem key={t} value={t} sx={{ fontSize: '0.85rem' }}>
-                                    {t}
-                                </MenuItem>
-                            ))}
-                        </TextField>
-                        <TextField select label="Status" size="small" value={values.status} onChange={(e) => set('status', e.target.value as HolidayFormData['status'])} sx={inputSx}>
-                            {HOLIDAY_STATUSES.map((s) => (
-                                <MenuItem key={s} value={s} sx={{ fontSize: '0.85rem' }}>
-                                    {s}
-                                </MenuItem>
-                            ))}
-                        </TextField>
-                    </Box>
+                    <TextField select label="Status" size="small" value={values.status} onChange={(e) => set('status', e.target.value as HolidayFormData['status'])} sx={inputSx}>
+                        {HOLIDAY_STATUSES.map((s) => (
+                            <MenuItem key={s} value={s} sx={{ fontSize: '0.85rem' }}>
+                                {s}
+                            </MenuItem>
+                        ))}
+                    </TextField>
                     {error && (
                         <Alert severity="error" sx={{ fontSize: '0.8rem' }}>
                             {error}

@@ -42,17 +42,15 @@ import {
 import { useBulkHolidays, useDeleteHoliday, useHolidayList } from '@/hooks/queries/useHolidays';
 import {
     HOLIDAY_STATUSES,
-    HOLIDAY_TYPES,
     type Holiday,
     type HolidayBulkAction,
     type HolidayListParams,
     type HolidaySortField,
     type HolidayStatus,
-    type HolidayType,
 } from '@/types/holiday.types';
 import { HolidayFormDialog } from './HolidayFormDialog';
 import { HolidayImportDialog } from './HolidayImportDialog';
-import { HolidayStatusPill, HolidayTypePill, formatHolidayDate, holidayWeekday } from './holidayDisplay';
+import { HolidayStatusPill, formatHolidayDate, holidayWeekday } from './holidayDisplay';
 
 const ALL = 'all';
 
@@ -103,13 +101,12 @@ const SORTABLE: { field: HolidaySortField; label: string }[] = [
 
 /**
  * Admin › Holidays: the company holiday list. Add, edit, import, activate / deactivate and delete holidays; filter
- * by year, type and status. Active holidays show on everyone's calendar.
+ * by year and status. Active holidays show on everyone's calendar.
  */
 export function HolidaysView() {
     const [searchInput, setSearchInput] = useState('');
     const [search, setSearch] = useState('');
     const [year, setYear] = useState<number | typeof ALL>(ALL);
-    const [holidayType, setHolidayType] = useState<HolidayType | typeof ALL>(ALL);
     const [status, setStatus] = useState<HolidayStatus | typeof ALL>(ALL);
     const [sort, setSort] = useState<{ by: HolidaySortField; order: 'asc' | 'desc' }>({ by: 'holidayDate', order: 'desc' });
     const [page, setPage] = useState(0);
@@ -134,7 +131,6 @@ export function HolidaysView() {
         limit: pageSize,
         search: search || undefined,
         year: year === ALL ? undefined : year,
-        holidayType: holidayType === ALL ? undefined : holidayType,
         status: status === ALL ? undefined : status,
         sortBy: sort.by,
         sortOrder: sort.order,
@@ -143,7 +139,7 @@ export function HolidaysView() {
     const rows = useMemo(() => list.data?.data ?? [], [list.data]);
     const total = list.data?.total ?? 0;
     const years = list.data?.years ?? [new Date().getFullYear()];
-    const filtered = Boolean(search) || year !== ALL || holidayType !== ALL || status !== ALL;
+    const filtered = Boolean(search) || year !== ALL || status !== ALL;
 
     const bulk = useBulkHolidays();
     const remove = useDeleteHoliday();
@@ -282,7 +278,7 @@ export function HolidaysView() {
                             setYear(e.target.value === ALL ? ALL : Number(e.target.value));
                             resetPage();
                         }}
-                        sx={{ ...inputSx, width: { xs: 'calc(33.33% - 6px)', sm: 140 } }}
+                        sx={{ ...inputSx, width: { xs: 'calc(50% - 4px)', sm: 140 } }}
                         slotProps={{ htmlInput: { 'aria-label': 'Year' } }}
                     >
                         <MenuItem value={ALL} sx={{ fontSize: '0.85rem' }}>
@@ -297,32 +293,12 @@ export function HolidaysView() {
                     <TextField
                         select
                         size="small"
-                        value={holidayType}
-                        onChange={(e) => {
-                            setHolidayType(e.target.value as HolidayType | typeof ALL);
-                            resetPage();
-                        }}
-                        sx={{ ...inputSx, width: { xs: 'calc(33.33% - 6px)', sm: 150 } }}
-                        slotProps={{ htmlInput: { 'aria-label': 'Holiday Type' } }}
-                    >
-                        <MenuItem value={ALL} sx={{ fontSize: '0.85rem' }}>
-                            All types
-                        </MenuItem>
-                        {HOLIDAY_TYPES.map((t) => (
-                            <MenuItem key={t} value={t} sx={{ fontSize: '0.85rem' }}>
-                                {t}
-                            </MenuItem>
-                        ))}
-                    </TextField>
-                    <TextField
-                        select
-                        size="small"
                         value={status}
                         onChange={(e) => {
                             setStatus(e.target.value as HolidayStatus | typeof ALL);
                             resetPage();
                         }}
-                        sx={{ ...inputSx, width: { xs: 'calc(33.33% - 6px)', sm: 150 } }}
+                        sx={{ ...inputSx, width: { xs: 'calc(50% - 4px)', sm: 150 } }}
                         slotProps={{ htmlInput: { 'aria-label': 'Status' } }}
                     >
                         <MenuItem value={ALL} sx={{ fontSize: '0.85rem' }}>
@@ -384,7 +360,7 @@ export function HolidaysView() {
                     <EmptyState
                         icon={<EventBusyOutlinedIcon />}
                         title={filtered ? 'No holidays match these filters' : 'No holidays yet'}
-                        description={filtered ? 'Try another year, type or status.' : 'Add the company holidays one by one, or import them from a spreadsheet.'}
+                        description={filtered ? 'Try another year or status.' : 'Add the company holidays one by one, or import them from a spreadsheet.'}
                         action={
                             filtered ? undefined : (
                                 <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', justifyContent: 'center' }}>
@@ -401,7 +377,7 @@ export function HolidaysView() {
                 ) : (
                     <>
                         <TableContainer sx={{ overflowX: 'auto', opacity: list.isFetching && list.isPlaceholderData ? 0.6 : 1, transition: 'opacity 0.15s ease' }}>
-                            <Table size="small" sx={{ minWidth: 640 }}>
+                            <Table size="small" sx={{ minWidth: 540 }}>
                                 <TableHead>
                                     <TableRow>
                                         <TableCell padding="checkbox" sx={headCellSx}>
@@ -421,11 +397,6 @@ export function HolidaysView() {
                                             </TableCell>
                                         ))}
                                         <TableCell sx={headCellSx}>Day</TableCell>
-                                        <TableCell sx={headCellSx} sortDirection={sort.by === 'holidayType' ? sort.order : false}>
-                                            <TableSortLabel active={sort.by === 'holidayType'} direction={sort.by === 'holidayType' ? sort.order : 'asc'} onClick={() => sortBy('holidayType')}>
-                                                Holiday Type
-                                            </TableSortLabel>
-                                        </TableCell>
                                         <TableCell sx={headCellSx} sortDirection={sort.by === 'status' ? sort.order : false}>
                                             <TableSortLabel active={sort.by === 'status'} direction={sort.by === 'status' ? sort.order : 'asc'} onClick={() => sortBy('status')}>
                                                 Status
@@ -461,9 +432,6 @@ export function HolidaysView() {
                                             </TableCell>
                                             <TableCell sx={{ ...cellSx, whiteSpace: 'nowrap' }}>{formatHolidayDate(row.holidayDate)}</TableCell>
                                             <TableCell sx={{ ...cellSx, color: 'var(--mui-palette-text-secondary)', whiteSpace: 'nowrap' }}>{holidayWeekday(row.holidayDate)}</TableCell>
-                                            <TableCell sx={cellSx}>
-                                                <HolidayTypePill type={row.holidayType} />
-                                            </TableCell>
                                             <TableCell sx={cellSx}>
                                                 <HolidayStatusPill status={row.status} />
                                             </TableCell>

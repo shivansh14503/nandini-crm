@@ -196,7 +196,7 @@ const HOLIDAY_COLORS = {
 
 /** A company holiday (Admin › Holidays) on the calendar: an amber all-day chip, or an agenda row. Not clickable. */
 export function HolidayEventContent({ holiday, Icon, list = false }: { holiday: CalendarHoliday; Icon: SvgIconComponent; list?: boolean }) {
-    const label = holiday.holidayType === 'Public' ? 'Holiday' : `${holiday.holidayType} holiday`;
+    const label = 'Holiday';
     if (list) {
         return (
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.25, width: '100%', minWidth: 0, minHeight: 40, py: 0.5 }}>
