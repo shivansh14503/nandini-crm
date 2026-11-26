@@ -4,6 +4,7 @@ import React from 'react';
 import { Box, Tooltip, Typography } from '@mui/material';
 import SettingsSuggestOutlinedIcon from '@mui/icons-material/SettingsSuggestOutlined';
 import { ROUTES } from '@/config/constants';
+import { UserAvatar as SharedUserAvatar } from '@/components/common/UserAvatar';
 import { getModuleColor, moduleKeyFrom } from '@/theme/moduleColors';
 import type { AuditListItem, AuditUserActivity } from '@/services/auditAdmin.service';
 
@@ -213,43 +214,52 @@ export function relativeTime(iso: string, now = Date.now()): string {
     return then.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', ...(sameYear ? {} : { year: 'numeric' }) });
 }
 
-/** `Asha Kulkarni` → `AK`; one word → its first two letters. */
-export function initials(name: string): string {
-    const words = name.trim().split(/[\s._-]+/).filter(Boolean);
-    if (words.length === 0) return '?';
-    if (words.length === 1) return words[0].slice(0, 2).toUpperCase();
-    return (words[0][0] + words[words.length - 1][0]).toUpperCase();
-}
-
-/** Initials on the brand fill (active users), muted for everyone else; a cog for the background jobs. */
-export function UserAvatar({ user, size = 34 }: { user: Pick<AuditUserActivity, 'name' | 'status'>; size?: number }) {
+/**
+ * A user's profile photo (shared `UserAvatar`, which falls back to initials on the brand fill), muted for everyone
+ * but active users; a cog for the background jobs.
+ */
+export function UserAvatar({ user, size = 34 }: { user: Pick<AuditUserActivity, 'name' | 'status'> & { photoUrl?: string | null }; size?: number }) {
     const active = user.status === 'active';
+    const fontSize = size >= 40 ? '0.95rem' : '0.75rem';
+    if (user.status === 'system') {
+        return (
+            <Box
+                aria-hidden
+                sx={{
+                    width: size,
+                    height: size,
+                    borderRadius: '50%',
+                    flexShrink: 0,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    '& svg': { fontSize: size * 0.55 },
+                    backgroundColor: 'var(--mui-palette-background-hover)',
+                    color: 'var(--mui-palette-text-secondary)',
+                    border: '1px solid var(--mui-palette-border-main)',
+                }}
+            >
+                <SettingsSuggestOutlinedIcon />
+            </Box>
+        );
+    }
     return (
-        <Box
-            aria-hidden
+        <SharedUserAvatar
+            name={user.name}
+            photoUrl={user.photoUrl}
+            size={size}
             sx={{
-                width: size,
-                height: size,
-                borderRadius: '50%',
-                flexShrink: 0,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                fontSize: size >= 40 ? '0.95rem' : '0.75rem',
-                fontWeight: 700,
+                fontSize,
                 letterSpacing: '0.02em',
-                '& svg': { fontSize: size * 0.55 },
                 ...(active
-                    ? { background: 'linear-gradient(135deg, var(--crm-fill-blue-700) 0%, var(--crm-fill-blue-600) 100%)', color: '#ffffff' }
+                    ? {}
                     : {
-                          backgroundColor: 'var(--mui-palette-background-hover)',
+                          background: 'var(--mui-palette-background-hover)',
                           color: 'var(--mui-palette-text-secondary)',
                           border: '1px solid var(--mui-palette-border-main)',
                       }),
             }}
-        >
-            {user.status === 'system' ? <SettingsSuggestOutlinedIcon /> : initials(user.name)}
-        </Box>
+        />
     );
 }
 

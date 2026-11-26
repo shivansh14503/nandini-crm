@@ -92,6 +92,19 @@ describe('buildUserActivity', () => {
         assert.equal(buildUserActivity([user('asha')], [], [last('system', null)], format).length, 1);
     });
 
+    it('gives users their profile photo URL, and none to the background jobs or former users', () => {
+        const rows = buildUserActivity([user('asha', { photo: { id: 'p1' } }), user('ravi', { photo: null })], [range('system', 'DATA', 9), range('gone', 'DATA', 2)], [], format);
+        assert.deepEqual(
+            rows.map((r) => [r.username, r.photoUrl]),
+            [
+                ['system', null],
+                ['gone', null],
+                ['asha', '/api/user-photos/p1'],
+                ['ravi', null],
+            ],
+        );
+    });
+
     it('leaves out group accounts that never did anything', () => {
         const rows = buildUserActivity([user('asha'), user('sales-team', { isGroupUser: true }), user('support-team', { isGroupUser: true })], [range('support-team', 'DATA', 1)], [], format);
         assert.deepEqual(

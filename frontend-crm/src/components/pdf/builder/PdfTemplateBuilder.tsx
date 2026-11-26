@@ -501,7 +501,16 @@ function BuilderLayout({ module, template, initialMeta, contextLoading, record, 
                     <Button variant="outlined" onClick={() => void reloadFromServer()} sx={secondaryButtonSx}>
                         Reload theirs
                     </Button>
-                    <Button variant="contained" color="error" onClick={() => void overwrite()} sx={{ ...primaryButtonSx, background: 'linear-gradient(135deg, #b91c1c 0%, #dc2626 100%)' }}>
+                    <Button variant="contained" color="error" onClick={() => void overwrite()} sx={{
+                            ...primaryButtonSx,
+                            color: '#ffffff',
+                            // Deep red in both schemes (white text stays readable); the hover gradient replaces the brand one.
+                            background: 'linear-gradient(135deg, var(--crm-fill-red-800) 0%, var(--crm-fill-red-700) 100%)',
+                            '&:hover': {
+                                background: 'linear-gradient(135deg, color-mix(in srgb, var(--crm-fill-red-800) 85%, black) 0%, var(--crm-fill-red-800) 100%)',
+                                boxShadow: 'none',
+                            },
+                        }}>
                         Overwrite with mine
                     </Button>
                 </DialogActions>

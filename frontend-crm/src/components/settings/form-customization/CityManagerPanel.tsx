@@ -655,8 +655,11 @@ function DeleteCityDialog({
                     variant="contained"
                     sx={{
                         ...primaryButtonSx,
-                        background: 'var(--mui-palette-error-main)',
-                        '&:hover': { background: 'var(--mui-palette-error-dark)', boxShadow: 'none' },
+                        color: '#ffffff',
+                        // --crm-fill-red-* stays a deep red in both schemes, so white text stays readable (error-dark turns pale in dark mode).
+                        background: 'var(--crm-fill-red-700)',
+                        '&:hover': { background: 'var(--crm-fill-red-800)', boxShadow: 'none' },
+                        '&.Mui-disabled': { background: 'var(--mui-palette-background-hover)', color: 'var(--mui-palette-text-muted)' },
                     }}
                 >
                     {deleting ? 'Deleting…' : inUse ? (action === 'move' ? 'Move Records & Delete' : 'Clear City & Delete') : 'Delete City'}

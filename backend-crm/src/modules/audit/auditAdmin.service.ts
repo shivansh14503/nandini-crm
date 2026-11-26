@@ -470,7 +470,7 @@ export const auditAdminService = {
         const range = resolveAggregateRange(from, to, TZ());
         const [directory, bounds] = await Promise.all([
             prisma.user.findMany({
-                select: { username: true, fullName: true, role: true, department: true, email: true, isActive: true, isGroupUser: true, onLeave: true, lastLoginAt: true },
+                select: { username: true, fullName: true, role: true, department: true, email: true, isActive: true, isGroupUser: true, onLeave: true, lastLoginAt: true, photo: { select: { id: true } } },
             }),
             idBounds(range),
         ]);

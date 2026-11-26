@@ -124,7 +124,7 @@ export function AuditUserHeader({
         }}
       >
         <UserAvatar
-          user={{ name, status: user?.status ?? "unknown" }}
+          user={{ name, status: user?.status ?? "unknown", photoUrl: user?.photoUrl }}
           size={44}
         />
         <Box sx={{ minWidth: 0, flex: 1 }}>
