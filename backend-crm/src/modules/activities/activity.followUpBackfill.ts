@@ -30,7 +30,7 @@ import { loadFollowUpContext, type FollowUpContext } from './activity.system.js'
 
 /**
  * Follow-up activity backfill and re-alignment (Calendar Phase 2 P2-4, spec §11.6): `npm run followups:backfill
- * [-- --dry-run]` (scripts/backfillFollowUpActivities.ts) and a nightly step (reminders worker, 00:20).
+ * [-- --dry-run]` (scripts/backfillFollowUpActivities.ts) and a nightly step (calendar sync worker, `calendar-nightly` 00:25).
  *
  *  1. Every open lead / opportunity with a next follow-up whose follow-up activity is missing or out of line (slot,
  *     type, owner, creator, organization / contact) is reconciled: created after P2-4's deploy, or put back in line
@@ -267,7 +267,7 @@ export async function backfillFollowUpActivities(options: FollowUpBackfillOption
     });
 }
 
-/** The nightly step (reminders worker): never throws, logs what it did. */
+/** The nightly step (calendar sync worker, `calendar-nightly`; the reminders worker until P2-3b): never throws, logs what it did. */
 export async function runFollowUpBackfillNightly(): Promise<FollowUpBackfillReport | null> {
     try {
         const report = await backfillFollowUpActivities();

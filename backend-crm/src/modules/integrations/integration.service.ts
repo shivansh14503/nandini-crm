@@ -34,6 +34,7 @@ import { parseServiceAccountKey, ServiceAccountKeyError, type ServiceAccountKey 
 import type { FetchImpl } from '../calendar-sync/providers/types.js';
 import { ADMIN_ERROR_MESSAGES, type TokenErrorCode } from '../calendar-sync/syncErrors.js';
 import { tokenSource } from '../calendar-sync/tokenSource.js';
+import { readWorkerHeartbeat } from '../calendar-sync/workerHeartbeat.js';
 import { FOLLOWUP_TYPE_CATEGORY_KEY } from '../form-configs/formConfig.defaults.js';
 import { formConfigService, invalidateFormConfigCaches, type FormConfigsPayload } from '../form-configs/formConfig.service.js';
 import { isActivityOnlyFollowupType } from '../shared/followupTypes.js';
@@ -214,7 +215,7 @@ export interface IntegrationsAdminDto {
     webhooksActive: boolean;
     /** The dev-only test calendar provider is on (CALENDAR_FAKE_PROVIDER): People may pick "Test (dev)". */
     fakeProvider: boolean;
-    /** The calendar sync worker's last heartbeat (P2-3); null until then. */
+    /** The calendar sync worker's last heartbeat (Redis key, P2-3b); null when no worker wrote it in the last 2 minutes or Redis is down. */
     worker: { lastSeenAt: string } | null;
     providers: ProviderAdminDto[];
     settings: CalendarSyncSettings;
@@ -567,7 +568,7 @@ async function afterProviderChange(provider: IntegrationProviderKey, user: AuthU
 
 export const integrationService = {
     async getAdmin(now: Date = new Date()): Promise<IntegrationsAdminDto> {
-        const [rows, configs, counts] = await Promise.all([prisma.integrationProvider.findMany(), formConfigService.getAllConfigs(), providerCounts()]);
+        const [rows, configs, counts, worker] = await Promise.all([prisma.integrationProvider.findMany(), formConfigService.getAllConfigs(), providerCounts(), readWorkerHeartbeat()]);
         const byProvider = new Map(rows.map((row) => [row.provider, row]));
         const providers = INTEGRATION_PROVIDERS.map((p) => toProviderDto(p, byProvider.get(p) ?? null, now, counts.get(p)));
         const anyUnreadable = providers.some((p) => !p.secret.readable || (p.serviceAccount && !p.serviceAccount.readable));
@@ -580,7 +581,7 @@ export const integrationService = {
             publicApiUrlConfigured: PUBLIC_API_URL_CONFIGURED,
             webhooksActive: false,
             fakeProvider: isFakeProviderEnabled(),
-            worker: null,
+            worker,
             providers,
             settings: calendarSettingsFrom(configs),
             syncTypes: syncTypesFrom(configs),

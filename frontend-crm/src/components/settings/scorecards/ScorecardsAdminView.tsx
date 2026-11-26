@@ -124,6 +124,14 @@ export function ScorecardsAdminView({ module }: { module: CrmModuleKey }) {
 
     const loading = scorecardsQuery.isPending || formConfigsQuery.isPending;
     const loadError = scorecardsQuery.error ?? formConfigsQuery.error;
+    // Nothing to edit until both have loaded once; after that a failed background refetch keeps the editor (and the
+    // unsaved draft) and only shows a warning. Editing over a failed first load would save on top of unknown settings.
+    const loadFailed = !loading && (!scorecardsQuery.data || !formConfigsQuery.data);
+    const refetching = scorecardsQuery.isFetching || formConfigsQuery.isFetching;
+    const retryLoad = () => {
+        if (scorecardsQuery.isError) void scorecardsQuery.refetch();
+        if (formConfigsQuery.isError) void formConfigsQuery.refetch();
+    };
     const busy = saveMutation.isPending || resetMutation.isPending;
     const mode = draftMode(draft);
     const info = SCORECARD_MODULES[module];
@@ -211,186 +219,198 @@ export function ScorecardsAdminView({ module }: { module: CrmModuleKey }) {
             </Box>
 
             {loadError && (
-                <Alert severity="error" sx={{ borderRadius: '10px', fontSize: '0.8rem' }}>
-                    {errorMessage(loadError, 'Could not load the scorecard settings.')}
+                <Alert
+                    severity={loadFailed ? 'error' : 'warning'}
+                    sx={{ borderRadius: '10px', fontSize: '0.8rem', alignItems: 'center' }}
+                    action={
+                        <Button size="small" variant="outlined" sx={secondaryButtonSx} onClick={retryLoad} disabled={refetching}>
+                            Try again
+                        </Button>
+                    }
+                >
+                    {loadFailed
+                        ? errorMessage(loadError, 'Could not load the scorecard settings.')
+                        : 'Could not refresh the scorecard settings. Showing the last loaded ones.'}
                 </Alert>
             )}
 
-            <Box sx={{ display: 'grid', gap: 2, gridTemplateColumns: { xs: 'minmax(0, 1fr)', lg: '248px minmax(0, 1fr)' }, alignItems: 'start' }}>
-                <ModulePicker module={module} statusOf={statusOf} unsaved={dirty} onSelect={requestModule} />
+            {!loadFailed && (
+                <Box sx={{ display: 'grid', gap: 2, gridTemplateColumns: { xs: 'minmax(0, 1fr)', lg: '248px minmax(0, 1fr)' }, alignItems: 'start' }}>
+                    <ModulePicker module={module} statusOf={statusOf} unsaved={dirty} onSelect={requestModule} />
 
-                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0 }}>
-                    {/* Module bar: on / off, status, reset */}
-                    <Box sx={{ ...surfaceSx, p: { xs: 1.5, md: 2 }, display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: { xs: 1.25, md: 2 } }}>
-                        <ModuleIconTile module={module} size={36} />
-                        <Box sx={{ flex: 1, minWidth: { xs: 'calc(100% - 52px)', sm: 200 } }}>
-                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
-                                <Typography component="h2" sx={{ fontWeight: 700, fontSize: '0.98rem', color: 'var(--crm-slate-900)' }}>
-                                    {label} cards
+                    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0 }}>
+                        {/* Module bar: on / off, status, reset */}
+                        <Box sx={{ ...surfaceSx, p: { xs: 1.5, md: 2 }, display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: { xs: 1.25, md: 2 } }}>
+                            <ModuleIconTile module={module} size={36} />
+                            <Box sx={{ flex: 1, minWidth: { xs: 'calc(100% - 52px)', sm: 200 } }}>
+                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
+                                    <Typography component="h2" sx={{ fontWeight: 700, fontSize: '0.98rem', color: 'var(--crm-slate-900)' }}>
+                                        {label} cards
+                                    </Typography>
+                                    <Badge tone={STATUS[mode].tone}>{STATUS[mode].label}</Badge>
+                                    {dirty && <Badge tone="unsaved">Unsaved</Badge>}
+                                </Box>
+                                <Typography sx={{ fontSize: '0.75rem', color: 'var(--mui-palette-text-secondary)', mt: 0.25 }}>
+                                    {saved?.updatedAt
+                                        ? `Last saved${saved.updatedBy ? ` by ${saved.updatedBy}` : ''}, ${formatSavedAt(saved.updatedAt)}`
+                                        : info.builtInCards
+                                          ? 'Not set up yet: the list shows its built-in cards.'
+                                          : 'Not set up yet: the list shows no cards.'}
                                 </Typography>
-                                <Badge tone={STATUS[mode].tone}>{STATUS[mode].label}</Badge>
-                                {dirty && <Badge tone="unsaved">Unsaved</Badge>}
                             </Box>
-                            <Typography sx={{ fontSize: '0.75rem', color: 'var(--mui-palette-text-secondary)', mt: 0.25 }}>
-                                {saved?.updatedAt
-                                    ? `Last saved${saved.updatedBy ? ` by ${saved.updatedBy}` : ''}, ${formatSavedAt(saved.updatedAt)}`
-                                    : info.builtInCards
-                                      ? 'Not set up yet: the list shows its built-in cards.'
-                                      : 'Not set up yet: the list shows no cards.'}
-                            </Typography>
-                        </Box>
-                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap', ml: { xs: 0, sm: 'auto' } }}>
-                            <Box
-                                component="label"
-                                sx={{
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    gap: 0.5,
-                                    pl: 1.25,
-                                    pr: 0.25,
-                                    minHeight: 36,
-                                    borderRadius: '8px',
-                                    border: '1px solid var(--mui-palette-border-main)',
-                                    backgroundColor: draft.enabled ? 'var(--mui-palette-primary-soft)' : 'var(--mui-palette-background-paper)',
-                                    borderColor: draft.enabled ? 'var(--mui-palette-primary-softBorder)' : 'var(--mui-palette-border-main)',
-                                    cursor: loading || busy ? 'default' : 'pointer',
-                                }}
-                            >
-                                <Typography component="span" sx={{ fontSize: '0.8rem', fontWeight: 600, color: draft.enabled ? 'var(--crm-text-blue-900)' : 'var(--crm-slate-700)' }}>
-                                    Show cards on the list
-                                </Typography>
-                                {/* On / off only: switching keeps the built-in cards built-in (see useScorecardDraft's `custom`). */}
-                                <Switch
-                                    checked={draft.enabled}
-                                    disabled={loading || busy}
-                                    onChange={(e) => update((d) => ({ ...d, enabled: e.target.checked }))}
-                                    slotProps={{ input: { 'aria-label': `Show cards on the ${label} list` } }}
-                                />
-                            </Box>
-                            {saved && (
-                                <Button
-                                    size="small"
-                                    startIcon={<RestartAltIcon sx={{ fontSize: 17 }} />}
-                                    onClick={() => setConfirmReset(true)}
-                                    disabled={busy}
+                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap', ml: { xs: 0, sm: 'auto' } }}>
+                                <Box
+                                    component="label"
                                     sx={{
-                                        textTransform: 'none',
-                                        fontWeight: 600,
-                                        fontSize: '0.8rem',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: 0.5,
+                                        pl: 1.25,
+                                        pr: 0.25,
                                         minHeight: 36,
                                         borderRadius: '8px',
-                                        color: 'var(--mui-palette-text-secondary)',
-                                        '&:hover': { color: 'var(--mui-palette-error-main)', backgroundColor: 'var(--mui-palette-error-soft)' },
+                                        border: '1px solid var(--mui-palette-border-main)',
+                                        backgroundColor: draft.enabled ? 'var(--mui-palette-primary-soft)' : 'var(--mui-palette-background-paper)',
+                                        borderColor: draft.enabled ? 'var(--mui-palette-primary-softBorder)' : 'var(--mui-palette-border-main)',
+                                        cursor: loading || busy ? 'default' : 'pointer',
                                     }}
                                 >
-                                    Reset to default
-                                </Button>
-                            )}
-                        </Box>
-                    </Box>
-
-                    {outdated && (
-                        <Alert
-                            severity="warning"
-                            sx={{ borderRadius: '10px', fontSize: '0.8rem', alignItems: 'center' }}
-                            action={
-                                <Button size="small" onClick={discard} sx={{ textTransform: 'none', fontWeight: 700, color: 'inherit', whiteSpace: 'nowrap' }}>
-                                    Load latest
-                                </Button>
-                            }
-                        >
-                            {saved
-                                ? `${saved.updatedBy ?? 'Another admin'} saved the ${label} scorecard while you were editing. Load their version, then make your changes again.`
-                                : `Someone reset the ${label} scorecard while you were editing. Load the latest settings, then make your changes again.`}
-                        </Alert>
-                    )}
-
-                    {mode === 'builtin' && !loading && (
-                        <Alert severity="info" sx={{ borderRadius: '10px', fontSize: '0.8rem' }}>
-                            {module === 'leads'
-                                ? 'The Leads list shows its built-in cards (New, In Process, Converted and Lost). '
-                                : `The ${label} list shows its built-in cards, one per ${module === 'contracts' ? 'status' : 'stage'}. `}
-                            Change any setting below to use your own cards instead.
-                        </Alert>
-                    )}
-                    {mode === 'off' && saved && !saved.enabled && info.builtInCards && !loading && (
-                        <Alert severity="info" sx={{ borderRadius: '10px', fontSize: '0.8rem' }}>
-                            Switching the cards back on shows the cards set up below. Use Reset to default for the list&apos;s built-in cards.
-                        </Alert>
-                    )}
-
-                    {loading ? (
-                        <>
-                            <Skeleton variant="rounded" height={150} sx={{ borderRadius: '12px' }} />
-                            <Skeleton variant="rounded" height={360} sx={{ borderRadius: '12px' }} />
-                        </>
-                    ) : (
-                        <>
-                            <ScorecardPreview module={module} configs={configs} draft={draft} mode={mode} defaults={defaults} />
-                            <ScorecardEditor module={module} configs={configs} draft={draft} base={base} edit={edit} disabled={busy} saved={Boolean(saved)} />
-                        </>
-                    )}
-
-                    {/* Save bar: stays in view at the bottom of the screen while the page scrolls. */}
-                    <Box
-                        sx={{
-                            ...surfaceSx,
-                            position: 'sticky',
-                            bottom: { xs: 8, md: 16 },
-                            zIndex: 5,
-                            px: { xs: 1.5, md: 2 },
-                            py: 1.25,
-                            display: 'flex',
-                            alignItems: 'center',
-                            flexWrap: 'wrap',
-                            gap: 1,
-                            boxShadow: dirty ? '0 8px 24px -8px rgba(15, 23, 42, 0.22)' : surfaceSx.boxShadow,
-                            borderColor: dirty ? 'var(--crm-orange-200)' : 'var(--mui-palette-border-main)',
-                        }}
-                    >
-                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flex: 1, minWidth: 160 }}>
-                            {dirty && <UnsavedDot />}
-                            <Typography sx={{ fontSize: '0.8rem', fontWeight: 600, color: dirty ? 'var(--crm-orange-700)' : 'var(--mui-palette-text-secondary)' }}>
-                                {dirty ? `Unsaved changes to the ${label} cards` : 'No unsaved changes'}
-                            </Typography>
-                        </Box>
-                        <Box sx={{ display: 'flex', gap: 1, ml: 'auto' }}>
-                            <Button variant="outlined" size="small" onClick={discard} disabled={!dirty || busy} sx={{ ...secondaryButtonSx, minHeight: 36 }}>
-                                Discard
-                            </Button>
-                            <Tooltip
-                                title={
-                                    outdated
-                                        ? 'Load the latest version first'
-                                        : dirty && !draft.fieldKey
-                                          ? 'Pick a dropdown field first'
-                                          : ''
-                                }
-                                arrow
-                            >
-                                <span>
+                                    <Typography component="span" sx={{ fontSize: '0.8rem', fontWeight: 600, color: draft.enabled ? 'var(--crm-text-blue-900)' : 'var(--crm-slate-700)' }}>
+                                        Show cards on the list
+                                    </Typography>
+                                    {/* On / off only: switching keeps the built-in cards built-in (see useScorecardDraft's `custom`). */}
+                                    <Switch
+                                        checked={draft.enabled}
+                                        disabled={loading || busy}
+                                        onChange={(e) => update((d) => ({ ...d, enabled: e.target.checked }))}
+                                        slotProps={{ input: { 'aria-label': `Show cards on the ${label} list` } }}
+                                    />
+                                </Box>
+                                {saved && (
                                     <Button
-                                        variant="contained"
                                         size="small"
-                                        onClick={() => void handleSave()}
-                                        disabled={!dirty || busy || outdated || !draft.fieldKey}
-                                        startIcon={saveMutation.isPending ? <CircularProgress size={14} color="inherit" /> : <SaveOutlinedIcon sx={{ fontSize: 17 }} />}
+                                        startIcon={<RestartAltIcon sx={{ fontSize: 17 }} />}
+                                        onClick={() => setConfirmReset(true)}
+                                        disabled={busy}
                                         sx={{
-                                            ...primaryButtonSx,
-                                            color: '#ffffff',
+                                            textTransform: 'none',
+                                            fontWeight: 600,
+                                            fontSize: '0.8rem',
                                             minHeight: 36,
-                                            px: 2.25,
-                                            '&.Mui-disabled': { background: 'var(--mui-palette-background-hover)', color: 'var(--mui-palette-text-muted)' },
+                                            borderRadius: '8px',
+                                            color: 'var(--mui-palette-text-secondary)',
+                                            '&:hover': { color: 'var(--mui-palette-error-main)', backgroundColor: 'var(--mui-palette-error-soft)' },
                                         }}
                                     >
-                                        {saveMutation.isPending ? 'Saving…' : 'Save'}
+                                        Reset to default
                                     </Button>
-                                </span>
-                            </Tooltip>
+                                )}
+                            </Box>
+                        </Box>
+
+                        {outdated && (
+                            <Alert
+                                severity="warning"
+                                sx={{ borderRadius: '10px', fontSize: '0.8rem', alignItems: 'center' }}
+                                action={
+                                    <Button size="small" onClick={discard} sx={{ textTransform: 'none', fontWeight: 700, color: 'inherit', whiteSpace: 'nowrap' }}>
+                                        Load latest
+                                    </Button>
+                                }
+                            >
+                                {saved
+                                    ? `${saved.updatedBy ?? 'Another admin'} saved the ${label} scorecard while you were editing. Load their version, then make your changes again.`
+                                    : `Someone reset the ${label} scorecard while you were editing. Load the latest settings, then make your changes again.`}
+                            </Alert>
+                        )}
+
+                        {mode === 'builtin' && !loading && (
+                            <Alert severity="info" sx={{ borderRadius: '10px', fontSize: '0.8rem' }}>
+                                {module === 'leads'
+                                    ? 'The Leads list shows its built-in cards (New, In Process, Converted and Lost). '
+                                    : `The ${label} list shows its built-in cards, one per ${module === 'contracts' ? 'status' : 'stage'}. `}
+                                Change any setting below to use your own cards instead.
+                            </Alert>
+                        )}
+                        {mode === 'off' && saved && !saved.enabled && info.builtInCards && !loading && (
+                            <Alert severity="info" sx={{ borderRadius: '10px', fontSize: '0.8rem' }}>
+                                Switching the cards back on shows the cards set up below. Use Reset to default for the list&apos;s built-in cards.
+                            </Alert>
+                        )}
+
+                        {loading ? (
+                            <>
+                                <Skeleton variant="rounded" height={150} sx={{ borderRadius: '12px' }} />
+                                <Skeleton variant="rounded" height={360} sx={{ borderRadius: '12px' }} />
+                            </>
+                        ) : (
+                            <>
+                                <ScorecardPreview module={module} configs={configs} draft={draft} mode={mode} defaults={defaults} />
+                                <ScorecardEditor module={module} configs={configs} draft={draft} base={base} edit={edit} disabled={busy} saved={Boolean(saved)} />
+                            </>
+                        )}
+
+                        {/* Save bar: stays in view at the bottom of the screen while the page scrolls. */}
+                        <Box
+                            sx={{
+                                ...surfaceSx,
+                                position: 'sticky',
+                                bottom: { xs: 8, md: 16 },
+                                zIndex: 5,
+                                px: { xs: 1.5, md: 2 },
+                                py: 1.25,
+                                display: 'flex',
+                                alignItems: 'center',
+                                flexWrap: 'wrap',
+                                gap: 1,
+                                boxShadow: dirty ? '0 8px 24px -8px rgba(15, 23, 42, 0.22)' : surfaceSx.boxShadow,
+                                borderColor: dirty ? 'var(--crm-orange-200)' : 'var(--mui-palette-border-main)',
+                            }}
+                        >
+                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flex: 1, minWidth: 160 }}>
+                                {dirty && <UnsavedDot />}
+                                <Typography sx={{ fontSize: '0.8rem', fontWeight: 600, color: dirty ? 'var(--crm-orange-700)' : 'var(--mui-palette-text-secondary)' }}>
+                                    {dirty ? `Unsaved changes to the ${label} cards` : 'No unsaved changes'}
+                                </Typography>
+                            </Box>
+                            <Box sx={{ display: 'flex', gap: 1, ml: 'auto' }}>
+                                <Button variant="outlined" size="small" onClick={discard} disabled={!dirty || busy} sx={{ ...secondaryButtonSx, minHeight: 36 }}>
+                                    Discard
+                                </Button>
+                                <Tooltip
+                                    title={
+                                        outdated
+                                            ? 'Load the latest version first'
+                                            : dirty && !draft.fieldKey
+                                              ? 'Pick a dropdown field first'
+                                              : ''
+                                    }
+                                    arrow
+                                >
+                                    <span>
+                                        <Button
+                                            variant="contained"
+                                            size="small"
+                                            onClick={() => void handleSave()}
+                                            disabled={!dirty || busy || outdated || !draft.fieldKey}
+                                            startIcon={saveMutation.isPending ? <CircularProgress size={14} color="inherit" /> : <SaveOutlinedIcon sx={{ fontSize: 17 }} />}
+                                            sx={{
+                                                ...primaryButtonSx,
+                                                color: '#ffffff',
+                                                minHeight: 36,
+                                                px: 2.25,
+                                                '&.Mui-disabled': { background: 'var(--mui-palette-background-hover)', color: 'var(--mui-palette-text-muted)' },
+                                            }}
+                                        >
+                                            {saveMutation.isPending ? 'Saving…' : 'Save'}
+                                        </Button>
+                                    </span>
+                                </Tooltip>
+                            </Box>
                         </Box>
                     </Box>
                 </Box>
-            </Box>
+            )}
 
             {/* Unsaved edits when picking another module */}
             <Dialog open={Boolean(pendingModule)} onClose={() => setPendingModule(null)} maxWidth="xs" fullWidth slotProps={{ paper: { sx: { borderRadius: '12px', m: 2, width: 'calc(100% - 32px)' } } }}>

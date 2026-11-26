@@ -938,6 +938,10 @@ model Contract {
 /// A call, meeting, task, note (or any Followup Type) linked to at most one CRM record.
 /// startAt / endAt are TRUE UTC instants (unlike Ticket.dueDate / Contract.renewalReminderDate, which are
 /// BUSINESS_TIMEZONE wall clocks stored as fake UTC). Notes have no times.
+///
+/// Hand-written filtered unique index in migration 20261128100000_activity_calendar_sync (Prisma can't model
+/// filtered indexes; keep it out of this file and re-check `prisma migrate diff` output after future migrations):
+///   UX_Activity_syncKey (syncKey) WHERE syncKey IS NOT NULL   (soft-deleted rows included)
 model Activity {
   id String @id @default(uuid()) @db.NVarChar(50)
 
@@ -1007,6 +1011,21 @@ model Activity {
   /// = at most one open follow-up activity per lead / opportunity.
   origin String @default("crm") @db.NVarChar(20)
 
+  // Calendar sync (Calendar Phase 2, P2-3b). Sync jobs write these with `updatedAt` kept unchanged (never a user edit).
+  /// RFC 5545 UID of the calendar event (organizer link create response, or a P2-8 import). Replaced when the
+  /// organizer link is re-created (owner change, new generation). Not indexed (syncKey is).
+  iCalUid           String?   @db.NVarChar(1024)
+  /// sha256 hex of `iCalUid + '|' + recurrenceId` (recurrenceId '' in Phase 2); UX_Activity_syncKey. Hashed because
+  /// an index on NVarChar(1024) would exceed SQL Server's 1,700-byte key limit.
+  syncKey           String?   @db.NVarChar(64)
+  /// Organizer of a meeting imported from a calendar (P2-8); null = the owner.
+  organizerEmail    String?   @db.NVarChar(254)
+  organizerName     String?   @db.NVarChar(200)
+  /// Organized outside the CRM's connected users (P2-8): event fields read-only, never pushed.
+  externalOrganizer Boolean   @default(false)
+  /// When a calendar change was last applied ("Updated from Google Calendar 10:42").
+  externalUpdatedAt DateTime?
+
   createdBy String    @db.NVarChar(50)
   updatedBy String?   @db.NVarChar(50)
   createdAt DateTime  @default(now())
@@ -1014,9 +1033,10 @@ model Activity {
   isDeleted Boolean   @default(false)
   deletedAt DateTime?
 
-  organization  Organization?      @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  contactRecord Contact?           @relation(fields: [contactId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  organization  Organization?          @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  contactRecord Contact?               @relation(fields: [contactId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   attendees     ActivityAttendee[]
+  externalLinks ActivityExternalLink[]
 
   /// Calendar range (managers / all users). Queries always bound startAt from below (from − 31 days).
   @@index([isDeleted, startAt])
@@ -1857,9 +1877,77 @@ model CalendarConnection {
   createdAt           DateTime  @default(now())
   updatedAt           DateTime  @default(now()) @updatedAt
 
+  links ActivityExternalLink[]
+
   @@index([username, status])
   @@index([provider, status])
   @@index([status, nextCheckAt])
+}
+
+/// One Activity as seen in one connected calendar, and the durable push outbox (`dirtyAt`): Calendar Phase 2 P2-3b.
+/// role 'organizer' = the copy the CRM writes (the owner's calendar); 'attendee' = a connected colleague's invitation
+/// copy (P2-8, replies only). Owned by its activity (cascades); NO ACTION to the connection (rows are kept when
+/// stopped and their links become 'detached'). Not audited (system state, like Notification).
+///
+/// Hand-written filtered unique index in migration 20261128100000_activity_calendar_sync (Prisma can't model
+/// filtered indexes; keep it out of this file and re-check `prisma migrate diff` output after future migrations):
+///   UX_ActivityExternalLink_event (connectionId, externalEventKey) WHERE externalEventKey IS NOT NULL
+model ActivityExternalLink {
+  id                String    @id @default(uuid()) @db.NVarChar(50)
+  activityId        String    @db.NVarChar(50)
+  connectionId      String    @db.NVarChar(50)
+  /// google | microsoft | fake (the connection's provider)
+  provider          String    @db.NVarChar(30)
+  /// organizer | attendee
+  role              String    @default("organizer") @db.NVarChar(10)
+  /// pending | synced | error | cancelled | removed_remote | unsupported | detached
+  state             String    @default("pending") @db.NVarChar(20)
+  /// send | withhold (a private copy without attendees: created by someone other than the owner (D41), or by the
+  /// connect backfill (P2-3c))
+  invites           String    @default("send") @db.NVarChar(10)
+  /// JSON array of lower-cased emails a non-owner added to an already-sent event: not invited until the owner sends
+  /// them (D41).
+  heldAttendeesJson String?   @db.NVarChar(Max)
+  /// Re-create counter (part of the requested id).
+  generation        Int       @default(0)
+  /// Google event id we ask for / Graph transactionId: 'crm' + 40 hex of sha256(activityId:connectionId:generation).
+  requestedId       String    @db.NVarChar(64)
+  externalEventId   String?   @db.NVarChar(1024)
+  /// sha256 hex of externalEventId (the indexed key; NVarChar(1024) would exceed the 1,700-byte key limit).
+  externalEventKey  String?   @db.NVarChar(64)
+  iCalUid           String?   @db.NVarChar(1024)
+  /// Google etag / Graph @odata.etag of the last version we wrote or read.
+  etag              String?   @db.NVarChar(200)
+  /// Google htmlLink / Graph webLink ("Open in Google Calendar"), shown to the owner / editors only.
+  htmlLink          String?   @db.NVarChar(2000)
+  providerUpdatedAt DateTime?
+  /// { crm: CrmShape, provider: ProviderShape } (calendar-sync/sync.shapes.ts): the last state both sides agreed on.
+  /// Null until the first successful push.
+  baseJson          String?   @db.NVarChar(Max)
+  /// Activity.updatedAt when the base was taken.
+  crmSyncedAt       DateTime?
+  /// Outbox: set inside the activity's own transaction; cleared by the push with compare-and-set.
+  dirtyAt           DateTime?
+  /// Earliest next try after a failure (null = as soon as possible).
+  nextAttemptAt     DateTime?
+  attempts          Int       @default(0)
+  lastErrorCode     String?   @db.NVarChar(100)
+  /// Provider's error text (≤ 300), shown to the owner / editors only.
+  lastErrorMessage  String?   @db.NVarChar(300)
+  /// Non-fatal note ("1 attendee has no email and wasn't invited").
+  lastWarning       String?   @db.NVarChar(500)
+  lastConflictAt    DateTime?
+  lastSyncedAt      DateTime?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @default(now()) @updatedAt
+
+  activity   Activity           @relation(fields: [activityId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  connection CalendarConnection @relation(fields: [connectionId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@unique([activityId, connectionId])
+  @@index([connectionId, state])
+  /// Outbox sweep: dirtyAt IS NOT NULL AND (nextAttemptAt IS NULL OR nextAttemptAt <= now).
+  @@index([dirtyAt, nextAttemptAt])
 }
 
 /// Admin choices for one employee's calendar sync (Admin › API Integrations › People). A row exists only when something

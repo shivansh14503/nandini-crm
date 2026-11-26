@@ -3,13 +3,14 @@ import { GRAPH_API } from '../../integrations/integration.constants.js';
 import { BUSY_PROVIDER_TIMEOUT_MS } from '../busy.constants.js';
 import { graphStatusKind } from '../busy.intervals.js';
 import type { AdapterOptions } from './google.js';
+import { graphEventOps } from './graphEvents.js';
 import { providerFetch } from './http.js';
 import type { CalendarProviderAdapter, CallCtx, FreeBusyRequest, FreeBusyResult, ProviderBusyBlock } from './types.js';
 
 /**
  * Microsoft Graph for one employee's mailbox with the tenant-wide app token (addendum AC2): every call goes to
- * `/users/{mailbox}/…` (`/me` has no meaning app-only). The event operations join this adapter with the push engine
- * (P2-3b), which builds its URLs with `graphUserUrl(ctx.mailbox)`.
+ * `/users/{mailbox}/…` (`/me` has no meaning app-only). The event operations of the push engine (P2-3b) live in
+ * graphEvents.ts and build their URLs with `graphUserUrl(ctx.mailbox)`.
  */
 
 export const graphUserUrl = (mailbox: string) => `${GRAPH_API}/users/${encodeURIComponent(mailbox)}`;
@@ -94,5 +95,7 @@ export function createMicrosoftAdapter(options: AdapterOptions = {}): CalendarPr
             const schedules = new Map(json.value.map((schedule) => [schedule.scheduleId.toLowerCase(), schedule]));
             return new Map(emails.map((email) => [email, graphScheduleResult(schedules.get(email))]));
         },
+
+        ...graphEventOps(fetchImpl),
     };
 }

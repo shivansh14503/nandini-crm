@@ -6,6 +6,7 @@ import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import { getActiveUsers, findCrmUser } from '@/services/masterData.store';
 import { useMasterData } from '@/hooks/queries/useMasterData';
+import { UserAwayChip } from '@/components/common/UserAwayChip';
 import { getModuleColor, type ModuleKey } from '@/theme/moduleColors';
 import { ACTIVITY_STATUSES, type ActivityStatus, type CalendarSource } from '@/types/activity.types';
 import { addDays } from '@/utils/zonedTime';
@@ -237,6 +238,20 @@ export function CalendarFilters({ values, onChange, me, typeOptions, typeLabel, 
                     filterSelectedOptions
                     disableClearable
                     isOptionEqualToValue={(a, b) => a.toLowerCase() === b.toLowerCase()}
+                    // Away colleagues stay listed; the chip explains an empty calendar (out of office until …, on leave).
+                    renderOption={(props, username) => {
+                        const { key, ...optionProps } = props;
+                        return (
+                            <li key={key} {...optionProps}>
+                                <Box component="span" sx={{ display: 'flex', alignItems: 'center', gap: 0.75, flexWrap: 'wrap', minWidth: 0 }}>
+                                    <Box component="span" sx={{ minWidth: 0, overflowWrap: 'anywhere' }}>
+                                        {userLabel(username)}
+                                    </Box>
+                                    <UserAwayChip user={findCrmUser(username)} />
+                                </Box>
+                            </li>
+                        );
+                    }}
                     renderValue={(selected, getItemProps) =>
                         selected.map((username, index) => {
                             const { key, ...itemProps } = getItemProps({ index });

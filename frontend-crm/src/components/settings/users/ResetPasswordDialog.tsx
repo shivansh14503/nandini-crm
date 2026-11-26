@@ -2,13 +2,15 @@
 
 import React, { useId, useState } from 'react';
 import { Alert, Box, Button, CircularProgress, Dialog, DialogActions, DialogContent, DialogTitle, FormControlLabel, Radio, RadioGroup, Typography } from '@mui/material';
+import { PasswordRulesChecklist } from '@/components/common/PasswordRulesChecklist';
 import { PasswordInput } from '@/components/profile/ChangePasswordCard';
 import { solidButtonSx } from '@/components/profile/profileUi';
 import { errorMessage, secondaryButtonSx } from '@/components/settings/form-customization/builderUi';
 import { useResetAdminUserPassword } from '@/hooks/queries/useUserAdmin';
 import type { AdminUserDto, ResetPasswordResult } from '@/types/userAdmin.types';
 import type { PasswordMode } from '@/validations/userAdmin.schema';
-import { PasswordRulesChecklist, adminPasswordIssue, apiFieldErrors, phoneDialogPaperSx, userLabel } from './userAdminUi';
+import { adminPasswordIssue } from '@/utils/passwordPolicy';
+import { apiFieldErrors, phoneDialogPaperSx, userLabel } from './userAdminUi';
 
 
 /** "Generate a temporary password" / "Set one" radio pair (Add user and Reset password). */
@@ -110,7 +112,7 @@ export function ResetPasswordDialog({
                                 error={Boolean(fieldError) || (touched && Boolean(issue))}
                                 helperText={fieldError || (touched && issue ? issue : undefined)}
                             />
-                            <PasswordRulesChecklist id={checklistId} password={password} username={username} />
+                            <PasswordRulesChecklist id={checklistId} audience="admin" password={password} context={{ username }} />
                         </>
                     )}
                     {formError && (

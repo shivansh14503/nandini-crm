@@ -130,6 +130,39 @@ export interface ActivityViewer {
     myResponse: AttendeeResponse | null;
 }
 
+/** State of an activity's copy in its owner's calendar (backend calendar-sync/sync.constants.ts LINK_STATES). */
+export const CALENDAR_LINK_STATES = ['pending', 'synced', 'error', 'cancelled', 'removed_remote', 'unsupported', 'detached'] as const;
+export type CalendarLinkState = (typeof CALENDAR_LINK_STATES)[number];
+
+/** `send` = guests are invited; `withhold` = a private copy (someone other than the owner created it, D41). */
+export const CALENDAR_LINK_INVITES = ['send', 'withhold'] as const;
+export type CalendarLinkInvites = (typeof CALENDAR_LINK_INVITES)[number];
+
+/**
+ * The activity in its owner's company calendar (Calendar Phase 2; data only for now, the drawer's status line comes
+ * with P2-3c). Null when the owner isn't synced or the type never goes to calendars.
+ */
+export interface ActivityCalendarState {
+    provider: string;
+    state: CalendarLinkState;
+    /** A CRM change is waiting to be sent to the calendar. */
+    pending: boolean;
+    invites: CalendarLinkInvites;
+    /** Guests someone else added that wait for the owner to send the invitations. */
+    heldCount: number;
+    /** The viewer is the owner and there is someone to invite. */
+    canSendInvites: boolean;
+    lastSyncedAt: string | null;
+    /** "Open in Google Calendar" (owner / editors only). */
+    htmlLink: string | null;
+    errorCode: string | null;
+    /** The calendar's own error text (owner / editors only). */
+    errorMessage: string | null;
+    warning: string | null;
+    conflictAt: string | null;
+    externalUpdatedAt: string | null;
+}
+
 export interface Activity extends ActivityFormData {
     id: string;
     /** Record number of the linked record (LD-0001 …), '' when none. */
@@ -155,6 +188,8 @@ export interface Activity extends ActivityFormData {
      * record: they move with the lead / opportunity). A PUT changing one gets 409 FOLLOW_UP_ACTIVITY_LOCKED.
      */
     lockedFields?: string[];
+    /** Sent with every activity the API returns: its copy in the owner's calendar, or null (not synced). */
+    calendar?: ActivityCalendarState | null;
 }
 
 /** `Activity.origin` values. */

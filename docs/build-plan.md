@@ -1,7 +1,7 @@
 # Nandini CRM — Build Plan
 
 > **Status:** living document. Part 1 records what has been built (reconstructed from git history, 115 commits
-> from 2026-10-15 to 2026-11-18; the snapshot as of 2026-11-26, Calendar Phase 2 P2-1, P2-2, P2-2b (admin-managed calendar connections), P2-3a, P2-4 and P2-6 (busy times), Calendar Phase 4 booking links, Profile Phase 1: My Profile, Profile Phase 2: Admin › Users, Profile Phase 3: notifications & preferences, Profile Phase 4: connected accounts and Profile Phase 5 PR5a + PR5b: company formats, which completes Phase 17). Part 2
+> from 2026-10-15 to 2026-11-18; the snapshot as of 2026-11-26, Calendar Phase 2 P2-1, P2-2, P2-2b (admin-managed calendar connections), P2-3a, P2-3b (calendar push engine), P2-4 and P2-6 (busy times), Calendar Phase 4 booking links, Profile Phase 1: My Profile, Profile Phase 2: Admin › Users, Profile Phase 3: notifications & preferences, Profile Phase 4: connected accounts and Profile Phase 5 PR5a + PR5b: company formats, which completes Phase 17). Part 2
 > is the roadmap. Tick
 > items off and add new ones as work lands.
 > Related: [System design](system-design.md) · [Database design](database-design.md) · [API plan](api-plan.md)
@@ -337,7 +337,7 @@ keeps wall-clock times); all-day activities are entered as business-timezone day
         `/connected-calendars` (user menu and mobile drawer item "Connected calendars"; since moved to My Profile ›
         Connected accounts, Profile Phase 4), a
         reconnect banner on the calendar, the bell icon for `calendar_reconnect`, and login `?next=` (CRM paths only).
-        Nothing syncs yet (P2-3): the card says sync arrives in the next update. Providers stay off until an admin
+        Nothing synced yet at the time (P2-3b added the push): the card said sync arrives in the next update. Providers stay off until an admin
         switches one on. Not run against a real SQL Server, Google or Microsoft (migration checked with
         `prisma migrate diff --from-empty`; the whole connect → callback → refresh → disconnect flow runs against the
         fake provider and replayed Google / Microsoft answers in tests). The morning email only has a parked hook
@@ -384,7 +384,29 @@ keeps wall-clock times); all-day activities are entered as business-timezone day
         none; enforced in update (only for fields the request asks to change), delete and bulk delete,
         `BulkDeleteResult.skipped` optional); system writes may also set `rowData` (columns the API can't) and
         re-align `createdBy`. No migration, no API change.
-  - [ ] **P2-3b: CRM → calendar push engine**
+  - [x] **P2-3b: CRM → calendar push engine** (2026-11-26, adapted to the admin-managed model) — migration
+        `20261128100000_activity_calendar_sync` (`ActivityExternalLink` with `heldAttendeesJson`, the Activity
+        calendar columns, hand-written `UX_ActivityExternalLink_event` / `UX_Activity_syncKey`). Outbox
+        (`sync.outbox.ts`) in `activityWriteHook.onWrite`; after-commit wake-up (`sync.wake.ts`) in
+        `runActivityPostCommit`; `pushLink` (`sync.push.ts`): gates, per-connection lease, `planPush`, create / patch /
+        cancel / detach, 412 three-way merge, remote deletion, error handling; Google and Graph event adapters
+        (`/users/{mailbox}/events`, through `withCalendarAccess`; no SDKs), the fake provider's events; queue
+        `crm-calendar-sync` and `calendarSync.worker.ts` (push, `enrolled`, `check`, `calendar-poll` every 5 min
+        07:00–21:55, `calendar-nightly` 00:25 taking over the reminders nightly's calendar steps and the follow-up
+        backfill, Redis-down fallback tick, heartbeat). Stopping a connection detaches its links; re-activation
+        re-attaches them. D41 (invites only on the owner's save; guests a colleague adds held by address on every
+        link that invites, detached ones and provider-off periods included; an owner change by anyone but the new
+        owner makes the new owner's earlier link a new copy), D42 (private events), D45. Review fixes: an error never
+        overwrites `cancelled` / `removed_remote` (a failed restore is retried as a restore, also by the nightly), the
+        lease is checked before every provider call, a failed push is put back while BullMQ retries it, an `enrolled`
+        job per recovery, a row stopped mid-push leaves the link `detached`. Notification kinds `calendar_sync_error`, `calendar_invites_held`, `integration_secret_expiring` (system,
+        always deliver; bell icons). `ActivityView.calendar` (data only). `CALENDAR_SYNC_ENABLED`. Deviations: the
+        `enrolled` job (replaces the per-user connect job) pushes dirty links only; the backfill of existing
+        activities is P2-3c; a follow-up activity moved in the calendar is moved back (the write-back to the record is
+        P2-5); the organizer columns stay out of the audited DTO and deleted `origin = 'calendar'` activities have no
+        push rule yet (both P2-8); activities created while a row was stopped get no link until the P2-3c backfill.
+        Tested against the fake provider, recorded Google / Graph answers and in-memory doubles; not run against a
+        real SQL Server, Google or Microsoft.
   - [ ] **P2-3c: backfill, send invitations, sync status UI**
   - [x] **P2-4: follow-ups create activities** (2026-11-26) — migration `20261127130000_followup_activities`
         (`Activity.origin` `crm` / `followup` / `calendar`, hand-written filtered unique index

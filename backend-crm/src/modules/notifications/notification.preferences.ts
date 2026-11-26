@@ -3,7 +3,8 @@ import { chunk, DEDUPE_KEY_READ_CHUNK, type NotificationDb, type NotificationInp
 
 /**
  * The bell kinds each user turned off (My Profile › Notifications), applied by the producer to every row it writes:
- * a muted kind gets no row at all. Kinds without a UserPreference column (`calendar_sync_issue`) always deliver and
+ * a muted kind gets no row at all. Kinds without a UserPreference column (the calendar kinds: `calendar_sync_issue`,
+ * `calendar_sync_error`, `calendar_invites_held`, `integration_secret_expiring`, `booking_created`) always deliver and
  * cost no query. Users without a row have every kind on.
  */
 

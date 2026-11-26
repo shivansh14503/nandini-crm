@@ -70,7 +70,7 @@ const VIEWS = [
 export function FormCustomizationView() {
     const { user } = useAuth();
     const canEdit = isAdminRole(user?.role);
-    const { data: savedConfigs, isLoading, error, refetch } = useFormConfigsQuery();
+    const { data: savedConfigs, isLoading, isFetching, error, refetch } = useFormConfigsQuery();
     const { draft: configs, ops, dirty, saving, actions, save, discard } = useConfigDraft(savedConfigs, refetch);
     const changed = useMemo(() => changedIds(ops), [ops]);
     const [discardOpen, setDiscardOpen] = useState(false);
@@ -332,7 +332,22 @@ export function FormCustomizationView() {
                 </Alert>
             )}
 
-            {!module && !isLoading && !error && (
+            {/* A failed background refetch keeps the loaded configuration: the editor (and the draft) stay, with this warning. */}
+            {error && configs && (
+                <Alert
+                    severity="warning"
+                    sx={{ mb: 2, borderRadius: '8px', fontSize: '0.8rem', alignItems: 'center' }}
+                    action={
+                        <Button size="small" variant="outlined" sx={secondaryButtonSx} onClick={() => void refetch()} disabled={isFetching}>
+                            Try again
+                        </Button>
+                    }
+                >
+                    Could not refresh the form configuration. Showing the last loaded settings.
+                </Alert>
+            )}
+
+            {!module && !isLoading && (!error || configs) && (
                 <Box sx={surfaceSx}>
                     <EmptyState
                         icon={<ViewQuiltOutlinedIcon sx={{ fontSize: 36 }} />}

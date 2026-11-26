@@ -13,6 +13,9 @@ import AutorenewOutlinedIcon from '@mui/icons-material/AutorenewOutlined';
 import DoneAllIcon from '@mui/icons-material/DoneAll';
 import MailOutlineOutlinedIcon from '@mui/icons-material/MailOutlineOutlined';
 import EventBusyOutlinedIcon from '@mui/icons-material/EventBusyOutlined';
+import SyncProblemOutlinedIcon from '@mui/icons-material/SyncProblemOutlined';
+import ForwardToInboxOutlinedIcon from '@mui/icons-material/ForwardToInboxOutlined';
+import KeyOutlinedIcon from '@mui/icons-material/KeyOutlined';
 import EventAvailableOutlinedIcon from '@mui/icons-material/EventAvailableOutlined';
 import SettingsOutlinedIcon from '@mui/icons-material/SettingsOutlined';
 import { ROUTES } from '@/config/constants';
@@ -40,6 +43,9 @@ const KIND_ICONS: Record<string, SvgIconComponent> = {
     activity_invited: GroupAddOutlinedIcon,
     contract_renewal: AutorenewOutlinedIcon,
     calendar_sync_issue: EventBusyOutlinedIcon,
+    calendar_sync_error: SyncProblemOutlinedIcon,
+    calendar_invites_held: ForwardToInboxOutlinedIcon,
+    integration_secret_expiring: KeyOutlinedIcon,
     booking_created: EventAvailableOutlinedIcon,
 };
 

@@ -144,6 +144,39 @@ describe('reconcileUser / reconcileAll', () => {
         assert.equal(state.connections[0].stoppedAt, null);
     });
 
+    it('stopping detaches the row’s links (events stay, nothing pushed); re-activating re-attaches the current ones as dirty', async () => {
+        const DAY = 24 * 60 * 60_000;
+        state = installConnectionDouble({
+            users: [user(1, 'asha')],
+            connections: [blankConnection({ id: 'c1', username: 'asha', provider: 'fake', accountEmail: 'asha@nandiniinfosys.com', status: 'ok' }, now)],
+            links: [
+                { id: 'l-up', connectionId: 'c1', activityId: 'a-up', state: 'synced', dirtyAt: null },
+                { id: 'l-dirty', connectionId: 'c1', activityId: 'a-dirty', state: 'pending', dirtyAt: now },
+                { id: 'l-old', connectionId: 'c1', activityId: 'a-old', state: 'synced', dirtyAt: null },
+                { id: 'l-moved', connectionId: 'c1', activityId: 'a-moved', state: 'synced', dirtyAt: null },
+            ],
+            activities: [
+                { id: 'a-up', assignedTo: 'asha', isDeleted: false, endAt: new Date(now.getTime() + DAY) },
+                { id: 'a-dirty', assignedTo: 'asha', isDeleted: false, endAt: new Date(now.getTime() + 2 * DAY) },
+                { id: 'a-old', assignedTo: 'asha', isDeleted: false, endAt: new Date(now.getTime() - 3 * DAY) },
+                { id: 'a-moved', assignedTo: 'ravi', isDeleted: false, endAt: new Date(now.getTime() + DAY) },
+            ],
+        });
+        state.syncUsers.push({ username: 'asha', provider: null, excluded: true, note: null, importMeetings: false, updatedBy: 'admin', createdAt: now, updatedAt: now });
+        await reconcileUser('asha', 'person_saved', { actor: 'admin', now });
+        assert.ok(state.links.every((l) => l.state === 'detached' && l.dirtyAt === null));
+
+        state.syncUsers = [];
+        const later = new Date(now.getTime() + 60_000);
+        await reconcileUser('asha', 'person_saved', { now: later });
+        const byId = Object.fromEntries(state.links.map((l) => [l.id, l]));
+        assert.equal(byId['l-up'].state, 'pending');
+        assert.equal((byId['l-up'].dirtyAt as Date).getTime(), later.getTime());
+        assert.equal(byId['l-dirty'].state, 'pending');
+        assert.equal(byId['l-old'].state, 'detached', 'ended long ago: left alone');
+        assert.equal(byId['l-moved'].state, 'detached', 'someone else owns it now');
+    });
+
     it('a changed email replaces the row (email_changed); an override records source=override on the same row', async () => {
         state = installConnectionDouble({
             users: [user(1, 'asha', { email: 'asha.rao@nandiniinfosys.com' })],
