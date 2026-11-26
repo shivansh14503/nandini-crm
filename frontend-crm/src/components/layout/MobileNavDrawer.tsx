@@ -19,6 +19,7 @@ import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import LogoutIcon from '@mui/icons-material/Logout';
 import AdminPanelSettingsOutlinedIcon from '@mui/icons-material/AdminPanelSettingsOutlined';
 import PersonOutlineRoundedIcon from '@mui/icons-material/PersonOutlineRounded';
+import EventAvailableOutlinedIcon from '@mui/icons-material/EventAvailableOutlined';
 import ChevronRightRoundedIcon from '@mui/icons-material/ChevronRightRounded';
 import { UserAvatar, displayName } from '@/components/common/UserAvatar';
 import type { User } from '@/types/auth.types';
@@ -27,6 +28,7 @@ import { moduleForPath } from '@/theme/moduleColors';
 import { APP_CONFIG, ROUTES } from '@/config/constants';
 import { ModuleDot, type NavGroup, type NavLinkItem } from './navItems';
 import { ThemeModeToggle } from './ThemeModeToggle';
+import { useShowBookingLinks } from './useShowBookingLinks';
 
 const isOnRoute = (path: string, href: string) => path === href || path.startsWith(`${href}/`);
 
@@ -112,6 +114,7 @@ export interface MobileNavDrawerProps {
  */
 export function MobileNavDrawer({ open, onClose, groups, currentPath, user, onLogout }: MobileNavDrawerProps) {
     const activeKey = activeHrefKey(groups, currentPath);
+    const showBookingLinks = useShowBookingLinks();
     const activeGroup = activeKey?.split(':')[0] ?? 'Sales';
     const [expanded, setExpanded] = useState<Set<string>>(() => new Set([activeGroup]));
 
@@ -385,6 +388,12 @@ export function MobileNavDrawer({ open, onClose, groups, currentPath, user, onLo
                     <PersonOutlineRoundedIcon sx={{ fontSize: 19 }} />
                     My Profile
                 </ListItemButton>
+                {showBookingLinks && (
+                    <ListItemButton component={Link} href={ROUTES.BOOKING_LINKS} onClick={onClose} sx={rowSx}>
+                        <EventAvailableOutlinedIcon sx={{ fontSize: 19 }} />
+                        Booking links
+                    </ListItemButton>
+                )}
                 <ListItemButton component={Link} href={ROUTES.ADMIN} onClick={onClose} sx={rowSx}>
                     <AdminPanelSettingsOutlinedIcon sx={{ fontSize: 19 }} />
                     Admin Panel

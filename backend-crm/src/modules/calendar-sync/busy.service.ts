@@ -528,7 +528,16 @@ export function gridWindow(from: Date, to: Date): { from: Date; to: Date } {
     return { from: new Date(Math.floor(from.getTime() / GRID_MS) * GRID_MS), to: new Date(Math.ceil(to.getTime() / GRID_MS) * GRID_MS) };
 }
 
-export async function busyTimes(query: BusyQuery, user: AuthUser, now: Date = new Date()): Promise<BusyTimesDto> {
+/** Options of a server-side caller (booking links). */
+export interface BusyTimesOptions {
+    /**
+     * Whose per-minute provider-call budget the calendar reads take (default `user:<id>` of the requester). Booking links
+     * pass `booking:<linkId>`, so visitors of one public page share one budget (BUSY_PROVIDER_CALL_BUDGET).
+     */
+    budgetKey?: string;
+}
+
+export async function busyTimes(query: BusyQuery, user: AuthUser, now: Date = new Date(), opts: BusyTimesOptions = {}): Promise<BusyTimesDto> {
     const from = new Date(query.from);
     const to = new Date(query.to);
     const { people, requesterRows } = await loadPeople(query.users, user.username);
@@ -543,7 +552,7 @@ export async function busyTimes(query: BusyQuery, user: AuthUser, now: Date = ne
             wide.from,
             wide.to,
         ),
-        loadProviderBusy(targets, requesterRows, wide.from, wide.to, `user:${user.id}`),
+        loadProviderBusy(targets, requesterRows, wide.from, wide.to, opts.budgetKey ?? `user:${user.id}`),
         loadExcluded(query.exclude, user),
     ]);
 

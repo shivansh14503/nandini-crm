@@ -65,6 +65,7 @@ import {
 } from '../modules/calendar-sync/connection.constants.js';
 import { LINK_INVITES, LINK_STATES } from '../modules/calendar-sync/sync.constants.js';
 import { NOTIFICATION_KINDS } from '../modules/notifications/notification.producer.js';
+import * as bookingConstants from '../modules/booking-links/bookingLink.constants.js';
 import { normalizeUsername, RESERVED_USERNAMES, USERNAME_MAX_LENGTH, USERNAME_MIN_LENGTH, USERNAME_PATTERN, usernameIssue } from '../modules/user-admin/username.js';
 import {
     ADMIN_ROLES,
@@ -257,6 +258,8 @@ interface FrontendNotificationPreferences {
     isOutOfOfficeOn(range: OutOfOfficeRange | null | undefined, day: string): boolean;
     outOfOfficeIssues(next: OutOfOfficeRange, today: string, previous?: OutOfOfficeRange | null): { path: string; message: string }[];
 }
+
+type BookingConstants = typeof import('../modules/booking-links/bookingLink.constants.js');
 
 async function loadFrontend<T>(relativePath: string): Promise<T> {
     return (await import(pathToFileURL(path.join(FRONTEND_SRC, relativePath)).href)) as T;
@@ -662,5 +665,38 @@ describe('backend ↔ frontend contract', { skip }, () => {
         assert.deepEqual([...frontend.USER_STATUS_FILTERS], [...ADMIN_USER_STATUSES]);
         assert.equal(frontend.JOB_TITLE_MAX_LENGTH, JOB_TITLE_MAX_LENGTH);
         assert.equal(frontend.DEPARTMENT_MAX_LENGTH, DEPARTMENT_MAX_LENGTH);
+    });
+    it('frontend types/bookingLink.types.ts matches the booking-link constants', async () => {
+        const frontend = await loadFrontend<BookingConstants & { BOOKING_CREATOR_SCOPE_LABELS: Record<string, string>; BOOKING_WEEKDAY_LABELS: Record<string, string> }>(
+            'types/bookingLink.types.ts',
+        );
+        assert.deepEqual([...frontend.BOOKING_CREATOR_SCOPES], [...bookingConstants.BOOKING_CREATOR_SCOPES]);
+        assert.deepEqual(Object.keys(frontend.BOOKING_CREATOR_SCOPE_LABELS).sort(), [...bookingConstants.BOOKING_CREATOR_SCOPES].sort());
+        assert.deepEqual([...frontend.BOOKING_WEEKDAYS], [...bookingConstants.BOOKING_WEEKDAYS]);
+        assert.deepEqual(Object.keys(frontend.BOOKING_WEEKDAY_LABELS), [...bookingConstants.BOOKING_WEEKDAYS]);
+        assert.deepEqual([...frontend.BOOKING_SLOT_STEPS], [...bookingConstants.BOOKING_SLOT_STEPS]);
+        assert.deepEqual(frontend.BOOKING_ERROR_CODES, bookingConstants.BOOKING_ERROR_CODES);
+        for (const key of [
+            'BOOKING_DURATION_MIN_MINUTES',
+            'BOOKING_DURATION_MAX_MINUTES',
+            'BOOKING_MAX_DURATIONS',
+            'BOOKING_MAX_WINDOWS_PER_DAY',
+            'BOOKING_MAX_BUFFER_MINUTES',
+            'BOOKING_MAX_NOTICE_MINUTES',
+            'BOOKING_MAX_HORIZON_DAYS',
+            'BOOKING_MAX_PER_DAY',
+            'BOOKING_MAX_LINKS_PER_OWNER',
+            'BOOKING_TITLE_MAX',
+            'BOOKING_LOCATION_MAX',
+            'BOOKING_NOTE_MAX',
+            'BOOKING_VISITOR_NAME_MAX',
+            'BOOKING_VISITOR_COMPANY_MAX',
+            'BOOKING_VISITOR_MESSAGE_MAX',
+        ] as const) {
+            assert.equal(frontend[key], bookingConstants[key], key);
+        }
+        const constants = readFileSync(path.join(FRONTEND_SRC, 'config/constants.ts'), 'utf8');
+        assert.ok(constants.includes("BOOK: (slug: string) => `/book/${encodeURIComponent(slug)}`"), 'ROUTES.BOOK is the DTO path /book/<slug>');
+        assert.ok(existsSync(path.join(FRONTEND_SRC, 'app/book/[slug]/page.tsx')), 'the public booking page exists');
     });
 });

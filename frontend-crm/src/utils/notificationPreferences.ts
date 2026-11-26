@@ -10,7 +10,7 @@
 
 /**
  * Bell kinds a user can turn off. Kinds not listed here (the calendar kinds `calendar_sync_issue`, `calendar_sync_error`,
- * `calendar_invites_held`, `integration_secret_expiring`) are not configurable and always deliver.
+ * `calendar_invites_held`, `integration_secret_expiring`, `booking_created`) are not configurable and always deliver.
  */
 export const IN_APP_NOTIFICATION_KINDS = ['activity_reminder', 'activity_assigned', 'activity_invited', 'contract_renewal'] as const;
 export type InAppNotificationKind = (typeof IN_APP_NOTIFICATION_KINDS)[number];
