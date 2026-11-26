@@ -27,6 +27,9 @@ import { assertAssigneeValid, assertRecordAccess, buildAccessScopeWhere } from '
 import { emailsInclude, normalizeEmails, replaceEmails } from '../shared/entityEmails.js';
 import { assertEmailsDeliverable, queueEmailVerification } from '../email-verification/emailVerification.service.js';
 import { invalidateSyncedCaches, propagateOrganizationName, type NameSyncCounts } from '../shared/nameSync.js';
+import { afterFollowUpCommit, renameOrganizationFollowUps } from '../activities/activity.followUp.js';
+import type { ActivityCommitRow } from '../activities/activity.service.js';
+import { loadFollowUpContext } from '../activities/activity.system.js';
 import { codeSearchPrefix, gstSearchPrefix } from '../shared/searchTerms.js';
 import type { PrefetchedLookups } from '../shared/prefetch.js';
 import { acquireLocks, assertDeletedRow, lockRecords, restoreData, runInTransaction, softDeleteData, type BulkDeleteResult } from '../shared/transactions.js';
@@ -552,10 +555,14 @@ export const organizationService = {
         const fieldConfig = await loadModuleFieldConfig('organizations');
         if ('corporateEmails' in patch) await assertEmailsDeliverable(patch.corporateEmails, 'corporateEmails', { organizationId: id });
         const flagsFor = await viewerFlags(user);
+        // A rename re-derives the follow-up activity subjects of unnamed opportunities (activity.followUp.ts).
+        const followUpContext = await loadFollowUpContext();
         let synced: NameSyncCounts | undefined;
+        let followUpRows: ActivityCommitRow[] = [];
 
         const updated = await runInTransaction(async (tx) => {
             synced = undefined;
+            followUpRows = [];
             await lockRecords(tx, 'organization', [id]);
             const existing = await tx.organization.findFirst({ where: { id, isDeleted: false }, include });
             if (!existing) throw notFound();
@@ -596,7 +603,13 @@ export const organizationService = {
                 await replaceEmails(tx, { organizationId: id }, normalizeEmails(input.corporateEmails));
             }
             // Linked records show the organization's name; rename them in the same transaction so lists never drift.
-            if (nameChanged) synced = await propagateOrganizationName(tx, id, input.organizationName, user);
+            if (nameChanged) {
+                synced = await propagateOrganizationName(tx, id, input.organizationName, user);
+                ({ rows: followUpRows } = await renameOrganizationFollowUps(tx, id, existing.organizationName, user.username, new Date(), {
+                    context: followUpContext,
+                    notify: false,
+                }));
+            }
 
             const saved = await tx.organization.findUniqueOrThrow({ where: { id }, include });
             const after = toOrganizationDto(saved, flagsFor(saved));
@@ -609,6 +622,7 @@ export const organizationService = {
         });
 
         await Promise.all([cacheService.invalidateEntityCaches('organizations'), invalidateSyncedCaches(synced)]);
+        await afterFollowUpCommit(followUpRows, user);
         if ('corporateEmails' in patch) queueEmailVerification({ organizationId: id });
         return updated;
     },

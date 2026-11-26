@@ -357,7 +357,7 @@ keeps wall-clock times); all-day activities are entered as business-timezone day
         Convert Lead, `retryOnceOnUniqueViolation` (D45), and `rescheduleRecordFromCalendar` (inert until P2-5). Hooked
         into lead / opportunity create, update (the lead transaction returns `{ after, plan }`), remove, bulk remove,
         restore, conversion and imports, under the record lock. Follow-up activity `createdBy` = the record's creator;
-        Task / Note / blank type → Call; Closed Won / Lost → Cancelled (or Completed with a response); an early
+        Task / Note / blank type → Call; Closed Won / Lost → always Cancelled (no response at a closed stage); an early
         completion keeps its slot. Locks: `409 FOLLOW_UP_ACTIVITY_LOCKED`, delete refused, bulk delete skips,
         `ActivityView.lockedFields`, audit undo blocks the locked fields with a reason. Calendar feed: follow-up
         activities under the follow-up sources (not draggable), derived items deduped per caller's scope. Morning
@@ -365,7 +365,12 @@ keeps wall-clock times); all-day activities are entered as business-timezone day
         Switch "Follow-ups create activities" on Admin › API Integrations (D44). Frontend: Follow-up chip, Record
         follow-up action, locked fields in the form, Next follow-up box on Activities tabs, form hint and save
         message, lead / opportunity writes refresh every activity query. Not run against a real SQL Server (migration
-        checked with `prisma migrate diff`).
+        checked with `prisma migrate diff`). Review fixes (2026-11-26): system writes keep a deleted organization /
+        contact the mirrored record still points at (an opportunity save no longer fails with 400); an organization
+        rename rewrites the derived subject of its unnamed opportunities' follow-up activities
+        (`renameOrganizationFollowUps`); a follow-up activity whose slot already passed is written with its reminder
+        marked sent (`quietPastReminder`, no reminder burst on the deploy-day backfill); the Activities tab's Next
+        follow-up box uses the record's own date while the switch is off.
   - [ ] **P2-5: calendar → CRM (polling)**
   - [ ] **P2-6: busy times**
   - [ ] **P2-7: webhooks and HTTPS go-live**

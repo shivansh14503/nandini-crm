@@ -357,9 +357,18 @@ ageing and scorecards keep reading the record's own fields; the activity never c
   subject only when its derived text changed, so a hand-edited subject stays). A recorded `customerResponse` with
   `followUpDecision: 'new'` (leads) / a new slot (opportunities) completes the open activity with the response and
   remarks (its times kept: an early completion stays on its slot) and creates the next one; `'keep'` (same slot) logs a
-  separate Completed activity (`origin: 'crm'`) with the response; a closing lead status, Closed Won / Lost or a "no
-  follow-up" response completes it (response recorded) or, without a response, cancels it.
+  separate Completed activity (`origin: 'crm'`) with the response; a closing lead status or a "no follow-up" response
+  completes it (response recorded) or, without a response, cancels it. Closed Won / Lost always cancels it (a closed
+  stage keeps no response, see §2.2).
 - Delete / bulk delete cancels the open follow-up activity; restore re-creates it.
+- An opportunity still pointing at a deleted organization / contact keeps it on its follow-up activities too (the
+  save is not refused with "has been deleted"; system writes copy the record's links as they are).
+- `PATCH /organizations/:id` renaming an organization also rewrites the subject of the open follow-up activities of
+  its opportunities that have no Opportunity Name (their subject is derived from the organization's name), when the
+  subject is still the derived one; audited `Activity UPDATE` by the renaming user, no notifications.
+- A follow-up activity whose slot has already passed when it is written (the backfill, a restore, a follow-up saved
+  in the past) is stored with its reminder marked sent: it shows as overdue and no late reminder fires. A reminder
+  that is due while the slot is still ahead fires as usual.
 - `POST /leads/:id/convert` moves the lead's open follow-up activity to the new opportunity (related record, code,
   subject; audited `Activity UPDATE`), so the calendar event isn't replaced.
 - Writes are audited `Activity CREATE / UPDATE` by the saving user; owners are notified on interactive saves (not on

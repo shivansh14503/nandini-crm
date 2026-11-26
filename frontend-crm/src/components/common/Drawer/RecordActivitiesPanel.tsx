@@ -15,6 +15,7 @@ import { getModuleColor } from '@/theme/moduleColors';
 import { COMPLETED_STATUS, isFollowUpActivity, NOTE_TYPE, PLANNED_STATUS, TASK_TYPE, type Activity } from '@/types/activity.types';
 import type { ActivityFormValues } from '@/validations/activity.schema';
 import { instantToZonedWallClock } from '@/utils/zonedTime';
+import { useFollowUpActivitiesOn } from '@/utils/followUpActivities';
 import { ActivityDetailDrawer } from '@/components/activities/ActivityDetailDrawer';
 import { ActivityQuickCreateDialog } from '@/components/activities/ActivityQuickCreateDialog';
 import { ActivityStatusPill, ActivityTypeIcon, FollowUpChip, useActivityTypeLabel } from '@/components/activities/ActivityBadges';
@@ -155,7 +156,9 @@ function ActivityRow({ activity, now, timeZone, onOpen }: { activity: Activity; 
  * related to the record. Organizations and contacts roll up the activities that carry them. Leads and opportunities
  * also show their current next follow-up (rescheduled on their own form): its follow-up activity when there is one
  * (Calendar Phase 2 P2-4; it opens like any activity and is left out of the Upcoming / Overdue lists), else the
- * record's own date (the "Follow-ups create activities" switch is off, or the nightly backfill hasn't run yet).
+ * record's own date (the nightly backfill hasn't run yet). While the "Follow-ups create activities" switch is off the
+ * box always shows the record's own date: saves no longer move the follow-up activity, so an old one stays in the
+ * normal lists like any other activity.
  */
 export function RecordActivitiesPanel({ module, id, label, organizationId, organizationName, contactId, contact, nextFollowUp }: RecordActivitiesContext) {
     const router = useRouter();
@@ -164,11 +167,16 @@ export function RecordActivitiesPanel({ module, id, label, organizationId, organ
     const [openActivity, setOpenActivity] = useState<Activity | null>(null);
     const [prefill, setPrefill] = useState<Partial<ActivityFormValues> | null>(null);
     const followUpTypeLabel = useActivityTypeLabel();
+    const followUpActivitiesOn = useFollowUpActivitiesOn();
 
     // The record's open follow-up activity (leads / opportunities): shown in the Next follow-up box instead of a list.
+    // Switch off (D44): saves leave it where it was, so the record's own date is the next follow-up.
     const openFollowUp = useMemo(
-        () => activities.find((a) => isFollowUpActivity(a) && a.status === PLANNED_STATUS && a.relatedModule === module && a.relatedId === id) ?? null,
-        [activities, module, id]
+        () =>
+            followUpActivitiesOn
+                ? (activities.find((a) => isFollowUpActivity(a) && a.status === PLANNED_STATUS && a.relatedModule === module && a.relatedId === id) ?? null)
+                : null,
+        [activities, module, id, followUpActivitiesOn]
     );
 
     const sections = useMemo<Section[]>(() => {

@@ -15,6 +15,7 @@ import {
     opportunityFollowUpTarget,
     planFollowUpChange,
     reconcileRecordFollowUp,
+    renameOrganizationFollowUps,
     retryOnceOnUniqueViolation,
     slotFromCalendar,
     type FollowUpOutcome,
@@ -221,7 +222,7 @@ describe('planFollowUpChange', () => {
         assert.ok(change.insert);
     });
 
-    it('a closing response on a Closed Won opportunity completes the open activity and plans no new one', () => {
+    it("planner: a 'closed' outcome completes the open activity and plans no new one; none (as at Closed Won / Lost) cancels it", () => {
         const won = opportunityFollowUpTarget({ ...OPP_ROW, salesStage: 'Closed Won' });
         const change = planFollowUpChange(openFa(), desiredFollowUp(won, context(), IST), recorded('closed'), NOW);
         assert.equal(change.complete?.fields.status, 'Completed');
@@ -402,12 +403,114 @@ describe('reconcileRecordFollowUp (system write path)', () => {
         );
     });
 
+    it("doesn't send a late reminder for a slot that already passed; one whose slot is still ahead stays armed", async () => {
+        const state = installActivityDouble({ users: USERS, leads: LEADS });
+        // 10:00 IST today: the slot passed two hours ago (the backfill on deploy day, or a follow-up saved in the past).
+        await reconcile(lead({ nextFollowupDate: new Date('2026-11-26T00:00:00.000Z'), nextFollowupTime: '10:00 AM' }));
+        const fa = state.activities[0];
+        assert.equal(fa.remindAt?.toISOString(), '2026-11-26T04:15:00.000Z');
+        assert.equal(fa.reminderSentAt?.toISOString(), NOW.toISOString(), 'stored as sent: no reminder burst');
+
+        // Moved to 12:10 IST: the reminder (11:55) is due, but the follow-up is still ahead, so it fires as usual.
+        await reconcile(lead({ nextFollowupDate: new Date('2026-11-26T00:00:00.000Z'), nextFollowupTime: '12:10 PM' }));
+        assert.equal(state.activities[0].remindAt?.toISOString(), '2026-11-26T06:25:00.000Z');
+        const sentAt = () => state.activities[0].reminderSentAt?.toISOString() ?? null;
+        assert.equal(sentAt(), null);
+
+        // All day today: 09:00 IST already passed.
+        await reconcile(lead({ nextFollowupDate: new Date('2026-11-26T00:00:00.000Z'), nextFollowupTime: '' }));
+        assert.equal(state.activities[0].allDay, true);
+        assert.equal(sentAt(), NOW.toISOString());
+    });
+
+    it('keeps the deleted organization / contact an opportunity still points at (no 400, the save goes through)', async () => {
+        const opportunity = { ...OPP_ROW, nextFollowupDate: new Date('2027-01-05T00:00:00.000Z'), productCategoryJson: null };
+        const state = installActivityDouble({
+            users: USERS,
+            opportunities: [opportunity],
+            organizations: [{ id: 'org1', organizationName: 'Sunrise Hotels', isDeleted: true }],
+            contacts: [{ id: 'c1', name: 'Asha Rao', organizationId: 'org1', isDeleted: true }],
+        });
+        const target = opportunityFollowUpTarget(opportunity);
+        // First slot: inserts the follow-up activity.
+        await reconcile(target);
+        // A response that keeps the slot logs a Completed activity (another insert).
+        await reconcile(target, recorded('keep'));
+        // A response with a new slot completes it and inserts the next one.
+        await reconcile(opportunityFollowUpTarget({ ...opportunity, nextFollowupDate: new Date('2027-01-12T00:00:00.000Z') }), recorded('new'));
+        assert.equal(state.activities.length, 3);
+        for (const row of state.activities) {
+            assert.equal(row.organizationId, 'org1');
+            assert.equal(row.contactId, 'c1');
+        }
+        assert.deepEqual(
+            state.activities.map((row) => row.status),
+            ['Completed', 'Completed', 'Planned'],
+        );
+    });
+
     it('cancelRecordFollowUps cancels the open activities of deleted records', async () => {
         const state = installActivityDouble({ users: USERS, leads: LEADS });
         await reconcile(future);
         const { rows } = await runInTransaction((tx) => cancelRecordFollowUps(tx, 'leads', ['l1', 'l2'], 'palak', NOW, { context: context(), notify: false }));
         assert.equal(rows.length, 1);
         assert.equal(state.activities[0].status, 'Cancelled');
+    });
+});
+
+describe('renameOrganizationFollowUps', () => {
+    afterEach(() => restoreActivityDouble());
+
+    const USERS = [{ username: 'palak', fullName: 'Palak Shah', isActive: true }];
+    const opp = (over: Partial<OpportunityFollowUpRow> = {}) => ({
+        ...OPP_ROW,
+        organizationName: 'ACME INDUSTRIES',
+        nextFollowupDate: new Date('2027-01-05T00:00:00.000Z'),
+        productCategoryJson: null,
+        ...over,
+    });
+    const fa = (id: string, relatedId: string, subject: string) =>
+        blankActivity({
+            id,
+            subject,
+            assignedTo: 'palak',
+            createdBy: 'palak',
+            followupType: 'Call',
+            status: 'Planned',
+            origin: 'followup',
+            relatedModule: 'opportunities',
+            relatedId,
+            organizationId: 'org1',
+            organizationName: 'ACME INDUSTRIES',
+            startAt: new Date('2027-01-05T00:00:00.000Z'),
+            allDay: true,
+        });
+
+    it("rewrites the subject of an unnamed opportunity's follow-up activity; an edited subject or a named opportunity is kept", async () => {
+        const state = installActivityDouble({
+            users: USERS,
+            organizations: [{ id: 'org1', organizationName: 'ACME INDUSTRIES', isDeleted: false }],
+            opportunities: [opp({ id: 'o1', opportunityCode: 'OPP-0009' }), opp({ id: 'o2', opportunityCode: 'OPP-0010' }), opp({ id: 'o3', opportunityCode: 'OPP-0011', opportunityName: 'Kitchen ERP' })],
+            activities: [
+                fa('fa1', 'o1', 'Call follow-up: OPP-0009 ACME TRADERS'),
+                fa('fa2', 'o2', 'Bring the samples'),
+                fa('fa3', 'o3', 'Call follow-up: OPP-0011 Kitchen ERP'),
+            ],
+        });
+        const { rows } = await runInTransaction((tx) => renameOrganizationFollowUps(tx, 'org1', 'ACME TRADERS', 'palak', NOW, { context: context(), notify: false }));
+        assert.equal(rows.length, 1);
+        assert.deepEqual(
+            state.activities.map((row) => row.subject),
+            ['Call follow-up: OPP-0009 ACME INDUSTRIES', 'Bring the samples', 'Call follow-up: OPP-0011 Kitchen ERP'],
+        );
+        assert.equal(state.audits.at(-1)?.action, 'UPDATE');
+        assert.ok(state.locks.some((key) => key.includes('o1')), "the opportunity's lock is taken");
+
+        // Switch off: nothing is written.
+        const off = await runInTransaction((tx) =>
+            renameOrganizationFollowUps(tx, 'org1', 'ACME INDUSTRIES', 'palak', NOW, { context: context({ followUpActivities: false }), notify: false }),
+        );
+        assert.equal(off.rows.length, 0);
     });
 });
 

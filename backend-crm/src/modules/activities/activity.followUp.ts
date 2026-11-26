@@ -485,7 +485,8 @@ async function applyChange(
     now: Date,
     opts: FollowUpWriteOptions,
 ): Promise<ActivityCommitRow[]> {
-    const base = { activityConfig: opts.context.activityConfig, notify: opts.notify ?? true };
+    // A follow-up whose slot already passed shows as overdue; its reminder isn't sent late (backfill, restore, past slots).
+    const base = { activityConfig: opts.context.activityConfig, notify: opts.notify ?? true, quietPastReminder: true };
     const rows: ActivityCommitRow[] = [];
     if (change.complete) rows.push(await applySystemPatch(tx, change.complete.id, change.complete.fields, actor, now, base));
     if (change.logCompleted) rows.push(await insertSystemActivity(tx, change.logCompleted.fields, actor, now, { ...base, createdBy: change.logCompleted.createdBy }));
@@ -541,6 +542,46 @@ export async function cancelRecordFollowUps(
     );
     const rows: ActivityCommitRow[] = [];
     for (const row of open) rows.push(...(await applyChange(tx, { cancel: { id: row.id } }, actor, now, opts)));
+    return { rows };
+}
+
+/**
+ * An organization rename (organization.service `update`, after `propagateOrganizationName` wrote the new name to its
+ * opportunities and activities). An opportunity without an Opportunity Name derives its follow-up activity's subject
+ * from its organization's name, so the open follow-up activities of those opportunities get the new subject through
+ * the system path (audited, write hook), under each opportunity's lock. Only a subject still derived from the old name
+ * is rewritten: one edited in the CRM or a calendar is kept, as on a record save.
+ */
+export async function renameOrganizationFollowUps(
+    tx: TransactionClient,
+    organizationId: string,
+    previousName: string,
+    actor: string,
+    now: Date,
+    opts: FollowUpWriteOptions,
+): Promise<{ rows: ActivityCommitRow[] }> {
+    assertContext(opts);
+    if (!followUpActivitiesOn(opts.context)) return { rows: [] };
+    const linked = await tx.opportunity.findMany({ where: { organizationId, isDeleted: false }, select: { id: true, opportunityName: true } });
+    const unnamed = linked.filter((row) => !row.opportunityName?.trim()).map((row) => row.id);
+    if (unnamed.length === 0) return { rows: [] };
+    const open = await tx.activity.findMany({ where: openFollowUpWhere('opportunities', unnamed), select: { id: true, relatedId: true, subject: true } });
+    if (open.length === 0) return { rows: [] };
+    const ids = [...new Set(open.map((fa) => fa.relatedId).filter((id): id is string => Boolean(id)))];
+    await lockRecords(tx, FOLLOW_UP_LOCK_ENTITY.opportunities, ids);
+    const records = new Map(
+        (await tx.opportunity.findMany({ where: { id: { in: ids } }, select: OPPORTUNITY_FOLLOW_UP_SELECT })).map((row) => [row.id, row] as const),
+    );
+    const base = { activityConfig: opts.context.activityConfig, notify: opts.notify ?? true, quietPastReminder: true };
+    const rows: ActivityCommitRow[] = [];
+    for (const fa of open) {
+        const row = fa.relatedId ? records.get(fa.relatedId) : undefined;
+        if (!row || row.isDeleted || row.opportunityName?.trim()) continue;
+        const before = followUpSubject(opportunityFollowUpTarget({ ...row, organizationName: previousName }));
+        const after = followUpSubject(opportunityFollowUpTarget(row));
+        if (before === after || fa.subject !== before) continue;
+        rows.push(await applySystemPatch(tx, fa.id, { subject: after }, actor, now, base));
+    }
     return { rows };
 }
 

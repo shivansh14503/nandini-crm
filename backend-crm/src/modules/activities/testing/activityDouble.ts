@@ -9,7 +9,7 @@ import type { ActivityRow } from '../activity.mapper.js';
 
 /**
  * Test double for the activity write paths (activity.service.ts, activity.system.ts): in-memory Activity /
- * ActivityAttendee rows plus the Users, Contact, Organization and Lead rows the saves read, behind the Prisma
+ * ActivityAttendee rows plus the Users, Contact, Organization, Lead and Opportunity rows the saves read, behind the Prisma
  * delegates those paths use; a `$transaction` that rolls every row back when its callback throws; application locks,
  * audits, cache invalidations and form-config loads captured. Only the query shapes those paths send are understood
  * (anything else throws, so a new query shape is noticed). Not a test file itself (the runner only loads *.test.ts).
@@ -44,6 +44,24 @@ export interface LeadRow {
     isDeleted: boolean;
 }
 
+export interface OpportunityRow {
+    id: string;
+    opportunityCode: string;
+    opportunityName: string | null;
+    productCategoryJson: string | null;
+    organizationName: string;
+    organizationId: string | null;
+    contact: string;
+    contactId: string | null;
+    assignedTo: string | null;
+    createdBy: string;
+    followupType: string | null;
+    salesStage: string;
+    nextFollowupDate: Date | null;
+    nextFollowupTime: string | null;
+    isDeleted: boolean;
+}
+
 export interface ActivityDoubleState {
     activities: Activity[];
     attendees: ActivityAttendee[];
@@ -51,6 +69,7 @@ export interface ActivityDoubleState {
     contacts: ContactRow[];
     organizations: OrganizationRow[];
     leads: LeadRow[];
+    opportunities: OpportunityRow[];
     audits: AuditEntry[];
     /** Application lock keys taken (acquireLocks), in order, without the `crm:` prefix. */
     locks: string[];
@@ -138,7 +157,7 @@ export function blankAttendee(over: Partial<ActivityAttendee> & Pick<ActivityAtt
     };
 }
 
-const DELEGATES = ['activity', 'activityAttendee', 'user', 'contact', 'organization', 'lead', '$transaction'] as const;
+const DELEGATES = ['activity', 'activityAttendee', 'user', 'contact', 'organization', 'lead', 'opportunity', '$transaction'] as const;
 const realDelegates = new Map<string, unknown>();
 
 function stub(name: (typeof DELEGATES)[number], fake: unknown): void {
@@ -165,6 +184,7 @@ export function installActivityDouble(
         contacts?: ContactRow[];
         organizations?: OrganizationRow[];
         leads?: LeadRow[];
+        opportunities?: OpportunityRow[];
         configs?: FormConfigsPayload;
     } = {},
 ): ActivityDoubleState {
@@ -175,6 +195,7 @@ export function installActivityDouble(
         contacts: (seed.contacts ?? []).map((row) => ({ ...row })),
         organizations: (seed.organizations ?? []).map((row) => ({ ...row })),
         leads: (seed.leads ?? []).map((row) => ({ ...row })),
+        opportunities: (seed.opportunities ?? []).map((row) => ({ ...row })),
         audits: [],
         locks: [],
         invalidated: [],
@@ -324,6 +345,18 @@ export function installActivityDouble(
         },
     };
 
+    const opportunity = {
+        findUnique: async (args: { where: { id: string }; select?: Record<string, unknown> }) => {
+            call('opportunity.findUnique');
+            const row = state.opportunities.find((o) => o.id === args.where.id);
+            return row ? pick(row, args.select) : null;
+        },
+        findMany: async (args: { where: Where; select?: Record<string, unknown> }) => {
+            call('opportunity.findMany');
+            return state.opportunities.filter((o) => matches(o as unknown as Record<string, unknown>, args.where)).map((o) => pick(o, args.select));
+        },
+    };
+
     const snapshot = () => ({
         activities: state.activities.map((row) => ({ ...row })),
         attendees: state.attendees.map((row) => ({ ...row })),
@@ -340,6 +373,7 @@ export function installActivityDouble(
             contact,
             organization,
             lead,
+            opportunity,
             $queryRaw: async (strings: TemplateStringsArray, ...values: unknown[]) => {
                 void strings;
                 // acquireLocks passes its keys as one JSON array of `crm:<key>` resources.
@@ -368,6 +402,7 @@ export function installActivityDouble(
     stub('contact', contact);
     stub('organization', organization);
     stub('lead', lead);
+    stub('opportunity', opportunity);
 
     mock.method(auditService, 'record', async (_tx: unknown, entry: AuditEntry) => {
         state.audits.push(entry);

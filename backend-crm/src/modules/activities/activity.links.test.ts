@@ -149,4 +149,22 @@ describe('resolveActivityLinks', () => {
         await assert.rejects(resolveActivityLinks(tx, input({ organizationId: 'missing' }), undefined, owner), (err: unknown) => err instanceof HttpError && err.statusCode === 400);
         await assert.rejects(resolveActivityLinks(tx, input({ relatedModule: 'leads', relatedId: 'zz' }), undefined, owner), (err: unknown) => err instanceof HttpError && err.statusCode === 400);
     });
+
+    it('keeps a deleted organization / contact on a system write (it mirrors a record that still points at them)', async () => {
+        const deletedTx = {
+            organization: { findUnique: async () => ({ id: 'o9', organizationName: 'OLD CO', isDeleted: true }) },
+            contact: { findUnique: async () => ({ id: 'c9', name: 'Gone', isDeleted: true }) },
+        } as unknown as TransactionClient;
+        const body = input({ organizationId: 'o9', contactId: 'c9' });
+        const deleted = (err: unknown) => err instanceof HttpError && err.statusCode === 400 && /has been deleted/.test(err.message);
+        // A user can't newly link a deleted record…
+        await assert.rejects(resolveActivityLinks(deletedTx, body, undefined, owner), deleted);
+        // …but a system insert (user null) keeps the links of the record it mirrors.
+        const links = await resolveActivityLinks(deletedTx, body, undefined, null);
+        assert.deepEqual(links.organization, { id: 'o9', name: 'OLD CO' });
+        assert.deepEqual(links.contact, { id: 'c9', name: 'Gone' });
+        // A missing record is still refused.
+        const missingTx = { organization: { findUnique: async () => null }, contact: { findUnique: async () => null } } as unknown as TransactionClient;
+        await assert.rejects(resolveActivityLinks(missingTx, body, undefined, null), (err: unknown) => err instanceof HttpError && err.statusCode === 400);
+    });
 });

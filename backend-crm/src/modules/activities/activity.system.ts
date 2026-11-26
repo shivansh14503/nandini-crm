@@ -31,7 +31,9 @@ export { activityWriteHook, type ActivityWriteEvent } from './activity.writeHook
  * (activity.writeHook.ts, where P2-3b marks the activity for calendar sync unless `markSync` is false).
  * Skipped: the owner's active-user check (the owner is taken verbatim: a lead still owned by a deactivated user keeps
  * saving), the past-start rule, admin-required custom fields (`checkModulePayload`), the related-record access check
- * (the record must still exist), the caller's edit permission and the activity's locks (callers decide, §8.13).
+ * (the record must still exist), the deleted organization / contact check (a system write copies the links of the
+ * record it mirrors, which may point at a deleted one), the caller's edit permission and the activity's locks
+ * (callers decide, §8.13).
  *
  * Both functions run inside the caller's transaction and read nothing through the shared client: the activity
  * configuration is passed in, loaded before the transaction (`loadFollowUpContext`). They return the row pair for
@@ -102,6 +104,11 @@ export interface SystemWriteOptions {
     markSync?: boolean;
     /** Carried on the returned row for `runActivityPostCommit`: false = no owner / invitee notifications. */
     notify?: boolean;
+    /**
+     * True: a reminder (re)armed for an event whose moment already passed is stored as sent, so no late reminder fires
+     * (P2-4 follow-up activities: the backfill, restores, a follow-up saved in the past). Default false.
+     */
+    quietPastReminder?: boolean;
 }
 
 const systemWriter = (actor: string, opts: SystemWriteOptions): ActivityWriter => ({
@@ -110,6 +117,7 @@ const systemWriter = (actor: string, opts: SystemWriteOptions): ActivityWriter =
     createdBy: opts.createdBy,
     rowData: opts.rowData,
     markSync: opts.markSync ?? true,
+    quietPastReminder: opts.quietPastReminder ?? false,
     config: opts.activityConfig,
 });
 

@@ -42,8 +42,9 @@ import { loadFollowUpContext, type FollowUpContext } from './activity.system.js'
  * interactive saves and is idempotent: running it twice, or next to the nightly step, changes nothing more. No
  * unique-index error is caught inside a transaction (D45): one aborts that record's transaction, which is retried once.
  * Writes are audited `Activity CREATE / UPDATE` by `system` under the `job:followup-backfill` origin, with the record's
- * creator as the activity's `createdBy` and no notifications. Past slots get overdue activities (reminders not re-sent
- * for the past; calendar push skips them, §9.1). With the switch off nothing is written (the dry run still counts).
+ * creator as the activity's `createdBy` and no notifications. Past slots get overdue activities with their reminder
+ * stored as sent (`quietPastReminder` in activity.followUp.ts: no late reminders; calendar push skips them, §9.1).
+ * With the switch off nothing is written (the dry run still counts).
  */
 
 export const BACKFILL_ACTOR = 'system';
