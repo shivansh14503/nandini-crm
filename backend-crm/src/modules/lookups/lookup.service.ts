@@ -7,8 +7,11 @@ import { booleanQuery } from '../../validators/common.js';
 
 /**
  * Data for the frontend's lookup modals and pickers (`LookupRecordMap`): compact projections of the big
- * entities (search + limit) and full lists of the small masters. Cached in Redis; entity writes invalidate
- * `cache:lookups:<entity>*`, masters expire by TTL.
+ * entities (search + limit) and full lists of the small masters. Cached in Redis. Lists that CRM writes change
+ * (organizations, contacts, products, partner companies and their contacts, cities) are dropped by those writes
+ * (`cache:lookups:<entity>*`, `cache:address-master:cities:*`) and read with `getOrSetGuarded`, so a list read while
+ * a write commits is never cached. Lists the CRM never writes (users, nature of calls, countries and states) only
+ * expire by TTL and use plain `getOrSet`.
  */
 
 const ENTITY_TTL_SECONDS = 5 * 60;
@@ -114,6 +117,8 @@ export interface CityLookupDto {
 export const lookupService = {
     async users(query: unknown): Promise<CrmUserDto[]> {
         const { includeInactive } = usersQuerySchema.parse(query ?? {});
+        // Plain getOrSet: no CRM write changes these fields (users are maintained outside the app; sign-in only sets
+        // lastLoginAt), so nothing invalidates the key and there is no write to race. Guard it if a write path is added.
         return cacheService.getOrSet(CACHE_KEYS.lookups(`users:${includeInactive ? 'all' : 'active'}`), ENTITY_TTL_SECONDS, async () => {
             const rows = await prisma.user.findMany({
                 where: includeInactive ? {} : { isActive: true },
@@ -162,7 +167,7 @@ export const lookupService = {
             }));
         };
         // Only the unfiltered list is cached; searches are cheap and too varied to be worth caching.
-        return search ? load() : cacheService.getOrSet(CACHE_KEYS.lookups(`organizations:${limit}`), ENTITY_TTL_SECONDS, load);
+        return search ? load() : cacheService.getOrSetGuarded(CACHE_KEYS.lookups(`organizations:${limit}`), ENTITY_TTL_SECONDS, load);
     },
 
     async contacts(query: unknown): Promise<ContactLookupDto[]> {
@@ -197,7 +202,7 @@ export const lookupService = {
                 assignedTo: c.assignedTo,
             }));
         };
-        return search || organizationId ? load() : cacheService.getOrSet(CACHE_KEYS.lookups(`contacts:${limit}`), ENTITY_TTL_SECONDS, load);
+        return search || organizationId ? load() : cacheService.getOrSetGuarded(CACHE_KEYS.lookups(`contacts:${limit}`), ENTITY_TTL_SECONDS, load);
     },
 
     async products(query: unknown): Promise<ProductLookupDto[]> {
@@ -226,11 +231,12 @@ export const lookupService = {
                 taxRate: p.taxRate ?? '',
             }));
         };
-        return search || category ? load() : cacheService.getOrSet(CACHE_KEYS.lookups(`products:${limit}`), ENTITY_TTL_SECONDS, load);
+        return search || category ? load() : cacheService.getOrSetGuarded(CACHE_KEYS.lookups(`products:${limit}`), ENTITY_TTL_SECONDS, load);
     },
 
     /** `NatureOfCallItem[]` (active entries). */
     async natureOfCalls() {
+        // Plain getOrSet: a seeded master with no write path in the CRM, so only its TTL (and the seed) drops it.
         return cacheService.getOrSet(CACHE_KEYS.lookups('nature-of-calls'), MASTER_TTL_SECONDS, () =>
             prisma.natureOfCall.findMany({
                 where: { isActive: true },
@@ -242,7 +248,7 @@ export const lookupService = {
 
     /** `PartnerCompany[]` (active). */
     async partnerCompanies() {
-        return cacheService.getOrSet(CACHE_KEYS.lookups('partner-companies'), MASTER_TTL_SECONDS, async () => {
+        return cacheService.getOrSetGuarded(CACHE_KEYS.lookups('partner-companies'), MASTER_TTL_SECONDS, async () => {
             const rows = await prisma.partnerCompany.findMany({ where: { isActive: true, isDeleted: false }, orderBy: { partnerName: 'asc' } });
             return rows.map((p) => ({
                 id: p.id,
@@ -261,7 +267,7 @@ export const lookupService = {
     /** `PartnerCompanyContact[]` (active), optionally for one partner company (by name). */
     async partnerContacts(query: unknown) {
         const { partnerCompany } = partnerContactsQuerySchema.parse(query ?? {});
-        const all = await cacheService.getOrSet(CACHE_KEYS.lookups('partner-contacts'), MASTER_TTL_SECONDS, async () => {
+        const all = await cacheService.getOrSetGuarded(CACHE_KEYS.lookups('partner-contacts'), MASTER_TTL_SECONDS, async () => {
             const rows = await prisma.partnerCompanyContact.findMany({
                 where: { isActive: true, partnerCompany: { isActive: true, isDeleted: false } },
                 include: { partnerCompany: { select: { partnerName: true } } },
@@ -287,6 +293,8 @@ export const lookupService = {
     async addressMaster(query: unknown) {
         const { country } = addressMasterQuerySchema.parse(query ?? {});
         const key = country ? `${CACHE_KEYS.addressMaster}:${country}` : CACHE_KEYS.addressMaster;
+        // Plain getOrSet: ISO countries and subdivisions are seeded reference data the CRM never writes (only cities
+        // are edited, under their own keys), so only the TTL expires these.
         return cacheService.getOrSet(key, ADDRESS_MASTER_TTL_SECONDS, async () => {
             const [countries, subdivisions] = await Promise.all([
                 prisma.country.findMany({ orderBy: { countryName: 'asc' } }),
@@ -326,7 +334,7 @@ export const lookupService = {
             rows.map((c) => ({ id: c.id, cityName: c.cityName, subdivisionCode: c.subdivisionCode ?? '' }));
 
         if (!term) {
-            return cacheService.getOrSet(`${CACHE_KEYS.addressMaster}:cities:${state}:${limit}`, ADDRESS_MASTER_TTL_SECONDS, async () =>
+            return cacheService.getOrSetGuarded(`${CACHE_KEYS.addressMaster}:cities:${state}:${limit}`, ADDRESS_MASTER_TTL_SECONDS, async () =>
                 toDto(await prisma.city.findMany({ where: scope, select, orderBy: BY_SIZE_THEN_NAME, take: limit })),
             );
         }

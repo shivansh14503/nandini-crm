@@ -137,6 +137,8 @@ async function lookupDomain(domain: string): Promise<DomainMailStatus> {
 /** DNS answer for a domain, cached in Redis for a day (unknown answers are retried, not cached). */
 export async function domainMailStatus(domain: string): Promise<DomainMailStatus> {
     const key = `cache:email-domain:${domain}`;
+    // Plain getOrSet, not the guarded read: DNS is external data no CRM write changes or invalidates (only the TTL
+    // and the line below drop it), so there is no write to race and no placeholder round trip to pay for.
     const status = await cacheService.getOrSet(key, DOMAIN_CACHE_TTL_SECONDS, () => lookupDomain(domain));
     if (status === 'unknown') await cacheService.invalidate(key);
     return status;

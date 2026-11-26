@@ -25,6 +25,8 @@ export interface LinkedChoiceField {
 export interface OptionValueMigration {
     records: number;
     filters: number;
+    /** Modules whose records were rewritten: their cached lookups, search results and dashboards now hold the old value. */
+    modules: CrmModuleKey[];
 }
 
 const same = (a: unknown, b: string) => typeof a === 'string' && a.toLowerCase() === b.toLowerCase();
@@ -192,14 +194,19 @@ async function migrateField(tx: TransactionClient, field: LinkedChoiceField, fro
 
 /**
  * Renames option value `from` to `to` on every record and table filter of `fields` (the fields linked to the
- * option's dropdown), in the caller's transaction.
+ * option's dropdown), in the caller's transaction. The caller drops the entity caches of the returned `modules` once
+ * the transaction commits.
  */
 export async function migrateOptionValue(tx: TransactionClient, fields: LinkedChoiceField[], from: string, to: string): Promise<OptionValueMigration> {
-    if (from === to) return { records: 0, filters: 0 };
+    if (from === to) return { records: 0, filters: 0, modules: [] };
     const records = new Set<string>();
+    const modules = new Set<CrmModuleKey>();
     for (const field of fields) {
         if (field.fieldType !== 'select' && field.fieldType !== 'multiselect') continue;
-        for (const id of await migrateField(tx, field, from, to)) records.add(`${field.module}:${id}`);
+        // migrateField only changes rows of a module in MODULE_TABLES, so a module with changed ids is a CrmModuleKey.
+        const ids = await migrateField(tx, field, from, to);
+        for (const id of ids) records.add(`${field.module}:${id}`);
+        if (ids.length > 0) modules.add(field.module as CrmModuleKey);
     }
 
     // Table filters: a condition is keyed by the list column id (the field key, or `customFields.<key>` for a custom field).
@@ -220,10 +227,10 @@ export async function migrateOptionValue(tx: TransactionClient, fields: LinkedCh
             filters++;
         }
     }
-    return { records: records.size, filters };
+    return { records: records.size, filters, modules: [...modules] };
 }
 
-export function describeOptionMigration(m: OptionValueMigration): string {
+export function describeOptionMigration(m: Pick<OptionValueMigration, 'records' | 'filters'>): string {
     const part = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`;
     return `Carried over to the renamed option: ${part(m.records, 'record')}${m.filters ? `, ${part(m.filters, 'table filter')}` : ''}.`;
 }

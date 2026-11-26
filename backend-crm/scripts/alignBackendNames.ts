@@ -1,10 +1,11 @@
 import { prisma, type TransactionClient } from '../src/config/prisma.js';
+import { connectRedis, isRedisReady, redis } from '../src/config/redis.js';
 import { auditService } from '../src/services/audit.service.js';
 import { HttpError } from '../src/utils/httpError.js';
-import { CACHE_KEYS, cacheService, type CachedEntity } from '../src/services/cache.service.js';
+import { cacheService } from '../src/services/cache.service.js';
 import { lockModuleFields, describeMigration, migrateFieldKey } from '../src/modules/form-configs/fieldKeyRename.js';
 import { CRM_MODULES, type CrmModuleKey } from '../src/modules/form-configs/formConfig.defaults.js';
-import { categoryKeyForLabel, changeOptionValue, customFieldKey } from '../src/modules/form-configs/formConfig.service.js';
+import { categoryKeyForLabel, changeOptionValue, customFieldKey, invalidateFormConfigCaches } from '../src/modules/form-configs/formConfig.service.js';
 
 /**
  * One-off clean-up: makes every backend name match the name shown in the UI, as the app now keeps them.
@@ -79,7 +80,7 @@ async function alignOptions(tx: TransactionClient, report: Report): Promise<void
         // Pass 2: each takes its label.
         for (const option of renamed) {
             const parked = await tx.dropdownOption.findUniqueOrThrow({ where: { id: option.id } });
-            const note = await changeOptionValue(tx, parked, option.label);
+            const note = (await changeOptionValue(tx, parked, option.label))?.note;
             await auditService.record(tx, {
                 entityType: 'DropdownOption',
                 entityId: option.id,
@@ -96,6 +97,24 @@ async function alignOptions(tx: TransactionClient, report: Report): Promise<void
         const linked = await tx.formFieldDefinition.findMany({ where: { dropdownCategoryId: category.id }, select: { module: true } });
         for (const { module } of linked) if ((CRM_MODULES as readonly string[]).includes(module)) report.modules.add(module as CrmModuleKey);
     }
+}
+
+/** How long to wait for Redis before giving up on dropping the caches. */
+const REDIS_WAIT_MS = 5_000;
+
+/**
+ * Drops the caches the renames made stale (form configs, and the lookups, search results and dashboards of the
+ * modules whose records changed), so running API processes stop serving the old names. The shared Redis client
+ * connects lazily (only the API, the worker and the seed connect it), so connect it first; otherwise every
+ * invalidation would be skipped as "Redis not ready". Returns false when Redis could not be reached.
+ */
+async function dropCaches(modules: Set<CrmModuleKey>): Promise<boolean> {
+    connectRedis();
+    for (let waited = 0; !isRedisReady() && waited < REDIS_WAIT_MS; waited += 100) await new Promise((r) => setTimeout(r, 100));
+    if (!isRedisReady()) return false;
+    await invalidateFormConfigCaches();
+    for (const module of modules) await cacheService.invalidateEntityCaches(module);
+    return true;
 }
 
 /** Builder-added dropdowns whose key isn't their name in snake_case. */
@@ -188,9 +207,13 @@ async function main(): Promise<void> {
         return;
     }
     if (report.lines.length > 0) {
-        await cacheService.invalidatePattern(`${CACHE_KEYS.lookups('form-configs')}*`);
-        for (const module of report.modules) await cacheService.invalidateEntityCaches(module as CachedEntity);
         console.log(`\nApplied ${report.lines.length} change(s).`);
+        if (!(await dropCaches(report.modules))) {
+            console.warn(
+                'Redis could not be reached, so cached form configs, lookups and search results were not dropped: restart the API ' +
+                    '(or wait up to an hour for the cached form configs to expire) so it stops showing the old names.',
+            );
+        }
     }
 }
 
@@ -199,4 +222,9 @@ main()
         console.error(err instanceof Error ? err.message : err);
         process.exitCode = 1;
     })
-    .finally(() => prisma.$disconnect());
+    .finally(async () => {
+        // disconnect(), not quit(): with Redis unreachable the client is mid-reconnect, quit() never settles, and its
+        // retry timers would keep the process alive (as in prisma/seed.ts).
+        redis.disconnect();
+        await prisma.$disconnect();
+    });

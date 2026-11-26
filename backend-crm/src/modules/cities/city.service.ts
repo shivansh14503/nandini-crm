@@ -176,7 +176,8 @@ async function rewriteAddresses(
     return counts;
 }
 
-async function invalidateCityCaches(owners: Partial<Record<CityOwner, number>> = {}): Promise<void> {
+/** Drops every state's cached city list and the entity caches of the record owners a rename / delete rewrote. */
+export async function invalidateCityCaches(owners: Partial<Record<CityOwner, number>> = {}): Promise<void> {
     await Promise.all([
         cacheService.invalidatePattern(`${CACHE_KEYS.addressMaster}:cities:*`),
         ...(Object.keys(owners) as CityOwner[]).map((owner) => cacheService.invalidateEntityCaches(CITY_OWNER_LABELS[owner].entity)),

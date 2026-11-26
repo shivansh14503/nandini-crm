@@ -92,6 +92,14 @@ export const searchQuerySchema = z.object({
 });
 
 const SEARCH_CACHE_TTL_SECONDS = 30;
+/**
+ * Placeholder lifetime of a guarded search read (the default is 90 s). Search is the slowest cached read: a document
+ * series query, then up to 27 queries (9 modules x rows / total / ids) queued on the driver's 10-connection pool,
+ * each allowed 15 s, after a cold connect of up to 30 s, so it can outlast 90 s. A read that outlives its placeholder
+ * is only left uncached, and a placeholder left behind by a crash only stops that one query being cached, so a
+ * generous lifetime costs nothing.
+ */
+const SEARCH_PLACEHOLDER_TTL_SECONDS = 180;
 
 const joinParts = (...parts: (string | null | undefined)[]) => parts.filter(Boolean).join(' • ');
 
@@ -902,7 +910,10 @@ export const searchService = {
         // part of a Redis key (or a SCAN pattern).
         const digest = createHash('sha256').update(q.toLowerCase()).digest('hex').slice(0, 32);
         const key = CACHE_KEYS.search(`${category ?? 'all'}:${page}:${limit}:${totals ? 't' : '-'}:${ids ? 'i' : '-'}:d${minDigits}:${digest}`);
-        return cacheService.getOrSet(key, SEARCH_CACHE_TTL_SECONDS, () => runSearch(q, { limit, page, category, totals, ids, minDigits }));
+        // Guarded: every entity write drops `cache:search:*`, so results read while a write commits are not cached.
+        return cacheService.getOrSetGuarded(key, SEARCH_CACHE_TTL_SECONDS, () => runSearch(q, { limit, page, category, totals, ids, minDigits }), {
+            placeholderTtlSeconds: SEARCH_PLACEHOLDER_TTL_SECONDS,
+        });
     },
 
     /**
