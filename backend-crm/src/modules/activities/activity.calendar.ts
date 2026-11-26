@@ -8,7 +8,7 @@ import { parseTimeOfDay } from '../../validators/notInPast.js';
 import { buildAccessScopeWhere } from '../shared/accessControl.js';
 import { loadRatingConfig } from '../leads/lead.followUp.js';
 import { CLOSED_SALES_STAGES } from '../opportunities/opportunity.validator.js';
-import { activityScopeWhere, canEditActivity, myResponseOf } from './activity.access.js';
+import { activityScopeWhere, canEditActivity, FOLLOW_UP_ORIGIN, lockedFieldsFor, myResponseOf } from './activity.access.js';
 import { allDayRange } from './activity.mapper.js';
 import { ACTIVITY_MAX_DURATION_DAYS, NOTE_TYPE, PLANNED_STATUS } from './activity.schedule.js';
 import { CALENDAR_DEFAULT_STATUSES, CALENDAR_SOURCES, type CalendarQuery, type CalendarSource } from './activity.validator.js';
@@ -17,6 +17,12 @@ import { CALENDAR_DEFAULT_STATUSES, CALENDAR_SOURCES, type CalendarQuery, type C
  * `GET /api/activities/calendar`: one feed of everything with a time in a window `[from, to)`: activities, plus the
  * lead / opportunity next follow-ups and contract renewal reminders those modules already store (read only, never
  * written). The where builders and row → item mappers are pure, so the rules are tested without a database.
+ *
+ * Follow-up activities (Calendar Phase 2 P2-4, `origin = 'followup'`) are listed under the lead / opportunity
+ * follow-up sources (the filters keep their meaning), as activities (`module: 'activities'`, `activityId`) that can't
+ * be dragged (`editable: false`). A record with an open follow-up activity the caller can see isn't listed again as a
+ * derived follow-up. With the company switch `followUpActivities` off (D44) follow-up activities are left out and the
+ * derived follow-ups show as in Phase 1.
  */
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -57,9 +63,13 @@ export interface CalendarItem {
     attendeeCount: number;
     /** The caller's reply when invited to the activity, else null. */
     myResponse: string | null;
-    /** True when the caller may reschedule it here (activities they may edit). */
+    /** True when the caller may reschedule it here (activities they may edit whose times aren't locked). */
     editable: boolean;
     overdue: boolean;
+    /** The activity behind the item (activities and follow-up activities); null for derived items. Opens the activity drawer. */
+    activityId: string | null;
+    /** Activity origin (`crm` / `followup` / `calendar`); null for derived items. */
+    origin: string | null;
 }
 
 export interface CalendarFeed {
@@ -123,7 +133,29 @@ export interface CalendarFilters {
     statuses: readonly string[];
 }
 
-export function activityCalendarWhere(user: AuthUser, filters: CalendarFilters, from: Date, to: Date): Prisma.ActivityWhereInput {
+/**
+ * `origin` filter of the feed's activity query (`origin` arm added to `activityCalendarWhere`): CRM-made / imported
+ * activities when the `activity` source is selected, lead / opportunity follow-up activities when their follow-up
+ * source is (and the `followUpActivities` switch is on). Null: the query isn't needed.
+ */
+export function calendarOriginWhere(sources: ReadonlySet<CalendarSource>, followUpActivities: boolean): Prisma.ActivityWhereInput | null {
+    const arms: Prisma.ActivityWhereInput[] = [];
+    if (sources.has('activity')) arms.push({ origin: { not: FOLLOW_UP_ORIGIN } });
+    const modules = followUpActivities
+        ? [...(sources.has('leadFollowup') ? ['leads'] : []), ...(sources.has('opportunityFollowup') ? ['opportunities'] : [])]
+        : [];
+    if (modules.length > 0) arms.push({ origin: FOLLOW_UP_ORIGIN, relatedModule: { in: modules } });
+    if (arms.length === 0) return null;
+    return arms.length === 1 ? arms[0] : { OR: arms };
+}
+
+export function activityCalendarWhere(
+    user: AuthUser,
+    filters: CalendarFilters,
+    from: Date,
+    to: Date,
+    origin?: Prisma.ActivityWhereInput,
+): Prisma.ActivityWhereInput {
     const and: Prisma.ActivityWhereInput[] = [
         { isDeleted: false },
         activityScopeWhere(user),
@@ -133,7 +165,19 @@ export function activityCalendarWhere(user: AuthUser, filters: CalendarFilters, 
         activityRangeWhere(from, to),
     ];
     if (filters.types?.length) and.push({ followupType: { in: [...filters.types] } });
+    if (origin) and.push(origin);
     return { AND: and };
+}
+
+/**
+ * Ids of the records (of `module`, among `ids`) that have an open follow-up activity `user` can see: their derived
+ * follow-up items are left out of the feed (the activity shows instead). Scoped with `activityScopeWhere`, so a
+ * derived item is only hidden from someone who sees the activity that replaces it.
+ */
+export function openFollowUpActivitiesWhere(user: AuthUser, module: 'leads' | 'opportunities', ids: readonly string[]): Prisma.ActivityWhereInput {
+    return {
+        AND: [activityScopeWhere(user), { origin: FOLLOW_UP_ORIGIN, status: PLANNED_STATUS, isDeleted: false, relatedModule: module, relatedId: { in: [...ids] } }],
+    };
 }
 
 /**
@@ -206,7 +250,9 @@ export const ACTIVITY_CALENDAR_SELECT = {
     relatedModule: true,
     relatedId: true,
     relatedTo: true,
+    relatedCode: true,
     location: true,
+    origin: true,
     attendees: { select: { kind: true, username: true, responseStatus: true } },
 } as const;
 
@@ -224,8 +270,18 @@ export interface ActivityCalendarRow {
     relatedModule: string | null;
     relatedId: string | null;
     relatedTo: string | null;
+    relatedCode: string | null;
     location: string | null;
+    origin: string;
     attendees: { kind: string; username: string | null; responseStatus: string }[];
+}
+
+/** The feed source of an activity: its record's follow-up source for a follow-up activity, else `activity`. */
+export function activitySource(row: Pick<ActivityCalendarRow, 'origin' | 'relatedModule'>): CalendarSource {
+    if (row.origin !== FOLLOW_UP_ORIGIN) return 'activity';
+    if (row.relatedModule === 'leads') return 'leadFollowup';
+    if (row.relatedModule === 'opportunities') return 'opportunityFollowup';
+    return 'activity';
 }
 
 export function activityToCalendarItem(row: ActivityCalendarRow, user: AuthUser, now: Date): CalendarItem {
@@ -233,7 +289,7 @@ export function activityToCalendarItem(row: ActivityCalendarRow, user: AuthUser,
     const days = row.allDay ? allDayRange(start, row.endAt, row.timeZone) : null;
     return {
         key: `activity:${row.id}`,
-        source: 'activity',
+        source: activitySource(row),
         module: 'activities',
         recordId: row.id,
         title: row.subject,
@@ -251,8 +307,11 @@ export function activityToCalendarItem(row: ActivityCalendarRow, user: AuthUser,
         location: row.location ?? '',
         attendeeCount: row.attendees.length,
         myResponse: myResponseOf(user, row),
-        editable: canEditActivity(user, row),
+        // Locked times (a follow-up activity moves with its record) can't be dragged.
+        editable: canEditActivity(user, row) && !lockedFieldsFor(row).includes('startAt'),
         overdue: row.status === PLANNED_STATUS && (row.endAt ?? start) < now,
+        activityId: row.id,
+        origin: row.origin,
     };
 }
 
@@ -299,6 +358,8 @@ function followupItem(
         myResponse: null,
         editable: false,
         overdue: slotOverdue(slot, now, timeZone),
+        activityId: null,
+        origin: null,
     };
 }
 
@@ -388,6 +449,8 @@ export function contractRenewalToCalendarItem(
         myResponse: null,
         editable: false,
         overdue: false,
+        activityId: null,
+        origin: null,
     };
 }
 
@@ -407,6 +470,23 @@ export function capRows<T>(rows: readonly T[], cap: number): { rows: T[]; trunca
 
 const empty = { items: [] as CalendarItem[], truncated: false };
 
+/**
+ * Derived follow-up items without the records that have an open follow-up activity the caller can see (one indexed
+ * query per source; nothing to ask when the switch is off or no record was read).
+ */
+async function withoutFollowUpActivities(
+    user: AuthUser,
+    module: 'leads' | 'opportunities',
+    items: CalendarItem[],
+    followUpActivities: boolean,
+): Promise<CalendarItem[]> {
+    if (!followUpActivities || items.length === 0) return items;
+    const ids = [...new Set(items.map((item) => item.recordId))];
+    const rows = await prisma.activity.findMany({ where: openFollowUpActivitiesWhere(user, module, ids), select: { relatedId: true } });
+    const covered = new Set(rows.map((row) => row.relatedId));
+    return items.filter((item) => !covered.has(item.recordId));
+}
+
 export async function calendarFeed(query: CalendarQuery, user: AuthUser, now = new Date()): Promise<CalendarFeed> {
     const timeZone = ENV.BUSINESS_TIMEZONE;
     const from = new Date(query.from);
@@ -418,12 +498,16 @@ export async function calendarFeed(query: CalendarQuery, user: AuthUser, now = n
         statuses: query.status?.length ? query.status : CALENDAR_DEFAULT_STATUSES,
     };
     const days = followupDayRange(from, to, timeZone);
+    // The company switch (D44), from the cached form configuration.
+    const { loadCalendarSettings } = await import('../integrations/integration.settings.js');
+    const { followUpActivities } = await loadCalendarSettings();
+    const origin = calendarOriginWhere(sources, followUpActivities);
 
     const [activities, leads, opportunities, contracts] = await Promise.all([
-        sources.has('activity')
+        origin
             ? prisma.activity
                   .findMany({
-                      where: activityCalendarWhere(user, filters, from, to),
+                      where: activityCalendarWhere(user, filters, from, to, origin),
                       select: ACTIVITY_CALENDAR_SELECT,
                       orderBy: [{ startAt: 'asc' }, { id: 'asc' }],
                       take: CALENDAR_CAPS.activity + 1,
@@ -442,7 +526,8 @@ export async function calendarFeed(query: CalendarQuery, user: AuthUser, now = n
                       take: CALENDAR_CAPS.leadFollowup + 1,
                   });
                   const capped = capRows(rows, CALENDAR_CAPS.leadFollowup);
-                  return { items: capped.rows.map((row) => leadFollowupToCalendarItem(row, timeZone, now)), truncated: capped.truncated };
+                  const items = capped.rows.map((row) => leadFollowupToCalendarItem(row, timeZone, now));
+                  return { items: await withoutFollowUpActivities(user, 'leads', items, followUpActivities), truncated: capped.truncated };
               })
             : empty,
         sources.has('opportunityFollowup')
@@ -453,9 +538,10 @@ export async function calendarFeed(query: CalendarQuery, user: AuthUser, now = n
                       orderBy: [{ nextFollowupDate: 'asc' }, { id: 'asc' }],
                       take: CALENDAR_CAPS.opportunityFollowup + 1,
                   })
-                  .then((rows) => {
+                  .then(async (rows) => {
                       const capped = capRows(rows, CALENDAR_CAPS.opportunityFollowup);
-                      return { items: capped.rows.map((row) => opportunityFollowupToCalendarItem(row, timeZone, now)), truncated: capped.truncated };
+                      const items = capped.rows.map((row) => opportunityFollowupToCalendarItem(row, timeZone, now));
+                      return { items: await withoutFollowUpActivities(user, 'opportunities', items, followUpActivities), truncated: capped.truncated };
                   })
             : empty,
         sources.has('contractRenewal')

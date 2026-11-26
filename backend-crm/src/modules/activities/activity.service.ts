@@ -22,7 +22,7 @@ import type { DropdownCategoryDto } from '../form-configs/formConfig.service.js'
 import { notifyActivityParticipants, scheduleActivityReminder } from '../notifications/notification.reminders.js';
 import { assertAssigneeValid } from '../shared/accessControl.js';
 import { assertDeletedRow, lockRecords, restoreData, runInTransaction, softDeleteData, type BulkDeleteResult } from '../shared/transactions.js';
-import { activityLocks, activityScopeWhere, canEditActivity, canViewActivity, myResponseOf, type ActivityAccessRow } from './activity.access.js';
+import { activityLocks, activityScopeWhere, canEditActivity, canViewActivity, lockedFieldsFor, myResponseOf, type ActivityAccessRow } from './activity.access.js';
 import { normalizeAttendees, planAttendeeSync, syncAttendees } from './activity.attendees.js';
 import { activityRangeWhere, calendarFeed, type CalendarFeed } from './activity.calendar.js';
 import { linkTargets, resolveActivityLinks, type LinkTarget } from './activity.links.js';
@@ -75,9 +75,9 @@ function assertCanEdit(user: AuthUser, row: ActivityAccessRow): void {
     if (!canEditActivity(user, row)) throw HttpError.forbidden(EDIT_FORBIDDEN_MESSAGE);
 }
 
-/** The DTO plus what the caller may do with it (`viewer` sits outside the audited record). */
+/** The DTO plus what the caller may do with it (`viewer`, `lockedFields` sit outside the audited record). */
 export function toActivityView(row: ActivityRow, user: AuthUser): ActivityView {
-    return { ...toActivityDto(row), viewer: { canEdit: canEditActivity(user, row), myResponse: myResponseOf(user, row) } };
+    return { ...toActivityDto(row), viewer: { canEdit: canEditActivity(user, row), myResponse: myResponseOf(user, row) }, lockedFields: lockedFieldsFor(row) };
 }
 
 // ── Configuration ────────────────────────────────────────────────────────────
@@ -318,7 +318,8 @@ type ActivityManagedColumn =
 /**
  * Columns only the system write path sets, written with the row so the audit entry and the write hook see them:
  * every Activity column except the API's fields (those come through the parsed input) and the ones the write path
- * computes. None exist yet; P2-4's `origin` and P2-8's organizer columns join this type with their migrations.
+ * computes. P2-4: `origin` (`'followup'` on a lead / opportunity follow-up activity); P2-8's organizer columns join
+ * this type with their migration.
  */
 export type ActivityRowData = Partial<Omit<Prisma.ActivityUncheckedCreateInput, ActivityApiColumn | ActivityManagedColumn>>;
 

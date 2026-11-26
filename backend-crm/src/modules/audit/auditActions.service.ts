@@ -16,7 +16,7 @@ import { ticketService } from '../tickets/ticket.service.js';
 import { parseChanges } from './audit.format.js';
 import { auditIdParamSchema, auditUndoBodySchema } from './auditAdmin.query.js';
 import { buildLabeler } from './auditAdmin.service.js';
-import { buildUndoPatch, fieldValue, planUndo, sameValue, UNDOABLE_ACTIONS, type UndoFieldPlan } from './auditUndo.js';
+import { buildUndoPatch, fieldValue, planUndo, sameValue, UNDOABLE_ACTIONS, undoBlockFor, type UndoFieldPlan } from './auditUndo.js';
 
 /**
  * Undo and Restore from Admin › Audit Log. Both go through the module's own service, so the record's normal rules
@@ -75,7 +75,8 @@ async function undoContext(params: unknown, user: AuthUser) {
     // A deleted record isn't found by getById (404): restore it first.
     const record = (await service.getById(row.entityId, user)) as Record<string, unknown>;
     const changes = parseChanges(row.changesJson);
-    return { row, service, record, plans: planUndo(changes, record) };
+    // Calendar-made record changes and a follow-up activity's locked fields can't be put back (auditUndo.ts).
+    return { row, service, record, plans: planUndo(changes, record, undoBlockFor(row, record)) };
 }
 
 /** One field of the undo preview, values as the screen shows them. */
@@ -89,6 +90,7 @@ async function presentPlans(module: string, plans: UndoFieldPlan[]) {
         to: show(plan.key, plan.to),
         current: show(plan.key, plan.current),
         status: plan.status,
+        ...(plan.reason ? { reason: plan.reason } : {}),
     }));
 }
 

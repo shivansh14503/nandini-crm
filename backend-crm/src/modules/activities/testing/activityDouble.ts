@@ -114,6 +114,7 @@ export function blankActivity(over: Partial<Activity> & Pick<Activity, 'id' | 's
         completedBy: null,
         revision: 0,
         customDataJson: null,
+        origin: 'crm',
         updatedBy: null,
         createdAt: now,
         updatedAt: now,

@@ -96,6 +96,42 @@ export function ActivityTypeChip({ type, compact = false }: { type: string; comp
     );
 }
 
+/**
+ * Tint of a lead / opportunity follow-up activity's "Follow-up" chip: its record's module hue (Leads orange,
+ * Opportunities violet), so the chip says which record it moves with. Activities' own hue otherwise.
+ */
+export function followUpModuleColor(relatedModule: string | null | undefined) {
+    return getModuleColor(relatedModule === 'leads' || relatedModule === 'opportunities' ? relatedModule : 'activities');
+}
+
+/** "Follow-up" chip of a lead / opportunity follow-up activity (Calendar Phase 2 P2-4): it moves with its record. */
+export function FollowUpChip({ relatedModule, relatedCode, compact = false }: { relatedModule: string | null | undefined; relatedCode?: string; compact?: boolean }) {
+    const color = followUpModuleColor(relatedModule);
+    const record = relatedModule === 'leads' ? 'lead' : relatedModule === 'opportunities' ? 'opportunity' : 'record';
+    return (
+        <Box
+            component="span"
+            title={`Next follow-up of ${relatedCode || `the ${record}`}: it moves with the ${record}`}
+            sx={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                px: compact ? 0.7 : 0.9,
+                py: 0.25,
+                borderRadius: '12px',
+                fontSize: '0.7rem',
+                fontWeight: 700,
+                whiteSpace: 'nowrap',
+                flexShrink: 0,
+                backgroundColor: color.soft,
+                color: color.text,
+                border: `1px solid ${color.border}`,
+            }}
+        >
+            Follow-up
+        </Box>
+    );
+}
+
 interface PillColors {
     bg: string;
     color: string;

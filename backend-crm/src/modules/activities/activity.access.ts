@@ -58,19 +58,55 @@ export interface ActivityLock {
     deleteRefusedReason: string | null;
 }
 
+/** Activity origins (Calendar Phase 2): made in the CRM, a lead / opportunity follow-up (P2-4), imported (P2-8). */
+export const ACTIVITY_ORIGINS = ['crm', 'followup', 'calendar'] as const;
+export type ActivityOrigin = (typeof ACTIVITY_ORIGINS)[number];
+export const FOLLOW_UP_ORIGIN: ActivityOrigin = 'followup';
+
+export const FOLLOW_UP_ACTIVITY_LOCKED = 'FOLLOW_UP_ACTIVITY_LOCKED';
+
+/**
+ * What a follow-up activity takes from its lead / opportunity (spec §8.13): changed on the record (Record a follow-up),
+ * never on the activity. Subject, location, attendees, reminder, remarks and custom fields stay editable.
+ */
+export const FOLLOW_UP_LOCKED_FIELDS = ['followupType', 'startAt', 'endAt', 'allDay', 'status', 'assignedTo', 'relatedModule', 'relatedId', 'relatedTo'] as const;
+
+/** What the lock reads from a row. */
+export type ActivityLockRow = Pick<Activity, 'origin' | 'status' | 'relatedModule' | 'relatedCode'>;
+
+const RECORD_NOUN: Readonly<Record<string, string>> = { leads: 'lead', opportunities: 'opportunity' };
+
+/** The lock of a follow-up activity (`origin = 'followup'`, any status), or null for any other row. */
+export function followUpLockOf(row: ActivityLockRow): ActivityLock | null {
+    if (row.origin !== FOLLOW_UP_ORIGIN) return null;
+    const noun = RECORD_NOUN[row.relatedModule ?? ''] ?? 'record';
+    const code = row.relatedCode ? ` (${row.relatedCode})` : '';
+    const open = row.status === 'Planned';
+    return {
+        fields: FOLLOW_UP_LOCKED_FIELDS,
+        code: FOLLOW_UP_ACTIVITY_LOCKED,
+        message: open
+            ? `This is the ${noun}'s next follow-up. Change it on the ${noun}${code}: Record a follow-up.`
+            : `This is a follow-up of the ${noun}${code}. Its schedule, type, status and owner can't be changed here.`,
+        deleteRefusedReason: open
+            ? `Next follow-up of ${row.relatedCode || `the ${noun}`}: change it on the ${noun}`
+            : `Follow-up history of ${row.relatedCode || `the ${noun}`}: kept with the ${noun}`,
+    };
+}
+
 export const activityLocks = {
     /**
-     * The lock on a stored row, or null. None yet (Phase 1 activities are never locked); P2-4 and P2-8 add theirs
-     * here. `activity.service.ts` already enforces it in `update`, `remove` and `bulkRemove`. Tests replace it with
-     * `mock.method`.
+     * The lock on a stored row, or null. P2-4: follow-up activities (`followUpLockOf`); P2-8 adds externally organized
+     * meetings here. `activity.service.ts` enforces it in `update`, `remove` and `bulkRemove`; the calendar feed reads
+     * it for `editable`. Tests replace it with `mock.method`.
      */
-    lockFor(_row: Activity): ActivityLock | null {
-        return null;
+    lockFor(row: ActivityLockRow): ActivityLock | null {
+        return followUpLockOf(row);
     },
 };
 
 /** Fields of the row a CRM update may not change (spec §8.13); `[]` when unlocked. */
-export function lockedFieldsFor(row: Activity): string[] {
+export function lockedFieldsFor(row: ActivityLockRow): string[] {
     return [...(activityLocks.lockFor(row)?.fields ?? [])];
 }
 

@@ -35,6 +35,7 @@ import {
 } from '../modules/activities/activity.schedule.js';
 import { MAX_ATTENDEES, NOTE_REMARKS_MESSAGE, PAST_START_MESSAGE, RELATED_RECORD_MESSAGE, activityPastIssues } from '../modules/activities/activity.validator.js';
 import * as zonedTime from '../utils/zonedTime.js';
+import { FOLLOW_UP_ACTIVITY_LOCKED, FOLLOW_UP_ORIGIN } from '../modules/activities/activity.access.js';
 import { ACTIVITY_ONLY_TYPE_MESSAGE, activityOnlyTypeIssues, isActivityOnlyFollowupType } from '../modules/shared/followupTypes.js';
 import { PASSWORD_MAX_LENGTH, PASSWORD_MIN_LENGTH, PASSWORD_RULES, passwordPolicyIssue } from '../modules/auth/passwordPolicy.js';
 import { GOOGLE_SCOPE_PROFILES, INTEGRATION_PROVIDERS, SECRET_EXPIRY_WARNING_DAYS } from '../modules/integrations/integration.constants.js';
@@ -108,6 +109,8 @@ interface FrontendActivityTypes {
 }
 
 interface FrontendActivityContract {
+    FOLLOW_UP_ORIGIN: string;
+    FOLLOW_UP_ACTIVITY_LOCKED: string;
     ACTIVITY_MAX_ATTENDEES: number;
     ACTIVITY_NOT_APPLICABLE: Readonly<Record<string, readonly string[]>>;
     ACTIVITY_RELATED_MODULE_LABELS: Readonly<Record<string, string>>;
@@ -323,6 +326,9 @@ describe('backend ↔ frontend contract', { skip }, () => {
         assert.deepEqual(contract.ACTIVITY_NOT_APPLICABLE, ACTIVITY_NOT_APPLICABLE);
         assert.equal(contract.ACTIVITY_MAX_ATTENDEES, MAX_ATTENDEES);
         assert.deepEqual(contract.ACTIVITY_RELATED_MODULE_LABELS, ACTIVITY_RELATED_MODULE_LABELS);
+        // Follow-up activities (P2-4): their origin and the 409 code of a locked-field write.
+        assert.equal(contract.FOLLOW_UP_ORIGIN, FOLLOW_UP_ORIGIN);
+        assert.equal(contract.FOLLOW_UP_ACTIVITY_LOCKED, FOLLOW_UP_ACTIVITY_LOCKED);
     });
 
     it('frontend utils/zonedTime.ts converts times exactly as the backend', async () => {

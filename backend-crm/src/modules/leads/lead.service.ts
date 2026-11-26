@@ -23,6 +23,20 @@ import { activityOnlyTypeIssues } from '../shared/followupTypes.js';
 import { resolveReferredBy } from '../shared/referredBy.js';
 import { toLeadData, toLeadDto, type LeadDto } from './lead.mapper.js';
 import { resolveAddressPlaces } from '../cities/cityAddresses.js';
+import { loadFollowUpContext } from '../activities/activity.system.js';
+import type { ActivityCommitRow } from '../activities/activity.service.js';
+import {
+    afterFollowUpCommit,
+    cancelRecordFollowUps,
+    followUpSubject,
+    LEAD_FOLLOW_UP_SELECT,
+    leadFollowUpTarget,
+    NO_OUTCOME,
+    reconcileRecordFollowUp,
+    retryOnceOnUniqueViolation,
+    type FollowUpOutcome,
+    type RecordFollowUpWrite,
+} from '../activities/activity.followUp.js';
 import {
     checkLeadDuplicatesQuerySchema,
     CONVERTED_STATUS,
@@ -85,7 +99,9 @@ async function loadLead(tx: TransactionClient | typeof prisma, id: string) {
 
 /**
  * Inserts a lead inside the caller's transaction (used by `create`, import and the seed). `rating` is its first
- * Rating (`newLeadRatingColumns`); the Rating is never taken from the lead input.
+ * Rating (`newLeadRatingColumns`); the Rating is never taken from the lead input. With `followUp` (create, import;
+ * not the seed) the lead's follow-up activity is created too (Calendar Phase 2 P2-4, activity.followUp.ts), its
+ * writes collected in `followUp.rows` for `afterFollowUpCommit`; `closingStatuses` comes from `loadRatingConfig`.
  */
 export async function createLeadRecord(
     tx: TransactionClient,
@@ -93,6 +109,7 @@ export async function createLeadRecord(
     user: AuthUser,
     rating: RatingColumns,
     lookups: PrefetchedLookups = {},
+    followUp?: RecordFollowUpWrite & { closingStatuses: ReadonlySet<string> },
 ): Promise<LeadDto> {
     await assertTaxIdsUnique(tx, 'lead', { gstNumber: input.gstNumber });
     const leadCode = await generateEntityCode(tx, 'LD');
@@ -106,6 +123,10 @@ export async function createLeadRecord(
 
     const dto = toLeadDto(await loadLead(tx, row.id));
     await auditService.record(tx, { entityType: 'Lead', entityId: row.id, action: 'CREATE', changedBy: user.username, changes: dto });
+    if (followUp) {
+        const { rows } = await reconcileRecordFollowUp(tx, leadFollowUpTarget(row, followUp.closingStatuses), NO_OUTCOME, user.username, new Date(), followUp);
+        followUp.rows.push(...rows);
+    }
     return dto;
 }
 
@@ -176,12 +197,20 @@ export const leadService = {
         const now = businessNow();
         assertFutureSlot({ date: input.nextFollowupDate ?? '', time: input.nextFollowupTime ?? '' }, now);
         await assertEmailsDeliverable(input.emailAddress, 'emailAddress');
+        // Loaded before the transaction (follow-up activity, activity.followUp.ts).
+        const context = await loadFollowUpContext();
 
-        const created = await runInTransaction(async (tx) => {
-            const rating = newLeadRatingColumns(await loadRatingConfig(tx), now.slice(0, 10), input.nextFollowupDate);
-            return createLeadRecord(tx, input, user, rating);
-        });
+        const { created, rows } = await retryOnceOnUniqueViolation(() =>
+            runInTransaction(async (tx) => {
+                const ratingConfig = await loadRatingConfig(tx);
+                const rating = newLeadRatingColumns(ratingConfig, now.slice(0, 10), input.nextFollowupDate);
+                const rows: ActivityCommitRow[] = [];
+                const created = await createLeadRecord(tx, input, user, rating, {}, { context, notify: true, rows, closingStatuses: ratingConfig.closingStatuses });
+                return { created, rows };
+            }),
+        );
         await cacheService.invalidateEntityCaches('leads');
+        await afterFollowUpCommit(rows, user);
         queueEmailVerification({ leadId: created.id });
         return created;
     },
@@ -193,12 +222,13 @@ export const leadService = {
      */
     async update(id: string, body: Record<string, unknown>, user: AuthUser): Promise<LeadDto> {
         const fieldConfig = await loadModuleFieldConfig('leads');
+        const context = await loadFollowUpContext();
         const { followUpDecision, ...rest } = body;
         const response = typeof rest.customerResponse === 'string' ? rest.customerResponse.trim() : '';
         // Customer Response and Remarks belong to a recorded follow-up: a details-only save keeps the stored ones.
         const patch: Record<string, unknown> = response ? rest : omitKeys(rest, ['customerResponse', 'remarks']);
         if ('emailAddress' in patch) await assertEmailsDeliverable(patch.emailAddress, 'emailAddress', { leadId: id });
-        const updated = await runInTransaction(async (tx) => {
+        const { after: updated, rows } = await retryOnceOnUniqueViolation(() => runInTransaction(async (tx) => {
             await lockRecords(tx, 'lead', [id]);
             const existing = await loadLead(tx, id);
             assertRecordAccess(user, existing);
@@ -217,6 +247,7 @@ export const leadService = {
             if (LEAD_SOURCE_DETAIL_KEYS.some((key) => key in patch)) assertLeadSourceDetails(input);
             // Task / Note are Activities-only: refused when the value changes to one (a stored one stays editable).
             throwFieldIssues(activityOnlyTypeIssues(input.followupType, before.followupType));
+            const ratingConfig = await loadRatingConfig(tx);
             const plan = planLeadEdit({
                 state: existing,
                 response,
@@ -224,7 +255,7 @@ export const leadService = {
                 decision: followUpDecision,
                 nextStatus: input.status,
                 next: { date: input.nextFollowupDate ?? '', time: input.nextFollowupTime ?? '' },
-                config: await loadRatingConfig(tx),
+                config: ratingConfig,
                 now: businessNow(),
             });
             await assertTaxIdsUnique(tx, 'lead', { gstNumber: input.gstNumber }, { excludeId: id, previous: { gstNumber: existing.gstNumber } });
@@ -240,7 +271,8 @@ export const leadService = {
                 await replaceEmails(tx, { leadId: id }, normalizeEmails(input.emailAddress));
             }
 
-            const after = toLeadDto(await loadLead(tx, id));
+            const saved = await loadLead(tx, id);
+            const after = toLeadDto(saved);
             const changes = diffRecords(before, after);
             if (plan.followUp) {
                 // Written even when nothing else changed: every recorded follow-up is part of the history.
@@ -248,24 +280,41 @@ export const leadService = {
             } else if (Object.keys(changes).length > 0) {
                 await auditService.record(tx, { entityType: 'Lead', entityId: id, action: 'UPDATE', changedBy: user.username, changes });
             }
-            return after;
-        });
+
+            // The follow-up activity follows the save (activity.followUp.ts): a recorded response completes it (or is
+            // logged when the slot is kept), a new slot moves or re-creates it, closing the lead cancels it; owner, type
+            // and name changes reconcile too.
+            const outcome: FollowUpOutcome = plan.followUp
+                ? { kind: 'recorded', response: plan.followUp.response, remarks: plan.followUp.remarks, decision: plan.followUp.decision }
+                : NO_OUTCOME;
+            const target = {
+                ...leadFollowUpTarget(saved, ratingConfig.closingStatuses),
+                derivedSubjectBefore: followUpSubject(leadFollowUpTarget(existing, ratingConfig.closingStatuses)),
+            };
+            const { rows } = await reconcileRecordFollowUp(tx, target, outcome, user.username, new Date(), { context, notify: true });
+            return { after, plan, rows };
+        }));
 
         await cacheService.invalidateEntityCaches('leads');
+        await afterFollowUpCommit(rows, user);
         if ('emailAddress' in patch) queueEmailVerification({ leadId: id });
         return updated;
     },
 
     async remove(id: string, user: AuthUser): Promise<void> {
-        await runInTransaction(async (tx) => {
+        const context = await loadFollowUpContext();
+        const { rows } = await runInTransaction(async (tx) => {
             await lockRecords(tx, 'lead', [id]);
             const existing = await tx.lead.findFirst({ where: { id, isDeleted: false }, select: OWNER_SELECT });
             if (!existing) throw leadNotFound();
             assertRecordAccess(user, existing);
             await tx.lead.update({ where: { id }, data: softDeleteData(user) });
             await auditService.record(tx, { entityType: 'Lead', entityId: id, action: 'DELETE', changedBy: user.username });
+            // A deleted lead's open follow-up activity is cancelled (a restore re-creates one).
+            return cancelRecordFollowUps(tx, 'leads', [id], user.username, new Date(), { context, notify: true });
         });
         await cacheService.invalidateEntityCaches('leads');
+        await afterFollowUpCommit(rows, user);
     },
 
     /**
@@ -273,18 +322,26 @@ export const leadService = {
      * Writes a RESTORE entry pointing at the DELETE it reverses (`revertsId`).
      */
     async restore(id: string, user: AuthUser, revertsId?: string): Promise<void> {
-        await runInTransaction(async (tx) => {
-            await lockRecords(tx, 'lead', [id]);
-            const row = assertDeletedRow(await tx.lead.findUnique({ where: { id }, select: { isDeleted: true, gstNumber: true } }), 'Lead');
-            await assertTaxIdsUnique(tx, 'lead', { gstNumber: row.gstNumber }, { excludeId: id });
-            await tx.lead.update({ where: { id }, data: restoreData(user) });
-            await auditService.record(tx, { entityType: 'Lead', entityId: id, action: 'RESTORE', changedBy: user.username, revertsId });
-        });
+        const context = await loadFollowUpContext();
+        const { rows } = await retryOnceOnUniqueViolation(() =>
+            runInTransaction(async (tx) => {
+                await lockRecords(tx, 'lead', [id]);
+                const row = assertDeletedRow(await tx.lead.findUnique({ where: { id }, select: { isDeleted: true, gstNumber: true } }), 'Lead');
+                await assertTaxIdsUnique(tx, 'lead', { gstNumber: row.gstNumber }, { excludeId: id });
+                const restored = await tx.lead.update({ where: { id }, data: restoreData(user), select: LEAD_FOLLOW_UP_SELECT });
+                await auditService.record(tx, { entityType: 'Lead', entityId: id, action: 'RESTORE', changedBy: user.username, revertsId });
+                // Re-creates the follow-up activity when the lead is open with a slot (the cancelled one stays as history).
+                const { closingStatuses } = await loadRatingConfig(tx);
+                return reconcileRecordFollowUp(tx, leadFollowUpTarget(restored, closingStatuses), NO_OUTCOME, user.username, new Date(), { context, notify: true });
+            }),
+        );
         await cacheService.invalidateEntityCaches('leads');
+        await afterFollowUpCommit(rows, user);
     },
 
     async bulkRemove(ids: string[], user: AuthUser): Promise<BulkDeleteResult> {
-        const result = await runInTransaction(async (tx) => {
+        const context = await loadFollowUpContext();
+        const { result, rows } = await runInTransaction(async (tx) => {
             await lockRecords(tx, 'lead', ids);
             const live = await tx.lead.findMany({ where: { id: { in: ids }, isDeleted: false }, select: { id: true, ...OWNER_SELECT } });
             for (const row of live) assertRecordAccess(user, row);
@@ -296,10 +353,12 @@ export const leadService = {
                     liveIds.map((entityId) => ({ entityType: 'Lead' as const, entityId, action: 'DELETE' as const, changedBy: user.username })),
                 );
             }
-            return { deleted: liveIds.length, ids: liveIds, notFound: ids.filter((id) => !liveIds.includes(id)) };
+            const { rows } = await cancelRecordFollowUps(tx, 'leads', liveIds, user.username, new Date(), { context, notify: true });
+            return { result: { deleted: liveIds.length, ids: liveIds, notFound: ids.filter((id) => !liveIds.includes(id)) }, rows };
         });
 
         if (result.deleted > 0) await cacheService.invalidateEntityCaches('leads');
+        await afterFollowUpCommit(rows, user);
         return result;
     },
 

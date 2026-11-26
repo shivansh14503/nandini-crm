@@ -27,6 +27,46 @@ export interface UndoFieldPlan {
     /** Value on the record now. */
     current: unknown;
     status: UndoFieldStatus;
+    /** Why a `blocked` field can't be put back, when there is more to say than "hidden or gone" (`UndoBlock`). */
+    reason?: string;
+}
+
+/** Fields of an entry that undo must leave alone, and why (`undoBlockFor`). */
+export interface UndoBlock {
+    /** `'all'`: every field of the entry. */
+    fields: ReadonlySet<string> | 'all';
+    reason: string;
+}
+
+/** Audit origin route of calendar sync work (Calendar Phase 2, `job:calendar-sync:<provider>`). */
+export const CALENDAR_SYNC_ROUTE_PREFIX = 'job:calendar-sync';
+export const CALENDAR_CHANGE_REASON = 'Changed from the calendar: change it in Google / Outlook or on the record.';
+export const FOLLOW_UP_LOCK_REASON = 'A follow-up activity follows its lead / opportunity: change it on the record (Record a follow-up).';
+
+/** DTO keys that move together with a locked field (the days of an all-day start / end, the related record's code). */
+const LOCK_COMPANIONS: Readonly<Record<string, readonly string[]>> = {
+    startAt: ['startDay'],
+    endAt: ['endDay'],
+    relatedId: ['relatedCode'],
+};
+
+/**
+ * What an undo of this entry may not write back (spec §3.6), or null:
+ *  • a Lead / Opportunity entry written by calendar sync (the follow-up activity's time moved in Google / Outlook,
+ *    P2-5): every field, as undoing it through the record's form would hit "Pick a Customer Response…";
+ *  • an Activity entry on an activity whose fields are locked now (`lockedFields` of the activity view, e.g. a
+ *    lead / opportunity follow-up activity, P2-4): those fields, as `PUT` would refuse them with 409
+ *    FOLLOW_UP_ACTIVITY_LOCKED. An ordinary activity's entries stay undoable, whoever wrote them.
+ */
+export function undoBlockFor(entry: { entityType: string; route?: string | null }, record: Record<string, unknown>): UndoBlock | null {
+    if ((entry.entityType === 'Lead' || entry.entityType === 'Opportunity') && entry.route?.startsWith(CALENDAR_SYNC_ROUTE_PREFIX)) {
+        return { fields: 'all', reason: CALENDAR_CHANGE_REASON };
+    }
+    if (entry.entityType === 'Activity' && Array.isArray(record.lockedFields) && record.lockedFields.length > 0) {
+        const locked = record.lockedFields.filter((key): key is string => typeof key === 'string');
+        return { fields: new Set(locked.flatMap((key) => [key, ...(LOCK_COMPANIONS[key] ?? [])])), reason: FOLLOW_UP_LOCK_REASON };
+    }
+    return null;
 }
 
 const isObject = (value: unknown): value is Record<string, unknown> => value !== null && typeof value === 'object' && !Array.isArray(value);
@@ -65,11 +105,12 @@ export function fieldValue(record: Record<string, unknown>, key: string): unknow
 const isField = (record: Record<string, unknown>, key: string) => key.startsWith(CUSTOM_PREFIX) || key in record;
 const wasRedacted = (value: unknown) => value === REDACTED;
 
-/** Every field the entry changed, with what an undo would do to it now. */
-export function planUndo(changes: unknown, record: Record<string, unknown>): UndoFieldPlan[] {
+/** Every field the entry changed, with what an undo would do to it now. `block`: fields to leave alone (`undoBlockFor`). */
+export function planUndo(changes: unknown, record: Record<string, unknown>, block?: UndoBlock | null): UndoFieldPlan[] {
     return expandDiff(changes).map(({ key, from, to }) => {
         const current = fieldValue(record, key);
         let status: UndoFieldStatus;
+        if (block && (block.fields === 'all' || block.fields.has(key))) return { key, from, to, current, status: 'blocked' as const, reason: block.reason };
         if (wasRedacted(from) || wasRedacted(to) || !isField(record, key)) status = 'blocked';
         else if (sameValue(current, to)) status = sameValue(from, to) ? 'already' : 'ready';
         else status = sameValue(current, from) ? 'already' : 'conflict';

@@ -186,8 +186,8 @@ describe('insertSystemActivity', () => {
     it('writes rowData (columns the API cannot set) with the row, so the hook sees the final row', async () => {
         const state = installActivityDouble({ users: USERS });
         const hook = captureHook(state);
-        // No such column yet: P2-4 adds `origin` with its migration (the double stores whatever it is given).
-        const rowData = { origin: 'followup' } as ActivityRowData;
+        // P2-4's `origin` column (follow-up activities).
+        const rowData: ActivityRowData = { origin: 'followup' };
         const { after } = await runInTransaction((tx) =>
             insertSystemActivity(tx, { followupType: 'Call', subject: 'x', assignedTo: 'palak', startAt: inDays(1).toISOString() }, 'palak', new Date(), {
                 activityConfig: CONFIG,
@@ -199,9 +199,10 @@ describe('insertSystemActivity', () => {
         assert.equal((hook[0].event.after as unknown as Record<string, unknown>).origin, 'followup');
         assert.equal(state.calls.filter((c) => c.startsWith('activity.update')).length, 0, 'one insert, no follow-up update');
 
-        // A CRM save can't set it: the API schema drops unknown keys.
+        // A CRM save can't set it: the API schema drops unknown keys, so the column keeps its default.
         const crm = await activityService.create({ followupType: 'Call', subject: 'y', assignedTo: 'palak', startAt: inDays(1).toISOString(), origin: 'followup' }, PALAK);
-        assert.equal((state.activities.find((a) => a.id === crm.id) as unknown as Record<string, unknown>).origin, undefined);
+        assert.equal(state.activities.find((a) => a.id === crm.id)?.origin, 'crm');
+        assert.equal(crm.origin, 'crm');
     });
 
     it('is rolled back with the transaction when the write hook throws (it runs inside it)', async () => {
@@ -319,13 +320,13 @@ describe('applySystemPatch', () => {
         const state = installActivityDouble({ users: USERS, activities: [seedActivity()] });
         const hook = captureHook(state);
         const { after } = await runInTransaction((tx) =>
-            applySystemPatch(tx, 'a1', {}, 'palak', new Date(), { activityConfig: CONFIG, createdBy: 'asha', rowData: { origin: 'followup' } as ActivityRowData }),
+            applySystemPatch(tx, 'a1', {}, 'palak', new Date(), { activityConfig: CONFIG, createdBy: 'asha', rowData: { origin: 'followup' } }),
         );
         assert.equal(after.createdBy, 'asha');
         assert.equal((after as unknown as Record<string, unknown>).origin, 'followup');
         assert.equal((hook[0].event.after as unknown as Record<string, unknown>).origin, 'followup');
         assert.equal(after.revision, 0, 'not a calendar change');
-        assert.deepEqual(state.audits.map((a) => a.changes), [{ createdBy: { from: 'ravi', to: 'asha' } }]);
+        assert.deepEqual(state.audits.map((a) => a.changes), [{ createdBy: { from: 'ravi', to: 'asha' }, origin: { from: 'crm', to: 'followup' } }]);
 
         const again = await runInTransaction((tx) => applySystemPatch(tx, 'a1', { remarks: 'Spoke to the buyer' }, 'palak', new Date(), { activityConfig: CONFIG }));
         assert.equal(again.after.createdBy, 'asha');

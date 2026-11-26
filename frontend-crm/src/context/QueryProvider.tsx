@@ -57,8 +57,11 @@ export function QueryProvider({ children }: { children: React.ReactNode }) {
                 if (key) queryClient.invalidateQueries({ queryKey: auditLogKeys.all });
                 // Opportunities write their document (Documentation section): the Documents list follows them.
                 if (key === 'opportunities') queryClient.invalidateQueries({ queryKey: queryKeys.documents.all });
-                // The calendar feed shows lead / opportunity follow-ups and contract renewals.
-                if (key === 'leads' || key === 'opportunities' || key === 'contracts') {
+                // Lead / opportunity saves write their follow-up activity (Calendar Phase 2 P2-4): every activity
+                // query (lists, Activities tabs, calendar) follows them. The calendar also shows contract renewals.
+                if (key === 'leads' || key === 'opportunities') {
+                    queryClient.invalidateQueries({ queryKey: queryKeys.activities.all });
+                } else if (key === 'contracts') {
                     queryClient.invalidateQueries({ queryKey: [...queryKeys.activities.all, 'calendar'] });
                 }
                 // Calendar connections show on Admin › API Integrations › People, and an admin disconnect changes the user's own list.

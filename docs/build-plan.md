@@ -1,7 +1,7 @@
 # Nandini CRM — Build Plan
 
 > **Status:** living document. Part 1 records what has been built (reconstructed from git history, 115 commits
-> from 2026-10-15 to 2026-11-18; the snapshot as of 2026-11-26, Calendar Phase 2 P2-1, P2-2 and P2-3a, Profile Phase 1: My Profile, Profile Phase 2: Admin › Users and Profile Phase 3: notifications & preferences). Part 2
+> from 2026-10-15 to 2026-11-18; the snapshot as of 2026-11-26, Calendar Phase 2 P2-1, P2-2, P2-3a and P2-4, Profile Phase 1: My Profile, Profile Phase 2: Admin › Users and Profile Phase 3: notifications & preferences). Part 2
 > is the roadmap. Tick
 > items off and add new ones as work lands.
 > Related: [System design](system-design.md) · [Database design](database-design.md) · [API plan](api-plan.md)
@@ -350,7 +350,22 @@ keeps wall-clock times); all-day activities are entered as business-timezone day
         re-align `createdBy`. No migration, no API change.
   - [ ] **P2-3b: CRM → calendar push engine**
   - [ ] **P2-3c: backfill, send invitations, sync status UI**
-  - [ ] **P2-4: follow-ups create activities**
+  - [x] **P2-4: follow-ups create activities** (2026-11-26) — migration `20261127120000_followup_activities`
+        (`Activity.origin` `crm` / `followup` / `calendar`, hand-written filtered unique index
+        `UX_Activity_openFollowUp`). `activity.followUp.ts`: pure planner `planFollowUpChange`,
+        `reconcileRecordFollowUp` (needs a `FollowUpContext` loaded before the transaction), cancel on delete, relink on
+        Convert Lead, `retryOnceOnUniqueViolation` (D45), and `rescheduleRecordFromCalendar` (inert until P2-5). Hooked
+        into lead / opportunity create, update (the lead transaction returns `{ after, plan }`), remove, bulk remove,
+        restore, conversion and imports, under the record lock. Follow-up activity `createdBy` = the record's creator;
+        Task / Note / blank type → Call; Closed Won / Lost → Cancelled (or Completed with a response); an early
+        completion keeps its slot. Locks: `409 FOLLOW_UP_ACTIVITY_LOCKED`, delete refused, bulk delete skips,
+        `ActivityView.lockedFields`, audit undo blocks the locked fields with a reason. Calendar feed: follow-up
+        activities under the follow-up sources (not draggable), derived items deduped per caller's scope. Morning
+        email leaves follow-up activities out. Backfill `npm run followups:backfill [-- --dry-run]` + nightly step.
+        Switch "Follow-ups create activities" on Admin › API Integrations (D44). Frontend: Follow-up chip, Record
+        follow-up action, locked fields in the form, Next follow-up box on Activities tabs, form hint and save
+        message, lead / opportunity writes refresh every activity query. Not run against a real SQL Server (migration
+        checked with `prisma migrate diff`).
   - [ ] **P2-5: calendar → CRM (polling)**
   - [ ] **P2-6: busy times**
   - [ ] **P2-7: webhooks and HTTPS go-live**

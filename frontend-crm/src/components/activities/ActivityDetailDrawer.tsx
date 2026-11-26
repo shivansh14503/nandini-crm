@@ -29,6 +29,7 @@ import ScheduleOutlinedIcon from '@mui/icons-material/ScheduleOutlined';
 import LinkOutlinedIcon from '@mui/icons-material/LinkOutlined';
 import GroupsOutlinedIcon from '@mui/icons-material/GroupsOutlined';
 import RateReviewOutlinedIcon from '@mui/icons-material/RateReviewOutlined';
+import EventAvailableOutlinedIcon from '@mui/icons-material/EventAvailableOutlined';
 
 import { ROUTES } from '@/config/constants';
 import { withListOrigin } from '@/utils/listOrigin';
@@ -51,17 +52,19 @@ import {
     NOTE_TYPE,
     PLANNED_STATUS,
     TASK_TYPE,
+    isActivityRelatedModule,
+    isFollowUpActivity,
     type Activity,
     type ActivityRelatedModule,
     type AttendeeResponse,
 } from '@/types/activity.types';
 import { activityPastIssues, activityScheduleIssues, fromApiSchedule, toApiSchedule, type ScheduleValues } from '@/utils/activitySchedule';
 import { addDays, addMinutesToWallClock, daysBetween, instantToZonedWallClock, isDay, isWallClock, wallClockMinutesBetween } from '@/utils/zonedTime';
-import { ACTIVITY_STATUS_COLORS, ActivityTypeIcon, AttendeeResponseChip, useActivityTypeLabel } from './ActivityBadges';
+import { ACTIVITY_STATUS_COLORS, ActivityTypeIcon, AttendeeResponseChip, followUpModuleColor, useActivityTypeLabel } from './ActivityBadges';
 import { attendeeKey, attendeeLabel } from './RhfAttendeesField';
 import { RhfScheduleField } from './RhfScheduleField';
 import { formatActivityWhen, formatBusinessInstant, isActivityOverdue, timeZoneAbbr, useBusinessClock, type BusinessClock } from './activityTime';
-import { relatedModuleLabel, relatedRecordHref } from './activityLinks';
+import { relatedModuleLabel, relatedRecordEditHref, relatedRecordHref } from './activityLinks';
 
 // Loaded on demand: the related record's drawer imports every module's drawer (which import this one).
 const RelatedRecordDrawer = dynamic(() => import('./relatedRecord').then((m) => m.RelatedRecordDrawer), { ssr: false });
@@ -407,6 +410,15 @@ export function ActivityDetailDrawer({ activity, activityId, open, onClose, onEd
 
     const planned = a.status === PLANNED_STATUS && !isNote;
     const relatedHref = relatedRecordHref(a.relatedModule, a.relatedId);
+    // A lead / opportunity follow-up activity (P2-4) moves with its record: its date, type, owner and status change
+    // there ("Record a follow-up" on the record's edit page); it can't be rescheduled, cancelled or deleted here.
+    const followUp = isFollowUpActivity(a);
+    const followUpRecord = a.relatedModule === 'opportunities' ? 'opportunity' : 'lead';
+    const recordFollowUpHref = followUp && isActivityRelatedModule(a.relatedModule) && a.relatedId ? relatedRecordEditHref(a.relatedModule, a.relatedId) : '';
+    const recordFollowUp = () => {
+        if (recordFollowUpHref) router.push(withListOrigin(recordFollowUpHref));
+    };
+    const followUpColor = followUpModuleColor(a.relatedModule);
 
     const overview = (
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
@@ -417,6 +429,13 @@ export function ActivityDetailDrawer({ activity, activityId, open, onClose, onEd
                 {overdue && (
                     <Typography sx={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--mui-palette-error-main)', mt: 0.3 }}>
                         Overdue: still Planned after its time
+                    </Typography>
+                )}
+                {followUp && (
+                    <Typography sx={{ fontSize: '0.78rem', color: 'var(--mui-palette-text-secondary)', mt: 0.6 }}>
+                        {planned
+                            ? `The next follow-up of ${a.relatedCode || `this ${followUpRecord}`}. Its date, type, owner and status change on the ${followUpRecord}: Record follow-up.`
+                            : `Follow-up history of ${a.relatedCode || `this ${followUpRecord}`}: kept with the ${followUpRecord}.`}
                     </Typography>
                 )}
                 {(a.reminder || a.completedAt) && (
@@ -601,19 +620,21 @@ export function ActivityDetailDrawer({ activity, activityId, open, onClose, onEd
     ) : null;
     const ownerActions = canEdit ? (
         <>
-            {planned && (
+            {planned && !followUp && (
                 <Button size="small" startIcon={<EventRepeatOutlinedIcon sx={{ fontSize: 16 }} />} onClick={() => setDialog('reschedule')} disabled={busy} sx={outlinedSx}>
                     Reschedule
                 </Button>
             )}
-            {planned && (
+            {planned && !followUp && (
                 <Button size="small" startIcon={<EventBusyOutlinedIcon sx={{ fontSize: 16 }} />} onClick={cancelActivity} disabled={busy} sx={outlinedSx}>
                     Cancel activity
                 </Button>
             )}
-            <Button size="small" startIcon={<DeleteOutlineIcon sx={{ fontSize: 16 }} />} onClick={deleteActivity} disabled={busy} sx={destructiveSx}>
-                Delete
-            </Button>
+            {!followUp && (
+                <Button size="small" startIcon={<DeleteOutlineIcon sx={{ fontSize: 16 }} />} onClick={deleteActivity} disabled={busy} sx={destructiveSx}>
+                    Delete
+                </Button>
+            )}
             {planned && (
                 <Button size="small" startIcon={<EditOutlinedIcon sx={{ fontSize: 16 }} />} onClick={handleEdit} sx={outlinedSx}>
                     Edit
@@ -631,9 +652,11 @@ export function ActivityDetailDrawer({ activity, activityId, open, onClose, onEd
 
     const primaryAction = !canEdit
         ? undefined
-        : planned
-          ? { label: 'Mark complete', icon: <CheckCircleOutlineIcon sx={{ fontSize: 16 }} />, onClick: markComplete, disabled: busy }
-          : { label: 'Edit Activity', onClick: handleEdit };
+        : followUp && planned && recordFollowUpHref
+          ? { label: 'Record follow-up', icon: <EventAvailableOutlinedIcon sx={{ fontSize: 16 }} />, onClick: recordFollowUp }
+          : planned
+            ? { label: 'Mark complete', icon: <CheckCircleOutlineIcon sx={{ fontSize: 16 }} />, onClick: markComplete, disabled: busy }
+            : { label: 'Edit Activity', onClick: handleEdit };
 
     return (
         <>
@@ -653,6 +676,17 @@ export function ActivityDetailDrawer({ activity, activityId, open, onClose, onEd
                         backgroundColor: color.soft,
                         borderColor: color.border,
                     },
+                    ...(followUp
+                        ? [
+                              {
+                                  label: 'Follow-up',
+                                  color: followUpColor.text,
+                                  backgroundColor: followUpColor.soft,
+                                  borderColor: followUpColor.border,
+                                  tooltip: `Moves with ${a.relatedCode || `the ${followUpRecord}`}`,
+                              },
+                          ]
+                        : []),
                     ...(isNote
                         ? []
                         : [

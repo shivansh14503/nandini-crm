@@ -40,7 +40,9 @@ function itemColors(item: CalendarItem) {
             icon: 'var(--mui-palette-error-main)',
         };
     }
-    const color = getModuleColor(item.module);
+    // A follow-up activity (P2-4) keeps its record's follow-up tint (Leads / Opportunities), like the derived entry it replaces.
+    const tint = item.module === 'activities' && item.origin === 'followup' && (item.relatedModule === 'leads' || item.relatedModule === 'opportunities') ? item.relatedModule : item.module;
+    const color = getModuleColor(tint);
     return { soft: color.soft, border: color.border, strip: color.main, text: color.text, icon: color.main };
 }
 
@@ -51,8 +53,8 @@ function itemColors(item: CalendarItem) {
  */
 export function EventContent({ item, Icon, timeText, list = false, compact = false }: EventContentProps) {
     const colors = itemColors(item);
-    const completed = item.source === 'activity' && item.status === COMPLETED_STATUS;
-    const cancelled = item.source === 'activity' && item.status === CANCELLED_STATUS;
+    const completed = item.module === 'activities' && item.status === COMPLETED_STATUS;
+    const cancelled = item.module === 'activities' && item.status === CANCELLED_STATUS;
     const StatusIcon = completed ? CheckCircleOutlinedIcon : null;
     const titleSx = {
         fontSize: 'inherit',

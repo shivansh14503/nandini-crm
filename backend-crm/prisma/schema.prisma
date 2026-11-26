@@ -984,6 +984,14 @@ model Activity {
   /// Admin-defined custom field values `{ [fieldKey]: value }` (see FormFieldDefinition) as JSON.
   customDataJson String? @db.NVarChar(Max)
 
+  /// Where the activity comes from: `crm` (made in the CRM) | `followup` (a lead / opportunity next follow-up, written
+  /// by activity.followUp.ts in the record's own transaction; schedule, type, status, owner and related record locked
+  /// in the activity UI) | `calendar` (imported from a calendar, Calendar Phase 2 P2-8). Set only by the system write
+  /// path. Hand-written filtered unique index (migration 20261127120000_followup_activities; keep it out of this file):
+  ///   UX_Activity_openFollowUp UNIQUE (relatedModule, relatedId) WHERE origin = 'followup' AND status = 'Planned' AND isDeleted = 0
+  /// = at most one open follow-up activity per lead / opportunity.
+  origin String @default("crm") @db.NVarChar(20)
+
   createdBy String    @db.NVarChar(50)
   updatedBy String?   @db.NVarChar(50)
   createdAt DateTime  @default(now())

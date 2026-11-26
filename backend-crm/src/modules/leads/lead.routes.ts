@@ -16,6 +16,9 @@ import { leadController } from './lead.controller.js';
  *   DELETE /:id          (soft delete)
  *   POST   /bulk-delete  { ids }
  *   POST   /:id/convert  ConvertLeadFormValues → LeadConversionResult (atomic)
+ * Save side effect (Calendar Phase 2 P2-4, switch `followUpActivities`): every write keeps the lead's follow-up
+ * activity in line in the same transaction (create / re-align / complete with the recorded response / cancel when
+ * closed or deleted; Convert moves it to the new opportunity). See activities/activity.followUp.ts.
  */
 const router = Router();
 router.use(authenticate);

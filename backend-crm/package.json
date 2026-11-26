@@ -28,7 +28,8 @@
     "align:backend-names": "tsx scripts/alignBackendNames.ts",
     "perf:audit": "tsx scripts/auditPerfCheck.ts",
     "integrations:reencrypt": "tsx scripts/reencryptIntegrations.ts",
-    "calendar:check-emails": "tsx scripts/checkUserEmails.ts"
+    "calendar:check-emails": "tsx scripts/checkUserEmails.ts",
+    "followups:backfill": "tsx scripts/backfillFollowUpActivities.ts"
   },
   "dependencies": {
     "@fontsource/noto-sans": "^5.3.0",

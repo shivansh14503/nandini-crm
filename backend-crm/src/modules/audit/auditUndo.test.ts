@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { REDACTED } from '../../services/auditCatalog.js';
-import { buildUndoPatch, entryActions, fieldValue, planUndo, sameValue } from './auditUndo.js';
+import { buildUndoPatch, CALENDAR_CHANGE_REASON, entryActions, fieldValue, FOLLOW_UP_LOCK_REASON, planUndo, sameValue, undoBlockFor } from './auditUndo.js';
 
 describe('sameValue', () => {
     it('treats every blank spelling alike', () => {
@@ -144,5 +144,43 @@ describe('entryActions', () => {
         assert.deepEqual(entryActions({ action: 'UPDATE', entityType: 'FormField' }, diff, null, false), none);
         assert.deepEqual(entryActions({ action: 'DELETE', entityType: 'DropdownOption' }, null, null, false), none);
         assert.deepEqual(entryActions({ action: 'LOGIN', entityType: 'User' }, null, null, false), none);
+    });
+});
+
+describe('undo of locked fields (P2-4 follow-up activities, P2-5 calendar changes)', () => {
+    const FOLLOW_UP_FIELDS = ['followupType', 'startAt', 'endAt', 'allDay', 'status', 'assignedTo', 'relatedModule', 'relatedId', 'relatedTo'];
+    const activity = { subject: 'Call follow-up: LD-0012 Sunrise', startAt: '2026-12-03T05:30:00.000Z', startDay: null, status: 'Planned', remarks: 'x', lockedFields: FOLLOW_UP_FIELDS };
+
+    it('blocks the locked fields of a follow-up activity (with their companions), and nothing of an ordinary one', () => {
+        const block = undoBlockFor({ entityType: 'Activity', route: '/api/activities/a1' }, activity);
+        assert.ok(block && block.fields !== 'all');
+        assert.equal(block.reason, FOLLOW_UP_LOCK_REASON);
+        assert.equal(block.fields.has('startAt'), true);
+        assert.equal(block.fields.has('startDay'), true);
+        assert.equal(block.fields.has('relatedCode'), true);
+        assert.equal(block.fields.has('subject'), false);
+        assert.equal(undoBlockFor({ entityType: 'Activity', route: 'job:calendar-sync:google' }, { ...activity, lockedFields: [] }), null);
+        assert.equal(undoBlockFor({ entityType: 'Lead', route: '/api/leads/l1' }, {}), null);
+    });
+
+    it('plans locked fields as blocked with the reason; the rest stays undoable', () => {
+        const block = undoBlockFor({ entityType: 'Activity' }, activity);
+        const plan = planUndo(
+            { startAt: { from: '2026-12-02T05:30:00.000Z', to: '2026-12-03T05:30:00.000Z' }, subject: { from: 'Old', to: 'Call follow-up: LD-0012 Sunrise' } },
+            activity,
+            block,
+        );
+        const byKey = Object.fromEntries(plan.map((field) => [field.key, field]));
+        assert.equal(byKey.startAt.status, 'blocked');
+        assert.equal(byKey.startAt.reason, FOLLOW_UP_LOCK_REASON);
+        assert.equal(byKey.subject.status, 'ready');
+        assert.equal(byKey.subject.reason, undefined);
+    });
+
+    it('blocks every field of a lead / opportunity change written by calendar sync', () => {
+        const block = undoBlockFor({ entityType: 'Opportunity', route: 'job:calendar-sync:outlook' }, {});
+        assert.deepEqual(block, { fields: 'all', reason: CALENDAR_CHANGE_REASON });
+        const plan = planUndo({ nextFollowupDate: { from: '2026-12-02', to: '2026-12-03' } }, { nextFollowupDate: '2026-12-03' }, block);
+        assert.equal(plan[0].status, 'blocked');
     });
 });
