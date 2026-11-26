@@ -1,6 +1,6 @@
 # Nandini CRM — System Design
 
-> **Status:** living document. Describes the system as built (code as of 2026-11-26; audit context + ledger audit table, admin audit query API and screen, Users tab; Contracts module; Referrals module; Documents module; Activities data model and API, Calendar Phase 1 PR1; Activities screens and Calendar, PR2; notifications, reminders and mail workers, navbar bell and the morning summary email, PR3, with its review fixes; guarded cache reads for lookups, form configs and search, with its review fixes; Calendar Phase 2 P2-1, Admin › API Integrations foundation: encrypted provider credentials, connection tests, calendar sync settings, company emails, with its review fixes; My Profile (Profile Phase 1): profile, photo, change password, signed-in sessions; Calendar Phase 2 P2-2, employees connect / disconnect Google or Microsoft 365 calendars: OAuth with PKCE, sealed tokens, refresh, reconnect notifications).
+> **Status:** living document. Describes the system as built (code as of 2026-11-26; audit context + ledger audit table, admin audit query API and screen, Users tab; Contracts module; Referrals module; Documents module; Activities data model and API, Calendar Phase 1 PR1; Activities screens and Calendar, PR2; notifications, reminders and mail workers, navbar bell and the morning summary email, PR3, with its review fixes; guarded cache reads for lookups, form configs and search, with its review fixes; Calendar Phase 2 P2-1, Admin › API Integrations foundation: encrypted provider credentials, connection tests, calendar sync settings, company emails, with its review fixes; My Profile (Profile Phase 1): profile, photo, change password, signed-in sessions; Admin › Users (Profile Phase 2, 2026-11-26): user management, the must-change-password claim, sessions revoked on deactivation / reset / role change; Calendar Phase 2 P2-2, employees connect / disconnect Google or Microsoft 365 calendars: OAuth with PKCE, sealed tokens, refresh, reconnect notifications).
 > Update it in the same change that alters architecture, infrastructure, Redis usage, queues or security.
 > Related: [Database design](database-design.md) · [API plan](api-plan.md) · [Build plan](build-plan.md)
 
@@ -171,9 +171,12 @@ SQL Server is the only source of truth; Redis only ever holds derived or disposa
 
 - `POST /api/auth/login` checks the bcrypt hash (12 rounds). Unknown usernames are compared against a dummy hash so
   timing doesn't reveal valid usernames. Legacy plain-text passwords are compared in constant time and
-  re-hashed to bcrypt on the next successful login.
+  re-hashed to bcrypt on the next successful login. After the Redis session is recorded the user row is read again:
+  if an admin deactivated the user or reset the password while the password was being checked (their `revokeAll`
+  ran before this session existed), the new session is deleted and the sign-in refused (403 `ACCOUNT_INACTIVE` / 401
+  `INVALID_CREDENTIALS`); `mcp` comes from that second read.
 - On success the API signs a **JWT** (HS256, `JWT_SECRET`, expiry = `SESSION_TTL_SECONDS`, default 8 h) with
-  `{ id, username, role, tracked, jti }` and sets it as an **httpOnly cookie** named `token`
+  `{ id, username, role, tracked, jti }` (plus `mcp: true` when the user must change their password, below) and sets it as an **httpOnly cookie** named `token`
   (`secure` + `SameSite=None` in production, `Lax` in dev). A `Bearer` header is accepted as a fallback.
 - The session is also written to Redis as `session:{userId}:{jti}` with the same TTL. A *tracked* token whose key
   is missing is treated as revoked (logout, a password change, "Sign out" on My Profile). If Redis is unreachable at
@@ -195,6 +198,37 @@ SQL Server is the only source of truth; Redis only ever holds derived or disposa
   signed in. If Redis is down or fails partway the response says `signedOutSessions: null` and the UI tells the user
   to sign out other sessions again from My Profile. Rate limited per user (10 requests / 15 min, every request counts). An untracked session (Redis was down
   at its sign-in) can't be revoked early and keeps working until its JWT expires.
+- **Must change password** (Profile Phase 2): `Users.mustChangePassword` is set for a user added in Admin › Users and
+  after an admin password reset (both with a temporary password the admin sees once). At sign-in the flag becomes the
+  JWT claim `mcp: true`; `authenticate` then lets the request through only when it is on a small allow-list
+  (`middlewares/passwordChangeGate.ts`, unit tested: `GET /api/auth/me`, `POST /api/auth/logout`,
+  `POST /api/auth/change-password`, `GET /api/me/profile`, `GET /api/me/sessions`, `GET /api/user-photos/:id`; method +
+  whole path, case-insensitive, one path segment for the photo id) and answers everything else
+  `403 PASSWORD_CHANGE_REQUIRED` (not audited as `ACCESS_DENIED`). The frontend sends the user to My Profile › Security
+  on that flag or that error. `GET /api/auth/me` reports `mustChangePassword` as the stored flag **or** the session's
+  own `mcp` claim, so a session that still carries the claim after the password was changed elsewhere (it couldn't be
+  signed out: Redis down, or untracked) stays on the change-password screen instead of unlocking and then getting 403s;
+  it gets out by changing the password again or signing in again. A deactivated user gets 403 `ACCOUNT_INACTIVE` from
+  change-password (nothing changed, no token issued). A successful change clears the column in the same transaction and re-issues the cookie
+  for the **same** session (same jti, Redis expiry restarted, current role) without the claim. Tokens without the claim
+  (all tokens issued before it existed) are unaffected. The claim is read from the token, not the database, so a reset
+  relies on revoking the user's sessions (below); an untracked token issued before a reset keeps working until it
+  expires.
+- **Admin › Users** (`/api/admin/users`, admin roles): deactivating a user, resetting their password and changing their
+  role delete every `session:{userId}:*` key after the commit (`sessionService.revokeAll`), so a tracked session ends
+  on its next request (`authenticate` finds the key gone → 401). The token carries the role, which is why a role
+  change signs the user out (the acting admin's own sessions are left alone; their new role applies at next sign-in).
+  Login already refuses an inactive user (403 `ACCOUNT_INACTIVE`). **Gap:** an *untracked* token (Redis was down at its
+  sign-in), or any token while Redis is down, isn't checked against the database, so a deactivated or demoted user
+  keeps that session until its JWT expires (8 h by default). Nothing records a revocation that failed: if Redis can't
+  be reached at the moment of the deactivation / reset / role change (`signedOutSessions: null`) but keeps its data,
+  the user's tracked sessions are **still valid after Redis comes back**, until their JWTs expire. The admin is warned
+  and can retry: Reset password again, or **Sign out all sessions** in an inactive user's row menu (it calls
+  `/deactivate`, which re-runs `revokeAll` for a user who is already inactive). A role change that couldn't sign the
+  user out has no retry short of a password reset. Guards: an admin can't remove their own admin access or
+  deactivate themselves (`400 SELF_LOCKOUT`), and the last active admin-role user can't lose it (`400 LAST_ADMIN`;
+  those writes serialise on an application lock). Admin password resets are rate limited (20 / 10 min per admin) and
+  audited as `PASSWORD_RESET` without the password.
 - **Signed-in sessions** (`/api/me/sessions`): the list is a `SCAN` of `session:{userId}:*` with `GET` + `PTTL` per key
   in one pipeline (`sessionService.list`), shown with a device name parsed from the stored User-Agent
   (`describeUserAgent`), IP, sign-in and expiry times. A user can sign out one other session (deletes its key) or all
@@ -206,13 +240,16 @@ SQL Server is the only source of truth; Redis only ever holds derived or disposa
 
 | Level | Rule |
 | --- | --- |
-| Admin features | `requireRole('Admin', 'Administrator', 'Super Admin')` — form customisation, document series, cities, PDF template management, API Integrations (`/api/admin/integrations`) |
+| Admin features | `requireRole('Admin', 'Administrator', 'Super Admin')` — form customisation, document series, cities, PDF template management, API Integrations (`/api/admin/integrations`), Users (`/api/admin/users`) |
 | Global data roles | Admin, Director – Operations, Regional Sales Head, Sales Manager, System Administrator, Accounts Manager see **all** records |
 | Everyone else | Row-level scope: only records where they are the owner (`assignedTo`) **or** the creator (`createdBy`). Lists add this as a Prisma `where`; single-record reads/writes call `assertRecordAccess` (403) |
 | Activities (`modules/activities/activity.access.ts`) | The same rule **plus attendees**: a colleague invited to an activity (`ActivityAttendee.username`) can see it (lists, calendar, record, its audit trail) and reply to it (`POST /api/activities/:id/response`), but only the owner, the creator or a global role can change or delete it. Linking an activity to a record (Related To, and the `link-targets` picker) needs access to that record under its own module's rule (403 otherwise); an unchanged link is kept even if the editor can't see the record. The calendar's lead / opportunity follow-ups and contract renewals follow their modules' rules. Activities are not in global search |
 | Referrals (`modules/referrals`) | Lists and records are **not** row-scoped (everyone picks Referred By from them); changes and deletes need the owner, the creator or a global role (`assertRecordAccess`) |
 
-Role names are compared case-insensitively and with any dash style.
+Role names are compared case-insensitively and with any dash style. Roles are plain names on `Users.role` (no
+permissions table): Admin › Users picks from the roles in use or a new one, and shows which give the admin panel and
+which see every record (`modules/user-admin/roles.ts`, mirrored and contract-tested by `frontend-crm/src/utils/roleAccess.ts`).
+"Administrator" and "Super Admin" open the admin panel but are not global data roles.
 
 **Other protections**
 
@@ -310,14 +347,15 @@ commands fail immediately instead of hanging, and reconnects in the background (
 
 | Key pattern | Type | TTL | Written by | Purpose |
 | --- | --- | --- | --- | --- |
-| `session:{userId}:{jti}` | string (JSON: ip, userAgent, createdAt) | `SESSION_TTL_SECONDS` (8 h) | login | Revocable sessions; logout deletes the key; a password change deletes every other key of the user; My Profile lists them (`SCAN` + `GET` + `PTTL`) and signs out one or all others |
+| `session:{userId}:{jti}` | string (JSON: ip, userAgent, createdAt) | `SESSION_TTL_SECONDS` (8 h) | login | Revocable sessions; logout deletes the key; a password change deletes every other key of the user (and restarts this one's TTL when it replaced a temporary password); My Profile lists them (`SCAN` + `GET` + `PTTL`) and signs out one or all others; Admin › Users deletes all of a user's keys on deactivation, a password reset or a role change |
+| `ratelimit:admin-password-reset:user:{id}` | counter | 10 min | `POST /api/admin/users/:id/reset-password` | 20 password resets / 10 min / admin |
 | `ratelimit:change-password:user:{id}` | counter | 15 min | `POST /api/auth/change-password` | 10 password changes (right or wrong) / 15 min / user |
 | `ratelimit:session-revoke:user:{id}` | counter | 10 min | `DELETE /api/me/sessions[/:id]` | 30 session sign-outs / 10 min / user |
 | `ratelimit:login:{ip}` | counter | `LOGIN_RATE_LIMIT_WINDOW_SECONDS` (15 min) | failed logins only | Brute-force protection (default 10 failures / window); reset on success |
 | `ratelimit:pdf:{module}:user:{id}` | counter | 60 s | `GET /:id/pdf` | 30 PDF renders / min / user |
 | `ratelimit:pdf-preview:user:{id}` | counter | 60 s | `POST /api/pdf-templates/preview` | 20 previews / min / user |
 | `ratelimit:integration-test:user:{id}` | counter | 60 s | `POST /api/admin/integrations/providers/:provider/test` | 6 connection tests / min / admin (in-memory per process whenever Redis can't count) |
-| `cache:lookups:users:{all\|active}` | JSON, guarded ¹ | 5 min | lookups | User picker list; dropped by a company email change (`invalidateUserCaches`, Admin › API Integrations › People) and by My Profile name / photo changes (`invalidateUserLookupCaches`) |
+| `cache:lookups:users:{all\|active}` | JSON, guarded ¹ | 5 min | lookups | User picker list; dropped by a company email change (`invalidateUserCaches`, Admin › API Integrations › People), by every Admin › Users write (`invalidateUserCaches`) and by My Profile name / photo changes (`invalidateUserLookupCaches`) |
 | `cache:lookups:organizations:{limit}` / `contacts:{limit}` / `products:{limit}` | JSON, guarded ¹ | 5 min | lookups (no search term only) | Lookup dialogs' default lists |
 | `cache:lookups:partner-companies` / `partner-contacts` | JSON, guarded ¹ | 1 h | lookups | Partner master lists; dropped by partner company writes |
 | `cache:lookups:nature-of-calls` | JSON | 1 h | lookups (plain read) | Seeded master list; TTL only |
@@ -775,6 +813,23 @@ Integrations › People shows each person's connection with an admin Disconnect 
 - **Data:** `services/profile.service.ts`, `hooks/queries/useProfile.ts` (keys `['me', 'profile']`,
   `['me', 'sessions']`), `types/profile.types.ts`.
 
+### 8.7 Admin › Users (`/admin/users`)
+
+- **Page:** `app/admin/users/page.tsx` in `AdminPageShell` (admin roles), content in `components/settings/users/`;
+  a "Users" card on the admin landing page. Not registered in Form Builder.
+- **List:** header card with the count and "Add user", a wrapping filter toolbar (search, Active / Inactive / All,
+  role, department), a table in its own `overflowX: auto` container on tablets and desktops and cards on phones, row
+  actions (Edit, Reset password, Deactivate / Activate, and Sign out all sessions for an inactive user), pagination. `GET /api/admin/users` + `GET /api/admin/users/meta`
+  (roles with their access, departments, managers, company domains).
+- **Add / edit drawer:** name, sign-in (username read-only after creation; email with "allow another domain" outside
+  the company domains; initial password generated or typed with the `utils/passwordPolicy.ts` checklist), work
+  (role picker with its access hint from `utils/roleAccess.ts`, job title, department, reports to), contact
+  (mobile, office phone), flags (group login, on leave). API field errors map to the inputs. The temporary password
+  is shown once in a dialog after a create or reset.
+- **Must change password (app-wide):** while the auth user has `mustChangePassword`, every page redirects to
+  `/profile?tab=security`, which shows "Choose a new password to continue"; a `403 PASSWORD_CHANGE_REQUIRED` from any
+  call does the same. After the change the auth user is updated and navigation is allowed again.
+
 ## 9. Deployment topology
 
 ```mermaid
@@ -878,10 +933,10 @@ Retention: `NOTIFICATION_RETENTION_DAYS` (90), `EMAIL_LOG_RETENTION_DAYS` (180).
 
 | Item | Notes |
 | --- | --- |
-| No user management API/UI | Users come from the seed or direct DB edits; each user can edit only their own name, phones and photo and change their own password (My Profile). `ROUTES.ADMIN_USERS` exists in the frontend but has no page (Profile Phase 2: job title, reports to, must change password, deactivate). `sessionService.revokeAll` is ready for deactivation. |
+| Deactivation / role changes vs untracked tokens | Admin › Users revokes a user's Redis sessions on deactivation, a password reset or a role change, but an untracked token (Redis down at sign-in) or any token while Redis is down is trusted until it expires (8 h by default): the request path doesn't read `Users.isActive` / `role`. A revocation that failed because Redis was unreachable at that moment isn't recorded, so the tracked sessions survive the outage too (retry from Admin › Users). A per-request database check, or a durable `sessionsValidAfter` timestamp checked against the token's `iat` (or a short token TTL with refresh) would close it. |
 | Sessions opened while Redis was down | They are untracked: not in the My Profile list and not signed out by a password change; they last until their JWT expires (8 h by default). |
 | Dashboard has no data API | The dashboard page is static; `cache:dashboard:*` is reserved. |
-| No automated frontend tests | Backend has 88 `node:test` files (pure logic: validators, numbering, PDF document, access control, audit, time zones, activities, referrals, documents, notifications, mail, cache, integrations: secret box, URL redaction, probes against recorded provider answers, a fake Prisma for the integrations service; profile, password rules, sessions; calendar connections: the connect → callback → refresh → disconnect flow against the fake provider and replayed Google / Microsoft answers, token refresh races, `providerFetch`). The guarded cache read's Redis tests (Lua compare-and-set, `SCAN` + `UNLINK`, placeholder expiry, 2 MB values) run only with `REDIS_TEST_URL` set. No integration/E2E tests. |
+| No automated frontend tests | Backend has 94 `node:test` files (pure logic: validators, numbering, PDF document, access control, audit, time zones, activities, referrals, documents, notifications, mail, cache, integrations: secret box, URL redaction, probes against recorded provider answers, a fake Prisma for the integrations service; profile, password rules, sessions; Admin › Users: username and role rules, reports-to cycles, admin guards, temporary passwords, the must-change-password allow-list; calendar connections: the connect → callback → refresh → disconnect flow against the fake provider and replayed Google / Microsoft answers, token refresh races, `providerFetch`). The guarded cache read's Redis tests (Lua compare-and-set, `SCAN` + `UNLINK`, placeholder expiry, 2 MB values) run only with `REDIS_TEST_URL` set. No integration/E2E tests. |
 | Notifications are polled, not pushed | The bell asks every minute (§8.4), so a reminder can show up to a minute late; background tabs don't poll. SSE through Redis pub/sub is the upgrade path. There are no browser / push notifications and no notification preferences yet. |
 | Reminders depend on a worker | No worker running = no reminders, renewals or morning email (§9.1). Off-hours contract renewals wait for the 07:00 sweep. With Redis down the fallback polls the database every minute. |
 | Morning email not yet proven against the relay | The mail layer, EmailLog claims and the summary are unit-tested (STARTTLS enforcement against a fake SMTP server), and the job schedulers and the guarded unread-count cache were checked against a local Redis, but no real SMTP send or SQL Server run has been done yet; the first real send should be an admin's "Send me a test". `MORNING_SUMMARY_CRON` is read with a small cron subset for the catch-up check (numbers, names, ranges, lists, steps). |

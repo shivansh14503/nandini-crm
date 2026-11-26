@@ -8,9 +8,11 @@ import { changePasswordSchema, loginSchema } from './auth.validator.js';
 /**
  * /api/auth   (the older `{ status: 'ok', … }` envelope, except change-password)
  *   POST   /login             { username, password }                    sets the httpOnly cookie → { status, message, user }
+ *                             (user as /me; mustChangePassword → the token carries `mcp`, see middlewares/passwordChangeGate.ts)
  *   POST   /logout                                                      clears the cookie, ends the session
- *   GET    /me                → { status, user: { id, username, role, fullName, firstName, lastName, photoUrl } }
- *   POST   /change-password   { currentPassword, newPassword }          → { passwordChangedAt, signedOutSessions }
+ *   GET    /me                → { status, user: { id, username, role, fullName, firstName, lastName, photoUrl, mustChangePassword } }
+ *   POST   /change-password   { currentPassword, newPassword }          → { passwordChangedAt, mustChangePassword: false, signedOutSessions }
+ *                             clears mustChangePassword and re-issues the cookie (same session) without `mcp`
  *                             400 WRONG_PASSWORD (currentPassword) · 400 WEAK_PASSWORD (newPassword) · 429 after 10 / 15 min
  */
 const router = Router();

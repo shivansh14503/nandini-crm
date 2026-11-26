@@ -4,12 +4,15 @@ import type { AuthSession, AuthUser } from '../../types/user.types.js';
 
 const ALGORITHM = 'HS256';
 
-export interface VerifiedToken extends AuthUser, AuthSession {}
+export interface VerifiedToken extends AuthUser, AuthSession {
+    mustChangePassword: boolean;
+}
 
 export const tokenService = {
     generateToken(user: AuthUser, session: AuthSession): string {
         return jwt.sign(
-            { id: user.id, username: user.username, role: user.role, tracked: session.tracked },
+            // `mcp` only when set, so ordinary tokens look exactly as before.
+            { id: user.id, username: user.username, role: user.role, tracked: session.tracked, ...(session.mustChangePassword ? { mcp: true } : {}) },
             ENV.JWT_SECRET,
             { algorithm: ALGORITHM, expiresIn: ENV.SESSION_TTL_SECONDS, jwtid: session.jti },
         );
@@ -33,6 +36,7 @@ export const tokenService = {
             role: payload.role,
             jti: payload.jti,
             tracked: payload.tracked === true,
+            mustChangePassword: payload.mcp === true,
         };
     },
 };

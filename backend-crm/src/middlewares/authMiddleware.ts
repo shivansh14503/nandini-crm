@@ -3,6 +3,7 @@ import { ENV } from '../config/env.js';
 import { sessionService } from '../modules/auth/session.service.js';
 import { tokenService, type VerifiedToken } from '../modules/auth/token.service.js';
 import { HttpError } from '../utils/httpError.js';
+import { isAllowedWhilePasswordChangeRequired, passwordChangeRequired } from './passwordChangeGate.js';
 
 /** Reads the session token from the auth cookie, falling back to an `Authorization: Bearer` header. */
 export function readToken(req: Request): string | undefined {
@@ -24,6 +25,9 @@ export function tryVerifyToken(token: string | undefined): VerifiedToken | undef
 /**
  * Requires a valid session: verifies the JWT, then (for tracked sessions) checks Redis that it hasn't been
  * revoked. If Redis is unreachable the signed, unexpired JWT is trusted so an outage doesn't log everyone out.
+ * Deactivating a user (Admin › Users) revokes their tracked sessions, so those end here at once.
+ * A token with the `mcp` claim (the user must change their password) only reaches the routes in
+ * `PASSWORD_CHANGE_ALLOWED_ROUTES`; anything else is 403 PASSWORD_CHANGE_REQUIRED (not audited as ACCESS_DENIED).
  */
 export async function authenticate(req: Request, _res: Response, next: NextFunction): Promise<void> {
     const token = readToken(req);
@@ -36,8 +40,12 @@ export async function authenticate(req: Request, _res: Response, next: NextFunct
         return next(HttpError.unauthorized('Your session has ended. Please sign in again.'));
     }
 
+    if (verified.mustChangePassword && !isAllowedWhilePasswordChangeRequired(req.method, req.originalUrl)) {
+        return next(passwordChangeRequired());
+    }
+
     req.user = { id: verified.id, username: verified.username, role: verified.role };
-    req.auth = { jti: verified.jti, tracked: verified.tracked };
+    req.auth = { jti: verified.jti, tracked: verified.tracked, mustChangePassword: verified.mustChangePassword };
     next();
 }
 

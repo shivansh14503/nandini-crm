@@ -55,6 +55,11 @@ describe('categoryFor / severityFor', () => {
         assert.equal(severityFor('SESSION_REVOKE', 'SECURITY'), 'NOTICE');
         assert.equal(changedFieldsOf('PASSWORD_CHANGE', { passwordChangedAt: { from: null, to: '2026-11-26T10:00:00.000Z' } }), null);
     });
+    it('an admin password reset (Admin › Users) is a SECURITY notice with no changed fields', () => {
+        assert.equal(categoryFor('User', 'PASSWORD_RESET'), 'SECURITY');
+        assert.equal(severityFor('PASSWORD_RESET', 'SECURITY'), 'NOTICE');
+        assert.equal(changedFieldsOf('PASSWORD_RESET', { passwordChangeRequired: true, generated: true }), null);
+    });
     it('a profile edit is a DATA update of the user', () => {
         assert.equal(categoryFor('User', 'UPDATE'), 'DATA');
         assert.equal(changedFieldsOf('UPDATE', { firstName: { from: 'A', to: 'B' }, photo: { from: null, to: 'p1' } }), '|firstName|photo|');

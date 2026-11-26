@@ -10,7 +10,8 @@ import { acquireLocks, runInTransaction } from '../shared/transactions.js';
 
 /**
  * Company email of a CRM user: the one backend rule for `Users.email`, shared by Admin › API Integrations › People
- * (PUT /api/admin/integrations/people/:username/email) and, later, Admin › Users and the calendar connect auto-fill.
+ * (PUT /api/admin/integrations/people/:username/email), Admin › Users (user-admin/userAdmin.service.ts, through
+ * `assertCompanyEmailAllowed` + `assertUserEmailFree` inside its own transaction) and the calendar connect auto-fill (`claimEmptyEmail`).
  *
  * Rule (database-design §4.1): stored trimmed and lower-cased, blank = none (NULL); unique among **active, non-group**
  * users (`isActive = 1 AND isGroupUser = 0`). Group (shared) logins aren't calendar identities, so they may share an
@@ -48,7 +49,7 @@ export function isCompanyEmail(email: string | null | undefined, companyDomains:
 }
 
 /** People who hold an address under the uniqueness rule (`isActive` and not a group login). */
-const holdsAddress = (user: { isActive: boolean; isGroupUser: boolean }) => user.isActive && !user.isGroupUser;
+export const holdsAddress = (user: { isActive: boolean; isGroupUser: boolean }) => user.isActive && !user.isGroupUser;
 
 /** Lower-cased addresses used by more than one active, non-group user. Pure. */
 export function duplicateEmailsAmong(users: readonly { email: string | null; isActive: boolean; isGroupUser: boolean }[]): Set<string> {
@@ -110,6 +111,19 @@ export async function invalidateUserCaches(): Promise<void> {
 
 const domainList = (domains: readonly string[]) => domains.map((d) => `@${d}`).join(', ');
 
+/**
+ * 400 (`VALIDATION_ERROR`, field `email`) for an address outside the company domains unless the admin allowed another
+ * domain. Blank addresses pass (clearing is always allowed).
+ */
+export function assertCompanyEmailAllowed(email: string | null, allowOtherDomain: boolean, companyDomains: readonly string[]): void {
+    if (!email || allowOtherDomain || isCompanyEmail(email, companyDomains)) return;
+    const message = `Use a company address (${domainList(companyDomains)}), or allow another domain.`;
+    throw new HttpError(message, StatusCodes.BAD_REQUEST, { code: 'VALIDATION_ERROR', errors: [{ message, path: ['email'] }] });
+}
+
+/** The application lock serializing every write of one address (take it before reading who holds the address). */
+export const userEmailLockKey = (email: string) => `user-email:${email}`;
+
 export interface SetUserEmailOptions {
     /** Company domains (Admin › API Integrations settings): an address elsewhere needs `allowOtherDomain`. */
     companyDomains: readonly string[];
@@ -126,18 +140,15 @@ export const userEmailService = {
      */
     async setEmail(username: string, body: unknown, options: SetUserEmailOptions): Promise<UserEmailRow> {
         const { email, allowOtherDomain } = userEmailBodySchema.parse(body);
-        if (email && !allowOtherDomain && !isCompanyEmail(email, options.companyDomains)) {
-            const message = `Use a company address (${domainList(options.companyDomains)}), or allow another domain.`;
-            throw new HttpError(message, StatusCodes.BAD_REQUEST, { code: 'VALIDATION_ERROR', errors: [{ message, path: ['email'] }] });
-        }
+        assertCompanyEmailAllowed(email, allowOtherDomain, options.companyDomains);
         const { row, changed } = await runInTransaction(async (tx) => {
             // Two admins saving the same address at once: the second waits, then sees the first as a duplicate.
-            if (email) await acquireLocks(tx, [`user-email:${email}`]);
+            if (email) await acquireLocks(tx, [userEmailLockKey(email)]);
             const user = await tx.user.findUnique({ where: { username }, select: USER_EMAIL_SELECT });
             if (!user) throw HttpError.notFound(`User '${username}' not found.`);
             if (user.email === email) return { row: user, changed: false };
             await assertNotConnectedElsewhere(tx, user.username, email);
-            if (email && holdsAddress(user)) await assertAddressFree(tx, email, user.id);
+            if (email && holdsAddress(user)) await assertUserEmailFree(tx, email, user.id);
             const updated = await tx.user.update({ where: { id: user.id }, data: { email }, select: USER_EMAIL_SELECT });
             await auditService.record(tx, {
                 entityType: 'User',
@@ -201,12 +212,15 @@ async function assertNotConnectedElsewhere(tx: TransactionClient, username: stri
 }
 
 /**
- * 409 when another active, non-group user holds the address. SQL Server's default collation compares
- * case-insensitively and ignores trailing spaces, so rows saved before addresses were normalized still match.
+ * 409 (`DUPLICATE_RECORD`, field `email`) when an active, non-group user other than `exceptUserId` holds the address.
+ * SQL Server's default collation compares case-insensitively and ignores trailing spaces, so rows saved before
+ * addresses were normalized still match. Also for writers that set `Users.email` in their own transaction (Admin ›
+ * Users): they must already hold `userEmailLockKey(email)` (in the same `acquireLocks` call as their other keys) and
+ * call it only when the user being written holds an address (active and not a group login).
  */
-async function assertAddressFree(tx: TransactionClient, email: string, exceptUserId: number): Promise<void> {
+export async function assertUserEmailFree(tx: TransactionClient, email: string, exceptUserId: number | null): Promise<void> {
     const holder = await tx.user.findFirst({
-        where: { email, isActive: true, isGroupUser: false, id: { not: exceptUserId } },
+        where: { email, isActive: true, isGroupUser: false, ...(exceptUserId !== null ? { id: { not: exceptUserId } } : {}) },
         select: { username: true, fullName: true },
     });
     if (!holder) return;

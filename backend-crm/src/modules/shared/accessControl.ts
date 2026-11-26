@@ -23,7 +23,8 @@ export const GLOBAL_ACCESS_ROLES = [
 /** Column holding a record's owner (`assignedTo` on every module). */
 export type OwnerField = 'assignedTo';
 
-const normalizeRole = (role: string) =>
+/** The key role names are compared by: any case, any dash style, runs of spaces as one (mirrored in frontend utils/roleAccess.ts). */
+export const normalizeRole = (role: string): string =>
     role
         .normalize('NFKC')
         .replace(/[‐-―−]/g, '-')

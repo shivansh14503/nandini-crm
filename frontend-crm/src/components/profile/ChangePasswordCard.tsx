@@ -9,6 +9,7 @@ import CheckCircleRoundedIcon from '@mui/icons-material/CheckCircleRounded';
 import RadioButtonUncheckedRoundedIcon from '@mui/icons-material/RadioButtonUncheckedRounded';
 import { fieldSx } from '@/components/forms/FormField';
 import { secondaryButtonSx } from '@/components/settings/form-customization/builderUi';
+import { useAuth } from '@/context/AuthContext';
 import { useChangePassword } from '@/hooks/queries/useProfile';
 import { ApiClientError } from '@/services/apiClient';
 import type { ProfileDto } from '@/types/profile.types';
@@ -25,8 +26,8 @@ const STRENGTH_COLOR: Record<PasswordStrengthLevel, string> = {
     strong: 'var(--mui-palette-success-main)',
 };
 
-/** Password input with a show / hide button. */
-function PasswordInput({
+/** Password input with a show / hide button (also used by Admin › Users to set a user's password). */
+export function PasswordInput({
     label,
     value,
     onChange,
@@ -109,6 +110,7 @@ const EMPTY = { currentPassword: '', newPassword: '', confirmPassword: '' };
 /** My Profile › Security › Change password. Other sessions are signed out by the API on success. */
 export function ChangePasswordCard({ profile, notify }: { profile: ProfileDto; notify: Notify }) {
     const changePassword = useChangePassword();
+    const { user } = useAuth();
     const [values, setValues] = useState(EMPTY);
     const [confirmTouched, setConfirmTouched] = useState(false);
     const [serverErrors, setServerErrors] = useState<{ currentPassword?: string; newPassword?: string }>({});
@@ -141,10 +143,13 @@ export function ChangePasswordCard({ profile, notify }: { profile: ProfileDto; n
         setConfirmTouched(true);
         if (!canSubmit || saving) return;
         try {
+            const wasRequired = Boolean(user?.mustChangePassword || profile.mustChangePassword);
             const result = await changePassword.mutateAsync({ currentPassword: values.currentPassword, newPassword: values.newPassword });
             clear();
             const n = result.signedOutSessions;
-            if (n === null) {
+            if (wasRequired) {
+                notify('Password changed. You can now use the CRM.');
+            } else if (n === null) {
                 notify('Password changed, but your other sessions could not be signed out. Sign them out below, or try again in a moment.', 'warning');
             } else {
                 notify(n > 0 ? `Password changed. ${n} other session${n === 1 ? ' was' : 's were'} signed out.` : 'Password changed.');

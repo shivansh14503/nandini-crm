@@ -16,6 +16,8 @@ export function CrmDataBootstrap() {
     const { user, loading } = useAuth();
     const queryClient = useQueryClient();
     const userId = user?.id;
+    // Until a must-change password is changed the API refuses the lookups (403); they load right after the change.
+    const mustChangePassword = Boolean(user?.mustChangePassword);
 
     useEffect(() => {
         if (loading) return;
@@ -24,8 +26,9 @@ export function CrmDataBootstrap() {
             clearMasterData();
             return;
         }
+        if (mustChangePassword) return;
         void queryClient.prefetchQuery({ queryKey: MASTER_DATA_QUERY_KEY, queryFn: loadMasterData, staleTime: MASTER_DATA_STALE_MS });
-    }, [userId, loading, queryClient]);
+    }, [userId, mustChangePassword, loading, queryClient]);
 
     return null;
 }

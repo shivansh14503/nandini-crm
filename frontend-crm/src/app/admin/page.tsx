@@ -121,11 +121,13 @@ const ADMIN_MODULES: AdminModule[] = [
     },
     {
         key: 'users',
-        title: 'User & Access Management',
-        description: 'Invite and deactivate users, assign roles and departments, and review sign-in activity.',
+        title: 'Users',
+        description:
+            'Add people and set their role, department, job title and manager. Reset passwords, see who signed in last, and deactivate people who leave.',
         icon: <ManageAccountsOutlinedIcon />,
-        badge: BADGES.comingSoon,
-        highlights: ['Users', 'Role assignment', 'Sign-in activity'],
+        href: ROUTES.ADMIN_USERS,
+        badge: BADGES.available,
+        highlights: ['Add users', 'Roles', 'Reset password', 'Deactivate'],
     },
     {
         key: 'audit',

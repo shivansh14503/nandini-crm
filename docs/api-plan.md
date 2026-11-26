@@ -2,8 +2,8 @@
 
 > **Status:** living document. Lists every endpoint of `backend-crm` as of 2026-11-26 (through Calendar Phase 2 P2-2:
 > `/api/calendar-connections` and the admin connection routes; P2-1: `/api/admin/integrations`, Admin › API
-> Integrations; Profile Phase 1: `/api/me` (My Profile), `/api/user-photos` and `POST /api/auth/change-password`) plus
-> the planned ones.
+> Integrations; Profile Phase 1: `/api/me` (My Profile), `/api/user-photos` and `POST /api/auth/change-password`; and
+> Profile Phase 2: `/api/admin/users` (Admin › Users) with the must-change-password claim) plus the planned ones.
 > When you add, change or remove a route, update this file in the same change (the route files'
 > header comments are the per-module source of truth; keep them in step too).
 > Related: [System design](system-design.md) · [Database design](database-design.md) · [Build plan](build-plan.md)
@@ -75,13 +75,20 @@ Modules marked **CRUD** expose (`modules/shared/crud.ts` → `registerCrudRoutes
 | Method | Path | Auth | Description |
 | --- | --- | --- | --- |
 | GET | `/health` | – | `{ status: 'ok', redis: 'connected' \| 'unavailable' }` |
-| POST | `/auth/login` | – | `{ username, password }` → `{ status: 'ok', message, user }` + sets cookie. `user` has the same shape as `/auth/me` (`{ id, username, role, fullName, firstName, lastName, photoUrl }`); the JWT itself stays `{ id, username, role }`. 429 after `LOGIN_RATE_LIMIT_MAX` failures per IP per window |
+| POST | `/auth/login` | – | `{ username, password }` → `{ status: 'ok', message, user }` + sets cookie. `user` has the same shape as `/auth/me` (`{ id, username, role, fullName, firstName, lastName, photoUrl, mustChangePassword }`); the JWT itself stays `{ id, username, role, tracked }`, plus `mcp: true` when the user must change their password (a new user, or after an admin reset): until they do, every other route answers `403 PASSWORD_CHANGE_REQUIRED` (see below). The user row is read again after the session is recorded, so a deactivation or admin reset that commits during the sign-in still applies (`403 ACCOUNT_INACTIVE` / `401 INVALID_CREDENTIALS`, the new session deleted). 429 after `LOGIN_RATE_LIMIT_MAX` failures per IP per window |
 | POST | `/auth/logout` | – | Revokes the Redis session (if tracked), clears cookie → `{ status: 'ok', message }` |
-| GET | `/auth/me` | ✔ | `{ status: 'ok', user: { id, username, role, fullName, firstName, lastName, photoUrl } }`, read from the database (not the JWT) so a name or photo change shows at once; `photoUrl` is `/api/user-photos/<id>` or `null`. `firstName` / `lastName` are split from `fullName` when the stored parts are missing or out of date (users created or renamed outside the app). `401` when the account no longer exists; when the database can't answer, `200` with the token's `{ id, username, role }` and `fullName: ''`, `firstName` / `lastName` / `photoUrl` `null` (a database outage never signs the user out) |
-| POST | `/auth/change-password` | ✔ | `{ currentPassword, newPassword }` (strings, ≤ 128) → `{ success, data: { passwordChangedAt, signedOutSessions }, message }`; `signedOutSessions` is `null` when the other sessions could not be signed out (Redis down or failing; the password is still changed, and the UI asks the user to sign them out from My Profile). Checks the current password (bcrypt or a legacy plain-text row), then the password rules (`modules/auth/passwordPolicy.ts`: 8–128 characters, a letter and a digit, not the username in any case, not the current password), stores the bcrypt hash and `passwordChangedAt` under the per-user lock `user:id:<id>` (the stored hash is re-checked inside it, so two concurrent changes from the same old password can't both succeed: the second gets `WRONG_PASSWORD`), audits `PASSWORD_CHANGE` (only the timestamp), then signs out every **other** session of the user (this one stays). `400 WRONG_PASSWORD` "Current password is incorrect." (path `currentPassword`); `400 WEAK_PASSWORD` with the rule's message (path `newPassword`); 429 after 10 requests per 15 min per user ("Too many password attempts. Please wait a few minutes.") |
+| GET | `/auth/me` | ✔ | `{ status: 'ok', user: { id, username, role, fullName, firstName, lastName, photoUrl, mustChangePassword } }`, read from the database (not the JWT) so a name or photo change shows at once; `photoUrl` is `/api/user-photos/<id>` or `null`. `mustChangePassword` is the stored flag **or** the request token's `mcp` claim, so it agrees with the `403 PASSWORD_CHANGE_REQUIRED` gate (a session that still carries the claim after the password was changed on another device stays locked until it changes the password again or signs in again). `firstName` / `lastName` are split from `fullName` when the stored parts are missing or out of date (users created or renamed outside the app). `401` when the account no longer exists; when the database can't answer, `200` with the token's `{ id, username, role }` and `fullName: ''`, `firstName` / `lastName` / `photoUrl` `null`, `mustChangePassword` from the token's `mcp` claim (a database outage never signs the user out) |
+| POST | `/auth/change-password` | ✔ | `{ currentPassword, newPassword }` (strings, ≤ 128) → `{ success, data: { passwordChangedAt, mustChangePassword: false, signedOutSessions }, message }`; `signedOutSessions` is `null` when the other sessions could not be signed out (Redis down or failing; the password is still changed, and the UI asks the user to sign them out from My Profile). Checks the current password (bcrypt or a legacy plain-text row), then the password rules (`modules/auth/passwordPolicy.ts`: 8–128 characters, a letter and a digit, not the username in any case, not the current password), stores the bcrypt hash and `passwordChangedAt` under the per-user lock `user:id:<id>` (the stored hash is re-checked inside it, so two concurrent changes from the same old password can't both succeed: the second gets `WRONG_PASSWORD`), audits `PASSWORD_CHANGE` (only the timestamp), then signs out every **other** session of the user (this one stays). It also clears `mustChangePassword` in the same transaction (audited as `passwordChangeRequired: { from: true, to: false }` in the same entry); when the account or the session's token was flagged, the auth cookie is re-issued for the **same** session (same jti, the Redis session's expiry restarted) without the `mcp` claim, with the current role. `403 ACCOUNT_INACTIVE` for a deactivated user whose session is still valid (nothing is changed, no cookie issued); `400 WRONG_PASSWORD` "Current password is incorrect." (path `currentPassword`); `400 WEAK_PASSWORD` with the rule's message (path `newPassword`); 429 after 10 requests per 15 min per user ("Too many password attempts. Please wait a few minutes.") |
 
 The auth endpoints use the older `{ status: 'ok', … }` envelope rather than `{ success, data }`; the frontend's
 `auth.service.ts` expects it. `change-password` is the exception: it is newer and uses `{ success, data }`.
+
+**Must change password.** While the token carries `mcp` (`authenticate`, allow-list in
+`backend-crm/src/middlewares/passwordChangeGate.ts`, unit tested) only these answer: `GET /auth/me`, `POST /auth/logout`,
+`POST /auth/change-password`, `GET /me/profile`, `GET /me/sessions`, `GET /user-photos/:id` (method + whole path,
+case-insensitive, query string and a trailing slash ignored). Everything else is `403 PASSWORD_CHANGE_REQUIRED`
+"Change your password to continue." (not audited as `ACCESS_DENIED`); the frontend sends the user to
+My Profile › Security. Tokens issued before the claim existed stay valid (no claim = not flagged).
 
 ### 2.2 Sales & customer records
 
@@ -162,8 +169,10 @@ request). Role, department, work email and username are admin-managed and read-o
 are audited as a User `UPDATE` (category DATA, module `users`, not undoable); signing out sessions as
 `SESSION_REVOKE` (SECURITY, NOTICE). Profile and photo writes drop the user lookup caches (`cache:lookups:users:*`).
 
-`ProfileDto`: `{ id, username, firstName, lastName, fullName, email, role, department, mobile, officePhone, photoUrl,
-lastLoginAt, passwordChangedAt, createdAt }` (`mobile` = the `phone` column; empty values and dates are `null`, dates
+`ProfileDto`: `{ id, username, firstName, lastName, fullName, email, role, department, jobTitle, reportsTo: { id, name }
+| null, mobile, officePhone, photoUrl, mustChangePassword, lastLoginAt, passwordChangedAt, createdAt }` (`jobTitle` and
+`reportsTo` are set in Admin › Users and read-only here; `reportsTo.name` is the manager's `fullName`, or username when
+blank; `mobile` = the `phone` column; empty values and dates are `null`, dates
 ISO). `SessionDto`: `{ id (the session's JWT id), current, ip, userAgent, device ("Chrome on Windows",
 `describeUserAgent`), createdAt, expiresAt }` (ISO or `null`).
 
@@ -310,9 +319,40 @@ expiresOn, expiresSoon }`).
 | PUT | `/settings` | Partial `{ companyDomains (1–10), followUpReminder (activity reminder label \| null), backfillDays: 30\|60\|90, eventVisibility: private\|default, followUpActivities, allowMeetingImport, importFollowupType }` → the whole settings. Stored as the module setting `activities/calendarSync` through Form Customization (validated, audited `ModuleSetting UPDATE`, form-config cache dropped) |
 | PUT | `/sync-types` | `{ "<Followup Type>": boolean }` → `syncTypes`. Option meta `calendarSync` on `shared_followup_type` (missing = on); Task / Note refused (400). Audited as option updates |
 | GET | `/people` | `?search&issue=any\|missing\|duplicate\|not_company` → active, non-group users `[{ username, fullName, department, role, email, emailIssue: missing\|duplicate\|not_company\|null, connection: { id, provider, status: active\|reauth_required\|error, statusReason, accountEmail, connectedAt, accessEndsAt } \| null }]` (the live calendar connection, never a token; as of 2026-11-26, P2-2) |
-| PUT | `/people/:username/email` | `{ email (required; `''` or `null` clears), allowOtherDomain? }` → the person row; a body without `email` is 400 `VALIDATION_ERROR`. `modules/users/userEmail.service.ts` (reused by the later Admin › Users): trimmed and lower-cased; unique among active non-group users (409 `DUPLICATE_RECORD` on `email`, naming the holder); a company domain unless `allowOtherDomain` (400 on `email`); audited `User UPDATE`; drops `cache:lookups:users*`. 409 `EMAIL_CONNECTED` while the person has a live calendar connection on another address (or the email is being cleared): disconnect it first (P2-2) |
+| PUT | `/people/:username/email` | `{ email (required; `''` or `null` clears), allowOtherDomain? }` → the person row; a body without `email` is 400 `VALIDATION_ERROR`. `modules/users/userEmail.service.ts` (also used by Admin › Users): trimmed and lower-cased; unique among active non-group users (409 `DUPLICATE_RECORD` on `email`, naming the holder); a company domain unless `allowOtherDomain` (400 on `email`); audited `User UPDATE`; drops `cache:lookups:users*`. 409 `EMAIL_CONNECTED` while the person has a live calendar connection on another address (or the email is being cleared): disconnect it first (P2-2) |
 | GET | `/connections` | `?provider=google\|microsoft\|fake&status=live (default: active + reauth_required + error)\|all\|active\|reauth_required\|error\|disconnected&search` (unknown values fall back to the default) → `AdminConnectionDto[]` (≤ 1,000): `{ id, username, fullName, provider, kind, accountEmail, status, statusReason, connectedAt, disconnectedAt, disconnectedBy, lastPulledAt, lastPushedAt, lastErrorCode, consecutiveFailures, pendingPushes (0 until P2-3), failedPushes (0), accessEndsAt, webhook: null (until P2-7) }`. Never a token, cursor or lease (as of 2026-11-26, P2-2) |
 | POST | `/connections/:id/disconnect` | `{ reason? (≤ 200, any other key → 400) }` → 204. Same as the employee's own disconnect (tokens dropped, Google grant revoked after commit) with `disconnectedBy` = the admin, `statusReason` `by_admin`, audited `CalendarConnection DISCONNECT` with the note. Already disconnected → 204, nothing changes; unknown id → 404 |
+
+**Users** — `/admin/users` 🔐 (Admin › Users, Profile Phase 2; `backend-crm/src/modules/user-admin/userAdmin.routes.ts`,
+route header comment = source of truth). Admin roles only (`FORM_CONFIG_ADMIN_ROLES`). Bodies are strict (an unknown
+key is `400 VALIDATION_ERROR`). Every write is audited as the acting admin (entity `User`, id = the user's id): `CREATE`
+(a snapshot without any password or hash), `UPDATE` (diff), `STATUS_CHANGE` (`isActive`), `PASSWORD_RESET` (SECURITY,
+NOTICE: `{ passwordChangeRequired: true, generated }`, never a password); writes drop `cache:lookups:users*`
+(`invalidateUserCaches`) and take the per-user lock `user:id:<id>` (shared with My Profile; the People screen's email
+write, `PUT /admin/integrations/people/:username/email`, doesn't take it, so `PATCH` writes only the columns that
+change and never writes back a column it left alone). Access stays decided by
+the role's **name** (`modules/user-admin/roles.ts` reads `FORM_CONFIG_ADMIN_ROLES` and `GLOBAL_ACCESS_ROLES`; mirrored
+and contract-tested by `frontend-crm/src/utils/roleAccess.ts`). A typed role or department that matches an existing one
+(role: by `normalizeRole`, any case / dash / spacing; department: any case) is stored with the existing spelling.
+Temporary passwords: 12 letters and digits (no look-alikes), returned **once** (`Cache-Control: no-store`), never
+logged or audited.
+
+`AdminUserDto`: `{ id, username, fullName, firstName, lastName, email, role, roleAccess: admin\|all-records\|own-records
+(admin panel first, then "sees all records"), department, jobTitle, reportsTo: { id, name, isActive } \| null,
+directReportsCount (active), mobile, officePhone, photoUrl, isActive, isGroupUser, onLeave, mustChangePassword,
+lastLoginAt, passwordChangedAt, createdAt, createdBy, deactivatedAt, emailIssue: missing\|duplicate\|not_company\|null }`
+(`emailIssue` as on the People table, only for active non-group users; `null` for the others).
+
+| Method | Path | Description |
+| --- | --- | --- |
+| GET | `/` | `?search&status=active\|inactive\|all (default active)&role&department&page&pageSize (≤ 100, default 25)` → `{ success, data: AdminUserDto[], meta: { total, page, pageSize } }`, by `fullName`, `username`. `search` looks in name, username, email, job title, department and role; `role` / `department` are exact (case-insensitive). Bad values fall back to the defaults |
+| GET | `/meta` | `{ roles: [{ name, access, adminPanel, allRecords, userCount, inactiveUserCount }], departments: [{ name, userCount }], managers: [{ id, name, username, photoUrl }], companyDomains }`. Roles = every stored role (grouped case-insensitively, most-used spelling) plus the admin and global-access roles nobody holds yet; departments = every stored one; `userCount` counts active users, `inactiveUserCount` (roles only) inactive ones (the list's Role filter offers the roles held in the chosen status). `managers` = active non-group users. `adminPanel` / `allRecords` are separate because "Administrator" and "Super Admin" open the admin panel but see only their own records |
+| GET | `/:id` | `AdminUserDto`; `404` "User not found." |
+| POST | `/` | `{ username, firstName, lastName?, email?, allowOtherDomain?, role, department?, jobTitle?, reportsToId?, mobile?, officePhone?, isGroupUser?, password? }` → `201 { user: AdminUserDto, temporaryPassword: string \| null }`. `username` trimmed and lower-cased, 3–50, `^[a-z0-9][a-z0-9._-]*$`, not a reserved name (`system`, the actor background jobs and seeds write) (`modules/user-admin/username.ts`, contract-tested with `frontend-crm/src/utils/username.ts`), unique case-insensitively (`409 DUPLICATE_RECORD` on `username`), never changes afterwards. Names / phones as My Profile (`formatPersonName`, E.164, "First and last name together cannot exceed 99 characters."). `role` ≤ 50 (required), `department` ≤ 50, `jobTitle` ≤ 100 (inner spaces collapsed). Email: the company email rule (`users/userEmail.service.ts`): company domain unless `allowOtherDomain` (400 on `email`), unique among active non-group users (409 on `email`). `password` omitted → a temporary one is generated and returned; typed → the password rules with the username (`400 WEAK_PASSWORD` on `password`). The user is active with `mustChangePassword: true`, `createdBy` = the admin |
+| PATCH | `/:id` | `{ firstName?, lastName?, email?, allowOtherDomain?, role?, department?, jobTitle?, reportsToId?, mobile?, officePhone?, isGroupUser?, onLeave? }` → `AdminUserDto` (keys left out stay; `''` / `null` clears an optional one; no change → no audit entry). `reportsToId`: an existing, active, non-group user, not the user, not anyone below them (chain walked up to 50 levels) → else `400 INVALID_MANAGER` on `reportsToId`; an unchanged manager is kept even if inactive. Taking admin access away: `400 SELF_LOCKOUT` (your own) / `400 LAST_ADMIN` (the only active admin), on `role`. A changed email (or a group login becoming a normal user) goes through the email rule. A **role change signs the user out** of every tracked session (their token carries the role) and the answer adds `signedOutSessions` (`null` when Redis is down); the acting admin's own sessions are left alone (their new role applies at next sign-in) |
+| POST | `/:id/deactivate` | → `AdminUserDto & { signedOutSessions }`: `isActive = false`, `deactivatedAt` = now, every tracked session revoked (`null` when Redis is down). Records, username and direct reports stay (their `reportsTo.isActive` turns false). `400 SELF_LOCKOUT` (your own account) / `400 LAST_ADMIN`. Already inactive: no change, no audit entry, but the sessions are revoked again (the UI's **Sign out all sessions** for an inactive user, to retry a revocation that failed while Redis was down) |
+| POST | `/:id/activate` | → `AdminUserDto & { signedOutSessions: null }`: `isActive = true`, `deactivatedAt = null`. `409 DUPLICATE_RECORD` on `email` when another active non-group user took the address meanwhile. Already active: no change |
+| POST | `/:id/reset-password` | `{ password? }` → `{ temporaryPassword: string \| null, signedOutSessions }`: new hash (typed password checked with the rules and the username, else generated), `mustChangePassword = true` (`passwordChangedAt` unchanged), every tracked session revoked. `400 BAD_REQUEST` for your own account ("Change your own password from My Profile › Security."); `400 WEAK_PASSWORD` on `password`; 20 / 10 min per admin (§3) |
 
 **Calendar connections** — `/calendar-connections` (any signed-in user, own rows only; Calendar Phase 2 P2-2, as of
 2026-11-26; `backend-crm/src/modules/calendar-sync/connection.routes.ts`, route header comment = source of truth).
@@ -411,6 +451,7 @@ scans the whole range: send a date range with it.
 | Change password (`ratelimit:change-password`) | 10 / 15 min (every request) | user | 429 "Too many password attempts. Please wait a few minutes." |
 | Sign out sessions (`ratelimit:session-revoke`, both `DELETE /me/sessions` routes) | 30 / 10 min | user | 429 |
 | Calendar connect start (`ratelimit:calendar-connect`) | 10 / 60 s | user | 429 "Too many connect attempts. Wait a minute and try again." |
+| Admin password reset (`ratelimit:admin-password-reset`) | 20 / 10 min (every request) | admin | 429 "Too many password resets. Please wait a few minutes." |
 | Integration connection test | 6 / 60 s | admin | 429 `RATE_LIMITED` + `Retry-After` (in-memory per process whenever Redis can't count it: down, or a command failing while it reports ready; this one never fails open) |
 
 Limited responses carry `RateLimit-Limit`, `RateLimit-Remaining`, `RateLimit-Reset`. All limits except the integration connection test fail open when Redis is down.
@@ -425,10 +466,15 @@ Limited responses carry `RateLimit-Limit`, `RateLimit-Remaining`, `RateLimit-Res
 | 400 | `WEAK_PASSWORD` | Change password: the new password breaks a password rule (`errors[].path` `newPassword`, message = the rule) |
 | 400 | `INVALID_IMAGE`, `IMAGE_TOO_LARGE` | Profile photo: not a PNG / JPEG / WebP image; over 512 KB |
 | 400 | `CURRENT_SESSION` | My Profile: signing out the request's own session from the sessions list (use Sign out) |
+| 400 | `WEAK_PASSWORD` (`password`) | Admin › Users: a typed initial / reset password breaks a password rule |
+| 400 | `INVALID_MANAGER` | Admin › Users: "Reports to" is the user, someone below them, missing, inactive or a group login (`errors[].path` `reportsToId`) |
+| 400 | `SELF_LOCKOUT` | Admin › Users: an admin removing their own admin role or deactivating themselves |
+| 400 | `LAST_ADMIN` | Admin › Users: demoting or deactivating the only active admin-role user |
 | 401 | (none) / `INVALID_CREDENTIALS` | Missing, invalid, expired or revoked session; wrong password |
 | 403 | `ACCOUNT_INACTIVE` / (none) | Deactivated user; role or row-level access denied |
+| 403 | `PASSWORD_CHANGE_REQUIRED` | The token carries `mcp` (must change password) and the route isn't on the allow-list (§2.1): "Change your password to continue." |
 | 404 | `NOT_FOUND` | Missing or soft-deleted record; unknown route |
-| 409 | `DUPLICATE_RECORD` | Unique violation (organization name, codes, partner name …) |
+| 409 | `DUPLICATE_RECORD` | Unique violation (organization name, codes, partner name, a user's username or email …) |
 | 409 | `WRITE_CONFLICT` | Concurrent write after retries were exhausted |
 | 409 | `RELATED_RECORD_CONSTRAINT` | FK violation |
 | 409 | `VERSION_CONFLICT` | Stale PDF template version |
@@ -457,6 +503,10 @@ Limited responses carry `RateLimit-Limit`, `RateLimit-Remaining`, `RateLimit-Res
   `deleteBulk`. Every write calls `notifyCrmUpdate(endpoint)` for cross-tab cache invalidation.
 - React Query hooks in `hooks/queries/` wrap those services; query keys in `queryKeys.ts`.
 - DTO types live in `frontend-crm/src/types/*.types.ts`; the backend mappers must return exactly those shapes.
+- Admin › Users is not a `createCrudService` module (the list answers `{ data, meta }`); its constants the forms check
+  live in `utils/username.ts` and `utils/roleAccess.ts`, contract-tested against `modules/user-admin/username.ts` and
+  `roles.ts` (`backend-crm/src/validators/contractSync.test.ts`). The frontend handles `403 PASSWORD_CHANGE_REQUIRED`
+  from any call by sending the user to My Profile › Security.
 - My Profile is not a CRUD module: `services/profile.service.ts` (profile, photo, sessions) and
   `auth.service.ts` `changePassword`, hooks in `hooks/queries/useProfile.ts`, types in `types/profile.types.ts`; the
   password rules in `utils/passwordPolicy.ts` are contract-tested against the API's copy.
@@ -487,7 +537,6 @@ Limited responses carry `RateLimit-Limit`, `RateLimit-Remaining`, `RateLimit-Res
 
 | Endpoint | Purpose | Notes |
 | --- | --- | --- |
-| `/users` (CRUD, 🔐) | Create, edit, deactivate users; reset password; job title, reports to, must change password (Profile Phase 2) | `ROUTES.ADMIN_USERS` already reserved in the frontend. Deactivation and an admin password reset must call `sessionService.revokeAll(userId)` and `invalidateUserLookupCaches()` (the users lookup is already read guarded) |
 | `GET /dashboard/*` | KPI aggregates (pipeline value by stage, follow-ups due, open tickets, conversion rate) | Use the reserved `cache:dashboard:*` namespace, already invalidated on every entity write; read it with `cacheService.getOrSetGuarded` |
 | `GET /opportunities/:id/pdf` etc. | PDFs for other modules | Follow the README "Adding a module" steps |
 | Export (`GET /<entity>/export`) | CSV/XLSX export of a filtered list | Stream; respect row-level scope |

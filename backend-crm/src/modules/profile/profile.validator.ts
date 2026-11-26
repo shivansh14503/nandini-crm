@@ -10,7 +10,7 @@ const isBlank = (value: unknown) => value === null || (typeof value === 'string'
  * A field the user may clear: missing → undefined (left as it is), '' / null → null (cleared), anything else checked
  * by `schema`.
  */
-const clearable = <T extends z.ZodType>(schema: T) => z.preprocess((value) => (isBlank(value) ? null : value), schema.nullable()).optional();
+export const clearable = <T extends z.ZodType>(schema: T) => z.preprocess((value) => (isBlank(value) ? null : value), schema.nullable()).optional();
 
 /**
  * PATCH /api/me/profile. Only these four fields are the user's to change (role, department, email and username are

@@ -1,7 +1,7 @@
 # Nandini CRM — Build Plan
 
 > **Status:** living document. Part 1 records what has been built (reconstructed from git history, 115 commits
-> from 2026-10-15 to 2026-11-18; the snapshot as of 2026-11-26, Calendar Phase 2 P2-1 and P2-2 and Profile Phase 1: My Profile). Part 2
+> from 2026-10-15 to 2026-11-18; the snapshot as of 2026-11-26, Calendar Phase 2 P2-1 and P2-2, Profile Phase 1: My Profile and Profile Phase 2: Admin › Users). Part 2
 > is the roadmap. Tick
 > items off and add new ones as work lands.
 > Related: [System design](system-design.md) · [Database design](database-design.md) · [API plan](api-plan.md)
@@ -34,9 +34,9 @@
 | Responsive layout | ✅ phones (from 320 px), tablets and desktops: menu drawer below 1200 px, icon-only navbar controls up to 1420 px, related records as a button on phones, no sideways page scroll |
 | Audit log | ✅ ledger table with who / where / how per entry, Admin › Audit Log screen (`/api/admin/audit-logs`), undo / restore, CSV / Excel export, ledger integrity checks; alert rules later (Phase 11 E) |
 | My Profile | ✅ own name, mobile, office phone and photo; change password (signs out other sessions); list and sign out signed-in sessions (2026-11-26) |
-| Users admin | ❌ seed / DB only (Profile Phase 2) |
+| Users admin | ✅ Admin › Users (`/admin/users`): add, edit, deactivate / activate, reset password with must-change-password at next sign-in; job title and reports to (2026-11-26) |
 | Dashboard | ❌ static page, no data |
-| Tests | ⚠️ 81 backend unit test files (`node:test`); no API integration, no frontend, no E2E |
+| Tests | ⚠️ 87 backend unit test files (`node:test`); no API integration, no frontend, no E2E |
 | CI/CD, containers | ❌ none in repo |
 
 ## Part 2 — Roadmap
@@ -46,9 +46,10 @@ Each phase lists exit criteria so "done" is unambiguous.
 
 ### Phase 6 — Production hardening (P1)
 
-- [ ] **User management** — `/api/users` CRUD (admin), deactivate, reset password; revoke sessions on deactivate /
-      reset; admin page at `/admin/users`. Planned as Phase 17, Profile Phase 2 (Admin › Users). Self-service
-      `POST /auth/change-password` with sign-out of other sessions shipped in Phase 17, Profile Phase 1.
+- [x] **User management** — done as Phase 17, Profile Phase 2 (Admin › Users, 2026-11-26): `/api/admin/users`
+      (list, add, edit, deactivate / activate, reset password; sessions revoked on deactivate / reset / role change)
+      and the admin page at `/admin/users`. Self-service `POST /auth/change-password` with sign-out of other sessions
+      shipped in Phase 17, Profile Phase 1.
 - [ ] **Run workers separately** — document and default production to `RUN_WORKERS=false` + `npm run worker:prod`.
 - [ ] **CI pipeline** — on every PR: `npm ci`, `prisma validate`, backend `typecheck` + `test`, frontend `lint` + `build`.
 - [ ] **Deployment artefacts** — Dockerfile for API (with Chromium, see README) and frontend; env checklist.
@@ -393,11 +394,25 @@ keeps wall-clock times); all-day activities are entered as business-timezone day
       profile / photo edits (User `UPDATE`), `PASSWORD_CHANGE`, `SESSION_REVOKE` (SECURITY, NOTICE). User pickers'
       cache is now read guarded and dropped by profile edits. Not in Form Builder (user fields are admin settings);
       old-CRM fields such as Nature of Calls, Principal Company, cost and live tracking are not carried over.
-- [ ] **Profile Phase 2: Admin › Users** — `/admin/users`: create and edit users (role, department, work email, job title,
-      reports to), deactivate (revokes sessions), reset a password with **must change password** at next sign-in,
-      `/api/users` (see Phase 6 and API plan §7). Out-of-office comes here or later.
+- [x] **Profile Phase 2 (PR2): Admin › Users** (2026-11-26) — `/admin/users` (admin roles; a card on the admin
+      landing page; not in Form Builder): a searchable, filterable list (Active / Inactive / All, role, department;
+      cards on phones) with status chips (inactive, on leave, group login, must change password, email issue) and row
+      actions; add / edit in a drawer: first / last name, username (set once at creation: lower-case letters, digits,
+      `.`, `-`, `_`, 3–50, never changes), work email under the company email rule shared with Admin › API Integrations
+      (`users/userEmail.service.ts`), role picked from the roles in use or typed (badges for "Admin" = admin panel and
+      "Sees all" = every record; access stays decided by the role's name), a new free-text **job title**, department
+      picked or typed, **reports to** (no cycles), mobile / office phone, group login and on-leave switches. New users
+      and admin resets get a generated temporary password (or one the admin types), shown once, and **must change
+      it** at next sign-in: the token's `mcp` claim limits the API to the change-password routes
+      (`403 PASSWORD_CHANGE_REQUIRED` elsewhere) and the app sends them to My Profile › Security until they do.
+      Deactivate / activate (guards: not yourself, not the last active admin); deactivation, a reset and a role change
+      sign the user out of every tracked session. My Profile shows job title and reports to (read-only). Users table
+      gains `jobTitle`, `reportsToId`, `mustChangePassword`, `createdBy`, `deactivatedAt`. Audited as the acting admin:
+      User `CREATE` / `UPDATE` / `STATUS_CHANGE` and the new `PASSWORD_RESET` (SECURITY, NOTICE). Other screens'
+      avatars are unchanged in this PR. Out-of-office dates are Phase 3 (only the on-leave switch here).
 - [ ] **Profile Phase 3: Notifications & preferences** — a Notifications tab on My Profile: which bell notifications and emails
-      (morning summary, reminders) a user gets, reminder defaults.
+      (morning summary, reminders) a user gets, reminder defaults; out-of-office dates (Phase 2 only has the on-leave
+      switch).
 - [ ] **Profile Phase 4: Connected accounts** — a Connected accounts tab hosting the Calendar thread's `CalendarConnectionsCard`
       (Google / Microsoft 365 calendar sync), replacing its temporary `/connected-calendars` page; the company email
       editor and its unique index belong to that work.

@@ -607,8 +607,11 @@ const SCROLL_BACKDROP_HEIGHT = FLOAT_INSET + NAVBAR_HEIGHT + 20;
 export function Navbar() {
     const router = useRouter();
     const { user, logout } = useAuth();
+    // Until a must-change password is changed only My Profile and sign-out work (the API refuses the rest), so the
+    // navigation, search, Create and the bell are hidden; the user menu stays.
+    const locked = Boolean(user?.mustChangePassword);
     // Admin-only items (Integrations) are left out for everyone else.
-    const navGroups = navGroupsFor(user?.role);
+    const navGroups = locked ? [] : navGroupsFor(user?.role);
     // A docked detail drawer: end the bar 12px short of it and switch the right-side controls to icons.
     const panelWidth = useRightPanelWidth();
     const docked = panelWidth > 0;
@@ -689,31 +692,33 @@ export function Navbar() {
                 {/* ── LEFT: Logo + Nav pills ── */}
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: compact ? 1 : { xs: 1, md: 2 }, minWidth: 0 }}>
                     {/* Menu button (phones / tablets): opens the drawer with the nav groups */}
-                    <IconButton
-                        onClick={openMenu}
-                        aria-label="Open menu"
-                        aria-haspopup="dialog"
-                        aria-expanded={menuOpen}
-                        size="small"
-                        sx={{
-                            display: { xs: 'inline-flex', lg: 'none' },
-                            width: 36,
-                            height: 36,
-                            flexShrink: 0,
-                            borderRadius: '8px',
-                            border: '1px solid var(--mui-palette-border-main)',
-                            color: 'var(--mui-palette-text-secondary)',
-                            backgroundColor: 'var(--mui-palette-background-paper)',
-                            transition: 'all 0.15s ease',
-                            '&:hover': {
-                                borderColor: 'var(--crm-blue-300)',
-                                backgroundColor: 'var(--mui-palette-primary-soft)',
-                                color: 'var(--crm-text-blue-700)',
-                            },
-                        }}
-                    >
-                        <MenuIcon sx={{ fontSize: 20 }} />
-                    </IconButton>
+                    {!locked && (
+                        <IconButton
+                            onClick={openMenu}
+                            aria-label="Open menu"
+                            aria-haspopup="dialog"
+                            aria-expanded={menuOpen}
+                            size="small"
+                            sx={{
+                                display: { xs: 'inline-flex', lg: 'none' },
+                                width: 36,
+                                height: 36,
+                                flexShrink: 0,
+                                borderRadius: '8px',
+                                border: '1px solid var(--mui-palette-border-main)',
+                                color: 'var(--mui-palette-text-secondary)',
+                                backgroundColor: 'var(--mui-palette-background-paper)',
+                                transition: 'all 0.15s ease',
+                                '&:hover': {
+                                    borderColor: 'var(--crm-blue-300)',
+                                    backgroundColor: 'var(--mui-palette-primary-soft)',
+                                    color: 'var(--crm-text-blue-700)',
+                                },
+                            }}
+                        >
+                            <MenuIcon sx={{ fontSize: 20 }} />
+                        </IconButton>
+                    )}
 
                     {/* Logo — clicks → dashboard */}
                     <Box
@@ -777,11 +782,15 @@ export function Navbar() {
                 {/* ── RIGHT: Search + Create + User menu (icon-only while a drawer is docked) ── */}
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: compact || isPhone ? 0.75 : 1.5, flexShrink: 0 }}>
 
-                    {/* Global search (every module; Enter opens /search) */}
-                    <GlobalSearch compact={compact} />
+                    {!locked && (
+                        <>
+                            {/* Global search (every module; Enter opens /search) */}
+                            <GlobalSearch compact={compact} />
 
-                    {/* Create button */}
-                    <CreateButton compact={compact || isPhone} />
+                            {/* Create button */}
+                            <CreateButton compact={compact || isPhone} />
+                        </>
+                    )}
 
                     {/* Light / dark (in the menu drawer on phones) */}
                     <Box sx={{ display: { xs: 'none', sm: 'flex' } }}>
@@ -789,7 +798,7 @@ export function Navbar() {
                     </Box>
 
                     {/* Notification bell */}
-                    <NotificationBell />
+                    {!locked && <NotificationBell />}
 
                     {/* Vertical divider */}
                     <Box

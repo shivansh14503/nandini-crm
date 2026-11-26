@@ -119,6 +119,7 @@ erDiagram
     DropdownCategory ||--o{ DropdownOption : options
     DropdownCategory ||--o{ FormFieldDefinition : "feeds select fields"
     Users ||--o| UserPhoto : "profile photo"
+    Users ||--o{ Users : "reports to (reportsToId)"
 ```
 
 Not drawn (no foreign keys, linked by convention):
@@ -146,16 +147,31 @@ Pre-existing table kept for compatibility (columns `Id`, `Username`, `Password`,
 | `Id` | INT IDENTITY PK | Frontend `User.id: number` |
 | `Username` | NVARCHAR(50) UNIQUE | Used everywhere as the owner/creator identifier |
 | `Password` | NVARCHAR(255) | bcrypt hash; legacy plain-text values are re-hashed on next login |
-| `Role` | NVARCHAR(50) | Default `Sales Executive`; drives admin access and row-level scope |
-| `email`, `department` | | `email` is unique in code only (SQL Server allows one NULL in a unique key). Since P2-1 the CRM writes it through `modules/users/userEmail.service.ts` (Admin › API Integrations › People; the later Admin › Users reuses it): trimmed and lower-cased, unique among **active non-group** users (writers serialise on an application lock), a company domain (`activities/calendarSync` `companyDomains`) unless the admin allows another, audited `User UPDATE`. As of 2026-11-26 (P2-2) the database enforces it too: filtered unique index `UX_Users_email` (`WHERE email IS NOT NULL AND isActive = 1 AND isGroupUser = 0`; the migration lower-cases stored emails first and stops on duplicates, pre-check `npm run calendar:check-emails`). While the user has a live calendar connection the address can't be changed or cleared (409 `EMAIL_CONNECTED`); an empty one is filled from the verified company account at connect. Both admin-managed (read-only on My Profile) |
+| `Role` | NVARCHAR(50) | Default `Sales Executive`; drives admin access and row-level scope **by name** (`FORM_CONFIG_ADMIN_ROLES` = admin panel, `GLOBAL_ACCESS_ROLES` = every record; `modules/user-admin/roles.ts`). Set in Admin › Users from the roles in use or a new one (a typed role matching an existing one by `normalizeRole` keeps its spelling) |
+| `email`, `department` (NVARCHAR(50)) | | `email` is unique in code only (SQL Server allows one NULL in a unique key). Since P2-1 the CRM writes it through `modules/users/userEmail.service.ts` (Admin › API Integrations › People, Admin › Users through its in-transaction checks `assertCompanyEmailAllowed` / `assertUserEmailFree`, and the calendar connect auto-fill): trimmed and lower-cased, unique among **active non-group** users (writers serialise on an application lock), a company domain (`activities/calendarSync` `companyDomains`) unless the admin allows another, audited `User UPDATE`. As of 2026-11-26 (P2-2) the database enforces it too: filtered unique index `UX_Users_email` (`WHERE email IS NOT NULL AND isActive = 1 AND isGroupUser = 0`; the migration lower-cases stored emails first and stops on duplicates, pre-check `npm run calendar:check-emails`). While the user has a live calendar connection the address can't be changed or cleared (409 `EMAIL_CONNECTED`); an empty one is filled from the verified company account at connect. Both admin-managed (read-only on My Profile) |
 | `fullName` | NVARCHAR(100), default `''` | Display name read everywhere (lookups, audit log, quotation PDFs). A profile write that changes a name sets it to `trim(firstName + ' ' + lastName)` |
 | `firstName`, `lastName` | NVARCHAR(100) NULL | Edited on My Profile (name-cased like other person names; together ≤ 99 characters so `fullName` fits). NULL or stale for users created or renamed outside the app: the API then shows them split from `fullName` (`resolveNameParts`) |
 | `phone` | NVARCHAR(20) NULL | The **mobile** number (E.164); My Profile calls it Mobile, quotation PDFs print it as the sales person's phone |
 | `officePhone` | NVARCHAR(20) NULL | Desk / landline number (E.164), My Profile |
-| `passwordChangedAt` | DATETIME2 NULL | Set by `POST /api/auth/change-password`; NULL = never changed in this CRM |
-| `isActive`, `isGroupUser`, `onLeave`, `lastLoginAt` | | Inactive users can't sign in or be assigned |
+| `passwordChangedAt` | DATETIME2 NULL | Set by `POST /api/auth/change-password`; NULL = never changed in this CRM. An admin reset leaves it as it is |
+| `jobTitle` | NVARCHAR(100) NULL | Free text set in Admin › Users (read-only on My Profile). Not an access rule |
+| `reportsToId` | INT NULL, FK → `Users.Id` (NO ACTION / NO ACTION), indexed | The user's manager (Admin › Users "Reports to"). The API refuses the user themselves, anyone below them (no cycles; chain walked up to 50 levels, writers serialise on an application lock), an inactive or group login. Kept when the manager is deactivated. NO ACTION: a user with direct reports can't be deleted |
+| `mustChangePassword` | BIT NOT NULL, default 0 | Set for a user added in Admin › Users and after an admin password reset; cleared by `POST /api/auth/change-password`. While set, the sign-in token carries `mcp` and the API answers only the change-password routes |
+| `createdBy` | NVARCHAR(50) NULL | Username of the admin who added the user in Admin › Users; NULL for older users (seed, SQL) |
+| `deactivatedAt` | DATETIME2 NULL | When an admin last deactivated the user; NULL again on activation |
+| `isActive`, `isGroupUser`, `onLeave`, `lastLoginAt` | | Inactive users can't sign in or be assigned. Set in Admin › Users (`onLeave` is a plain switch; out-of-office dates are Profile Phase 3) |
 
-Indexes: `email`, `isActive`.
+Indexes: `email`, `isActive`, `reportsToId`.
+
+The username is set once (Admin › Users validates `^[a-z0-9][a-z0-9._-]*$`, 3–50, stored lower-cased, unique
+case-insensitively) and never changes: records store it as their owner. Users are never deleted by the app, only
+deactivated.
+
+Migration `20261126235000_user_admin` (Profile Phase 2) adds `jobTitle`, `reportsToId` (+ index `Users_reportsToId_idx`
+and the self foreign key `Users_reportsToId_fkey`), `mustChangePassword` (NOT NULL, default 0), `createdBy` and
+`deactivatedAt`. Nothing is backfilled: existing users keep `mustChangePassword = 0` and NULL elsewhere. Writes from
+Admin › Users are audited as the acting admin: `CREATE` (a snapshot without any password), `UPDATE` (diff),
+`STATUS_CHANGE` (`isActive`) and `PASSWORD_RESET`.
 
 Migration `20261126230000_user_profile` adds `firstName`, `lastName`, `officePhone` and `passwordChangedAt` (all NULL)
 and splits every existing name once: `firstName` = the text before the first space of `LTRIM(RTRIM(fullName))`,
@@ -393,7 +409,7 @@ with `@ignore` so schema diffs stay empty.
 
 | Group | Columns |
 | --- | --- |
-| What | `category` (`DATA` / `CONFIG` / `SECURITY`), `action` (`CREATE`, `UPDATE`, `DELETE`, `RESTORE`, `REVERT`, `STATUS_CHANGE`, `CONVERT`, `FOLLOW_UP`, `EMAIL_CHECK` (an email check changed an address's result on a record: `{ verificationStatus: { from, to }, email, reason, runId? }`), `IMPORT`, `LOGIN`, `LOGIN_FAILED`, `LOGOUT`, `ACCESS_DENIED`, `SET_DEFAULT`, `DUPLICATE`, `PDF_GENERATED`, `EXPORT` (an audit log export: `{ format, rowCount, truncated, fileName, filters }`), `LEDGER_VERIFY` (a "Verify integrity" run: `{ result, message, digests, unreadableFiles, upToBlock, durationMs }`), `PASSWORD_CHANGE` (a user changed their own password: `{ passwordChangedAt: { from, to } }`, never a password), `SESSION_REVOKE` (My Profile sign-out of other sessions: `{ scope: 'one', sessionId }` or `{ scope: 'others', signedOutSessions }`)), `severity` (`INFO` / `NOTICE` / `WARNING` / `CRITICAL`), `module` (CRM module key or admin area: `form-customization`, `pdf-templates`, `document-series`, `cities`, `users`) |
+| What | `category` (`DATA` / `CONFIG` / `SECURITY`), `action` (`CREATE`, `UPDATE`, `DELETE`, `RESTORE`, `REVERT`, `STATUS_CHANGE`, `CONVERT`, `FOLLOW_UP`, `EMAIL_CHECK` (an email check changed an address's result on a record: `{ verificationStatus: { from, to }, email, reason, runId? }`), `IMPORT`, `LOGIN`, `LOGIN_FAILED`, `LOGOUT`, `ACCESS_DENIED`, `SET_DEFAULT`, `DUPLICATE`, `PDF_GENERATED`, `EXPORT` (an audit log export: `{ format, rowCount, truncated, fileName, filters }`), `LEDGER_VERIFY` (a "Verify integrity" run: `{ result, message, digests, unreadableFiles, upToBlock, durationMs }`), `PASSWORD_CHANGE` (a user changed their own password: `{ passwordChangedAt: { from, to } }` plus `passwordChangeRequired: { from: true, to: false }` when it replaced a temporary one, never a password), `PASSWORD_RESET` (an admin reset a user's password in Admin › Users: `{ passwordChangeRequired: true, generated }`, never a password; keys ending in `Password` are redacted, hence `passwordChangeRequired`), `SESSION_REVOKE` (My Profile sign-out of other sessions: `{ scope: 'one', sessionId }` or `{ scope: 'others', signedOutSessions }`)), `severity` (`INFO` / `NOTICE` / `WARNING` / `CRITICAL`), `module` (CRM module key or admin area: `form-customization`, `pdf-templates`, `document-series`, `cities`, `users`) |
 | Which record | `entityType`, `entityId`, `entityCode` (record number at the time; shown only once the module has a document series), `entityLabel` (record name at the time, so renamed / deleted records stay readable) |
 | Change | `changedFields` (`\|status\|assignedTo\|` for diffs), `changesJson` (`{ field: { from, to } }` for updates, a snapshot or summary otherwise; sensitive keys stored as `[redacted]`) |
 | Who | `changedBy` (username, `system` for jobs), `actorId` (`Users.Id`), `actorRole` (role at the time) |
@@ -710,6 +726,8 @@ are audited as entity `CalendarConnection` (module `calendar-connections`) with 
 | Option value rename / field key rename | Stored values in records, saved filters and PDF template paths follow (`optionValueRename.ts`, `fieldKeyRename.ts`) |
 | Activity reminder due | One transaction: claim `Activity.reminderSentAt` (matching `remindAt` and `updatedAt`, writing `updatedAt` back unchanged) + insert the missing `Notification` rows |
 | Profile edit / photo (My Profile) | App lock on the user → UPDATE `Users` (or replace the `UserPhoto` row) → `AuditLog` UPDATE; user lookup caches dropped after commit |
+| User added / edited (Admin › Users) | App locks (username, email address, reports-to chain, admin roster as needed; the per-user lock on edits) → checks → INSERT / UPDATE `Users` → `AuditLog` CREATE / UPDATE; user lookup caches dropped after commit |
+| User deactivated / reset (Admin › Users) | App lock on the user → `isActive = 0, deactivatedAt = now` (or new hash + `mustChangePassword = 1`) → `AuditLog` STATUS_CHANGE / PASSWORD_RESET; after commit every Redis session of the user is deleted |
 | Nightly retention (00:20) | Hard delete of old `Notification` and `EmailLog` rows (see §4.26); then live `CalendarConnection` rows of inactive / group users are disconnected (`user_inactive`, revoked) and `calendar_reconnect` "access ends soon" notifications written (as of 2026-11-26) |
 | Calendar connect / disconnect | Locks → INSERT or re-activate the `CalendarConnection` row (+ fill an empty `Users.email`) → `AuditLog` CONNECT; disconnect nulls the tokens, sets `disconnected`, `AuditLog` DISCONNECT, then revokes at Google after commit |
 

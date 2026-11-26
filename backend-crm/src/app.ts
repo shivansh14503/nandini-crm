@@ -51,6 +51,7 @@ import { closeQueues } from './jobs/queues.js';
 import { startWorkers, stopWorkers } from './jobs/workers/index.js';
 import { errorHandler, notFoundHandler } from './middlewares/errorHandler.js';
 import integrationRouter from './modules/integrations/integration.routes.js';
+import userAdminRouter from './modules/user-admin/userAdmin.routes.js';
 import { serializeRequestForLog } from './utils/redactUrl.js';
 import { isAppOrigin } from './config/origins.js';
 import calendarConnectionRouter from './modules/calendar-sync/connection.routes.js';
@@ -141,6 +142,7 @@ app.use('/api/notifications', notificationRouter);
 app.use('/api/me', profileRouter);
 app.use('/api/user-photos', userPhotoRouter);
 app.use('/api/admin/integrations', integrationRouter);
+app.use('/api/admin/users', userAdminRouter);
 app.use('/api/calendar-connections', calendarConnectionRouter);
 
 // ── 404 + global error handler ─────────────────────────────────────────────────

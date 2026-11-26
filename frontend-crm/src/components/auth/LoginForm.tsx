@@ -42,6 +42,7 @@ export function LoginForm() {
         try {
             if (window.sessionStorage.getItem(SESSION_EXPIRED_KEY)) {
                 window.sessionStorage.removeItem(SESSION_EXPIRED_KEY);
+                // eslint-disable-next-line react-hooks/set-state-in-effect -- browser storage is only readable after hydration
                 setSessionExpired(true);
             }
         } catch {
@@ -69,9 +70,10 @@ export function LoginForm() {
 
         setLoading(true);
         try {
-            await login({ username: trimmedUsername, password });
-            // Back to the page that sent the user here (`?next=`, CRM paths only), else the dashboard.
-            router.push(nextPathFromLocation(ROUTES.DASHBOARD));
+            const signedIn = await login({ username: trimmedUsername, password });
+            // A temporary password (new user, admin reset) must be changed before anything else; otherwise back to the
+            // page that sent the user here (`?next=`, CRM paths only), else the dashboard.
+            router.push(signedIn.mustChangePassword ? ROUTES.PROFILE_SECURITY : nextPathFromLocation(ROUTES.DASHBOARD));
         } catch (err: unknown) {
             const message = err instanceof Error ? err.message : 'Login failed. Please try again.';
             setError(message);

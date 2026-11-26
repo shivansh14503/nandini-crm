@@ -74,14 +74,31 @@ export const sessionService = {
         }
     },
 
-    /** Ends every tracked session of a user (e.g. after deactivation). */
-    async revokeAll(userId: number): Promise<void> {
-        if (!isRedisReady()) return;
+    /**
+     * Ends every tracked session of a user (Admin › Users: deactivation, a password reset, a role change). Returns how
+     * many were ended, or null when Redis can't be asked or failed partway (some may still be signed in).
+     */
+    async revokeAll(userId: number): Promise<number | null> {
+        if (!isRedisReady()) return null;
+        let revoked = 0;
         try {
-            for await (const keys of sessionKeyBatches(userId)) await redis.unlink(...keys);
+            for await (const keys of sessionKeyBatches(userId)) revoked += await redis.unlink(...keys);
         } catch (err) {
-            logger.warn({ err: (err as Error).message, userId }, 'Revoking all sessions failed');
+            logger.warn({ err: (err as Error).message, userId, revoked }, 'Revoking all sessions failed');
+            return null;
         }
+        return revoked;
+    },
+
+    /**
+     * Restarts a tracked session's expiry (its token was re-issued with a fresh expiry, after the user replaced a
+     * temporary password). Best effort: on failure the session simply ends at its old expiry.
+     */
+    async refresh(userId: number, jti: string): Promise<void> {
+        if (!isRedisReady()) return;
+        await redis.expire(sessionKey(userId, jti), ENV.SESSION_TTL_SECONDS).catch((err: Error) => {
+            logger.warn({ err: err.message, userId }, 'Session refresh failed');
+        });
     },
 
     /**
