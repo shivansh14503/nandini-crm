@@ -24,7 +24,7 @@ export interface PdfAssetDto {
     createdAt: string;
 }
 
-type ImageMime = 'image/png' | 'image/jpeg' | 'image/webp';
+export type ImageMime = 'image/png' | 'image/jpeg' | 'image/webp';
 
 /** Detects PNG / JPEG / WebP from the first bytes; null for anything else. */
 export function detectImageMime(data: Buffer): ImageMime | null {
@@ -34,11 +34,15 @@ export function detectImageMime(data: Buffer): ImageMime | null {
     return null;
 }
 
-function decodeBase64(input: string): Buffer {
+const invalidImageData = () => HttpError.badRequest('Image data is not valid base64.', [{ message: 'Invalid image data.', path: ['data'] }]);
+
+/**
+ * Decodes an uploaded image's base64 (a full data: URI is accepted); whitespace is ignored. Throws `invalid()` (by
+ * default a 400 "Image data is not valid base64.") when it isn't base64. Also used by profile photos.
+ */
+export function decodeBase64(input: string, invalid: () => Error = invalidImageData): Buffer {
     const payload = input.replace(/^data:[\w/+.-]+;base64,/i, '').replace(/\s+/g, '');
-    if (!/^[A-Za-z0-9+/]+={0,2}$/.test(payload) || payload.length % 4 === 1) {
-        throw HttpError.badRequest('Image data is not valid base64.', [{ message: 'Invalid image data.', path: ['data'] }]);
-    }
+    if (!/^[A-Za-z0-9+/]+={0,2}$/.test(payload) || payload.length % 4 === 1) throw invalid();
     return Buffer.from(payload, 'base64');
 }
 

@@ -114,12 +114,16 @@ export interface CityLookupDto {
     subdivisionCode: string;
 }
 
+/** Drops the cached user lists (pickers, assignee names). Call after a write to a user's name or photo commits. */
+export function invalidateUserLookupCaches(): Promise<void> {
+    return cacheService.invalidatePattern(`${CACHE_KEYS.lookups('users')}:*`);
+}
+
 export const lookupService = {
     async users(query: unknown): Promise<CrmUserDto[]> {
         const { includeInactive } = usersQuerySchema.parse(query ?? {});
-        // Plain getOrSet: no CRM write changes these fields (users are maintained outside the app; sign-in only sets
-        // lastLoginAt), so nothing invalidates the key and there is no write to race. Guard it if a write path is added.
-        return cacheService.getOrSet(CACHE_KEYS.lookups(`users:${includeInactive ? 'all' : 'active'}`), ENTITY_TTL_SECONDS, async () => {
+        // Guarded: My Profile edits change a user's name and photo, and drop these keys (invalidateUserLookupCaches).
+        return cacheService.getOrSetGuarded(CACHE_KEYS.lookups(`users:${includeInactive ? 'all' : 'active'}`), ENTITY_TTL_SECONDS, async () => {
             const rows = await prisma.user.findMany({
                 where: includeInactive ? {} : { isActive: true },
                 orderBy: [{ fullName: 'asc' }, { username: 'asc' }],

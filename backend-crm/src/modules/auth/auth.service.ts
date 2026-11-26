@@ -6,9 +6,12 @@ import { logger } from '../../config/logger.js';
 import { loginRateLimit } from '../../middlewares/rateLimiter.js';
 import { HttpError } from '../../utils/httpError.js';
 import { auditService } from '../../services/audit.service.js';
+import { acquireLocks, runInTransaction } from '../shared/transactions.js';
+import { AUTH_ME_SELECT, toAuthMeDto, type AuthMeDto } from '../profile/profile.dto.js';
+import { passwordPolicyIssue } from './passwordPolicy.js';
 import { sessionService, type SessionMetadata } from './session.service.js';
 import { tokenService } from './token.service.js';
-import type { LoginInput } from './auth.validator.js';
+import type { ChangePasswordInput, LoginInput } from './auth.validator.js';
 import type { AuthSession, AuthUser } from '../../types/user.types.js';
 
 const BCRYPT_ROUNDS = 12;
@@ -31,7 +34,7 @@ function plainTextMatches(candidate: string, stored: string): boolean {
 }
 
 /** Checks a password against the stored value; `needsRehash` flags legacy plain-text rows to migrate to bcrypt. */
-async function verifyPassword(candidate: string, stored: string): Promise<{ valid: boolean; needsRehash: boolean }> {
+export async function verifyPassword(candidate: string, stored: string): Promise<{ valid: boolean; needsRehash: boolean }> {
     if (BCRYPT_HASH_PATTERN.test(stored)) {
         return { valid: await bcrypt.compare(candidate, stored), needsRehash: false };
     }
@@ -40,13 +43,30 @@ async function verifyPassword(candidate: string, stored: string): Promise<{ vali
 }
 
 export interface LoginResult {
-    user: AuthUser;
+    /** The same shape as GET /api/auth/me, so the navbar shows the name and photo right after sign-in. */
+    user: AuthMeDto;
     token: string;
 }
 
+export interface ChangePasswordResult {
+    passwordChangedAt: string;
+    /**
+     * How many of the user's other sessions were signed out, or null when they could not be (Redis unavailable or
+     * failing): the password is changed, but the user should sign out other sessions again from My Profile.
+     */
+    signedOutSessions: number | null;
+}
+
+const SESSION_ENDED = 'Your account was not found. Please sign in again.';
+
+const wrongPassword = () => {
+    const message = 'Current password is incorrect.';
+    return new HttpError(message, StatusCodes.BAD_REQUEST, { code: 'WRONG_PASSWORD', errors: [{ message, path: ['currentPassword'] }] });
+};
+
 export const authService = {
     async loginUser(credentials: LoginInput, context: SessionMetadata = {}): Promise<LoginResult> {
-        const user = await prisma.user.findUnique({ where: { username: credentials.username } });
+        const user = await prisma.user.findUnique({ where: { username: credentials.username }, include: { photo: { select: { id: true } } } });
 
         if (!user) {
             await bcrypt.compare(credentials.password, await dummyHash());
@@ -107,7 +127,63 @@ export const authService = {
             changes: { ip: context.ip },
         });
 
-        return { user: authUser, token: tokenService.generateToken(authUser, { jti, tracked }) };
+        // The token carries only { id, username, role }; the response user also has the name and photo (as /me).
+        return { user: toAuthMeDto(user), token: tokenService.generateToken(authUser, { jti, tracked }) };
+    },
+
+    /** GET /api/auth/me: the signed-in user read from the database (name and photo for the navbar). */
+    async me(userId: number): Promise<AuthMeDto> {
+        const row = await prisma.user.findUnique({ where: { id: userId }, select: AUTH_ME_SELECT });
+        if (!row) throw HttpError.unauthorized(SESSION_ENDED);
+        return toAuthMeDto(row);
+    },
+
+    /**
+     * POST /api/auth/change-password (My Profile › Security). Checks the current password (bcrypt or a legacy
+     * plain-text row) and the password rules, stores the new bcrypt hash with `passwordChangedAt`, audits
+     * PASSWORD_CHANGE (no password in the entry), then signs out every other session of the user, keeping this one.
+     */
+    async changePassword(user: AuthUser, session: AuthSession, input: ChangePasswordInput): Promise<ChangePasswordResult> {
+        const row = await prisma.user.findUnique({
+            where: { id: user.id },
+            select: { id: true, username: true, passwordHash: true, passwordChangedAt: true },
+        });
+        if (!row) throw HttpError.unauthorized(SESSION_ENDED);
+
+        const { valid } = await verifyPassword(input.currentPassword, row.passwordHash);
+        if (!valid) throw wrongPassword();
+        const issue = passwordPolicyIssue(input.newPassword, { username: row.username, currentPassword: input.currentPassword });
+        if (issue) {
+            throw new HttpError(issue, StatusCodes.BAD_REQUEST, { code: 'WEAK_PASSWORD', errors: [{ message: issue, path: ['newPassword'] }] });
+        }
+
+        // Hashed before the transaction: bcrypt takes ~a quarter second and needs no row lock.
+        const passwordHash = await hashPassword(input.newPassword);
+        const passwordChangedAt = new Date();
+        await runInTransaction(async (tx) => {
+            // The same per-user lock as profile writes: two concurrent changes from the old password must not both win.
+            await acquireLocks(tx, [`user:id:${row.id}`]);
+            const current = await tx.user.findUnique({ where: { id: row.id }, select: { passwordHash: true, passwordChangedAt: true } });
+            if (!current) throw HttpError.unauthorized(SESSION_ENDED);
+            // Changed since it was checked above (another change, or a legacy row rehashed at sign-in): check again.
+            if (current.passwordHash !== row.passwordHash && !(await verifyPassword(input.currentPassword, current.passwordHash)).valid) {
+                throw wrongPassword();
+            }
+            await tx.user.update({ where: { id: row.id }, data: { passwordHash, passwordChangedAt } });
+            await auditService.record(tx, {
+                entityType: 'User',
+                entityId: String(row.id),
+                action: 'PASSWORD_CHANGE',
+                changedBy: row.username,
+                changes: { passwordChangedAt: { from: current.passwordChangedAt?.toISOString() ?? null, to: passwordChangedAt.toISOString() } },
+            });
+        });
+
+        // After the commit: a stolen session must not outlive the password it was opened with. The request's own
+        // session stays signed in (untracked sessions aren't in Redis, so there is nothing to keep). null tells the
+        // user the others could not be signed out, rather than reporting 0 as if there were none.
+        const signedOutSessions = await sessionService.revokeAllExcept(row.id, session.jti);
+        return { passwordChangedAt: passwordChangedAt.toISOString(), signedOutSessions };
     },
 
     async logout(user: AuthUser, session: AuthSession): Promise<void> {

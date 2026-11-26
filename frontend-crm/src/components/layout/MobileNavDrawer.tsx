@@ -4,7 +4,6 @@ import { useState } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 import {
-    Avatar,
     Box,
     Button,
     Collapse,
@@ -19,6 +18,10 @@ import CloseIcon from '@mui/icons-material/Close';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import LogoutIcon from '@mui/icons-material/Logout';
 import AdminPanelSettingsOutlinedIcon from '@mui/icons-material/AdminPanelSettingsOutlined';
+import PersonOutlineRoundedIcon from '@mui/icons-material/PersonOutlineRounded';
+import ChevronRightRoundedIcon from '@mui/icons-material/ChevronRightRounded';
+import { UserAvatar, displayName } from '@/components/common/UserAvatar';
+import type { User } from '@/types/auth.types';
 import { glassSurfaceSx, GLASS_RADIUS, GLASS_SHADOW, FLOAT_INSET } from '@/theme/glass';
 import { moduleForPath } from '@/theme/moduleColors';
 import { APP_CONFIG, ROUTES } from '@/config/constants';
@@ -98,13 +101,14 @@ export interface MobileNavDrawerProps {
     groups: readonly NavGroup[];
     /** Path of the page the menu was opened on; its item is highlighted and its group starts expanded. */
     currentPath: string;
-    user: { username: string; role: string } | null;
+    user: Pick<User, 'username' | 'role' | 'fullName' | 'photoUrl'> | null;
     onLogout: () => void;
 }
 
 /**
  * Phone / tablet navigation: the navbar pills don't fit below `lg`, so the menu button opens this panel with the
- * same groups (collapsible), the admin link, the light/dark switch (hidden from the bar on phones) and Sign Out.
+ * same groups (collapsible), My Profile, the admin link, the light/dark switch (hidden from the bar on phones) and
+ * Sign Out.
  */
 export function MobileNavDrawer({ open, onClose, groups, currentPath, user, onLogout }: MobileNavDrawerProps) {
     const activeKey = activeHrefKey(groups, currentPath);
@@ -223,42 +227,37 @@ export function MobileNavDrawer({ open, onClose, groups, currentPath, user, onLo
                 </IconButton>
             </Box>
 
-            {/* Signed-in user */}
+            {/* Signed-in user (opens My Profile) */}
             {user && (
-                <Box
-                    sx={{
-                        mx: 1.5,
-                        mb: 1,
-                        px: 1.5,
-                        py: 1.25,
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: 1.25,
-                        borderRadius: '12px',
-                        backgroundColor: 'var(--mui-palette-background-subtle)',
-                        border: '1px solid var(--mui-palette-border-light)',
-                    }}
-                >
-                    <Avatar
+                <Box sx={{ mx: 1.5, mb: 1 }}>
+                    <ListItemButton
+                        component={Link}
+                        href={ROUTES.PROFILE}
+                        onClick={onClose}
+                        aria-label={`My Profile: ${displayName(user)}`}
                         sx={{
-                            width: 34,
-                            height: 34,
-                            fontSize: '0.75rem',
-                            fontWeight: 700,
-                            color: '#ffffff',
-                            background: 'linear-gradient(135deg, var(--crm-fill-blue-700) 0%, var(--crm-fill-blue-600) 100%)',
+                            px: 1.5,
+                            py: 1.25,
+                            gap: 1.25,
+                            borderRadius: '12px',
+                            backgroundColor: 'var(--mui-palette-background-subtle)',
+                            border: '1px solid var(--mui-palette-border-light)',
+                            transition: 'background-color 0.15s ease, border-color 0.15s ease',
+                            '&:hover': { backgroundColor: 'var(--mui-palette-primary-soft)', borderColor: 'var(--mui-palette-primary-softBorder)' },
+                            '&.Mui-focusVisible': { boxShadow: '0 0 0 3px rgb(var(--crm-accent-rgb) / 0.22)' },
                         }}
                     >
-                        {user.username.slice(0, 2).toUpperCase()}
-                    </Avatar>
-                    <Box sx={{ minWidth: 0 }}>
-                        <Typography noWrap sx={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--crm-slate-900)', lineHeight: 1.2 }}>
-                            {user.username}
-                        </Typography>
-                        <Typography noWrap sx={{ fontSize: '0.72rem', color: 'var(--mui-palette-text-secondary)', lineHeight: 1.3 }}>
-                            {user.role}
-                        </Typography>
-                    </Box>
+                        <UserAvatar name={displayName(user)} photoUrl={user.photoUrl} size={34} />
+                        <Box sx={{ minWidth: 0, flex: 1 }}>
+                            <Typography noWrap sx={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--crm-slate-900)', lineHeight: 1.2 }}>
+                                {displayName(user)}
+                            </Typography>
+                            <Typography noWrap sx={{ fontSize: '0.72rem', color: 'var(--mui-palette-text-secondary)', lineHeight: 1.3 }}>
+                                {user.role}
+                            </Typography>
+                        </Box>
+                        <ChevronRightRoundedIcon sx={{ fontSize: 18, color: 'var(--mui-palette-text-muted)', flexShrink: 0 }} />
+                    </ListItemButton>
                 </Box>
             )}
 
@@ -382,6 +381,10 @@ export function MobileNavDrawer({ open, onClose, groups, currentPath, user, onLo
 
                 <Divider sx={{ my: 1, borderColor: 'var(--mui-palette-border-light)' }} />
 
+                <ListItemButton component={Link} href={ROUTES.PROFILE} onClick={onClose} sx={rowSx}>
+                    <PersonOutlineRoundedIcon sx={{ fontSize: 19 }} />
+                    My Profile
+                </ListItemButton>
                 <ListItemButton component={Link} href={ROUTES.ADMIN} onClick={onClose} sx={rowSx}>
                     <AdminPanelSettingsOutlinedIcon sx={{ fontSize: 19 }} />
                     Admin Panel

@@ -126,6 +126,8 @@ const ACTION_TITLES: Record<string, { title: string; tag: string }> = {
     SET_DEFAULT: { title: 'Set as default template', tag: 'Default' },
     DUPLICATE: { title: 'Duplicated', tag: 'Created' },
     PDF_GENERATED: { title: 'PDF generated', tag: 'PDF' },
+    PASSWORD_CHANGE: { title: 'Password changed', tag: 'Security' },
+    SESSION_REVOKE: { title: 'Session signed out', tag: 'Security' },
 };
 
 const EMAIL_RESULT_LABELS: Record<string, string> = {
@@ -195,6 +197,14 @@ function toRevisions(entry: AuditEntryDto, time: string): AuditRevisionItem[] {
     }
     if (entry.action === 'PDF_GENERATED' && typeof changes.templateName === 'string') {
         return [{ ...base, ...known, note: `Template: ${changes.templateName}` }];
+    }
+    if (entry.action === 'SESSION_REVOKE') {
+        const signedOut = typeof changes.signedOutSessions === 'number' ? changes.signedOutSessions : undefined;
+        const note =
+            changes.scope === 'others'
+                ? `All other sessions${signedOut !== undefined ? ` (${signedOut})` : ''}`
+                : 'One other session';
+        return [{ ...base, ...known, note }];
     }
     return [{ ...base, ...known }];
 }

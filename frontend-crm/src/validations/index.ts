@@ -11,3 +11,4 @@ export * from './contract.schema';
 export * from './referral.schema';
 export * from './partnerCompany.schema';
 export * from './activity.schema';
+export * from './profile.schema';

@@ -70,7 +70,11 @@ export type AuditAction =
     /** Entries of the audit log exported to a file. */
     | 'EXPORT'
     /** The ledger was checked for tampering ("Verify integrity"); CRITICAL when it failed. */
-    | 'LEDGER_VERIFY';
+    | 'LEDGER_VERIFY'
+    /** A user changed their own password (My Profile); `changes` holds only `passwordChangedAt`, never a password. */
+    | 'PASSWORD_CHANGE'
+    /** A user signed out one of their other sessions (`scope: 'one'`, `sessionId`) or all of them (`scope: 'others'`). */
+    | 'SESSION_REVOKE';
 
 /** DATA = a CRM record changed; CONFIG = an admin setting changed; SECURITY = sign-ins and refused access. */
 export type AuditCategory = 'DATA' | 'CONFIG' | 'SECURITY';
@@ -125,7 +129,16 @@ const CONFIG_ENTITIES: ReadonlySet<AuditEntityType> = new Set([
     'City',
 ]);
 
-const SECURITY_ACTIONS: ReadonlySet<AuditAction> = new Set(['LOGIN', 'LOGIN_FAILED', 'LOGOUT', 'ACCESS_DENIED', 'EXPORT', 'LEDGER_VERIFY']);
+const SECURITY_ACTIONS: ReadonlySet<AuditAction> = new Set([
+    'LOGIN',
+    'LOGIN_FAILED',
+    'LOGOUT',
+    'ACCESS_DENIED',
+    'EXPORT',
+    'LEDGER_VERIFY',
+    'PASSWORD_CHANGE',
+    'SESSION_REVOKE',
+]);
 
 /** Actions whose `changes` are a `{ field: { from, to } }` diff. */
 const DIFF_ACTIONS: ReadonlySet<AuditAction> = new Set(['UPDATE', 'STATUS_CHANGE', 'FOLLOW_UP', 'CONVERT', 'REVERT', 'EMAIL_CHECK', 'RSVP']);
@@ -151,12 +164,15 @@ export function categoryFor(entityType: AuditEntityType, action: AuditAction): A
 }
 
 /**
- * INFO: everyday creates, edits, sign-ins. NOTICE: deletes, restores, undo, conversions, imports and any admin setting.
+ * INFO: everyday creates, edits, sign-ins. NOTICE: deletes, restores, undo, conversions, imports, any admin setting,
+ * password changes and sessions signed out from My Profile.
  * WARNING: failed sign-ins and refused access. CRITICAL is reserved for integrity alarms.
  */
 export function severityFor(action: AuditAction, category: AuditCategory): AuditSeverity {
     if (action === 'LOGIN_FAILED' || action === 'ACCESS_DENIED') return 'WARNING';
-    if (['DELETE', 'RESTORE', 'REVERT', 'CONVERT', 'IMPORT', 'EXPORT'].includes(action) || category === 'CONFIG') return 'NOTICE';
+    if (['DELETE', 'RESTORE', 'REVERT', 'CONVERT', 'IMPORT', 'EXPORT', 'PASSWORD_CHANGE', 'SESSION_REVOKE'].includes(action) || category === 'CONFIG') {
+        return 'NOTICE';
+    }
     return 'INFO';
 }
 
@@ -187,7 +203,7 @@ export function changedFieldsOf(action: AuditAction, changes: unknown): string |
 }
 
 /** Keys whose values are never written to the audit log, at any depth. */
-const SENSITIVE_KEY = /^(password|passwordHash|newPassword|currentPassword|token|accessToken|refreshToken|secret|apiKey|otp)$/i;
+const SENSITIVE_KEY = /^(password|passwordHash|newPassword|currentPassword|confirmPassword|token|accessToken|refreshToken|secret|apiKey|otp)$/i;
 export const REDACTED = '[redacted]';
 
 /** Copy of `value` with sensitive keys replaced by `[redacted]` (diff `{ from, to }` pairs included). */

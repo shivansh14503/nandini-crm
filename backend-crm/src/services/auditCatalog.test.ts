@@ -48,6 +48,17 @@ describe('categoryFor / severityFor', () => {
         assert.equal(severityFor('ACCESS_DENIED', 'SECURITY'), 'WARNING');
         assert.equal(severityFor('LOGIN', 'SECURITY'), 'INFO');
     });
+    it('password changes and sessions signed out from My Profile are SECURITY notices', () => {
+        assert.equal(categoryFor('User', 'PASSWORD_CHANGE'), 'SECURITY');
+        assert.equal(categoryFor('User', 'SESSION_REVOKE'), 'SECURITY');
+        assert.equal(severityFor('PASSWORD_CHANGE', 'SECURITY'), 'NOTICE');
+        assert.equal(severityFor('SESSION_REVOKE', 'SECURITY'), 'NOTICE');
+        assert.equal(changedFieldsOf('PASSWORD_CHANGE', { passwordChangedAt: { from: null, to: '2026-11-26T10:00:00.000Z' } }), null);
+    });
+    it('a profile edit is a DATA update of the user', () => {
+        assert.equal(categoryFor('User', 'UPDATE'), 'DATA');
+        assert.equal(changedFieldsOf('UPDATE', { firstName: { from: 'A', to: 'B' }, photo: { from: null, to: 'p1' } }), '|firstName|photo|');
+    });
 });
 
 describe('RSVP entries', () => {
@@ -94,6 +105,10 @@ describe('redact', () => {
         const out = redact(input);
         assert.deepEqual(out, { username: 'a', password: REDACTED, nested: { apiKey: REDACTED, passwordHash: REDACTED }, list: [{ token: REDACTED }] });
         assert.equal(input.password, 'p');
+    });
+    it('redacts every password field of a change-password form, but not passwordChangedAt', () => {
+        const out = redact({ currentPassword: 'a', newPassword: 'b', confirmPassword: 'c', passwordChangedAt: { from: null, to: 't' } });
+        assert.deepEqual(out, { currentPassword: REDACTED, newPassword: REDACTED, confirmPassword: REDACTED, passwordChangedAt: { from: null, to: 't' } });
     });
     it('passes primitives through', () => {
         assert.equal(redact('x'), 'x');

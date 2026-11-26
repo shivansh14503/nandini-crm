@@ -8,6 +8,8 @@ interface AccountDetailsCardProps {
 }
 
 export function AccountDetailsCard({ user }: AccountDetailsCardProps) {
+    // Greets by first name; accounts without one fall back to the full name, then the username.
+    const greetingName = user.firstName?.trim() || user.fullName?.trim() || user.username;
     return (
         <Card
             elevation={0}
@@ -21,7 +23,7 @@ export function AccountDetailsCard({ user }: AccountDetailsCardProps) {
         >
             <CardContent>
                 <Typography variant="h5" sx={{ fontWeight: 700, color: 'text.primary', mb: 1 }}>
-                    Welcome back, {user.username}!
+                    Welcome back, {greetingName}!
                 </Typography>
                 <Typography variant="body2" sx={{ color: 'text.secondary', mb: 3 }}>
                     Your session is secured using HTTP-only cookies.
@@ -34,7 +36,8 @@ export function AccountDetailsCard({ user }: AccountDetailsCardProps) {
                         borderRadius: '10px',
                         border: '1px solid var(--mui-palette-border-main)',
                         display: 'inline-block',
-                        minWidth: 280,
+                        minWidth: { xs: 0, sm: 280 },
+                        maxWidth: '100%',
                     }}
                 >
                     <Typography variant="subtitle2" sx={{ color: 'text.secondary', mb: 0.5, fontWeight: 600 }}>
@@ -43,6 +46,11 @@ export function AccountDetailsCard({ user }: AccountDetailsCardProps) {
                     <Typography variant="body2" sx={{ color: 'text.primary', mb: 0.5 }}>
                         <strong>User ID:</strong> {user.id}
                     </Typography>
+                    {user.fullName?.trim() && (
+                        <Typography variant="body2" sx={{ color: 'text.primary', mb: 0.5 }}>
+                            <strong>Name:</strong> {user.fullName}
+                        </Typography>
+                    )}
                     <Typography variant="body2" sx={{ color: 'text.primary', mb: 0.5 }}>
                         <strong>Username:</strong> {user.username}
                     </Typography>

@@ -19,3 +19,4 @@ export * from './useGlobalSearch';
 export * from './useAuditLogs';
 export * from './useFormConfigs';
 export * from './usePdfTemplates';
+export * from './useProfile';

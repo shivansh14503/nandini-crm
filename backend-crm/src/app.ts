@@ -42,6 +42,8 @@ import { drawerLayoutRouter, drawerPieceRouter } from './modules/drawer-layouts/
 import { seedFormConfigsSafely } from './modules/form-configs/formConfig.seed.js';
 import { pdfAssetRouter, pdfSavedItemRouter, pdfTemplateRouter } from './modules/pdf/pdf.routes.js';
 import recordFileRouter from './modules/files/recordFile.routes.js';
+import profileRouter from './modules/profile/profile.routes.js';
+import userPhotoRouter from './modules/profile/userPhoto.routes.js';
 import { seedPdfTemplatesSafely } from './modules/pdf/pdfTemplate.seed.js';
 import { shutdownPdfRenderer } from './modules/pdf/renderer/puppeteerRenderer.js';
 import { closeMail } from './services/mail.service.js';
@@ -130,6 +132,9 @@ app.use('/api/scorecards', scorecardRouter);
 app.use('/api/drawer-layouts', drawerLayoutRouter);
 app.use('/api/drawer-pieces', drawerPieceRouter);
 app.use('/api/notifications', notificationRouter);
+// My Profile (a photo upload is ≤ 512 KB, about 700 KB as base64, so it fits the global 1 MB parser).
+app.use('/api/me', profileRouter);
+app.use('/api/user-photos', userPhotoRouter);
 
 // ── 404 + global error handler ─────────────────────────────────────────────────
 app.use(notFoundHandler);
