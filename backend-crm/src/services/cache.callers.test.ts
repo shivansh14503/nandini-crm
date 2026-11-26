@@ -1,10 +1,13 @@
 import assert from 'node:assert/strict';
 import { afterEach, describe, it, mock } from 'node:test';
+import { prisma } from '../config/prisma.js';
+import { invalidateCityCaches } from '../modules/cities/city.service.js';
 import { domainMailStatus } from '../modules/email-verification/localChecks.js';
-import { formConfigService } from '../modules/form-configs/formConfig.service.js';
+import { formConfigService, invalidateFormConfigCaches } from '../modules/form-configs/formConfig.service.js';
 import { lookupService } from '../modules/lookups/lookup.service.js';
 import { invalidatePartnerCaches } from '../modules/partner-companies/partnerCompany.service.js';
 import { searchService } from '../modules/search/search.service.js';
+import { auditService } from './audit.service.js';
 import { CACHE_KEYS, cacheService, type GuardedReadOptions } from './cache.service.js';
 
 /**
@@ -33,16 +36,14 @@ function watchReads(stub: (key: string) => unknown): Read[] {
     return reads;
 }
 
-/** The glob patterns CRM writes delete (SCAN MATCH). */
-async function writePatterns(): Promise<string[]> {
+/** The glob patterns (SCAN MATCH) one writer's own invalidator deletes. */
+async function patternsOf(invalidate: () => Promise<void>): Promise<string[]> {
     const patterns: string[] = [];
-    mock.method(cacheService, 'invalidatePattern', async (pattern: string) => {
+    const spy = mock.method(cacheService, 'invalidatePattern', async (pattern: string) => {
         patterns.push(pattern);
     });
-    for (const entity of ['organizations', 'contacts', 'products', 'partner-companies'] as const) await cacheService.invalidateEntityCaches(entity);
-    await invalidatePartnerCaches();
-    // Module-private invalidators: city.service `invalidateCityCaches` and formConfig.service `invalidate`.
-    patterns.push(`${CACHE_KEYS.addressMaster}:cities:*`, `${CACHE_KEYS.lookups('form-configs')}*`);
+    await invalidate();
+    spy.mock.restore();
     return patterns;
 }
 
@@ -52,7 +53,7 @@ const matches = (pattern: string, key: string) =>
 describe('cached reads', () => {
     afterEach(() => mock.restoreAll());
 
-    it('reads every key a CRM write invalidates with getOrSetGuarded, and each one is covered by that invalidation', async () => {
+    it('reads every key a CRM write invalidates with getOrSetGuarded, and the writers\' invalidators cover each one', async () => {
         const reads = watchReads((key) => (key.startsWith(CACHE_KEYS.search('')) ? { results: {} } : key.includes('form-configs') ? {} : []));
         await lookupService.organizations({});
         await lookupService.contacts({ limit: '20' });
@@ -64,26 +65,29 @@ describe('cached reads', () => {
         await formConfigService.getAllConfigs(true);
         await searchService.search({ q: 'Acme' });
 
+        // Each guarded read, with the invalidator of the writes that change it (called for real, Redis stubbed).
+        const expected: [key: string, writer: string, invalidate: () => Promise<void>][] = [
+            ['cache:lookups:organizations:50', 'organization writes', () => cacheService.invalidateEntityCaches('organizations')],
+            ['cache:lookups:contacts:20', 'contact writes', () => cacheService.invalidateEntityCaches('contacts')],
+            ['cache:lookups:products:50', 'product writes', () => cacheService.invalidateEntityCaches('products')],
+            ['cache:lookups:partner-companies', 'partner company writes', invalidatePartnerCaches],
+            ['cache:lookups:partner-contacts', 'partner company writes', invalidatePartnerCaches],
+            ['cache:address-master:cities:IN-DL:20', 'city admin writes', () => invalidateCityCaches()],
+            ['cache:lookups:form-configs:active', 'form-config writes', invalidateFormConfigCaches],
+            ['cache:lookups:form-configs:all', 'form-config writes', invalidateFormConfigCaches],
+            ['cache:search:all:1:…', 'any entity write', () => cacheService.invalidateEntityCaches('leads')],
+        ];
         assert.deepEqual(
             reads.map((read) => [read.method, read.key.replace(/^(cache:search:all:1:)\S+$/, '$1…')]),
-            [
-                ['getOrSetGuarded', 'cache:lookups:organizations:50'],
-                ['getOrSetGuarded', 'cache:lookups:contacts:20'],
-                ['getOrSetGuarded', 'cache:lookups:products:50'],
-                ['getOrSetGuarded', 'cache:lookups:partner-companies'],
-                ['getOrSetGuarded', 'cache:lookups:partner-contacts'],
-                ['getOrSetGuarded', 'cache:address-master:cities:IN-DL:20'],
-                ['getOrSetGuarded', 'cache:lookups:form-configs:active'],
-                ['getOrSetGuarded', 'cache:lookups:form-configs:all'],
-                ['getOrSetGuarded', 'cache:search:all:1:…'],
-            ],
+            expected.map(([key]) => ['getOrSetGuarded', key]),
         );
 
-        const patterns = await writePatterns();
-        for (const read of reads) {
+        for (const [index, [, writer, invalidate]] of expected.entries()) {
+            const { key } = reads[index];
+            const patterns = await patternsOf(invalidate);
             assert.ok(
-                patterns.some((pattern) => matches(pattern, read.key)),
-                `${read.key} is read guarded but no write invalidation covers it`,
+                patterns.some((pattern) => matches(pattern, key)),
+                `${key} is read guarded but the invalidation of ${writer} (${patterns.join(', ')}) does not cover it`,
             );
         }
     });
@@ -126,5 +130,92 @@ describe('cached reads', () => {
                 ['getOrSet', 'cache:email-domain:example.com'],
             ],
         );
+    });
+});
+
+describe('option renames', () => {
+    const originalTransaction = prisma.$transaction;
+    afterEach(() => {
+        mock.restoreAll();
+        (prisma as { $transaction: unknown }).$transaction = originalTransaction;
+    });
+
+    /** The SQL text of a `$queryRaw` / `$executeRaw` call (tagged template or `Prisma.sql`). */
+    const sqlText = (query: unknown) => (Array.isArray(query) ? query.join('?') : (query as { sql: string }).sql);
+    const tableOf = (text: string) => /\[dbo\]\.\[(\w+)\]/.exec(text)?.[1] ?? '';
+
+    /**
+     * Runs `formConfigService.updateOption` on the 'Hardware' option of Product Category (linked to products.category,
+     * a select column, and leads.productCategory, a JSON list) against a fake transaction whose tables hold
+     * `recordIds` with that value. Returns what happened, in order.
+     */
+    async function renameOption(body: Record<string, unknown>, recordIds: Record<string, string[]>): Promise<string[]> {
+        const events: string[] = [];
+        let option = {
+            id: 'opt-1',
+            categoryId: 'cat-1',
+            value: 'Hardware',
+            label: 'Hardware',
+            metaJson: null,
+            sortOrder: 1,
+            isActive: true,
+            isSystem: false,
+            isDefault: false,
+            createdAt: new Date(0),
+            updatedAt: new Date(0),
+        };
+        const tx = {
+            dropdownOption: {
+                findUnique: async () => option,
+                findFirst: async () => null,
+                update: async ({ data }: { data: Partial<typeof option> }) => (option = { ...option, ...data }),
+            },
+            dropdownCategory: { findUnique: async () => ({ key: 'shared_product_category', label: 'Product Category', module: 'shared' }) },
+            formFieldDefinition: {
+                findMany: async () => [
+                    { id: 'f-1', module: 'products', fieldKey: 'category', fieldType: 'select', isSystem: true, defaultValue: null },
+                    { id: 'f-2', module: 'leads', fieldKey: 'productCategory', fieldType: 'multiselect', isSystem: true, defaultValue: null },
+                ],
+                update: async () => ({}),
+            },
+            tableFilter: { findMany: async () => [] },
+            async $queryRaw(query: unknown) {
+                const text = sqlText(query);
+                if (text.includes('sp_getapplock')) return [{ result: 0 }];
+                // columnsOf: the values are the table name, then the column names asked for.
+                if (text.includes('INFORMATION_SCHEMA')) return (query as { values: string[] }).values.slice(1).map((name) => ({ name, maxLength: -1 }));
+                if (text.includes('SELECT [id] FROM')) return (recordIds[tableOf(text)] ?? []).map((id) => ({ id }));
+                throw new Error(`unexpected query: ${text}`);
+            },
+            async $executeRaw(query: unknown) {
+                events.push(`update ${tableOf(sqlText(query))}`);
+                return 1;
+            },
+        };
+        (prisma as { $transaction: unknown }).$transaction = async (fn: (client: unknown) => Promise<unknown>) => {
+            const result = await fn(tx);
+            events.push('commit');
+            return result;
+        };
+        mock.method(auditService, 'record', async () => undefined);
+        mock.method(cacheService, 'invalidatePattern', async (pattern: string) => {
+            events.push(`drop ${pattern}`);
+        });
+        mock.method(cacheService, 'invalidateEntityCaches', async (entity: string) => {
+            events.push(`drop ${entity} caches`);
+        });
+        await formConfigService.updateOption('opt-1', body, { id: 1, username: 'admin', role: 'Admin' });
+        return events;
+    }
+
+    it('drops the entity caches of the modules whose records it rewrote, after the commit', async () => {
+        const events = await renameOption({ label: 'Computer Hardware' }, { Product: ['p-1', 'p-2'] });
+        // Products' lookup, search and dashboards held 'Hardware'; no lead stored it, so lead caches are left alone.
+        assert.deepEqual(events, ['update Product', 'commit', 'drop cache:lookups:form-configs*', 'drop products caches']);
+    });
+
+    it('drops only the form configs when no record stored the value, or the option was not renamed', async () => {
+        assert.deepEqual(await renameOption({ label: 'Computer Hardware' }, {}), ['commit', 'drop cache:lookups:form-configs*']);
+        assert.deepEqual(await renameOption({ isDefault: true }, { Product: ['p-1'] }), ['commit', 'drop cache:lookups:form-configs*']);
     });
 });

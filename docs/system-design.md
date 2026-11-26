@@ -1,6 +1,6 @@
 # Nandini CRM — System Design
 
-> **Status:** living document. Describes the system as built (code as of 2026-11-26; audit context + ledger audit table, admin audit query API and screen, Users tab; Contracts module; Referrals module; Documents module; Activities data model and API, Calendar Phase 1 PR1; Activities screens and Calendar, PR2; notifications, reminders and mail workers, navbar bell and the morning summary email, PR3, with its review fixes; guarded cache reads for lookups, form configs and search).
+> **Status:** living document. Describes the system as built (code as of 2026-11-26; audit context + ledger audit table, admin audit query API and screen, Users tab; Contracts module; Referrals module; Documents module; Activities data model and API, Calendar Phase 1 PR1; Activities screens and Calendar, PR2; notifications, reminders and mail workers, navbar bell and the morning summary email, PR3, with its review fixes; guarded cache reads for lookups, form configs and search, with its review fixes).
 > Update it in the same change that alters architecture, infrastructure, Redis usage, queues or security.
 > Related: [Database design](database-design.md) · [API plan](api-plan.md) · [Build plan](build-plan.md)
 
@@ -262,9 +262,14 @@ commands fail immediately instead of hanging, and reconnects in the background (
 Caches are read-through. After a write **commits**, the service calls
 `cacheService.invalidateEntityCaches(entity)`, which deletes `cache:lookups:{entity}*`, every `cache:search:*` and
 every `cache:dashboard:*` using `SCAN` + `UNLINK` (never `KEYS`, so Redis isn't blocked). Form-config writes drop
-`cache:lookups:form-configs*`, partner company writes also `cache:lookups:partner-contacts*`, city admin writes
-`cache:address-master:cities:*`. PDF cache entries never need invalidation: any change to the template or the record
-changes the key.
+`cache:lookups:form-configs*` (`invalidateFormConfigCaches`), partner company writes also
+`cache:lookups:partner-contacts*`, city admin writes `cache:address-master:cities:*`. Two form-config writes rewrite
+records too, so they also call `invalidateEntityCaches` for the modules they touched: renaming a dropdown option (its
+stored value follows, e.g. every organization's Customer Type or product's Category; only the modules whose records
+held the old value) and renaming a custom field's key. The one-off `npm run align:backend-names -- --apply` drops the
+same keys; the shared Redis client connects lazily, so the script connects it first (waiting up to 5 s) and, when
+Redis can't be reached, tells the operator to restart the API. PDF cache entries never need invalidation: any change
+to the template or the record changes the key.
 
 Every key a CRM write invalidates is read with **`cacheService.getOrSetGuarded`** (lookups of organizations,
 contacts, products, partner companies and partner contacts, cities, form configs, global search, unread counts). A

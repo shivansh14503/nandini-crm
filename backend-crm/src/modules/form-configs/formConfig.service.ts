@@ -191,13 +191,20 @@ function renameDefaultValue(defaultValue: string | null, fieldType: string, from
     return defaultValue.trim() === from ? to : defaultValue;
 }
 
+/** What `changeOptionValue` moved. */
+export interface OptionValueChange {
+    /** For the audit trail. */
+    note: string;
+    /** Modules whose records now hold the new value: the caller drops their entity caches once the transaction commits. */
+    modules: CrmModuleKey[];
+}
+
 /**
  * Gives `option` the stored value `nextValue`, in the caller's transaction: the defaults of the fields using its
- * dropdown, and every record and table filter storing the old value, follow. Returns a note on what moved (for the
- * audit trail), or undefined when the value is unchanged. Values are unique per dropdown (case-insensitive under
- * the database's default collation).
+ * dropdown, and every record and table filter storing the old value, follow. Returns what moved, or undefined when
+ * the value is unchanged. Values are unique per dropdown (case-insensitive under the database's default collation).
  */
-export async function changeOptionValue(tx: TransactionClient, option: DropdownOption, nextValue: string): Promise<string | undefined> {
+export async function changeOptionValue(tx: TransactionClient, option: DropdownOption, nextValue: string): Promise<OptionValueChange | undefined> {
     if (nextValue === option.value) return undefined;
     const clash = await tx.dropdownOption.findFirst({
         where: { categoryId: option.categoryId, value: nextValue, id: { not: option.id } },
@@ -214,12 +221,12 @@ export async function changeOptionValue(tx: TransactionClient, option: DropdownO
         const defaultValue = renameDefaultValue(field.defaultValue, field.fieldType, option.value, nextValue);
         if (defaultValue !== field.defaultValue) await tx.formFieldDefinition.update({ where: { id: field.id }, data: { defaultValue } });
     }
-    const note = describeOptionMigration(await migrateOptionValue(tx, linkedFields, option.value, nextValue));
+    const migration = await migrateOptionValue(tx, linkedFields, option.value, nextValue);
     await tx.dropdownOption.update({ where: { id: option.id }, data: { value: nextValue } });
     if (linkedFields.some((f) => f.module === 'opportunities' && f.fieldKey === 'salesStage')) {
         await renameStageInResponseRules(tx, option.value, nextValue);
     }
-    return note;
+    return { note: describeOptionMigration(migration), modules: migration.modules };
 }
 
 /** A renamed Sales Stage: the Customer Response options that list it (`opportunityStages`) follow. */
@@ -330,7 +337,8 @@ async function optionAuditMeta(tx: TransactionClient, option: DropdownOption): P
     };
 }
 
-async function invalidate(): Promise<void> {
+/** Drops the cached form-config payloads (`cache:lookups:form-configs:{all|active}`). Call after the write commits. */
+export async function invalidateFormConfigCaches(): Promise<void> {
     await cacheService.invalidatePattern(`${CACHE_KEYS.lookups('form-configs')}*`);
 }
 
@@ -659,7 +667,7 @@ export const formConfigService = {
                 changes: withMeta({ setting: settingKey, value: { from: before ? JSON.parse(before.valueJson) : null, to: value } }, user, { module }),
             });
         });
-        await invalidate();
+        await invalidateFormConfigCaches();
         return value;
     },
 
@@ -673,7 +681,7 @@ export const formConfigService = {
     async createCategory(body: unknown, user: AuthUser): Promise<DropdownCategoryDto> {
         const input = createCategorySchema.parse(body);
         const category = await runInTransaction((tx) => createCategoryWithOptions(tx, input, user));
-        await invalidate();
+        await invalidateFormConfigCaches();
         return formConfigService.getCategory(category.key);
     },
 
@@ -702,7 +710,7 @@ export const formConfigService = {
             });
             renamedTo = after.key;
         });
-        await invalidate();
+        await invalidateFormConfigCaches();
         return formConfigService.getCategory(renamedTo);
     },
 
@@ -787,7 +795,7 @@ export const formConfigService = {
                 ),
             });
         });
-        await invalidate();
+        await invalidateFormConfigCaches();
         return { key: categoryKey };
     },
 
@@ -840,13 +848,13 @@ export const formConfigService = {
             });
             return saved;
         });
-        await invalidate();
+        await invalidateFormConfigCaches();
         return toOptionDto(option);
     },
 
     async updateOption(optionId: string, body: unknown, user: AuthUser): Promise<DropdownOptionDto> {
         const input = updateOptionSchema.parse(body);
-        const option = await runInTransaction(async (tx) => {
+        const { option, recordModules } = await runInTransaction(async (tx) => {
             const before = await findOption(tx, optionId);
             // Task / Note of the Followup Type list are hidden on new Lead / Opportunity forms (and refused by their
             // APIs), so they can't be what those forms start on.
@@ -863,8 +871,8 @@ export const formConfigService = {
                 ]);
             }
             // An option's stored value is its name: renaming it renames the value, and records follow.
-            let migrationNote: string | undefined;
-            if (renamed) migrationNote = await changeOptionValue(tx, before, input.label!);
+            let migration: OptionValueChange | undefined;
+            if (renamed) migration = await changeOptionValue(tx, before, input.label!);
             const after = await tx.dropdownOption.update({
                 where: { id: before.id },
                 data: {
@@ -874,7 +882,7 @@ export const formConfigService = {
                 },
             });
             const changes: Record<string, unknown> = diffRecords(before, after);
-            if (migrationNote) changes.reason = migrationNote;
+            if (migration) changes.reason = migration.note;
             if (Object.keys(changes).length > 0) {
                 await auditService.record(tx, {
                     entityType: 'DropdownOption',
@@ -884,9 +892,12 @@ export const formConfigService = {
                     changes: withMeta(changes, user, await optionAuditMeta(tx, after)),
                 });
             }
-            return after;
+            return { option: after, recordModules: migration?.modules ?? [] };
         });
-        await invalidate();
+        await invalidateFormConfigCaches();
+        // Records that stored the old value now hold the new one, so their cached lookups (e.g. an organization's
+        // Customer Type), search results and dashboards are stale too.
+        await Promise.all(recordModules.map((module) => cacheService.invalidateEntityCaches(module)));
         return toOptionDto(option);
     },
 
@@ -908,7 +919,7 @@ export const formConfigService = {
                 changes: withMeta({ categoryId: option.categoryId, value: option.value, label: option.label }, user, meta),
             });
         });
-        await invalidate();
+        await invalidateFormConfigCaches();
         return { id: optionId };
     },
 
@@ -937,7 +948,7 @@ export const formConfigService = {
                 }),
             });
         });
-        await invalidate();
+        await invalidateFormConfigCaches();
         return formConfigService.getCategory(categoryKey);
     },
 
@@ -1012,7 +1023,7 @@ export const formConfigService = {
             });
             return created;
         });
-        await invalidate();
+        await invalidateFormConfigCaches();
         return formConfigService.getField(field.id);
     },
 
@@ -1176,7 +1187,7 @@ export const formConfigService = {
                 });
             }
         });
-        await invalidate();
+        await invalidateFormConfigCaches();
         // Cached records, search results and dashboards still hold values under the old API name.
         if (keyRenamedIn) await cacheService.invalidateEntityCaches(keyRenamedIn);
         return formConfigService.getField(fieldId);
@@ -1226,7 +1237,7 @@ export const formConfigService = {
             });
             await releaseFieldCategory(tx, field, user);
         });
-        await invalidate();
+        await invalidateFormConfigCaches();
         return { id: fieldId };
     },
 
@@ -1259,7 +1270,7 @@ export const formConfigService = {
                 changes: withMeta({ reordered: ordered.length }, user, { module }),
             });
         });
-        await invalidate();
+        await invalidateFormConfigCaches();
         return (await formConfigService.getAllConfigs(true)).fieldsByModule[module];
     },
 
@@ -1290,7 +1301,7 @@ export const formConfigService = {
                 changes: withMeta(rank.size > 0 ? { convertReordered: rank.size } : { convertOrderReset: true }, user, { module }),
             });
         });
-        await invalidate();
+        await invalidateFormConfigCaches();
         return (await formConfigService.getAllConfigs(true)).fieldsByModule[module];
     },
 
@@ -1308,7 +1319,7 @@ export const formConfigService = {
                 changes: withMeta({ sectionLabel }, user, { module, sectionKey }),
             });
         });
-        await invalidate();
+        await invalidateFormConfigCaches();
         return (await formConfigService.getAllConfigs(true)).fieldsByModule[module];
     },
 };
