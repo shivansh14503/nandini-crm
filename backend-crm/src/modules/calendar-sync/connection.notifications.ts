@@ -3,7 +3,7 @@ import { CALENDAR_CONNECTIONS_ENTITY_MODULE, CALENDAR_PROVIDER_LABELS, isCalenda
 
 /**
  * `calendar_reconnect` notifications (spec §4.7, D38): the bell tells an employee their calendar needs a reconnect.
- * They open the Connected calendars page (notificationHref: entityModule `calendar-connections`). Pure.
+ * They open My Profile › Connected accounts (notificationHref: entityModule `calendar-connections`). Pure.
  *
  * Dedupe keys are per grant: they carry the connection's `connectedAt` (set again by every connect or reconnect, never
  * by a token refresh), because a reconnect of the same account re-activates the same row (same id). So a reconnected

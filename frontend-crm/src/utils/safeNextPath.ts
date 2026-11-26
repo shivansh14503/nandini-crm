@@ -1,6 +1,6 @@
 /**
  * Where to go after signing in: the `?next=` value of the login URL when it is a path inside the CRM
- * (`/connected-calendars`), else the fallback. Never another origin: `//evil.example`, `/\evil.example`,
+ * (`/profile?tab=connected-accounts`), else the fallback. Never another origin: `//evil.example`, `/\evil.example`,
  * `https://…`, `javascript:` and control characters are refused (no open redirect). Pure.
  */
 export function safeNextPath(value: string | null | undefined, fallback: string): string {

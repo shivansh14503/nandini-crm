@@ -166,7 +166,7 @@ export function ApiIntegrationsView() {
                     </Typography>
                     <Typography sx={{ fontSize: '0.8rem', color: 'var(--mui-palette-text-secondary)', mt: 0.25, lineHeight: 1.55 }}>
                         Connect the CRM to Google Workspace and Microsoft 365 so employees can sync CRM meetings and follow-ups with their own calendars. Everything stays
-                        off until you turn a provider on; employees then connect from Connected calendars.
+                        off until you turn a provider on; employees then connect from My Profile › Connected accounts.
                     </Typography>
                 </Box>
             </Box>

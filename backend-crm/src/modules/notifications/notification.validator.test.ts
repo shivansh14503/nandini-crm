@@ -53,8 +53,8 @@ describe('notificationHref', () => {
         assert.equal(notificationHref('activities', null), '');
     });
 
-    it('opens calendar_reconnect notifications on the Connected calendars page (whatever the connection id)', () => {
-        assert.equal(notificationHref('calendar-connections', 'conn-1'), '/connected-calendars');
-        assert.equal(notificationHref('calendar-connections', null), '/connected-calendars');
+    it('opens calendar_reconnect notifications on My Profile › Connected accounts (whatever the connection id)', () => {
+        assert.equal(notificationHref('calendar-connections', 'conn-1'), '/profile?tab=connected-accounts');
+        assert.equal(notificationHref('calendar-connections', null), '/profile?tab=connected-accounts');
     });
 });

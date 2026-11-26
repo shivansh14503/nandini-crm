@@ -19,7 +19,7 @@ import { withoutMutedRecipients } from './notification.preferences.js';
 
 /**
  * `calendar_reconnect` (Calendar Phase 2 P2-2): an employee's calendar connection needs a reconnect (entityModule
- * `calendar-connections`, entityId the connection id; it opens the Connected calendars page).
+ * `calendar-connections`, entityId the connection id; it opens My Profile › Connected accounts).
  */
 export const NOTIFICATION_KINDS = ['activity_reminder', 'activity_assigned', 'activity_invited', 'contract_renewal', 'calendar_reconnect'] as const;
 export type NotificationKind = (typeof NOTIFICATION_KINDS)[number];

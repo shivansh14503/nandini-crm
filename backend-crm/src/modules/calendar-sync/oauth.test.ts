@@ -138,9 +138,9 @@ describe('crm_oauth cookie and redirects', () => {
         assert.equal(returnOriginFor(ENV.CLIENT_ORIGIN), ENV.CLIENT_ORIGIN.replace(/\/+$/, ''));
         assert.equal(returnOriginFor('https://evil.example.com'), APP);
         assert.equal(returnOriginFor(undefined), APP);
-        assert.equal(callbackLocation(CRM, { ok: true, provider: 'google' }), `${CRM}/connected-calendars?calendar=connected&provider=google`);
-        assert.equal(callbackLocation(CRM, { ok: false, reason: 'denied', provider: 'microsoft' }), `${CRM}/connected-calendars?calendar=error&reason=denied&provider=microsoft`);
-        assert.equal(loginLocation(), `${APP}/login?next=%2Fconnected-calendars`);
+        assert.equal(callbackLocation(CRM, { ok: true, provider: 'google' }), `${CRM}/profile?tab=connected-accounts&calendar=connected&provider=google`);
+        assert.equal(callbackLocation(CRM, { ok: false, reason: 'denied', provider: 'microsoft' }), `${CRM}/profile?tab=connected-accounts&calendar=error&reason=denied&provider=microsoft`);
+        assert.equal(loginLocation(), `${APP}/login?next=%2Fprofile%3Ftab%3Dconnected-accounts`);
     });
 
     it('requires the Google hd claim to be a company domain', () => {
@@ -194,7 +194,7 @@ describe('connect → callback → refresh → disconnect (fake provider)', () =
 
     it('connects, seals the tokens, audits CONNECT and returns to the starting origin', async () => {
         const { location, cookie } = await connectFake(asha, 'http://192.168.1.20:8007');
-        assert.equal(location, 'http://192.168.1.20:8007/connected-calendars?calendar=connected&provider=fake');
+        assert.equal(location, 'http://192.168.1.20:8007/profile?tab=connected-accounts&calendar=connected&provider=fake');
         assert.equal(state.connections.length, 1);
         const row = state.connections[0];
         assert.equal(row.status, 'active');
@@ -381,7 +381,7 @@ describe('callback decision table', () => {
         assert.equal(params(await completeConnect({ provider: 'fake', query, cookie, session: sessionOf(ravi), now })).reason, 'expired');
         const late = new Date(now.getTime() + 11 * 60_000);
         const expired = await completeConnect({ provider: 'fake', query, cookie, session: sessionOf(asha), now: late });
-        assert.ok(expired.startsWith(`${APP}/connected-calendars?`));
+        assert.ok(expired.startsWith(`${APP}/profile?tab=connected-accounts&`));
         assert.equal(params(expired).reason, 'expired');
         // A cookie for the fake provider can't complete a Google callback (provider mix-up).
         assert.equal(params(await completeConnect({ provider: 'google', query, cookie, session: sessionOf(asha), now })).reason, 'expired');

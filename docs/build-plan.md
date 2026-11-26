@@ -330,7 +330,8 @@ keeps wall-clock times); all-day activities are entered as business-timezone day
         edits, nightly disconnect of inactive users and a "your access ends soon" warning (from the reminders worker's
         nightly job until the calendar worker exists), `integrations:reencrypt` also re-seals connection tokens.
         Frontend: self-contained `components/integrations/CalendarConnectionsCard` on the temporary page
-        `/connected-calendars` (user menu and mobile drawer item "Connected calendars"; My Profile unchanged), a
+        `/connected-calendars` (user menu and mobile drawer item "Connected calendars"; since moved to My Profile ›
+        Connected accounts, Profile Phase 4), a
         reconnect banner on the calendar, the bell icon for `calendar_reconnect`, and login `?next=` (CRM paths only).
         Nothing syncs yet (P2-3): the card says sync arrives in the next update. Providers stay off until an admin
         switches one on. Not run against a real SQL Server, Google or Microsoft (migration checked with
@@ -423,9 +424,18 @@ keeps wall-clock times); all-day activities are entered as business-timezone day
       leave hint now says what it does (shown when picked, no morning summary). Not done, by decision: reminder emails
       (no bell kind sends email, so the matrix shows only an In app column), per-invitee reminder offsets, admins
       editing someone's out-of-office (they see it), and hiding away users from pickers (they are labelled).
-- [ ] **Profile Phase 4: Connected accounts** — a Connected accounts tab hosting the Calendar thread's `CalendarConnectionsCard`
-      (Google / Microsoft 365 calendar sync), replacing its temporary `/connected-calendars` page; the company email
-      editor and its unique index belong to that work.
+- [x] **Profile Phase 4: Connected accounts** (2026-11-26) — a **Connected accounts** tab on My Profile
+      (`/profile?tab=connected-accounts`, between Notifications and Security; hidden while the user must change their
+      password) hosting the Calendar thread's `CalendarConnectionsCard` unchanged (Google / Microsoft 365: connect,
+      reconnect, disconnect). The OAuth callback (`CALENDAR_CONNECTIONS_PAGE`, `…&calendar=connected|error&reason=&provider=`),
+      its sign-in `?next=`, `calendar_reconnect` notification links (computed on read, so older rows follow) and the
+      calendar's reconnect banner now open the tab; the card drops only its own callback params, so `?tab=` stays. The
+      user menu and mobile drawer item is now "Connected accounts" (was "Connected calendars"); the temporary
+      `/connected-calendars` page is only a client redirect to the tab that keeps the query string (old bookmarks,
+      callbacks in flight). Contract test: `ROUTES.PROFILE_CONNECTED_ACCOUNTS` equals the API constant and ProfileView
+      has that tab. The company email editor and its unique index (`UX_Users_email`) already shipped with Calendar
+      P2-1 / P2-2 (Admin › API Integrations › People, `users/userEmail.service.ts`). Only calendars are listed for now
+      (no other account kinds).
 - [ ] **Profile Phase 5: Admin › Company formats** — company-wide date, time and currency formats (one setting for everyone; no
       per-user locale).
 

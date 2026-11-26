@@ -1,35 +1,25 @@
 'use client';
 
-import { Suspense, useEffect } from 'react';
+import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { useAuth } from '@/context/AuthContext';
 import { ROUTES } from '@/config/constants';
-import { AppPageLayout } from '@/components/layout/AppPageLayout';
 import { LoadingScreen } from '@/components/common/LoadingScreen';
-import { CalendarConnectionsCard } from '@/components/integrations/CalendarConnectionsCard';
 
 /**
- * /connected-calendars[?calendar=connected|error&reason=&provider=]: the signed-in user's calendar connection. Any
- * signed-in user. Temporary home of CalendarConnectionsCard (the OAuth callback and `calendar_reconnect`
- * notifications land here) until it moves into My Profile.
+ * /connected-calendars: the old temporary page, now My Profile › Connected accounts. Kept only as a redirect for old
+ * bookmarks and OAuth flows already in flight; the rest of the query string (`?calendar=connected|error&reason=&provider=`)
+ * is carried over so the card still shows the callback result. /profile sends signed-out users to login with
+ * `?next=` set to that tab, so they come back to it.
  */
-export default function ConnectedCalendarsPage() {
+export default function ConnectedCalendarsRedirect() {
     const router = useRouter();
-    const { user, loading, isAuthenticated } = useAuth();
 
     useEffect(() => {
-        if (!loading && !isAuthenticated) router.push(`${ROUTES.LOGIN}?next=${encodeURIComponent(ROUTES.CONNECTED_CALENDARS)}`);
-    }, [isAuthenticated, loading, router]);
+        const params = new URLSearchParams(window.location.search);
+        params.delete('tab');
+        const rest = params.toString();
+        router.replace(rest ? `${ROUTES.PROFILE_CONNECTED_ACCOUNTS}&${rest}` : ROUTES.PROFILE_CONNECTED_ACCOUNTS);
+    }, [router]);
 
-    if (loading) return <LoadingScreen message="Loading your calendars..." />;
-    if (!user) return null;
-
-    return (
-        <AppPageLayout breadcrumbItems={[{ label: 'Connected calendars' }]} maxWidth="md">
-            {/* The card reads the ?calendar= callback params (useSearchParams needs a Suspense boundary). */}
-            <Suspense fallback={null}>
-                <CalendarConnectionsCard />
-            </Suspense>
-        </AppPageLayout>
-    );
+    return <LoadingScreen message="Opening Connected accounts..." />;
 }

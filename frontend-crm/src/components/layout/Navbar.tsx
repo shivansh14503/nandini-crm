@@ -28,7 +28,7 @@ import LogoutIcon from '@mui/icons-material/Logout';
 import PersonIcon from '@mui/icons-material/Person';
 import AddIcon from '@mui/icons-material/Add';
 import AdminPanelSettingsOutlinedIcon from '@mui/icons-material/AdminPanelSettingsOutlined';
-import EventAvailableOutlinedIcon from '@mui/icons-material/EventAvailableOutlined';
+import LinkRoundedIcon from '@mui/icons-material/LinkRounded';
 import MenuIcon from '@mui/icons-material/Menu';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import { getModuleColor, moduleForPath } from '@/theme/moduleColors';
@@ -410,9 +410,9 @@ function UserMenu({
                                             My Profile
                                         </MenuItem>
                                         <MenuItem
-                                            id="connected-calendars-btn"
+                                            id="connected-accounts-btn"
                                             component={Link}
-                                            href={ROUTES.CONNECTED_CALENDARS}
+                                            href={ROUTES.PROFILE_CONNECTED_ACCOUNTS}
                                             onClick={close}
                                             sx={{
                                                 textDecoration: 'none',
@@ -424,8 +424,8 @@ function UserMenu({
                                                 '&:hover': { backgroundColor: 'var(--mui-palette-primary-soft)', color: 'var(--mui-palette-primary-main)' },
                                             }}
                                         >
-                                            <EventAvailableOutlinedIcon fontSize="small" />
-                                            Connected calendars
+                                            <LinkRoundedIcon fontSize="small" />
+                                            Connected accounts
                                         </MenuItem>
                                         <MenuItem
                                             id="admin-panel-btn"

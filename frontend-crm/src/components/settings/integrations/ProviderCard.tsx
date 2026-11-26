@@ -171,7 +171,7 @@ export function ProviderCard({
     const toggleEnabled = async (enabled: boolean) => {
         try {
             await save.mutateAsync({ provider: p.provider, payload: { enabled } });
-            onToast(enabled ? `${p.label} is on. Employees can connect from Connected calendars.` : `${p.label} is off. Connected calendars stop syncing until it is turned back on.`);
+            onToast(enabled ? `${p.label} is on. Employees can connect from My Profile › Connected accounts.` : `${p.label} is off. Connected calendars stop syncing until it is turned back on.`);
         } catch (err) {
             onToast(errorMessage(err, `Could not turn ${p.label} ${enabled ? 'on' : 'off'}.`), 'error');
         }
