@@ -11,11 +11,13 @@ import { ROUTES } from '@/config/constants';
 import { setSaveFlash } from '@/utils/saveFlash';
 import { CommonFormLayout, AppToast } from '@/components/forms';
 import { FormConfigProvider } from '@/context/FormConfigContext';
-import { isFollowUpActivity, PLANNED_STATUS, type Activity } from '@/types/activity.types';
+import { isFollowUpActivity, NOTE_TYPE, PLANNED_STATUS, type Activity } from '@/types/activity.types';
 import type { ActivityFormValues } from '@/validations/activity.schema';
 import { ActivityFormFields, useActivityForm } from './ActivityFormFields';
 import { ActivityTypeIcon } from './ActivityBadges';
-import { formatActivityWhen } from './activityTime';
+import { activityToFormValues, formatActivityWhen } from './activityTime';
+import { ActivityRepeatField, useActivityRepeat } from './ActivityRepeatField';
+import { useSeriesScopePrompt } from './SeriesScopeDialog';
 import { findCrmUser } from '@/services/masterData.store';
 import { useAuth } from '@/context/AuthContext';
 
@@ -72,6 +74,12 @@ export default function ActivityForm({ mode = 'create', activityId, initialData,
     const { isDirty, isSubmitting } = formState;
     const subject = useWatch({ control, name: 'subject' });
     const followupType = useWatch({ control, name: 'followupType' });
+    // Recurring activities (Calendar Phase 4): the Repeat control and, for an occurrence, the scope of a save.
+    const startAt = useWatch({ control, name: 'startAt' }) ?? '';
+    const repeatState = useActivityRepeat(mode === 'create' ? undefined : activity);
+    const scopePrompt = useSeriesScopePrompt();
+    const canRepeat =
+        followupType !== NOTE_TYPE && !isFollowUpActivity(activity) && (!activity || !activity.origin || activity.origin === 'crm') && !activity?.lockedFields?.includes('startAt');
 
     const canEdit = activity?.viewer?.canEdit ?? true;
     const breadcrumbs: BreadcrumbItem[] = [
@@ -82,8 +90,21 @@ export default function ActivityForm({ mode = 'create', activityId, initialData,
     const submit = createSubmitHandler(async (values) => {
         const ownerChange = ownerChangeNote(activity, values, user?.username);
         if (ownerChange && !window.confirm(ownerChange)) return;
+        const repeat = canRepeat ? repeatState.repeat : null;
+        let recurrence: Parameters<typeof save>[1];
+        if (mode === 'create') recurrence = repeat ? { repeat } : undefined;
+        else if (activity?.seriesId) {
+            const loadedDay = activityToFormValues(activity, activity.timeZone || clock.timeZone).startAt.slice(0, 10);
+            const scope = await scopePrompt.ask({
+                action: values.status === 'Cancelled' && activity.status !== 'Cancelled' ? 'cancel' : 'save',
+                ruleChanged: repeatState.changed,
+                dayMoved: (values.startAt ?? '').slice(0, 10) !== loadedDay,
+            });
+            if (!scope) return;
+            recurrence = { scope, ...(repeatState.changed ? { repeat } : {}) };
+        } else if (repeat) recurrence = { repeat };
         try {
-            const saved = await save(values);
+            const saved = await save(values, recurrence);
             if (onSaved) {
                 onSaved(saved);
                 return;
@@ -118,7 +139,7 @@ export default function ActivityForm({ mode = 'create', activityId, initialData,
             <FormConfigProvider module="activities">
                 <CommonFormLayout
                     loading={recordLoading}
-                    isDirty={isDirty}
+                    isDirty={isDirty || (canRepeat && repeatState.changed)}
                     breadcrumbItems={breadcrumbs}
                     tabs={ACTIVITY_FORM_TABS}
                     activeTab="overview"
@@ -154,7 +175,19 @@ export default function ActivityForm({ mode = 'create', activityId, initialData,
                         activityId={mode === 'create' ? undefined : activityId}
                         calendar={mode === 'create' ? null : activity?.calendar}
                         savedOwner={mode === 'create' ? undefined : activity?.assignedTo}
+                        repeatSlot={
+                            canRepeat ? (
+                                <ActivityRepeatField
+                                    value={repeatState.repeat}
+                                    onChange={repeatState.setRepeat}
+                                    startDay={startAt.slice(0, 10)}
+                                    disabled={mode === 'view' || (mode !== 'create' && !canEdit)}
+                                    hint={activity?.seriesId ? 'Saving asks whether the change is for this event, the following ones or all' : undefined}
+                                />
+                            ) : undefined
+                        }
                     />
+                    {scopePrompt.dialog}
                 </CommonFormLayout>
             </FormConfigProvider>
         </FormProvider>

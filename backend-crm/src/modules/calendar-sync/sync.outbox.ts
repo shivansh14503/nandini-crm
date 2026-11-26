@@ -5,6 +5,7 @@ import type { ActivityWriteEvent } from '../activities/activity.writeHook.js';
 import { attendeeIdentity } from '../activities/activity.validator.js';
 import { calendarSyncFromMeta } from '../integrations/calendarSyncSettings.js';
 import { isActivityOnlyFollowupType } from '../shared/followupTypes.js';
+import { SERIES_SYNC_WINDOW_MS } from '../activities/activity.series.constants.js';
 import { LIVE_CONNECTION_STATUSES } from './connection.constants.js';
 import { isFakeProviderEnabled } from './providers/fakeSwitch.js';
 import { heldKeyOf, isHeldIdentity, parseHeld, resolveAttendeeEmails, serializeHeld } from './sync.attendees.js';
@@ -121,10 +122,13 @@ export function isTypeSyncable(followupType: string, config: Pick<ActivityConfig
 
 /**
  * Create-eligible (§8.3 step 3): Planned, live, a syncable type, a schedule, not organized outside the CRM, ends after
- * now − 1 day (old activities are never sent: backfills, restores of old rows).
+ * now − 1 day (old activities are never sent: backfills, restores of old rows). Calendar Phase 4: an occurrence of a
+ * recurring series starting more than SERIES_SYNC_WINDOW_DAYS ahead isn't yet (no invitation flood; the series
+ * nightly marks occurrences as they come inside the window, activity.series.ts `markSeriesSyncWindow`).
  */
 export function isCreateEligible(row: ActivityRow, config: Pick<ActivityConfig, 'followupTypes'> | null, now: Date): boolean {
     if (row.isDeleted || row.status !== 'Planned' || !row.startAt || row.externalOrganizer) return false;
+    if (row.seriesId && row.startAt.getTime() > now.getTime() + SERIES_SYNC_WINDOW_MS) return false;
     if (!isTypeSyncable(row.followupType, config)) return false;
     const end = (row.endAt ?? row.startAt).getTime();
     return end > now.getTime() - CREATE_ELIGIBLE_PAST_MS;

@@ -494,7 +494,7 @@ keeps wall-clock times); all-day activities are entered as business-timezone day
         details, hides another duration's times while loading and retries after network errors. Not run against a
         real SQL Server, Google or Microsoft (doubles only). Later: email confirmations and visitor cancel /
         reschedule (mail layer), team / round-robin links, custom questions.
-  - [ ] Recurring activities (CRM-authored series, R12 occurrence rows).
+  - [x] Recurring activities (CRM-authored series, R12 occurrence rows). Done 2026-11-26 (migration `20261128160000_recurring_activities`): an `ActivitySeries` rule (daily / weekly on weekdays / monthly on a day or the nth weekday, every N, ends on a date or after a count, business timezone) with one `Activity` row per occurrence (`seriesId` + `originalStartAt`, filtered unique index) over a rolling 90-day horizon extended by the 00:20 nightly job; a Repeat control on the activity form and quick create (not Notes, not follow-ups); "This event / This and following / All events" for saves, cancels and deletes; occurrences pushed to calendars as single events inside a 14-day window; "Repeats …" in the drawer and a repeat mark on the calendar. Tested with in-memory doubles only, not against a real SQL Server, Google or Microsoft.
   - [ ] Email logging.
 
 ### Phase 15 — Documents (P2, 2026-11-25)

@@ -8,6 +8,7 @@ import { getModuleColor } from '@/theme/moduleColors';
 import { CANCELLED_STATUS, COMPLETED_STATUS, type CalendarItem } from '@/types/activity.types';
 import type { CalendarHoliday } from '@/types/holiday.types';
 import { relatedModuleLabel } from '../activityLinks';
+import { SeriesRepeatMark } from './SeriesRepeatMark';
 
 export interface EventContentProps {
     item: CalendarItem;
@@ -141,6 +142,7 @@ export function EventContent({ item, Icon, timeText, list = false, compact = fal
                         </Typography>
                     )}
                 </Box>
+                <SeriesRepeatMark item={item} size={14} />
                 {syncError && <SyncErrorDot size={8} />}
                 {StatusIcon && <StatusIcon sx={{ fontSize: 16, color: 'var(--mui-palette-success-main)', flexShrink: 0 }} />}
             </Box>
@@ -183,6 +185,7 @@ export function EventContent({ item, Icon, timeText, list = false, compact = fal
         >
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, minWidth: 0 }}>
                 <Icon sx={{ fontSize: 13, color: colors.icon, flexShrink: 0 }} />
+                <SeriesRepeatMark item={item} size={11} />
                 {timeText && (compact || !item.allDay) && (
                     <Box component="span" sx={{ fontWeight: 600, whiteSpace: 'nowrap', flexShrink: 0 }}>
                         {timeText}

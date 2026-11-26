@@ -32,6 +32,7 @@ const before: ActivityDto = {
     completedBy: '',
     customFields: {},
     origin: 'crm',
+    seriesId: '',
     createdBy: 'palak',
     updatedBy: '',
     createdAt: '2026-11-25T00:00:00.000Z',

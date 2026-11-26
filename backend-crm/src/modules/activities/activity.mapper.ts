@@ -2,6 +2,7 @@ import type { Activity, ActivityAttendee, Prisma } from '../../generated/prisma/
 import { nullable, parseCustomFields, serializeCustomFields, text, toIso } from '../../utils/mappers.js';
 import { zonedDayOf } from '../../utils/zonedTime.js';
 import type { ActivityInput } from './activity.validator.js';
+import type { ActivitySeriesView } from './activity.seriesView.js';
 
 /**
  * `Activity` from frontend-crm/src/types/activity.types.ts. Times are true UTC instants (`…Z`); all-day activities
@@ -51,6 +52,8 @@ export interface ActivityDto {
      * `calendar` (imported, P2-8). Read only (set by the system write path).
      */
     origin: string;
+    /** The recurring series this occurrence belongs to (Calendar Phase 4), '' for a single activity. Read only. */
+    seriesId: string;
     createdBy: string;
     /** Username of the last editor; empty until the record is first modified. */
     updatedBy: string;
@@ -128,6 +131,8 @@ export type ActivityView = ActivityDto & {
      * activity's schedule, type, status, owner and related record. `[]` when nothing is locked.
      */
     lockedFields: string[];
+    /** The series this occurrence belongs to (rule, summary, position; Calendar Phase 4); null for a single activity. */
+    series: ActivitySeriesView | null;
 };
 
 export type ActivityRow = Activity & { attendees: ActivityAttendee[] };
@@ -181,6 +186,7 @@ export function toActivityDto(row: ActivityRow): ActivityDto {
         completedBy: text(row.completedBy),
         customFields: parseCustomFields(row.customDataJson),
         origin: row.origin,
+        seriesId: row.seriesId ?? '',
         createdBy: row.createdBy,
         updatedBy: row.updatedBy ?? '',
         createdAt: toIso(row.createdAt),

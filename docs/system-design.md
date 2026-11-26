@@ -1,6 +1,6 @@
 # Nandini CRM — System Design
 
-> **Status:** living document. Describes the system as built (code as of 2026-11-26; audit context + ledger audit table, admin audit query API and screen, Users tab; Contracts module; Referrals module; Documents module; Activities data model and API, Calendar Phase 1 PR1; Activities screens and Calendar, PR2; notifications, reminders and mail workers, navbar bell and the morning summary email, PR3, with its review fixes; guarded cache reads for lookups, form configs and search, with its review fixes; Calendar Phase 2 P2-1, Admin › API Integrations foundation: encrypted provider credentials, connection tests, calendar sync settings, company emails, with its review fixes; My Profile (Profile Phase 1): profile, photo, change password, signed-in sessions; Admin › Users (Profile Phase 2, 2026-11-26): user management, the must-change-password claim, sessions revoked on deactivation / reset / role change; Calendar Phase 2 P2-2, employees connect / disconnect Google or Microsoft 365 calendars (replaced by P2-2b); Calendar Phase 2 P2-2b, admin-managed calendar connections: a Google service account with domain-wide delegation and a Microsoft Entra app with application permissions, automatic enrolment of everyone with a company email, in-memory tokens only, admin problem notifications; My Profile › Notifications (Profile Phase 3): bell kinds a user can turn off, the morning summary opt-out, a personal default reminder and out-of-office dates; Calendar Phase 2 P2-3a: one activity write path (system writes, write hook, lock seam, shared post-commit step), no behaviour change; Admin › Company formats (Profile Phase 5, PR5a): one company-wide date / time / number display setting, a shared formatter core, legacy styles kept until an admin saves; PR5b: the remaining ad-hoc format sites and the audit log's Before / After values follow it too; Calendar Phase 2 P2-4: lead / opportunity follow-ups create activities, locked follow-up fields, the nightly follow-up backfill; Calendar Phase 2 P2-3b: the CRM → calendar push engine (outbox, `crm-calendar-sync` queue and worker, Google / Graph event writes for enrolled people); Calendar Phase 2 P2-6: colleagues' busy times when picking a time, `GET /api/activities/busy`; Calendar Phase 4: booking links, public scheduling pages `/book/<slug>` on free/busy, as of 2026-11-26).
+> **Status:** living document. Describes the system as built (code as of 2026-11-26; audit context + ledger audit table, admin audit query API and screen, Users tab; Contracts module; Referrals module; Documents module; Activities data model and API, Calendar Phase 1 PR1; Activities screens and Calendar, PR2; notifications, reminders and mail workers, navbar bell and the morning summary email, PR3, with its review fixes; guarded cache reads for lookups, form configs and search, with its review fixes; Calendar Phase 2 P2-1, Admin › API Integrations foundation: encrypted provider credentials, connection tests, calendar sync settings, company emails, with its review fixes; My Profile (Profile Phase 1): profile, photo, change password, signed-in sessions; Admin › Users (Profile Phase 2, 2026-11-26): user management, the must-change-password claim, sessions revoked on deactivation / reset / role change; Calendar Phase 2 P2-2, employees connect / disconnect Google or Microsoft 365 calendars (replaced by P2-2b); Calendar Phase 2 P2-2b, admin-managed calendar connections: a Google service account with domain-wide delegation and a Microsoft Entra app with application permissions, automatic enrolment of everyone with a company email, in-memory tokens only, admin problem notifications; My Profile › Notifications (Profile Phase 3): bell kinds a user can turn off, the morning summary opt-out, a personal default reminder and out-of-office dates; Calendar Phase 2 P2-3a: one activity write path (system writes, write hook, lock seam, shared post-commit step), no behaviour change; Admin › Company formats (Profile Phase 5, PR5a): one company-wide date / time / number display setting, a shared formatter core, legacy styles kept until an admin saves; PR5b: the remaining ad-hoc format sites and the audit log's Before / After values follow it too; Calendar Phase 2 P2-4: lead / opportunity follow-ups create activities, locked follow-up fields, the nightly follow-up backfill; Calendar Phase 2 P2-3b: the CRM → calendar push engine (outbox, `crm-calendar-sync` queue and worker, Google / Graph event writes for enrolled people); Calendar Phase 2 P2-6: colleagues' busy times when picking a time, `GET /api/activities/busy`; Calendar Phase 4: booking links, public scheduling pages `/book/<slug>` on free/busy; Calendar Phase 4: recurring activities, CRM-authored series stored as one row per occurrence over a rolling 90-day horizon, as of 2026-11-26).
 > Update it in the same change that alters architecture, infrastructure, Redis usage, queues or security.
 > Related: [Database design](database-design.md) · [API plan](api-plan.md) · [Build plan](build-plan.md)
 
@@ -709,7 +709,13 @@ one per event and recipient, made unique by `dedupeKey`, never audited.
   (`armPendingReminders`: live, Planned, unsent, `remindAt` in the future, batches of 500, same job ids, so BullMQ
   ignores those it already holds). This recovers jobs lost to a Redis flush or added while Redis was down. The
   calendar connection steps and the follow-up activity backfill that ran here moved to `calendar-nightly` at 00:25
-  (§5.4; as of 2026-11-26, P2-3b).
+  (§5.4; as of 2026-11-26, P2-3b). Last, the **recurring activities** step (Calendar Phase 4, as of 2026-11-26;
+  `activitySeriesService.runNightly`, `activity.series.ts`): it extends the horizon of live, not-ended series whose
+  `materializedThrough` is less than 90 days ahead (index `[isDeleted, endedAt, materializedThrough]`, 50 series per
+  run, at most 120 new occurrence rows per series per run, one short transaction per series under the series lock;
+  idempotent thanks to `UX_Activity_seriesOccurrence`), then marks occurrences that just entered the 14-day calendar
+  sync window for the push (200 per run, §5.4). It logs and never fails the job's other steps. Occurrences are written
+  by the system writer (audit actor = the series' last writer, no notifications); reminders arm per occurrence.
 - **Start-up and Redis recovery:** `src/jobs/worker.ts` doesn't wait for Redis, so the worker never decides degraded
   mode once at boot. On every `ready` of the shared Redis client it upserts the schedulers, re-arms pending
   reminders and runs one sweep; without Redis the one-minute fallback tick of §4.3 runs the sweep instead.
@@ -795,7 +801,7 @@ The same list is next to `DB_KEEPALIVE_INTERVAL_MS` in `.env.example`.
 | --- | --- |
 | 00:05 | Lead Rating ageing |
 | 00:15 | Audit ledger digest |
-| 00:20 | Notification / email log purge + reminder re-arm |
+| 00:20 | Notification / email log purge + reminder re-arm, then recurring activities: series horizon extension (50 series max) and occurrences entering the 14-day calendar sync window (200 max); one indexed read each when nothing is due (as of 2026-11-26, Calendar Phase 4) |
 | 00:25 | Calendar nightly: connection reconcile / checks / digest, follow-up backfill, error-link retries, secrets expiring, leases (`crm-calendar-sync`; only reads when nothing is enrolled) |
 | 09:00 Mon–Sat | Morning summary email (only while mail is on; `crm-mail`) |
 | Every 15 min, 07:00–21:45 | Reminder sweep (contract renewals, missed reminders) |
@@ -825,6 +831,12 @@ busy blocks from the busy-times cache (30 s per fixed 14-day block, the same key
 bookings per slots request. The page refetches its times every 10 minutes only while its tab is visible (React Query
 stops interval refetches in background tabs), so a forgotten tab doesn't keep the database awake overnight. Bots
 guessing slugs hit the rate limit and the negative cache, not SQL.
+
+Recurring activities (Calendar Phase 4, as of 2026-11-26) add **no new wake**: their nightly step rides the 00:20
+reminders job, while the database is already awake for it. With nothing due it costs two small indexed reads (series
+needing more rows, occurrences entering the sync window). Saving a series writes its first 90 days at once (at most
+120 rows), inside the save request. Without Redis there is no nightly job, so horizons stop growing; the 90-day
+horizon is the slack, and the next nightly run (or any edit of the series) catches up.
 
 ### 5.4 Calendar sync (`crm-calendar-sync`)
 
@@ -896,6 +908,13 @@ job and the sweep (connection checks and the nightly connection steps still run)
   problem digest (from P2-2b), the follow-up activity backfill (from P2-4), one more try for `error` links (and
   `cancelled` / `removed_remote` links whose restore was refused) whose activity hasn't ended, `integration_secret_expiring` to admins, and expired leases cleared. Each step logs and never
   stops the others.
+- **Recurring activities** (Calendar Phase 4, as of 2026-11-26): each occurrence is pushed as a single event with its
+  own link and `syncKey`; provider series (RRULE masters) are never written or imported. **Invitation-flood
+  control:** an occurrence becomes push-eligible only when it starts within 14 days (`SERIES_SYNC_WINDOW_DAYS`;
+  `isCreateEligible`), so a daily series with guests sends invitations for about two weeks, not 90 days, and an
+  "All events" edit updates only the events already in the calendar. The 00:20 nightly step marks occurrences that
+  enter the window (200 per run), with the series' last writer as the actor, so D41's invitation rules (owner sends,
+  others' copies are held) apply as if that person had saved it.
 - **Redis down**: §4.3. **Heartbeat**: `calendar:worker:heartbeat` (§4.1), shown on Admin › API Integrations as
   `workerStatus` (running / not running / unknown without Redis; P2-3c).
 - **View**: `ActivityView.calendar` ([API plan](api-plan.md)) gives the activity's calendar state (provider, state,
@@ -1416,6 +1435,7 @@ Retention: `NOTIFICATION_RETENTION_DAYS` (90), `EMAIL_LOG_RETENTION_DAYS` (180).
 | Morning email not yet proven against the relay | The mail layer, EmailLog claims and the summary are unit-tested (STARTTLS enforcement against a fake SMTP server), and the job schedulers and the guarded unread-count cache were checked against a local Redis, but no real SMTP send or SQL Server run has been done yet; the first real send should be an admin's "Send me a test". `MORNING_SUMMARY_CRON` is read with a small cron subset for the catch-up check (numbers, names, ranges, lists, steps). |
 | "Add to Google Calendar" is a one-time copy | Moving the meeting in the CRM doesn't update the copy; real Google / Microsoft 365 sync is Calendar Phase 2 (needs HTTPS on a nandiniinfosys.com hostname). |
 | Calendar sync pushes but does not pull yet (P2-1, P2-2b, P2-3b) | As of 2026-11-26 admins connect the company calendars, everyone with a company email is enrolled and health-checked, and enrolled people's activities are pushed to their calendars (P2-3b, §5.4). The first-sync backfill, Send invitations and the sync status UI landed in P2-3c (as of 2026-11-26). Not yet: pulling calendar changes (P2-5), webhooks (P2-7, `webhooksActive` is false), imported calendar events (P2-8). A follow-up activity moved in the calendar is moved back on the next push (P2-5 writes it to the record). Activities created while a person's row was stopped get no link (the P2-3c backfill runs once, at the row's first `ok`). The P2-3b push code (`20261128100000_activity_calendar_sync`) was tested against the fake provider, recorded Google / Graph answers and in-memory doubles only; no real SQL Server, Google or Microsoft was reachable when it was built. The JWT signing, token exchanges, probes and error mapping were written against the providers' documented answers and tested with a local RSA key; no real Google / Microsoft / SQL Server call was made when P2-1, P2-2 and P2-2b were built. Each process pauses a provider by itself after a long 429 (not shared through Redis). |
+| Recurring activities are CRM-only (Calendar Phase 4) | As of 2026-11-26 a series lives in the CRM as one row per occurrence over a rolling 90-day horizon, grown by the 00:20 nightly step. Not yet: importing or editing provider recurring series (P2-8 imports single events only), dragging an occurrence in the calendar asks no scope (it is a "This event" edit, so it becomes an exception). Without Redis the horizon stops growing until the next nightly run (90 days of slack). The migration `20261128160000_recurring_activities` and the series code were tested with in-memory doubles only; no real SQL Server, Google or Microsoft was reachable when they were built. |
 | Integrations key is a single point of loss | Losing `INTEGRATIONS_ENCRYPTION_KEY` makes stored secrets unreadable (re-enter them); keep it in the password manager (§9.2). |
 | Workers inside the API by default | Long imports share the event loop with requests unless `RUN_WORKERS=false` + separate worker. |
 | Rate limits fail open | Intentional for availability; brute-force protection disappears while Redis is down. |

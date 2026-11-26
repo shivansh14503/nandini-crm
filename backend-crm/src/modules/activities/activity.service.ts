@@ -58,6 +58,7 @@ import {
     type ActivityInput,
 } from './activity.validator.js';
 import { activityWriteHook } from './activity.writeHook.js';
+import { loadSeriesViews, NO_SERIES, type SeriesById } from './activity.seriesView.js';
 
 export const EDIT_FORBIDDEN_MESSAGE = "Only the activity's owner can change it. Invitees can reply to the invitation.";
 export const RSVP_FORBIDDEN_MESSAGE = 'Only invited colleagues can reply to this activity.';
@@ -72,7 +73,7 @@ function assertCanView(user: AuthUser, row: ActivityAccessRow): void {
 }
 
 /** 403 for anyone but the owner, the creator or a global role (an invitee may only reply). */
-function assertCanEdit(user: AuthUser, row: ActivityAccessRow): void {
+export function assertCanEdit(user: AuthUser, row: ActivityAccessRow): void {
     assertCanView(user, row);
     if (!canEditActivity(user, row)) throw HttpError.forbidden(EDIT_FORBIDDEN_MESSAGE);
 }
@@ -81,23 +82,27 @@ function assertCanEdit(user: AuthUser, row: ActivityAccessRow): void {
  * The DTO plus what the caller may do with it (`viewer`, `lockedFields` and `calendar` sit outside the audited record).
  * `links`: the owners' calendar links (calendar-sync/sync.view.ts); without them `calendar` is null.
  */
-export function toActivityView(row: ActivityRow, user: AuthUser, links: CalendarLinksByActivity = NO_CALENDAR_LINKS): ActivityView {
+export function toActivityView(row: ActivityRow, user: AuthUser, links: CalendarLinksByActivity = NO_CALENDAR_LINKS, series: SeriesById = NO_SERIES): ActivityView {
     const canEdit = canEditActivity(user, row);
     return {
         ...toActivityDto(row),
         viewer: { canEdit, myResponse: myResponseOf(user, row) },
         lockedFields: lockedFieldsFor(row),
         calendar: calendarViewOf(row, links.get(row.id), user.username, canEdit),
+        series: row.seriesId ? (series.get(row.id) ?? null) : null,
     };
 }
 
-/** Views of committed rows with their calendar state (one link read per call, a second only when links exist). */
-async function toActivityViews(rows: readonly ActivityRow[], user: AuthUser): Promise<ActivityView[]> {
-    const links = await loadOwnerCalendarLinks(rows);
-    return rows.map((row) => toActivityView(row, user, links));
+/**
+ * Views of committed rows with their calendar state (one link read per call, a second only when links exist) and
+ * their series (Calendar Phase 4: one ActivitySeries read, only when a row belongs to one).
+ */
+export async function toActivityViews(rows: readonly ActivityRow[], user: AuthUser): Promise<ActivityView[]> {
+    const [links, series] = await Promise.all([loadOwnerCalendarLinks(rows), loadSeriesViews(rows)]);
+    return rows.map((row) => toActivityView(row, user, links, series));
 }
 
-const toOneView = async (row: ActivityRow, user: AuthUser): Promise<ActivityView> => (await toActivityViews([row], user))[0];
+export const toOneView = async (row: ActivityRow, user: AuthUser): Promise<ActivityView> => (await toActivityViews([row], user))[0];
 
 // ── Configuration ────────────────────────────────────────────────────────────
 
@@ -393,9 +398,22 @@ export interface ActivityWriter {
     quietPastReminder?: boolean;
     /** Activity configuration loaded before the transaction, passed to the write hook; null when not loaded. */
     config?: ActivityConfig | null;
+    /**
+     * Series columns written with the row (Calendar Phase 4, activity.series.ts): any writer. Unset leaves them as they
+     * are (an update) or null (an insert).
+     */
+    series?: ActivitySeriesColumns;
+    /**
+     * The CREATE audit entry's `changes` instead of the full snapshot (Calendar Phase 4: occurrences a series creates
+     * write `{ subject, seriesId, originalStartAt }`; the series' own entry carries the rest).
+     */
+    auditCreateChanges?: Record<string, unknown>;
 }
 
-const crmWriter = (user: AuthUser, config: ActivityConfig | null = null, requested?: ReadonlySet<string>): ActivityWriter => ({
+/** Activity columns of a series occurrence (Calendar Phase 4). */
+export type ActivitySeriesColumns = Partial<Pick<Prisma.ActivityUncheckedCreateInput, 'seriesId' | 'originalStartAt' | 'seriesIndex' | 'seriesException'>>;
+
+export const crmWriter = (user: AuthUser, config: ActivityConfig | null = null, requested?: ReadonlySet<string>): ActivityWriter => ({
     actor: user.username,
     user,
     config,
@@ -420,7 +438,7 @@ function assertUnlockedChanges(existing: ActivityRow, changes: Record<string, un
 }
 
 /** 409 when the activity may not be deleted (`ActivityLock.deleteRefusedReason`). */
-function assertDeletable(existing: ActivityRow): void {
+export function assertDeletable(existing: ActivityRow): void {
     const lock = activityLocks.lockFor(existing);
     if (lock?.deleteRefusedReason) throw new HttpError(lock.message, StatusCodes.CONFLICT, { code: lock.code });
 }
@@ -440,6 +458,7 @@ export async function insertActivityRow(tx: TransactionClient, input: ActivityIn
         data: {
             ...toActivityData(withOwner, links, schedule),
             ...(writer.user ? {} : writer.rowData),
+            ...writer.series,
             timeZone: ENV.BUSINESS_TIMEZONE,
             remindAt,
             reminderSentAt: armedReminderSentAt(writer, withOwner, schedule, remindAt, now),
@@ -449,7 +468,8 @@ export async function insertActivityRow(tx: TransactionClient, input: ActivityIn
         },
         include: WITH_ATTENDEES,
     });
-    await auditService.record(tx, { entityType: 'Activity', entityId: row.id, action: 'CREATE', changedBy: writer.actor, changes: toActivityDto(row) });
+    const changes = writer.auditCreateChanges ?? toActivityDto(row);
+    await auditService.record(tx, { entityType: 'Activity', entityId: row.id, action: 'CREATE', changedBy: writer.actor, changes });
     await afterActivityWrite(tx, null, row, writer, now);
     return row;
 }
@@ -475,6 +495,7 @@ export async function updateActivityRow(tx: TransactionClient, existing: Activit
     const data = {
         ...toActivityData(withOwner, links, schedule),
         ...(system ? writer.rowData : {}),
+        ...writer.series,
         ...completionData(input.status, existing, writer.actor, now),
         remindAt,
         // An unchanged remindAt keeps its sent stamp (nextReminderSentAt); a reschedule re-arms it.
@@ -502,6 +523,18 @@ export async function updateActivityRow(tx: TransactionClient, existing: Activit
     }
     await afterActivityWrite(tx, existing, row, writer, now);
     return row;
+}
+
+/**
+ * Soft-deletes a locked, live row inside the caller's transaction (access and locks are the caller's checks): the
+ * reminder is cleared, a DELETE entry is audited and the write hook runs (the calendar push cancels its event).
+ */
+export async function softDeleteActivityRow(tx: TransactionClient, existing: ActivityRow, user: AuthUser, now = new Date()): Promise<ActivityCommitRow> {
+    // A deleted activity leaves the reminder set.
+    const after = await tx.activity.update({ where: { id: existing.id }, data: { ...softDeleteData(user), remindAt: null }, include: WITH_ATTENDEES });
+    await auditService.record(tx, { entityType: 'Activity', entityId: existing.id, action: 'DELETE', changedBy: user.username });
+    await afterActivityWrite(tx, existing, after, crmWriter(user), now);
+    return { before: existing, after };
 }
 
 /**
@@ -577,6 +610,71 @@ export interface ActivityMeta {
     maxDurationDays: number;
 }
 
+/**
+ * A CRM create request parsed and checked as `POST /` does (form configuration, schedule, past start), before any
+ * transaction. Shared with the series create (activity.series.ts).
+ */
+export function parseCrmCreate(body: unknown, config: ActivityConfig): { input: ActivityInput; schedule: Schedule; now: Date } {
+    const input = activityInputSchema.parse(body);
+    input.customFields = checkModulePayload(config.fields, configPayload(asPayload(body), input), input.customFields, {
+        notApplicableKeys: notApplicableFor(input.followupType),
+    });
+    const schedule = scheduleOf(input, config);
+    const now = new Date();
+    throwFieldIssues(activityPastIssues({ ...input, ...schedule }, undefined, now, ENV.BUSINESS_TIMEZONE));
+    return { input, schedule, now };
+}
+
+/** What `applyCrmUpdate` hands back: the row before and after, and the parsed input it saved. */
+export interface CrmUpdateResult {
+    existing: ActivityRow;
+    row: ActivityRow;
+    input: ActivityInput;
+    /** ActivityDto keys the request asked to change (`requestedChanges`). */
+    requested: ReadonlySet<string>;
+}
+
+/** Fields of a series occurrence a change to which doesn't make it an exception (they're per occurrence anyway). */
+const PER_OCCURRENCE_KEYS: ReadonlySet<string> = new Set(['status', 'customerResponse']);
+
+/**
+ * A CRM user's update of one activity inside the caller's transaction (`PUT /:id`): record lock, access, patch merge,
+ * validation (form configuration, schedule, past start), the activity's locks and `updateActivityRow`. A series
+ * occurrence changed here on its own (anything but status / customer response) becomes an exception
+ * (`seriesException`) unless `series` says otherwise (Calendar Phase 4: the series paths pass the columns they set).
+ */
+export async function applyCrmUpdate(
+    tx: TransactionClient,
+    id: string,
+    patch: Record<string, unknown>,
+    user: AuthUser,
+    config: ActivityConfig,
+    series?: ActivitySeriesColumns,
+): Promise<CrmUpdateResult> {
+    await lockRecords(tx, 'activity', [id]);
+    const existing = await tx.activity.findFirst({ where: { id, isDeleted: false }, include: WITH_ATTENDEES });
+    if (!existing) throw notFound();
+    assertCanEdit(user, existing);
+
+    const before = toActivityDto(existing);
+    const merged = mergeActivityPatch(before, patch);
+    const input = activityInputSchema.parse(merged);
+    input.customFields = checkModulePayload(config.fields, configPayload(merged, input), input.customFields, {
+        submittedKeys: submittedKeys(patch),
+        previousCustomFields: before.customFields,
+        notApplicableKeys: notApplicableFor(input.followupType),
+    });
+    const schedule = scheduleOf(input, config);
+    const now = new Date();
+    throwFieldIssues(activityPastIssues({ ...input, ...schedule }, before, now, ENV.BUSINESS_TIMEZONE));
+
+    const requested = requestedChanges(before, patch);
+    const becomesException = !series && Boolean(existing.seriesId) && !existing.seriesException && [...requested].some((key) => !PER_OCCURRENCE_KEYS.has(key));
+    const writer: ActivityWriter = { ...crmWriter(user, config, requested), series: series ?? (becomesException ? { seriesException: true } : undefined) };
+    const row = await updateActivityRow(tx, existing, input, schedule, writer, now);
+    return { existing, row, input, requested };
+}
+
 export const activityService = {
     /**
      * Rows (the shape `list` returns, without `viewer`) for the given ids, regardless of row-level access. Kept for
@@ -608,13 +706,7 @@ export const activityService = {
 
     async create(body: unknown, user: AuthUser): Promise<ActivityView> {
         const config = await loadActivityConfig();
-        const input = activityInputSchema.parse(body);
-        input.customFields = checkModulePayload(config.fields, configPayload(asPayload(body), input), input.customFields, {
-            notApplicableKeys: notApplicableFor(input.followupType),
-        });
-        const schedule = scheduleOf(input, config);
-        const now = new Date();
-        throwFieldIssues(activityPastIssues({ ...input, ...schedule }, undefined, now, ENV.BUSINESS_TIMEZONE));
+        const { input, schedule, now } = parseCrmCreate(body, config);
         const row = await runInTransaction((tx) => insertActivityRow(tx, input, schedule, crmWriter(user, config), now));
         await cacheService.invalidateEntityCaches('activities');
         await runActivityPostCommit([{ before: null, after: row }], user);
@@ -623,27 +715,7 @@ export const activityService = {
 
     async update(id: string, patch: Record<string, unknown>, user: AuthUser): Promise<ActivityView> {
         const config = await loadActivityConfig();
-        const { existing, row } = await runInTransaction(async (tx) => {
-            await lockRecords(tx, 'activity', [id]);
-            const existing = await tx.activity.findFirst({ where: { id, isDeleted: false }, include: WITH_ATTENDEES });
-            if (!existing) throw notFound();
-            assertCanEdit(user, existing);
-
-            const before = toActivityDto(existing);
-            const merged = mergeActivityPatch(before, patch);
-            const input = activityInputSchema.parse(merged);
-            input.customFields = checkModulePayload(config.fields, configPayload(merged, input), input.customFields, {
-                submittedKeys: submittedKeys(patch),
-                previousCustomFields: before.customFields,
-                notApplicableKeys: notApplicableFor(input.followupType),
-            });
-            const schedule = scheduleOf(input, config);
-            const now = new Date();
-            throwFieldIssues(activityPastIssues({ ...input, ...schedule }, before, now, ENV.BUSINESS_TIMEZONE));
-
-            const row = await updateActivityRow(tx, existing, input, schedule, crmWriter(user, config, requestedChanges(before, patch)), now);
-            return { existing, row };
-        });
+        const { existing, row } = await runInTransaction((tx) => applyCrmUpdate(tx, id, patch, user, config));
 
         await cacheService.invalidateEntityCaches('activities');
         await runActivityPostCommit([{ before: existing, after: row }], user);
@@ -657,11 +729,7 @@ export const activityService = {
             if (!existing) throw notFound();
             assertCanEdit(user, existing);
             assertDeletable(existing);
-            // A deleted activity leaves the reminder set.
-            const after = await tx.activity.update({ where: { id }, data: { ...softDeleteData(user), remindAt: null }, include: WITH_ATTENDEES });
-            await auditService.record(tx, { entityType: 'Activity', entityId: id, action: 'DELETE', changedBy: user.username });
-            await afterActivityWrite(tx, existing, after, crmWriter(user), new Date());
-            return { before: existing, after };
+            return softDeleteActivityRow(tx, existing, user);
         });
         await cacheService.invalidateEntityCaches('activities');
         // Nothing to arm or tell for a deleted row; the calendar push (a cancel) is woken here.

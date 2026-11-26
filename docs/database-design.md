@@ -1,7 +1,8 @@
 # Nandini CRM — Database Design
 
-> **Status:** living document, generated from `backend-crm/prisma/schema.prisma` and `prisma/migrations/` (90 migrations,
-> latest `20261128120000_booking_links`, Calendar Phase 4 booking links, as of 2026-11-26; before it `20261128100000_activity_calendar_sync`, Calendar Phase 2 P2-3b; P2-6 busy times needed no migration: it reads `Activity` through the existing `[isDeleted, startAt]` index and stores nothing). Update it in the same change as any schema migration.
+> **Status:** living document, generated from `backend-crm/prisma/schema.prisma` and `prisma/migrations/` (91 migrations,
+> latest `20261128160000_recurring_activities`, Calendar Phase 4 recurring activities, as of 2026-11-26; before it
+> `20261128120000_booking_links`, Calendar Phase 4 booking links; before it `20261128100000_activity_calendar_sync`, Calendar Phase 2 P2-3b; P2-6 busy times needed no migration: it reads `Activity` through the existing `[isDeleted, startAt]` index and stores nothing). Update it in the same change as any schema migration.
 > Related: [System design](system-design.md) · [API plan](api-plan.md) · [Build plan](build-plan.md)
 
 ---
@@ -12,7 +13,7 @@
 | --- | --- |
 | Engine | Microsoft SQL Server / Azure SQL (schema `dbo`) |
 | Access | Prisma 7 ORM through `@prisma/adapter-mssql`; a few raw SQL statements (`MERGE` for counters, `sp_getapplock` for locks, `OPENJSON`) |
-| Tables | **48** application tables + Prisma's `_prisma_migrations` |
+| Tables | **49** application tables + Prisma's `_prisma_migrations` |
 | Owned child tables ("sub tables") | 8: `EntityEmail`, `OpportunityLineItem`, `QuotationLineItem`, `PartnerCompanyContact`, `DropdownOption`, `ActivityAttendee`, `UserPhoto`, `UserPreference` |
 | Migrations | `backend-crm/prisma/migrations/` (`npm run db:migrate` in dev, `npm run db:deploy` in prod) |
 | Seed | `backend-crm/prisma/seed.ts` (`npm run seed`) |
@@ -23,7 +24,7 @@
 | --- | --- |
 | Identity | `Users` (model `User`), `UserPhoto` (profile photos), `UserPreference` (My Profile › Notifications) |
 | CRM core | `Organization`, `Contact`, `Lead`, `Opportunity`, `Quotation`, `Ticket`, `Contract`, `Document`, `Product` |
-| Activities & calendar | `Activity`, `ActivityAttendee`, `ActivityExternalLink` (an activity's copy in a connected calendar + push outbox, P2-3b) |
+| Activities & calendar | `Activity`, `ActivityAttendee`, `ActivityExternalLink` (an activity's copy in a connected calendar + push outbox, P2-3b), `ActivitySeries` (a recurring activity's rule; its occurrences are `Activity` rows, Calendar Phase 4) |
 | Owned children | `EntityEmail`, `OpportunityLineItem`, `QuotationLineItem` |
 | Partner master | `PartnerCompany`, `PartnerCompanyContact` |
 | Referral master | `Referral` (Referred By of leads and opportunities) |
@@ -95,6 +96,7 @@ erDiagram
     Contact ||--o{ ActivityAttendee : "invited as"
     Activity ||--o{ ActivityAttendee : attendees
     Activity ||--o{ ActivityExternalLink : "calendar copies"
+    ActivitySeries ||--o{ Activity : "occurrences"
     CalendarConnection ||--o{ ActivityExternalLink : "pushes"
     Lead ||--o{ EntityEmail : emailAddress
     Referral ||--o{ EntityEmail : emailAddress
@@ -599,6 +601,32 @@ soft-deleted rows included, so a meeting removed from the CRM is never imported 
 `schema.prisma`, as Prisma can't express a filtered index: `prisma migrate diff` from the schema never shows them, so
 don't drop them in a later migration).
 
+**Recurring activities** (migration `20261128160000_recurring_activities`, as of 2026-11-26, Calendar Phase 4;
+`activities/activity.series.ts`). Phase 1 R12 holds: a series is stored as **one `Activity` row per occurrence**, never
+as an RRULE master, so reminders (`remindAt` / `reminderSentAt` claim), the `startAt`-bounded range queries, busy
+times, the 31-day cap and the calendar push keep working on single rows. `Activity` gains `seriesId` (→
+`ActivitySeries`, `NO ACTION`; null on a single activity), `originalStartAt` (the rule slot the row fills, UTC; kept when
+the occurrence alone is moved), `seriesIndex` (1-based position from the series' first day) and `seriesException`
+(BIT, default 0: changed on its own, series edits leave it). Index `(seriesId, startAt)` (series edits, the nightly
+sync window) and the hand-written filtered unique `UX_Activity_seriesOccurrence (seriesId, originalStartAt) WHERE
+seriesId IS NOT NULL` (one row per slot, **soft-deleted rows included**, so the nightly extension never re-creates a
+deleted occurrence; created through `sp_executesql` because its columns are added in the same batch). The code pairs
+occurrences by business day of `originalStartAt` (at most one row per series and day).
+
+**`ActivitySeries`**: `id`, `assignedTo` (owner of every occurrence), rule columns `frequency` (`daily` | `weekly` |
+`monthly`, NVARCHAR(10)), `interval` (1–99), `weekdays` (weekly: ISO weekday csv, `"1,3"`), `monthlyMode` (`day` |
+`weekday`), `monthDay` (1–31; months without it are skipped), `setPos` (1–4, -1 = last), `setWeekday` (1–7), end
+`untilDay` (NVARCHAR(10) `YYYY-MM-DD`, inclusive) or `count` (1–366) or neither (no end); anchor `startDay`
+(occurrence 1), `startTime` (NVARCHAR(5) `HH:mm`, null when all-day), `allDay`, `durationMinutes`, `spanDays`
+(all-day length); `timeZone` (BUSINESS_TIMEZONE); `templateJson` (NVARCHAR(MAX): the fields every occurrence copies:
+type, subject, owner, related record, organization, contact, location, reminder, remarks, attendees, custom fields);
+`materializedThrough` (the last business day occurrences were created through, today + 90 after a run);
+`endedAt` (no more occurrences will be created: ended, split, cancelled, deleted or the count / until reached);
+`splitFromId` (the series a "This and following" edit split it from; no FK); `revision`; `createdBy` / `updatedBy` /
+timestamps; soft delete (`isDeleted`, `deletedAt`). Indexes `(isDeleted, endedAt, materializedThrough)` (the nightly
+extension: live series not ended, oldest horizon first) and `(assignedTo)`. Audited as `ActivitySeries` (module
+`activities`).
+
 **`ActivityExternalLink`** (migration `20261128100000_activity_calendar_sync`, as of 2026-11-26, Calendar Phase 2
 P2-3b; module `backend-crm/src/modules/calendar-sync`): one activity as seen in one connected calendar, and the
 durable push outbox. Owned by `Activity` (`ON DELETE CASCADE`); `connectionId` → `CalendarConnection` (`NO ACTION`:
@@ -891,6 +919,9 @@ also on the activity as an attendee and in its remarks).
 - **Calendar connections** (as of 2026-11-26): `(username, status)` serves the user's own list and the People table,
   `(provider, status)` the admin counts, `(keyId)` key rotation; the filtered unique indexes enforce one live
   connection per person and per provider account.
+- **Recurring activities** (Calendar Phase 4, as of 2026-11-26): the nightly reads `ActivitySeries (isDeleted,
+  endedAt, materializedThrough)` (an equality pair then a range); series edits read occurrences by `(seriesId,
+  startAt)`; slot pre-reads and the unique guard use `UX_Activity_seriesOccurrence`.
 - **Calendar push outbox** (P2-3b, as of 2026-11-26): `ActivityExternalLink (dirtyAt, nextAttemptAt)` answers the
   5-minute sweep (07:00–21:55) with a seek on `dirtyAt` (most rows have it null); `(connectionId, state)` serves the
   `enrolled` job and stopping / re-attaching a connection; `UX_ActivityExternalLink_event` and `UX_Activity_syncKey`
@@ -934,7 +965,8 @@ also on the activity as an attendee and in its remarks).
   `20261128090000_calendar_admin_connect`, which replaced P2-2's `UX_CalendarConnection_user_kind` /
   `UX_CalendarConnection_account`; `UX_Activity_openFollowUp` of `20261127130000_followup_activities`;
   `UX_ActivityExternalLink_event` and `UX_Activity_syncKey` of `20261128100000_activity_calendar_sync`, the latter
-  created through `sp_executesql` because its column is added in the same batch). `20261127090000_calendar_connections`
+  created through `sp_executesql` because its column is added in the same batch); `UX_Activity_seriesOccurrence` of
+  `20261128160000_recurring_activities` (also through `sp_executesql`). `20261127090000_calendar_connections`
   also lower-cases `Users.email` and stops (THROW 50001, rolled back) when two active non-group users share an
   address: run `npm run calendar:check-emails` before deploying; after a stop, fix the users, run
   `npx prisma migrate resolve --rolled-back 20261127090000_calendar_connections` and deploy again.

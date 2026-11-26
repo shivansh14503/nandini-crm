@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { mock } from 'node:test';
 import { prisma } from '../../../config/prisma.js';
-import type { Activity, ActivityAttendee, ActivityExternalLink } from '../../../generated/prisma/client.js';
+import type { Activity, ActivityAttendee, ActivityExternalLink, ActivitySeries } from '../../../generated/prisma/client.js';
 import { auditService, type AuditEntry } from '../../../services/audit.service.js';
 import { cacheService } from '../../../services/cache.service.js';
 import { matchesWhere, type ConnectionRowState, type NotificationRowState } from '../../calendar-sync/testing/connectionDouble.js';
@@ -105,6 +105,8 @@ export interface ActivityDoubleState {
     providers: ProviderRow[];
     entityEmails: EntityEmailRow[];
     notifications: NotificationRowState[];
+    /** Recurring series (Calendar Phase 4); rolled back with the activity rows. */
+    series: ActivitySeries[];
 }
 
 type Where = Record<string, unknown>;
@@ -160,6 +162,10 @@ export function blankActivity(over: Partial<Activity> & Pick<Activity, 'id' | 's
         organizerName: null,
         externalOrganizer: false,
         externalUpdatedAt: null,
+        seriesId: null,
+        originalStartAt: null,
+        seriesIndex: null,
+        seriesException: false,
         updatedBy: null,
         createdAt: now,
         updatedAt: now,
@@ -229,6 +235,7 @@ const DELEGATES = [
     'entityEmail',
     'notification',
     'userPreference',
+    'activitySeries',
     '$transaction',
 ] as const;
 const realDelegates = new Map<string, unknown>();
@@ -263,6 +270,7 @@ export function installActivityDouble(
         links?: ActivityExternalLink[];
         providers?: ProviderRow[];
         entityEmails?: EntityEmailRow[];
+        series?: ActivitySeries[];
     } = {},
 ): ActivityDoubleState {
     const state: ActivityDoubleState = {
@@ -283,6 +291,7 @@ export function installActivityDouble(
         providers: (seed.providers ?? []).map((row) => ({ ...row })),
         entityEmails: (seed.entityEmails ?? []).map((row) => ({ ...row })),
         notifications: [],
+        series: (seed.series ?? []).map((row) => ({ ...row })),
     };
 
     let clock = 0;
@@ -338,6 +347,10 @@ export function installActivityDouble(
             const { attendees, ...data } = args.data;
             const stamp = touch();
             const row = blankActivity({ id: randomUUID(), createdAt: stamp, updatedAt: stamp, ...(data as Partial<Activity>) } as Activity);
+            // UX_Activity_seriesOccurrence (filtered unique, soft-deleted rows included).
+            if (row.seriesId && state.activities.some((a) => a.seriesId === row.seriesId && a.originalStartAt?.getTime() === row.originalStartAt?.getTime())) {
+                throw Object.assign(new Error('Unique constraint failed on UX_Activity_seriesOccurrence'), { code: 'P2002' });
+            }
             state.activities.push(row);
             for (const attendee of attendees?.create ?? []) state.attendees.push(blankAttendee({ ...attendee, activityId: row.id }));
             return shape(row, args);
@@ -559,12 +572,77 @@ export function installActivityDouble(
     };
     const userPreference = { findMany: async () => [] };
 
+    // ── Recurring series (Calendar Phase 4) ──
+    const blankSeries = (data: Partial<ActivitySeries>): ActivitySeries => {
+        const stamp = touch();
+        return {
+            id: randomUUID(),
+            assignedTo: '',
+            frequency: 'weekly',
+            interval: 1,
+            weekdays: null,
+            monthlyMode: null,
+            monthDay: null,
+            setPos: null,
+            setWeekday: null,
+            untilDay: null,
+            count: null,
+            startDay: '2026-12-01',
+            startTime: null,
+            allDay: false,
+            durationMinutes: 30,
+            spanDays: 1,
+            timeZone: 'Asia/Kolkata',
+            templateJson: '{}',
+            materializedThrough: null,
+            endedAt: null,
+            splitFromId: null,
+            revision: 0,
+            createdBy: 'system',
+            updatedBy: null,
+            createdAt: stamp,
+            updatedAt: stamp,
+            isDeleted: false,
+            deletedAt: null,
+            ...data,
+        };
+    };
+    const activitySeries = {
+        create: async (args: { data: Partial<ActivitySeries> }) => {
+            call('activitySeries.create');
+            const row = blankSeries(args.data);
+            state.series.push(row);
+            return { ...row };
+        },
+        update: async (args: { where: { id: string }; data: Record<string, unknown> }) => {
+            call('activitySeries.update');
+            const row = state.series.find((s) => s.id === args.where.id);
+            if (!row) throw Object.assign(new Error('Record to update not found'), { code: 'P2025' });
+            for (const [key, value] of Object.entries(args.data)) {
+                if (value !== null && typeof value === 'object' && !(value instanceof Date) && 'increment' in value) {
+                    (rec(row) as Record<string, number>)[key] += (value as { increment: number }).increment;
+                } else rec(row)[key] = value;
+            }
+            row.updatedAt = touch();
+            return { ...row };
+        },
+        findFirst: async (args: FindArgs = {}) => {
+            call('activitySeries.findFirst');
+            return findAll(state.series, { ...args, take: 1 })[0] ?? null;
+        },
+        findMany: async (args: FindArgs = {}) => {
+            call('activitySeries.findMany');
+            return findAll(state.series, args);
+        },
+    };
+
     const snapshot = () => ({
         activities: state.activities.map((row) => ({ ...row })),
         attendees: state.attendees.map((row) => ({ ...row })),
         audits: [...state.audits],
         connections: state.connections.map((row) => ({ ...row })),
         links: state.links.map((row) => ({ ...row })),
+        series: state.series.map((row) => ({ ...row })),
     });
 
     stub('$transaction', async (fn: (tx: unknown) => Promise<unknown>) => {
@@ -584,6 +662,7 @@ export function installActivityDouble(
             entityEmail,
             notification,
             userPreference,
+            activitySeries,
             $queryRaw: async (strings: TemplateStringsArray, ...values: unknown[]) => {
                 void strings;
                 // acquireLocks passes its keys as one JSON array of `crm:<key>` resources.
@@ -603,6 +682,7 @@ export function installActivityDouble(
             state.audits = saved.audits;
             state.connections = saved.connections;
             state.links = saved.links;
+            state.series = saved.series;
             throw err;
         } finally {
             state.openTx = null;
@@ -621,6 +701,7 @@ export function installActivityDouble(
     stub('entityEmail', entityEmail);
     stub('notification', notification);
     stub('userPreference', userPreference);
+    stub('activitySeries', activitySeries);
 
     mock.method(auditService, 'record', async (_tx: unknown, entry: AuditEntry) => {
         state.audits.push(entry);

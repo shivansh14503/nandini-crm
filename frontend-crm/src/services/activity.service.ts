@@ -11,6 +11,8 @@ import type {
     BusyTimesParams,
     CalendarFeed,
     CalendarFeedParams,
+    RepeatRule,
+    SeriesScope,
 } from '../types/activity.types';
 import { apiClient } from './apiClient';
 import { createCrudService } from './base.service';
@@ -25,6 +27,23 @@ const csv = (values: readonly string[] | undefined) => (values && values.length 
 
 export const activityService = {
     ...crud,
+
+    /**
+     * Update of an occurrence of a recurring activity (Calendar Phase 4): `scope` = this | following | all; `repeat`
+     * changes how it repeats (null = stops repeating; omitted = unchanged). On a single activity `repeat` makes it the
+     * first occurrence of a series.
+     */
+    updateScoped: async (id: string, data: Partial<ActivityFormData> & { repeat?: RepeatRule | null }, scope: SeriesScope = 'this'): Promise<Activity> => {
+        const res = await apiClient.put<ApiResponse<Activity>>(`${ENDPOINT}/${encodeURIComponent(id)}`, data, { params: { scope } });
+        notifyCrmUpdate(ENDPOINT, id);
+        return res.data;
+    },
+
+    /** Delete of an occurrence: this one, this and following, or all events of its series. */
+    deleteScoped: async (id: string, scope: SeriesScope = 'this'): Promise<void> => {
+        await apiClient.delete<ApiResponse<unknown>>(`${ENDPOINT}/${encodeURIComponent(id)}`, { params: { scope } });
+        notifyCrmUpdate(ENDPOINT, id);
+    },
 
     /** Business timezone, default durations per Followup Type, reminders and statuses (cache it: staleTime Infinity). */
     meta: async (): Promise<ActivityMeta> => (await apiClient.get<ApiResponse<ActivityMeta>>(`${ENDPOINT}/meta`)).data,
